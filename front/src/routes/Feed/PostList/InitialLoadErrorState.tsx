@@ -57,7 +57,7 @@ const StyledWrapper = styled.section`
   p {
     margin: 0;
     max-width: 29rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     font-size: 0.88rem;
     line-height: 1.55;
   }

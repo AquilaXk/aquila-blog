@@ -168,19 +168,19 @@ const StyledWrapper = styled.div`
       border-radius: 0;
       border: none;
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray11};
+      color: var(--aq-muted);
       font-size: 0.8125rem;
       font-weight: 650;
       line-height: 1;
 
       &:hover {
-        color: ${({ theme }) => theme.colors.gray12};
+        color: var(--aq-text);
         text-decoration: none;
       }
 
       &[data-active="true"] {
-        color: ${({ theme }) => theme.colors.gray12};
-        box-shadow: inset 0 -2px ${({ theme }) => theme.publicDesign.accent};
+        color: var(--aq-text);
+        box-shadow: inset 0 -2px var(--aq-accent);
       }
     }
   }
@@ -201,13 +201,13 @@ const StyledWrapper = styled.div`
   .searchTrigger {
     height: 36px;
     width: 212px;
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    border: 1px solid var(--aq-border);
+    background: var(--aq-surface);
     display: flex;
     align-items: center;
     gap: 0.5rem;
     padding: 0 0.625rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
     border-radius: 0;
     cursor: pointer;
     text-decoration: none;
@@ -229,10 +229,10 @@ const StyledWrapper = styled.div`
     }
 
     kbd {
-      border: 1px solid ${({ theme }) => theme.publicDesign.border};
-      background: ${({ theme }) => theme.publicDesign.surfaceElevated};
+      border: 1px solid var(--aq-border);
+      background: var(--aq-surface-elevated);
       padding: 0.25rem 0.3rem;
-      color: ${({ theme }) => theme.colors.gray10};
+      color: var(--aq-muted);
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       font-size: 0.625rem;
       line-height: 1;
@@ -255,22 +255,22 @@ const StyledWrapper = styled.div`
   }
 
   .loginLink {
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
-    color: ${({ theme }) => theme.colors.gray12};
+    border: 1px solid var(--aq-border);
+    background: var(--aq-surface);
+    color: var(--aq-text);
     cursor: pointer;
   }
 
   .adminLink {
-    border: 1px solid ${({ theme }) => theme.colors.gray12};
-    background: ${({ theme }) => theme.colors.gray12};
-    color: ${({ theme }) => theme.colors.gray1};
+    border: 1px solid var(--aq-text);
+    background: var(--aq-text);
+    color: var(--aq-page-bg);
   }
 
   .logoutBtn {
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
-    color: ${({ theme }) => theme.colors.gray12};
+    border: 1px solid var(--aq-border);
+    background: var(--aq-surface);
+    color: var(--aq-text);
     cursor: pointer;
   }
 

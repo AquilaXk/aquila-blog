@@ -15,10 +15,16 @@ const ThemeToggle: React.FC<Props> = () => {
     <StyledWrapper
       type="button"
       onClick={handleClick}
-      aria-label={scheme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"}
-      title={scheme === "light" ? "다크 모드" : "라이트 모드"}
+      aria-label="테마 전환"
+      aria-pressed={scheme === "dark"}
+      title="테마 전환"
     >
-      {scheme === "light" ? <SunIcon /> : <MoonIcon />}
+      <span className="themeIcon themeIconLight">
+        <SunIcon />
+      </span>
+      <span className="themeIcon themeIconDark">
+        <MoonIcon />
+      </span>
     </StyledWrapper>
   )
 }
@@ -49,13 +55,29 @@ const StyledWrapper = styled.button`
   border-radius: ${({ theme }) => theme.variables.ui.button.radius}px;
   padding: 0;
   background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
+  color: var(--aq-muted);
   cursor: pointer;
 
   &:hover {
-    border-color: ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-color: var(--aq-border);
+    background: var(--aq-surface);
+    color: var(--aq-text);
+  }
+
+  .themeIcon {
+    display: inline-flex;
+  }
+
+  .themeIconDark {
+    display: none;
+  }
+
+  html[data-aquila-scheme="dark"] & .themeIconLight {
+    display: none;
+  }
+
+  html[data-aquila-scheme="dark"] & .themeIconDark {
+    display: inline-flex;
   }
 
   svg {

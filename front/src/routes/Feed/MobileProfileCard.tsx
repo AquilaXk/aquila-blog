@@ -71,7 +71,7 @@ const StyledWrapper = styled.div`
     gap: 0.35rem;
     padding: 0.15rem 0.1rem;
     margin-bottom: 0.7rem;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: var(--aq-muted);
     font-size: 0.82rem;
     font-weight: 700;
 
@@ -92,9 +92,9 @@ const StyledWrapper = styled.div`
     button {
       min-height: 34px;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border: 1px solid var(--aq-border);
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray11};
+      color: var(--aq-muted);
       padding: 0 0.72rem;
       font-size: 0.74rem;
       font-weight: 700;
@@ -104,7 +104,7 @@ const StyledWrapper = styled.div`
   > .mid {
     padding: 0.12rem 0 0.86rem;
     margin-bottom: 1rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid var(--aq-border);
     background: transparent;
     > .wrapper {
       display: flex;
@@ -122,13 +122,13 @@ const StyledWrapper = styled.div`
           margin: 0.35rem 0 0.5rem;
           font-size: 0.875rem;
           line-height: 1.35;
-          color: ${({ theme }) => theme.colors.blue11};
+          color: var(--aq-accent-link);
           font-weight: 700;
         }
         > .btm {
           font-size: 0.875rem;
           line-height: 1.6;
-          color: ${({ theme }) => theme.colors.gray11};
+          color: var(--aq-muted);
           white-space: pre-line;
           word-break: break-word;
         }

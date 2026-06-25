@@ -595,7 +595,7 @@ export const getThemeSurfaceFingerprint = async (page: Page) =>
     }
 
     const readThemeToggleLabel = () => {
-      const toggle = document.querySelector('button[aria-label*="모드로 전환"]')
+      const toggle = document.querySelector('button[aria-label="테마 전환"]')
       return toggle?.getAttribute("aria-label") ?? null
     }
 

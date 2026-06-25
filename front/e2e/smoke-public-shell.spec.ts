@@ -29,7 +29,7 @@ test.describe("core smoke public shell", () => {
     expect(useSchemeSource).not.toMatch(/setScheme\(nextScheme\)\s*clearSchemeBootstrapAfterHydration\(\)/)
   })
 
-  test("OS 다크 첫 로드는 hydration 전 surface dark guard를 먼저 삽입한다", async ({ page }) => {
+  test("OS 다크 첫 로드는 root scheme seed와 themed route guard를 함께 삽입한다", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" })
     await mockFeedEndpoints(page)
     await page.route("**/member/api/v1/auth/me", async (route) => {
@@ -98,8 +98,11 @@ test.describe("core smoke public shell", () => {
 
     expect(firstLoadScheme.datasetScheme).toBe("dark")
     expect(firstLoadScheme.bodyBackground).toBe("rgb(18, 18, 18)")
-    expect(bootstrapStyle).toContain('html[data-aquila-scheme-bootstrap="dark"]')
+    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap]{background:#121212;color-scheme:dark;}")
+    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap] body{background:#121212;color:#f5f5f5;color-scheme:dark;}")
+    expect(bootstrapStyle).toContain('html[data-aquila-scheme-bootstrap="dark"] *{color-scheme:dark!important;}')
     expect(bootstrapStyle).toContain("background-color:transparent!important")
+    expect(bootstrapStyle).toContain('[role="search"],[class*="Card"],[class*="card"]')
     expect(bootstrapStyle).not.toContain("#f3f5f8")
   })
 

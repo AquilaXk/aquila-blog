@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { setCookie } from "cookies-next"
-import { useCallback, useEffect, useLayoutEffect } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
 import { CONFIG } from "site.config"
 import { queryKey } from "src/constants/queryKey"
 import { SchemeType } from "src/types"
@@ -47,6 +47,7 @@ const clearSchemeBootstrapStyle = (scheme: SchemeType, renderedScheme = scheme) 
 
 const useScheme = (): [SchemeType, SetScheme] => {
   const queryClient = useQueryClient()
+  const resolvedInitialSchemeRef = useRef(false)
   const followsSystemTheme = CONFIG.blog.scheme === "system"
   const fallbackScheme = (CONFIG.blog.scheme === "system" ? "light" : CONFIG.blog.scheme) as SchemeType
 
@@ -65,11 +66,13 @@ const useScheme = (): [SchemeType, SetScheme] => {
   }, [queryClient])
 
   useIsomorphicLayoutEffect(() => {
-    const bootstrap = resolveBootstrapScheme()
+    const shouldResolveInitialScheme = !resolvedInitialSchemeRef.current
+    const bootstrap = shouldResolveInitialScheme ? resolveBootstrapScheme() : null
     const bootstrapScheme =
       bootstrap?.scheme ??
-      (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)
+      (shouldResolveInitialScheme ? (followsSystemTheme ? resolveSystemScheme() : fallbackScheme) : data)
     const renderedScheme = bootstrap?.renderedScheme ?? bootstrapScheme
+    resolvedInitialSchemeRef.current = true
     if (bootstrapScheme !== data) {
       queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)
       clearSchemeBootstrapStyle(bootstrapScheme, renderedScheme)

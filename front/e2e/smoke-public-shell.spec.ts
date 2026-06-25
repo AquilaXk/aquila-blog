@@ -23,10 +23,15 @@ test.describe("core smoke public shell", () => {
     expect(useSchemeSource).toContain("return { scheme: userScheme, renderedScheme }")
     expect(useSchemeSource).toContain('const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect')
     expect(useSchemeSource).toContain("const resolvedInitialSchemeRef = useRef(false)")
+    expect(useSchemeSource).toContain("let runtimeSchemeSeed: SchemeType | null = null")
+    expect(useSchemeSource).toContain("runtimeSchemeSeed = scheme")
     expect(useSchemeSource).toContain("useIsomorphicLayoutEffect(() =>")
     expect(useSchemeSource).toContain("initialData: fallbackScheme")
     expect(useSchemeSource).toContain("const shouldResolveInitialScheme = !resolvedInitialSchemeRef.current")
     expect(useSchemeSource).toContain("const bootstrap = shouldResolveInitialScheme ? resolveBootstrapScheme() : null")
+    expect(useSchemeSource).toContain(
+      "runtimeSchemeSeed ?? (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)"
+    )
     expect(useSchemeSource).toContain("resolvedInitialSchemeRef.current = true")
     expect(useSchemeSource).not.toContain("getCookie")
     expect(useSchemeSource).toContain("if (bootstrapScheme !== data)")

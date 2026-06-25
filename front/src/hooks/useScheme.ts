@@ -12,6 +12,7 @@ type BootstrapScheme = {
 }
 
 const isScheme = (value: unknown): value is SchemeType => value === "light" || value === "dark"
+let runtimeSchemeSeed: SchemeType | null = null
 
 const resolveSystemScheme = (): SchemeType => {
   if (typeof window === "undefined") return "light"
@@ -38,6 +39,7 @@ const clearSchemeBootstrapStyle = (scheme: SchemeType, renderedScheme = scheme) 
   const root = document.documentElement
   root.dataset.aquilaScheme = renderedScheme
   root.style.colorScheme = renderedScheme
+  runtimeSchemeSeed = scheme
   root.removeAttribute("data-aquila-scheme-bootstrap")
   root.removeAttribute("data-aquila-scheme-bootstrap-source")
   root.removeAttribute("data-aquila-scheme-user")
@@ -70,8 +72,14 @@ const useScheme = (): [SchemeType, SetScheme] => {
     const bootstrap = shouldResolveInitialScheme ? resolveBootstrapScheme() : null
     const bootstrapScheme =
       bootstrap?.scheme ??
-      (shouldResolveInitialScheme ? (followsSystemTheme ? resolveSystemScheme() : fallbackScheme) : data)
-    const renderedScheme = bootstrap?.renderedScheme ?? bootstrapScheme
+      (shouldResolveInitialScheme
+        ? runtimeSchemeSeed ?? (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)
+        : data)
+    const renderedScheme =
+      bootstrap?.renderedScheme ??
+      (isScheme(globalThis.document?.documentElement.dataset.aquilaScheme)
+        ? globalThis.document.documentElement.dataset.aquilaScheme
+        : bootstrapScheme)
     resolvedInitialSchemeRef.current = true
     if (bootstrapScheme !== data) {
       queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)

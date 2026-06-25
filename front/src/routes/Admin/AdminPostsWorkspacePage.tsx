@@ -123,20 +123,40 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
     setListError("")
 
     try {
-      const data = await apiFetch<PageDto<AdminPostListItem>>(
-        buildListEndpoint(listScope, {
-          page: sanitizeNumberInput(listPage, DEFAULT_PAGE),
-          pageSize: sanitizeNumberInput(listPageSize, DEFAULT_PAGE_SIZE),
-          kw: listKw.trim(),
-          sort: listSort,
-        })
-      )
+      const safePageSize = sanitizeNumberInput(listPageSize, DEFAULT_PAGE_SIZE)
+      const shouldCollectActiveRows = listScope === "active" && listStatus !== "all"
+      const fetchListPage = (page: string) =>
+        apiFetch<PageDto<AdminPostListItem>>(
+          buildListEndpoint(listScope, {
+            page,
+            pageSize: safePageSize,
+            kw: listKw.trim(),
+            sort: listSort,
+          })
+        )
+      const data = await fetchListPage(shouldCollectActiveRows ? DEFAULT_PAGE : sanitizeNumberInput(listPage, DEFAULT_PAGE))
 
       if (listRequestIdRef.current !== requestId) return
 
+      let rows = data.content || []
+      if (shouldCollectActiveRows) {
+        const numericPageSize = Number.parseInt(safePageSize, 10) || Number.parseInt(DEFAULT_PAGE_SIZE, 10)
+        const totalPages =
+          data.pageable?.totalPages ??
+          Math.ceil((data.pageable?.totalElements ?? rows.length) / Math.max(numericPageSize, 1))
+
+        for (let pageNumber = 2; pageNumber <= totalPages; pageNumber += 1) {
+          const nextPage = await fetchListPage(String(pageNumber))
+          if (listRequestIdRef.current !== requestId) return
+          rows = rows.concat(nextPage.content || [])
+        }
+      }
+
       setListState({
-        rows: data.content || [],
-        total: data.pageable?.totalElements ?? data.content?.length ?? 0,
+        rows,
+        total: shouldCollectActiveRows
+          ? rows.length
+          : data.pageable?.totalElements ?? data.content?.length ?? 0,
         loadedAt: new Date().toISOString(),
       })
     } catch {
@@ -148,7 +168,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         setIsListLoading(false)
       }
     }
-  }, [listKw, listPage, listPageSize, listScope, listSort])
+  }, [listKw, listPage, listPageSize, listScope, listSort, listStatus])
 
   useEffect(() => {
     setLocalDraft(readLocalDraft())

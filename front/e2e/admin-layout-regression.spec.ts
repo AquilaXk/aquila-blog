@@ -14,11 +14,14 @@ const ADMIN_POST_FIXTURES = Array.from({ length: 6 }, (_, index) => ({
   title: index === 0 ? "First fold 운영 점검" : `관리자 글 목록 회귀 ${index}`,
   authorName: "관리자",
   authorProfileImgUrl: "/avatar.png",
+  category: index === 0 ? ["Architecture"] : ["JWT"],
+  tags: index === 0 ? ["Cache", "Redis"] : ["Auth"],
   published: index % 2 === 0,
   listed: index % 3 !== 0,
   tempDraft: false,
   createdAt: `2026-05-${String(10 + index).padStart(2, "0")}T01:00:00Z`,
   modifiedAt: `2026-05-${String(20 - index).padStart(2, "0")}T08:30:00Z`,
+  hitCount: 100 + index,
 }))
 
 const SYSTEM_HEALTH_FIXTURE = {
@@ -329,7 +332,13 @@ test("관리자 글 관리는 1440px 데스크톱에서 V4 toolbar와 table을 f
   await expect(page.getByRole("heading", { name: "글 관리" })).toBeVisible()
   await expect(page.getByRole("button", { name: "전체", exact: true })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Title" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Topic" })).toBeVisible()
   await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible()
+  await expect(page.getByRole("columnheader", { name: "Views" })).toBeVisible()
+  await expect(page.getByText("Architecture")).toBeVisible()
+  await expect(page.getByText("100")).toBeVisible()
+  await expect(page.getByText("발행").first()).toBeVisible()
+  await expect(page.getByLabel("글 검색")).toBeVisible()
   await expect(page.locator("tbody tr, article").filter({ hasText: "First fold 운영 점검" }).first()).toBeVisible()
 
   const snapshot = await capturePostsFirstFoldSnapshot(page)

@@ -49,6 +49,7 @@ export const AdminPostsWorkspaceFilterToolbar: React.FC<AdminPostsWorkspaceFilte
       <SearchField>
         <input
           id="workspace-post-search"
+          aria-label="글 검색"
           placeholder="글 검색"
           value={listKw}
           onChange={(event) => onKeywordChange(event.target.value)}

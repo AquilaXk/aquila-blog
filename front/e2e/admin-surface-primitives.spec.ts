@@ -239,6 +239,8 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(postsListSource).toContain('<th className="topicCell">Topic</th>')
     expect(postsListSource).toContain('<th className="viewsCell">Views</th>')
     expect(postsListSource).not.toContain('<th className="actionCell">Actions</th>')
+    expect(postsFilterSource).toContain('aria-label="글 검색"')
+    expect(postsListSource).toContain("getWorkspaceTopicLabel(row)")
     expectStyledComponentRadius(postsFilterSource, "ScopeTabButton", "2px")
     expectStyledComponentRadius(postsFilterSource, "SearchField", "2px")
     expect(postsSectionSource).toContain(

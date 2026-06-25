@@ -12,7 +12,7 @@ export type AdminPostListItem = {
   title: string
   authorName: string
   authorProfileImgUrl?: string
-  category?: string
+  category?: string | string[]
   tags?: string[]
   published: boolean
   listed: boolean
@@ -129,7 +129,6 @@ export const getWorkspacePostStatusFilter = (
 ): Exclude<PostStatusFilter, "all" | "deleted"> => {
   if (row.tempDraft) return "draft"
   if (!row.published) return "private"
-  if (!row.listed) return "private"
   return "published"
 }
 
@@ -142,6 +141,8 @@ export const workspaceStatusLabel = (row: Pick<AdminPostListItem, "published" | 
 
 export const getWorkspaceTopicLabel = (row: Pick<AdminPostListItem, "category" | "tags">) => {
   if (typeof row.category === "string" && row.category.trim()) return row.category.trim()
+  const firstCategory = Array.isArray(row.category) ? row.category.find((category) => category.trim()) : undefined
+  if (firstCategory?.trim()) return firstCategory.trim()
   const firstTag = row.tags?.find((tag) => tag.trim())
   return firstTag?.trim() || "-"
 }

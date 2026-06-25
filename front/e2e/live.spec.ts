@@ -577,7 +577,7 @@ test.describe("live production e2e", () => {
     const dashboardKpiRail = page.locator('[data-ui="monitoring-service-rail"]')
     await expect(dashboardKpiRail).toBeVisible()
     await expect(dashboardKpiRail.getByText("서비스 상태")).toBeVisible()
-    await expect(page.getByRole("heading", { name: "우선 점검 항목" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Steady-state guard" })).toBeVisible()
 
     await expectLiveAdminRoute(page, apiBaseUrl, "/admin/cloud", adminCloudHeadingPattern, "admin cloud")
     const visibleCloudUploadButtons = page

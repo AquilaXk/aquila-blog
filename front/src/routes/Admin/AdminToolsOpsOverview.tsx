@@ -26,7 +26,9 @@ import {
   FreshnessBadge,
 } from "src/routes/Admin/AdminToolsWorkspace.styles"
 import {
+  CONNECTION_UNAVAILABLE_STATUS_LABEL,
   DATA_EMPTY_STATUS_LABEL,
+  DATA_MISSING_STATUS_LABEL,
   SECTION_IDS,
   formatInstant,
   type SystemHealthPayload,
@@ -62,6 +64,12 @@ type Props = Record<string, any>
 const toOpsTone = (value: string | null | undefined): OpsTone => {
   const normalized = value?.trim()
   if (!normalized || normalized === DATA_EMPTY_STATUS_LABEL) return "neutral"
+  if (
+    normalized === DATA_MISSING_STATUS_LABEL ||
+    normalized === CONNECTION_UNAVAILABLE_STATUS_LABEL ||
+    normalized.toUpperCase() === "UNKNOWN"
+  )
+    return "neutral"
   if (
     /오류|실패|DOWN|DEGRADED|WARN|점검|MISCONFIGURED|CONNECTION_FAILED/i.test(
       normalized
@@ -230,6 +238,7 @@ const buildBars = (props: Props): OpsBar[] => {
 
 export const AdminToolsOpsOverview = (props: Props) => {
   const health = props.systemHealthQuery.data ?? null
+  const isActionBusy = Boolean(props.loadingKey)
   const version = readStringField(health, "version") || "dev"
   const redisStatus =
     readHealthCheck(health, "redis") || props.systemHealthStatus
@@ -360,9 +369,9 @@ export const AdminToolsOpsOverview = (props: Props) => {
             <HeaderLink
               as="button"
               type="button"
-              aria-disabled={props.loadingKey === "systemHealth"}
+              aria-disabled={isActionBusy}
               onClick={() =>
-                props.loadingKey === "systemHealth"
+                isActionBusy
                   ? undefined
                   : void props.executeAction(
                       "systemHealth",

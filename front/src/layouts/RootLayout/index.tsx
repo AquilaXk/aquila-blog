@@ -82,6 +82,26 @@ const RootLayout = ({
   useGtagEffect()
 
   useEffect(() => {
+    if (!isPublicBlogRoute) return
+    if (typeof document === "undefined") return
+
+    const root = document.documentElement
+    const previousScheme = root.dataset.aquilaScheme
+    const previousColorScheme = root.style.colorScheme
+    root.dataset.aquilaScheme = "light"
+    root.style.colorScheme = "light"
+
+    return () => {
+      if (previousScheme) {
+        root.dataset.aquilaScheme = previousScheme
+      } else {
+        delete root.dataset.aquilaScheme
+      }
+      root.style.colorScheme = previousColorScheme
+    }
+  }, [isPublicBlogRoute])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     if (process.env.NODE_ENV !== "production") return
 
@@ -153,7 +173,11 @@ const RootLayout = ({
       {/* // TODO: replace react query */}
       {/* {metaConfig.type !== "Paper" && <Header />} */}
       {isAdminRoute || isDedicatedEditorRoute ? null : (
-        <Header fullWidth={false} showThemeToggle={effectiveBlogDesign === "legacy"} blogTitle={headerBlogTitle} />
+        <Header
+          fullWidth={false}
+          showThemeToggle={!isPublicBlogRoute && effectiveBlogDesign === "legacy"}
+          blogTitle={headerBlogTitle}
+        />
       )}
       <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
     </ThemeProvider>

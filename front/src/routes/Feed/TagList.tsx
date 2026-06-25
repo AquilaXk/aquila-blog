@@ -104,6 +104,7 @@ const TagList: React.FC = () => {
   return (
     <StyledWrapper>
       <section
+        id="topics"
         className="desktopPanel"
         aria-label="태그 목록"
       >

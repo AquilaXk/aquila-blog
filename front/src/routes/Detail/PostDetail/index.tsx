@@ -108,7 +108,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const commentsCount = typeof data?.commentsCount === "number" ? data.commentsCount : 0
   const commentsProgressLabel = commentsRailActive ? "읽는 중" : `${commentsCount}`
   const extractedSummaryState = useMemo(() => extractLeadingSummaryBlock(data?.content || "", 180), [data?.content])
-  const leadSummaryText = extractedSummaryState.summary || data?.summary?.trim() || ""
+  const leadSummaryText = extractedSummaryState.summary
   const renderedContent = useMemo(() => {
     if (!data?.content) return ""
     return extractedSummaryState.summary ? extractedSummaryState.contentWithoutSummary : data.content

@@ -29,7 +29,7 @@ test.describe("core smoke public shell", () => {
     expect(useSchemeSource).not.toMatch(/setScheme\(nextScheme\)\s*clearSchemeBootstrapAfterHydration\(\)/)
   })
 
-  test("OS 다크 첫 로드는 root scheme seed와 themed route guard를 함께 삽입한다", async ({ page }) => {
+  test("OS 다크 첫 로드는 bootstrap guard를 삽입하고 공개 V4 route는 light로 수렴한다", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" })
     await mockFeedEndpoints(page)
     await page.route("**/member/api/v1/auth/me", async (route) => {
@@ -96,8 +96,8 @@ test.describe("core smoke public shell", () => {
       throw new Error("OS 다크 첫 로드 bootstrap style을 캡처하지 못했습니다.")
     }
 
-    expect(firstLoadScheme.datasetScheme).toBe("dark")
-    expect(firstLoadScheme.bodyBackground).toBe("rgb(18, 18, 18)")
+    expect(firstLoadScheme.datasetScheme).toBe("light")
+    expect(firstLoadScheme.bodyBackground).toBe("rgb(243, 245, 248)")
     expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap]{background:#121212;color-scheme:dark;}")
     expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap] body{background:#121212;color:#f5f5f5;color-scheme:dark;}")
     expect(bootstrapStyle).toContain('html[data-aquila-scheme-bootstrap="dark"] *{color-scheme:dark!important;}')
@@ -149,8 +149,7 @@ test.describe("core smoke public shell", () => {
   expect(rootLayoutSource).toContain(
     'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
   )
-  expect(rootLayoutSource).toContain('showThemeToggle={effectiveBlogDesign === "legacy"}')
-  expect(rootLayoutSource).not.toContain('showThemeToggle={effectiveBlogDesign === "legacy" && !isPublicBlogRoute}')
+  expect(rootLayoutSource).toContain('showThemeToggle={!isPublicBlogRoute && effectiveBlogDesign === "legacy"}')
   expect(rootLayoutSource).toContain("refetchOnMount: isDesignAwareRoute")
   expect(rootLayoutSource).toContain("staleTimeMs: isDesignAwareRoute ? 0 : undefined")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')

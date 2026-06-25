@@ -39,7 +39,7 @@ export const PostsHeroCopy = styled(AdminWorkspaceHeroCopy)`
   }
 
   > span {
-    color: ${({ theme }) => theme.colors.blue9};
+    color: ${({ theme }) => theme.colors.blue11};
     font-size: 0.62rem;
     font-weight: 820;
     letter-spacing: 0.08em;
@@ -67,7 +67,7 @@ export const WorkspaceMain = styled.div`
 export const PrimaryCta = styled.button`
   border: 0;
   border-radius: 2px;
-  background: ${({ theme }) => theme.colors.blue9};
+  background: ${({ theme }) => theme.colors.blue11};
   color: ${({ theme }) => theme.colors.gray1};
   min-height: 38px;
   padding: 0 0.95rem;

@@ -493,13 +493,15 @@ test.describe("관리자 클라우드", () => {
 
     await page.goto("/admin/cloud")
 
-    await expect(page.getByRole("heading", { name: "내 파일" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "미디어 라이브러리" })).toBeVisible()
+    await expect(page.getByText("Storage")).toBeVisible()
+    await expect(page.getByRole("button", { name: "파일을 끌어놓거나 클릭해 업로드" })).toBeVisible()
     await expect(page.getByRole("link", { name: "클라우드" }).first()).toHaveAttribute("href", "/admin/cloud")
     await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
     await expect(page.getByRole("row", { name: /home-server-rack\.png/ })).toBeVisible()
     await expect(page.getByRole("row", { name: /deploy-walkthrough\.mp4/ })).toBeVisible()
     await expect(page.getByText("표시할 파일이 없습니다.")).toHaveCount(0)
-    await expect(page.getByText("계정 소유주만 볼 수 있음").first()).toBeVisible()
+    await expect(page.getByLabel("클라우드 상세정보")).toHaveCount(0)
     await expect(page.getByRole("button", { name: "운영 점검 리포트.pdf 즐겨찾기 (준비 중)" })).toBeDisabled()
     await expect(page.getByText("문", { exact: true })).toHaveCount(0)
     await expect(page.getByText("PDF").first()).toBeVisible()
@@ -568,6 +570,7 @@ test.describe("관리자 클라우드", () => {
 
     await page.locator('button[title="운영 점검 리포트.pdf"]').click()
     await expect(page.getByRole("heading", { name: "문서 뷰어" })).toBeVisible()
+    await expect(page.getByText("계정 소유주만 볼 수 있음").first()).toBeVisible()
     await expect(page.getByText("미리보기 완료")).toBeVisible()
     await expectPdfPreviewFitsDetailPanel(page, "운영 점검 리포트.pdf PDF 미리보기")
     await page.getByRole("button", { name: "상세 패널 닫기" }).click()
@@ -605,7 +608,7 @@ test.describe("관리자 클라우드", () => {
 
     await page.goto("/admin/cloud")
 
-    await expect(page.getByRole("heading", { name: "내 파일" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "미디어 라이브러리" })).toBeVisible()
     await expect(page.locator('button[aria-label="파일 업로드"]').first()).toBeVisible()
     await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toBeVisible()
     await expect(page.locator("[data-admin-cloud-skeleton-row]")).toHaveCount(3)
@@ -898,6 +901,7 @@ test.describe("관리자 클라우드", () => {
 
     const selectedRow = page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })
     await expect(selectedRow).toBeVisible()
+    await selectedRow.locator('button[title="운영 점검 리포트.pdf"]').click()
     const nameCell = selectedRow.locator("td").nth(2)
     const typeBadge = selectedRow.getByLabel("문서")
     await expect(typeBadge).toHaveText("PDF")
@@ -1005,7 +1009,7 @@ test.describe("관리자 클라우드", () => {
     })
 
     await page.goto("/admin/cloud")
-    await expect(page.getByRole("heading", { name: "내 파일" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "미디어 라이브러리" })).toBeVisible()
     await page.waitForTimeout(250)
 
     expect(snapshotRequestCount).toBe(0)

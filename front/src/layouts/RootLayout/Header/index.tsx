@@ -68,6 +68,16 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
   }, [isPostDetailRoute])
 
   useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+
+    wrapper.inert = hiddenByScroll
+    return () => {
+      wrapper.inert = false
+    }
+  }, [hiddenByScroll])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     const wrapper = wrapperRef.current
     if (!wrapper) return
@@ -137,8 +147,10 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
   return (
     <StyledWrapper
       ref={wrapperRef}
+      data-ui="app-header"
       data-autohide={isPostDetailRoute}
       data-hidden={hiddenByScroll}
+      aria-hidden={hiddenByScroll ? true : undefined}
       style={
         hiddenByScroll
           ? {
@@ -166,9 +178,8 @@ const StyledWrapper = styled.div`
   z-index: ${zIndexes.header};
   position: sticky;
   top: 0;
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(249, 251, 254, 0.94)" : `${theme.colors.gray1}e6`};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: var(--aq-header-bg);
+  border-bottom: 1px solid var(--aq-border);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   transform: translateY(0);

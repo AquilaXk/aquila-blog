@@ -51,6 +51,6 @@ const StyledWrapper = styled.footer`
     padding: 0 0.15rem;
     font-size: 0.875rem;
     line-height: 1.25rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--aq-muted);
   }
 `

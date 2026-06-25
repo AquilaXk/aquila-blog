@@ -57,7 +57,7 @@ const StyledWrapper = styled.div`
   > .content {
     margin-bottom: 2.25rem;
     width: 100%;
-    border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
+    border-bottom: 1px solid var(--aq-border);
     background: transparent;
     padding: 0 0 1rem;
 
@@ -67,8 +67,8 @@ const StyledWrapper = styled.div`
       margin: 0 auto 1rem;
       border-radius: 50%;
       overflow: hidden;
-      border: 1px solid ${({ theme }) => theme.publicDesign.border};
-      background: ${({ theme }) => theme.publicDesign.surface};
+      border: 1px solid var(--aq-border);
+      background: var(--aq-surface);
 
       &:after {
         content: "";
@@ -100,14 +100,14 @@ const StyledWrapper = styled.div`
         margin: 0.55rem 0 1rem;
         font-size: 0.9rem;
         line-height: 1.25rem;
-        color: ${({ theme }) => theme.colors.gray11};
+        color: var(--aq-muted);
         font-weight: 600;
       }
       .bio {
         margin-bottom: 0.25rem;
         font-size: 0.875rem;
         line-height: 1.55;
-        color: ${({ theme }) => theme.colors.gray11};
+        color: var(--aq-muted);
         white-space: pre-line;
         word-break: break-word;
       }

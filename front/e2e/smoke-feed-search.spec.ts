@@ -49,7 +49,7 @@ test.describe("core smoke feed and search", () => {
     }
   })
 
-  expect(homeStyles.firstCard?.backgroundColor).toBe("rgba(0, 0, 0, 0)")
+  expect(homeStyles.firstCard?.backgroundColor).toBe("rgb(243, 245, 248)")
   expect(homeStyles.firstCard?.borderBottomWidth).toBe("1px")
 })
 

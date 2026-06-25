@@ -419,7 +419,7 @@ test.describe("성능 레이아웃과 표면 예산", () => {
     const fingerprint = await getThemeSurfaceFingerprint(page)
 
     expect(fingerprint.route).toBe(scenario.route)
-    expect(fingerprint.themeToggleLabel).toBe("다크 모드로 전환")
+    expect(fingerprint.themeToggleLabel).toBe("테마 전환")
     expect(fingerprint.bodyBg).toBe("rgb(243, 245, 248)")
     expect(fingerprint.headerBg).not.toBeNull()
     expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
@@ -449,8 +449,8 @@ test.describe("성능 레이아웃과 표면 예산", () => {
     const fingerprint = await getThemeSurfaceFingerprint(page)
     expect(fingerprint.route).toBe(scenario.route)
     expect(fingerprint.bodyBg).toBe("rgb(243, 245, 248)")
-    expect(fingerprint.headerBg).toBe("rgba(249, 251, 254, 0.94)")
-    expect(fingerprint.themeToggleLabel).toBe("다크 모드로 전환")
+    expect(fingerprint.headerBg).toBe("rgb(255, 255, 255)")
+    expect(fingerprint.themeToggleLabel).toBe("테마 전환")
     expect(fingerprint.authShellBg).toBe("rgb(255, 255, 255)")
     expect(fingerprint.authShellBorder).toBe("rgb(215, 224, 234)")
   }

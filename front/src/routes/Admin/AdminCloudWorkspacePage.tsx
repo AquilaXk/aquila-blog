@@ -1,7 +1,15 @@
 /* eslint-disable @next/next/no-img-element -- private cloud content needs browser-owned auth cookies. */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist"
-import { type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import {
+  type ChangeEvent,
+  type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import {
   deleteCloudFile,
   getCloudFileContentUrl,
@@ -82,6 +90,7 @@ import {
   SkeletonRows,
   ToastViewport,
   Timeline,
+  UploadZone,
   UploadInput,
   ViewModeButton,
   VideoFrame,
@@ -91,8 +100,6 @@ const CLOUD_QUERY_KEY = "admin-cloud-files"
 const EMPTY_CLOUD_FILES: CloudFile[] = []
 const PDF_STANDARD_FONT_DATA_URL = "/pdfjs/standard_fonts/"
 const PDF_LOADED_TASK_DESTROY_DELAY_MS = 3000
-const DETAIL_INLINE_MEDIA_QUERY = "(min-width: 1081px)"
-
 const mediaKindFromFilter = (filter: CloudMediaFilter): CloudMediaKind | undefined =>
   filter === "ALL" ? undefined : filter
 
@@ -485,7 +492,6 @@ const AdminCloudWorkspacePage = () => {
   const queryClient = useQueryClient()
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const uploadControllersRef = useRef<Map<string, AbortController>>(new Map())
-  const didInitializeDetailModeRef = useRef(false)
   const [filter, setFilter] = useState<CloudMediaFilter>("ALL")
   const [keyword, setKeyword] = useState("")
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null)
@@ -534,14 +540,6 @@ const AdminCloudWorkspacePage = () => {
     if (selectedFileId && files.some((file) => file.id === selectedFileId)) return
     setSelectedFileId(files[0]?.id ?? null)
   }, [files, selectedFileId])
-
-  useEffect(() => {
-    if (didInitializeDetailModeRef.current || filesQuery.isLoading) return
-    didInitializeDetailModeRef.current = true
-    if (files.length === 0 || isDetailPanelOpen) return
-    const canUseInlineDetail = window.matchMedia(DETAIL_INLINE_MEDIA_QUERY).matches
-    setIsDetailPanelOpen(canUseInlineDetail && files.length <= 8)
-  }, [files.length, filesQuery.isLoading, isDetailPanelOpen])
 
   useEffect(() => {
     setCheckedFileIds((current) => current.filter((id) => files.some((file) => file.id === id)))
@@ -658,12 +656,24 @@ const AdminCloudWorkspacePage = () => {
     void run()
   }, [queryClient, uploadQueue])
 
-  const handleUploadSelect = (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.currentTarget.files || [])
+  const queueUploadFiles = (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) return
 
     setUploadQueue((current) => [...current, ...selectedFiles.map(createUploadQueueItem)])
+  }
+
+  const handleUploadSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    queueUploadFiles(Array.from(event.currentTarget.files || []))
     event.currentTarget.value = ""
+  }
+
+  const handleUploadDragOver = (event: ReactDragEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+  }
+
+  const handleUploadDrop = (event: ReactDragEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    queueUploadFiles(Array.from(event.dataTransfer.files || []))
   }
 
   const handleCancelUpload = (item: UploadQueueItem) => {
@@ -847,7 +857,9 @@ const AdminCloudWorkspacePage = () => {
         <CloudContent>
           <CloudTitleBar>
             <div>
-              <h1>내 파일</h1>
+              <span>Storage</span>
+              <h1>미디어 라이브러리</h1>
+              <p>글 이미지, 첨부 파일과 업로드 lifecycle을 관리합니다.</p>
             </div>
             <CloudSearchField>
               <AppIcon name="search" />
@@ -860,6 +872,18 @@ const AdminCloudWorkspacePage = () => {
               <SearchDetail aria-hidden="true">파일</SearchDetail>
             </CloudSearchField>
           </CloudTitleBar>
+
+          <UploadZone
+            type="button"
+            aria-label="파일을 끌어놓거나 클릭해 업로드"
+            onClick={() => uploadInputRef.current?.click()}
+            onDragOver={handleUploadDragOver}
+            onDrop={handleUploadDrop}
+          >
+            <AppIcon name="cloud" />
+            <strong>파일을 끌어놓거나 클릭해 업로드</strong>
+            <span>사진 50MB · 문서 100MB · 동영상 5GB 이하</span>
+          </UploadZone>
 
           <ActionBar>
             <ActionGroup>
@@ -938,10 +962,10 @@ const AdminCloudWorkspacePage = () => {
 
           <FileTableScroll>
             {files.length === 0 && filesQuery.isLoading ? (
-              <FileTable aria-busy="true">
+              <FileTable role="table" aria-busy="true">
                 <FileTableHead />
                 <tbody>
-                  <tr>
+                  <tr data-loading-row="true">
                     <td colSpan={5}>
                       <LoadingTableStatus role="status" aria-label="파일 목록 로딩">
                         <SkeletonRows aria-hidden="true">
@@ -974,7 +998,7 @@ const AdminCloudWorkspacePage = () => {
                 )}
               </EmptyTableState>
             ) : (
-              <FileTable aria-busy={filesQuery.isFetching ? "true" : "false"}>
+              <FileTable role="table" aria-busy={filesQuery.isFetching ? "true" : "false"}>
                 <FileTableHead />
                 <tbody>
                   {files.map((file) => {
@@ -982,7 +1006,7 @@ const AdminCloudWorkspacePage = () => {
                     const selected = shouldShowDetailPanel && selectedFile?.id === file.id
                     const filenameParts = getCloudFilenameParts(file.originalFilename)
                     return (
-                      <tr key={file.id} data-selected={selected ? "true" : "false"}>
+                      <tr key={file.id} role="row" data-selected={selected ? "true" : "false"}>
                         <SelectBoxCell>
                           <RowCheckbox
                             type="checkbox"

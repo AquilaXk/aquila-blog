@@ -149,35 +149,50 @@ export const CloudContent = styled.div`
   display: grid;
   align-content: start;
   min-width: 0;
+  padding: 2rem 2.125rem 4.375rem;
   background: ${surface};
+
+  @media (max-width: 820px) {
+    padding: 1.5rem 1rem 3.75rem;
+  }
 `
 
 export const CloudTitleBar = styled.header`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 28rem);
-  gap: 1rem;
-  align-items: center;
-  padding: 1rem 1.25rem 0.72rem;
-  border-bottom: 1px solid ${border};
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.875rem;
+  margin-bottom: 1.75rem;
+
+  span {
+    color: ${accentGold};
+    font-size: 0.68rem;
+    line-height: 1.4;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+  }
 
   h1 {
-    margin: 0;
+    margin: 0.32rem 0 0;
     color: ${textPrimary};
-    font-size: 1.08rem;
-    line-height: 1.2;
+    font-size: 2.125rem;
+    line-height: 1.08;
     font-weight: 850;
     letter-spacing: 0;
   }
 
   p {
-    margin: 0.22rem 0 0;
+    margin: 0.45rem 0 0;
     color: ${textMuted};
-    font-size: 0.82rem;
+    font-size: 0.88rem;
     line-height: 1.45;
   }
 
   @media (max-width: 980px) {
-    grid-template-columns: minmax(0, 1fr);
+    align-items: flex-start;
+    flex-direction: column;
   }
 `
 
@@ -231,11 +246,54 @@ export const ActionBar = styled.div`
   justify-content: space-between;
   gap: 0.8rem;
   min-width: 0;
-  padding: 0.65rem 1.25rem;
-  border-bottom: 1px solid ${border};
+  margin-bottom: 1rem;
 
   @media (max-width: 760px) {
     grid-template-columns: minmax(0, 1fr);
+  }
+`
+
+export const UploadZone = styled.button`
+  display: grid;
+  place-items: center;
+  gap: 0.38rem;
+  width: 100%;
+  min-height: 8.65rem;
+  margin: 0 0 1.375rem;
+  border: 1px dashed ${borderStrong};
+  border-radius: 0;
+  padding: 1.75rem;
+  background: ${surface};
+  color: ${textMuted};
+  text-align: center;
+  cursor: pointer;
+
+  svg {
+    color: ${accentGold};
+  }
+
+  strong {
+    display: block;
+    color: ${textPrimary};
+    font-size: 0.96rem;
+    font-weight: 850;
+  }
+
+  span {
+    color: ${textMuted};
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  &:hover,
+  &:focus-visible {
+    border-color: ${accentGold};
+    background: ${surfaceRaised};
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--admin-focus-ring, rgba(9, 105, 218, 0.2));
   }
 `
 
@@ -425,19 +483,34 @@ export const Notice = styled.p`
 
 export const FileTableScroll = styled.div`
   min-width: 0;
-  overflow-x: auto;
+  overflow-x: visible;
 `
 
 export const FileTable = styled.table`
   width: 100%;
-  min-width: 48rem;
-  border-collapse: collapse;
-  table-layout: fixed;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  display: grid;
   color: ${textPrimary};
+
+  thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  tbody {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.875rem;
+  }
 
   th,
   td {
-    border-bottom: 1px solid ${border};
     text-align: left;
     vertical-align: middle;
   }
@@ -452,19 +525,40 @@ export const FileTable = styled.table`
   }
 
   td {
-    height: 4.15rem;
-    padding: 0 0.7rem;
+    height: auto;
+    min-width: 0;
+    padding: 0;
     color: ${textSecondary};
     font-size: 0.82rem;
     font-weight: 700;
   }
 
-  tbody tr[data-selected="true"] {
-    background: ${surfaceAccent};
+  tbody tr {
+    display: grid;
+    grid-template-columns: 1.6rem 1.6rem minmax(0, 1fr);
+    grid-template-rows: minmax(4.2rem, auto) auto;
+    gap: 0.55rem 0.52rem;
+    align-items: center;
+    min-width: 0;
+    min-height: 9.25rem;
+    border: 1px solid ${border};
+    padding: 0.875rem;
+    background: ${surface};
+    transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
   }
 
-  tbody tr {
-    transition: background 140ms ease, color 140ms ease;
+  tbody tr[data-loading-row="true"] {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 12rem;
+  }
+
+  tbody tr[data-loading-row="true"] td {
+    grid-column: 1 / -1;
+  }
+
+  tbody tr[data-selected="true"] {
+    background: ${surfaceAccent};
+    border-color: ${borderStrong};
   }
 
   tbody tr:hover,
@@ -473,7 +567,9 @@ export const FileTable = styled.table`
   }
 
   tbody tr td:first-of-type {
+    align-self: stretch;
     border-left: 3px solid transparent;
+    padding-left: 0.35rem;
   }
 
   tbody tr[data-selected="true"] td:first-of-type {
@@ -484,22 +580,44 @@ export const FileTable = styled.table`
   th:nth-of-type(2),
   td:nth-of-type(1),
   td:nth-of-type(2) {
-    width: 2.65rem;
+    width: auto;
   }
 
   th:nth-of-type(3),
   td:nth-of-type(3) {
     width: auto;
+    min-width: 0;
   }
 
   th:nth-of-type(4),
   td:nth-of-type(4) {
-    width: 5.8rem;
+    grid-column: 1 / 3;
+    align-self: end;
+    width: auto;
+    color: ${textMuted};
+    font-size: 0.76rem;
   }
 
   th:nth-of-type(5),
   td:nth-of-type(5) {
-    width: 8.9rem;
+    grid-column: 3;
+    align-self: end;
+    justify-self: end;
+    width: auto;
+    color: ${textMuted};
+    font-size: 0.76rem;
+  }
+
+  @media (max-width: 1180px) {
+    tbody {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    tbody {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 `
 
@@ -557,13 +675,13 @@ export const FileIdentity = styled.div`
 `
 
 export const FileThumbnailFrame = styled.span`
-  width: 3rem;
-  height: 2.4rem;
+  width: 3.3rem;
+  height: 3.3rem;
   display: grid;
   place-items: center;
   overflow: hidden;
   border: 1px solid ${border};
-  border-radius: 6px;
+  border-radius: 0;
   background: ${surfaceRaised};
   color: ${accentGold};
   font-size: 0.68rem;
@@ -654,6 +772,7 @@ export const FileNameButton = styled.button`
     white-space: nowrap;
   }
 
+  &:focus,
   &:focus-visible {
     outline: none;
     color: ${accentGold};
@@ -667,6 +786,7 @@ export const EmptyTableState = styled.div`
   gap: 0.62rem;
   min-height: 20rem;
   padding: 1.25rem;
+  border: 1px solid ${border};
   color: ${textMuted};
   text-align: center;
 

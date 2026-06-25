@@ -54,8 +54,8 @@ test.describe("모바일 관리자 레이아웃", () => {
   await mockAdminPostsWorkspaceEndpoints(page)
 
   await page.goto("/admin/posts")
-  await expect(page.getByRole("heading", { name: "글 목록" })).toBeVisible()
-  await expect(page.getByLabel("검색어")).toBeVisible()
+  await expect(page.getByRole("heading", { name: "글 관리" })).toBeVisible()
+  await expect(page.getByLabel("글 검색")).toBeVisible()
 
   const firstListCard = page.locator("article").filter({ hasText: "First fold 운영 점검" }).first()
   await expect(firstListCard).toBeVisible()

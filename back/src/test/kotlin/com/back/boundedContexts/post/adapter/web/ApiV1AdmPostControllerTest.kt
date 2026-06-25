@@ -124,7 +124,19 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자 첫 화면 기본 목록은 snapshot cache 서비스로 응답한다`() {
-        val post = samplePost(id = 55, title = "첫 화면 캐시", content = "본문", published = true, listed = true)
+        val post =
+            samplePost(
+                id = 55,
+                title = "첫 화면 캐시",
+                content =
+                    """
+                    category: 운영
+
+                    본문
+                    """.trimIndent(),
+                published = true,
+                listed = true,
+            )
         given(adminPostListSnapshotService.getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT))
             .willReturn(
                 PageDto(
@@ -147,6 +159,7 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 status { isOk() }
                 jsonPath("$.content[0].id") { value(55) }
                 jsonPath("$.content[0].title") { value("첫 화면 캐시") }
+                jsonPath("$.content[0].category[0]") { value("운영") }
             }
 
         then(adminPostListSnapshotService)

@@ -8,6 +8,58 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("core smoke detail rendering", () => {
+  test("leading summary block은 header deck과 body lead summary에 중복 렌더되지 않는다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/1701", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 1701,
+        createdAt: "2026-06-25T00:00:00Z",
+        modifiedAt: "2026-06-25T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "요약 중복 방지",
+        content: [
+          "> 요약: 캐시 무효화 경계를 먼저 정리합니다.",
+          "",
+          "본문은 요약 다음에 이어지는 실제 상세 설명입니다.",
+        ].join("\n"),
+        tags: ["테스트태그"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/1701/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/1701")
+  await expect(page.getByRole("heading", { name: "요약 중복 방지" })).toBeVisible()
+  await expect(page.locator(".leadSummary")).toContainText("캐시 무효화 경계를 먼저 정리합니다.")
+  await expect(page.locator(".deck")).toHaveCount(0)
+  await expect(page.getByText("본문은 요약 다음에 이어지는 실제 상세 설명입니다.")).toBeVisible()
+})
+
   test("상세 본문은 legacy inline code html을 인라인 코드로 정규화한다", async ({ page }) => {
   await page.route("**/post/api/v1/posts/105", async (route) => {
     await route.fulfill({

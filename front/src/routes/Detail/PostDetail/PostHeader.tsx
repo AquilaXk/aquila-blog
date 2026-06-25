@@ -32,6 +32,7 @@ type Props = {
   adminActionPending?: boolean
   onEditPost?: () => void
   onDeletePost?: () => void
+  deckSummary?: string
   interactiveTags?: boolean
   showEngagement?: boolean
   showThumbnail?: boolean
@@ -55,6 +56,7 @@ const PostHeader: React.FC<Props> = ({
   adminActionPending = false,
   onEditPost,
   onDeletePost,
+  deckSummary,
   showEngagement = true,
   showThumbnail = true,
 }) => {
@@ -83,6 +85,7 @@ const PostHeader: React.FC<Props> = ({
       : shareFeedback === "shared"
         ? "복사 완료"
         : "복사 완료"
+  const resolvedDeckSummary = (deckSummary ?? data.summary ?? "").trim()
 
   return (
     <StyledWrapper>
@@ -98,7 +101,7 @@ const PostHeader: React.FC<Props> = ({
         </div>
       ) : null}
       <h1 className="title">{data.title}</h1>
-      {data.summary?.trim() ? <p className="deck">{data.summary.trim()}</p> : null}
+      {resolvedDeckSummary ? <p className="deck">{resolvedDeckSummary}</p> : null}
 
       <div className="metaRow">
         {data.author?.[0]?.name && (

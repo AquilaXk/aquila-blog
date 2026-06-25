@@ -109,6 +109,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const commentsProgressLabel = commentsRailActive ? "읽는 중" : `${commentsCount}`
   const extractedSummaryState = useMemo(() => extractLeadingSummaryBlock(data?.content || "", 180), [data?.content])
   const leadSummaryText = extractedSummaryState.summary
+  const headerDeckSummaryText = extractedSummaryState.summary ? "" : data?.summary?.trim() || ""
   const renderedContent = useMemo(() => {
     if (!data?.content) return ""
     return extractedSummaryState.summary ? extractedSummaryState.contentWithoutSummary : data.content
@@ -444,6 +445,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 adminActionPending={adminActionPending}
                 onEditPost={handleEditPost}
                 onDeletePost={handleDeletePost}
+                deckSummary={headerDeckSummaryText}
               />
             </section>
           )}

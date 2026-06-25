@@ -98,12 +98,11 @@ test.describe("core smoke public shell", () => {
 
     expect(firstLoadScheme.datasetScheme).toBe("light")
     expect(firstLoadScheme.bodyBackground).toBe("rgb(243, 245, 248)")
-    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap]{background:#121212;color-scheme:dark;}")
-    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap] body{background:#121212;color:#f5f5f5;color-scheme:dark;}")
-    expect(bootstrapStyle).toContain('html[data-aquila-scheme-bootstrap="dark"] *{color-scheme:dark!important;}')
-    expect(bootstrapStyle).toContain("background-color:transparent!important")
-    expect(bootstrapStyle).toContain('[role="search"],[class*="Card"],[class*="card"]')
-    expect(bootstrapStyle).not.toContain("#f3f5f8")
+    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap]{background:#f3f5f8;color-scheme:light;}")
+    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap] body{background:#f3f5f8;color:#101214;color-scheme:light;}")
+    expect(bootstrapStyle).not.toContain('html[data-aquila-scheme-bootstrap="dark"] *{color-scheme:dark!important;}')
+    expect(bootstrapStyle).not.toContain("background-color:transparent!important")
+    expect(bootstrapStyle).not.toContain("#121212")
   })
 
   test("public blog appearance는 전역 theme와 legacy 디자인으로 고정된다", async () => {

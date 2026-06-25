@@ -8,7 +8,7 @@ const MARKDOWN_IMAGE_REGEX = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const INLINE_CODE_REGEX = /`([^`]+)`/g
 const MARKDOWN_LINK_REGEX = /\[(.*?)\]\((.*?)\)/g
 const MARKDOWN_PUNCTUATION_REGEX = /[#>*_~|-]/g
-const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:["'“”]\s*)?(?:요약|summary)\b/i
+const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:["'“”]\s*)?(?:요약|summary)(?=\s|[:：-]|$)/i
 const SUMMARY_HTML_BLOCKQUOTE_REGEX = /^\s*<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>\s*/i
 const HTML_TAG_REGEX = /<[^>]+>/g
 const HTML_NBSP_REGEX = /&nbsp;|&#160;/gi
@@ -160,7 +160,7 @@ export const extractLeadingSummaryBlockFromHtml = (
       .trim()
   )
 
-  if (!normalizedInnerText || !/^(?:["'“”]\s*)?(?:요약|summary)\b/i.test(normalizedInnerText)) {
+  if (!normalizedInnerText || !/^(?:["'“”]\s*)?(?:요약|summary)(?=\s|[:：-]|$)/i.test(normalizedInnerText)) {
     return {
       summary: "",
       contentHtmlWithoutSummary: contentHtml,

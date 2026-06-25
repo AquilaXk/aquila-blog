@@ -22,13 +22,15 @@ const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
   var configuredScheme = "${AQUILA_CONFIGURED_SCHEME}";
   var cookieMatch = document.cookie.match(/(?:^|; )scheme=(light|dark)(?:;|$)/);
   var cachedScheme = cookieMatch ? cookieMatch[1] : "";
+  var pathname = window.location && window.location.pathname ? window.location.pathname : "/";
+  var isPublicBlogRoute = pathname === "/" || pathname === "/about" || /^\\/posts\\/[^/]+\\/?$/.test(pathname);
   var systemDark = false;
   try {
     systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   } catch (_) {}
   var defaultScheme = configuredScheme === "system" ? (systemDark ? "dark" : "light") : configuredScheme;
-  var nextScheme = cachedScheme || defaultScheme;
-  var bootstrapSource = cachedScheme ? "cookie" : "system";
+  var nextScheme = isPublicBlogRoute ? "light" : (cachedScheme || defaultScheme);
+  var bootstrapSource = isPublicBlogRoute ? "public" : (cachedScheme ? "cookie" : "system");
   var background = nextScheme === "dark" ? "#121212" : "#f3f5f8";
   var foreground = nextScheme === "dark" ? "#f5f5f5" : "#101214";
   var darkPreHydrationGuard = nextScheme === "dark"

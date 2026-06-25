@@ -6,6 +6,7 @@ import {
   ListSkeleton,
   MobileCardList,
   PageFooter,
+  RowActions,
   PostsDesktopTable,
   PrimaryInlineButton,
   TitleCell,
@@ -13,9 +14,9 @@ import {
   VisibilityBadge,
 } from "./AdminPostsWorkspaceList.styles"
 import {
+  buildRowTitle,
   formatDateTime,
   formatWorkspaceViews,
-  buildRowTitle,
   getWorkspaceTopicLabel,
   LIST_SKELETON_ROW_COUNT,
   toVisibility,
@@ -37,6 +38,9 @@ type AdminPostsWorkspaceListProps = {
   onLoadList: () => void
   onOpenWriteRoute: (query?: Record<string, string>) => void
   onPageChange: (page: number) => void
+  mutationPending: { rowId: number; kind: "delete" | "restore" | "hardDelete" } | null
+  onHardDeletePost: (row: AdminPostListItem) => void
+  onRestorePost: (row: AdminPostListItem) => void
   onResetSearch: () => void
 }
 
@@ -52,11 +56,17 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
   onLoadList,
   onOpenWriteRoute,
   onPageChange,
+  mutationPending,
+  onHardDeletePost,
+  onRestorePost,
   onResetSearch,
 }) => {
+  const isDeletedScope = listScope === "deleted"
   const openEditorForRow = (row: AdminPostListItem) => onOpenWriteRoute({ postId: String(row.id) })
   const getStatusLabel = (row: AdminPostListItem) => (listScope === "deleted" ? "삭제됨" : workspaceStatusLabel(row))
   const getStatusTone = (row: AdminPostListItem) => (listScope === "deleted" ? "PRIVATE" : toVisibility(row.published, row.listed))
+  const isRowPending = (row: AdminPostListItem, kind: "restore" | "hardDelete") =>
+    mutationPending?.rowId === row.id && mutationPending.kind === kind
 
   if (isListLoading) {
     return (
@@ -161,22 +171,26 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
               <th className="topicCell">Topic</th>
               <th className="statusCell">Status</th>
               <th className="dateCell">Updated</th>
-              <th className="viewsCell">Views</th>
+              <th className="viewsCell">{isDeletedScope ? "Actions" : "Views"}</th>
             </tr>
           </thead>
           <tbody>
             {listState.rows.map((row) => (
               <tr
                 key={row.id}
-                tabIndex={0}
-                role="button"
-                onClick={() => openEditorForRow(row)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    openEditorForRow(row)
-                  }
-                }}
+                tabIndex={isDeletedScope ? undefined : 0}
+                role={isDeletedScope ? undefined : "button"}
+                onClick={isDeletedScope ? undefined : () => openEditorForRow(row)}
+                onKeyDown={
+                  isDeletedScope
+                    ? undefined
+                    : (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          openEditorForRow(row)
+                        }
+                      }
+                }
               >
                 <td className="selectCell">
                   <span className="check" aria-hidden="true" />
@@ -194,7 +208,28 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                   <VisibilityBadge data-tone={getStatusTone(row)}>{getStatusLabel(row)}</VisibilityBadge>
                 </td>
                 <td className="dateCell">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</td>
-                <td className="viewsCell">{listScope === "active" ? formatWorkspaceViews(row) : "-"}</td>
+                <td className="viewsCell">
+                  {isDeletedScope ? (
+                    <RowActions>
+                      <GhostButton
+                        type="button"
+                        disabled={isRowPending(row, "restore")}
+                        onClick={() => onRestorePost(row)}
+                      >
+                        복구
+                      </GhostButton>
+                      <GhostButton
+                        type="button"
+                        disabled={isRowPending(row, "hardDelete")}
+                        onClick={() => onHardDeletePost(row)}
+                      >
+                        영구삭제
+                      </GhostButton>
+                    </RowActions>
+                  ) : (
+                    formatWorkspaceViews(row)
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -206,15 +241,19 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
           {listState.rows.map((row) => (
             <article
               key={`mobile-${row.id}`}
-              tabIndex={0}
-              role="button"
-              onClick={() => openEditorForRow(row)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault()
-                  openEditorForRow(row)
-                }
-              }}
+              tabIndex={isDeletedScope ? undefined : 0}
+              role={isDeletedScope ? undefined : "button"}
+              onClick={isDeletedScope ? undefined : () => openEditorForRow(row)}
+              onKeyDown={
+                isDeletedScope
+                  ? undefined
+                  : (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        openEditorForRow(row)
+                      }
+                    }
+              }
             >
               <header>
                 <span className="id">#{row.id}</span>
@@ -227,6 +266,24 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                 {getWorkspaceTopicLabel(row)} · {formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)} ·{" "}
                 {listScope === "active" ? formatWorkspaceViews(row) : "-"} views
               </span>
+              {isDeletedScope ? (
+                <RowActions>
+                  <GhostButton
+                    type="button"
+                    disabled={isRowPending(row, "restore")}
+                    onClick={() => onRestorePost(row)}
+                  >
+                    복구
+                  </GhostButton>
+                  <GhostButton
+                    type="button"
+                    disabled={isRowPending(row, "hardDelete")}
+                    onClick={() => onHardDeletePost(row)}
+                  >
+                    영구삭제
+                  </GhostButton>
+                </RowActions>
+              ) : null}
             </article>
           ))}
         </MobileCardList>

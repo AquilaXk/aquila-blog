@@ -180,7 +180,7 @@ export const sanitizeNumberInput = (value: string, fallback: string) => {
 
 export const buildListEndpoint = (
   scope: PostListScope,
-  options: { page: string; pageSize: string; kw: string; sort: ListSort }
+  options: { page: string; pageSize: string; kw: string; sort: ListSort; status?: PostStatusFilter }
 ) => {
   const query = new URLSearchParams({
     page: options.page,
@@ -191,6 +191,9 @@ export const buildListEndpoint = (
   const endpoint = scope === "deleted" ? "/post/api/v1/adm/posts/deleted" : "/post/api/v1/adm/posts"
   if (scope === "active") {
     query.set("sort", options.sort)
+    if (options.status && options.status !== "all" && options.status !== "deleted") {
+      query.set("status", options.status)
+    }
   }
 
   return `${endpoint}?${query.toString()}`

@@ -96,8 +96,15 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 숨김글을 포함한 전체 글 목록을 조회할 수 있다`() {
         val privatePost = samplePost(id = 101, title = "관리자 검색용 숨김 글", content = "숨김 내용", published = false, listed = false)
-        given(postUseCase.findPagedByKwForAdmin("관리자 검색용 숨김", com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT, 1, 30))
-            .willReturn(PagedResult(content = listOf(privatePost), page = 1, pageSize = 30, totalElements = 1))
+        given(
+            postUseCase.findPagedByKwForAdmin(
+                "관리자 검색용 숨김",
+                com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT,
+                1,
+                30,
+                "all",
+            ),
+        ).willReturn(PagedResult(content = listOf(privatePost), page = 1, pageSize = 30, totalElements = 1))
 
         mvc
             .get("/post/api/v1/adm/posts") {
@@ -147,7 +154,39 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
             .getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT)
         then(postUseCase)
             .should(never())
-            .findPagedByKwForAdmin("", com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT, 1, 20)
+            .findPagedByKwForAdmin("", com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT, 1, 20, "all")
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자 글 목록은 상태 필터를 usecase로 전달한다`() {
+        val draftPost = samplePost(id = 103, title = "임시글", content = "임시글 입니다.", published = false, listed = false)
+        given(
+            postUseCase.findPagedByKwForAdmin(
+                "",
+                com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT,
+                1,
+                20,
+                "draft",
+            ),
+        ).willReturn(PagedResult(content = listOf(draftPost), page = 1, pageSize = 20, totalElements = 1))
+
+        mvc
+            .get("/post/api/v1/adm/posts") {
+                param("page", "1")
+                param("pageSize", "20")
+                param("kw", "")
+                param("sort", "CREATED_AT")
+                param("status", "draft")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.content[0].id") { value(103) }
+                jsonPath("$.pageable.totalElements") { value(1) }
+            }
+
+        then(adminPostListSnapshotService)
+            .should(never())
+            .getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT)
     }
 
     @Test

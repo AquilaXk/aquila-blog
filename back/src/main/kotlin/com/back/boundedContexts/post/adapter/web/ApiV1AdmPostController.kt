@@ -41,6 +41,10 @@ class ApiV1AdmPostController(
     private val postTagRecommendationUseCase: PostTagRecommendationUseCase,
     private val adminPostListSnapshotService: AdminPostListSnapshotUseCase,
 ) {
+    companion object {
+        private val validAdminListStatuses = setOf("all", "draft", "published", "private")
+    }
+
     data class AdminPostsBootstrapResBody(
         val member: AuthSessionMemberDto,
         val firstPage: PageDto<PostDto>,
@@ -79,13 +83,21 @@ class ApiV1AdmPostController(
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+        @RequestParam(defaultValue = "all") status: String,
     ): PageDto<PostDto> {
         val validPage = page.coerceAtLeast(1)
         val validPageSize = pageSize.coerceIn(1, 30)
-        if (kw.isBlank() && validPage == 1 && validPageSize == 20 && sort == PostSearchSortType1.CREATED_AT) {
+        val validStatus = status.takeIf { it in validAdminListStatuses } ?: "all"
+        if (
+            kw.isBlank() &&
+            validPage == 1 &&
+            validPageSize == 20 &&
+            sort == PostSearchSortType1.CREATED_AT &&
+            validStatus == "all"
+        ) {
             return adminPostListSnapshotService.getFirstPageSnapshot(sort)
         }
-        val postPage = postUseCase.findPagedByKwForAdmin(kw, sort, validPage, validPageSize)
+        val postPage = postUseCase.findPagedByKwForAdmin(kw, sort, validPage, validPageSize, validStatus)
         return PageDto(
             postPage.map { post ->
                 PostDto(post).apply {

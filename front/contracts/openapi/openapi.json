@@ -2322,6 +2322,14 @@
             "default" : "CREATED_AT",
             "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
           }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "all"
+          }
         } ],
         "responses" : {
           "200" : {

@@ -47,7 +47,8 @@ class PostRepositoryImpl(
     override fun findQPagedByKwForAdmin(
         kw: String,
         pageable: Pageable,
-    ): Page<Post> = findPosts(null, kw, pageable, publicOnly = false)
+        status: String,
+    ): Page<Post> = findPosts(null, kw, pageable, publicOnly = false, adminStatus = status)
 
     override fun findQPagedByAuthorAndKw(
         author: Member,
@@ -174,6 +175,7 @@ class PostRepositoryImpl(
         publicOnly: Boolean = false,
         tag: String? = null,
         usePostTagIndexTable: Boolean = false,
+        adminStatus: String = "all",
     ): Page<Post> {
         // Keep legacy metaTagsIndex as the default path to avoid rollback-only commits
         // when post_tag_index probing fails on partially migrated runtime nodes.
@@ -187,6 +189,18 @@ class PostRepositoryImpl(
         if (publicOnly) {
             builder.and(post.published.isTrue)
             builder.and(post.listed.isTrue)
+        } else {
+            when (adminStatus) {
+                "draft" ->
+                    builder.and(
+                        post.published
+                            .isFalse
+                            .and(post.listed.isFalse)
+                            .and(post.title.eq("임시글")),
+                    )
+                "published" -> builder.and(post.published.isTrue)
+                "private" -> builder.and(post.published.isFalse.and(post.title.ne("임시글")))
+            }
         }
         author?.let { builder.and(post.author.eq(it)) }
         if (kw.isNotBlank()) builder.and(buildKwPredicate(kw))

@@ -30,6 +30,9 @@ export const AdminPostsWorkspacePageView = (props: Record<string, any>) => {
     listSort,
     listState,
     loadList,
+    mutationPending,
+    onHardDeletePost,
+    onRestorePost,
     openWriteRoute,
     sessionMember,
     setConfirmState,
@@ -88,6 +91,9 @@ export const AdminPostsWorkspacePageView = (props: Record<string, any>) => {
                 onLoadList={() => void loadList()}
                 onOpenWriteRoute={(query) => void openWriteRoute(query)}
                 onPageChange={(page) => setListPage(String(page))}
+                mutationPending={mutationPending}
+                onHardDeletePost={(row) => void onHardDeletePost(row)}
+                onRestorePost={(row) => void onRestorePost(row)}
                 onResetSearch={() => {
                   setListKw("")
                   setListPage(DEFAULT_PAGE)

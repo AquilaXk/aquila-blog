@@ -186,6 +186,12 @@ export const PageFooter = styled(ActionRow)`
   font-size: 0.84rem;
 `
 
+export const RowActions = styled(ActionRow)`
+  justify-content: flex-start;
+  gap: 0.42rem;
+  flex-wrap: wrap;
+`
+
 export const PostsDesktopTable = styled.table`
   width: 100%;
   border-collapse: collapse;
@@ -243,7 +249,7 @@ export const PostsDesktopTable = styled.table`
     border-bottom: none;
   }
 
-  tbody tr {
+  tbody tr[role="button"] {
     cursor: pointer;
   }
 

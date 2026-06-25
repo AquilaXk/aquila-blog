@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { NextPage } from "next"
 import { useRouter } from "next/router"
-import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
 import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -14,7 +14,6 @@ import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
   DEFAULT_SORT,
-  getWorkspacePostStatusFilter,
   POSTS_WORKSPACE_DEFERRED_PANEL_TIMEOUT_MS,
   POSTS_WORKSPACE_MOBILE_LIST_DELAY_MS,
   POSTS_WORKSPACE_MOBILE_LIST_QUERY,
@@ -130,6 +129,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
           pageSize: safePageSize,
           kw: listKw.trim(),
           sort: listSort,
+          status: listStatus,
         })
       )
 
@@ -149,7 +149,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
         setIsListLoading(false)
       }
     }
-  }, [listKw, listPage, listPageSize, listScope, listSort])
+  }, [listKw, listPage, listPageSize, listScope, listSort, listStatus])
 
   useEffect(() => {
     setLocalDraft(readLocalDraft())
@@ -461,16 +461,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
     [openWriteRoute]
   )
 
-  const displayListState = useMemo(() => {
-    if (listStatus === "all" || listStatus === "deleted") return listState
-    const rows = listState.rows.filter((row) => getWorkspacePostStatusFilter(row) === listStatus)
-    return {
-      ...listState,
-      rows,
-      total: rows.length,
-    }
-  }, [listState, listStatus])
-
   const handleStatusFilterChange = useCallback((nextStatus: PostStatusFilter) => {
     setListStatus(nextStatus)
     setListPage(DEFAULT_PAGE)
@@ -530,7 +520,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       listStatus={listStatus}
       listSectionRef={listSectionRef}
       listSort={listSort}
-      listState={displayListState}
+      listState={listState}
       loadList={loadList}
       loadRecentPosts={loadRecentPosts}
       localDraft={localDraft}
@@ -547,6 +537,8 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       setListStatus={handleStatusFilterChange}
       setListSort={setListSort}
       setToast={setToast}
+      onHardDeletePost={handleHardDeletePost}
+      onRestorePost={handleRestorePost}
       shouldRenderMobileList={shouldRenderMobileList}
       showDeferredSupportPanels={showDeferredSupportPanels}
       toast={toast}

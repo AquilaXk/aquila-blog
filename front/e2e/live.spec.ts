@@ -27,7 +27,7 @@ const adminLandingHeadingPattern = /^좋은 아침이에요,/
 const adminDashboardHeadingPattern = /^운영 상태와 복구$/
 const adminCloudHeadingPattern = /^미디어 라이브러리$/
 const adminProfileHeadingPattern = /^프로필$/
-const adminToolsHeadingPattern = /^운영 도구$/
+const adminToolsHeadingPattern = /^운영 상태와 복구$/
 const adminPostsHeadingPattern = /^글 관리$/
 const adminUrlPattern = /\/admin(\/|$|\?)/
 

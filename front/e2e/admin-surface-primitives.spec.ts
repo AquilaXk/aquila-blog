@@ -420,6 +420,10 @@ test.describe("관리자 표면 공통 계약", () => {
       path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceSections.tsx"),
       "utf8",
     )
+    const toolsOverviewSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsOpsOverview.tsx"),
+      "utf8",
+    )
     const toolsDiagnosticsSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminToolsDiagnosticsSection.tsx"),
       "utf8",
@@ -445,9 +449,14 @@ test.describe("관리자 표면 공통 계약", () => {
       "utf8",
     )
 
-    const toolsSurfaceSource = `${toolsPageSource}\n${toolsSectionsSource}\n${toolsDiagnosticsSource}\n${toolsExecutionSource}`
+    const toolsSurfaceSource = `${toolsPageSource}\n${toolsSectionsSource}\n${toolsOverviewSource}\n${toolsDiagnosticsSource}\n${toolsExecutionSource}`
 
-    expect(toolsSectionsSource).toContain("<h1>운영 도구</h1>")
+    expect(toolsSectionsSource).toContain("<AdminToolsOpsOverview")
+    expect(toolsOverviewSource).toContain("<h1>운영 상태와 복구</h1>")
+    expect(toolsOverviewSource).toContain("<h2>Public read latency</h2>")
+    expect(toolsOverviewSource).toContain("<h2>Steady-state guard</h2>")
+    expect(toolsOverviewSource).toContain("<h2>Live logs</h2>")
+    expect(toolsOverviewSource).toContain('data-ui="tools-guard-rows"')
     expect(toolsTokenStyleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
     expect(toolsDiagnosticsSource).toContain("<h2>메일과 큐</h2>")
     expect(toolsExecutionSource).toContain("<h2>정리와 보안</h2>")

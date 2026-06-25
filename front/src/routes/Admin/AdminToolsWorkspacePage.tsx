@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
+import type { DashboardSnapshotPayload } from "src/routes/Admin/AdminDashboardWorkspaceModel"
 import {
   ACTION_META,
   CHECK_REQUIRED_STATUS_LABEL,
@@ -91,6 +92,16 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       : undefined,
     staleTime: HEALTH_CACHE_MS,
     gcTime: 60_000,
+    retry: 1,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  })
+  const dashboardSnapshotQuery = useQuery({
+    queryKey: ["admin", "tools", "dashboard-snapshot"],
+    queryFn: (): Promise<DashboardSnapshotPayload> => apiFetch<DashboardSnapshotPayload>("/system/api/v1/adm/dashboard-snapshot"),
+    enabled: Boolean(sessionMember?.isAdmin),
+    staleTime: 30_000,
+    gcTime: 120_000,
     retry: 1,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -545,7 +556,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     setSectionJumpTarget(section)
   }
   if (!sessionMember) return null
-  const toolsWorkspaceSectionProps = { queryClient, sessionMember, loadingKey, setLoadingKey, executions, setExecutions, selectedExecutionId, setSelectedExecutionId, resultsFilter, setResultsFilter, postId, setPostId, commentId, setCommentId, commentContent, setCommentContent, mailDiagnostics, setMailDiagnostics, mailDiagnosticsError, setMailDiagnosticsError, taskQueueDiagnostics, setTaskQueueDiagnostics, taskQueueDiagnosticsError, setTaskQueueDiagnosticsError, taskQueueCheckedAt, setTaskQueueCheckedAt, cleanupDiagnostics, setCleanupDiagnostics, cleanupDiagnosticsError, setCleanupDiagnosticsError, cleanupCheckedAt, setCleanupCheckedAt, authSecurityEvents, setAuthSecurityEvents, authSecurityEventsError, setAuthSecurityEventsError, authSecurityCheckedAt, setAuthSecurityCheckedAt, systemHealthCheckedAt, setSystemHealthCheckedAt, activeSection, setActiveSection, sectionJumpTarget, setSectionJumpTarget, activeDiagnosticTab, setActiveDiagnosticTab, testEmail, setTestEmail, mailTestNotice, setMailTestNotice, freshnessClock, setFreshnessClock, confirmDelete, setConfirmDelete, advancedToolsOpen, setAdvancedToolsOpen, isMutationExpanded, setIsMutationExpanded, systemHealthQuery, fetchSystemHealthCached, pushExecution, executeAction, parsePositiveInt, requireCommentContent, fetchSignupMailDiagnostics, sendSignupTestMail, fetchTaskQueueDiagnostics, fetchCleanupDiagnostics, fetchAuthSecurityEvents, filteredExecutions, resultFilterCounts, selectedExecution, rawSystemHealthStatus, hasSystemHealthStatus, isSystemHealthConnectionUnavailable, systemHealthStatus, mailFreshness, taskQueueFreshness, cleanupFreshness, authFreshness, systemHealthFreshness, systemHealthSummary, systemHealthFetchedAt, isMailLoading, isQueueLoading, isCleanupLoading, isAuthLoading, hasMailDiagnostics, hasTaskQueueDiagnostics, hasCleanupDiagnostics, hasAuthDiagnostics, mailStatusLabel, signupMailTaskQueue, signupMailQueueStatusLabel, signupMailQueueStatusMessage, queueStatusLabel, cleanupStatusLabel, authSecurityStatusLabel, recentCheckedLabel, overviewStatusLabel, attentionItems, quickLinks, focusSection }
+  const toolsWorkspaceSectionProps = { queryClient, sessionMember, loadingKey, setLoadingKey, executions, setExecutions, selectedExecutionId, setSelectedExecutionId, resultsFilter, setResultsFilter, postId, setPostId, commentId, setCommentId, commentContent, setCommentContent, mailDiagnostics, setMailDiagnostics, mailDiagnosticsError, setMailDiagnosticsError, taskQueueDiagnostics, setTaskQueueDiagnostics, taskQueueDiagnosticsError, setTaskQueueDiagnosticsError, taskQueueCheckedAt, setTaskQueueCheckedAt, cleanupDiagnostics, setCleanupDiagnostics, cleanupDiagnosticsError, setCleanupDiagnosticsError, cleanupCheckedAt, setCleanupCheckedAt, authSecurityEvents, setAuthSecurityEvents, authSecurityEventsError, setAuthSecurityEventsError, authSecurityCheckedAt, setAuthSecurityCheckedAt, systemHealthCheckedAt, setSystemHealthCheckedAt, activeSection, setActiveSection, sectionJumpTarget, setSectionJumpTarget, activeDiagnosticTab, setActiveDiagnosticTab, testEmail, setTestEmail, mailTestNotice, setMailTestNotice, freshnessClock, setFreshnessClock, confirmDelete, setConfirmDelete, advancedToolsOpen, setAdvancedToolsOpen, isMutationExpanded, setIsMutationExpanded, systemHealthQuery, dashboardSnapshot: dashboardSnapshotQuery.data ?? null, fetchSystemHealthCached, pushExecution, executeAction, parsePositiveInt, requireCommentContent, fetchSignupMailDiagnostics, sendSignupTestMail, fetchTaskQueueDiagnostics, fetchCleanupDiagnostics, fetchAuthSecurityEvents, filteredExecutions, resultFilterCounts, selectedExecution, rawSystemHealthStatus, hasSystemHealthStatus, isSystemHealthConnectionUnavailable, systemHealthStatus, mailFreshness, taskQueueFreshness, cleanupFreshness, authFreshness, systemHealthFreshness, systemHealthSummary, systemHealthFetchedAt, isMailLoading, isQueueLoading, isCleanupLoading, isAuthLoading, hasMailDiagnostics, hasTaskQueueDiagnostics, hasCleanupDiagnostics, hasAuthDiagnostics, mailStatusLabel, signupMailTaskQueue, signupMailQueueStatusLabel, signupMailQueueStatusMessage, queueStatusLabel, cleanupStatusLabel, authSecurityStatusLabel, recentCheckedLabel, overviewStatusLabel, attentionItems, quickLinks, focusSection }
   return <AdminToolsWorkspaceSections {...toolsWorkspaceSectionProps} />
 }
 

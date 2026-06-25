@@ -147,15 +147,19 @@ test.describe("관리자 표면 공통 계약", () => {
     const cloudPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspacePage.tsx"), "utf8")
 
     expect(cloudPageSource).toContain("<UploadZone")
+    expect(cloudPageSource).toContain("onDragOver={handleUploadDragOver}")
+    expect(cloudPageSource).toContain("onDrop={handleUploadDrop}")
     expect(cloudPageSource).toContain("<span>Storage</span>")
     expect(cloudPageSource).toContain("<h1>미디어 라이브러리</h1>")
     expect(cloudPageSource).toContain("글 이미지, 첨부 파일과 업로드 lifecycle을 관리합니다.")
+    expect(cloudPageSource).toContain("사진 50MB · 문서 100MB · 동영상 5GB 이하")
     expect(cloudPageSource).toContain('aria-label="파일을 끌어놓거나 클릭해 업로드"')
     expect(cloudPageSource).not.toContain("<h1>내 파일</h1>")
 
     expect(getStyledComponentBlock(cloudStyleSource, "CloudContent")).toContain("padding: 2rem 2.125rem 4.375rem;")
     expect(getStyledComponentBlock(cloudStyleSource, "CloudTitleBar")).toContain("align-items: flex-end;")
     expect(getStyledComponentBlock(cloudStyleSource, "UploadZone")).toContain("border: 1px dashed ${borderStrong};")
+    expect(getStyledComponentBlock(cloudStyleSource, "FileTable")).toContain('tbody tr[data-loading-row="true"]')
     expect(getStyledComponentBlock(cloudStyleSource, "FileTable")).toContain(
       "grid-template-columns: repeat(3, minmax(0, 1fr));",
     )

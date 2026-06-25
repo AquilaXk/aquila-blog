@@ -1,7 +1,15 @@
 /* eslint-disable @next/next/no-img-element -- private cloud content needs browser-owned auth cookies. */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist"
-import { type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import {
+  type ChangeEvent,
+  type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import {
   deleteCloudFile,
   getCloudFileContentUrl,
@@ -648,12 +656,24 @@ const AdminCloudWorkspacePage = () => {
     void run()
   }, [queryClient, uploadQueue])
 
-  const handleUploadSelect = (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.currentTarget.files || [])
+  const queueUploadFiles = (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) return
 
     setUploadQueue((current) => [...current, ...selectedFiles.map(createUploadQueueItem)])
+  }
+
+  const handleUploadSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    queueUploadFiles(Array.from(event.currentTarget.files || []))
     event.currentTarget.value = ""
+  }
+
+  const handleUploadDragOver = (event: ReactDragEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+  }
+
+  const handleUploadDrop = (event: ReactDragEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    queueUploadFiles(Array.from(event.dataTransfer.files || []))
   }
 
   const handleCancelUpload = (item: UploadQueueItem) => {
@@ -857,10 +877,12 @@ const AdminCloudWorkspacePage = () => {
             type="button"
             aria-label="파일을 끌어놓거나 클릭해 업로드"
             onClick={() => uploadInputRef.current?.click()}
+            onDragOver={handleUploadDragOver}
+            onDrop={handleUploadDrop}
           >
             <AppIcon name="cloud" />
             <strong>파일을 끌어놓거나 클릭해 업로드</strong>
-            <span>이미지 8MB · 첨부 파일 10MB 이하</span>
+            <span>사진 50MB · 문서 100MB · 동영상 5GB 이하</span>
           </UploadZone>
 
           <ActionBar>
@@ -943,7 +965,7 @@ const AdminCloudWorkspacePage = () => {
               <FileTable role="table" aria-busy="true">
                 <FileTableHead />
                 <tbody>
-                  <tr>
+                  <tr data-loading-row="true">
                     <td colSpan={5}>
                       <LoadingTableStatus role="status" aria-label="파일 목록 로딩">
                         <SkeletonRows aria-hidden="true">

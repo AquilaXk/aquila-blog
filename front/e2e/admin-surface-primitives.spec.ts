@@ -142,6 +142,27 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(profileModelSource).not.toContain('label: "프로필"')
   })
 
+  test("관리자 클라우드 표면은 V4 작업공간 토큰과 아이콘 계약을 유지한다", () => {
+    const cloudStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspace.styles.ts"), "utf8")
+    const cloudPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspacePage.tsx"), "utf8")
+
+    expect(cloudPageSource).toContain("<UploadZone")
+    expect(cloudPageSource).toContain("<span>Storage</span>")
+    expect(cloudPageSource).toContain("<h1>미디어 라이브러리</h1>")
+    expect(cloudPageSource).toContain("글 이미지, 첨부 파일과 업로드 lifecycle을 관리합니다.")
+    expect(cloudPageSource).toContain('aria-label="파일을 끌어놓거나 클릭해 업로드"')
+    expect(cloudPageSource).not.toContain("<h1>내 파일</h1>")
+
+    expect(getStyledComponentBlock(cloudStyleSource, "CloudContent")).toContain("padding: 2rem 2.125rem 4.375rem;")
+    expect(getStyledComponentBlock(cloudStyleSource, "CloudTitleBar")).toContain("align-items: flex-end;")
+    expect(getStyledComponentBlock(cloudStyleSource, "UploadZone")).toContain("border: 1px dashed ${borderStrong};")
+    expect(getStyledComponentBlock(cloudStyleSource, "FileTable")).toContain(
+      "grid-template-columns: repeat(3, minmax(0, 1fr));",
+    )
+    expect(getStyledComponentBlock(cloudStyleSource, "FileTable")).toContain("display: grid;")
+    expect(getStyledComponentBlock(cloudStyleSource, "FileThumbnailFrame")).toContain("border-radius: 0;")
+  })
+
   test("관리자 공통 프리미티브는 포커스 표시와 모바일 스냅 계약을 가진다", () => {
     const source = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"),

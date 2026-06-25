@@ -117,6 +117,7 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
   useEffect(() => {
     if (!member?.isAdmin) return
     if (typeof window === "undefined") return
+    if (currentSection === "cloud") return
 
     const refreshSnapshot = () => {
       void window.fetch("/api/backend/member/api/v1/notifications/snapshot", {
@@ -138,7 +139,7 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
         window.clearTimeout(idleHandle)
       }
     }
-  }, [member?.isAdmin])
+  }, [currentSection, member?.isAdmin])
 
   const handleLogout = async () => {
     await apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }).catch(() => undefined)

@@ -1,8 +1,6 @@
 import styled from "@emotion/styled"
 import {
   AdminRailCard,
-  AdminSectionHeading,
-  AdminTextActionButton,
   AdminWorkspaceHero,
   AdminWorkspaceHeroCopy,
 } from "./AdminSurfacePrimitives"
@@ -10,20 +8,27 @@ import {
 export const AdminPostsWorkspaceMainSections = Symbol("AdminPostsWorkspaceMainSections")
 
 export const Main = styled.main`
+  min-height: 100vh;
   width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 1.05rem 1.45rem 2.4rem;
+  padding: 2.55rem 2.125rem 4.375rem;
   display: grid;
-  gap: 1rem;
+  align-content: start;
+  gap: 1.5rem;
+  background: ${({ theme }) => theme.colors.gray1};
 
   @media (max-width: 767px) {
-    gap: 0.9rem;
-    padding: 0.85rem 0.82rem 2rem;
+    gap: 1rem;
+    padding: 1rem 0.82rem 2rem;
   }
 `
 
-export const HeroSection = styled(AdminWorkspaceHero)``
+export const HeroSection = styled(AdminWorkspaceHero)`
+  padding: 0;
+  border: 0;
+  background: transparent;
+`
 
 export const PostsHeroCopy = styled(AdminWorkspaceHeroCopy)`
   min-width: 0;
@@ -31,6 +36,21 @@ export const PostsHeroCopy = styled(AdminWorkspaceHeroCopy)`
   h1 {
     max-width: 100%;
     overflow-wrap: anywhere;
+  }
+
+  > span {
+    color: ${({ theme }) => theme.colors.blue9};
+    font-size: 0.62rem;
+    font-weight: 820;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 1rem;
+    line-height: 1.5;
   }
 `
 
@@ -46,41 +66,19 @@ export const WorkspaceMain = styled.div`
 
 export const PrimaryCta = styled.button`
   border: 0;
-  background: transparent;
-  color: ${({ theme }) => (theme.scheme === "light" ? "#005fc4" : "#7cc4ff")};
-  padding: 0;
-  font-size: 1rem;
+  border-radius: 2px;
+  background: ${({ theme }) => theme.colors.blue9};
+  color: ${({ theme }) => theme.colors.gray1};
+  min-height: 38px;
+  padding: 0 0.95rem;
+  font-size: 0.82rem;
   font-weight: 800;
   cursor: pointer;
 `
 
 export const ListSection = styled.section`
   display: grid;
-  gap: 0.8rem;
-`
-
-export const SectionHeading = styled(AdminSectionHeading)`
-  h2 {
-    font-size: 1.22rem;
-    letter-spacing: -0.03em;
-  }
-`
-
-export const ListMeta = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  flex-wrap: wrap;
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-  }
-`
-
-export const GhostButton = styled(AdminTextActionButton)`
-  font-size: 0.88rem;
-  font-weight: 700;
+  gap: 0.9rem;
 `
 
 export const MutedText = styled.p`

@@ -5,18 +5,22 @@ import {
 } from "./editorStudioStorageModel"
 
 export type PostListScope = "active" | "deleted"
+export type PostStatusFilter = "all" | "draft" | "published" | "private" | "deleted"
 
 export type AdminPostListItem = {
   id: number
   title: string
   authorName: string
   authorProfileImgUrl?: string
+  category?: string
+  tags?: string[]
   published: boolean
   listed: boolean
   tempDraft?: boolean
   createdAt: string
   modifiedAt: string
   deletedAt?: string
+  hitCount?: number
 }
 
 export type PageDto<T> = {
@@ -119,6 +123,31 @@ export const visibilityLabel = (published: boolean, listed: boolean) => {
   if (visibility === "PUBLIC_UNLISTED") return "링크 공개"
   return "전체 공개"
 }
+
+export const getWorkspacePostStatusFilter = (
+  row: Pick<AdminPostListItem, "published" | "listed" | "tempDraft">
+): Exclude<PostStatusFilter, "all" | "deleted"> => {
+  if (row.tempDraft) return "draft"
+  if (!row.published) return "private"
+  if (!row.listed) return "private"
+  return "published"
+}
+
+export const workspaceStatusLabel = (row: Pick<AdminPostListItem, "published" | "listed" | "tempDraft">) => {
+  const status = getWorkspacePostStatusFilter(row)
+  if (status === "draft") return "초안"
+  if (status === "published") return "발행"
+  return "비공개"
+}
+
+export const getWorkspaceTopicLabel = (row: Pick<AdminPostListItem, "category" | "tags">) => {
+  if (typeof row.category === "string" && row.category.trim()) return row.category.trim()
+  const firstTag = row.tags?.find((tag) => tag.trim())
+  return firstTag?.trim() || "-"
+}
+
+export const formatWorkspaceViews = (row: Pick<AdminPostListItem, "hitCount">) =>
+  typeof row.hitCount === "number" ? String(row.hitCount) : "-"
 
 export const isWorkspaceTempDraft = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
   isServerTempDraftPost(row)

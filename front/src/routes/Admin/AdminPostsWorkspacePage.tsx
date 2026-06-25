@@ -14,6 +14,7 @@ import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
   DEFAULT_SORT,
+  getWorkspacePostStatusFilter,
   POSTS_WORKSPACE_DEFERRED_PANEL_TIMEOUT_MS,
   POSTS_WORKSPACE_MOBILE_LIST_DELAY_MS,
   POSTS_WORKSPACE_MOBILE_LIST_QUERY,
@@ -25,6 +26,7 @@ import {
   type ListState,
   type PageDto,
   type PostListScope,
+  type PostStatusFilter,
   type PostWriteResult,
   type WorkspaceConfirmState,
   type WorkspaceRecentAction,
@@ -61,12 +63,11 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
   const [recentError, setRecentError] = useState("")
 
   const [listScope, setListScope] = useState<PostListScope>("active")
+  const [listStatus, setListStatus] = useState<PostStatusFilter>("all")
   const [listKw, setListKw] = useState("")
   const [listPage, setListPage] = useState(DEFAULT_PAGE)
-  const [listPageSize, setListPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [listPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [listSort, setListSort] = useState<ListSort>(DEFAULT_SORT)
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
-  const [isStickyToolbarCompact, setIsStickyToolbarCompact] = useState(false)
   const [listState, setListState] = useState<ListState>(() => initialSnapshot.listState || { rows: [], total: 0, loadedAt: "" })
   const [isListLoading, setIsListLoading] = useState(!hasInitialListState)
   const [listError, setListError] = useState("")
@@ -459,30 +460,20 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
     [openWriteRoute]
   )
 
-  const hasListFilters = Boolean(
-    listKw.trim() ||
-      listScope !== "active" ||
-      sanitizeNumberInput(listPage, DEFAULT_PAGE) !== DEFAULT_PAGE ||
-      sanitizeNumberInput(listPageSize, DEFAULT_PAGE_SIZE) !== DEFAULT_PAGE_SIZE ||
-      listSort !== DEFAULT_SORT
-  )
-  const listSummaryParts = useMemo(() => {
-    const parts = [listScope === "active" ? "활성 글" : "삭제 글"]
-    if (listKw.trim()) parts.push(`검색 "${listKw.trim()}"`)
-    if (listScope === "active") parts.push(listSort === "CREATED_AT" ? "최신순" : "오래된순")
-    parts.push(`${sanitizeNumberInput(listPageSize, DEFAULT_PAGE_SIZE)}개씩`)
-    if (sanitizeNumberInput(listPage, DEFAULT_PAGE) !== DEFAULT_PAGE) {
-      parts.push(`${sanitizeNumberInput(listPage, DEFAULT_PAGE)}페이지`)
+  const displayListState = useMemo(() => {
+    if (listStatus === "all" || listStatus === "deleted") return listState
+    const rows = listState.rows.filter((row) => getWorkspacePostStatusFilter(row) === listStatus)
+    return {
+      ...listState,
+      rows,
+      total: rows.length,
     }
-    return parts
-  }, [listKw, listPage, listPageSize, listScope, listSort])
+  }, [listState, listStatus])
 
-  const handleResetListFilters = useCallback(() => {
-    setListScope("active")
-    setListKw("")
+  const handleStatusFilterChange = useCallback((nextStatus: PostStatusFilter) => {
+    setListStatus(nextStatus)
     setListPage(DEFAULT_PAGE)
-    setListPageSize(DEFAULT_PAGE_SIZE)
-    setListSort(DEFAULT_SORT)
+    setListScope(nextStatus === "deleted" ? "deleted" : "active")
   }, [])
 
   const handleToastAction = useCallback(async () => {
@@ -526,23 +517,17 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       handleContinueRecent={handleContinueRecent}
       handleDeletePost={handleDeletePost}
       handleHardDeletePost={handleHardDeletePost}
-      handleResetListFilters={handleResetListFilters}
       handleRestorePost={handleRestorePost}
       handleToastAction={handleToastAction}
-      hasListFilters={hasListFilters}
-      isAdvancedOpen={isAdvancedOpen}
       isListLoading={isListLoading}
       isRecentLoading={isRecentLoading}
-      isStickyToolbarCompact={isStickyToolbarCompact}
       listError={listError}
       listKw={listKw}
-      listPage={listPage}
-      listPageSize={listPageSize}
       listScope={listScope}
+      listStatus={listStatus}
       listSectionRef={listSectionRef}
       listSort={listSort}
-      listState={listState}
-      listSummaryParts={listSummaryParts}
+      listState={displayListState}
       loadList={loadList}
       loadRecentPosts={loadRecentPosts}
       localDraft={localDraft}
@@ -554,12 +539,9 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
       recentPosts={recentPosts}
       sessionMember={sessionMember}
       setConfirmState={setConfirmState}
-      setIsAdvancedOpen={setIsAdvancedOpen}
-      setIsStickyToolbarCompact={setIsStickyToolbarCompact}
       setListKw={setListKw}
       setListPage={setListPage}
-      setListPageSize={setListPageSize}
-      setListScope={setListScope}
+      setListStatus={handleStatusFilterChange}
       setListSort={setListSort}
       setToast={setToast}
       shouldRenderMobileList={shouldRenderMobileList}

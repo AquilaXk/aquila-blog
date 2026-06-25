@@ -57,7 +57,7 @@ export const ListSkeleton = styled.div`
   .headerRow,
   .row {
     display: grid;
-    grid-template-columns: 88px minmax(0, 1fr) 144px 220px;
+    grid-template-columns: 42px minmax(0, 1fr) 120px 96px 132px 72px;
   }
 
   .headerRow {
@@ -88,13 +88,6 @@ export const ListSkeleton = styled.div`
     gap: 0.34rem;
     min-height: 78px;
     padding: 0.95rem 0;
-  }
-
-  .actionCell {
-    grid-auto-flow: column;
-    align-items: center;
-    justify-content: start;
-    gap: 0.65rem;
   }
 
   .line {
@@ -138,17 +131,16 @@ export const ListSkeleton = styled.div`
       padding: 0.95rem;
     }
 
-    .mobileCards article {
+  .mobileCards article {
       display: grid;
       gap: 0.55rem;
       padding: 0.95rem;
-      border-radius: 14px;
+      border-radius: 2px;
       border: 1px solid ${({ theme }) => theme.colors.gray5};
       background: ${({ theme }) => theme.colors.gray1};
     }
 
-    .mobileCards .metaRow,
-    .mobileCards .actionRow {
+    .mobileCards .metaRow {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -161,7 +153,7 @@ export const ListEmptyState = styled.div`
   display: grid;
   gap: 0.45rem;
   padding: 1rem;
-  border-radius: 16px;
+  border-radius: 2px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
 
@@ -177,8 +169,9 @@ export const ListEmptyState = styled.div`
 `
 
 export const ListCard = styled(AdminSubtleCard)`
-  border-radius: 16px;
+  border-radius: 2px;
   overflow: hidden;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
 `
 
 export const PostsDesktopTable = styled.table`
@@ -198,25 +191,53 @@ export const PostsDesktopTable = styled.table`
     color: ${({ theme }) => theme.colors.gray10};
   }
 
-  .idCell {
-    width: 88px;
+  .selectCell {
+    width: 42px;
     white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .topicCell {
+    width: 120px;
+    vertical-align: middle;
+  }
+
+  .statusCell {
+    width: 96px;
     vertical-align: middle;
   }
 
   .dateCell {
-    width: 144px;
+    width: 132px;
     white-space: nowrap;
     vertical-align: middle;
   }
 
-  .actionCell {
-    width: 220px;
+  .viewsCell {
+    width: 72px;
+    white-space: nowrap;
     vertical-align: middle;
+  }
+
+  .check {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 2px;
   }
 
   tbody tr:last-of-type td {
     border-bottom: none;
+  }
+
+  tbody tr {
+    cursor: pointer;
+  }
+
+  tbody tr:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.colors.gray8};
+    outline-offset: -2px;
   }
 
   @media (max-width: 900px) {
@@ -239,6 +260,12 @@ export const TitleCell = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.82rem;
   }
+
+  .metaRow > span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
 `
 
 export const TitleAnchor = styled.a`
@@ -255,8 +282,7 @@ export const TitleAnchor = styled.a`
 
   &:hover {
     color: ${({ theme }) => theme.colors.gray12};
-    text-decoration: underline;
-    text-underline-offset: 0.16em;
+    text-decoration: none;
   }
 
   &:focus-visible {
@@ -278,92 +304,6 @@ export const TitleText = styled.strong`
   -webkit-line-clamp: 3;
 `
 
-export const AuthorIdentity = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-width: 0;
-`
-
-export const AuthorAvatarFrame = styled.span`
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 1.4rem;
-  height: 1.4rem;
-  overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray3};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.66rem;
-  font-weight: 800;
-  line-height: 1;
-
-  &[data-has-image="true"] {
-    background: ${({ theme }) => theme.colors.gray4};
-  }
-
-  img {
-    width: 100%;
-    height: 100%;
-  }
-`
-
-export const RowActions = styled(AdminInlineActionRow)``
-
-export const RowPrimaryButton = styled(AdminTextActionButton)`
-  display: inline-flex;
-  min-width: 32px;
-  min-height: 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.18rem;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.86rem;
-  font-weight: 800;
-
-  &:disabled {
-    opacity: 0.48;
-    cursor: wait;
-  }
-`
-
-export const RowSecondaryButton = styled(AdminTextActionButton)`
-  display: inline-flex;
-  min-width: 32px;
-  min-height: 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.18rem;
-  font-size: 0.84rem;
-  font-weight: 700;
-
-  &:disabled {
-    opacity: 0.48;
-    cursor: wait;
-  }
-`
-
-export const DangerTextButton = styled(AdminTextActionButton)`
-  display: inline-flex;
-  min-width: 32px;
-  min-height: 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.18rem;
-  color: ${({ theme }) => theme.colors.red11};
-  font-size: 0.86rem;
-  font-weight: 700;
-
-  &:disabled {
-    opacity: 0.48;
-    cursor: wait;
-  }
-`
-
 export const MobileCardList = styled.div`
   display: none;
 
@@ -377,9 +317,15 @@ export const MobileCardList = styled.div`
     display: grid;
     gap: 0.55rem;
     padding: 0.95rem;
-    border-radius: 14px;
+    border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
+    cursor: pointer;
+  }
+
+  article:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.colors.gray8};
+    outline-offset: 2px;
   }
 
   header {
@@ -413,9 +359,4 @@ export const MobileCardList = styled.div`
     font-size: 0.84rem;
   }
 
-  .actions {
-    display: flex;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-  }
 `

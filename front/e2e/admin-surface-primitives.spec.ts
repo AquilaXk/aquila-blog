@@ -235,10 +235,11 @@ test.describe("관리자 표면 공통 계약", () => {
     )
 
     expect(postsListStyleSource).toContain("export const VisibilityBadge = styled(AdminStatusPill)<{ \"data-tone\": string }>`")
-    expect(postsListStyleSource).toContain("export const RowPrimaryButton = styled(AdminTextActionButton)`")
-    expect(postsListStyleSource).toContain("export const RowActions = styled(AdminInlineActionRow)``")
     expect(postsListSource).toContain("VisibilityBadge,")
-    expectStyledComponentRadius(postsFilterSource, "SummaryPill", "2px")
+    expect(postsListSource).toContain('<th className="topicCell">Topic</th>')
+    expect(postsListSource).toContain('<th className="viewsCell">Views</th>')
+    expect(postsListSource).not.toContain('<th className="actionCell">Actions</th>')
+    expectStyledComponentRadius(postsFilterSource, "ScopeTabButton", "2px")
     expectStyledComponentRadius(postsFilterSource, "SearchField", "2px")
     expect(postsSectionSource).toContain(
       ".stateLabel {\n    display: inline-flex;\n    align-items: center;\n    min-height: 24px;\n    padding: 0 0.56rem;\n    border-radius: 2px;",
@@ -329,10 +330,6 @@ test.describe("관리자 표면 공통 계약", () => {
   test("글 관리 작업공간은 반복 UI 영역을 페이지에서 분리한다", () => {
     const postsSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageView.tsx"), "utf8")
     const controllerSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
-    const recentWorkSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceRecentWork.tsx"),
-      "utf8",
-    )
     const filterSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceFilterToolbar.tsx"),
       "utf8",
@@ -346,11 +343,11 @@ test.describe("관리자 표면 공통 계약", () => {
       "utf8",
     )
 
-    expect(postsSource).toContain('import { AdminPostsWorkspaceRecentWork } from "./AdminPostsWorkspaceRecentWork"')
+    expect(postsSource).not.toContain('import { AdminPostsWorkspaceRecentWork } from "./AdminPostsWorkspaceRecentWork"')
     expect(postsSource).toContain('import { AdminPostsWorkspaceFilterToolbar } from "./AdminPostsWorkspaceFilterToolbar"')
     expect(postsSource).toContain('import { AdminPostsWorkspaceList } from "./AdminPostsWorkspaceList"')
     expect(postsSource).toContain('import { AdminPostsWorkspaceFeedbackLayer } from "./AdminPostsWorkspaceFeedbackLayer"')
-    expect(postsSource).toContain("<AdminPostsWorkspaceRecentWork")
+    expect(postsSource).not.toContain("<AdminPostsWorkspaceRecentWork")
     expect(postsSource).toContain("<AdminPostsWorkspaceFilterToolbar")
     expect(postsSource).toContain("<AdminPostsWorkspaceList")
     expect(postsSource).toContain("<AdminPostsWorkspaceFeedbackLayer")
@@ -360,7 +357,6 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(postsSource).not.toContain("const ToastViewport = styled.div`")
     expect(controllerSource.length).toBeLessThan(76000)
 
-    expect(recentWorkSource).toContain("export const AdminPostsWorkspaceRecentWork")
     expect(filterSource).toContain("export const AdminPostsWorkspaceFilterToolbar")
     expect(listSource).toContain("export const AdminPostsWorkspaceList")
     expect(feedbackSource).toContain("export const AdminPostsWorkspaceFeedbackLayer")

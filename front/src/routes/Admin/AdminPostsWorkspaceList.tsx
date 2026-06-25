@@ -5,6 +5,7 @@ import {
   ListEmptyState,
   ListSkeleton,
   MobileCardList,
+  PageFooter,
   PostsDesktopTable,
   PrimaryInlineButton,
   TitleCell,
@@ -27,24 +28,30 @@ import {
 type AdminPostsWorkspaceListProps = {
   listScope: PostListScope
   listKw: string
+  listPage: string
+  listPageSize: string
   listState: ListState
   isListLoading: boolean
   listError: string
   shouldRenderMobileList: boolean
   onLoadList: () => void
   onOpenWriteRoute: (query?: Record<string, string>) => void
+  onPageChange: (page: number) => void
   onResetSearch: () => void
 }
 
 export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = ({
   listScope,
   listKw,
+  listPage,
+  listPageSize,
   listState,
   isListLoading,
   listError,
   shouldRenderMobileList,
   onLoadList,
   onOpenWriteRoute,
+  onPageChange,
   onResetSearch,
 }) => {
   const openEditorForRow = (row: AdminPostListItem) => onOpenWriteRoute({ postId: String(row.id) })
@@ -124,6 +131,11 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
       </ListEmptyState>
     )
   }
+
+  const currentPage = Math.max(1, Number.parseInt(listPage, 10) || 1)
+  const pageSize = Math.max(1, Number.parseInt(listPageSize, 10) || 1)
+  const totalPages = Math.max(currentPage, Math.ceil(listState.total / pageSize))
+  const showPager = totalPages > 1
 
   return (
     <ListCard>
@@ -209,6 +221,24 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
             </article>
           ))}
         </MobileCardList>
+      ) : null}
+
+      {showPager ? (
+        <PageFooter>
+          <GhostButton type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)}>
+            이전
+          </GhostButton>
+          <span>
+            {currentPage} / {totalPages}
+          </span>
+          <PrimaryInlineButton
+            type="button"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(currentPage + 1)}
+          >
+            다음
+          </PrimaryInlineButton>
+        </PageFooter>
       ) : null}
     </ListCard>
   )

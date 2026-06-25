@@ -22,6 +22,8 @@ export const AdminPostsWorkspacePageView = (props: Record<string, any>) => {
     isListLoading,
     listError,
     listKw,
+    listPage,
+    listPageSize,
     listScope,
     listStatus,
     listSectionRef,
@@ -77,12 +79,15 @@ export const AdminPostsWorkspacePageView = (props: Record<string, any>) => {
               <AdminPostsWorkspaceList
                 listScope={listScope}
                 listKw={listKw}
+                listPage={listPage}
+                listPageSize={listPageSize}
                 listState={listState}
                 isListLoading={isListLoading}
                 listError={listError}
                 shouldRenderMobileList={shouldRenderMobileList}
                 onLoadList={() => void loadList()}
                 onOpenWriteRoute={(query) => void openWriteRoute(query)}
+                onPageChange={(page) => setListPage(String(page))}
                 onResetSearch={() => {
                   setListKw("")
                   setListPage(DEFAULT_PAGE)

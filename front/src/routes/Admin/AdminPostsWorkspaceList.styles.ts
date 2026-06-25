@@ -174,6 +174,14 @@ export const ListCard = styled(AdminSubtleCard)`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
 `
 
+export const PageFooter = styled(ActionRow)`
+  justify-content: flex-end;
+  padding: 0.72rem 1rem;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray5};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.84rem;
+`
+
 export const PostsDesktopTable = styled.table`
   width: 100%;
   border-collapse: collapse;

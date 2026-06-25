@@ -125,14 +125,14 @@ export const visibilityLabel = (published: boolean, listed: boolean) => {
 }
 
 export const getWorkspacePostStatusFilter = (
-  row: Pick<AdminPostListItem, "published" | "listed" | "tempDraft">
+  row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">
 ): Exclude<PostStatusFilter, "all" | "deleted"> => {
-  if (row.tempDraft) return "draft"
+  if (isServerTempDraftPost(row)) return "draft"
   if (!row.published) return "private"
   return "published"
 }
 
-export const workspaceStatusLabel = (row: Pick<AdminPostListItem, "published" | "listed" | "tempDraft">) => {
+export const workspaceStatusLabel = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) => {
   const status = getWorkspacePostStatusFilter(row)
   if (status === "draft") return "초안"
   if (status === "published") return "발행"

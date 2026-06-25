@@ -24,6 +24,7 @@ test.describe("admin posts workspace link contract", () => {
     const listSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.tsx"), "utf8")
     const listStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.styles.ts"), "utf8")
     const modelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceModel.ts"), "utf8")
+    const pageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
     const pageViewSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageView.tsx"), "utf8")
     const recentWorkSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceRecentWork.tsx"),
@@ -43,6 +44,11 @@ test.describe("admin posts workspace link contract", () => {
     expect(listSource).toContain('<th className="viewsCell">Views</th>')
     expect(listSource).toContain("const openEditorForRow = (row: AdminPostListItem) => onOpenWriteRoute({ postId: String(row.id) })")
     expect(listSource).toContain("onClick={() => openEditorForRow(row)}")
+    expect(listSource).toContain("onClick={() => onPageChange(currentPage + 1)}")
+    expect(listStyleSource).toContain("export const PageFooter = styled(ActionRow)`")
+    expect(pageSource).toContain("listPage={listPage}")
+    expect(pageSource).not.toContain("for (let pageNumber")
+    expect(modelSource).toContain("if (isServerTempDraftPost(row)) return \"draft\"")
     expect(listSource).toContain("<TitleText>{getWorkspaceRowTitle(row)}</TitleText>")
     expect(listSource).toContain('<div className="metaRow">')
     expect(listSource).toContain("getWorkspaceTopicLabel(row)")

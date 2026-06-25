@@ -1,28 +1,55 @@
 import styled from "@emotion/styled";
 export const StyledWrapper = styled.div `
+  --detail-v4-bg: #f7f7f5;
+  --detail-v4-paper: ${({ theme }) => theme.publicDesign.readableSurface};
+  --detail-v4-paper-2: #f0f1f2;
+  --detail-v4-ink: #111216;
+  --detail-v4-muted: #646a73;
+  --detail-v4-faint: #8c9199;
+  --detail-v4-line: #dfe1e5;
+  --detail-v4-line-strong: #c8ccd2;
+  --detail-v4-accent: #155eef;
   width: 100%;
   max-width: none;
   box-sizing: border-box;
   margin: 0 auto;
   min-width: 0;
   padding: 0;
+  color: var(--detail-v4-ink);
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    z-index: -1;
+    width: 100vw;
+    transform: translateX(-50%);
+    background: var(--detail-v4-bg);
+    pointer-events: none;
+  }
 
   .detailLayout {
     display: grid;
-    width: 74rem;
-    margin-left: calc(50% - 32rem);
-    grid-template-columns: 80px minmax(0, var(--article-readable-width, 48rem)) minmax(0, 15rem);
-    justify-content: start;
-    gap: 3rem;
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    grid-template-columns: 64px minmax(0, 760px) 240px;
+    justify-content: center;
+    gap: 44px;
+    padding: 54px 20px 100px;
     min-width: 0;
     overflow: visible;
   }
 
   article {
     margin: 0 auto;
-    max-width: var(--article-readable-width, 48rem);
+    max-width: 760px;
     display: grid;
-    gap: 1.15rem;
+    gap: 0;
     min-width: 0;
     width: 100%;
     position: relative;
@@ -36,8 +63,8 @@ export const StyledWrapper = styled.div `
     inset: -1.4rem -1.5rem;
     z-index: -1;
     border-radius: 18px;
-    border: 1px solid ${({ theme }) => theme.publicDesign.border};
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    border: 1px solid var(--detail-v4-line);
+    background: var(--detail-v4-paper);
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
     pointer-events: none;
   }
@@ -62,7 +89,7 @@ export const StyledWrapper = styled.div `
   .rightRail {
     min-width: 0;
     position: sticky;
-    top: calc(var(--app-header-height, 5.4rem) + 1rem);
+    top: 94px;
     align-self: start;
     overflow: visible;
     z-index: 1;
@@ -89,37 +116,30 @@ export const StyledWrapper = styled.div `
   }
 
   .floatingActionButton {
-    width: 3.5rem;
-    height: 3.5rem;
+    width: 42px;
+    height: 42px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.scheme === "dark"
-    ? "rgba(148, 163, 184, 0.28)"
-    : theme.colors.gray6};
-    background: ${({ theme }) => theme.scheme === "dark"
-    ? "rgba(15, 23, 42, 0.32)"
-    : "rgba(255, 255, 255, 0.92)"};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-radius: 6px;
+    border: 1px solid var(--detail-v4-line);
+    background: var(--detail-v4-paper);
+    color: var(--detail-v4-muted);
     cursor: pointer;
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 
     svg {
       width: 1em;
       height: 1em;
-      font-size: 1.75rem;
+      font-size: 1.125rem;
     }
 
     &:hover {
       transform: translateY(-1px);
-      border-color: ${({ theme }) => theme.scheme === "dark"
-    ? "rgba(148, 163, 184, 0.62)"
-    : theme.colors.gray8};
-      background: ${({ theme }) => theme.scheme === "dark"
-    ? "rgba(17, 24, 39, 0.62)"
-    : "#ffffff"};
+      border-color: var(--detail-v4-accent);
+      background: var(--detail-v4-paper);
+      color: var(--detail-v4-accent);
     }
 
     &:disabled {
@@ -143,9 +163,9 @@ export const StyledWrapper = styled.div `
       white-space: nowrap;
       padding: 0.3rem 0.48rem;
       border-radius: 8px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray2};
-      color: ${({ theme }) => theme.colors.gray11};
+      border: 1px solid var(--detail-v4-line);
+      background: var(--detail-v4-paper);
+      color: var(--detail-v4-muted);
       font-size: 0.68rem;
       line-height: 1;
       font-weight: 700;
@@ -161,21 +181,21 @@ export const StyledWrapper = styled.div `
   }
 
   .floatingLikeButton[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.red7};
+    border-color: var(--detail-v4-accent);
 
     svg {
-      color: ${({ theme }) => theme.colors.red10};
+      color: var(--detail-v4-accent);
     }
   }
 
   .floatingShareButton {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--detail-v4-muted);
   }
 
   .floatingLikeCluster {
     display: grid;
     justify-items: center;
-    row-gap: 0.54rem;
+    row-gap: 8px;
   }
 
   .floatingLikeStat {
@@ -194,22 +214,21 @@ export const StyledWrapper = styled.div `
     font-size: 0.88rem;
     line-height: 1;
     font-weight: 720;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: var(--detail-v4-faint);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   }
 
   .floatingShareFeedback {
     font-size: 0.64rem;
     line-height: 1;
     font-weight: 600;
-    color: ${({ theme }) => theme.colors.gray9};
+    color: var(--detail-v4-faint);
     text-align: center;
   }
 
   .rightRailInner {
-    border-left: 1px solid ${({ theme }) => theme.scheme === "dark"
-    ? "rgba(148, 163, 184, 0.26)"
-    : theme.colors.gray6};
-    padding: 0.2rem 0 0.2rem 1.4rem;
+    border-left: 1px solid var(--detail-v4-line);
+    padding: 0 0 0 18px;
     background: transparent;
 
     .rightRailHead {
@@ -228,25 +247,28 @@ export const StyledWrapper = styled.div `
 
     .rightRailTitle {
       margin: 0;
-      color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.96rem;
-      line-height: 1.2;
-      font-weight: 780;
-      letter-spacing: -0.02em;
+      color: var(--detail-v4-ink);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.6875rem;
+      line-height: 1;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .rightRailMeta {
-      color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.76rem;
+      color: var(--detail-v4-faint);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.6875rem;
       line-height: 1.2;
       font-weight: 620;
     }
 
     .tocDepthToggle {
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      border-radius: 999px;
-      background: ${({ theme }) => theme.colors.gray2};
-      color: ${({ theme }) => theme.colors.gray10};
+      border: 1px solid var(--detail-v4-line);
+      border-radius: 6px;
+      background: var(--detail-v4-paper);
+      color: var(--detail-v4-muted);
       font-size: 0.71rem;
       font-weight: 700;
       line-height: 1;
@@ -255,8 +277,8 @@ export const StyledWrapper = styled.div `
       flex-shrink: 0;
 
       &:hover {
-        color: ${({ theme }) => theme.colors.gray12};
-        border-color: ${({ theme }) => theme.colors.gray8};
+        color: var(--detail-v4-ink);
+        border-color: var(--detail-v4-line-strong);
       }
     }
 
@@ -295,9 +317,9 @@ export const StyledWrapper = styled.div `
       max-width: 100%;
       padding: 0.34rem 0.68rem 0.34rem 0.1rem;
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray9};
-      font-size: 0.8125rem;
-      line-height: 1.36;
+      color: var(--detail-v4-muted);
+      font-size: 0.75rem;
+      line-height: 1.4;
       cursor: pointer;
       white-space: normal;
       overflow-wrap: anywhere;
@@ -308,8 +330,8 @@ export const StyledWrapper = styled.div `
     }
 
     button:hover {
-      color: ${({ theme }) => theme.colors.gray11};
-      background: ${({ theme }) => theme.colors.gray2};
+      color: var(--detail-v4-ink);
+      background: transparent;
     }
 
     button::before {
@@ -320,14 +342,14 @@ export const StyledWrapper = styled.div `
       bottom: 0.18rem;
       width: 1px;
       opacity: 0;
-      background: ${({ theme }) => (theme.colors.accentBorder)};
+      background: var(--detail-v4-accent);
       transition: opacity 0.15s ease;
     }
 
     button[data-active="true"] {
-      color: ${({ theme }) => theme.colors.gray12};
+      color: var(--detail-v4-accent);
       font-weight: 700;
-      background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+      background: transparent;
     }
 
     button[data-active="true"]::before {
@@ -389,15 +411,30 @@ export const StyledWrapper = styled.div `
   }
 `;
 export const BodySection = styled.div `
-  margin-top: 0.8rem;
-  padding-top: 1.05rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
   width: 100%;
   min-width: 0;
+
+  .leadSummary {
+    margin: 0 0 42px;
+    padding: 4px 0 4px 20px;
+    border-left: 3px solid #155eef;
+    color: #646a73;
+    font-size: 1.125rem;
+    line-height: 1.75;
+    word-break: keep-all;
+  }
 
   @media (max-width: 768px) {
     margin-top: 0.55rem;
     padding-top: 0.85rem;
+
+    .leadSummary {
+      margin-bottom: 32px;
+      font-size: 1rem;
+    }
   }
 `;
 export { CompactTocSection, MobileSummaryBar, RelatedSection, RelatedSkeletonItem } from "./PostDetailSection.styles";

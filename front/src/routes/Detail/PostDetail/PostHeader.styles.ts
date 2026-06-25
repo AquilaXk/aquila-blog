@@ -1,51 +1,97 @@
 import styled from "@emotion/styled";
 import { HEADER_AUTH_ADMIN_ATTR } from "src/libs/headerAuthShell";
-import { articleTypographyScale } from "src/libs/markdown/contentTypography";
 export const StyledWrapper = styled.header `
+  padding: 0 0 2.625rem;
+  border-bottom: 1px solid #dfe1e5;
+
+  .backLink {
+    display: flex;
+    width: max-content;
+    align-items: center;
+    gap: 0.44rem;
+    margin-bottom: 2.125rem;
+    color: #646a73;
+    font-size: 0.875rem;
+    font-weight: 650;
+    line-height: 1.2;
+    text-decoration: none;
+
+    &:hover {
+      color: #111216;
+    }
+  }
+
+  .heroLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    margin-bottom: 0.875rem;
+    color: #155eef;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
   .taxonomyRow {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.55rem;
-    margin-bottom: 1rem;
+    gap: 0.44rem;
+    margin-bottom: 0.875rem;
 
     > span {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       box-sizing: border-box;
-      min-height: 32px;
-      padding: 0.38rem 0.78rem;
-      border-radius: 999px;
-      font-size: 0.86rem;
-      line-height: 1.2;
-      font-weight: 600;
+      min-height: 26px;
+      padding: 0 0.5rem;
+      border-radius: 6px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.6875rem;
+      line-height: 1;
+      font-weight: 650;
+      text-transform: uppercase;
     }
   }
 
   .staticTag {
     display: inline-flex;
     align-items: center;
-    min-height: 32px;
-    padding: 0.38rem 0.78rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    font-size: 0.86rem;
-    line-height: 1.2;
-    font-weight: 600;
-    color: ${({ theme }) => theme.colors.gray11};
-    background-color: ${({ theme }) => theme.colors.gray3};
+    min-height: 26px;
+    padding: 0 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.6875rem;
+    line-height: 1;
+    font-weight: 650;
+    text-transform: uppercase;
+    color: #646a73;
+    background-color: transparent;
   }
 
   .title {
-    margin: 0;
-    font-size: ${articleTypographyScale.postTitleFontSize};
-    line-height: ${articleTypographyScale.postTitleLineHeight};
+    margin: 0.875rem 0 1.375rem;
+    font-size: clamp(42px, 5.3vw, 70px);
+    line-height: 1.08;
     letter-spacing: 0;
-    font-weight: 700;
-    color: ${({ theme }) => theme.colors.gray12};
-    max-width: 18ch;
+    font-weight: 850;
+    color: #111216;
+    max-width: 14ch;
     overflow-wrap: break-word;
+    word-break: keep-all;
+  }
+
+  .deck {
+    max-width: 820px;
+    margin: 0 0 2rem;
+    color: #646a73;
+    font-size: 1.125rem;
+    line-height: 1.75;
     word-break: keep-all;
   }
 
@@ -55,7 +101,7 @@ export const StyledWrapper = styled.header `
     justify-content: space-between;
     gap: 1rem;
     flex-wrap: wrap;
-    margin-top: 1.4rem;
+    margin-top: 0;
   }
 
   .author {
@@ -69,9 +115,10 @@ export const StyledWrapper = styled.header `
     position: relative;
     width: 48px;
     height: 48px;
-    border-radius: 50%;
+    border-radius: 0;
     overflow: hidden;
-    background: ${({ theme }) => theme.colors.gray3};
+    border: 1px solid #c8ccd2;
+    background: #ffffff;
 
     img {
       object-fit: cover;
@@ -85,9 +132,9 @@ export const StyledWrapper = styled.header `
     min-width: 0;
 
     strong {
-      color: ${({ theme }) => theme.colors.gray12};
-      font-size: 1rem;
-      font-weight: 700;
+      color: #111216;
+      font-size: 0.8125rem;
+      font-weight: 800;
       overflow-wrap: anywhere;
     }
   }
@@ -98,13 +145,15 @@ export const StyledWrapper = styled.header `
     align-items: center;
     flex-wrap: wrap;
     gap: 0.42rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.9rem;
+    color: #646a73;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.6875rem;
     min-width: 0;
   }
 
   .metaText {
-    font-weight: 500;
+    font-weight: 550;
+    color: #8c9199;
   }
 
   .authorUtilities {
@@ -145,10 +194,10 @@ export const StyledWrapper = styled.header `
     align-items: center;
     min-height: 34px;
     padding: 0 0.78rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => (theme.colors.gray2)};
-    color: ${({ theme }) => theme.colors.gray11};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
+    background: #ffffff;
+    color: #646a73;
     font-size: 0.82rem;
     font-weight: 650;
     line-height: 1;
@@ -160,10 +209,10 @@ export const StyledWrapper = styled.header `
     gap: 0.42rem;
     min-height: 34px;
     padding: 0 0.76rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => (theme.colors.gray2)};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
+    background: #ffffff;
+    color: #111216;
     font-size: 0.82rem;
     font-weight: 700;
     cursor: pointer;
@@ -187,9 +236,9 @@ export const StyledWrapper = styled.header `
   }
 
   .dangerButton {
-    border-color: ${({ theme }) => theme.colors.red7};
+    border-color: #c33a3a;
     background: transparent;
-    color: ${({ theme }) => theme.colors.red11};
+    color: #c33a3a;
   }
 
   .mobileMetaOnly {
@@ -199,7 +248,7 @@ export const StyledWrapper = styled.header `
   .metaInlineMetric {
     align-items: center;
     gap: 0.32rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    color: #646a73;
     font-size: 0.84rem;
     font-weight: 600;
     line-height: 1;
@@ -210,7 +259,7 @@ export const StyledWrapper = styled.header `
   }
 
   .metaInlineViewStat {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: #111216;
     white-space: nowrap;
   }
 
@@ -220,10 +269,10 @@ export const StyledWrapper = styled.header `
     gap: 0.42rem;
     min-height: 40px;
     padding: 0 0.9rem;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: #111216;
     font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
@@ -237,12 +286,12 @@ export const StyledWrapper = styled.header `
     }
 
     &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.red7};
+      border-color: #155eef;
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray12};
+      color: #111216;
 
       svg {
-        color: ${({ theme }) => theme.colors.red10};
+        color: #155eef;
       }
     }
 
@@ -258,10 +307,10 @@ export const StyledWrapper = styled.header `
     gap: 0.42rem;
     min-height: 40px;
     padding: 0 0.9rem;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: #111216;
     font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
@@ -279,7 +328,7 @@ export const StyledWrapper = styled.header `
     width: 0.22rem;
     height: 0.22rem;
     border-radius: 50%;
-    background: ${({ theme }) => (theme.colors.gray8)};
+    background: #c8ccd2;
   }
 
   .statChip {
@@ -288,10 +337,10 @@ export const StyledWrapper = styled.header `
     gap: 0.42rem;
     min-height: 40px;
     padding: 0 0.82rem;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: #646a73;
     font-size: 0.9rem;
     font-weight: 650;
     line-height: 1;
@@ -305,7 +354,7 @@ export const StyledWrapper = styled.header `
     display: inline-flex;
     align-items: center;
     gap: 0.34rem;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: #646a73;
 
     svg {
       font-size: 0.96rem;
@@ -313,7 +362,7 @@ export const StyledWrapper = styled.header `
   }
 
   .statMetricValue {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: #111216;
     font-size: 0.96rem;
     font-weight: 760;
     letter-spacing: -0.02em;
@@ -325,8 +374,8 @@ export const StyledWrapper = styled.header `
     margin-top: 2rem;
     border-radius: 10px;
     width: 100%;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background-color: ${({ theme }) => theme.colors.gray3};
+    border: 1px solid #dfe1e5;
+    background-color: #f0f1f2;
     padding-bottom: 52%;
   }
 
@@ -341,8 +390,12 @@ export const StyledWrapper = styled.header `
     }
 
     .title {
-      font-size: ${articleTypographyScale.postTitleFontSizeMobile};
-      line-height: ${articleTypographyScale.postTitleLineHeightMobile};
+      font-size: clamp(38px, 11vw, 43px);
+      line-height: 1.08;
+    }
+
+    .deck {
+      font-size: 1rem;
     }
 
     .metaRow {

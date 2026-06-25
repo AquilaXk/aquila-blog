@@ -1,9 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 import React from "react"
+import Link from "next/link"
 import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
-import Tag from "src/components/Tag"
 import { formatDateTime } from "src/libs/utils"
 import {
   parseThumbnailFocusXFromUrl,
@@ -55,13 +55,14 @@ const PostHeader: React.FC<Props> = ({
   adminActionPending = false,
   onEditPost,
   onDeletePost,
-  interactiveTags = true,
   showEngagement = true,
   showThumbnail = true,
 }) => {
   const authorName = data.author?.[0]?.name || CONFIG.profile.name
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
   const tags = (data.tags || []).map((tag) => tag.trim()).filter(Boolean)
+  const primaryTaxonomy = (data.category?.[0] || tags[0] || data.type[0] || "").trim()
+  const typeLabel = data.type[0] === "Post" ? "Production note" : data.type[0]
   const publishedAt = formatDateTime(data.createdTime, CONFIG.lang)
   const modifiedAt =
     data.modifiedTime && data.modifiedTime !== data.createdTime
@@ -85,21 +86,19 @@ const PostHeader: React.FC<Props> = ({
 
   return (
     <StyledWrapper>
-      {tags.length > 0 ? (
-        <div className="taxonomyRow">
-          {tags.map((tag) =>
-            interactiveTags ? (
-              <Tag key={tag}>{tag}</Tag>
-            ) : (
-              <span key={tag} className="staticTag">
-                {tag}
-              </span>
-            )
-          )}
+      <Link href="/" className="backLink">
+        <span aria-hidden="true">←</span>
+        <span>모든 글</span>
+      </Link>
+      {primaryTaxonomy ? (
+        <div className="heroLabel">
+          {primaryTaxonomy}
+          <span aria-hidden="true">·</span>
+          {typeLabel}
         </div>
       ) : null}
-
       <h1 className="title">{data.title}</h1>
+      {data.summary?.trim() ? <p className="deck">{data.summary.trim()}</p> : null}
 
       <div className="metaRow">
         {data.author?.[0]?.name && (

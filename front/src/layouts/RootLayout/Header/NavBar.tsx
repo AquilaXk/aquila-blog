@@ -12,7 +12,8 @@ type Props = {
 }
 
 const primaryLinks = [
-  ["home", "Home", "/"],
+  ["notes", "Notes", "/"],
+  ["topics", "Topics", "/#topics"],
   ["about", "About", "/about"],
 ] as const
 
@@ -63,7 +64,7 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
               href={to}
               data-ui="nav-control"
               data-active={
-                (id === "home" && router.pathname === "/") ||
+                (id === "notes" && router.pathname === "/") ||
                 (id === "about" && router.pathname === "/about")
                   ? "true"
                   : "false"

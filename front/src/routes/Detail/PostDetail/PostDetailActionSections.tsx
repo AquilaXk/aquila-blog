@@ -21,6 +21,8 @@ type FloatingActionRailProps = {
   shareFeedback: ShareFeedback
   onToggleLike: () => void
   onSharePost: () => void
+  onScrollToComments: () => void
+  commentsCount: number
 }
 
 export const FloatingActionRail = ({
@@ -33,6 +35,8 @@ export const FloatingActionRail = ({
   shareFeedback,
   onToggleLike,
   onSharePost,
+  onScrollToComments,
+  commentsCount,
 }: FloatingActionRailProps) => (
   <aside ref={railRef as Ref<HTMLElement>} className="leftRail" data-hybrid-active={active} aria-hidden={!showFloatingLike}>
     {showFloatingLike ? (
@@ -66,6 +70,18 @@ export const FloatingActionRail = ({
               onClick={onSharePost}
             >
               <AppIcon name="share" />
+            </button>
+          </div>
+          <div className="floatingShareStat">
+            <button
+              type="button"
+              className="floatingActionButton floatingCommentButton"
+              title="댓글"
+              data-tooltip="댓글"
+              aria-label={`댓글 ${commentsCount}`}
+              onClick={onScrollToComments}
+            >
+              <AppIcon name="message" />
             </button>
           </div>
           {shareFeedback ? (
@@ -221,8 +237,7 @@ export const RightTocRail = ({
       <nav ref={innerRef as Ref<HTMLElement>} className="rightRailInner" aria-label="목차">
         <div className="rightRailHead">
           <div className="rightRailTitleGroup">
-            <h2 className="rightRailTitle">목차</h2>
-            <span className="rightRailMeta">{visibleTocItems.length}개 섹션</span>
+            <h2 className="rightRailTitle">On this page</h2>
           </div>
           {hasDepth4Toc && (
             <button

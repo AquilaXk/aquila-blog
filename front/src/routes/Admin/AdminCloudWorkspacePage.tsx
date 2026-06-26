@@ -392,7 +392,8 @@ type VideoPreviewProps = {
 
 const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const activeFileIdRef = useRef(file.id)
+  const isMountedRef = useRef(false)
+  const activeFileIdRef = useRef<number | null>(file.id)
   activeFileIdRef.current = file.id
   const [speed, setSpeed] = useState<(typeof PLAYBACK_SPEEDS)[number]>(1)
   const [commandState, setCommandState] = useState<ExternalPlaybackCommandState | null>(null)
@@ -405,14 +406,20 @@ const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
   }, [speed, contentUrl])
 
   useEffect(() => {
+    isMountedRef.current = true
+    activeFileIdRef.current = file.id
     setCommandState(null)
+    return () => {
+      isMountedRef.current = false
+      activeFileIdRef.current = null
+    }
   }, [file.id])
 
   const copyExternalPlaybackCommand = async (player: ExternalPlaybackPlayer) => {
     const requestedFileId = file.id
     const playerLabel = EXTERNAL_PLAYBACK_PLAYER_LABELS[player]
     setCommandState({ status: "pending", message: `${playerLabel} 명령 발급 중` })
-    const isStaleRequest = () => activeFileIdRef.current !== requestedFileId
+    const isStaleRequest = () => !isMountedRef.current || activeFileIdRef.current !== requestedFileId
 
     try {
       const token = await issueCloudExternalPlaybackToken(requestedFileId)

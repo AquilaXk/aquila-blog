@@ -771,6 +771,36 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByRole("status").filter({ hasText: /명령/ })).toHaveCount(0)
   })
 
+  test("외부 재생 token 응답 중 상세 패널이 닫히면 이전 파일 명령을 복사하지 않는다", async ({ page }) => {
+    const mocks = await setupAdminCloudMocks(page, {
+      externalPlaybackTokenDelayMs: 250,
+    })
+
+    await page.goto("/admin/cloud")
+    await page.locator('button[title="deploy-walkthrough.mp4"]').click()
+    await page.getByRole("button", { name: "IINA 명령 복사" }).click()
+    await expect.poll(() => mocks.externalPlaybackTokenRequests).toEqual(["103"])
+
+    await page.getByRole("button", { name: "상세 패널 닫기" }).click()
+    await expect(page.getByLabel("클라우드 상세정보")).toHaveCount(0)
+    await page.waitForTimeout(350)
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
+        )
+      )
+      .toBe("")
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudPromptText?: string }).__adminCloudPromptText || ""
+        )
+      )
+      .toBe("")
+  })
+
   test("100MB 초과 동영상은 resumable 세션과 조각 업로드로 처리한다", async ({ page }, testInfo) => {
     const mocks = await setupAdminCloudMocks(page)
     const largeVideo = Buffer.alloc(101 * 1024 * 1024)

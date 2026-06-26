@@ -361,6 +361,8 @@ test.describe("Markdown editor replacement", () => {
         "## __굵게__",
         "",
         "## user_id_field",
+        "",
+        "## 프로젝트_설정_가이드",
       ].join("\n"),
       "Using **kwargs** in Python"
     )
@@ -375,6 +377,7 @@ test.describe("Markdown editor replacement", () => {
     await expect(outline.locator("strong").filter({ hasText: /^기울임$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^굵게$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^user_id_field$/ })).toBeVisible()
+    await expect(outline.locator("strong").filter({ hasText: /^프로젝트_설정_가이드$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^\*\*시작하며\*\*$/ })).toHaveCount(0)
     await expect(outline.locator("strong").filter({ hasText: /^`핵심` 포인트$/ })).toHaveCount(0)
     await expect(outline.locator("strong").filter({ hasText: /^_기울임_$/ })).toHaveCount(0)

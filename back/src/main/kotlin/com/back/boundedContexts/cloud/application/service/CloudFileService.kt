@@ -140,6 +140,25 @@ class CloudFileService(
         )
     }
 
+    @Transactional(readOnly = true)
+    fun openContentRange(
+        ownerMemberId: Long,
+        fileId: Long,
+        range: LongRange,
+    ): CloudFileContent {
+        val file =
+            cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
+                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+        val storedObject =
+            cloudStoragePort.openRange(file.objectKey, range)
+                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+
+        return CloudFileContent(
+            file = file.toDto(),
+            storedObject = storedObject,
+        )
+    }
+
     @Transactional
     fun delete(
         ownerMemberId: Long,

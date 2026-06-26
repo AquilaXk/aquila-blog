@@ -108,6 +108,38 @@ class CloudStorageAdapter(
         }
     }
 
+    override fun openRange(
+        objectKey: String,
+        range: LongRange,
+    ): CloudStoragePort.StoredObject? {
+        val client = requireClient()
+        validateObjectKey(objectKey)
+
+        return try {
+            val response =
+                client.getObject(
+                    GetObjectRequest
+                        .builder()
+                        .bucket(properties.bucket)
+                        .key(objectKey)
+                        .range("bytes=${range.first}-${range.last}")
+                        .build(),
+                )
+            CloudStoragePort.StoredObject(
+                inputStream = response,
+                contentType = response.response().contentType() ?: "application/octet-stream",
+                contentLength = response.response().contentLength(),
+                originalFilename = decodeStoredOriginalFilename(response.response().metadata()["original-filename"]),
+            )
+        } catch (_: NoSuchKeyException) {
+            null
+        } catch (e: S3Exception) {
+            if (e.statusCode() == 404) return null
+            logger.error("Cloud file range download failed (objectKey={}, range={}-{})", objectKey, range.first, range.last, e)
+            throw AppException("500-1", "클라우드 파일을 불러오지 못했습니다.")
+        }
+    }
+
     override fun initiateMultipartUpload(
         request: CloudStoragePort.MultipartUploadInitRequest,
     ): CloudStoragePort.MultipartUploadInitResult {

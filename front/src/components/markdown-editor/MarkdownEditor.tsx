@@ -23,6 +23,8 @@ type MarkdownUploadResult = {
 
 type MarkdownEditorProps = {
   value: string
+  previewTitle?: string
+  previewSummary?: string
   disabled?: boolean
   disableMermaid?: boolean
   onChange: (markdown: string, meta?: MarkdownChangeMeta) => void
@@ -46,19 +48,17 @@ const toolbarMarkdownSnippets = [
   { label: ">", title: "인용문", before: "> ", after: "" },
   { label: "List", title: "목록", before: "- ", after: "" },
   { label: "Task", title: "작업 목록", before: "- [ ] ", after: "" },
-  { label: "Code", title: "인라인 코드", before: "`", after: "`" },
-  { label: "Link", title: "링크", before: "[", after: "](https://)" },
 ] as const
 
 const tableSnippet = [
   "",
-  "| Column 1 | Column 2 | Column 3 |",
-  "| --- | --- | --- |",
-  "| Value | Value | Value |",
+  "| 항목 | 설명 |",
+  "| --- | --- |",
+  "| 값 | 내용 |",
   "",
 ].join("\n")
 
-const codeBlockSnippet = ["", "```text", "", "```", ""].join("\n")
+const codeBlockSnippet = ["", '```kotlin title="invalidatePost.kt"', "fun example() = Unit", "```", ""].join("\n")
 const mermaidSnippet = ["", "```mermaid", "flowchart LR", "    A[Admin write] --> B[DB commit]", "```", ""].join("\n")
 const calloutSnippet = ["", "> [!TIP]", "> **설계 원칙**", "> 내용을 입력하세요.", ""].join("\n")
 const toggleSnippet = ["", ":::toggle 자세히 보기", "내용을 입력하세요.", ":::", ""].join("\n")
@@ -88,6 +88,8 @@ const getWheelDeltaYPixels = (event: ReactWheelEvent<HTMLElement>, element: HTML
 
 export const MarkdownEditor = ({
   value,
+  previewTitle = "",
+  previewSummary = "",
   disabled = false,
   disableMermaid = false,
   onChange,
@@ -98,7 +100,7 @@ export const MarkdownEditor = ({
   const [uploadError, setUploadError] = useState("")
   const [draftValue, setDraftValue] = useState(value)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const previewScrollRef = useRef<HTMLElement | null>(null)
+  const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
 
@@ -289,6 +291,7 @@ export const MarkdownEditor = ({
             <ToolbarButton
               key={snippet.title}
               type="button"
+              title={snippet.title}
               aria-label={snippet.title}
               disabled={disabled || ("disableWhenMermaid" in snippet && disableMermaid)}
               onMouseDown={(event) => event.preventDefault()}
@@ -297,7 +300,7 @@ export const MarkdownEditor = ({
               {snippet.label}
             </ToolbarButton>
           ))}
-          <ImageUploadButton>
+          <ImageUploadButton title="이미지" aria-label="이미지" aria-disabled={disabled || !onUploadImage}>
             Image
             <input
               type="file"
@@ -310,6 +313,16 @@ export const MarkdownEditor = ({
               }}
             />
           </ImageUploadButton>
+          <ToolbarButton
+            type="button"
+            title="링크"
+            aria-label="링크"
+            disabled={disabled}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => applySnippet("[", "](https://)")}
+          >
+            Link
+          </ToolbarButton>
         </ToolbarGroup>
         <ModeTabs role="tablist" aria-label="Markdown editor mode">
           <ModeTab type="button" role="tab" aria-selected={mode === "write"} onClick={() => setMode("write")}>
@@ -352,13 +365,23 @@ export const MarkdownEditor = ({
           </WritePane>
         ) : null}
         {mode !== "write" ? (
-          <PreviewPane data-pane="preview" data-testid="markdown-editor-preview-pane">
+          <PreviewPane
+            ref={previewScrollRef}
+            data-pane="preview"
+            data-testid="markdown-editor-preview-pane"
+            onScroll={handlePreviewScroll}
+            onWheel={handlePreviewWheel}
+          >
             <PreviewArticle
-              ref={previewScrollRef}
               data-testid="markdown-editor-preview-scroll"
-              onScroll={handlePreviewScroll}
-              onWheel={handlePreviewWheel}
             >
+              {previewTitle || previewSummary ? (
+                <PreviewHeader>
+                  <span>Public preview</span>
+                  {previewTitle ? <h1>{previewTitle}</h1> : null}
+                  {previewSummary ? <p>{previewSummary}</p> : null}
+                </PreviewHeader>
+              ) : null}
               <MarkdownRenderer content={value} disableMermaid={disableMermaid} />
             </PreviewArticle>
           </PreviewPane>
@@ -369,6 +392,10 @@ export const MarkdownEditor = ({
 }
 
 const EditorRoot = styled.section`
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 0;
   overflow: hidden;
@@ -377,43 +404,49 @@ const EditorRoot = styled.section`
 `
 
 const EditorToolbar = styled.div`
-  min-height: 44px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.35rem 0.55rem;
+  gap: 12px;
+  padding: 7px 12px;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.publicDesign.readableSurface};
-  flex-wrap: wrap;
+
+  @media (max-width: 820px) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 `
 
 const ModeTabs = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 0;
+  max-width: 100%;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.publicDesign.surfaceElevated};
 `
 
 const ModeTab = styled.button`
   border: 0;
-  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-  min-height: 28px;
-  padding: 0 0.62rem;
+  height: 30px;
+  padding: 0 11px;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.72rem;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
 
-  &:first-of-type {
-    border-left: 0;
-  }
-
   &[aria-selected="true"] {
-    background: ${({ theme }) => theme.colors.gray12};
-    color: ${({ theme }) => theme.colors.gray1};
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    color: ${({ theme }) => theme.colors.gray12};
+    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.gray6};
   }
 
   &:focus-visible {
@@ -426,23 +459,31 @@ const ToolbarGroup = styled.div`
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0.12rem;
-  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+
+  @media (max-width: 820px) {
+    width: 100%;
+  }
 `
 
 const ToolbarButton = styled.button`
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 4px;
-  min-height: 30px;
-  padding: 0 0.52rem;
+  height: 31px;
+  min-width: 31px;
+  padding: 0 8px;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.7rem;
-  font-weight: 700;
+  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   cursor: pointer;
 
   &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.gray3};
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
@@ -453,19 +494,26 @@ const ToolbarButton = styled.button`
 `
 
 const ImageUploadButton = styled.label`
+  border: 1px solid transparent;
   border-radius: 4px;
-  min-height: 30px;
+  height: 31px;
+  min-width: 31px;
   display: inline-flex;
   align-items: center;
-  padding: 0 0.52rem;
+  padding: 0 8px;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.7rem;
-  font-weight: 700;
+  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   cursor: pointer;
 
-  &:hover {
-    background: ${({ theme }) => theme.colors.gray3};
+  &:hover:not([aria-disabled="true"]) {
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
     color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  &[aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   input {
@@ -487,61 +535,67 @@ const ToolbarError = styled.div`
 `
 
 const EditorBody = styled.div`
-  min-height: min(720px, calc(100vh - 260px));
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
 
   &[data-mode="write"],
   &[data-mode="preview"] {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  @media (max-width: 980px) {
-    grid-template-columns: minmax(0, 1fr);
+  &[data-mode="preview"] [data-testid="markdown-editor-preview-scroll"] {
+    max-width: 820px;
   }
 
-  @media (max-width: 768px) {
-    &[data-mode="split"] [data-pane="preview"] {
-      display: none;
-    }
+  @media (max-width: 1100px) {
+    grid-template-columns: minmax(0, 1fr);
 
     &[data-mode="split"] [data-pane="write"] {
-      border-bottom: 0;
+      height: 46vh;
+      border-right: 0;
+      border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    }
+
+    &[data-mode="split"] [data-pane="preview"] {
+      height: auto;
     }
   }
 `
 
 const WritePane = styled.div`
   min-width: 0;
-  min-height: min(720px, calc(100vh - 260px));
+  min-height: 0;
+  overflow: auto;
   border-right: 1px solid ${({ theme }) => theme.colors.gray6};
-
-  @media (max-width: 980px) {
-    border-right: 0;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  }
+  background: #0f1728;
 `
 
 const WriteEditorFrame = styled.div`
-  min-height: min(720px, calc(100vh - 260px));
+  min-height: 100%;
   background: #0f1728;
   color: #dbe7ff;
 `
 
 const MarkdownTextarea = styled.textarea`
   width: 100%;
-  min-height: min(720px, calc(100vh - 260px));
+  height: 100%;
+  min-height: 640px;
   max-width: none;
-  padding: 2rem;
+  padding: 30px 32px;
   border: 0;
   outline: none;
-  resize: vertical;
+  resize: none;
   background: #0f1728;
-  color: #dbe7ff;
+  color: #d9e4f7;
   caret-color: #dbe7ff;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.78;
   tab-size: 2;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -560,28 +614,30 @@ const MarkdownTextarea = styled.textarea`
     cursor: not-allowed;
     opacity: 0.7;
   }
+
+  @media (max-width: 820px) {
+    padding: 22px 18px;
+  }
 `
 
 const PreviewPane = styled.div`
   min-width: 0;
-  height: min(720px, calc(100vh - 260px));
-  min-height: min(720px, calc(100vh - 260px));
-  display: flex;
-  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 `
 
 const PreviewArticle = styled.article`
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 2rem;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 44px 110px;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 
   .aq-markdown {
-    width: min(100%, var(--article-readable-width, 48rem));
-    max-width: var(--article-readable-width, 48rem);
+    width: min(100%, 760px);
+    max-width: 760px;
     margin-top: 0;
     margin-inline: auto;
     color: ${({ theme }) => theme.colors.gray12};
@@ -591,7 +647,40 @@ const PreviewArticle = styled.article`
     margin-top: 0;
   }
 
-  @media (max-width: 980px) {
-    padding-inline: 1rem;
+  @media (max-width: 820px) {
+    padding: 34px 20px 90px;
+  }
+`
+
+const PreviewHeader = styled.header`
+  width: min(100%, 760px);
+  max-width: 760px;
+  margin: 0 auto 34px;
+
+  span {
+    display: block;
+    margin-bottom: 14px;
+    color: ${({ theme }) => theme.publicDesign.accent};
+    font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 12px 0 18px;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 43px;
+    font-weight: 850;
+    line-height: 1.13;
+    letter-spacing: -0.055em;
+  }
+
+  p {
+    margin: 0;
+    padding: 4px 0 4px 20px;
+    border-left: 3px solid ${({ theme }) => theme.publicDesign.accent};
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 18px;
+    line-height: 1.75;
   }
 `

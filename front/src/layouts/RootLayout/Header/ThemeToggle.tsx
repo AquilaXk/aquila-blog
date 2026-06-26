@@ -52,7 +52,7 @@ const StyledWrapper = styled.button`
   width: 36px;
   height: 36px;
   border: 1px solid transparent;
-  border-radius: ${({ theme }) => theme.variables.ui.button.radius}px;
+  border-radius: 6px;
   padding: 0;
   background: transparent;
   color: var(--aq-muted);
@@ -84,11 +84,6 @@ const StyledWrapper = styled.button`
     width: 18px;
     height: 18px;
     display: block;
-    transform: translateY(-0.3px);
   }
 
-  @media (max-width: 720px) {
-    width: 36px;
-    height: 36px;
-  }
 `

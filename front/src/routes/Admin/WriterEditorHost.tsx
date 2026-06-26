@@ -5,6 +5,8 @@ import { MarkdownEditor } from "src/components/markdown-editor/MarkdownEditor"
 type WriterEditorHostProps = {
   canvasId: string
   markdown: string
+  previewTitle?: string
+  previewSummary?: string
   onMarkdownChange: (markdown: string, meta?: { editorFocused: boolean }) => void
   onFlushMarkdownReady: (flush: (() => string) | null) => void
   onImageUpload: (file: File) => Promise<{ alt?: string; title?: string; url?: string; src?: string }>
@@ -17,6 +19,8 @@ type WriterEditorHostProps = {
 export const WriterEditorHost = ({
   canvasId,
   markdown,
+  previewTitle,
+  previewSummary,
   onMarkdownChange,
   onFlushMarkdownReady,
   onImageUpload,
@@ -33,6 +37,8 @@ export const WriterEditorHost = ({
     <RecoverableSurfaceBoundary surface="editor" resetKey={canvasId}>
       <MarkdownEditor
         value={markdown}
+        previewTitle={previewTitle}
+        previewSummary={previewSummary}
         onChange={onMarkdownChange}
         onFlushMarkdownReady={onFlushMarkdownReady}
         onUploadImage={onImageUpload}

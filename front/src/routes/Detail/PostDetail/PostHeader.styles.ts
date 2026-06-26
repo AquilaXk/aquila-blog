@@ -1,8 +1,9 @@
 import styled from "@emotion/styled";
 import { HEADER_AUTH_ADMIN_ATTR } from "src/libs/headerAuthShell";
 export const StyledWrapper = styled.header `
-  padding: 0 0 2.625rem;
-  border-bottom: 1px solid #dfe1e5;
+  width: min(100%, 880px);
+  margin: 0 auto;
+  padding: 0;
 
   .backLink {
     display: flex;
@@ -35,53 +36,13 @@ export const StyledWrapper = styled.header `
     text-transform: uppercase;
   }
 
-  .taxonomyRow {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.44rem;
-    margin-bottom: 0.875rem;
-
-    > span {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-sizing: border-box;
-      min-height: 26px;
-      padding: 0 0.5rem;
-      border-radius: 6px;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-      font-size: 0.6875rem;
-      line-height: 1;
-      font-weight: 650;
-      text-transform: uppercase;
-    }
-  }
-
-  .staticTag {
-    display: inline-flex;
-    align-items: center;
-    min-height: 26px;
-    padding: 0 0.5rem;
-    border-radius: 6px;
-    border: 1px solid #dfe1e5;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    font-size: 0.6875rem;
-    line-height: 1;
-    font-weight: 650;
-    text-transform: uppercase;
-    color: #646a73;
-    background-color: transparent;
-  }
-
   .title {
     margin: 0.875rem 0 1.375rem;
     font-size: clamp(42px, 5.3vw, 70px);
     line-height: 1.08;
-    letter-spacing: 0;
+    letter-spacing: -0.065em;
     font-weight: 850;
     color: #111216;
-    max-width: 14ch;
     overflow-wrap: break-word;
     word-break: keep-all;
   }
@@ -99,7 +60,7 @@ export const StyledWrapper = styled.header `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 20px;
     flex-wrap: wrap;
     margin-top: 0;
   }
@@ -107,14 +68,14 @@ export const StyledWrapper = styled.header `
   .author {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: 11px;
     min-width: 0;
   }
 
   .avatar {
     position: relative;
-    width: 48px;
-    height: 48px;
+    width: 38px;
+    height: 38px;
     border-radius: 0;
     overflow: hidden;
     border: 1px solid #c8ccd2;
@@ -124,6 +85,38 @@ export const StyledWrapper = styled.header `
       object-fit: cover;
       object-position: center 38%;
     }
+  }
+
+  .avatarFallback {
+    position: absolute;
+    inset: 5px;
+    display: block;
+    color: #465b66;
+  }
+
+  .avatarFallback::before,
+  .avatarFallback::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    background: currentColor;
+    transform: translateX(-50%);
+  }
+
+  .avatarFallback::before {
+    top: 0;
+    width: 42%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+  }
+
+  .avatarFallback::after {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 45%;
+    border-radius: 999px 999px 2px 2px;
+    transform: none;
   }
 
   .authorText {
@@ -139,8 +132,7 @@ export const StyledWrapper = styled.header `
     }
   }
 
-  .metaText,
-  .stats {
+  .metaText {
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
@@ -149,11 +141,21 @@ export const StyledWrapper = styled.header `
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 0.6875rem;
     min-width: 0;
-  }
-
-  .metaText {
     font-weight: 550;
     color: #8c9199;
+  }
+
+  .stats {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px 22px;
+    min-width: 0;
+    color: #8c9199;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 600;
   }
 
   .authorUtilities {
@@ -241,28 +243,6 @@ export const StyledWrapper = styled.header `
     color: #c33a3a;
   }
 
-  .mobileMetaOnly {
-    display: none;
-  }
-
-  .metaInlineMetric {
-    align-items: center;
-    gap: 0.32rem;
-    color: #646a73;
-    font-size: 0.84rem;
-    font-weight: 600;
-    line-height: 1;
-
-    svg {
-      font-size: 0.9rem;
-    }
-  }
-
-  .metaInlineViewStat {
-    color: #111216;
-    white-space: nowrap;
-  }
-
   .likeButton {
     display: inline-flex;
     align-items: center;
@@ -335,60 +315,29 @@ export const StyledWrapper = styled.header `
     display: inline-flex;
     align-items: center;
     gap: 0.42rem;
-    min-height: 40px;
-    padding: 0 0.82rem;
-    border-radius: 6px;
-    border: 1px solid #dfe1e5;
+    min-height: auto;
+    padding: 0;
+    border-radius: 0;
+    border: 0;
     background: transparent;
-    color: #646a73;
-    font-size: 0.9rem;
-    font-weight: 650;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
     line-height: 1;
-  }
-
-  .viewStatChip {
-    justify-content: space-between;
-  }
-
-  .statMetaLabel {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.34rem;
-    color: #646a73;
-
-    svg {
-      font-size: 0.96rem;
-    }
-  }
-
-  .statMetricValue {
-    color: #111216;
-    font-size: 0.96rem;
-    font-weight: 760;
-    letter-spacing: -0.02em;
   }
 
   .thumbnail {
     overflow: hidden;
     position: relative;
     margin-top: 2rem;
-    border-radius: 10px;
+    border-radius: 0;
     width: 100%;
     border: 1px solid #dfe1e5;
     background-color: #f0f1f2;
     padding-bottom: 52%;
   }
 
-  @media (max-width: 768px) {
-    .taxonomyRow {
-      margin-bottom: 0.8rem;
-    }
-
-    .taxonomyRow > span {
-      min-height: 30px;
-      font-size: 0.8rem;
-    }
-
+  @media (max-width: 820px) {
     .title {
       font-size: clamp(38px, 11vw, 43px);
       line-height: 1.08;
@@ -404,9 +353,10 @@ export const StyledWrapper = styled.header `
     }
   }
 
-  @media (max-width: 1023px) {
-    .mobileMetaOnly {
-      display: inline-flex;
+  @media (max-width: 820px) {
+    .metaRow {
+      align-items: flex-start;
+      flex-direction: column;
     }
 
     .actions[data-hide-mobile="true"] {
@@ -420,7 +370,7 @@ export const StyledWrapper = styled.header `
     }
   }
 
-  @media (min-width: 1201px) {
+  @media (min-width: 821px) {
     .likeButton[data-hide-desktop="true"],
     .shareButton[data-hide-desktop="true"],
     .shareFeedbackPill[data-hide-desktop="true"] {

@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from "react"
 import AppIcon from "src/components/icons/AppIcon"
-import { CompactTocSection, MobileSummaryBar } from "./PostDetail.styles"
+import { MobileSummaryBar } from "./PostDetail.styles"
 import type { TocItem } from "./PostDetailTocModel"
 
 type EngagementState = {
@@ -165,44 +165,6 @@ export const MobileSummaryActions = ({
       <strong>{commentsProgressLabel}</strong>
     </button>
   </MobileSummaryBar>
-)
-
-type CompactTocProps = {
-  sectionRef: RefObject<HTMLElement | null>
-  visibleTocItems: TocItem[]
-  activeTocId: string
-  onNavigate: (id: string) => void
-}
-
-export const CompactToc = ({ sectionRef, visibleTocItems, activeTocId, onNavigate }: CompactTocProps) => (
-  <CompactTocSection ref={sectionRef as Ref<HTMLElement>} aria-label="접이식 목차">
-    <details>
-      <summary>
-        <div className="summaryCopy">
-          <strong>목차</strong>
-          <span>{visibleTocItems.length}개 섹션</span>
-        </div>
-        <span className="summaryChevron" aria-hidden="true">
-          <AppIcon name="chevron-down" />
-        </span>
-      </summary>
-      <ol>
-        {visibleTocItems.map((item) => (
-          <li key={`compact-${item.id}`} data-level={item.level}>
-            <button
-              type="button"
-              data-active={activeTocId === item.id}
-              title={item.text}
-              aria-label={item.text}
-              onClick={() => onNavigate(item.id)}
-            >
-              {item.text}
-            </button>
-          </li>
-        ))}
-      </ol>
-    </details>
-  </CompactTocSection>
 )
 
 type RightTocRailProps = {

@@ -13,10 +13,12 @@ export const markdownRendererRootBaseStyles = (theme: Theme) => css`
   }
 
   .aq-image-frame {
-    width: min(100%, var(--article-readable-width, 48rem));
-    margin: 0 auto;
+    width: 100%;
+    margin: 30px 0;
     position: relative;
     min-width: 0;
+    border: 1px solid ${ theme.colors.gray6};
+    background: ${ theme.publicDesign.readableSurface};
   }
 
   .aq-image-frame[data-width-mode="custom"] {
@@ -30,10 +32,10 @@ export const markdownRendererRootBaseStyles = (theme: Theme) => css`
     height: auto;
     max-height: min(76vh, 880px);
     object-fit: contain;
-    border-radius: 12px;
-    border: 1px solid ${ theme.colors.gray6};
-    background: ${ theme.colors.gray2};
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+    border-radius: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .aq-image-frame[data-editable="true"] .aq-image-resize-handle {
@@ -65,15 +67,17 @@ export const markdownRendererRootBaseStyles = (theme: Theme) => css`
   }
 
   .aq-image-frame[data-editable="true"] .aq-image-resize-handle:hover {
-    transform: translateY(-1px);
+    color: ${ theme.publicDesign.accent};
   }
 
   .aq-image-frame figcaption {
-    margin-top: 0.62rem;
+    margin-top: 0;
+    padding: 12px 15px;
+    border-top: 1px solid ${ theme.colors.gray6};
     color: ${ theme.colors.gray11};
-    font-size: 0.84rem;
-    line-height: 1.56;
-    text-align: center;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: left;
   }
 
   ul.contains-task-list,

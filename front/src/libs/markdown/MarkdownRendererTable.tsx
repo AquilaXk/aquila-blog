@@ -70,8 +70,8 @@ export const MarkdownTableRenderer = ({
     if (!isWideOverflowTable) {
       return {
         width: "100%",
-        minWidth: "100%",
-        maxWidth: "100%",
+        minWidth: "680px",
+        maxWidth: "none",
       }
     }
 

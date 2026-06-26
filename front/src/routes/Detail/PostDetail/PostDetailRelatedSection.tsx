@@ -1,11 +1,10 @@
 import Link from "next/link"
 import { formatDate } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
-import { normalizeCardSummary } from "src/libs/postSummary"
 import type { TPost } from "src/types"
 import { RelatedSection, RelatedSkeletonItem } from "./PostDetail.styles"
 
-const RELATED_SKELETON_COUNT = 3
+const RELATED_SKELETON_COUNT = 2
 
 type RelatedPostsSectionProps = {
   relatedTag: string
@@ -15,79 +14,51 @@ type RelatedPostsSectionProps = {
   relatedByAuthorPosts: TPost[]
 }
 
-const renderRelatedSummary = (summary: string | undefined) => {
-  const summaryText = normalizeCardSummary(summary, { fallback: "", maxLength: 148 })
-  return summaryText ? <p>{summaryText}</p> : null
-}
-
 const renderSkeletonItems = (prefix: string) =>
   Array.from({ length: RELATED_SKELETON_COUNT }, (_, index) => (
     <RelatedSkeletonItem key={`${prefix}-skeleton-${index}`} aria-hidden="true">
       <span className="titleLine" />
-      <span className="summaryLine wide" />
-      <span className="summaryLine medium" />
       <span className="metaLine" />
     </RelatedSkeletonItem>
   ))
 
+const getRelatedPostMeta = (post: TPost) => {
+  const taxonomy = post.tags?.[0] || post.category?.[0] || post.type?.[0] || "Post"
+  return `${taxonomy} · ${formatDate(post.date?.start_date || post.createdTime)}`
+}
+
 export const RelatedPostsSection = ({
-  relatedTag,
   showRelatedTagSkeleton,
   relatedByTagPosts,
   showRelatedAuthorSkeleton,
   relatedByAuthorPosts,
-}: RelatedPostsSectionProps) => (
-  <>
-    {(showRelatedTagSkeleton || relatedByTagPosts.length > 0) && (
-      <RelatedSection aria-label="연관 글" data-rum-section="related-tag">
-        <header>
-          <div className="headerCopy">
-            <h2>같은 태그 글</h2>
-            <p className="sectionReason">현재 글과 같은 태그 흐름에서 바로 이어 읽기 좋은 글만 추렸습니다.</p>
-          </div>
-          <Link href={relatedTag ? `/?tag=${encodeURIComponent(relatedTag)}` : "/"}>태그 글 보기</Link>
-        </header>
-        <ul>
-          {showRelatedTagSkeleton
-            ? renderSkeletonItems("tag")
-            : relatedByTagPosts.map((post) => (
-                <li key={post.id}>
-                  <Link href={toCanonicalPostPath(post.id)}>
-                    <span className="reasonChip">같은 태그</span>
-                    <strong>{post.title}</strong>
-                    {renderRelatedSummary(post.summary)}
-                    <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
-                  </Link>
-                </li>
-              ))}
-        </ul>
-      </RelatedSection>
-    )}
+}: RelatedPostsSectionProps) => {
+  const relatedPosts = [...relatedByTagPosts, ...relatedByAuthorPosts]
+    .filter((post, index, posts) => posts.findIndex((item) => item.id === post.id) === index)
+    .slice(0, 2)
+  const showSkeleton = showRelatedTagSkeleton || showRelatedAuthorSkeleton
 
-    {(showRelatedAuthorSkeleton || relatedByAuthorPosts.length > 0) && (
-      <RelatedSection aria-label="같은 작성자 글" data-rum-section="related-author">
-        <header>
-          <div className="headerCopy">
-            <h2>같은 작성자 글</h2>
-            <p className="sectionReason">같은 문제의식과 톤으로 연결되는 작성자 글을 한 번에 이어볼 수 있습니다.</p>
-          </div>
-          <Link href="/">작성자 글 보기</Link>
-        </header>
-        <ul>
-          {showRelatedAuthorSkeleton
-            ? renderSkeletonItems("author")
-            : relatedByAuthorPosts.map((post) => (
-                <li key={post.id}>
-                  <Link href={toCanonicalPostPath(post.id)}>
-                    <span className="reasonChip">같은 작성자</span>
+  if (!showSkeleton && relatedPosts.length === 0) return null
+
+  return (
+    <RelatedSection aria-label="관련 글" data-rum-section="related">
+      <span className="monoLabel">Continue reading</span>
+      <h3>관련 글</h3>
+      <ul>
+        {showSkeleton
+          ? renderSkeletonItems("related")
+          : relatedPosts.map((post) => (
+              <li key={post.id}>
+                <Link href={toCanonicalPostPath(post.id)}>
+                  <span className="relatedItemCopy">
                     <strong>{post.title}</strong>
-                    {renderRelatedSummary(post.summary)}
-                    <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
-                  </Link>
-                </li>
-              ))}
-        </ul>
-      </RelatedSection>
-    )}
-  </>
-)
+                    <span className="relatedMeta">{getRelatedPostMeta(post)}</span>
+                  </span>
+                  <span className="relatedArrow" aria-hidden="true">→</span>
+                </Link>
+              </li>
+            ))}
+      </ul>
+    </RelatedSection>
+  )
+}

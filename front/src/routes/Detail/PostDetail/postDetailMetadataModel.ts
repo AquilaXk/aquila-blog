@@ -20,7 +20,7 @@ const normalizePostImage = (post: TPost) =>
 
 const normalizeAuthorName = (post: TPost) =>
   post.author?.find((author) => author.name.trim().length > 0)?.name.trim() ||
-  CONFIG.profile.name
+  "익명"
 
 const buildBlogPostingJsonLd = ({
   post,

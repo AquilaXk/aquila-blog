@@ -1,19 +1,19 @@
 import styled from "@emotion/styled"
 
 export const StyledWrapper = styled.section`
-  margin-top: 1.5rem;
-  padding: 1rem 0;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  margin-top: 64px;
+  padding: 28px 0 0;
+  border-top: 2px solid #111216;
   background: transparent;
 
   textarea {
     width: 100%;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 8px;
-    background-color: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
-    padding: 0.8rem 0.95rem;
-    min-height: 104px;
+    border: 1px solid #dfe1e5;
+    border-radius: 0;
+    background-color: #ffffff;
+    color: #111216;
+    padding: 14px;
+    min-height: 110px;
     resize: vertical;
     line-height: 1.7;
   }
@@ -25,13 +25,13 @@ export const StyledWrapper = styled.section`
     justify-content: center;
     gap: 0.35rem;
     min-height: 38px;
-    padding: 0 0.82rem;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background-color: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
+    padding: 0 14px;
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
+    background-color: #ffffff;
+    color: #111216;
     font-size: 0.8rem;
-    font-weight: 700;
+    font-weight: 750;
     cursor: pointer;
 
     :disabled {
@@ -65,8 +65,8 @@ export const StyledWrapper = styled.section`
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
-    gap: 0.85rem;
-    margin-bottom: 1rem;
+    gap: 12px;
+    margin-bottom: 22px;
 
     @media (max-width: 640px) {
       grid-template-columns: 1fr;
@@ -95,7 +95,7 @@ export const StyledWrapper = styled.section`
   .error {
     margin: 0 0 0.9rem;
     padding: 0.72rem 0.82rem;
-    border-radius: 8px;
+    border-radius: 6px;
     border: 1px solid ${({ theme }) => theme.colors.red7};
     background: transparent;
     color: ${({ theme }) => theme.colors.red11};
@@ -115,7 +115,7 @@ export const StyledWrapper = styled.section`
   }
 
   .commentList > li + li {
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-top: 1px solid #dfe1e5;
   }
 
   .commentBody[id] {
@@ -133,8 +133,11 @@ export const SectionHeader = styled.div`
 
   h3 {
     margin: 0;
-    font-size: 1.35rem;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: #111216;
+    font-size: 32px;
+    line-height: 1.25;
+    font-weight: 850;
+    letter-spacing: -0.045em;
   }
 
   .countBadge {
@@ -142,10 +145,10 @@ export const SectionHeader = styled.div`
     align-items: center;
     min-height: 38px;
     padding: 0 0.85rem;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
+    background: #ffffff;
+    color: #646a73;
     font-size: 0.82rem;
     font-weight: 700;
   }
@@ -157,13 +160,48 @@ export const Avatar = styled.div<{ size: number }>`
   height: ${({ size }) => `${size}px`};
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: 50%;
-  border: none;
-  background: ${({ theme }) => theme.colors.gray2};
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  border: 1px solid #dfe1e5;
+  background: #ffffff;
+  color: #465b66;
 
   img {
     object-fit: cover;
     object-position: center 38%;
+  }
+
+  .avatarFallback {
+    position: absolute;
+    inset: 14%;
+    display: block;
+    color: inherit;
+  }
+
+  .avatarFallback::before,
+  .avatarFallback::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    background: currentColor;
+    transform: translateX(-50%);
+  }
+
+  .avatarFallback::before {
+    top: 0;
+    width: 42%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+  }
+
+  .avatarFallback::after {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 45%;
+    border-radius: 999px 999px 2px 2px;
+    transform: none;
   }
 `
 
@@ -171,7 +209,7 @@ export const CommentItem = styled.div`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.85rem;
-  padding: 1.05rem 0;
+  padding: 22px 0;
 
   &[data-reply="true"] {
     position: relative;
@@ -244,12 +282,12 @@ export const CommentItem = styled.div`
     gap: 0.38rem 0.52rem;
 
     strong {
-      color: ${({ theme }) => theme.colors.gray12};
+      color: #111216;
       font-size: 0.92rem;
     }
 
     span {
-      color: ${({ theme }) => theme.colors.gray11};
+      color: #646a73;
       font-size: 0.78rem;
     }
   }
@@ -278,8 +316,8 @@ export const CommentItem = styled.div`
   }
 
   .content {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
+    margin: 8px 0 0;
+    color: #646a73;
     line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;
@@ -357,7 +395,7 @@ export const EmptyState = styled.div`
   gap: 0.24rem;
   margin-left: calc(44px + 0.85rem);
   padding: 0.95rem 1rem;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
 
@@ -383,7 +421,7 @@ export const ComposerPromptCard = styled.div`
   display: grid;
   gap: 0.52rem;
   padding: 0.95rem 1rem;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
 

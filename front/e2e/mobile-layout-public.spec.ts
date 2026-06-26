@@ -26,6 +26,7 @@ test.describe("mobile layout public", () => {
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
+  await page.getByRole("button", { name: "메뉴 열기" }).click()
   await expect(page.getByRole("link", { name: "Notes" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Topics" })).toBeVisible()
   await expect(page.getByRole("link", { name: "About" })).toBeVisible()
@@ -232,7 +233,7 @@ test.describe("mobile layout public", () => {
   await page.goto("/posts/991")
 
   const engagementRow = page.locator('[aria-label="post engagement"]')
-  const metaViewStat = page.locator(".metaInlineViewStat")
+  const metaViewStat = page.locator(".stats .statChip").filter({ hasText: "25 VIEWS" })
   const compactActionBar = page.getByLabel("빠른 이동 및 반응")
   const likeButton = compactActionBar.getByRole("button", { name: "좋아요 1" })
   const shareButton = compactActionBar.getByRole("button", { name: /^공유/ })
@@ -241,15 +242,15 @@ test.describe("mobile layout public", () => {
   const deleteButton = page.getByRole("button", { name: "삭제" }).first()
 
   await expect(engagementRow).toBeHidden()
-  await expect(metaViewStat).toContainText("조회 25")
+  await expect(metaViewStat).toHaveText("25 VIEWS")
+  await expect(metaViewStat).toBeHidden()
   await expect(likeButton).toBeVisible()
   await expect(shareButton).toBeVisible()
   await expect(commentButton).toBeVisible()
   await expect(editButton).toBeVisible()
   await expect(deleteButton).toBeVisible()
 
-  const [metaViewBox, likeBox, shareBox, commentActionBox, editBox, deleteBox] = await Promise.all([
-    metaViewStat.boundingBox(),
+  const [likeBox, shareBox, commentActionBox, editBox, deleteBox] = await Promise.all([
     likeButton.boundingBox(),
     shareButton.boundingBox(),
     commentButton.boundingBox(),
@@ -257,14 +258,12 @@ test.describe("mobile layout public", () => {
     deleteButton.boundingBox(),
   ])
 
-  expect(metaViewBox).not.toBeNull()
   expect(likeBox).not.toBeNull()
   expect(shareBox).not.toBeNull()
   expect(commentActionBox).not.toBeNull()
   expect(editBox).not.toBeNull()
   expect(deleteBox).not.toBeNull()
 
-  expect((metaViewBox?.y ?? 0)).toBeLessThan((likeBox?.y ?? 0))
   expect((likeBox?.height ?? 0)).toBeLessThanOrEqual(72)
   expect(Math.abs((likeBox?.y ?? 0) - (shareBox?.y ?? 0))).toBeLessThanOrEqual(4)
   expect(Math.abs((shareBox?.y ?? 0) - (commentActionBox?.y ?? 0))).toBeLessThanOrEqual(4)

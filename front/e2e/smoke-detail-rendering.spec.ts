@@ -23,7 +23,12 @@ test.describe("core smoke detail rendering", () => {
         authorProfileImageDirectUrl: "/avatar.png",
         title: "요약 중복 방지",
         content: [
-          "> 요약: 캐시 무효화 경계를 먼저 정리합니다.",
+          [
+            "> **요약**: 캐시 무효화 경계를 먼저 정리합니다.",
+            "이 문장은 180자를 넘는 lead summary가 상세 본문에서 잘리지 않는지 확인하기 위한 긴 설명입니다.",
+            "요약 블록은 본문 renderer에서는 제거되지만 lead summary 영역에는 전체 문장이 남아야 합니다.",
+            "긴 요약 끝부분 보존 확인",
+          ].join(" "),
           "",
           "본문은 요약 다음에 이어지는 실제 상세 설명입니다.",
         ].join("\n"),
@@ -56,6 +61,7 @@ test.describe("core smoke detail rendering", () => {
   await page.goto("/posts/1701")
   await expect(page.getByRole("heading", { name: "요약 중복 방지" })).toBeVisible()
   await expect(page.locator(".leadSummary")).toContainText("캐시 무효화 경계를 먼저 정리합니다.")
+  await expect(page.locator(".leadSummary")).toContainText("긴 요약 끝부분 보존 확인")
   await expect(page.locator(".deck")).toHaveCount(0)
   await expect(page.getByText("본문은 요약 다음에 이어지는 실제 상세 설명입니다.")).toBeVisible()
 })

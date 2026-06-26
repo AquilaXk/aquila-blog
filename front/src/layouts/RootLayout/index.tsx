@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect } from "react"
+import React, { ReactNode, useEffect, useLayoutEffect } from "react"
 import { ThemeProvider } from "./ThemeProvider"
 import useScheme from "src/hooks/useScheme"
 import Header from "./Header"
@@ -14,6 +14,10 @@ import { FLUID_LAYOUT_MAX_PX } from "./layoutTiers"
 
 const PUBLIC_ADMIN_PROFILE_QUERY_KEY = ["member", "adminProfile"] as const
 const INITIAL_PROPS_CANCELLED_MESSAGE = "loading initial props cancelled"
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
+const RootAdminProfileContext = React.createContext<AdminProfile | null>(null)
+
+export const useRootAdminProfile = () => React.useContext(RootAdminProfileContext)
 
 type UsePublicAdminProfileOptions = {
   enabled: boolean
@@ -81,7 +85,7 @@ const RootLayout = ({
   const headerBlogTitle = (isPublicBlogRoute && adminProfile?.blogTitle?.trim()) || CONFIG.blog.title
   useGtagEffect()
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!isPublicBlogRoute) return
     if (typeof document === "undefined") return
 
@@ -163,17 +167,19 @@ const RootLayout = ({
 
   return (
     <ThemeProvider scheme={effectiveScheme} blogDesign={effectiveBlogDesign}>
-      <Scripts />
-      {/* // TODO: replace react query */}
-      {/* {metaConfig.type !== "Paper" && <Header />} */}
-      {isAdminRoute || isDedicatedEditorRoute ? null : (
-        <Header
-          fullWidth={false}
-          showThemeToggle={!isPublicBlogRoute && effectiveBlogDesign === "legacy"}
-          blogTitle={headerBlogTitle}
-        />
-      )}
-      <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
+      <RootAdminProfileContext.Provider value={adminProfile}>
+        <Scripts />
+        {/* // TODO: replace react query */}
+        {/* {metaConfig.type !== "Paper" && <Header />} */}
+        {isAdminRoute || isDedicatedEditorRoute ? null : (
+          <Header
+            fullWidth={false}
+            showThemeToggle={effectiveBlogDesign === "legacy"}
+            blogTitle={headerBlogTitle}
+          />
+        )}
+        <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
+      </RootAdminProfileContext.Provider>
     </ThemeProvider>
   )
 }
@@ -192,10 +198,6 @@ const StyledMain = styled.main<{ $fullBleed?: boolean }>`
       ? ""
       : `
         @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
-          width: min(calc(100% - 24px), 1240px);
-        }
-
-        @media (max-width: 768px) {
           width: min(calc(100% - 24px), 1240px);
         }
       `}

@@ -33,6 +33,33 @@ export const StyledWrapper = styled.div `
     pointer-events: none;
   }
 
+  .detailReadProgress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 90;
+    width: 100%;
+    height: 2px;
+    pointer-events: none;
+
+    span {
+      display: block;
+      width: 100%;
+      height: 100%;
+      transform: scaleX(0);
+      transform-origin: left center;
+      background: var(--detail-v4-accent);
+    }
+  }
+
+  .detailHero {
+    width: 100%;
+    margin: 0 auto;
+    padding: 68px 20px 42px;
+    border-bottom: 1px solid var(--detail-v4-line);
+    box-sizing: border-box;
+  }
+
   .detailLayout {
     display: grid;
     width: min(100%, 1180px);
@@ -56,26 +83,6 @@ export const StyledWrapper = styled.div `
     z-index: 0;
   }
 
-  article::before {
-    content: "";
-    display: ${({ theme }) => ("none")};
-    position: absolute;
-    inset: -1.4rem -1.5rem;
-    z-index: -1;
-    border-radius: 18px;
-    border: 1px solid var(--detail-v4-line);
-    background: var(--detail-v4-paper);
-    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
-    pointer-events: none;
-  }
-
-  @media (max-width: 768px) {
-    article::before {
-      inset: -0.95rem -0.85rem;
-      border-radius: 14px;
-    }
-  }
-
   article > * {
     min-width: 0;
   }
@@ -89,7 +96,7 @@ export const StyledWrapper = styled.div `
   .rightRail {
     min-width: 0;
     position: sticky;
-    top: 94px;
+    top: calc(var(--app-header-height, var(--app-header-mobile-height, 64px)) + 1.25rem);
     align-self: start;
     overflow: visible;
     z-index: 1;
@@ -127,7 +134,7 @@ export const StyledWrapper = styled.div `
     background: var(--detail-v4-paper);
     color: var(--detail-v4-muted);
     cursor: pointer;
-    transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 
     svg {
       width: 1em;
@@ -136,7 +143,6 @@ export const StyledWrapper = styled.div `
     }
 
     &:hover {
-      transform: translateY(-1px);
       border-color: var(--detail-v4-accent);
       background: var(--detail-v4-paper);
       color: var(--detail-v4-accent);
@@ -145,7 +151,6 @@ export const StyledWrapper = styled.div `
     &:disabled {
       opacity: 0.7;
       cursor: not-allowed;
-      transform: none;
     }
   }
 
@@ -162,7 +167,7 @@ export const StyledWrapper = styled.div `
       transform: translateY(-50%);
       white-space: nowrap;
       padding: 0.3rem 0.48rem;
-      border-radius: 8px;
+      border-radius: 6px;
       border: 1px solid var(--detail-v4-line);
       background: var(--detail-v4-paper);
       color: var(--detail-v4-muted);
@@ -211,9 +216,9 @@ export const StyledWrapper = styled.div `
   }
 
   .floatingLikeCount {
-    font-size: 0.88rem;
+    font-size: 10px;
     line-height: 1;
-    font-weight: 720;
+    font-weight: 600;
     color: var(--detail-v4-faint);
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   }
@@ -236,7 +241,7 @@ export const StyledWrapper = styled.div `
       align-items: center;
       justify-content: space-between;
       gap: 0.75rem;
-      margin-bottom: 0.42rem;
+      margin-bottom: 14px;
     }
 
     .rightRailTitleGroup {
@@ -309,24 +314,24 @@ export const StyledWrapper = styled.div `
 
     button {
       width: 100%;
+      display: block;
       text-align: left;
       border: 0;
-      border-radius: 8px;
-      min-height: 32px;
+      border-radius: 0;
+      min-height: 0;
       box-sizing: border-box;
       max-width: 100%;
-      padding: 0.34rem 0.68rem 0.34rem 0.1rem;
+      padding: 7px 0;
       background: transparent;
       color: var(--detail-v4-muted);
-      font-size: 0.75rem;
+      font-size: 12px;
       line-height: 1.4;
       cursor: pointer;
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: keep-all;
       position: relative;
-      display: block;
-      transition: color 0.15s ease, background-color 0.15s ease;
+      transition: color 0.15s ease;
     }
 
     button:hover {
@@ -334,35 +339,17 @@ export const StyledWrapper = styled.div `
       background: transparent;
     }
 
-    button::before {
-      content: "";
-      position: absolute;
-      left: -1.18rem;
-      top: 0.18rem;
-      bottom: 0.18rem;
-      width: 1px;
-      opacity: 0;
-      background: var(--detail-v4-accent);
-      transition: opacity 0.15s ease;
-    }
-
     button[data-active="true"] {
       color: var(--detail-v4-accent);
-      font-weight: 700;
+      font-weight: 750;
       background: transparent;
-    }
-
-    button[data-active="true"]::before {
-      opacity: 1;
     }
   }
 
-  @media (max-width: 1365px) {
+  @media (max-width: 1100px) {
     .detailLayout {
-      width: auto;
-      margin-left: 0;
-      grid-template-columns: 72px minmax(0, var(--article-readable-width, 48rem));
-      gap: 2rem;
+      grid-template-columns: 52px minmax(0, 1fr);
+      gap: 44px;
     }
 
     .rightRail {
@@ -370,43 +357,24 @@ export const StyledWrapper = styled.div `
     }
   }
 
-  @media (max-width: 1279px) {
+  @media (max-width: 820px) {
+    .detailHero {
+      padding: 44px 20px 28px;
+    }
+
     .detailLayout {
       width: auto;
-      margin-left: 0;
-      grid-template-columns: 72px minmax(0, var(--article-readable-width, 48rem));
-      gap: 1.6rem;
-    }
-  }
-
-  @media (max-width: 1200px) {
-    .detailLayout {
-      width: min(100%, var(--article-readable-width, 48rem));
-      margin: 0 auto;
-      grid-template-columns: minmax(0, 1fr);
-      justify-content: center;
+      display: block;
       gap: 0;
+      padding: 30px 20px 70px;
     }
 
     .leftRail {
       display: none;
     }
-  }
-
-  @media (max-width: 1080px) {
-    width: 100%;
-    max-width: 50rem;
-    padding: 0;
-
-    .detailLayout {
-      width: auto;
-      margin-left: 0;
-      grid-template-columns: minmax(0, 50rem);
-      gap: 0;
-    }
 
     article {
-      max-width: 50rem;
+      max-width: 760px;
     }
   }
 `;
@@ -426,15 +394,5 @@ export const BodySection = styled.div `
     line-height: 1.75;
     word-break: keep-all;
   }
-
-  @media (max-width: 768px) {
-    margin-top: 0.55rem;
-    padding-top: 0.85rem;
-
-    .leadSummary {
-      margin-bottom: 32px;
-      font-size: 1rem;
-    }
-  }
 `;
-export { CompactTocSection, MobileSummaryBar, RelatedSection, RelatedSkeletonItem } from "./PostDetailSection.styles";
+export { MobileSummaryBar, RelatedSection, RelatedSkeletonItem } from "./PostDetailSection.styles";

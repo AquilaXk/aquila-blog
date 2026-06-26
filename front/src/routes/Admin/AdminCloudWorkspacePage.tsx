@@ -13,6 +13,7 @@ import {
 import {
   deleteCloudFile,
   getCloudFileContentUrl,
+  issueCloudExternalPlaybackToken,
   listCloudFiles,
   uploadCloudFile,
   type CloudFile,
@@ -155,6 +156,23 @@ const resolveCloudErrorMessage = (error: unknown) => {
   if (error instanceof Error && error.message.trim()) return error.message.trim()
   return "요청 처리 중 오류가 발생했습니다."
 }
+
+type ExternalPlaybackPlayer = "iina" | "mpv"
+
+type ExternalPlaybackCommandState = {
+  status: "pending" | "success" | "error"
+  message: string
+}
+
+const EXTERNAL_PLAYBACK_PLAYER_LABELS: Record<ExternalPlaybackPlayer, string> = {
+  iina: "IINA",
+  mpv: "mpv",
+}
+
+const quoteShellArg = (value: string) => `"${value.replace(/(["\\$`])/g, "\\$1")}"`
+
+const buildExternalPlaybackCommand = (player: ExternalPlaybackPlayer, contentUrl: string) =>
+  `${player} ${quoteShellArg(contentUrl)}`
 
 const installPdfWorkerTerminationRejectionHandler = () => {
   const shouldIgnorePdfWorkerTermination = (error: unknown) => {
@@ -375,6 +393,7 @@ type VideoPreviewProps = {
 const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [speed, setSpeed] = useState<(typeof PLAYBACK_SPEEDS)[number]>(1)
+  const [commandState, setCommandState] = useState<ExternalPlaybackCommandState | null>(null)
 
   useEffect(() => {
     const video = videoRef.current
@@ -382,6 +401,35 @@ const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
 
     video.playbackRate = speed
   }, [speed, contentUrl])
+
+  useEffect(() => {
+    setCommandState(null)
+  }, [file.id])
+
+  const copyExternalPlaybackCommand = async (player: ExternalPlaybackPlayer) => {
+    const playerLabel = EXTERNAL_PLAYBACK_PLAYER_LABELS[player]
+    setCommandState({ status: "pending", message: `${playerLabel} 명령 발급 중` })
+
+    try {
+      const token = await issueCloudExternalPlaybackToken(file.id)
+      const command = buildExternalPlaybackCommand(player, token.contentUrl)
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(command)
+        setCommandState({ status: "success", message: `${playerLabel} 명령을 복사했습니다. 5분 안에 실행하세요.` })
+        return
+      }
+      if (typeof window !== "undefined") {
+        window.prompt("명령을 복사하세요.", command)
+        setCommandState({ status: "success", message: `${playerLabel} 명령을 표시했습니다. 5분 안에 실행하세요.` })
+        return
+      }
+      throw new Error("clipboard를 사용할 수 없습니다.")
+    } catch (error) {
+      setCommandState({ status: "error", message: `${playerLabel} 명령 복사 실패: ${resolveCloudErrorMessage(error)}` })
+    }
+  }
+
+  const isCommandPending = commandState?.status === "pending"
 
   return (
     <PreviewStage>
@@ -407,6 +455,27 @@ const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
               </GhostButton>
             ))}
           </FilterGroup>
+          <ActionGroup aria-label="외부 플레이어 명령 복사">
+            <SecondaryButton
+              type="button"
+              disabled={isCommandPending}
+              onClick={() => void copyExternalPlaybackCommand("iina")}
+            >
+              IINA 명령 복사
+            </SecondaryButton>
+            <SecondaryButton
+              type="button"
+              disabled={isCommandPending}
+              onClick={() => void copyExternalPlaybackCommand("mpv")}
+            >
+              mpv 명령 복사
+            </SecondaryButton>
+          </ActionGroup>
+          {commandState ? (
+            <InlineList role="status" aria-live="polite" data-tone={commandState.status}>
+              <span>{commandState.message}</span>
+            </InlineList>
+          ) : null}
         </PlayerBar>
       </VideoFrame>
     </PreviewStage>

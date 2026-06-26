@@ -419,7 +419,7 @@ test.describe("editor live visual regression", () => {
     await expect(preview.getByRole("heading", { name: "Live Markdown editor" })).toBeVisible()
     await expect(preview.locator("table")).toContainText(post507FinalTableTargetCell)
     await expect(preview.locator("pre")).toContainText(post507CodeText)
-    await expect(preview.getByText(post507ListText)).toBeVisible()
+    await expect(preview.getByRole("listitem").filter({ hasText: post507ListText })).toBeVisible()
     await expect(page.locator("[data-table-affordance]")).toHaveCount(0)
   })
 
@@ -452,7 +452,7 @@ test.describe("editor live visual regression", () => {
       const preview = page.getByTestId("markdown-editor-preview-pane")
       await expect(preview.locator("table")).toContainText(post507FinalTableSelectAllNeedle)
       await expect(preview.locator("pre")).toContainText(post507CodeText)
-      await expect(preview.getByText(post507ListText)).toBeVisible()
+      await expect(preview.getByRole("listitem").filter({ hasText: post507ListText })).toBeVisible()
 
       await focusMarkdownEditor(page)
       await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A")
@@ -494,7 +494,7 @@ test.describe("editor live visual regression", () => {
     await expect(finalReferenceTable).toContainText(post507FinalTableTargetCell, { timeout: 30_000 })
     await expect(finalReferenceTable).toContainText(post507FinalTableSelectAllNeedle)
     await expect(tokenCodeBlock).toContainText(post507CodeText)
-    await expect(preview.getByText(post507ListText)).toBeVisible()
+    await expect(preview.getByRole("listitem").filter({ hasText: post507ListText })).toBeVisible()
 
     await expect(page.locator("[data-table-affordance]")).toHaveCount(0)
   })

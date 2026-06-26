@@ -38,7 +38,6 @@ import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
 import java.io.ByteArrayOutputStream
-import java.io.EOFException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import io.swagger.v3.oas.annotations.parameters.RequestBody as OpenApiRequestBody
@@ -247,35 +246,31 @@ class ApiV1AdmCloudController(
         id: Long,
         request: HttpServletRequest,
     ): ResponseEntity<Resource> {
-        val content =
-            cloudFileService.openContent(
-                ownerMemberId = securityUser.id,
-                fileId = id,
-            )
-        val storedObject = content.storedObject
-        val totalLength = storedObject.contentLength ?: -1
         val rangeHeader = request.getHeader(HttpHeaders.RANGE)
 
         // 동영상 seek 호환을 위해 단일 byte range만 허용하고 multi-range는 거절한다.
         if (!rangeHeader.isNullOrBlank()) {
-            if (totalLength <= 0) {
-                storedObject.close()
-                return noStoreHeaders(
-                    ResponseEntity
-                        .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                        .header(HttpHeaders.CONTENT_RANGE, "bytes */*"),
-                ).build()
-            }
-
+            val file =
+                cloudFileService.get(
+                    ownerMemberId = securityUser.id,
+                    fileId = id,
+                )
+            val totalLength = file.byteSize
             val range = parseSingleRange(rangeHeader, totalLength)
             if (range == null) {
-                storedObject.close()
                 return noStoreHeaders(
                     ResponseEntity
                         .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength"),
                 ).build()
             }
+            val content =
+                cloudFileService.openContentRange(
+                    ownerMemberId = securityUser.id,
+                    fileId = id,
+                    range = range,
+                )
+            val storedObject = content.storedObject
 
             return noStoreHeaders(
                 ResponseEntity
@@ -285,9 +280,16 @@ class ApiV1AdmCloudController(
                     .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
                     .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename))
                     .contentLength(range.last - range.first + 1),
-            ).body(InputStreamResource(sliceStream(storedObject.inputStream, range)))
+            ).body(InputStreamResource(storedObject.inputStream))
         }
 
+        val content =
+            cloudFileService.openContent(
+                ownerMemberId = securityUser.id,
+                fileId = id,
+            )
+        val storedObject = content.storedObject
+        val totalLength = storedObject.contentLength ?: -1
         val responseBuilder =
             noStoreHeaders(
                 ResponseEntity
@@ -378,25 +380,6 @@ class ApiV1AdmCloudController(
         return start..end
     }
 
-    private fun skipFully(
-        input: InputStream,
-        count: Long,
-    ) {
-        var remaining = count
-        while (remaining > 0) {
-            val skipped = input.skip(remaining)
-            if (skipped > 0) {
-                remaining -= skipped
-                continue
-            }
-
-            if (input.read() == -1) {
-                throw EOFException("Unexpected EOF while skipping stream")
-            }
-            remaining -= 1
-        }
-    }
-
     private fun readBoundedPartBytes(
         input: InputStream,
         expectedBytes: Long,
@@ -416,38 +399,5 @@ class ApiV1AdmCloudController(
         }
 
         return output.toByteArray()
-    }
-
-    private fun sliceStream(
-        source: InputStream,
-        range: LongRange,
-    ): InputStream {
-        skipFully(source, range.first)
-        return object : InputStream() {
-            private var remaining = range.last - range.first + 1
-
-            override fun read(): Int {
-                if (remaining <= 0) return -1
-                val value = source.read()
-                if (value >= 0) remaining -= 1
-                return value
-            }
-
-            override fun read(
-                b: ByteArray,
-                off: Int,
-                len: Int,
-            ): Int {
-                if (remaining <= 0) return -1
-                val allowed = minOf(remaining, len.toLong()).toInt()
-                val read = source.read(b, off, allowed)
-                if (read > 0) remaining -= read.toLong()
-                return read
-            }
-
-            override fun close() {
-                source.close()
-            }
-        }
     }
 }

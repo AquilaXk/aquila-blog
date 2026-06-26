@@ -747,11 +747,12 @@ class CloudFileServiceTest {
                 originalFilename = "demo.mp4",
             )
 
-        val content = service.openContent(ownerMemberId = 7L, fileId = saved.id)
+        val content = service.openContentRange(ownerMemberId = 7L, fileId = saved.id, range = 2L..5L)
 
         assertThat(content.file.id).isEqualTo(saved.id)
         assertThat(content.storedObject.contentType).isEqualTo("video/mp4")
-        assertThat(storage.openedObjectKeys).containsExactly(saved.objectKey)
+        assertThat(storage.openedObjectKeys).isEmpty()
+        assertThat(storage.openedRanges).containsExactly(saved.objectKey to (2L..5L))
     }
 
     @Test
@@ -997,6 +998,7 @@ class CloudFileServiceTest {
     private class FakeCloudStoragePort : CloudStoragePort {
         val uploaded = mutableListOf<CloudStoragePort.UploadRequest>()
         val openedObjectKeys = mutableListOf<String>()
+        val openedRanges = mutableListOf<Pair<String, LongRange>>()
         val deletedObjectKeys = mutableListOf<String>()
         val objects = mutableMapOf<String, CloudStoragePort.StoredObject>()
         var deleteFailure: RuntimeException? = null
@@ -1031,6 +1033,14 @@ class CloudFileServiceTest {
 
         override fun open(objectKey: String): CloudStoragePort.StoredObject? {
             openedObjectKeys += objectKey
+            return objects[objectKey]
+        }
+
+        override fun openRange(
+            objectKey: String,
+            range: LongRange,
+        ): CloudStoragePort.StoredObject? {
+            openedRanges += objectKey to range
             return objects[objectKey]
         }
 

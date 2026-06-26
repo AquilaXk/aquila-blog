@@ -2,18 +2,15 @@ package com.back.boundedContexts.cloud.adapter.web
 
 import com.back.boundedContexts.cloud.application.service.CloudFileContent
 import com.back.boundedContexts.cloud.application.service.CloudFileDto
-import com.back.boundedContexts.cloud.application.service.CloudFileService
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartDto
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartResultDto
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionDto
-import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
 import jakarta.servlet.http.HttpServletRequest
-import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -21,6 +18,7 @@ import org.mockito.ArgumentMatchers
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.mock.web.DelegatingServletInputStream
@@ -28,15 +26,12 @@ import org.springframework.mock.web.MockMultipartFile
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
-import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.multipart
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
 import java.io.ByteArrayInputStream
-import java.io.EOFException
-import java.io.InputStream
 import java.time.Instant
 
 @DisplayName("관리자 클라우드 WebMvc 테스트")
@@ -427,94 +422,116 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     }
 
     @Test
-    @DisplayName("content Range 요청은 private partial response를 반환한다")
-    fun `content Range 요청은 private partial response를 반환한다`() {
+    @DisplayName("content Range bytes=0-1023 요청은 storage range stream으로 private partial response를 반환한다")
+    fun `content Range bytes 0-1023 요청은 storage range stream으로 private partial response를 반환한다`() {
         val admin = adminUser(id = 7L)
-        givenContent(ownerMemberId = 7L, fileId = 12L, bytes = "0123456789".toByteArray(), contentLength = 10L)
+        val bytes = ByteArray(1024) { (it % 251).toByte() }
+        givenRangeContent(ownerMemberId = 7L, fileId = 12L, totalLength = 2048L, range = 0L..1023L, bytes = bytes)
 
         mvc
             .get("/system/api/v1/adm/cloud/files/12/content") {
-                header(HttpHeaders.RANGE, "bytes=2-5")
+                header(HttpHeaders.RANGE, "bytes=0-1023")
                 with(user(admin))
             }.andExpect {
                 status { isPartialContent() }
                 header { string(HttpHeaders.ACCEPT_RANGES, "bytes") }
-                header { string(HttpHeaders.CONTENT_RANGE, "bytes 2-5/10") }
+                header { string(HttpHeaders.CONTENT_RANGE, "bytes 0-1023/2048") }
+                header { longValue(HttpHeaders.CONTENT_LENGTH, 1024L) }
                 header { string(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0") }
                 content { contentType("video/mp4") }
-                content { bytes("2345".toByteArray()) }
+                content { bytes(bytes) }
             }
+
+        then(cloudFileService).should().openContentRange(ownerMemberId = 7L, fileId = 12L, range = 0L..1023L)
+        then(cloudFileService).should(never()).openContent(ownerMemberId = 7L, fileId = 12L)
     }
 
     @Test
-    @DisplayName("content suffix Range 요청은 마지막 byte 구간을 반환한다")
-    fun `content suffix Range 요청은 마지막 byte 구간을 반환한다`() {
+    @DisplayName("content Range bytes=1024- 요청은 끝까지 반환한다")
+    fun `content Range bytes 1024 open ended 요청은 끝까지 반환한다`() {
         val admin = adminUser(id = 7L)
-        givenContent(ownerMemberId = 7L, fileId = 12L, bytes = "0123456789".toByteArray(), contentLength = 10L)
+        val bytes = ByteArray(1024) { (it % 251).toByte() }
+        givenRangeContent(ownerMemberId = 7L, fileId = 12L, totalLength = 2048L, range = 1024L..2047L, bytes = bytes)
 
         mvc
             .get("/system/api/v1/adm/cloud/files/12/content") {
-                header(HttpHeaders.RANGE, "bytes=-4")
+                header(HttpHeaders.RANGE, "bytes=1024-")
                 with(user(admin))
             }.andExpect {
                 status { isPartialContent() }
-                header { string(HttpHeaders.CONTENT_RANGE, "bytes 6-9/10") }
-                content { bytes("6789".toByteArray()) }
+                header { string(HttpHeaders.CONTENT_RANGE, "bytes 1024-2047/2048") }
+                header { longValue(HttpHeaders.CONTENT_LENGTH, 1024L) }
+                content { bytes(bytes) }
             }
     }
 
     @Test
-    @DisplayName("content open-ended Range 요청은 끝까지 반환한다")
-    fun `content open-ended Range 요청은 끝까지 반환한다`() {
+    @DisplayName("content suffix Range bytes=-1024 요청은 total보다 크면 전체 길이로 clamp한다")
+    fun `content suffix Range bytes minus 1024 요청은 total보다 크면 전체 길이로 clamp한다`() {
         val admin = adminUser(id = 7L)
-        givenContent(ownerMemberId = 7L, fileId = 12L, bytes = "0123456789".toByteArray(), contentLength = 10L)
+        givenRangeContent(
+            ownerMemberId = 7L,
+            fileId = 12L,
+            totalLength = 10L,
+            range = 0L..9L,
+            bytes = "0123456789".toByteArray(),
+        )
 
         mvc
             .get("/system/api/v1/adm/cloud/files/12/content") {
-                header(HttpHeaders.RANGE, "bytes=7-")
+                header(HttpHeaders.RANGE, "bytes=-1024")
                 with(user(admin))
             }.andExpect {
                 status { isPartialContent() }
-                header { string(HttpHeaders.CONTENT_RANGE, "bytes 7-9/10") }
-                content { bytes("789".toByteArray()) }
+                header { string(HttpHeaders.CONTENT_RANGE, "bytes 0-9/10") }
+                header { longValue(HttpHeaders.CONTENT_LENGTH, 10L) }
+                content { bytes("0123456789".toByteArray()) }
             }
     }
 
     @Test
-    @DisplayName("content Range 요청은 stream 길이를 모르면 416을 반환하고 stream을 닫는다")
-    fun `content Range 요청은 stream 길이를 모르면 416을 반환하고 stream을 닫는다`() {
+    @DisplayName("content invalid Range 요청은 416을 반환하고 storage stream을 열지 않는다")
+    fun `content invalid Range 요청은 416을 반환하고 storage stream을 열지 않는다`() {
         val admin = adminUser(id = 7L)
-        val inputStream =
-            givenContent(
-                ownerMemberId = 7L,
-                fileId = 12L,
-                bytes = "0123456789".toByteArray(),
-                contentLength = null,
-            )
+        givenFileMetadata(ownerMemberId = 7L, fileId = 12L, totalLength = 10L)
 
         mvc
             .get("/system/api/v1/adm/cloud/files/12/content") {
-                header(HttpHeaders.RANGE, "bytes=0-1")
+                header(HttpHeaders.RANGE, "bytes=abc-def")
                 with(user(admin))
             }.andExpect {
                 status { isRequestedRangeNotSatisfiable() }
-                header { string(HttpHeaders.CONTENT_RANGE, "bytes */*") }
+                header { string(HttpHeaders.CONTENT_RANGE, "bytes */10") }
             }
 
-        assertThat(inputStream.closed).isTrue()
+        then(cloudFileService).should().get(ownerMemberId = 7L, fileId = 12L)
+        then(cloudFileService).shouldHaveNoMoreInteractions()
     }
 
     @Test
-    @DisplayName("content Range 요청은 multi-range를 거절하고 stream을 닫는다")
-    fun `content Range 요청은 multi-range를 거절하고 stream을 닫는다`() {
+    @DisplayName("content unsatisfiable Range 요청은 416을 반환하고 storage stream을 열지 않는다")
+    fun `content unsatisfiable Range 요청은 416을 반환하고 storage stream을 열지 않는다`() {
         val admin = adminUser(id = 7L)
-        val inputStream =
-            givenContent(
-                ownerMemberId = 7L,
-                fileId = 12L,
-                bytes = "0123456789".toByteArray(),
-                contentLength = 10L,
-            )
+        givenFileMetadata(ownerMemberId = 7L, fileId = 12L, totalLength = 10L)
+
+        mvc
+            .get("/system/api/v1/adm/cloud/files/12/content") {
+                header(HttpHeaders.RANGE, "bytes=10-")
+                with(user(admin))
+            }.andExpect {
+                status { isRequestedRangeNotSatisfiable() }
+                header { string(HttpHeaders.CONTENT_RANGE, "bytes */10") }
+            }
+
+        then(cloudFileService).should().get(ownerMemberId = 7L, fileId = 12L)
+        then(cloudFileService).shouldHaveNoMoreInteractions()
+    }
+
+    @Test
+    @DisplayName("content Range 요청은 multi-range를 거절하고 storage stream을 열지 않는다")
+    fun `content Range 요청은 multi-range를 거절하고 storage stream을 열지 않는다`() {
+        val admin = adminUser(id = 7L)
+        givenFileMetadata(ownerMemberId = 7L, fileId = 12L, totalLength = 10L)
 
         mvc
             .get("/system/api/v1/adm/cloud/files/12/content") {
@@ -525,7 +542,8 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 header { string(HttpHeaders.CONTENT_RANGE, "bytes */10") }
             }
 
-        assertThat(inputStream.closed).isTrue()
+        then(cloudFileService).should().get(ownerMemberId = 7L, fileId = 12L)
+        then(cloudFileService).shouldHaveNoMoreInteractions()
     }
 
     @Test
@@ -547,68 +565,6 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 status { isInternalServerError() }
                 jsonPath("$.resultCode") { value("500-1") }
             }
-    }
-
-    @Test
-    @DisplayName("slice stream은 단일 byte read에서도 지정된 구간만 반환한다")
-    fun `slice stream은 단일 byte read에서도 지정된 구간만 반환한다`() {
-        val controller =
-            ApiV1AdmCloudController(
-                mock(CloudFileService::class.java),
-                mock(CloudVideoUploadSessionService::class.java),
-            )
-        val stream =
-            ReflectionTestUtils.invokeMethod<InputStream>(
-                controller,
-                "sliceStream",
-                ByteArrayInputStream("0123456789".toByteArray()),
-                2L..4L,
-            )!!
-
-        val values = generateSequence { stream.read().takeIf { it >= 0 } }.toList()
-        stream.close()
-
-        assertThat(values).containsExactly('2'.code, '3'.code, '4'.code)
-    }
-
-    @Test
-    @DisplayName("slice stream은 시작 위치까지 건너뛰지 못하면 EOF로 실패한다")
-    fun `slice stream은 시작 위치까지 건너뛰지 못하면 EOF로 실패한다`() {
-        val controller =
-            ApiV1AdmCloudController(
-                mock(CloudFileService::class.java),
-                mock(CloudVideoUploadSessionService::class.java),
-            )
-
-        assertThatThrownBy {
-            ReflectionTestUtils.invokeMethod<InputStream>(
-                controller,
-                "sliceStream",
-                ByteArrayInputStream("abc".toByteArray()),
-                5L..6L,
-            )
-        }.rootCause()
-            .isInstanceOf(EOFException::class.java)
-    }
-
-    @Test
-    @DisplayName("slice stream은 skip이 0이면 read로 건너뛰기를 이어간다")
-    fun `slice stream은 skip이 0이면 read로 건너뛰기를 이어간다`() {
-        val controller =
-            ApiV1AdmCloudController(
-                mock(CloudFileService::class.java),
-                mock(CloudVideoUploadSessionService::class.java),
-            )
-        val stream =
-            ReflectionTestUtils.invokeMethod<InputStream>(
-                controller,
-                "sliceStream",
-                ZeroSkipInputStream("abc".toByteArray()),
-                2L..2L,
-            )!!
-
-        assertThat(stream.read()).isEqualTo('c'.code)
-        assertThat(stream.read()).isEqualTo(-1)
     }
 
     @Test
@@ -653,6 +609,51 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                             inputStream = inputStream,
                             contentType = contentType,
                             contentLength = contentLength,
+                            originalFilename = "demo.mp4",
+                        ),
+                ),
+            )
+        return inputStream
+    }
+
+    private fun givenFileMetadata(
+        ownerMemberId: Long,
+        fileId: Long,
+        totalLength: Long,
+        contentType: String = "video/mp4",
+    ): CloudFileDto {
+        val file =
+            sampleDto(
+                id = fileId,
+                ownerMemberId = ownerMemberId,
+                originalFilename = "demo.mp4",
+                contentType = contentType,
+                byteSize = totalLength,
+                mediaKind = CloudFileMediaKind.VIDEO,
+            )
+        given(cloudFileService.get(ownerMemberId = ownerMemberId, fileId = fileId)).willReturn(file)
+        return file
+    }
+
+    private fun givenRangeContent(
+        ownerMemberId: Long,
+        fileId: Long,
+        totalLength: Long,
+        range: LongRange,
+        bytes: ByteArray,
+        contentType: String = "video/mp4",
+    ): CloseAwareInputStream {
+        val inputStream = CloseAwareInputStream(bytes)
+        val file = givenFileMetadata(ownerMemberId, fileId, totalLength, contentType)
+        given(cloudFileService.openContentRange(ownerMemberId = ownerMemberId, fileId = fileId, range = range))
+            .willReturn(
+                CloudFileContent(
+                    file = file,
+                    storedObject =
+                        CloudStoragePort.StoredObject(
+                            inputStream = inputStream,
+                            contentType = contentType,
+                            contentLength = bytes.size.toLong(),
                             originalFilename = "demo.mp4",
                         ),
                 ),
@@ -725,11 +726,5 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             closed = true
             super.close()
         }
-    }
-
-    private class ZeroSkipInputStream(
-        bytes: ByteArray,
-    ) : ByteArrayInputStream(bytes) {
-        override fun skip(n: Long): Long = 0
     }
 }

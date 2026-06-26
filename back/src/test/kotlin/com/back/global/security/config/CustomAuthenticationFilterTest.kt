@@ -1,5 +1,6 @@
 package com.back.global.security.config
 
+import com.back.boundedContexts.cloud.config.CloudSecurityConfigurer
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
@@ -311,6 +312,29 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("외부 cloud content 공개 route는 stale 인증 정보가 있어도 token 검증 경로로 진행한다")
+    fun `cloud external content public route proceeds with stale auth credentials`() {
+        val fixture =
+            CustomAuthenticationFilterFixture(
+                publicApiRequestMatcherOverride =
+                    PublicApiRequestMatcher(listOf(CloudSecurityConfigurer())),
+            )
+        val request = MockHttpServletRequest("GET", "/system/api/v1/adm/cloud/files/12/external-content")
+
+        fixture.givenEmptyAuthorizationHeader()
+        fixture.givenCookieTokens(accessToken = "broken-access-token")
+        fixture.givenClientIp(request, "203.0.113.12")
+        given(fixture.actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
+
+        val response = MockHttpServletResponse()
+        val filterChain = fixture.noContentFilterChain()
+
+        fixture.authenticationFilter().doFilter(request, response, filterChain)
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+    }
+
+    @Test
     @DisplayName("payload email 누락 토큰은 DB 회원 기준으로 권한을 복구하고 accessToken을 재발급한다")
     fun `legacy payload without email restores admin authority from persisted member`() {
         configureProductionUrls()
@@ -604,14 +628,17 @@ class CustomAuthenticationFilterTest {
         )
     }
 
-    private class CustomAuthenticationFilterFixture {
+    private class CustomAuthenticationFilterFixture(
+        publicApiRequestMatcherOverride: PublicApiRequestMatcher? = null,
+    ) {
         val actorApplicationService: ActorApplicationService = mock(ActorApplicationService::class.java)
         val memberSessionUseCase: MemberSessionUseCase = mock(MemberSessionUseCase::class.java)
         val authIpSecurityService: AuthIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService: AuthSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService: AuthCookieService = mock(AuthCookieService::class.java)
         val clientIpResolver: ClientIpResolver = mock(ClientIpResolver::class.java)
-        val publicApiRequestMatcher: PublicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val publicApiRequestMatcher: PublicApiRequestMatcher =
+            publicApiRequestMatcherOverride ?: mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy: ApiCorsPolicy = mock(ApiCorsPolicy::class.java)
         val rq: Rq = mock(Rq::class.java)
 

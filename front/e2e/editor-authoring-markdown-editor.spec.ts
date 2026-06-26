@@ -45,7 +45,7 @@ const fulfillJson = async (route: Route, data: unknown) => {
   })
 }
 
-const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft) => {
+const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft, title = "Markdown 작성 테스트") => {
   await page.route("**/member/api/v1/auth/me", async (route) => {
     await fulfillJson(route, adminMember)
   })
@@ -67,11 +67,11 @@ const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft
     })
   })
   await page.addInitScript(
-    ({ storageKey, content }) => {
+    ({ storageKey, content, title }) => {
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
-          title: "Markdown 작성 테스트",
+          title,
           content,
           summary: "Markdown split editor test",
           thumbnailUrl: "",
@@ -85,7 +85,7 @@ const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft
         })
       )
     },
-    { storageKey: localDraftStorageKey, content: markdown }
+    { storageKey: localDraftStorageKey, content: markdown, title }
   )
 }
 
@@ -347,16 +347,22 @@ test.describe("Markdown editor replacement", () => {
 
   test("dedicated editor outline hides inline markdown markers from headings", async ({ page }) => {
     await page.setViewportSize({ width: 2048, height: 1152 })
-    await routeAuthenticatedEditor(page, ["## **시작하며**", "", "### `핵심` 포인트", "", "## user_id_field"].join("\n"))
+    await routeAuthenticatedEditor(
+      page,
+      ["## **시작하며**", "", "### `핵심` 포인트", "", "### `**kwargs**`", "", "## user_id_field"].join("\n"),
+      "Using **kwargs** in Python"
+    )
 
     await page.goto("/editor/new?source=local-draft")
 
     const outline = page.getByLabel("문서 목차")
+    await expect(outline.locator("strong").filter({ hasText: /^Using \*\*kwargs\*\* in Python$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^시작하며$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^핵심 포인트$/ })).toBeVisible()
+    await expect(outline.locator("strong").filter({ hasText: /^\*\*kwargs\*\*$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^user_id_field$/ })).toBeVisible()
-    await expect(outline.locator("strong").filter({ hasText: /\*\*/ })).toHaveCount(0)
-    await expect(outline.locator("strong").filter({ hasText: /`/ })).toHaveCount(0)
+    await expect(outline.locator("strong").filter({ hasText: /^\*\*시작하며\*\*$/ })).toHaveCount(0)
+    await expect(outline.locator("strong").filter({ hasText: /^`핵심` 포인트$/ })).toHaveCount(0)
   })
 
   test("preview matches supported table markdown for alignment, escaped pipes, and inline cell formatting", async ({

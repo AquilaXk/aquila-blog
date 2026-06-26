@@ -87,19 +87,26 @@ type OutlineItem = {
   text: string
 }
 
-const formatOutlineText = (text: string) =>
-  text
+const formatOutlineText = (text: string) => {
+  const codeSpans: string[] = []
+  return text
+    .replace(/`([^`]+)`/g, (_, code: string) => {
+      const token = `@@CODE_SPAN_${codeSpans.length}@@`
+      codeSpans.push(code)
+      return token
+    })
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/\*([^*\s](?:[^*]*[^*\s])?)\*/g, "$1")
     .replace(/~~(.*?)~~/g, "$1")
+    .replace(/@@CODE_SPAN_(\d+)@@/g, (_, index: string) => codeSpans[Number(index)] ?? "")
     .trim()
+}
 
 const extractEditorOutline = (title: string, markdown: string): OutlineItem[] => {
   const items: OutlineItem[] = []
-  const normalizedTitle = formatOutlineText(title)
+  const normalizedTitle = title.trim()
   if (normalizedTitle) items.push({ id: "title", level: 1, text: normalizedTitle })
 
   markdown.split(/\r?\n/).forEach((line, index) => {

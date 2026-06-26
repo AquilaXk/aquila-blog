@@ -395,7 +395,11 @@ const EditorRoot = styled.section`
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 0;
   overflow: hidden;
@@ -535,6 +539,7 @@ const ToolbarError = styled.div`
 `
 
 const EditorBody = styled.div`
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
   min-height: 0;
@@ -569,6 +574,7 @@ const EditorBody = styled.div`
 const WritePane = styled.div`
   min-width: 0;
   min-height: 0;
+  height: 100%;
   overflow: auto;
   border-right: 1px solid ${({ theme }) => theme.colors.gray6};
   background: #0f1728;
@@ -623,6 +629,7 @@ const MarkdownTextarea = styled.textarea`
 const PreviewPane = styled.div`
   min-width: 0;
   min-height: 0;
+  height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: ${({ theme }) => theme.publicDesign.readableSurface};

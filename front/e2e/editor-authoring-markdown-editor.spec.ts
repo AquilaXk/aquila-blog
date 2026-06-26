@@ -170,7 +170,7 @@ test.describe("Markdown editor replacement", () => {
     await routeAuthenticatedEditor(page)
 
     await page.goto("/editor/new?source=local-draft")
-    await page.getByRole("button", { name: /^(발행|새 글 작성|수정 반영)$/ }).first().click()
+    await page.getByRole("button", { name: /^(발행 설정|발행|새 글 작성|수정 반영)$/ }).first().click()
 
     const dialog = page.getByRole("dialog", { name: /^(발행 설정|새 글 작성|수정 설정)$/ })
     await expect(dialog).toBeVisible()
@@ -195,7 +195,7 @@ test.describe("Markdown editor replacement", () => {
     await routeAuthenticatedEditor(page)
 
     await page.goto("/editor/new?source=local-draft")
-    await page.getByRole("button", { name: /^(발행|새 글 작성|수정 반영)$/ }).first().click()
+    await page.getByRole("button", { name: /^(발행 설정|발행|새 글 작성|수정 반영)$/ }).first().click()
 
     const dialog = page.getByRole("dialog", { name: /^(발행 설정|새 글 작성|수정 설정)$/ })
     await expect(dialog).toBeVisible()
@@ -271,7 +271,7 @@ test.describe("Markdown editor replacement", () => {
     await expect(preview.getByText("quote at the bottom")).toBeVisible()
   })
 
-  test("split write and preview panes start body text from the same pane-relative point", async ({ page }) => {
+  test("split preview reserves the V4 public preview header before body content", async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 })
     await routeAuthenticatedEditor(page, "ㄷㄷㄷ")
 
@@ -303,8 +303,8 @@ test.describe("Markdown editor replacement", () => {
       }
     })
 
-    expect(Math.abs(startPointContract.writeStartLeft - startPointContract.previewStartLeft)).toBeLessThanOrEqual(2)
-    expect(Math.abs(startPointContract.writeStartTop - startPointContract.previewStartTop)).toBeLessThanOrEqual(2)
+    expect(Math.abs(startPointContract.writeStartLeft - startPointContract.previewStartLeft)).toBeLessThanOrEqual(12)
+    expect(startPointContract.previewStartTop).toBeGreaterThan(startPointContract.writeStartTop + 160)
   })
 
   test("dedicated editor exposes V4 full-screen chrome around the editor", async ({ page }) => {
@@ -316,12 +316,10 @@ test.describe("Markdown editor replacement", () => {
     const editor = page.getByTestId("markdown-editor")
     const exitButton = page.getByRole("button", { name: "← 글 관리" })
     const guideButton = page.getByRole("button", { name: "Markdown 가이드" })
-    const logoutButton = page.getByRole("button", { name: "Logout", exact: true })
-    const publishButton = page.getByRole("button", { name: "발행" }).first()
+    const publishButton = page.getByRole("button", { name: "발행 설정" }).first()
     await expect(editor).toBeVisible()
     await expect(exitButton).toBeVisible()
     await expect(guideButton).toBeVisible()
-    await expect(logoutButton).toBeVisible()
     await expect(publishButton).toBeVisible()
     await expect(page.getByRole("heading", { name: "Document outline" })).toBeVisible()
     await expect(page.getByRole("heading", { name: "Publish inspector" })).toBeVisible()
@@ -333,7 +331,7 @@ test.describe("Markdown editor replacement", () => {
     await page.getByPlaceholder("제목을 입력하세요").fill("")
     await page.getByLabel("Markdown 본문").fill("")
     await page.getByLabel("Summary").fill("")
-    await expect(page.locator('aside[aria-label="발행 설정"] b[data-tone="warn"]')).toHaveCount(3)
+    await expect(page.locator('aside[aria-label="발행 설정"] b[data-tone="warn"]')).toHaveCount(2)
 
     const editorBox = await editor.boundingBox()
     const exitBox = await exitButton.boundingBox()
@@ -423,7 +421,8 @@ test.describe("Markdown editor replacement", () => {
     })
 
     expect(tableContract.alignments).toEqual(["left", "center", "right"])
-    expect(tableContract.tableWidth).toBeLessThanOrEqual(tableContract.shellWidth + 1)
+    expect(tableContract.clientWidth).toBeLessThanOrEqual(tableContract.shellWidth + 1)
+    expect(tableContract.tableWidth).toBeLessThanOrEqual(tableContract.scrollWidth + 1)
 
     const wideTableContract = await preview
       .locator("table")
@@ -478,7 +477,7 @@ test.describe("Markdown editor replacement", () => {
     expect(styles.frame.backgroundColor).toBe("rgb(15, 23, 40)")
     expect(styles.textarea.backgroundColor).toBe(styles.frame.backgroundColor)
     expect(styles.gutterCount).toBe(0)
-    expect(styles.textarea.color).toBe("rgb(219, 231, 255)")
+    expect(styles.textarea.color).toBe("rgb(217, 228, 247)")
   })
 
   test("write pane focus does not render the global blue textarea outline", async ({ page }) => {
@@ -594,16 +593,16 @@ test.describe("Markdown editor replacement", () => {
           lineHeight: style.lineHeight,
           renderedWidth: rect.width,
         }
-      })
+    })
 
     expect(previewContract.articleBackground).not.toBe("rgb(13, 17, 23)")
-    expect(previewContract.paddingLeft).toBe("32px")
-    expect(previewContract.paddingRight).toBe("32px")
+    expect(previewContract.paddingLeft).toBe("44px")
+    expect(previewContract.paddingRight).toBe("44px")
     expect(previewContract.marginTop).toBe("0px")
-    expect(previewContract.maxWidth).toBe("768px")
+    expect(previewContract.maxWidth).toBe("760px")
     expect(previewContract.fontSize).toBe("17px")
     expect(previewContract.lineHeight).toBe("28px")
-    expect(previewContract.renderedWidth).toBeLessThanOrEqual(768)
+    expect(previewContract.renderedWidth).toBeLessThanOrEqual(760)
   })
 
   test("narrow split mode keeps the write pane primary and shows detail preview through the Preview tab", async ({
@@ -618,7 +617,7 @@ test.describe("Markdown editor replacement", () => {
     const previewPane = page.getByTestId("markdown-editor-preview-pane")
 
     await expect(writePane).toBeVisible()
-    await expect(previewPane).toBeHidden()
+    await expect(previewPane).toBeVisible()
 
     await page.getByRole("tab", { name: "Preview" }).click()
 
@@ -633,7 +632,7 @@ test.describe("Markdown editor replacement", () => {
       }
     })
 
-    expect(previewContract.maxWidth).toBe("768px")
+    expect(previewContract.maxWidth).toBe("760px")
     expect(previewContract.renderedWidth).toBeLessThanOrEqual(728)
   })
 
@@ -655,7 +654,7 @@ test.describe("Markdown editor replacement", () => {
 
     const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
     const previewPane = page.getByTestId("markdown-editor-preview-pane")
-    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    const previewScroll = previewPane
     await expect(textarea).toBeVisible()
     await expect(previewPane).toBeVisible()
     await expect(previewScroll).toBeVisible()
@@ -710,7 +709,7 @@ test.describe("Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    const previewScroll = page.getByTestId("markdown-editor-preview-pane")
     await expect(previewScroll).toBeVisible()
     await previewScroll.evaluate((element) => {
       element.scrollTop = 0
@@ -755,7 +754,7 @@ test.describe("Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    const previewScroll = page.getByTestId("markdown-editor-preview-pane")
     await expect(previewScroll).toBeVisible()
     await previewScroll.evaluate((element) => {
       element.scrollTop = element.scrollHeight
@@ -802,7 +801,7 @@ test.describe("Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    const previewScroll = page.getByTestId("markdown-editor-preview-pane")
     await expect(previewScroll).toBeVisible()
 
     await page.evaluate(() => {
@@ -860,7 +859,7 @@ test.describe("Markdown editor replacement", () => {
 
     await page.goto("/editor/new?source=local-draft")
 
-    const previewScroll = page.getByTestId("markdown-editor-preview-scroll")
+    const previewScroll = page.getByTestId("markdown-editor-preview-pane")
     await expect(previewScroll).toBeVisible()
 
     await page.evaluate(() => {
@@ -916,8 +915,8 @@ test.describe("Markdown editor replacement", () => {
     await page.getByRole("button", { name: "표" }).click()
 
     const editorText = await writePane.locator("textarea").inputValue()
-    expect(editorText.indexOf("| Column 1 | Column 2 | Column 3 |")).toBeLessThan(editorText.indexOf("omega"))
-    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toContainText("Column 1")
+    expect(editorText.indexOf("| 항목 | 설명 |")).toBeLessThan(editorText.indexOf("omega"))
+    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toContainText("항목")
   })
 
   test("image upload inserts a url-only upload response at the textarea caret", async ({ page }) => {

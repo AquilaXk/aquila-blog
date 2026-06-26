@@ -603,7 +603,7 @@ export const getThemeSurfaceFingerprint = async (page: Page) =>
       route: window.location.pathname,
       themeToggleLabel: readThemeToggleLabel(),
       bodyBg: getComputedStyle(document.body).backgroundColor,
-      headerBg: readStyle('[data-autohide]', "backgroundColor"),
+      headerBg: readStyle('[data-ui="app-header"]', "backgroundColor"),
       searchBg: readStyle(".field", "backgroundColor"),
       searchBorder: readStyle(".field", "borderTopColor"),
       cardBg: readStyle(".postColumn article", "backgroundColor"),

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { expect, test } from "@playwright/test"
 import { addPublicAboutSnapshotCookie, mockAvatarAsset } from "./helpers/smokeFixtures"
 test.beforeEach(async ({ page }) => {
@@ -5,6 +7,109 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("core smoke detail layout", () => {
+  test("상세 shell은 V4 article layout 수치 계약을 유지한다", () => {
+    const detailStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Detail/PostDetail/PostDetail.styles.ts"),
+      "utf8"
+    )
+    const sectionStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Detail/PostDetail/PostDetailSection.styles.ts"),
+      "utf8"
+    )
+    const commentStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Detail/PostDetail/CommentBox/CommentBox.styles.ts"),
+      "utf8"
+    )
+    const headerStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Detail/PostDetail/PostHeader.styles.ts"),
+      "utf8"
+    )
+    const commentSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Detail/PostDetail/CommentBox/index.tsx"),
+      "utf8"
+    )
+    const relatedSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Detail/PostDetail/PostDetailRelatedSection.tsx"),
+      "utf8"
+    )
+    const detailSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Detail/PostDetail/index.tsx"),
+      "utf8"
+    )
+
+    expect(detailSource).toContain('className="detailReadProgress"')
+    expect(detailSource).toContain('className="detailHero"')
+    expect(detailSource.indexOf('className="detailHero"')).toBeLessThan(detailSource.indexOf('className="detailLayout"'))
+    expect(detailSource).toContain("readProgressRef")
+    expect(detailSource).toContain("documentElement.scrollHeight - window.innerHeight")
+    expect(detailSource).not.toContain("./PostFooter")
+    expect(detailSource).not.toContain('data-rum-section="footer"')
+    expect(detailStyles).toContain(".detailReadProgress")
+    expect(detailStyles).toContain("position: fixed;")
+    expect(detailStyles).toContain("height: 2px;")
+    expect(detailStyles).toContain("z-index: 90;")
+    expect(detailStyles).toContain("transform-origin: left center;")
+    expect(detailStyles).toContain("width: 100%;")
+    expect(detailStyles).toContain("padding: 68px 20px 42px;")
+    expect(detailStyles).toContain("border-bottom: 1px solid var(--detail-v4-line);")
+    expect(detailStyles).toContain("width: min(100%, 1180px);")
+    expect(detailStyles).toContain("grid-template-columns: 64px minmax(0, 760px) 240px;")
+    expect(detailStyles).toContain("gap: 44px;")
+    expect(detailStyles).toContain("padding: 54px 20px 100px;")
+    expect(detailStyles).toContain("top: calc(var(--app-header-height, var(--app-header-mobile-height, 64px)) + 1.25rem);")
+    expect(detailStyles).not.toContain("top: 94px;")
+    expect(detailStyles).toContain("transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;")
+    expect(detailStyles).not.toContain("translateY(-1px)")
+    expect(detailStyles).not.toContain("transform 0.18s ease")
+    expect(detailStyles).toContain(".floatingLikeCount")
+    expect(detailStyles).toContain("font-size: 10px;")
+    expect(detailStyles).toContain("font-weight: 600;")
+    expect(detailStyles).toContain("border-left: 1px solid var(--detail-v4-line);")
+    expect(detailStyles).toContain("padding: 0 0 0 18px;")
+    expect(detailStyles).toContain("margin-bottom: 14px;")
+    expect(detailStyles).toContain("padding: 7px 0;")
+    expect(detailStyles).toContain("font-size: 12px;")
+    expect(detailStyles).toContain("font-weight: 750;")
+    expect(detailStyles).not.toContain("button[data-active=\"true\"]::before")
+    expect(detailStyles).toContain("@media (max-width: 1100px)")
+    expect(detailStyles).toContain("grid-template-columns: 52px minmax(0, 1fr);")
+    expect(detailStyles).not.toContain("width: min(100%, 864px);")
+    expect(detailStyles).toContain("@media (max-width: 820px)")
+    expect(detailStyles).toContain("padding: 44px 20px 28px;")
+    expect(detailStyles).toContain("display: block;")
+    expect(detailStyles).toContain("padding: 30px 20px 70px;")
+    expect(detailStyles).not.toContain("@media (max-width: 768px)")
+    expect(headerStyles).toContain("border-radius: 0;")
+    expect(headerStyles).not.toContain("border-radius: 10px;")
+    expect(sectionStyles).toContain("margin-bottom: 28px;")
+    expect(sectionStyles).toContain("width: 42px;")
+    expect(sectionStyles).toContain("height: 42px;")
+    expect(relatedSource).toContain('data-rum-section="related"')
+    expect(relatedSource).toContain("const getRelatedPostMeta = (post: TPost)")
+    expect(relatedSource).toContain("post.tags?.[0] || post.category?.[0] || post.type?.[0]")
+    expect(relatedSource).toContain("relatedByTagPosts, ...relatedByAuthorPosts")
+    expect(relatedSource).toContain("posts.findIndex((item) => item.id === post.id) === index")
+    expect(sectionStyles).toContain("margin-top: 64px;")
+    expect(sectionStyles).toContain("padding-top: 40px;")
+    expect(sectionStyles).toContain("grid-template-columns: minmax(0, 1fr) auto;")
+    expect(sectionStyles).toContain("padding: 18px 0;")
+    expect(sectionStyles).not.toContain("@media (max-width: 768px)")
+    expect(sectionStyles).not.toContain("margin-top: 48px;")
+    expect(sectionStyles).not.toContain("padding-top: 32px;")
+    expect(sectionStyles).not.toContain("border-radius: 10px;")
+    expect(sectionStyles).not.toContain("reasonChip")
+    expect(commentStyles).toContain("margin-top: 64px;")
+    expect(commentStyles).toContain("padding: 28px 0 0;")
+    expect(commentStyles).toContain("border-top: 2px solid #111216;")
+    expect(commentStyles).toContain("min-height: 110px;")
+    expect(commentSource).toContain('placeholder="질문이나 의견을 남겨주세요."')
+    expect(commentSource).toContain("const imageSrc = profileImageDirectUrl || profileImageUrl")
+    expect(commentSource).toContain('<span className="avatarFallback" aria-hidden="true" />')
+    expect(commentStyles).toContain(".avatarFallback::before")
+    expect(commentStyles).toContain(".avatarFallback::after")
+    expect(commentSource).not.toContain("CONFIG.profile.image")
+  })
+
   test("404 robots 정책은 noindex이고 canonical은 생략하며 정상 페이지 기본값은 유지한다", async ({ page }) => {
   await page.goto("/404")
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, follow")
@@ -347,7 +452,7 @@ test.describe("core smoke detail layout", () => {
     .toBe("ready")
 })
 
-  test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", async ({ page }) => {
+  test("모바일 상세는 V4 square 액션 rail만 노출하고 접이식 목차를 만들지 않는다", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.addInitScript(() => {
     const clipboard = {
@@ -360,7 +465,7 @@ test.describe("core smoke detail layout", () => {
   })
   const mobileTocContent = Array.from({ length: 12 }, (_, index) => {
     const sectionNumber = String(index + 1).padStart(2, "0")
-    return [`## 모바일 목차 섹션 ${sectionNumber}`, "모바일 compact 목차 높이 회귀를 검증하는 본문입니다."].join("\n\n")
+    return [`## 모바일 목차 섹션 ${sectionNumber}`, "모바일 V4 상세 레이아웃 회귀를 검증하는 본문입니다."].join("\n\n")
   }).join("\n\n")
 
   await page.route("**/post/api/v1/posts/909", async (route) => {
@@ -406,32 +511,36 @@ test.describe("core smoke detail layout", () => {
   await page.goto("/posts/909")
   const compactActionBar = page.getByLabel("빠른 이동 및 반응")
   const engagementRow = page.locator('[aria-label="post engagement"]')
-  const metaViewStat = page.locator(".metaInlineViewStat")
+  const metaViewStat = page.locator(".stats .statChip").filter({ hasText: "6 VIEWS" })
   await expect(page.getByRole("button", { name: /공유/ })).toHaveCount(1)
   await expect(page.getByRole("button", { name: /^좋아요/ })).toHaveCount(1)
   await expect(engagementRow).toBeHidden()
-  await expect(metaViewStat).toContainText("조회 6")
+  await expect(metaViewStat).toHaveText("6 VIEWS")
+  await expect(metaViewStat).toBeHidden()
   await expect(compactActionBar.getByRole("button", { name: /^좋아요/ })).toBeVisible()
   await expect(compactActionBar.getByRole("button", { name: /^공유/ })).toBeVisible()
   await expect(compactActionBar.getByRole("button", { name: /^댓글/ })).toBeVisible()
-  const compactTocSummary = page.locator('[aria-label="접이식 목차"] summary')
-  await expect(compactTocSummary).toBeVisible()
-  await expect(compactTocSummary.getByText("목차")).toBeVisible()
-  await expect(compactTocSummary.getByText("12개 섹션")).toBeVisible()
-  await expect(page.getByRole("button", { name: "모바일 목차 섹션 01" })).toBeHidden()
-  const compactTocInitialListHeight = await page.locator('[aria-label="접이식 목차"] ol').evaluate((list) => list.clientHeight)
-  expect(compactTocInitialListHeight).toBe(0)
+  await expect(page.locator('[aria-label="접이식 목차"]')).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "모바일 목차 섹션 01" })).toHaveCount(0)
+  const actionMetrics = await compactActionBar.evaluate((bar) => {
+    const firstButton = bar.querySelector("button")
+    const buttonBox = firstButton?.getBoundingClientRect()
+    const barStyle = window.getComputedStyle(bar)
+    return {
+      position: barStyle.position,
+      display: barStyle.display,
+      width: Math.round(buttonBox?.width ?? 0),
+      height: Math.round(buttonBox?.height ?? 0),
+    }
+  })
+  expect(actionMetrics).toEqual({
+    position: "static",
+    display: "flex",
+    width: 42,
+    height: 42,
+  })
   const compactShareButton = compactActionBar.getByRole("button", { name: /^공유/ })
   await compactShareButton.click()
   await expect(compactShareButton).toBeVisible()
-
-  await compactTocSummary.click()
-  await expect(page.getByRole("button", { name: "모바일 목차 섹션 01" })).toBeVisible()
-  const compactTocListMetrics = await page.locator('[aria-label="접이식 목차"] ol').evaluate((list) => ({
-    clientHeight: list.clientHeight,
-    scrollHeight: list.scrollHeight,
-  }))
-  expect(compactTocListMetrics.clientHeight).toBeLessThanOrEqual(240)
-  expect(compactTocListMetrics.scrollHeight).toBeGreaterThan(compactTocListMetrics.clientHeight)
 })
 })

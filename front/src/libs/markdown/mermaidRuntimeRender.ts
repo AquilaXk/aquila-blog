@@ -237,7 +237,7 @@ export const createMermaidRuntimeController = ({
     const maxReadableHeight = isMobileViewport
       ? Number.POSITIVE_INFINITY
       : Math.min(760, Math.floor(window.innerHeight * 0.74))
-    const usesDesktopWideLane = maxDisplayWidth > containerWidth + 24
+    const usesDesktopWideLane = complexityLevel !== "high" && maxDisplayWidth > containerWidth + 24
 
     let scale = 1
     if (intrinsicWidth > maxDisplayWidth) {

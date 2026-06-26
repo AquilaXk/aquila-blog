@@ -6,21 +6,20 @@ import type {
   Ref,
 } from "react"
 import { useMemo, useState } from "react"
-import ProfileImage from "src/components/ProfileImage"
+import { CONFIG } from "site.config"
 import {
   EditorGuideBackdrop,
+  EditorGuideBody,
   EditorGuideGrid,
   EditorGuidePanel,
+  EditorGuideRepo,
   EditorExitAction,
-  EditorHeaderActionButton,
-  EditorHeaderAuthor,
-  EditorHeaderAuthorText,
-  EditorHeaderAvatar,
-  EditorHeaderMetaActions,
   EditorHeaderMetaPill,
   EditorHeaderMetaRow,
   EditorInspector,
+  EditorInspectorFullWidthAction,
   EditorInspectorPreview,
+  EditorInspectorTagInputRow,
   EditorOutline,
   EditorOutlineItem,
   EditorStudioDedicatedCanvasSection,
@@ -50,7 +49,6 @@ type EditorStudioDedicatedEditorSurfaceProps = {
   thumbnailImageFileInputRef: Ref<HTMLInputElement>
   onThumbnailImageFileChange: ChangeEventHandler<HTMLInputElement>
   onExit: () => void
-  onLogout: () => void
   saveStateText: string
   saveStateTone: string
   primaryActionDisabled: boolean
@@ -63,23 +61,18 @@ type EditorStudioDedicatedEditorSurfaceProps = {
   onAddTags: (values: string[]) => void
   onAddTag: (value: string) => void
   onRemoveTag: (value: string) => void
+  isRecommendTagsDisabled: boolean
+  isRecommendTagsLoading: boolean
+  onRecommendTags: () => void
   titleInputRef: (node: HTMLTextAreaElement | null) => void
   postTitle: string
   onPostTitleChange: ChangeEventHandler<HTMLTextAreaElement>
   onPostTitleKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
-  authorName: string
-  authorInitial: string
-  authorAvatarSrc: string
-  previewDateText: string
-  currentVisibilityText: string
   postContent: string
   postSummary: string
   onPostSummaryChange: (value: string) => void
   postVisibility: PostVisibility
   onPostVisibilityChange: (value: PostVisibility) => void
-  canOpenCurrentPostDetail: boolean
-  onOpenPostDetail: () => void
-  onCopyPostDetailLink: () => void
   editorCanvas: ReactNode
   showPublishNotice: boolean
   publishNoticeTone: NoticeTone
@@ -120,6 +113,12 @@ const isComposingKeyboardEvent = (event: ReactKeyboardEvent<HTMLElement>) => {
   return nativeEvent.isComposing === true || nativeEvent.keyCode === 229
 }
 
+const countMarkdownLinkWarnings = (markdown: string) =>
+  [...markdown.matchAll(/!?\[[^\]]*\]\(([^)\s]*)/g)].filter((match) => {
+    const href = match[1]?.trim() ?? ""
+    return !href || /^https?:\/\/$/.test(href)
+  }).length
+
 export const EditorStudioDedicatedEditorLoadingState = () => (
   <EditorStudioRoot>
     <EditorStudioLoadingState>
@@ -133,7 +132,6 @@ export const EditorStudioDedicatedEditorSurface = ({
   thumbnailImageFileInputRef,
   onThumbnailImageFileChange,
   onExit,
-  onLogout,
   saveStateText,
   saveStateTone,
   primaryActionDisabled,
@@ -146,23 +144,18 @@ export const EditorStudioDedicatedEditorSurface = ({
   onAddTags,
   onAddTag,
   onRemoveTag,
+  isRecommendTagsDisabled,
+  isRecommendTagsLoading,
+  onRecommendTags,
   titleInputRef,
   postTitle,
   onPostTitleChange,
   onPostTitleKeyDown,
-  authorName,
-  authorInitial,
-  authorAvatarSrc,
-  previewDateText,
-  currentVisibilityText,
   postContent,
   postSummary,
   onPostSummaryChange,
   postVisibility,
   onPostVisibilityChange,
-  canOpenCurrentPostDetail,
-  onOpenPostDetail,
-  onCopyPostDetailLink,
   editorCanvas,
   showPublishNotice,
   publishNoticeTone,
@@ -172,11 +165,39 @@ export const EditorStudioDedicatedEditorSurface = ({
 }: EditorStudioDedicatedEditorSurfaceProps) => {
   const [isGuideOpen, setIsGuideOpen] = useState(false)
   const outlineItems = useMemo(() => extractEditorOutline(postTitle, postContent), [postContent, postTitle])
+  const projectRepository = CONFIG.projects?.[0]
   const hasTitleAndBody = Boolean(postTitle.trim() && postContent.trim())
   const hasMarkdownBody = Boolean(postContent.trim())
-  const hasSummaryPreview = Boolean(postSummary.trim() || postContent.trim())
+  const linkWarningCount = countMarkdownLinkWarnings(postContent)
   const primaryTag = postTags[0] || "태그 없음"
   const readTimeText = postContent.trim() ? `${Math.max(1, Math.ceil(postContent.trim().length / 500))}분` : "읽기 시간"
+  const thumbnailPreviewLabel =
+    (postTags.length > 0 ? postTags : postTitle.trim().split(/\s+/))
+      .map((label) => label.trim())
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("\n")
+      .toUpperCase() || primaryTag
+  const handleTagDraftChange = (nextValue: string) => {
+    const commaSeparated = /[,，]/
+    if (!commaSeparated.test(nextValue)) {
+      onTagDraftChange(nextValue)
+      return
+    }
+
+    const fragments = nextValue.split(commaSeparated)
+    const tailDraft = fragments.pop() ?? ""
+    const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
+    if (tagsToAdd.length > 0) onAddTags(tagsToAdd)
+    onTagDraftChange(tailDraft)
+  }
+  const handleTagDraftKeyDown: KeyboardEventHandler<HTMLInputElement> = (event) => {
+    if (isComposingKeyboardEvent(event)) return
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault()
+      onAddTag(event.currentTarget.value)
+    }
+  }
 
   return (
     <EditorStudioRoot>
@@ -196,9 +217,6 @@ export const EditorStudioDedicatedEditorSurface = ({
         <EditorStudioTopBarActions>
           <SecondaryButton type="button" onClick={() => setIsGuideOpen(true)}>
             Markdown 가이드
-          </SecondaryButton>
-          <SecondaryButton type="button" onClick={onLogout}>
-            Logout
           </SecondaryButton>
           <PrimaryButton type="button" disabled={primaryActionDisabled} onClick={onPrimaryAction}>
             {primaryActionLabel}
@@ -246,42 +264,11 @@ export const EditorStudioDedicatedEditorSurface = ({
                 <InlineMetaInput
                   placeholder="태그 입력 후 Enter"
                   value={tagDraft}
-                  onChange={(event) => {
-                    const nextValue = event.target.value
-                    const commaSeparated = /[,，]/
-                    if (!commaSeparated.test(nextValue)) {
-                      onTagDraftChange(nextValue)
-                      return
-                    }
-
-                    const fragments = nextValue.split(commaSeparated)
-                    const tailDraft = fragments.pop() ?? ""
-                    const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
-                    if (tagsToAdd.length > 0) onAddTags(tagsToAdd)
-                    onTagDraftChange(tailDraft)
-                  }}
-                  onKeyDown={(event) => {
-                    if (isComposingKeyboardEvent(event)) return
-                    if (event.key === "Enter" || event.key === ",") {
-                      event.preventDefault()
-                      onAddTag(event.currentTarget.value)
-                    }
-                  }}
+                  onChange={(event) => handleTagDraftChange(event.target.value)}
+                  onKeyDown={handleTagDraftKeyDown}
                 />
               </EditorTagRow>
-              <EditorHeaderMetaActions>
-                <EditorHeaderMetaPill $compact={isCompactSplitPreview}>{currentVisibilityText}</EditorHeaderMetaPill>
-                {canOpenCurrentPostDetail ? (
-                  <>
-                    <EditorHeaderActionButton type="button" onClick={onOpenPostDetail}>
-                      상세 열기
-                    </EditorHeaderActionButton>
-                    <EditorHeaderActionButton type="button" onClick={onCopyPostDetailLink}>
-                      링크 복사
-                    </EditorHeaderActionButton>
-                  </>
-                ) : null}
-              </EditorHeaderMetaActions>
+              <EditorHeaderMetaPill $compact={isCompactSplitPreview}>본문 형식 · Markdown</EditorHeaderMetaPill>
             </EditorHeaderMetaRow>
           </EditorStudioDedicatedMetaSection>
 
@@ -325,9 +312,27 @@ export const EditorStudioDedicatedEditorSurface = ({
                 </SelectedTagChip>
               ))}
             </EditorTagRow>
+            <EditorInspectorTagInputRow>
+              <input
+                placeholder="태그 추가"
+                value={tagDraft}
+                onChange={(event) => handleTagDraftChange(event.target.value)}
+                onKeyDown={handleTagDraftKeyDown}
+              />
+              <button type="button" onClick={() => onAddTag(tagDraft)} aria-label="태그 추가">
+                +
+              </button>
+            </EditorInspectorTagInputRow>
+            <EditorInspectorFullWidthAction
+              type="button"
+              onClick={onRecommendTags}
+              disabled={isRecommendTagsDisabled || isRecommendTagsLoading}
+            >
+              {isRecommendTagsLoading ? "추천 중..." : "AI 태그 추천"}
+            </EditorInspectorFullWidthAction>
           </section>
           <EditorInspectorPreview>
-            <div>ETAG<br />INVALIDATION</div>
+            <div>{thumbnailPreviewLabel}</div>
             <strong>{postTitle.trim() || "제목을 입력하세요"}</strong>
             <span>{primaryTag} · {readTimeText}</span>
           </EditorInspectorPreview>
@@ -342,8 +347,10 @@ export const EditorStudioDedicatedEditorSurface = ({
               <b data-tone={hasMarkdownBody ? "pass" : "warn"}>{hasMarkdownBody ? "PASS" : "WARN"}</b>
             </p>
             <p>
-              <strong>요약</strong>
-              <b data-tone={hasSummaryPreview ? "pass" : "warn"}>{hasSummaryPreview ? "PASS" : "WARN"}</b>
+              <strong>링크 검사</strong>
+              <b data-tone={linkWarningCount === 0 ? "pass" : "warn"}>
+                {linkWarningCount === 0 ? "PASS" : `${linkWarningCount} WARN`}
+              </b>
             </p>
           </section>
         </EditorInspector>
@@ -359,24 +366,35 @@ export const EditorStudioDedicatedEditorSurface = ({
               </div>
               <button type="button" aria-label="가이드 닫기" onClick={() => setIsGuideOpen(false)}>×</button>
             </header>
-            <p>글 제목은 별도 필드가 H1 역할을 합니다. 본문은 Markdown 원문을 저장하고 같은 renderer로 미리보기와 공개 글을 표시합니다.</p>
-            <EditorGuideGrid>
-              {[
-                ["제목과 강조", "# 제목 1\n## 제목 2\n**굵게** · _기울임_"],
-                ["목록과 인용", "- 목록\n- [x] 완료\n> 인용문"],
-                ["콜아웃", "> [!TIP]\n> **제목**\n> 내용"],
-                ["토글", ":::toggle 자세히 보기\n내용\n:::"],
-                ["표와 코드", "| 항목 | 설명 |\n| --- | --- |\n\n```kotlin\ncode\n```"],
-                ["Mermaid", "```mermaid\nflowchart LR\n A --> B\n```"],
-                ["수식과 색상", "$$\nE = mc^2\n$$\n{{color:#155eef|강조}}"],
-                ["미디어와 링크 카드", "![설명](URL)\n:::bookmark URL\n제목\n설명\n:::"],
-              ].map(([title, code]) => (
-                <section key={title}>
-                  <h3>{title}</h3>
-                  <pre>{code}</pre>
-                </section>
-              ))}
-            </EditorGuideGrid>
+            <EditorGuideBody>
+              <p>글 제목은 별도 필드가 H1 역할을 합니다. 본문은 Markdown 원문을 저장하고 같은 renderer로 미리보기와 공개 글을 표시합니다.</p>
+              <EditorGuideGrid>
+                {[
+                  ["제목과 강조", "문서 구조와 인라인 강조", "# 제목 1\n## 제목 2\n### 제목 3\n**굵게** · _기울임_"],
+                  ["목록과 인용", "일반 목록, 작업 목록, 인용문", "- 목록\n- [x] 완료\n- [ ] 예정\n> 인용문"],
+                  ["콜아웃", "TIP, INFO, WARNING, SUMMARY", "> [!TIP]\n> **제목**\n> 내용"],
+                  ["토글", "긴 보조 설명을 접어두기", ":::toggle 자세히 보기\n내용\n:::"],
+                  ["표와 코드", "GFM table과 fenced code", "| 항목 | 설명 |\n| --- | --- |\n\n```kotlin title=\"invalidatePost.kt\"\ncode\n```"],
+                  ["Mermaid", "흐름과 구조 다이어그램", "```mermaid\nflowchart LR\n A --> B\n```"],
+                  ["수식과 색상", "KaTeX block과 제한된 인라인 색상", "$$\nE = mc^2\n$$\n{{color:#155eef|강조}}"],
+                  ["미디어와 링크 카드", "이미지, bookmark, embed, file", "![설명](URL)\n:::bookmark URL\n제목\n설명\n:::"],
+                ].map(([title, description, code]) => (
+                  <section key={title}>
+                    <h3>{title}</h3>
+                    <p>{description}</p>
+                    <pre>{code}</pre>
+                  </section>
+                ))}
+              </EditorGuideGrid>
+              {projectRepository?.href ? (
+                <EditorGuideRepo>
+                  <strong>프로젝트 리포지터리</strong>
+                  <a href={projectRepository.href} target="_blank" rel="noreferrer">
+                    {projectRepository.href}
+                  </a>
+                </EditorGuideRepo>
+              ) : null}
+            </EditorGuideBody>
           </EditorGuidePanel>
         </EditorGuideBackdrop>
       ) : null}

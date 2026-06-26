@@ -8,16 +8,23 @@ import {
 } from "src/libs/markdown/tableChrome"
 
 export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
+  .aq-toggle {
+    margin: 28px 0;
+    border: 1px solid ${theme.colors.gray6};
+    border-radius: 0;
+    background: ${theme.publicDesign.readableSurface};
+  }
+
   .aq-toggle > summary {
     cursor: pointer;
-    position: relative;
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     list-style: none;
-    padding: 0.16rem var(--aq-toggle-summary-padding-x) 0.16rem var(--aq-toggle-indent);
+    padding: 15px 17px;
     color: var(--color-gray12);
-    font-size: 0.96rem;
-    font-weight: 650;
-    line-height: 1.58;
+    font-weight: 780;
+    line-height: 1.4;
   }
 
   .aq-toggle__title {
@@ -30,34 +37,28 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
   }
 
   .aq-toggle__caret {
-    position: absolute;
-    left: 0;
-    top: 0.12rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--aq-toggle-caret-hit);
-    height: var(--aq-toggle-caret-hit);
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    border: 1px solid ${theme.publicDesign.borderStrong};
     color: var(--color-gray10);
+    font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
   }
 
   .aq-toggle__caret::before {
-    content: "";
-    width: var(--aq-toggle-caret-size);
-    height: var(--aq-toggle-caret-size);
-    background: currentColor;
-    clip-path: polygon(26% 18%, 82% 50%, 26% 82%);
-    transform-origin: center;
-    transition: transform 120ms ease;
+    content: "+";
   }
 
   .aq-toggle[open] .aq-toggle__caret::before {
-    transform: rotate(90deg);
+    content: "−";
   }
 
   .aq-toggle__body {
-    margin-top: 0.22rem;
-    padding-left: var(--aq-toggle-indent);
+    padding: 0 17px 17px 47px;
+    color: var(--color-gray10);
   }
 
   .aq-toggle[open] > .aq-toggle__body:first-of-type {
@@ -67,6 +68,10 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
   .aq-toggle__body p,
   .aq-toggle__body li {
     line-height: 1.7;
+  }
+
+  .aq-toggle__body p:last-child {
+    margin-bottom: 0;
   }
 
   .aq-table-shell {
@@ -106,21 +111,22 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
 
   table,
   .aq-table {
-    width: auto;
-    min-width: 0;
+    width: 100%;
+    min-width: 680px;
     max-width: none;
-    border-collapse: separate;
+    border-collapse: collapse;
     border-spacing: 0;
-    table-layout: fixed;
+    table-layout: auto;
     margin: 0;
     border: 0;
     background: transparent;
+    font-size: 14px;
   }
 
   table[data-overflow-mode="wide"],
   .aq-table.aq-table-wide {
     width: max-content;
-    min-width: 100%;
+    min-width: 680px;
     max-width: none;
   }
 
@@ -190,78 +196,6 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
   .aq-table tbody tr:last-child td,
   .aq-table tbody tr:last-child th {
     border-bottom: 0;
-  }
-
-  @media (max-width: 480px) {
-    .aq-table-shell {
-      margin: 24px 0;
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-    }
-
-    .aq-table-scroll {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-      overflow-x: auto;
-      overflow-y: hidden;
-    }
-
-    table,
-    .aq-table,
-    table.aq-table-responsive,
-    .aq-table.aq-table-responsive {
-      display: table;
-      width: 100%;
-      min-width: 100%;
-      max-width: 100%;
-      table-layout: fixed;
-    }
-
-    table[data-overflow-mode="wide"],
-    .aq-table.aq-table-wide,
-    table.aq-table-responsive[data-overflow-mode="wide"],
-    .aq-table.aq-table-responsive.aq-table-wide {
-      width: max-content;
-      min-width: 100%;
-      max-width: none;
-    }
-
-    table.aq-table-responsive > thead,
-    .aq-table.aq-table-responsive > thead {
-      display: table-header-group;
-    }
-
-    table.aq-table-responsive > tbody,
-    .aq-table.aq-table-responsive > tbody {
-      display: table-row-group;
-      width: auto;
-      min-width: max-content;
-      max-width: none;
-    }
-
-    table.aq-table-responsive > tbody > tr,
-    .aq-table.aq-table-responsive > tbody > tr {
-      display: table-row;
-      width: auto;
-      min-width: max-content;
-      max-width: none;
-    }
-
-    table.aq-table-responsive > tbody > tr > :is(td, th),
-    .aq-table.aq-table-responsive > tbody > tr > :is(td, th) {
-      box-sizing: border-box;
-      width: auto;
-      min-width: ${TABLE_MIN_COLUMN_WIDTH_PX}px;
-      max-width: none;
-    }
-
-    table.aq-table-responsive > tbody > tr > :is(td, th) > *,
-    .aq-table.aq-table-responsive > tbody > tr > :is(td, th) > * {
-      min-width: 0;
-      max-width: none;
-    }
   }
 
 `

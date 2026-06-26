@@ -102,7 +102,7 @@ const TagList: React.FC = () => {
   const hiddenChipTagCount = Math.max(tagEntries.length - chipTagEntries.length, 0)
 
   return (
-    <StyledWrapper>
+    <StyledWrapper id="topics">
       <section
         className="desktopPanel"
         aria-label="태그 목록"

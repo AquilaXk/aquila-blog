@@ -9,6 +9,7 @@ export type MarkdownRendererProps = {
   content?: string
   contentHtml?: string
   disableMermaid?: boolean
+  forceScheme?: "dark" | "light"
   editableImages?: boolean
   onImageWidthCommit?: (payload: MarkdownImageWidthCommitPayload) => void
 }

@@ -1,38 +1,57 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { setCookie } from "cookies-next"
-import { useCallback, useEffect, useLayoutEffect } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
 import { CONFIG } from "site.config"
 import { queryKey } from "src/constants/queryKey"
 import { SchemeType } from "src/types"
 
 type SetScheme = (scheme: SchemeType) => void
+type BootstrapScheme = {
+  scheme: SchemeType
+  renderedScheme: SchemeType
+}
 
 const isScheme = (value: unknown): value is SchemeType => value === "light" || value === "dark"
+let runtimeSchemeSeed: SchemeType | null = null
 
 const resolveSystemScheme = (): SchemeType => {
   if (typeof window === "undefined") return "light"
   return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light"
 }
 
-const resolveBootstrapScheme = (): SchemeType | null => {
-  const scheme = globalThis.document?.documentElement.dataset.aquilaScheme
-  return isScheme(scheme) ? scheme : null
+const resolveBootstrapScheme = (): BootstrapScheme | null => {
+  const root = globalThis.document?.documentElement
+  const renderedScheme = root?.dataset.aquilaScheme
+  if (!root || !isScheme(renderedScheme)) return null
+
+  const userScheme = root.getAttribute("data-aquila-scheme-user")
+  const source = root.getAttribute("data-aquila-scheme-bootstrap-source")
+  const bootstrapScheme = root.getAttribute("data-aquila-scheme-bootstrap")
+  if (!source || !isScheme(bootstrapScheme)) return null
+  if (source === "public" && isScheme(userScheme)) {
+    return { scheme: userScheme, renderedScheme }
+  }
+
+  return { scheme: bootstrapScheme, renderedScheme }
 }
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 
-const clearSchemeBootstrapStyle = (scheme: SchemeType) => {
+const clearSchemeBootstrapStyle = (scheme: SchemeType, renderedScheme = scheme) => {
   const root = document.documentElement
-  root.dataset.aquilaScheme = scheme
-  root.style.colorScheme = scheme
+  root.dataset.aquilaScheme = renderedScheme
+  root.style.colorScheme = renderedScheme
+  runtimeSchemeSeed = scheme
   root.removeAttribute("data-aquila-scheme-bootstrap")
   root.removeAttribute("data-aquila-scheme-bootstrap-source")
+  root.removeAttribute("data-aquila-scheme-user")
   root.style.removeProperty("background-color")
   document.querySelector('style[data-aquila-scheme-bootstrap-style="true"]')?.remove()
 }
 
 const useScheme = (): [SchemeType, SetScheme] => {
   const queryClient = useQueryClient()
+  const resolvedInitialSchemeRef = useRef(false)
   const followsSystemTheme = CONFIG.blog.scheme === "system"
   const fallbackScheme = (CONFIG.blog.scheme === "system" ? "light" : CONFIG.blog.scheme) as SchemeType
 
@@ -51,15 +70,25 @@ const useScheme = (): [SchemeType, SetScheme] => {
   }, [queryClient])
 
   useIsomorphicLayoutEffect(() => {
+    const shouldResolveInitialScheme = !resolvedInitialSchemeRef.current
+    const bootstrap = shouldResolveInitialScheme ? resolveBootstrapScheme() : null
     const bootstrapScheme =
-      resolveBootstrapScheme() ??
-      (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)
+      bootstrap?.scheme ??
+      (shouldResolveInitialScheme
+        ? runtimeSchemeSeed ?? (followsSystemTheme ? resolveSystemScheme() : fallbackScheme)
+        : data)
+    const renderedScheme =
+      bootstrap?.renderedScheme ??
+      (isScheme(globalThis.document?.documentElement.dataset.aquilaScheme)
+        ? globalThis.document.documentElement.dataset.aquilaScheme
+        : bootstrapScheme)
+    resolvedInitialSchemeRef.current = true
     if (bootstrapScheme !== data) {
       queryClient.setQueryData(queryKey.scheme(), bootstrapScheme)
-      clearSchemeBootstrapStyle(bootstrapScheme)
+      clearSchemeBootstrapStyle(bootstrapScheme, renderedScheme)
       return
     }
-    clearSchemeBootstrapStyle(data)
+    clearSchemeBootstrapStyle(data, renderedScheme)
   }, [data, fallbackScheme, followsSystemTheme, queryClient])
 
   return [data, setScheme]

@@ -226,7 +226,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     ]
   )
   const currentVisibilityText = getVisibilityLabel(currentFlags.published, currentFlags.listed)
-  const canOpenCurrentPostDetail = editorMode === "edit" && postId.trim().length > 0
   const composeViewModel = useMemo(
     () =>
       deriveComposeViewModel({
@@ -453,12 +452,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   )
   const editorPrimaryActionType: PublishActionType =
     editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify"
-  const editorPrimaryActionLabel =
-    editorPrimaryActionType === "modify"
-      ? "수정 반영"
-      : editorPrimaryActionType === "temp"
-        ? "새 글 작성"
-        : "발행"
   const isMarkdownEditorDisabled = loadingKey.length > 0
   const handleEditorCommitDuration = useCallback((actualDuration: number) => {
     recordEditorCommitDurationForRuntimeGuard(actualDuration)
@@ -468,6 +461,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       <WriterEditorHost
         canvasId="editor-dedicated-canvas"
         markdown={postContent}
+        previewTitle={postTitle}
+        previewSummary={resolvedPreviewSummary}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
         onImageUpload={handleMarkdownEditorImageUpload}
@@ -485,6 +480,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       handleEditorCommitDuration,
       isMarkdownEditorDisabled,
       postContent,
+      postTitle,
+      resolvedPreviewSummary,
     ]
   )
   const composeEditorCanvas = useMemo(
@@ -492,6 +489,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       <WriterEditorHost
         canvasId="editor-compose-canvas"
         markdown={postContent}
+        previewTitle={postTitle}
+        previewSummary={resolvedPreviewSummary}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
         onImageUpload={handleMarkdownEditorImageUpload}
@@ -509,6 +508,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       handleEditorCommitDuration,
       isMarkdownEditorDisabled,
       postContent,
+      postTitle,
+      resolvedPreviewSummary,
     ]
   )
   const shouldShowEditorLoadingState =
@@ -546,11 +547,10 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         thumbnailImageFileInputRef={thumbnailImageFileInputRef}
         onThumbnailImageFileChange={handleThumbnailImageFileChange}
         onExit={handleExitDedicatedEditor}
-        onLogout={handleLogout}
         saveStateText={composeStatusText}
         saveStateTone={composeStatusTone}
         primaryActionDisabled={publishActionTriggerDisabled}
-        primaryActionLabel={editorPrimaryActionLabel}
+        primaryActionLabel="발행 설정"
         onPrimaryAction={() => openPublishModal(editorPrimaryActionType)}
         isCompactSplitPreview={isCompactSplitPreview}
         postTags={postTags}
@@ -559,23 +559,18 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         onAddTags={addTagsToPost}
         onAddTag={addTagToPost}
         onRemoveTag={removeTagFromPost}
+        isRecommendTagsDisabled={disabled("recommendTags") || !postContent.trim()}
+        isRecommendTagsLoading={loadingKey === "recommendTags"}
+        onRecommendTags={() => void handleRecommendTags()}
         titleInputRef={handleTitleFieldRef}
         postTitle={postTitle}
         onPostTitleChange={handleTitleChange}
         onPostTitleKeyDown={handleTitleKeyDown}
-        authorName={displayName}
-        authorInitial={displayNameInitial}
-        authorAvatarSrc={previewAuthorAvatarSrc}
-        previewDateText={previewDateText}
-        currentVisibilityText={currentVisibilityText}
         postContent={postContent}
         postSummary={postSummary}
         onPostSummaryChange={setPostSummary}
         postVisibility={postVisibility}
         onPostVisibilityChange={setPostVisibility}
-        canOpenCurrentPostDetail={canOpenCurrentPostDetail}
-        onOpenPostDetail={() => void openPostDetailRoute(postId)}
-        onCopyPostDetailLink={() => void copyPostDetailLink(postId, postTitle)}
         editorCanvas={dedicatedEditorCanvas}
         showPublishNotice={shouldShowPublishNotice}
         publishNoticeTone={publishNotice.tone}

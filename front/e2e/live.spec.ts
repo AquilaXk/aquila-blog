@@ -602,6 +602,12 @@ test.describe("live production e2e", () => {
     const previewPane = await appendMarkdownToEditor(page, liveEditorSmokeMarkdown)
     await expectLiveEditorHoverWheelScrollChain(page, previewPane)
 
+    const backToPostManagement = page.getByRole("button", { name: /글 관리/ }).first()
+    if (await backToPostManagement.isVisible().catch(() => false)) {
+      await backToPostManagement.click()
+      await expectLiveAdminRoute(page, apiBaseUrl, "/admin/posts", adminPostsHeadingPattern, "admin posts after editor")
+    }
+
     await page.getByRole("button", { name: "Logout", exact: true }).click()
     await expect(page).toHaveURL(/\/login/)
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()

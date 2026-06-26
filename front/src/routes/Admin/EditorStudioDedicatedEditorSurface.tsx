@@ -92,8 +92,8 @@ const formatOutlineText = (text: string) =>
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
-    .replace(/(\*\*|__)(.*?)\1/g, "$2")
-    .replace(/(\*|_)(.*?)\1/g, "$2")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*([^*\s](?:[^*]*[^*\s])?)\*/g, "$1")
     .replace(/~~(.*?)~~/g, "$1")
     .trim()
 

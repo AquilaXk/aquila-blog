@@ -59,6 +59,7 @@ class SecurityConfig(
                 memberSecurityConfigurer.configure(this)
                 postSecurityConfigurer.configure(this)
 
+                authorize("/system/api/v1/adm/cloud/files/*/external-content", permitAll)
                 authorize("/*/api/*/adm/**", hasRole("ADMIN"))
                 authorize("/*/api/*/**", authenticated)
                 authorize("/oauth2/**", permitAll)

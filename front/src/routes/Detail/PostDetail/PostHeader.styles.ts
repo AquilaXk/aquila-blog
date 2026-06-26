@@ -76,10 +76,10 @@ export const StyledWrapper = styled.header `
     position: relative;
     width: 38px;
     height: 38px;
-    border-radius: 0;
+    border-radius: 50%;
     overflow: hidden;
-    border: 1px solid #c8ccd2;
-    background: #ffffff;
+    background: #f0f1f2;
+    box-shadow: inset 0 0 0 1px #dfe1e5;
 
     img {
       object-fit: cover;
@@ -145,6 +145,16 @@ export const StyledWrapper = styled.header `
     color: #8c9199;
   }
 
+  .metaUtilities {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.52rem;
+    min-width: 0;
+    margin-left: auto;
+  }
+
   .stats {
     display: inline-flex;
     align-items: center;
@@ -163,7 +173,6 @@ export const StyledWrapper = styled.header `
     align-items: center;
     flex-wrap: wrap;
     gap: 0.45rem;
-    margin-top: 0.5rem;
   }
 
   .authorUtilities[data-shell-only="true"] {
@@ -209,13 +218,13 @@ export const StyledWrapper = styled.header `
     display: inline-flex;
     align-items: center;
     gap: 0.42rem;
-    min-height: 34px;
-    padding: 0 0.76rem;
+    min-height: 40px;
+    padding: 0 0.9rem;
     border-radius: 6px;
     border: 1px solid #dfe1e5;
-    background: #ffffff;
+    background: transparent;
     color: #111216;
-    font-size: 0.82rem;
+    font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
     transition:
@@ -238,7 +247,7 @@ export const StyledWrapper = styled.header `
   }
 
   .dangerButton {
-    border-color: #c33a3a;
+    border-color: #ead0d0;
     background: transparent;
     color: #c33a3a;
   }
@@ -357,6 +366,11 @@ export const StyledWrapper = styled.header `
     .metaRow {
       align-items: flex-start;
       flex-direction: column;
+    }
+
+    .metaUtilities {
+      justify-content: flex-start;
+      margin-left: 0;
     }
 
     .actions[data-hide-mobile="true"] {

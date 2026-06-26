@@ -349,7 +349,19 @@ test.describe("Markdown editor replacement", () => {
     await page.setViewportSize({ width: 2048, height: 1152 })
     await routeAuthenticatedEditor(
       page,
-      ["## **시작하며**", "", "### `핵심` 포인트", "", "### `**kwargs**`", "", "## user_id_field"].join("\n"),
+      [
+        "## **시작하며**",
+        "",
+        "### `핵심` 포인트",
+        "",
+        "### `**kwargs**`",
+        "",
+        "## _기울임_",
+        "",
+        "## __굵게__",
+        "",
+        "## user_id_field",
+      ].join("\n"),
       "Using **kwargs** in Python"
     )
 
@@ -360,9 +372,13 @@ test.describe("Markdown editor replacement", () => {
     await expect(outline.locator("strong").filter({ hasText: /^시작하며$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^핵심 포인트$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^\*\*kwargs\*\*$/ })).toBeVisible()
+    await expect(outline.locator("strong").filter({ hasText: /^기울임$/ })).toBeVisible()
+    await expect(outline.locator("strong").filter({ hasText: /^굵게$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^user_id_field$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^\*\*시작하며\*\*$/ })).toHaveCount(0)
     await expect(outline.locator("strong").filter({ hasText: /^`핵심` 포인트$/ })).toHaveCount(0)
+    await expect(outline.locator("strong").filter({ hasText: /^_기울임_$/ })).toHaveCount(0)
+    await expect(outline.locator("strong").filter({ hasText: /^__굵게__$/ })).toHaveCount(0)
   })
 
   test("preview matches supported table markdown for alignment, escaped pipes, and inline cell formatting", async ({

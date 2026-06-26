@@ -140,86 +140,91 @@ const PostHeader: React.FC<Props> = ({
             <div className="authorText">
               <strong>{authorName}</strong>
               {authorRole ? <div className="metaText">{authorRole}</div> : null}
-              {shouldRenderAuthorUtilities && (
-                <div className="authorUtilities" data-shell-only={authorUtilitiesShellOnly ? "true" : "false"}>
-                  {(showModifyAction || shellModifyFallback) && (
-                    <button
-                      type="button"
-                      className="adminButton"
-                      data-shell-fallback={shellModifyFallback ? "true" : "false"}
-                      onClick={onEditPost}
-                      disabled={adminActionPending}
-                    >
-                      <AppIcon name="edit" />
-                      <span>수정</span>
-                    </button>
-                  )}
-                  {(showDeleteAction || shellDeleteFallback) && (
-                    <button
-                      type="button"
-                      className="adminButton dangerButton"
-                      data-shell-fallback={shellDeleteFallback ? "true" : "false"}
-                      onClick={onDeletePost}
-                      disabled={adminActionPending}
-                    >
-                      <AppIcon name="trash" />
-                      <span>{adminActionPending ? "삭제 중..." : "삭제"}</span>
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {showEngagement ? (
-          <div className="actions" data-hide-mobile={hideActionButtonsOnMobile}>
-            <div className="engagementRow" aria-label="post engagement">
-              <div className="stats" aria-label="post stats">
-                <span className="statChip">{publishedAt}</span>
-                <span className="statChip">{readTimeText}</span>
-                <span className="statChip">{viewText}</span>
-                {modifiedAt ? <span className="statChip">UPDATED {modifiedAt}</span> : null}
+        {shouldRenderAuthorUtilities || showEngagement ? (
+          <div className="metaUtilities">
+            {shouldRenderAuthorUtilities && (
+              <div className="authorUtilities" data-shell-only={authorUtilitiesShellOnly ? "true" : "false"}>
+                {(showModifyAction || shellModifyFallback) && (
+                  <button
+                    type="button"
+                    className="adminButton"
+                    data-shell-fallback={shellModifyFallback ? "true" : "false"}
+                    onClick={onEditPost}
+                    disabled={adminActionPending}
+                  >
+                    <AppIcon name="edit" />
+                    <span>수정</span>
+                  </button>
+                )}
+                {(showDeleteAction || shellDeleteFallback) && (
+                  <button
+                    type="button"
+                    className="adminButton dangerButton"
+                    data-shell-fallback={shellDeleteFallback ? "true" : "false"}
+                    onClick={onDeletePost}
+                    disabled={adminActionPending}
+                  >
+                    <AppIcon name="trash" />
+                    <span>{adminActionPending ? "삭제 중..." : "삭제"}</span>
+                  </button>
+                )}
               </div>
-              <button
-                type="button"
-                className="likeButton"
-                aria-pressed={actorHasLiked}
-                data-active={actorHasLiked}
-                data-hide-desktop={hideLikeActionOnDesktop}
-                data-hide-mobile={hideActionButtonsOnMobile}
-                disabled={likePending}
-                onClick={onToggleLike}
-              >
-                <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
-                <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
-              </button>
-
-              {onSharePost && (
-                <button
-                  type="button"
-                  className="shareButton"
-                  data-hide-desktop={hideShareActionOnDesktop}
-                  data-hide-mobile={hideActionButtonsOnMobile}
-                  aria-label="게시글 공유"
-                  onClick={onSharePost}
-                >
-                  <AppIcon name="share" />
-                  <span>공유</span>
-                </button>
-              )}
-            </div>
-            {shareFeedback && (
-              <span
-                className="shareFeedbackPill"
-                data-hide-desktop={hideShareActionOnDesktop}
-                data-hide-mobile={hideActionButtonsOnMobile}
-                role="status"
-                aria-live="polite"
-              >
-                {shareFeedbackMessage}
-              </span>
             )}
+
+            {showEngagement ? (
+              <div className="actions" data-hide-mobile={hideActionButtonsOnMobile}>
+                <div className="engagementRow" aria-label="post engagement">
+                  <div className="stats" aria-label="post stats">
+                    <span className="statChip">{publishedAt}</span>
+                    <span className="statChip">{readTimeText}</span>
+                    <span className="statChip">{viewText}</span>
+                    {modifiedAt ? <span className="statChip">UPDATED {modifiedAt}</span> : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="likeButton"
+                    aria-pressed={actorHasLiked}
+                    data-active={actorHasLiked}
+                    data-hide-desktop={hideLikeActionOnDesktop}
+                    data-hide-mobile={hideActionButtonsOnMobile}
+                    disabled={likePending}
+                    onClick={onToggleLike}
+                  >
+                    <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
+                    <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
+                  </button>
+
+                  {onSharePost && (
+                    <button
+                      type="button"
+                      className="shareButton"
+                      data-hide-desktop={hideShareActionOnDesktop}
+                      data-hide-mobile={hideActionButtonsOnMobile}
+                      aria-label="게시글 공유"
+                      onClick={onSharePost}
+                    >
+                      <AppIcon name="share" />
+                      <span>공유</span>
+                    </button>
+                  )}
+                </div>
+                {shareFeedback && (
+                  <span
+                    className="shareFeedbackPill"
+                    data-hide-desktop={hideShareActionOnDesktop}
+                    data-hide-mobile={hideActionButtonsOnMobile}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {shareFeedbackMessage}
+                  </span>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

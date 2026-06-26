@@ -561,6 +561,34 @@
         }
       }
     },
+    "/system/api/v1/adm/cloud/files/{id}/external-playback-token" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "issueExternalPlaybackToken",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataCloudExternalPlaybackTokenDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/cloud/files/video-upload-sessions" : {
       "post" : {
         "tags" : [ "api-v-1-adm-cloud-controller" ],
@@ -1658,6 +1686,42 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/cloud/files/{id}/external-content" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "externalContent",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        }, {
+          "name" : "token",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
                 }
               }
             }
@@ -3740,6 +3804,39 @@
           },
           "data" : {
             "$ref" : "#/components/schemas/CloudFileDto"
+          }
+        }
+      },
+      "CloudExternalPlaybackTokenDto" : {
+        "type" : "object",
+        "properties" : {
+          "fileId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "token" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "contentPath" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RsDataCloudExternalPlaybackTokenDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/CloudExternalPlaybackTokenDto"
           }
         }
       },

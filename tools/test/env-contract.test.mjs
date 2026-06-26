@@ -249,6 +249,27 @@ test("Caddy access logs skip signup verification endpoint before proxying", () =
   assert(!caddyfile.includes("signup=done&email="), "Caddy config must not preserve signup completion email query examples")
 })
 
+test("Caddy routes tokenized cloud external content through public read upstream before admin API", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const sensitiveMatcherIndex = caddyfile.indexOf("@cloudExternalContentSensitive path /system/api/v1/adm/cloud/files/*/external-content")
+  const logSkipIndex = caddyfile.indexOf("log_skip @cloudExternalContentSensitive")
+  const publicReadMatcherIndex = caddyfile.indexOf("@publicReadFallback")
+  const externalContentIndex = caddyfile.indexOf("/system/api/v1/adm/cloud/files/*/external-content", publicReadMatcherIndex)
+  const readProxyIndex = caddyfile.indexOf("reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080", publicReadMatcherIndex)
+  const adminMatcherIndex = caddyfile.indexOf("@adminApi")
+
+  assert.notEqual(sensitiveMatcherIndex, -1, "cloud external-content sensitive matcher must be configured")
+  assert.notEqual(logSkipIndex, -1, "cloud external-content access log skip must be configured")
+  assert.notEqual(publicReadMatcherIndex, -1, "public read matcher must be configured")
+  assert.notEqual(externalContentIndex, -1, "cloud external-content route must be in the public read matcher")
+  assert.notEqual(readProxyIndex, -1, "public read matcher must proxy to READ_API_UPSTREAM")
+  assert.notEqual(adminMatcherIndex, -1, "admin API matcher must be configured")
+  assert(logSkipIndex > sensitiveMatcherIndex, "cloud external-content log_skip must reference the sensitive matcher")
+  assert(logSkipIndex < publicReadMatcherIndex, "cloud external-content log_skip must be declared before routing")
+  assert(externalContentIndex < readProxyIndex, "cloud external-content route must be matched before read proxy handling")
+  assert(readProxyIndex < adminMatcherIndex, "public read proxy must be declared before admin API matcher")
+})
+
 test("home-server-source contract allows no-auth operations alert SMTP relay", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const noAuthEnv = baseHomeServerEnv

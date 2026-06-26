@@ -156,6 +156,7 @@ const setupAdminCloudMocks = async (
     failUploadNames?: string[]
     failVideoPartOnceNumber?: number
     failVideoSessionGetOnceStatus?: number
+    externalPlaybackTokenDelayMs?: number
     initialFiles?: CloudFileFixture[]
     listDelayMs?: number
     lookupOnlyFiles?: CloudFileFixture[]
@@ -176,6 +177,7 @@ const setupAdminCloudMocks = async (
   const videoCancels: string[] = []
   const deletedIds: string[] = []
   const requestedContentIds: string[] = []
+  const externalPlaybackTokenRequests: string[] = []
   const uploadedFiles: CloudFileFixture[] = []
   const failedDeleteIds = new Set(options.failDeleteIds ?? [])
   const failedUploadNames = new Set(options.failUploadNames ?? [])
@@ -300,12 +302,45 @@ const setupAdminCloudMocks = async (
     await route.fallback()
   })
 
+  await page.route("**/system/api/v1/adm/cloud/files/*/external-playback-token", async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const id = url.pathname.match(/\/files\/(\d+)\/external-playback-token$/)?.[1] ?? ""
+    if (request.method() !== "POST" || !id) {
+      await route.fallback()
+      return
+    }
+
+    externalPlaybackTokenRequests.push(id)
+    if (options.externalPlaybackTokenDelayMs) {
+      await delay(options.externalPlaybackTokenDelayMs)
+    }
+    await fulfillJson(
+      route,
+      {
+        resultCode: "201-1",
+        msg: "외부 재생 token이 발급되었습니다.",
+        data: {
+          fileId: Number(id),
+          token: `external-token-${id}`,
+          expiresAt: "2026-06-26T12:05:00Z",
+          contentPath: `/system/api/v1/adm/cloud/files/${id}/external-content?token=external-token-${id}`,
+        },
+      },
+      201
+    )
+  })
+
   await page.route("**/system/api/v1/adm/cloud/files/**", async (route) => {
     const request = route.request()
     const method = request.method()
     const url = new URL(request.url())
     const id = url.pathname.match(/\/files\/(\d+)$/)?.[1] ?? ""
     if (url.pathname.includes("/video-upload-sessions")) {
+      await route.fallback()
+      return
+    }
+    if (url.pathname.includes("/external-playback-token")) {
       await route.fallback()
       return
     }
@@ -338,6 +373,10 @@ const setupAdminCloudMocks = async (
     const url = new URL(request.url())
     const id = url.pathname.match(/\/files\/(\d+)$/)?.[1] ?? ""
     if (url.pathname.includes("/video-upload-sessions")) {
+      await route.fallback()
+      return
+    }
+    if (url.pathname.includes("/external-playback-token")) {
       await route.fallback()
       return
     }
@@ -470,6 +509,7 @@ const setupAdminCloudMocks = async (
     videoCancels,
     deletedIds,
     requestedContentIds,
+    externalPlaybackTokenRequests,
   }
 }
 
@@ -489,6 +529,25 @@ test.describe("관리자 클라우드", () => {
       ) {
         browserErrors.push(message.text())
       }
+    })
+    await page.addInitScript(() => {
+      Object.assign(window, { __adminCloudCopiedText: "", __adminCloudPromptText: "" })
+      const clipboard = {
+        writeText: async (text: string) => {
+          Object.assign(window, { __adminCloudCopiedText: text })
+        },
+      }
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: clipboard,
+      })
+      Object.defineProperty(window, "prompt", {
+        configurable: true,
+        value: (_message: string, value?: string) => {
+          Object.assign(window, { __adminCloudPromptText: value || "" })
+          return value || ""
+        },
+      })
     })
 
     await page.goto("/admin/cloud")
@@ -590,8 +649,8 @@ test.describe("관리자 클라우드", () => {
     await page.locator('button[title="deploy-walkthrough.mp4"]').click()
     await expect(page.getByRole("heading", { name: "클라우드 동영상" })).toBeVisible()
     await expect(page.getByText("IINA playback model")).toHaveCount(0)
-    await expect(page.getByText(/IINA/)).toHaveCount(0)
-    await expect(page.getByText(/mpv/i)).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "IINA 명령 복사" })).toBeVisible()
+    await expect(page.getByRole("button", { name: "mpv 명령 복사" })).toBeVisible()
     await expect(page.getByText(/챕터 \d+개/)).toHaveCount(0)
     await expect(page.getByText(/재생 기록/)).toHaveCount(0)
     await expect(page.getByRole("button", { name: "자막" })).toHaveCount(0)
@@ -600,6 +659,58 @@ test.describe("관리자 클라우드", () => {
     await expect(video).toBeVisible()
     await page.getByRole("button", { name: "1.5x" }).click()
     await expect.poll(async () => video.evaluate((node) => (node as HTMLVideoElement).playbackRate)).toBe(1.5)
+    await page.getByRole("button", { name: "IINA 명령 복사" }).click()
+    await expect(page.getByRole("status")).toContainText("IINA 명령을 복사했습니다")
+    await expect.poll(() => mocks.externalPlaybackTokenRequests).toEqual(["103"])
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
+        )
+      )
+      .toContain('iina "')
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
+        )
+      )
+      .toMatch(/^iina "https?:\/\//)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
+        )
+      )
+      .toContain("/system/api/v1/adm/cloud/files/103/external-content?token=external-token-103")
+    await page.evaluate(() => {
+      Object.assign(window, { __adminCloudCopiedText: "", __adminCloudPromptText: "" })
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async () => {
+            throw new DOMException("Clipboard denied", "NotAllowedError")
+          },
+        },
+      })
+    })
+    await page.getByRole("button", { name: "mpv 명령 복사" }).click()
+    await expect(page.getByRole("status")).toContainText("mpv 명령을 표시했습니다. 6시간 동안 유효합니다.")
+    await expect.poll(() => mocks.externalPlaybackTokenRequests).toEqual(["103", "103"])
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudPromptText?: string }).__adminCloudPromptText || ""
+        )
+      )
+      .toMatch(/^mpv "https?:\/\//)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudPromptText?: string }).__adminCloudPromptText || ""
+        )
+      )
+      .toContain("/system/api/v1/adm/cloud/files/103/external-content?token=external-token-103")
 
     await expect(page.getByRole("button", { name: "deploy-walkthrough.mp4 삭제" })).toHaveCount(0)
     await page.getByRole("checkbox", { name: "deploy-walkthrough.mp4 선택" }).check()
@@ -622,6 +733,72 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("파일을 불러오는 중입니다.")).toHaveCount(0)
     await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
     await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toHaveCount(0)
+  })
+
+  test("외부 재생 token 응답 중 선택이 바뀌면 이전 파일 명령을 복사하지 않는다", async ({ page }) => {
+    const secondVideo: CloudFileFixture = {
+      id: 105,
+      ownerMemberId: 1,
+      originalFilename: "release-demo.mp4",
+      contentType: "video/mp4",
+      byteSize: 4_194_304,
+      mediaKind: "VIDEO",
+      folderPath: "/video",
+      createdAt: "2026-06-12T12:00:00Z",
+      modifiedAt: "2026-06-12T12:00:00Z",
+    }
+    const mocks = await setupAdminCloudMocks(page, {
+      externalPlaybackTokenDelayMs: 250,
+      initialFiles: [...CLOUD_FILES, secondVideo],
+    })
+
+    await page.goto("/admin/cloud")
+    await page.locator('button[title="deploy-walkthrough.mp4"]').click()
+    await page.getByRole("button", { name: "IINA 명령 복사" }).click()
+    await expect.poll(() => mocks.externalPlaybackTokenRequests).toEqual(["103"])
+
+    await page.locator('button[title="release-demo.mp4"]').click()
+    await expect(page.getByRole("heading", { name: "클라우드 동영상" })).toBeVisible()
+    await page.waitForTimeout(350)
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
+        )
+      )
+      .toBe("")
+    await expect(page.getByRole("status").filter({ hasText: /명령/ })).toHaveCount(0)
+  })
+
+  test("외부 재생 token 응답 중 상세 패널이 닫히면 이전 파일 명령을 복사하지 않는다", async ({ page }) => {
+    const mocks = await setupAdminCloudMocks(page, {
+      externalPlaybackTokenDelayMs: 250,
+    })
+
+    await page.goto("/admin/cloud")
+    await page.locator('button[title="deploy-walkthrough.mp4"]').click()
+    await page.getByRole("button", { name: "IINA 명령 복사" }).click()
+    await expect.poll(() => mocks.externalPlaybackTokenRequests).toEqual(["103"])
+
+    await page.getByRole("button", { name: "상세 패널 닫기" }).click()
+    await expect(page.getByLabel("클라우드 상세정보")).toHaveCount(0)
+    await page.waitForTimeout(350)
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
+        )
+      )
+      .toBe("")
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudPromptText?: string }).__adminCloudPromptText || ""
+        )
+      )
+      .toBe("")
   })
 
   test("100MB 초과 동영상은 resumable 세션과 조각 업로드로 처리한다", async ({ page }, testInfo) => {

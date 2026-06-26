@@ -128,7 +128,7 @@ const normalizeCloudExternalPlaybackToken = (
     token: rawToken,
     expiresAt,
     contentPath,
-    contentUrl: getApiRequestUrl(contentPath),
+    contentUrl: getApiRequestUrl(contentPath, { backendProxy: "bypass" }),
   }
 }
 

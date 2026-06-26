@@ -527,7 +527,7 @@ test.describe("관리자 클라우드", () => {
       }
     })
     await page.addInitScript(() => {
-      Object.assign(window, { __adminCloudCopiedText: "" })
+      Object.assign(window, { __adminCloudCopiedText: "", __adminCloudPromptText: "" })
       const clipboard = {
         writeText: async (text: string) => {
           Object.assign(window, { __adminCloudCopiedText: text })
@@ -536,6 +536,13 @@ test.describe("관리자 클라우드", () => {
       Object.defineProperty(navigator, "clipboard", {
         configurable: true,
         value: clipboard,
+      })
+      Object.defineProperty(window, "prompt", {
+        configurable: true,
+        value: (_message: string, value?: string) => {
+          Object.assign(window, { __adminCloudPromptText: value || "" })
+          return value || ""
+        },
       })
     })
 
@@ -672,9 +679,34 @@ test.describe("관리자 클라우드", () => {
         )
       )
       .toContain("/system/api/v1/adm/cloud/files/103/external-content?token=external-token-103")
+    await page.evaluate(() => {
+      Object.assign(window, { __adminCloudCopiedText: "", __adminCloudPromptText: "" })
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async () => {
+            throw new DOMException("Clipboard denied", "NotAllowedError")
+          },
+        },
+      })
+    })
     await page.getByRole("button", { name: "mpv 명령 복사" }).click()
-    await expect(page.getByRole("status")).toContainText("mpv 명령을 복사했습니다")
+    await expect(page.getByRole("status")).toContainText("mpv 명령을 표시했습니다. 6시간 동안 유효합니다.")
     await expect.poll(() => mocks.externalPlaybackTokenRequests).toEqual(["103", "103"])
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudPromptText?: string }).__adminCloudPromptText || ""
+        )
+      )
+      .toMatch(/^mpv "https?:\/\//)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudPromptText?: string }).__adminCloudPromptText || ""
+        )
+      )
+      .toContain("/system/api/v1/adm/cloud/files/103/external-content?token=external-token-103")
 
     await expect(page.getByRole("button", { name: "deploy-walkthrough.mp4 삭제" })).toHaveCount(0)
     await page.getByRole("checkbox", { name: "deploy-walkthrough.mp4 선택" }).check()

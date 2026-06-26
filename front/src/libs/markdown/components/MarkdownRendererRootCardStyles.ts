@@ -190,6 +190,10 @@ export const markdownRendererRootCardStyles = (theme: Theme) => css`
       grid-template-columns: 1fr;
     }
 
+    .aq-link-card-thumb {
+      width: 100%;
+    }
+
     .aq-bookmark-card span,
     .aq-file-card span {
       max-width: 100%;

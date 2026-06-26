@@ -114,7 +114,10 @@ const isComposingKeyboardEvent = (event: ReactKeyboardEvent<HTMLElement>) => {
 }
 
 const countMarkdownLinkWarnings = (markdown: string) =>
-  [...markdown.matchAll(/!?\[[^\]]*\]\(([^)\s]*)/g)].filter((match) => !match[1]?.trim()).length
+  [...markdown.matchAll(/!?\[[^\]]*\]\(([^)\s]*)/g)].filter((match) => {
+    const href = match[1]?.trim() ?? ""
+    return !href || /^https?:\/\/$/.test(href)
+  }).length
 
 export const EditorStudioDedicatedEditorLoadingState = () => (
   <EditorStudioRoot>

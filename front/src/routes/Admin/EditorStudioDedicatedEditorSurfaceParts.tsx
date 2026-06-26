@@ -6,6 +6,8 @@ export const EditorStudioRoot = styled.main `
   margin-right: calc(50% - 50vw);
   height: 100vh;
   min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
   padding: 0;
   display: grid;
   grid-template-rows: 58px minmax(0, 1fr);
@@ -217,13 +219,15 @@ export const EditorStudioFrame = styled.div `
 
   @media (max-width: 1100px) {
     grid-template-columns: 190px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
   }
 
   @media (max-width: 820px) {
     width: 100vw;
     max-width: 100vw;
     display: block;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 `;
 export const EditorStudioWritingColumn = styled.section<{
@@ -642,7 +646,14 @@ export const EditorInspector = styled.aside`
   }
 
   @media (max-width: 1100px) {
-    display: none;
+    grid-column: 1 / -1;
+    max-height: min(38vh, 360px);
+    border-top: 1px solid ${({ theme }) => theme.publicDesign.border};
+    border-left: 0;
+  }
+
+  @media (max-width: 820px) {
+    max-height: none;
   }
 `;
 

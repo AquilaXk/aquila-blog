@@ -87,9 +87,19 @@ type OutlineItem = {
   text: string
 }
 
+const formatOutlineText = (text: string) =>
+  text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/(\*|_)(.*?)\1/g, "$2")
+    .replace(/~~(.*?)~~/g, "$1")
+    .trim()
+
 const extractEditorOutline = (title: string, markdown: string): OutlineItem[] => {
   const items: OutlineItem[] = []
-  const normalizedTitle = title.trim()
+  const normalizedTitle = formatOutlineText(title)
   if (normalizedTitle) items.push({ id: "title", level: 1, text: normalizedTitle })
 
   markdown.split(/\r?\n/).forEach((line, index) => {
@@ -98,7 +108,7 @@ const extractEditorOutline = (title: string, markdown: string): OutlineItem[] =>
     items.push({
       id: `heading-${index}`,
       level: match[1].length as 2 | 3,
-      text: match[2].trim(),
+      text: formatOutlineText(match[2]),
     })
   })
 

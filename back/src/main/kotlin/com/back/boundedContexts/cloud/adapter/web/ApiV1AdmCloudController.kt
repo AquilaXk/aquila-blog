@@ -1,5 +1,7 @@
 package com.back.boundedContexts.cloud.adapter.web
 
+import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenDto
+import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenService
 import com.back.boundedContexts.cloud.application.service.CloudFileDto
 import com.back.boundedContexts.cloud.application.service.CloudFileService
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartResultDto
@@ -48,6 +50,7 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody as OpenApiRequestBod
 class ApiV1AdmCloudController(
     private val cloudFileService: CloudFileService,
     private val cloudVideoUploadSessionService: CloudVideoUploadSessionService,
+    private val cloudExternalPlaybackTokenService: CloudExternalPlaybackTokenService,
 ) {
     data class CloudFileListResBody(
         val files: List<CloudFileDto>,
@@ -237,6 +240,25 @@ class ApiV1AdmCloudController(
             fileId = id,
         )
 
+    @PostMapping("/files/{id}/external-playback-token")
+    @ApiResponse(responseCode = "201", description = "Created")
+    fun issueExternalPlaybackToken(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+    ): ResponseEntity<RsData<CloudExternalPlaybackTokenDto>> {
+        val issued =
+            cloudExternalPlaybackTokenService.issue(
+                ownerMemberId = securityUser.id,
+                fileId = id,
+            )
+
+        return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(RsData("201-1", "외부 재생 token이 발급되었습니다.", issued))
+    }
+
     @GetMapping("/files/{id}/content")
     @Transactional(readOnly = true)
     fun content(
@@ -286,6 +308,76 @@ class ApiV1AdmCloudController(
         val content =
             cloudFileService.openContent(
                 ownerMemberId = securityUser.id,
+                fileId = id,
+            )
+        val storedObject = content.storedObject
+        val totalLength = storedObject.contentLength ?: -1
+        val responseBuilder =
+            noStoreHeaders(
+                ResponseEntity
+                    .ok()
+                    .contentType(safeMediaType(storedObject.contentType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename)),
+            )
+        val finalizedBuilder =
+            totalLength
+                .takeIf { it >= 0 }
+                ?.let(responseBuilder::contentLength)
+                ?: responseBuilder
+
+        return finalizedBuilder.body(InputStreamResource(storedObject.inputStream))
+    }
+
+    @GetMapping("/files/{id}/external-content")
+    @Transactional(readOnly = true)
+    fun externalContent(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestParam
+        token: String,
+        request: HttpServletRequest,
+    ): ResponseEntity<Resource> {
+        val rangeHeader = request.getHeader(HttpHeaders.RANGE)
+
+        if (!rangeHeader.isNullOrBlank()) {
+            val file =
+                cloudExternalPlaybackTokenService.getFile(
+                    token = token,
+                    fileId = id,
+                )
+            val totalLength = file.byteSize
+            val range = parseSingleRange(rangeHeader, totalLength)
+            if (range == null) {
+                return noStoreHeaders(
+                    ResponseEntity
+                        .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength"),
+                ).build()
+            }
+            val content =
+                cloudExternalPlaybackTokenService.openContentRange(
+                    token = token,
+                    fileId = id,
+                    range = range,
+                )
+            val storedObject = content.storedObject
+
+            return noStoreHeaders(
+                ResponseEntity
+                    .status(HttpStatus.PARTIAL_CONTENT)
+                    .contentType(safeMediaType(storedObject.contentType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename))
+                    .contentLength(range.last - range.first + 1),
+            ).body(InputStreamResource(storedObject.inputStream))
+        }
+
+        val content =
+            cloudExternalPlaybackTokenService.openContent(
+                token = token,
                 fileId = id,
             )
         val storedObject = content.storedObject

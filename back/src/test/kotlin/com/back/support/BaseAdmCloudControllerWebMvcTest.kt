@@ -1,6 +1,7 @@
 package com.back.support
 
 import com.back.boundedContexts.cloud.adapter.web.ApiV1AdmCloudController
+import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenService
 import com.back.boundedContexts.cloud.application.service.CloudFileService
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
 import com.back.global.security.config.CustomAuthenticationFilter
@@ -42,6 +43,9 @@ abstract class BaseAdmCloudControllerWebMvcTest : BaseIntegrationTest() {
     @MockitoBean
     protected lateinit var cloudVideoUploadSessionService: CloudVideoUploadSessionService
 
+    @MockitoBean
+    protected lateinit var cloudExternalPlaybackTokenService: CloudExternalPlaybackTokenService
+
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext
 
@@ -58,6 +62,7 @@ abstract class BaseAdmCloudControllerWebMvcTest : BaseIntegrationTest() {
                     sessionCreationPolicy = SessionCreationPolicy.STATELESS
                 }
                 authorizeHttpRequests {
+                    authorize("/system/api/v1/adm/cloud/files/*/external-content", permitAll)
                     authorize("/system/api/v1/adm/cloud/**", hasRole("ADMIN"))
                     authorize(anyRequest, permitAll)
                 }

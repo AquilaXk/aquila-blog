@@ -724,6 +724,79 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("content 조회는 owner match 뒤에 저장소 stream을 반환한다")
+    fun `content 조회는 owner match 뒤에 저장소 stream을 반환한다`() {
+        val saved =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/docs/file.pdf",
+                    originalFilename = "file.pdf",
+                    mediaKind = CloudFileMediaKind.DOCUMENT,
+                    folderPath = "docs",
+                ),
+            )
+        storage.objects[saved.objectKey] =
+            CloudStoragePort.StoredObject(
+                inputStream = ByteArrayInputStream("content".toByteArray()),
+                contentType = "application/pdf",
+                contentLength = 7L,
+                originalFilename = "file.pdf",
+            )
+
+        val content = service.openContent(ownerMemberId = 7L, fileId = saved.id)
+
+        assertThat(content.file.id).isEqualTo(saved.id)
+        assertThat(content.storedObject.contentType).isEqualTo("application/pdf")
+        assertThat(storage.openedObjectKeys).containsExactly(saved.objectKey)
+        assertThat(storage.openedRanges).isEmpty()
+    }
+
+    @Test
+    @DisplayName("Range content 조회 시 owner match 없이는 저장소 range stream을 열지 않는다")
+    fun `Range content 조회는 owner match 없이는 저장소 range stream을 열지 않는다`() {
+        val saved =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/video/hidden.mp4",
+                    originalFilename = "hidden.mp4",
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = "video",
+                ),
+            )
+
+        assertThatThrownBy {
+            service.openContentRange(ownerMemberId = 8L, fileId = saved.id, range = 0L..9L)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("파일을 찾을 수 없습니다")
+
+        assertThat(storage.openedRanges).isEmpty()
+    }
+
+    @Test
+    @DisplayName("Range content 조회 시 metadata는 있지만 object가 없으면 404로 실패한다")
+    fun `Range content 조회는 metadata는 있지만 object가 없으면 실패한다`() {
+        val saved =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/video/missing.mp4",
+                    originalFilename = "missing.mp4",
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = "video",
+                ),
+            )
+
+        assertThatThrownBy {
+            service.openContentRange(ownerMemberId = 7L, fileId = saved.id, range = 0L..9L)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("파일을 찾을 수 없습니다")
+
+        assertThat(storage.openedRanges).containsExactly(saved.objectKey to (0L..9L))
+    }
+
+    @Test
     @DisplayName("Range content 조회는 owner match 뒤에만 저장소 stream을 반환한다")
     fun `Range content 조회는 owner match 뒤에만 저장소 stream을 반환한다`() {
         val saved =

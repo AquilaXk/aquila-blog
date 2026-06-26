@@ -4,6 +4,7 @@ import Link from "next/link"
 import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
+import { useRootAdminProfile } from "src/layouts/RootLayout"
 import { formatDateTime } from "src/libs/utils"
 import {
   parseThumbnailFocusXFromUrl,
@@ -15,7 +16,7 @@ import { TPost } from "src/types"
 import { StyledWrapper } from "./PostHeader.styles"
 
 type Props = {
-  data: TPost
+  data: TPost & { content?: string }
   likesCount?: number
   hitCount?: number
   actorHasLiked?: boolean
@@ -60,8 +61,13 @@ const PostHeader: React.FC<Props> = ({
   showEngagement = true,
   showThumbnail = true,
 }) => {
-  const authorName = data.author?.[0]?.name || CONFIG.profile.name
-  const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
+  const adminProfile = useRootAdminProfile()
+  const authorName = data.author?.[0]?.name || adminProfile?.nickname || adminProfile?.name || "익명"
+  const authorImageSrc =
+    data.author?.[0]?.profile_photo ||
+    adminProfile?.profileImageDirectUrl ||
+    adminProfile?.profileImageUrl ||
+    ""
   const tags = (data.tags || []).map((tag) => tag.trim()).filter(Boolean)
   const primaryTaxonomy = (data.category?.[0] || tags[0] || data.type[0] || "").trim()
   const typeLabel = data.type[0] === "Post" ? "Production note" : data.type[0]
@@ -86,6 +92,11 @@ const PostHeader: React.FC<Props> = ({
         ? "복사 완료"
         : "복사 완료"
   const resolvedDeckSummary = (deckSummary ?? data.summary ?? "").trim()
+  const readSource = (data.content || data.summary || data.title).trim()
+  const readTimeText = `${Math.max(1, Math.ceil(readSource.length / 500))}분 READ`
+  const viewCount = hitCount ?? data.hitCount ?? 0
+  const viewText = `${Intl.NumberFormat(CONFIG.lang).format(viewCount)} VIEWS`
+  const authorRole = adminProfile?.profileRole?.trim() || ""
 
   return (
     <StyledWrapper>
@@ -104,34 +115,25 @@ const PostHeader: React.FC<Props> = ({
       {resolvedDeckSummary ? <p className="deck">{resolvedDeckSummary}</p> : null}
 
       <div className="metaRow">
-        {data.author?.[0]?.name && (
+        {authorName && (
           <div className="author">
             <div className="avatar">
-              <ProfileImage
-                src={authorImageSrc}
-                alt={`${authorName} profile image`}
-                priority
-                fillContainer
-                width={48}
-                height={48}
-              />
+              {authorImageSrc ? (
+                <ProfileImage
+                  src={authorImageSrc}
+                  alt={`${authorName} profile image`}
+                  priority
+                  fillContainer
+                  width={38}
+                  height={38}
+                />
+              ) : (
+                <span className="avatarFallback" aria-hidden="true" />
+              )}
             </div>
             <div className="authorText">
-              <strong>{data.author[0].name}</strong>
-              <div className="metaText">
-                <span>{publishedAt}</span>
-                {modifiedAt && (
-                  <>
-                    <span className="dot" />
-                    <span>수정 {modifiedAt}</span>
-                  </>
-                )}
-                <span className="dot mobileMetaOnly" />
-                <span className="metaInlineMetric metaInlineViewStat mobileMetaOnly">
-                  <AppIcon name="eye" />
-                  <span>조회 {hitCount ?? data.hitCount ?? 0}</span>
-                </span>
-              </div>
+              <strong>{authorName}</strong>
+              {authorRole ? <div className="metaText">{authorRole}</div> : null}
               {shouldRenderAuthorUtilities && (
                 <div className="authorUtilities" data-shell-only={authorUtilitiesShellOnly ? "true" : "false"}>
                   {(showModifyAction || shellModifyFallback) && (
@@ -168,16 +170,10 @@ const PostHeader: React.FC<Props> = ({
           <div className="actions" data-hide-mobile={hideActionButtonsOnMobile}>
             <div className="engagementRow" aria-label="post engagement">
               <div className="stats" aria-label="post stats">
-                <span className="statChip commentStatChip" data-hide-mobile={hideActionButtonsOnMobile}>
-                  댓글 {data.commentsCount ?? 0}
-                </span>
-                <span className="statChip viewStatChip">
-                  <span className="statMetaLabel">
-                    <AppIcon name="eye" />
-                    <span>조회</span>
-                  </span>
-                  <strong className="statMetricValue">{hitCount ?? data.hitCount ?? 0}</strong>
-                </span>
+                <span className="statChip">{publishedAt}</span>
+                <span className="statChip">{readTimeText}</span>
+                <span className="statChip">{viewText}</span>
+                {modifiedAt ? <span className="statChip">UPDATED {modifiedAt}</span> : null}
               </div>
               <button
                 type="button"

@@ -32,7 +32,7 @@ const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
   var actualScheme = cachedScheme || defaultScheme;
   var nextScheme = isPublicBlogRoute ? "light" : actualScheme;
   var bootstrapSource = isPublicBlogRoute ? "public" : (cachedScheme ? "cookie" : "system");
-  var background = nextScheme === "dark" ? "#121212" : "#f3f5f8";
+  var background = nextScheme === "dark" ? "#121212" : "#f7f7f5";
   var foreground = nextScheme === "dark" ? "#f5f5f5" : "#101214";
   var darkPreHydrationGuard = nextScheme === "dark"
     ? [

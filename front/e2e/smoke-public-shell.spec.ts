@@ -15,6 +15,7 @@ test.beforeEach(async ({ page }) => {
 test.describe("core smoke public shell", () => {
   test("system dark 공개 페이지는 hydration 첫 렌더와 bootstrap 동기화 경계를 분리한다", async () => {
     const useSchemeSource = readFileSync(path.resolve(__dirname, "../src/hooks/useScheme.ts"), "utf8")
+    const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
 
     expect(useSchemeSource).toContain('CONFIG.blog.scheme === "system" ? "light" : CONFIG.blog.scheme')
     expect(useSchemeSource).toContain("const resolveBootstrapScheme = (): BootstrapScheme | null =>")
@@ -42,6 +43,9 @@ test.describe("core smoke public shell", () => {
     expect(useSchemeSource).toContain("clearSchemeBootstrapStyle(bootstrapScheme, renderedScheme)")
     expect(useSchemeSource).not.toContain("setScheme(bootstrapScheme)")
     expect(useSchemeSource).not.toMatch(/setScheme\(nextScheme\)\s*clearSchemeBootstrapAfterHydration\(\)/)
+    expect(rootLayoutSource).toContain("const RootAdminProfileContext = React.createContext<AdminProfile | null>(null)")
+    expect(rootLayoutSource).toContain("export const useRootAdminProfile = () => React.useContext(RootAdminProfileContext)")
+    expect(rootLayoutSource).toContain("<RootAdminProfileContext.Provider value={adminProfile}>")
   })
 
   test("OS 다크 첫 로드는 bootstrap guard를 삽입하고 공개 V4 route는 light로 수렴한다", async ({ page }) => {
@@ -112,19 +116,29 @@ test.describe("core smoke public shell", () => {
     }
 
     expect(firstLoadScheme.datasetScheme).toBe("light")
-    expect(firstLoadScheme.bodyBackground).toBe("rgb(243, 245, 248)")
-    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap]{background:#f3f5f8;color-scheme:light;}")
-    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap] body{background:#f3f5f8;color:#101214;color-scheme:light;}")
+    expect(firstLoadScheme.bodyBackground).toBe("rgb(247, 247, 245)")
+    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap]{background:#f7f7f5;color-scheme:light;}")
+    expect(bootstrapStyle).toContain("html[data-aquila-scheme-bootstrap] body{background:#f7f7f5;color:#101214;color-scheme:light;}")
     expect(bootstrapStyle).not.toContain('html[data-aquila-scheme-bootstrap="dark"] *{color-scheme:dark!important;}')
     expect(bootstrapStyle).not.toContain("background-color:transparent!important")
     expect(bootstrapStyle).not.toContain("#121212")
   })
 
-  test("public blog appearance는 전역 theme와 legacy 디자인으로 고정된다", async () => {
+  test("public blog appearance는 V4 전역 theme와 sticky header 계약을 유지한다", async () => {
   const resolverSource = readFileSync(path.resolve(__dirname, "../src/libs/blogAppearance.ts"), "utf8")
   const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
   const headerSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/index.tsx"), "utf8")
+  const navBarSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/NavBar.tsx"), "utf8")
   const logoSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/Logo.tsx"), "utf8")
+  const themeToggleSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/ThemeToggle.tsx"), "utf8")
+  const notificationBellStyleSource = readFileSync(
+    path.resolve(__dirname, "../src/layouts/RootLayout/Header/NotificationBell.styles.ts"),
+    "utf8"
+  )
+  const notificationBellStateSource = readFileSync(
+    path.resolve(__dirname, "../src/layouts/RootLayout/Header/useNotificationBellState.ts"),
+    "utf8"
+  )
   const adminShellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
   const adminPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/adminPage.ts"), "utf8")
   const appSource = readFileSync(path.resolve(__dirname, "../src/pages/_app.tsx"), "utf8")
@@ -132,6 +146,11 @@ test.describe("core smoke public shell", () => {
   const aboutPageSource = readFileSync(path.resolve(__dirname, "../src/pages/about.tsx"), "utf8")
   const postDetailPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/postDetailPage.ts"), "utf8")
   const useAdminProfileSource = readFileSync(path.resolve(__dirname, "../src/hooks/useAdminProfile.ts"), "utf8")
+  const themeSource = readFileSync(path.resolve(__dirname, "../src/styles/theme.ts"), "utf8")
+  const globalSource = readFileSync(
+    path.resolve(__dirname, "../src/layouts/RootLayout/ThemeProvider/Global/index.tsx"),
+    "utf8"
+  )
 
   expect(resolverSource).toContain('const normalizeBlogDesign = (_value: unknown): BlogDesignType => "legacy"')
   expect(resolverSource).not.toContain('blogDesign === "grid"')
@@ -139,10 +158,69 @@ test.describe("core smoke public shell", () => {
   expect(rootLayoutSource).not.toContain("resolvePublicBlogAppearance")
   expect(rootLayoutSource).toContain("usePublicAdminProfile(initialAdminProfile")
   expect(headerSource).toContain("showThemeToggle")
+  expect(headerSource).toContain('data-ui="app-header"')
+  expect(headerSource).toContain("z-index: 50;")
+  expect(headerSource).toContain("width: min(calc(100% - 40px), 1240px);")
+  expect(headerSource).toContain("min-height: 64px;")
+  expect(headerSource).toContain("gap: 32px;")
+  expect(headerSource).toContain("@media (max-width: 820px)")
+  expect(headerSource).toContain("width: min(calc(100% - 24px), 1240px);")
+  expect(headerSource).toContain("min-height: 58px;")
+  expect(headerSource).toContain("gap: 10px;")
+  expect(themeSource).toContain('pageBackgroundImage: "none"')
+  expect(themeSource).toContain('border: scheme === "light" ? "#dfe1e5" : schemeColors.gray6')
+  expect(themeSource).toContain('borderStrong: scheme === "light" ? "#c8ccd2" : schemeColors.gray7')
+  expect(themeSource).toContain('accent: scheme === "light" ? "#155eef" : "#78a7ff"')
+  expect(themeSource).toContain('accentHover: scheme === "light" ? "#0d4ed8" : "#9bbdff"')
+  expect(themeSource).toContain('accentMuted: scheme === "light" ? "#edf4ff" : "#17243d"')
+  expect(globalSource).toContain(
+    "--aq-header-bg: color-mix(in srgb, ${lightDesign.pageBackgroundColor} 92%, transparent);"
+  )
+  expect(headerSource).not.toContain("data-autohide")
+  expect(headerSource).not.toContain("data-hidden")
+  expect(headerSource).not.toContain("transform: translateY(0);")
+  expect(headerSource).not.toContain("will-change: transform")
+  expect(headerSource).not.toContain("backface-visibility")
+  expect(headerSource).not.toContain("translateY(calc(-100%")
+  expect(navBarSource).toContain("min-height: 34px;")
+  expect(navBarSource).toContain("padding: 0 11px;")
+  expect(navBarSource).toContain("gap: 7px;")
+  expect(navBarSource).toContain("height: 36px;")
+  expect(navBarSource).toContain("min-height: 36px;")
+  expect(navBarSource).toContain("border-radius: 6px;")
+  expect(navBarSource).toContain('const activeHash = router.asPath.split("#")[1]?.split("?")[0] || ""')
+  expect(navBarSource).toContain('id === "notes" && router.pathname === "/" && activeHash !== "topics"')
+  expect(navBarSource).toContain('id === "topics" && router.pathname === "/" && activeHash === "topics"')
+  expect(navBarSource).not.toContain("theme.variables.navControl.height")
+  expect(navBarSource).toContain("@media (max-width: 820px)")
+  expect(navBarSource).not.toContain("@media (max-width: 860px)")
+  expect(navBarSource).not.toContain("@media (max-width: 720px)")
+  expect(navBarSource).toContain("const [mobileMenuOpen, setMobileMenuOpen] = useState(false)")
+  expect(navBarSource).toContain('className="mobileMenuButton"')
+  expect(navBarSource).toContain('className="mobileMenuPanel"')
+  expect(navBarSource).toContain(".primaryLinks,")
+  expect(navBarSource).toContain(".searchTrigger,\n    .loginLink,")
+  expect(navBarSource).not.toContain(".bellSlot,\n    .loginLink,")
+  expect(navBarSource).toContain(".logoutBtn {\n      display: none;")
+  expect(navBarSource).toContain(".mobileMenuButton {\n      display: grid;")
+  expect(navBarSource).toContain(".mobileMenuPanel {\n      display: grid;")
+  expect(notificationBellStyleSource).toContain("@media (max-width: 820px)")
+  expect(notificationBellStyleSource).toContain("width: 36px;")
+  expect(notificationBellStyleSource).toContain("height: 36px;")
+  expect(notificationBellStyleSource).toContain("border-radius: 6px;")
+  expect(notificationBellStyleSource).not.toContain("@media (max-width: 720px)")
+  expect(notificationBellStyleSource).not.toContain("transform: translateY(-1px);")
+  expect(notificationBellStyleSource).not.toContain("theme.variables.navControl.height")
+  expect(notificationBellStateSource).toContain('window.matchMedia("(max-width: 820px)")')
+  expect(notificationBellStateSource).not.toContain('window.matchMedia("(max-width: 720px)")')
   expect(headerSource).not.toContain('blogDesign === "grid"')
   expect(logoSource).not.toContain("useAdminProfile")
   expect(logoSource).not.toContain('blogDesign === "grid"')
+  expect(logoSource).not.toContain("@media (max-width: 720px)")
   expect(logoSource).toContain("blogTitle")
+  expect(themeToggleSource).toContain("width: 36px;")
+  expect(themeToggleSource).toContain("height: 36px;")
+  expect(themeToggleSource).toContain("border-radius: 6px;")
   expect(adminShellSource).not.toContain("useAdminProfile")
   expect(adminPageSource).toContain("initialProfileSnapshot?: AdminProfile | null")
   expect(adminPageSource).toContain("fetchServerAdminProfile(req")
@@ -163,7 +241,10 @@ test.describe("core smoke public shell", () => {
   expect(rootLayoutSource).toContain(
     'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
   )
-  expect(rootLayoutSource).toContain('showThemeToggle={!isPublicBlogRoute && effectiveBlogDesign === "legacy"}')
+  expect(rootLayoutSource).not.toContain("@media (max-width: 768px)")
+  expect(rootLayoutSource).toContain('const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect')
+  expect(rootLayoutSource).toContain("useIsomorphicLayoutEffect(() =>")
+  expect(rootLayoutSource).toContain('showThemeToggle={effectiveBlogDesign === "legacy"}')
   expect(rootLayoutSource).toContain("refetchOnMount: isDesignAwareRoute")
   expect(rootLayoutSource).toContain("staleTimeMs: isDesignAwareRoute ? 0 : undefined")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')
@@ -343,9 +424,12 @@ test.describe("core smoke public shell", () => {
     return Array.from(new Set(roundedHeights))
   })
 
-  expect(uniqueHeights.length).toBe(1)
-  expect(uniqueHeights[0]).toBeGreaterThanOrEqual(34)
-  expect(uniqueHeights[0]).toBeLessThanOrEqual(40)
+  expect(uniqueHeights.length).toBeGreaterThanOrEqual(1)
+  expect(uniqueHeights.length).toBeLessThanOrEqual(2)
+  for (const height of uniqueHeights) {
+    expect(height).toBeGreaterThanOrEqual(34)
+    expect(height).toBeLessThanOrEqual(40)
+  }
 })
 
   test("상세 페이지는 클라이언트 복구 요청으로 렌더되고 조회수 hit는 1회 반영된다", async ({ page }) => {
@@ -408,9 +492,8 @@ test.describe("core smoke public shell", () => {
   await page.goto("/posts/101")
   await expect(page.getByText("상세 E2E 글")).toBeVisible()
   await expect.poll(() => hitCountRequest).toBe(1)
-  const viewStatChip = page.locator('[aria-label="post engagement"] .viewStatChip')
-  await expect(viewStatChip).toContainText("조회")
-  await expect(viewStatChip).toContainText("8")
+  const viewStatChip = page.locator(".stats .statChip").filter({ hasText: "8 VIEWS" })
+  await expect(viewStatChip).toBeVisible()
   await page.waitForTimeout(300)
   expect(runtimeErrors).toEqual([])
 })

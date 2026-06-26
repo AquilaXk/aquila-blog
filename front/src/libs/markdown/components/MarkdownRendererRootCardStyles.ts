@@ -5,31 +5,30 @@ export const markdownRendererRootCardStyles = (theme: Theme) => css`
   .aq-file-card,
   .aq-embed-card,
   .aq-formula-card {
-    width: min(100%, var(--article-readable-width, 48rem));
-    margin: 1.25rem auto;
-    border-radius: 16px;
+    width: 100%;
+    margin: 24px 0;
+    border-radius: 0;
     border: 1px solid ${ theme.colors.gray6};
-    background: ${
-      theme.scheme === "dark" ? "rgba(17, 19, 24, 0.94)" : "rgba(255, 255, 255, 0.98)"};
-    box-shadow: ${
-      theme.scheme === "dark" ? "0 18px 38px rgba(2, 6, 23, 0.24)" : "0 18px 36px rgba(15, 23, 42, 0.06)"};
+    background: ${ theme.publicDesign.readableSurface};
+    box-shadow: none;
     overflow: hidden;
   }
 
   .aq-bookmark-card a,
   .aq-file-card a {
-    display: flex;
-    gap: 0.9rem;
-    padding: 1rem 1.08rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 20px;
+    padding: 17px;
     text-decoration: none;
   }
 
   .aq-link-card-thumb,
   .aq-embed-thumb {
     overflow: hidden;
-    border-radius: 14px;
-    background: ${
-      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(15, 23, 42, 0.04)"};
+    border-radius: 0;
+    background: ${ theme.publicDesign.surfaceElevated};
     aspect-ratio: 16 / 10;
   }
 
@@ -49,50 +48,60 @@ export const markdownRendererRootCardStyles = (theme: Theme) => css`
   .aq-link-card-copy,
   .aq-embed-copy {
     display: grid;
-    gap: 0.34rem;
+    gap: 0;
     min-width: 0;
   }
 
   .aq-link-card-copy small,
   .aq-embed-copy small {
-    color: ${ theme.colors.gray10};
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    margin-bottom: 5px;
+    color: ${ theme.publicDesign.accent};
+    font: 700 10px / 1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
 
   .aq-bookmark-card strong,
   .aq-file-card strong,
   .aq-embed-card strong {
+    display: block;
     color: ${ theme.colors.gray12};
-    font-size: 1rem;
+    font-size: 15px;
     font-weight: 700;
+    line-height: 1.42;
   }
 
-  .aq-bookmark-card span,
-  .aq-file-card span,
   .aq-embed-caption,
   .aq-embed-fallback p {
     color: ${ theme.colors.gray10};
-    font-size: 0.86rem;
-    line-height: 1.55;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .aq-bookmark-card span,
+  .aq-file-card span {
+    max-width: 240px;
+    overflow: hidden;
+    color: ${ theme.colors.gray9};
+    font: 600 10px / 1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .aq-bookmark-card p,
   .aq-file-card p {
-    margin: 0;
-    color: ${ theme.colors.gray11};
-    font-size: 0.92rem;
-    line-height: 1.65;
+    margin: 5px 0 0;
+    color: ${ theme.colors.gray10};
+    font-size: 13px;
+    line-height: 1.5;
   }
 
   .aq-embed-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.8rem;
-    padding: 1rem 1.08rem 0.72rem;
+    gap: 20px;
+    padding: 15px;
   }
 
   .aq-embed-header a {
@@ -103,7 +112,7 @@ export const markdownRendererRootCardStyles = (theme: Theme) => css`
   }
 
   .aq-embed-frame {
-    padding: 0 1.08rem 0.92rem;
+    padding: 0 17px 15px;
   }
 
   .aq-embed-frame iframe {
@@ -111,25 +120,25 @@ export const markdownRendererRootCardStyles = (theme: Theme) => css`
     width: 100%;
     aspect-ratio: 16 / 9;
     border: 0;
-    border-radius: 12px;
+    border-radius: 0;
     background: ${ theme.colors.gray2};
   }
 
   .aq-embed-fallback {
-    padding: 0 1.08rem 0.92rem;
+    padding: 0 17px 15px;
   }
 
   .aq-embed-thumb {
-    margin: 0 1.08rem 0.92rem;
+    margin: 0 17px 15px;
   }
 
   .aq-embed-caption {
     margin: 0;
-    padding: 0 1.08rem 1rem;
+    padding: 0 17px 15px;
   }
 
   .aq-formula-card {
-    padding: 1rem 1.08rem;
+    padding: 17px;
     text-align: center;
   }
 
@@ -173,5 +182,17 @@ export const markdownRendererRootCardStyles = (theme: Theme) => css`
   .aq-inline-color {
     color: var(--aq-inline-color, inherit);
     font-weight: 700;
+  }
+
+  @media (max-width: 820px) {
+    .aq-bookmark-card a,
+    .aq-file-card a {
+      grid-template-columns: 1fr;
+    }
+
+    .aq-bookmark-card span,
+    .aq-file-card span {
+      max-width: 100%;
+    }
   }
 `

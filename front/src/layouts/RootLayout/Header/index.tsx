@@ -1,10 +1,7 @@
 import NavBar from "./NavBar"
 import Logo from "./Logo"
 import styled from "@emotion/styled"
-import { zIndexes } from "src/styles/zIndexes"
-import { useRouter } from "next/router"
-import { useEffect, useRef, useState } from "react"
-import { FLUID_LAYOUT_MAX_PX } from "../layoutTiers"
+import { useEffect, useRef } from "react"
 
 type Props = {
   fullWidth: boolean
@@ -13,69 +10,7 @@ type Props = {
 }
 
 const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle }) => {
-  const router = useRouter()
-  const isPostDetailRoute = router.pathname === "/posts/[id]"
-  const [isHiddenByScroll, setIsHiddenByScroll] = useState(false)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
-  const hiddenByScroll = isPostDetailRoute && isHiddenByScroll
-  const lastScrollYRef = useRef(0)
-  const rafRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    if (!isPostDetailRoute) {
-      setIsHiddenByScroll(false)
-      return
-    }
-
-    lastScrollYRef.current = window.scrollY
-    const minDelta = window.innerWidth <= 768 ? 12 : 8
-
-    const handleScroll = () => {
-      if (rafRef.current !== null) return
-
-      rafRef.current = window.requestAnimationFrame(() => {
-        rafRef.current = null
-        const currentY = window.scrollY
-        const previousY = lastScrollYRef.current
-        const delta = currentY - previousY
-
-        if (currentY <= 0) {
-          setIsHiddenByScroll(false)
-          lastScrollYRef.current = currentY
-          return
-        }
-
-        if (delta > minDelta && currentY > 72) {
-          setIsHiddenByScroll(true)
-        } else if (currentY < previousY) {
-          setIsHiddenByScroll(false)
-        }
-
-        lastScrollYRef.current = currentY
-      })
-    }
-
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => {
-      window.removeEventListener("scroll", handleScroll)
-      if (rafRef.current !== null) {
-        window.cancelAnimationFrame(rafRef.current)
-        rafRef.current = null
-      }
-    }
-  }, [isPostDetailRoute])
-
-  useEffect(() => {
-    const wrapper = wrapperRef.current
-    if (!wrapper) return
-
-    wrapper.inert = hiddenByScroll
-    return () => {
-      wrapper.inert = false
-    }
-  }, [hiddenByScroll])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -145,23 +80,7 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
   }, [])
 
   return (
-    <StyledWrapper
-      ref={wrapperRef}
-      data-ui="app-header"
-      data-autohide={isPostDetailRoute}
-      data-hidden={hiddenByScroll}
-      aria-hidden={hiddenByScroll ? true : undefined}
-      style={
-        hiddenByScroll
-          ? {
-              transform: "translateY(calc(-100% - 1px))",
-              opacity: 0,
-              pointerEvents: "none",
-              borderBottomColor: "transparent",
-            }
-          : undefined
-      }
-    >
+    <StyledWrapper ref={wrapperRef} data-ui="app-header">
       <div data-full-width={fullWidth} className="container">
         <Logo blogTitle={blogTitle} />
         <div className="nav">
@@ -175,18 +94,13 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
 export default Header
 
 const StyledWrapper = styled.div`
-  z-index: ${zIndexes.header};
+  z-index: 50;
   position: sticky;
   top: 0;
   background: var(--aq-header-bg);
   border-bottom: 1px solid var(--aq-border);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  transform: translateY(0);
-  opacity: 1;
-  transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
-  will-change: transform, opacity;
-  backface-visibility: hidden;
 
   .container {
     display: grid;
@@ -194,15 +108,16 @@ const StyledWrapper = styled.div`
     grid-template-columns: auto 1fr;
     padding-left: 0;
     padding-right: 0;
-    gap: 2rem;
+    gap: 32px;
     align-items: center;
     width: min(calc(100% - 40px), 1240px);
-    min-height: 4rem;
+    min-height: 64px;
     margin: 0 auto;
 
-    @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
+    @media (max-width: 820px) {
       width: min(calc(100% - 24px), 1240px);
-      min-height: 3.6rem;
+      min-height: 58px;
+      gap: 10px;
     }
 
     &[data-full-width="true"] {
@@ -220,11 +135,10 @@ const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 820px) {
     .container {
-      padding-left: 0.62rem;
-      padding-right: 0.62rem;
-      gap: 0.45rem;
+      padding-left: 0;
+      padding-right: 0;
 
       > a {
         min-width: 0;
@@ -241,9 +155,5 @@ const StyledWrapper = styled.div`
         justify-content: flex-end;
       }
     }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
   }
 `

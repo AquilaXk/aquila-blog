@@ -1,16 +1,6 @@
 import { css, type Theme } from "@emotion/react"
 
 export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
-  .aq-toggle {
-    --aq-toggle-caret-size: 0.92rem;
-    --aq-toggle-caret-hit: 1.34rem;
-    --aq-toggle-gap: 0.52rem;
-    --aq-toggle-summary-padding-x: 0;
-    --aq-toggle-indent: calc(var(--aq-toggle-summary-padding-x) + var(--aq-toggle-caret-hit) + var(--aq-toggle-gap));
-    margin: 30px 0;
-    position: relative;
-  }
-
   .aq-mermaid {
     margin: 30px 0;
     display: block;
@@ -23,7 +13,7 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
     padding: 0;
     border: 1px solid ${theme.colors.gray6};
     border-radius: 0;
-    background: transparent;
+    background: ${theme.publicDesign.readableSurface};
     box-shadow: none;
     scrollbar-width: thin;
   }
@@ -37,7 +27,7 @@ export const markdownRendererRootMermaidStyles = (theme: Theme) => css`
     justify-content: space-between;
     border-bottom: 1px solid ${theme.colors.gray6};
     color: ${theme.colors.gray9};
-    background: ${theme.publicDesign.surfaceElevated};
+    background: ${theme.publicDesign.readableSurface};
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
     font-size: 10px;
     font-weight: 700;

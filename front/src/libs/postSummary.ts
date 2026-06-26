@@ -1,4 +1,4 @@
-const SUMMARY_PREFIX_REGEX = /^(?:요약|summary)\s*[:：-]\s*/i
+const SUMMARY_PREFIX_REGEX = /^(?:요약|summary)(?:\*\*|__)?\s*[:：-]\s*/i
 const SUMMARY_LEAD_IN_REGEX =
   /^(?:이 글(?:은|에서는)?|이번 글(?:은|에서는)?|이번 포스트(?:는|에서는)?|이 포스트(?:는|에서는)?|본 글(?:은|에서는)?|해당 글(?:은|에서는)?|이 문서(?:는|에서는)?|본문은|정리하면)\s+/i
 const HTML_COLON_REGEX = /&#x3A;|&#58;/gi
@@ -8,7 +8,7 @@ const MARKDOWN_IMAGE_REGEX = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const INLINE_CODE_REGEX = /`([^`]+)`/g
 const MARKDOWN_LINK_REGEX = /\[(.*?)\]\((.*?)\)/g
 const MARKDOWN_PUNCTUATION_REGEX = /[#>*_~|-]/g
-const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:["'“”]\s*)?(?:요약|summary)(?=\s|[:：-]|$)/i
+const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:["'“”]\s*)?(?:요약|summary)(?:\*\*|__)?(?=\s|[:：-]|$)/i
 const SUMMARY_HTML_BLOCKQUOTE_REGEX = /^\s*<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>\s*/i
 const HTML_TAG_REGEX = /<[^>]+>/g
 const HTML_NBSP_REGEX = /&nbsp;|&#160;/gi
@@ -160,7 +160,7 @@ export const extractLeadingSummaryBlockFromHtml = (
       .trim()
   )
 
-  if (!normalizedInnerText || !/^(?:["'“”]\s*)?(?:요약|summary)(?=\s|[:：-]|$)/i.test(normalizedInnerText)) {
+  if (!normalizedInnerText || !/^(?:["'“”]\s*)?(?:요약|summary)(?:\*\*|__)?(?=\s|[:：-]|$)/i.test(normalizedInnerText)) {
     return {
       summary: "",
       contentHtmlWithoutSummary: contentHtml,

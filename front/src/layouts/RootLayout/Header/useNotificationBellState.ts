@@ -265,7 +265,7 @@ export const useNotificationBellState = (enabled: boolean) => {
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const media = window.matchMedia("(max-width: 720px)")
+    const media = window.matchMedia("(max-width: 820px)")
     const sync = () => {
       setIsMobileViewport(media.matches)
     }

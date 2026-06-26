@@ -58,18 +58,4 @@ const StyledWrapper = styled(Link)`
     letter-spacing: 0.08em;
     white-space: nowrap;
   }
-
-  @media (max-width: 720px) {
-    min-height: 36px;
-    font-size: 1rem;
-
-    .brandMark {
-      width: 1.42rem;
-      height: 1.42rem;
-    }
-
-    em {
-      display: none;
-    }
-  }
 `

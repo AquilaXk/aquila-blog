@@ -31,7 +31,7 @@ export const Global = () => {
           --aq-text: ${lightColors.gray12};
           --aq-muted: ${lightColors.gray10};
           --aq-subtle: ${lightColors.gray9};
-          --aq-header-bg: ${lightDesign.readableSurface};
+          --aq-header-bg: color-mix(in srgb, ${lightDesign.pageBackgroundColor} 92%, transparent);
           --aq-accent: ${lightDesign.accent};
           --aq-accent-muted: ${lightDesign.accentMuted};
           --aq-accent-link: ${lightColors.accentLink};
@@ -51,7 +51,7 @@ export const Global = () => {
           --aq-text: ${darkColors.gray12};
           --aq-muted: ${darkColors.gray10};
           --aq-subtle: ${darkColors.gray9};
-          --aq-header-bg: ${darkDesign.readableSurface};
+          --aq-header-bg: color-mix(in srgb, ${darkDesign.pageBackgroundColor} 92%, transparent);
           --aq-accent: ${darkDesign.accent};
           --aq-accent-muted: ${darkDesign.accentMuted};
           --aq-accent-link: ${darkColors.accentLink};

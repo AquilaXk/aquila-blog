@@ -114,7 +114,7 @@ test.describe("core smoke detail mermaid", () => {
   await expect(page.locator("pre code", { hasText: /^info$/ })).toHaveCount(0)
 })
 
-  test("mermaid source style 지시문이 있어도 상세 배경은 투명 preset을 유지한다", async ({ page }) => {
+  test("mermaid source style 지시문이 있어도 상세 배경은 V4 paper preset을 유지한다", async ({ page }) => {
   await page.route("**/post/api/v1/posts/782**", async (route) => {
     await route.fulfill({
       status: 200,
@@ -176,7 +176,7 @@ test.describe("core smoke detail mermaid", () => {
   const mermaidBlockBackground = await page.locator("pre.aq-mermaid").first().evaluate((node) => {
     return window.getComputedStyle(node).backgroundColor
   })
-  expect(["transparent", "rgba(0, 0, 0, 0)"]).toContain(mermaidBlockBackground)
+  expect(["rgb(255, 255, 255)", "rgba(255, 255, 255, 1)"]).toContain(mermaidBlockBackground)
 
   const nodeFill = await page.locator(".aq-mermaid-stage svg .node rect").first().evaluate((node) => {
     return window.getComputedStyle(node as SVGGraphicsElement).fill
@@ -184,7 +184,7 @@ test.describe("core smoke detail mermaid", () => {
   expect(["transparent", "rgba(0, 0, 0, 0)"]).toContain(nodeFill)
 })
 
-  test("mermaid init theme override 가 있어도 상세 배경은 투명 preset을 유지한다", async ({ page }) => {
+  test("mermaid init theme override 가 있어도 상세 배경은 V4 paper preset을 유지한다", async ({ page }) => {
   await page.route("**/post/api/v1/posts/783**", async (route) => {
     await route.fulfill({
       status: 200,
@@ -247,7 +247,7 @@ test.describe("core smoke detail mermaid", () => {
   const mermaidBlockBackground = await page.locator("pre.aq-mermaid").first().evaluate((node) => {
     return window.getComputedStyle(node).backgroundColor
   })
-  expect(["transparent", "rgba(0, 0, 0, 0)"]).toContain(mermaidBlockBackground)
+  expect(["rgb(255, 255, 255)", "rgba(255, 255, 255, 1)"]).toContain(mermaidBlockBackground)
 
   const nodeFill = await page.locator(".aq-mermaid-stage svg .node rect").first().evaluate((node) => {
     return window.getComputedStyle(node as SVGGraphicsElement).fill

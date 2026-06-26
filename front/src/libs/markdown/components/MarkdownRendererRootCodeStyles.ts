@@ -13,7 +13,6 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
   }
 
   .aq-code-block {
-    --aq-code-shell-padding-x: 0.72rem;
     --aq-code-gutter-width: 1.34rem;
     --aq-code-gutter-gap: 0.54rem;
     margin: 28px 0;
@@ -21,9 +20,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     min-width: 0;
     border-radius: 0;
     overflow: hidden;
-    border: 1px solid
-      ${
-        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(17, 24, 39, 0.08)"};
+    border: 1px solid #27334a;
     box-shadow: none;
   }
 
@@ -32,8 +29,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    min-height: 42px;
-    padding: 0 14px;
+    padding: 11px 14px;
     background: #0f1728;
     border-bottom: 1px solid #27334a;
     color: #7895c9;
@@ -46,7 +42,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .aq-code-copy {
@@ -59,9 +55,8 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     border-radius: 0;
     width: auto;
     min-width: 44px;
-    min-height: 32px;
-    padding: 0 8px;
-    margin-right: -8px;
+    min-height: 0;
+    padding: 0;
     font: inherit;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -100,7 +95,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    padding: 1.05rem var(--aq-code-shell-padding-x);
+    padding: 22px;
     min-width: 100%;
     background: #0f1728;
     color: #dbe7ff;
@@ -272,7 +267,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     color: #bbb529;
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 820px) {
     .aq-code code,
     pre code {
       font-size: ${articleTypographyScale.codeFontSizeMobile};
@@ -325,7 +320,6 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     }
 
     .aq-code-block {
-      --aq-code-shell-padding-x: 0.58rem;
       --aq-code-gutter-width: 1.16rem;
       --aq-code-gutter-gap: 0.46rem;
     }

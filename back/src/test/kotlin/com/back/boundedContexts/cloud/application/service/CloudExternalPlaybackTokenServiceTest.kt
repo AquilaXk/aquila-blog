@@ -45,7 +45,7 @@ class CloudExternalPlaybackTokenServiceTest {
     }
 
     @Test
-    @DisplayName("관리자 본인 동영상 파일에 대해 5분 TTL raw token을 반환하고 hash만 저장한다")
+    @DisplayName("관리자 본인 동영상 파일에 대해 6시간 TTL raw token을 반환하고 hash만 저장한다")
     fun issueStoresHashOnly() {
         files.savedFiles += videoFile(id = 12L, ownerMemberId = 7L)
 
@@ -53,7 +53,7 @@ class CloudExternalPlaybackTokenServiceTest {
 
         assertThat(issued.fileId).isEqualTo(12L)
         assertThat(issued.token).isNotBlank()
-        assertThat(issued.expiresAt).isEqualTo(Instant.parse("2026-06-26T12:05:00Z"))
+        assertThat(issued.expiresAt).isEqualTo(Instant.parse("2026-06-26T18:00:00Z"))
         assertThat(issued.contentPath)
             .startsWith("/system/api/v1/adm/cloud/files/12/external-content?token=")
         assertThat(tokens.savedTokens).hasSize(1)

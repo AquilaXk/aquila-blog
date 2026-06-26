@@ -415,12 +415,12 @@ const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
       const command = buildExternalPlaybackCommand(player, token.contentUrl)
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(command)
-        setCommandState({ status: "success", message: `${playerLabel} 명령을 복사했습니다. 5분 안에 실행하세요.` })
+        setCommandState({ status: "success", message: `${playerLabel} 명령을 복사했습니다. 6시간 동안 유효합니다.` })
         return
       }
       if (typeof window !== "undefined") {
         window.prompt("명령을 복사하세요.", command)
-        setCommandState({ status: "success", message: `${playerLabel} 명령을 표시했습니다. 5분 안에 실행하세요.` })
+        setCommandState({ status: "success", message: `${playerLabel} 명령을 표시했습니다. 6시간 동안 유효합니다.` })
         return
       }
       throw new Error("clipboard를 사용할 수 없습니다.")

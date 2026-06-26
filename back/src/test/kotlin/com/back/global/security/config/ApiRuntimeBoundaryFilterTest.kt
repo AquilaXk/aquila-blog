@@ -24,6 +24,21 @@ class ApiRuntimeBoundaryFilterTest {
     }
 
     @Test
+    @DisplayName("read 모드에서 외부 cloud content GET HEAD 경로는 차단하지 않는다")
+    fun `read mode allows external cloud content get and head endpoints`() {
+        val filter = ApiRuntimeBoundaryFilter("read", createApiCorsPolicy())
+
+        for (method in listOf("GET", "HEAD")) {
+            val request = MockHttpServletRequest(method, "/system/api/v1/adm/cloud/files/12/external-content")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+    }
+
+    @Test
     @DisplayName("런타임 경계 503 응답에도 CORS 헤더를 포함한다")
     fun `blocked runtime boundary response includes cors headers`() {
         val filter = ApiRuntimeBoundaryFilter("read", createApiCorsPolicy())

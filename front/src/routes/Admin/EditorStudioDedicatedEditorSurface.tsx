@@ -99,6 +99,8 @@ const formatOutlineText = (text: string) => {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/\*([^*\s](?:[^*]*[^*\s])?)\*/g, "$1")
+    .replace(/(^|[^A-Za-z0-9_])__([^_\s](?:[^_]*[^_\s])?)__(?=$|[^A-Za-z0-9_])/g, "$1$2")
+    .replace(/(^|[^A-Za-z0-9_])_([^_\s](?:[^_]*[^_\s])?)_(?=$|[^A-Za-z0-9_])/g, "$1$2")
     .replace(/~~(.*?)~~/g, "$1")
     .replace(/@@CODE_SPAN_(\d+)@@/g, (_, index: string) => codeSpans[Number(index)] ?? "")
     .trim()

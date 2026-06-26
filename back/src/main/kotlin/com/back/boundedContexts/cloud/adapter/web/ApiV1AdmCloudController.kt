@@ -2,6 +2,7 @@ package com.back.boundedContexts.cloud.adapter.web
 
 import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenDto
 import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenService
+import com.back.boundedContexts.cloud.application.service.CloudFileContent
 import com.back.boundedContexts.cloud.application.service.CloudFileDto
 import com.back.boundedContexts.cloud.application.service.CloudFileService
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartResultDto
@@ -267,67 +268,29 @@ class ApiV1AdmCloudController(
         @Positive
         id: Long,
         request: HttpServletRequest,
-    ): ResponseEntity<Resource> {
-        val rangeHeader = request.getHeader(HttpHeaders.RANGE)
-
-        // 동영상 seek 호환을 위해 단일 byte range만 허용하고 multi-range는 거절한다.
-        if (!rangeHeader.isNullOrBlank()) {
-            val file =
+    ): ResponseEntity<Resource> =
+        contentResponse(
+            request = request,
+            loadFile = {
                 cloudFileService.get(
                     ownerMemberId = securityUser.id,
                     fileId = id,
                 )
-            val totalLength = file.byteSize
-            val range = parseSingleRange(rangeHeader, totalLength)
-            if (range == null) {
-                return noStoreHeaders(
-                    ResponseEntity
-                        .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                        .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength"),
-                ).build()
-            }
-            val content =
+            },
+            openRange = { range ->
                 cloudFileService.openContentRange(
                     ownerMemberId = securityUser.id,
                     fileId = id,
                     range = range,
                 )
-            val storedObject = content.storedObject
-
-            return noStoreHeaders(
-                ResponseEntity
-                    .status(HttpStatus.PARTIAL_CONTENT)
-                    .contentType(safeMediaType(storedObject.contentType))
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
-                    .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename))
-                    .contentLength(range.last - range.first + 1),
-            ).body(InputStreamResource(storedObject.inputStream))
-        }
-
-        val content =
-            cloudFileService.openContent(
-                ownerMemberId = securityUser.id,
-                fileId = id,
-            )
-        val storedObject = content.storedObject
-        val totalLength = storedObject.contentLength ?: -1
-        val responseBuilder =
-            noStoreHeaders(
-                ResponseEntity
-                    .ok()
-                    .contentType(safeMediaType(storedObject.contentType))
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename)),
-            )
-        val finalizedBuilder =
-            totalLength
-                .takeIf { it >= 0 }
-                ?.let(responseBuilder::contentLength)
-                ?: responseBuilder
-
-        return finalizedBuilder.body(InputStreamResource(storedObject.inputStream))
-    }
+            },
+            openFull = {
+                cloudFileService.openContent(
+                    ownerMemberId = securityUser.id,
+                    fileId = id,
+                )
+            },
+        )
 
     @GetMapping("/files/{id}/external-content")
     @Transactional(readOnly = true)
@@ -338,66 +301,29 @@ class ApiV1AdmCloudController(
         @RequestParam
         token: String,
         request: HttpServletRequest,
-    ): ResponseEntity<Resource> {
-        val rangeHeader = request.getHeader(HttpHeaders.RANGE)
-
-        if (!rangeHeader.isNullOrBlank()) {
-            val file =
+    ): ResponseEntity<Resource> =
+        contentResponse(
+            request = request,
+            loadFile = {
                 cloudExternalPlaybackTokenService.getFile(
                     token = token,
                     fileId = id,
                 )
-            val totalLength = file.byteSize
-            val range = parseSingleRange(rangeHeader, totalLength)
-            if (range == null) {
-                return noStoreHeaders(
-                    ResponseEntity
-                        .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                        .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength"),
-                ).build()
-            }
-            val content =
+            },
+            openRange = { range ->
                 cloudExternalPlaybackTokenService.openContentRange(
                     token = token,
                     fileId = id,
                     range = range,
                 )
-            val storedObject = content.storedObject
-
-            return noStoreHeaders(
-                ResponseEntity
-                    .status(HttpStatus.PARTIAL_CONTENT)
-                    .contentType(safeMediaType(storedObject.contentType))
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
-                    .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename))
-                    .contentLength(range.last - range.first + 1),
-            ).body(InputStreamResource(storedObject.inputStream))
-        }
-
-        val content =
-            cloudExternalPlaybackTokenService.openContent(
-                token = token,
-                fileId = id,
-            )
-        val storedObject = content.storedObject
-        val totalLength = storedObject.contentLength ?: -1
-        val responseBuilder =
-            noStoreHeaders(
-                ResponseEntity
-                    .ok()
-                    .contentType(safeMediaType(storedObject.contentType))
-                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename)),
-            )
-        val finalizedBuilder =
-            totalLength
-                .takeIf { it >= 0 }
-                ?.let(responseBuilder::contentLength)
-                ?: responseBuilder
-
-        return finalizedBuilder.body(InputStreamResource(storedObject.inputStream))
-    }
+            },
+            openFull = {
+                cloudExternalPlaybackTokenService.openContent(
+                    token = token,
+                    fileId = id,
+                )
+            },
+        )
 
     @DeleteMapping("/files/{id}")
     fun delete(
@@ -412,6 +338,60 @@ class ApiV1AdmCloudController(
         )
 
         return RsData("200-1", "클라우드 파일이 삭제되었습니다.")
+    }
+
+    private fun contentResponse(
+        request: HttpServletRequest,
+        loadFile: () -> CloudFileDto,
+        openRange: (LongRange) -> CloudFileContent,
+        openFull: () -> CloudFileContent,
+    ): ResponseEntity<Resource> {
+        val rangeHeader = request.getHeader(HttpHeaders.RANGE)
+
+        // 동영상 seek 호환을 위해 단일 byte range만 허용하고 multi-range는 거절한다.
+        if (!rangeHeader.isNullOrBlank()) {
+            val file = loadFile()
+            val totalLength = file.byteSize
+            val range = parseSingleRange(rangeHeader, totalLength)
+            if (range == null) {
+                return noStoreHeaders(
+                    ResponseEntity
+                        .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength"),
+                ).build()
+            }
+            val content = openRange(range)
+            val storedObject = content.storedObject
+
+            return noStoreHeaders(
+                ResponseEntity
+                    .status(HttpStatus.PARTIAL_CONTENT)
+                    .contentType(safeMediaType(storedObject.contentType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename))
+                    .contentLength(range.last - range.first + 1),
+            ).body(InputStreamResource(storedObject.inputStream))
+        }
+
+        val content = openFull()
+        val storedObject = content.storedObject
+        val totalLength = storedObject.contentLength ?: -1
+        val responseBuilder =
+            noStoreHeaders(
+                ResponseEntity
+                    .ok()
+                    .contentType(safeMediaType(storedObject.contentType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename)),
+            )
+        val finalizedBuilder =
+            totalLength
+                .takeIf { it >= 0 }
+                ?.let(responseBuilder::contentLength)
+                ?: responseBuilder
+
+        return finalizedBuilder.body(InputStreamResource(storedObject.inputStream))
     }
 
     private fun inlineDisposition(filename: String): String =

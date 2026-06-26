@@ -312,26 +312,28 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("외부 cloud content 공개 route는 stale 인증 정보가 있어도 token 검증 경로로 진행한다")
+    @DisplayName("외부 cloud content 공개 route는 GET/HEAD stale 인증 정보가 있어도 token 검증 경로로 진행한다")
     fun `cloud external content public route proceeds with stale auth credentials`() {
-        val fixture =
-            CustomAuthenticationFilterFixture(
-                publicApiRequestMatcherOverride =
-                    PublicApiRequestMatcher(listOf(CloudSecurityConfigurer())),
-            )
-        val request = MockHttpServletRequest("GET", "/system/api/v1/adm/cloud/files/12/external-content")
+        listOf("GET", "HEAD").forEach { method ->
+            val fixture =
+                CustomAuthenticationFilterFixture(
+                    publicApiRequestMatcherOverride =
+                        PublicApiRequestMatcher(listOf(CloudSecurityConfigurer())),
+                )
+            val request = MockHttpServletRequest(method, "/system/api/v1/adm/cloud/files/12/external-content")
 
-        fixture.givenEmptyAuthorizationHeader()
-        fixture.givenCookieTokens(accessToken = "broken-access-token")
-        fixture.givenClientIp(request, "203.0.113.12")
-        given(fixture.actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
+            fixture.givenEmptyAuthorizationHeader()
+            fixture.givenCookieTokens(accessToken = "broken-access-token")
+            fixture.givenClientIp(request, "203.0.113.12")
+            given(fixture.actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
 
-        val response = MockHttpServletResponse()
-        val filterChain = fixture.noContentFilterChain()
+            val response = MockHttpServletResponse()
+            val filterChain = fixture.noContentFilterChain()
 
-        fixture.authenticationFilter().doFilter(request, response, filterChain)
+            fixture.authenticationFilter().doFilter(request, response, filterChain)
 
-        assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+        }
     }
 
     @Test

@@ -144,7 +144,7 @@ class CloudExternalPlaybackTokenService(
         )
 
     companion object {
-        private val TOKEN_TTL: Duration = Duration.ofMinutes(5)
+        private val TOKEN_TTL: Duration = Duration.ofHours(6)
         private val secureRandom = SecureRandom()
 
         fun hashToken(token: String): String =

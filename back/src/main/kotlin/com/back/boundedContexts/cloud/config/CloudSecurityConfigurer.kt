@@ -11,6 +11,7 @@ class CloudSecurityConfigurer : PublicApiRouteContributor {
     override fun publicApiRoutes() =
         listOf(
             PublicApiRouteSpec("/system/api/v1/adm/cloud/files/*/external-content", HttpMethod.GET),
+            PublicApiRouteSpec("/system/api/v1/adm/cloud/files/*/external-content", HttpMethod.HEAD),
         )
 
     fun configure(authorize: AuthorizeHttpRequestsDsl) {

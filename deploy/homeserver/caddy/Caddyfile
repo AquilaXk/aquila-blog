@@ -116,6 +116,9 @@ http://{$API_DOMAIN} {
   @signupVerifySensitive path /member/api/v1/signup/email/verify
   log_skip @signupVerifySensitive
 
+  @cloudExternalContentSensitive path /system/api/v1/adm/cloud/files/*/external-content
+  log_skip @cloudExternalContentSensitive
+
   handle @notificationSse {
     header {
       Cache-Control "no-cache, no-transform"

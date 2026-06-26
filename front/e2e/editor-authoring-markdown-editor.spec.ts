@@ -347,13 +347,14 @@ test.describe("Markdown editor replacement", () => {
 
   test("dedicated editor outline hides inline markdown markers from headings", async ({ page }) => {
     await page.setViewportSize({ width: 2048, height: 1152 })
-    await routeAuthenticatedEditor(page, ["## **시작하며**", "", "### `핵심` 포인트"].join("\n"))
+    await routeAuthenticatedEditor(page, ["## **시작하며**", "", "### `핵심` 포인트", "", "## user_id_field"].join("\n"))
 
     await page.goto("/editor/new?source=local-draft")
 
     const outline = page.getByLabel("문서 목차")
     await expect(outline.locator("strong").filter({ hasText: /^시작하며$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /^핵심 포인트$/ })).toBeVisible()
+    await expect(outline.locator("strong").filter({ hasText: /^user_id_field$/ })).toBeVisible()
     await expect(outline.locator("strong").filter({ hasText: /\*\*/ })).toHaveCount(0)
     await expect(outline.locator("strong").filter({ hasText: /`/ })).toHaveCount(0)
   })

@@ -156,6 +156,7 @@ const setupAdminCloudMocks = async (
     failUploadNames?: string[]
     failVideoPartOnceNumber?: number
     failVideoSessionGetOnceStatus?: number
+    externalPlaybackTokenDelayMs?: number
     initialFiles?: CloudFileFixture[]
     listDelayMs?: number
     lookupOnlyFiles?: CloudFileFixture[]
@@ -311,6 +312,9 @@ const setupAdminCloudMocks = async (
     }
 
     externalPlaybackTokenRequests.push(id)
+    if (options.externalPlaybackTokenDelayMs) {
+      await delay(options.externalPlaybackTokenDelayMs)
+    }
     await fulfillJson(
       route,
       {
@@ -729,6 +733,42 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByText("파일을 불러오는 중입니다.")).toHaveCount(0)
     await expect(page.getByRole("row", { name: /운영 점검 리포트\.pdf/ })).toBeVisible()
     await expect(page.getByRole("status", { name: "파일 목록 로딩" })).toHaveCount(0)
+  })
+
+  test("외부 재생 token 응답 중 선택이 바뀌면 이전 파일 명령을 복사하지 않는다", async ({ page }) => {
+    const secondVideo: CloudFileFixture = {
+      id: 105,
+      ownerMemberId: 1,
+      originalFilename: "release-demo.mp4",
+      contentType: "video/mp4",
+      byteSize: 4_194_304,
+      mediaKind: "VIDEO",
+      folderPath: "/video",
+      createdAt: "2026-06-12T12:00:00Z",
+      modifiedAt: "2026-06-12T12:00:00Z",
+    }
+    const mocks = await setupAdminCloudMocks(page, {
+      externalPlaybackTokenDelayMs: 250,
+      initialFiles: [...CLOUD_FILES, secondVideo],
+    })
+
+    await page.goto("/admin/cloud")
+    await page.locator('button[title="deploy-walkthrough.mp4"]').click()
+    await page.getByRole("button", { name: "IINA 명령 복사" }).click()
+    await expect.poll(() => mocks.externalPlaybackTokenRequests).toEqual(["103"])
+
+    await page.locator('button[title="release-demo.mp4"]').click()
+    await expect(page.getByRole("heading", { name: "클라우드 동영상" })).toBeVisible()
+    await page.waitForTimeout(350)
+
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
+        )
+      )
+      .toBe("")
+    await expect(page.getByRole("status").filter({ hasText: /명령/ })).toHaveCount(0)
   })
 
   test("100MB 초과 동영상은 resumable 세션과 조각 업로드로 처리한다", async ({ page }, testInfo) => {

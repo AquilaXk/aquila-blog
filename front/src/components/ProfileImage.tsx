@@ -48,6 +48,7 @@ const ProfileImage: React.FC<Props> = ({
       onError={handleImageError}
       style={{
         display: "block",
+        borderRadius: "50%",
         objectFit: "cover",
         objectPosition: "center 38%",
         ...(fillContainer

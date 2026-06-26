@@ -293,10 +293,12 @@ const expectNoHorizontalOverflow = async (page: Page) => {
     viewportWidth: window.innerWidth,
     htmlScrollWidth: document.documentElement.scrollWidth,
     bodyScrollWidth: document.body.scrollWidth,
+    zoom: Number.parseFloat(window.getComputedStyle(document.documentElement).zoom || "1") || 1,
   }))
+  const maxScrollWidth = Math.ceil(snapshot.viewportWidth * snapshot.zoom)
 
-  expect(snapshot.htmlScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
-  expect(snapshot.bodyScrollWidth).toBeLessThanOrEqual(snapshot.viewportWidth)
+  expect(snapshot.htmlScrollWidth).toBeLessThanOrEqual(maxScrollWidth)
+  expect(snapshot.bodyScrollWidth).toBeLessThanOrEqual(maxScrollWidth)
 }
 
 test.beforeEach(async ({ page }) => {
@@ -387,8 +389,12 @@ test("모바일 header와 login modal은 keyboard-only 진입에서 심각도 �
   await mockFeedEndpoints(page)
   await page.goto("/")
 
-  await expect(page.getByRole("button", { name: "헤더 메뉴 열기" })).toHaveCount(0)
-  await expect(page.getByRole("link", { name: "Home" })).toBeVisible()
+  const menuButton = page.getByRole("button", { name: "메뉴 열기" })
+  await expect(menuButton).toBeVisible()
+  await expect(menuButton).toHaveAttribute("aria-expanded", "false")
+  await menuButton.click()
+  await expect(menuButton).toHaveAttribute("aria-expanded", "true")
+  await expect(page.getByRole("link", { name: "Notes" })).toBeVisible()
   await expect(page.getByRole("link", { name: "About" })).toBeVisible()
   await expect(page.getByRole("button", { name: "테마 전환" })).toBeVisible()
   await expectNoHorizontalOverflow(page)

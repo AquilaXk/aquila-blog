@@ -27,6 +27,27 @@ export type CloudFileListParams = {
   mediaKind?: CloudMediaKind
 }
 
+export type CloudExternalPlaybackToken = {
+  fileId: number
+  token: string
+  expiresAt: string
+  contentPath: string
+  contentUrl: string
+}
+
+type CloudExternalPlaybackTokenDto = {
+  fileId?: number
+  token?: string
+  expiresAt?: string
+  contentPath?: string
+}
+
+type RsDataCloudExternalPlaybackTokenDto = {
+  resultCode?: string
+  msg?: string
+  data?: CloudExternalPlaybackTokenDto
+}
+
 type CloudVideoUploadSession = {
   id: number
   ownerMemberId: number
@@ -89,6 +110,38 @@ const appendQuery = (path: string, params: Record<string, string | undefined>) =
 
 export const getCloudFileContentUrl = (fileId: number) =>
   getApiRequestUrl(`/system/api/v1/adm/cloud/files/${fileId}/content`)
+
+const normalizeCloudExternalPlaybackToken = (
+  fileId: number,
+  token: CloudExternalPlaybackTokenDto | undefined
+): CloudExternalPlaybackToken => {
+  const normalizedFileId = Number(token?.fileId || fileId)
+  const rawToken = token?.token?.trim() || ""
+  const expiresAt = token?.expiresAt?.trim() || ""
+  const contentPath = token?.contentPath?.trim() || ""
+  if (!normalizedFileId || !rawToken || !expiresAt || !contentPath) {
+    throw new Error("외부 재생 token을 발급하지 못했습니다.")
+  }
+
+  return {
+    fileId: normalizedFileId,
+    token: rawToken,
+    expiresAt,
+    contentPath,
+    contentUrl: getApiRequestUrl(contentPath, { backendProxy: "bypass" }),
+  }
+}
+
+export const issueCloudExternalPlaybackToken = async (fileId: number): Promise<CloudExternalPlaybackToken> => {
+  const response = await apiFetch<RsDataCloudExternalPlaybackTokenDto>(
+    `/system/api/v1/adm/cloud/files/${fileId}/external-playback-token`,
+    {
+      method: "POST",
+      timeoutMs: 30_000,
+    }
+  )
+  return normalizeCloudExternalPlaybackToken(fileId, response.data)
+}
 
 export const isResumableVideoUploadFile = (file: File) => {
   const lowerName = file.name.toLowerCase()

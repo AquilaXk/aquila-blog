@@ -1,5 +1,6 @@
 package com.back.support
 
+import com.back.boundedContexts.cloud.config.CloudSecurityConfigurer
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
@@ -104,6 +105,9 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
 
         @Bean
         fun postSecurityConfigurer(): PostSecurityConfigurer = PostSecurityConfigurer()
+
+        @Bean
+        fun cloudSecurityConfigurer(): CloudSecurityConfigurer = CloudSecurityConfigurer()
 
         @Bean
         fun apiCorsPolicy(environment: Environment): ApiCorsPolicy =

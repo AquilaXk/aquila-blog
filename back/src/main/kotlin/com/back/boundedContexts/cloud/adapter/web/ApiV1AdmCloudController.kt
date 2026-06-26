@@ -1,5 +1,8 @@
 package com.back.boundedContexts.cloud.adapter.web
 
+import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenDto
+import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenService
+import com.back.boundedContexts.cloud.application.service.CloudFileContent
 import com.back.boundedContexts.cloud.application.service.CloudFileDto
 import com.back.boundedContexts.cloud.application.service.CloudFileService
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartResultDto
@@ -48,6 +51,7 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody as OpenApiRequestBod
 class ApiV1AdmCloudController(
     private val cloudFileService: CloudFileService,
     private val cloudVideoUploadSessionService: CloudVideoUploadSessionService,
+    private val cloudExternalPlaybackTokenService: CloudExternalPlaybackTokenService,
 ) {
     data class CloudFileListResBody(
         val files: List<CloudFileDto>,
@@ -237,6 +241,25 @@ class ApiV1AdmCloudController(
             fileId = id,
         )
 
+    @PostMapping("/files/{id}/external-playback-token")
+    @ApiResponse(responseCode = "201", description = "Created")
+    fun issueExternalPlaybackToken(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+    ): ResponseEntity<RsData<CloudExternalPlaybackTokenDto>> {
+        val issued =
+            cloudExternalPlaybackTokenService.issue(
+                ownerMemberId = securityUser.id,
+                fileId = id,
+            )
+
+        return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(RsData("201-1", "외부 재생 token이 발급되었습니다.", issued))
+    }
+
     @GetMapping("/files/{id}/content")
     @Transactional(readOnly = true)
     fun content(
@@ -245,16 +268,89 @@ class ApiV1AdmCloudController(
         @Positive
         id: Long,
         request: HttpServletRequest,
+    ): ResponseEntity<Resource> =
+        contentResponse(
+            request = request,
+            loadFile = {
+                cloudFileService.get(
+                    ownerMemberId = securityUser.id,
+                    fileId = id,
+                )
+            },
+            openRange = { range ->
+                cloudFileService.openContentRange(
+                    ownerMemberId = securityUser.id,
+                    fileId = id,
+                    range = range,
+                )
+            },
+            openFull = {
+                cloudFileService.openContent(
+                    ownerMemberId = securityUser.id,
+                    fileId = id,
+                )
+            },
+        )
+
+    @GetMapping("/files/{id}/external-content")
+    @Transactional(readOnly = true)
+    fun externalContent(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestParam
+        token: String,
+        request: HttpServletRequest,
+    ): ResponseEntity<Resource> =
+        contentResponse(
+            request = request,
+            loadFile = {
+                cloudExternalPlaybackTokenService.getFile(
+                    token = token,
+                    fileId = id,
+                )
+            },
+            openRange = { range ->
+                cloudExternalPlaybackTokenService.openContentRange(
+                    token = token,
+                    fileId = id,
+                    range = range,
+                )
+            },
+            openFull = {
+                cloudExternalPlaybackTokenService.openContent(
+                    token = token,
+                    fileId = id,
+                )
+            },
+        )
+
+    @DeleteMapping("/files/{id}")
+    fun delete(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+    ): RsData<Void> {
+        cloudFileService.delete(
+            ownerMemberId = securityUser.id,
+            fileId = id,
+        )
+
+        return RsData("200-1", "클라우드 파일이 삭제되었습니다.")
+    }
+
+    private fun contentResponse(
+        request: HttpServletRequest,
+        loadFile: () -> CloudFileDto,
+        openRange: (LongRange) -> CloudFileContent,
+        openFull: () -> CloudFileContent,
     ): ResponseEntity<Resource> {
         val rangeHeader = request.getHeader(HttpHeaders.RANGE)
 
         // 동영상 seek 호환을 위해 단일 byte range만 허용하고 multi-range는 거절한다.
         if (!rangeHeader.isNullOrBlank()) {
-            val file =
-                cloudFileService.get(
-                    ownerMemberId = securityUser.id,
-                    fileId = id,
-                )
+            val file = loadFile()
             val totalLength = file.byteSize
             val range = parseSingleRange(rangeHeader, totalLength)
             if (range == null) {
@@ -264,12 +360,7 @@ class ApiV1AdmCloudController(
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength"),
                 ).build()
             }
-            val content =
-                cloudFileService.openContentRange(
-                    ownerMemberId = securityUser.id,
-                    fileId = id,
-                    range = range,
-                )
+            val content = openRange(range)
             val storedObject = content.storedObject
 
             return noStoreHeaders(
@@ -283,11 +374,7 @@ class ApiV1AdmCloudController(
             ).body(InputStreamResource(storedObject.inputStream))
         }
 
-        val content =
-            cloudFileService.openContent(
-                ownerMemberId = securityUser.id,
-                fileId = id,
-            )
+        val content = openFull()
         val storedObject = content.storedObject
         val totalLength = storedObject.contentLength ?: -1
         val responseBuilder =
@@ -305,21 +392,6 @@ class ApiV1AdmCloudController(
                 ?: responseBuilder
 
         return finalizedBuilder.body(InputStreamResource(storedObject.inputStream))
-    }
-
-    @DeleteMapping("/files/{id}")
-    fun delete(
-        @AuthenticationPrincipal securityUser: SecurityUser,
-        @PathVariable
-        @Positive
-        id: Long,
-    ): RsData<Void> {
-        cloudFileService.delete(
-            ownerMemberId = securityUser.id,
-            fileId = id,
-        )
-
-        return RsData("200-1", "클라우드 파일이 삭제되었습니다.")
     }
 
     private fun inlineDisposition(filename: String): String =

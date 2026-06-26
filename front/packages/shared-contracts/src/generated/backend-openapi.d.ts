@@ -164,6 +164,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/api/v1/adm/cloud/files/{id}/external-playback-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["issueExternalPlaybackToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/api/v1/adm/cloud/files/video-upload-sessions": {
         parameters: {
             query?: never;
@@ -721,6 +737,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["delete_2"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/cloud/files/{id}/external-content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["externalContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1674,6 +1706,19 @@ export interface components {
             resultCode?: string;
             msg?: string;
             data?: components["schemas"]["CloudFileDto"];
+        };
+        CloudExternalPlaybackTokenDto: {
+            /** Format: int64 */
+            fileId?: number;
+            token?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            contentPath?: string;
+        };
+        RsDataCloudExternalPlaybackTokenDto: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["CloudExternalPlaybackTokenDto"];
         };
         CreateVideoUploadSessionReqBody: {
             originalFilename?: string;
@@ -2961,6 +3006,28 @@ export interface operations {
             };
         };
     };
+    issueExternalPlaybackToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataCloudExternalPlaybackTokenDto"];
+                };
+            };
+        };
+    };
     createVideoUploadSession: {
         parameters: {
             query?: never;
@@ -3859,6 +3926,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataVoid"];
+                };
+            };
+        };
+    };
+    externalContent: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
                 };
             };
         };

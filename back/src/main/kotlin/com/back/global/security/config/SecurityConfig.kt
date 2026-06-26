@@ -1,5 +1,6 @@
 package com.back.global.security.config
 
+import com.back.boundedContexts.cloud.config.CloudSecurityConfigurer
 import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
@@ -41,6 +42,7 @@ class SecurityConfig(
     private val authSecurityConfigurer: AuthSecurityConfigurer,
     private val memberSecurityConfigurer: MemberSecurityConfigurer,
     private val postSecurityConfigurer: PostSecurityConfigurer,
+    private val cloudSecurityConfigurer: CloudSecurityConfigurer,
     private val apiCorsPolicy: ApiCorsPolicy,
     private val objectMapper: ObjectMapper,
     private val environment: Environment,
@@ -58,6 +60,7 @@ class SecurityConfig(
                 authSecurityConfigurer.configure(this)
                 memberSecurityConfigurer.configure(this)
                 postSecurityConfigurer.configure(this)
+                cloudSecurityConfigurer.configure(this)
 
                 authorize("/*/api/*/adm/**", hasRole("ADMIN"))
                 authorize("/*/api/*/**", authenticated)

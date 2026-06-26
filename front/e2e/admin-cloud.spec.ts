@@ -588,11 +588,18 @@ test.describe("관리자 클라우드", () => {
     await expect(page.getByLabel("사진 썸네일")).toHaveCount(0)
 
     await page.locator('button[title="deploy-walkthrough.mp4"]').click()
-    await expect(page.getByRole("heading", { name: "동영상 플레이어" })).toBeVisible()
-    await expect(page.getByText("IINA playback model")).toBeVisible()
-    await expect(page.getByText("챕터 3개")).toBeVisible()
-    await expect(page.getByRole("button", { name: "자막" })).toBeVisible()
-    await expect(page.getByText("재생 기록 00:00")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "클라우드 동영상" })).toBeVisible()
+    await expect(page.getByText("IINA playback model")).toHaveCount(0)
+    await expect(page.getByText(/IINA/)).toHaveCount(0)
+    await expect(page.getByText(/mpv/i)).toHaveCount(0)
+    await expect(page.getByText(/챕터 \d+개/)).toHaveCount(0)
+    await expect(page.getByText(/재생 기록/)).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "자막" })).toHaveCount(0)
+
+    const video = page.locator("video")
+    await expect(video).toBeVisible()
+    await page.getByRole("button", { name: "1.5x" }).click()
+    await expect.poll(async () => video.evaluate((node) => (node as HTMLVideoElement).playbackRate)).toBe(1.5)
 
     await expect(page.getByRole("button", { name: "deploy-walkthrough.mp4 삭제" })).toHaveCount(0)
     await page.getByRole("checkbox", { name: "deploy-walkthrough.mp4 선택" }).check()

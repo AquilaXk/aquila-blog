@@ -21,8 +21,6 @@ import {
 import AppIcon from "src/components/icons/AppIcon"
 import {
   CLOUD_FILTERS,
-  IINA_CHAPTERS,
-  IINA_SHORTCUTS,
   PLAYBACK_SPEEDS,
   doesCloudFileMatchFilters,
   formatCloudDate,
@@ -89,7 +87,6 @@ import {
   SkeletonRow,
   SkeletonRows,
   ToastViewport,
-  Timeline,
   UploadZone,
   UploadInput,
   ViewModeButton,
@@ -376,25 +373,29 @@ type VideoPreviewProps = {
 }
 
 const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null)
   const [speed, setSpeed] = useState<(typeof PLAYBACK_SPEEDS)[number]>(1)
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState(true)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    video.playbackRate = speed
+  }, [speed, contentUrl])
 
   return (
     <PreviewStage>
       <PreviewHeader>
-        <h3>동영상 플레이어</h3>
+        <h3>클라우드 동영상</h3>
       </PreviewHeader>
       <VideoFrame>
-        <video src={contentUrl} controls preload="metadata" />
-        <PlayerBar aria-label="IINA playback model">
-          <Timeline aria-hidden="true" />
+        <video ref={videoRef} src={contentUrl} controls preload="metadata" playsInline />
+        <PlayerBar aria-label="클라우드 동영상 재생 제어">
           <InlineList>
-            <span>IINA playback model</span>
-            <span>Range streaming</span>
-            <span>챕터 {IINA_CHAPTERS.length}개</span>
-            <span>재생 기록 00:00</span>
+            <span>브라우저 기본 재생</span>
+            <span>원본 파일 재생</span>
           </InlineList>
-          <FilterGroup aria-label="동영상 재생 제어">
+          <FilterGroup aria-label="동영상 재생 속도">
             {PLAYBACK_SPEEDS.map((candidate) => (
               <GhostButton
                 key={candidate}
@@ -405,21 +406,7 @@ const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
                 {candidate}x
               </GhostButton>
             ))}
-            <GhostButton
-              type="button"
-              data-active={subtitlesEnabled ? "true" : "false"}
-              onClick={() => setSubtitlesEnabled((current) => !current)}
-            >
-              자막
-            </GhostButton>
           </FilterGroup>
-          <InlineList aria-label="키보드 단축키">
-            {IINA_SHORTCUTS.map((shortcut) => (
-              <span key={shortcut.key}>
-                {shortcut.key} {shortcut.label}
-              </span>
-            ))}
-          </InlineList>
         </PlayerBar>
       </VideoFrame>
     </PreviewStage>

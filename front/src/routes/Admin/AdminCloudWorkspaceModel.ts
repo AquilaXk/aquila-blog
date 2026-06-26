@@ -25,19 +25,6 @@ export const CLOUD_FILTERS: Array<{ value: CloudMediaFilter; label: string }> = 
   { value: "VIDEO", label: "동영상" },
 ]
 
-export const IINA_SHORTCUTS = [
-  { key: "Space", label: "재생/일시정지" },
-  { key: "← / →", label: "5초 이동" },
-  { key: "J / L", label: "챕터 이동" },
-  { key: "S", label: "자막 전환" },
-]
-
-export const IINA_CHAPTERS = [
-  { at: "00:00", label: "시작" },
-  { at: "01:12", label: "핵심 구간" },
-  { at: "03:40", label: "점검 메모" },
-]
-
 export const PLAYBACK_SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const
 
 export const getCloudKindLabel = (kind: CloudMediaFilter) => {

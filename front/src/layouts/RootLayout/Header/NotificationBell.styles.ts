@@ -7,27 +7,25 @@ export const StyledWrapper = styled.div`
 
   .trigger {
     position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: ${({ theme }) => theme.variables.navControl.height}px;
-    min-height: ${({ theme }) => theme.variables.navControl.height}px;
-    width: auto;
-    height: ${({ theme }) => theme.variables.navControl.height}px;
-    padding: 0 0.34rem;
-    border-radius: 8px;
-    border: none;
+    display: grid;
+    place-items: center;
+    min-width: 36px;
+    min-height: 36px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 6px;
+    border: 1px solid transparent;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: var(--aq-muted);
     flex-shrink: 0;
-    transition: color 0.16s ease, text-decoration-color 0.16s ease;
+    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
 
     &:hover,
     &[data-open="true"] {
-      color: ${({ theme }) => theme.colors.gray12};
-      text-decoration: underline;
-      text-underline-offset: 3px;
-      text-decoration-thickness: 1px;
+      border-color: var(--aq-border);
+      background: var(--aq-surface);
+      color: var(--aq-text);
     }
 
     &:focus-visible {
@@ -67,21 +65,17 @@ export const StyledWrapper = styled.div`
     max-height: min(70vh, 28rem);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    border-radius: 16px;
+    border-radius: 6px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray2};
-    box-shadow: 0 20px 42px rgba(0, 0, 0, 0.44);
     padding: 0.74rem;
     overflow: hidden;
-    transform-origin: top right;
     animation: panelIn 0.14s ease-out;
     z-index: 30;
 
     &:focus-visible {
       outline: none;
-      box-shadow:
-        0 0 0 2px ${({ theme }) => theme.colors.blue4},
-        0 20px 42px rgba(0, 0, 0, 0.44);
+      box-shadow: 0 0 0 2px ${({ theme }) => theme.colors.blue4};
     }
   }
 
@@ -92,11 +86,9 @@ export const StyledWrapper = styled.div`
   @keyframes panelIn {
     from {
       opacity: 0;
-      transform: translateY(-4px) scale(0.985);
     }
     to {
       opacity: 1;
-      transform: translateY(0) scale(1);
     }
   }
 
@@ -189,16 +181,15 @@ export const StyledWrapper = styled.div`
     gap: 0.62rem;
     align-items: center;
     padding: 0.66rem 0.72rem;
-    border-radius: 12px;
+    border-radius: 6px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray1};
     text-align: left;
-    transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+    transition: border-color 0.16s ease, background-color 0.16s ease;
 
     &:hover {
       border-color: ${({ theme }) => theme.colors.gray7};
       background: ${({ theme }) => theme.colors.gray2};
-      transform: translateY(-1px);
     }
 
     &:focus-visible {
@@ -294,7 +285,7 @@ export const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 820px) {
     .mobileBackdrop {
       display: block;
       position: fixed;
@@ -310,9 +301,8 @@ export const StyledWrapper = styled.div`
     .trigger {
       min-width: 36px;
       min-height: 36px;
-      width: auto;
+      width: 36px;
       height: 36px;
-      padding: 0 0.34rem;
 
       svg {
         width: 18px;
@@ -329,9 +319,8 @@ export const StyledWrapper = styled.div`
       width: auto;
       max-height: min(72dvh, 34rem);
       padding: 0.62rem;
-      border-radius: 16px;
+      border-radius: 6px;
       animation-name: panelInMobile;
-      transform-origin: bottom center;
       z-index: 36;
     }
 
@@ -388,11 +377,9 @@ export const StyledWrapper = styled.div`
   @keyframes panelInMobile {
     from {
       opacity: 0;
-      transform: translateY(12px) scale(0.992);
     }
     to {
       opacity: 1;
-      transform: translateY(0) scale(1);
     }
   }
 `

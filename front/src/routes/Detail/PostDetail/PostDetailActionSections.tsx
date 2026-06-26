@@ -1,6 +1,6 @@
 import type { Ref, RefObject } from "react"
 import AppIcon from "src/components/icons/AppIcon"
-import { CompactTocSection, MobileSummaryBar } from "./PostDetail.styles"
+import { MobileSummaryBar } from "./PostDetail.styles"
 import type { TocItem } from "./PostDetailTocModel"
 
 type EngagementState = {
@@ -21,6 +21,8 @@ type FloatingActionRailProps = {
   shareFeedback: ShareFeedback
   onToggleLike: () => void
   onSharePost: () => void
+  onScrollToComments: () => void
+  commentsCount: number
 }
 
 export const FloatingActionRail = ({
@@ -33,6 +35,8 @@ export const FloatingActionRail = ({
   shareFeedback,
   onToggleLike,
   onSharePost,
+  onScrollToComments,
+  commentsCount,
 }: FloatingActionRailProps) => (
   <aside ref={railRef as Ref<HTMLElement>} className="leftRail" data-hybrid-active={active} aria-hidden={!showFloatingLike}>
     {showFloatingLike ? (
@@ -66,6 +70,18 @@ export const FloatingActionRail = ({
               onClick={onSharePost}
             >
               <AppIcon name="share" />
+            </button>
+          </div>
+          <div className="floatingShareStat">
+            <button
+              type="button"
+              className="floatingActionButton floatingCommentButton"
+              title="댓글"
+              data-tooltip="댓글"
+              aria-label={`댓글 ${commentsCount}`}
+              onClick={onScrollToComments}
+            >
+              <AppIcon name="message" />
             </button>
           </div>
           {shareFeedback ? (
@@ -151,44 +167,6 @@ export const MobileSummaryActions = ({
   </MobileSummaryBar>
 )
 
-type CompactTocProps = {
-  sectionRef: RefObject<HTMLElement | null>
-  visibleTocItems: TocItem[]
-  activeTocId: string
-  onNavigate: (id: string) => void
-}
-
-export const CompactToc = ({ sectionRef, visibleTocItems, activeTocId, onNavigate }: CompactTocProps) => (
-  <CompactTocSection ref={sectionRef as Ref<HTMLElement>} aria-label="접이식 목차">
-    <details>
-      <summary>
-        <div className="summaryCopy">
-          <strong>목차</strong>
-          <span>{visibleTocItems.length}개 섹션</span>
-        </div>
-        <span className="summaryChevron" aria-hidden="true">
-          <AppIcon name="chevron-down" />
-        </span>
-      </summary>
-      <ol>
-        {visibleTocItems.map((item) => (
-          <li key={`compact-${item.id}`} data-level={item.level}>
-            <button
-              type="button"
-              data-active={activeTocId === item.id}
-              title={item.text}
-              aria-label={item.text}
-              onClick={() => onNavigate(item.id)}
-            >
-              {item.text}
-            </button>
-          </li>
-        ))}
-      </ol>
-    </details>
-  </CompactTocSection>
-)
-
 type RightTocRailProps = {
   railRef: RefObject<HTMLElement | null>
   innerRef: RefObject<HTMLElement | null>
@@ -221,8 +199,7 @@ export const RightTocRail = ({
       <nav ref={innerRef as Ref<HTMLElement>} className="rightRailInner" aria-label="목차">
         <div className="rightRailHead">
           <div className="rightRailTitleGroup">
-            <h2 className="rightRailTitle">목차</h2>
-            <span className="rightRailMeta">{visibleTocItems.length}개 섹션</span>
+            <h2 className="rightRailTitle">On this page</h2>
           </div>
           {hasDepth4Toc && (
             <button

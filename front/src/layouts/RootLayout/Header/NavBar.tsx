@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { Suspense, lazy, useState } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 import ThemeToggle from "./ThemeToggle"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
@@ -12,7 +12,8 @@ type Props = {
 }
 
 const primaryLinks = [
-  ["home", "Home", "/"],
+  ["notes", "Notes", "/"],
+  ["topics", "Topics", "/#topics"],
   ["about", "About", "/about"],
 ] as const
 
@@ -35,14 +36,29 @@ const SearchIcon = () => (
   </svg>
 )
 
+const MenuIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+    <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+  </svg>
+)
+
 const NavBar = ({ showThemeToggle = true }: Props) => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const isAuthenticated = authStatus === "authenticated"
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
   const showLogin = authStatus !== "authenticated"
   const nextPath = normalizeNextPath(router.asPath)
+  const [activeHash, setActiveHash] = useState<string | null>(null)
+
+  useEffect(() => {
+    const syncHash = () => setActiveHash(window.location.hash.replace(/^#/, "").split("?")[0] || "")
+    syncHash()
+    window.addEventListener("hashchange", syncHash)
+    return () => window.removeEventListener("hashchange", syncHash)
+  }, [])
 
   const handleLogout = async () => {
     await logout()
@@ -63,7 +79,8 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
               href={to}
               data-ui="nav-control"
               data-active={
-                (id === "home" && router.pathname === "/") ||
+                (id === "notes" && router.pathname === "/" && activeHash !== "topics") ||
+                (id === "topics" && router.pathname === "/" && activeHash === "topics") ||
                 (id === "about" && router.pathname === "/about")
                   ? "true"
                   : "false"
@@ -123,7 +140,55 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
             Logout
           </button>
         ) : null}
+
+        <button
+          type="button"
+          className="mobileMenuButton"
+          aria-label="메뉴 열기"
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen((value) => !value)}
+        >
+          <MenuIcon />
+        </button>
       </div>
+
+      {mobileMenuOpen ? (
+        <div className="mobileMenuPanel">
+          {primaryLinks.map(([, name, to]) => (
+            <Link key={to} href={to} onClick={() => setMobileMenuOpen(false)}>
+              {name}
+            </Link>
+          ))}
+          {isAdmin ? (
+            <Link href="/admin" onClick={() => setMobileMenuOpen(false)}>
+              Admin
+            </Link>
+          ) : null}
+          {showLogin ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false)
+                preloadAuthEntryModal()
+                setAuthModalOpen(true)
+              }}
+            >
+              Login
+            </button>
+          ) : null}
+          {isAuthenticated ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false)
+                void handleLogout()
+              }}
+            >
+              Logout
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <AuthEntryModal
         open={authModalOpen}
@@ -163,8 +228,8 @@ const StyledWrapper = styled.div`
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 36px;
-      padding: 0 0.68rem;
+      min-height: 34px;
+      padding: 0 11px;
       border-radius: 0;
       border: none;
       background: transparent;
@@ -189,9 +254,9 @@ const StyledWrapper = styled.div`
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.44rem;
+    gap: 7px;
     min-width: 0;
-    min-height: ${({ theme }) => theme.variables.navControl.height}px;
+    min-height: 36px;
 
     > * {
       flex-shrink: 0;
@@ -208,7 +273,7 @@ const StyledWrapper = styled.div`
     gap: 0.5rem;
     padding: 0 0.625rem;
     color: var(--aq-muted);
-    border-radius: 0;
+    border-radius: 6px;
     cursor: pointer;
     text-decoration: none;
 
@@ -250,7 +315,7 @@ const StyledWrapper = styled.div`
     padding: 0 0.75rem;
     font-size: 0.75rem;
     font-weight: 750;
-    border-radius: ${({ theme }) => theme.variables.ui.button.radius}px;
+    border-radius: 6px;
     text-decoration: none;
   }
 
@@ -274,25 +339,79 @@ const StyledWrapper = styled.div`
     cursor: pointer;
   }
 
-  @media (max-width: 860px) {
-    .searchTrigger,
-    .bellSlot,
-    .loginLink,
-    .adminLink {
-      display: none;
+  .mobileMenuButton {
+    display: none;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--aq-muted);
+    cursor: pointer;
+
+    svg {
+      width: 18px;
+      height: 18px;
     }
 
-    .primaryLinks {
-      display: flex;
-      gap: 0.18rem;
-    }
-
-    .authArea {
-      gap: 0.28rem;
+    &:hover,
+    &[aria-expanded="true"] {
+      border-color: var(--aq-border);
+      background: var(--aq-surface);
+      color: var(--aq-text);
     }
   }
 
-  @media (max-width: 720px) {
-    gap: 0.22rem;
+  .mobileMenuPanel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 2;
+    display: none;
+    width: 180px;
+    border: 1px solid var(--aq-border-strong);
+    background: var(--aq-surface);
+    padding: 6px;
+
+    a,
+    button {
+      display: flex;
+      width: 100%;
+      min-height: 34px;
+      align-items: center;
+      border: 0;
+      background: transparent;
+      color: var(--aq-text);
+      padding: 0 10px;
+      text-align: left;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+  }
+
+  @media (max-width: 820px) {
+    .primaryLinks,
+    .searchTrigger,
+    .loginLink,
+    .adminLink,
+    .logoutBtn {
+      display: none;
+    }
+
+    .authArea {
+      gap: 7px;
+    }
+
+    .mobileMenuButton {
+      display: grid;
+    }
+
+    .mobileMenuPanel {
+      display: grid;
+    }
   }
 `

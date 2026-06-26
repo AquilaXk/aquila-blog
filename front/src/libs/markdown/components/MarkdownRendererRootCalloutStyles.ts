@@ -3,10 +3,10 @@ import { articleTypographyScale } from "src/libs/markdown/contentTypography"
 
 export const markdownRendererRootCalloutStyles = (theme: Theme) => css`
   .aq-callout.aq-admonition {
-    --ad-accent: ${ (theme.scheme === "dark" ? "#7dd3fc" : "#155eef")};
-    --ad-body-bg: ${ (theme.scheme === "dark" ? "rgba(125, 211, 252, 0.08)" : "rgba(21, 94, 239, 0.04)")};
-    --ad-border: ${ (theme.scheme === "dark" ? "rgba(125, 211, 252, 0.28)" : "rgba(21, 94, 239, 0.3)")};
-    --ad-text: ${ (theme.scheme === "dark" ? "#e6edf6" : "#1f2937")};
+    --ad-accent: ${theme.publicDesign.accent};
+    --ad-body-bg: ${theme.publicDesign.readableSurface};
+    --ad-border: ${theme.colors.gray6};
+    --ad-text: ${theme.colors.gray12};
     position: relative;
     display: grid;
     grid-template-columns: 34px minmax(0, 1fr);
@@ -62,7 +62,7 @@ export const markdownRendererRootCalloutStyles = (theme: Theme) => css`
   }
 
   .aq-callout.aq-admonition .aq-callout-title {
-    color: var(--ad-text);
+    color: var(--ad-accent);
     font-size: ${articleTypographyScale.calloutTitleFontSize};
     font-weight: 750;
     line-height: ${articleTypographyScale.calloutTitleLineHeight};
@@ -80,21 +80,21 @@ export const markdownRendererRootCalloutStyles = (theme: Theme) => css`
   }
 
   .aq-callout.aq-admonition-tip {
-    --ad-accent: ${ (theme.scheme === "dark" ? "#86efac" : "#12805c")};
-    --ad-body-bg: ${ (theme.scheme === "dark" ? "rgba(134, 239, 172, 0.08)" : "rgba(18, 128, 92, 0.04)")};
-    --ad-border: ${ (theme.scheme === "dark" ? "rgba(134, 239, 172, 0.28)" : "rgba(18, 128, 92, 0.3)")};
+    --ad-accent: ${theme.colors.green10};
+    --ad-body-bg: color-mix(in srgb, ${theme.colors.green10} 5%, ${theme.publicDesign.readableSurface});
+    --ad-border: color-mix(in srgb, ${theme.colors.green10} 36%, ${theme.colors.gray6});
   }
 
   .aq-callout.aq-admonition-info {
-    --ad-accent: ${ (theme.scheme === "dark" ? "#4cc9f0" : "#0b63a8")};
-    --ad-body-bg: ${ (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.08)" : "rgba(21, 94, 239, 0.04)")};
-    --ad-border: ${ (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.28)" : "rgba(21, 94, 239, 0.3)")};
+    --ad-accent: ${theme.publicDesign.accent};
+    --ad-body-bg: color-mix(in srgb, ${theme.publicDesign.accent} 5%, ${theme.publicDesign.readableSurface});
+    --ad-border: color-mix(in srgb, ${theme.publicDesign.accent} 32%, ${theme.colors.gray6});
   }
 
   .aq-callout.aq-admonition-warning {
-    --ad-accent: ${ (theme.scheme === "dark" ? "#fbbf24" : "#a15c00")};
-    --ad-body-bg: ${ (theme.scheme === "dark" ? "rgba(251, 191, 36, 0.08)" : "rgba(161, 92, 0, 0.05)")};
-    --ad-border: ${ (theme.scheme === "dark" ? "rgba(251, 191, 36, 0.32)" : "rgba(161, 92, 0, 0.34)")};
+    --ad-accent: ${theme.colors.orange10};
+    --ad-body-bg: color-mix(in srgb, ${theme.colors.orange10} 6%, ${theme.publicDesign.readableSurface});
+    --ad-border: color-mix(in srgb, ${theme.colors.orange10} 42%, ${theme.colors.gray6});
   }
 
   .aq-callout.aq-admonition-outline {
@@ -110,8 +110,21 @@ export const markdownRendererRootCalloutStyles = (theme: Theme) => css`
   }
 
   .aq-callout.aq-admonition-summary {
-    --ad-accent: ${ (theme.scheme === "dark" ? "#a78bfa" : "#5b4ab8")};
+    --ad-accent: ${theme.colors.gray12};
     --ad-body-bg: ${theme.publicDesign.surfaceElevated};
     --ad-border: ${theme.colors.gray7};
+  }
+
+  @media (max-width: 820px) {
+    .aq-callout.aq-admonition {
+      grid-template-columns: 28px minmax(0, 1fr);
+      padding: 16px;
+    }
+
+    .aq-callout.aq-admonition .aq-callout-emoji {
+      width: 26px;
+      height: 26px;
+      margin-left: -41px;
+    }
   }
 `

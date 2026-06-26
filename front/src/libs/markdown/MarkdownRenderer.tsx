@@ -52,6 +52,7 @@ const MarkdownRendererComponent: FC<MarkdownRendererProps> = ({
   content,
   contentHtml,
   disableMermaid = false,
+  forceScheme,
   editableImages = false,
   onImageWidthCommit,
 }) => {
@@ -66,6 +67,7 @@ const MarkdownRendererComponent: FC<MarkdownRendererProps> = ({
 
   useMermaidEffect(rootRef, renderKey, !disableMermaid, {
     observeMutations: false,
+    forceScheme,
   })
   useResponsiveTableEffect(rootRef, renderKey)
   useInlineColorEffect(rootRef, renderKey)

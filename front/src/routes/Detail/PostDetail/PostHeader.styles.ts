@@ -1,51 +1,58 @@
 import styled from "@emotion/styled";
 import { HEADER_AUTH_ADMIN_ATTR } from "src/libs/headerAuthShell";
-import { articleTypographyScale } from "src/libs/markdown/contentTypography";
 export const StyledWrapper = styled.header `
-  .taxonomyRow {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.55rem;
-    margin-bottom: 1rem;
+  width: min(100%, 880px);
+  margin: 0 auto;
+  padding: 0;
 
-    > span {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-sizing: border-box;
-      min-height: 32px;
-      padding: 0.38rem 0.78rem;
-      border-radius: 999px;
-      font-size: 0.86rem;
-      line-height: 1.2;
-      font-weight: 600;
+  .backLink {
+    display: flex;
+    width: max-content;
+    align-items: center;
+    gap: 0.44rem;
+    margin-bottom: 2.125rem;
+    color: #646a73;
+    font-size: 0.875rem;
+    font-weight: 650;
+    line-height: 1.2;
+    text-decoration: none;
+
+    &:hover {
+      color: #111216;
     }
   }
 
-  .staticTag {
+  .heroLabel {
     display: inline-flex;
     align-items: center;
-    min-height: 32px;
-    padding: 0.38rem 0.78rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    font-size: 0.86rem;
-    line-height: 1.2;
-    font-weight: 600;
-    color: ${({ theme }) => theme.colors.gray11};
-    background-color: ${({ theme }) => theme.colors.gray3};
+    gap: 0.42rem;
+    margin-bottom: 0.875rem;
+    color: #155eef;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .title {
-    margin: 0;
-    font-size: ${articleTypographyScale.postTitleFontSize};
-    line-height: ${articleTypographyScale.postTitleLineHeight};
-    letter-spacing: 0;
-    font-weight: 700;
-    color: ${({ theme }) => theme.colors.gray12};
-    max-width: 18ch;
+    margin: 0.875rem 0 1.375rem;
+    font-size: clamp(42px, 5.3vw, 70px);
+    line-height: 1.08;
+    letter-spacing: -0.065em;
+    font-weight: 850;
+    color: #111216;
     overflow-wrap: break-word;
+    word-break: keep-all;
+  }
+
+  .deck {
+    max-width: 820px;
+    margin: 0 0 2rem;
+    color: #646a73;
+    font-size: 1.125rem;
+    line-height: 1.75;
     word-break: keep-all;
   }
 
@@ -53,30 +60,63 @@ export const StyledWrapper = styled.header `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 20px;
     flex-wrap: wrap;
-    margin-top: 1.4rem;
+    margin-top: 0;
   }
 
   .author {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: 11px;
     min-width: 0;
   }
 
   .avatar {
     position: relative;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    border-radius: 0;
     overflow: hidden;
-    background: ${({ theme }) => theme.colors.gray3};
+    border: 1px solid #c8ccd2;
+    background: #ffffff;
 
     img {
       object-fit: cover;
       object-position: center 38%;
     }
+  }
+
+  .avatarFallback {
+    position: absolute;
+    inset: 5px;
+    display: block;
+    color: #465b66;
+  }
+
+  .avatarFallback::before,
+  .avatarFallback::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    background: currentColor;
+    transform: translateX(-50%);
+  }
+
+  .avatarFallback::before {
+    top: 0;
+    width: 42%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+  }
+
+  .avatarFallback::after {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 45%;
+    border-radius: 999px 999px 2px 2px;
+    transform: none;
   }
 
   .authorText {
@@ -85,26 +125,37 @@ export const StyledWrapper = styled.header `
     min-width: 0;
 
     strong {
-      color: ${({ theme }) => theme.colors.gray12};
-      font-size: 1rem;
-      font-weight: 700;
+      color: #111216;
+      font-size: 0.8125rem;
+      font-weight: 800;
       overflow-wrap: anywhere;
     }
   }
 
-  .metaText,
-  .stats {
+  .metaText {
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.42rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.9rem;
+    color: #646a73;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.6875rem;
     min-width: 0;
+    font-weight: 550;
+    color: #8c9199;
   }
 
-  .metaText {
-    font-weight: 500;
+  .stats {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px 22px;
+    min-width: 0;
+    color: #8c9199;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 600;
   }
 
   .authorUtilities {
@@ -145,10 +196,10 @@ export const StyledWrapper = styled.header `
     align-items: center;
     min-height: 34px;
     padding: 0 0.78rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => (theme.colors.gray2)};
-    color: ${({ theme }) => theme.colors.gray11};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
+    background: #ffffff;
+    color: #646a73;
     font-size: 0.82rem;
     font-weight: 650;
     line-height: 1;
@@ -160,10 +211,10 @@ export const StyledWrapper = styled.header `
     gap: 0.42rem;
     min-height: 34px;
     padding: 0 0.76rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => (theme.colors.gray2)};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
+    background: #ffffff;
+    color: #111216;
     font-size: 0.82rem;
     font-weight: 700;
     cursor: pointer;
@@ -187,31 +238,9 @@ export const StyledWrapper = styled.header `
   }
 
   .dangerButton {
-    border-color: ${({ theme }) => theme.colors.red7};
+    border-color: #c33a3a;
     background: transparent;
-    color: ${({ theme }) => theme.colors.red11};
-  }
-
-  .mobileMetaOnly {
-    display: none;
-  }
-
-  .metaInlineMetric {
-    align-items: center;
-    gap: 0.32rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    font-weight: 600;
-    line-height: 1;
-
-    svg {
-      font-size: 0.9rem;
-    }
-  }
-
-  .metaInlineViewStat {
-    color: ${({ theme }) => theme.colors.gray12};
-    white-space: nowrap;
+    color: #c33a3a;
   }
 
   .likeButton {
@@ -220,10 +249,10 @@ export const StyledWrapper = styled.header `
     gap: 0.42rem;
     min-height: 40px;
     padding: 0 0.9rem;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: #111216;
     font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
@@ -237,12 +266,12 @@ export const StyledWrapper = styled.header `
     }
 
     &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.red7};
+      border-color: #155eef;
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray12};
+      color: #111216;
 
       svg {
-        color: ${({ theme }) => theme.colors.red10};
+        color: #155eef;
       }
     }
 
@@ -258,10 +287,10 @@ export const StyledWrapper = styled.header `
     gap: 0.42rem;
     min-height: 40px;
     padding: 0 0.9rem;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 6px;
+    border: 1px solid #dfe1e5;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
+    color: #111216;
     font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
@@ -279,70 +308,43 @@ export const StyledWrapper = styled.header `
     width: 0.22rem;
     height: 0.22rem;
     border-radius: 50%;
-    background: ${({ theme }) => (theme.colors.gray8)};
+    background: #c8ccd2;
   }
 
   .statChip {
     display: inline-flex;
     align-items: center;
     gap: 0.42rem;
-    min-height: 40px;
-    padding: 0 0.82rem;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    min-height: auto;
+    padding: 0;
+    border-radius: 0;
+    border: 0;
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.9rem;
-    font-weight: 650;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
     line-height: 1;
-  }
-
-  .viewStatChip {
-    justify-content: space-between;
-  }
-
-  .statMetaLabel {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.34rem;
-    color: ${({ theme }) => theme.colors.gray11};
-
-    svg {
-      font-size: 0.96rem;
-    }
-  }
-
-  .statMetricValue {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.96rem;
-    font-weight: 760;
-    letter-spacing: -0.02em;
   }
 
   .thumbnail {
     overflow: hidden;
     position: relative;
     margin-top: 2rem;
-    border-radius: 10px;
+    border-radius: 0;
     width: 100%;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background-color: ${({ theme }) => theme.colors.gray3};
+    border: 1px solid #dfe1e5;
+    background-color: #f0f1f2;
     padding-bottom: 52%;
   }
 
-  @media (max-width: 768px) {
-    .taxonomyRow {
-      margin-bottom: 0.8rem;
-    }
-
-    .taxonomyRow > span {
-      min-height: 30px;
-      font-size: 0.8rem;
-    }
-
+  @media (max-width: 820px) {
     .title {
-      font-size: ${articleTypographyScale.postTitleFontSizeMobile};
-      line-height: ${articleTypographyScale.postTitleLineHeightMobile};
+      font-size: clamp(38px, 11vw, 43px);
+      line-height: 1.08;
+    }
+
+    .deck {
+      font-size: 1rem;
     }
 
     .metaRow {
@@ -351,9 +353,10 @@ export const StyledWrapper = styled.header `
     }
   }
 
-  @media (max-width: 1023px) {
-    .mobileMetaOnly {
-      display: inline-flex;
+  @media (max-width: 820px) {
+    .metaRow {
+      align-items: flex-start;
+      flex-direction: column;
     }
 
     .actions[data-hide-mobile="true"] {
@@ -367,7 +370,7 @@ export const StyledWrapper = styled.header `
     }
   }
 
-  @media (min-width: 1201px) {
+  @media (min-width: 821px) {
     .likeButton[data-hide-desktop="true"],
     .shareButton[data-hide-desktop="true"],
     .shareFeedbackPill[data-hide-desktop="true"] {

@@ -316,17 +316,21 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     size: number,
     priority = false
   ) => {
-    const imageSrc = profileImageDirectUrl || profileImageUrl || CONFIG.profile.image
+    const imageSrc = profileImageDirectUrl || profileImageUrl
     return (
       <Avatar size={size}>
-        <ProfileImage
-          src={imageSrc}
-          alt={`${name} avatar`}
-          priority={priority}
-          fillContainer
-          width={size}
-          height={size}
-        />
+        {imageSrc ? (
+          <ProfileImage
+            src={imageSrc}
+            alt={`${name} avatar`}
+            priority={priority}
+            fillContainer
+            width={size}
+            height={size}
+          />
+        ) : (
+          <span className="avatarFallback" aria-hidden="true" />
+        )}
       </Avatar>
     )
   }
@@ -484,7 +488,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
               <textarea
                 value={commentInput}
                 onChange={(event) => setCommentInput(event.target.value)}
-                placeholder="의견이나 질문을 남겨주세요."
+                placeholder="질문이나 의견을 남겨주세요."
                 disabled={isLoading}
               />
               <div className="composerFooter">
@@ -501,7 +505,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
           ) : (
             <ComposerPromptCard data-tone="neutral">
               <strong>로그인 후 댓글을 작성할 수 있습니다.</strong>
-              <p>의견이나 질문을 남기려면 먼저 로그인해 주세요.</p>
+              <p>질문이나 의견을 남기려면 먼저 로그인해 주세요.</p>
               <button type="button" onClick={handleComposerIntent}>
                 로그인하고 댓글 작성
               </button>

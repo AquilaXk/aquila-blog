@@ -1,24 +1,23 @@
 import styled from "@emotion/styled";
-import { articleTypographyScale } from "src/libs/markdown/contentTypography";
 export const EditorStudioRoot = styled.main `
   box-sizing: border-box;
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
+  height: 100vh;
   min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
   padding: 0;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 58px minmax(0, 1fr);
   gap: 0;
+  overflow: hidden;
   overflow-x: clip;
-  background: ${({ theme }) => theme.publicDesign.operationSurface};
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
   color: ${({ theme }) => theme.colors.gray12};
 
   @media (max-width: 1024px) {
-    padding: 0;
-  }
-
-  @media (max-width: 768px) {
     padding: 0;
   }
 `;
@@ -41,41 +40,38 @@ export const EditorStudioLoadingState = styled.div `
 `;
 export const EditorStudioDedicatedTopBar = styled.div `
   width: 100%;
+  height: 58px;
   min-height: 58px;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 1rem;
-  padding: 0 1rem;
+  gap: 20px;
+  padding: 0 16px;
   border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 
-  @media (max-width: 1200px) {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.8rem;
-  }
-
-  @media (max-width: 760px) {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-    gap: 0.7rem;
-    padding: 0.72rem;
+  @media (max-width: 820px) {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 0 10px;
   }
 `;
 export const EditorExitAction = styled.button `
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  gap: 9px;
+  min-width: 0;
   min-height: 34px;
-  width: min(100%, 240px);
-  padding: 0 0.72rem;
+  width: max-content;
+  padding: 0;
   margin: 0;
-  border: 1px solid ${({ theme }) => theme.publicDesign.borderStrong};
+  border: 0;
   border-radius: 0;
-  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 750;
   line-height: 1;
   cursor: pointer;
   transition:
@@ -83,7 +79,8 @@ export const EditorExitAction = styled.button `
     color 0.18s ease;
 
   &:hover {
-    background: ${({ theme }) => (theme.colors.gray3)};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.blue10};
   }
 
   &:focus-visible {
@@ -98,9 +95,15 @@ export const EditorExitAction = styled.button `
 export const EditorStudioTopBarActions = styled.div `
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 8px;
   flex-wrap: nowrap;
   justify-content: flex-end;
+
+  button {
+    height: 38px;
+    min-height: 38px;
+    padding: 0 14px;
+  }
 
   @media (max-width: 1200px) {
     width: auto;
@@ -109,17 +112,23 @@ export const EditorStudioTopBarActions = styled.div `
     flex-wrap: nowrap;
   }
 
-  @media (max-width: 760px) {
-    width: 100%;
+  @media (max-width: 820px) {
+    width: auto;
+    justify-self: end;
     margin-left: 0;
     justify-content: flex-end;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+
+    button {
+      height: 34px;
+      min-height: 34px;
+      padding: 0 10px;
+    }
   }
 `;
 export const EditorStudioSaveState = styled.span `
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.84rem;
-  font-weight: 600;
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: nowrap;
   text-align: center;
 
@@ -135,8 +144,8 @@ export const EditorStudioSaveState = styled.span `
     color: ${({ theme }) => theme.colors.red10};
   }
 
-  @media (max-width: 680px) {
-    width: 100%;
+  @media (max-width: 820px) {
+    display: none;
   }
 `;
 const Button = styled.button `
@@ -175,15 +184,15 @@ const Button = styled.button `
 export const PrimaryButton = styled(Button) `
   border-radius: 6px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => (theme.scheme === "dark" ? "#0a58ca" : "#0969da")};
-  background: ${({ theme }) => (theme.scheme === "dark" ? "#0a58ca" : "#0969da")};
-  color: ${({ theme }) => theme.colors.accentControlText};
-  font-weight: 700;
+  border-color: ${({ theme }) => theme.publicDesign.accent};
+  background: ${({ theme }) => theme.publicDesign.accent};
+  color: ${({ theme }) => (theme.scheme === "dark" ? theme.colors.gray1 : theme.colors.accentControlText)};
+  font-weight: 750;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => (theme.scheme === "dark" ? "#084298" : "#075bb5")};
-    background: ${({ theme }) => (theme.scheme === "dark" ? "#084298" : "#075bb5")};
-    color: ${({ theme }) => theme.colors.accentControlText};
+    border-color: ${({ theme }) => theme.publicDesign.accentHover};
+    background: ${({ theme }) => theme.publicDesign.accentHover};
+    color: ${({ theme }) => (theme.scheme === "dark" ? theme.colors.gray1 : theme.colors.accentControlText)};
   }
 `;
 export const SecondaryButton = styled(Button) `
@@ -200,7 +209,7 @@ export const SecondaryButton = styled(Button) `
 `;
 export const EditorStudioFrame = styled.div `
   width: 100%;
-  min-height: calc(100vh - 58px);
+  min-height: 0;
   margin: 0;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) 300px;
@@ -208,18 +217,28 @@ export const EditorStudioFrame = styled.div `
   align-items: stretch;
   overflow-x: clip;
 
-  @media (max-width: 1180px) {
-    grid-template-columns: minmax(0, 1fr);
+  @media (max-width: 1100px) {
+    grid-template-columns: 190px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  @media (max-width: 820px) {
+    width: 100vw;
+    max-width: 100vw;
+    display: block;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 `;
 export const EditorStudioWritingColumn = styled.section<{
     $compact?: boolean;
 }> `
+  position: relative;
   display: grid;
   min-width: 0;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
-  overflow-x: clip;
+  overflow: hidden;
 `;
 export const EditorStudioDedicatedMetaSection = styled.section<{
     $compact?: boolean;
@@ -229,12 +248,18 @@ export const EditorStudioDedicatedMetaSection = styled.section<{
   min-width: 0;
   margin-inline: auto;
   display: grid;
-  gap: ${({ $compact }) => ($compact ? "0.72rem" : "0.9rem")};
-  border: 1px solid ${({ theme }) => ("transparent")};
+  gap: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
   border-radius: ${({ theme }) => ("0")};
-  background: ${({ theme }) => ("transparent")};
-  padding: 1.55rem 1.8rem 1.05rem;
+  background: ${({ theme }) => theme.publicDesign.readableSurface};
+  padding: 22px 28px 17px;
 
+  @media (max-width: 820px) {
+    width: 100vw;
+    max-width: 100vw;
+    box-sizing: border-box;
+  }
 `;
 export const EditorTagRow = styled.div<{
     $compact?: boolean;
@@ -242,8 +267,8 @@ export const EditorTagRow = styled.div<{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: ${({ $compact }) => ($compact ? "0.44rem" : "0.55rem")};
-  min-height: 32px;
+  gap: 7px;
+  min-height: 26px;
 `;
 export const SelectedTagChip = styled.span `
   display: inline-flex;
@@ -251,19 +276,14 @@ export const SelectedTagChip = styled.span `
   gap: 0;
   min-width: 0;
   max-width: 100%;
-  min-height: 32px;
+  min-height: 26px;
   border-radius: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  background: transparent;
   overflow: hidden;
   transition:
     border-color 0.18s ease,
-    transform 0.18s ease,
     background 0.18s ease;
-
-  &:hover {
-    transform: none;
-  }
 
   .label {
     display: inline-flex;
@@ -272,11 +292,9 @@ export const SelectedTagChip = styled.span `
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding: 0.38rem 0.78rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.86rem;
-    font-weight: 600;
-    line-height: 1;
+    padding: 0 8px;
+    color: ${({ theme }) => theme.colors.gray10};
+    font: 650 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   }
 
   button {
@@ -284,8 +302,8 @@ export const SelectedTagChip = styled.span `
     align-items: center;
     justify-content: center;
     align-self: stretch;
-    min-width: 1.92rem;
-    padding: 0 0.52rem;
+    min-width: 26px;
+    padding: 0 6px;
     border: 0;
     border-left: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.publicDesign.readableSurface};
@@ -295,12 +313,10 @@ export const SelectedTagChip = styled.span `
     font-size: 0.98rem;
     line-height: 1;
     transition:
-      transform 0.18s ease,
       background 0.18s ease,
       color 0.18s ease;
 
     &:hover {
-      transform: none;
       background: ${({ theme }) => theme.colors.gray4};
       color: ${({ theme }) => theme.colors.gray12};
     }
@@ -333,11 +349,43 @@ export const InlineMetaInput = styled.input `
     box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
   }
 `;
+
+export const EditorInspectorTagInputRow = styled.div`
+  display: flex;
+  gap: 6px;
+
+  input {
+    min-width: 0;
+    flex: 1 1 auto;
+    width: 100%;
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    border-radius: 6px;
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.88rem;
+    padding: 10px;
+  }
+
+  button {
+    width: 38px;
+    border: 1px solid ${({ theme }) => theme.publicDesign.border};
+    border-radius: 6px;
+    background: ${({ theme }) => theme.publicDesign.readableSurface};
+    color: ${({ theme }) => theme.colors.gray12};
+    cursor: pointer;
+  }
+`;
+
+export const EditorInspectorFullWidthAction = styled(SecondaryButton)`
+  width: 100%;
+  margin-top: 8px;
+`;
+
 export const TitleInput = styled.textarea<{
     $compact?: boolean;
 }> `
   width: 100%;
-  max-width: 52rem;
+  max-width: 100%;
   min-width: 0;
   border: 0;
   border-radius: 0;
@@ -346,10 +394,10 @@ export const TitleInput = styled.textarea<{
   background: transparent;
   box-shadow: none;
   font-family: inherit;
-  font-size: ${articleTypographyScale.postTitleFontSize};
-  font-weight: 700;
-  line-height: ${articleTypographyScale.postTitleLineHeight};
-  letter-spacing: 0;
+  font-size: 30px;
+  font-weight: 850;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
   resize: none;
   overflow: hidden;
   white-space: pre-wrap;
@@ -364,97 +412,29 @@ export const TitleInput = styled.textarea<{
     border-color: transparent;
   }
 
-  @media (max-width: 720px) {
-    font-size: ${articleTypographyScale.postTitleFontSizeMobile};
-    line-height: ${articleTypographyScale.postTitleLineHeightMobile};
+  @media (max-width: 820px) {
+    font-size: 25px;
   }
 `;
 export const EditorHeaderMetaRow = styled.div `
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.85rem;
+  gap: 9px;
   min-width: 0;
-`;
-export const EditorHeaderMetaActions = styled.div `
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  min-width: 0;
-`;
-export const EditorHeaderAuthor = styled.div `
-  display: inline-flex;
-  align-items: center;
-  gap: 0.85rem;
-  min-width: 0;
-`;
-export const EditorHeaderAvatar = styled.div<{
-    $compact?: boolean;
-}> `
-  position: relative;
-  width: ${({ $compact }) => ($compact ? "40px" : "48px")};
-  height: ${({ $compact }) => ($compact ? "40px" : "48px")};
-  flex-shrink: 0;
-  border-radius: 0;
-  border: 1px solid ${({ theme }) => theme.publicDesign.borderStrong};
-  overflow: hidden;
-  background: ${({ theme }) => theme.colors.gray3};
-
-  .initial {
-    display: inline-flex;
-    width: 100%;
-    height: 100%;
-    align-items: center;
-    justify-content: center;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.84rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-  }
-`;
-export const EditorHeaderAuthorText = styled.div<{
-    $compact?: boolean;
-}> `
-  display: grid;
-  gap: ${({ $compact }) => ($compact ? "0.12rem" : "0.18rem")};
-  min-width: 0;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: ${({ $compact }) => ($compact ? "0.94rem" : "1rem")};
-    font-weight: 700;
-    overflow-wrap: anywhere;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: ${({ $compact }) => ($compact ? "0.82rem" : "0.9rem")};
-    font-weight: 500;
-  }
+  margin-top: 10px;
 `;
 export const EditorHeaderMetaPill = styled.span<{
     $compact?: boolean;
 }> `
   display: inline-flex;
   align-items: center;
-  min-height: ${({ $compact }) => ($compact ? "30px" : "34px")};
-  padding: ${({ $compact }) => ($compact ? "0 0.72rem" : "0 0.82rem")};
-  border-radius: 0;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: ${({ $compact }) => ($compact ? "0.74rem" : "0.82rem")};
-  font-weight: 650;
+  min-height: 26px;
+  padding: 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: ${({ $compact }) => ($compact ? "0.72rem" : "0.78rem")};
+  font-weight: 600;
   line-height: 1;
-`;
-export const EditorHeaderActionButton = styled(Button) `
-  min-height: 34px;
-  padding: 0.45rem 0.7rem;
-  border-radius: 6px;
-  font-size: 0.78rem;
 `;
 export const EditorStudioDedicatedCanvasSection = styled.section `
   --compose-pane-readable-width: var(--article-readable-width, 48rem);
@@ -462,27 +442,35 @@ export const EditorStudioDedicatedCanvasSection = styled.section `
   max-width: 100%;
   min-width: 0;
   margin-inline: auto;
-  min-height: clamp(28rem, 70vh, 56rem);
+  min-height: 0;
   display: grid;
-  gap: 0.72rem;
-  overflow-x: visible;
-  border: 1px solid ${({ theme }) => ("transparent")};
+  gap: 0;
+  overflow: hidden;
+  border: 0;
   border-radius: ${({ theme }) => ("0")};
   background: ${({ theme }) => ("transparent")};
-  padding: 0 1.8rem 1.8rem;
+  padding: 0;
   box-shadow: ${({ theme }) => ("none")};
 
-  @media (max-width: 720px) {
-    padding: 0 0.82rem 1rem;
+  @media (max-width: 820px) {
+    width: 100vw;
+    max-width: 100vw;
+    box-sizing: border-box;
+    padding: 0;
   }
 `;
 export const PublishNotice = styled.div `
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 18px;
+  z-index: 10;
   margin: 0;
   padding: 0.55rem 0.7rem;
-  border-radius: 10px;
+  border-radius: 6px;
   font-size: 0.83rem;
   line-height: 1.4;
-  width: 100%;
+  width: auto;
   box-sizing: border-box;
 
   &[data-tone="idle"] {
@@ -509,22 +497,25 @@ export const PublishNotice = styled.div `
     background: ${({ theme }) => theme.colors.red3};
   }
 
-  @media (max-width: 720px) {
-    width: 100%;
+  @media (max-width: 820px) {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
   }
 `;
 
 export const EditorOutline = styled.aside`
   min-width: 0;
-  padding: 1.2rem 0.88rem;
+  padding: 20px 14px;
   border-right: 1px solid ${({ theme }) => theme.publicDesign.border};
   background: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  overflow: auto;
 
   h3 {
-    margin: 0 0 1.1rem;
+    margin: 0 0 16px;
     color: ${({ theme }) => theme.colors.gray10};
-    font: 750 0.68rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: 0.12em;
+    font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
   }
 
@@ -535,39 +526,40 @@ export const EditorOutline = styled.aside`
     line-height: 1.6;
   }
 
-  @media (max-width: 1180px) {
+  @media (max-width: 820px) {
     display: none;
   }
 `;
 
 export const EditorOutlineItem = styled.div`
-  display: grid;
-  grid-template-columns: 1.6rem minmax(0, 1fr);
-  gap: 0.45rem;
-  padding: 0.45rem 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 6px;
   color: ${({ theme }) => theme.colors.gray10};
+  font-size: 12px;
 
   &[data-level="2"] {
-    padding-left: 0.9rem;
+    padding-left: 20px;
   }
 
   &[data-level="3"] {
-    padding-left: 1.8rem;
+    padding-left: 34px;
   }
 
   &[data-active="true"] {
     color: ${({ theme }) => theme.publicDesign.accent};
+    font-weight: 750;
   }
 
   span {
-    font: 700 0.72rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font: 700 12px/1.3 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   }
 
   strong {
     min-width: 0;
-    font-size: 0.82rem;
     font-weight: 650;
-    line-height: 1.5;
+    line-height: 1.4;
     overflow-wrap: anywhere;
   }
 `;
@@ -576,26 +568,33 @@ export const EditorInspector = styled.aside`
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: 1.2rem;
-  padding: 1.2rem;
+  padding: 20px;
   border-left: 1px solid ${({ theme }) => theme.publicDesign.border};
-  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
+  background: ${({ theme }) => theme.publicDesign.operationSurface};
+  overflow: auto;
 
-  h3,
+  h3 {
+    margin: 0 0 16px;
+    color: ${({ theme }) => theme.colors.gray10};
+    font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
   label > span,
   section > span {
-    margin: 0;
+    margin: 0 0 8px;
     color: ${({ theme }) => theme.colors.gray10};
-    font: 750 0.68rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: 0.1em;
+    font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     text-transform: uppercase;
   }
 
   label,
   section {
     display: grid;
-    gap: 0.65rem;
-    padding-bottom: 1.15rem;
+    gap: 0;
+    padding: 0 0 22px;
+    margin-bottom: 22px;
     border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
   }
 
@@ -613,16 +612,15 @@ export const EditorInspector = styled.aside`
     background: ${({ theme }) => theme.publicDesign.readableSurface};
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.88rem;
+    padding: 10px;
   }
 
   select {
     min-height: 42px;
-    padding: 0 0.65rem;
   }
 
   textarea {
-    min-height: 5.6rem;
-    padding: 0.8rem;
+    min-height: 90px;
     resize: vertical;
     line-height: 1.65;
   }
@@ -647,8 +645,15 @@ export const EditorInspector = styled.aside`
     color: ${({ theme }) => theme.colors.orange10};
   }
 
-  @media (max-width: 1180px) {
-    display: none;
+  @media (max-width: 1100px) {
+    grid-column: 1 / -1;
+    max-height: min(38vh, 360px);
+    border-top: 1px solid ${({ theme }) => theme.publicDesign.border};
+    border-left: 0;
+  }
+
+  @media (max-width: 820px) {
+    max-height: none;
   }
 `;
 
@@ -658,63 +663,69 @@ export const EditorInspectorPreview = styled.div`
   background: ${({ theme }) => theme.publicDesign.readableSurface};
 
   div {
-    min-height: 6.8rem;
-    padding: 1.05rem;
+    height: 112px;
+    padding: 14px;
     background: #0f1728;
-    color: #a9c5ff;
-    font: 800 0.86rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #88a9e8;
+    font: 700 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
   }
 
   strong {
-    padding: 0.85rem 0.85rem 0.2rem;
+    display: block;
+    padding: 12px 12px 0;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.92rem;
-    line-height: 1.35;
+    line-height: 1.4;
   }
 
   span {
-    padding: 0 0.85rem 0.9rem;
+    padding: 6px 12px 12px;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
+    font-size: 11px;
   }
 `;
 
 export const EditorGuideBackdrop = styled.div`
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 200;
   display: flex;
   justify-content: flex-end;
-  background: rgba(17, 18, 22, 0.52);
+  background: rgba(10, 12, 16, 0.42);
 `;
 
 export const EditorGuidePanel = styled.aside`
   width: min(100%, 590px);
-  min-height: 100vh;
-  overflow-y: auto;
-  padding: 1rem 1.35rem 1.4rem;
-  border-left: 1px solid ${({ theme }) => theme.publicDesign.border};
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border-left: 1px solid ${({ theme }) => theme.publicDesign.borderStrong};
   background: ${({ theme }) => theme.publicDesign.readableSurface};
+  box-shadow: -24px 0 70px rgba(0, 0, 0, 0.18);
 
   header {
+    height: 64px;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 1.5rem;
+    padding: 0 20px;
+    border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
   }
 
   header span {
     color: ${({ theme }) => theme.publicDesign.accent};
-    font: 750 0.68rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
 
   h2 {
-    margin: 0.25rem 0 0;
+    margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.15rem;
+    font-size: 17px;
     line-height: 1.25;
   }
 
@@ -725,9 +736,14 @@ export const EditorGuidePanel = styled.aside`
     font-size: 1.2rem;
     cursor: pointer;
   }
+`;
+
+export const EditorGuideBody = styled.div`
+  overflow: auto;
+  padding: 24px 22px 50px;
 
   > p {
-    margin: 0 0 1.35rem;
+    margin: 0 0 22px;
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.92rem;
     line-height: 1.7;
@@ -737,11 +753,12 @@ export const EditorGuidePanel = styled.aside`
 export const EditorGuideGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border: 1px solid ${({ theme }) => theme.publicDesign.border};
+  border-top: 1px solid ${({ theme }) => theme.publicDesign.border};
+  border-left: 1px solid ${({ theme }) => theme.publicDesign.border};
 
   section {
     min-width: 0;
-    padding: 1rem;
+    padding: 17px;
     border-right: 1px solid ${({ theme }) => theme.publicDesign.border};
     border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
   }
@@ -751,19 +768,28 @@ export const EditorGuideGrid = styled.div`
   }
 
   h3 {
-    margin: 0 0 0.7rem;
+    margin: 0 0 8px;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.9rem;
+    font-size: 13px;
+  }
+
+  p {
+    margin: 0 0 9px;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 12px;
+    line-height: 1.45;
   }
 
   pre {
     margin: 0;
     min-height: 5.6rem;
-    padding: 0.8rem;
+    padding: 11px;
     overflow: auto;
     background: #0f1728;
     color: #dbe7ff;
-    font: 650 0.74rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font: 650 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: 560px) {
@@ -772,5 +798,24 @@ export const EditorGuideGrid = styled.div`
     section {
       border-right: 0;
     }
+  }
+`;
+
+export const EditorGuideRepo = styled.div`
+  margin-top: 22px;
+  padding: 17px;
+  border: 1px solid ${({ theme }) => theme.publicDesign.border};
+  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
+
+  strong {
+    display: block;
+    margin-bottom: 5px;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  a {
+    color: ${({ theme }) => theme.publicDesign.accent};
+    font-size: 12px;
+    overflow-wrap: anywhere;
   }
 `;

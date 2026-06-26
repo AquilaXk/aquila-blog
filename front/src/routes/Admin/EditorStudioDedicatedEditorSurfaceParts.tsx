@@ -184,13 +184,13 @@ export const PrimaryButton = styled(Button) `
   padding: 0.6rem 0.88rem;
   border-color: ${({ theme }) => theme.publicDesign.accent};
   background: ${({ theme }) => theme.publicDesign.accent};
-  color: ${({ theme }) => theme.colors.accentControlText};
+  color: ${({ theme }) => (theme.scheme === "dark" ? theme.colors.gray1 : theme.colors.accentControlText)};
   font-weight: 750;
 
   &:hover:not(:disabled) {
     border-color: ${({ theme }) => theme.publicDesign.accentHover};
     background: ${({ theme }) => theme.publicDesign.accentHover};
-    color: ${({ theme }) => theme.colors.accentControlText};
+    color: ${({ theme }) => (theme.scheme === "dark" ? theme.colors.gray1 : theme.colors.accentControlText)};
   }
 `;
 export const SecondaryButton = styled(Button) `

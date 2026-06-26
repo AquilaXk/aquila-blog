@@ -369,6 +369,8 @@ export const MarkdownEditor = ({
             ref={previewScrollRef}
             data-pane="preview"
             data-testid="markdown-editor-preview-pane"
+            aria-label="Markdown 미리보기"
+            tabIndex={0}
             onScroll={handlePreviewScroll}
             onWheel={handlePreviewWheel}
           >

@@ -35,6 +35,9 @@ reviews:
     - "!**/coverage/**"
     - "!**/test-results/**"
     - "!**/playwright-report/**"
+    - "!front/public/pdf.worker.min.mjs"
+    - "!front/contracts/openapi/**"
+    - "!front/packages/shared-contracts/src/generated/**"
 
   auto_review:
     enabled: true
@@ -67,6 +70,12 @@ reviews:
     - path: ".github/**"
       instructions: |
         GitHub Actions 변경은 권한 최소화, secret 노출, pull_request_target 안전성, cache key 안정성, required check drift, 배포 조건 누락을 우선 검토한다.
+    - path: "sonar-project.properties"
+      instructions: |
+        Sonar 분석 범위가 현재 운영 모드와 일치하는지 확인한다.
+        CI-based analysis에서는 sources/tests/exclusions/coverage report path drift를 우선 검토한다.
+        Automatic Analysis 운영 중이면 sonar-project.properties가 실제 분석에 적용되지 않을 수 있음을 지적한다.
+        generated/vendor 파일 제외와 CodeRabbit path_filters가 불일치하면 지적한다.
     - path: "deploy/**"
       instructions: |
         배포 변경은 rollback 가능성, secret/env drift, health check, live verification, 홈서버 배포 경로와 main merge 후 자동 배포 계약을 우선 검토한다.

@@ -11,6 +11,15 @@ BEGIN
         expires_at TIMESTAMPTZ NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         modified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id)
+        CONSTRAINT pk_cloud_external_playback_token PRIMARY KEY (id),
+        CONSTRAINT uk_cloud_external_playback_token_hash UNIQUE (token_hash),
+        CONSTRAINT fk_cloud_external_playback_token_file FOREIGN KEY (file_id) REFERENCES cloud_file (id),
+        CONSTRAINT fk_cloud_external_playback_token_member FOREIGN KEY (member_id) REFERENCES member (id)
     )';
 END $$;
+
+CREATE INDEX IF NOT EXISTS cloud_external_playback_token_idx_file_purpose_expires
+    ON cloud_external_playback_token (file_id, purpose, expires_at);
+
+CREATE INDEX IF NOT EXISTS cloud_external_playback_token_idx_member_expires
+    ON cloud_external_playback_token (member_id, expires_at);

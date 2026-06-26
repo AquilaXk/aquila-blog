@@ -125,5 +125,10 @@ interface CloudStoragePort {
 
     fun open(objectKey: String): StoredObject?
 
+    fun openRange(
+        objectKey: String,
+        range: LongRange,
+    ): StoredObject?
+
     fun delete(objectKey: String)
 }

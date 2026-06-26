@@ -1094,6 +1094,11 @@ class CloudVideoUploadSessionServiceTest {
         override fun open(objectKey: String): CloudStoragePort.StoredObject? =
             CloudStoragePort.StoredObject(ByteArrayInputStream(ByteArray(0)), "video/mp4", 0, "empty.mp4")
 
+        override fun openRange(
+            objectKey: String,
+            range: LongRange,
+        ): CloudStoragePort.StoredObject? = CloudStoragePort.StoredObject(ByteArrayInputStream(ByteArray(0)), "video/mp4", 0, "empty.mp4")
+
         override fun delete(objectKey: String) = Unit
     }
 

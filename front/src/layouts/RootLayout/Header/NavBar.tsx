@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { Suspense, lazy, useState } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 import ThemeToggle from "./ThemeToggle"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
@@ -51,7 +51,14 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
   const showLogin = authStatus !== "authenticated"
   const nextPath = normalizeNextPath(router.asPath)
-  const activeHash = router.asPath.split("#")[1]?.split("?")[0] || ""
+  const [activeHash, setActiveHash] = useState<string | null>(null)
+
+  useEffect(() => {
+    const syncHash = () => setActiveHash(window.location.hash.replace(/^#/, "").split("?")[0] || "")
+    syncHash()
+    window.addEventListener("hashchange", syncHash)
+    return () => window.removeEventListener("hashchange", syncHash)
+  }, [])
 
   const handleLogout = async () => {
     await logout()

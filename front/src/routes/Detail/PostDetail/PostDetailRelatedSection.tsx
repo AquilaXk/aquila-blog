@@ -36,7 +36,7 @@ export const RelatedPostsSection = ({
   const relatedPosts = [...relatedByTagPosts, ...relatedByAuthorPosts]
     .filter((post, index, posts) => posts.findIndex((item) => item.id === post.id) === index)
     .slice(0, 2)
-  const showSkeleton = showRelatedTagSkeleton || showRelatedAuthorSkeleton
+  const showSkeleton = relatedPosts.length === 0 && (showRelatedTagSkeleton || showRelatedAuthorSkeleton)
 
   if (!showSkeleton && relatedPosts.length === 0) return null
 

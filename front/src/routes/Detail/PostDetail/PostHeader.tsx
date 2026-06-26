@@ -62,15 +62,18 @@ const PostHeader: React.FC<Props> = ({
   showThumbnail = true,
 }) => {
   const adminProfile = useRootAdminProfile()
-  const authorName = data.author?.[0]?.name || adminProfile?.nickname || adminProfile?.name || "익명"
-  const authorImageSrc =
-    data.author?.[0]?.profile_photo ||
-    adminProfile?.profileImageDirectUrl ||
-    adminProfile?.profileImageUrl ||
-    ""
+  const postAuthor = data.author?.find((author) => author.name?.trim()) ?? null
+  const usingAdminFallback = !postAuthor
+  const authorName =
+    postAuthor?.name?.trim() || adminProfile?.nickname?.trim() || adminProfile?.name?.trim() || "익명"
+  const authorImageSrc = usingAdminFallback
+    ? adminProfile?.profileImageDirectUrl || adminProfile?.profileImageUrl || ""
+    : postAuthor?.profile_photo || ""
   const tags = (data.tags || []).map((tag) => tag.trim()).filter(Boolean)
-  const primaryTaxonomy = (data.category?.[0] || tags[0] || data.type[0] || "").trim()
-  const typeLabel = data.type[0] === "Post" ? "Production note" : data.type[0]
+  const primaryTaxonomy = (data.category?.[0] || tags[0] || "").trim()
+  const rawTypeLabel = data.type?.[0]?.trim() || "Post"
+  const typeLabel = rawTypeLabel === "Post" ? "Production note" : rawTypeLabel
+  const heroLabels = primaryTaxonomy ? [primaryTaxonomy, typeLabel] : [typeLabel]
   const publishedAt = formatDateTime(data.createdTime, CONFIG.lang)
   const modifiedAt =
     data.modifiedTime && data.modifiedTime !== data.createdTime
@@ -96,7 +99,7 @@ const PostHeader: React.FC<Props> = ({
   const readTimeText = `${Math.max(1, Math.ceil(readSource.length / 500))}분 READ`
   const viewCount = hitCount ?? data.hitCount ?? 0
   const viewText = `${Intl.NumberFormat(CONFIG.lang).format(viewCount)} VIEWS`
-  const authorRole = adminProfile?.profileRole?.trim() || ""
+  const authorRole = usingAdminFallback ? adminProfile?.profileRole?.trim() || "" : ""
 
   return (
     <StyledWrapper>
@@ -104,11 +107,14 @@ const PostHeader: React.FC<Props> = ({
         <span aria-hidden="true">←</span>
         <span>모든 글</span>
       </Link>
-      {primaryTaxonomy ? (
+      {heroLabels.length > 0 ? (
         <div className="heroLabel">
-          {primaryTaxonomy}
-          <span aria-hidden="true">·</span>
-          {typeLabel}
+          {heroLabels.map((label, index) => (
+            <React.Fragment key={label}>
+              {index > 0 ? <span aria-hidden="true">·</span> : null}
+              {label}
+            </React.Fragment>
+          ))}
         </div>
       ) : null}
       <h1 className="title">{data.title}</h1>

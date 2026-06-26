@@ -152,26 +152,26 @@ test.describe("admin posts workspace link contract", () => {
     const editorMetaSectionStyle =
       editorPartsSource.match(/export const EditorStudioDedicatedMetaSection[\s\S]*?`;/)?.[0] ?? ""
     const titleInputStyle = editorPartsSource.match(/export const TitleInput[\s\S]*?`;/)?.[0] ?? ""
-    const editorInspectorStyle = editorPartsSource.match(/export const EditorInspector[\s\S]*?`;/)?.[0] ?? ""
+    const editorInspectorStyle = editorPartsSource.match(/export const EditorInspector = styled\.aside`[\s\S]*?`;/)?.[0] ?? ""
     const inspectorTagInputRowStyle =
       editorPartsSource.match(/export const EditorInspectorTagInputRow[\s\S]*?`;/)?.[0] ?? ""
     const inspectorFullWidthActionStyle =
       editorPartsSource.match(/export const EditorInspectorFullWidthAction[\s\S]*?`;/)?.[0] ?? ""
-    const markdownEditorRootStyle = source.match(/const EditorRoot = styled\.section`[\s\S]*?`;/)?.[0] ?? ""
-    const markdownEditorToolbarStyle = source.match(/const EditorToolbar = styled\.div`[\s\S]*?`;/)?.[0] ?? ""
-    const markdownToolbarGroupStyle = source.match(/const ToolbarGroup = styled\.div`[\s\S]*?`;/)?.[0] ?? ""
-    const markdownEditorBodyStyle = source.match(/const EditorBody = styled\.div`[\s\S]*?`;/)?.[0] ?? ""
-    const markdownWritePaneStyle = source.match(/const WritePane = styled\.div`[\s\S]*?`;/)?.[0] ?? ""
-    const markdownTextareaStyle = source.match(/const MarkdownTextarea = styled\.textarea`[\s\S]*?`;/)?.[0] ?? ""
-    const markdownPreviewPaneStyle = source.match(/const PreviewPane = styled\.div`[\s\S]*?`;/)?.[0] ?? ""
-    const markdownPreviewArticleStyle = source.match(/const PreviewArticle = styled\.article`[\s\S]*?`;/)?.[0] ?? ""
+    const markdownEditorRootStyle = source.match(/const EditorRoot = styled\.section`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownEditorToolbarStyle = source.match(/const EditorToolbar = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownToolbarGroupStyle = source.match(/const ToolbarGroup = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownEditorBodyStyle = source.match(/const EditorBody = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownWritePaneStyle = source.match(/const WritePane = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownTextareaStyle = source.match(/const MarkdownTextarea = styled\.textarea`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownPreviewPaneStyle = source.match(/const PreviewPane = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownPreviewArticleStyle = source.match(/const PreviewArticle = styled\.article`[\s\S]*?\n`/)?.[0] ?? ""
 
     expect(editorNewPageSource).toContain("getEditorStudioPageProps")
     expect(editorPostPageSource).toContain("getEditorStudioPageProps")
     expect(legacyWriteRedirectSource).toContain('destination: "/editor/new"')
     expect(legacyWriteRedirectSource).toContain("destination: `/editor/${encodeURIComponent(postId)}`")
     expect(controllerRootSource).toContain('const isDedicatedEditorRoute = router.pathname.startsWith("/editor")')
-    expect(controllerRootSource).toContain("if (isDedicatedEditorRoute) {")
+    expect(controllerSource).toContain("if (isDedicatedEditorRoute) {")
     expect(controllerSource).toContain("<EditorStudioDedicatedEditorSurface")
     expect(controllerSource).toContain("editorCanvas={dedicatedEditorCanvas}")
     expect(source).toContain('```kotlin title="invalidatePost.kt"')
@@ -189,7 +189,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("@media (max-width: 820px)")
     expect(source).toContain("@media (max-width: 1100px)")
     expect(source).not.toContain("@media (max-width: 980px)")
-    expect(source).not.toContain('&[data-mode="split"] [data-pane="preview"]')
+    expect(source).toContain('&[data-mode="split"] [data-pane="preview"]')
     expect(source).toContain("ref={previewScrollRef}")
     expect(source).toContain("onScroll={handlePreviewScroll}")
     expect(source).toContain("onWheel={handlePreviewWheel}")
@@ -259,6 +259,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(guideSource).not.toContain("2026.06.19")
     expect(guideSource).not.toContain("2.1K")
     expect(guideSource).toContain("const countMarkdownLinkWarnings = (markdown: string)")
+    expect(guideSource).toContain("return !href || /^https?:\\/\\/$/.test(href)")
     expect(guideSource).toContain("const linkWarningCount = countMarkdownLinkWarnings(postContent)")
     expect(guideSource).toContain("<strong>링크 검사</strong>")
     expect(guideSource).toContain('linkWarningCount === 0 ? "PASS" : `${linkWarningCount} WARN`')
@@ -267,6 +268,8 @@ test.describe("admin posts workspace link contract", () => {
     expect(guideSource).not.toContain("ETAG")
     expect(guideSource).not.toContain("INVALIDATION")
     expect(editorRootStyle).toContain("height: 100vh;")
+    expect(editorRootStyle).toContain("height: 100dvh;")
+    expect(editorRootStyle).toContain("min-height: 100dvh;")
     expect(editorRootStyle).toContain("grid-template-rows: 58px minmax(0, 1fr);")
     expect(editorRootStyle).toContain("overflow: hidden;")
     expect(editorRootStyle).toContain("theme.publicDesign.readableSurface")
@@ -279,7 +282,8 @@ test.describe("admin posts workspace link contract", () => {
     expect(editorFrameStyle).toContain("min-height: 0;")
     expect(editorFrameStyle).toContain("width: 100vw;")
     expect(editorFrameStyle).toContain("max-width: 100vw;")
-    expect(editorFrameStyle).toContain("overflow: hidden;")
+    expect(editorFrameStyle).toContain("overflow-x: hidden;")
+    expect(editorFrameStyle).toContain("overflow-y: auto;")
     expect(editorPartsSource).toContain("padding: 20px 14px;")
     expect(editorPartsSource).toContain("font: 750 11px/1 ui-monospace")
     expect(editorPartsSource).toContain("letter-spacing: 0.08em;")
@@ -330,6 +334,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(editorPartsSource).toContain("font-size: 11px;")
     expect(editorPartsSource).toContain("@media (max-width: 1100px)")
     expect(editorPartsSource).toContain("grid-template-columns: 190px minmax(0, 1fr);")
+    expect(editorPartsSource).toContain("grid-template-rows: minmax(0, 1fr) auto;")
     expect(editorPartsSource).toContain("@media (max-width: 820px)")
     expect(editorPartsSource).toContain("z-index: 200;")
     expect(editorPartsSource).toContain("background: rgba(10, 12, 16, 0.42);")
@@ -338,6 +343,9 @@ test.describe("admin posts workspace link contract", () => {
     expect(editorInspectorStyle).toContain("font: 750 11px/1 ui-monospace")
     expect(editorInspectorStyle).toContain("font: 700 10px/1 ui-monospace")
     expect(editorInspectorStyle).toContain("margin: 0 0 8px;")
+    expect(editorInspectorStyle).toContain("grid-column: 1 / -1;")
+    expect(editorInspectorStyle).toContain("max-height: min(38vh, 360px);")
+    expect(editorInspectorStyle).not.toContain("display: none;")
     expect(inspectorTagInputRowStyle).toContain("display: flex;")
     expect(inspectorTagInputRowStyle).toContain("gap: 6px;")
     expect(inspectorTagInputRowStyle).toContain("min-width: 0;")
@@ -386,9 +394,14 @@ test.describe("admin posts workspace link contract", () => {
     expect(headerStyleSource).not.toContain("width: 48px;")
     expect(headerStyleSource).not.toContain("height: 48px;")
     expect(headerStyleSource).not.toContain("border-bottom: 1px solid #dfe1e5;")
-    expect(headerSource).toContain('adminProfile?.nickname || adminProfile?.name || "익명"')
+    expect(headerSource).toContain("const postAuthor = data.author?.find((author) => author.name?.trim()) ?? null")
+    expect(headerSource).toContain('postAuthor?.name?.trim() || adminProfile?.nickname?.trim() || adminProfile?.name?.trim() || "익명"')
+    expect(headerSource).toContain("const authorImageSrc = usingAdminFallback")
+    expect(headerSource).toContain("const authorRole = usingAdminFallback")
     expect(headerSource).toContain("adminProfile?.profileImageDirectUrl")
     expect(headerSource).toContain("adminProfile?.profileImageUrl")
+    expect(headerSource).toContain('const primaryTaxonomy = (data.category?.[0] || tags[0] || "").trim()')
+    expect(headerSource).toContain("const heroLabels = primaryTaxonomy ? [primaryTaxonomy, typeLabel] : [typeLabel]")
     expect(headerSource).not.toContain("CONFIG.profile.image")
     expect(headerSource).toContain('<span className="avatarFallback" aria-hidden="true" />')
     expect(headerStyleSource).toContain(".avatarFallback")
@@ -398,7 +411,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(headerSource).toContain("<strong>{authorName}</strong>")
     expect(headerSource).toContain("useRootAdminProfile")
     expect(headerSource).toContain("const adminProfile = useRootAdminProfile()")
-    expect(headerSource).toContain("const authorRole = adminProfile?.profileRole?.trim() || \"\"")
+    expect(headerSource).toContain("const authorRole = usingAdminFallback ? adminProfile?.profileRole?.trim() || \"\" : \"\"")
     expect(headerSource).not.toContain("CONFIG.profile.role ? <div className=\"metaText\">")
     expect(metadataSource).toContain('post.author?.find((author) => author.name.trim().length > 0)?.name.trim() ||\n  "익명"')
     expect(metadataSource).not.toContain("CONFIG.profile.name")

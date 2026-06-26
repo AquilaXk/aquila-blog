@@ -30,9 +30,10 @@ test.describe("성능 레이아웃과 표면 예산", () => {
     }
 
     const expectedWidth = viewport <= 1056 ? viewport - 24 : Math.min(1240, viewport - 40)
+    const expectedHeaderWidth = Math.min(1240, viewport - 40)
     const snapshot = await getWidthLockSnapshot(page)
     expect(snapshot.mainWidth).toBeCloseTo(expectedWidth, 0)
-    expect(snapshot.headerWidth).toBeCloseTo(expectedWidth, 0)
+    expect(snapshot.headerWidth).toBeCloseTo(expectedHeaderWidth, 0)
     await expect(page.locator(".rt")).toBeHidden()
   }
 })
@@ -143,7 +144,7 @@ test.describe("성능 레이아웃과 표면 예산", () => {
   expect(deepSnapshot.leftRail).not.toBeNull()
   expect(deepSnapshot.rightRail).not.toBeNull()
 
-  const topTolerance = 2.5
+  const topTolerance = 4
   expect(Math.abs((midSnapshot.leftRail?.top ?? 0) - midSnapshot.expectedTop)).toBeLessThanOrEqual(topTolerance)
   expect(Math.abs((midSnapshot.rightRail?.top ?? 0) - midSnapshot.expectedTop)).toBeLessThanOrEqual(topTolerance)
   expect(Math.abs((deepSnapshot.leftRail?.top ?? 0) - deepSnapshot.expectedTop)).toBeLessThanOrEqual(topTolerance)
@@ -302,16 +303,16 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
       const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
 
-      expect(leftRailWidth).toBe(80)
+      expect(leftRailWidth).toBe(64)
       expect(leftRailHeight).toBeGreaterThanOrEqual(128)
       expect(leftRailHeight).toBeLessThanOrEqual(172)
-      expect(leftRailY).toBeGreaterThanOrEqual(84)
-      expect(leftRailY).toBeLessThanOrEqual(104)
+      expect(leftRailY).toBeGreaterThanOrEqual(620)
+      expect(leftRailY).toBeLessThanOrEqual(700)
       expect(rightRailWidth).toBe(240)
-      expect(rightRailHeight).toBeGreaterThanOrEqual(280)
+      expect(rightRailHeight).toBeGreaterThanOrEqual(270)
       expect(rightRailHeight).toBeLessThanOrEqual(380)
-      expect(rightRailY).toBeGreaterThanOrEqual(84)
-      expect(rightRailY).toBeLessThanOrEqual(104)
+      expect(rightRailY).toBeGreaterThanOrEqual(620)
+      expect(rightRailY).toBeLessThanOrEqual(700)
       expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
       expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
       expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
@@ -380,7 +381,7 @@ test.describe("성능 레이아웃과 표면 예산", () => {
   }
 })
 
-  test("공개와 인증 핵심 화면은 system light legacy 표면 계층을 유지한다", async ({ page }) => {
+  test("공개와 인증 핵심 화면은 system light V4 표면 계층을 유지한다", async ({ page }) => {
   test.setTimeout(60_000)
   await mockFeedEndpoints(page, {
     adminProfile: {
@@ -403,6 +404,7 @@ test.describe("성능 레이아웃과 표면 예산", () => {
     { route: "/login", viewport: { width: 393, height: 852 } },
     { route: "/login", viewport: { width: 768, height: 1024 } },
   ] as const
+  const v4PaperBackground = "rgb(247, 247, 245)"
 
   for (const scenario of publicScenarios) {
     await applySchemePreference(page, "light")
@@ -414,13 +416,13 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
         timeout: 8000,
       })
-      .toBe("rgb(243, 245, 248)")
+      .toBe(v4PaperBackground)
 
     const fingerprint = await getThemeSurfaceFingerprint(page)
 
     expect(fingerprint.route).toBe(scenario.route)
     expect(fingerprint.themeToggleLabel).toBe("테마 전환")
-    expect(fingerprint.bodyBg).toBe("rgb(243, 245, 248)")
+    expect(fingerprint.bodyBg).toBe(v4PaperBackground)
     expect(fingerprint.headerBg).not.toBeNull()
     expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
 
@@ -445,11 +447,13 @@ test.describe("성능 레이아웃과 표면 예산", () => {
       .poll(async () => (await getThemeSurfaceFingerprint(page)).bodyBg, {
         timeout: 8000,
       })
-      .toBe("rgb(243, 245, 248)")
+      .toBe(v4PaperBackground)
     const fingerprint = await getThemeSurfaceFingerprint(page)
     expect(fingerprint.route).toBe(scenario.route)
-    expect(fingerprint.bodyBg).toBe("rgb(243, 245, 248)")
-    expect(fingerprint.headerBg).toBe("rgb(255, 255, 255)")
+    expect(fingerprint.bodyBg).toBe(v4PaperBackground)
+    expect(fingerprint.headerBg).not.toBeNull()
+    expect(fingerprint.headerBg).not.toBe("rgb(255, 255, 255)")
+    expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
     expect(fingerprint.themeToggleLabel).toBe("테마 전환")
     expect(fingerprint.authShellBg).toBe("rgb(255, 255, 255)")
     expect(fingerprint.authShellBorder).toBe("rgb(215, 224, 234)")

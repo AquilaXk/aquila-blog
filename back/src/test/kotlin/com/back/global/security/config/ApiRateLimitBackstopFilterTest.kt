@@ -67,6 +67,23 @@ class ApiRateLimitBackstopFilterTest {
     }
 
     @Test
+    @DisplayName("외부 cloud content GET HEAD는 public read bucket으로 제한한다")
+    fun `external cloud content get and head use public read bucket`() {
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, publicReadLimitPerMinute = 2)
+        val path = "/system/api/v1/adm/cloud/files/12/external-content"
+
+        assertThat(runFilter(filter, "GET", path).status).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(filter, "HEAD", path).status).isEqualTo(HttpServletResponse.SC_OK)
+
+        val limited = runFilter(filter, "GET", path)
+
+        assertThat(limited.status).isEqualTo(429)
+        assertThat(limited.contentAsString).contains("public-read")
+        assertThat(redis.expiredKeys()).anyMatch { it.contains("public-read") }
+    }
+
+    @Test
     @DisplayName("비활성화, actuator, OPTIONS 요청은 rate limit을 건너뛴다")
     fun `disabled actuator and options requests bypass filter`() {
         val disabled = createFilter(redis = InMemoryRedisKeyValuePort(), enabled = false, publicReadLimitPerMinute = 1)

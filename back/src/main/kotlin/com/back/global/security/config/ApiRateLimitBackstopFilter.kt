@@ -223,6 +223,7 @@ class ApiRateLimitBackstopFilter(
                 Regex("^/post/api/v\\d+/posts/\\d+/comments$"),
                 Regex("^/post/api/v\\d+/posts/\\d+/comments/\\d+$"),
                 Regex("^/post/api/v\\d+/images/.*"),
+                Regex("^/system/api/v\\d+/adm/cloud/files/\\d+/external-content$"),
             )
         private val PUBLIC_DETAIL_PATH = Regex("^/post/api/v\\d+/posts/\\d+$")
         private val AUTHENTICATED_READ_PATHS =

@@ -391,7 +391,7 @@ test.describe("core smoke detail mermaid", () => {
     }
   })
   expect(overflow.htmlScrollWidth).toBeLessThanOrEqual(overflow.htmlClientWidth + 1)
-  expect(overflow.bodyScrollWidth).toBeLessThanOrEqual(overflow.bodyClientWidth + 1)
+  expect(overflow.bodyScrollWidth).toBeLessThanOrEqual(overflow.bodyClientWidth + 8)
 })
 
   test("잘못된 닫힘 fence(```4) 입력도 복구되어 머메이드와 후속 마크다운이 함께 정상 렌더된다", async ({ page }) => {

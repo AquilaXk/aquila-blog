@@ -30,8 +30,15 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  automatic-analysis:
+    if: vars.SONARCLOUD_CI_ENABLED != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep SonarCloud automatic analysis
+        run: echo "SonarCloud CI scanner is skipped because SONARCLOUD_CI_ENABLED is not true."
+
   sonarcloud:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: vars.SONARCLOUD_CI_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     env:
       TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}

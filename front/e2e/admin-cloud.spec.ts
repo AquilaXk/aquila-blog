@@ -664,6 +664,13 @@ test.describe("관리자 클라우드", () => {
           () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
         )
       )
+      .toMatch(/^iina "https?:\/\//)
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as typeof window & { __adminCloudCopiedText?: string }).__adminCloudCopiedText || ""
+        )
+      )
       .toContain("/system/api/v1/adm/cloud/files/103/external-content?token=external-token-103")
     await page.getByRole("button", { name: "mpv 명령 복사" }).click()
     await expect(page.getByRole("status")).toContainText("mpv 명령을 복사했습니다")

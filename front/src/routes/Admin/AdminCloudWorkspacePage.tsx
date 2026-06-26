@@ -392,6 +392,8 @@ type VideoPreviewProps = {
 
 const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const activeFileIdRef = useRef(file.id)
+  activeFileIdRef.current = file.id
   const [speed, setSpeed] = useState<(typeof PLAYBACK_SPEEDS)[number]>(1)
   const [commandState, setCommandState] = useState<ExternalPlaybackCommandState | null>(null)
 
@@ -407,22 +409,29 @@ const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
   }, [file.id])
 
   const copyExternalPlaybackCommand = async (player: ExternalPlaybackPlayer) => {
+    const requestedFileId = file.id
     const playerLabel = EXTERNAL_PLAYBACK_PLAYER_LABELS[player]
     setCommandState({ status: "pending", message: `${playerLabel} 명령 발급 중` })
+    const isStaleRequest = () => activeFileIdRef.current !== requestedFileId
 
     try {
-      const token = await issueCloudExternalPlaybackToken(file.id)
+      const token = await issueCloudExternalPlaybackToken(requestedFileId)
+      if (isStaleRequest()) return
       const command = buildExternalPlaybackCommand(player, token.contentUrl)
       const showManualCopyPrompt = () => {
+        if (isStaleRequest()) return false
         if (typeof window === "undefined") return false
         window.prompt("명령을 복사하세요.", command)
+        if (isStaleRequest()) return true
         setCommandState({ status: "success", message: `${playerLabel} 명령을 표시했습니다. 6시간 동안 유효합니다.` })
         return true
       }
 
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         try {
+          if (isStaleRequest()) return
           await navigator.clipboard.writeText(command)
+          if (isStaleRequest()) return
           setCommandState({ status: "success", message: `${playerLabel} 명령을 복사했습니다. 6시간 동안 유효합니다.` })
           return
         } catch (error) {
@@ -435,6 +444,7 @@ const VideoPreview = ({ file, contentUrl }: VideoPreviewProps) => {
       }
       throw new Error("clipboard를 사용할 수 없습니다.")
     } catch (error) {
+      if (isStaleRequest()) return
       setCommandState({ status: "error", message: `${playerLabel} 명령 복사 실패: ${resolveCloudErrorMessage(error)}` })
     }
   }

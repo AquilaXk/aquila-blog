@@ -20,6 +20,7 @@ HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
+COMPOSE_IMAGE_METADATA_KEYS=(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
 
 normalize_bool() {
   local raw="$1"
@@ -351,6 +352,18 @@ repair_back_image_if_missing() {
   repair_runtime_back_image_if_missing "back_worker" "${target_image}"
 }
 
+restore_compose_image_metadata() {
+  local key value
+  for key in "${COMPOSE_IMAGE_METADATA_KEYS[@]}"; do
+    value="$(trim_quotes "$(backup_metadata_value "${key}")")"
+    if [[ -n "${value}" ]]; then
+      require_digest_image_value "${key}" "${value}"
+      upsert_env_key "${key}" "${value}"
+      echo "rollback ${key} restored from backup_metadata: ${value}"
+    fi
+  done
+}
+
 resolve_prod_db_name() {
   local db_name
 
@@ -663,6 +676,8 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
   echo "rollback failed: caddy file missing after backup restore (${CADDY_FILE})" >&2
   exit 1
 fi
+
+restore_compose_image_metadata
 
 # normalize legacy upstream tokens before rollback target is chosen
 if [[ -f "${CADDY_FILE}" ]]; then

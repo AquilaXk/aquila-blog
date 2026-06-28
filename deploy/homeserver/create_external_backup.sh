@@ -22,6 +22,7 @@ LEGACY_MINIO_STOPPED_FOR_MIGRATION="false"
 MINIO_STOPPED_FOR_BACKUP="false"
 MIGRATED_MINIO_DIR_THIS_RUN=""
 COMPOSE_IMAGE_ENV_PREFLIGHT_DONE="false"
+COMPOSE_IMAGE_METADATA_KEYS=(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
 
 read_key_from_text() {
   local key="$1"
@@ -581,6 +582,13 @@ write_metadata() {
     if [[ -n "${POSTGRES_DB_NAME:-}" ]]; then
       echo "postgres_database=${POSTGRES_DB_NAME}"
     fi
+    for image_key in "${COMPOSE_IMAGE_METADATA_KEYS[@]}"; do
+      image_value="$(trim_quotes "$(read_key_from_file "${image_key}" "${COMPOSE_ENV_FILE}")")"
+      if [[ -n "${image_value}" ]]; then
+        require_digest_image_value "${image_key}" "${image_value}"
+        echo "${image_key}=${image_value}"
+      fi
+    done
     for image_key in BACK_BLUE_IMAGE BACK_GREEN_IMAGE BACK_READ_IMAGE BACK_ADMIN_IMAGE BACK_WORKER_IMAGE; do
       metadata_key="$(metadata_backend_image_key "${image_key}")"
       image_value="$(trim_quotes "$(read_key_from_file "${image_key}" "${COMPOSE_ENV_FILE}")")"

@@ -223,6 +223,8 @@ grep -q "minio-data.tar.gz.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted
 grep -q "secret_files_copied=false" "${CREATE_SCRIPT}" || { echo "missing: secret-free backup manifest marker" >&2; exit 1; }
 grep -q "metadata_backend_image_key" "${CREATE_SCRIPT}" || { echo "missing: deploy backup image metadata helper" >&2; exit 1; }
 grep -q "back_blue_image" "${CREATE_SCRIPT}" || { echo "missing: deploy backup backend image metadata" >&2; exit 1; }
+grep -q "COMPOSE_IMAGE_METADATA_KEYS" "${CREATE_SCRIPT}" || { echo "missing: non-backend image metadata key list" >&2; exit 1; }
+grep -q "CADDY_IMAGE" "${CREATE_SCRIPT}" || { echo "missing: non-backend image metadata" >&2; exit 1; }
 grep -q 'read_key_from_file "${image_key}" "${COMPOSE_ENV_FILE}"' "${CREATE_SCRIPT}" || { echo "missing: staged compose image metadata read" >&2; exit 1; }
 if grep -q '\.env\.prod\.compose' "${CREATE_SCRIPT}"; then
   echo "external backup still references .env.prod.compose" >&2

@@ -2233,6 +2233,7 @@ export interface components {
             inventoryLimit?: number;
             /** Format: int32 */
             inventoryObjectCount?: number;
+            inventoryAvailable?: boolean;
             inventoryTruncated?: boolean;
             /** Format: int32 */
             bucketOnlyObjectCount?: number;

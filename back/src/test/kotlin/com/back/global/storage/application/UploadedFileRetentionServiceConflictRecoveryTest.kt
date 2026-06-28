@@ -174,14 +174,51 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         verify(postImageStoragePort).deletePostImage("posts/2026/03/delete-fail.png")
     }
 
-    private fun newService(repository: UploadedFileRepositoryPort): UploadedFileRetentionService =
+    @Test
+    fun `cleanup diagnostics는 object storage listing 실패 시 degraded reconcile만 반환한다`() {
+        `when`(postImageStoragePort.listObjects("posts/", 1000))
+            .thenThrow(IllegalStateException("storage unavailable"))
+        val service = newService(SuccessfulRepository())
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.tempCount).isEqualTo(0)
+        assertThat(diagnostics.eligibleForPurgeCount).isEqualTo(0)
+        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo("posts/")
+        assertThat(diagnostics.reconcile.inventoryAvailable).isFalse()
+        assertThat(diagnostics.reconcile.repairMode).isEqualTo("dry-run-degraded")
+        assertThat(diagnostics.reconcile.bucketOnlyObjectCount).isEqualTo(0)
+        assertThat(diagnostics.reconcile.dbOnlyMissingObjectCount).isEqualTo(0)
+    }
+
+    @Test
+    fun `cleanup diagnostics는 reconcile prefix 기본값을 storage keyPrefix에서 파생한다`() {
+        `when`(postImageStoragePort.listObjects("custom-posts/", 1000))
+            .thenReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
+        val service =
+            newService(
+                repository = SuccessfulRepository(),
+                storageProperties = PostImageStorageProperties(keyPrefix = "custom-posts"),
+            )
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo("custom-posts/")
+        verify(postImageStoragePort).listObjects("custom-posts/", 1000)
+    }
+
+    private fun newService(
+        repository: UploadedFileRepositoryPort,
+        storageProperties: PostImageStorageProperties = PostImageStorageProperties(),
+        retentionProperties: UploadedFileRetentionProperties = UploadedFileRetentionProperties(),
+    ): UploadedFileRetentionService =
         UploadedFileRetentionService(
             registrationService =
                 UploadedFileRegistrationService(
                     uploadedFileRepository = repository,
                     postImageStoragePort = postImageStoragePort,
-                    storageProperties = PostImageStorageProperties(),
-                    retentionProperties = UploadedFileRetentionProperties(),
+                    storageProperties = storageProperties,
+                    retentionProperties = retentionProperties,
                     transactionManager = transactionManager,
                     clock = clock,
                     prodSequenceGuardService = prodSequenceGuardService,
@@ -189,16 +226,16 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             postAttachmentRetentionService =
                 PostAttachmentRetentionService(
                     uploadedFileRepository = repository,
-                    storageProperties = PostImageStorageProperties(),
-                    retentionProperties = UploadedFileRetentionProperties(),
+                    storageProperties = storageProperties,
+                    retentionProperties = retentionProperties,
                     clock = clock,
                 ),
             profileImageRetentionService =
                 ProfileImageRetentionService(
                     uploadedFileRepository = repository,
                     postImageStoragePort = postImageStoragePort,
-                    storageProperties = PostImageStorageProperties(),
-                    retentionProperties = UploadedFileRetentionProperties(),
+                    storageProperties = storageProperties,
+                    retentionProperties = retentionProperties,
                     transactionManager = transactionManager,
                     clock = clock,
                 ),
@@ -206,7 +243,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
                 UploadedFilePurgeService(
                     uploadedFileRepository = repository,
                     postImageStoragePort = postImageStoragePort,
-                    retentionProperties = UploadedFileRetentionProperties(),
+                    storageProperties = storageProperties,
+                    retentionProperties = retentionProperties,
                     referenceQueryService =
                         UploadedFileReferenceQueryService(
                             postRepository = postRepository,

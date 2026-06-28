@@ -34,6 +34,7 @@ class UploadedFileReconcileMetricsBinderTest {
                 bucketOnlyObjectCount = 2,
                 dbOnlyMissingObjectCount = 3,
                 longLivedPendingDeleteCount = 4,
+                inventoryAvailable = false,
                 inventoryTruncated = true,
             ),
         )
@@ -51,6 +52,7 @@ class UploadedFileReconcileMetricsBinderTest {
         assertThat(registry.get("storage.uploaded_file.reconcile.bucket_only_objects").gauge().value()).isEqualTo(2.0)
         assertThat(registry.get("storage.uploaded_file.reconcile.db_only_missing_objects").gauge().value()).isEqualTo(3.0)
         assertThat(registry.get("storage.uploaded_file.reconcile.long_lived_pending_delete").gauge().value()).isEqualTo(4.0)
+        assertThat(registry.get("storage.uploaded_file.reconcile.inventory_available").gauge().value()).isEqualTo(0.0)
         assertThat(registry.get("storage.uploaded_file.reconcile.inventory_truncated").gauge().value()).isEqualTo(1.0)
         assertThat(registry.get("storage.uploaded_file.cleanup.refresh_failures").functionCounter().count()).isEqualTo(0.0)
         verify(retentionService).diagnoseCleanup()
@@ -95,6 +97,7 @@ class UploadedFileReconcileMetricsBinderTest {
         bucketOnlyObjectCount: Int = 0,
         dbOnlyMissingObjectCount: Int = 0,
         longLivedPendingDeleteCount: Long = 0,
+        inventoryAvailable: Boolean = true,
         inventoryTruncated: Boolean = false,
     ): UploadedFileCleanupDiagnostics =
         UploadedFileCleanupDiagnostics(
@@ -112,6 +115,7 @@ class UploadedFileReconcileMetricsBinderTest {
                     objectPrefix = "posts/",
                     inventoryLimit = 1_000,
                     inventoryObjectCount = bucketOnlyObjectCount,
+                    inventoryAvailable = inventoryAvailable,
                     inventoryTruncated = inventoryTruncated,
                     bucketOnlyObjectCount = bucketOnlyObjectCount,
                     sampleBucketOnlyObjectKeys = emptyList(),

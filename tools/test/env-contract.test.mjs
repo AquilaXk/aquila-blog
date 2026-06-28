@@ -20,7 +20,7 @@ const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometh
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
 const forbiddenSecretBackupCopyPattern =
-  /for file in[^\n]*(?:^|[\s/])\.env\.prod(?:\.compose)?(?:[\s"';]|$)|\b(?:cp|install)\b[^\n]*(?:^|[\s/])\.env\.prod(?:\.compose)?(?:[\s"';]|$)/
+  /for file in[^\n]*[\s/]\.env\.prod(?:\.compose)?(?:[\s"';]|$)|\b(?:cp|install)\b[^\n]*[\s/]\.env\.prod(?:\.compose)?(?:[\s"';]|$)/
 
 const git = (cwd, args) =>
   execFileSync("git", args, {

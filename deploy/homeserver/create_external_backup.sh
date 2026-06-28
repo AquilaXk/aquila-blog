@@ -584,16 +584,14 @@ write_metadata() {
     fi
     for image_key in "${COMPOSE_IMAGE_METADATA_KEYS[@]}"; do
       image_value="$(trim_quotes "$(read_key_from_file "${image_key}" "${COMPOSE_ENV_FILE}")")"
-      if [[ -n "${image_value}" ]]; then
-        require_digest_image_value "${image_key}" "${image_value}"
+      if is_digest_image_value "${image_value}"; then
         echo "${image_key}=${image_value}"
       fi
     done
     for image_key in BACK_BLUE_IMAGE BACK_GREEN_IMAGE BACK_READ_IMAGE BACK_ADMIN_IMAGE BACK_WORKER_IMAGE; do
       metadata_key="$(metadata_backend_image_key "${image_key}")"
       image_value="$(trim_quotes "$(read_key_from_file "${image_key}" "${COMPOSE_ENV_FILE}")")"
-      if [[ -n "${image_value}" ]]; then
-        require_digest_image_value "${image_key}" "${image_value}"
+      if is_digest_image_value "${image_value}"; then
         echo "${metadata_key}=${image_value}"
       fi
     done

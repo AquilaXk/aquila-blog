@@ -25,6 +25,7 @@ class UploadedFileReconcileMetricsBinder(
     private val longLivedPendingDelete = AtomicLong(0)
     private val inventoryAvailable = AtomicLong(1)
     private val inventoryTruncated = AtomicLong(0)
+    private val dbRowsTruncated = AtomicLong(0)
     private val cleanupRefreshFailures = AtomicLong(0)
 
     override fun bindTo(registry: MeterRegistry) {
@@ -33,6 +34,7 @@ class UploadedFileReconcileMetricsBinder(
         registerGauge(registry, "storage.uploaded_file.reconcile.long_lived_pending_delete", longLivedPendingDelete)
         registerGauge(registry, "storage.uploaded_file.reconcile.inventory_available", inventoryAvailable)
         registerGauge(registry, "storage.uploaded_file.reconcile.inventory_truncated", inventoryTruncated)
+        registerGauge(registry, "storage.uploaded_file.reconcile.db_rows_truncated", dbRowsTruncated)
         FunctionCounter
             .builder("storage.uploaded_file.cleanup.refresh_failures", cleanupRefreshFailures) { it.get().toDouble() }
             .register(registry)
@@ -55,6 +57,7 @@ class UploadedFileReconcileMetricsBinder(
                 longLivedPendingDelete.set(reconcile.longLivedPendingDeleteCount)
                 inventoryAvailable.set(if (reconcile.inventoryAvailable) 1 else 0)
                 inventoryTruncated.set(if (reconcile.inventoryTruncated) 1 else 0)
+                dbRowsTruncated.set(if (reconcile.dbRowsTruncated) 1 else 0)
             }.onFailure { exception ->
                 cleanupRefreshFailures.incrementAndGet()
                 logger.warn("Skip uploaded file reconcile metrics refresh due to diagnostics error", exception)

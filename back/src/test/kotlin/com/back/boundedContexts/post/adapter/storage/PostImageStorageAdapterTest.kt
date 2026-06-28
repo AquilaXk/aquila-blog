@@ -113,6 +113,43 @@ class PostImageStorageAdapterTest {
     }
 
     @Test
+    @DisplayName("listObjects는 빈 keyPrefix에서 bucket root inventory를 조회한다")
+    fun listObjectsAllowsRootPrefixWhenConfiguredPrefixIsBlank() {
+        // given
+        val s3Client =
+            RecordingS3Client(
+                ListObjectsV2Response
+                    .builder()
+                    .contents(
+                        S3Object
+                            .builder()
+                            .key("2026/06/root.png")
+                            .size(10L)
+                            .build(),
+                    ).isTruncated(false)
+                    .build(),
+            )
+        val adapter =
+            PostImageStorageAdapter(
+                PostImageStorageProperties(
+                    enabled = true,
+                    bucket = "test-bucket",
+                    keyPrefix = "",
+                ),
+            )
+        ReflectionTestUtils.setField(adapter, "s3Client", s3Client)
+
+        // when
+        val listing = adapter.listObjects("", limit = 25)
+
+        // then
+        assertThat(s3Client.lastListObjectsRequest!!.prefix()).isEqualTo("")
+        assertThat(listing.objects).containsExactly(
+            PostImageStoragePort.StoredObjectSummary("2026/06/root.png", 10),
+        )
+    }
+
+    @Test
     @DisplayName("stream 이미지 업로드는 빈 contentLength를 storage 접근 전에 거절한다")
     fun rejectEmptyImageUploadBeforeStorageAccess() {
         // given

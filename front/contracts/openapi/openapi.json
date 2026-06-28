@@ -5272,6 +5272,61 @@
             "items" : {
               "type" : "string"
             }
+          },
+          "reconcile" : {
+            "$ref" : "#/components/schemas/UploadedFileReconcileDiagnostics"
+          }
+        }
+      },
+      "UploadedFileReconcileDiagnostics" : {
+        "type" : "object",
+        "properties" : {
+          "objectPrefix" : {
+            "type" : "string"
+          },
+          "inventoryLimit" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "inventoryObjectCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "inventoryTruncated" : {
+            "type" : "boolean"
+          },
+          "bucketOnlyObjectCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sampleBucketOnlyObjectKeys" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "dbOnlyMissingObjectCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sampleDbOnlyObjectKeys" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "longLivedPendingDeleteCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "sampleLongLivedPendingDeleteObjectKeys" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "repairMode" : {
+            "type" : "string"
           }
         }
       },

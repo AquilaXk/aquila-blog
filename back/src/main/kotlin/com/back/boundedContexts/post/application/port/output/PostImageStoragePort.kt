@@ -30,6 +30,16 @@ interface PostImageStoragePort {
         val originalFilename: String? = null,
     )
 
+    data class StoredObjectSummary(
+        val objectKey: String,
+        val size: Long,
+    )
+
+    data class StoredObjectListing(
+        val objects: List<StoredObjectSummary>,
+        val isTruncated: Boolean,
+    )
+
     fun uploadPostImage(request: UploadImageRequest): String
 
     fun uploadPostFile(request: UploadFileRequest): String
@@ -41,4 +51,9 @@ interface PostImageStoragePort {
     fun deletePostImage(objectKey: String)
 
     fun deletePostFile(objectKey: String)
+
+    fun listObjects(
+        prefix: String,
+        limit: Int,
+    ): StoredObjectListing
 }

@@ -1,6 +1,7 @@
 package com.back.global.storage.application
 
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
+import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.global.app.AppConfig
 import com.back.global.storage.adapter.persistence.UploadedFileRepository
 import com.back.global.storage.domain.UploadedFile
@@ -294,6 +295,8 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
     @Test
     fun `cleanup 진단은 purge 후보 수와 샘플 object key를 보여준다`() {
         val objectKey = "posts/2026/03/diagnostics-temp.png"
+        given(postImageStoragePort.listObjects("posts/", 1000))
+            .willReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
 
         uploadedFileRetentionService.registerTempUpload(
             objectKey = objectKey,
@@ -313,6 +316,68 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         assertThat(diagnostics.eligibleForPurgeCount).isGreaterThanOrEqualTo(1)
         assertThat(diagnostics.sampleEligibleObjectKeys).contains(objectKey)
         assertThat(directDiagnostics.sampleEligibleObjectKeys).contains(objectKey)
+    }
+
+    @Test
+    fun `cleanup 진단은 bucket only와 DB only object drift를 dry-run으로 보여준다`() {
+        uploadedFileRepository.deleteAll()
+
+        val existingKey = "posts/2026/03/reconcile-existing.png"
+        val missingKey = "posts/2026/03/reconcile-db-only.png"
+        val longPendingKey = "posts/2026/03/reconcile-pending-delete.png"
+        val orphanKey = "posts/2026/03/reconcile-bucket-only.png"
+        val oldPurgeAfter = Instant.now(clock).minusSeconds(retentionProperties.longPendingDeleteSeconds + 60)
+
+        uploadedFileRepository.save(
+            UploadedFile(
+                objectKey = existingKey,
+                bucket = "test-bucket",
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.ACTIVE,
+            ),
+        )
+        uploadedFileRepository.save(
+            UploadedFile(
+                objectKey = missingKey,
+                bucket = "test-bucket",
+                contentType = "image/png",
+                fileSize = 256,
+                status = UploadedFileStatus.ACTIVE,
+            ),
+        )
+        uploadedFileRepository.save(
+            UploadedFile(
+                objectKey = longPendingKey,
+                bucket = "test-bucket",
+                contentType = "image/png",
+                fileSize = 512,
+                status = UploadedFileStatus.PENDING_DELETE,
+                purgeAfter = oldPurgeAfter,
+            ),
+        )
+        given(postImageStoragePort.listObjects("posts/", 1000))
+            .willReturn(
+                PostImageStoragePort.StoredObjectListing(
+                    objects =
+                        listOf(
+                            PostImageStoragePort.StoredObjectSummary(existingKey, 128),
+                            PostImageStoragePort.StoredObjectSummary(orphanKey, 64),
+                        ),
+                    isTruncated = false,
+                ),
+            )
+
+        val diagnostics = uploadedFileRetentionService.diagnoseCleanup(sampleSize = 5).reconcile
+
+        assertThat(diagnostics.repairMode).isEqualTo("dry-run")
+        assertThat(diagnostics.objectPrefix).isEqualTo("posts/")
+        assertThat(diagnostics.bucketOnlyObjectCount).isEqualTo(1)
+        assertThat(diagnostics.sampleBucketOnlyObjectKeys).containsExactly(orphanKey)
+        assertThat(diagnostics.dbOnlyMissingObjectCount).isEqualTo(2)
+        assertThat(diagnostics.sampleDbOnlyObjectKeys).contains(missingKey, longPendingKey)
+        assertThat(diagnostics.longLivedPendingDeleteCount).isEqualTo(1)
+        assertThat(diagnostics.sampleLongLivedPendingDeleteObjectKeys).containsExactly(longPendingKey)
     }
 
     @Test

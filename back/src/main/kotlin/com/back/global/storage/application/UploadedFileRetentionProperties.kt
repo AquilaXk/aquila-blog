@@ -10,4 +10,7 @@ data class UploadedFileRetentionProperties(
     val cleanupFixedDelayMs: Long = 3_600_000,
     val cleanupBatchSize: Int = 100,
     val cleanupSafetyThreshold: Int = 25,
+    val reconcileObjectPrefix: String = "posts/",
+    val reconcileInventoryLimit: Int = 1_000,
+    val longPendingDeleteSeconds: Long = 2_592_000,
 )

@@ -2,9 +2,15 @@ package com.back.boundedContexts.post.adapter.storage
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
+import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.test.util.ReflectionTestUtils
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
+import software.amazon.awssdk.services.s3.model.S3Object
 import java.io.ByteArrayInputStream
 
 @DisplayName("PostImageStorageAdapter 테스트")
@@ -45,6 +51,65 @@ class PostImageStorageAdapterTest {
             adapter.getPostImage("posts/2026/06/image.png")
         }.hasMessageContaining("503-1")
             .hasMessageContaining("이미지 스토리지가 비활성화되어 있습니다.")
+    }
+
+    @Test
+    @DisplayName("listObjects는 post prefix와 limit으로 S3 inventory를 조회한다")
+    fun listObjectsUsesConfiguredPostPrefixAndLimit() {
+        // given
+        val s3Client =
+            RecordingS3Client(
+                ListObjectsV2Response
+                    .builder()
+                    .contents(
+                        S3Object
+                            .builder()
+                            .key("posts/2026/06/a.png")
+                            .size(10L)
+                            .build(),
+                        S3Object
+                            .builder()
+                            .key("posts/2026/06/b.png")
+                            .size(20L)
+                            .build(),
+                    ).isTruncated(false)
+                    .build(),
+            )
+        val adapter =
+            PostImageStorageAdapter(
+                PostImageStorageProperties(
+                    enabled = true,
+                    bucket = "test-bucket",
+                    keyPrefix = "posts",
+                ),
+            )
+        ReflectionTestUtils.setField(adapter, "s3Client", s3Client)
+
+        // when
+        val listing = adapter.listObjects("posts/2026/06", limit = 25)
+
+        // then
+        assertThat(s3Client.lastListObjectsRequest!!.bucket()).isEqualTo("test-bucket")
+        assertThat(s3Client.lastListObjectsRequest!!.prefix()).isEqualTo("posts/2026/06/")
+        assertThat(s3Client.lastListObjectsRequest!!.maxKeys()).isEqualTo(25)
+        assertThat(listing.isTruncated).isFalse()
+        assertThat(listing.objects).containsExactly(
+            PostImageStoragePort.StoredObjectSummary("posts/2026/06/a.png", 10),
+            PostImageStoragePort.StoredObjectSummary("posts/2026/06/b.png", 20),
+        )
+    }
+
+    @Test
+    @DisplayName("listObjects는 post prefix 밖 inventory 요청을 거절한다")
+    fun listObjectsRejectsPrefixOutsideConfiguredPostPrefix() {
+        // given
+        val adapter = disabledAdapter()
+
+        // when & then
+        assertThatThrownBy {
+            adapter.listObjects("cloud/2026/06", limit = 25)
+        }.hasMessageContaining("400-1")
+            .hasMessageContaining("유효하지 않은 이미지 경로입니다.")
     }
 
     @Test
@@ -168,4 +233,21 @@ class PostImageStorageAdapterTest {
             0x0A,
             0x00,
         )
+
+    private class RecordingS3Client(
+        private val response: ListObjectsV2Response,
+    ) : S3Client {
+        var lastListObjectsRequest: ListObjectsV2Request? = null
+            private set
+
+        override fun listObjectsV2(listObjectsV2Request: ListObjectsV2Request): ListObjectsV2Response {
+            lastListObjectsRequest = listObjectsV2Request
+            return response
+        }
+
+        override fun serviceName(): String = "s3"
+
+        override fun close() {
+        }
+    }
 }

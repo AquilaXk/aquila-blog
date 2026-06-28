@@ -239,7 +239,7 @@ class PostImageStorageAdapter(
         val client = requireClient()
         val objects = mutableListOf<PostImageStoragePort.StoredObjectSummary>()
         var continuationToken: String? = null
-        var hasMore = false
+        var hasMore: Boolean
 
         do {
             val remaining = safeLimit - objects.size

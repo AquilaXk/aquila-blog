@@ -32,6 +32,10 @@ read_key_from_file() {
   ' "${file}" | tail -n 1
 }
 
+is_digest_image_value() {
+  [[ "$1" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]
+}
+
 container_image_for_service() {
   local service="$1"
   local container_id
@@ -114,7 +118,7 @@ compose_image_keys=(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMA
   fi
   for image_key in "${compose_image_keys[@]}"; do
     image_value="$(read_key_from_file "${image_key}" "${ENV_FILE}")"
-    if [[ -n "${image_value}" ]]; then
+    if [[ -n "${image_value}" ]] && is_digest_image_value "${image_value}"; then
       echo "${image_key}=${image_value}"
     fi
   done

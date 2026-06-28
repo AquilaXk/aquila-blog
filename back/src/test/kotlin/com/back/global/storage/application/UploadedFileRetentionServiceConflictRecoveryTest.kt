@@ -176,19 +176,34 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
     @Test
     fun `cleanup diagnostics는 object storage listing 실패 시 degraded reconcile만 반환한다`() {
+        val repository = SuccessfulRepository()
+        repository.save(
+            UploadedFile(
+                id = 1,
+                objectKey = "posts/2026/03/stale-pending-delete.png",
+                bucket = "test-bucket",
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.PENDING_DELETE,
+                purgeAfter = Instant.parse("2026-05-19T00:00:00Z"),
+            ),
+        )
         `when`(postImageStoragePort.listObjects("posts/", 1000))
             .thenThrow(IllegalStateException("storage unavailable"))
-        val service = newService(SuccessfulRepository())
+        val service = newService(repository)
 
         val diagnostics = service.diagnoseCleanup()
 
         assertThat(diagnostics.tempCount).isEqualTo(0)
-        assertThat(diagnostics.eligibleForPurgeCount).isEqualTo(0)
+        assertThat(diagnostics.eligibleForPurgeCount).isEqualTo(1)
         assertThat(diagnostics.reconcile.objectPrefix).isEqualTo("posts/")
         assertThat(diagnostics.reconcile.inventoryAvailable).isFalse()
         assertThat(diagnostics.reconcile.repairMode).isEqualTo("dry-run-degraded")
         assertThat(diagnostics.reconcile.bucketOnlyObjectCount).isEqualTo(0)
         assertThat(diagnostics.reconcile.dbOnlyMissingObjectCount).isEqualTo(0)
+        assertThat(diagnostics.reconcile.longLivedPendingDeleteCount).isEqualTo(1)
+        assertThat(diagnostics.reconcile.sampleLongLivedPendingDeleteObjectKeys)
+            .containsExactly("posts/2026/03/stale-pending-delete.png")
     }
 
     @Test
@@ -246,6 +261,41 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         assertThat(diagnostics.reconcile.dbRowsTruncated).isTrue()
         assertThat(diagnostics.reconcile.dbOnlyMissingObjectCount).isEqualTo(1000)
+    }
+
+    @Test
+    fun `cleanup diagnostics는 DELETED row가 있는 bucket object를 bucket only drift로 표시한다`() {
+        val repository = SuccessfulRepository()
+        repository.save(
+            UploadedFile(
+                id = 1,
+                objectKey = "posts/2026/03/deleted-but-present.png",
+                bucket = "test-bucket",
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.DELETED,
+            ),
+        )
+        `when`(postImageStoragePort.listObjects("posts/", 1000))
+            .thenReturn(
+                PostImageStoragePort.StoredObjectListing(
+                    objects =
+                        listOf(
+                            PostImageStoragePort.StoredObjectSummary(
+                                objectKey = "posts/2026/03/deleted-but-present.png",
+                                size = 128,
+                            ),
+                        ),
+                    isTruncated = false,
+                ),
+            )
+        val service = newService(repository)
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.bucketOnlyObjectCount).isEqualTo(1)
+        assertThat(diagnostics.reconcile.sampleBucketOnlyObjectKeys)
+            .containsExactly("posts/2026/03/deleted-but-present.png")
     }
 
     private fun newService(
@@ -310,7 +360,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
 
-        override fun countByStatus(status: UploadedFileStatus): Long = 0
+        override fun countByStatus(status: UploadedFileStatus): Long = store.values.count { it.status == status }.toLong()
 
         override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
             purpose: com.back.global.storage.domain.UploadedFilePurpose,
@@ -329,13 +379,25 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         override fun countByStatusInAndPurgeAfterLessThanEqual(
             statuses: Collection<UploadedFileStatus>,
             purgeAfter: Instant,
-        ): Long = 0
+        ): Long =
+            store.values
+                .count { uploadedFile ->
+                    uploadedFile.status in statuses &&
+                        uploadedFile.purgeAfter?.let { !it.isAfter(purgeAfter) } == true
+                }.toLong()
 
         override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
             statuses: Collection<UploadedFileStatus>,
             purgeAfter: Instant,
             pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
+        ): List<UploadedFile> =
+            store.values
+                .filter { uploadedFile ->
+                    uploadedFile.status in statuses &&
+                        uploadedFile.purgeAfter?.let { !it.isAfter(purgeAfter) } == true
+                }.sortedWith(compareBy<UploadedFile> { it.purgeAfter }.thenBy { it.id })
+                .drop(pageable.offset.toInt())
+                .take(pageable.pageSize)
 
         override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
             statuses: Collection<UploadedFileStatus>,

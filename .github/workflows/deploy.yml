@@ -492,6 +492,8 @@ jobs:
           DEPLOY_COMPLETED="false"
           ROLLBACK_IN_PROGRESS="false"
           ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
+          PRE_DEPLOY_ENV_CAPTURED="false"
+          PRE_DEPLOY_ENV_CONTENT=""
           BACKUP_DIR=""
 
           rollback_from_backup_if_needed() {
@@ -631,7 +633,7 @@ jobs:
               return 1
             fi
 
-            for file in .env.prod docker-compose.prod.yml .active_backend .backend-release-state.env; do
+            for file in docker-compose.prod.yml .active_backend; do
               if [ -f "${backup_dir}/${file}" ]; then
                 cp "${backup_dir}/${file}" "deploy/homeserver/${file}"
               fi
@@ -653,6 +655,10 @@ jobs:
             fi
 
             echo "rollback from backup: ${BACKUP_DIR} (reason=${reason})" >&2
+            if [ "${PRE_DEPLOY_ENV_CAPTURED}" = "true" ]; then
+              printf '%s\n' "${PRE_DEPLOY_ENV_CONTENT}" > deploy/homeserver/.env.prod
+              echo "pre-deploy env restored from shell memory before rollback" >&2
+            fi
 
             if ! restore_backup_files_minimally "${BACKUP_DIR}"; then
               echo "minimal backup restore failed before rollback script: ${BACKUP_DIR}" >&2
@@ -686,6 +692,11 @@ jobs:
           echo "external backup created (pre-env-mutation): ${EXTERNAL_BACKUP_DIR}"
           ./deploy/homeserver/prune_external_backups.sh --dry-run
           ./deploy/homeserver/prune_external_backups.sh
+
+          if [ -f deploy/homeserver/.env.prod ]; then
+            PRE_DEPLOY_ENV_CONTENT="$(cat deploy/homeserver/.env.prod)"
+            PRE_DEPLOY_ENV_CAPTURED="true"
+          fi
 
           if [ -n "${HOME_SERVER_ENV:-}" ]; then
             printf '%s\n' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod

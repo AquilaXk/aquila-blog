@@ -4,6 +4,9 @@ front/tsconfig.tsbuildinfo
 infra/terraform.tfvars
 infra/*.auto.tfvars
 deploy/homeserver/.env.prod
+deploy/homeserver/.deploy-backups/
+deploy/homeserver/*.backup
+deploy/homeserver/*.enc
 
 # Agent-only docs (machine-facing)
 AGENTS.md

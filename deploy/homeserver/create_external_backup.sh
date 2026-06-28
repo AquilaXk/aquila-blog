@@ -22,6 +22,7 @@ LEGACY_MINIO_STOPPED_FOR_MIGRATION="false"
 MINIO_STOPPED_FOR_BACKUP="false"
 MIGRATED_MINIO_DIR_THIS_RUN=""
 COMPOSE_IMAGE_ENV_PREFLIGHT_DONE="false"
+COMPOSE_IMAGE_METADATA_KEYS=(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
 
 read_key_from_text() {
   local key="$1"
@@ -348,6 +349,18 @@ ensure_backend_runtime_image_env_key() {
   fail "required backend runtime image env key is missing: ${key}"
 }
 
+metadata_backend_image_key() {
+  local key="$1"
+  case "${key}" in
+    BACK_BLUE_IMAGE) echo "back_blue_image" ;;
+    BACK_GREEN_IMAGE) echo "back_green_image" ;;
+    BACK_READ_IMAGE) echo "back_read_image" ;;
+    BACK_ADMIN_IMAGE) echo "back_admin_image" ;;
+    BACK_WORKER_IMAGE) echo "back_worker_image" ;;
+    *) return 1 ;;
+  esac
+}
+
 ensure_compose_image_env_defaults() {
   ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
   ensure_image_env_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:1.2.0"
@@ -550,9 +563,12 @@ write_metadata() {
   local class="$1"
   local target_dir="$2"
   local minio_mode="${3:-}"
+  local image_key metadata_key image_value
 
   {
     echo "backup_set_id=${TIMESTAMP}"
+    echo "manifest_version=2"
+    echo "secret_files_copied=false"
     echo "class=${class}"
     echo "created_at=${TIMESTAMP}"
     echo "created_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -566,6 +582,19 @@ write_metadata() {
     if [[ -n "${POSTGRES_DB_NAME:-}" ]]; then
       echo "postgres_database=${POSTGRES_DB_NAME}"
     fi
+    for image_key in "${COMPOSE_IMAGE_METADATA_KEYS[@]}"; do
+      image_value="$(trim_quotes "$(read_key_from_file "${image_key}" "${COMPOSE_ENV_FILE}")")"
+      if is_digest_image_value "${image_value}"; then
+        echo "${image_key}=${image_value}"
+      fi
+    done
+    for image_key in BACK_BLUE_IMAGE BACK_GREEN_IMAGE BACK_READ_IMAGE BACK_ADMIN_IMAGE BACK_WORKER_IMAGE; do
+      metadata_key="$(metadata_backend_image_key "${image_key}")"
+      image_value="$(trim_quotes "$(read_key_from_file "${image_key}" "${COMPOSE_ENV_FILE}")")"
+      if is_digest_image_value "${image_value}"; then
+        echo "${metadata_key}=${image_value}"
+      fi
+    done
     if [[ -n "${minio_mode}" ]]; then
       echo "minio_backup_mode=${minio_mode}"
     fi
@@ -585,14 +614,11 @@ copy_deploy_config() {
   fi
 
   local file
-  for file in .env.prod docker-compose.prod.yml .active_backend; do
+  for file in docker-compose.prod.yml .active_backend; do
     if [[ -f "${SCRIPT_DIR}/${file}" ]]; then
       cp "${SCRIPT_DIR}/${file}" "${target_dir}/${file}"
     fi
   done
-  if [[ "${COMPOSE_ENV_FILE}" != "${ENV_FILE}" && -f "${COMPOSE_ENV_FILE}" ]]; then
-    cp "${COMPOSE_ENV_FILE}" "${target_dir}/.env.prod.compose"
-  fi
 
   write_metadata "${class}" "${target_dir}"
 }

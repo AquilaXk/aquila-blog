@@ -20,6 +20,7 @@ HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
+COMPOSE_IMAGE_METADATA_KEYS=(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
 
 normalize_bool() {
   local raw="$1"
@@ -284,18 +285,11 @@ require_digest_image_value() {
 repair_runtime_back_image_if_missing() {
   local service="$1"
   local fallback="$2"
-  local key metadata_key current_value repaired_value metadata_image legacy_image
+  local key metadata_key repaired_value metadata_image legacy_image
   repaired_value=""
   metadata_image=""
   legacy_image=""
   key="$(backend_image_key "${service}")"
-  current_value="$(trim_quotes "$(env_value "${key}")")"
-  if [[ -n "${current_value}" ]]; then
-    require_digest_image_value "${key}" "${current_value}"
-    echo "rollback ${key} preserved: ${current_value}"
-    return 0
-  fi
-
   metadata_key="$(backup_image_key_for_service "${service}" || true)"
   if [[ -n "${metadata_key}" ]]; then
     metadata_image="$(trim_quotes "$(backup_metadata_value "${metadata_key}")")"
@@ -304,8 +298,17 @@ repair_runtime_back_image_if_missing() {
     metadata_image="$(trim_quotes "$(backup_metadata_value "active_backend_image")")"
   fi
   if [[ -n "${metadata_image}" ]]; then
-    repaired_value="${metadata_image}"
-    echo "rollback ${key} repair source=backup_metadata image=${repaired_value}"
+    require_digest_image_value "${key}" "${metadata_image}"
+    upsert_env_key "${key}" "${metadata_image}"
+    echo "rollback ${key} restored from backup_metadata: ${metadata_image}"
+    return 0
+  fi
+
+  if [[ -z "${repaired_value}" ]]; then
+    repaired_value="${fallback}"
+    if [[ -n "${repaired_value}" ]]; then
+      echo "rollback ${key} repair source=backup_fallback image=${repaired_value}"
+    fi
   fi
 
   if [[ -z "${repaired_value}" ]]; then
@@ -321,11 +324,6 @@ repair_runtime_back_image_if_missing() {
       repaired_value="${legacy_image}"
       echo "rollback ${key} repair source=legacy_BACK_IMAGE image=${repaired_value}"
     fi
-  fi
-
-  if [[ -z "${repaired_value}" ]]; then
-    repaired_value="${fallback}"
-    echo "rollback ${key} repair source=fallback image=${repaired_value}"
   fi
 
   require_digest_image_value "${key}" "${repaired_value}"
@@ -352,6 +350,18 @@ repair_back_image_if_missing() {
   repair_runtime_back_image_if_missing "back_read" "${target_image}"
   repair_runtime_back_image_if_missing "back_admin" "${target_image}"
   repair_runtime_back_image_if_missing "back_worker" "${target_image}"
+}
+
+restore_compose_image_metadata() {
+  local key value
+  for key in "${COMPOSE_IMAGE_METADATA_KEYS[@]}"; do
+    value="$(trim_quotes "$(backup_metadata_value "${key}")")"
+    if [[ -n "${value}" ]]; then
+      require_digest_image_value "${key}" "${value}"
+      upsert_env_key "${key}" "${value}"
+      echo "rollback ${key} restored from backup_metadata: ${value}"
+    fi
+  done
 }
 
 resolve_prod_db_name() {
@@ -648,7 +658,7 @@ trap 'release_deploy_lock' EXIT INT TERM
 
 echo "rollback from backup: ${BACKUP_DIR}"
 
-for file in .env.prod docker-compose.prod.yml .active_backend .backend-release-state.env; do
+for file in docker-compose.prod.yml .active_backend; do
   if [[ -f "${BACKUP_DIR}/${file}" ]]; then
     cp "${BACKUP_DIR}/${file}" "${SCRIPT_DIR}/${file}"
   fi
@@ -666,6 +676,8 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
   echo "rollback failed: caddy file missing after backup restore (${CADDY_FILE})" >&2
   exit 1
 fi
+
+restore_compose_image_metadata
 
 # normalize legacy upstream tokens before rollback target is chosen
 if [[ -f "${CADDY_FILE}" ]]; then

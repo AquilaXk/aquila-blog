@@ -19,6 +19,8 @@ const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
+const forbiddenSecretBackupCopyPattern =
+  /for file in [^\n]*\b\.env\.prod(?:\.compose)?\b|\b(?:cp|install)\b[^\n]*\b\.env\.prod(?:\.compose)?\b/
 
 const git = (cwd, args) =>
   execFileSync("git", args, {
@@ -1213,10 +1215,9 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(deployScript, /write_backend_release_state "\$\{next_backend\}" "\$\{active_backend\}"/)
   assert.match(deployScript, /prepare_runtime_backend_images "\$\{active_backend\}" "\$\{next_backend\}" "\$\{STAGED_BACK_IMAGE\}"/)
   assert.match(backupScript, /\.backend-release-state\.env/)
-  assert.doesNotMatch(backupScript, /for file in \.env\.prod/)
+  assert.doesNotMatch(backupScript, forbiddenSecretBackupCopyPattern)
   assert.match(backupScript, /secret_files_copied=false/)
-  assert.doesNotMatch(externalBackupScript, /for file in \.env\.prod/)
-  assert.doesNotMatch(externalBackupScript, /\.env\.prod\.compose/)
+  assert.doesNotMatch(externalBackupScript, forbiddenSecretBackupCopyPattern)
   assert.match(externalBackupScript, /secret_files_copied=false/)
   assert.match(backupScript, /back_blue_image=/)
   assert.match(backupScript, /back_green_image=/)
@@ -1290,9 +1291,9 @@ test("secret-bearing homeserver backups use private file permissions", () => {
   assert.match(deployBackupScript, /^umask 077$/m)
   assert(externalBackupScript.indexOf("umask 077") < externalBackupScript.indexOf('mkdir -p "${BACKUP_ROOT}/logs"'))
   assert(deployBackupScript.indexOf("umask 077") < deployBackupScript.indexOf('mkdir -p "${BACKUP_DIR}"'))
-  assert.doesNotMatch(externalBackupScript, /cp "\$\{COMPOSE_ENV_FILE\}" "\$\{target_dir\}\/\.env\.prod\.compose"/)
-  assert.doesNotMatch(deployBackupScript, /\.env\.prod docker-compose\.prod\.yml/)
-  assert.doesNotMatch(rollbackScript, /for file in \.env\.prod/)
+  assert.doesNotMatch(externalBackupScript, forbiddenSecretBackupCopyPattern)
+  assert.doesNotMatch(deployBackupScript, forbiddenSecretBackupCopyPattern)
+  assert.doesNotMatch(rollbackScript, forbiddenSecretBackupCopyPattern)
   assert.match(gitignore, /deploy\/homeserver\/\.deploy-backups\//)
   assert.match(gitignore, /deploy\/homeserver\/\*\.backup/)
   assert.match(gitignore, /deploy\/homeserver\/\*\.enc/)

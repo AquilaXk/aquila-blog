@@ -225,7 +225,7 @@ if grep -q '\.env\.prod\.compose' "${CREATE_SCRIPT}"; then
   echo "external backup still references .env.prod.compose" >&2
   exit 1
 fi
-if grep -q 'for file in \.env\.prod' "${CREATE_SCRIPT}"; then
+if grep -Eq 'for file in .*\.env\.prod(\.compose)?|cp .*\.env\.prod(\.compose)?|install .*\.env\.prod(\.compose)?' "${CREATE_SCRIPT}"; then
   echo "external backup still copies .env.prod" >&2
   exit 1
 fi

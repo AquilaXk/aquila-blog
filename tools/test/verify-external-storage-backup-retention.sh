@@ -206,6 +206,35 @@ AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
 
 [[ -s "${KEY_PARENT_FILE}" ]] || { echo "backup did not create custom encryption key with missing parent" >&2; exit 1; }
 
+SKIP_TAG_ROOT="${WORK_DIR}/skip-tag-root"
+SKIP_TAG_SCRIPT_DIR="${SKIP_TAG_ROOT}/deploy/homeserver"
+SKIP_TAG_EXTERNAL_ROOT="${SKIP_TAG_ROOT}/external"
+SKIP_TAG_BACKUP_ROOT="${SKIP_TAG_EXTERNAL_ROOT}/backups"
+mkdir -p "${SKIP_TAG_SCRIPT_DIR}" "${SKIP_TAG_EXTERNAL_ROOT}"
+cp "${CREATE_SCRIPT}" "${SKIP_TAG_SCRIPT_DIR}/create_external_backup.sh"
+chmod +x "${SKIP_TAG_SCRIPT_DIR}/create_external_backup.sh"
+cat > "${SKIP_TAG_SCRIPT_DIR}/.env.prod" <<'ENV'
+CADDY_IMAGE=caddy:2.8-alpine
+ENV
+
+AQUILA_BACKUP_TIMESTAMP=20260101-030405 \
+  AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${SKIP_TAG_EXTERNAL_ROOT}" \
+  AQUILA_BACKUP_ROOT="${SKIP_TAG_BACKUP_ROOT}" \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+  AQUILA_BACKUP_SKIP_POSTGRES=true \
+  AQUILA_BACKUP_SKIP_MINIO=true \
+    "${SKIP_TAG_SCRIPT_DIR}/create_external_backup.sh" >/dev/null
+
+SKIP_TAG_METADATA="${SKIP_TAG_BACKUP_ROOT}/deploy/daily/20260101-030405/metadata.env"
+[[ -f "${SKIP_TAG_METADATA}" ]] || { echo "skip-tag deploy metadata was not written" >&2; exit 1; }
+grep -q "secret_files_copied=false" "${SKIP_TAG_METADATA}" || { echo "skip-tag metadata missing secret-free marker" >&2; exit 1; }
+if grep -q "CADDY_IMAGE=caddy:2.8-alpine" "${SKIP_TAG_METADATA}"; then
+  echo "skip-tag metadata recorded a non-digest image tag" >&2
+  exit 1
+fi
+
 grep -q "stop_legacy_minio_for_migration" "${CREATE_SCRIPT}"
 grep -q "docker stop" "${CREATE_SCRIPT}"
 grep -q "MIGRATION_STOPPED_FILE" "${CREATE_SCRIPT}"
@@ -220,6 +249,20 @@ grep -q 'assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE"' "${CREA
 grep -q "openssl enc -aes-256-cbc -pbkdf2" "${CREATE_SCRIPT}" || { echo "missing: openssl encryption command" >&2; exit 1; }
 grep -q "dump.sql.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted postgres dump artifact name" >&2; exit 1; }
 grep -q "minio-data.tar.gz.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted minio archive artifact name" >&2; exit 1; }
+grep -q "secret_files_copied=false" "${CREATE_SCRIPT}" || { echo "missing: secret-free backup manifest marker" >&2; exit 1; }
+grep -q "metadata_backend_image_key" "${CREATE_SCRIPT}" || { echo "missing: deploy backup image metadata helper" >&2; exit 1; }
+grep -q "back_blue_image" "${CREATE_SCRIPT}" || { echo "missing: deploy backup backend image metadata" >&2; exit 1; }
+grep -q "COMPOSE_IMAGE_METADATA_KEYS" "${CREATE_SCRIPT}" || { echo "missing: non-backend image metadata key list" >&2; exit 1; }
+grep -q "CADDY_IMAGE" "${CREATE_SCRIPT}" || { echo "missing: non-backend image metadata" >&2; exit 1; }
+grep -q 'read_key_from_file "${image_key}" "${COMPOSE_ENV_FILE}"' "${CREATE_SCRIPT}" || { echo "missing: staged compose image metadata read" >&2; exit 1; }
+if grep -q '\.env\.prod\.compose' "${CREATE_SCRIPT}"; then
+  echo "external backup still references .env.prod.compose" >&2
+  exit 1
+fi
+if grep -Eq 'for file in .*\.env\.prod(\.compose)?|cp .*\.env\.prod(\.compose)?|install .*\.env\.prod(\.compose)?' "${CREATE_SCRIPT}"; then
+  echo "external backup still copies .env.prod" >&2
+  exit 1
+fi
 grep -q "AQUILA_BACKUP_ROOT must not be inside the MinIO data directory" "${PRUNE_SCRIPT}"
 
 echo "[external-storage-retention] ok"

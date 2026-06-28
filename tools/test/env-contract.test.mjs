@@ -19,6 +19,8 @@ const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
+const forbiddenSecretBackupCopyPattern =
+  /for file in[^\n]*[\s/]\.env\.prod(?:\.compose)?(?:[\s"';]|$)|\b(?:cp|install)\b[^\n]*[\s/]\.env\.prod(?:\.compose)?(?:[\s"';]|$)/
 
 const git = (cwd, args) =>
   execFileSync("git", args, {
@@ -565,10 +567,11 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   assert(skipMarkerIndex < prepareComposeReadyCallIndex, "compose preflight must not run before skipped PostgreSQL backups")
   assert(prepareCallIndex < composeExecIndex, "compose preflight must run before backup compose calls")
   assert(loopPrepareIndex < loopCopyIndex, "compose env failures must be detected before copying deploy config")
-  assert.match(
+  assert.doesNotMatch(
     copyDeployConfigBody,
     /cp "\$\{COMPOSE_ENV_FILE\}" "\$\{target_dir\}\/\.env\.prod\.compose"/,
   )
+  assert.match(externalBackupScript, /secret_files_copied=false/)
 })
 
 test("external backup stages HOME_SERVER_ENV values with compose-safe quoting", () => {
@@ -1072,7 +1075,7 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=/)
   assert.doesNotMatch(workflow, /stale workflow_run payload: deploy_sha=/)
   assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
-  assert.match(workflow, /if echo "\$\{CHANGED_FILES\}" \| grep -Eq "\$\{FRONT_BUILD_SHA_PATHS_PATTERN\}"/)
+  assert.match(workflow, /if \[ "\$\{FRONT_BUILD_SHA_SUPERSEDED\}" != "true" \] && echo "\$\{CHANGED_FILES\}" \| grep -Eq "\$\{FRONT_BUILD_SHA_PATHS_PATTERN\}"/)
 })
 
 test("deploy calculateTag는 docs-only 후속 main 변경이면 기존 backend deploy를 계속 허용한다", () => {
@@ -1185,6 +1188,7 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   const recoverScript = readFileSync(path.join(repoRoot, "deploy/homeserver/recover.sh"), "utf8")
   const statusScript = readFileSync(path.join(repoRoot, "deploy/homeserver/check_deploy_status.sh"), "utf8")
   const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
+  const workflow = readFileSync(workflowPath, "utf8")
 
   for (const key of runtimeBackendImageKeys) {
     assert.match(deployScript, new RegExp(`${key}`))
@@ -1212,15 +1216,39 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(deployScript, /write_backend_release_state "\$\{next_backend\}" "\$\{active_backend\}"/)
   assert.match(deployScript, /prepare_runtime_backend_images "\$\{active_backend\}" "\$\{next_backend\}" "\$\{STAGED_BACK_IMAGE\}"/)
   assert.match(backupScript, /\.backend-release-state\.env/)
+  assert.doesNotMatch(backupScript, forbiddenSecretBackupCopyPattern)
+  assert.match(backupScript, /secret_files_copied=false/)
+  assert.match(backupScript, /is_digest_image_value\(\)/)
+  assert.match(backupScript, /compose_image_keys=\(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
+  assert.match(backupScript, /is_digest_image_value "\$\{image_value\}"/)
+  assert.doesNotMatch(externalBackupScript, forbiddenSecretBackupCopyPattern)
+  assert.match(externalBackupScript, /secret_files_copied=false/)
+  assert.match(externalBackupScript, /COMPOSE_IMAGE_METADATA_KEYS=\(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
+  assert.match(externalBackupScript, /echo "\$\{image_key\}=\$\{image_value\}"/)
+  assert.match(externalBackupScript, /metadata_backend_image_key\(\)/)
+  assert.match(externalBackupScript, /for image_key in BACK_BLUE_IMAGE BACK_GREEN_IMAGE BACK_READ_IMAGE BACK_ADMIN_IMAGE BACK_WORKER_IMAGE/)
+  assert.match(externalBackupScript, /read_key_from_file "\$\{image_key\}" "\$\{COMPOSE_ENV_FILE\}"/)
+  assert.match(externalBackupScript, /echo "\$\{metadata_key\}=\$\{image_value\}"/)
   assert.match(backupScript, /back_blue_image=/)
   assert.match(backupScript, /back_green_image=/)
   assert.match(rollbackScript, /backup_image_key_for_service\(\)/)
-  assert.match(rollbackScript, /local key metadata_key current_value repaired_value metadata_image legacy_image\s+repaired_value=""/)
+  assert.match(rollbackScript, /COMPOSE_IMAGE_METADATA_KEYS=\(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
+  assert.match(rollbackScript, /restore_compose_image_metadata/)
+  assert.match(rollbackScript, /local key metadata_key repaired_value metadata_image legacy_image\s+repaired_value=""/)
+  assert.match(rollbackScript, /rollback \$\{key\} restored from backup_metadata/)
+  assert.match(rollbackScript, /rollback \$\{key\} repair source=backup_fallback/)
+  assert.doesNotMatch(rollbackScript, /rollback \$\{key\} preserved:/)
   assert.match(rollbackScript, /repair_runtime_back_image_if_missing "\$\{target_backend\}"/)
   assert.match(recoverScript, /repair_runtime_back_image_if_missing "back_worker"/)
   assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE"/)
   assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE"/)
   assert.match(steadyStateGuard, /image_key="BACK_BLUE_IMAGE"/)
+  assert.match(workflow, /for file in docker-compose\.prod\.yml \.active_backend; do/)
+  assert.doesNotMatch(workflow, /for file in \.env\.prod docker-compose\.prod\.yml \.active_backend \.backend-release-state\.env/)
+  assert.match(workflow, /PRE_DEPLOY_ENV_CONTENT="\$\(cat deploy\/homeserver\/\.env\.prod\)"/)
+  assert.match(workflow, /printf '%s\\n' "\$\{PRE_DEPLOY_ENV_CONTENT\}" > deploy\/homeserver\/\.env\.prod/)
+  assert(workflow.indexOf("PRE_DEPLOY_ENV_CONTENT=\"$(cat deploy/homeserver/.env.prod)\"") < workflow.indexOf("printf '%s\\n' \"${HOME_SERVER_ENV}\" > deploy/homeserver/.env.prod"))
+  assert(workflow.indexOf("printf '%s\\n' \"${PRE_DEPLOY_ENV_CONTENT}\" > deploy/homeserver/.env.prod") < workflow.indexOf("./deploy/homeserver/rollback_last_deploy.sh"))
   assert.match(steadyStateGuard, /image_key="BACK_GREEN_IMAGE"/)
   assert.doesNotMatch(statusScript, /env_value "BACK_IMAGE"/)
   assert.doesNotMatch(steadyStateGuard, /env_value "BACK_IMAGE"/)
@@ -1277,11 +1305,27 @@ test("minio production data is bound to the approved external disk", () => {
 test("secret-bearing homeserver backups use private file permissions", () => {
   const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
   const deployBackupScript = readFileSync(deployBackupScriptPath, "utf8")
+  const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
+  const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8")
+  const forbiddenCopySamples = [
+    "for file in .env.prod docker-compose.prod.yml; do",
+    'cp "${SCRIPT_DIR}/.env.prod" "${BACKUP_DIR}/.env.prod"',
+    "install -m 600 .env.prod backup/.env.prod",
+  ]
 
   assert.match(externalBackupScript, /^umask 077$/m)
   assert.match(deployBackupScript, /^umask 077$/m)
   assert(externalBackupScript.indexOf("umask 077") < externalBackupScript.indexOf('mkdir -p "${BACKUP_ROOT}/logs"'))
   assert(deployBackupScript.indexOf("umask 077") < deployBackupScript.indexOf('mkdir -p "${BACKUP_DIR}"'))
+  for (const sample of forbiddenCopySamples) {
+    assert.match(sample, forbiddenSecretBackupCopyPattern)
+  }
+  assert.doesNotMatch(externalBackupScript, forbiddenSecretBackupCopyPattern)
+  assert.doesNotMatch(deployBackupScript, forbiddenSecretBackupCopyPattern)
+  assert.doesNotMatch(rollbackScript, forbiddenSecretBackupCopyPattern)
+  assert.match(gitignore, /deploy\/homeserver\/\.deploy-backups\//)
+  assert.match(gitignore, /deploy\/homeserver\/\*\.backup/)
+  assert.match(gitignore, /deploy\/homeserver\/\*\.enc/)
 })
 
 test("prod datasource uses a non-superuser runtime role contract", () => {

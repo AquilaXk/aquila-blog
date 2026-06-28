@@ -181,11 +181,11 @@ export const LoginPageForm = ({
           {loading ? "로그인 중..." : "로그인"}
         </PrimaryButton>
 
-        {hasSocialItems ? (
+        {hasSocialItems && showSocialAuth ? (
           <SocialSection>
             <span>소셜 계정으로 로그인</span>
             <SocialButtonRow>
-              {showSocialAuth ? <SocialAuthButtons items={socialItems} /> : null}
+              <SocialAuthButtons items={socialItems} />
             </SocialButtonRow>
           </SocialSection>
         ) : null}

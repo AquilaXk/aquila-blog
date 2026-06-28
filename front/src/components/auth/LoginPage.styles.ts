@@ -141,12 +141,12 @@ export const LoginStateRow = styled.div`
 `
 
 export const FeedbackSlot = styled.div`
-  min-height: 4.6rem;
+  min-height: 0;
   display: flex;
   align-items: stretch;
 
-  &[data-filled="false"] {
-    min-height: 4.1rem;
+  &[data-filled="true"] {
+    min-height: 4.6rem;
   }
 
   > * {
@@ -273,12 +273,12 @@ export const PrimaryButton = styled.button`
   border: 0;
   border-radius: 12px;
   padding: 0.84rem 1rem;
-  background: #12b886;
+  background: ${({ theme }) => theme.colors.accentLink};
   color: #fff;
   font-weight: 700;
   cursor: pointer;
   box-shadow: ${({ theme }) =>
-    theme.scheme === "light" ? "0 10px 22px rgba(18, 184, 134, 0.18)" : "none"};
+    theme.scheme === "light" ? `0 10px 22px color-mix(in srgb, ${theme.colors.accentLink} 18%, transparent)` : "none"};
   transition: filter 0.16s ease, box-shadow 0.16s ease;
 
   &:hover:not(:disabled) {

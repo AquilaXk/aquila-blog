@@ -363,10 +363,14 @@ test("Prometheus basic auth has no Caddy fallback and rejects known weak values"
   assertPrometheusAuthRejected(
     baseHomeServerEnv.replace(
       "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
-      "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$g4sdUn.YYoUOjAy/41KhSOBCQvOnwTNJ/jmdl/95o8YKEoq/gddPC",
+      [
+        "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$",
+        "g4sdUn.YYoUOjAy/41KhSOBCQvOnwTNJ/",
+        "jmdl/95o8YKEoq/gddPC",
+      ].join(""),
     ),
     "PROMETHEUS_BASIC_AUTH_HASH",
-    "forbidden value",
+    "forbidden fingerprint",
   )
   assertPrometheusAuthRejected(
     baseHomeServerEnv.replace(

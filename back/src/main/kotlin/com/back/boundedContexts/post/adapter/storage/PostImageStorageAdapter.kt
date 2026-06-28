@@ -15,6 +15,7 @@ import software.amazon.awssdk.services.s3.model.CreateBucketRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
@@ -227,6 +228,51 @@ class PostImageStorageAdapter(
 
     override fun deletePostFile(objectKey: String) {
         deleteObject(objectKey, "첨부 파일 삭제에 실패했습니다.")
+    }
+
+    override fun listObjects(
+        prefix: String,
+        limit: Int,
+    ): PostImageStoragePort.StoredObjectListing {
+        val normalizedPrefix = normalizeObjectPrefix(prefix)
+        val safeLimit = limit.coerceIn(1, MAX_LIST_OBJECTS)
+        val client = requireClient()
+        val objects = mutableListOf<PostImageStoragePort.StoredObjectSummary>()
+        var continuationToken: String? = null
+        var hasMore: Boolean
+
+        do {
+            val remaining = safeLimit - objects.size
+            val response =
+                client.listObjectsV2(
+                    ListObjectsV2Request
+                        .builder()
+                        .bucket(properties.bucket)
+                        .prefix(normalizedPrefix)
+                        .maxKeys(remaining.coerceAtMost(S3_PAGE_SIZE))
+                        .continuationToken(continuationToken)
+                        .build(),
+                )
+            val responseObjects = response.contents()
+
+            responseObjects.forEach { s3Object ->
+                if (objects.size < safeLimit) {
+                    objects +=
+                        PostImageStoragePort.StoredObjectSummary(
+                            objectKey = s3Object.key(),
+                            size = s3Object.size(),
+                        )
+                }
+            }
+
+            continuationToken = response.nextContinuationToken()
+            hasMore = response.isTruncated == true || continuationToken != null || responseObjects.size > remaining
+        } while (objects.size < safeLimit && continuationToken != null)
+
+        return PostImageStoragePort.StoredObjectListing(
+            objects = objects,
+            isTruncated = hasMore && objects.size >= safeLimit,
+        )
     }
 
     private fun deleteObject(
@@ -466,6 +512,29 @@ class PostImageStorageAdapter(
         }
     }
 
+    private fun normalizeObjectPrefix(prefix: String): String {
+        val normalized = prefix.trim().trimStart('/')
+        val allowedPrefix =
+            properties.keyPrefix
+                .trim()
+                .trim('/')
+        if (allowedPrefix.isBlank()) {
+            if (normalized.contains("..")) {
+                throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
+            }
+            return if (normalized.isBlank() || normalized.endsWith("/")) normalized else "$normalized/"
+        }
+        if (
+            normalized.isBlank() ||
+            normalized.contains("..") ||
+            normalized != allowedPrefix &&
+            !normalized.startsWith("$allowedPrefix/")
+        ) {
+            throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
+        }
+        return if (normalized.endsWith("/")) normalized else "$normalized/"
+    }
+
     private fun decodeStoredOriginalFilename(value: String?): String? {
         val encoded = value?.trim().orEmpty()
         if (encoded.isBlank()) return null
@@ -491,6 +560,8 @@ class PostImageStorageAdapter(
 
         private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
         private const val IMAGE_SIGNATURE_MAX_BYTES = 16
+        private const val MAX_LIST_OBJECTS = 1_000
+        private const val S3_PAGE_SIZE = 1_000
     }
 
     private fun normalizeDeclaredContentType(raw: String?): String? {

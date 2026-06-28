@@ -2225,6 +2225,27 @@ export interface components {
             /** Format: date-time */
             oldestEligiblePurgeAfter?: string;
             sampleEligibleObjectKeys?: string[];
+            reconcile?: components["schemas"]["UploadedFileReconcileDiagnostics"];
+        };
+        UploadedFileReconcileDiagnostics: {
+            objectPrefix?: string;
+            /** Format: int32 */
+            inventoryLimit?: number;
+            /** Format: int32 */
+            inventoryObjectCount?: number;
+            inventoryAvailable?: boolean;
+            inventoryTruncated?: boolean;
+            dbRowsTruncated?: boolean;
+            /** Format: int32 */
+            bucketOnlyObjectCount?: number;
+            sampleBucketOnlyObjectKeys?: string[];
+            /** Format: int32 */
+            dbOnlyMissingObjectCount?: number;
+            sampleDbOnlyObjectKeys?: string[];
+            /** Format: int64 */
+            longLivedPendingDeleteCount?: number;
+            sampleLongLivedPendingDeleteObjectKeys?: string[];
+            repairMode?: string;
         };
         StreamDiagnostics: {
             /** Format: int32 */

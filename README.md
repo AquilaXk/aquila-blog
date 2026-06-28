@@ -139,7 +139,7 @@ Local development can run with the default development infrastructure. External 
 | `CUSTOM__JWT__SECRET_KEY` | Backend | JWT signing key |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | MinIO | Local object storage credentials |
 | `CUSTOM__AI__TAG__GEMINI__API_KEY` | Backend | Optional AI tag recommendation |
-| `CUSTOM__OAUTH2__KAKAO__CLIENT_ID` | Backend | Optional Kakao OAuth login |
+| `SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID` | Backend | Optional Kakao OAuth client ID |
 
 ## Quality Checks
 
@@ -150,7 +150,7 @@ cd back
 ./gradlew test
 
 # Frontend
-cd front
+cd ../front
 yarn lint
 yarn build
 yarn contracts:check

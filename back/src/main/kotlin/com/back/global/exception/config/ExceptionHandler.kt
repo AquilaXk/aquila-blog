@@ -3,6 +3,7 @@ package com.back.global.exception.config
 import com.back.global.exception.application.AppException
 import com.back.global.jpa.application.ProdSequenceGuardService
 import com.back.global.rsData.RsData
+import com.back.global.web.logging.SensitiveQueryRedactor
 import jakarta.persistence.OptimisticLockException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.ConstraintViolationException
@@ -16,10 +17,10 @@ import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.validation.FieldError
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
-import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.multipart.MultipartException
+import org.springframework.web.bind.annotation.ExceptionHandler as SpringExceptionHandler
 
 @RestControllerAdvice
 class ExceptionHandler(
@@ -28,7 +29,7 @@ class ExceptionHandler(
 ) {
     private val logger = LoggerFactory.getLogger(ExceptionHandler::class.java)
 
-    @ExceptionHandler(NoSuchElementException::class)
+    @SpringExceptionHandler(NoSuchElementException::class)
     fun handleNoSuchElementException(
         @Suppress("UNUSED_PARAMETER") ex: NoSuchElementException,
     ): ResponseEntity<RsData<Void>> =
@@ -36,7 +37,7 @@ class ExceptionHandler(
             .status(HttpStatus.NOT_FOUND)
             .body(RsData("404-1", "해당 데이터가 존재하지 않습니다."))
 
-    @ExceptionHandler(ConstraintViolationException::class)
+    @SpringExceptionHandler(ConstraintViolationException::class)
     fun handleConstraintViolationException(e: ConstraintViolationException): ResponseEntity<RsData<Void>> {
         val message =
             e.constraintViolations
@@ -57,7 +58,7 @@ class ExceptionHandler(
             .body(RsData("400-1", message))
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException::class)
+    @SpringExceptionHandler(MethodArgumentNotValidException::class)
     fun handleMethodArgumentNotValidException(e: MethodArgumentNotValidException): ResponseEntity<RsData<Void>> {
         val message =
             e.bindingResult
@@ -73,7 +74,7 @@ class ExceptionHandler(
             .body(RsData("400-1", message))
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException::class)
+    @SpringExceptionHandler(HttpMessageNotReadableException::class)
     fun handleHttpMessageNotReadableException(
         @Suppress("UNUSED_PARAMETER") e: HttpMessageNotReadableException,
     ): ResponseEntity<RsData<Void>> =
@@ -81,14 +82,14 @@ class ExceptionHandler(
             .status(HttpStatus.BAD_REQUEST)
             .body(RsData("400-1", "요청 본문이 올바르지 않습니다."))
 
-    @ExceptionHandler(MaxUploadSizeExceededException::class)
+    @SpringExceptionHandler(MaxUploadSizeExceededException::class)
     fun handleMaxUploadSizeExceededException(
         ex: MaxUploadSizeExceededException,
         request: HttpServletRequest,
     ): ResponseEntity<RsData<Void>> {
         val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
         val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
-        val reason = sanitizeLogValue(ex.message, MAX_QUERY_LENGTH)
+        val reason = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
         logger.warn(
             "multipart_request_too_large method={} path={} reason={}",
             method,
@@ -100,14 +101,14 @@ class ExceptionHandler(
             .body(RsData("413-1", "업로드 가능한 파일 용량을 초과했습니다. 허용 크기 이내 파일로 다시 시도해주세요."))
     }
 
-    @ExceptionHandler(MultipartException::class)
+    @SpringExceptionHandler(MultipartException::class)
     fun handleMultipartException(
         ex: MultipartException,
         request: HttpServletRequest,
     ): ResponseEntity<RsData<Void>> {
         val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
         val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
-        val reason = sanitizeLogValue(ex.message, MAX_QUERY_LENGTH)
+        val reason = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
         logger.warn(
             "multipart_request_rejected method={} path={} reason={}",
             method,
@@ -119,7 +120,7 @@ class ExceptionHandler(
             .body(RsData("400-1", "업로드 요청 형식이 올바르지 않습니다. 파일을 다시 선택해주세요."))
     }
 
-    @ExceptionHandler(MissingRequestHeaderException::class)
+    @SpringExceptionHandler(MissingRequestHeaderException::class)
     fun handleMissingRequestHeaderException(e: MissingRequestHeaderException): ResponseEntity<RsData<Void>> =
         ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
@@ -134,7 +135,7 @@ class ExceptionHandler(
                 ),
             )
 
-    @ExceptionHandler(AppException::class)
+    @SpringExceptionHandler(AppException::class)
     fun handleAppException(
         ex: AppException,
         request: HttpServletRequest,
@@ -142,15 +143,17 @@ class ExceptionHandler(
         if (ex.rsData.statusCode >= 500) {
             val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
             val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
-            val query = normalizeQueryString(request.queryString)
+            val query = SensitiveQueryRedactor.redactQuery(request.queryString, MAX_QUERY_LENGTH)
+            val exceptionMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
             logger.error(
-                "app_exception status={} method={} path={} query={} resultCode={}",
+                "app_exception status={} method={} path={} query={} resultCode={} exceptionClass={} exceptionMessage={}",
                 ex.rsData.statusCode,
                 method,
                 path,
                 query,
                 ex.rsData.resultCode,
-                ex,
+                ex::class.qualifiedName,
+                exceptionMessage,
             )
         }
 
@@ -166,7 +169,7 @@ class ExceptionHandler(
         return response.body(ex.rsData)
     }
 
-    @ExceptionHandler(DataIntegrityViolationException::class)
+    @SpringExceptionHandler(DataIntegrityViolationException::class)
     fun handleDataIntegrityViolationException(ex: DataIntegrityViolationException): ResponseEntity<RsData<Void>> {
         val repaired = prodSequenceGuardService?.repairIfSequenceDrift(ex) == true
         logger.warn("Data integrity violation", ex)
@@ -184,7 +187,7 @@ class ExceptionHandler(
             )
     }
 
-    @ExceptionHandler(
+    @SpringExceptionHandler(
         OptimisticLockingFailureException::class,
         OptimisticLockException::class,
     )
@@ -195,27 +198,29 @@ class ExceptionHandler(
             .body(RsData("409-1", "다른 요청이 먼저 반영되어 충돌이 발생했습니다. 최신 상태를 확인 후 다시 시도해주세요."))
     }
 
-    @ExceptionHandler(Exception::class)
+    @SpringExceptionHandler(Exception::class)
     fun handleUnexpectedException(
         ex: Exception,
         request: HttpServletRequest,
     ): ResponseEntity<RsData<Void>> {
         val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
         val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
-        val query = normalizeQueryString(request.queryString)
+        val query = SensitiveQueryRedactor.redactQuery(request.queryString, MAX_QUERY_LENGTH)
+        val exceptionMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
+        val exceptionStack = SensitiveQueryRedactor.redactText(ex.stackTraceToString(), MAX_EXCEPTION_STACK_LENGTH)
         logger.error(
-            "unhandled_server_exception method={} path={} query={}",
+            "unhandled_server_exception method={} path={} query={} exceptionClass={} exceptionMessage={} exceptionStack={}",
             method,
             path,
             query,
-            ex,
+            ex::class.qualifiedName,
+            exceptionMessage,
+            exceptionStack,
         )
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(RsData("500-1", "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."))
     }
-
-    private fun normalizeQueryString(rawQuery: String?): String = sanitizeLogValue(rawQuery, MAX_QUERY_LENGTH)
 
     private fun sanitizeLogValue(
         raw: String?,
@@ -239,6 +244,7 @@ class ExceptionHandler(
         private const val MAX_METHOD_LENGTH = 16
         private const val MAX_PATH_LENGTH = 512
         private const val MAX_QUERY_LENGTH = 512
+        private const val MAX_EXCEPTION_STACK_LENGTH = 4096
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
     }
 }

@@ -113,11 +113,23 @@ http://{$API_DOMAIN} {
   @notificationSse path /member/api/v1/notifications/stream
   log_skip @notificationSse
 
+  @oauthCallbackSensitive path /login/oauth2/code/*
+  log_skip @oauthCallbackSensitive
+
   @signupVerifySensitive path /member/api/v1/signup/email/verify
   log_skip @signupVerifySensitive
 
+  @socialSignupSensitive path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete
+  log_skip @socialSignupSensitive
+
+  @accountDeletionSensitive path /member/api/v1/privacy/account
+  log_skip @accountDeletionSensitive
+
   @cloudExternalContentSensitive path /system/api/v1/adm/cloud/files/*/external-content
   log_skip @cloudExternalContentSensitive
+
+  @publicSearchSensitive path /post/api/v1/posts/search
+  log_skip @publicSearchSensitive
 
   handle @notificationSse {
     header {

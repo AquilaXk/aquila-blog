@@ -14,6 +14,8 @@ interface UploadedFileRepositoryPort {
 
     fun findByObjectKey(objectKey: String): UploadedFile?
 
+    fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile>
+
     fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
         purpose: UploadedFilePurpose,
         ownerType: UploadedFileOwnerType,
@@ -38,6 +40,12 @@ interface UploadedFileRepositoryPort {
     fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
         statuses: Collection<UploadedFileStatus>,
         purgeAfter: Instant,
+        pageable: Pageable,
+    ): List<UploadedFile>
+
+    fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+        statuses: Collection<UploadedFileStatus>,
+        objectKeyPrefix: String,
         pageable: Pageable,
     ): List<UploadedFile>
 }

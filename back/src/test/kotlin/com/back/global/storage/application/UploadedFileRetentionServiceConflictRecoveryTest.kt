@@ -229,6 +229,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
 
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
+
         override fun countByStatus(status: UploadedFileStatus): Long = 0
 
         override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
@@ -255,6 +257,12 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             purgeAfter: Instant,
             pageable: org.springframework.data.domain.Pageable,
         ): List<UploadedFile> = emptyList()
+
+        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+            statuses: Collection<UploadedFileStatus>,
+            objectKeyPrefix: String,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> = emptyList()
     }
 
     private class AlwaysFailingRepository(
@@ -265,6 +273,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         override fun flush() {}
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = null
+
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = emptyList()
 
         override fun countByStatus(status: UploadedFileStatus): Long = 0
 
@@ -290,6 +300,12 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
             statuses: Collection<UploadedFileStatus>,
             purgeAfter: Instant,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+            statuses: Collection<UploadedFileStatus>,
+            objectKeyPrefix: String,
             pageable: org.springframework.data.domain.Pageable,
         ): List<UploadedFile> = emptyList()
     }
@@ -318,6 +334,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
 
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
+
         override fun countByStatus(status: UploadedFileStatus): Long = 0
 
         override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
@@ -342,6 +360,12 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
             statuses: Collection<UploadedFileStatus>,
             purgeAfter: Instant,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+            statuses: Collection<UploadedFileStatus>,
+            objectKeyPrefix: String,
             pageable: org.springframework.data.domain.Pageable,
         ): List<UploadedFile> = emptyList()
     }
@@ -379,6 +403,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
 
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
+
         override fun countByStatus(status: UploadedFileStatus): Long = 0
 
         override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
@@ -403,6 +429,12 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
             statuses: Collection<UploadedFileStatus>,
             purgeAfter: Instant,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+            statuses: Collection<UploadedFileStatus>,
+            objectKeyPrefix: String,
             pageable: org.springframework.data.domain.Pageable,
         ): List<UploadedFile> = emptyList()
     }

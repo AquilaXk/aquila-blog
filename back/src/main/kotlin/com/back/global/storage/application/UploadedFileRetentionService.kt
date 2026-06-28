@@ -16,6 +16,21 @@ data class UploadedFileCleanupDiagnostics(
     val blockedBySafetyThreshold: Boolean,
     val oldestEligiblePurgeAfter: Instant?,
     val sampleEligibleObjectKeys: List<String>,
+    val reconcile: UploadedFileReconcileDiagnostics,
+)
+
+data class UploadedFileReconcileDiagnostics(
+    val objectPrefix: String,
+    val inventoryLimit: Int,
+    val inventoryObjectCount: Int,
+    val inventoryTruncated: Boolean,
+    val bucketOnlyObjectCount: Int,
+    val sampleBucketOnlyObjectKeys: List<String>,
+    val dbOnlyMissingObjectCount: Int,
+    val sampleDbOnlyObjectKeys: List<String>,
+    val longLivedPendingDeleteCount: Long,
+    val sampleLongLivedPendingDeleteObjectKeys: List<String>,
+    val repairMode: String = "dry-run",
 )
 
 data class ProfileImageHistoryDto(

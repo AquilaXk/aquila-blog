@@ -108,6 +108,11 @@ class ApiV1PostImageControllerTest {
         override fun deletePostImage(objectKey: String) {}
 
         override fun deletePostFile(objectKey: String) {}
+
+        override fun listObjects(
+            prefix: String,
+            limit: Int,
+        ): PostImageStoragePort.StoredObjectListing = PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false)
     }
 
     private class ByteAccessFailingMultipartFile(

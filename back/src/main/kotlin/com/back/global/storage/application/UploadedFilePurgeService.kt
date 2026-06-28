@@ -94,6 +94,7 @@ class UploadedFilePurgeService(
                 purgeCandidateStatuses,
                 now,
             )
+        val reconcileDiagnostics = diagnoseReconcile(now, safeSampleSize)
 
         return UploadedFileCleanupDiagnostics(
             tempCount = uploadedFileRepository.countByStatus(UploadedFileStatus.TEMP),
@@ -105,6 +106,70 @@ class UploadedFilePurgeService(
             blockedBySafetyThreshold = eligibleCount > retentionProperties.cleanupSafetyThreshold,
             oldestEligiblePurgeAfter = eligibleCandidates.firstOrNull()?.purgeAfter,
             sampleEligibleObjectKeys = eligibleCandidates.map { it.objectKey },
+            reconcile = reconcileDiagnostics,
+        )
+    }
+
+    private fun diagnoseReconcile(
+        now: Instant,
+        sampleSize: Int,
+    ): UploadedFileReconcileDiagnostics {
+        val objectPrefix = normalizeReconcilePrefix(retentionProperties.reconcileObjectPrefix)
+        val inventoryLimit = retentionProperties.reconcileInventoryLimit.coerceIn(1, MAX_RECONCILE_INVENTORY_LIMIT)
+        val inventory = postImageStoragePort.listObjects(objectPrefix, inventoryLimit)
+        val inventoryObjectKeys = inventory.objects.map { it.objectKey }
+        val uploadedFilesByKey =
+            if (inventoryObjectKeys.isEmpty()) {
+                emptyMap()
+            } else {
+                uploadedFileRepository
+                    .findByObjectKeyIn(inventoryObjectKeys)
+                    .associateBy { it.objectKey }
+            }
+        val bucketOnlyObjectKeys =
+            inventoryObjectKeys
+                .filterNot(uploadedFilesByKey::containsKey)
+                .take(sampleSize)
+
+        val dbRows =
+            uploadedFileRepository.findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+                statuses = activeStorageStatuses,
+                objectKeyPrefix = objectPrefix,
+                pageable = PageRequest.of(0, inventoryLimit),
+            )
+        val dbOnlyMissingObjectKeys =
+            if (inventory.isTruncated) {
+                emptyList()
+            } else {
+                val inventorySet = inventoryObjectKeys.toSet()
+                dbRows
+                    .map { it.objectKey }
+                    .filterNot(inventorySet::contains)
+            }
+        val longLivedPendingDeleteCutoff = now.minusSeconds(retentionProperties.longPendingDeleteSeconds.coerceAtLeast(1))
+        val longLivedPendingDeleteCandidates =
+            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+                statuses = listOf(UploadedFileStatus.PENDING_DELETE),
+                purgeAfter = longLivedPendingDeleteCutoff,
+                pageable = PageRequest.of(0, sampleSize),
+            )
+        val longLivedPendingDeleteCount =
+            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
+                statuses = listOf(UploadedFileStatus.PENDING_DELETE),
+                purgeAfter = longLivedPendingDeleteCutoff,
+            )
+
+        return UploadedFileReconcileDiagnostics(
+            objectPrefix = objectPrefix,
+            inventoryLimit = inventoryLimit,
+            inventoryObjectCount = inventory.objects.size,
+            inventoryTruncated = inventory.isTruncated,
+            bucketOnlyObjectCount = inventoryObjectKeys.size - uploadedFilesByKey.size,
+            sampleBucketOnlyObjectKeys = bucketOnlyObjectKeys,
+            dbOnlyMissingObjectCount = dbOnlyMissingObjectKeys.size,
+            sampleDbOnlyObjectKeys = dbOnlyMissingObjectKeys.take(sampleSize),
+            longLivedPendingDeleteCount = longLivedPendingDeleteCount,
+            sampleLongLivedPendingDeleteObjectKeys = longLivedPendingDeleteCandidates.map { it.objectKey },
         )
     }
 
@@ -137,4 +202,21 @@ class UploadedFilePurgeService(
     }
 
     private fun now(): Instant = Instant.now(clock)
+
+    private fun normalizeReconcilePrefix(prefix: String): String =
+        prefix
+            .trim()
+            .trimStart('/')
+            .ifBlank { "posts/" }
+            .let { if (it.endsWith("/")) it else "$it/" }
+
+    companion object {
+        private const val MAX_RECONCILE_INVENTORY_LIMIT = 1_000
+        private val activeStorageStatuses =
+            listOf(
+                UploadedFileStatus.TEMP,
+                UploadedFileStatus.ACTIVE,
+                UploadedFileStatus.PENDING_DELETE,
+            )
+    }
 }

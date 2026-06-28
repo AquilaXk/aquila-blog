@@ -2235,6 +2235,7 @@ export interface components {
             inventoryObjectCount?: number;
             inventoryAvailable?: boolean;
             inventoryTruncated?: boolean;
+            dbRowsTruncated?: boolean;
             /** Format: int32 */
             bucketOnlyObjectCount?: number;
             sampleBucketOnlyObjectKeys?: string[];

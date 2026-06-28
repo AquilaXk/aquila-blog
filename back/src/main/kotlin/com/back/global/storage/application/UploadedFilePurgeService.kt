@@ -149,14 +149,16 @@ class UploadedFilePurgeService(
             uploadedFileRepository.findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
                 statuses = activeStorageStatuses,
                 objectKeyPrefix = objectPrefix,
-                pageable = PageRequest.of(0, inventoryLimit),
+                pageable = PageRequest.of(0, inventoryLimit + 1),
             )
+        val dbRowsTruncated = dbRows.size > inventoryLimit
+        val sampledDbRows = dbRows.take(inventoryLimit)
         val dbOnlyMissingObjectKeys =
             if (inventory.isTruncated) {
                 emptyList()
             } else {
                 val inventorySet = inventoryObjectKeys.toSet()
-                dbRows
+                sampledDbRows
                     .map { it.objectKey }
                     .filterNot(inventorySet::contains)
             }
@@ -178,6 +180,7 @@ class UploadedFilePurgeService(
             inventoryLimit = inventoryLimit,
             inventoryObjectCount = inventory.objects.size,
             inventoryTruncated = inventory.isTruncated,
+            dbRowsTruncated = dbRowsTruncated,
             bucketOnlyObjectCount = inventoryObjectKeys.size - uploadedFilesByKey.size,
             sampleBucketOnlyObjectKeys = bucketOnlyObjectKeys,
             dbOnlyMissingObjectCount = dbOnlyMissingObjectKeys.size,
@@ -226,8 +229,7 @@ class UploadedFilePurgeService(
         prefix
             .trim()
             .trimStart('/')
-            .ifBlank { "posts" }
-            .let { if (it.endsWith("/")) it else "$it/" }
+            .let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
 
     private fun degradedReconcileDiagnostics(
         objectPrefix: String,
@@ -239,6 +241,7 @@ class UploadedFilePurgeService(
             inventoryObjectCount = 0,
             inventoryAvailable = false,
             inventoryTruncated = false,
+            dbRowsTruncated = false,
             bucketOnlyObjectCount = 0,
             sampleBucketOnlyObjectKeys = emptyList(),
             dbOnlyMissingObjectCount = 0,

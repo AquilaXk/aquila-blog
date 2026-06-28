@@ -207,6 +207,47 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         verify(postImageStoragePort).listObjects("custom-posts/", 1000)
     }
 
+    @Test
+    fun `cleanup diagnostics는 빈 storage keyPrefix를 bucket root prefix로 보존한다`() {
+        `when`(postImageStoragePort.listObjects("", 1000))
+            .thenReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
+        val service =
+            newService(
+                repository = SuccessfulRepository(),
+                storageProperties = PostImageStorageProperties(keyPrefix = ""),
+            )
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo("")
+        verify(postImageStoragePort).listObjects("", 1000)
+    }
+
+    @Test
+    fun `cleanup diagnostics는 DB reconcile row truncation을 표시한다`() {
+        val repository = SuccessfulRepository()
+        repeat(1001) { index ->
+            repository.save(
+                UploadedFile(
+                    id = index.toLong() + 1,
+                    objectKey = "posts/2026/03/db-row-$index.png",
+                    bucket = "test-bucket",
+                    contentType = "image/png",
+                    fileSize = 128,
+                    status = UploadedFileStatus.ACTIVE,
+                ),
+            )
+        }
+        `when`(postImageStoragePort.listObjects("posts/", 1000))
+            .thenReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
+        val service = newService(repository)
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.dbRowsTruncated).isTrue()
+        assertThat(diagnostics.reconcile.dbOnlyMissingObjectCount).isEqualTo(1000)
+    }
+
     private fun newService(
         repository: UploadedFileRepositoryPort,
         storageProperties: PostImageStorageProperties = PostImageStorageProperties(),
@@ -300,7 +341,12 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             statuses: Collection<UploadedFileStatus>,
             objectKeyPrefix: String,
             pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
+        ): List<UploadedFile> =
+            store.values
+                .filter { it.status in statuses && it.objectKey.startsWith(objectKeyPrefix) }
+                .sortedBy { it.id }
+                .drop(pageable.offset.toInt())
+                .take(pageable.pageSize)
     }
 
     private class AlwaysFailingRepository(

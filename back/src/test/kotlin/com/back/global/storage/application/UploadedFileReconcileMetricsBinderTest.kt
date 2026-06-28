@@ -36,6 +36,7 @@ class UploadedFileReconcileMetricsBinderTest {
                 longLivedPendingDeleteCount = 4,
                 inventoryAvailable = false,
                 inventoryTruncated = true,
+                dbRowsTruncated = true,
             ),
         )
         val registry = SimpleMeterRegistry()
@@ -54,6 +55,7 @@ class UploadedFileReconcileMetricsBinderTest {
         assertThat(registry.get("storage.uploaded_file.reconcile.long_lived_pending_delete").gauge().value()).isEqualTo(4.0)
         assertThat(registry.get("storage.uploaded_file.reconcile.inventory_available").gauge().value()).isEqualTo(0.0)
         assertThat(registry.get("storage.uploaded_file.reconcile.inventory_truncated").gauge().value()).isEqualTo(1.0)
+        assertThat(registry.get("storage.uploaded_file.reconcile.db_rows_truncated").gauge().value()).isEqualTo(1.0)
         assertThat(registry.get("storage.uploaded_file.cleanup.refresh_failures").functionCounter().count()).isEqualTo(0.0)
         verify(retentionService).diagnoseCleanup()
     }
@@ -99,6 +101,7 @@ class UploadedFileReconcileMetricsBinderTest {
         longLivedPendingDeleteCount: Long = 0,
         inventoryAvailable: Boolean = true,
         inventoryTruncated: Boolean = false,
+        dbRowsTruncated: Boolean = false,
     ): UploadedFileCleanupDiagnostics =
         UploadedFileCleanupDiagnostics(
             tempCount = 0,
@@ -117,6 +120,7 @@ class UploadedFileReconcileMetricsBinderTest {
                     inventoryObjectCount = bucketOnlyObjectCount,
                     inventoryAvailable = inventoryAvailable,
                     inventoryTruncated = inventoryTruncated,
+                    dbRowsTruncated = dbRowsTruncated,
                     bucketOnlyObjectCount = bucketOnlyObjectCount,
                     sampleBucketOnlyObjectKeys = emptyList(),
                     dbOnlyMissingObjectCount = dbOnlyMissingObjectCount,

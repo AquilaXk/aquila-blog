@@ -517,7 +517,12 @@ class PostImageStorageAdapter(
             properties.keyPrefix
                 .trim()
                 .trim('/')
-                .ifBlank { "posts" }
+        if (allowedPrefix.isBlank()) {
+            if (normalized.contains("..")) {
+                throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
+            }
+            return if (normalized.isBlank() || normalized.endsWith("/")) normalized else "$normalized/"
+        }
         if (
             normalized.isBlank() ||
             normalized.contains("..") ||

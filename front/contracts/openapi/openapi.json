@@ -5298,6 +5298,9 @@
           "inventoryTruncated" : {
             "type" : "boolean"
           },
+          "dbRowsTruncated" : {
+            "type" : "boolean"
+          },
           "bucketOnlyObjectCount" : {
             "type" : "integer",
             "format" : "int32"

@@ -25,6 +25,7 @@ data class UploadedFileReconcileDiagnostics(
     val inventoryObjectCount: Int,
     val inventoryAvailable: Boolean = true,
     val inventoryTruncated: Boolean,
+    val dbRowsTruncated: Boolean = false,
     val bucketOnlyObjectCount: Int,
     val sampleBucketOnlyObjectKeys: List<String>,
     val dbOnlyMissingObjectCount: Int,

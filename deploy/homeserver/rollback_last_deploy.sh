@@ -648,7 +648,7 @@ trap 'release_deploy_lock' EXIT INT TERM
 
 echo "rollback from backup: ${BACKUP_DIR}"
 
-for file in .env.prod docker-compose.prod.yml .active_backend .backend-release-state.env; do
+for file in docker-compose.prod.yml .active_backend; do
   if [[ -f "${BACKUP_DIR}/${file}" ]]; then
     cp "${BACKUP_DIR}/${file}" "${SCRIPT_DIR}/${file}"
   fi

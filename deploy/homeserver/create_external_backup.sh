@@ -553,6 +553,8 @@ write_metadata() {
 
   {
     echo "backup_set_id=${TIMESTAMP}"
+    echo "manifest_version=2"
+    echo "secret_files_copied=false"
     echo "class=${class}"
     echo "created_at=${TIMESTAMP}"
     echo "created_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -585,14 +587,11 @@ copy_deploy_config() {
   fi
 
   local file
-  for file in .env.prod docker-compose.prod.yml .active_backend; do
+  for file in docker-compose.prod.yml .active_backend; do
     if [[ -f "${SCRIPT_DIR}/${file}" ]]; then
       cp "${SCRIPT_DIR}/${file}" "${target_dir}/${file}"
     fi
   done
-  if [[ "${COMPOSE_ENV_FILE}" != "${ENV_FILE}" && -f "${COMPOSE_ENV_FILE}" ]]; then
-    cp "${COMPOSE_ENV_FILE}" "${target_dir}/.env.prod.compose"
-  fi
 
   write_metadata "${class}" "${target_dir}"
 }

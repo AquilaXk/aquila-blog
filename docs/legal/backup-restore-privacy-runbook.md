@@ -34,7 +34,9 @@
 
 - PostgreSQL backup artifact: `postgres/<class>/<backup_set_id>/dump.sql.enc`.
 - MinIO backup artifact: `minio/<class>/<backup_set_id>/minio-data.tar.gz.enc`.
+- Deploy backup artifacts must not copy `.env.prod`, `.env.prod.compose`, or other secret-bearing env files. They keep caddy config, active slot, image metadata, and `secret_files_copied=false` manifest evidence only.
 - Algorithm: `openssl enc -aes-256-cbc -pbkdf2 -salt`.
+  This legacy CBC mode is not AEAD; backup restore drills must treat decrypt or metadata mismatch failures as fail-closed until an authenticated encryption replacement is adopted.
 - Key file: `AQUILA_BACKUP_ENCRYPTION_KEY_FILE`로 지정하며 `AQUILA_BACKUP_ROOT` 내부에 둘 수 없다.
   값을 생략하면 `${AQUILA_EXTERNAL_STORAGE_ROOT}/backup-encryption.key`를 사용하고, 최초 backup 시 0600 권한으로 생성된다.
 - Rotation: 새 key 파일을 배포 env에 먼저 추가하고 다음 backup부터 새 key로 생성한다. 기존 backup 복구 기간 동안 이전 key는 별도 offline secret store에 보관하고, retention 만료 후 폐기한다.

@@ -173,19 +173,17 @@ export const LoginPageForm = ({
           </IpSecurityControl>
         </LoginStateRow>
 
-        <FeedbackSlot aria-live="polite" data-filled={feedbackMessage ? "true" : "false"}>
-          {feedbackMessage}
-        </FeedbackSlot>
+        {feedbackMessage ? <FeedbackSlot aria-live="polite">{feedbackMessage}</FeedbackSlot> : null}
 
         <PrimaryButton type="submit" disabled={loading}>
           {loading ? "로그인 중..." : "로그인"}
         </PrimaryButton>
 
-        {hasSocialItems ? (
+        {hasSocialItems && showSocialAuth ? (
           <SocialSection>
             <span>소셜 계정으로 로그인</span>
             <SocialButtonRow>
-              {showSocialAuth ? <SocialAuthButtons items={socialItems} /> : null}
+              <SocialAuthButtons items={socialItems} />
             </SocialButtonRow>
           </SocialSection>
         ) : null}

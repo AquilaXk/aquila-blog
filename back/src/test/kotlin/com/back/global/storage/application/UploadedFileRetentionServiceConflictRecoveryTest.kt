@@ -405,75 +405,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
                 ),
         )
 
-    private class SuccessfulRepository : UploadedFileRepositoryPort {
-        private val store = linkedMapOf<String, UploadedFile>()
-
-        override fun save(entity: UploadedFile): UploadedFile {
-            store[entity.objectKey] = entity
-            return entity
-        }
-
-        override fun flush() {}
-
-        override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
-
-        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
-
-        override fun countByStatus(status: UploadedFileStatus): Long = store.values.count { it.status == status }.toLong()
-
-        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-            status: UploadedFileStatus,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
-            id: Long,
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-        ): UploadedFile? = null
-
-        override fun countByStatusInAndPurgeAfterLessThanEqual(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-        ): Long =
-            store.values
-                .count { uploadedFile ->
-                    uploadedFile.status in statuses &&
-                        uploadedFile.purgeAfter?.let { !it.isAfter(purgeAfter) } == true
-                }.toLong()
-
-        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> =
-            store.values
-                .filter { uploadedFile ->
-                    uploadedFile.status in statuses &&
-                        uploadedFile.purgeAfter?.let { !it.isAfter(purgeAfter) } == true
-                }.sortedWith(compareBy<UploadedFile> { it.purgeAfter }.thenBy { it.id })
-                .drop(pageable.offset.toInt())
-                .take(pageable.pageSize)
-
-        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
-            statuses: Collection<UploadedFileStatus>,
-            objectKeyPrefix: String,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> =
-            store.values
-                .filter { it.status in statuses && it.objectKey.startsWith(objectKeyPrefix) }
-                .sortedBy { it.id }
-                .drop(pageable.offset.toInt())
-                .take(pageable.pageSize)
-    }
-
-    private class AlwaysFailingRepository(
-        private val failure: RuntimeException,
-    ) : UploadedFileRepositoryPort {
-        override fun save(entity: UploadedFile): UploadedFile = throw failure
+    private abstract class EmptyUploadedFileRepository : UploadedFileRepositoryPort {
+        override fun save(entity: UploadedFile): UploadedFile = entity
 
         override fun flush() {}
 
@@ -515,9 +448,64 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         ): List<UploadedFile> = emptyList()
     }
 
+    private class SuccessfulRepository : EmptyUploadedFileRepository() {
+        private val store = linkedMapOf<String, UploadedFile>()
+
+        override fun save(entity: UploadedFile): UploadedFile {
+            store[entity.objectKey] = entity
+            return entity
+        }
+
+        override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
+
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
+
+        override fun countByStatus(status: UploadedFileStatus): Long = store.values.count { it.status == status }.toLong()
+
+        override fun countByStatusInAndPurgeAfterLessThanEqual(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+        ): Long =
+            store.values
+                .count { uploadedFile ->
+                    uploadedFile.status in statuses &&
+                        uploadedFile.purgeAfter?.let { !it.isAfter(purgeAfter) } == true
+                }.toLong()
+
+        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> =
+            store.values
+                .filter { uploadedFile ->
+                    uploadedFile.status in statuses &&
+                        uploadedFile.purgeAfter?.let { !it.isAfter(purgeAfter) } == true
+                }.sortedWith(compareBy<UploadedFile> { it.purgeAfter }.thenBy { it.id })
+                .drop(pageable.offset.toInt())
+                .take(pageable.pageSize)
+
+        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+            statuses: Collection<UploadedFileStatus>,
+            objectKeyPrefix: String,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> =
+            store.values
+                .filter { it.status in statuses && it.objectKey.startsWith(objectKeyPrefix) }
+                .sortedBy { it.id }
+                .drop(pageable.offset.toInt())
+                .take(pageable.pageSize)
+    }
+
+    private class AlwaysFailingRepository(
+        private val failure: RuntimeException,
+    ) : EmptyUploadedFileRepository() {
+        override fun save(entity: UploadedFile): UploadedFile = throw failure
+    }
+
     private class SequenceDriftRecoveringRepository(
         private val firstConflict: DataIntegrityViolationException,
-    ) : UploadedFileRepositoryPort {
+    ) : EmptyUploadedFileRepository() {
         private val store = linkedMapOf<String, UploadedFile>()
         var saveCallCount: Int = 0
             private set
@@ -538,44 +526,9 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         }
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
-
-        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
-
-        override fun countByStatus(status: UploadedFileStatus): Long = 0
-
-        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-            status: UploadedFileStatus,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
-            id: Long,
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-        ): UploadedFile? = null
-
-        override fun countByStatusInAndPurgeAfterLessThanEqual(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-        ): Long = 0
-
-        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
-            statuses: Collection<UploadedFileStatus>,
-            objectKeyPrefix: String,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
     }
 
-    private class ExistingObjectKeyRecoveringRepository : UploadedFileRepositoryPort {
+    private class ExistingObjectKeyRecoveringRepository : EmptyUploadedFileRepository() {
         private var conflictReturned = false
         private val existing =
             UploadedFile(
@@ -607,41 +560,6 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         }
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
-
-        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
-
-        override fun countByStatus(status: UploadedFileStatus): Long = 0
-
-        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-            status: UploadedFileStatus,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
-            id: Long,
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-        ): UploadedFile? = null
-
-        override fun countByStatusInAndPurgeAfterLessThanEqual(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-        ): Long = 0
-
-        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
-            statuses: Collection<UploadedFileStatus>,
-            objectKeyPrefix: String,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
     }
 
     private class NoopTransactionManager : PlatformTransactionManager {

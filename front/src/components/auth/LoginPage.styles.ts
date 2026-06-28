@@ -141,9 +141,13 @@ export const LoginStateRow = styled.div`
 `
 
 export const FeedbackSlot = styled.div`
-  min-height: 4.6rem;
+  min-height: 0;
   display: flex;
   align-items: stretch;
+
+  &[data-filled="true"] {
+    min-height: 4.6rem;
+  }
 
   > * {
     width: 100%;

@@ -19,6 +19,12 @@ data class UploadedFileCleanupDiagnostics(
     val reconcile: UploadedFileReconcileDiagnostics,
 )
 
+data class UploadedFileCleanupSummary(
+    val eligibleForPurgeCount: Long,
+    val blockedBySafetyThreshold: Boolean,
+    val oldestEligiblePurgeAfter: Instant?,
+)
+
 data class UploadedFileReconcileDiagnostics(
     val objectPrefix: String,
     val inventoryLimit: Int,
@@ -147,4 +153,6 @@ class UploadedFileRetentionService(
     }
 
     fun diagnoseCleanup(sampleSize: Int = 5): UploadedFileCleanupDiagnostics = purgeService.diagnoseCleanup(sampleSize)
+
+    fun diagnoseCleanupSummary(sampleSize: Int = 5): UploadedFileCleanupSummary = purgeService.diagnoseCleanupSummary(sampleSize)
 }

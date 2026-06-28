@@ -298,6 +298,30 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             .containsExactly("posts/2026/03/deleted-but-present.png")
     }
 
+    @Test
+    fun `cleanup summary는 object storage inventory를 조회하지 않는다`() {
+        val repository = SuccessfulRepository()
+        repository.save(
+            UploadedFile(
+                id = 1,
+                objectKey = "posts/2026/03/old-temp.png",
+                bucket = "test-bucket",
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.TEMP,
+                purgeAfter = Instant.parse("2026-06-18T00:00:00Z"),
+            ),
+        )
+        val service = newService(repository)
+
+        val summary = service.diagnoseCleanupSummary()
+
+        assertThat(summary.eligibleForPurgeCount).isEqualTo(1)
+        assertThat(summary.blockedBySafetyThreshold).isFalse()
+        assertThat(summary.oldestEligiblePurgeAfter).isEqualTo(Instant.parse("2026-06-18T00:00:00Z"))
+        verifyNoInteractions(postImageStoragePort)
+    }
+
     private fun newService(
         repository: UploadedFileRepositoryPort,
         storageProperties: PostImageStorageProperties = PostImageStorageProperties(),

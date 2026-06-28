@@ -83,19 +83,8 @@ class UploadedFilePurgeService(
 
     fun diagnoseCleanup(sampleSize: Int): UploadedFileCleanupDiagnostics {
         val now = now()
+        val cleanupSummary = diagnoseCleanupSummary(sampleSize)
         val safeSampleSize = sampleSize.coerceIn(1, 20)
-        val eligibleCandidates =
-            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-                statuses = purgeCandidateStatuses,
-                purgeAfter = now,
-                pageable = PageRequest.of(0, safeSampleSize),
-            )
-
-        val eligibleCount =
-            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
-                purgeCandidateStatuses,
-                now,
-            )
         val reconcileDiagnostics = diagnoseReconcile(now, safeSampleSize)
 
         return UploadedFileCleanupDiagnostics(
@@ -103,14 +92,47 @@ class UploadedFilePurgeService(
             activeCount = uploadedFileRepository.countByStatus(UploadedFileStatus.ACTIVE),
             pendingDeleteCount = uploadedFileRepository.countByStatus(UploadedFileStatus.PENDING_DELETE),
             deletedCount = uploadedFileRepository.countByStatus(UploadedFileStatus.DELETED),
-            eligibleForPurgeCount = eligibleCount,
+            eligibleForPurgeCount = cleanupSummary.eligibleForPurgeCount,
             cleanupSafetyThreshold = retentionProperties.cleanupSafetyThreshold,
-            blockedBySafetyThreshold = eligibleCount > retentionProperties.cleanupSafetyThreshold,
-            oldestEligiblePurgeAfter = eligibleCandidates.firstOrNull()?.purgeAfter,
-            sampleEligibleObjectKeys = eligibleCandidates.map { it.objectKey },
+            blockedBySafetyThreshold = cleanupSummary.blockedBySafetyThreshold,
+            oldestEligiblePurgeAfter = cleanupSummary.oldestEligiblePurgeAfter,
+            sampleEligibleObjectKeys = loadEligibleObjectKeys(now, safeSampleSize),
             reconcile = reconcileDiagnostics,
         )
     }
+
+    fun diagnoseCleanupSummary(sampleSize: Int): UploadedFileCleanupSummary {
+        val now = now()
+        val safeSampleSize = sampleSize.coerceIn(1, 20)
+        val eligibleCandidates =
+            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+                statuses = purgeCandidateStatuses,
+                purgeAfter = now,
+                pageable = PageRequest.of(0, safeSampleSize),
+            )
+        val eligibleCount =
+            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
+                purgeCandidateStatuses,
+                now,
+            )
+
+        return UploadedFileCleanupSummary(
+            eligibleForPurgeCount = eligibleCount,
+            blockedBySafetyThreshold = eligibleCount > retentionProperties.cleanupSafetyThreshold,
+            oldestEligiblePurgeAfter = eligibleCandidates.firstOrNull()?.purgeAfter,
+        )
+    }
+
+    private fun loadEligibleObjectKeys(
+        now: Instant,
+        sampleSize: Int,
+    ): List<String> =
+        uploadedFileRepository
+            .findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+                statuses = purgeCandidateStatuses,
+                purgeAfter = now,
+                pageable = PageRequest.of(0, sampleSize),
+            ).map { it.objectKey }
 
     private fun diagnoseReconcile(
         now: Instant,

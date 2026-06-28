@@ -348,6 +348,18 @@ ensure_backend_runtime_image_env_key() {
   fail "required backend runtime image env key is missing: ${key}"
 }
 
+metadata_backend_image_key() {
+  local key="$1"
+  case "${key}" in
+    BACK_BLUE_IMAGE) echo "back_blue_image" ;;
+    BACK_GREEN_IMAGE) echo "back_green_image" ;;
+    BACK_READ_IMAGE) echo "back_read_image" ;;
+    BACK_ADMIN_IMAGE) echo "back_admin_image" ;;
+    BACK_WORKER_IMAGE) echo "back_worker_image" ;;
+    *) return 1 ;;
+  esac
+}
+
 ensure_compose_image_env_defaults() {
   ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
   ensure_image_env_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:1.2.0"
@@ -550,6 +562,7 @@ write_metadata() {
   local class="$1"
   local target_dir="$2"
   local minio_mode="${3:-}"
+  local image_key metadata_key image_value
 
   {
     echo "backup_set_id=${TIMESTAMP}"
@@ -568,6 +581,14 @@ write_metadata() {
     if [[ -n "${POSTGRES_DB_NAME:-}" ]]; then
       echo "postgres_database=${POSTGRES_DB_NAME}"
     fi
+    for image_key in BACK_BLUE_IMAGE BACK_GREEN_IMAGE BACK_READ_IMAGE BACK_ADMIN_IMAGE BACK_WORKER_IMAGE; do
+      metadata_key="$(metadata_backend_image_key "${image_key}")"
+      image_value="$(trim_quotes "$(env_value "${image_key}")")"
+      if [[ -n "${image_value}" ]]; then
+        require_digest_image_value "${image_key}" "${image_value}"
+        echo "${metadata_key}=${image_value}"
+      fi
+    done
     if [[ -n "${minio_mode}" ]]; then
       echo "minio_backup_mode=${minio_mode}"
     fi

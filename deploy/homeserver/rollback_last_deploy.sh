@@ -289,13 +289,6 @@ repair_runtime_back_image_if_missing() {
   metadata_image=""
   legacy_image=""
   key="$(backend_image_key "${service}")"
-  current_value="$(trim_quotes "$(env_value "${key}")")"
-  if [[ -n "${current_value}" ]]; then
-    require_digest_image_value "${key}" "${current_value}"
-    echo "rollback ${key} preserved: ${current_value}"
-    return 0
-  fi
-
   metadata_key="$(backup_image_key_for_service "${service}" || true)"
   if [[ -n "${metadata_key}" ]]; then
     metadata_image="$(trim_quotes "$(backup_metadata_value "${metadata_key}")")"
@@ -304,8 +297,17 @@ repair_runtime_back_image_if_missing() {
     metadata_image="$(trim_quotes "$(backup_metadata_value "active_backend_image")")"
   fi
   if [[ -n "${metadata_image}" ]]; then
-    repaired_value="${metadata_image}"
-    echo "rollback ${key} repair source=backup_metadata image=${repaired_value}"
+    require_digest_image_value "${key}" "${metadata_image}"
+    upsert_env_key "${key}" "${metadata_image}"
+    echo "rollback ${key} restored from backup_metadata: ${metadata_image}"
+    return 0
+  fi
+
+  current_value="$(trim_quotes "$(env_value "${key}")")"
+  if [[ -n "${current_value}" ]]; then
+    require_digest_image_value "${key}" "${current_value}"
+    echo "rollback ${key} preserved: ${current_value}"
+    return 0
   fi
 
   if [[ -z "${repaired_value}" ]]; then

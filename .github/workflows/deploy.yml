@@ -631,7 +631,7 @@ jobs:
               return 1
             fi
 
-            for file in .env.prod docker-compose.prod.yml .active_backend .backend-release-state.env; do
+            for file in docker-compose.prod.yml .active_backend; do
               if [ -f "${backup_dir}/${file}" ]; then
                 cp "${backup_dir}/${file}" "deploy/homeserver/${file}"
               fi

@@ -66,16 +66,8 @@ class PostImageStorageAdapterTest {
                 ListObjectsV2Response
                     .builder()
                     .contents(
-                        S3Object
-                            .builder()
-                            .key("posts/2026/06/a.png")
-                            .size(10L)
-                            .build(),
-                        S3Object
-                            .builder()
-                            .key("posts/2026/06/b.png")
-                            .size(20L)
-                            .build(),
+                        s3Object("posts/2026/06/a.png", 10),
+                        s3Object("posts/2026/06/b.png", 20),
                     ).isTruncated(false)
                     .build(),
             )
@@ -104,6 +96,51 @@ class PostImageStorageAdapterTest {
     }
 
     @Test
+    @DisplayName("listObjects는 continuation token과 limit 중간 절단을 truncated로 표시한다")
+    fun listObjectsMarksTruncatedWhenLimitCutsThroughPagedResponses() {
+        // given
+        val s3Client =
+            RecordingS3Client(
+                ListObjectsV2Response
+                    .builder()
+                    .contents(s3Object("posts/2026/06/a.png", 10))
+                    .nextContinuationToken("page-2")
+                    .isTruncated(true)
+                    .build(),
+                ListObjectsV2Response
+                    .builder()
+                    .contents(
+                        s3Object("posts/2026/06/b.png", 20),
+                        s3Object("posts/2026/06/c.png", 30),
+                    ).isTruncated(false)
+                    .build(),
+            )
+        val adapter =
+            PostImageStorageAdapter(
+                PostImageStorageProperties(
+                    enabled = true,
+                    bucket = TEST_BUCKET,
+                    keyPrefix = "posts",
+                ),
+            )
+        ReflectionTestUtils.setField(adapter, "s3Client", s3Client)
+
+        // when
+        val listing = adapter.listObjects("posts/2026/06", limit = 2)
+
+        // then
+        assertThat(s3Client.listObjectsRequests).hasSize(2)
+        assertThat(s3Client.listObjectsRequests[0].maxKeys()).isEqualTo(2)
+        assertThat(s3Client.listObjectsRequests[1].continuationToken()).isEqualTo("page-2")
+        assertThat(s3Client.listObjectsRequests[1].maxKeys()).isEqualTo(1)
+        assertThat(listing.isTruncated).isTrue()
+        assertThat(listing.objects).containsExactly(
+            PostImageStoragePort.StoredObjectSummary("posts/2026/06/a.png", 10),
+            PostImageStoragePort.StoredObjectSummary("posts/2026/06/b.png", 20),
+        )
+    }
+
+    @Test
     @DisplayName("listObjects는 post prefix 밖 inventory 요청을 거절한다")
     fun listObjectsRejectsPrefixOutsideConfiguredPostPrefix() {
         // given
@@ -125,11 +162,7 @@ class PostImageStorageAdapterTest {
                 ListObjectsV2Response
                     .builder()
                     .contents(
-                        S3Object
-                            .builder()
-                            .key("2026/06/root.png")
-                            .size(10L)
-                            .build(),
+                        s3Object("2026/06/root.png", 10),
                     ).isTruncated(false)
                     .build(),
             )
@@ -275,15 +308,29 @@ class PostImageStorageAdapterTest {
             0x00,
         )
 
+    private fun s3Object(
+        key: String,
+        size: Long,
+    ): S3Object =
+        S3Object
+            .builder()
+            .key(key)
+            .size(size)
+            .build()
+
     private class RecordingS3Client(
-        private val response: ListObjectsV2Response,
+        firstResponse: ListObjectsV2Response,
+        vararg otherResponses: ListObjectsV2Response,
     ) : S3Client {
+        private val responses = ArrayDeque(listOf(firstResponse, *otherResponses))
+        val listObjectsRequests = mutableListOf<ListObjectsV2Request>()
         var lastListObjectsRequest: ListObjectsV2Request? = null
             private set
 
         override fun listObjectsV2(listObjectsV2Request: ListObjectsV2Request): ListObjectsV2Response {
             lastListObjectsRequest = listObjectsV2Request
-            return response
+            listObjectsRequests += listObjectsV2Request
+            return responses.removeFirst()
         }
 
         override fun serviceName(): String = "s3"

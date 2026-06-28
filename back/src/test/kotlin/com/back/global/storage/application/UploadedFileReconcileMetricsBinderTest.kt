@@ -14,6 +14,7 @@ class UploadedFileReconcileMetricsBinderTest {
     @Test
     fun `worker disabled runtime은 reconcile metrics refresh를 실행하지 않는다`() {
         val retentionService = mock(UploadedFileRetentionService::class.java)
+        val registry = SimpleMeterRegistry()
         val binder =
             UploadedFileReconcileMetricsBinder(
                 uploadedFileRetentionService = retentionService,
@@ -21,8 +22,10 @@ class UploadedFileReconcileMetricsBinderTest {
                 refreshEnabled = true,
             )
 
+        binder.bindTo(registry)
         binder.refreshSnapshot()
 
+        assertThat(registry.get("storage.uploaded_file.reconcile.inventory_available").gauge().value()).isEqualTo(0.0)
         verifyNoInteractions(retentionService)
     }
 

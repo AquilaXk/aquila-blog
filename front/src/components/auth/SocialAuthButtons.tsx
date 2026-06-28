@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import Image from "next/image"
 import React from "react"
 import AppIcon, { IconName } from "src/components/icons/AppIcon"
 
@@ -20,7 +21,8 @@ type Props = {
 
 type ProviderMeta = {
   label: string
-  icon: IconName
+  icon?: IconName
+  imageSrc?: string
   background: string
   foreground: string
   border: string
@@ -29,10 +31,10 @@ type ProviderMeta = {
 const PROVIDER_META: Record<SocialProvider, ProviderMeta> = {
   kakao: {
     label: "카카오로 로그인",
-    icon: "kakao",
-    background: "#FEE500",
+    imageSrc: "/images/auth/kakao_login_simple_medium.png",
+    background: "transparent",
     foreground: "#111111",
-    border: "#DCC300",
+    border: "transparent",
   },
   google: {
     label: "구글로 로그인",
@@ -74,7 +76,19 @@ const SocialAuthButtons: React.FC<Props> = ({ items, size = "regular", className
                 } as React.CSSProperties
               }
             >
-              <AppIcon name={meta.icon} aria-hidden="true" />
+              {meta.imageSrc ? (
+                <Image
+                  className="providerImage"
+                  src={meta.imageSrc}
+                  alt=""
+                  width={90}
+                  height={45}
+                  aria-hidden="true"
+                  unoptimized
+                />
+              ) : meta.icon ? (
+                <AppIcon name={meta.icon} aria-hidden="true" />
+              ) : null}
             </button>
           </li>
         )
@@ -129,6 +143,22 @@ const StyledList = styled.ul`
     &[data-provider="google"] svg {
       width: 56%;
       height: 56%;
+    }
+
+    &[data-provider="kakao"] {
+      width: 90px;
+      height: 45px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .providerImage {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
     }
 
     &:hover:not(:disabled) {

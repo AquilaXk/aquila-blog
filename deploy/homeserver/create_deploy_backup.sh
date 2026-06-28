@@ -39,7 +39,7 @@ elif [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
   cp "${SCRIPT_DIR}/Caddyfile" "${BACKUP_DIR}/caddy/Caddyfile"
 fi
 
-for file in .env.prod docker-compose.prod.yml .active_backend .backend-release-state.env; do
+for file in docker-compose.prod.yml .active_backend; do
   if [[ -f "${SCRIPT_DIR}/${file}" ]]; then
     cp "${SCRIPT_DIR}/${file}" "${BACKUP_DIR}/${file}"
   fi
@@ -66,7 +66,12 @@ back_worker_image="$(container_image_for_service "back_worker" || true)"
 
 {
   echo "created_at=${TIMESTAMP}"
+  echo "manifest_version=2"
+  echo "secret_files_copied=false"
   echo "git_head=$(git -C "${SCRIPT_DIR}/../.." rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  if [[ -f "${RELEASE_STATE_FILE}" ]]; then
+    echo "release_state_present=true"
+  fi
   if [[ -n "${active_backend}" ]]; then
     echo "active_backend=${active_backend}"
   fi

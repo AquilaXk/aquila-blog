@@ -565,10 +565,11 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   assert(skipMarkerIndex < prepareComposeReadyCallIndex, "compose preflight must not run before skipped PostgreSQL backups")
   assert(prepareCallIndex < composeExecIndex, "compose preflight must run before backup compose calls")
   assert(loopPrepareIndex < loopCopyIndex, "compose env failures must be detected before copying deploy config")
-  assert.match(
+  assert.doesNotMatch(
     copyDeployConfigBody,
     /cp "\$\{COMPOSE_ENV_FILE\}" "\$\{target_dir\}\/\.env\.prod\.compose"/,
   )
+  assert.match(externalBackupScript, /secret_files_copied=false/)
 })
 
 test("external backup stages HOME_SERVER_ENV values with compose-safe quoting", () => {
@@ -1072,7 +1073,7 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=/)
   assert.doesNotMatch(workflow, /stale workflow_run payload: deploy_sha=/)
   assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
-  assert.match(workflow, /if echo "\$\{CHANGED_FILES\}" \| grep -Eq "\$\{FRONT_BUILD_SHA_PATHS_PATTERN\}"/)
+  assert.match(workflow, /if \[ "\$\{FRONT_BUILD_SHA_SUPERSEDED\}" != "true" \] && echo "\$\{CHANGED_FILES\}" \| grep -Eq "\$\{FRONT_BUILD_SHA_PATHS_PATTERN\}"/)
 })
 
 test("deploy calculateTag는 docs-only 후속 main 변경이면 기존 backend deploy를 계속 허용한다", () => {
@@ -1212,6 +1213,11 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(deployScript, /write_backend_release_state "\$\{next_backend\}" "\$\{active_backend\}"/)
   assert.match(deployScript, /prepare_runtime_backend_images "\$\{active_backend\}" "\$\{next_backend\}" "\$\{STAGED_BACK_IMAGE\}"/)
   assert.match(backupScript, /\.backend-release-state\.env/)
+  assert.doesNotMatch(backupScript, /for file in \.env\.prod/)
+  assert.match(backupScript, /secret_files_copied=false/)
+  assert.doesNotMatch(externalBackupScript, /for file in \.env\.prod/)
+  assert.doesNotMatch(externalBackupScript, /\.env\.prod\.compose/)
+  assert.match(externalBackupScript, /secret_files_copied=false/)
   assert.match(backupScript, /back_blue_image=/)
   assert.match(backupScript, /back_green_image=/)
   assert.match(rollbackScript, /backup_image_key_for_service\(\)/)
@@ -1277,11 +1283,19 @@ test("minio production data is bound to the approved external disk", () => {
 test("secret-bearing homeserver backups use private file permissions", () => {
   const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
   const deployBackupScript = readFileSync(deployBackupScriptPath, "utf8")
+  const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
+  const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8")
 
   assert.match(externalBackupScript, /^umask 077$/m)
   assert.match(deployBackupScript, /^umask 077$/m)
   assert(externalBackupScript.indexOf("umask 077") < externalBackupScript.indexOf('mkdir -p "${BACKUP_ROOT}/logs"'))
   assert(deployBackupScript.indexOf("umask 077") < deployBackupScript.indexOf('mkdir -p "${BACKUP_DIR}"'))
+  assert.doesNotMatch(externalBackupScript, /cp "\$\{COMPOSE_ENV_FILE\}" "\$\{target_dir\}\/\.env\.prod\.compose"/)
+  assert.doesNotMatch(deployBackupScript, /\.env\.prod docker-compose\.prod\.yml/)
+  assert.doesNotMatch(rollbackScript, /for file in \.env\.prod/)
+  assert.match(gitignore, /deploy\/homeserver\/\.deploy-backups\//)
+  assert.match(gitignore, /deploy\/homeserver\/\*\.backup/)
+  assert.match(gitignore, /deploy\/homeserver\/\*\.enc/)
 })
 
 test("prod datasource uses a non-superuser runtime role contract", () => {

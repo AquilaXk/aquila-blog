@@ -220,6 +220,15 @@ grep -q 'assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE"' "${CREA
 grep -q "openssl enc -aes-256-cbc -pbkdf2" "${CREATE_SCRIPT}" || { echo "missing: openssl encryption command" >&2; exit 1; }
 grep -q "dump.sql.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted postgres dump artifact name" >&2; exit 1; }
 grep -q "minio-data.tar.gz.enc" "${CREATE_SCRIPT}" || { echo "missing: encrypted minio archive artifact name" >&2; exit 1; }
+grep -q "secret_files_copied=false" "${CREATE_SCRIPT}" || { echo "missing: secret-free backup manifest marker" >&2; exit 1; }
+if grep -q '\.env\.prod\.compose' "${CREATE_SCRIPT}"; then
+  echo "external backup still references .env.prod.compose" >&2
+  exit 1
+fi
+if grep -q 'for file in \.env\.prod' "${CREATE_SCRIPT}"; then
+  echo "external backup still copies .env.prod" >&2
+  exit 1
+fi
 grep -q "AQUILA_BACKUP_ROOT must not be inside the MinIO data directory" "${PRUNE_SCRIPT}"
 
 echo "[external-storage-retention] ok"

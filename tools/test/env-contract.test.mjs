@@ -10,6 +10,7 @@ const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const caddyfilePath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
+const envExamplePath = path.join(repoRoot, "deploy/homeserver/.env.prod.example")
 const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
 const deployBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_deploy_backup.sh")
@@ -162,7 +163,7 @@ const baseHomeServerEnv = [
   "AQUILA_BACKUP_MIN_FREE_PERCENT=15",
   "AQUILA_BACKUP_ENCRYPTION_KEY_FILE=/mnt/aquila-blog-data/backup-encryption.key",
   "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=/opt/aquila-blog/restore-privacy-gate.sh",
-  "PROMETHEUS_BASIC_AUTH_USER=promviewer",
+  "PROMETHEUS_BASIC_AUTH_USER=prometheus-operator",
   "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
   "OPERATIONS_ALERT_EMAIL_TO=ops@aquilaxk.site",
   "ALERTMANAGER_SMTP_AUTH_ENABLED=true",
@@ -331,6 +332,69 @@ test("grafana admin password has no compose fallback and rejects weak contract v
       .replace("GRAFANA_ADMIN_USER=admin", "GRAFANA_ADMIN_USER=grafana-operator")
       .replace("GRAFANA_ADMIN_PASSWORD=valid-grafana-password", "GRAFANA_ADMIN_PASSWORD=grafana-operator"),
     "must differ from GRAFANA_ADMIN_USER",
+  )
+})
+
+test("Prometheus basic auth has no Caddy fallback and rejects known weak values", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const envExample = readFileSync(envExamplePath, "utf8")
+  const contract = loadContract(contractPath)
+  const assertPrometheusAuthRejected = (text, key, expectedMessagePart) => {
+    const result = validateEnvText({
+      contract,
+      target: "home-server-source",
+      text,
+    })
+
+    assert.equal(result.ok, false)
+    assert(
+      result.errors.some((error) => error.key === key && error.message.includes(expectedMessagePart)),
+      result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+    )
+  }
+
+  assert.match(caddyfile, /\{\$PROMETHEUS_BASIC_AUTH_USER\} \{\$PROMETHEUS_BASIC_AUTH_HASH\}/)
+  assert(!caddyfile.includes("PROMETHEUS_BASIC_AUTH_USER:promviewer"))
+  assert(!caddyfile.includes("PROMETHEUS_BASIC_AUTH_HASH:$2y$05$g4sdUn"))
+  assert.match(envExample, /caddy hash-password --plaintext/)
+  assert.match(envExample, /Wrap the generated hash in single quotes/)
+  assert.match(envExample, /escape every "\$" as "\$\$"/)
+  assert(!envExample.includes("exactly as printed"))
+  assert(!envExample.includes("PROMETHEUS_BASIC_AUTH_USER=promviewer"))
+  assert(!envExample.includes("g4sdUn.YYoUOjAy"))
+  assertPrometheusAuthRejected(
+    baseHomeServerEnv.replace("PROMETHEUS_BASIC_AUTH_USER=prometheus-operator", "PROMETHEUS_BASIC_AUTH_USER=promviewer"),
+    "PROMETHEUS_BASIC_AUTH_USER",
+    "forbidden value",
+  )
+  assertPrometheusAuthRejected(
+    baseHomeServerEnv.replace(
+      "PROMETHEUS_BASIC_AUTH_USER=prometheus-operator",
+      "PROMETHEUS_BASIC_AUTH_USER=change_me_prometheus_user",
+    ),
+    "PROMETHEUS_BASIC_AUTH_USER",
+    "placeholder value",
+  )
+  assertPrometheusAuthRejected(
+    baseHomeServerEnv.replace(
+      "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
+      [
+        "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$",
+        "g4sdUn.YYoUOjAy/41KhSOBCQvOnwTNJ/",
+        "jmdl/95o8YKEoq/gddPC",
+      ].join(""),
+    ),
+    "PROMETHEUS_BASIC_AUTH_HASH",
+    "forbidden fingerprint",
+  )
+  assertPrometheusAuthRejected(
+    baseHomeServerEnv.replace(
+      "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
+      "PROMETHEUS_BASIC_AUTH_HASH=short-hash",
+    ),
+    "PROMETHEUS_BASIC_AUTH_HASH",
+    "at least 50 characters",
   )
 })
 

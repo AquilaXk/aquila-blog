@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs"
+import crypto from "node:crypto"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -54,6 +55,8 @@ const resolveTarget = (contract, targetName) => {
 }
 
 const safeError = (key, message) => ({ key, message })
+
+const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex")
 
 const hostnamePattern = /^(?!-)(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}$/
 
@@ -138,6 +141,10 @@ export const validateEnvText = ({ contract, target, text }) => {
 
     if (definition.forbiddenValues?.includes(value)) {
       errors.push(safeError(definition.name, "must not use forbidden value"))
+    }
+
+    if (definition.forbiddenSha256?.includes(sha256(value))) {
+      errors.push(safeError(definition.name, "must not use forbidden fingerprint"))
     }
 
     if (definition.mustDifferFrom && value === valueOf(env, definition.mustDifferFrom)) {

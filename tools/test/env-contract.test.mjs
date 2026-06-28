@@ -20,7 +20,7 @@ const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometh
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
 const forbiddenSecretBackupCopyPattern =
-  /for file in [^\n]*\b\.env\.prod(?:\.compose)?\b|\b(?:cp|install)\b[^\n]*\b\.env\.prod(?:\.compose)?\b/
+  /for file in[^\n]*(?:^|[\s/])\.env\.prod(?:\.compose)?(?:[\s"';]|$)|\b(?:cp|install)\b[^\n]*(?:^|[\s/])\.env\.prod(?:\.compose)?(?:[\s"';]|$)/
 
 const git = (cwd, args) =>
   execFileSync("git", args, {
@@ -1307,11 +1307,19 @@ test("secret-bearing homeserver backups use private file permissions", () => {
   const deployBackupScript = readFileSync(deployBackupScriptPath, "utf8")
   const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
   const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8")
+  const forbiddenCopySamples = [
+    "for file in .env.prod docker-compose.prod.yml; do",
+    'cp "${SCRIPT_DIR}/.env.prod" "${BACKUP_DIR}/.env.prod"',
+    "install -m 600 .env.prod backup/.env.prod",
+  ]
 
   assert.match(externalBackupScript, /^umask 077$/m)
   assert.match(deployBackupScript, /^umask 077$/m)
   assert(externalBackupScript.indexOf("umask 077") < externalBackupScript.indexOf('mkdir -p "${BACKUP_ROOT}/logs"'))
   assert(deployBackupScript.indexOf("umask 077") < deployBackupScript.indexOf('mkdir -p "${BACKUP_DIR}"'))
+  for (const sample of forbiddenCopySamples) {
+    assert.match(sample, forbiddenSecretBackupCopyPattern)
+  }
   assert.doesNotMatch(externalBackupScript, forbiddenSecretBackupCopyPattern)
   assert.doesNotMatch(deployBackupScript, forbiddenSecretBackupCopyPattern)
   assert.doesNotMatch(rollbackScript, forbiddenSecretBackupCopyPattern)

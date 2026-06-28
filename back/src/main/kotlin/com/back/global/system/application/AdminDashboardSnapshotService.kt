@@ -59,7 +59,7 @@ class AdminDashboardSnapshotService(
         val taskQueue = taskQueueDiagnosticsService.diagnoseQueue()
         val signupMail = signupMailDiagnosticsService.diagnose(checkConnection = false)
         val authEvents = authSecurityEventService.getRecent(30)
-        val cleanup = uploadedFileRetentionService.diagnoseCleanup()
+        val cleanup = uploadedFileRetentionService.diagnoseCleanupSummary()
         val latestFailure = taskQueue.recentFailures.firstOrNull()
         val latestTaskTypeFailure = taskQueue.taskTypes.firstOrNull { it.latestFailureAt != null }
         val latestBlockedEvent =

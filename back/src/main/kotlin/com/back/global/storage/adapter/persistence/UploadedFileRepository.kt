@@ -18,6 +18,8 @@ interface UploadedFileRepository :
     UploadedFileRepositoryPort {
     override fun findByObjectKey(objectKey: String): UploadedFile?
 
+    override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile>
+
     override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
         purpose: UploadedFilePurpose,
         ownerType: UploadedFileOwnerType,
@@ -48,6 +50,12 @@ interface UploadedFileRepository :
     override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
         statuses: Collection<UploadedFileStatus>,
         purgeAfter: Instant,
+        pageable: Pageable,
+    ): List<UploadedFile>
+
+    override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+        statuses: Collection<UploadedFileStatus>,
+        objectKeyPrefix: String,
         pageable: Pageable,
     ): List<UploadedFile>
 }

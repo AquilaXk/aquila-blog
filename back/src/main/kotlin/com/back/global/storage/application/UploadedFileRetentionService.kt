@@ -16,6 +16,29 @@ data class UploadedFileCleanupDiagnostics(
     val blockedBySafetyThreshold: Boolean,
     val oldestEligiblePurgeAfter: Instant?,
     val sampleEligibleObjectKeys: List<String>,
+    val reconcile: UploadedFileReconcileDiagnostics,
+)
+
+data class UploadedFileCleanupSummary(
+    val eligibleForPurgeCount: Long,
+    val blockedBySafetyThreshold: Boolean,
+    val oldestEligiblePurgeAfter: Instant?,
+)
+
+data class UploadedFileReconcileDiagnostics(
+    val objectPrefix: String,
+    val inventoryLimit: Int,
+    val inventoryObjectCount: Int,
+    val inventoryAvailable: Boolean = true,
+    val inventoryTruncated: Boolean,
+    val dbRowsTruncated: Boolean = false,
+    val bucketOnlyObjectCount: Int,
+    val sampleBucketOnlyObjectKeys: List<String>,
+    val dbOnlyMissingObjectCount: Int,
+    val sampleDbOnlyObjectKeys: List<String>,
+    val longLivedPendingDeleteCount: Long,
+    val sampleLongLivedPendingDeleteObjectKeys: List<String>,
+    val repairMode: String = "dry-run",
 )
 
 data class ProfileImageHistoryDto(
@@ -130,4 +153,6 @@ class UploadedFileRetentionService(
     }
 
     fun diagnoseCleanup(sampleSize: Int = 5): UploadedFileCleanupDiagnostics = purgeService.diagnoseCleanup(sampleSize)
+
+    fun diagnoseCleanupSummary(sampleSize: Int = 5): UploadedFileCleanupSummary = purgeService.diagnoseCleanupSummary(sampleSize)
 }

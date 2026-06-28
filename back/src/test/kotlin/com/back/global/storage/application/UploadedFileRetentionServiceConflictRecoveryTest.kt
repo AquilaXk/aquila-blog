@@ -28,6 +28,12 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 class UploadedFileRetentionServiceConflictRecoveryTest {
+    private companion object {
+        const val POSTS_PREFIX = "posts/"
+        const val CUSTOM_POSTS_PREFIX = "custom-posts/"
+        const val TEST_BUCKET = "test-bucket"
+    }
+
     private val postRepository = mock(PostRepositoryPort::class.java)
     private val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
     private val postImageStoragePort = mock(PostImageStoragePort::class.java)
@@ -174,14 +180,195 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         verify(postImageStoragePort).deletePostImage("posts/2026/03/delete-fail.png")
     }
 
-    private fun newService(repository: UploadedFileRepositoryPort): UploadedFileRetentionService =
+    @Test
+    fun `cleanup diagnostics는 object storage listing 실패 시 degraded reconcile만 반환한다`() {
+        val repository = SuccessfulRepository()
+        repository.save(
+            UploadedFile(
+                id = 1,
+                objectKey = "posts/2026/03/stale-pending-delete.png",
+                bucket = TEST_BUCKET,
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.PENDING_DELETE,
+                purgeAfter = Instant.parse("2026-05-19T00:00:00Z"),
+            ),
+        )
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
+            .thenThrow(IllegalStateException("storage unavailable"))
+        val service = newService(repository)
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.tempCount).isEqualTo(0)
+        assertThat(diagnostics.eligibleForPurgeCount).isEqualTo(1)
+        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo(POSTS_PREFIX)
+        assertThat(diagnostics.reconcile.inventoryAvailable).isFalse()
+        assertThat(diagnostics.reconcile.repairMode).isEqualTo("dry-run-degraded")
+        assertThat(diagnostics.reconcile.bucketOnlyObjectCount).isEqualTo(0)
+        assertThat(diagnostics.reconcile.dbOnlyMissingObjectCount).isEqualTo(0)
+        assertThat(diagnostics.reconcile.longLivedPendingDeleteCount).isEqualTo(1)
+        assertThat(diagnostics.reconcile.sampleLongLivedPendingDeleteObjectKeys)
+            .containsExactly("posts/2026/03/stale-pending-delete.png")
+    }
+
+    @Test
+    fun `cleanup diagnostics는 reconcile prefix 기본값을 storage keyPrefix에서 파생한다`() {
+        `when`(postImageStoragePort.listObjects(CUSTOM_POSTS_PREFIX, 1000))
+            .thenReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
+        val service =
+            newService(
+                repository = SuccessfulRepository(),
+                storageProperties = PostImageStorageProperties(keyPrefix = "custom-posts"),
+            )
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo(CUSTOM_POSTS_PREFIX)
+        verify(postImageStoragePort).listObjects(CUSTOM_POSTS_PREFIX, 1000)
+    }
+
+    @Test
+    fun `cleanup diagnostics는 빈 storage keyPrefix를 bucket root prefix로 보존한다`() {
+        `when`(postImageStoragePort.listObjects("", 1000))
+            .thenReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
+        val service =
+            newService(
+                repository = SuccessfulRepository(),
+                storageProperties = PostImageStorageProperties(keyPrefix = ""),
+            )
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo("")
+        verify(postImageStoragePort).listObjects("", 1000)
+    }
+
+    @Test
+    fun `cleanup diagnostics는 DB reconcile row truncation을 표시한다`() {
+        val repository = SuccessfulRepository()
+        repeat(1001) { index ->
+            repository.save(
+                UploadedFile(
+                    id = index.toLong() + 1,
+                    objectKey = "posts/2026/03/db-row-$index.png",
+                    bucket = TEST_BUCKET,
+                    contentType = "image/png",
+                    fileSize = 128,
+                    status = UploadedFileStatus.ACTIVE,
+                ),
+            )
+        }
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
+            .thenReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
+        val service = newService(repository)
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.dbRowsTruncated).isTrue()
+        assertThat(diagnostics.reconcile.dbOnlyMissingObjectCount).isEqualTo(1000)
+    }
+
+    @Test
+    fun `cleanup diagnostics는 inventory가 잘렸으면 DB only missing 계산을 보류한다`() {
+        val repository = SuccessfulRepository()
+        repository.save(
+            UploadedFile(
+                id = 1,
+                objectKey = "posts/2026/03/db-present-but-inventory-truncated.png",
+                bucket = TEST_BUCKET,
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.ACTIVE,
+            ),
+        )
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
+            .thenReturn(
+                PostImageStoragePort.StoredObjectListing(
+                    objects = emptyList(),
+                    isTruncated = true,
+                ),
+            )
+        val service = newService(repository)
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.inventoryTruncated).isTrue()
+        assertThat(diagnostics.reconcile.dbOnlyMissingObjectCount).isZero()
+        assertThat(diagnostics.reconcile.sampleDbOnlyObjectKeys).isEmpty()
+    }
+
+    @Test
+    fun `cleanup diagnostics는 DELETED row가 있는 bucket object를 bucket only drift로 표시한다`() {
+        val repository = SuccessfulRepository()
+        repository.save(
+            UploadedFile(
+                id = 1,
+                objectKey = "posts/2026/03/deleted-but-present.png",
+                bucket = TEST_BUCKET,
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.DELETED,
+            ),
+        )
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
+            .thenReturn(
+                PostImageStoragePort.StoredObjectListing(
+                    objects =
+                        listOf(
+                            PostImageStoragePort.StoredObjectSummary(
+                                objectKey = "posts/2026/03/deleted-but-present.png",
+                                size = 128,
+                            ),
+                        ),
+                    isTruncated = false,
+                ),
+            )
+        val service = newService(repository)
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.bucketOnlyObjectCount).isEqualTo(1)
+        assertThat(diagnostics.reconcile.sampleBucketOnlyObjectKeys)
+            .containsExactly("posts/2026/03/deleted-but-present.png")
+    }
+
+    @Test
+    fun `cleanup summary는 object storage inventory를 조회하지 않는다`() {
+        val repository = SuccessfulRepository()
+        repository.save(
+            UploadedFile(
+                id = 1,
+                objectKey = "posts/2026/03/old-temp.png",
+                bucket = TEST_BUCKET,
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.TEMP,
+                purgeAfter = Instant.parse("2026-06-18T00:00:00Z"),
+            ),
+        )
+        val service = newService(repository)
+
+        val summary = service.diagnoseCleanupSummary()
+
+        assertThat(summary.eligibleForPurgeCount).isEqualTo(1)
+        assertThat(summary.blockedBySafetyThreshold).isFalse()
+        assertThat(summary.oldestEligiblePurgeAfter).isEqualTo(Instant.parse("2026-06-18T00:00:00Z"))
+        verifyNoInteractions(postImageStoragePort)
+    }
+
+    private fun newService(
+        repository: UploadedFileRepositoryPort,
+        storageProperties: PostImageStorageProperties = PostImageStorageProperties(),
+        retentionProperties: UploadedFileRetentionProperties = UploadedFileRetentionProperties(),
+    ): UploadedFileRetentionService =
         UploadedFileRetentionService(
             registrationService =
                 UploadedFileRegistrationService(
                     uploadedFileRepository = repository,
                     postImageStoragePort = postImageStoragePort,
-                    storageProperties = PostImageStorageProperties(),
-                    retentionProperties = UploadedFileRetentionProperties(),
+                    storageProperties = storageProperties,
+                    retentionProperties = retentionProperties,
                     transactionManager = transactionManager,
                     clock = clock,
                     prodSequenceGuardService = prodSequenceGuardService,
@@ -189,16 +376,16 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             postAttachmentRetentionService =
                 PostAttachmentRetentionService(
                     uploadedFileRepository = repository,
-                    storageProperties = PostImageStorageProperties(),
-                    retentionProperties = UploadedFileRetentionProperties(),
+                    storageProperties = storageProperties,
+                    retentionProperties = retentionProperties,
                     clock = clock,
                 ),
             profileImageRetentionService =
                 ProfileImageRetentionService(
                     uploadedFileRepository = repository,
                     postImageStoragePort = postImageStoragePort,
-                    storageProperties = PostImageStorageProperties(),
-                    retentionProperties = UploadedFileRetentionProperties(),
+                    storageProperties = storageProperties,
+                    retentionProperties = retentionProperties,
                     transactionManager = transactionManager,
                     clock = clock,
                 ),
@@ -206,7 +393,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
                 UploadedFilePurgeService(
                     uploadedFileRepository = repository,
                     postImageStoragePort = postImageStoragePort,
-                    retentionProperties = UploadedFileRetentionProperties(),
+                    storageProperties = storageProperties,
+                    retentionProperties = retentionProperties,
                     referenceQueryService =
                         UploadedFileReferenceQueryService(
                             postRepository = postRepository,
@@ -217,7 +405,50 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
                 ),
         )
 
-    private class SuccessfulRepository : UploadedFileRepositoryPort {
+    private abstract class EmptyUploadedFileRepository : UploadedFileRepositoryPort {
+        override fun save(entity: UploadedFile): UploadedFile = entity
+
+        override fun flush() {}
+
+        override fun findByObjectKey(objectKey: String): UploadedFile? = null
+
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = emptyList()
+
+        override fun countByStatus(status: UploadedFileStatus): Long = 0
+
+        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+            status: UploadedFileStatus,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
+            id: Long,
+            purpose: com.back.global.storage.domain.UploadedFilePurpose,
+            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
+            ownerId: Long,
+        ): UploadedFile? = null
+
+        override fun countByStatusInAndPurgeAfterLessThanEqual(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+        ): Long = 0
+
+        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> = emptyList()
+
+        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+            statuses: Collection<UploadedFileStatus>,
+            objectKeyPrefix: String,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> = emptyList()
+    }
+
+    private class SuccessfulRepository : EmptyUploadedFileRepository() {
         private val store = linkedMapOf<String, UploadedFile>()
 
         override fun save(entity: UploadedFile): UploadedFile {
@@ -225,78 +456,56 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             return entity
         }
 
-        override fun flush() {}
-
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
 
-        override fun countByStatus(status: UploadedFileStatus): Long = 0
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(store::get)
 
-        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-            status: UploadedFileStatus,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
-            id: Long,
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-        ): UploadedFile? = null
+        override fun countByStatus(status: UploadedFileStatus): Long = store.values.count { it.status == status }.toLong()
 
         override fun countByStatusInAndPurgeAfterLessThanEqual(
             statuses: Collection<UploadedFileStatus>,
             purgeAfter: Instant,
-        ): Long = 0
+        ): Long =
+            store.values
+                .count { uploadedFile ->
+                    uploadedFile.status in statuses &&
+                        uploadedFile.purgeAfter?.let { !it.isAfter(purgeAfter) } == true
+                }.toLong()
 
         override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
             statuses: Collection<UploadedFileStatus>,
             purgeAfter: Instant,
             pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
+        ): List<UploadedFile> =
+            store.values
+                .filter { uploadedFile ->
+                    uploadedFile.status in statuses &&
+                        uploadedFile.purgeAfter?.let { !it.isAfter(purgeAfter) } == true
+                }.sortedWith(compareBy<UploadedFile> { it.purgeAfter }.thenBy { it.id })
+                .drop(pageable.offset.toInt())
+                .take(pageable.pageSize)
+
+        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+            statuses: Collection<UploadedFileStatus>,
+            objectKeyPrefix: String,
+            pageable: org.springframework.data.domain.Pageable,
+        ): List<UploadedFile> =
+            store.values
+                .filter { it.status in statuses && it.objectKey.startsWith(objectKeyPrefix) }
+                .sortedBy { it.id }
+                .drop(pageable.offset.toInt())
+                .take(pageable.pageSize)
     }
 
     private class AlwaysFailingRepository(
         private val failure: RuntimeException,
-    ) : UploadedFileRepositoryPort {
+    ) : EmptyUploadedFileRepository() {
         override fun save(entity: UploadedFile): UploadedFile = throw failure
-
-        override fun flush() {}
-
-        override fun findByObjectKey(objectKey: String): UploadedFile? = null
-
-        override fun countByStatus(status: UploadedFileStatus): Long = 0
-
-        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-            status: UploadedFileStatus,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
-            id: Long,
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-        ): UploadedFile? = null
-
-        override fun countByStatusInAndPurgeAfterLessThanEqual(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-        ): Long = 0
-
-        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
     }
 
     private class SequenceDriftRecoveringRepository(
         private val firstConflict: DataIntegrityViolationException,
-    ) : UploadedFileRepositoryPort {
+    ) : EmptyUploadedFileRepository() {
         private val store = linkedMapOf<String, UploadedFile>()
         var saveCallCount: Int = 0
             private set
@@ -317,36 +526,9 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         }
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
-
-        override fun countByStatus(status: UploadedFileStatus): Long = 0
-
-        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-            status: UploadedFileStatus,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
-            id: Long,
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-        ): UploadedFile? = null
-
-        override fun countByStatusInAndPurgeAfterLessThanEqual(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-        ): Long = 0
-
-        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
     }
 
-    private class ExistingObjectKeyRecoveringRepository : UploadedFileRepositoryPort {
+    private class ExistingObjectKeyRecoveringRepository : EmptyUploadedFileRepository() {
         private var conflictReturned = false
         private val existing =
             UploadedFile(
@@ -378,33 +560,6 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         }
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = store[objectKey]
-
-        override fun countByStatus(status: UploadedFileStatus): Long = 0
-
-        override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-            status: UploadedFileStatus,
-        ): List<UploadedFile> = emptyList()
-
-        override fun findByIdAndPurposeAndOwnerTypeAndOwnerId(
-            id: Long,
-            purpose: com.back.global.storage.domain.UploadedFilePurpose,
-            ownerType: com.back.global.storage.domain.UploadedFileOwnerType,
-            ownerId: Long,
-        ): UploadedFile? = null
-
-        override fun countByStatusInAndPurgeAfterLessThanEqual(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-        ): Long = 0
-
-        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-            statuses: Collection<UploadedFileStatus>,
-            purgeAfter: Instant,
-            pageable: org.springframework.data.domain.Pageable,
-        ): List<UploadedFile> = emptyList()
     }
 
     private class NoopTransactionManager : PlatformTransactionManager {

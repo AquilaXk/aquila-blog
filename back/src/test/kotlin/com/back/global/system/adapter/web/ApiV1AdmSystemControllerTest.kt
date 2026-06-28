@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorS
 import com.back.global.security.application.AuthSecurityEventDto
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
+import com.back.global.storage.application.UploadedFileReconcileDiagnostics
 import com.back.global.system.application.AdminDashboardAuthSecuritySnapshot
 import com.back.global.system.application.AdminDashboardSignupMailSnapshot
 import com.back.global.system.application.AdminDashboardSnapshot
@@ -358,6 +359,9 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
             jsonPath("$.eligibleForPurgeCount") { isNumber() }
             jsonPath("$.cleanupSafetyThreshold") { isNumber() }
             jsonPath("$.sampleEligibleObjectKeys") { isArray() }
+            jsonPath("$.reconcile.repairMode") { value("dry-run") }
+            jsonPath("$.reconcile.bucketOnlyObjectCount") { value(1) }
+            jsonPath("$.reconcile.dbOnlyMissingObjectCount") { value(1) }
         }
     }
 
@@ -564,6 +568,19 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
             blockedBySafetyThreshold = false,
             oldestEligiblePurgeAfter = Instant.parse("2026-03-13T00:00:00Z"),
             sampleEligibleObjectKeys = listOf("posts/2026/test.png"),
+            reconcile =
+                UploadedFileReconcileDiagnostics(
+                    objectPrefix = "posts/",
+                    inventoryLimit = 1000,
+                    inventoryObjectCount = 2,
+                    inventoryTruncated = false,
+                    bucketOnlyObjectCount = 1,
+                    sampleBucketOnlyObjectKeys = listOf("posts/2026/orphan.png"),
+                    dbOnlyMissingObjectCount = 1,
+                    sampleDbOnlyObjectKeys = listOf("posts/2026/missing.png"),
+                    longLivedPendingDeleteCount = 1,
+                    sampleLongLivedPendingDeleteObjectKeys = listOf("posts/2026/old-pending.png"),
+                ),
         )
 
     private fun adminDashboardSnapshot(): AdminDashboardSnapshot =

@@ -276,8 +276,8 @@ test("Caddy routes tokenized cloud external content through public read upstream
 test("Caddy access logs skip sensitive query routes before proxying", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const apiBlockIndex = caddyfile.indexOf("http://{$API_DOMAIN}")
-  const proxyIndex = caddyfile.indexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080", apiBlockIndex)
-  const publicReadMatcherIndex = caddyfile.indexOf("@publicReadFallback")
+  const adminHandleIndex = caddyfile.indexOf("handle @adminApi {", apiBlockIndex)
+  const publicReadHandleIndex = caddyfile.indexOf("handle @publicReadFallback {", apiBlockIndex)
   const sensitiveRoutes = [
     ["@oauthCallbackSensitive", "path /login/oauth2/code/*"],
     ["@socialSignupSensitive", "path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete"],
@@ -286,8 +286,8 @@ test("Caddy access logs skip sensitive query routes before proxying", () => {
   ]
 
   assert.notEqual(apiBlockIndex, -1, "API domain block must be configured")
-  assert.notEqual(proxyIndex, -1, "admin proxy handling must be configured")
-  assert.notEqual(publicReadMatcherIndex, -1, "public read matcher must be configured")
+  assert.notEqual(adminHandleIndex, -1, "admin API handle must be configured")
+  assert.notEqual(publicReadHandleIndex, -1, "public read handle must be configured")
 
   for (const [matcherName, pathMatcher] of sensitiveRoutes) {
     const matcherIndex = caddyfile.indexOf(`${matcherName} ${pathMatcher}`)
@@ -296,8 +296,8 @@ test("Caddy access logs skip sensitive query routes before proxying", () => {
     assert.notEqual(matcherIndex, -1, `${matcherName} matcher must be configured`)
     assert.notEqual(skipIndex, -1, `${matcherName} access log skip must be configured`)
     assert(skipIndex > matcherIndex, `${matcherName} log_skip must reference the sensitive matcher`)
-    assert(skipIndex < proxyIndex, `${matcherName} log_skip must be declared before admin proxy handling`)
-    assert(skipIndex < publicReadMatcherIndex, `${matcherName} log_skip must be declared before read routing`)
+    assert(skipIndex < adminHandleIndex, `${matcherName} log_skip must be declared before admin API handling`)
+    assert(skipIndex < publicReadHandleIndex, `${matcherName} log_skip must be declared before public read handling`)
   }
 })
 

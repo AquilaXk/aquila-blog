@@ -33,12 +33,13 @@ class SensitiveQueryRedactorTest {
     fun `redacts token-like key variants and control characters`() {
         val redacted =
             SensitiveQueryRedactor.redactQuery(
-                "access_token=LEAK_TEST_123&refreshToken=REFRESH_SECRET&name=ok\r\nnext",
+                "access_token=LEAK_TEST_123;refreshToken=REFRESH_SECRET&name=ok\r\nnext",
             )
 
         assertThat(redacted)
             .contains("access_token=[REDACTED]")
             .contains("refreshToken=[REDACTED]")
+            .contains("access_token=[REDACTED]&refreshToken=[REDACTED]")
             .contains("name=ok  next")
             .doesNotContain("LEAK_TEST_123")
             .doesNotContain("REFRESH_SECRET")

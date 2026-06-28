@@ -4,6 +4,7 @@ object SensitiveQueryRedactor {
     const val DEFAULT_MAX_LENGTH = 512
     private const val REDACTED = "[REDACTED]"
     private val controlCharRegex = Regex("[\\x00-\\x1F\\x7F]")
+    private val queryPairSeparatorRegex = Regex("[&;]")
     private val queryTokenInTextRegex = Regex("(^|[?&;\\s])([A-Za-z0-9_.%-]+)=([^&?\\s]*)")
     private val exactSensitiveKeys =
         setOf(
@@ -35,7 +36,7 @@ object SensitiveQueryRedactor {
         if (sanitized.isBlank()) return "-"
 
         return sanitized
-            .split("&")
+            .split(queryPairSeparatorRegex)
             .joinToString("&") { part -> redactQueryPart(part) }
             .take(maxLength)
     }

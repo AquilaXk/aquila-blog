@@ -118,6 +118,7 @@ class UploadedFilePurgeService(
     ): UploadedFileReconcileDiagnostics {
         val objectPrefix = resolveReconcilePrefix()
         val inventoryLimit = retentionProperties.reconcileInventoryLimit.coerceIn(1, MAX_RECONCILE_INVENTORY_LIMIT)
+        val longLivedPendingDelete = loadLongLivedPendingDeleteDiagnostics(now, sampleSize)
         val inventory =
             runCatching { postImageStoragePort.listObjects(objectPrefix, inventoryLimit) }
                 .getOrElse { exception ->
@@ -129,6 +130,7 @@ class UploadedFilePurgeService(
                     return degradedReconcileDiagnostics(
                         objectPrefix = objectPrefix,
                         inventoryLimit = inventoryLimit,
+                        longLivedPendingDelete = longLivedPendingDelete,
                     )
                 }
         val inventoryObjectKeys = inventory.objects.map { it.objectKey }
@@ -138,6 +140,7 @@ class UploadedFilePurgeService(
             } else {
                 uploadedFileRepository
                     .findByObjectKeyIn(inventoryObjectKeys)
+                    .filter { it.status in activeStorageStatuses }
                     .associateBy { it.objectKey }
             }
         val bucketOnlyObjectKeys =
@@ -162,19 +165,6 @@ class UploadedFilePurgeService(
                     .map { it.objectKey }
                     .filterNot(inventorySet::contains)
             }
-        val longLivedPendingDeleteCutoff = now.minusSeconds(retentionProperties.longPendingDeleteSeconds.coerceAtLeast(1))
-        val longLivedPendingDeleteCandidates =
-            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-                statuses = listOf(UploadedFileStatus.PENDING_DELETE),
-                purgeAfter = longLivedPendingDeleteCutoff,
-                pageable = PageRequest.of(0, sampleSize),
-            )
-        val longLivedPendingDeleteCount =
-            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
-                statuses = listOf(UploadedFileStatus.PENDING_DELETE),
-                purgeAfter = longLivedPendingDeleteCutoff,
-            )
-
         return UploadedFileReconcileDiagnostics(
             objectPrefix = objectPrefix,
             inventoryLimit = inventoryLimit,
@@ -185,8 +175,31 @@ class UploadedFilePurgeService(
             sampleBucketOnlyObjectKeys = bucketOnlyObjectKeys,
             dbOnlyMissingObjectCount = dbOnlyMissingObjectKeys.size,
             sampleDbOnlyObjectKeys = dbOnlyMissingObjectKeys.take(sampleSize),
-            longLivedPendingDeleteCount = longLivedPendingDeleteCount,
-            sampleLongLivedPendingDeleteObjectKeys = longLivedPendingDeleteCandidates.map { it.objectKey },
+            longLivedPendingDeleteCount = longLivedPendingDelete.count,
+            sampleLongLivedPendingDeleteObjectKeys = longLivedPendingDelete.sampleObjectKeys,
+        )
+    }
+
+    private fun loadLongLivedPendingDeleteDiagnostics(
+        now: Instant,
+        sampleSize: Int,
+    ): LongLivedPendingDeleteDiagnostics {
+        val cutoff = now.minusSeconds(retentionProperties.longPendingDeleteSeconds.coerceAtLeast(1))
+        val candidates =
+            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+                statuses = listOf(UploadedFileStatus.PENDING_DELETE),
+                purgeAfter = cutoff,
+                pageable = PageRequest.of(0, sampleSize),
+            )
+        val count =
+            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
+                statuses = listOf(UploadedFileStatus.PENDING_DELETE),
+                purgeAfter = cutoff,
+            )
+
+        return LongLivedPendingDeleteDiagnostics(
+            count = count,
+            sampleObjectKeys = candidates.map { it.objectKey },
         )
     }
 
@@ -234,6 +247,7 @@ class UploadedFilePurgeService(
     private fun degradedReconcileDiagnostics(
         objectPrefix: String,
         inventoryLimit: Int,
+        longLivedPendingDelete: LongLivedPendingDeleteDiagnostics,
     ): UploadedFileReconcileDiagnostics =
         UploadedFileReconcileDiagnostics(
             objectPrefix = objectPrefix,
@@ -246,10 +260,15 @@ class UploadedFilePurgeService(
             sampleBucketOnlyObjectKeys = emptyList(),
             dbOnlyMissingObjectCount = 0,
             sampleDbOnlyObjectKeys = emptyList(),
-            longLivedPendingDeleteCount = 0,
-            sampleLongLivedPendingDeleteObjectKeys = emptyList(),
+            longLivedPendingDeleteCount = longLivedPendingDelete.count,
+            sampleLongLivedPendingDeleteObjectKeys = longLivedPendingDelete.sampleObjectKeys,
             repairMode = "dry-run-degraded",
         )
+
+    private data class LongLivedPendingDeleteDiagnostics(
+        val count: Long,
+        val sampleObjectKeys: List<String>,
+    )
 
     companion object {
         private const val MAX_RECONCILE_INVENTORY_LIMIT = 1_000

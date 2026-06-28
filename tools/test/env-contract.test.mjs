@@ -358,8 +358,9 @@ test("Prometheus basic auth has no Caddy fallback and rejects known weak values"
   assert(!caddyfile.includes("PROMETHEUS_BASIC_AUTH_USER:promviewer"))
   assert(!caddyfile.includes("PROMETHEUS_BASIC_AUTH_HASH:$2y$05$g4sdUn"))
   assert.match(envExample, /caddy hash-password --plaintext/)
-  assert.match(envExample, /Write the generated hash exactly as printed/)
-  assert(!envExample.includes('as "$$"'))
+  assert.match(envExample, /Wrap the generated hash in single quotes/)
+  assert.match(envExample, /escape every "\$" as "\$\$"/)
+  assert(!envExample.includes("exactly as printed"))
   assert(!envExample.includes("PROMETHEUS_BASIC_AUTH_USER=promviewer"))
   assert(!envExample.includes("g4sdUn.YYoUOjAy"))
   assertPrometheusAuthRejected(

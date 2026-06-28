@@ -362,6 +362,14 @@ test("Prometheus basic auth has no Caddy fallback and rejects known weak values"
   )
   assertPrometheusAuthRejected(
     baseHomeServerEnv.replace(
+      "PROMETHEUS_BASIC_AUTH_USER=prometheus-operator",
+      "PROMETHEUS_BASIC_AUTH_USER=change_me_prometheus_user",
+    ),
+    "PROMETHEUS_BASIC_AUTH_USER",
+    "placeholder value",
+  )
+  assertPrometheusAuthRejected(
+    baseHomeServerEnv.replace(
       "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
       [
         "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$",

@@ -17,7 +17,7 @@ test.describe("core smoke auth and notifications", () => {
 
   expect(loginSource).toContain("const hasSocialItems = socialItems.length > 0")
   expect(loginSource).toContain("if (!hasSocialItems || showSocialAuth")
-  expect(loginFormSource).toContain("{hasSocialItems ? (")
+  expect(loginFormSource).toContain("{hasSocialItems && showSocialAuth ? (")
 })
 
   test("로그인 화면은 visible 페이지 제목을 h1로 노출한다", async ({ page }) => {

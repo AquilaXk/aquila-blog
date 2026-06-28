@@ -173,7 +173,9 @@ export const LoginPageForm = ({
           </IpSecurityControl>
         </LoginStateRow>
 
-        {feedbackMessage ? <FeedbackSlot aria-live="polite">{feedbackMessage}</FeedbackSlot> : null}
+        <FeedbackSlot aria-live="polite" data-filled={feedbackMessage ? "true" : "false"}>
+          {feedbackMessage}
+        </FeedbackSlot>
 
         <PrimaryButton type="submit" disabled={loading}>
           {loading ? "로그인 중..." : "로그인"}

@@ -1,5 +1,6 @@
 package com.back.global.web.config
 
+import com.back.global.web.logging.SensitiveQueryRedactor
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -41,7 +42,7 @@ class RequestCorrelationFilter(
             val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
             val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
             val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
-            val query = normalizeQueryString(request.queryString)
+            val query = SensitiveQueryRedactor.redactQuery(request.queryString, MAX_QUERY_LENGTH)
             val status = response.status
             val remoteIp = resolveClientIp(request)
 
@@ -96,8 +97,6 @@ class RequestCorrelationFilter(
             sanitizeLogValue(request.remoteAddr, MAX_REMOTE_IP_LENGTH)
         }
     }
-
-    private fun normalizeQueryString(rawQuery: String?): String = sanitizeLogValue(rawQuery, MAX_QUERY_LENGTH)
 
     private fun sanitizeLogValue(
         raw: String?,

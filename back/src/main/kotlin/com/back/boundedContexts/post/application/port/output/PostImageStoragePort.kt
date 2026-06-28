@@ -52,6 +52,10 @@ interface PostImageStoragePort {
 
     fun deletePostFile(objectKey: String)
 
+    /**
+     * Returns at most [limit] objects under [prefix], ordered stably by `objectKey`.
+     * `isTruncated=true` means additional matching objects may exist beyond this result.
+     */
     fun listObjects(
         prefix: String,
         limit: Int,

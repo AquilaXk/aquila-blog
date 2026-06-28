@@ -253,8 +253,9 @@ class PostImageStorageAdapter(
                         .continuationToken(continuationToken)
                         .build(),
                 )
+            val responseObjects = response.contents()
 
-            response.contents().forEach { s3Object ->
+            responseObjects.forEach { s3Object ->
                 if (objects.size < safeLimit) {
                     objects +=
                         PostImageStoragePort.StoredObjectSummary(
@@ -265,7 +266,7 @@ class PostImageStorageAdapter(
             }
 
             continuationToken = response.nextContinuationToken()
-            hasMore = response.isTruncated == true || continuationToken != null
+            hasMore = response.isTruncated == true || continuationToken != null || responseObjects.size > remaining
         } while (objects.size < safeLimit && continuationToken != null)
 
         return PostImageStoragePort.StoredObjectListing(

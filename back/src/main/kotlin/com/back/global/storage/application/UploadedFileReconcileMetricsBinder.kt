@@ -23,7 +23,7 @@ class UploadedFileReconcileMetricsBinder(
     private val bucketOnlyObjects = AtomicLong(0)
     private val dbOnlyMissingObjects = AtomicLong(0)
     private val longLivedPendingDelete = AtomicLong(0)
-    private val inventoryAvailable = AtomicLong(1)
+    private val inventoryAvailable = AtomicLong(if (workerEnabled && refreshEnabled) 1 else 0)
     private val inventoryTruncated = AtomicLong(0)
     private val dbRowsTruncated = AtomicLong(0)
     private val cleanupRefreshFailures = AtomicLong(0)

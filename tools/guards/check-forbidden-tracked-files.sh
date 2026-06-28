@@ -19,6 +19,7 @@ is_allowed_markdown() {
     back/README.md|\
     back/REFACTORING_ROADMAP.md|\
     deploy/homeserver/HARDENING.md|\
+    docs/README.md|\
     front/.github/CODE_OF_CONDUCT.md|\
     front/.github/CONTRIBUTING.md|\
     front/.github/PULL_REQUEST_TEMPLATE.md|\

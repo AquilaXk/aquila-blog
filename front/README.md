@@ -4,7 +4,7 @@
 
 ## Stack
 
-- Next.js 14 (Pages Router)
+- Next.js Pages Router
 - React 18 + TypeScript
 - TanStack Query (SSR hydrate + client cache)
 - Emotion
@@ -24,7 +24,7 @@
 
 ```bash
 cd front
-yarn
+yarn install
 yarn dev
 ```
 
@@ -50,10 +50,10 @@ yarn dev
 
 ## 인증/세션 동작 요약
 
-- 로그인 상태 조회는 `/member/api/v1/auth/me` 기반.
-- SSR에서 auth 스냅샷(`authMeProbe`)을 주입하고, 비로그인 확정 상태에서는 클라이언트 재검증 호출을 생략.
-- 비로그인 새로고침 시 `auth/me 401` 콘솔 노이즈를 줄이기 위한 억제 로직이 포함되어 있음.
-- 알림 채널은 production에서 `polling-only`를 기본값으로 사용하며, snapshot 요청은 ETag/304 조건부 요청으로 대역폭을 절감한다.
+- 로그인 상태 조회는 `/member/api/v1/auth/me` 기반입니다.
+- SSR에서 auth 스냅샷(`authMeProbe`)을 주입하고, 비로그인 확정 상태에서는 클라이언트 재검증 호출을 생략합니다.
+- 비로그인 새로고침 시 `auth/me 401` 콘솔 노이즈를 줄이기 위한 억제 로직이 포함되어 있습니다.
+- 알림 채널은 production에서 `polling-only`를 기본값으로 사용하며, snapshot 요청은 ETag/304 조건부 요청으로 대역폭을 절감합니다.
 
 관련 코드:
 
@@ -91,6 +91,5 @@ yarn check:bundle-size
 
 ## 문서
 
-- 사람용 인덱스: [`../docs/README.md`](../docs/README.md)
-- 프론트 작업 기준: [`../docs/design/Frontend-Working-Guide.md`](../docs/design/Frontend-Working-Guide.md)
-- 성능 기준: [`../docs/design/Frontend-Performance-Guide.md`](../docs/design/Frontend-Performance-Guide.md)
+- 문서 허브: [../docs/README.md](../docs/README.md)
+- UI 릴리즈 QA: [../docs/design/release-ui-qa-matrix.md](../docs/design/release-ui-qa-matrix.md)

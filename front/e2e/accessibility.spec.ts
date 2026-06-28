@@ -88,7 +88,7 @@ const mockAuthenticatedEditor = async (page: Page) => {
           tags: ["a11y"],
           category: "",
           visibility: "PUBLIC_UNLISTED",
-          savedAt: "2026-06-20T10:00:00.000Z",
+          savedAt: new Date().toISOString(),
         })
       )
     },

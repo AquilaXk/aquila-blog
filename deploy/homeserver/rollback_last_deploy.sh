@@ -284,7 +284,7 @@ require_digest_image_value() {
 repair_runtime_back_image_if_missing() {
   local service="$1"
   local fallback="$2"
-  local key metadata_key current_value repaired_value metadata_image legacy_image
+  local key metadata_key repaired_value metadata_image legacy_image
   repaired_value=""
   metadata_image=""
   legacy_image=""
@@ -303,11 +303,11 @@ repair_runtime_back_image_if_missing() {
     return 0
   fi
 
-  current_value="$(trim_quotes "$(env_value "${key}")")"
-  if [[ -n "${current_value}" ]]; then
-    require_digest_image_value "${key}" "${current_value}"
-    echo "rollback ${key} preserved: ${current_value}"
-    return 0
+  if [[ -z "${repaired_value}" ]]; then
+    repaired_value="${fallback}"
+    if [[ -n "${repaired_value}" ]]; then
+      echo "rollback ${key} repair source=backup_fallback image=${repaired_value}"
+    fi
   fi
 
   if [[ -z "${repaired_value}" ]]; then
@@ -323,11 +323,6 @@ repair_runtime_back_image_if_missing() {
       repaired_value="${legacy_image}"
       echo "rollback ${key} repair source=legacy_BACK_IMAGE image=${repaired_value}"
     fi
-  fi
-
-  if [[ -z "${repaired_value}" ]]; then
-    repaired_value="${fallback}"
-    echo "rollback ${key} repair source=fallback image=${repaired_value}"
   fi
 
   require_digest_image_value "${key}" "${repaired_value}"

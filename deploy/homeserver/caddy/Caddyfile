@@ -51,7 +51,7 @@ http://{$GRAFANA_DOMAIN:grafana.localhost} {
 # Set PROMETHEUS_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
 http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
   basic_auth {
-    {$PROMETHEUS_BASIC_AUTH_USER:promviewer} {$PROMETHEUS_BASIC_AUTH_HASH:$2y$05$g4sdUn.YYoUOjAy/41KhSOBCQvOnwTNJ/jmdl/95o8YKEoq/gddPC}
+    {$PROMETHEUS_BASIC_AUTH_USER} {$PROMETHEUS_BASIC_AUTH_HASH}
   }
 
   reverse_proxy prometheus:9090

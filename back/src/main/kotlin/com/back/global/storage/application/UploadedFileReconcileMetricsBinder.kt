@@ -23,6 +23,7 @@ class UploadedFileReconcileMetricsBinder(
     private val bucketOnlyObjects = AtomicLong(0)
     private val dbOnlyMissingObjects = AtomicLong(0)
     private val longLivedPendingDelete = AtomicLong(0)
+    private val inventoryAvailable = AtomicLong(1)
     private val inventoryTruncated = AtomicLong(0)
     private val cleanupRefreshFailures = AtomicLong(0)
 
@@ -30,6 +31,7 @@ class UploadedFileReconcileMetricsBinder(
         registerGauge(registry, "storage.uploaded_file.reconcile.bucket_only_objects", bucketOnlyObjects)
         registerGauge(registry, "storage.uploaded_file.reconcile.db_only_missing_objects", dbOnlyMissingObjects)
         registerGauge(registry, "storage.uploaded_file.reconcile.long_lived_pending_delete", longLivedPendingDelete)
+        registerGauge(registry, "storage.uploaded_file.reconcile.inventory_available", inventoryAvailable)
         registerGauge(registry, "storage.uploaded_file.reconcile.inventory_truncated", inventoryTruncated)
         FunctionCounter
             .builder("storage.uploaded_file.cleanup.refresh_failures", cleanupRefreshFailures) { it.get().toDouble() }
@@ -51,6 +53,7 @@ class UploadedFileReconcileMetricsBinder(
                 bucketOnlyObjects.set(reconcile.bucketOnlyObjectCount.toLong())
                 dbOnlyMissingObjects.set(reconcile.dbOnlyMissingObjectCount.toLong())
                 longLivedPendingDelete.set(reconcile.longLivedPendingDeleteCount)
+                inventoryAvailable.set(if (reconcile.inventoryAvailable) 1 else 0)
                 inventoryTruncated.set(if (reconcile.inventoryTruncated) 1 else 0)
             }.onFailure { exception ->
                 cleanupRefreshFailures.incrementAndGet()

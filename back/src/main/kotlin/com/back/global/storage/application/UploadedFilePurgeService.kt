@@ -1,6 +1,7 @@
 package com.back.global.storage.application
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
+import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileStatus
@@ -17,6 +18,7 @@ import java.time.Instant
 class UploadedFilePurgeService(
     private val uploadedFileRepository: UploadedFileRepositoryPort,
     private val postImageStoragePort: PostImageStoragePort,
+    private val storageProperties: PostImageStorageProperties,
     private val retentionProperties: UploadedFileRetentionProperties,
     private val referenceQueryService: UploadedFileReferenceQueryService,
     private val transactionManager: PlatformTransactionManager,
@@ -114,9 +116,21 @@ class UploadedFilePurgeService(
         now: Instant,
         sampleSize: Int,
     ): UploadedFileReconcileDiagnostics {
-        val objectPrefix = normalizeReconcilePrefix(retentionProperties.reconcileObjectPrefix)
+        val objectPrefix = resolveReconcilePrefix()
         val inventoryLimit = retentionProperties.reconcileInventoryLimit.coerceIn(1, MAX_RECONCILE_INVENTORY_LIMIT)
-        val inventory = postImageStoragePort.listObjects(objectPrefix, inventoryLimit)
+        val inventory =
+            runCatching { postImageStoragePort.listObjects(objectPrefix, inventoryLimit) }
+                .getOrElse { exception ->
+                    logger.warn(
+                        "Skip uploaded file reconcile inventory because object storage listing failed (prefix={})",
+                        objectPrefix,
+                        exception,
+                    )
+                    return degradedReconcileDiagnostics(
+                        objectPrefix = objectPrefix,
+                        inventoryLimit = inventoryLimit,
+                    )
+                }
         val inventoryObjectKeys = inventory.objects.map { it.objectKey }
         val uploadedFilesByKey =
             if (inventoryObjectKeys.isEmpty()) {
@@ -203,12 +217,36 @@ class UploadedFilePurgeService(
 
     private fun now(): Instant = Instant.now(clock)
 
+    private fun resolveReconcilePrefix(): String =
+        normalizeReconcilePrefix(
+            retentionProperties.reconcileObjectPrefix.ifBlank { storageProperties.keyPrefix },
+        )
+
     private fun normalizeReconcilePrefix(prefix: String): String =
         prefix
             .trim()
             .trimStart('/')
-            .ifBlank { "posts/" }
+            .ifBlank { "posts" }
             .let { if (it.endsWith("/")) it else "$it/" }
+
+    private fun degradedReconcileDiagnostics(
+        objectPrefix: String,
+        inventoryLimit: Int,
+    ): UploadedFileReconcileDiagnostics =
+        UploadedFileReconcileDiagnostics(
+            objectPrefix = objectPrefix,
+            inventoryLimit = inventoryLimit,
+            inventoryObjectCount = 0,
+            inventoryAvailable = false,
+            inventoryTruncated = false,
+            bucketOnlyObjectCount = 0,
+            sampleBucketOnlyObjectKeys = emptyList(),
+            dbOnlyMissingObjectCount = 0,
+            sampleDbOnlyObjectKeys = emptyList(),
+            longLivedPendingDeleteCount = 0,
+            sampleLongLivedPendingDeleteObjectKeys = emptyList(),
+            repairMode = "dry-run-degraded",
+        )
 
     companion object {
         private const val MAX_RECONCILE_INVENTORY_LIMIT = 1_000

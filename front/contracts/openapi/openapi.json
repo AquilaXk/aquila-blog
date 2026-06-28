@@ -5292,6 +5292,9 @@
             "type" : "integer",
             "format" : "int32"
           },
+          "inventoryAvailable" : {
+            "type" : "boolean"
+          },
           "inventoryTruncated" : {
             "type" : "boolean"
           },

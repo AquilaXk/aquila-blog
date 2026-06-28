@@ -28,6 +28,12 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 class UploadedFileRetentionServiceConflictRecoveryTest {
+    private companion object {
+        const val POSTS_PREFIX = "posts/"
+        const val CUSTOM_POSTS_PREFIX = "custom-posts/"
+        const val TEST_BUCKET = "test-bucket"
+    }
+
     private val postRepository = mock(PostRepositoryPort::class.java)
     private val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
     private val postImageStoragePort = mock(PostImageStoragePort::class.java)
@@ -181,14 +187,14 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             UploadedFile(
                 id = 1,
                 objectKey = "posts/2026/03/stale-pending-delete.png",
-                bucket = "test-bucket",
+                bucket = TEST_BUCKET,
                 contentType = "image/png",
                 fileSize = 128,
                 status = UploadedFileStatus.PENDING_DELETE,
                 purgeAfter = Instant.parse("2026-05-19T00:00:00Z"),
             ),
         )
-        `when`(postImageStoragePort.listObjects("posts/", 1000))
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
             .thenThrow(IllegalStateException("storage unavailable"))
         val service = newService(repository)
 
@@ -196,7 +202,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         assertThat(diagnostics.tempCount).isEqualTo(0)
         assertThat(diagnostics.eligibleForPurgeCount).isEqualTo(1)
-        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo("posts/")
+        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo(POSTS_PREFIX)
         assertThat(diagnostics.reconcile.inventoryAvailable).isFalse()
         assertThat(diagnostics.reconcile.repairMode).isEqualTo("dry-run-degraded")
         assertThat(diagnostics.reconcile.bucketOnlyObjectCount).isEqualTo(0)
@@ -208,7 +214,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
     @Test
     fun `cleanup diagnostics는 reconcile prefix 기본값을 storage keyPrefix에서 파생한다`() {
-        `when`(postImageStoragePort.listObjects("custom-posts/", 1000))
+        `when`(postImageStoragePort.listObjects(CUSTOM_POSTS_PREFIX, 1000))
             .thenReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
         val service =
             newService(
@@ -218,8 +224,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         val diagnostics = service.diagnoseCleanup()
 
-        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo("custom-posts/")
-        verify(postImageStoragePort).listObjects("custom-posts/", 1000)
+        assertThat(diagnostics.reconcile.objectPrefix).isEqualTo(CUSTOM_POSTS_PREFIX)
+        verify(postImageStoragePort).listObjects(CUSTOM_POSTS_PREFIX, 1000)
     }
 
     @Test
@@ -246,14 +252,14 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
                 UploadedFile(
                     id = index.toLong() + 1,
                     objectKey = "posts/2026/03/db-row-$index.png",
-                    bucket = "test-bucket",
+                    bucket = TEST_BUCKET,
                     contentType = "image/png",
                     fileSize = 128,
                     status = UploadedFileStatus.ACTIVE,
                 ),
             )
         }
-        `when`(postImageStoragePort.listObjects("posts/", 1000))
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
             .thenReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
         val service = newService(repository)
 
@@ -264,19 +270,48 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
     }
 
     @Test
+    fun `cleanup diagnostics는 inventory가 잘렸으면 DB only missing 계산을 보류한다`() {
+        val repository = SuccessfulRepository()
+        repository.save(
+            UploadedFile(
+                id = 1,
+                objectKey = "posts/2026/03/db-present-but-inventory-truncated.png",
+                bucket = TEST_BUCKET,
+                contentType = "image/png",
+                fileSize = 128,
+                status = UploadedFileStatus.ACTIVE,
+            ),
+        )
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
+            .thenReturn(
+                PostImageStoragePort.StoredObjectListing(
+                    objects = emptyList(),
+                    isTruncated = true,
+                ),
+            )
+        val service = newService(repository)
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.reconcile.inventoryTruncated).isTrue()
+        assertThat(diagnostics.reconcile.dbOnlyMissingObjectCount).isZero()
+        assertThat(diagnostics.reconcile.sampleDbOnlyObjectKeys).isEmpty()
+    }
+
+    @Test
     fun `cleanup diagnostics는 DELETED row가 있는 bucket object를 bucket only drift로 표시한다`() {
         val repository = SuccessfulRepository()
         repository.save(
             UploadedFile(
                 id = 1,
                 objectKey = "posts/2026/03/deleted-but-present.png",
-                bucket = "test-bucket",
+                bucket = TEST_BUCKET,
                 contentType = "image/png",
                 fileSize = 128,
                 status = UploadedFileStatus.DELETED,
             ),
         )
-        `when`(postImageStoragePort.listObjects("posts/", 1000))
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
             .thenReturn(
                 PostImageStoragePort.StoredObjectListing(
                     objects =
@@ -305,7 +340,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             UploadedFile(
                 id = 1,
                 objectKey = "posts/2026/03/old-temp.png",
-                bucket = "test-bucket",
+                bucket = TEST_BUCKET,
                 contentType = "image/png",
                 fileSize = 128,
                 status = UploadedFileStatus.TEMP,

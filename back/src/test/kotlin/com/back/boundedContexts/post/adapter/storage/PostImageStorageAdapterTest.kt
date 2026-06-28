@@ -15,6 +15,10 @@ import java.io.ByteArrayInputStream
 
 @DisplayName("PostImageStorageAdapter 테스트")
 class PostImageStorageAdapterTest {
+    private companion object {
+        const val TEST_BUCKET = "test-bucket"
+    }
+
     @Test
     @DisplayName("post prefix 밖 object key는 storage 접근 전에 거절한다")
     fun `post object reader rejects keys outside configured post prefix before storage access`() {
@@ -79,7 +83,7 @@ class PostImageStorageAdapterTest {
             PostImageStorageAdapter(
                 PostImageStorageProperties(
                     enabled = true,
-                    bucket = "test-bucket",
+                    bucket = TEST_BUCKET,
                     keyPrefix = "posts",
                 ),
             )
@@ -89,7 +93,7 @@ class PostImageStorageAdapterTest {
         val listing = adapter.listObjects("posts/2026/06", limit = 25)
 
         // then
-        assertThat(s3Client.lastListObjectsRequest!!.bucket()).isEqualTo("test-bucket")
+        assertThat(s3Client.lastListObjectsRequest!!.bucket()).isEqualTo(TEST_BUCKET)
         assertThat(s3Client.lastListObjectsRequest!!.prefix()).isEqualTo("posts/2026/06/")
         assertThat(s3Client.lastListObjectsRequest!!.maxKeys()).isEqualTo(25)
         assertThat(listing.isTruncated).isFalse()
@@ -133,7 +137,7 @@ class PostImageStorageAdapterTest {
             PostImageStorageAdapter(
                 PostImageStorageProperties(
                     enabled = true,
-                    bucket = "test-bucket",
+                    bucket = TEST_BUCKET,
                     keyPrefix = "",
                 ),
             )
@@ -285,6 +289,7 @@ class PostImageStorageAdapterTest {
         override fun serviceName(): String = "s3"
 
         override fun close() {
+            // S3Client test double has no resources to close.
         }
     }
 }

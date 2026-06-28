@@ -295,7 +295,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
     @Test
     fun `cleanup 진단은 purge 후보 수와 샘플 object key를 보여준다`() {
         val objectKey = "posts/2026/03/diagnostics-temp.png"
-        given(postImageStoragePort.listObjects("posts/", 1000))
+        given(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
             .willReturn(PostImageStoragePort.StoredObjectListing(emptyList(), isTruncated = false))
 
         uploadedFileRetentionService.registerTempUpload(
@@ -331,7 +331,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         uploadedFileRepository.save(
             UploadedFile(
                 objectKey = existingKey,
-                bucket = "test-bucket",
+                bucket = TEST_BUCKET,
                 contentType = "image/png",
                 fileSize = 128,
                 status = UploadedFileStatus.ACTIVE,
@@ -340,7 +340,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         uploadedFileRepository.save(
             UploadedFile(
                 objectKey = missingKey,
-                bucket = "test-bucket",
+                bucket = TEST_BUCKET,
                 contentType = "image/png",
                 fileSize = 256,
                 status = UploadedFileStatus.ACTIVE,
@@ -349,14 +349,14 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         uploadedFileRepository.save(
             UploadedFile(
                 objectKey = longPendingKey,
-                bucket = "test-bucket",
+                bucket = TEST_BUCKET,
                 contentType = "image/png",
                 fileSize = 512,
                 status = UploadedFileStatus.PENDING_DELETE,
                 purgeAfter = oldPurgeAfter,
             ),
         )
-        given(postImageStoragePort.listObjects("posts/", 1000))
+        given(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
             .willReturn(
                 PostImageStoragePort.StoredObjectListing(
                     objects =
@@ -371,7 +371,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         val diagnostics = uploadedFileRetentionService.diagnoseCleanup(sampleSize = 5).reconcile
 
         assertThat(diagnostics.repairMode).isEqualTo("dry-run")
-        assertThat(diagnostics.objectPrefix).isEqualTo("posts/")
+        assertThat(diagnostics.objectPrefix).isEqualTo(POSTS_PREFIX)
         assertThat(diagnostics.bucketOnlyObjectCount).isEqualTo(1)
         assertThat(diagnostics.sampleBucketOnlyObjectKeys).containsExactly(orphanKey)
         assertThat(diagnostics.dbOnlyMissingObjectCount).isEqualTo(2)
@@ -542,6 +542,9 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
     }
 
     companion object {
+        private const val POSTS_PREFIX = "posts/"
+        private const val TEST_BUCKET = "test-bucket"
+
         @JvmStatic
         @BeforeAll
         fun setUpAppConfig() {

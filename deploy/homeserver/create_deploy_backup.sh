@@ -11,8 +11,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
+ENV_FILE="${SCRIPT_DIR}/.env.prod"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
 RELEASE_STATE_FILE="${SCRIPT_DIR}/.backend-release-state.env"
+
+read_key_from_file() {
+  local key="$1"
+  local file="$2"
+  [[ -f "${file}" ]] || return 0
+  awk -F= -v key="${key}" '
+    $1 == key {
+      value = substr($0, index($0, "=") + 1)
+      gsub(/\r/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      gsub(/^'\''/, "", value)
+      gsub(/'\''$/, "", value)
+      print value
+    }
+  ' "${file}" | tail -n 1
+}
 
 container_image_for_service() {
   local service="$1"
@@ -63,6 +81,7 @@ back_green_image="$(container_image_for_service "back_green" || true)"
 back_read_image="$(container_image_for_service "back_read" || true)"
 back_admin_image="$(container_image_for_service "back_admin" || true)"
 back_worker_image="$(container_image_for_service "back_worker" || true)"
+compose_image_keys=(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
 
 {
   echo "created_at=${TIMESTAMP}"
@@ -93,6 +112,12 @@ back_worker_image="$(container_image_for_service "back_worker" || true)"
   if [[ -n "${back_worker_image}" ]]; then
     echo "back_worker_image=${back_worker_image}"
   fi
+  for image_key in "${compose_image_keys[@]}"; do
+    image_value="$(read_key_from_file "${image_key}" "${ENV_FILE}")"
+    if [[ -n "${image_value}" ]]; then
+      echo "${image_key}=${image_value}"
+    fi
+  done
 } > "${BACKUP_DIR}/metadata.env"
 
 echo "${BACKUP_DIR}"

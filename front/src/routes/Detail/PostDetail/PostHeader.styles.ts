@@ -126,8 +126,9 @@ export const StyledWrapper = styled.header `
 
     strong {
       color: #111216;
-      font-size: 0.8125rem;
+      font-size: 0.9375rem;
       font-weight: 800;
+      line-height: 1.25;
       overflow-wrap: anywhere;
     }
   }

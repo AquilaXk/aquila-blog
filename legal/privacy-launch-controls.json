@@ -1,7 +1,7 @@
 {
   "version": 1,
   "releaseLinkage": {
-    "policyEffectiveDateSource": "legal/policies/privacy.ko-KR.v1.0.2.yaml",
+    "policyEffectiveDateSource": "legal/policies/privacy.ko-KR.v1.0.3.yaml",
     "deployShaSource": "AQUILA_BUILD_SHA",
     "evidenceArtifacts": [
       "front/src/apis/backend/legal.ts",
@@ -26,7 +26,7 @@
       "target": "정책 버전관리와 공개 페이지",
       "evidenceRequirement": "`legal/policies/*.yaml`, `/privacy`, `/terms`, `/cookies`",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["legal/policies/privacy.ko-KR.v1.0.2.yaml", "front/src/routes/LegalPolicy/LegalPolicyPage.tsx"]
+      "evidenceArtifacts": ["legal/policies/privacy.ko-KR.v1.0.3.yaml", "front/src/routes/LegalPolicy/LegalPolicyPage.tsx"]
     },
     {
       "issue": 996,
@@ -95,7 +95,7 @@
       "issue": 1003,
       "status": "Open",
       "category": "필수 출시 전 완료",
-      "target": "Gemini tag recommendation 외부 처리 안전화",
+      "target": "Gemini optional AI 외부 처리 안전화",
       "evidenceRequirement": "default disabled config, redaction/cache regression test",
       "launchDecision": "차단",
       "disabledByFlag": true,

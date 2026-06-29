@@ -12,8 +12,8 @@ class ActiveLegalDocumentMetadataTest {
     fun currentMetadataMatchesPublicPolicySources() {
         val active = ActiveLegalDocumentMetadata.current()
 
-        val terms = readPolicyMetadata("../legal/policies/terms.ko-KR.v1.0.1.yaml")
-        val privacy = readPolicyMetadata("../legal/policies/privacy.ko-KR.v1.0.2.yaml")
+        val terms = readPolicyMetadata("../legal/policies/terms.ko-KR.v1.0.2.yaml")
+        val privacy = readPolicyMetadata("../legal/policies/privacy.ko-KR.v1.0.3.yaml")
         val expectedSignupPolicyVersion = latestVersion(terms.version, privacy.version)
 
         assertThat(active.signupPolicyVersion).isEqualTo(expectedSignupPolicyVersion)

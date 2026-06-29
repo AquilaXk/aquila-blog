@@ -318,27 +318,6 @@ custom:
       requestTimeoutMs: ${CUSTOM__CDN__PURGE__REQUEST_TIMEOUT_MS:2500}
       coalesceWindowMs: ${CUSTOM__CDN__PURGE__COALESCE_WINDOW_MS:1200}
       coalesceMaxTags: ${CUSTOM__CDN__PURGE__COALESCE_MAX_TAGS:2048}
-  ai:
-    tag:
-      enabled: ${CUSTOM__AI__TAG__ENABLED:false}
-      timeoutSeconds: ${CUSTOM__AI__TAG__TIMEOUT_SECONDS:6}
-      maxRequestsPerMinute: ${CUSTOM__AI__TAG__MAX_REQUESTS_PER_MINUTE:30}
-      maxRequestsPerDay: ${CUSTOM__AI__TAG__MAX_REQUESTS_PER_DAY:1000}
-      cacheTtlSeconds: ${CUSTOM__AI__TAG__CACHE_TTL_SECONDS:300}
-      fallbackCacheTtlSeconds: ${CUSTOM__AI__TAG__FALLBACK_CACHE_TTL_SECONDS:45}
-      retryMaxAttempts: ${CUSTOM__AI__TAG__RETRY_MAX_ATTEMPTS:1}
-      retryDelayMs: ${CUSTOM__AI__TAG__RETRY_DELAY_MS:250}
-      maxTagLength: ${CUSTOM__AI__TAG__MAX_TAG_LENGTH:24}
-      gemini:
-        apiKey: "${CUSTOM__AI__TAG__GEMINI__API_KEY:${CUSTOM__AI__SUMMARY__GEMINI__API_KEY:}}"
-        model: "${CUSTOM__AI__TAG__GEMINI__MODEL:${CUSTOM__AI__SUMMARY__GEMINI__MODEL:gemini-2.5-flash}}"
-        baseUrl: "${CUSTOM__AI__TAG__GEMINI__BASE_URL:${CUSTOM__AI__SUMMARY__GEMINI__BASE_URL:https://generativelanguage.googleapis.com/v1beta}}"
-      policy:
-        dpaConfirmed: ${CUSTOM__AI__TAG__POLICY__DPA_CONFIRMED:false}
-        regionConfirmed: ${CUSTOM__AI__TAG__POLICY__REGION_CONFIRMED:false}
-        retentionConfirmed: ${CUSTOM__AI__TAG__POLICY__RETENTION_CONFIRMED:false}
-        trainingOptOutConfirmed: ${CUSTOM__AI__TAG__POLICY__TRAINING_OPT_OUT_CONFIRMED:false}
-        processorRegistryConfirmed: ${CUSTOM__AI__TAG__POLICY__PROCESSOR_REGISTRY_CONFIRMED:false}
   storage:
     enabled: ${CUSTOM_STORAGE_ENABLED:false}
     endpoint: ${CUSTOM_STORAGE_ENDPOINT:http://localhost:9000}

@@ -4,7 +4,6 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
-import com.back.boundedContexts.post.dto.PostTagRecommendationResult
 import com.back.global.security.domain.SecurityUser
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
@@ -250,91 +249,6 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 jsonPath("$.content[0].title") { value("삭제된 글") }
                 jsonPath("$.content[0].authorProfileImgUrl") { value("https://cdn.example.com/profiles/user1.png?v=1710374400000") }
                 jsonPath("$.content[0].deletedAt") { value("2026-03-14T00:00:00Z") }
-            }
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `관리자는 AI 태그 추천을 생성할 수 있다`() {
-        given(
-            postTagRecommendationUseCase.recommend(
-                title = "태그 추천 테스트 제목",
-                content = "태그 추천 테스트 본문입니다.",
-                existingTags = listOf("spring"),
-                maxTags = 6,
-            ),
-        ).willReturn(
-            PostTagRecommendationResult(
-                tags = listOf("kotlin", "spring", "hexagonal-architecture"),
-                provider = "gemini",
-                model = "gemini-2.5-flash",
-                reason = null,
-            ),
-        )
-
-        mvc
-            .post("/post/api/v1/adm/posts/recommend-tags") {
-                contentType = org.springframework.http.MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "태그 추천 테스트 제목",
-                      "content": "태그 추천 테스트 본문입니다.",
-                      "existingTags": ["spring"],
-                      "maxTags": 6
-                    }
-                    """.trimIndent()
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.resultCode") { value("200-1") }
-                jsonPath("$.data.tags.length()") { value(3) }
-                jsonPath("$.data.tags[0]") { value("kotlin") }
-                jsonPath("$.data.provider") { value("gemini") }
-                jsonPath("$.data.model") { value("gemini-2.5-flash") }
-            }
-
-        then(postTagRecommendationUseCase)
-            .should()
-            .recommend("태그 추천 테스트 제목", "태그 추천 테스트 본문입니다.", listOf("spring"), 6)
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `태그 추천 본문 길이가 너무 크면 400으로 차단된다`() {
-        val oversizedContent = "a".repeat(50_001)
-
-        mvc
-            .post("/post/api/v1/adm/posts/recommend-tags") {
-                contentType = org.springframework.http.MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "태그 추천 길이 제한",
-                      "content": "$oversizedContent"
-                    }
-                    """.trimIndent()
-            }.andExpect {
-                status { isBadRequest() }
-            }
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `태그 추천 제목 길이가 너무 크면 400으로 차단된다`() {
-        val oversizedTitle = "t".repeat(301)
-
-        mvc
-            .post("/post/api/v1/adm/posts/recommend-tags") {
-                contentType = org.springframework.http.MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "$oversizedTitle",
-                      "content": "태그 추천 테스트 본문"
-                    }
-                    """.trimIndent()
-            }.andExpect {
-                status { isBadRequest() }
             }
     }
 

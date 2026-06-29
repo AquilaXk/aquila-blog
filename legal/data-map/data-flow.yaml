@@ -89,8 +89,8 @@ flows:
       - vercel_frontend_hosting
       - grafana_loki_monitoring
     status: /settings/privacy consent manager와 opt-out guard 구현
-  - id: gemini_tag_recommendation
-    collectionPoint: admin editor tag recommendation request
+  - id: gemini_ai_summary
+    collectionPoint: future admin editor AI request
     stores:
       - transient backend request
       - optional AI trace metadata
@@ -98,8 +98,7 @@ flows:
       - google_gemini
       - vercel_frontend_hosting
       - home_server_postgresql
-      - home_server_redis
-    status: default-off/PII scanner/DPA는 issue1003
+    status: no current runtime processing; default-off/PII scanner/DPA는 issue1003
   - id: backup_restore
     collectionPoint: deploy and backup scripts
     stores:
@@ -114,7 +113,7 @@ flows:
 
 reviewBlockers:
   - SMTP provider name, region, TLS mode, DPA, retention policy
-  - Gemini production default-off, DPA, retention, training opt-out
+  - Future Gemini optional AI production default-off, DPA, retention, training opt-out
   - Backup encryption and deletion tombstone replay
 
 codeEvidence:
@@ -129,7 +128,6 @@ codeEvidence:
   cloudFile: back/src/main/kotlin/com/back/boundedContexts/cloud/model/CloudFile.kt
   rum: front/src/pages/api/rum/vitals.ts
   analytics: front/src/libs/gtag.ts
-  geminiProxy: front/src/pages/api/post/recommend-tags.ts
-  geminiBackend: back/src/main/kotlin/com/back/boundedContexts/post/adapter/web/ApiV1AdmPostController.kt
+  geminiConfig: deploy/env/env.contract.json
   backup: deploy/homeserver/create_external_backup.sh
   restoreDrill: deploy/homeserver/restore_external_backup_drill.sh

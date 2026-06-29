@@ -114,8 +114,7 @@ export const EditorStudioPublishModal = <TViewport extends string,>({
   const isCloseDisabled =
     loadingKey === "writePost" ||
     loadingKey === "modifyPost" ||
-    loadingKey === "publishTempPost" ||
-    loadingKey === "recommendTags"
+    loadingKey === "publishTempPost"
 
   return (
     <PublishModalBackdrop data-variant={variant} onClick={onClose}>

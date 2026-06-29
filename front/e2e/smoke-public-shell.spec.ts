@@ -234,10 +234,13 @@ test.describe("core smoke public shell", () => {
   )
   expect(homePageSource).toContain("resolveStaticAdminProfileSeed")
   expect(homePageSource).toContain("initialAdminProfileSource")
+  expect(homePageSource).toContain('initialAdminProfileSource === "static-fallback"')
   expect(aboutPageSource).toContain("initialAdminProfileSource")
+  expect(aboutPageSource).toContain("resolvePublicAdminProfileCacheControl")
   expect(postDetailPageSource).toContain("queryKey.adminProfile()")
   expect(postDetailPageSource).toContain("initialAdminProfile")
   expect(postDetailPageSource).toContain('initialAdminProfileSource === "static-fallback"')
+  expect(appSource).toContain("shouldRefetchAdminProfileSource")
   expect(appSource).toContain("initialAdminProfileShouldRefetch")
   expect(rootLayoutSource).toContain('pathname[1] !== "_"')
   expect(rootLayoutSource).toContain(
@@ -282,6 +285,32 @@ test.describe("core smoke public shell", () => {
     profile: { blogDesign: "legacy", legacyBlogScheme: "dark" },
     source: "static-fallback",
   })
+})
+
+  test("about fallback profile 응답은 public cache로 저장하지 않는다", async ({ page }) => {
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "401-1", msg: "unauthorized" }),
+    })
+  })
+  await page.route("**/member/api/v1/members/adminProfile", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "503-1", msg: "profile unavailable" }),
+    })
+  })
+
+  const staticFallbackResponse = await page.goto("/about")
+  expect(staticFallbackResponse?.headers()["cache-control"]).toBe("private, no-store")
+  expect(staticFallbackResponse?.headers()["server-timing"]).toContain('desc="static-fallback"')
+
+  await addPublicAboutSnapshotCookie(page)
+  const cookieSnapshotResponse = await page.goto("/about")
+  expect(cookieSnapshotResponse?.headers()["cache-control"]).toBe("private, no-store")
+  expect(cookieSnapshotResponse?.headers()["server-timing"]).toContain('desc="cookie-snapshot"')
 })
 
   test("about 자기소개 문구는 작성 개행을 유지하는 white-space 계약을 가진다", async ({ page }) => {

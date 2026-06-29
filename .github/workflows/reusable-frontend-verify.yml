@@ -152,6 +152,22 @@ jobs:
         working-directory: front
         run: yarn contracts:check
 
+      - name: Run frontend unit tests
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn test:unit
+
+      - name: Upload frontend unit test report
+        if: always() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-unit-test-report
+          path: |
+            front/playwright-report-unit
+            front/test-results/unit
+          if-no-files-found: warn
+          retention-days: 3
+
       - name: Upload OpenAPI contract drift report
         if: failure() && steps.changes.outputs.frontend == 'true'
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
@@ -228,6 +244,24 @@ jobs:
         env:
           NEXT_PUBLIC_SIGNUP_ENABLED: "true"
         run: yarn test:e2e:smoke
+
+      - name: Run release UI QA e2e
+        if: steps.changes.outputs.frontend == 'true' && github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/heads/release'))
+        working-directory: front
+        env:
+          NEXT_PUBLIC_SIGNUP_ENABLED: "true"
+        run: yarn test:e2e:release-ui-qa
+
+      - name: Upload release UI QA report
+        if: always() && steps.changes.outputs.frontend == 'true' && github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/heads/release'))
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-release-ui-qa-report
+          path: |
+            front/playwright-report
+            front/test-results
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Run legal privacy e2e
         if: steps.changes.outputs.frontend == 'true'

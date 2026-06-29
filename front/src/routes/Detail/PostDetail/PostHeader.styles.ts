@@ -53,6 +53,7 @@ export const StyledWrapper = styled.header `
     color: #646a73;
     font-size: 1.125rem;
     line-height: 1.75;
+    overflow-wrap: anywhere;
     word-break: keep-all;
   }
 

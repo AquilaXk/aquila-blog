@@ -79,6 +79,7 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
     max-width: 100%;
     min-width: 0;
     margin: 30px 0;
+    overflow-x: hidden;
   }
 
   .aq-table-scroll {
@@ -196,6 +197,23 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
   .aq-table tbody tr:last-child td,
   .aq-table tbody tr:last-child th {
     border-bottom: 0;
+  }
+
+  @media (max-width: 820px) {
+    table,
+    .aq-table {
+      width: 100%;
+      min-width: 100%;
+      max-width: 100%;
+      table-layout: fixed;
+    }
+
+    table[data-overflow-mode="wide"],
+    .aq-table.aq-table-wide {
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
+    }
   }
 
 `

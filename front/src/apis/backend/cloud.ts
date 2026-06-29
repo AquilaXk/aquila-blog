@@ -303,7 +303,7 @@ const isMatchingVideoUploadSessionFile = (session: CloudVideoUploadSession, file
   // Server-side NFC normalization or metadata truncation must not discard a resumable session.
   session.byteSize === file.size
 
-const isDefinitiveStaleVideoUploadSessionError = (error: unknown) =>
+export const isDefinitiveStaleVideoUploadSessionError = (error: unknown) =>
   error instanceof ApiError && (error.status === 404 || error.status === 410)
 
 type ResolvedVideoUploadSession =
@@ -339,7 +339,7 @@ const resolveVideoUploadSession = async (
   return { kind: "inProgress", session }
 }
 
-const isExplicitUploadAbort = (error: unknown, signal?: AbortSignal) => {
+export const isExplicitUploadAbort = (error: unknown, signal?: AbortSignal) => {
   if (signal?.aborted) return true
   if (!(error instanceof Error)) return false
   return error.name === "AbortError"

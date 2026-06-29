@@ -13,7 +13,7 @@ type PrismEffectOptions = {
 const usePrismHydrationEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 
 const usePrismEffect = (
-  rootRef: RefObject<HTMLElement>,
+  rootRef: RefObject<HTMLElement | null>,
   contentKey: string,
   enabled = true,
   options?: PrismEffectOptions

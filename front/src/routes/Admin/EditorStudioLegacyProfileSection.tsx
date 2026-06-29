@@ -14,7 +14,7 @@ type EditorStudioLegacyProfileSectionProps = {
   profilePreviewSrc: string
   profileRoleInput: string
   profileBioInput: string
-  profileImageFileInputRef: RefObject<HTMLInputElement>
+  profileImageFileInputRef: RefObject<HTMLInputElement | null>
   profileImageHint: string
   profileImageNotice: NoticeState
   profileNotice: NoticeState

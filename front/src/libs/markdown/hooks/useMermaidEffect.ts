@@ -13,7 +13,7 @@ interface MermaidEffectOptions {
 }
 
 const useMermaidEffect = (
-  rootRef?: RefObject<HTMLElement>,
+  rootRef?: RefObject<HTMLElement | null>,
   contentKey?: string,
   enabled = true,
   options?: MermaidEffectOptions

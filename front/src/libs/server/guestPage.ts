@@ -7,13 +7,13 @@ import type { AdminProfile } from "src/hooks/useAdminProfile"
 import {
   fetchServerAdminProfile,
   resolvePublicAdminProfileSnapshot,
-  type StaticAdminProfileSeedSource,
 } from "./adminProfile"
+import type { PublicAdminProfileSource } from "src/libs/adminProfileSource"
 
 export type GuestPageProps = {
   dehydratedState: DehydratedState
   initialProfileSnapshot: AdminProfile | null
-  initialAdminProfileSource: StaticAdminProfileSeedSource
+  initialAdminProfileSource: PublicAdminProfileSource
 }
 
 export const getGuestPageProps = async (
@@ -33,8 +33,9 @@ export const getGuestPageProps = async (
   const fallbackProfileSnapshot = resolvePublicAdminProfileSnapshot(req)
   const publishedProfile = await fetchServerAdminProfile(req, { timeoutMs: 900 })
   const initialProfileSnapshot = publishedProfile ?? fallbackProfileSnapshot.profile
-  const initialAdminProfileSource: StaticAdminProfileSeedSource =
-    publishedProfile || fallbackProfileSnapshot.source === "cookie-snapshot" ? "published" : "static-fallback"
+  const initialAdminProfileSource: PublicAdminProfileSource = publishedProfile
+    ? "published"
+    : fallbackProfileSnapshot.source
 
   return {
     props: {

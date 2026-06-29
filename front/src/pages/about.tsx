@@ -21,9 +21,10 @@ import {
   buildStaticAdminProfileSnapshot,
   fetchServerAdminProfile,
   hasServerAuthCookie,
+  resolvePublicAdminProfileCacheControl,
   resolvePublicAdminProfileSnapshot,
-  type StaticAdminProfileSeedSource,
 } from "src/libs/server/adminProfile"
+import { shouldRefetchAdminProfileSource, type PublicAdminProfileSource } from "src/libs/adminProfileSource"
 import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "src/libs/server/serverTiming"
 import { resolveContactLinks, resolveRenderableProfileLinkHref, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 
@@ -43,14 +44,18 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
       : hasAuthCookie
         ? buildStaticAdminProfileSnapshot()
         : fallbackProfileSnapshot?.profile || buildStaticAdminProfileSnapshot()
-  const initialAdminProfileSource: StaticAdminProfileSeedSource =
+  const initialAdminProfileSource: PublicAdminProfileSource =
     adminProfileResult.ok && adminProfileResult.value
       ? "published"
-      : "static-fallback"
+      : fallbackProfileSnapshot?.source || "static-fallback"
 
   res.setHeader(
     "Cache-Control",
-    !debugSsr && !hasAuthCookie ? "public, s-maxage=60, stale-while-revalidate=300" : "private, no-store"
+    resolvePublicAdminProfileCacheControl({
+      debugSsr,
+      hasAuthCookie,
+      source: initialAdminProfileSource,
+    })
   )
   appendSsrDebugTiming(req, res, [
     {
@@ -78,11 +83,11 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
 
 type AboutPageProps = {
   initialAdminProfile: AdminProfile | null
-  initialAdminProfileSource: StaticAdminProfileSeedSource
+  initialAdminProfileSource: PublicAdminProfileSource
 }
 
 const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile, initialAdminProfileSource }) => {
-  const shouldRefreshProfile = initialAdminProfileSource !== "published"
+  const shouldRefreshProfile = shouldRefetchAdminProfileSource(initialAdminProfileSource)
   const adminProfile = useAdminProfile(initialAdminProfile, {
     refetchOnMount: shouldRefreshProfile,
     staleTimeMs: shouldRefreshProfile ? 0 : undefined,

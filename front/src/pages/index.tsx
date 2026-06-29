@@ -11,8 +11,8 @@ import { dehydrate } from "@tanstack/react-query"
 import { AdminProfile } from "src/hooks/useAdminProfile"
 import {
   resolveStaticAdminProfileSeed,
-  type StaticAdminProfileSeedSource,
 } from "src/libs/server/adminProfile"
+import type { StaticAdminProfileSeedSource } from "src/libs/adminProfileSource"
 import type { TPost } from "src/types"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { setAdminProfileCache } from "src/hooks/useAdminProfile"
@@ -127,7 +127,9 @@ export const getStaticProps: GetStaticProps = async () => {
       initialHomeBootstrapStatus: status,
     },
     revalidate:
-      IS_QA_STATIC_SHELL_MODE || !postsLoaded ? HOME_QA_SHELL_REVALIDATE_SECONDS : HOME_ISR_REVALIDATE_SECONDS,
+      IS_QA_STATIC_SHELL_MODE || !postsLoaded || initialAdminProfileSource === "static-fallback"
+        ? HOME_QA_SHELL_REVALIDATE_SECONDS
+        : HOME_ISR_REVALIDATE_SECONDS,
   }
 }
 

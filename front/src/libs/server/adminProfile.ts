@@ -8,13 +8,12 @@ import {
   normalizeBlogDesign,
   normalizeLegacyBlogScheme,
 } from "src/libs/profileWorkspace"
+import type { PublicAdminProfileSource, StaticAdminProfileSeedSource } from "src/libs/adminProfileSource"
 import { serverApiFetch } from "./backend"
 
 type FetchServerAdminProfileOptions = {
   timeoutMs?: number
 }
-
-export type StaticAdminProfileSeedSource = "published" | "static-fallback"
 
 type StaticAdminProfileSeed = {
   profile: AdminProfile
@@ -25,6 +24,21 @@ type FetchStaticAdminProfile = () => Promise<AdminProfile>
 
 const ADMIN_PROFILE_SNAPSHOT_COOKIE = "admin_profile_snapshot_v1"
 const ADMIN_PROFILE_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
+const PUBLISHED_PROFILE_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=300"
+const TRANSIENT_PROFILE_CACHE_CONTROL = "private, no-store"
+
+export const resolvePublicAdminProfileCacheControl = ({
+  debugSsr,
+  hasAuthCookie,
+  source,
+}: {
+  debugSsr: boolean
+  hasAuthCookie: boolean
+  source: PublicAdminProfileSource
+}) => {
+  if (debugSsr || hasAuthCookie || source !== "published") return TRANSIENT_PROFILE_CACHE_CONTROL
+  return PUBLISHED_PROFILE_CACHE_CONTROL
+}
 
 const readCookieValue = (req: IncomingMessage, key: string) => {
   const rawCookie = req.headers.cookie || ""
@@ -178,6 +192,6 @@ export const resolvePublicAdminProfileSnapshot = (req: IncomingMessage) => {
 
   return {
     profile: buildStaticAdminProfileSnapshot(),
-    source: "static-snapshot" as const,
+    source: "static-fallback" as const,
   }
 }

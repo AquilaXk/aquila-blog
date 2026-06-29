@@ -11,6 +11,7 @@ import {
   buildCanonicalPostDetailStaticPaths,
   buildCanonicalPostDetailStaticProps,
 } from "src/libs/server/postDetailPage"
+import type { PublicAdminProfileSource } from "src/libs/adminProfileSource"
 import { buildPostDetailMetadata } from "src/routes/Detail/PostDetail/postDetailMetadataModel"
 
 export const getStaticPaths: GetStaticPaths = async () => {
@@ -25,7 +26,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
 type DetailPageProps = {
   initialComments: TPostComment[] | null
   initialAdminProfile: AdminProfile | null
-  initialAdminProfileSource: "published" | "static-fallback"
+  initialAdminProfileSource: PublicAdminProfileSource
 }
 
 const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({

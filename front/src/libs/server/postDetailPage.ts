@@ -8,8 +8,8 @@ import type { AdminProfile } from "src/hooks/useAdminProfile"
 import { createQueryClient } from "src/libs/react-query"
 import {
   resolveStaticAdminProfileSeed,
-  type StaticAdminProfileSeedSource,
 } from "src/libs/server/adminProfile"
+import type { StaticAdminProfileSeedSource } from "src/libs/adminProfileSource"
 import { TPostComment } from "src/types"
 
 export { resolveStaticAdminProfileSeed } from "src/libs/server/adminProfile"
@@ -107,6 +107,7 @@ export const buildCanonicalPostDetailStaticPaths = async (): Promise<GetStaticPa
         pageSize: DETAIL_PREBUILD_COUNT,
       })
     } catch {
+      console.warn("[post-detail-static-paths] bootstrap failed; using blocking fallback only")
       return {
         posts: [],
       }

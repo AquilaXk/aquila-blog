@@ -30,8 +30,9 @@ const toDisplayCategoryLabels = (post: TPost) => {
   const labels = [...(post.category ?? []), ...(post.tags ?? [])]
     .filter((tag) => !INTERNAL_CATEGORY_TAGS.has(tag))
     .map((tag) => splitCategoryDisplay(tag).label)
+    .filter(Boolean)
   const uniqueLabels = Array.from(new Set(labels))
-  return uniqueLabels.length > 0 ? uniqueLabels : ["Engineering"]
+  return uniqueLabels
 }
 
 const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
@@ -40,7 +41,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
     data?.date?.start_date || data.createdTime,
     CONFIG.lang
   )
-  const summary = normalizeCardSummary(data.summary)
+  const summary = normalizeCardSummary(data.summary, { fallback: "" })
   const likesCount = data.likesCount ?? 0
   const commentsCount = data.commentsCount ?? 0
   const categoryLabels = toDisplayCategoryLabels(data)
@@ -86,19 +87,23 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
           {String(index + 1).padStart(2, "0")}
         </span>
         <div className="content">
-          <div className="tagRow">
-            {categoryLabels.map((categoryLabel) => (
-              <span className="tag" key={categoryLabel}>
-                {categoryLabel.toUpperCase()}
-              </span>
-            ))}
-          </div>
+          {categoryLabels.length > 0 && (
+            <div className="tagRow">
+              {categoryLabels.map((categoryLabel) => (
+                <span className="tag" key={categoryLabel}>
+                  {categoryLabel.toUpperCase()}
+                </span>
+              ))}
+            </div>
+          )}
           <header>
             <h2>{data.title}</h2>
           </header>
-          <div className="summary">
-            <p>{summary}</p>
-          </div>
+          {summary && (
+            <div className="summary">
+              <p>{summary}</p>
+            </div>
+          )}
           <div className="meta">
             <span>{createdAtText}</span>
             <span className="dot">·</span>
@@ -135,8 +140,8 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular", index = 0 }) => {
                 }}
               />
             ) : (
-              <div className="imageFallback" aria-hidden="true">
-                <span className="coverCategory">{coverCategoryLabel}</span>
+              <div className="imageFallback" data-ui="feed-card-brand-cover" aria-hidden="true">
+                {coverCategoryLabel && <span className="coverCategory">{coverCategoryLabel}</span>}
                 <strong>{data.title}</strong>
                 <span className="coverBrand">AquilaLog</span>
               </div>

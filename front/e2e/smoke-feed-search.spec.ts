@@ -73,6 +73,35 @@ test.describe("core smoke feed and search", () => {
   await expect(firstCard.locator(".imageFallback")).toContainText("깨진 썸네일 fallback")
 })
 
+  test("피드 카드는 빈 summary/category placeholder를 실제 데이터처럼 렌더링하지 않는다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        createExplorePage("빈 표시값 카드", "", {
+          category: [],
+          summary: "핵심 내용을 정리 중입니다.",
+          tags: [],
+          thumbnail: "https://cdn.example.invalid/empty-card.png",
+        })
+      ),
+    })
+  })
+  await page.route("https://cdn.example.invalid/empty-card.png", async (route) => route.abort("failed"))
+
+  await page.goto("/")
+
+  const firstCard = page.locator('[data-ui="feed-post-card"]').first()
+  await expect(firstCard.locator(".tagRow")).toHaveCount(0)
+  await expect(firstCard.locator(".summary")).toHaveCount(0)
+  await expect(firstCard.locator(".imageFallback")).toBeVisible()
+  await expect(firstCard.locator(".imageFallback")).toContainText("빈 표시값 카드")
+  await expect(firstCard.locator(".imageFallback")).not.toContainText("Engineering")
+  await expect(firstCard).not.toContainText("핵심 내용을 정리 중입니다.")
+})
+
   test("홈 topic rail은 실제 태그 count 상위 항목을 표시하고 tag 탐색으로 연결한다", async ({ page }) => {
   const capturedTag: string[] = []
 

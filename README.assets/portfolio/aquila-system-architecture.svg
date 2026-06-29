@@ -1,158 +1,190 @@
+<?xml version='1.0' encoding='UTF-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1672" height="941" viewBox="0 0 1672 941" role="img" aria-labelledby="title desc">
   <title id="title">Aquila Blog system architecture</title>
-  <desc id="desc">Architecture diagram showing Vercel Next.js frontend, Cloudflare Tunnel, home server Caddy ingress, Spring Boot Kotlin runtime, PostgreSQL, Redis, MinIO, observability, and GitHub Actions deployment.</desc>
+  <desc id="desc">Architecture diagram showing Vercel Next.js frontend, Cloudflare Tunnel through Caddy, Spring Boot Kotlin backend, PostgreSQL, Redis, MinIO, observability, and GitHub Actions deployment.</desc>
   <defs>
+    <linearGradient id="blueHdr" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0759cf"/>
+      <stop offset="1" stop-color="#0c69e8"/>
+    </linearGradient>
+    <linearGradient id="greenHdr" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#047200"/>
+      <stop offset="1" stop-color="#0b8d0e"/>
+    </linearGradient>
+    <linearGradient id="purpleHdr" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6424d8"/>
+      <stop offset="1" stop-color="#8426e3"/>
+    </linearGradient>
+    <linearGradient id="infraHdr" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#075bd0"/>
+      <stop offset="1" stop-color="#0b65e3"/>
+    </linearGradient>
+    <linearGradient id="hostingFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e9f3ff"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="hostingHead" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e6f3ff"/>
+      <stop offset="1" stop-color="#dceeff"/>
+    </linearGradient>
+    <linearGradient id="artifactFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbfff8"/>
+      <stop offset="1" stop-color="#f4fbf3"/>
+    </linearGradient>
+    <linearGradient id="ciHead" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff8e8"/>
+      <stop offset="1" stop-color="#fff0d0"/>
+    </linearGradient>
+    <linearGradient id="noteFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f7fbff"/>
+    </linearGradient>
+    <filter id="panelShadow" x="-6%" y="-6%" width="112%" height="112%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="blur"/>
+      <feOffset in="blur" dx="0" dy="1.2" result="offset"/>
+      <feFlood flood-color="#7188a8" flood-opacity="0.18" result="color"/>
+      <feComposite in="color" in2="offset" operator="in" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="headerShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="blur"/>
+      <feOffset in="blur" dx="0" dy="1.6" result="offset"/>
+      <feFlood flood-color="#1d2d4d" flood-opacity="0.23" result="color"/>
+      <feComposite in="color" in2="offset" operator="in" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
     <style>
-      .bg{fill:#f7f9fc}
-      .panel{fill:#fff;stroke:#cbd7e6;stroke-width:2}
-      .panel-blue{stroke:#79a7ff}
-      .panel-green{stroke:#72cf90}
-      .panel-orange{stroke:#ffc36f}
-      .label{font:700 18px Arial,sans-serif;letter-spacing:.2px}
-      .title{font:800 44px Arial,sans-serif;fill:#102033}
-      .subtitle{font:500 20px Arial,sans-serif;fill:#5d6b7c}
-      .h2{font:800 27px Arial,sans-serif;fill:#15243a}
-      .h3{font:700 20px Arial,sans-serif;fill:#15243a}
-      .text{font:500 16px Arial,sans-serif;fill:#4c5b70}
-      .small{font:500 14px Arial,sans-serif;fill:#607086}
-      .mono{font:700 15px Arial,sans-serif;fill:#22314a}
-      .arrow{stroke:#2468db;stroke-width:4;fill:none;marker-end:url(#arrowHead)}
-      .dash{stroke:#df8500;stroke-width:3;stroke-dasharray:8 8;fill:none;marker-end:url(#deployHead)}
-      .runtime{fill:#f8fbff;stroke:#b8cbea;stroke-width:1.5}
-      .card{fill:#fbfdff;stroke:#d8e1ef;stroke-width:1.5}
-    </style>
-    <marker id="arrowHead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
-      <path d="M0,0 L12,6 L0,12 Z" fill="#2468db"/>
-    </marker>
-    <marker id="deployHead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
-      <path d="M0,0 L12,6 L0,12 Z" fill="#df8500"/>
-    </marker>
-    <linearGradient id="blue" x1="0" x2="1">
-      <stop offset="0" stop-color="#1259d9"/>
-      <stop offset="1" stop-color="#1f8fff"/>
-    </linearGradient>
-    <linearGradient id="green" x1="0" x2="1">
-      <stop offset="0" stop-color="#087a36"/>
-      <stop offset="1" stop-color="#22a75a"/>
-    </linearGradient>
-    <linearGradient id="orange" x1="0" x2="1">
-      <stop offset="0" stop-color="#c56800"/>
-      <stop offset="1" stop-color="#ff9c2f"/>
-    </linearGradient>
+    .txt, .title { font-family: 'Noto Sans CJK KR','Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif; text-rendering: geometricPrecision; }
+    .title { letter-spacing: -0.7px; }
+    .panel { fill:#fff; stroke:#6f7f9c; stroke-width:1.8; filter:url(#panelShadow); }
+    .card { fill:#fff; stroke:#a7b3c7; stroke-width:1.6; }
+    .blueFlow { stroke:#075bbb; stroke-width:4.2; fill:none; stroke-linejoin:round; stroke-linecap:butt; }
+    .bluePlain { stroke:#075bbb; stroke-width:4.2; fill:none; stroke-linejoin:round; stroke-linecap:butt; }
+    .greenDash { stroke:#27b52f; stroke-width:2.2; stroke-dasharray:5 5; fill:none; stroke-linejoin:round; stroke-linecap:round; }
+    .greenDashPlain { stroke:#27b52f; stroke-width:2.2; stroke-dasharray:5 5; fill:none; stroke-linejoin:round; stroke-linecap:round; }
+    .orangeDash { stroke:#ffa000; stroke-width:2.5; stroke-dasharray:6 5; fill:none; stroke-linejoin:round; stroke-linecap:round; }
+    .orangeDashPlain { stroke:#ffa000; stroke-width:2.5; stroke-dasharray:6 5; fill:none; stroke-linejoin:round; stroke-linecap:round; }
+  </style>
   </defs>
-
-  <rect class="bg" width="1672" height="941"/>
-  <circle cx="225" cy="40" r="240" fill="#2e5bff" opacity=".06"/>
-  <circle cx="1375" cy="170" r="260" fill="#22c55e" opacity=".06"/>
-
-  <text x="54" y="72" class="title">Aquila Blog Architecture</text>
-  <text x="56" y="108" class="subtitle">Public blog, admin content workspace, and home-server operations</text>
-  <rect x="1228" y="52" width="388" height="48" rx="14" class="panel"/>
-  <text x="1252" y="83" class="mono">Production: Vercel + Cloudflare Tunnel + Home Server</text>
-
-  <rect x="58" y="148" width="360" height="360" rx="22" class="panel panel-blue"/>
-  <rect x="90" y="126" width="300" height="44" rx="12" fill="url(#blue)"/>
-  <text x="123" y="154" class="label" fill="#fff">Frontend</text>
-  <text x="96" y="216" class="h2">Vercel / Next.js</text>
-  <rect x="92" y="250" width="292" height="98" rx="14" class="card"/>
-  <text x="116" y="282" class="h3">Next.js 15 Pages Router</text>
-  <text x="116" y="311" class="text">React 18 + TypeScript</text>
-  <text x="116" y="336" class="small">SSR, public blog, admin routes</text>
-  <rect x="92" y="370" width="292" height="104" rx="14" class="card"/>
-  <text x="116" y="402" class="h3">Content UI</text>
-  <text x="116" y="431" class="text">Feed, post detail, search, tags</text>
-  <text x="116" y="456" class="small">Editor, preview, publish workflow</text>
-
-  <rect x="456" y="226" width="244" height="168" rx="20" class="panel panel-orange"/>
-  <rect x="493" y="204" width="170" height="44" rx="12" fill="url(#orange)"/>
-  <text x="524" y="232" class="label" fill="#fff">Edge</text>
-  <text x="493" y="288" class="h2">Cloudflare Tunnel</text>
-  <text x="493" y="326" class="text">Public ingress to Caddy</text>
-  <text x="493" y="351" class="small">Host ports stay loopback-bound</text>
-
-  <rect x="744" y="148" width="504" height="360" rx="22" class="panel panel-green"/>
-  <rect x="842" y="126" width="308" height="44" rx="12" fill="url(#green)"/>
-  <text x="895" y="154" class="label" fill="#fff">Home Server</text>
-  <text x="786" y="216" class="h2">Caddy + Docker Compose</text>
-  <rect x="786" y="250" width="420" height="90" rx="14" class="card"/>
-  <text x="810" y="282" class="h3">Spring Boot 4 / Kotlin API</text>
-  <text x="810" y="311" class="text">Reverse proxy, health routes, rollback scripts</text>
-  <rect x="786" y="362" width="126" height="104" rx="14" class="runtime"/>
-  <text x="809" y="393" class="h3">blue / green</text>
-  <text x="809" y="421" class="small">Zero-downtime</text>
-  <text x="809" y="443" class="small">API cutover</text>
-  <rect x="932" y="362" width="126" height="104" rx="14" class="runtime"/>
-  <text x="965" y="393" class="h3">read</text>
-  <text x="955" y="421" class="small">Public read</text>
-  <text x="955" y="443" class="small">runtime mode</text>
-  <rect x="1078" y="362" width="126" height="104" rx="14" class="runtime"/>
-  <text x="1094" y="393" class="h3">admin / worker</text>
-  <text x="1102" y="421" class="small">Ops, jobs,</text>
-  <text x="1102" y="443" class="small">cleanup</text>
-
-  <rect x="1290" y="148" width="326" height="360" rx="22" class="panel panel-blue"/>
-  <rect x="1360" y="126" width="186" height="44" rx="12" fill="url(#blue)"/>
-  <text x="1401" y="154" class="label" fill="#fff">Data</text>
-  <rect x="1326" y="202" width="254" height="78" rx="14" class="card"/>
-  <text x="1350" y="234" class="h3">PostgreSQL</text>
-  <text x="1350" y="262" class="small">Posts, members, Flyway, backups</text>
-  <rect x="1326" y="300" width="254" height="78" rx="14" class="card"/>
-  <text x="1350" y="332" class="h3">Redis</text>
-  <text x="1350" y="360" class="small">Cache, sessions, queues, locks</text>
-  <rect x="1326" y="398" width="254" height="78" rx="14" class="card"/>
-  <text x="1350" y="430" class="h3">MinIO</text>
-  <text x="1350" y="458" class="small">Image and object storage</text>
-
-  <path d="M418 328 H456" class="arrow"/>
-  <path d="M700 310 H744" class="arrow"/>
-  <path d="M1248 310 H1290" class="arrow"/>
-
-  <rect x="58" y="574" width="498" height="250" rx="22" class="panel panel-orange"/>
-  <rect x="90" y="552" width="202" height="44" rx="12" fill="url(#orange)"/>
-  <text x="128" y="580" class="label" fill="#fff">CI / CD</text>
-  <rect x="92" y="628" width="132" height="90" rx="14" class="card"/>
-  <text x="114" y="660" class="h3">Actions</text>
-  <text x="114" y="688" class="small">Lint, test, build</text>
-  <rect x="242" y="628" width="132" height="90" rx="14" class="card"/>
-  <text x="267" y="660" class="h3">Image</text>
-  <text x="267" y="688" class="small">Backend image</text>
-  <rect x="392" y="628" width="132" height="90" rx="14" class="card"/>
-  <text x="421" y="660" class="h3">Deploy</text>
-  <text x="414" y="688" class="small">SSH blue/green</text>
-  <text x="92" y="760" class="text">PR to main runs checks.</text>
-  <text x="92" y="790" class="text">Main merge starts home-server deployment and live E2E verification.</text>
-  <path d="M224 673 H242" class="dash"/>
-  <path d="M374 673 H392" class="dash"/>
-
-  <rect x="596" y="574" width="468" height="250" rx="22" class="panel panel-orange"/>
-  <rect x="628" y="552" width="234" height="44" rx="12" fill="url(#orange)"/>
-  <text x="669" y="580" class="label" fill="#fff">Observability</text>
-  <rect x="630" y="628" width="190" height="78" rx="14" class="card"/>
-  <text x="654" y="660" class="h3">Prometheus</text>
-  <text x="654" y="688" class="small">Metrics and alerts</text>
-  <rect x="840" y="628" width="190" height="78" rx="14" class="card"/>
-  <text x="864" y="660" class="h3">Loki / Promtail</text>
-  <text x="864" y="688" class="small">Container logs</text>
-  <rect x="630" y="728" width="400" height="62" rx="14" class="card"/>
-  <text x="654" y="755" class="text">Grafana, Alertmanager</text>
-  <text x="654" y="785" class="text">public_edge_probe, docker_runtime_probe</text>
-
-  <rect x="1104" y="574" width="512" height="250" rx="22" class="panel panel-green"/>
-  <rect x="1136" y="552" width="216" height="44" rx="12" fill="url(#green)"/>
-  <text x="1179" y="580" class="label" fill="#fff">Operations</text>
-  <rect x="1138" y="628" width="204" height="78" rx="14" class="card"/>
-  <text x="1162" y="660" class="h3">Backups</text>
-  <text x="1162" y="688" class="small">PostgreSQL and MinIO drills</text>
-  <rect x="1368" y="628" width="204" height="78" rx="14" class="card"/>
-  <text x="1392" y="660" class="h3">Hardening</text>
-  <text x="1392" y="688" class="small">Cloudflare-first ingress</text>
-  <rect x="1138" y="728" width="434" height="62" rx="14" class="card"/>
-  <text x="1162" y="755" class="text">Legacy Terraform remains experimental.</text>
-  <text x="1162" y="785" class="text">Production uses homeserver deploy.</text>
-
-  <path d="M996 508 V552" class="dash"/>
-  <path d="M556 700 H596" class="dash"/>
-  <path d="M1064 700 H1104" class="arrow"/>
-
-  <text x="58" y="890" class="small">Source of truth: front/package.json, back/build.gradle.kts, deploy/homeserver/docker-compose.prod.yml, deploy/homeserver/caddy/Caddyfile</text>
+  <rect x="0" y="0" width="1672" height="941" fill="#ffffff" stroke="none" stroke-width="0"/>
+  <text class="title" x="22" y="36" font-size="40" font-weight="900" fill="#050505" text-anchor="start" dominant-baseline="middle">아키텍처 구조도</text>
+  <rect x="58" y="94" width="321" height="447" rx="12" ry="12" fill="#fff" stroke="#6f7f9c" stroke-width="1.8"/>
+  <rect x="94" y="73" width="245" height="40" rx="10" ry="10" fill="url(#blueHdr)" stroke="none" stroke-width="0"/>
+  <text class="txt" x="216.5" y="94.0" font-size="24" font-weight="800" fill="#fff" text-anchor="middle" dominant-baseline="middle">Frontend (사용자)</text>
+  <text class="txt" x="148" y="249" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">React 18</text>
+  <text class="txt" x="296" y="249" font-size="24" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">TypeScript</text>
+  <text class="txt" x="217" y="361" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">Next.js</text>
+  <rect x="77" y="385" width="282" height="138" rx="6" ry="6" fill="url(#hostingFill)" stroke="#5d9bff" stroke-width="1.8"/>
+  <rect x="77" y="385" width="282" height="39" rx="6" ry="6" fill="url(#hostingHead)" stroke="#5d9bff" stroke-width="1.6"/>
+  <line x1="78" y1="424" x2="358" y2="424" stroke="#5d9bff" stroke-width="1.6" stroke-linecap="butt"/>
+  <text class="txt" x="218" y="405" font-size="18.5" font-weight="800" fill="#0b337a" text-anchor="middle" dominant-baseline="middle">배포 (Hosting)</text>
+  <path d="M135 445 L157 488 L112 488 Z" fill="#000" stroke="none" stroke-width="1"/>
+  <text class="txt" x="218" y="464" font-size="29" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">Vercel</text>
+  <text class="txt" x="235" y="497" font-size="16.2" font-weight="800" fill="#071b5d" text-anchor="middle" dominant-baseline="middle">(Frontend Hosting)</text>
+  <path d="M379 268 H404" fill="none" stroke="#075bbb" stroke-width="4.2" stroke-linecap="butt"/>
+  <path d="M404 259 L428 268 L404 277 Z" fill="#075bbb" stroke="none"/>
+  <text class="txt" x="493" y="277" font-size="24.5" font-weight="800" fill="#111" text-anchor="middle" dominant-baseline="middle">Cloudflare</text>
+  <text class="txt" x="493" y="306" font-size="24.5" font-weight="800" fill="#111" text-anchor="middle" dominant-baseline="middle">Tunnel</text>
+  <path d="M556 268 H592" fill="none" stroke="#075bbb" stroke-width="4.2" stroke-linecap="butt"/>
+  <path d="M592 255 L624 268 L592 281 Z" fill="#075bbb" stroke="none"/>
+  <rect x="391" y="362" width="209" height="98" rx="8" ry="8" fill="#fff" stroke="#075bbb" stroke-width="2.2"/>
+  <path d="M485 362 L493 327 L501 362" fill="none" stroke="#075bbb" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="txt" x="496" y="388" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">Cloudflare Tunnel에서</text>
+  <text class="txt" x="496" y="417" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">Caddy 경유 Backend로</text>
+  <text class="txt" x="496" y="444" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">접속 (포트 노출 없음)</text>
+  <rect x="625" y="94" width="418" height="292" rx="12" ry="12" fill="#fff" stroke="#6f7f9c" stroke-width="1.8"/>
+  <rect x="649" y="73" width="366" height="40" rx="10" ry="10" fill="url(#greenHdr)" stroke="none" stroke-width="0"/>
+  <text class="txt" x="832.0" y="94.0" font-size="22.5" font-weight="800" fill="#fff" text-anchor="middle" dominant-baseline="middle">Backend (애플리케이션 서버)</text>
+  <text class="txt" x="788" y="188" font-size="27" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">Spring Boot 4.0</text>
+  <line x1="670" y1="254" x2="1000" y2="254" stroke="#cbd4e1" stroke-width="2.0" stroke-linecap="butt"/>
+  <text class="txt" x="788" y="318" font-size="29" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">Kotlin</text>
+  <!-- backend-to-data connector moved after data panel so arrow heads are not clipped -->
+  <rect x="1183" y="94" width="382" height="377" rx="12" ry="12" fill="#fff" stroke="#6f7f9c" stroke-width="1.8"/>
+  <rect x="1207" y="73" width="339" height="40" rx="10" ry="10" fill="url(#purpleHdr)" stroke="none" stroke-width="0"/>
+  <text class="txt" x="1376.5" y="94.0" font-size="22" font-weight="800" fill="#fff" text-anchor="middle" dominant-baseline="middle">Data Layer (데이터 저장소)</text>
+  <rect x="1208" y="132" width="337" height="98" rx="8" ry="8" fill="#fff" stroke="#a7b3c7" stroke-width="1.6"/>
+  <rect x="1208" y="245" width="337" height="98" rx="8" ry="8" fill="#fff" stroke="#a7b3c7" stroke-width="1.6"/>
+  <rect x="1208" y="356" width="337" height="98" rx="8" ry="8" fill="#fff" stroke="#a7b3c7" stroke-width="1.6"/>
+  <g id="flow-backend-to-data" shape-rendering="geometricPrecision">
+    <path d="M1043 268 H1102" fill="none" stroke="#075bbb" stroke-width="4.2" stroke-linecap="butt"/>
+    <path d="M1102 268 V181 Q1102 169 1114 169 H1176" fill="none" stroke="#075bbb" stroke-width="4.2" stroke-linecap="butt" stroke-linejoin="round"/>
+    <path d="M1102 268 H1176" fill="none" stroke="#075bbb" stroke-width="4.2" stroke-linecap="butt"/>
+    <path d="M1102 268 V382 Q1102 394 1114 394 H1176" fill="none" stroke="#075bbb" stroke-width="4.2" stroke-linecap="butt" stroke-linejoin="round"/>
+    <path d="M1176 157 L1200 169 L1176 181 Z" fill="#075bbb" stroke="none"/>
+    <path d="M1176 256 L1200 268 L1176 280 Z" fill="#075bbb" stroke="none"/>
+    <path d="M1176 382 L1200 394 L1176 406 Z" fill="#075bbb" stroke="none"/>
+  </g>
+  <text class="txt" x="1330" y="160" font-size="25.5" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">PostgreSQL</text>
+  <text class="txt" x="1330" y="193" font-size="16" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 관계형 데이터 (주 데이터)</text>
+  <text class="txt" x="1330" y="219" font-size="16" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• Docker Compose 로 실행</text>
+  <text class="txt" x="1330" y="270" font-size="25.5" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">Redis</text>
+  <text class="txt" x="1330" y="303" font-size="16" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 캐싱 / 세션 / 임시 데이터</text>
+  <text class="txt" x="1330" y="329" font-size="16" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• Docker Compose 로 실행</text>
+  <text class="txt" x="1330" y="381" font-size="25.5" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">MinIO</text>
+  <text class="txt" x="1330" y="413" font-size="16" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 객체 스토리지 (파일 저장)</text>
+  <text class="txt" x="1330" y="440" font-size="16" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• Docker Compose 로 실행</text>
+  <rect x="910" y="502" width="232" height="153" rx="8" ry="8" fill="#fff" stroke="#ff9f00" stroke-width="1.8"/>
+  <rect x="910" y="502" width="232" height="39" rx="8" ry="8" fill="url(#ciHead)" stroke="#ff9f00" stroke-width="1.6"/>
+  <line x1="911" y1="541" x2="1141" y2="541" stroke="#ff9f00" stroke-width="1.6" stroke-linecap="butt"/>
+  <text class="txt" x="1026" y="520" font-size="17.5" font-weight="800" fill="#9b5d00" text-anchor="middle" dominant-baseline="middle">CI / CD (자동화)</text>
+  <text class="txt" x="1000" y="561" font-size="18" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">GitHub Actions</text>
+  <text class="txt" x="1000" y="590" font-size="14.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 빌드 / 테스트</text>
+  <text class="txt" x="1000" y="614" font-size="14.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• Docker Image 생성</text>
+  <text class="txt" x="1000" y="638" font-size="14.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 서버 배포 (SSH)</text>
+  <path d="M1142 517 H1185 V585 H1208" fill="none" stroke="#ffa000" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M1208 577 L1226 585 L1208 593 Z" fill="#ffa000" stroke="none"/>
+  <rect x="1227" y="522" width="330" height="144" rx="8" ry="8" fill="none" stroke="#8b24ff" stroke-width="1.8" stroke-dasharray="6 5"/>
+  <rect x="1245" y="503" width="292" height="39" rx="10" ry="10" fill="url(#purpleHdr)" stroke="none" stroke-width="0"/>
+  <text class="txt" x="1391" y="523" font-size="20.5" font-weight="800" fill="#fff" text-anchor="middle" dominant-baseline="middle">배포 서버 (운영 환경)</text>
+  <rect x="1245" y="552" width="293" height="106" rx="6" ry="6" fill="none" stroke="#8b24ff" stroke-width="1.4" stroke-dasharray="5 5"/>
+  <text class="txt" x="1350" y="566" font-size="20.2" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">Docker Compose</text>
+  <text class="txt" x="1369" y="596" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• back_* + Caddy</text>
+  <text class="txt" x="1369" y="622" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• cloudflared</text>
+  <text class="txt" x="1369" y="648" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• DB / Redis / MinIO</text>
+  <rect x="52" y="688" width="1546" height="150" rx="8" ry="8" fill="#fff" stroke="none"/>
+  <rect x="65" y="660" width="272" height="39" rx="10" ry="10" fill="url(#infraHdr)" stroke="none" stroke-width="0"/>
+  <path d="M65 688 H337 M337 688 H1590 Q1598 688 1598 696 V830 Q1598 838 1590 838 H60 Q52 838 52 830 V696 Q52 688 60 688 H65" fill="none" stroke="#0b63e5" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="txt" x="201.0" y="680.5" font-size="23" font-weight="800" fill="#fff" text-anchor="middle" dominant-baseline="middle">Infrastructure / 운영</text>
+  <rect x="67" y="719" width="318" height="101" rx="6" ry="6" fill="#fff" stroke="#b7c2d2" stroke-width="1.5"/>
+  <rect x="397" y="719" width="273" height="101" rx="6" ry="6" fill="#fff" stroke="#b7c2d2" stroke-width="1.5"/>
+  <rect x="684" y="719" width="334" height="101" rx="6" ry="6" fill="#fff" stroke="#b7c2d2" stroke-width="1.5"/>
+  <rect x="1033" y="719" width="295" height="101" rx="6" ry="6" fill="#fff" stroke="#b7c2d2" stroke-width="1.5"/>
+  <rect x="1343" y="719" width="251" height="101" rx="6" ry="6" fill="#fff" stroke="#b7c2d2" stroke-width="1.5"/>
+  <text class="txt" x="198" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">개발 환경 (Local)</text>
+  <text class="txt" x="198" y="768" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Docker Compose 로</text>
+  <text class="txt" x="198" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">DB / Redis / MinIO 실행</text>
+  <path d="M449 734 L470 776 L428 776 Z" fill="#000" stroke="none" stroke-width="1"/>
+  <text class="txt" x="420" y="786" font-size="20" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">Vercel</text>
+  <text class="txt" x="515" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">프론트 배포</text>
+  <text class="txt" x="515" y="768" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Vercel을 통한</text>
+  <text class="txt" x="515" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Next.js 앱 배포</text>
+  <text class="txt" x="844" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">모니터링</text>
+  <text class="txt" x="844" y="768" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Prometheus + Grafana</text>
+  <text class="txt" x="844" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">메트릭 수집 및 시각화</text>
+  <text class="txt" x="1164" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">네트워크 / 보안</text>
+  <text class="txt" x="1144" y="768" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Cloudflare Tunnel</text>
+  <text class="txt" x="1144" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Zero Trust Access</text>
+  <text class="txt" x="1448" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">CI / CD</text>
+  <text class="txt" x="1438" y="768" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">GitHub Actions로</text>
+  <text class="txt" x="1438" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">자동 빌드 및 배포</text>
+  <path d="M66 876 H104" fill="none" stroke="#075bbb" stroke-width="4.0" stroke-linecap="butt"/>
+  <path d="M104 867 L130 876 L104 885 Z" fill="#075bbb" stroke="none"/>
+  <text class="txt" x="144" y="875" font-size="14.5" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">실행 흐름</text>
+  <path d="M242 876 H285" fill="none" stroke="#27b52f" stroke-width="2.5" stroke-dasharray="5 5" stroke-linecap="round"/>
+  <path d="M285 868 L302 876 L285 884 Z" fill="#27b52f" stroke="none"/>
+  <text class="txt" x="306" y="875" font-size="14.5" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">아티팩트 흐름</text>
+  <path d="M447 876 H489" fill="none" stroke="#ffa000" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round"/>
+  <path d="M489 868 L507 876 L489 884 Z" fill="#ffa000" stroke="none"/>
+  <text class="txt" x="518" y="875" font-size="14.5" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">배포 흐름</text>
+  <rect x="830" y="852" width="784" height="84" rx="8" ry="8" fill="#f8fbff" stroke="#5d9bff" stroke-width="1.5"/>
+  <text class="txt" x="884" y="867" font-size="18" font-weight="800" fill="#0262e0" text-anchor="start" dominant-baseline="middle">주요 특징</text>
+  <text class="txt" x="846" y="897" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 포트 노출 없이 Cloudflare Tunnel 로 안전한 접속</text>
+  <text class="txt" x="846" y="922" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• CI/CD 자동화로 일관된 배포 · 서버 빌드를 외부화</text>
+  <text class="txt" x="1225" y="897" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 서버 런타임은 Docker Compose 로 관리</text>
 </svg>

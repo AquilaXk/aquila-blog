@@ -11,6 +11,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.security.authentication.InternalAuthenticationServiceException
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest
 import org.springframework.security.oauth2.client.registration.ClientRegistration
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
@@ -113,7 +114,7 @@ class CustomOAuth2UserServiceTest {
         assertThat(principal.attributes["sub"]).isEqualTo("oidc-user-id")
         assertThat(principal.claims["nickname"]).isEqualTo("OIDC닉네임")
         assertThat(principal.idToken).isSameAs(idToken)
-        assertThat(principal.userInfo.subject).isEqualTo("oidc-user-id")
+        assertThat(principal.userInfo!!.subject).isEqualTo("oidc-user-id")
     }
 
     @Test
@@ -193,6 +194,43 @@ class CustomOAuth2UserServiceTest {
             )
         }.isInstanceOf(IllegalStateException::class.java)
             .hasMessage("Unsupported provider: google")
+    }
+
+    @Test
+    fun `OAuth2 provider user가 없으면 명시적으로 거부한다`() {
+        val service =
+            CustomOAuth2UserService(RecordingMemberUseCase().proxy, RecordingOAuthSignupUseCase()).apply {
+                delegate = OAuth2UserService<OAuth2UserRequest, OAuth2User> { null }
+            }
+
+        assertThatThrownBy {
+            service.loadUser(
+                OAuth2UserRequest(kakaoClientRegistration(userNameAttributeName = "id"), accessToken()),
+            )
+        }.isInstanceOf(InternalAuthenticationServiceException::class.java)
+            .hasMessage("OAuth2 provider returned no user.")
+    }
+
+    @Test
+    fun `OIDC provider user가 없으면 명시적으로 거부한다`() {
+        val idToken =
+            OidcIdToken(
+                "id-token",
+                Instant.EPOCH,
+                Instant.EPOCH.plusSeconds(60),
+                mapOf("sub" to "oidc-user-id"),
+            )
+        val service =
+            CustomOidcUserService(RecordingMemberUseCase().proxy, RecordingOAuthSignupUseCase()).apply {
+                delegate = OAuth2UserService<OidcUserRequest, OidcUser> { null }
+            }
+
+        assertThatThrownBy {
+            service.loadUser(
+                OidcUserRequest(kakaoClientRegistration(userNameAttributeName = "sub"), accessToken(), idToken),
+            )
+        }.isInstanceOf(InternalAuthenticationServiceException::class.java)
+            .hasMessage("OIDC provider returned no user.")
     }
 
     private fun kakaoClientRegistration(

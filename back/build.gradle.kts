@@ -1,8 +1,10 @@
+import org.gradle.api.tasks.compile.JavaCompile
+
 plugins {
     kotlin("jvm") version "2.2.21"
     kotlin("plugin.spring") version "2.2.21"
     jacoco
-    id("org.springframework.boot") version "4.0.3"
+    id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"
     kotlin("plugin.jpa") version "2.2.21"
     kotlin("kapt") version "2.2.21"
@@ -20,8 +22,12 @@ description = "back"
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(24)
+        languageVersion = JavaLanguageVersion.of(25)
     }
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(24)
 }
 
 repositories {

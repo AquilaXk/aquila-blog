@@ -30,6 +30,7 @@ class PostSecurityConfigurer : PublicApiRouteContributor {
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/images/**", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/files/**", HttpMethod.GET),
+            PublicApiRouteSpec("/post/api/*/files/**", HttpMethod.HEAD),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/hit", HttpMethod.POST),
             PublicApiRouteSpec("/post/api/*/posts/{postId:\\d+}/comments", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{postId:\\d+}/comments/{id:\\d+}", HttpMethod.GET),

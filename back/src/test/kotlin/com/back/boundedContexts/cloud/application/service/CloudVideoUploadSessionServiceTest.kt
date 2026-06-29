@@ -44,6 +44,20 @@ class CloudVideoUploadSessionServiceTest {
             clock = clock,
         )
 
+    private fun CloudVideoUploadSessionService.uploadPart(
+        ownerMemberId: Long,
+        sessionId: Long,
+        partNumber: Int,
+        bytes: ByteArray,
+    ): CloudVideoUploadPartResultDto =
+        uploadPart(
+            ownerMemberId = ownerMemberId,
+            sessionId = sessionId,
+            partNumber = partNumber,
+            inputStream = ByteArrayInputStream(bytes),
+            contentLength = bytes.size.toLong(),
+        )
+
     private fun createService(clock: Clock): CloudVideoUploadSessionService =
         CloudVideoUploadSessionService(
             sessionRepository = sessionRepository,
@@ -230,7 +244,14 @@ class CloudVideoUploadSessionServiceTest {
                         String::class.java,
                     ),
                 CloudVideoUploadSessionService::class.java
-                    .getMethod("uploadPart", java.lang.Long.TYPE, java.lang.Long.TYPE, Integer.TYPE, ByteArray::class.java),
+                    .getMethod(
+                        "uploadPart",
+                        java.lang.Long.TYPE,
+                        java.lang.Long.TYPE,
+                        Integer.TYPE,
+                        java.io.InputStream::class.java,
+                        java.lang.Long.TYPE,
+                    ),
                 CloudVideoUploadSessionService::class.java
                     .getMethod("complete", java.lang.Long.TYPE, java.lang.Long.TYPE),
                 CloudVideoUploadSessionService::class.java
@@ -440,6 +461,58 @@ class CloudVideoUploadSessionServiceTest {
 
         assertThatThrownBy {
             service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt() - 1))
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("조각 크기")
+
+        assertThat(storage.multipartParts).isEmpty()
+    }
+
+    @Test
+    @DisplayName("조각 stream이 선언 길이보다 짧으면 storage에 올리지 않는다")
+    fun `조각 upload는 짧은 stream을 storage 저장 전에 차단한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+
+        assertThatThrownBy {
+            service.uploadPart(
+                ownerMemberId = 7L,
+                sessionId = session.id,
+                partNumber = 1,
+                inputStream = ByteArrayInputStream(ByteArray(0)),
+                contentLength = TEST_PART_SIZE_BYTES,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("조각 크기")
+
+        assertThat(storage.multipartParts).isEmpty()
+    }
+
+    @Test
+    @DisplayName("조각 stream이 선언 길이보다 길면 storage에 올리지 않는다")
+    fun `조각 upload는 긴 stream을 storage 저장 전에 차단한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+
+        assertThatThrownBy {
+            service.uploadPart(
+                ownerMemberId = 7L,
+                sessionId = session.id,
+                partNumber = 1,
+                inputStream = ByteArrayInputStream(mp4Part(TEST_PART_SIZE_BYTES.toInt() + 1)),
+                contentLength = TEST_PART_SIZE_BYTES,
+            )
         }.isInstanceOf(AppException::class.java)
             .hasMessageContaining("조각 크기")
 
@@ -835,28 +908,32 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
-    @DisplayName("multipart part request는 ByteArray 내용을 기준으로 equals와 hashCode를 계산한다")
-    fun `multipart part request는 ByteArray 내용 기준으로 비교한다`() {
+    @DisplayName("multipart part request는 stream identity와 contentLength 기준으로 equals와 hashCode를 계산한다")
+    fun `multipart part request는 stream identity와 contentLength 기준으로 비교한다`() {
+        val inputStream = ByteArrayInputStream(byteArrayOf(1, 2, 3))
         val first =
             CloudStoragePort.MultipartUploadPartRequest(
                 objectKey = "cloud/7/movie.mp4",
                 uploadId = "upload-1",
                 partNumber = 1,
-                bytes = byteArrayOf(1, 2, 3),
+                inputStream = inputStream,
+                contentLength = 3,
             )
         val second =
             CloudStoragePort.MultipartUploadPartRequest(
                 objectKey = "cloud/7/movie.mp4",
                 uploadId = "upload-1",
                 partNumber = 1,
-                bytes = byteArrayOf(1, 2, 3),
+                inputStream = inputStream,
+                contentLength = 3,
             )
         val different =
             CloudStoragePort.MultipartUploadPartRequest(
                 objectKey = "cloud/7/movie.mp4",
                 uploadId = "upload-1",
                 partNumber = 1,
-                bytes = byteArrayOf(1, 2, 4),
+                inputStream = ByteArrayInputStream(byteArrayOf(1, 2, 3)),
+                contentLength = 3,
             )
 
         assertThat(first).isEqualTo(second)

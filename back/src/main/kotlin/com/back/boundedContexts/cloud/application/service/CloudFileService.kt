@@ -11,8 +11,11 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import java.io.InputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
 import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
@@ -20,6 +23,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
+import java.util.zip.ZipFile
 
 data class CloudFileDto(
     val id: Long,
@@ -53,48 +57,58 @@ class CloudFileService(
         originalFilename: String?,
         clientOriginalFilename: String? = null,
         contentType: String?,
-        bytes: ByteArray,
+        inputStream: InputStream,
+        contentLength: Long,
         folderPath: String?,
-    ): CloudFileDto {
-        if (bytes.isEmpty()) throw AppException("400-1", "클라우드 파일이 비어 있습니다.")
-        val normalizedFolderPath = normalizeFolderPath(folderPath)
-        val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
-        val detected = detectContent(bytes, contentType, safeFilename)
-        validateFileSize(bytes.size.toLong(), detected)
-        val objectKey =
-            buildObjectKey(
-                ownerMemberId = ownerMemberId,
-                folderPath = normalizedFolderPath,
-                originalFilename = safeFilename,
-            )
+    ): CloudFileDto =
+        inputStream.use { source ->
+            if (contentLength <= 0) throw AppException("400-1", "클라우드 파일이 비어 있습니다.")
+            val normalizedFolderPath = normalizeFolderPath(folderPath)
+            val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
+            val tempFile = copyToTempFile(source, contentLength)
+            try {
+                val detected = detectContent(tempFile, contentType, safeFilename)
+                validateFileSize(contentLength, detected)
+                val objectKey =
+                    buildObjectKey(
+                        ownerMemberId = ownerMemberId,
+                        folderPath = normalizedFolderPath,
+                        originalFilename = safeFilename,
+                    )
 
-        // 선언 MIME만 믿지 않고 파일 시그니처로 media kind를 확정해 preview spoofing을 막는다.
-        val uploadResult =
-            cloudStoragePort.upload(
-                CloudStoragePort.UploadRequest(
-                    objectKey = objectKey,
-                    bytes = bytes,
-                    contentType = detected.contentType,
-                    originalFilename = safeFilename,
-                ),
-            )
+                // 선언 MIME만 믿지 않고 파일 시그니처로 media kind를 확정해 preview spoofing을 막는다.
+                val uploadResult =
+                    Files.newInputStream(tempFile).use { uploadStream ->
+                        cloudStoragePort.upload(
+                            CloudStoragePort.UploadRequest(
+                                objectKey = objectKey,
+                                inputStream = uploadStream,
+                                contentLength = contentLength,
+                                contentType = detected.contentType,
+                                originalFilename = safeFilename,
+                            ),
+                        )
+                    }
 
-        val saved =
-            cloudFileRepository.save(
-                CloudFile.create(
-                    ownerMemberId = ownerMemberId,
-                    objectKey = uploadResult.objectKey,
-                    originalFilename = safeFilename,
-                    contentType = detected.contentType,
-                    byteSize = bytes.size.toLong(),
-                    mediaKind = detected.mediaKind,
-                    folderPath = normalizedFolderPath,
-                    checksumSha256 = uploadResult.checksumSha256,
-                ),
-            )
+                val saved =
+                    cloudFileRepository.save(
+                        CloudFile.create(
+                            ownerMemberId = ownerMemberId,
+                            objectKey = uploadResult.objectKey,
+                            originalFilename = safeFilename,
+                            contentType = detected.contentType,
+                            byteSize = contentLength,
+                            mediaKind = detected.mediaKind,
+                            folderPath = normalizedFolderPath,
+                            checksumSha256 = uploadResult.checksumSha256,
+                        ),
+                    )
 
-        return saved.toDto()
-    }
+                return saved.toDto()
+            } finally {
+                deleteTempFileQuietly(tempFile)
+            }
+        }
 
     @Transactional(readOnly = true)
     fun listFiles(
@@ -306,6 +320,41 @@ class CloudFileService(
             .toByteArray(StandardCharsets.US_ASCII)
             .size
 
+    private fun copyToTempFile(
+        inputStream: InputStream,
+        expectedLength: Long,
+    ): Path {
+        val tempFile = Files.createTempFile("cloud-upload-", ".tmp")
+        try {
+            var total = 0L
+            inputStream.use { input ->
+                Files.newOutputStream(tempFile).use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        if (total > expectedLength) {
+                            throw AppException("400-1", "클라우드 파일 크기가 올바르지 않습니다.")
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+            if (total != expectedLength) {
+                throw AppException("400-1", "클라우드 파일 크기가 올바르지 않습니다.")
+            }
+            return tempFile
+        } catch (ex: Exception) {
+            deleteTempFileQuietly(tempFile)
+            throw ex
+        }
+    }
+
+    private fun deleteTempFileQuietly(tempFile: Path) {
+        runCatching { Files.deleteIfExists(tempFile) }
+    }
+
     private fun recoverUtf8MojibakeFilename(raw: String): String {
         if (raw.isBlank()) return raw
         if (raw.any { it in '가'..'힣' }) return raw
@@ -387,13 +436,14 @@ class CloudFileService(
     }
 
     private fun detectContent(
-        bytes: ByteArray,
+        file: Path,
         declaredContentType: String?,
         filename: String,
     ): DetectedContent {
         val normalizedDeclared = normalizeContentType(declaredContentType)
+        val header = readHeader(file, 16)
         val detected =
-            detectFromSignature(bytes, filename)
+            detectFromSignature(file, header, filename)
                 ?: throw AppException("400-1", "지원하지 않는 클라우드 파일 형식입니다.")
 
         if (
@@ -426,6 +476,7 @@ class CloudFileService(
     }
 
     private fun detectFromSignature(
+        file: Path,
         bytes: ByteArray,
         filename: String,
     ): DetectedContent? {
@@ -474,100 +525,49 @@ class CloudFileService(
         ) {
             return DetectedContent("video/webm", CloudFileMediaKind.VIDEO)
         }
-        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx" && isHwpxPackage(bytes)) {
+        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx" && isHwpxPackage(file)) {
             return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
-        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "zip" && isValidZipArchive(bytes)) {
+        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "zip" && isValidZipArchive(file)) {
             return DetectedContent(ZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
 
         return null
     }
 
-    private fun isZipSignature(bytes: ByteArray): Boolean =
-        bytes.size >= 4 &&
-            bytes.copyOfRange(0, 4).toList() in ZIP_SIGNATURES
+    private fun readHeader(
+        file: Path,
+        maxBytes: Int,
+    ): ByteArray = Files.newInputStream(file).use { it.readNBytes(maxBytes) }
 
-    private fun isHwpxPackage(bytes: ByteArray): Boolean {
-        if (!isZipSignature(bytes)) return false
+    private fun isHwpxPackage(file: Path): Boolean {
+        if (!isZipSignature(readHeader(file, 4))) return false
 
-        val entries = readZipCentralDirectoryEntryNames(bytes)
+        val entries = readZipEntryNames(file)
 
         return HWPX_MANIFEST_ENTRY in entries && entries.any { it in HWPX_DOCUMENT_ENTRIES }
     }
 
-    private fun isValidZipArchive(bytes: ByteArray): Boolean = isZipSignature(bytes) && parseZipCentralDirectoryEntryNames(bytes) != null
+    private fun isValidZipArchive(file: Path): Boolean =
+        isZipSignature(readHeader(file, 4)) &&
+            runCatching {
+                ZipFile(file.toFile()).use { zip -> zip.entries().hasMoreElements() || Files.size(file) >= ZIP_EOCD_MIN_SIZE }
+            }.getOrDefault(false)
 
-    private fun readZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String> = parseZipCentralDirectoryEntryNames(bytes).orEmpty()
+    private fun isZipSignature(bytes: ByteArray): Boolean =
+        bytes.size >= 4 &&
+            bytes.copyOfRange(0, 4).toList() in ZIP_SIGNATURES
 
-    private fun parseZipCentralDirectoryEntryNames(bytes: ByteArray): Set<String>? {
-        val endRecordOffset = findZipEndOfCentralDirectoryOffset(bytes) ?: return null
-        val entryCount = readUInt16Le(bytes, endRecordOffset + ZIP_EOCD_TOTAL_ENTRY_COUNT_OFFSET)
-        val centralDirectorySize = readUInt32Le(bytes, endRecordOffset + ZIP_EOCD_DIRECTORY_SIZE_OFFSET)
-        val centralDirectoryOffset = readUInt32Le(bytes, endRecordOffset + ZIP_EOCD_DIRECTORY_OFFSET)
-        if (centralDirectorySize > bytes.size || centralDirectoryOffset > bytes.size) return null
-
-        val directoryStart = centralDirectoryOffset.toInt()
-        val directoryEnd = (centralDirectoryOffset + centralDirectorySize).takeIf { it <= bytes.size }?.toInt() ?: return null
-        val names = mutableSetOf<String>()
-        var offset = directoryStart
-        var scannedCount = 0
-
-        while (
-            offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE <= directoryEnd &&
-            scannedCount < entryCount
-        ) {
-            if (!hasSignature(bytes, offset, ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE)) return null
-
-            val nameLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_NAME_LENGTH_OFFSET)
-            val extraLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_EXTRA_LENGTH_OFFSET)
-            val commentLength = readUInt16Le(bytes, offset + ZIP_CENTRAL_DIRECTORY_COMMENT_LENGTH_OFFSET)
-            val nameOffset = offset + ZIP_CENTRAL_DIRECTORY_HEADER_SIZE
-            val nextOffset = nameOffset + nameLength + extraLength + commentLength
-            if (nameOffset + nameLength > directoryEnd || nextOffset > directoryEnd) return null
-
-            names += String(bytes, nameOffset, nameLength, StandardCharsets.UTF_8).replace('\\', '/')
-            offset = nextOffset
-            scannedCount++
-        }
-
-        if (scannedCount != entryCount || offset != directoryEnd) return null
-
-        return names
-    }
-
-    private fun findZipEndOfCentralDirectoryOffset(bytes: ByteArray): Int? {
-        val firstSearchOffset = maxOf(0, bytes.size - ZIP_EOCD_MAX_SEARCH_LENGTH)
-        for (offset in bytes.size - ZIP_EOCD_MIN_SIZE downTo firstSearchOffset) {
-            if (hasSignature(bytes, offset, ZIP_END_OF_CENTRAL_DIRECTORY_SIGNATURE)) return offset
-        }
-        return null
-    }
-
-    private fun hasSignature(
-        bytes: ByteArray,
-        offset: Int,
-        signature: ByteArray,
-    ): Boolean {
-        if (offset < 0 || offset + signature.size > bytes.size) return false
-        return signature.indices.all { index -> bytes[offset + index] == signature[index] }
-    }
-
-    private fun readUInt16Le(
-        bytes: ByteArray,
-        offset: Int,
-    ): Int =
-        (bytes[offset].toInt() and 0xFF) or
-            ((bytes[offset + 1].toInt() and 0xFF) shl 8)
-
-    private fun readUInt32Le(
-        bytes: ByteArray,
-        offset: Int,
-    ): Long =
-        (bytes[offset].toLong() and 0xFF) or
-            ((bytes[offset + 1].toLong() and 0xFF) shl 8) or
-            ((bytes[offset + 2].toLong() and 0xFF) shl 16) or
-            ((bytes[offset + 3].toLong() and 0xFF) shl 24)
+    private fun readZipEntryNames(file: Path): Set<String> =
+        runCatching {
+            ZipFile(file.toFile()).use { zip ->
+                zip
+                    .entries()
+                    .asSequence()
+                    .map { it.name.replace('\\', '/') }
+                    .toSet()
+            }
+        }.getOrDefault(emptySet())
 
     private data class DetectedContent(
         val contentType: String,

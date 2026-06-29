@@ -28,6 +28,7 @@ import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.security.DigestInputStream
 import java.security.MessageDigest
 
 @Service
@@ -51,24 +52,27 @@ class CloudStorageAdapter(
     override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult {
         val client = requireClient()
         validateObjectKey(request.objectKey)
+        val digest = MessageDigest.getInstance("SHA-256")
 
         try {
-            client.putObject(
-                PutObjectRequest
-                    .builder()
-                    .bucket(properties.bucket)
-                    .key(request.objectKey)
-                    .contentType(request.contentType)
-                    .metadata(
-                        mapOf(
-                            "original-filename" to
-                                URLEncoder
-                                    .encode(request.originalFilename, StandardCharsets.UTF_8)
-                                    .replace("+", "%20"),
-                        ),
-                    ).build(),
-                RequestBody.fromBytes(request.bytes),
-            )
+            DigestInputStream(request.inputStream, digest).use { body ->
+                client.putObject(
+                    PutObjectRequest
+                        .builder()
+                        .bucket(properties.bucket)
+                        .key(request.objectKey)
+                        .contentType(request.contentType)
+                        .metadata(
+                            mapOf(
+                                "original-filename" to
+                                    URLEncoder
+                                        .encode(request.originalFilename, StandardCharsets.UTF_8)
+                                        .replace("+", "%20"),
+                            ),
+                        ).build(),
+                    RequestBody.fromInputStream(body, request.contentLength),
+                )
+            }
         } catch (e: Exception) {
             logger.error("Cloud file upload failed (objectKey={})", request.objectKey, e)
             throw AppException("500-1", "클라우드 파일 업로드에 실패했습니다.")
@@ -76,7 +80,7 @@ class CloudStorageAdapter(
 
         return CloudStoragePort.UploadResult(
             objectKey = request.objectKey,
-            checksumSha256 = sha256Hex(request.bytes),
+            checksumSha256 = digest.digest().toHex(),
         )
     }
 
@@ -180,17 +184,19 @@ class CloudStorageAdapter(
 
         return try {
             val response =
-                client.uploadPart(
-                    UploadPartRequest
-                        .builder()
-                        .bucket(properties.bucket)
-                        .key(request.objectKey)
-                        .uploadId(request.uploadId)
-                        .partNumber(request.partNumber)
-                        .contentLength(request.bytes.size.toLong())
-                        .build(),
-                    RequestBody.fromBytes(request.bytes),
-                )
+                request.inputStream.use { body ->
+                    client.uploadPart(
+                        UploadPartRequest
+                            .builder()
+                            .bucket(properties.bucket)
+                            .key(request.objectKey)
+                            .uploadId(request.uploadId)
+                            .partNumber(request.partNumber)
+                            .contentLength(request.contentLength)
+                            .build(),
+                        RequestBody.fromInputStream(body, request.contentLength),
+                    )
+                }
 
             CloudStoragePort.MultipartUploadPartResult(
                 partNumber = request.partNumber,
@@ -420,11 +426,7 @@ class CloudStorageAdapter(
         return runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }.getOrNull()
     }
 
-    private fun sha256Hex(bytes: ByteArray): String =
-        MessageDigest
-            .getInstance("SHA-256")
-            .digest(bytes)
-            .joinToString("") { "%02x".format(it) }
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     companion object {
         private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")

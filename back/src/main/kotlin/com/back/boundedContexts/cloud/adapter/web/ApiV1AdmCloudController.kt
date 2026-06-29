@@ -40,8 +40,6 @@ import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import io.swagger.v3.oas.annotations.parameters.RequestBody as OpenApiRequestBody
 
@@ -102,7 +100,8 @@ class ApiV1AdmCloudController(
                 originalFilename = file.originalFilename,
                 clientOriginalFilename = clientFilename,
                 contentType = file.contentType,
-                bytes = file.bytes,
+                inputStream = file.inputStream,
+                contentLength = file.size,
                 folderPath = folderPath,
             )
 
@@ -193,7 +192,8 @@ class ApiV1AdmCloudController(
             ownerMemberId = securityUser.id,
             sessionId = sessionId,
             partNumber = partNumber,
-            bytes = readBoundedPartBytes(request.inputStream, expectedBytes),
+            inputStream = request.inputStream,
+            contentLength = contentLength,
         )
     }
 
@@ -450,26 +450,5 @@ class ApiV1AdmCloudController(
             }
 
         return start..end
-    }
-
-    private fun readBoundedPartBytes(
-        input: InputStream,
-        expectedBytes: Long,
-    ): ByteArray {
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        var total = 0L
-
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            total += read
-            if (total > expectedBytes) {
-                throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
-            }
-            output.write(buffer, 0, read)
-        }
-
-        return output.toByteArray()
     }
 }

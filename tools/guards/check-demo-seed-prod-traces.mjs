@@ -19,6 +19,7 @@ const forbiddenRuntimePatterns = [
   /holding@test\.com/,
   /user[0-9]+@test\.com/,
   /["']1234["']/,
+  /\b[A-Z0-9_.-]*PASSWORD[A-Z0-9_.-]*\s*[:=]\s*["']?1234["']?(?=\s|$)/im,
   /제목 1/,
   /비공개 글/,
 ]

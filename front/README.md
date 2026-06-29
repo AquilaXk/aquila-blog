@@ -5,7 +5,7 @@
 ## Stack
 
 - Next.js Pages Router
-- React 18 + TypeScript
+- React 19 + TypeScript
 - TanStack Query (SSR hydrate + client cache)
 - Emotion
 - Playwright (smoke/perf/live E2E)
@@ -17,16 +17,18 @@
 - `/about` 소개 페이지
 - `/admin` 운영 허브
 - `/admin/profile` 관리자 프로필 관리
-- `/admin/posts/new` 글 작성/수정 (AI 태그 추천 포함)
+- `/admin/posts/new` 글 작성/수정
 - `/admin/tools` 시스템 운영 도구
 
 ## 실행
 
 ```bash
 cd front
-yarn install
+yarn install --frozen-lockfile
 yarn dev
 ```
+
+Node.js 20.x와 Yarn 1.22.22를 기준으로 실행합니다. `package.json`의 `engines.node`는 CI의 Node 20 런타임과 맞춥니다.
 
 ## 필수 환경변수
 
@@ -41,12 +43,17 @@ yarn dev
 | --- | --- |
 | `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH` | 관리자 도구의 상태 페이지 임베드 경로 |
 | `NEXT_PUBLIC_MONITORING_EMBED_URL` | 관리자 도구의 모니터링 iframe URL(예: Grafana kiosk URL) |
+| `NEXT_PUBLIC_LOGS_EMBED_URL` | 관리자 도구의 로그 iframe URL |
 | `NEXT_PUBLIC_PROMETHEUS_URL` | 관리자 도구의 Prometheus 바로가기 URL |
 | `NEXT_PUBLIC_NOTIFICATION_STREAM_MODE` | 알림 전송 모드(`auto`, `polling-only`, `sse`) |
+| `NEXT_PUBLIC_SIGNUP_ENABLED` | 회원가입 화면 활성화 여부 |
+| `NEXT_PUBLIC_RUM_SAMPLE_RATE` | Web Vitals 수집 샘플 비율 |
 | `UPTIME_KUMA_PROXY_ORIGIN` | `/status/*` rewrite 대상 오리진 |
 | `PLAYWRIGHT_BASE_URL` | live E2E 대상 URL |
 | `BUNDLE_BUDGET_MARGIN_PERCENT` | 번들 예산 허용 오차(%) |
 | `BUNDLE_BUDGET_ENFORCEMENT` | `strict` 또는 `warn` |
+| `E2E_ADMIN_EMAIL` | live E2E 관리자 이메일 |
+| `E2E_ADMIN_PASSWORD` | live E2E 관리자 비밀번호 |
 
 ## 인증/세션 동작 요약
 
@@ -77,10 +84,10 @@ yarn contracts:check
 cd front
 yarn lint
 yarn build
+yarn check:bundle-size
 yarn test:e2e:smoke
 yarn test:e2e:perf
 yarn test:e2e:live
-yarn check:bundle-size
 ```
 
 ## 번들 예산

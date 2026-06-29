@@ -40,6 +40,8 @@ import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.time.Instant
 
+private const val PDF_CONTENT_TYPE = "application/pdf"
+
 @DisplayName("관리자 클라우드 WebMvc 테스트")
 class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     @Test
@@ -147,7 +149,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 ownerMemberId = ArgumentMatchers.eq(7L),
                 originalFilename = ArgumentMatchers.eq("manual.pdf"),
                 clientOriginalFilename = ArgumentMatchers.eq(null),
-                contentType = ArgumentMatchers.eq("application/pdf"),
+                contentType = ArgumentMatchers.eq(PDF_CONTENT_TYPE),
                 inputStream = anyInputStream(),
                 contentLength = ArgumentMatchers.eq(8L),
                 folderPath = ArgumentMatchers.eq("docs"),
@@ -163,7 +165,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
         val response =
             controller.upload(
                 securityUser = adminUser(id = 7L),
-                file = ByteAccessFailingMultipartFile("file", "manual.pdf", "application/pdf", "%PDF-1.7".toByteArray()),
+                file = ByteAccessFailingMultipartFile("file", "manual.pdf", PDF_CONTENT_TYPE, "%PDF-1.7".toByteArray()),
                 folderPath = "docs",
                 clientFilename = null,
             )
@@ -173,7 +175,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             ownerMemberId = ArgumentMatchers.eq(7L),
             originalFilename = ArgumentMatchers.eq("manual.pdf"),
             clientOriginalFilename = ArgumentMatchers.eq(null),
-            contentType = ArgumentMatchers.eq("application/pdf"),
+            contentType = ArgumentMatchers.eq(PDF_CONTENT_TYPE),
             inputStream = anyInputStream(),
             contentLength = ArgumentMatchers.eq(8L),
             folderPath = ArgumentMatchers.eq("docs"),
@@ -931,7 +933,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
         id: Long,
         ownerMemberId: Long,
         originalFilename: String,
-        contentType: String = "application/pdf",
+        contentType: String = PDF_CONTENT_TYPE,
         byteSize: Long = 9L,
         mediaKind: CloudFileMediaKind = CloudFileMediaKind.DOCUMENT,
     ): CloudFileDto =

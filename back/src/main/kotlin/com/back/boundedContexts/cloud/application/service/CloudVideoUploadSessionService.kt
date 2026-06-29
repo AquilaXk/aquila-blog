@@ -31,6 +31,7 @@ private val CLOUD_VIDEO_UPLOAD_DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern
 private const val CLOUD_VIDEO_UPLOAD_MAX_FILENAME_CODE_POINTS = 255L
 private const val CLOUD_VIDEO_UPLOAD_MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
 private const val CLOUD_VIDEO_UPLOAD_MAX_MULTIPART_PARTS = 10_000L
+private const val INVALID_PART_SIZE_MESSAGE = "업로드 조각 크기가 올바르지 않습니다."
 
 data class CloudVideoUploadSessionDto(
     val id: Long,
@@ -524,7 +525,7 @@ class CloudVideoUploadSessionService(
                 session.partSizeBytes
             }
         if (contentLength != expectedSize) {
-            throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+            throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
         }
     }
 
@@ -543,14 +544,14 @@ class CloudVideoUploadSessionService(
                         if (read < 0) break
                         total += read
                         if (total > expectedLength) {
-                            throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+                            throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
                         }
                         output.write(buffer, 0, read)
                     }
                 }
             }
             if (total != expectedLength) {
-                throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+                throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
             }
             return tempFile
         } catch (ex: Exception) {

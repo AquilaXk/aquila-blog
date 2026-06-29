@@ -66,6 +66,70 @@ test.describe("api client stale-if-error contract", () => {
     expect(fetchCount).toBe(3)
   })
 
+  test("runtime stale fallback survives original cache max-age expiry", async ({ page }) => {
+    const cachedPayload = { title: "expired max-age feed payload" }
+    let fetchCount = 0
+
+    await page.route("**/post/api/v1/posts/feed**", async (route) => {
+      fetchCount += 1
+      if (fetchCount === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          headers: {
+            "cache-control": "max-age=1",
+            etag: '"feed-expired-v1"',
+          },
+          body: JSON.stringify(cachedPayload),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 503,
+        body: "temporarily unavailable",
+      })
+    })
+
+    await page.goto("/_qa/api-client-stale-if-error")
+    await page.getByRole("button", { name: "Run stale-if-error scenario" }).click()
+
+    await expect
+      .poll(async () => {
+        const rawText = await page.getByTestId("qa-api-client-stale-result").textContent()
+        return rawText ? JSON.parse(rawText) : null
+      })
+      .toMatchObject({
+        fresh: {
+          data: cachedPayload,
+          meta: { stale: false },
+        },
+      })
+
+    await page.waitForTimeout(1100)
+    await page.getByRole("button", { name: "Run stale-if-error scenario" }).click()
+
+    await expect
+      .poll(async () => {
+        const rawText = await page.getByTestId("qa-api-client-stale-result").textContent()
+        return rawText ? JSON.parse(rawText) : null
+      })
+      .toMatchObject({
+        stale: {
+          data: cachedPayload,
+          meta: {
+            stale: true,
+            staleReason: "http-status",
+            staleStatus: 503,
+            staleAgeMs: expect.any(Number),
+          },
+        },
+        error: null,
+      })
+
+    expect(fetchCount).toBe(7)
+  })
+
   test("stale fallback exposes opt-in meta without changing apiFetch payload callers", () => {
     const clientSource = readFrontText("src/apis/backend/client.ts")
     const revalidateCacheSource = readFrontText("src/apis/backend/clientRevalidateCache.ts")
@@ -95,9 +159,11 @@ test.describe("api client stale-if-error contract", () => {
     expect(postsRequestsSource).toContain("apiFetchWithMeta<PageDto<ApiPostDto>>")
     expect(postsRequestsSource).toContain("staleMeta: response.meta")
     expect(dtoSource).toContain("staleMeta?: ApiFetchMeta")
-    expect(postQuerySource).toContain("useQuery<ApiFetchResult<PostDetail | null>>")
+    expect(postQuerySource).toContain("isPostDetailResult")
+    expect(postQuerySource).toContain("useQuery<ApiFetchResult<PostDetail | null> | PostDetail | null>")
     expect(postQuerySource).toContain("queryFn: () => getPostDetailByIdWithMeta(routeId)")
-    expect(postQuerySource).toContain("staleMeta: query.data?.meta ?? null")
+    expect(postQuerySource).toContain("const post = isPostDetailResult(query.data) ? query.data.data : (query.data ?? null)")
+    expect(postQuerySource).toContain("const staleMeta = isPostDetailResult(query.data) ? query.data.meta : null")
     expect(feedQuerySource).toContain("query.data?.pages.find((page) => page.staleMeta?.stale)?.staleMeta")
     expect(feedQuerySource).toContain("query.data?.pages.find((page) => page.staleMeta)?.staleMeta")
     expect(feedQuerySource).toContain("staleMeta,")

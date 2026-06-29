@@ -11,6 +11,17 @@ const extractCanonicalPostIdFromAsPath = (asPath: string): string => {
   return canonicalMatch ? canonicalMatch[1] : ""
 }
 
+const isPostDetailResult = (
+  value: ApiFetchResult<PostDetail | null> | PostDetail | null | undefined
+): value is ApiFetchResult<PostDetail | null> =>
+  typeof value === "object" &&
+  value !== null &&
+  "data" in value &&
+  "meta" in value &&
+  typeof value.meta === "object" &&
+  value.meta !== null &&
+  "stale" in value.meta
+
 const usePostQuery = () => {
   const router = useRouter()
   const routeId =
@@ -18,7 +29,7 @@ const usePostQuery = () => {
       ? router.query.id
       : extractCanonicalPostIdFromAsPath(router.asPath || "")
   const hasRouteId = routeId.length > 0
-  const query = useQuery<ApiFetchResult<PostDetail | null>>({
+  const query = useQuery<ApiFetchResult<PostDetail | null> | PostDetail | null>({
     queryKey: queryKey.post(routeId),
     queryFn: () => getPostDetailByIdWithMeta(routeId),
     enabled: hasRouteId,
@@ -26,12 +37,14 @@ const usePostQuery = () => {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   })
+  const post = isPostDetailResult(query.data) ? query.data.data : (query.data ?? null)
+  const staleMeta = isPostDetailResult(query.data) ? query.data.meta : null
 
   return {
-    post: query.data?.data ?? undefined,
-    staleMeta: query.data?.meta ?? null,
+    post: post ?? undefined,
+    staleMeta,
     isLoading: !hasRouteId || query.isLoading || (query.isFetching && query.data === undefined),
-    isNotFound: hasRouteId && query.status === "success" && query.data?.data === null,
+    isNotFound: hasRouteId && query.status === "success" && post === null,
   }
 }
 

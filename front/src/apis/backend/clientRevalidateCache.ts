@@ -44,10 +44,6 @@ export const getRevalidateCacheEntry = (url: string) => {
   if (isServer) return null
   const cached = browserRevalidateCache.get(url)
   if (!cached) return null
-  if (cached.expiresAt <= Date.now()) {
-    browserRevalidateCache.delete(url)
-    return null
-  }
   return cached
 }
 

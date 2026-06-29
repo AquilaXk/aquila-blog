@@ -52,7 +52,7 @@ const buildHeaderLabels = (table: HTMLTableElement) => {
   })
 }
 
-const useResponsiveTableEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string) => {
+const useResponsiveTableEffect = (rootRef?: RefObject<HTMLElement | null>, contentKey?: string) => {
   useEffect(() => {
     const root = rootRef?.current
     if (!root) return

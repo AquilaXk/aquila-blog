@@ -2371,7 +2371,7 @@ fi
 edge_services_to_boot=(caddy cloudflared)
 compose_up_with_retry "${edge_services_to_boot[@]}"
 ensure_monitoring_bind_mount_permissions
-compose_up_no_deps_with_retry loki promtail prometheus grafana
+compose_up_no_deps_with_retry alertmanager loki promtail prometheus grafana
 reset_grafana_admin_password
 ensure_caddy_mount_sync
 if [[ "${active_backend_was_running}" == "true" ]]; then

@@ -156,7 +156,7 @@ jobs:
           exit 1
 
       - name: Test release planner guards
-        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs tools/test/comment-jacoco-summary.test.mjs
+        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs tools/test/comment-jacoco-summary.test.mjs tools/test/demo-seed-prod-gate.test.mjs
 
       - name: Guard forbidden AI docs and tool metadata
         run: bash tools/guards/check-forbidden-tracked-files.sh

@@ -1,7 +1,7 @@
 import { RefObject, useEffect } from "react"
 import { INLINE_COLOR_TOKEN_REGEX, resolveInlineColorValue } from "src/libs/markdown/inlineColor"
 
-const useInlineColorEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => {
+const useInlineColorEffect = (rootRef: RefObject<HTMLElement | null>, contentKey: string) => {
   useEffect(() => {
     const root = rootRef.current
     if (!root) return

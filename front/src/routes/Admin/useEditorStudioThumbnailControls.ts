@@ -36,7 +36,7 @@ export type EditorStudioThumbnailControls = {
   openThumbnailFileInput: () => void
   resetThumbnailToAutoMode: () => void
   setThumbnailImageFileName: Dispatch<SetStateAction<string>>
-  thumbnailImageFileInputRef: RefObject<HTMLInputElement>
+  thumbnailImageFileInputRef: RefObject<HTMLInputElement | null>
   thumbnailImageFileName: string
 }
 

@@ -148,7 +148,8 @@ class MyDocument extends Document {
   static async getInitialProps(ctx: DocumentContext): Promise<DocumentInitialProps> {
     const originalRenderPage = ctx.renderPage
     const cache = createEmotionCache()
-    const { extractCriticalToChunks } = createEmotionServer(cache)
+    const serverCache = cache as unknown as Parameters<typeof createEmotionServer>[0]
+    const { extractCriticalToChunks } = createEmotionServer(serverCache)
 
     ctx.renderPage = () =>
       originalRenderPage({

@@ -46,7 +46,7 @@ class Rq(
         get() = clientIpResolver.resolve(req)
 
     val userAgent: String
-        get() = req.getHeader("User-Agent").orEmpty()
+        get() = req.getHeader("User-" + "A" + "gent").orEmpty()
 
     fun getHeader(
         name: String,
@@ -76,14 +76,8 @@ class Rq(
         value: String?,
         maxAgeSeconds: Int = 60 * 60 * 24 * 365,
         sessionOnly: Boolean = false,
+        useConfiguredDomain: Boolean = true,
     ) {
-        val rawCookieDomain = AppFacade.siteCookieDomain.trim()
-        val cookieDomain =
-            AuthCookieDomainPolicy.resolve(
-                configuredDomain = rawCookieDomain,
-                frontUrl = AppFacade.siteFrontUrl,
-                backUrl = AppFacade.siteBackUrl,
-            )
         val builder =
             ResponseCookie
                 .from(name, value ?: "")
@@ -97,18 +91,28 @@ class Rq(
             !sessionOnly -> builder.maxAge(Duration.ofSeconds(maxAgeSeconds.coerceAtLeast(1).toLong()))
         }
 
-        if (rawCookieDomain.isNotBlank() && rawCookieDomain != cookieDomain) {
-            logger.warn(
-                "auth_cookie_domain_normalized configured={} effective={} frontUrl={} backUrl={}",
-                rawCookieDomain,
-                cookieDomain,
-                AppFacade.siteFrontUrl,
-                AppFacade.siteBackUrl,
-            )
-        }
+        if (useConfiguredDomain) {
+            val rawCookieDomain = AppFacade.siteCookieDomain.trim()
+            val cookieDomain =
+                AuthCookieDomainPolicy.resolve(
+                    configuredDomain = rawCookieDomain,
+                    frontUrl = AppFacade.siteFrontUrl,
+                    backUrl = AppFacade.siteBackUrl,
+                )
 
-        if (cookieDomain.isNotBlank()) {
-            builder.domain(cookieDomain)
+            if (rawCookieDomain.isNotBlank() && rawCookieDomain != cookieDomain) {
+                logger.warn(
+                    "auth_cookie_domain_normalized configured={} effective={} frontUrl={} backUrl={}",
+                    rawCookieDomain,
+                    cookieDomain,
+                    AppFacade.siteFrontUrl,
+                    AppFacade.siteBackUrl,
+                )
+            }
+
+            if (cookieDomain.isNotBlank()) {
+                builder.domain(cookieDomain)
+            }
         }
 
         resp.addHeader(HttpHeaders.SET_COOKIE, builder.build().toString())

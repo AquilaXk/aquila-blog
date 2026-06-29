@@ -116,6 +116,10 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             assertThat(activeSession.refreshTokenHash).isNotBlank()
             assertThat(activeSession.refreshTokenHash).isNotEqualTo(refreshTokenCookie.value)
             assertThat(activeSession.refreshTokenExpiresAt).isNotNull
+
+            val setCookieHeaders = result.response.getHeaders(HttpHeaders.SET_COOKIE)
+            assertIssuedAuthCookiesAreHostOnly(setCookieHeaders)
+            assertConfiguredDomainAuthCookiesExpired(setCookieHeaders)
         }
 
         @Test
@@ -487,6 +491,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     }
 
             val result = resultActions.andReturn()
+            val setCookieHeaders = result.response.getHeaders(HttpHeaders.SET_COOKIE)
 
             val apiKeyCookie: Cookie? = result.response.getCookie(AuthCookieNames.API_KEY)
             assertThat(apiKeyCookie).isNotNull
@@ -519,6 +524,8 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             val revokedSession = memberSessionRepository.findBySessionKey(sessionKeyCookie!!.value)
             assertThat(revokedSession).isNotNull
             assertThat(revokedSession!!.revokedAt).isNotNull
+            assertHostOnlyAuthCookiesExpired(setCookieHeaders)
+            assertConfiguredDomainAuthCookiesExpired(setCookieHeaders)
         }
     }
 
@@ -996,6 +1003,47 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
         cookies: List<Cookie>,
         name: String,
     ): Cookie = cookies.firstOrNull { it.name == name } ?: error("$name cookie not issued")
+
+    private fun assertIssuedAuthCookiesAreHostOnly(setCookieHeaders: List<String>) {
+        AuthCookieNames.AUTHENTICATION_COOKIE_NAMES.forEach { name ->
+            val issuedHeader =
+                setCookieHeaders.firstOrNull {
+                    it.startsWith("$name=") &&
+                        !it.startsWith("$name=;") &&
+                        !it.contains("Max-Age=0")
+                }
+
+            assertThat(issuedHeader)
+                .describedAs("$name issued cookie")
+                .isNotNull
+            assertThat(issuedHeader!!)
+                .contains("Path=/", "HttpOnly", "Secure", "SameSite=Strict")
+                .doesNotContain("Domain=")
+        }
+    }
+
+    private fun assertHostOnlyAuthCookiesExpired(setCookieHeaders: List<String>) {
+        AuthCookieNames.AUTHENTICATION_COOKIE_NAMES.forEach { name ->
+            assertThat(setCookieHeaders)
+                .anySatisfy { header ->
+                    assertThat(header)
+                        .startsWith("$name=;")
+                        .contains("Path=/", "Max-Age=0", "HttpOnly", "Secure", "SameSite=Strict")
+                        .doesNotContain("Domain=")
+                }
+        }
+    }
+
+    private fun assertConfiguredDomainAuthCookiesExpired(setCookieHeaders: List<String>) {
+        AuthCookieNames.AUTHENTICATION_COOKIE_NAMES.forEach { name ->
+            assertThat(setCookieHeaders)
+                .anySatisfy { header ->
+                    assertThat(header)
+                        .startsWith("$name=;")
+                        .contains("Path=/", "Domain=localhost", "Max-Age=0", "HttpOnly", "Secure", "SameSite=Strict")
+                }
+        }
+    }
 
     private fun remoteAddr(ip: String): RequestPostProcessor =
         RequestPostProcessor { request ->

@@ -193,5 +193,5 @@
   <text class="txt" x="884" y="867" font-size="18" font-weight="800" fill="#0262e0" text-anchor="start" dominant-baseline="middle">주요 특징</text>
   <text class="txt" x="846" y="897" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 포트 노출 없이 Cloudflare Tunnel 로 안전한 접속</text>
   <text class="txt" x="846" y="922" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• CI/CD 자동화로 일관된 배포 · 서버 빌드를 외부화</text>
-  <text class="txt" x="1225" y="897" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 모든 구성 요소 Docker Compose 로 관리</text>
+  <text class="txt" x="1225" y="897" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 서버 런타임은 Docker Compose 로 관리</text>
 </svg>

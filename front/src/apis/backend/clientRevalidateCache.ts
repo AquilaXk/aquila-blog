@@ -31,9 +31,14 @@ const FRESH_API_FETCH_META: ApiFetchMeta = { stale: false }
 const isServer = typeof window === "undefined"
 const browserRevalidateCache = new Map<string, RevalidateCacheEntry>()
 
+const hasNoStoreCacheControl = (cacheControlHeader: string | null) =>
+  cacheControlHeader
+    ?.split(",")
+    .some((directive) => directive.trim().toLowerCase() === "no-store") ?? false
+
 const parseCacheControlMaxAgeMs = (cacheControlHeader: string | null) => {
   if (!cacheControlHeader) return DEFAULT_REVALIDATE_CACHE_TTL_MS
-  const matched = cacheControlHeader.match(/(?:^|,)\s*max-age=(\d+)/i)
+  const matched = /(?:^|,)\s*max-age=(\d+)/i.exec(cacheControlHeader)
   if (!matched) return DEFAULT_REVALIDATE_CACHE_TTL_MS
   const seconds = Number.parseInt(matched[1], 10)
   if (!Number.isFinite(seconds) || seconds <= 0) return DEFAULT_REVALIDATE_CACHE_TTL_MS
@@ -54,6 +59,11 @@ export const setRevalidateCacheEntry = (
   cacheControlHeader: string | null,
 ) => {
   if (isServer) return
+  if (hasNoStoreCacheControl(cacheControlHeader)) {
+    browserRevalidateCache.delete(url)
+    return
+  }
+
   const maxAgeMs = parseCacheControlMaxAgeMs(cacheControlHeader)
   const cachedAt = Date.now()
   browserRevalidateCache.set(url, {
@@ -76,7 +86,13 @@ export const refreshRevalidateCacheEntry = (
   cacheControlHeader: string | null,
 ) => {
   if (isServer) return
-  const maxAgeMs = parseCacheControlMaxAgeMs(cacheControlHeader)
+  if (hasNoStoreCacheControl(cacheControlHeader)) {
+    browserRevalidateCache.delete(url)
+    return
+  }
+
+  const maxAgeMs =
+    cacheControlHeader === null ? fallback.maxAgeMs : parseCacheControlMaxAgeMs(cacheControlHeader)
   const cachedAt = Date.now()
   const nextEtag = etagHeader?.trim() || fallback.etag
   browserRevalidateCache.set(url, {

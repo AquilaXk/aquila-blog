@@ -130,6 +130,49 @@ test.describe("api client stale-if-error contract", () => {
     expect(fetchCount).toBe(7)
   })
 
+  test("runtime stale fallback does not reuse no-store responses", async ({ page }) => {
+    const noStorePayload = { title: "no-store feed payload" }
+    let fetchCount = 0
+
+    await page.route("**/post/api/v1/posts/feed**", async (route) => {
+      fetchCount += 1
+      if (fetchCount === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          headers: {
+            "cache-control": "no-store",
+            etag: '"feed-no-store-v1"',
+          },
+          body: JSON.stringify(noStorePayload),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 503,
+        body: "temporarily unavailable",
+      })
+    })
+
+    await page.goto("/_qa/api-client-stale-if-error")
+    await page.getByRole("button", { name: "Run stale-if-error scenario" }).click()
+
+    await expect
+      .poll(async () => {
+        const rawText = await page.getByTestId("qa-api-client-stale-result").textContent()
+        return rawText ? JSON.parse(rawText) : null
+      })
+      .toMatchObject({
+        fresh: null,
+        stale: null,
+        telemetry: [],
+        error: expect.any(String),
+      })
+
+    expect(fetchCount).toBe(3)
+  })
+
   test("stale fallback exposes opt-in meta without changing apiFetch payload callers", () => {
     const clientSource = readFrontText("src/apis/backend/client.ts")
     const revalidateCacheSource = readFrontText("src/apis/backend/clientRevalidateCache.ts")
@@ -146,6 +189,8 @@ test.describe("api client stale-if-error contract", () => {
     expect(revalidateCacheSource).toContain("emitStaleIfErrorTelemetry")
     expect(revalidateCacheSource).toContain("reason,")
     expect(revalidateCacheSource).toContain("staleAgeMs,")
+    expect(revalidateCacheSource).toContain("hasNoStoreCacheControl(cacheControlHeader)")
+    expect(revalidateCacheSource).toContain("cacheControlHeader === null ? fallback.maxAgeMs")
   })
 
   test("public detail and feed hooks retain stale meta beside React Query data", () => {

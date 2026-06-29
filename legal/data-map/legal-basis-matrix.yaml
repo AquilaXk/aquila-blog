@@ -45,7 +45,7 @@ legalBasis:
   - id: explicitAdminActionAndExternalProcessingReviewRequired
     activities:
       - ai_summary_gemini
-    rationale: 관리자 명시 조작과 외부 AI 처리 고지·계약 확인 필요
+    rationale: 향후 관리자 명시 조작 기반 외부 AI 처리 고지·계약 확인 필요
     reviewRequired: AI 안전화는 issue1003
   - id: legitimateOperationalAndSecurityInterest
     activities:

@@ -17,12 +17,12 @@ data class ActiveLegalDocumentMetadata(
                 terms =
                     LegalDocumentMetadata(
                         version = "1.0.2",
-                        contentSha256 = "c7b9da465ac101aa19162c3cc0d400252af1769008c6d17e2b2436abc40e4f48",
+                        contentSha256 = "825642074982313f39c5d9bfbeffb20b12fc1a072addce8770b332652a75ad9b",
                     ),
                 privacy =
                     LegalDocumentMetadata(
                         version = "1.0.3",
-                        contentSha256 = "58bb166ab2705ff81e4171d405ad3d213b4f26c744a3f0ef937ac053834d7f60",
+                        contentSha256 = "b1a9d7f800214aeab69e0185c2a4721dc394afd3c47a581a3190888a17d95827",
                     ),
             )
     }

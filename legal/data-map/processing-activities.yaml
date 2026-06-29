@@ -434,7 +434,7 @@ activities:
     reviewRequired: []
 
   - id: ai_summary_gemini
-    name: Gemini 기반 관리자 요약 생성
+    name: Gemini optional AI 예정 기능 검토
     dataCategories:
       - postTitle
       - postMarkdownContent
@@ -443,11 +443,11 @@ activities:
     dataSubjects:
       - contentAuthor
       - peopleMentionedInDraftContent
-    purpose: 관리자 글 작성 보조와 요약 생성
+    purpose: 향후 관리자 글 작성 보조 기능 검토
     legalBasis: explicitAdminActionAndExternalProcessingReviewRequired
-    collectionSource: admin editor AI summary request
+    collectionSource: future admin editor AI request
     requiredOrOptional: optionalAdminTool
-    systemOfRecord: transient request to backend AI service; no intended raw prompt persistence
+    systemOfRecord: no current runtime processing; future transient request to backend AI service only after gate approval
     processors:
       - google_gemini
       - vercel_frontend_hosting

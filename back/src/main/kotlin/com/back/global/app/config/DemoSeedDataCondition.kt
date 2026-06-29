@@ -32,7 +32,7 @@ class DemoSeedDataCondition : Condition {
         fun isProdLikeProfile(profile: String): Boolean {
             val normalized = profile.trim().lowercase(Locale.ROOT)
             return DENIED_PROFILE_PREFIXES.any { denied ->
-                normalized == denied || normalized.startsWith("$denied-")
+                normalized.startsWith(denied)
             }
         }
     }

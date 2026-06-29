@@ -48,27 +48,30 @@ class DemoSeedDataConditionTest {
 
     @Test
     fun `prod-like profiles do not load demo seed beans even when flag is true`() {
-        listOf("prod", "staging", "preview", "qa", "release", "release-candidate").forEach { profile ->
+        listOf("prod", "production", "staging", "preview", "qa", "release", "release-candidate", "releasecandidate")
+            .forEach { profile ->
+                contextRunner
+                    .withPropertyValues(
+                        "spring.profiles.active=$profile",
+                        "custom.bootstrap.seed-demo-data-enabled=true",
+                    ).run { context ->
+                        assertThat(context).doesNotHaveBean(MemberNotProdInitData::class.java)
+                        assertThat(context).doesNotHaveBean(PostNotProdInitData::class.java)
+                    }
+            }
+    }
+
+    @Test
+    fun `prod-like profile wins when combined with allowed profile`() {
+        listOf("test,preview", "dev,production", "test,releasecandidate").forEach { profiles ->
             contextRunner
                 .withPropertyValues(
-                    "spring.profiles.active=$profile",
+                    "spring.profiles.active=$profiles",
                     "custom.bootstrap.seed-demo-data-enabled=true",
                 ).run { context ->
                     assertThat(context).doesNotHaveBean(MemberNotProdInitData::class.java)
                     assertThat(context).doesNotHaveBean(PostNotProdInitData::class.java)
                 }
         }
-    }
-
-    @Test
-    fun `prod-like profile wins when combined with allowed profile`() {
-        contextRunner
-            .withPropertyValues(
-                "spring.profiles.active=test,preview",
-                "custom.bootstrap.seed-demo-data-enabled=true",
-            ).run { context ->
-                assertThat(context).doesNotHaveBean(MemberNotProdInitData::class.java)
-                assertThat(context).doesNotHaveBean(PostNotProdInitData::class.java)
-            }
     }
 }

@@ -25,6 +25,15 @@ const forbiddenRuntimePatterns = [
 
 const readTextFile = (relativePath) => readFileSync(path.join(repoRoot, relativePath), "utf8")
 
+const isScannableRuntimeFile = (relativePath) => {
+  const basename = path.basename(relativePath)
+  return (
+    basename.startsWith(".env") ||
+    path.extname(basename) === "" ||
+    /\.(ya?ml|json|sh|mjs|md|properties|env)$/.test(relativePath)
+  )
+}
+
 const walk = (relativePath) => {
   const absolutePath = path.join(repoRoot, relativePath)
   const stat = statSync(absolutePath)
@@ -49,7 +58,7 @@ for (const relativePath of seedConfigFiles) {
 }
 
 for (const relativePath of forbiddenRuntimeTargets.flatMap(walk)) {
-  if (!/\.(ya?ml|json|sh|mjs|md|properties)$/.test(relativePath)) continue
+  if (!isScannableRuntimeFile(relativePath)) continue
   const source = readTextFile(relativePath)
   for (const pattern of forbiddenRuntimePatterns) {
     if (pattern.test(source)) fail(`${relativePath} contains forbidden demo seed trace: ${pattern}`)

@@ -1,8 +1,6 @@
 package com.back.boundedContexts.post.dto
 
-import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.post.domain.Post
-import org.slf4j.LoggerFactory
 import java.time.Instant
 
 data class FeedPostDto(
@@ -25,57 +23,80 @@ data class FeedPostDto(
     val hitCount: Int,
 ) {
     companion object {
-        private val log = LoggerFactory.getLogger(FeedPostDto::class.java)
-        private const val FALLBACK_SUMMARY = "미리보기를 불러오지 못했습니다."
+        private const val UNAVAILABLE_SUMMARY = "미리보기를 불러오지 못했습니다."
 
-        fun from(post: Post): FeedPostDto =
+        fun from(
+            post: Post,
+            reportFailure: FeedPostDtoMappingFailureReporter = { _, _, _ -> },
+        ): FeedPostDto {
+            val postId = post.id
+            val content = post.content
+            val meta = extractMeta(postId, content, reportFailure)
+            val preview = extractPreview(postId, content, reportFailure)
+
+            return FeedPostDto(
+                id = postId,
+                createdAt = post.createdAt,
+                modifiedAt = post.modifiedAt,
+                authorId = post.author.id,
+                authorName = post.author.name,
+                authorUsername = post.author.username,
+                authorProfileImgUrl = post.author.profileImgUrlVersionedOrDefault,
+                title = post.title,
+                thumbnail = preview.thumbnail,
+                summary = preview.summary,
+                tags = meta.tags,
+                category = meta.categories,
+                published = post.published,
+                listed = post.listed,
+                likesCount = post.likesCount,
+                commentsCount = post.commentsCount,
+                hitCount = post.hitCount,
+            )
+        }
+
+        private fun extractMeta(
+            postId: Long,
+            content: String,
+            reportFailure: FeedPostDtoMappingFailureReporter,
+        ): PostMetaExtractor.PostMeta =
             runCatching {
-                val meta = PostMetaExtractor.extract(post.content)
-                val preview = PostPreviewExtractor.extract(post.content)
-
-                FeedPostDto(
-                    id = post.id,
-                    createdAt = post.createdAt,
-                    modifiedAt = post.modifiedAt,
-                    authorId = post.author.id,
-                    authorName = post.author.name,
-                    authorUsername = post.author.username,
-                    authorProfileImgUrl = post.author.profileImgUrlVersionedOrDefault,
-                    title = post.title,
-                    thumbnail = preview.thumbnail,
-                    summary = preview.summary,
-                    tags = meta.tags,
-                    category = meta.categories,
-                    published = post.published,
-                    listed = post.listed,
-                    likesCount = post.likesCount,
-                    commentsCount = post.commentsCount,
-                    hitCount = post.hitCount,
-                )
+                PostMetaExtractor.extract(content)
             }.getOrElse { exception ->
-                log.error("FeedPostDto mapping failed. postId={}", post.id, exception)
-
-                FeedPostDto(
-                    id = post.id,
-                    createdAt = post.createdAt,
-                    modifiedAt = post.modifiedAt,
-                    authorId = runCatching { post.author.id }.getOrDefault(0),
-                    authorName = runCatching { post.author.name }.getOrDefault("unknown"),
-                    authorUsername = runCatching { post.author.username }.getOrDefault("unknown"),
-                    authorProfileImgUrl =
-                        runCatching { post.author.profileImgUrlVersionedOrDefault }
-                            .getOrDefault(defaultProfileImageUrl()),
-                    title = runCatching { post.title }.getOrDefault("제목 없음"),
-                    thumbnail = null,
-                    summary = FALLBACK_SUMMARY,
+                reportFailure(postId, FeedPostDtoMappingFailureType.META, exception)
+                PostMetaExtractor.PostMeta(
                     tags = emptyList(),
-                    category = emptyList(),
-                    published = post.published,
-                    listed = post.listed,
-                    likesCount = runCatching { post.likesCount }.getOrDefault(0),
-                    commentsCount = runCatching { post.commentsCount }.getOrDefault(0),
-                    hitCount = runCatching { post.hitCount }.getOrDefault(0),
+                    categories = emptyList(),
+                )
+            }
+
+        private fun extractPreview(
+            postId: Long,
+            content: String,
+            reportFailure: FeedPostDtoMappingFailureReporter,
+        ): PostPreviewExtractor.Preview =
+            runCatching {
+                PostPreviewExtractor.extract(content)
+            }.getOrElse { exception ->
+                reportFailure(postId, FeedPostDtoMappingFailureType.PREVIEW, exception)
+                PostPreviewExtractor.Preview(
+                    thumbnail = null,
+                    summary = UNAVAILABLE_SUMMARY,
                 )
             }
     }
 }
+
+enum class FeedPostDtoMappingFailureType(
+    val metricTag: String,
+) {
+    PREVIEW("preview"),
+    META("meta"),
+    CORE("core"),
+}
+
+typealias FeedPostDtoMappingFailureReporter = (
+    postId: Long,
+    failureType: FeedPostDtoMappingFailureType,
+    exception: Throwable,
+) -> Unit

@@ -2,8 +2,10 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
+import com.back.boundedContexts.post.dto.FeedPostDtoMappingFailureType
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailMetaCacheDto
@@ -291,7 +293,7 @@ class PostPublicReadQueryService(
                         authorId = authorId,
                         excludePostId = excludePostId,
                         limit = limit.coerceIn(1, 12),
-                    ).map(FeedPostDto::from)
+                    ).mapNotNull(::toFeedPostDto)
             }
         }
 
@@ -674,11 +676,18 @@ class PostPublicReadQueryService(
             (detail.contentHtml?.length ?: 0) +
             256
 
-    private fun toFeedPostDtoPage(postPage: PagedResult<com.back.boundedContexts.post.domain.Post>): PageDto<FeedPostDto> =
-        PageDto(postPage.map(FeedPostDto::from))
+    private fun toFeedPostDtoPage(postPage: PagedResult<Post>): PageDto<FeedPostDto> =
+        PageDto(
+            PagedResult(
+                content = postPage.content.mapNotNull(::toFeedPostDto),
+                page = postPage.page,
+                pageSize = postPage.pageSize,
+                totalElements = postPage.totalElements,
+            ),
+        )
 
     private fun toCursorFeedPageDto(
-        rows: List<com.back.boundedContexts.post.domain.Post>,
+        rows: List<Post>,
         pageSize: Int,
     ): CursorFeedPageDto {
         if (rows.isEmpty()) {
@@ -692,16 +701,50 @@ class PostPublicReadQueryService(
 
         val hasNext = rows.size > pageSize
         val currentRows = if (hasNext) rows.take(pageSize) else rows
-        val last = currentRows.last()
-        val nextCursor = if (hasNext) encodeCursor(last.createdAt, last.id) else null
+        val mappedRows =
+            currentRows.mapNotNull { row ->
+                toFeedPostDto(row)?.let { dto -> FeedPostRow(row, dto) }
+            }
+        val last = mappedRows.lastOrNull()?.post
+        val nextCursor = if (hasNext && last != null) encodeCursor(last.createdAt, last.id) else null
 
         return CursorFeedPageDto(
-            content = currentRows.map(FeedPostDto::from),
+            content = mappedRows.map(FeedPostRow::dto),
             pageSize = pageSize,
-            hasNext = hasNext,
+            hasNext = hasNext && last != null,
             nextCursor = nextCursor,
         )
     }
+
+    private fun toFeedPostDto(post: Post): FeedPostDto? =
+        runCatching {
+            FeedPostDto.from(post, ::recordFeedPostDtoMappingFailure)
+        }.getOrElse { exception ->
+            recordFeedPostDtoMappingFailure(post.id, FeedPostDtoMappingFailureType.CORE, exception)
+            null
+        }
+
+    private fun recordFeedPostDtoMappingFailure(
+        postId: Long,
+        failureType: FeedPostDtoMappingFailureType,
+        exception: Throwable,
+    ) {
+        logger.warn(
+            "post_feed_dto_mapping_failed postId={} failureType={} exception={}",
+            postId,
+            failureType.metricTag,
+            exception::class.java.simpleName,
+            exception,
+        )
+        meterRegistry
+            ?.counter("post.feed.dto.mapping.failure", "failureType", failureType.metricTag)
+            ?.increment()
+    }
+
+    private data class FeedPostRow(
+        val post: Post,
+        val dto: FeedPostDto,
+    )
 
     private fun requireCursorSort(sort: PostSearchSortType1): PostSearchSortType1 {
         if (sort == PostSearchSortType1.CREATED_AT || sort == PostSearchSortType1.CREATED_AT_ASC) {

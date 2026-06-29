@@ -418,7 +418,7 @@ jobs:
           HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
           HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
           HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
-          HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || '' }}
+          HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || 'false' }}
           HOME_AI_SUMMARY_GEMINI_API_KEY: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || vars.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || '' }}
           HOME_AI_SUMMARY_GEMINI_MODEL: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__MODEL || vars.CUSTOM__AI__SUMMARY__GEMINI__MODEL || '' }}
           HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}

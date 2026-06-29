@@ -2,6 +2,8 @@
 
 이 문서는 `aquila-blog` 상용 출시 전 개인정보·법적 고지·동의·외부처리·보유기간·운영 대응을 한 번에 판정하는 decision artifact다. 일반 release gate는 `docs/design/launch-gate-operations.md`를 따르고, 개인정보/법무 항목은 이 문서가 우선한다.
 
+Follow-up matrix의 source of truth는 `legal/privacy-launch-controls.json`이다. `node tools/privacy/validate-launch-gate-checklist.mjs`는 각 control의 issue 상태, launch 판정, evidence reference, feature flag 비활성 evidence, 정책 시행일/deploy SHA 연결 source가 이 문서와 drift되면 실패한다.
+
 ## Current Decision
 
 | 항목 | 현재 판정 | 근거 | 다음 조치 |

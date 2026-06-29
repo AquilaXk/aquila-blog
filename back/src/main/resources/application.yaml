@@ -135,6 +135,8 @@ management:
         task.processor.handler.duration: 0.95,0.99
         task.processor.fetch.limit: 0.95,0.99
 custom:
+  bootstrap:
+    seed-demo-data-enabled: ${CUSTOM__BOOTSTRAP__SEED_DEMO_DATA_ENABLED:false}
   dbBaseName: blog
   dev:
     cookieDomain: localhost

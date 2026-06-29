@@ -323,6 +323,7 @@ jobs:
       - name: Validate HOME_SERVER_ENV contract
         env:
           HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || 'false' }}
           HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
           HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
           HOME_NEXT_PUBLIC_SIGNUP_ENABLED: ${{ secrets.NEXT_PUBLIC_SIGNUP_ENABLED || vars.NEXT_PUBLIC_SIGNUP_ENABLED || 'false' }}
@@ -335,6 +336,7 @@ jobs:
           {
             printf '%s\n' "${HOME_SERVER_ENV}"
             printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
+            printf 'CUSTOM__AI__SUMMARY__ENABLED=%s\n' "${HOME_AI_SUMMARY_ENABLED:-false}"
             printf 'CUSTOM__MEMBER__SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
             printf 'CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
             printf 'NEXT_PUBLIC_SIGNUP_ENABLED=%s\n' "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}"

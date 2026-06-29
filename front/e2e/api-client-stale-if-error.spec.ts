@@ -136,6 +136,7 @@ test.describe("api client stale-if-error contract", () => {
 
     expect(clientSource).toContain('export type { ApiFetchMeta, ApiFetchResult } from "./clientRevalidateCache"')
     expect(clientSource).toContain("export const apiFetchWithMeta")
+    expect(clientSource).toContain("split(/[?#]/, 1)[0]")
     expect(clientSource).toMatch(/apiFetch\s*=\s*async\s*<T>[\s\S]*apiFetchWithMeta<T>\(path, init\)\)\.data/)
     expect(clientSource).not.toContain("refreshRevalidateCacheEntry(url, revalidateCacheEntry, null, null)")
     expect(revalidateCacheSource).toContain("export type ApiFetchMeta")

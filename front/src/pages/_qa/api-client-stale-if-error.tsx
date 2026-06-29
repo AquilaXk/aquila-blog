@@ -45,8 +45,8 @@ const ApiClientStaleIfErrorQaPage: NextPage = () => {
     setState(initialRunState)
 
     try {
-      const fresh = await apiFetchWithMeta<QaStalePayload>("/post/api/v1/posts/feed")
-      const stale = await apiFetchWithMeta<QaStalePayload>("/post/api/v1/posts/feed")
+      const fresh = await apiFetchWithMeta<QaStalePayload>("/post/api/v1/posts/feed?sort=CREATED_AT&page=1&pageSize=30")
+      const stale = await apiFetchWithMeta<QaStalePayload>("/post/api/v1/posts/feed?sort=CREATED_AT&page=1&pageSize=30")
       setState({
         fresh,
         stale,

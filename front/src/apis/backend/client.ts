@@ -116,7 +116,7 @@ const GET_REQUEST_POLICY_REGISTRY: Array<{
 ]
 
 const resolveGetRequestPolicy = (path: string): GetRequestPolicy => {
-  const normalizedPath = path.trim().toLowerCase()
+  const normalizedPath = path.trim().toLowerCase().split(/[?#]/, 1)[0] || "/"
   const matched = GET_REQUEST_POLICY_REGISTRY.find((entry) => entry.matcher.test(normalizedPath))
   if (!matched) return DEFAULT_GET_REQUEST_POLICY
 

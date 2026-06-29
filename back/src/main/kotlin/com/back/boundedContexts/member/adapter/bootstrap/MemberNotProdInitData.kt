@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional
  * MemberNotProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
  * 애플리케이션 기동 시 필요한 기본 상태를 안전하게 준비합니다.
  */
-@Profile("local", "dev", "test")
+@Profile("(local | dev | test) & !prod & !staging & !preview & !qa & !release")
 @ConditionalOnProperty(
     prefix = "custom.bootstrap",
     name = ["seed-demo-data-enabled"],

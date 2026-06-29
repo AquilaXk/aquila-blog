@@ -49,7 +49,7 @@ class OAuth2AuthorizationRequestResolverTest {
             .isNotBlank()
         assertThat(authorizationRequest.attributes[OidcParameterNames.NONCE] as String)
             .isNotBlank()
-        assertThat(OAuth2State.decode(authorizationRequest.state).redirectUrl).isEqualTo("/admin")
+        assertThat(OAuth2State.decode(authorizationRequest.state!!).redirectUrl).isEqualTo("/admin")
     }
 
     private fun kakaoClientRegistration(): ClientRegistration {

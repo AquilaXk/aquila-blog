@@ -46,7 +46,9 @@ class CustomOAuth2UserService(
 
     @Transactional
     override fun loadUser(userRequest: OAuth2UserRequest): OAuth2User {
-        val oAuth2User = delegate.loadUser(userRequest)
+        val oAuth2User =
+            delegate.loadUser(userRequest)
+                ?: throw InternalAuthenticationServiceException("OAuth2 provider returned no user.")
         val provider = OAuth2Provider.from(userRequest.clientRegistration.registrationId)
         val profilePayload =
             when (provider) {
@@ -76,7 +78,9 @@ class CustomOidcUserService(
 
     @Transactional
     override fun loadUser(userRequest: OidcUserRequest): OidcUser {
-        val oidcUser = delegate.loadUser(userRequest)
+        val oidcUser =
+            delegate.loadUser(userRequest)
+                ?: throw InternalAuthenticationServiceException("OIDC provider returned no user.")
         val provider = OAuth2Provider.from(userRequest.clientRegistration.registrationId)
         val profilePayload =
             when (provider) {

@@ -4,8 +4,8 @@
 # 1️⃣ JDK Source Stage
 # =========================
 # Digest pin source:
-# docker buildx imagetools inspect eclipse-temurin:24-jdk
-FROM eclipse-temurin:24-jdk@sha256:7493205ffe6caa8074fa8a06a276bb1c5ac41d3dd0fd43a0db66d7f776e80b3e AS jdk-source
+# docker buildx imagetools inspect eclipse-temurin:25-jdk
+FROM eclipse-temurin:25-jdk@sha256:dfc0093e3dbf43dae57827111c6e374f5b44fac19a9451584b2b336b81474d64 AS jdk-source
 
 # =========================
 # 2️⃣ Build Stage
@@ -55,19 +55,19 @@ RUN set -e \
 # =========================
 # Oracle GraalVM base can require x86-64-v3 on older CPUs.
 # Use Temurin for broader CPU compatibility.
-FROM eclipse-temurin:24-jdk@sha256:7493205ffe6caa8074fa8a06a276bb1c5ac41d3dd0fd43a0db66d7f776e80b3e AS extractor
+FROM eclipse-temurin:25-jdk@sha256:dfc0093e3dbf43dae57827111c6e374f5b44fac19a9451584b2b336b81474d64 AS extractor
 
 WORKDIR /app
 
 COPY --from=builder /app/build/libs/*.jar app.jar
 
-# Spring Boot layered jar 추출 (deprecation 경고는 무시해도 됨 — Spring Boot 4.x에서 tools extract 명령은 다른 디렉토리 구조를 생성함)
-RUN java -Djarmode=layertools -jar app.jar extract
+# Spring Boot 4.1 tools jarmode extracts a thin runnable jar plus lib directory.
+RUN java -Djarmode=tools -jar app.jar extract
 
 # =========================
 # 4️⃣ Runtime Stage
 # =========================
-FROM eclipse-temurin:24-jdk@sha256:7493205ffe6caa8074fa8a06a276bb1c5ac41d3dd0fd43a0db66d7f776e80b3e
+FROM eclipse-temurin:25-jdk@sha256:dfc0093e3dbf43dae57827111c6e374f5b44fac19a9451584b2b336b81474d64
 
 ENV LANG=ko_KR.UTF-8
 ENV LC_ALL=ko_KR.UTF-8
@@ -75,11 +75,9 @@ ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.en
 
 WORKDIR /app
 
-# Spring Boot layers (변경 빈도 낮은 순 → 높은 순으로 배치해 캐시 효율 극대화)
-COPY --from=extractor /app/dependencies/ ./
-COPY --from=extractor /app/snapshot-dependencies/ ./
-COPY --from=extractor /app/spring-boot-loader/ ./
-COPY --from=extractor /app/application/ ./
+# Spring Boot extracted app (library jars first for Docker cache reuse)
+COPY --from=extractor /app/app/lib/ ./lib/
+COPY --from=extractor /app/app/app.jar ./app.jar
 
 # ── t3.micro JVM 최적화 ──
 ENTRYPOINT ["java", \
@@ -89,4 +87,5 @@ ENTRYPOINT ["java", \
   "-XX:+ExitOnOutOfMemoryError", \
   "-XX:+AlwaysPreTouch", \
   "-Dspring.profiles.active=prod", \
-  "org.springframework.boot.loader.launch.JarLauncher"]
+  "-jar", \
+  "app.jar"]

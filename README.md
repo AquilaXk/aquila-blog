@@ -94,7 +94,7 @@ Spring Boot + Kotlin API
 
 ### Prerequisites
 
-- Java 24
+- Java 25 LTS
 - Node.js LTS
 - Yarn Classic 1.22.x
 - Docker / Docker Compose

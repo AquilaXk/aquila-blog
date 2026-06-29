@@ -1,9 +1,8 @@
 import styled from "@emotion/styled"
-import Image from "next/image"
 import React from "react"
-import AppIcon, { IconName } from "src/components/icons/AppIcon"
+import AppIcon from "src/components/icons/AppIcon"
 
-export type SocialProvider = "kakao" | "google" | "github"
+export type SocialProvider = "kakao"
 
 export type SocialAuthItem = {
   provider: SocialProvider
@@ -21,34 +20,11 @@ type Props = {
 
 type ProviderMeta = {
   label: string
-  icon?: IconName
-  imageSrc?: string
-  background: string
-  foreground: string
-  border: string
 }
 
 const PROVIDER_META: Record<SocialProvider, ProviderMeta> = {
   kakao: {
-    label: "카카오로 로그인",
-    imageSrc: "/images/auth/kakao_login_simple_medium.png",
-    background: "transparent",
-    foreground: "#111111",
-    border: "transparent",
-  },
-  google: {
-    label: "구글로 로그인",
-    icon: "google",
-    background: "#FFFFFF",
-    foreground: "#202124",
-    border: "#DADCE0",
-  },
-  github: {
-    label: "깃허브로 로그인",
-    icon: "github",
-    background: "#24292F",
-    foreground: "#FFFFFF",
-    border: "#3F4A56",
+    label: "카카오톡으로 계속하기",
   },
 }
 
@@ -68,27 +44,9 @@ const SocialAuthButtons: React.FC<Props> = ({ items, size = "regular", className
               title={meta.label}
               onClick={item.onClick}
               disabled={item.disabled}
-              style={
-                {
-                  "--provider-bg": meta.background,
-                  "--provider-fg": meta.foreground,
-                  "--provider-border": meta.border,
-                } as React.CSSProperties
-              }
             >
-              {meta.imageSrc ? (
-                <Image
-                  className="providerImage"
-                  src={meta.imageSrc}
-                  alt=""
-                  width={90}
-                  height={45}
-                  aria-hidden="true"
-                  unoptimized
-                />
-              ) : meta.icon ? (
-                <AppIcon name={meta.icon} aria-hidden="true" />
-              ) : null}
+              <AppIcon name="kakao" aria-hidden="true" />
+              <span>{meta.label}</span>
             </button>
           </li>
         )
@@ -100,86 +58,72 @@ const SocialAuthButtons: React.FC<Props> = ({ items, size = "regular", className
 export default SocialAuthButtons
 
 const StyledList = styled.ul`
-  --social-button-size: 46px;
+  --social-button-height: 52px;
+  --social-button-radius: 12px;
+  --social-button-font-size: 0.98rem;
 
   margin: 0;
   padding: 0;
+  width: 100%;
   list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 0.58rem;
+  display: grid;
+  gap: 0.65rem;
 
   &[data-size="compact"] {
-    --social-button-size: 42px;
+    --social-button-height: 44px;
+    --social-button-font-size: 0.92rem;
   }
 
   li {
     display: flex;
+    min-width: 0;
   }
 
   .providerButton {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--social-button-size);
-    height: var(--social-button-size);
-    border-radius: 999px;
-    border: 1px solid var(--provider-border, ${({ theme }) => theme.colors.gray6});
-    background: var(--provider-bg, ${({ theme }) => theme.colors.gray3});
-    color: var(--provider-fg, ${({ theme }) => theme.colors.gray12});
-    box-shadow:
-      0 10px 18px rgba(0, 0, 0, 0.2),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-    padding: 0;
+    gap: 0.45rem;
+    width: 100%;
+    min-height: var(--social-button-height);
+    border-radius: var(--social-button-radius);
+    border: 0;
+    background: ${({ theme }) => theme.colors.kakaoLoginBackground};
+    color: ${({ theme }) => theme.colors.kakaoLoginText};
+    box-shadow: none;
+    padding: 0 1rem;
+    font-size: var(--social-button-font-size);
+    font-weight: 800;
+    letter-spacing: 0;
     cursor: pointer;
-    transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
+    transition: filter 0.16s ease, opacity 0.16s ease;
 
     svg {
-      width: 52%;
-      height: 52%;
+      width: 1.25em;
+      height: 1.25em;
+      flex: 0 0 auto;
       display: block;
     }
 
-    &[data-provider="google"] svg {
-      width: 56%;
-      height: 56%;
-    }
-
-    &[data-provider="kakao"] {
-      width: 90px;
-      height: 45px;
-      border: 0;
-      border-radius: 6px;
-      background: transparent;
-      overflow: hidden;
-    }
-
-    .providerImage {
-      width: 100%;
-      height: 100%;
-      display: block;
-      object-fit: contain;
+    span {
+      min-width: 0;
+      white-space: nowrap;
     }
 
     &:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow:
-        0 14px 26px rgba(0, 0, 0, 0.26),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.16);
-      filter: brightness(1.02);
+      filter: brightness(0.98);
     }
 
     &:focus-visible {
       outline: none;
       box-shadow:
-        0 0 0 3px rgba(96, 165, 250, 0.34),
-        0 10px 18px rgba(0, 0, 0, 0.2);
+        0 0 0 3px ${({ theme }) => theme.colors.blue4},
+        0 0 0 1px ${({ theme }) => theme.colors.kakaoLoginFocusBorder};
     }
 
     &:disabled {
       opacity: 0.58;
       cursor: not-allowed;
-      transform: none;
     }
   }
 `

@@ -3,7 +3,7 @@ import { getApiBaseUrl } from "src/apis/backend/client"
 import { normalizeNextPath } from "src/libs/router"
 import { SocialAuthItem, SocialProvider } from "./SocialAuthButtons"
 
-const PROVIDER_ORDER: SocialProvider[] = ["kakao", "google", "github"]
+const PROVIDER_ORDER: SocialProvider[] = ["kakao"]
 
 const isProviderEnabled = (provider: SocialProvider) => {
   const providerConfig = CONFIG.auth?.socialProviders?.[provider]

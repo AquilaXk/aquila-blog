@@ -905,6 +905,14 @@ jobs:
           ROLLBACK_RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}"
           echo "runtime split from HOME_SERVER_ENV: enabled=${RUNTIME_SPLIT_ENABLED_VALUE} stage=${RUNTIME_SPLIT_STAGE_VALUE}"
 
+          ensure_monitoring_bind_mount_permissions() {
+            chmod 0644 deploy/homeserver/monitoring/prometheus.yml 2>/dev/null || true
+            chmod 0644 deploy/homeserver/monitoring/alertmanager.yml 2>/dev/null || true
+            find deploy/homeserver/monitoring/rules -type f -exec chmod 0644 {} + 2>/dev/null || true
+            find deploy/homeserver/monitoring/grafana/provisioning -type f -exec chmod 0644 {} + 2>/dev/null || true
+            find deploy/homeserver/monitoring/grafana/dashboards -type f -exec chmod 0644 {} + 2>/dev/null || true
+          }
+
           emit_post_deploy_diagnostics() {
             backend_container_id_any_state() {
               local backend="$1"
@@ -944,6 +952,8 @@ jobs:
             fi
             exit 1
           }
+
+          ensure_monitoring_bind_mount_permissions
 
           if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
             rollback_and_exit "blue_green_deploy_failed"

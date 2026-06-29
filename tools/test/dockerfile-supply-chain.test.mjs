@@ -22,3 +22,10 @@ test("backend Dockerfile does not pipe unchecked network downloads into build to
   assert.doesNotMatch(dockerfile, /curl\b[\s\S]*\|\s*tar\b/)
   assert.equal(dockerfile.includes(uncheckedJdkDownloadHost), false)
 })
+
+test("backend runtime image contains the compose healthcheck client", () => {
+  const dockerfile = readFileSync(backendDockerfilePath, "utf8")
+  const runtimeStage = dockerfile.split(/^FROM /m).at(-1)
+
+  assert.match(runtimeStage, /apt-get install -y --no-install-recommends wget\b/)
+})

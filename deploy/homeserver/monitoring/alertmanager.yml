@@ -1,25 +1,9 @@
-global:
-  smtp_smarthost: ${ALERTMANAGER_SMTP_SMARTHOST}
-  smtp_from: ${ALERTMANAGER_SMTP_FROM}
-  smtp_auth_username: ${ALERTMANAGER_SMTP_AUTH_USERNAME}
-  smtp_auth_password: |-
-    ${ALERTMANAGER_SMTP_AUTH_PASSWORD}
-  smtp_require_tls: ${ALERTMANAGER_SMTP_REQUIRE_TLS}
-
 route:
   receiver: drop
   group_by: ["alertname", "severity"]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
-  routes:
-    - receiver: operations-email
-      matchers:
-        - severity=~"critical|warning"
 
 receivers:
   - name: drop
-  - name: operations-email
-    email_configs:
-      - to: ${OPERATIONS_ALERT_EMAIL_TO}
-        send_resolved: true

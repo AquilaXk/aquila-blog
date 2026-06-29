@@ -63,10 +63,38 @@ services:
   alertmanager:
     image: ${ALERTMANAGER_IMAGE:?ALERTMANAGER_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
-    command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--storage.path=/alertmanager"
-      - "--config.expand-env"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        {
+          printf '%s\n' 'global:'
+          printf '  smtp_smarthost: %s\n' "$$ALERTMANAGER_SMTP_SMARTHOST"
+          printf '  smtp_from: %s\n' "$$ALERTMANAGER_SMTP_FROM"
+          printf '  smtp_auth_username: %s\n' "$$ALERTMANAGER_SMTP_AUTH_USERNAME"
+          printf '%s\n' '  smtp_auth_password: |-'
+          printf '    %s\n' "$$ALERTMANAGER_SMTP_AUTH_PASSWORD"
+          printf '  smtp_require_tls: %s\n' "$$ALERTMANAGER_SMTP_REQUIRE_TLS"
+          printf '%s\n' ''
+          printf '%s\n' 'route:'
+          printf '%s\n' '  receiver: drop'
+          printf '%s\n' '  group_by: ["alertname", "severity"]'
+          printf '%s\n' '  group_wait: 30s'
+          printf '%s\n' '  group_interval: 5m'
+          printf '%s\n' '  repeat_interval: 4h'
+          printf '%s\n' '  routes:'
+          printf '%s\n' '    - receiver: operations-email'
+          printf '%s\n' '      matchers:'
+          printf '%s\n' '        - severity=~"critical|warning"'
+          printf '%s\n' ''
+          printf '%s\n' 'receivers:'
+          printf '%s\n' '  - name: drop'
+          printf '%s\n' '  - name: operations-email'
+          printf '%s\n' '    email_configs:'
+          printf '      - to: %s\n' "$$OPERATIONS_ALERT_EMAIL_TO"
+          printf '%s\n' '        send_resolved: true'
+        } > /tmp/alertmanager.yml
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     environment:
       ALERTMANAGER_SMTP_SMARTHOST: ${SPRING__MAIL__HOST:?SPRING__MAIL__HOST is required}:${SPRING__MAIL__PORT:?SPRING__MAIL__PORT is required}
       ALERTMANAGER_SMTP_FROM: ${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:?CUSTOM__MEMBER__SIGNUP__MAIL_FROM is required}
@@ -75,7 +103,6 @@ services:
       ALERTMANAGER_SMTP_REQUIRE_TLS: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:-true}
       OPERATIONS_ALERT_EMAIL_TO: ${OPERATIONS_ALERT_EMAIL_TO:?OPERATIONS_ALERT_EMAIL_TO is required}
     volumes:
-      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
 
   postgres_exporter:

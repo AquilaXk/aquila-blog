@@ -78,12 +78,23 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 sort = PostSearchSortType1.CREATED_AT,
             ),
         ).willReturn(listOf(invalidBoundaryPost, nextRawPost))
+        given(
+            postUseCase.findPublicByCursor(
+                cursorCreatedAt = Instant.parse("2026-01-02T00:00:00Z"),
+                cursorId = 20L,
+                limit = 2,
+                sort = PostSearchSortType1.CREATED_AT,
+            ),
+        ).willReturn(listOf(nextRawPost))
 
         val page = service.getPublicFeedByCursor(null, 1, PostSearchSortType1.CREATED_AT)
+        val nextPage = service.getPublicFeedByCursor(page.nextCursor, 1, PostSearchSortType1.CREATED_AT)
 
         assertThat(page.content).isEmpty()
         assertThat(page.hasNext).isTrue()
         assertThat(page.nextCursor).isNotBlank()
+        assertThat(nextPage.content.map { it.id }).containsExactly(21L)
+        assertThat(nextPage.hasNext).isFalse()
         assertThat(
             meterRegistry
                 .get("post.feed.dto.mapping.failure")

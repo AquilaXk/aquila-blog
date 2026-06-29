@@ -11,6 +11,8 @@ import { GlobalErrorBoundary } from "src/components/error/ErrorBoundary"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { useOptionalTrackingConsent } from "src/libs/privacy/optionalTrackingConsent"
 import { createQueryClient } from "src/libs/react-query"
+import type { PublicAdminProfileSource } from "src/libs/adminProfileSource"
+import { shouldRefetchAdminProfileSource } from "src/libs/adminProfileSource"
 import { useState } from "react"
 import "katex/dist/katex.min.css"
 
@@ -25,14 +27,14 @@ const OptionalVercelTelemetry = dynamic(
 type AppPageProps = AppPropsWithLayout["pageProps"] & {
   initialAdminProfile?: AdminProfile | null
   initialProfileSnapshot?: AdminProfile | null
-  initialAdminProfileSource?: "published" | "static-fallback"
+  initialAdminProfileSource?: PublicAdminProfileSource
 }
 
 function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: AppPropsWithLayout) {
   const getLayout = Component.getLayout || ((page) => page)
   const appPageProps = pageProps as AppPageProps
   const initialAdminProfile = appPageProps.initialAdminProfile ?? appPageProps.initialProfileSnapshot ?? null
-  const initialAdminProfileShouldRefetch = appPageProps.initialAdminProfileSource === "static-fallback"
+  const initialAdminProfileShouldRefetch = shouldRefetchAdminProfileSource(appPageProps.initialAdminProfileSource)
   const [queryClient] = useState(createQueryClient)
   const router = useRouter()
   const optionalTrackingAllowed = useOptionalTrackingConsent()

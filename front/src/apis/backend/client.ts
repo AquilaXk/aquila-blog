@@ -138,6 +138,8 @@ export type ApiFetchResult<T> = {
   meta: ApiFetchMeta
 }
 
+const FRESH_API_FETCH_META: ApiFetchMeta = { stale: false }
+
 const isServer = typeof window === "undefined"
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
@@ -285,6 +287,11 @@ const buildStaleResult = <T>({
     },
   }
 }
+
+const buildFreshResult = <T>(data: T): ApiFetchResult<T> => ({
+  data,
+  meta: FRESH_API_FETCH_META,
+})
 
 export const evictBrowserRevalidateCacheEntries = (predicate: (url: string) => boolean) => {
   if (isServer) return
@@ -618,7 +625,7 @@ export const apiFetchWithMeta = async <T>(
       )
       return {
         data: revalidateCacheEntry.payload as T,
-        meta: { stale: false },
+        meta: FRESH_API_FETCH_META,
       }
     }
 
@@ -642,18 +649,12 @@ export const apiFetchWithMeta = async <T>(
     }
 
     if (response.status === 204) {
-      return {
-        data: undefined as T,
-        meta: { stale: false },
-      }
+      return buildFreshResult(undefined as T)
     }
 
     const contentLength = response.headers.get("content-length")
     if (contentLength === "0") {
-      return {
-        data: undefined as T,
-        meta: { stale: false },
-      }
+      return buildFreshResult(undefined as T)
     }
 
     const contentType = response.headers.get("content-type")?.toLowerCase() || ""
@@ -664,20 +665,14 @@ export const apiFetchWithMeta = async <T>(
       if (canUseRevalidateCache && etag) {
         setRevalidateCacheEntry(url, etag, payload, response.headers.get("cache-control"))
       }
-      return {
-        data: payload,
-        meta: { stale: false },
-      }
+      return buildFreshResult(payload)
     }
 
     const body = await response.text()
     if (canUseRevalidateCache && etag) {
       setRevalidateCacheEntry(url, etag, body, response.headers.get("cache-control"))
     }
-    return {
-      data: body as unknown as T,
-      meta: { stale: false },
-    }
+    return buildFreshResult(body as unknown as T)
   }
 
   if (!inFlightKey) {

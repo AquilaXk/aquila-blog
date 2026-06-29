@@ -2,7 +2,6 @@ package com.back.support
 
 import com.back.boundedContexts.post.adapter.web.ApiV1AdmPostController
 import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
-import com.back.boundedContexts.post.application.port.input.PostTagRecommendationUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.global.app.AppConfig
 import com.back.global.security.config.CustomAuthenticationFilter
@@ -41,9 +40,6 @@ abstract class BaseAdmPostControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean
     protected lateinit var postUseCase: PostUseCase
-
-    @MockitoBean
-    protected lateinit var postTagRecommendationUseCase: PostTagRecommendationUseCase
 
     @MockitoBean
     protected lateinit var adminPostListSnapshotService: AdminPostListSnapshotUseCase

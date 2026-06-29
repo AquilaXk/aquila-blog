@@ -86,7 +86,6 @@ export type ManageMobileStudioStep = "query" | "list"
 export type ComposeMobileStudioStep = "edit" | "publish"
 
 export const GLOBAL_NOTICE_IDLE_TEXT = "운영 작업 상태가 여기에 표시됩니다."
-export const TAG_RECOMMENDATION_IDLE_TEXT = "AI 태그 추천 상태가 여기에 표시됩니다."
 export const MANAGE_MOBILE_STUDIO_STEPS = ["query", "list"] as const
 export const COMPOSE_MOBILE_STUDIO_STEPS = ["edit", "publish"] as const
 

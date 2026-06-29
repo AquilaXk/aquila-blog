@@ -19,7 +19,6 @@ type UseEditorStudioPublishModalFlowParams = {
   publishActionType: PublishActionType
   publishModalHintByAction: (actionType: PublishActionType) => string
   safePreviewThumbnail: string
-  tagRecommendationIdleText: string
   setIsMobileMetaEditorOpen: Dispatch<SetStateAction<boolean>>
   setIsMobileThumbnailEditorOpen: Dispatch<SetStateAction<boolean>>
   setIsPublishModalOpen: Dispatch<SetStateAction<boolean>>
@@ -27,7 +26,6 @@ type UseEditorStudioPublishModalFlowParams = {
   setPreviewViewport: Dispatch<SetStateAction<PreviewViewportMode>>
   setPublishActionType: Dispatch<SetStateAction<PublishActionType>>
   setPublishModalNotice: Dispatch<SetStateAction<NoticeState>>
-  setTagRecommendationNotice: Dispatch<SetStateAction<NoticeState>>
 }
 
 export const useEditorStudioPublishModalFlow = ({
@@ -48,8 +46,6 @@ export const useEditorStudioPublishModalFlow = ({
   setPreviewViewport,
   setPublishActionType,
   setPublishModalNotice,
-  setTagRecommendationNotice,
-  tagRecommendationIdleText,
 }: UseEditorStudioPublishModalFlowParams) => {
   const openPublishModal = useCallback((actionType: PublishActionType) => {
     activateComposeSurface()
@@ -57,10 +53,6 @@ export const useEditorStudioPublishModalFlow = ({
     setPublishModalNotice({
       tone: "idle",
       text: publishModalHintByAction(actionType),
-    })
-    setTagRecommendationNotice({
-      tone: "idle",
-      text: tagRecommendationIdleText,
     })
     if (typeof window !== "undefined") {
       const nextViewport: PreviewViewportMode =
@@ -89,24 +81,17 @@ export const useEditorStudioPublishModalFlow = ({
     setPreviewViewport,
     setPublishActionType,
     setPublishModalNotice,
-    setTagRecommendationNotice,
-    tagRecommendationIdleText,
   ])
 
   const closePublishModal = useCallback(() => {
     if (
       loadingKey === "writePost" ||
       loadingKey === "modifyPost" ||
-      loadingKey === "publishTempPost" ||
-      loadingKey === "recommendTags"
+      loadingKey === "publishTempPost"
     ) return
     setPublishModalNotice({
       tone: "idle",
       text: publishModalHintByAction(publishActionType),
-    })
-    setTagRecommendationNotice({
-      tone: "idle",
-      text: tagRecommendationIdleText,
     })
     setIsPublishModalOpen(false)
     if (isCompactMobileLayout) {
@@ -120,8 +105,6 @@ export const useEditorStudioPublishModalFlow = ({
     setIsPublishModalOpen,
     setMobileComposeStep,
     setPublishModalNotice,
-    setTagRecommendationNotice,
-    tagRecommendationIdleText,
   ])
 
   const handleConfirmPublish = useCallback(async () => {

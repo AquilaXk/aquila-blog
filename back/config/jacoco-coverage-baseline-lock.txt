@@ -73,7 +73,6 @@ com/back/boundedContexts/post/adapter/scheduler/PostLikeReconciliationScheduledJ
 com/back/boundedContexts/post/adapter/scheduler/PostWriteRequestIdempotencyCleanupScheduledJob.class
 com/back/boundedContexts/post/adapter/security/SecureTipProviderAdapter.class
 com/back/boundedContexts/post/adapter/storage/PostImageStorageAdapter.class
-com/back/boundedContexts/post/adapter/web/ApiV1AdmPostController$RecommendTagsResBody.class
 com/back/boundedContexts/post/adapter/web/ApiV1PostController.class
 com/back/boundedContexts/post/adapter/web/ApiV1PostImageController$sliceStream$1.class
 com/back/boundedContexts/post/adapter/web/ApiV1PostImageController.class
@@ -97,9 +96,6 @@ com/back/boundedContexts/post/application/service/PostRecommendFeatureStoreServi
 com/back/boundedContexts/post/application/service/PostRecommendRankingService.class
 com/back/boundedContexts/post/application/service/PostSearchEngineMirrorService.class
 com/back/boundedContexts/post/application/service/PostSearchIndexSyncService.class
-com/back/boundedContexts/post/application/service/PostTagRecommendationService$GeminiResponse.class
-com/back/boundedContexts/post/application/service/PostTagRecommendationService$ParsedResponse.class
-com/back/boundedContexts/post/application/service/PostTagRecommendationService.class
 com/back/boundedContexts/post/application/service/PostUseCaseAdapter.class
 com/back/boundedContexts/post/application/service/PostWriteRequestIdempotencyRetentionService.class
 com/back/boundedContexts/post/application/support/PostCacheTags.class

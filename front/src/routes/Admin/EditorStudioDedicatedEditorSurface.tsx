@@ -17,7 +17,6 @@ import {
   EditorHeaderMetaPill,
   EditorHeaderMetaRow,
   EditorInspector,
-  EditorInspectorFullWidthAction,
   EditorInspectorPreview,
   EditorInspectorTagInputRow,
   EditorOutline,
@@ -61,9 +60,6 @@ type EditorStudioDedicatedEditorSurfaceProps = {
   onAddTags: (values: string[]) => void
   onAddTag: (value: string) => void
   onRemoveTag: (value: string) => void
-  isRecommendTagsDisabled: boolean
-  isRecommendTagsLoading: boolean
-  onRecommendTags: () => void
   titleInputRef: (node: HTMLTextAreaElement | null) => void
   postTitle: string
   onPostTitleChange: ChangeEventHandler<HTMLTextAreaElement>
@@ -163,9 +159,6 @@ export const EditorStudioDedicatedEditorSurface = ({
   onAddTags,
   onAddTag,
   onRemoveTag,
-  isRecommendTagsDisabled,
-  isRecommendTagsLoading,
-  onRecommendTags,
   titleInputRef,
   postTitle,
   onPostTitleChange,
@@ -342,13 +335,6 @@ export const EditorStudioDedicatedEditorSurface = ({
                 +
               </button>
             </EditorInspectorTagInputRow>
-            <EditorInspectorFullWidthAction
-              type="button"
-              onClick={onRecommendTags}
-              disabled={isRecommendTagsDisabled || isRecommendTagsLoading}
-            >
-              {isRecommendTagsLoading ? "추천 중..." : "AI 태그 추천"}
-            </EditorInspectorFullWidthAction>
           </section>
           <EditorInspectorPreview>
             <div>{thumbnailPreviewLabel}</div>

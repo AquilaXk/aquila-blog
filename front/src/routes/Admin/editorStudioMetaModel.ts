@@ -192,56 +192,6 @@ export const normalizeSafePreviewThumbnailUrl = (raw: string): string => {
 export const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) =>
   buildPreviewSummaryFromMarkdown(content, maxLength, "")
 
-export const resolveTagRecommendationErrorMessage = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  const normalized = message.trim()
-  if (!normalized) return "태그 추천 요청 처리 중 오류가 발생했습니다."
-
-  const lowered = normalized.toLowerCase()
-  if (lowered.includes("failed to fetch")) {
-    return "네트워크 연결 또는 API 응답 수신에 실패했습니다."
-  }
-
-  if (lowered.includes("abort") || lowered.includes("timeout")) {
-    return "태그 추천 응답 대기 시간이 초과되었습니다."
-  }
-
-  return normalized
-}
-
-export const formatTagRecommendationReason = (rawReason?: string | null) => {
-  const reason = (rawReason || "").trim()
-  switch (reason) {
-    case "ai-disabled":
-      return "AI 태그 추천이 비활성화됨"
-    case "api-key-missing":
-      return "Gemini API 키 누락"
-    case "rate-limited":
-      return "요청 제한으로 규칙 추천 사용"
-    case "quota-exhausted":
-      return "AI API 사용 한도 초과"
-    case "status-503":
-    case "status-504":
-      return "AI API 통신 실패"
-    case "transport":
-      return "AI API 전송 실패"
-    case "parse-error":
-      return "AI 태그 응답 파싱 실패"
-    case "empty-tags":
-      return "AI가 태그를 반환하지 않음"
-    case "internal-error":
-      return "서버 내부 처리 실패"
-    case "proxy-transport":
-      return "프록시 통신 실패(규칙 추천 대체)"
-    default:
-      if (reason.startsWith("proxy-upstream-")) {
-        return `프록시 업스트림 오류(${reason.slice("proxy-upstream-".length)})`
-      }
-      if (reason.startsWith("status-")) return `AI API 상태코드 ${reason.slice("status-".length)}`
-      return reason
-  }
-}
-
 const splitFrontmatterBlock = (content: string) => {
   const normalized = content.replace(/\r\n?/g, "\n").trimStart()
   const lines = normalized.split("\n")

@@ -719,6 +719,7 @@ jobs:
 
           require_privacy_freeze_value "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "false"
           require_privacy_freeze_value "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "false"
+          require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-false}" "false"
           require_privacy_freeze_value "NEXT_PUBLIC_SIGNUP_ENABLED" "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}" "false"
           require_privacy_freeze_value "NEXT_PUBLIC_RUM_SAMPLE_RATE" "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}" "0"
           upsert_env_key "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"

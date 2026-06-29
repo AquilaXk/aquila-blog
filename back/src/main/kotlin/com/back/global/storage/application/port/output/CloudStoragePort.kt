@@ -5,7 +5,8 @@ import java.io.InputStream
 interface CloudStoragePort {
     class UploadRequest(
         val objectKey: String,
-        val bytes: ByteArray,
+        val inputStream: InputStream,
+        val contentLength: Long,
         val contentType: String,
         val originalFilename: String,
     ) {
@@ -14,14 +15,16 @@ interface CloudStoragePort {
                 (
                     other is UploadRequest &&
                         objectKey == other.objectKey &&
-                        bytes.contentEquals(other.bytes) &&
+                        inputStream === other.inputStream &&
+                        contentLength == other.contentLength &&
                         contentType == other.contentType &&
                         originalFilename == other.originalFilename
                 )
 
         override fun hashCode(): Int {
             var result = objectKey.hashCode()
-            result = 31 * result + bytes.contentHashCode()
+            result = 31 * result + System.identityHashCode(inputStream)
+            result = 31 * result + contentLength.hashCode()
             result = 31 * result + contentType.hashCode()
             result = 31 * result + originalFilename.hashCode()
             return result
@@ -30,7 +33,7 @@ interface CloudStoragePort {
         override fun toString(): String =
             "UploadRequest(" +
                 "objectKey=$objectKey, " +
-                "bytes=${bytes.size} bytes, " +
+                "contentLength=$contentLength bytes, " +
                 "contentType=$contentType, " +
                 "originalFilename=$originalFilename" +
                 ")"
@@ -56,7 +59,8 @@ interface CloudStoragePort {
         val objectKey: String,
         val uploadId: String,
         val partNumber: Int,
-        val bytes: ByteArray,
+        val inputStream: InputStream,
+        val contentLength: Long,
     ) {
         override fun equals(other: Any?): Boolean =
             this === other ||
@@ -65,14 +69,16 @@ interface CloudStoragePort {
                         objectKey == other.objectKey &&
                         uploadId == other.uploadId &&
                         partNumber == other.partNumber &&
-                        bytes.contentEquals(other.bytes)
+                        inputStream === other.inputStream &&
+                        contentLength == other.contentLength
                 )
 
         override fun hashCode(): Int {
             var result = objectKey.hashCode()
             result = 31 * result + uploadId.hashCode()
             result = 31 * result + partNumber
-            result = 31 * result + bytes.contentHashCode()
+            result = 31 * result + System.identityHashCode(inputStream)
+            result = 31 * result + contentLength.hashCode()
             return result
         }
     }

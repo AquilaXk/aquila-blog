@@ -60,11 +60,7 @@ normalize_non_negative_int() {
 
 ensure_monitoring_bind_mount_permissions() {
   find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
-  chmod 0644 "${SCRIPT_DIR}/monitoring/prometheus.yml" 2>/dev/null || true
-  chmod 0644 "${SCRIPT_DIR}/monitoring/alertmanager.yml" 2>/dev/null || true
-  find "${SCRIPT_DIR}/monitoring/rules" -type f -exec chmod 0644 {} + 2>/dev/null || true
-  find "${SCRIPT_DIR}/monitoring/grafana/provisioning" -type f -exec chmod 0644 {} + 2>/dev/null || true
-  find "${SCRIPT_DIR}/monitoring/grafana/dashboards" -type f -exec chmod 0644 {} + 2>/dev/null || true
+  find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
 }
 
 reset_grafana_admin_password() {

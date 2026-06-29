@@ -218,11 +218,9 @@ class PostPublicReadQueryService(
                 if (isSearchNegativeCached(page, pageSize, sort, kw)) {
                     return@withSearchPermit PageDto(PagedResult(emptyList(), page, pageSize, 0))
                 }
-                val pageDto =
-                    toFeedPostDtoPage(
-                        postUseCase.findPagedByKw(kw, sort, page, pageSize),
-                    )
-                if (shouldCacheSearchNegative(page, kw) && pageDto.content.isEmpty()) {
+                val postPage = postUseCase.findPagedByKw(kw, sort, page, pageSize)
+                val pageDto = toFeedPostDtoPage(postPage)
+                if (shouldCacheSearchNegative(page, kw) && postPage.content.isEmpty()) {
                     cacheManager
                         .getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
                         ?.put(buildSearchCacheKey(page, pageSize, sort, kw), true)
@@ -705,13 +703,17 @@ class PostPublicReadQueryService(
             currentRows.mapNotNull { row ->
                 toFeedPostDto(row)?.let { dto -> FeedPostRow(row, dto) }
             }
-        val last = mappedRows.lastOrNull()?.post
-        val nextCursor = if (hasNext && last != null) encodeCursor(last.createdAt, last.id) else null
+        val nextCursor =
+            if (hasNext) {
+                currentRows.lastOrNull()?.let { encodeCursor(it.createdAt, it.id) }
+            } else {
+                null
+            }
 
         return CursorFeedPageDto(
             content = mappedRows.map(FeedPostRow::dto),
             pageSize = pageSize,
-            hasNext = hasNext && last != null,
+            hasNext = hasNext && nextCursor != null,
             nextCursor = nextCursor,
         )
     }

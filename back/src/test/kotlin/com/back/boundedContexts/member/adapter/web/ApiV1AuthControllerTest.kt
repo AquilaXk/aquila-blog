@@ -118,8 +118,8 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
             assertThat(activeSession.refreshTokenExpiresAt).isNotNull
 
             val setCookieHeaders = result.response.getHeaders(HttpHeaders.SET_COOKIE)
-            assertIssuedAuthCookiesAreHostOnly(setCookieHeaders)
-            assertConfiguredDomainAuthCookiesExpired(setCookieHeaders)
+            assertIssuedAuthCookiesUseConfiguredDomain(setCookieHeaders)
+            assertHostOnlyAuthCookiesExpired(setCookieHeaders)
         }
 
         @Test
@@ -1004,7 +1004,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
         name: String,
     ): Cookie = cookies.firstOrNull { it.name == name } ?: error("$name cookie not issued")
 
-    private fun assertIssuedAuthCookiesAreHostOnly(setCookieHeaders: List<String>) {
+    private fun assertIssuedAuthCookiesUseConfiguredDomain(setCookieHeaders: List<String>) {
         AuthCookieNames.AUTHENTICATION_COOKIE_NAMES.forEach { name ->
             val issuedHeader =
                 setCookieHeaders.firstOrNull {
@@ -1018,7 +1018,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                 .isNotNull
             assertThat(issuedHeader!!)
                 .contains("Path=/", "HttpOnly", "Secure", "SameSite=Strict")
-                .doesNotContain("Domain=")
+                .contains("Domain=localhost")
         }
     }
 

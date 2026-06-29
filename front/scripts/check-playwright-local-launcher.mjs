@@ -4,54 +4,45 @@ import { fileURLToPath } from "url"
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const configPath = path.join(projectRoot, "playwright.config.ts")
+const packageJsonPath = path.join(projectRoot, "package.json")
 const configSource = fs.readFileSync(configPath, "utf8")
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"))
 
 const requiredContracts = [
   {
-    id: "default-chromium-project",
-    pattern: /const defaultProjects = \[\s*{\s*name:\s*"chromium",\s*use:\s*{\s*\.\.\.devices\["Desktop Chrome"\],\s*},\s*},\s*\]/s,
+    id: "darwin-channel-guard",
+    source: configSource,
+    pattern:
+      /const shouldUseChromiumChannel =\s*process\.platform === "darwin" &&\s*!process\.env\.CI &&\s*process\.env\.PLAYWRIGHT_LOCAL_CHROMIUM_CHANNEL !== "false"/,
   },
   {
-    id: "live-chromium-project",
-    pattern: /const liveMultiBrowserProjects = \[\s*{\s*name:\s*"chromium",\s*use:\s*{\s*\.\.\.devices\["Desktop Chrome"\],\s*},\s*},/s,
+    id: "chromium-channel",
+    source: configSource,
+    pattern: /channel:\s*"chromium"\s+as const/,
+  },
+  {
+    id: "yarn-playwright-cft-opt-out",
+    source: packageJson.scripts?.playwright || "",
+    pattern: /PLAYWRIGHT_LOCAL_CHROMIUM_CHANNEL=false/,
   },
 ]
 
 const missing = requiredContracts
-  .filter((contract) => !contract.pattern.test(configSource))
+  .filter((contract) => !contract.pattern.test(contract.source))
   .map((contract) => contract.id)
 
-const forbiddenContracts = [
-  {
-    id: "darwin-local-channel-flag",
-    pattern: /shouldUseChromiumChannel/,
-  },
-  {
-    id: "forced-chromium-channel",
-    pattern: /channel:\s*["']chromium["']/,
-  },
-  {
-    id: "darwin-local-channel-assertion",
-    pattern: /assertDarwinLocalChromiumChannel/,
-  },
-]
-
-const presentForbidden = forbiddenContracts
-  .filter((contract) => contract.pattern.test(configSource))
-  .map((contract) => contract.id)
-
-if (missing.length === 0 && presentForbidden.length === 0) process.exit(0)
+if (missing.length === 0) {
+  process.exit(0)
+}
 
 console.error(
   [
     "[playwright-preflight] Playwright local chromium launcher contract drift detected.",
-    "로컬 기본 Playwright 실행은 Google Chrome for Testing/channel=chromium 경로를 강제하지 않아야 합니다.",
+    "raw macOS Playwright guard는 유지하고 yarn playwright 진입점만 CFT crash 경로를 opt-out 해야 합니다.",
     `config: ${configPath}`,
-    missing.length > 0 ? `missing: ${missing.join(", ")}` : null,
-    presentForbidden.length > 0 ? `forbidden: ${presentForbidden.join(", ")}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n")
+    `package: ${packageJsonPath}`,
+    `missing: ${missing.join(", ")}`,
+  ].join("\n")
 )
 
 process.exit(1)

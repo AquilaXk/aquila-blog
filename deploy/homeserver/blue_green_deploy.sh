@@ -1191,6 +1191,22 @@ validate_required_runtime_env() {
   require_digest_image_env_key "MINIO_IMAGE"
 }
 
+ensure_monitoring_bind_mount_permissions() {
+  find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
+  find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
+}
+
+reset_grafana_admin_password() {
+  local grafana_password
+  grafana_password="$(trim_quotes "$(env_value "GRAFANA_ADMIN_PASSWORD")")"
+  if [[ -z "${grafana_password}" ]]; then
+    echo "skip grafana admin password reset: missing GRAFANA_ADMIN_PASSWORD" >&2
+    return 0
+  fi
+
+  compose exec -T grafana grafana cli admin reset-admin-password "${grafana_password}" >/dev/null 2>&1 || true
+}
+
 resolve_prod_db_name() {
   local db_name
 
@@ -2354,7 +2370,9 @@ else
 fi
 edge_services_to_boot=(caddy cloudflared)
 compose_up_with_retry "${edge_services_to_boot[@]}"
-compose_up_no_deps_with_retry loki promtail prometheus grafana
+ensure_monitoring_bind_mount_permissions
+compose_up_no_deps_with_retry alertmanager loki promtail prometheus grafana
+reset_grafana_admin_password
 ensure_caddy_mount_sync
 if [[ "${active_backend_was_running}" == "true" ]]; then
   check_cloudflared_runtime "${api_domain}"

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -377,6 +377,43 @@ test("grafana admin password has no compose fallback and rejects weak contract v
       .replace("GRAFANA_ADMIN_PASSWORD=valid-grafana-password", "GRAFANA_ADMIN_PASSWORD=grafana-operator"),
     "must differ from GRAFANA_ADMIN_USER",
   )
+})
+
+test("homeserver monitoring runtime files stay readable by container users", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
+  const compose = readFileSync(composePath, "utf8")
+  const grafanaProvisioningDir = path.join(repoRoot, "deploy/homeserver/monitoring/grafana/provisioning")
+
+  assert.doesNotMatch(compose, /--config\.expand-env/)
+  assert.equal(existsSync(path.join(grafanaProvisioningDir, "alerting")), true)
+  assert.equal(existsSync(path.join(grafanaProvisioningDir, "plugins")), true)
+  assert.match(workflow, /ensure_monitoring_bind_mount_permissions/)
+  assert.match(workflow, /find deploy\/homeserver\/monitoring -type d -exec chmod 0755/)
+  assert.match(workflow, /find deploy\/homeserver\/monitoring -type f -exec chmod 0644/)
+  assert.match(deployScript, /ensure_monitoring_bind_mount_permissions\(\)/)
+  assert.match(steadyStateGuard, /ensure_monitoring_bind_mount_permissions\(\)/)
+  assert.match(deployScript, /find "\$\{SCRIPT_DIR\}\/monitoring" -type d -exec chmod 0755/)
+  assert.match(steadyStateGuard, /find "\$\{SCRIPT_DIR\}\/monitoring" -type d -exec chmod 0755/)
+  assert.match(deployScript, /find "\$\{SCRIPT_DIR\}\/monitoring" -type f -exec chmod 0644/)
+  assert.match(steadyStateGuard, /find "\$\{SCRIPT_DIR\}\/monitoring" -type f -exec chmod 0644/)
+  assert.match(deployScript, /compose_up_no_deps_with_retry alertmanager loki promtail prometheus grafana/)
+  assert.match(deployScript, /grafana cli admin reset-admin-password "\$\{grafana_password\}"/)
+  assert.match(steadyStateGuard, /grafana cli admin reset-admin-password "\$\{grafana_password\}"/)
+})
+
+test("provisioned Grafana dashboard files have dashboard titles", () => {
+  const dashboardsDir = path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards")
+  const dashboardFiles = readdirSync(dashboardsDir).filter((fileName) => fileName.endsWith(".json"))
+
+  assert.notEqual(dashboardFiles.length, 0)
+  for (const fileName of dashboardFiles) {
+    const dashboard = JSON.parse(readFileSync(path.join(dashboardsDir, fileName), "utf8"))
+
+    assert.equal(typeof dashboard.title, "string", `${fileName} must define a Grafana dashboard title`)
+    assert.notEqual(dashboard.title.trim(), "", `${fileName} must not define an empty Grafana dashboard title`)
+  }
 })
 
 test("Prometheus basic auth has no Caddy fallback and rejects known weak values", async () => {

@@ -54,8 +54,9 @@ test("operations alert email channel is wired through env contract, compose, and
 
   assert.match(compose, /alertmanager:/)
   assert.match(compose, /image:\s+\$\{ALERTMANAGER_IMAGE:\?ALERTMANAGER_IMAGE is required \(sha256 digest required\)\}/)
-  assert.match(compose, /--config\.file=\/etc\/alertmanager\/alertmanager\.yml/)
-  assert.match(compose, /--config\.expand-env/)
+  assert.match(compose, /> \/tmp\/alertmanager\.yml/)
+  assert.match(compose, /--config\.file=\/tmp\/alertmanager\.yml/)
+  assert.doesNotMatch(compose, /--config\.expand-env/)
   assert.doesNotMatch(
     compose.slice(compose.indexOf("  alertmanager:"), compose.indexOf("  postgres_exporter:")),
     /env_file:/,
@@ -69,7 +70,13 @@ test("operations alert email channel is wired through env contract, compose, and
   assert.match(compose, /ALERTMANAGER_SMTP_AUTH_USERNAME:\s+\$\{ALERTMANAGER_SMTP_AUTH_USERNAME:-\}/)
   assert.match(compose, /ALERTMANAGER_SMTP_AUTH_PASSWORD:\s+\$\{ALERTMANAGER_SMTP_AUTH_PASSWORD:-\}/)
   assert.match(compose, /ALERTMANAGER_SMTP_REQUIRE_TLS:\s+\$\{SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:-true\}/)
-  assert.match(compose, /monitoring\/alertmanager\.yml:\/etc\/alertmanager\/alertmanager\.yml:ro/)
+  assert.match(compose, /\$\$ALERTMANAGER_SMTP_SMARTHOST/)
+  assert.match(compose, /\$\$ALERTMANAGER_SMTP_AUTH_PASSWORD/)
+  assert.match(compose, /\$\$OPERATIONS_ALERT_EMAIL_TO/)
+  assert.match(compose, /operations-email/)
+  assert.match(compose, /email_configs:/)
+  assert.match(compose, /send_resolved: true/)
+  assert.doesNotMatch(compose, /monitoring\/alertmanager\.yml:\/etc\/alertmanager\/alertmanager\.yml:ro/)
   assert.match(compose, /alertmanager_data:$/m)
 
   assert.match(prometheus, /alerting:\n(?:.*\n)*\s+alertmanagers:/)
@@ -79,16 +86,10 @@ test("operations alert email channel is wired through env contract, compose, and
 
   assert.match(alertmanager, /receiver:\s+drop/)
   assert.match(alertmanager, /- name: drop/)
-  assert.match(alertmanager, /receiver:\s+operations-email/)
   assert.match(alertmanager, /group_by:\s+\["alertname", "severity"\]/)
-  assert.match(alertmanager, /smtp_smarthost:\s+\$\{ALERTMANAGER_SMTP_SMARTHOST\}/)
-  assert.match(alertmanager, /smtp_from:\s+\$\{ALERTMANAGER_SMTP_FROM\}/)
-  assert.match(alertmanager, /smtp_auth_username:\s+\$\{ALERTMANAGER_SMTP_AUTH_USERNAME\}/)
-  assert.match(alertmanager, /smtp_auth_password:\s+\|-\n\s+\$\{ALERTMANAGER_SMTP_AUTH_PASSWORD\}/)
-  assert.match(alertmanager, /smtp_require_tls:\s+\$\{ALERTMANAGER_SMTP_REQUIRE_TLS\}/)
-  assert.match(alertmanager, /email_configs:/)
-  assert.match(alertmanager, /to:\s+\$\{OPERATIONS_ALERT_EMAIL_TO\}/)
-  assert.match(alertmanager, /send_resolved:\s+true/)
+  assert.doesNotMatch(alertmanager, /\$\{ALERTMANAGER_/)
+  assert.doesNotMatch(alertmanager, /\$\{OPERATIONS_ALERT_EMAIL_TO\}/)
+  assert.doesNotMatch(alertmanager, /email_configs:/)
   assert.doesNotMatch(alertmanager, /webhook_configs:/)
 
   assert.match(workflow, /Validate HOME_SERVER_ENV contract/)

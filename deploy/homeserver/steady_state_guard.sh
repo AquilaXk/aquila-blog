@@ -58,6 +58,22 @@ normalize_non_negative_int() {
   fi
 }
 
+ensure_monitoring_bind_mount_permissions() {
+  find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
+  find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
+}
+
+reset_grafana_admin_password() {
+  local grafana_password
+  grafana_password="$(trim_quotes "$(env_value "GRAFANA_ADMIN_PASSWORD")")"
+  if [[ -z "${grafana_password}" ]]; then
+    log "skip grafana admin password reset (missing GRAFANA_ADMIN_PASSWORD)"
+    return 0
+  fi
+
+  compose exec -T grafana grafana cli admin reset-admin-password "${grafana_password}" >/dev/null 2>&1 || true
+}
+
 auth_probes_enabled() {
   local value
   value="$(trim_quotes "$(env_value "STEADY_GUARD_AUTH_PROBES_ENABLED")")"
@@ -502,6 +518,7 @@ check_grafana_core_datasources() {
   grafana_password="$(env_value "GRAFANA_ADMIN_PASSWORD")"
   [[ -n "${grafana_user}" ]] || grafana_user="admin"
   [[ -n "${grafana_password}" ]] || grafana_password="change_me_grafana_password"
+  reset_grafana_admin_password
 
   local fail_threshold cooldown_seconds
   fail_threshold="$(normalize_positive_int "$(env_value "GRAFANA_DS_FAIL_THRESHOLD")" "3")"
@@ -815,6 +832,7 @@ main() {
   fi
 
   local ok=0
+  ensure_monitoring_bind_mount_permissions
   if enforce_single_backend_rule; then ok=$((ok + 1)); fi
   if check_active_backend_image; then ok=$((ok + 1)); fi
   if ensure_caddy_mount_sync; then ok=$((ok + 1)); fi

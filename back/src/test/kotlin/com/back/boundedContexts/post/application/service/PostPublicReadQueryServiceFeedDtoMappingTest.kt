@@ -21,6 +21,8 @@ import java.time.Instant
 @DisplayName("공개 게시글 feed DTO 매핑")
 class PostPublicReadQueryServiceFeedDtoMappingTest {
     companion object {
+        private const val MAPPING_FAILURE_METRIC = "post.feed.dto.mapping.failure"
+
         @JvmStatic
         @BeforeAll
         fun initAppConfig() {
@@ -55,7 +57,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         assertThat(page.pageable.totalElements).isEqualTo(2)
         assertThat(
             meterRegistry
-                .get("post.feed.dto.mapping.failure")
+                .get(MAPPING_FAILURE_METRIC)
                 .tag("failureType", "core")
                 .counter()
                 .count(),
@@ -74,7 +76,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
             postUseCase.findPublicByCursor(
                 cursorCreatedAt = null,
                 cursorId = null,
-                limit = 2,
+                limit = 3,
                 sort = PostSearchSortType1.CREATED_AT,
             ),
         ).willReturn(listOf(invalidBoundaryPost, nextRawPost))
@@ -82,7 +84,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
             postUseCase.findPublicByCursor(
                 cursorCreatedAt = Instant.parse("2026-01-02T00:00:00Z"),
                 cursorId = 20L,
-                limit = 2,
+                limit = 3,
                 sort = PostSearchSortType1.CREATED_AT,
             ),
         ).willReturn(listOf(nextRawPost))
@@ -97,7 +99,38 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         assertThat(nextPage.hasNext).isFalse()
         assertThat(
             meterRegistry
-                .get("post.feed.dto.mapping.failure")
+                .get(MAPPING_FAILURE_METRIC)
+                .tag("failureType", "core")
+                .counter()
+                .count(),
+        ).isEqualTo(1.0)
+    }
+
+    @Test
+    @DisplayName("cursor feed는 boundary row의 audit timestamp가 없어도 다음 row를 숨기지 않는다")
+    fun doesNotHideNextRowWhenFilteredBoundaryRowHasNoAuditTimestamp() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val meterRegistry = SimpleMeterRegistry()
+        val service = createService(postUseCase, meterRegistry)
+        val invalidBoundaryPost = postWithoutAuditTimestamps(id = 22L)
+        val nextRawPost = postByAuthor(id = 23L)
+        given(
+            postUseCase.findPublicByCursor(
+                cursorCreatedAt = null,
+                cursorId = null,
+                limit = 3,
+                sort = PostSearchSortType1.CREATED_AT,
+            ),
+        ).willReturn(listOf(invalidBoundaryPost, nextRawPost))
+
+        val page = service.getPublicFeedByCursor(null, 1, PostSearchSortType1.CREATED_AT)
+
+        assertThat(page.content.map { it.id }).containsExactly(23L)
+        assertThat(page.hasNext).isFalse()
+        assertThat(page.nextCursor).isNull()
+        assertThat(
+            meterRegistry
+                .get(MAPPING_FAILURE_METRIC)
                 .tag("failureType", "core")
                 .counter()
                 .count(),

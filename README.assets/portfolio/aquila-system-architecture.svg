@@ -1,7 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1672" height="941" viewBox="0 0 1672 941" role="img" aria-labelledby="title desc">
-  <title id="title">Aquila Blog system architecture</title>
-  <desc id="desc">Architecture diagram showing Vercel Next.js frontend, Cloudflare Tunnel through Caddy, Spring Boot Kotlin backend, PostgreSQL, Redis, MinIO, observability, and GitHub Actions deployment.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1672" height="941" viewBox="0 0 1672 941" role="img" aria-label="아키텍처 구조도">
   <defs>
     <linearGradient id="blueHdr" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#0759cf"/>
@@ -5442,7 +5440,7 @@
     <path fill="#f9f7f9" d="M228 301h1v1H228z"/>
     <path fill="#faf7fa" d="M217 313h1v1H217z"/>
   </g>
-  <text class="txt" x="148" y="249" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">React 18</text>
+  <text class="txt" x="148" y="249" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">React 19</text>
   <text class="txt" x="296" y="249" font-size="24" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">TypeScript</text>
   <text class="txt" x="217" y="361" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">Next.js</text>
   <rect x="77" y="385" width="282" height="138" rx="6" ry="6" fill="url(#hostingFill)" stroke="#5d9bff" stroke-width="1.8"/>
@@ -7089,8 +7087,8 @@
   <path d="M592 255 L624 268 L592 281 Z" fill="#075bbb" stroke="none"/>
   <rect x="391" y="362" width="209" height="98" rx="8" ry="8" fill="#fff" stroke="#075bbb" stroke-width="2.2"/>
   <path d="M485 362 L493 327 L501 362" fill="none" stroke="#075bbb" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
-  <text class="txt" x="496" y="388" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">Cloudflare Tunnel에서</text>
-  <text class="txt" x="496" y="417" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">Caddy 경유 Backend로</text>
+  <text class="txt" x="496" y="388" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">Cloudflare Tunnel을</text>
+  <text class="txt" x="496" y="417" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">통해 안전하게 Backend에</text>
   <text class="txt" x="496" y="444" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">접속 (포트 노출 없음)</text>
   <rect x="625" y="94" width="418" height="292" rx="12" ry="12" fill="#fff" stroke="#6f7f9c" stroke-width="1.8"/>
   <rect x="649" y="73" width="366" height="40" rx="10" ry="10" fill="url(#greenHdr)" stroke="none" stroke-width="0"/>
@@ -21446,9 +21444,9 @@
     <path fill="#f7fcfc" d="M1348 587h1v1H1348z"/>
   </g>
   <text class="txt" x="1350" y="566" font-size="20.2" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">Docker Compose</text>
-  <text class="txt" x="1369" y="596" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• back_* + Caddy</text>
-  <text class="txt" x="1369" y="622" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• cloudflared</text>
-  <text class="txt" x="1369" y="648" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• DB / Redis / MinIO</text>
+  <text class="txt" x="1369" y="596" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• PostgreSQL</text>
+  <text class="txt" x="1369" y="622" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• Redis</text>
+  <text class="txt" x="1369" y="648" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• MinIO</text>
   <rect x="52" y="688" width="1546" height="150" rx="8" ry="8" fill="#fff" stroke="none"/>
   <rect x="65" y="660" width="272" height="39" rx="10" ry="10" fill="url(#infraHdr)" stroke="none" stroke-width="0"/>
   <path d="M65 688 H337 M337 688 H1590 Q1598 688 1598 696 V830 Q1598 838 1590 838 H60 Q52 838 52 830 V696 Q52 688 60 688 H65" fill="none" stroke="#0b63e5" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
@@ -24207,7 +24205,7 @@
   </g>
   <text class="txt" x="198" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">개발 환경 (Local)</text>
   <text class="txt" x="198" y="768" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Docker Compose 로</text>
-  <text class="txt" x="198" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">DB / Redis / MinIO 실행</text>
+  <text class="txt" x="198" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">전체 스택 로컬 실행</text>
   <path d="M449 734 L470 776 L428 776 Z" fill="#000" stroke="none" stroke-width="1"/>
   <text class="txt" x="420" y="786" font-size="20" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">Vercel</text>
   <text class="txt" x="515" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">프론트 배포</text>
@@ -30207,5 +30205,5 @@
   <text class="txt" x="884" y="867" font-size="18" font-weight="800" fill="#0262e0" text-anchor="start" dominant-baseline="middle">주요 특징</text>
   <text class="txt" x="846" y="897" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 포트 노출 없이 Cloudflare Tunnel 로 안전한 접속</text>
   <text class="txt" x="846" y="922" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• CI/CD 자동화로 일관된 배포 · 서버 빌드를 외부화</text>
-  <text class="txt" x="1225" y="897" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 서버 런타임은 Docker Compose 로 관리</text>
+  <text class="txt" x="1225" y="897" font-size="14.5" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 모든 구성 요소 Docker Compose 로 관리</text>
 </svg>

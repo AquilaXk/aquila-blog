@@ -14,8 +14,11 @@ import com.back.global.storage.config.CloudStorageProperties
 import com.fasterxml.jackson.annotation.JsonInclude
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import java.io.InputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
 import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
@@ -173,70 +176,83 @@ class CloudVideoUploadSessionService(
         ownerMemberId: Long,
         sessionId: Long,
         partNumber: Int,
-        bytes: ByteArray,
+        inputStream: InputStream,
+        contentLength: Long,
     ): CloudVideoUploadPartResultDto {
         val session = findMutableSession(ownerMemberId, sessionId)
         validatePartNumber(session, partNumber)
-        validatePartBytes(session, partNumber, bytes)
-        validateFirstPartSignature(session, partNumber, bytes)
+        validatePartSize(session, partNumber, contentLength)
+        val tempFile = copyPartToTempFile(inputStream, contentLength)
+        try {
+            validateFirstPartSignature(session, partNumber, tempFile)
 
-        val existing = partRepository.findBySessionIdAndPartNumber(session.id, partNumber)
-        if (existing != null) {
-            if (existing.byteSize != bytes.size.toLong()) {
-                throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
+            val existing = partRepository.findBySessionIdAndPartNumber(session.id, partNumber)
+            if (existing != null) {
+                if (existing.byteSize != contentLength) {
+                    throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
+                }
+                return CloudVideoUploadPartResultDto(
+                    session = session.toDto(partRepository.findBySessionId(session.id)),
+                    part = existing.toDto(),
+                )
             }
-            return CloudVideoUploadPartResultDto(
-                session = session.toDto(partRepository.findBySessionId(session.id)),
-                part = existing.toDto(),
+
+            claimStatus(
+                session,
+                expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+                nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+                conflictMessage = "다른 업로드 작업이 진행 중입니다.",
             )
+            val uploadResult =
+                try {
+                    Files.newInputStream(tempFile).use { partStream ->
+                        cloudStoragePort.uploadMultipartPart(
+                            CloudStoragePort.MultipartUploadPartRequest(
+                                objectKey = session.objectKey,
+                                uploadId = requireUploadId(session),
+                                partNumber = partNumber,
+                                inputStream = partStream,
+                                contentLength = contentLength,
+                            ),
+                        )
+                    }
+                } catch (ex: RuntimeException) {
+                    releasePartUploadClaim(session.id)
+                    throw ex
+                }
+            val savedPart =
+                try {
+                    partRepository.save(
+                        CloudVideoUploadPart(
+                            sessionId = session.id,
+                            partNumber = partNumber,
+                            eTag = uploadResult.eTag,
+                            byteSize = contentLength,
+                        ),
+                    )
+                } catch (ex: RuntimeException) {
+                    markFailed(
+                        session.id,
+                        CloudVideoUploadSessionStatus.UPLOADING_PART,
+                        "multipart part metadata save failed: ${ex.message}",
+                    )
+                    throw ex
+                }
+            transitionStatus(
+                session.id,
+                expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+                nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+            )
+            session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
+            val parts = partRepository.findBySessionId(session.id)
+
+            return CloudVideoUploadPartResultDto(
+                session = session.toDto(parts),
+                part = savedPart.toDto(),
+            )
+        } finally {
+            Files.deleteIfExists(tempFile)
         }
-
-        claimStatus(
-            session,
-            expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-            nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
-            conflictMessage = "다른 업로드 작업이 진행 중입니다.",
-        )
-        val uploadResult =
-            try {
-                cloudStoragePort.uploadMultipartPart(
-                    CloudStoragePort.MultipartUploadPartRequest(
-                        objectKey = session.objectKey,
-                        uploadId = requireUploadId(session),
-                        partNumber = partNumber,
-                        bytes = bytes,
-                    ),
-                )
-            } catch (ex: RuntimeException) {
-                releasePartUploadClaim(session.id)
-                throw ex
-            }
-        val savedPart =
-            try {
-                partRepository.save(
-                    CloudVideoUploadPart(
-                        sessionId = session.id,
-                        partNumber = partNumber,
-                        eTag = uploadResult.eTag,
-                        byteSize = bytes.size.toLong(),
-                    ),
-                )
-            } catch (ex: RuntimeException) {
-                markFailed(session.id, CloudVideoUploadSessionStatus.UPLOADING_PART, "multipart part metadata save failed: ${ex.message}")
-                throw ex
-            }
-        transitionStatus(
-            session.id,
-            expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
-            nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-        )
-        session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
-        val parts = partRepository.findBySessionId(session.id)
-
-        return CloudVideoUploadPartResultDto(
-            session = session.toDto(parts),
-            part = savedPart.toDto(),
-        )
     }
 
     fun complete(
@@ -494,29 +510,61 @@ class CloudVideoUploadSessionService(
         }
     }
 
-    private fun validatePartBytes(
+    private fun validatePartSize(
         session: CloudVideoUploadSession,
         partNumber: Int,
-        bytes: ByteArray,
+        contentLength: Long,
     ) {
-        if (bytes.isEmpty()) throw AppException("400-1", "업로드 조각이 비어 있습니다.")
+        if (contentLength <= 0) throw AppException("400-1", "업로드 조각이 비어 있습니다.")
         val expectedSize =
             if (partNumber == session.totalParts) {
                 session.byteSize - (session.partSizeBytes * (partNumber - 1))
             } else {
                 session.partSizeBytes
             }
-        if (bytes.size.toLong() != expectedSize) {
+        if (contentLength != expectedSize) {
             throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+        }
+    }
+
+    private fun copyPartToTempFile(
+        inputStream: InputStream,
+        expectedLength: Long,
+    ): Path {
+        val tempFile = Files.createTempFile("cloud-upload-part-", ".tmp")
+        try {
+            var total = 0L
+            inputStream.use { input ->
+                Files.newOutputStream(tempFile).use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        if (total > expectedLength) {
+                            throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+            if (total != expectedLength) {
+                throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+            }
+            return tempFile
+        } catch (ex: Exception) {
+            Files.deleteIfExists(tempFile)
+            throw ex
         }
     }
 
     private fun validateFirstPartSignature(
         session: CloudVideoUploadSession,
         partNumber: Int,
-        bytes: ByteArray,
+        file: Path,
     ) {
         if (partNumber != 1) return
+        val bytes = Files.newInputStream(file).use { it.readNBytes(12) }
         val detected =
             detectVideoFromSignature(bytes)
                 ?: throw AppException("400-1", "지원하지 않는 동영상 파일 형식입니다.")

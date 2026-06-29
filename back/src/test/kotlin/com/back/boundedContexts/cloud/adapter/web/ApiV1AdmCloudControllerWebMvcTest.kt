@@ -8,10 +8,12 @@ import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartRe
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionDto
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
+import com.back.global.exception.application.AppException
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
 import jakarta.servlet.http.HttpServletRequest
+import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -21,6 +23,7 @@ import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.mock.web.DelegatingServletInputStream
 import org.springframework.mock.web.MockMultipartFile
@@ -32,7 +35,9 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.multipart
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
+import org.springframework.web.multipart.MultipartFile
 import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.time.Instant
 
 @DisplayName("관리자 클라우드 WebMvc 테스트")
@@ -109,12 +114,13 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
         val uploadBytes = "png".toByteArray()
         given(
             cloudFileService.upload(
-                ownerMemberId = 7L,
-                originalFilename = "photo.png",
-                clientOriginalFilename = "사진 원본.png",
-                contentType = "image/png",
-                bytes = uploadBytes,
-                folderPath = "photos",
+                ownerMemberId = ArgumentMatchers.eq(7L),
+                originalFilename = ArgumentMatchers.eq("photo.png"),
+                clientOriginalFilename = ArgumentMatchers.eq("사진 원본.png"),
+                contentType = ArgumentMatchers.eq("image/png"),
+                inputStream = anyInputStream(),
+                contentLength = ArgumentMatchers.eq(uploadBytes.size.toLong()),
+                folderPath = ArgumentMatchers.eq("photos"),
             ),
         ).willReturn(item)
 
@@ -130,6 +136,48 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 jsonPath("$.data.id") { value(11) }
                 jsonPath("$.data.ownerMemberId") { value(7) }
             }
+    }
+
+    @Test
+    @DisplayName("관리자 upload는 MultipartFile bytes 복사 없이 stream으로 위임한다")
+    fun `관리자 upload는 MultipartFile bytes 복사 없이 stream으로 위임한다`() {
+        val item = sampleDto(id = 12L, ownerMemberId = 7L, originalFilename = "manual.pdf")
+        given(
+            cloudFileService.upload(
+                ownerMemberId = ArgumentMatchers.eq(7L),
+                originalFilename = ArgumentMatchers.eq("manual.pdf"),
+                clientOriginalFilename = ArgumentMatchers.eq(null),
+                contentType = ArgumentMatchers.eq("application/pdf"),
+                inputStream = anyInputStream(),
+                contentLength = ArgumentMatchers.eq(8L),
+                folderPath = ArgumentMatchers.eq("docs"),
+            ),
+        ).willReturn(item)
+        val controller =
+            ApiV1AdmCloudController(
+                cloudFileService,
+                cloudVideoUploadSessionService,
+                cloudExternalPlaybackTokenService,
+            )
+
+        val response =
+            controller.upload(
+                securityUser = adminUser(id = 7L),
+                file = ByteAccessFailingMultipartFile("file", "manual.pdf", "application/pdf", "%PDF-1.7".toByteArray()),
+                folderPath = "docs",
+                clientFilename = null,
+            )
+
+        assertThat(response.statusCode).isEqualTo(HttpStatus.CREATED)
+        then(cloudFileService).should().upload(
+            ownerMemberId = ArgumentMatchers.eq(7L),
+            originalFilename = ArgumentMatchers.eq("manual.pdf"),
+            clientOriginalFilename = ArgumentMatchers.eq(null),
+            contentType = ArgumentMatchers.eq("application/pdf"),
+            inputStream = anyInputStream(),
+            contentLength = ArgumentMatchers.eq(8L),
+            folderPath = ArgumentMatchers.eq("docs"),
+        )
     }
 
     @Test
@@ -230,7 +278,8 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 ownerMemberId = ArgumentMatchers.eq(7L),
                 sessionId = ArgumentMatchers.eq(21L),
                 partNumber = ArgumentMatchers.eq(1),
-                bytes = byteArrayContentEquals(chunkBytes),
+                inputStream = anyInputStream(),
+                contentLength = ArgumentMatchers.eq(chunkBytes.size.toLong()),
             ),
         ).willReturn(
             CloudVideoUploadPartResultDto(
@@ -300,8 +349,8 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     }
 
     @Test
-    @DisplayName("대용량 동영상 조각 chunked body가 기대 크기를 넘으면 읽는 중 거절한다")
-    fun `대용량 동영상 조각 chunked body가 기대 크기를 넘으면 읽는 중 거절한다`() {
+    @DisplayName("대용량 동영상 조각 chunked body는 service stream 검증으로 위임한다")
+    fun `대용량 동영상 조각 chunked body는 service stream 검증으로 위임한다`() {
         val request = mock(HttpServletRequest::class.java)
         given(request.contentLengthLong).willReturn(-1)
         given(request.inputStream)
@@ -314,6 +363,15 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                     totalParts = 1,
                 ),
             )
+        given(
+            cloudVideoUploadSessionService.uploadPart(
+                ownerMemberId = ArgumentMatchers.eq(7L),
+                sessionId = ArgumentMatchers.eq(21L),
+                partNumber = ArgumentMatchers.eq(1),
+                inputStream = anyInputStream(),
+                contentLength = ArgumentMatchers.eq(-1L),
+            ),
+        ).willThrow(AppException("400-1", "업로드 조각 크기가 올바르지 않습니다."))
 
         val controller =
             ApiV1AdmCloudController(
@@ -332,7 +390,13 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
         }.hasMessageContaining("업로드 조각 크기가 올바르지 않습니다.")
 
         then(cloudVideoUploadSessionService).should().getSession(ownerMemberId = 7L, sessionId = 21L)
-        then(cloudVideoUploadSessionService).shouldHaveNoMoreInteractions()
+        then(cloudVideoUploadSessionService).should().uploadPart(
+            ownerMemberId = ArgumentMatchers.eq(7L),
+            sessionId = ArgumentMatchers.eq(21L),
+            partNumber = ArgumentMatchers.eq(1),
+            inputStream = anyInputStream(),
+            contentLength = ArgumentMatchers.eq(-1L),
+        )
     }
 
     @Test
@@ -905,10 +969,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             failureReason = null,
         )
 
-    private fun byteArrayContentEquals(expected: ByteArray): ByteArray =
-        ArgumentMatchers.argThat<ByteArray> { actual ->
-            actual != null && actual.contentEquals(expected)
-        } ?: ByteArray(0)
+    private fun anyInputStream(): InputStream = ArgumentMatchers.any(InputStream::class.java) ?: ByteArrayInputStream(ByteArray(0))
 
     private class CloseAwareInputStream(
         bytes: ByteArray,
@@ -918,6 +979,34 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
         override fun close() {
             closed = true
             super.close()
+        }
+    }
+
+    private class ByteAccessFailingMultipartFile(
+        private val name: String,
+        private val originalFilename: String,
+        private val contentType: String,
+        private val content: ByteArray,
+    ) : MultipartFile {
+        override fun getName(): String = name
+
+        override fun getOriginalFilename(): String = originalFilename
+
+        override fun getContentType(): String = contentType
+
+        override fun isEmpty(): Boolean = content.isEmpty()
+
+        override fun getSize(): Long = content.size.toLong()
+
+        override fun getBytes(): ByteArray =
+            throw AssertionError(
+                "controller must pass upload content as stream without reading MultipartFile.bytes",
+            )
+
+        override fun getInputStream(): InputStream = ByteArrayInputStream(content)
+
+        override fun transferTo(dest: java.io.File) {
+            dest.outputStream().use { it.write(content) }
         }
     }
 }

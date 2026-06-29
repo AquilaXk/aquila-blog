@@ -33,6 +33,24 @@ class CloudFileServiceTest {
             clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
         )
 
+    private fun CloudFileService.upload(
+        ownerMemberId: Long,
+        originalFilename: String?,
+        clientOriginalFilename: String? = null,
+        contentType: String?,
+        bytes: ByteArray,
+        folderPath: String?,
+    ): CloudFileDto =
+        upload(
+            ownerMemberId = ownerMemberId,
+            originalFilename = originalFilename,
+            clientOriginalFilename = clientOriginalFilename,
+            contentType = contentType,
+            inputStream = ByteArrayInputStream(bytes),
+            contentLength = bytes.size.toLong(),
+            folderPath = folderPath,
+        )
+
     @Test
     @DisplayName("업로드 시 ownerMemberId와 cloud prefix를 metadata에 고정한다")
     fun `upload는 ownerMemberId와 cloud prefix를 metadata에 고정한다`() {
@@ -168,7 +186,7 @@ class CloudFileServiceTest {
         assertThat(result.originalFilename).isEqualTo("portfolio.pdf")
         assertThat(result.byteSize).isEqualTo(seventeenMbPdf.size.toLong())
         assertThat(result.mediaKind).isEqualTo(CloudFileMediaKind.DOCUMENT)
-        assertThat(storage.uploaded.single().bytes).hasSize(seventeenMbPdf.size)
+        assertThat(storage.uploaded.single().contentLength).isEqualTo(seventeenMbPdf.size.toLong())
     }
 
     @Test
@@ -951,19 +969,22 @@ class CloudFileServiceTest {
     }
 
     @Test
-    @DisplayName("UploadRequest는 bytes 내용을 기준으로 동일성을 비교한다")
-    fun `UploadRequest는 bytes 내용을 기준으로 동일성을 비교한다`() {
+    @DisplayName("UploadRequest는 stream identity와 contentLength를 기준으로 동일성을 비교한다")
+    fun `UploadRequest는 stream identity와 contentLength를 기준으로 동일성을 비교한다`() {
+        val inputStream = ByteArrayInputStream("%PDF-1.7".toByteArray())
         val first =
             CloudStoragePort.UploadRequest(
                 objectKey = "cloud/7/docs/file.pdf",
-                bytes = "%PDF-1.7".toByteArray(),
+                inputStream = inputStream,
+                contentLength = 8,
                 contentType = "application/pdf",
                 originalFilename = "file.pdf",
             )
         val second =
             CloudStoragePort.UploadRequest(
                 objectKey = "cloud/7/docs/file.pdf",
-                bytes = "%PDF-1.7".toByteArray(),
+                inputStream = inputStream,
+                contentLength = 8,
                 contentType = "application/pdf",
                 originalFilename = "file.pdf",
             )
@@ -971,18 +992,19 @@ class CloudFileServiceTest {
         assertThat(first).isEqualTo(second)
         assertThat(first.hashCode()).isEqualTo(second.hashCode())
         assertThat(first.objectKey).isEqualTo("cloud/7/docs/file.pdf")
-        assertThat(first.bytes).containsExactly(*"%PDF-1.7".toByteArray())
+        assertThat(first.contentLength).isEqualTo(8)
         assertThat(first.contentType).isEqualTo("application/pdf")
         assertThat(first.originalFilename).isEqualTo("file.pdf")
         assertThat(first).isNotEqualTo(
             CloudStoragePort.UploadRequest(
                 objectKey = "cloud/7/docs/other.pdf",
-                bytes = "%PDF-1.7".toByteArray(),
+                inputStream = inputStream,
+                contentLength = 8,
                 contentType = "application/pdf",
                 originalFilename = "file.pdf",
             ),
         )
-        assertThat(first.toString()).contains("bytes=8 bytes")
+        assertThat(first.toString()).contains("contentLength=8 bytes")
     }
 
     @Test

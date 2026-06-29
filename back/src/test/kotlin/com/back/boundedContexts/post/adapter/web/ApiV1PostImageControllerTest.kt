@@ -121,7 +121,37 @@ class ApiV1PostImageControllerTest {
         assertThat(response.headers.contentLength).isEqualTo(storedBytes.size.toLong())
         assertThat(response.headers.getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("attachment").contains("manual.pdf")
         assertThat(response.headers.getFirst("X-Content-Type-Options")).isEqualTo("nosniff")
+        assertThat(response.headers.cacheControl).isEqualTo("no-store")
         assertThat(postImageStorageService.fileDownloads).containsExactly(objectKey)
+    }
+
+    @Test
+    @DisplayName("게시글 첨부파일 304 응답은 재검증 가능한 캐시를 남기지 않는다")
+    fun `files 다운로드 304는 no store cache policy를 반환한다`() {
+        val objectKey = "posts/2026/03/cached.pdf"
+        val uploadedFile = postFile(objectKey).apply { attachToPost(11L, UploadedFilePurpose.POST_FILE) }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(postRepository.findPublicDetailById(11L)).thenReturn(publicPost(11L))
+        postImageStorageService.files[objectKey] =
+            PostImageStoragePort.StoredObject(
+                inputStream = ByteArrayInputStream("pdf".toByteArray()),
+                contentType = "application/pdf",
+                contentLength = 3L,
+                originalFilename = "cached.pdf",
+            )
+        val firstResponse = controller.getPostFile(fileRequest(objectKey))
+        postImageStorageService.fileDownloads.clear()
+
+        val conditionalRequest =
+            fileRequest(objectKey).apply {
+                addHeader(HttpHeaders.IF_NONE_MATCH, requireNotNull(firstResponse.headers.eTag))
+            }
+
+        val response = controller.getPostFile(conditionalRequest)
+
+        assertThat(response.statusCode).isEqualTo(HttpStatus.NOT_MODIFIED)
+        assertThat(response.headers.cacheControl).isEqualTo("no-store")
+        assertThat(postImageStorageService.fileDownloads).isEmpty()
     }
 
     @Test

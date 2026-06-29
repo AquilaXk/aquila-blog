@@ -283,12 +283,8 @@ class ApiV1PostImageController(
             return ResponseEntity
                 .status(HttpStatus.NOT_MODIFIED)
                 .eTag(etag)
-                .cacheControl(
-                    CacheControl
-                        .maxAge(30, TimeUnit.DAYS)
-                        .cachePublic()
-                        .immutable(),
-                ).build()
+                .cacheControl(CacheControl.noStore())
+                .build()
         }
 
         val storedFile =
@@ -311,12 +307,7 @@ class ApiV1PostImageController(
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
                 .header("X-Content-Type-Options", "nosniff")
                 .eTag(etag)
-                .cacheControl(
-                    CacheControl
-                        .maxAge(30, TimeUnit.DAYS)
-                        .cachePublic()
-                        .immutable(),
-                )
+                .cacheControl(CacheControl.noStore())
 
         val finalizedBuilder =
             storedFile.contentLength

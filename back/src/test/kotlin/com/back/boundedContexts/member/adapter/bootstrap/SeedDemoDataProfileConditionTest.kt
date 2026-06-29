@@ -59,4 +59,17 @@ class SeedDemoDataProfileConditionTest {
                 assertThat(context).doesNotHaveBean(PostNotProdInitData::class.java)
             }
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["prod,dev", "staging,test", "preview,local", "qa,dev", "release,test"])
+    fun `mixed prod-like profile does not load demo seed beans even with opt-in flag`(profiles: String) {
+        runner
+            .withPropertyValues(
+                "spring.profiles.active=$profiles",
+                "custom.bootstrap.seed-demo-data-enabled=true",
+            ).run { context ->
+                assertThat(context).doesNotHaveBean(MemberNotProdInitData::class.java)
+                assertThat(context).doesNotHaveBean(PostNotProdInitData::class.java)
+            }
+    }
 }

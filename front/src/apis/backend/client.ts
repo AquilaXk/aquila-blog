@@ -24,6 +24,7 @@ type GetRequestPolicy = {
   cacheMode: GetCacheMode
   retryCount: number
   staleIfError: boolean
+  maxStaleAgeMs?: number
   timeoutMs?: number
   credentials: ApiRequestCredentials
 }
@@ -114,6 +115,7 @@ const resolveGetRequestPolicy = (path: string): GetRequestPolicy => {
     cacheMode: matched.policy.cacheMode ?? DEFAULT_GET_REQUEST_POLICY.cacheMode,
     retryCount: matched.policy.retryCount ?? DEFAULT_GET_REQUEST_POLICY.retryCount,
     staleIfError: matched.policy.staleIfError ?? DEFAULT_GET_REQUEST_POLICY.staleIfError,
+    maxStaleAgeMs: matched.policy.maxStaleAgeMs,
     timeoutMs: matched.policy.timeoutMs,
     credentials: matched.policy.credentials ?? DEFAULT_GET_REQUEST_POLICY.credentials,
   }
@@ -124,6 +126,18 @@ export type ApiFetchOptions = RequestInit & {
   backendProxy?: BackendProxyMode
 }
 
+export type ApiFetchMeta = {
+  stale: boolean
+  staleReason?: "transport" | "timeout" | "http-status"
+  staleStatus?: number
+  staleAgeMs?: number
+}
+
+export type ApiFetchResult<T> = {
+  data: T
+  meta: ApiFetchMeta
+}
+
 const isServer = typeof window === "undefined"
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
@@ -131,6 +145,7 @@ const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 type RevalidateCacheEntry = {
   etag: string
   payload: unknown
+  cachedAt: number
   expiresAt: number
   maxAgeMs: number
 }
@@ -166,11 +181,13 @@ const setRevalidateCacheEntry = (
 ) => {
   if (isServer) return
   const maxAgeMs = parseCacheControlMaxAgeMs(cacheControlHeader)
+  const cachedAt = Date.now()
   browserRevalidateCache.set(url, {
     etag,
     payload,
+    cachedAt,
     maxAgeMs,
-    expiresAt: Date.now() + maxAgeMs,
+    expiresAt: cachedAt + maxAgeMs,
   })
 
   if (browserRevalidateCache.size <= REVALIDATE_CACHE_MAX_ENTRIES) return
@@ -186,13 +203,87 @@ const refreshRevalidateCacheEntry = (
 ) => {
   if (isServer) return
   const maxAgeMs = parseCacheControlMaxAgeMs(cacheControlHeader)
+  const cachedAt = Date.now()
   const nextEtag = etagHeader?.trim() || fallback.etag
   browserRevalidateCache.set(url, {
     etag: nextEtag,
     payload: fallback.payload,
+    cachedAt,
     maxAgeMs,
-    expiresAt: Date.now() + maxAgeMs,
+    expiresAt: cachedAt + maxAgeMs,
   })
+}
+
+const getRevalidateCacheEntryAgeMs = (entry: RevalidateCacheEntry) => {
+  const ageMs = Date.now() - entry.cachedAt
+  return Number.isFinite(ageMs) && ageMs > 0 ? ageMs : 0
+}
+
+const canUseStaleRevalidateCacheEntry = (
+  entry: RevalidateCacheEntry,
+  policy: GetRequestPolicy | null,
+) => {
+  if (policy?.staleIfError === false) return false
+  const maxStaleAgeMs = policy?.maxStaleAgeMs ?? REVALIDATE_CACHE_MAX_TTL_MS
+  return getRevalidateCacheEntryAgeMs(entry) <= maxStaleAgeMs
+}
+
+const toApiPathBucket = (safePath: string) =>
+  safePath
+    .split(/[?#]/, 1)[0]
+    .replace(/\/\d+(?=\/|$)/g, "/:id")
+
+const emitStaleIfErrorTelemetry = ({
+  path,
+  reason,
+  status,
+  staleAgeMs,
+}: {
+  path: string
+  reason: ApiFetchMeta["staleReason"]
+  status?: number
+  staleAgeMs: number
+}) => {
+  if (isServer || typeof window === "undefined") return
+  window.dispatchEvent(
+    new CustomEvent("aquila:api-stale-if-error", {
+      detail: {
+        pathBucket: toApiPathBucket(path),
+        reason,
+        status,
+        staleAgeMs,
+      },
+    })
+  )
+}
+
+const buildStaleResult = <T>({
+  path,
+  entry,
+  reason,
+  status,
+}: {
+  path: string
+  entry: RevalidateCacheEntry
+  reason: NonNullable<ApiFetchMeta["staleReason"]>
+  status?: number
+}): ApiFetchResult<T> => {
+  const staleAgeMs = getRevalidateCacheEntryAgeMs(entry)
+  emitStaleIfErrorTelemetry({
+    path,
+    reason,
+    status,
+    staleAgeMs,
+  })
+  return {
+    data: entry.payload as T,
+    meta: {
+      stale: true,
+      staleReason: reason,
+      staleStatus: status,
+      staleAgeMs,
+    },
+  }
 }
 
 export const evictBrowserRevalidateCacheEntries = (predicate: (url: string) => boolean) => {
@@ -395,7 +486,13 @@ export const getApiRequestUrl = (path: string, options: ApiRequestUrlOptions = {
   return `${getApiBaseUrl()}${safePath}`
 }
 
-export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Promise<T> => {
+export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Promise<T> =>
+  (await apiFetchWithMeta<T>(path, init)).data
+
+export const apiFetchWithMeta = async <T>(
+  path: string,
+  init: ApiFetchOptions = {}
+): Promise<ApiFetchResult<T>> => {
   const safePath = normalizeApiRequestPath(path)
   const { timeoutMs: _timeoutMs, backendProxy = "auto", ...requestInit } = init
   const url = getApiRequestUrl(safePath, { backendProxy })
@@ -436,10 +533,10 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
 
   if (inFlightKey) {
     const existing = browserInFlightGetRequests.get(inFlightKey)
-    if (existing) return existing as Promise<T>
+    if (existing) return existing as Promise<ApiFetchResult<T>>
   }
 
-  const executeRequest = async (): Promise<T> => {
+  const executeRequest = async (): Promise<ApiFetchResult<T>> => {
     const resolvedTimeoutMs = resolveTimeoutMs(safePath, init)
     const getRetryCount = getRequestPolicy?.retryCount ?? 0
     const canRetryTransientRead =
@@ -478,10 +575,16 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
           continue
         }
 
-        if (canUseRevalidateCache && revalidateCacheEntry && getRequestPolicy?.staleIfError !== false) {
-          // stale-if-error: 전송 장애/타임아웃 시 최근 정상 payload로 즉시 복구
-          refreshRevalidateCacheEntry(url, revalidateCacheEntry, null, null)
-          return revalidateCacheEntry.payload as T
+        if (
+          canUseRevalidateCache &&
+          revalidateCacheEntry &&
+          canUseStaleRevalidateCacheEntry(revalidateCacheEntry, getRequestPolicy)
+        ) {
+          return buildStaleResult<T>({
+            path: safePath,
+            entry: revalidateCacheEntry,
+            reason: timedOut ? "timeout" : "transport",
+          })
         }
 
         if (timedOut) {
@@ -513,24 +616,25 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
         response.headers.get("etag"),
         response.headers.get("cache-control"),
       )
-      return revalidateCacheEntry.payload as T
+      return {
+        data: revalidateCacheEntry.payload as T,
+        meta: { stale: false },
+      }
     }
 
     if (!response.ok) {
       if (
         canUseRevalidateCache &&
         revalidateCacheEntry &&
-        getRequestPolicy?.staleIfError !== false &&
+        canUseStaleRevalidateCacheEntry(revalidateCacheEntry, getRequestPolicy) &&
         STALE_IF_ERROR_STATUS_CODES.has(response.status)
       ) {
-        // upstream 5xx/429 구간에서도 사용자에게 마지막 정상 스냅샷을 우선 제공
-        refreshRevalidateCacheEntry(
-          url,
-          revalidateCacheEntry,
-          response.headers.get("etag"),
-          response.headers.get("cache-control"),
-        )
-        return revalidateCacheEntry.payload as T
+        return buildStaleResult<T>({
+          path: safePath,
+          entry: revalidateCacheEntry,
+          reason: "http-status",
+          status: response.status,
+        })
       }
 
       const body = await response.text().catch(() => "")
@@ -538,12 +642,18 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
     }
 
     if (response.status === 204) {
-      return undefined as T
+      return {
+        data: undefined as T,
+        meta: { stale: false },
+      }
     }
 
     const contentLength = response.headers.get("content-length")
     if (contentLength === "0") {
-      return undefined as T
+      return {
+        data: undefined as T,
+        meta: { stale: false },
+      }
     }
 
     const contentType = response.headers.get("content-type")?.toLowerCase() || ""
@@ -554,14 +664,20 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
       if (canUseRevalidateCache && etag) {
         setRevalidateCacheEntry(url, etag, payload, response.headers.get("cache-control"))
       }
-      return payload
+      return {
+        data: payload,
+        meta: { stale: false },
+      }
     }
 
     const body = await response.text()
     if (canUseRevalidateCache && etag) {
       setRevalidateCacheEntry(url, etag, body, response.headers.get("cache-control"))
     }
-    return body as unknown as T
+    return {
+      data: body as unknown as T,
+      meta: { stale: false },
+    }
   }
 
   if (!inFlightKey) {

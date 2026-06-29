@@ -157,9 +157,12 @@ const useExplorePostsQuery = ({
     }
   }, [query.data])
 
+  const staleMeta = query.data?.pages.find((page) => page.staleMeta?.stale)?.staleMeta ?? null
+
   return {
     pinnedPosts,
     regularPosts,
+    staleMeta,
     loadedPagesCount: query.data?.pages.length ?? 0,
     hasNextPage: query.hasNextPage ?? false,
     isInitialLoading: query.isLoading,

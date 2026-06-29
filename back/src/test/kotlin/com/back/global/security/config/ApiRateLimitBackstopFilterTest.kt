@@ -71,16 +71,12 @@ class ApiRateLimitBackstopFilterTest {
     fun `external cloud content get and head use public read bucket`() {
         val redis = InMemoryRedisKeyValuePort()
         val filter = createFilter(redis = redis, publicReadLimitPerMinute = 2)
-        val path = "/system/api/v1/adm/cloud/files/12/external-content"
 
-        assertThat(runFilter(filter, "GET", path).status).isEqualTo(HttpServletResponse.SC_OK)
-        assertThat(runFilter(filter, "HEAD", path).status).isEqualTo(HttpServletResponse.SC_OK)
-
-        val limited = runFilter(filter, "GET", path)
-
-        assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString).contains("public-read")
-        assertThat(redis.expiredKeys()).anyMatch { it.contains("public-read") }
+        assertPublicReadBucketLimit(
+            filter = filter,
+            redis = redis,
+            path = "/system/api/v1/adm/cloud/files/12/external-content",
+        )
     }
 
     @Test
@@ -88,11 +84,21 @@ class ApiRateLimitBackstopFilterTest {
     fun `post file get and head use public read bucket`() {
         val redis = InMemoryRedisKeyValuePort()
         val filter = createFilter(redis = redis, publicReadLimitPerMinute = 2)
-        val path = "/post/api/v1/files/posts/2026/03/manual.pdf"
 
+        assertPublicReadBucketLimit(
+            filter = filter,
+            redis = redis,
+            path = "/post/api/v1/files/posts/2026/03/manual.pdf",
+        )
+    }
+
+    private fun assertPublicReadBucketLimit(
+        filter: ApiRateLimitBackstopFilter,
+        redis: InMemoryRedisKeyValuePort,
+        path: String,
+    ) {
         assertThat(runFilter(filter, "GET", path).status).isEqualTo(HttpServletResponse.SC_OK)
         assertThat(runFilter(filter, "HEAD", path).status).isEqualTo(HttpServletResponse.SC_OK)
-
         val limited = runFilter(filter, "GET", path)
 
         assertThat(limited.status).isEqualTo(429)

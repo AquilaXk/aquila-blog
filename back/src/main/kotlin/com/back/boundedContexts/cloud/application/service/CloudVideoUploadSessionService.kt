@@ -178,82 +178,83 @@ class CloudVideoUploadSessionService(
         partNumber: Int,
         inputStream: InputStream,
         contentLength: Long,
-    ): CloudVideoUploadPartResultDto {
-        val session = findMutableSession(ownerMemberId, sessionId)
-        validatePartNumber(session, partNumber)
-        validatePartSize(session, partNumber, contentLength)
-        val tempFile = copyPartToTempFile(inputStream, contentLength)
-        try {
-            validateFirstPartSignature(session, partNumber, tempFile)
+    ): CloudVideoUploadPartResultDto =
+        inputStream.use { source ->
+            val session = findMutableSession(ownerMemberId, sessionId)
+            validatePartNumber(session, partNumber)
+            validatePartSize(session, partNumber, contentLength)
+            val tempFile = copyPartToTempFile(source, contentLength)
+            try {
+                validateFirstPartSignature(session, partNumber, tempFile)
 
-            val existing = partRepository.findBySessionIdAndPartNumber(session.id, partNumber)
-            if (existing != null) {
-                if (existing.byteSize != contentLength) {
-                    throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
+                val existing = partRepository.findBySessionIdAndPartNumber(session.id, partNumber)
+                if (existing != null) {
+                    if (existing.byteSize != contentLength) {
+                        throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
+                    }
+                    return CloudVideoUploadPartResultDto(
+                        session = session.toDto(partRepository.findBySessionId(session.id)),
+                        part = existing.toDto(),
+                    )
                 }
-                return CloudVideoUploadPartResultDto(
-                    session = session.toDto(partRepository.findBySessionId(session.id)),
-                    part = existing.toDto(),
-                )
-            }
 
-            claimStatus(
-                session,
-                expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-                nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
-                conflictMessage = "다른 업로드 작업이 진행 중입니다.",
-            )
-            val uploadResult =
-                try {
-                    Files.newInputStream(tempFile).use { partStream ->
-                        cloudStoragePort.uploadMultipartPart(
-                            CloudStoragePort.MultipartUploadPartRequest(
-                                objectKey = session.objectKey,
-                                uploadId = requireUploadId(session),
+                claimStatus(
+                    session,
+                    expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+                    nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+                    conflictMessage = "다른 업로드 작업이 진행 중입니다.",
+                )
+                val uploadResult =
+                    try {
+                        Files.newInputStream(tempFile).use { partStream ->
+                            cloudStoragePort.uploadMultipartPart(
+                                CloudStoragePort.MultipartUploadPartRequest(
+                                    objectKey = session.objectKey,
+                                    uploadId = requireUploadId(session),
+                                    partNumber = partNumber,
+                                    inputStream = partStream,
+                                    contentLength = contentLength,
+                                ),
+                            )
+                        }
+                    } catch (ex: RuntimeException) {
+                        releasePartUploadClaim(session.id)
+                        throw ex
+                    }
+                val savedPart =
+                    try {
+                        partRepository.save(
+                            CloudVideoUploadPart(
+                                sessionId = session.id,
                                 partNumber = partNumber,
-                                inputStream = partStream,
-                                contentLength = contentLength,
+                                eTag = uploadResult.eTag,
+                                byteSize = contentLength,
                             ),
                         )
+                    } catch (ex: RuntimeException) {
+                        markFailed(
+                            session.id,
+                            CloudVideoUploadSessionStatus.UPLOADING_PART,
+                            "multipart part metadata save failed: ${ex.message}",
+                        )
+                        throw ex
                     }
-                } catch (ex: RuntimeException) {
-                    releasePartUploadClaim(session.id)
-                    throw ex
-                }
-            val savedPart =
-                try {
-                    partRepository.save(
-                        CloudVideoUploadPart(
-                            sessionId = session.id,
-                            partNumber = partNumber,
-                            eTag = uploadResult.eTag,
-                            byteSize = contentLength,
-                        ),
-                    )
-                } catch (ex: RuntimeException) {
-                    markFailed(
-                        session.id,
-                        CloudVideoUploadSessionStatus.UPLOADING_PART,
-                        "multipart part metadata save failed: ${ex.message}",
-                    )
-                    throw ex
-                }
-            transitionStatus(
-                session.id,
-                expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
-                nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-            )
-            session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
-            val parts = partRepository.findBySessionId(session.id)
+                transitionStatus(
+                    session.id,
+                    expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+                    nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+                )
+                session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
+                val parts = partRepository.findBySessionId(session.id)
 
-            return CloudVideoUploadPartResultDto(
-                session = session.toDto(parts),
-                part = savedPart.toDto(),
-            )
-        } finally {
-            Files.deleteIfExists(tempFile)
+                return CloudVideoUploadPartResultDto(
+                    session = session.toDto(parts),
+                    part = savedPart.toDto(),
+                )
+            } finally {
+                deleteTempFileQuietly(tempFile)
+            }
         }
-    }
 
     fun complete(
         ownerMemberId: Long,
@@ -553,9 +554,13 @@ class CloudVideoUploadSessionService(
             }
             return tempFile
         } catch (ex: Exception) {
-            Files.deleteIfExists(tempFile)
+            deleteTempFileQuietly(tempFile)
             throw ex
         }
+    }
+
+    private fun deleteTempFileQuietly(tempFile: Path) {
+        runCatching { Files.deleteIfExists(tempFile) }
     }
 
     private fun validateFirstPartSignature(

@@ -136,6 +136,19 @@ class CloudFileServiceTest {
         }.isInstanceOf(AppException::class.java)
             .hasMessageContaining("파일 크기")
 
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "long.pdf",
+                clientOriginalFilename = null,
+                contentType = "application/pdf",
+                inputStream = ByteArrayInputStream("%PDF-1.7".toByteArray()),
+                contentLength = 4,
+                folderPath = "docs",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("파일 크기")
+
         assertThat(storage.uploaded).isEmpty()
         assertThat(repository.savedFiles).isEmpty()
     }

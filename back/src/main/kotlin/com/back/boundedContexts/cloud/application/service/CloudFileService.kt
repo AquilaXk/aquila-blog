@@ -60,54 +60,55 @@ class CloudFileService(
         inputStream: InputStream,
         contentLength: Long,
         folderPath: String?,
-    ): CloudFileDto {
-        if (contentLength <= 0) throw AppException("400-1", "클라우드 파일이 비어 있습니다.")
-        val normalizedFolderPath = normalizeFolderPath(folderPath)
-        val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
-        val tempFile = copyToTempFile(inputStream, contentLength)
-        try {
-            val detected = detectContent(tempFile, contentType, safeFilename)
-            validateFileSize(contentLength, detected)
-            val objectKey =
-                buildObjectKey(
-                    ownerMemberId = ownerMemberId,
-                    folderPath = normalizedFolderPath,
-                    originalFilename = safeFilename,
-                )
+    ): CloudFileDto =
+        inputStream.use { source ->
+            if (contentLength <= 0) throw AppException("400-1", "클라우드 파일이 비어 있습니다.")
+            val normalizedFolderPath = normalizeFolderPath(folderPath)
+            val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
+            val tempFile = copyToTempFile(source, contentLength)
+            try {
+                val detected = detectContent(tempFile, contentType, safeFilename)
+                validateFileSize(contentLength, detected)
+                val objectKey =
+                    buildObjectKey(
+                        ownerMemberId = ownerMemberId,
+                        folderPath = normalizedFolderPath,
+                        originalFilename = safeFilename,
+                    )
 
-            // 선언 MIME만 믿지 않고 파일 시그니처로 media kind를 확정해 preview spoofing을 막는다.
-            val uploadResult =
-                Files.newInputStream(tempFile).use { uploadStream ->
-                    cloudStoragePort.upload(
-                        CloudStoragePort.UploadRequest(
-                            objectKey = objectKey,
-                            inputStream = uploadStream,
-                            contentLength = contentLength,
-                            contentType = detected.contentType,
+                // 선언 MIME만 믿지 않고 파일 시그니처로 media kind를 확정해 preview spoofing을 막는다.
+                val uploadResult =
+                    Files.newInputStream(tempFile).use { uploadStream ->
+                        cloudStoragePort.upload(
+                            CloudStoragePort.UploadRequest(
+                                objectKey = objectKey,
+                                inputStream = uploadStream,
+                                contentLength = contentLength,
+                                contentType = detected.contentType,
+                                originalFilename = safeFilename,
+                            ),
+                        )
+                    }
+
+                val saved =
+                    cloudFileRepository.save(
+                        CloudFile.create(
+                            ownerMemberId = ownerMemberId,
+                            objectKey = uploadResult.objectKey,
                             originalFilename = safeFilename,
+                            contentType = detected.contentType,
+                            byteSize = contentLength,
+                            mediaKind = detected.mediaKind,
+                            folderPath = normalizedFolderPath,
+                            checksumSha256 = uploadResult.checksumSha256,
                         ),
                     )
-                }
 
-            val saved =
-                cloudFileRepository.save(
-                    CloudFile.create(
-                        ownerMemberId = ownerMemberId,
-                        objectKey = uploadResult.objectKey,
-                        originalFilename = safeFilename,
-                        contentType = detected.contentType,
-                        byteSize = contentLength,
-                        mediaKind = detected.mediaKind,
-                        folderPath = normalizedFolderPath,
-                        checksumSha256 = uploadResult.checksumSha256,
-                    ),
-                )
-
-            return saved.toDto()
-        } finally {
-            Files.deleteIfExists(tempFile)
+                return saved.toDto()
+            } finally {
+                deleteTempFileQuietly(tempFile)
+            }
         }
-    }
 
     @Transactional(readOnly = true)
     fun listFiles(
@@ -333,6 +334,9 @@ class CloudFileService(
                         val read = input.read(buffer)
                         if (read < 0) break
                         total += read
+                        if (total > expectedLength) {
+                            throw AppException("400-1", "클라우드 파일 크기가 올바르지 않습니다.")
+                        }
                         output.write(buffer, 0, read)
                     }
                 }
@@ -342,9 +346,13 @@ class CloudFileService(
             }
             return tempFile
         } catch (ex: Exception) {
-            Files.deleteIfExists(tempFile)
+            deleteTempFileQuietly(tempFile)
             throw ex
         }
+    }
+
+    private fun deleteTempFileQuietly(tempFile: Path) {
+        runCatching { Files.deleteIfExists(tempFile) }
     }
 
     private fun recoverUtf8MojibakeFilename(raw: String): String {

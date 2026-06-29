@@ -1,6 +1,6 @@
 import { normalizeTagQuery } from "src/libs/query/normalize"
 import type { TPost } from "src/types"
-import { ApiError, apiFetch } from "../client"
+import { ApiError, apiFetch, apiFetchWithMeta, type ApiFetchResult } from "../client"
 import { resetPostDetailRequestCaches } from "./PostApiDetailRequests"
 import type {
   ApiPostDto,
@@ -51,6 +51,46 @@ type GetPostsOptions = {
   throwOnError?: boolean
 }
 
+const toPostsPageResult = (
+  response: ApiFetchResult<PageDto<ApiPostDto>>,
+  fallbackPageNumber: number,
+  fallbackPageSize: number,
+  paginationMode?: "page"
+): ExplorePostsPage => ({
+  posts: response.data.content.map(mapPostDto),
+  totalCount:
+    typeof response.data?.pageable?.totalElements === "number" && Number.isFinite(response.data.pageable.totalElements)
+      ? response.data.pageable.totalElements
+      : response.data.content.length,
+  pageNumber:
+    typeof response.data?.pageable?.pageNumber === "number" && Number.isFinite(response.data.pageable.pageNumber)
+      ? Math.max(1, Math.trunc(response.data.pageable.pageNumber))
+      : fallbackPageNumber,
+  pageSize:
+    typeof response.data?.pageable?.pageSize === "number" && Number.isFinite(response.data.pageable.pageSize)
+      ? Math.max(1, Math.trunc(response.data.pageable.pageSize))
+      : fallbackPageSize,
+  paginationMode,
+  staleMeta: response.meta,
+})
+
+const toPostsCursorPageResult = (
+  response: ApiFetchResult<CursorPageDto<ApiPostDto>>,
+  pageSize: number
+): ExplorePostsPage => {
+  const mappedPosts = response.data.content.map(mapPostDto)
+  return {
+    posts: mappedPosts,
+    totalCount: mappedPosts.length,
+    pageNumber: 1,
+    pageSize,
+    hasNext: response.data.hasNext === true,
+    nextCursor: typeof response.data.nextCursor === "string" ? response.data.nextCursor : null,
+    paginationMode: "cursor",
+    staleMeta: response.meta,
+  }
+}
+
 export const resetPostsRequestCaches = () => {
   postsCache = null
   postsCacheAt = 0
@@ -87,19 +127,20 @@ export const getPostsBootstrap = async ({
   }
 
   const loadBootstrap = async (): Promise<PostsBootstrapResult> => {
-    const response = await apiFetch<PostsBootstrapDto>(endpoint, { signal })
-    const feed = response.feed
+    const response = await apiFetchWithMeta<PostsBootstrapDto>(endpoint, { signal })
+    const feed = response.data.feed
     return {
       posts: feed.content.map(mapPostDto),
       hasNext: feed.hasNext === true,
       nextCursor: typeof feed.nextCursor === "string" ? feed.nextCursor : null,
       pageSize: Number.isFinite(feed.pageSize) ? Math.max(1, Math.trunc(feed.pageSize)) : toValidPageSize(pageSize),
-      tagCounts: response.tags.reduce<Record<string, number>>((acc, row) => {
+      tagCounts: response.data.tags.reduce<Record<string, number>>((acc, row) => {
         const normalizedTag = normalizeTagQuery(row.tag)
         if (!normalizedTag) return acc
         acc[normalizedTag] = Number.isFinite(row.count) ? row.count : 0
         return acc
       }, {}),
+      staleMeta: response.meta,
     }
   }
 
@@ -176,7 +217,7 @@ export const getExplorePostsPage = async ({
 }: ExplorePostsParams = {}): Promise<ExplorePostsPage> => {
   const fallbackPageNumber = toValidPage(page)
   const fallbackPageSize = toValidPageSize(pageSize)
-  const response = await apiFetch<PageDto<ApiPostDto>>(
+  const response = await apiFetchWithMeta<PageDto<ApiPostDto>>(
     (() => {
       const endpoint = buildExplorePath({
         kw,
@@ -192,22 +233,7 @@ export const getExplorePostsPage = async ({
       signal,
     }
   )
-  return {
-    posts: response.content.map(mapPostDto),
-    totalCount:
-      typeof response?.pageable?.totalElements === "number" && Number.isFinite(response.pageable.totalElements)
-        ? response.pageable.totalElements
-        : response.content.length,
-    pageNumber:
-      typeof response?.pageable?.pageNumber === "number" && Number.isFinite(response.pageable.pageNumber)
-        ? Math.max(1, Math.trunc(response.pageable.pageNumber))
-        : fallbackPageNumber,
-    pageSize:
-      typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
-        ? Math.max(1, Math.trunc(response.pageable.pageSize))
-        : fallbackPageSize,
-    paginationMode: "page",
-  }
+  return toPostsPageResult(response, fallbackPageNumber, fallbackPageSize, "page")
 }
 
 export const getFeedPostsPage = async ({
@@ -218,7 +244,7 @@ export const getFeedPostsPage = async ({
 }: Pick<ExplorePostsParams, "order" | "page" | "pageSize" | "signal"> = {}): Promise<ExplorePostsPage> => {
   const fallbackPageNumber = toValidPage(page)
   const fallbackPageSize = toValidPageSize(pageSize)
-  const response = await apiFetch<PageDto<ApiPostDto>>(
+  const response = await apiFetchWithMeta<PageDto<ApiPostDto>>(
     (() => {
       const endpoint = buildFeedPath({
         order,
@@ -233,22 +259,7 @@ export const getFeedPostsPage = async ({
     }
   )
 
-  return {
-    posts: response.content.map(mapPostDto),
-    totalCount:
-      typeof response?.pageable?.totalElements === "number" && Number.isFinite(response.pageable.totalElements)
-        ? response.pageable.totalElements
-        : response.content.length,
-    pageNumber:
-      typeof response?.pageable?.pageNumber === "number" && Number.isFinite(response.pageable.pageNumber)
-        ? Math.max(1, Math.trunc(response.pageable.pageNumber))
-        : fallbackPageNumber,
-    pageSize:
-      typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
-        ? Math.max(1, Math.trunc(response.pageable.pageSize))
-        : fallbackPageSize,
-    paginationMode: "page",
-  }
+  return toPostsPageResult(response, fallbackPageNumber, fallbackPageSize, "page")
 }
 
 export const getFeedPostsCursorPage = async ({
@@ -275,7 +286,7 @@ export const getFeedPostsCursorPage = async ({
   }
 
   try {
-    const response = await apiFetch<CursorPageDto<ApiPostDto>>(
+    const response = await apiFetchWithMeta<CursorPageDto<ApiPostDto>>(
       (() => {
         const endpoint = buildFeedCursorPath({
           order,
@@ -290,16 +301,7 @@ export const getFeedPostsCursorPage = async ({
       }
     )
 
-    const mappedPosts = response.content.map(mapPostDto)
-    return {
-      posts: mappedPosts,
-      totalCount: mappedPosts.length,
-      pageNumber: 1,
-      pageSize: safePageSize,
-      hasNext: response.hasNext === true,
-      nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
-      paginationMode: "cursor",
-    }
+    return toPostsCursorPageResult(response, safePageSize)
   } catch (error) {
     if (isAuthRequiredError(error)) {
       markPublicCursorDisabled()
@@ -349,7 +351,7 @@ export const getExplorePostsCursorPage = async ({
   }
 
   try {
-    const response = await apiFetch<CursorPageDto<ApiPostDto>>(
+    const response = await apiFetchWithMeta<CursorPageDto<ApiPostDto>>(
       (() => {
         const endpoint = buildExploreCursorPath({
           tag,
@@ -365,16 +367,7 @@ export const getExplorePostsCursorPage = async ({
       }
     )
 
-    const mappedPosts = response.content.map(mapPostDto)
-    return {
-      posts: mappedPosts,
-      totalCount: mappedPosts.length,
-      pageNumber: 1,
-      pageSize: safePageSize,
-      hasNext: response.hasNext === true,
-      nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
-      paginationMode: "cursor",
-    }
+    return toPostsCursorPageResult(response, safePageSize)
   } catch (error) {
     if (isAuthRequiredError(error)) {
       markPublicCursorDisabled()
@@ -407,7 +400,7 @@ export const getSearchPostsPage = async ({
 }: ExplorePostsParams = {}): Promise<ExplorePostsPage> => {
   const fallbackPageNumber = toValidPage(page)
   const fallbackPageSize = toValidPageSize(pageSize)
-  const response = await apiFetch<PageDto<ApiPostDto>>(
+  const response = await apiFetchWithMeta<PageDto<ApiPostDto>>(
     (() => {
       const endpoint = buildSearchPath({
         kw,
@@ -422,21 +415,7 @@ export const getSearchPostsPage = async ({
       signal,
     }
   )
-  return {
-    posts: response.content.map(mapPostDto),
-    totalCount:
-      typeof response?.pageable?.totalElements === "number" && Number.isFinite(response.pageable.totalElements)
-        ? response.pageable.totalElements
-        : response.content.length,
-    pageNumber:
-      typeof response?.pageable?.pageNumber === "number" && Number.isFinite(response.pageable.pageNumber)
-        ? Math.max(1, Math.trunc(response.pageable.pageNumber))
-        : fallbackPageNumber,
-    pageSize:
-      typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
-        ? Math.max(1, Math.trunc(response.pageable.pageSize))
-        : fallbackPageSize,
-  }
+  return toPostsPageResult(response, fallbackPageNumber, fallbackPageSize)
 }
 
 export const getTagCounts = async (): Promise<Record<string, number>> => {

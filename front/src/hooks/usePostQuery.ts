@@ -19,17 +19,20 @@ const usePostQuery = () => {
       ? router.query.id
       : extractCanonicalPostIdFromAsPath(router.asPath || "")
   const hasRouteId = routeId.length > 0
-  const [staleMetaByRouteId, setStaleMetaByRouteId] = useState<Record<string, ApiFetchMeta | null>>({})
+  const [staleMetaByRouteId, setStaleMetaByRouteId] = useState(
+    () => new Map<string, ApiFetchMeta | null>(),
+  )
 
   const query = useQuery<PostDetail | null>({
     queryKey: queryKey.post(routeId),
     queryFn: async () => {
       const requestedRouteId = routeId
       const result = await getPostDetailByIdWithMeta(requestedRouteId)
-      setStaleMetaByRouteId((prev) => ({
-        ...prev,
-        [requestedRouteId]: result.meta,
-      }))
+      setStaleMetaByRouteId((prev) => {
+        const next = new Map(prev)
+        next.set(requestedRouteId, result.meta)
+        return next
+      })
       return result.data
     },
     enabled: hasRouteId,
@@ -40,7 +43,7 @@ const usePostQuery = () => {
 
   return {
     post: query.data ?? undefined,
-    staleMeta: hasRouteId ? (staleMetaByRouteId[routeId] ?? null) : null,
+    staleMeta: hasRouteId ? (staleMetaByRouteId.get(routeId) ?? null) : null,
     isLoading: !hasRouteId || query.isLoading || (query.isFetching && query.data === undefined),
     isNotFound: hasRouteId && query.status === "success" && query.data === null,
   }

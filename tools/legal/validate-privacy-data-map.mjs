@@ -49,10 +49,6 @@ const requiredProcessors = new Set([
 const requiredActivityDataCategories = new Map([
   ["account_registration_email", ["email", "nickname", "passwordHash", "apiKey"]],
   [
-    "ai_tag_recommendation_gemini",
-    ["tagRecommendationCacheKey", "tagRecommendationRateLimitKey", "tagRecommendationCachedResult"],
-  ],
-  [
     "user_content_posts_comments",
     [
       "profileNickname",
@@ -73,8 +69,8 @@ const requiredActivityEnvFragments = new Map([
     ["NEXT_PUBLIC_RUM_SAMPLE_RATE", "defaults 0", "explicit non-zero enables custom RUM"],
   ],
   [
-    "ai_tag_recommendation_gemini",
-    ["custom.ai.tag.enabled", "defaults false", "CUSTOM__AI__TAG__ENABLED", "custom.ai.tag.gemini."],
+    "ai_summary_gemini",
+    ["custom.ai.summary.enabled", "defaults false", "CUSTOM__AI__SUMMARY__ENABLED", "custom.ai.summary.gemini."],
   ],
   ["file_uploads_profile_post_cloud", ["AQUILA_EXTERNAL_STORAGE_ROOT"]],
   ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
@@ -85,12 +81,11 @@ const requiredActivityProcessors = new Map([
   ["user_content_posts_comments", ["home_server_redis"]],
   ["auth_security_events", ["home_server_redis"]],
   ["notifications_sse", ["home_server_redis"]],
-  ["ai_tag_recommendation_gemini", ["home_server_redis"]],
 ])
 const requiredProcessorEnvFragments = new Map([
   [
     "google_gemini",
-    ["custom.ai.tag.enabled", "defaults false", "CUSTOM__AI__TAG__ENABLED", "custom.ai.tag.gemini."],
+    ["custom.ai.summary.enabled", "defaults false", "CUSTOM__AI__SUMMARY__ENABLED", "custom.ai.summary.gemini."],
   ],
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
@@ -103,7 +98,7 @@ const requiredFlowProcessors = new Map([
   ["security_and_action_logs", ["home_server_postgresql", "home_server_redis", "grafana_loki_monitoring"]],
   ["notifications_sse", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
   ["analytics_rum", ["google_analytics", "vercel_frontend_hosting", "grafana_loki_monitoring"]],
-  ["gemini_tag_recommendation", ["google_gemini", "vercel_frontend_hosting", "home_server_postgresql", "home_server_redis"]],
+  ["gemini_ai_summary", ["google_gemini", "vercel_frontend_hosting", "home_server_postgresql"]],
   ["backup_restore", ["home_server_backup_storage", "github_actions", "ghcr_container_registry"]],
 ])
 

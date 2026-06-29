@@ -93,6 +93,14 @@
 - `PostSearchCachePolicyResolver`는 빈 검색어는 `SEARCH_DEFAULT`, 길이 28자 이상 또는 token 4개 이상 또는 높은 unique ratio 검색어는 `SEARCH_NO_STORE`, 길이 16자 이상은 `SEARCH_SHORT`, 나머지는 `SEARCH_DEFAULT`로 분류한다.
 - `PostPublicReadCachePolicies`는 feed/explore/detail/bootstrap/tag/search/related author별 TTL을 가진다. 정책 변경 시 ETag seed builder와 cache invalidation scope가 같은 응답 변수를 반영하는지 함께 확인한다.
 
+### Demo seed 점검
+
+- 실행 조건: `local`/`dev`/`test` profile + `custom.bootstrap.seed-demo-data-enabled=true`
+- 운영 유사 DB 점검:
+  `select id, email, username, role from member where email in ('system@test.com','holding@test.com','admin@test.com','user1@test.com','user2@test.com','user3@test.com');`
+  `select id, title, published, listed from post where title in ('제목 1','제목 2','제목 3','비공개 글');`
+- 발견 시 외부 접근을 먼저 차단하고, 계정 권한 제거 또는 데이터 삭제 후 seed flag/profile 설정을 재확인한다.
+
 ### 업로드 retention 흐름
 
 게시글 이미지와 첨부파일 업로드는 `ApiV1PostImageController`, `PostImageStorageAdapter`, `UploadedFileRetentionService`가 나누어 처리한다.

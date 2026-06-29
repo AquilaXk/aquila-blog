@@ -953,38 +953,6 @@
         } ]
       }
     },
-    "/post/api/v1/adm/posts/recommend-tags" : {
-      "post" : {
-        "tags" : [ "ApiV1AdmPostController" ],
-        "summary" : "관리자용 AI 태그 추천",
-        "operationId" : "recommendTags",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/RecommendTagsRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/RsDataRecommendTagsResBody"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
     "/member/api/v1/signup/social/pending" : {
       "post" : {
         "tags" : [ "api-v-1-o-auth-signup-controller" ],
@@ -4235,74 +4203,6 @@
           },
           "name" : {
             "type" : "string"
-          }
-        }
-      },
-      "RecommendTagsRequest" : {
-        "type" : "object",
-        "properties" : {
-          "title" : {
-            "type" : "string",
-            "maxLength" : 300,
-            "minLength" : 0
-          },
-          "content" : {
-            "type" : "string",
-            "maxLength" : 50000,
-            "minLength" : 0
-          },
-          "existingTags" : {
-            "type" : "array",
-            "items" : {
-              "type" : "string"
-            }
-          },
-          "maxTags" : {
-            "type" : "integer",
-            "format" : "int32",
-            "maximum" : 10,
-            "minimum" : 3
-          }
-        },
-        "required" : [ "content" ]
-      },
-      "RecommendTagsResBody" : {
-        "type" : "object",
-        "properties" : {
-          "tags" : {
-            "type" : "array",
-            "items" : {
-              "type" : "string"
-            }
-          },
-          "provider" : {
-            "type" : "string"
-          },
-          "model" : {
-            "type" : "string"
-          },
-          "reason" : {
-            "type" : "string"
-          },
-          "traceId" : {
-            "type" : "string"
-          },
-          "degraded" : {
-            "type" : "boolean"
-          }
-        }
-      },
-      "RsDataRecommendTagsResBody" : {
-        "type" : "object",
-        "properties" : {
-          "resultCode" : {
-            "type" : "string"
-          },
-          "msg" : {
-            "type" : "string"
-          },
-          "data" : {
-            "$ref" : "#/components/schemas/RecommendTagsResBody"
           }
         }
       },

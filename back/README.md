@@ -43,13 +43,6 @@
   - 검색 엔진 미러링(옵션)
   - read prewarm
 
-### AI 기능
-
-- 관리자 글쓰기에서 `AI 태그 추천` 지원
-- 엔드포인트: `POST /post/api/v1/adm/posts/recommend-tags`
-- 응답: `tags`, `provider`, `model`, `reason`, `traceId`, `degraded`
-- AI 실패 시 규칙 기반 fallback 유지
-
 ### 인증/세션
 
 - 로그인/로그아웃/`auth/me` 제공

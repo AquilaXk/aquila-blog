@@ -325,23 +325,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/post/api/v1/adm/posts/recommend-tags": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 관리자용 AI 태그 추천 */
-        post: operations["recommendTags"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/member/api/v1/signup/social/pending": {
         parameters: {
             query?: never;
@@ -1870,26 +1853,6 @@ export interface components {
             url?: string;
             name?: string;
         };
-        RecommendTagsRequest: {
-            title?: string;
-            content: string;
-            existingTags?: string[];
-            /** Format: int32 */
-            maxTags?: number;
-        };
-        RecommendTagsResBody: {
-            tags?: string[];
-            provider?: string;
-            model?: string;
-            reason?: string;
-            traceId?: string;
-            degraded?: boolean;
-        };
-        RsDataRecommendTagsResBody: {
-            resultCode?: string;
-            msg?: string;
-            data?: components["schemas"]["RecommendTagsResBody"];
-        };
         SocialSignupPendingRequest: {
             token: string;
         };
@@ -3310,30 +3273,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataPostDto"];
-                };
-            };
-        };
-    };
-    recommendTags: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RecommendTagsRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["RsDataRecommendTagsResBody"];
                 };
             };
         };

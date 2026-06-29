@@ -2,7 +2,6 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
-import com.back.boundedContexts.post.application.port.input.PostTagRecommendationUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
@@ -15,19 +14,13 @@ import com.back.standard.extensions.getOrThrow
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.validation.Valid
-import jakarta.validation.constraints.Max
-import jakarta.validation.constraints.Min
-import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
-import jakarta.validation.constraints.Size
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -38,7 +31,6 @@ import org.springframework.web.bind.annotation.RestController
 @SecurityRequirement(name = "bearerAuth")
 class ApiV1AdmPostController(
     private val postUseCase: PostUseCase,
-    private val postTagRecommendationUseCase: PostTagRecommendationUseCase,
     private val adminPostListSnapshotService: AdminPostListSnapshotUseCase,
 ) {
     companion object {
@@ -157,55 +149,5 @@ class ApiV1AdmPostController(
         return PostWithContentDto(post).apply {
             tempDraft = postUseCase.isTempDraft(post)
         }
-    }
-
-    data class RecommendTagsRequest(
-        @field:Size(max = 300)
-        val title: String = "",
-        @field:NotBlank
-        @field:Size(max = 50_000)
-        val content: String,
-        val existingTags: List<String> = emptyList(),
-        @field:Min(3)
-        @field:Max(10)
-        val maxTags: Int? = null,
-    )
-
-    data class RecommendTagsResBody(
-        val tags: List<String>,
-        val provider: String,
-        val model: String?,
-        val reason: String? = null,
-        val traceId: String? = null,
-        val degraded: Boolean = provider == "rule",
-    )
-
-    @PostMapping("/recommend-tags")
-    @Operation(summary = "관리자용 AI 태그 추천")
-    fun recommendTags(
-        @Valid @RequestBody reqBody: RecommendTagsRequest,
-    ): RsData<RecommendTagsResBody> {
-        val result =
-            postTagRecommendationUseCase.recommend(
-                title = reqBody.title,
-                content = reqBody.content,
-                existingTags = reqBody.existingTags,
-                maxTags = reqBody.maxTags ?: 6,
-            )
-
-        val providerLabel = if (result.provider == "gemini") "AI" else "규칙 기반"
-
-        return RsData(
-            "200-1",
-            "$providerLabel 태그 추천을 생성했습니다.",
-            RecommendTagsResBody(
-                tags = result.tags,
-                provider = result.provider,
-                model = result.model,
-                reason = result.reason,
-                traceId = result.traceId,
-                degraded = result.provider == "rule",
-            ),
-        )
     }
 }

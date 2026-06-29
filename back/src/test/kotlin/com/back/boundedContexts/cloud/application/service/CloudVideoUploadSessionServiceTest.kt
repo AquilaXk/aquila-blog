@@ -468,6 +468,58 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
+    @DisplayName("조각 stream이 선언 길이보다 짧으면 storage에 올리지 않는다")
+    fun `조각 upload는 짧은 stream을 storage 저장 전에 차단한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+
+        assertThatThrownBy {
+            service.uploadPart(
+                ownerMemberId = 7L,
+                sessionId = session.id,
+                partNumber = 1,
+                inputStream = ByteArrayInputStream(ByteArray(0)),
+                contentLength = TEST_PART_SIZE_BYTES,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("조각 크기")
+
+        assertThat(storage.multipartParts).isEmpty()
+    }
+
+    @Test
+    @DisplayName("조각 stream이 선언 길이보다 길면 storage에 올리지 않는다")
+    fun `조각 upload는 긴 stream을 storage 저장 전에 차단한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+
+        assertThatThrownBy {
+            service.uploadPart(
+                ownerMemberId = 7L,
+                sessionId = session.id,
+                partNumber = 1,
+                inputStream = ByteArrayInputStream(mp4Part(TEST_PART_SIZE_BYTES.toInt() + 1)),
+                contentLength = TEST_PART_SIZE_BYTES,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("조각 크기")
+
+        assertThat(storage.multipartParts).isEmpty()
+    }
+
+    @Test
     @DisplayName("콘텐츠 타입과 첫 조각 시그니처가 다르면 업로드를 거절한다")
     fun `콘텐츠 타입과 첫 조각 시그니처가 다르면 업로드를 거절한다`() {
         val session =

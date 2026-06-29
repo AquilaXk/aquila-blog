@@ -40,16 +40,29 @@ class CloudFileServiceTest {
         contentType: String?,
         bytes: ByteArray,
         folderPath: String?,
-    ): CloudFileDto =
-        upload(
-            ownerMemberId = ownerMemberId,
-            originalFilename = originalFilename,
-            clientOriginalFilename = clientOriginalFilename,
-            contentType = contentType,
-            inputStream = ByteArrayInputStream(bytes),
-            contentLength = bytes.size.toLong(),
-            folderPath = folderPath,
-        )
+    ): CloudFileDto {
+        val inputStream = ByteArrayInputStream(bytes)
+        return if (clientOriginalFilename == null) {
+            upload(
+                ownerMemberId = ownerMemberId,
+                originalFilename = originalFilename,
+                contentType = contentType,
+                inputStream = inputStream,
+                contentLength = bytes.size.toLong(),
+                folderPath = folderPath,
+            )
+        } else {
+            upload(
+                ownerMemberId = ownerMemberId,
+                originalFilename = originalFilename,
+                clientOriginalFilename = clientOriginalFilename,
+                contentType = contentType,
+                inputStream = inputStream,
+                contentLength = bytes.size.toLong(),
+                folderPath = folderPath,
+            )
+        }
+    }
 
     @Test
     @DisplayName("업로드 시 ownerMemberId와 cloud prefix를 metadata에 고정한다")
@@ -102,6 +115,26 @@ class CloudFileServiceTest {
             )
         }.isInstanceOf(AppException::class.java)
             .hasMessageContaining("콘텐츠 타입이 일치하지 않습니다")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("업로드 stream 길이가 선언 길이와 다르면 storage 저장 전에 차단한다")
+    fun `upload는 stream 길이 불일치를 storage 저장 전에 차단한다`() {
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "short.pdf",
+                clientOriginalFilename = null,
+                contentType = "application/pdf",
+                inputStream = ByteArrayInputStream("%PDF-1.7".toByteArray()),
+                contentLength = 128,
+                folderPath = "docs",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("파일 크기")
 
         assertThat(storage.uploaded).isEmpty()
         assertThat(repository.savedFiles).isEmpty()

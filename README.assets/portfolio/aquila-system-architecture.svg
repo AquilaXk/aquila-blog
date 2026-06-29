@@ -129,13 +129,6 @@
   <text class="txt" x="1330" y="381" font-size="25.5" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">MinIO</text>
   <text class="txt" x="1330" y="413" font-size="16" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• 객체 스토리지 (파일 저장)</text>
   <text class="txt" x="1330" y="440" font-size="16" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• Docker Compose 로 실행</text>
-  <path d="M825 386 V427 H738 V450" fill="none" stroke="#27b52f" stroke-width="2.2" stroke-dasharray="5 5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M728 450 L738 467 L748 450 Z" fill="#27b52f" stroke="none"/>
-  <path d="M738 427 H894 V517" fill="none" stroke="#27b52f" stroke-width="2.2" stroke-dasharray="5 5" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="625" y="472" width="203" height="96" rx="8" ry="8" fill="url(#artifactFill)" stroke="#9acb9f" stroke-width="1.4"/>
-  <text class="txt" x="727" y="497" font-size="16.5" font-weight="800" fill="#1f6f24" text-anchor="middle" dominant-baseline="middle">빌드/배포 아티팩트</text>
-  <text class="txt" x="704" y="540" font-size="16.2" font-weight="600" fill="#111" text-anchor="start" dominant-baseline="middle">Docker Image</text>
-  <path d="M894 517 H910" fill="none" stroke="#ffa000" stroke-width="2.5" stroke-dasharray="6 5"/>
   <rect x="910" y="502" width="232" height="153" rx="8" ry="8" fill="#fff" stroke="#ff9f00" stroke-width="1.8"/>
   <rect x="910" y="502" width="232" height="39" rx="8" ry="8" fill="url(#ciHead)" stroke="#ff9f00" stroke-width="1.6"/>
   <line x1="911" y1="541" x2="1141" y2="541" stroke="#ff9f00" stroke-width="1.6" stroke-linecap="butt"/>

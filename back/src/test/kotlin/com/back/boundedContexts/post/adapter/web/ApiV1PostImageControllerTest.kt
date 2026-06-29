@@ -178,9 +178,11 @@ class ApiV1PostImageControllerTest {
             val objectKey = "posts/2026/03/${status.name.lowercase()}.pdf"
             val uploadedFile =
                 postFile(objectKey).apply {
+                    attachToPost(12L, UploadedFilePurpose.POST_FILE)
                     this.status = status
                 }
             `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+            `when`(postRepository.findPublicDetailById(12L)).thenReturn(publicPost(12L))
 
             assertPostFileNotFound(objectKey)
 

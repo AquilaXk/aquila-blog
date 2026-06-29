@@ -8,20 +8,12 @@ const configSource = fs.readFileSync(configPath, "utf8")
 
 const requiredContracts = [
   {
-    id: "darwin-local-flag",
-    pattern: /const shouldUseChromiumChannel = process\.platform === "darwin" && !process\.env\.CI/,
+    id: "default-chromium-project",
+    pattern: /const defaultProjects = \[\s*{\s*name:\s*"chromium",\s*use:\s*{\s*\.\.\.devices\["Desktop Chrome"\],\s*},\s*},\s*\]/s,
   },
   {
-    id: "chromium-channel",
-    pattern: /channel:\s*"chromium"\s+as const/,
-  },
-  {
-    id: "darwin-local-assertion",
-    pattern: /assertDarwinLocalChromiumChannel\(defaultProjects\)/,
-  },
-  {
-    id: "darwin-local-assertion-live",
-    pattern: /assertDarwinLocalChromiumChannel\(liveMultiBrowserProjects\)/,
+    id: "live-chromium-project",
+    pattern: /const liveMultiBrowserProjects = \[\s*{\s*name:\s*"chromium",\s*use:\s*{\s*\.\.\.devices\["Desktop Chrome"\],\s*},\s*},/s,
   },
 ]
 
@@ -29,17 +21,37 @@ const missing = requiredContracts
   .filter((contract) => !contract.pattern.test(configSource))
   .map((contract) => contract.id)
 
-if (missing.length === 0) {
-  process.exit(0)
-}
+const forbiddenContracts = [
+  {
+    id: "darwin-local-channel-flag",
+    pattern: /shouldUseChromiumChannel/,
+  },
+  {
+    id: "forced-chromium-channel",
+    pattern: /channel:\s*["']chromium["']/,
+  },
+  {
+    id: "darwin-local-channel-assertion",
+    pattern: /assertDarwinLocalChromiumChannel/,
+  },
+]
+
+const presentForbidden = forbiddenContracts
+  .filter((contract) => contract.pattern.test(configSource))
+  .map((contract) => contract.id)
+
+if (missing.length === 0 && presentForbidden.length === 0) process.exit(0)
 
 console.error(
   [
     "[playwright-preflight] Playwright local chromium launcher contract drift detected.",
-    "로컬 darwin에서는 chromium_headless_shell이 아니라 channel=chromium(new headless) 경로를 강제해야 합니다.",
+    "로컬 기본 Playwright 실행은 Google Chrome for Testing/channel=chromium 경로를 강제하지 않아야 합니다.",
     `config: ${configPath}`,
-    `missing: ${missing.join(", ")}`,
-  ].join("\n")
+    missing.length > 0 ? `missing: ${missing.join(", ")}` : null,
+    presentForbidden.length > 0 ? `forbidden: ${presentForbidden.join(", ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n")
 )
 
 process.exit(1)

@@ -95,7 +95,7 @@
       "issue": 1003,
       "status": "Open",
       "category": "필수 출시 전 완료",
-      "target": "Gemini tag recommendation 외부 처리 안전화",
+      "target": "Gemini optional AI 외부 처리 안전화",
       "evidenceRequirement": "default disabled config, redaction/cache regression test",
       "launchDecision": "차단",
       "disabledByFlag": true,

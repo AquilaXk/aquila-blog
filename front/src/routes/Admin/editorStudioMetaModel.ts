@@ -13,10 +13,10 @@ import {
 } from "src/libs/thumbnailFocus"
 import type { PostVisibility } from "./editorStudioState"
 import { restoreEmptyFencedCodeBlocks } from "./editorCodeFenceRecovery"
-import { dedupeStrings, normalizeRecommendedTags } from "./editorStudioMetaModelHelpers"
+import { dedupeStrings } from "./editorStudioMetaModelHelpers"
 
 export { restoreEmptyFencedCodeBlocks } from "./editorCodeFenceRecovery"
-export { dedupeStrings, normalizeRecommendedTags } from "./editorStudioMetaModelHelpers"
+export { dedupeStrings } from "./editorStudioMetaModelHelpers"
 
 export type ParsedEditorMeta = {
   body: string

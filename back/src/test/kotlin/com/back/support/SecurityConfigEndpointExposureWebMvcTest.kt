@@ -49,6 +49,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 import tools.jackson.databind.ObjectMapper
@@ -290,6 +292,17 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
         mvc.post("/post/api/v1/posts/files").andExpect {
             status { isInternalServerError() }
         }
+    }
+
+    @Test
+    @DisplayName("prod에서 공개 첨부 파일 다운로드는 익명 보안 체인을 통과해 handler 계층까지 도달한다")
+    fun `prod keeps post file download public`() {
+        mvc.get("/post/api/v1/files/posts/2026/03/manual.pdf").andExpect {
+            status { isInternalServerError() }
+        }
+        mvc
+            .perform(head("/post/api/v1/files/posts/2026/03/manual.pdf"))
+            .andExpect(status().isInternalServerError)
     }
 
     @Test

@@ -1,12 +1,16 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
+import com.back.global.storage.domain.UploadedFileStatus
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.core.io.InputStreamResource
 import org.springframework.core.io.Resource
@@ -37,6 +41,8 @@ class ApiV1PostImageController(
     private val postImageStorageService: PostImageStoragePort,
     private val postImageStorageProperties: PostImageStorageProperties,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
+    private val uploadedFileRepository: UploadedFileRepositoryPort,
+    private val postRepository: PostRepositoryPort,
 ) {
     companion object {
         private const val POST_IMAGE_MAX_FILE_SIZE_BYTES = 8L * 1024 * 1024
@@ -264,6 +270,8 @@ class ApiV1PostImageController(
                 "잘못된 첨부 파일 경로입니다.",
                 "첨부 파일을 찾을 수 없습니다.",
             )
+        ensurePublicPostFile(objectKey)
+
         val etag =
             "\"" +
                 Base64
@@ -275,12 +283,8 @@ class ApiV1PostImageController(
             return ResponseEntity
                 .status(HttpStatus.NOT_MODIFIED)
                 .eTag(etag)
-                .cacheControl(
-                    CacheControl
-                        .maxAge(30, TimeUnit.DAYS)
-                        .cachePublic()
-                        .immutable(),
-                ).build()
+                .cacheControl(CacheControl.noStore())
+                .build()
         }
 
         val storedFile =
@@ -301,13 +305,9 @@ class ApiV1PostImageController(
                 .ok()
                 .contentType(MediaType.parseMediaType(storedFile.contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                .header("X-Content-Type-Options", "nosniff")
                 .eTag(etag)
-                .cacheControl(
-                    CacheControl
-                        .maxAge(30, TimeUnit.DAYS)
-                        .cachePublic()
-                        .immutable(),
-                )
+                .cacheControl(CacheControl.noStore())
 
         val finalizedBuilder =
             storedFile.contentLength
@@ -317,6 +317,22 @@ class ApiV1PostImageController(
 
         return finalizedBuilder.body(InputStreamResource(storedFile.inputStream))
     }
+
+    private fun ensurePublicPostFile(objectKey: String) {
+        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: throw postFileNotFound()
+        if (
+            uploadedFile.purpose != UploadedFilePurpose.POST_FILE ||
+            uploadedFile.status != UploadedFileStatus.ACTIVE ||
+            uploadedFile.ownerType != UploadedFileOwnerType.POST
+        ) {
+            throw postFileNotFound()
+        }
+
+        val postId = uploadedFile.ownerId?.takeIf { it > 0L } ?: throw postFileNotFound()
+        if (postRepository.findPublicDetailById(postId) == null) throw postFileNotFound()
+    }
+
+    private fun postFileNotFound(): AppException = AppException("404-1", "첨부 파일을 찾을 수 없습니다.")
 
     private fun extractObjectKey(
         request: HttpServletRequest,

@@ -60,6 +60,29 @@ export type AuthMember = {
   legalReconsent?: LegalReconsentStatus | null
 }
 
+type AuthSessionFetchDecisionInput = {
+  hasCachedSnapshot: boolean
+  hasCachedMemberSnapshot: boolean
+  hasCachedAnonymousSnapshot: boolean
+  serverProbeSnapshot: boolean | undefined
+  anonymousProbeSuppressed: boolean
+}
+
+export const shouldFetchAuthSession = ({
+  hasCachedSnapshot,
+  hasCachedMemberSnapshot,
+  hasCachedAnonymousSnapshot,
+  serverProbeSnapshot,
+  anonymousProbeSuppressed,
+}: AuthSessionFetchDecisionInput) => {
+  if (hasCachedMemberSnapshot) return true
+  if (hasCachedAnonymousSnapshot && serverProbeSnapshot !== true) return false
+  if (anonymousProbeSuppressed) return false
+  if (serverProbeSnapshot === false) return false
+  if (serverProbeSnapshot === true) return true
+  return !hasCachedSnapshot
+}
+
 const useAuthSession = () => {
   const router = useRouter()
   const [isMounted, setIsMounted] = useState(false)
@@ -76,14 +99,13 @@ const useAuthSession = () => {
   // SSR에서 "쿠키 없음"이 확정된 anonymous(null)은 재검증을 건너뛰어
   // 비로그인 사용자의 불필요한 401(auth/me) 반복을 줄인다.
   // 단, SSR 검증 실패(undefined)로 들어온 경우에는 클라이언트에서 재검증한다.
-  const shouldFetchAuthMe = (() => {
-    if (hasCachedMemberSnapshot) return true
-    if (hasCachedAnonymousSnapshot && serverProbeSnapshot !== true) return false
-    if (readAnonymousProbeSuppressed()) return false
-    if (serverProbeSnapshot === false) return false
-    if (serverProbeSnapshot === true) return true
-    return !hasCachedSnapshot
-  })()
+  const shouldFetchAuthMe = shouldFetchAuthSession({
+    hasCachedSnapshot,
+    hasCachedMemberSnapshot,
+    hasCachedAnonymousSnapshot,
+    serverProbeSnapshot,
+    anonymousProbeSuppressed: readAnonymousProbeSuppressed(),
+  })
   const query = useQuery({
     queryKey: queryKey.authMe(),
     queryFn: async () => {

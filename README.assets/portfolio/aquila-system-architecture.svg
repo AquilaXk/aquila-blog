@@ -5440,7 +5440,7 @@
     <path fill="#f9f7f9" d="M228 301h1v1H228z"/>
     <path fill="#faf7fa" d="M217 313h1v1H217z"/>
   </g>
-  <text class="txt" x="148" y="249" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">React 19</text>
+  <text class="txt" x="148" y="249" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">React 18</text>
   <text class="txt" x="296" y="249" font-size="24" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">TypeScript</text>
   <text class="txt" x="217" y="361" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">Next.js</text>
   <rect x="77" y="385" width="282" height="138" rx="6" ry="6" fill="url(#hostingFill)" stroke="#5d9bff" stroke-width="1.8"/>
@@ -7087,8 +7087,8 @@
   <path d="M592 255 L624 268 L592 281 Z" fill="#075bbb" stroke="none"/>
   <rect x="391" y="362" width="209" height="98" rx="8" ry="8" fill="#fff" stroke="#075bbb" stroke-width="2.2"/>
   <path d="M485 362 L493 327 L501 362" fill="none" stroke="#075bbb" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
-  <text class="txt" x="496" y="388" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">Cloudflare Tunnel을</text>
-  <text class="txt" x="496" y="417" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">통해 안전하게 Backend에</text>
+  <text class="txt" x="496" y="388" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">Cloudflare Tunnel에서</text>
+  <text class="txt" x="496" y="417" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">Caddy 경유 Backend로</text>
   <text class="txt" x="496" y="444" font-size="16.3" font-weight="800" fill="#062a73" text-anchor="middle" dominant-baseline="middle">접속 (포트 노출 없음)</text>
   <rect x="625" y="94" width="418" height="292" rx="12" ry="12" fill="#fff" stroke="#6f7f9c" stroke-width="1.8"/>
   <rect x="649" y="73" width="366" height="40" rx="10" ry="10" fill="url(#greenHdr)" stroke="none" stroke-width="0"/>

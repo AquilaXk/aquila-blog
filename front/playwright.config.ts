@@ -18,6 +18,10 @@ const playwrightOutputDir =
     "playwright",
     (process.env.CODEX_THREAD_ID?.trim() || `pid-${process.pid}`).replace(/[^A-Za-z0-9._-]+/g, "-")
   )
+const shouldUseChromiumChannel =
+  process.platform === "darwin" &&
+  !process.env.CI &&
+  process.env.PLAYWRIGHT_LOCAL_CHROMIUM_CHANNEL !== "false"
 const inheritedEnv = { ...process.env }
 const resolvedBackendInternalUrl = inheritedEnv.BACKEND_INTERNAL_URL || "http://127.0.0.1:1"
 const shouldEnableAdminGuardQaBypassByDefault =
@@ -32,14 +36,20 @@ if (inheritedEnv.FORCE_COLOR && Object.prototype.hasOwnProperty.call(inheritedEn
 const defaultProjects = [
   {
     name: "chromium",
-    use: { ...devices["Desktop Chrome"] },
+    use: {
+      ...devices["Desktop Chrome"],
+      ...(shouldUseChromiumChannel ? { channel: "chromium" as const } : {}),
+    },
   },
 ]
 
 const liveMultiBrowserProjects = [
   {
     name: "chromium",
-    use: { ...devices["Desktop Chrome"] },
+    use: {
+      ...devices["Desktop Chrome"],
+      ...(shouldUseChromiumChannel ? { channel: "chromium" as const } : {}),
+    },
   },
   {
     name: "webkit",

@@ -1,11 +1,18 @@
 import { normalizeApiRequestPath } from "src/libs/backend/requestPath"
+import {
+  buildFreshResult,
+  buildStaleResult,
+  canUseStaleRevalidateCacheEntry,
+  evictBrowserRevalidatePayloadCacheEntries,
+  getRevalidateCacheEntry,
+  refreshRevalidateCacheEntry,
+  setRevalidateCacheEntry,
+  type ApiFetchResult,
+} from "./clientRevalidateCache"
 
 const DEFAULT_API_BASE_URL = "http://localhost:8080"
 const BROWSER_BACKEND_PROXY_PREFIX = "/api/backend"
 const DEFAULT_API_FETCH_TIMEOUT_MS = 12_000
-const DEFAULT_REVALIDATE_CACHE_TTL_MS = 15_000
-const REVALIDATE_CACHE_MAX_TTL_MS = 300_000
-const REVALIDATE_CACHE_MAX_ENTRIES = 200
 const DEFAULT_GET_TRANSIENT_RETRY_COUNT = 1
 const DEFAULT_GET_TRANSIENT_RETRY_DELAY_MS = 120
 const CSRF_PREFLIGHT_HEADER = "X-Aquila-CSRF"
@@ -19,6 +26,8 @@ type BackendProxyMode = "auto" | "bypass"
 type ApiRequestUrlOptions = {
   backendProxy?: BackendProxyMode
 }
+
+export type { ApiFetchMeta, ApiFetchResult } from "./clientRevalidateCache"
 
 type GetRequestPolicy = {
   cacheMode: GetCacheMode
@@ -126,183 +135,15 @@ export type ApiFetchOptions = RequestInit & {
   backendProxy?: BackendProxyMode
 }
 
-export type ApiFetchMeta = {
-  stale: boolean
-  staleReason?: "transport" | "timeout" | "http-status"
-  staleStatus?: number
-  staleAgeMs?: number
-}
-
-export type ApiFetchResult<T> = {
-  data: T
-  meta: ApiFetchMeta
-}
-
-const FRESH_API_FETCH_META: ApiFetchMeta = { stale: false }
-
 const isServer = typeof window === "undefined"
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 
-type RevalidateCacheEntry = {
-  etag: string
-  payload: unknown
-  cachedAt: number
-  expiresAt: number
-  maxAgeMs: number
-}
-
-const browserRevalidateCache = new Map<string, RevalidateCacheEntry>()
 const browserInFlightGetRequests = new Map<string, Promise<unknown>>()
-
-const parseCacheControlMaxAgeMs = (cacheControlHeader: string | null) => {
-  if (!cacheControlHeader) return DEFAULT_REVALIDATE_CACHE_TTL_MS
-  const matched = cacheControlHeader.match(/(?:^|,)\s*max-age=(\d+)/i)
-  if (!matched) return DEFAULT_REVALIDATE_CACHE_TTL_MS
-  const seconds = Number.parseInt(matched[1], 10)
-  if (!Number.isFinite(seconds) || seconds <= 0) return DEFAULT_REVALIDATE_CACHE_TTL_MS
-  return Math.min(seconds * 1000, REVALIDATE_CACHE_MAX_TTL_MS)
-}
-
-const getRevalidateCacheEntry = (url: string) => {
-  if (isServer) return null
-  const cached = browserRevalidateCache.get(url)
-  if (!cached) return null
-  if (cached.expiresAt <= Date.now()) {
-    browserRevalidateCache.delete(url)
-    return null
-  }
-  return cached
-}
-
-const setRevalidateCacheEntry = (
-  url: string,
-  etag: string,
-  payload: unknown,
-  cacheControlHeader: string | null,
-) => {
-  if (isServer) return
-  const maxAgeMs = parseCacheControlMaxAgeMs(cacheControlHeader)
-  const cachedAt = Date.now()
-  browserRevalidateCache.set(url, {
-    etag,
-    payload,
-    cachedAt,
-    maxAgeMs,
-    expiresAt: cachedAt + maxAgeMs,
-  })
-
-  if (browserRevalidateCache.size <= REVALIDATE_CACHE_MAX_ENTRIES) return
-  const oldestKey = browserRevalidateCache.keys().next().value
-  if (oldestKey) browserRevalidateCache.delete(oldestKey)
-}
-
-const refreshRevalidateCacheEntry = (
-  url: string,
-  fallback: RevalidateCacheEntry,
-  etagHeader: string | null,
-  cacheControlHeader: string | null,
-) => {
-  if (isServer) return
-  const maxAgeMs = parseCacheControlMaxAgeMs(cacheControlHeader)
-  const cachedAt = Date.now()
-  const nextEtag = etagHeader?.trim() || fallback.etag
-  browserRevalidateCache.set(url, {
-    etag: nextEtag,
-    payload: fallback.payload,
-    cachedAt,
-    maxAgeMs,
-    expiresAt: cachedAt + maxAgeMs,
-  })
-}
-
-const getRevalidateCacheEntryAgeMs = (entry: RevalidateCacheEntry) => {
-  const ageMs = Date.now() - entry.cachedAt
-  return Number.isFinite(ageMs) && ageMs > 0 ? ageMs : 0
-}
-
-const canUseStaleRevalidateCacheEntry = (
-  entry: RevalidateCacheEntry,
-  policy: GetRequestPolicy | null,
-) => {
-  if (policy?.staleIfError === false) return false
-  const maxStaleAgeMs = policy?.maxStaleAgeMs ?? REVALIDATE_CACHE_MAX_TTL_MS
-  return getRevalidateCacheEntryAgeMs(entry) <= maxStaleAgeMs
-}
-
-const toApiPathBucket = (safePath: string) =>
-  safePath
-    .split(/[?#]/, 1)[0]
-    .replace(/\/\d+(?=\/|$)/g, "/:id")
-
-const emitStaleIfErrorTelemetry = ({
-  path,
-  reason,
-  status,
-  staleAgeMs,
-}: {
-  path: string
-  reason: ApiFetchMeta["staleReason"]
-  status?: number
-  staleAgeMs: number
-}) => {
-  if (isServer || typeof window === "undefined") return
-  window.dispatchEvent(
-    new CustomEvent("aquila:api-stale-if-error", {
-      detail: {
-        pathBucket: toApiPathBucket(path),
-        reason,
-        status,
-        staleAgeMs,
-      },
-    })
-  )
-}
-
-const buildStaleResult = <T>({
-  path,
-  entry,
-  reason,
-  status,
-}: {
-  path: string
-  entry: RevalidateCacheEntry
-  reason: NonNullable<ApiFetchMeta["staleReason"]>
-  status?: number
-}): ApiFetchResult<T> => {
-  const staleAgeMs = getRevalidateCacheEntryAgeMs(entry)
-  emitStaleIfErrorTelemetry({
-    path,
-    reason,
-    status,
-    staleAgeMs,
-  })
-  return {
-    data: entry.payload as T,
-    meta: {
-      stale: true,
-      staleReason: reason,
-      staleStatus: status,
-      staleAgeMs,
-    },
-  }
-}
-
-const buildFreshResult = <T>(data: T): ApiFetchResult<T> => ({
-  data,
-  meta: FRESH_API_FETCH_META,
-})
 
 export const evictBrowserRevalidateCacheEntries = (predicate: (url: string) => boolean) => {
   if (isServer) return
-
-  const cacheKeysToDelete: string[] = []
-  browserRevalidateCache.forEach((_, url) => {
-    if (predicate(url)) cacheKeysToDelete.push(url)
-  })
-  cacheKeysToDelete.forEach((url) => {
-    browserRevalidateCache.delete(url)
-  })
+  evictBrowserRevalidatePayloadCacheEntries(predicate)
 
   const inFlightKeysToDelete: string[] = []
   browserInFlightGetRequests.forEach((_, key) => {
@@ -623,10 +464,7 @@ export const apiFetchWithMeta = async <T>(
         response.headers.get("etag"),
         response.headers.get("cache-control"),
       )
-      return {
-        data: revalidateCacheEntry.payload as T,
-        meta: FRESH_API_FETCH_META,
-      }
+      return buildFreshResult(revalidateCacheEntry.payload as T)
     }
 
     if (!response.ok) {

@@ -8,17 +8,19 @@ const readFrontText = (relativePath: string): string =>
 test.describe("api client stale-if-error contract", () => {
   test("stale fallback exposes opt-in meta without changing apiFetch payload callers", () => {
     const clientSource = readFrontText("src/apis/backend/client.ts")
+    const revalidateCacheSource = readFrontText("src/apis/backend/clientRevalidateCache.ts")
 
-    expect(clientSource).toContain("export type ApiFetchMeta")
-    expect(clientSource).toContain("export type ApiFetchResult<T>")
+    expect(clientSource).toContain('export type { ApiFetchMeta, ApiFetchResult } from "./clientRevalidateCache"')
     expect(clientSource).toContain("export const apiFetchWithMeta")
     expect(clientSource).toMatch(/apiFetch\s*=\s*async\s*<T>[\s\S]*apiFetchWithMeta<T>\(path, init\)\)\.data/)
-    expect(clientSource).toContain('staleReason?: "transport" | "timeout" | "http-status"')
-    expect(clientSource).toContain("maxStaleAgeMs")
-    expect(clientSource).toContain("emitStaleIfErrorTelemetry")
-    expect(clientSource).toContain("reason,")
-    expect(clientSource).toContain("staleAgeMs,")
     expect(clientSource).not.toContain("refreshRevalidateCacheEntry(url, revalidateCacheEntry, null, null)")
+    expect(revalidateCacheSource).toContain("export type ApiFetchMeta")
+    expect(revalidateCacheSource).toContain("export type ApiFetchResult<T>")
+    expect(revalidateCacheSource).toContain('staleReason?: "transport" | "timeout" | "http-status"')
+    expect(revalidateCacheSource).toContain("maxStaleAgeMs")
+    expect(revalidateCacheSource).toContain("emitStaleIfErrorTelemetry")
+    expect(revalidateCacheSource).toContain("reason,")
+    expect(revalidateCacheSource).toContain("staleAgeMs,")
   })
 
   test("public detail and feed hooks retain stale meta beside React Query data", () => {

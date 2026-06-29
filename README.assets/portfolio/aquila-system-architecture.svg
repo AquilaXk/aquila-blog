@@ -5440,7 +5440,7 @@
     <path fill="#f9f7f9" d="M228 301h1v1H228z"/>
     <path fill="#faf7fa" d="M217 313h1v1H217z"/>
   </g>
-  <text class="txt" x="148" y="249" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">React 19</text>
+  <text class="txt" x="148" y="249" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">React 18</text>
   <text class="txt" x="296" y="249" font-size="24" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">TypeScript</text>
   <text class="txt" x="217" y="361" font-size="25" font-weight="800" fill="#0a0a0a" text-anchor="middle" dominant-baseline="middle">Next.js</text>
   <rect x="77" y="385" width="282" height="138" rx="6" ry="6" fill="url(#hostingFill)" stroke="#5d9bff" stroke-width="1.8"/>
@@ -21444,9 +21444,9 @@
     <path fill="#f7fcfc" d="M1348 587h1v1H1348z"/>
   </g>
   <text class="txt" x="1350" y="566" font-size="20.2" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">Docker Compose</text>
-  <text class="txt" x="1369" y="596" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• PostgreSQL</text>
-  <text class="txt" x="1369" y="622" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• Redis</text>
-  <text class="txt" x="1369" y="648" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• MinIO</text>
+  <text class="txt" x="1369" y="596" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• back_* + Caddy</text>
+  <text class="txt" x="1369" y="622" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• cloudflared</text>
+  <text class="txt" x="1369" y="648" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• DB / Redis / MinIO</text>
   <rect x="52" y="688" width="1546" height="150" rx="8" ry="8" fill="#fff" stroke="none"/>
   <rect x="65" y="660" width="272" height="39" rx="10" ry="10" fill="url(#infraHdr)" stroke="none" stroke-width="0"/>
   <path d="M65 688 H337 M337 688 H1590 Q1598 688 1598 696 V830 Q1598 838 1590 838 H60 Q52 838 52 830 V696 Q52 688 60 688 H65" fill="none" stroke="#0b63e5" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
@@ -24205,7 +24205,7 @@
   </g>
   <text class="txt" x="198" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">개발 환경 (Local)</text>
   <text class="txt" x="198" y="768" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Docker Compose 로</text>
-  <text class="txt" x="198" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">전체 스택 로컬 실행</text>
+  <text class="txt" x="198" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">DB / Redis / MinIO 실행</text>
   <path d="M449 734 L470 776 L428 776 Z" fill="#000" stroke="none" stroke-width="1"/>
   <text class="txt" x="420" y="786" font-size="20" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">Vercel</text>
   <text class="txt" x="515" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">프론트 배포</text>

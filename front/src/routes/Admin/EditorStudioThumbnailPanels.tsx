@@ -14,7 +14,7 @@ type EditorStudioThumbnailEditorPanelProps = {
   isPreviewThumbDragging: boolean
   isPreviewThumbnailError: boolean
   postThumbnailZoom: number
-  previewThumbFrameRef: RefObject<HTMLDivElement>
+  previewThumbFrameRef: RefObject<HTMLDivElement | null>
   safePreviewThumbnail: string
   setIsPreviewThumbnailError: (nextValue: boolean) => void
   onThumbnailZoomChange: (nextZoom: number) => void

@@ -19,6 +19,7 @@ const ProfileImage: React.FC<Props> = ({
   ...props
 }) => {
   const requestedSrc = src || fallbackSrc
+  const fallbackAttemptKey = typeof requestedSrc === "string" ? requestedSrc : fallbackSrc
   const [resolvedSrc, setResolvedSrc] = React.useState(requestedSrc)
   const fallbackAttemptSourceRef = React.useRef<string | undefined>(undefined)
 
@@ -30,10 +31,10 @@ const ProfileImage: React.FC<Props> = ({
   const handleImageError: React.ReactEventHandler<HTMLImageElement> = (event) => {
     onError?.(event)
 
-    if (!fallbackSrc || fallbackAttemptSourceRef.current === requestedSrc) return
+    if (!fallbackSrc || fallbackAttemptSourceRef.current === fallbackAttemptKey) return
 
     // Keep persisted broken profile URLs from leaving the UI with alt text only.
-    fallbackAttemptSourceRef.current = requestedSrc
+    fallbackAttemptSourceRef.current = fallbackAttemptKey
     setResolvedSrc(fallbackSrc)
   }
 

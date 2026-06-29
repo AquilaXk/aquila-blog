@@ -20,7 +20,7 @@ type Props = {
   onLoadMore?: () => void
   onRetryInitialLoad?: () => void
   onRetryLoadMore?: () => void
-  loadMoreTriggerRef?: RefObject<HTMLDivElement>
+  loadMoreTriggerRef?: RefObject<HTMLDivElement | null>
 }
 
 type EmptyPostStateProps = {

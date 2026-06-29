@@ -11,14 +11,20 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("core smoke auth and notifications", () => {
-  test("로그인 화면은 활성 소셜 provider가 없으면 빈 소셜 로그인 섹션을 렌더하지 않는다", async () => {
-  const loginSource = readFileSync(path.resolve(__dirname, "../src/pages/login.tsx"), "utf8")
-  const loginFormSource = readFileSync(path.resolve(__dirname, "../src/components/auth/LoginPageForm.tsx"), "utf8")
+  test("로그인 화면은 카카오 단일 소셜 로그인 버튼만 렌더한다", async () => {
+    const loginSource = readFileSync(path.resolve(__dirname, "../src/pages/login.tsx"), "utf8")
+    const loginFormSource = readFileSync(path.resolve(__dirname, "../src/components/auth/LoginPageForm.tsx"), "utf8")
+    const socialAuthSource = readFileSync(path.resolve(__dirname, "../src/components/auth/socialAuth.ts"), "utf8")
+    const socialButtonsSource = readFileSync(path.resolve(__dirname, "../src/components/auth/SocialAuthButtons.tsx"), "utf8")
 
-  expect(loginSource).toContain("const hasSocialItems = socialItems.length > 0")
-  expect(loginSource).toContain("if (!hasSocialItems || showSocialAuth")
-  expect(loginFormSource).toContain("{hasSocialItems && showSocialAuth ? (")
-})
+    expect(loginSource).toContain("const hasSocialItems = socialItems.length > 0")
+    expect(loginSource).toContain("if (!hasSocialItems || showSocialAuth")
+    expect(loginFormSource).toContain("{hasSocialItems && showSocialAuth ? (")
+    expect(socialAuthSource).toContain('const PROVIDER_ORDER: SocialProvider[] = ["kakao"]')
+    expect(socialButtonsSource).toContain('label: "카카오톡으로 계속하기"')
+    expect(socialButtonsSource).not.toContain('"google"')
+    expect(socialButtonsSource).not.toContain('"github"')
+  })
 
   test("로그인 화면은 visible 페이지 제목을 h1로 노출한다", async ({ page }) => {
   await page.goto("/login")

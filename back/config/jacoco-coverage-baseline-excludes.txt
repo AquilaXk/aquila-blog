@@ -153,8 +153,6 @@ com/back/global/revalidate/dto/PurgePostReadCachesPayload.class
 com/back/global/revalidate/dto/RevalidateHomePayload.class
 com/back/global/rsData/RsData$Companion.class
 com/back/global/security/adapter/persistence/AuthSecurityEventPersistenceAdapter.class
-com/back/global/security/application/AuthSecurityEventService.class
-com/back/global/security/application/HtmlContentSanitizer.class
 com/back/global/security/application/SecurityTipProvider.class
 com/back/global/security/config/ApiDefaultCacheControlFilter.class
 com/back/global/security/config/ApiRuntimeBoundaryFilter.class
@@ -162,14 +160,8 @@ com/back/global/security/config/CustomAuthenticationFilter.class
 com/back/global/security/config/CustomUserDetailsService.class
 com/back/global/security/config/oauth2/CustomOAuth2AuthorizationRequestResolver.class
 com/back/global/security/config/oauth2/CustomOAuth2LoginSuccessHandler.class
-com/back/global/security/config/oauth2/CustomOAuth2UserService.class
-com/back/global/security/config/oauth2/OAuth2Provider$Companion.class
-com/back/global/security/config/oauth2/OAuth2Provider.class
 com/back/global/security/config/oauth2/application/OAuth2State$Companion.class
-com/back/global/security/config/oauth2/application/OAuth2State.class
 com/back/global/security/domain/SecurityUser.class
-com/back/global/security/model/AuthSecurityEvent.class
-com/back/global/storage/application/UploadedFileRetentionService.class
 com/back/global/storage/application/UploadedFileUrlCodec.class
 com/back/global/storage/adapter/CloudStorageAdapter.class
 com/back/global/storage/model/UploadedFile.class

@@ -105,7 +105,7 @@ class PostPublicReadQueryService(
                     postUseCase.findPublicByCursor(
                         cursorCreatedAt = parsedCursor?.createdAt,
                         cursorId = parsedCursor?.id,
-                        limit = safePageSize + 1,
+                        limit = safePageSize + 2,
                         sort = safeSort,
                     )
                 toCursorFeedPageDto(rows, safePageSize)
@@ -186,7 +186,7 @@ class PostPublicReadQueryService(
                         tag = normalizedTag,
                         cursorCreatedAt = parsedCursor?.createdAt,
                         cursorId = parsedCursor?.id,
-                        limit = safePageSize + 1,
+                        limit = safePageSize + 2,
                         sort = safeSort,
                     )
                 toCursorFeedPageDto(rows, safePageSize)
@@ -331,7 +331,7 @@ class PostPublicReadQueryService(
                             postUseCase.findPublicByCursor(
                                 cursorCreatedAt = null,
                                 cursorId = null,
-                                limit = safePageSize + 1,
+                                limit = safePageSize + 2,
                                 sort = safeSort,
                             )
                         } else {
@@ -339,7 +339,7 @@ class PostPublicReadQueryService(
                                 tag = normalizedTag,
                                 cursorCreatedAt = null,
                                 cursorId = null,
-                                limit = safePageSize + 1,
+                                limit = safePageSize + 2,
                                 sort = safeSort,
                             )
                         }
@@ -697,15 +697,25 @@ class PostPublicReadQueryService(
             )
         }
 
-        val hasNext = rows.size > pageSize
-        val currentRows = if (hasNext) rows.take(pageSize) else rows
+        val cursorRows = rows.mapNotNull(::toCursorPostRow)
+        if (cursorRows.isEmpty()) {
+            return CursorFeedPageDto(
+                content = emptyList(),
+                pageSize = pageSize,
+                hasNext = false,
+                nextCursor = null,
+            )
+        }
+
+        val hasNext = cursorRows.size > pageSize
+        val currentRows = cursorRows.take(pageSize)
         val mappedRows =
             currentRows.mapNotNull { row ->
-                toFeedPostDto(row)?.let { dto -> FeedPostRow(row, dto) }
+                toFeedPostDto(row.post)?.let { dto -> FeedPostRow(row.post, dto) }
             }
         val nextCursor =
             if (hasNext) {
-                currentRows.lastOrNull()?.let { encodeCursor(it.createdAt, it.id) }
+                currentRows.lastOrNull()?.let { encodeCursor(it.createdAt, it.post.id) }
             } else {
                 null
             }
@@ -746,6 +756,11 @@ class PostPublicReadQueryService(
     private data class FeedPostRow(
         val post: Post,
         val dto: FeedPostDto,
+    )
+
+    private data class CursorPostRow(
+        val post: Post,
+        val createdAt: Instant,
     )
 
     private fun requireCursorSort(sort: PostSearchSortType1): PostSearchSortType1 {
@@ -797,6 +812,17 @@ class PostPublicReadQueryService(
     ): String {
         val payload = "${createdAt.toEpochMilli()}:$id"
         return "$payload:${signCursorPayload(payload)}"
+    }
+
+    private fun toCursorPostRow(post: Post): CursorPostRow? {
+        val createdAt =
+            try {
+                post.createdAt
+            } catch (exception: UninitializedPropertyAccessException) {
+                recordFeedPostDtoMappingFailure(post.id, FeedPostDtoMappingFailureType.CORE, exception)
+                return null
+            }
+        return CursorPostRow(post, createdAt)
     }
 
     private fun signCursorPayload(payload: String): String {

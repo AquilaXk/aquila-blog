@@ -151,9 +151,9 @@
   <text class="txt" x="1391" y="523" font-size="20.5" font-weight="800" fill="#fff" text-anchor="middle" dominant-baseline="middle">배포 서버 (운영 환경)</text>
   <rect x="1245" y="552" width="293" height="106" rx="6" ry="6" fill="none" stroke="#8b24ff" stroke-width="1.4" stroke-dasharray="5 5"/>
   <text class="txt" x="1350" y="566" font-size="20.2" font-weight="800" fill="#0a0a0a" text-anchor="start" dominant-baseline="middle">Docker Compose</text>
-  <text class="txt" x="1369" y="596" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• PostgreSQL</text>
-  <text class="txt" x="1369" y="622" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• Redis</text>
-  <text class="txt" x="1369" y="648" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• MinIO</text>
+  <text class="txt" x="1369" y="596" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• back_* + Caddy</text>
+  <text class="txt" x="1369" y="622" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• cloudflared</text>
+  <text class="txt" x="1369" y="648" font-size="15.8" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">• DB / Redis / MinIO</text>
   <rect x="52" y="688" width="1546" height="150" rx="8" ry="8" fill="#fff" stroke="none"/>
   <rect x="65" y="660" width="272" height="39" rx="10" ry="10" fill="url(#infraHdr)" stroke="none" stroke-width="0"/>
   <path d="M65 688 H337 M337 688 H1590 Q1598 688 1598 696 V830 Q1598 838 1590 838 H60 Q52 838 52 830 V696 Q52 688 60 688 H65" fill="none" stroke="#0b63e5" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
@@ -165,7 +165,7 @@
   <rect x="1343" y="719" width="251" height="101" rx="6" ry="6" fill="#fff" stroke="#b7c2d2" stroke-width="1.5"/>
   <text class="txt" x="198" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">개발 환경 (Local)</text>
   <text class="txt" x="198" y="768" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">Docker Compose 로</text>
-  <text class="txt" x="198" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">전체 스택 로컬 실행</text>
+  <text class="txt" x="198" y="794" font-size="15" font-weight="500" fill="#111" text-anchor="start" dominant-baseline="middle">DB / Redis / MinIO 실행</text>
   <path d="M449 734 L470 776 L428 776 Z" fill="#000" stroke="none" stroke-width="1"/>
   <text class="txt" x="420" y="786" font-size="20" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">Vercel</text>
   <text class="txt" x="515" y="739" font-size="17" font-weight="800" fill="#111" text-anchor="start" dominant-baseline="middle">프론트 배포</text>

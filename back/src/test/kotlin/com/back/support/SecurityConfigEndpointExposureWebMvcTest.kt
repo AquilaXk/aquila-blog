@@ -293,6 +293,14 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
     }
 
     @Test
+    @DisplayName("prod에서 공개 첨부 파일 다운로드는 익명 보안 체인을 통과해 handler 계층까지 도달한다")
+    fun `prod keeps post file download public`() {
+        mvc.get("/post/api/v1/files/posts/2026/03/manual.pdf").andExpect {
+            status { isInternalServerError() }
+        }
+    }
+
+    @Test
     @DisplayName("prod에서 liveness probe는 익명 보안 체인을 통과해 no-handler까지 도달한다")
     fun `prod keeps liveness probe public`() {
         mvc.get("/actuator/health/liveness").andExpect {

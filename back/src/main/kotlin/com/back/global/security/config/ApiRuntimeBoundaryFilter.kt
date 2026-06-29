@@ -110,6 +110,7 @@ class ApiRuntimeBoundaryFilter(
                 Regex("^/post/api/v1/posts$"),
                 Regex("^/post/api/v1/posts/\\d+/comments$"),
                 Regex("^/post/api/v1/posts/\\d+/comments/\\d+$"),
+                Regex("^/post/api/v1/files/.*"),
                 Regex("^/system/api/v1/adm/cloud/files/\\d+/external-content$"),
             )
         private val PUBLIC_DETAIL_PATH = Regex("^/post/api/v1/posts/\\d+$")

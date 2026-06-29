@@ -1192,8 +1192,8 @@ validate_required_runtime_env() {
 }
 
 ensure_monitoring_bind_mount_permissions() {
-  find deploy/homeserver/monitoring -type d -exec chmod 0755 {} + 2>/dev/null || true
-  find deploy/homeserver/monitoring -type f -exec chmod 0644 {} + 2>/dev/null || true
+  find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
+  find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
 }
 
 reset_grafana_admin_password() {

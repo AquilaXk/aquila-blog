@@ -12,8 +12,8 @@ type LegalPolicyFixture = {
 }
 
 const currentLegalVersions = {
-  privacy: "1.0.2",
-  terms: "1.0.1",
+  privacy: "1.0.3",
+  terms: "1.0.2",
   cookies: "1.0.3",
 } as const
 const internalPolicyTokens = [
@@ -140,7 +140,11 @@ test.describe("legal policy public pages", () => {
       "href",
       `/legal/privacy/${currentLegalVersions.privacy}`,
     )
-    await expect(page.getByRole("navigation", { name: "이용약관 링크" }).getByRole("link", { name: "버전 문서" })).toHaveAttribute(
+    const currentTermsHistoryItem = page
+      .locator("article")
+      .filter({ has: page.getByText(`버전 ${currentLegalVersions.terms}`) })
+      .filter({ has: page.getByRole("heading", { name: "이용약관" }) })
+    await expect(currentTermsHistoryItem.getByRole("link", { name: "버전 문서" })).toHaveAttribute(
       "href",
       `/legal/terms/${currentLegalVersions.terms}`,
     )

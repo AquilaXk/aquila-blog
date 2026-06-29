@@ -17,6 +17,14 @@ const checks = [
     name: "legal validator failure fixtures",
     command: [process.execPath, "--test", "tools/test/legal-policy-validator-fixtures.test.mjs"],
   },
+  {
+    name: "privacy launch checklist evidence sync",
+    command: [process.execPath, "tools/privacy/validate-launch-gate-checklist.mjs"],
+  },
+  {
+    name: "privacy launch checklist failure fixtures",
+    command: [process.execPath, "--test", "tools/test/privacy-launch-gate-fixtures.test.mjs"],
+  },
 ]
 
 for (const check of checks) {

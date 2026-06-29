@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "releaseLinkage": {
+    "policyEffectiveDateSource": "legal/policies/privacy.ko-KR.v1.0.2.yaml",
+    "deployShaSource": "AQUILA_BUILD_SHA",
+    "evidenceArtifacts": [
+      "front/src/apis/backend/legal.ts",
+      "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt",
+      "front/src/pages/_document.tsx"
+    ]
+  },
+  "controls": [
+    {
+      "issue": 994,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "데이터맵, 법적 근거 registry",
+      "evidenceRequirement": "`legal/data-map/*.yaml`와 공개 정책 참조",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["legal/data-map/processing-activities.yaml", "legal/data-map/legal-basis-matrix.yaml"]
+    },
+    {
+      "issue": 995,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "정책 버전관리와 공개 페이지",
+      "evidenceRequirement": "`legal/policies/*.yaml`, `/privacy`, `/terms`, `/cookies`",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["legal/policies/privacy.ko-KR.v1.0.2.yaml", "front/src/routes/LegalPolicy/LegalPolicyPage.tsx"]
+    },
+    {
+      "issue": 996,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "이메일 가입 동의와 증빙 저장",
+      "evidenceRequirement": "backend acceptance version/hash, signup flow evidence",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["front/e2e/legal-policy-pages.spec.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance"]
+    },
+    {
+      "issue": 997,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "Kakao OAuth 신규 가입 pending 동의",
+      "evidenceRequirement": "OAuth 신규 가입 동의 flow evidence",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["front/e2e/legal-policy-pages.spec.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance"]
+    },
+    {
+      "issue": 998,
+      "status": "Open",
+      "category": "필수 출시 전 완료",
+      "target": "회원가입 token/email URL 노출 제거",
+      "evidenceRequirement": "token hash 저장, URL/log redaction 테스트",
+      "launchDecision": "차단",
+      "evidenceArtifacts": ["issue #998"]
+    },
+    {
+      "issue": 999,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "권리 요청, export, 계정 탈퇴",
+      "evidenceRequirement": "privacy request/export/delete 테스트",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["front/e2e/privacy-tracking-consent.spec.ts", "docs/legal/data-subject-request-runbook.md"]
+    },
+    {
+      "issue": 1000,
+      "status": "Open",
+      "category": "필수 출시 전 완료",
+      "target": "보유기간 설정과 자동 파기 job",
+      "evidenceRequirement": "retention config, scheduled deletion test, dry-run log",
+      "launchDecision": "차단",
+      "evidenceArtifacts": ["legal/data-map/retention-matrix.yaml", "issue #1000"]
+    },
+    {
+      "issue": 1001,
+      "status": "Open",
+      "category": "필수 출시 전 완료",
+      "target": "로그 최소화와 민감정보 redaction",
+      "evidenceRequirement": "request/application log redaction test, sample log",
+      "launchDecision": "차단",
+      "evidenceArtifacts": ["issue #1001"]
+    },
+    {
+      "issue": 1002,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "analytics/cookie consent manager와 opt-out",
+      "evidenceRequirement": "`/settings/privacy` consent UI, `privacy.optionalTrackingConsent.v1` structured storage, tracking pre-consent/withdrawal e2e",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["front/e2e/privacy-tracking-consent.spec.ts", "front/e2e/browser-storage-registry.spec.ts"]
+    },
+    {
+      "issue": 1003,
+      "status": "Open",
+      "category": "필수 출시 전 완료",
+      "target": "Gemini tag recommendation 외부 처리 안전화",
+      "evidenceRequirement": "default disabled config, redaction/cache regression test",
+      "launchDecision": "차단",
+      "disabledByFlag": true,
+      "disabledEvidence": ["deploy/env/env.contract.json", ".github/workflows/deploy.yml"],
+      "evidenceArtifacts": ["issue #1003"]
+    },
+    {
+      "issue": 1004,
+      "status": "Open",
+      "category": "필수 출시 전 완료",
+      "target": "backup 암호화, deletion tombstone, restore privacy guard",
+      "evidenceRequirement": "backup artifact encryption, restore drill, deletion tombstone evidence",
+      "launchDecision": "차단",
+      "evidenceArtifacts": ["docs/legal/backup-restore-privacy-runbook.md", "tools/test/verify-external-backup-restore-drill.sh", "issue #1004"]
+    },
+    {
+      "issue": 1005,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "침해사고 대응 runbook",
+      "evidenceRequirement": "`docs/legal/*.md`, tabletop exercise template, owner/contact/evidence 절차",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["docs/legal/privacy-incident-runbook.md", "docs/legal/privacy-tabletop-exercise-template.md"]
+    },
+    {
+      "issue": 1006,
+      "status": "Open",
+      "category": "필수 출시 전 완료",
+      "target": "정책·코드 privacy drift gate",
+      "evidenceRequirement": "CI command, failing fixture example, passing workflow link",
+      "launchDecision": "차단",
+      "evidenceArtifacts": ["tools/privacy/ci-privacy-gate.mjs", "issue #1006"]
+    },
+    {
+      "issue": 1007,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "신규 개인정보 수집 feature flag 동결",
+      "evidenceRequirement": "`back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, `yarn --cwd front build` 2회 exit 0, privacy data-map/env contract validator exit 0",
+      "launchDecision": "완료",
+      "disabledByFlag": true,
+      "disabledEvidence": ["deploy/env/env.contract.json", ".github/workflows/deploy.yml"],
+      "evidenceArtifacts": ["tools/legal/validate-privacy-data-map.mjs", "deploy/env/env.contract.json"]
+    },
+    {
+      "issue": 1008,
+      "status": "Open",
+      "category": "필수 출시 전 완료",
+      "target": "기존 사용자 재동의와 legacy 고지 migration",
+      "evidenceRequirement": "legacy account migration, re-consent prompt, audit log evidence",
+      "launchDecision": "차단",
+      "evidenceArtifacts": ["issue #1008"]
+    },
+    {
+      "issue": 1024,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "공개 정책과 legal acceptance version/hash 단일화",
+      "evidenceRequirement": "`ActiveLegalDocumentMetadata`와 public policy hash evidence",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["front/src/apis/backend/legal.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt"]
+    },
+    {
+      "issue": 1025,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "effective 정책의 내부 검토 문구 제거",
+      "evidenceRequirement": "`reviewRequired=0`, internal phrase validator, page e2e",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["tools/legal/validate-legal-policies.mjs", "front/e2e/legal-policy-pages.spec.ts"]
+    },
+    {
+      "issue": 1026,
+      "status": "Closed",
+      "category": "출시 후 보완 가능",
+      "target": "법적 정책 탐색성과 원문 검증 UX",
+      "evidenceRequirement": "policy URL, TOC, hash/download 검증, live page evidence",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["front/src/routes/LegalPolicy/LegalPolicyPage.tsx", "front/e2e/legal-policy-pages.spec.ts"]
+    },
+    {
+      "issue": 1027,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "cookie/sessionStorage/localStorage inventory",
+      "evidenceRequirement": "browser storage registry, retention mapping evidence",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["front/e2e/browser-storage-registry.spec.ts", "legal/data-map/retention-matrix.yaml"]
+    },
+    {
+      "issue": 1028,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "정책·동의·추적 회귀 검증 세트",
+      "evidenceRequirement": "legal policy and tracking regression test output",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["front/e2e/legal-policy-pages.spec.ts", "front/e2e/privacy-tracking-consent.spec.ts"]
+    }
+  ]
+}

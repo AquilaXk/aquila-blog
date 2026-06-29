@@ -1192,6 +1192,7 @@ validate_required_runtime_env() {
 }
 
 ensure_monitoring_bind_mount_permissions() {
+  find deploy/homeserver/monitoring -type d -exec chmod 0755 {} + 2>/dev/null || true
   chmod 0644 deploy/homeserver/monitoring/prometheus.yml 2>/dev/null || true
   chmod 0644 deploy/homeserver/monitoring/alertmanager.yml 2>/dev/null || true
   find deploy/homeserver/monitoring/rules -type f -exec chmod 0644 {} + 2>/dev/null || true

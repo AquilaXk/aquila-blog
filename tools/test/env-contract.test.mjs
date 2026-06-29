@@ -236,6 +236,22 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
+test("home-server-source contract rejects enabled AI summary before SSH deployment", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: baseHomeServerEnv.replace("CUSTOM__AI__SUMMARY__ENABLED=false", "CUSTOM__AI__SUMMARY__ENABLED=true"),
+  })
+
+  assert.equal(result.ok, false)
+  assert(
+    result.errors.some((error) => error.key === "CUSTOM__AI__SUMMARY__ENABLED" && error.message.includes("must be one of: false")),
+    result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+})
+
 test("Caddy access logs skip signup verification endpoint before proxying", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const matcherIndex = caddyfile.indexOf("@signupVerifySensitive path /member/api/v1/signup/email/verify")
@@ -1014,7 +1030,15 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
   assert.match(workflow, /printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT:-\/opt\/aquila-blog\/restore-privacy-gate\.sh\}"/)
   assert.match(workflow, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT:-\/opt\/aquila-blog\/restore-privacy-gate\.sh\}" "deploy\/homeserver\/\.env\.prod"/)
+  assert.match(workflow, /HOME_AI_SUMMARY_ENABLED: \$\{\{ secrets\.CUSTOM__AI__SUMMARY__ENABLED \|\| vars\.CUSTOM__AI__SUMMARY__ENABLED \|\| 'false' \}\}/)
+  assert.match(workflow, /printf 'CUSTOM__AI__SUMMARY__ENABLED=%s\\n' "\$\{HOME_AI_SUMMARY_ENABLED:-false\}"/)
+  assert.match(workflow, /upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "\$\{HOME_AI_SUMMARY_ENABLED:-\}" "deploy\/homeserver\/\.env\.prod"/)
+  assert.match(workflow, /require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED" "\$\{HOME_AI_SUMMARY_ENABLED:-false\}" "false"/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
+  assert(
+    workflow.indexOf('upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED"') <
+      workflow.indexOf('require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED"'),
+  )
   assert.match(workflow, /export HOME_SERVER_ENV/)
   assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
   assert.match(workflow, /restart_external_backup_legacy_minio_if_needed/)

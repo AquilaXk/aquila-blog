@@ -48,7 +48,6 @@ type ComposeStatusEntry = {
 type EditorStudioComposeAssistantPanelProps = {
   composeHeroSummary: string[]
   publishAction: ReactNode
-  tagRecommendationAction: ReactNode
   composeStatusEntries: ComposeStatusEntry[]
   activeVisibility: PostVisibility
   visibilityOptions: VisibilityOption[]
@@ -81,7 +80,6 @@ type EditorStudioComposeAssistantPanelProps = {
 export const EditorStudioComposeAssistantPanel = ({
   composeHeroSummary,
   publishAction,
-  tagRecommendationAction,
   composeStatusEntries,
   activeVisibility,
   visibilityOptions,
@@ -125,7 +123,6 @@ export const EditorStudioComposeAssistantPanel = ({
       </PublishSettingsSummary>
       <ComposeAssistantActionBar>
         {publishAction}
-        {tagRecommendationAction}
       </ComposeAssistantActionBar>
       <ComposeStatusBoard aria-label="작성 상태 요약">
         {composeStatusEntries.map((item) => (

@@ -16,7 +16,7 @@ import { LIST_SORT_OPTIONS } from "./useEditorStudioListConditions"
 import { deriveComposeViewModel, deriveEditorContentMetrics, deriveEditorPersistenceState, derivePublishActionViewModel, getVisibilityLabel, toFlags, type PublishActionType } from "./editorStudioState"
 import { PREVIEW_SUMMARY_MAX_LENGTH, buildEditorStateFingerprint, detectPublishPlaceholderIssue, makePreviewSummary } from "./editorStudioMetaModel"
 import { Main, HeroCard, HeroIntro, StudioStatusItem, StudioStatusStrip, WorkspaceGrid, WorkspaceMain } from "./EditorStudioWorkspaceControllerRoot.styles"
-import { MARKDOWN_EDITOR_MERMAID_ENABLED, COMPOSE_MOBILE_STUDIO_STEPS, GLOBAL_NOTICE_IDLE_TEXT, MANAGE_MOBILE_STUDIO_STEPS, MOBILE_STUDIO_STEP_DESCRIPTION, MOBILE_STUDIO_STEP_LABEL, PREVIEW_CARD_VIEWPORT_ORDER, PREVIEW_CARD_VIEWPORTS, PUBLISH_VISIBILITY_OPTIONS, SHOW_LEGACY_CONTENT_STUDIO, SHOW_LEGACY_PROFILE_STUDIO, SHOW_LEGACY_UTILITY_STUDIO, TAG_RECOMMENDATION_IDLE_TEXT, getMobileStudioStepMoveLabel, recordEditorCommitDurationForRuntimeGuard, type MobileStudioStep, type NoticeTone, type PreviewViewportMode } from "./EditorStudioWorkspaceControllerRootModel"
+import { MARKDOWN_EDITOR_MERMAID_ENABLED, COMPOSE_MOBILE_STUDIO_STEPS, GLOBAL_NOTICE_IDLE_TEXT, MANAGE_MOBILE_STUDIO_STEPS, MOBILE_STUDIO_STEP_DESCRIPTION, MOBILE_STUDIO_STEP_LABEL, PREVIEW_CARD_VIEWPORT_ORDER, PREVIEW_CARD_VIEWPORTS, PUBLISH_VISIBILITY_OPTIONS, SHOW_LEGACY_CONTENT_STUDIO, SHOW_LEGACY_PROFILE_STUDIO, SHOW_LEGACY_UTILITY_STUDIO, getMobileStudioStepMoveLabel, recordEditorCommitDurationForRuntimeGuard, type MobileStudioStep, type NoticeTone, type PreviewViewportMode } from "./EditorStudioWorkspaceControllerRootModel"
 
 type EditorStudioWorkspaceControllerRootViewProps = {
   props: Record<string, any>
@@ -75,7 +75,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     handleReadComment,
     handleReadPostCount,
     handleReadSystemHealth,
-    handleRecommendTags,
     handleRefreshAdminProfile,
     handleSelectedPostIdChange,
     handleThumbnailImageFileChange,
@@ -189,7 +188,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     softDeleteUndoState,
     studioSurface,
     tagDraft,
-    tagRecommendationNotice,
     tagUsageMap,
     thumbnailImageFileInputRef,
     thumbnailImageFileName,
@@ -360,8 +358,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   const shouldShowGlobalNotice =
     globalNotice.tone !== "idle" || globalNotice.text !== GLOBAL_NOTICE_IDLE_TEXT
   const shouldShowPublishNotice = publishNotice.tone !== "idle"
-  const shouldShowTagRecommendationNotice =
-    tagRecommendationNotice.tone !== "idle" || tagRecommendationNotice.text !== TAG_RECOMMENDATION_IDLE_TEXT
   const composeStatusEntries = [
     shouldShowPublishNotice
       ? {
@@ -369,14 +365,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
           label: "발행 상태",
           tone: publishNotice.tone,
           text: publishNotice.text,
-        }
-      : null,
-    shouldShowTagRecommendationNotice
-      ? {
-          key: "tags",
-          label: "태그 상태",
-          tone: tagRecommendationNotice.tone,
-          text: tagRecommendationNotice.text,
         }
       : null,
     {
@@ -559,9 +547,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         onAddTags={addTagsToPost}
         onAddTag={addTagToPost}
         onRemoveTag={removeTagFromPost}
-        isRecommendTagsDisabled={disabled("recommendTags") || !postContent.trim()}
-        isRecommendTagsLoading={loadingKey === "recommendTags"}
-        onRecommendTags={() => void handleRecommendTags()}
         titleInputRef={handleTitleFieldRef}
         postTitle={postTitle}
         onPostTitleChange={handleTitleChange}
@@ -833,9 +818,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
             isSaveDraftDisabled={loadingKey.length > 0}
             onSaveLocalDraft={saveLocalDraft}
             composeHeroSummary={composeHeroSummary}
-            isRecommendTagsDisabled={disabled("recommendTags") || !postContent.trim()}
-            isRecommendTagsLoading={loadingKey === "recommendTags"}
-            onRecommendTags={() => void handleRecommendTags()}
             composeStatusEntries={composeStatusEntries}
             activeVisibility={postVisibility}
             visibilityOptions={PUBLISH_VISIBILITY_OPTIONS}

@@ -433,30 +433,25 @@ activities:
     enabledByEnv: CONFIG.googleAnalytics.enable with optional tracking consent; Vercel analytics package in production only after optional tracking consent; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0 and explicit non-zero enables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging; Do Not Track and Global Privacy Control block optional tracking
     reviewRequired: []
 
-  - id: ai_tag_recommendation_gemini
-    name: Gemini 기반 관리자 태그 추천
+  - id: ai_summary_gemini
+    name: Gemini optional AI 예정 기능 검토
     dataCategories:
       - postTitle
       - postMarkdownContent
-      - existingTags
-      - generatedTags
+      - generatedSummary
       - aiTraceId
-      - tagRecommendationCacheKey
-      - tagRecommendationRateLimitKey
-      - tagRecommendationCachedResult
     dataSubjects:
       - contentAuthor
       - peopleMentionedInDraftContent
-    purpose: 관리자 글 작성 보조와 태그 추천
+    purpose: 향후 관리자 글 작성 보조 기능 검토
     legalBasis: explicitAdminActionAndExternalProcessingReviewRequired
-    collectionSource: admin editor tag recommendation request
+    collectionSource: future admin editor AI request
     requiredOrOptional: optionalAdminTool
-    systemOfRecord: transient request to backend AI service; no intended raw prompt persistence
+    systemOfRecord: no current runtime processing; future transient request to backend AI service only after gate approval
     processors:
       - google_gemini
       - vercel_frontend_hosting
       - home_server_postgresql
-      - home_server_redis
     overseasTransfer: possibleViaGoogleGeminiGlobalInfrastructure
     retentionRule: noRawPromptRetentionIntended; providerRetentionRequiresContractReview
     destructionMethod: noLocalPersistence; providerDeletionControlsReviewRequired
@@ -467,7 +462,7 @@ activities:
     userRightsHandler: contentDeletionAndExternalProcessingDisclosureFutureWork
     codeOwner: back/post-ai; front/admin-editor
     policySectionId: privacy-processor-ai
-    enabledByEnv: custom.ai.tag.enabled defaults false via CUSTOM__AI__TAG__ENABLED; custom.ai.tag.gemini.*; legacy fallback CUSTOM__AI__SUMMARY__GEMINI__*
+    enabledByEnv: custom.ai.summary.enabled defaults false via CUSTOM__AI__SUMMARY__ENABLED; custom.ai.summary.gemini.*
     reviewRequired:
       - Production default-off, PII block, and DPA/region/retention/training opt-out startup checks are enforced by issue1003.
 

@@ -146,7 +146,6 @@ Local development can run with the default development infrastructure. External 
 | `BACKEND_INTERNAL_URL` | Frontend SSR | Server-side backend URL |
 | `CUSTOM__JWT__SECRET_KEY` | Backend | JWT signing key |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | MinIO | Local object storage credentials |
-| `CUSTOM__AI__TAG__GEMINI__API_KEY` | Backend | Optional AI tag recommendation |
 | `SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID` | Backend | Optional Kakao OAuth client ID |
 
 ## Quality Checks

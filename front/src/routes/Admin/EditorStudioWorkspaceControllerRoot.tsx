@@ -79,7 +79,6 @@ import {
   ADMIN_POSTS_WORKSPACE_ROUTE,
   EDITOR_NEW_ROUTE_PATH,
   GLOBAL_NOTICE_IDLE_TEXT,
-  TAG_RECOMMENDATION_IDLE_TEXT,
   buildEffectiveThumbnailUrl,
   buildEmptyEditorMetaSnapshot,
   extractImageFileFromClipboard,
@@ -152,10 +151,6 @@ export const EditorStudioWorkspaceController = ({
   const [publishModalNotice, setPublishModalNotice] = useState<NoticeState>({
     tone: "idle",
     text: "발행 전 설정을 점검한 뒤 실행하면 결과가 여기에 표시됩니다.",
-  })
-  const [tagRecommendationNotice, setTagRecommendationNotice] = useState<NoticeState>({
-    tone: "idle",
-    text: TAG_RECOMMENDATION_IDLE_TEXT,
   })
   const [globalNotice, setGlobalNotice] = useState<NoticeState>({
     tone: "idle",
@@ -590,22 +585,17 @@ export const EditorStudioWorkspaceController = ({
     addTagsToPost,
     addTagToPost,
     deleteTagFromCatalog,
-    handleRecommendTags,
     refreshEditorMetaCatalog,
     removeTagFromPost,
   } = useEditorStudioMetaCatalog({
     customTagCatalog,
-    postContent,
     postTags,
-    postTitle,
     setCustomTagCatalog,
     setKnownTags,
-    setLoadingKey,
     setMetaCatalogLoading,
     setMetaNotice,
     setPostTags,
     setTagDraft,
-    setTagRecommendationNotice,
     setTagUsageMap,
     tagUsageMap,
   })
@@ -801,8 +791,6 @@ export const EditorStudioWorkspaceController = ({
     setPreviewViewport,
     setPublishActionType,
     setPublishModalNotice,
-    setTagRecommendationNotice,
-    tagRecommendationIdleText: TAG_RECOMMENDATION_IDLE_TEXT,
   })
 
   const handleContinueSelectedPostEditing = useCallback(() => {
@@ -838,7 +826,7 @@ export const EditorStudioWorkspaceController = ({
         handleCreateNewPostFromSelectedPanel, handleDeleteComment, handleDeleteSelectedPost, handleExitDedicatedEditor, handleFlushMarkdownReady, handleHitPost,
         handleLikePost, handleListComments, handleListPageChange, handleListPageSizeChange, handleListSortChange, handleLogout,
         handleLoadOrCreateTempPost, handleModifyComment, handlePreviewThumbPointerDown, handlePreviewThumbPointerMove, handleProfileImageSelected,
-        handleReadComment, handleReadPostCount, handleReadSystemHealth, handleRecommendTags, handleRefreshAdminProfile,
+        handleReadComment, handleReadPostCount, handleReadSystemHealth, handleRefreshAdminProfile,
         handleSelectedPostIdChange, handleThumbnailImageFileChange, handleThumbnailPaste, handleThumbnailUrlModalChange, handleTitleChange,
         handleTitleFieldRef, handleTitleKeyDown, handleUndoSoftDelete, handleUpdateMemberProfileCard, handleWriteComment,
         hardDeleteDeletedPostFromList, isAllVisiblePostsSelected, isCompactMobileLayout, isComposeAssistOpen, isComposeUtilityOpen,
@@ -864,7 +852,7 @@ export const EditorStudioWorkspaceController = ({
         setMobileComposeStep,
         setMobileManageStep, setModifiedSortOrder, setPostId, setPostSummary, setPostVisibility,
         setPreviewViewport, setProfileBioInput, setProfileRoleInput, setSelectedPostIds, setTagDraft,
-        softDeleteUndoState, studioSurface, tagDraft, tagRecommendationNotice, tagUsageMap,
+        softDeleteUndoState, studioSurface, tagDraft, tagUsageMap,
         thumbnailImageFileInputRef, thumbnailImageFileName, toggleListAdvanced, togglePostSelection, toggleSelectAllVisiblePosts,
       }}
     />

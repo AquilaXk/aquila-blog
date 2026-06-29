@@ -1,5 +1,31 @@
 {
+  "uid": "blog-runtime-guard-baseline",
+  "title": "Blog Runtime Guard Baseline",
+  "schemaVersion": 39,
   "version": 2,
+  "tags": [
+    "runtime-guard",
+    "baseline"
+  ],
+  "timezone": "browser",
+  "refresh": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Runtime guard budgets",
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "This dashboard file also stores the runtime guard baseline used by front/scripts/compare-runtime-guard-metrics.mjs."
+      }
+    }
+  ],
   "sourceDashboard": {
     "uid": "blog-feed-performance",
     "title": "Blog Feed Performance"

@@ -73,6 +73,10 @@ ENV LANG=ko_KR.UTF-8
 ENV LC_ALL=ko_KR.UTF-8
 ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8"
 
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends wget \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Spring Boot extracted app (library jars first for Docker cache reuse)

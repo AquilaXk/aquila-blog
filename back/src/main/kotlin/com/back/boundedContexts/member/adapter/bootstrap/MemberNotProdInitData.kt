@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.global.app.AdminProperties
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.ApplicationRunner
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Lazy
@@ -15,7 +16,12 @@ import org.springframework.transaction.annotation.Transactional
  * MemberNotProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
  * 애플리케이션 기동 시 필요한 기본 상태를 안전하게 준비합니다.
  */
-@Profile("!prod")
+@Profile("local", "dev", "test")
+@ConditionalOnProperty(
+    prefix = "custom.bootstrap",
+    name = ["seed-demo-data-enabled"],
+    havingValue = "true",
+)
 @Configuration
 class MemberNotProdInitData(
     private val memberUseCase: MemberUseCase,

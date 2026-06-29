@@ -7,6 +7,7 @@ import org.springframework.test.context.TestPropertySource
 @TestPropertySource(
     properties = [
         "custom.task.processor.enabled=false",
+        "custom.bootstrap.seed-demo-data-enabled=true",
     ],
 )
 abstract class BaseIntegrationTest

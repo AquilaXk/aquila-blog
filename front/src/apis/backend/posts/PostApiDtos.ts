@@ -1,4 +1,5 @@
 import type { TPost } from "src/types"
+import type { ApiFetchMeta } from "../client"
 
 export type PageDto<T> = {
   content: T[]
@@ -90,6 +91,7 @@ export type PostsBootstrapResult = {
   nextCursor: string | null
   pageSize: number
   tagCounts: Record<string, number>
+  staleMeta?: ApiFetchMeta
 }
 
 export type ExplorePostsPage = {
@@ -100,4 +102,5 @@ export type ExplorePostsPage = {
   hasNext?: boolean
   nextCursor?: string | null
   paginationMode?: "cursor" | "page"
+  staleMeta?: ApiFetchMeta
 }

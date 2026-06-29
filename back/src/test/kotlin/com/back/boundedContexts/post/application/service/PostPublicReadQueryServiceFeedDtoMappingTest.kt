@@ -12,7 +12,9 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
+import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.times
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
 import java.time.Instant
 
@@ -60,6 +62,63 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         ).isEqualTo(1.0)
     }
 
+    @Test
+    @DisplayName("cursor feed는 제외된 row가 있어도 소비한 raw boundary로 다음 cursor를 만든다")
+    fun advancesCursorByConsumedRawBoundaryWhenRowIsFiltered() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val meterRegistry = SimpleMeterRegistry()
+        val service = createService(postUseCase, meterRegistry)
+        val invalidBoundaryPost = postWithMissingAuthor(id = 20L)
+        val nextRawPost = postByAuthor(id = 21L)
+        given(
+            postUseCase.findPublicByCursor(
+                cursorCreatedAt = null,
+                cursorId = null,
+                limit = 2,
+                sort = PostSearchSortType1.CREATED_AT,
+            ),
+        ).willReturn(listOf(invalidBoundaryPost, nextRawPost))
+
+        val page = service.getPublicFeedByCursor(null, 1, PostSearchSortType1.CREATED_AT)
+
+        assertThat(page.content).isEmpty()
+        assertThat(page.hasNext).isTrue()
+        assertThat(page.nextCursor).isNotBlank()
+        assertThat(
+            meterRegistry
+                .get("post.feed.dto.mapping.failure")
+                .tag("failureType", "core")
+                .counter()
+                .count(),
+        ).isEqualTo(1.0)
+    }
+
+    @Test
+    @DisplayName("search는 매핑 실패로 빈 응답이 되어도 negative cache를 기록하지 않는다")
+    fun doesNotNegativeCacheSearchWhenRowsAreFilteredByMappingFailure() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val service = createService(postUseCase, SimpleMeterRegistry())
+        val invalidPost = postWithMissingAuthor(id = 30L)
+        given(postUseCase.findPagedByKw("kw", PostSearchSortType1.CREATED_AT, 1, 10))
+            .willReturn(
+                PagedResult(
+                    content = listOf(invalidPost),
+                    page = 1,
+                    pageSize = 10,
+                    totalElements = 1,
+                ),
+            )
+
+        val firstPage = service.getPublicSearch(1, 10, "kw", PostSearchSortType1.CREATED_AT)
+        val secondPage = service.getPublicSearch(1, 10, "kw", PostSearchSortType1.CREATED_AT)
+
+        assertThat(firstPage.content).isEmpty()
+        assertThat(secondPage.content).isEmpty()
+        then(postUseCase)
+            .should(times(2))
+            .findPagedByKw("kw", PostSearchSortType1.CREATED_AT, 1, 10)
+    }
+
     private fun createService(
         postUseCase: PostUseCase,
         meterRegistry: SimpleMeterRegistry,
@@ -87,6 +146,14 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         postWithoutAuditTimestamps(id).apply {
             createdAt = Instant.parse("2026-01-02T00:00:00Z")
             modifiedAt = Instant.parse("2026-01-02T00:01:00Z")
+        }
+
+    private fun postWithMissingAuthor(id: Long): Post =
+        postByAuthor(id).also { post ->
+            Post::class.java
+                .getDeclaredField("author")
+                .apply { isAccessible = true }
+                .set(post, null)
         }
 
     private fun postWithoutAuditTimestamps(id: Long): Post =

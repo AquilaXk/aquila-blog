@@ -39,6 +39,21 @@ class ApiRuntimeBoundaryFilterTest {
     }
 
     @Test
+    @DisplayName("read 모드에서 게시글 첨부파일 GET HEAD 경로는 차단하지 않는다")
+    fun `read mode allows post file get and head endpoints`() {
+        val filter = ApiRuntimeBoundaryFilter("read", createApiCorsPolicy())
+
+        for (method in listOf("GET", "HEAD")) {
+            val request = MockHttpServletRequest(method, "/post/api/v1/files/posts/2026/03/manual.pdf")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+    }
+
+    @Test
     @DisplayName("런타임 경계 503 응답에도 CORS 헤더를 포함한다")
     fun `blocked runtime boundary response includes cors headers`() {
         val filter = ApiRuntimeBoundaryFilter("read", createApiCorsPolicy())

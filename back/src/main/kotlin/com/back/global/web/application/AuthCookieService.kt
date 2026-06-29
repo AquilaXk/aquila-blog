@@ -11,7 +11,8 @@ import java.time.Duration
 /**
  * 인증 쿠키 발급/갱신/만료를 같은 이름 정책으로 처리합니다.
  *
- * 표준 domain cookie를 발급하기 전 과거 host-only cookie를 먼저 만료해
+ * 인증 쿠키는 browser origin 전환 흐름을 위해 configured-domain으로 발급하고,
+ * 과거 host-only 쿠키는 함께 만료해
  * 브라우저에 같은 이름의 auth cookie가 중복으로 남지 않게 합니다.
  */
 @Component
@@ -75,14 +76,16 @@ class AuthCookieService(
         maxAgeSeconds: Int,
         sessionOnly: Boolean = false,
     ) {
-        // 이전 배포에서 남았을 수 있는 host-only 쿠키를 먼저 제거한 뒤,
-        // 현재 표준인 domain cookie 한 종류만 유지한다.
         expireHostOnlyCookie(name)
         rq.setCookie(name, value, maxAgeSeconds, sessionOnly)
     }
 
     private fun expireCookie(name: String) {
         expireHostOnlyCookie(name)
+        expireConfiguredDomainCookie(name)
+    }
+
+    private fun expireConfiguredDomainCookie(name: String) {
         rq.deleteCookie(name)
     }
 

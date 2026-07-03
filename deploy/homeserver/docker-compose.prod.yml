@@ -68,6 +68,74 @@ services:
       - -ec
       - |
         {
+          printf '%s\n' '{{ define "aquila.status_ko" -}}'
+          printf '%s\n' '{{- if eq . "firing" -}}장애 발생{{- else if eq . "resolved" -}}복구{{- else -}}{{ . }}{{- end -}}'
+          printf '%s\n' '{{- end }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ define "aquila.severity_ko" -}}'
+          printf '%s\n' '{{- if eq . "critical" -}}긴급{{- else if eq . "warning" -}}주의{{- else if . -}}{{ . }}{{- else -}}미분류{{- end -}}'
+          printf '%s\n' '{{- end }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ define "aquila.email.subject" -}}'
+          printf '%s\n' '{{- $$title := or (index .CommonAnnotations "title_ko") (index .CommonAnnotations "summary") .CommonLabels.alertname -}}'
+          printf '%s\n' '{{- $$severity := or .CommonLabels.severity "unknown" -}}'
+          printf '%s\n' '[Aquila 운영][{{ template "aquila.status_ko" .Status }}][{{ template "aquila.severity_ko" $$severity }}] {{ $$title }}'
+          printf '%s\n' '{{- end }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ define "aquila.email.text" -}}'
+          printf '%s\n' '{{ range .Alerts }}'
+          printf '%s\n' 'Aquila 운영 알림'
+          printf '%s\n' ''
+          printf '%s\n' '상태: {{ template "aquila.status_ko" .Status }}'
+          printf '%s\n' '심각도: {{ template "aquila.severity_ko" .Labels.severity }}'
+          printf '%s\n' '대상: {{ or .Labels.service .Labels.job .Labels.instance }}'
+          printf '%s\n' '알림: {{ or (index .Annotations "title_ko") (index .Annotations "summary") .Labels.alertname }}'
+          printf '%s\n' ''
+          printf '%s\n' '영향'
+          printf '%s\n' '{{ or (index .Annotations "impact_ko") (index .Annotations "description") "영향 설명이 없습니다." }}'
+          printf '%s\n' ''
+          printf '%s\n' '확인할 것'
+          printf '%s\n' '{{ or (index .Annotations "action_ko") "Grafana와 관련 서비스 상태를 확인하세요." }}'
+          printf '%s\n' ''
+          printf '%s\n' '시작 시각'
+          printf '%s\n' '{{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05 -0700" }}'
+          printf '%s\n' ''
+          if [ -n "$$ALERTMANAGER_GRAFANA_ROOT_URL" ]; then
+            printf '%s\n' 'Grafana에서 보기'
+            printf '%s\n' "$$ALERTMANAGER_GRAFANA_ROOT_URL"
+            printf '%s\n' ''
+          fi
+          printf '%s\n' '내부 알림명: {{ .Labels.alertname }}'
+          printf '%s\n' 'job: {{ .Labels.job }}'
+          printf '%s\n' 'service: {{ .Labels.service }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ end }}'
+          printf '%s\n' '{{- end }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ define "aquila.email.html" -}}'
+          printf '%s\n' '<h2>Aquila 운영 알림</h2>'
+          printf '%s\n' '{{ range .Alerts }}'
+          printf '%s\n' '<table role="presentation" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid #d0d7de;width:100%;max-width:720px">'
+          printf '%s\n' '  <tr><th align="left">상태</th><td>{{ template "aquila.status_ko" .Status }}</td></tr>'
+          printf '%s\n' '  <tr><th align="left">심각도</th><td>{{ template "aquila.severity_ko" .Labels.severity }}</td></tr>'
+          printf '%s\n' '  <tr><th align="left">대상</th><td>{{ or .Labels.service .Labels.job .Labels.instance }}</td></tr>'
+          printf '%s\n' '  <tr><th align="left">알림</th><td>{{ or (index .Annotations "title_ko") (index .Annotations "summary") .Labels.alertname }}</td></tr>'
+          printf '%s\n' '</table>'
+          printf '%s\n' '<h3>영향</h3>'
+          printf '%s\n' '<p>{{ or (index .Annotations "impact_ko") (index .Annotations "description") "영향 설명이 없습니다." }}</p>'
+          printf '%s\n' '<h3>확인할 것</h3>'
+          printf '%s\n' '<p>{{ or (index .Annotations "action_ko") "Grafana와 관련 서비스 상태를 확인하세요." }}</p>'
+          printf '%s\n' '<h3>시작 시각</h3>'
+          printf '%s\n' '<p>{{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05 -0700" }}</p>'
+          if [ -n "$$ALERTMANAGER_GRAFANA_ROOT_URL" ]; then
+            printf '<p><a href="%s">Grafana에서 보기</a></p>\n' "$$ALERTMANAGER_GRAFANA_ROOT_URL"
+          fi
+          printf '%s\n' '<hr>'
+          printf '%s\n' '<p><small>내부 알림명: {{ .Labels.alertname }}<br>job: {{ .Labels.job }}<br>service: {{ .Labels.service }}</small></p>'
+          printf '%s\n' '{{ end }}'
+          printf '%s\n' '{{- end }}'
+        } > /tmp/alertmanager-email.tmpl
+        {
           printf '%s\n' 'global:'
           printf '  smtp_smarthost: %s\n' "$$ALERTMANAGER_SMTP_SMARTHOST"
           printf '  smtp_from: %s\n' "$$ALERTMANAGER_SMTP_FROM"
@@ -75,6 +143,9 @@ services:
           printf '%s\n' '  smtp_auth_password: |-'
           printf '    %s\n' "$$ALERTMANAGER_SMTP_AUTH_PASSWORD"
           printf '  smtp_require_tls: %s\n' "$$ALERTMANAGER_SMTP_REQUIRE_TLS"
+          printf '%s\n' ''
+          printf '%s\n' 'templates:'
+          printf '%s\n' '  - /tmp/alertmanager-email.tmpl'
           printf '%s\n' ''
           printf '%s\n' 'route:'
           printf '%s\n' '  receiver: drop'
@@ -97,13 +168,9 @@ services:
           printf '      - to: %s\n' "$$OPERATIONS_ALERT_EMAIL_TO"
           printf '%s\n' '        send_resolved: true'
           printf '%s\n' '        headers:'
-          printf '%s\n' '          Subject: "Aquila {{ .Status }}: {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})"'
-          printf '%s\n' '        text: |-'
-          printf '%s\n' '          Status: {{ .Status }}'
-          printf '%s\n' '          Alert: {{ .CommonLabels.alertname }}'
-          printf '%s\n' '          Severity: {{ .CommonLabels.severity }}'
-          printf '%s\n' '          Summary: {{ .CommonAnnotations.summary }}'
-          printf '%s\n' '          Description: {{ .CommonAnnotations.description }}'
+          printf '%s\n' '          Subject: "{{ template \"aquila.email.subject\" . }}"'
+          printf '%s\n' '        text: "{{ template \"aquila.email.text\" . }}"'
+          printf '%s\n' '        html: "{{ template \"aquila.email.html\" . }}"'
         } > /tmp/alertmanager.yml
         exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     environment:
@@ -112,6 +179,7 @@ services:
       ALERTMANAGER_SMTP_AUTH_USERNAME: ${ALERTMANAGER_SMTP_AUTH_USERNAME:-}
       ALERTMANAGER_SMTP_AUTH_PASSWORD: ${ALERTMANAGER_SMTP_AUTH_PASSWORD:-}
       ALERTMANAGER_SMTP_REQUIRE_TLS: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:-true}
+      ALERTMANAGER_GRAFANA_ROOT_URL: ${GRAFANA_ROOT_URL:-}
       OPERATIONS_ALERT_EMAIL_TO: ${OPERATIONS_ALERT_EMAIL_TO:?OPERATIONS_ALERT_EMAIL_TO is required}
     volumes:
       - alertmanager_data:/alertmanager

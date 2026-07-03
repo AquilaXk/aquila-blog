@@ -44,7 +44,7 @@ scrape_configs:
           component: admin
           deploy_color: admin
       - targets:
-          - back_worker:8080
+          - back-worker:8080
         labels:
           service: aquila-back
           component: worker

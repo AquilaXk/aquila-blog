@@ -1759,7 +1759,7 @@ test("prometheus scrapes backend runtimes with color and component labels", () =
     "utf8",
   )
 
-  for (const target of ["back-blue:8080", "back-green:8080", "back-read:8080", "back-admin:8080", "back_worker:8080"]) {
+  for (const target of ["back-blue:8080", "back-green:8080", "back-read:8080", "back-admin:8080", "back-worker:8080"]) {
     assert.match(prometheus, new RegExp(`- ${target.replace(".", "\\.")}`))
   }
 

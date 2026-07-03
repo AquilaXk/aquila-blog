@@ -83,6 +83,9 @@ services:
           printf '%s\n' '  group_interval: 5m'
           printf '%s\n' '  repeat_interval: 4h'
           printf '%s\n' '  routes:'
+          printf '%s\n' '    - receiver: drop'
+          printf '%s\n' '      matchers:'
+          printf '%s\n' '        - alertname=~"Aquila(PublicEdgeProbeScrapeDown|DockerRuntimeProbeScrapeDown|BackWorkerScrapeDown)"'
           printf '%s\n' '    - receiver: operations-email'
           printf '%s\n' '      matchers:'
           printf '%s\n' '        - severity=~"critical|warning"'
@@ -93,6 +96,14 @@ services:
           printf '%s\n' '    email_configs:'
           printf '      - to: %s\n' "$$OPERATIONS_ALERT_EMAIL_TO"
           printf '%s\n' '        send_resolved: true'
+          printf '%s\n' '        headers:'
+          printf '%s\n' '          Subject: "Aquila {{ .Status }}: {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})"'
+          printf '%s\n' '        text: |-'
+          printf '%s\n' '          Status: {{ .Status }}'
+          printf '%s\n' '          Alert: {{ .CommonLabels.alertname }}'
+          printf '%s\n' '          Severity: {{ .CommonLabels.severity }}'
+          printf '%s\n' '          Summary: {{ .CommonAnnotations.summary }}'
+          printf '%s\n' '          Description: {{ .CommonAnnotations.description }}'
         } > /tmp/alertmanager.yml
         exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     environment:
@@ -209,7 +220,7 @@ services:
       - "--services"
       - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1"
       - "--readiness-targets"
-      - "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back_worker:8080"
+      - "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back-worker:8080"
     volumes:
       - ./monitoring/docker-runtime-probe.mjs:/app/docker-runtime-probe.mjs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -377,6 +388,10 @@ services:
       - db_1
       - redis_1
       - minio_1
+    networks:
+      default:
+        aliases:
+          - back-worker
 
   db_1:
     image: ${DB_IMAGE}

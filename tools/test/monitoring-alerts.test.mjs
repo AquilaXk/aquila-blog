@@ -76,6 +76,10 @@ test("operations alert email channel is wired through env contract, compose, and
   assert.match(compose, /operations-email/)
   assert.match(compose, /email_configs:/)
   assert.match(compose, /send_resolved: true/)
+  assert.match(compose, /alertname=~"Aquila\(PublicEdgeProbeScrapeDown\|DockerRuntimeProbeScrapeDown\|BackWorkerScrapeDown\)"/)
+  assert.match(compose, /Subject: "Aquila \{\{ \.Status \}\}: \{\{ \.CommonLabels\.alertname \}\} \(\{\{ \.CommonLabels\.severity \}\}\)"/)
+  assert.match(compose, /text: \|-/)
+  assert.match(compose, /Alert: \{\{ \.CommonLabels\.alertname \}\}/)
   assert.doesNotMatch(compose, /monitoring\/alertmanager\.yml:\/etc\/alertmanager\/alertmanager\.yml:ro/)
   assert.match(compose, /alertmanager_data:$/m)
 

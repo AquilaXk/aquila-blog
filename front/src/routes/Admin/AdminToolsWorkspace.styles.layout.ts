@@ -14,7 +14,6 @@ import {
 import {
   adminActionGroupSurface,
   adminWarningBadgeBorder,
-  adminWarningBadgeSurface,
   adminWarningBadgeText,
 } from "src/routes/Admin/adminColorTokens"
 
@@ -29,19 +28,16 @@ export const InlineNotice = styled.p`
 
   &[data-tone="warning"] {
     border-color: ${adminWarningBadgeBorder()};
-    background: ${adminWarningBadgeSurface()};
     color: ${adminWarningBadgeText()};
   }
 
   &[data-tone="danger"] {
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
     color: ${({ theme }) => theme.colors.statusDangerText};
   }
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
-    background: ${({ theme }) => theme.colors.statusSuccessSurface};
     color: ${({ theme }) => theme.colors.statusSuccessText};
   }
 `
@@ -182,7 +178,6 @@ export const ActionToneBadge = styled(AdminStatusPill)`
 
   &[data-tone="danger"] {
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
     color: ${({ theme }) => theme.colors.statusDangerText};
   }
 

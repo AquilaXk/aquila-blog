@@ -17,7 +17,6 @@ import {
   adminSurface,
   adminSurfaceRaised,
   adminWarningBadgeBorder,
-  adminWarningBadgeSurface,
   adminWarningBadgeText,
 } from "src/routes/Admin/adminColorTokens"
 
@@ -204,7 +203,7 @@ export const WorkspaceSection = styled.section`
   }
 
   &[data-tone="danger"] {
-    background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray2} 0%, rgba(239, 68, 68, 0.08) 100%);
+    background: ${({ theme }) => theme.colors.gray2};
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
   }
 `
@@ -213,22 +212,20 @@ export const SectionHeading = styled(AdminSectionHeading)`
   align-items: flex-start;
 `
 
+// 패밀리룩(1221): 상태 배지는 파스텔 면 대신 헤어라인 보더 + 상태 텍스트로 표현.
 export const StatusBadge = styled(AdminStatusPill)`
   min-height: 34px;
   padding: 0 0.78rem;
   border-color: ${adminWarningBadgeBorder()};
-  background: ${adminWarningBadgeSurface()};
   color: ${adminWarningBadgeText()};
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
-    background: ${({ theme }) => theme.colors.statusSuccessSurface};
     color: ${({ theme }) => theme.colors.statusSuccessText};
   }
 
   &[data-tone="danger"] {
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
     color: ${({ theme }) => theme.colors.statusDangerText};
   }
 `
@@ -239,19 +236,16 @@ export const FreshnessBadge = styled(AdminStatusPill)`
 
   &[data-tone="fresh"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
-    background: ${({ theme }) => theme.colors.statusSuccessSurface};
     color: ${({ theme }) => theme.colors.statusSuccessText};
   }
 
   &[data-tone="aging"] {
     border-color: ${({ theme }) => theme.colors.orange7};
-    background: ${({ theme }) => theme.colors.orange2};
-    color: ${({ theme }) => theme.colors.orange10};
+    color: ${({ theme }) => theme.colors.orange11};
   }
 
   &[data-tone="stale"] {
     border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray10};
   }
 `

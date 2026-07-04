@@ -187,13 +187,14 @@ const ConfirmDialog = styled.div`
   }
 `
 
+// 패밀리룩(1221): 파스텔 danger 버튼 → danger 아웃라인 사각 컨트롤
 const ConfirmButton = styled.button<{ "data-tone": "danger" }>`
-  border: 0;
-  background: ${({ theme }) => theme.colors.statusDangerSurface};
+  border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
+  background: transparent;
   color: ${({ theme }) => theme.colors.statusDangerText};
   min-height: 40px;
   padding: 0 0.85rem;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 0.92rem;
   font-weight: 800;
   cursor: pointer;

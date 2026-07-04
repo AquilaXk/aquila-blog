@@ -103,29 +103,27 @@ export const settingsStyles = `
     line-height: 1.6;
   }
 
+  /* 패밀리룩(1219): 필형 탭 그룹 → 헤어라인 위 밑줄 강조 사각 탭 */
   .tabs {
     display: inline-flex;
-    gap: 4px;
-    padding: 4px;
-    border: 1px solid var(--aq-border);
-    border-radius: 8px;
-    background: var(--aq-surface-elevated);
+    gap: 1.4rem;
+    border-bottom: 1px solid var(--aq-border);
   }
 
   .settingsPage .tabs a {
-    min-width: 92px;
-    padding: 9px 12px;
-    border-radius: 6px;
+    padding: 0 0 10px;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
     color: var(--aq-text-secondary);
     text-align: center;
     text-decoration: none;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .settingsPage .tabs a.active {
     color: var(--aq-text);
-    background: var(--aq-surface);
-    box-shadow: 0 1px 2px rgba(15, 23, 32, 0.08);
+    border-bottom-color: var(--aq-text);
+    font-weight: 700;
   }
 
   .settingsGrid {
@@ -135,11 +133,10 @@ export const settingsStyles = `
     margin-top: 24px;
   }
 
+  /* 패밀리룩(1219): 라운드 카드 패널 → 헤어라인 구획 섹션(면/그림자 제거) */
   .panel {
-    padding: 22px;
-    border: 1px solid var(--aq-border);
-    border-radius: 8px;
-    background: var(--aq-surface);
+    padding: 24px 0 0;
+    border-top: 1px solid var(--aq-border);
   }
 
   .panel h2 {

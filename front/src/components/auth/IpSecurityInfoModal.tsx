@@ -127,12 +127,14 @@ const Header = styled.header`
   }
 `
 
+// 패밀리룩(1219): 그린 파스텔 badge/라벨 → 헤어라인 사각 + 절제된 accent
 const LockMark = styled.div`
   width: 46px;
   height: 46px;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.green7};
-  background: ${({ theme }) => theme.colors.green3};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.publicDesign.accent};
   display: grid;
   place-items: center;
   font-size: 1.3rem;
@@ -140,7 +142,7 @@ const LockMark = styled.div`
 
 const Eyebrow = styled.small`
   display: inline-block;
-  color: ${({ theme }) => theme.colors.green10};
+  color: ${({ theme }) => theme.publicDesign.accent};
   font-weight: 800;
   margin-bottom: 0.26rem;
   letter-spacing: 0.02em;
@@ -176,8 +178,8 @@ const ModeCard = styled.article`
   }
 
   &[data-mode="on"] {
-    border-color: ${({ theme }) => theme.colors.green8};
-    box-shadow: inset 0 0 0 1px rgba(18, 184, 134, 0.2);
+    border-color: ${({ theme }) => theme.publicDesign.accent};
+    box-shadow: ${({ theme }) => `inset 0 0 0 1px color-mix(in srgb, ${theme.publicDesign.accent} 30%, transparent)`};
   }
 `
 

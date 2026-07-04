@@ -455,8 +455,8 @@ test.describe("성능 레이아웃과 표면 예산", () => {
     expect(fingerprint.headerBg).not.toBe("rgb(255, 255, 255)")
     expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
     expect(fingerprint.themeToggleLabel).toBe("테마 전환")
-    expect(fingerprint.authShellBg).toBe("rgb(255, 255, 255)")
-    expect(fingerprint.authShellBorder).toBe("rgb(215, 224, 234)")
+    // 패밀리룩(1219): 인증 셸은 라운드 카드 → 투명 에디토리얼 컬럼. 카드 면/보더가 없어야 한다.
+    expect(fingerprint.authShellBg).toBe("rgba(0, 0, 0, 0)")
   }
 })
 })

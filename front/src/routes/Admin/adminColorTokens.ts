@@ -16,15 +16,23 @@ type SchemePalette = {
 
 const buildAdminThemeVariables = (scheme: "light" | "dark", palette: SchemePalette) => {
   const { colors: c, design: d } = palette
+  // 표면 계층(sidebar/raised/muted/elevated-top)은 라이트/다크에서 서로 다른 gray
+  // 인덱스를 쓴다(다크는 gray가 어두울수록 낮은 인덱스라 방향이 뒤집힘). 기존 값을
+  // 그대로 재현해 표면 깊이(elevation) 역전을 막는다.
+  const isLight = scheme === "light"
+  const surfaceRaised = isLight ? c.gray2 : c.gray3
+  const surfaceMuted = isLight ? c.gray3 : c.gray2
+  const surfaceElevatedTop = isLight ? c.gray1 : c.gray3
+  const sidebar = isLight ? c.gray1 : c.gray2
   return `
   color-scheme: ${scheme};
   --admin-app-bg: ${d.pageBackgroundColor};
-  --admin-sidebar-bg: ${d.surface};
+  --admin-sidebar-bg: ${sidebar};
   --admin-surface: ${d.surface};
-  --admin-surface-raised: ${c.gray2};
-  --admin-surface-muted: ${c.gray3};
+  --admin-surface-raised: ${surfaceRaised};
+  --admin-surface-muted: ${surfaceMuted};
   --admin-surface-accent: ${d.accentMuted};
-  --admin-elevated-top: ${d.surface};
+  --admin-elevated-top: ${surfaceElevatedTop};
   --admin-border: ${c.gray6};
   --admin-border-strong: ${c.gray8};
   --admin-text-primary: ${c.gray12};

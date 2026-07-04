@@ -221,8 +221,16 @@ const IntroCard = styled.section`
       line-height: 1.5;
     }
 
-    .noteRow {
+    /* 패밀리룩(1225): 모바일에서 3열 메타가 좁아 줄바꿈이 어색 → 전폭 행으로 스택 */
+    .homeNote {
       grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .noteRow {
+      grid-template-columns: 88px minmax(0, 1fr);
+      align-items: baseline;
+      gap: 12px;
     }
   }
 `

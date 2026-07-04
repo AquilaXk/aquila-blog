@@ -566,13 +566,14 @@ const ErrorPanel = styled.div`
   gap: 0.8rem;
 `
 
+// 패밀리룩(1219): 그린 그라디언트 필 → 낮은 라운드 사각 accent 컨트롤
 const PrimaryButton = styled.button`
   min-width: 140px;
-  border: 1px solid ${({ theme }) => theme.colors.green8};
-  border-radius: 14px;
+  border: 0;
+  border-radius: 8px;
   padding: 0.9rem 1rem;
-  background: linear-gradient(135deg, #10b981, #34d399);
-  color: #fff;
+  background: ${({ theme }) => theme.publicDesign.accent};
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
   font-weight: 700;
   cursor: pointer;
 

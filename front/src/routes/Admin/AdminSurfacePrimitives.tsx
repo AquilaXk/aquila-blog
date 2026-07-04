@@ -436,10 +436,10 @@ export const AdminInfoStatusItem = styled.div`
   }
 
   &[data-tone="warn"] {
-    color: ${({ theme }) => theme.colors.orange10};
+    color: ${({ theme }) => theme.colors.orange11};
 
     strong {
-      color: ${({ theme }) => theme.colors.orange10};
+      color: ${({ theme }) => theme.colors.orange11};
     }
   }
 
@@ -500,7 +500,7 @@ export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`
 
   &[data-tone="warn"] {
     border-color: ${({ theme }) => theme.colors.orange7};
-    color: ${({ theme }) => theme.colors.orange10};
+    color: ${({ theme }) => theme.colors.orange11};
   }
 
   &[data-tone="danger"] {

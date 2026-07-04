@@ -390,14 +390,13 @@ export const ReplyList = styled.ul`
   }
 `
 
+// 패밀리룩(1224): 라운드 박스 셸 → 헤어라인 좌측 rule 구획(면/그림자 없음)
 export const EmptyState = styled.div`
   display: grid;
   gap: 0.24rem;
   margin-left: calc(44px + 0.85rem);
-  padding: 0.95rem 1rem;
-  border-radius: 6px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.1rem 0 0.1rem 0.9rem;
+  border-left: 2px solid ${({ theme }) => theme.publicDesign.border};
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
@@ -417,17 +416,15 @@ export const EmptyState = styled.div`
   }
 `
 
+// 패밀리룩(1224): 로그인 유도 라운드 박스 → 헤어라인 좌측 rule 구획(면/그림자 없음)
 export const ComposerPromptCard = styled.div`
   display: grid;
   gap: 0.52rem;
-  padding: 0.95rem 1rem;
-  border-radius: 6px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.1rem 0 0.1rem 0.9rem;
+  border-left: 2px solid ${({ theme }) => theme.publicDesign.border};
 
   &[data-tone="error"] {
-    border-color: ${({ theme }) => theme.colors.red6};
-    background: ${({ theme }) => theme.colors.red2};
+    border-left-color: ${({ theme }) => theme.colors.statusDangerBorder};
   }
 
   strong {

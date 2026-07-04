@@ -9,7 +9,6 @@ import {
 import {
   adminBorder,
   adminSurface,
-  adminSurfaceAccent,
   adminTeal,
   adminTealBorder,
   adminTextPrimary,
@@ -219,7 +218,6 @@ export const PrioritySummary = styled.div`
 
   &[data-tone="good"] {
     border-color: ${adminTealBorder};
-    background: ${adminSurfaceAccent};
     color: ${adminTeal};
   }
 

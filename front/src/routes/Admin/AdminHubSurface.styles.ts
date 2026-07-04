@@ -7,7 +7,6 @@ import {
   adminControlText,
   adminGoldTintFocus,
   adminSurface,
-  adminSurfaceAccent,
   adminSurfaceRaised,
   adminTeal,
   adminTealBorder,
@@ -327,7 +326,6 @@ export const ContentRow = styled.a`
 
   &[data-tone="good"] small {
     border-color: ${adminTealBorder};
-    background: ${adminSurfaceAccent};
     color: ${adminTeal};
   }
 `
@@ -387,7 +385,7 @@ export const StatusRow = styled.div`
     height: 0.48rem;
     border-radius: 50%;
     background: ${adminTeal};
-    box-shadow: 0 0 0 4px rgba(17, 145, 112, 0.12);
+    box-shadow: 0 0 0 4px ${adminGoldTintFocus};
   }
 
   strong {

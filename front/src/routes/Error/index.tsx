@@ -1,26 +1,24 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 
-import AppIcon from "src/components/icons/AppIcon"
-
+// 패밀리룩(1223): "4?4" 제네릭 중앙 정렬 + 필 버튼 → 좌측 정렬 에디토리얼(모노 라벨 +
+// 대형 헤드라인 + 헤어라인 + 사각/잉크 컨트롤). 404/500이 동일 오류 UI 문법을 공유한다.
 const CustomError = () => {
   return (
     <StyledWrapper>
-      <div className="wrapper">
-        <div className="top">
-          <div>4</div>
-          <AppIcon name="question" className="questionIcon" />
-          <div>4</div>
-        </div>
+      <div className="shell">
+        <div className="status">ERROR · 404</div>
         <div className="copy">
-          <strong>찾을 수 없는 페이지입니다.</strong>
+          <h1>찾을 수 없는 페이지입니다.</h1>
           <p>
-            주소가 바뀌었거나 삭제된 글일 수 있습니다. 홈으로 돌아가 최신
-            글이나 블로그 소개부터 다시 확인하세요.
+            주소가 바뀌었거나 삭제된 글일 수 있습니다. 홈으로 돌아가 최신 글이나 블로그 소개부터 다시
+            확인하세요.
           </p>
         </div>
         <div className="actions">
-          <Link href="/">홈으로 이동</Link>
+          <Link href="/" className="primary">
+            홈으로 이동
+          </Link>
           <Link href="/about">블로그 소개</Link>
         </div>
       </div>
@@ -30,89 +28,86 @@ const CustomError = () => {
 
 export default CustomError
 
+const monoLabel = `"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace`
+
 const StyledWrapper = styled.div`
-  margin: 0 auto;
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
-  padding-top: 3rem;
-  padding-bottom: 3rem;
-  border-radius: 1.5rem;
-  max-width: 56rem;
-  background: transparent;
-  border: 1px solid transparent;
-  box-shadow: none;
+  display: block;
+  min-height: min(72vh, 42rem);
+  padding: clamp(2.5rem, 8vw, 5rem) clamp(1rem, 5vw, 2rem);
+  color: ${({ theme }) => theme.colors.gray12};
 
-  .wrapper {
+  .shell {
+    width: min(100%, 46rem);
+    margin: 0 auto;
+    display: grid;
+    gap: 1.1rem;
+  }
+
+  .status {
+    font-family: ${monoLabel};
+    font-size: 11px;
+    font-weight: 760;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: ${({ theme }) => theme.colors.gray10};
+  }
+
+  .copy {
+    display: grid;
+    gap: 0.85rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
+  }
+
+  .copy h1 {
+    margin: 0;
+    font-size: clamp(1.9rem, 5vw, 2.8rem);
+    line-height: 1.15;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .copy p {
+    margin: 0;
+    max-width: 40rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.7;
+  }
+
+  .actions {
     display: flex;
-    padding-top: 5rem;
-    padding-bottom: 5rem;
-    flex-direction: column;
-    gap: 2.5rem;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.4rem;
+  }
+
+  .actions a {
+    display: inline-flex;
     align-items: center;
-    > .top {
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-      font-size: 3.75rem;
-      line-height: 1;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 1.1rem;
+    border: 1px solid ${({ theme }) => theme.publicDesign.borderStrong};
+    border-radius: 6px;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
+    text-decoration: none;
+    font-size: 0.92rem;
+    font-weight: 800;
+    transition: border-color 0.16s ease, opacity 0.16s ease;
+  }
 
-      .questionIcon {
-        font-size: 3.1rem;
-        flex: 0 0 auto;
-        color: inherit;
-      }
-    }
+  .actions a.primary {
+    border-color: ${({ theme }) => theme.colors.gray12};
+    background: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.publicDesign.pageBackgroundColor};
+  }
 
-    > .copy {
-      display: grid;
-      gap: 0.72rem;
-      max-width: 34rem;
-      text-align: center;
-    }
+  .actions a:hover {
+    border-color: ${({ theme }) => theme.colors.gray12};
+  }
 
-    > .copy strong {
-      font-size: 1.875rem;
-      line-height: 2.25rem;
-      color: ${({ theme }) => theme.colors.gray12};
-    }
-
-    > .copy p {
-      margin: 0;
-      color: ${({ theme }) => theme.colors.gray10};
-      line-height: 1.7;
-    }
-
-    > .actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: 0.72rem;
-    }
-
-    > .actions a {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 44px;
-      padding: 0 1rem;
-      border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray1};
-      color: ${({ theme }) => theme.colors.gray12};
-      text-decoration: none;
-      font-size: 0.92rem;
-      font-weight: 700;
-      transition:
-        transform 0.16s ease,
-        border-color 0.16s ease,
-        background-color 0.16s ease;
-    }
-
-    > .actions a:hover {
-      transform: translateY(-1px);
-      border-color: ${({ theme }) => theme.colors.gray8};
-      background: ${({ theme }) => theme.colors.gray2};
-    }
+  .actions a.primary:hover {
+    opacity: 0.88;
   }
 `

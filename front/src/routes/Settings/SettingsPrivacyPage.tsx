@@ -327,7 +327,7 @@ const SettingsPrivacyPage = () => {
         }
 
         dt {
-          color: #65758b;
+          color: var(--aq-muted);
           font-size: 0.82rem;
           font-weight: 800;
         }
@@ -335,7 +335,7 @@ const SettingsPrivacyPage = () => {
         dd {
           margin: 5px 0 0;
           overflow-wrap: anywhere;
-          color: #1f2933;
+          color: var(--aq-text);
           font-weight: 700;
         }
 
@@ -354,7 +354,7 @@ const SettingsPrivacyPage = () => {
         label {
           display: grid;
           gap: 7px;
-          color: #44515f;
+          color: var(--aq-text-secondary);
           font-weight: 800;
         }
 
@@ -372,10 +372,10 @@ const SettingsPrivacyPage = () => {
         select,
         textarea {
           width: 100%;
-          border: 1px solid #c8d0da;
+          border: 1px solid var(--aq-border);
           border-radius: 7px;
           padding: 11px 12px;
-          color: #1f2933;
+          color: var(--aq-text);
           font: inherit;
         }
 
@@ -383,12 +383,12 @@ const SettingsPrivacyPage = () => {
         .feedback,
         .requestResult {
           margin: 12px 0 0;
-          color: #53606f;
+          color: var(--aq-text-secondary);
           line-height: 1.6;
         }
 
         .feedback {
-          color: #174ea6;
+          color: var(--aq-accent-link);
           font-weight: 800;
         }
 

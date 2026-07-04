@@ -69,7 +69,7 @@ export const settingsStyles = `
     width: min(980px, calc(100% - 32px));
     margin: 0 auto;
     padding: 48px 0 72px;
-    color: #1f2933;
+    color: var(--aq-text);
   }
 
   .pageHeader {
@@ -78,12 +78,12 @@ export const settingsStyles = `
     justify-content: space-between;
     gap: 24px;
     padding-bottom: 24px;
-    border-bottom: 1px solid #d8dee4;
+    border-bottom: 1px solid var(--aq-border);
   }
 
   .eyebrow {
     margin: 0 0 8px;
-    color: #65758b;
+    color: var(--aq-muted);
     font-size: 0.8rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -99,7 +99,7 @@ export const settingsStyles = `
 
   .summary {
     margin: 10px 0 0;
-    color: #53606f;
+    color: var(--aq-text-secondary);
     line-height: 1.6;
   }
 
@@ -107,24 +107,24 @@ export const settingsStyles = `
     display: inline-flex;
     gap: 4px;
     padding: 4px;
-    border: 1px solid #d8dee4;
+    border: 1px solid var(--aq-border);
     border-radius: 8px;
-    background: #f6f8fa;
+    background: var(--aq-surface-elevated);
   }
 
   .settingsPage .tabs a {
     min-width: 92px;
     padding: 9px 12px;
     border-radius: 6px;
-    color: #44515f;
+    color: var(--aq-text-secondary);
     text-align: center;
     text-decoration: none;
     font-weight: 700;
   }
 
   .settingsPage .tabs a.active {
-    color: #0f1720;
-    background: #ffffff;
+    color: var(--aq-text);
+    background: var(--aq-surface);
     box-shadow: 0 1px 2px rgba(15, 23, 32, 0.08);
   }
 
@@ -137,9 +137,9 @@ export const settingsStyles = `
 
   .panel {
     padding: 22px;
-    border: 1px solid #d8dee4;
+    border: 1px solid var(--aq-border);
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--aq-surface);
   }
 
   .panel h2 {
@@ -151,7 +151,7 @@ export const settingsStyles = `
   .statusText,
   .emptyState {
     margin-top: 48px;
-    color: #53606f;
+    color: var(--aq-text-secondary);
   }
 
   .settingsPage .primaryLink,
@@ -160,8 +160,8 @@ export const settingsStyles = `
     padding: 0 16px;
     border: 0;
     border-radius: 7px;
-    background: #174ea6;
-    color: #ffffff;
+    background: var(--aq-accent);
+    color: var(--aq-on-accent);
     font-weight: 800;
     cursor: pointer;
   }
@@ -175,7 +175,7 @@ export const settingsStyles = `
 
   .settingsPage button:disabled {
     cursor: not-allowed;
-    background: #a8b3c2;
+    background: var(--aq-border-strong);
   }
 
   @media (max-width: 720px) {

@@ -228,8 +228,8 @@ const CloseButton = styled.button`
   min-width: 92px;
   min-height: 38px;
   padding: 0.3rem 0.95rem;
-  background: #12b886;
-  color: #fff;
+  background: ${({ theme }) => theme.colors.accentLink};
+  color: ${({ theme }) => theme.colors.accentControlText};
   font-weight: 700;
   cursor: pointer;
   transition: filter 0.16s ease;

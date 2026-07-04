@@ -135,7 +135,7 @@ export const Modal = styled.div`
     width: 16px;
     height: 16px;
     margin-top: 0.15rem;
-    accent-color: #12b886;
+    accent-color: ${({ theme }) => theme.colors.accentControl};
     flex: 0 0 auto;
   }
 
@@ -412,10 +412,12 @@ export const Modal = styled.div`
 
   .primaryAction {
     border: 0;
-    background: #087f5b;
-    color: #fff;
+    background: ${({ theme }) => theme.colors.accentLink};
+    color: ${({ theme }) => theme.colors.accentControlText};
     box-shadow: ${({ theme }) =>
-      theme.scheme === "light" ? "0 10px 22px rgba(8, 127, 91, 0.18)" : "none"};
+      theme.scheme === "light"
+        ? `0 10px 22px color-mix(in srgb, ${theme.colors.accentLink} 18%, transparent)`
+        : "none"};
     transition: filter 0.16s ease, box-shadow 0.16s ease;
 
     &:hover:not(:disabled) {
@@ -470,7 +472,7 @@ export const Modal = styled.div`
     background: transparent;
     min-height: auto;
     padding: 0;
-    color: ${({ theme }) => (theme.scheme === "light" ? "#005fc4" : "#7cc4ff")};
+    color: ${({ theme }) => theme.colors.accentLink};
     font-size: 0.86rem;
     font-weight: 700;
     text-decoration: none;

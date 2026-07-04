@@ -274,7 +274,7 @@ export const PrimaryButton = styled.button`
   border-radius: 12px;
   padding: 0.84rem 1rem;
   background: ${({ theme }) => theme.colors.accentLink};
-  color: #fff;
+  color: ${({ theme }) => theme.colors.accentControlText};
   font-weight: 700;
   cursor: pointer;
   box-shadow: ${({ theme }) =>

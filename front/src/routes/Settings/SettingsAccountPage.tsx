@@ -78,7 +78,7 @@ const SettingsAccountPage = () => {
       <style jsx>{`
         .notice {
           margin: 0 0 18px;
-          color: #53606f;
+          color: var(--aq-text-secondary);
           line-height: 1.65;
         }
 
@@ -90,23 +90,23 @@ const SettingsAccountPage = () => {
         label {
           display: grid;
           gap: 7px;
-          color: #44515f;
+          color: var(--aq-text-secondary);
           font-weight: 800;
         }
 
         input[type="password"],
         textarea {
           width: 100%;
-          border: 1px solid #c8d0da;
+          border: 1px solid var(--aq-border);
           border-radius: 7px;
           padding: 11px 12px;
-          color: #1f2933;
+          color: var(--aq-text);
           font: inherit;
         }
 
         .fieldHint {
           margin: -8px 0 0;
-          color: #677484;
+          color: var(--aq-muted);
           font-size: 0.92rem;
           line-height: 1.5;
         }
@@ -125,7 +125,7 @@ const SettingsAccountPage = () => {
         .feedback,
         .result {
           margin: 12px 0 0;
-          color: #174ea6;
+          color: var(--aq-accent-link);
           font-weight: 800;
         }
       `}</style>

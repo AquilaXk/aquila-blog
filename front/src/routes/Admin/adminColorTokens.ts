@@ -1,54 +1,56 @@
 import type { Theme } from "@emotion/react"
+import { colors, createPublicDesignTokens } from "src/styles"
 
-const adminLightThemeVariables = `
-  color-scheme: light;
-  --admin-app-bg: #f3f5f8;
-  --admin-sidebar-bg: #ffffff;
-  --admin-surface: #ffffff;
-  --admin-surface-raised: #fcfdff;
-  --admin-surface-muted: #f4f7fb;
-  --admin-surface-accent: #eef6ff;
-  --admin-elevated-top: #ffffff;
-  --admin-border: #c8d2de;
-  --admin-border-strong: #9ca8b7;
-  --admin-text-primary: #0f1724;
-  --admin-text-secondary: #36414f;
-  --admin-text-muted: #566273;
-  --admin-primary: #0969da;
-  --admin-primary-hover: #075bb5;
-  --admin-accent-text: #0969da;
-  --admin-primary-border: rgba(9, 105, 218, 0.32);
-  --admin-primary-border-hover: rgba(9, 105, 218, 0.52);
-  --admin-control-text: #ffffff;
-  --admin-focus-ring: rgba(9, 105, 218, 0.2);
-  --admin-focus-ring-strong: rgba(9, 105, 218, 0.32);
-  --admin-action-group-surface: rgba(255, 255, 255, 0.92);
-`
+// 패밀리룩 토큰 통합(#1218): 관리자 팔레트는 더 이상 자체 블루를 하드코딩하지 않고
+// 공용 semantic 토큰(colors + publicDesign)에서 값을 파생한다. 라이트/다크 대칭은
+// 공용 팔레트가 보장하며, 파스텔 tint는 color-mix로 포인트 블루에서 유도한다.
+const lightColors = colors.light
+const darkColors = colors.dark
+const lightDesign = createPublicDesignTokens("light")
+const darkDesign = createPublicDesignTokens("dark")
 
-const adminDarkThemeVariables = `
-  color-scheme: dark;
-  --admin-app-bg: #121212;
-  --admin-sidebar-bg: #181818;
-  --admin-surface: #121212;
-  --admin-surface-raised: #1f1f1f;
-  --admin-surface-muted: #181818;
-  --admin-surface-accent: rgba(122, 182, 255, 0.18);
-  --admin-elevated-top: #1f1f1f;
-  --admin-border: #363636;
-  --admin-border-strong: #4f4f4f;
-  --admin-text-primary: #f5f5f5;
-  --admin-text-secondary: #d8d8d8;
-  --admin-text-muted: #b2b2b2;
-  --admin-primary: #7ab6ff;
-  --admin-primary-hover: #9bcbff;
-  --admin-accent-text: #7ab6ff;
-  --admin-primary-border: rgba(122, 182, 255, 0.46);
-  --admin-primary-border-hover: rgba(122, 182, 255, 0.66);
-  --admin-control-text: #101214;
-  --admin-focus-ring: rgba(122, 182, 255, 0.3);
-  --admin-focus-ring-strong: rgba(122, 182, 255, 0.42);
-  --admin-action-group-surface: rgba(18, 18, 18, 0.92);
+type SchemePalette = {
+  colors: typeof lightColors
+  design: typeof lightDesign
+}
+
+const buildAdminThemeVariables = (scheme: "light" | "dark", palette: SchemePalette) => {
+  const { colors: c, design: d } = palette
+  return `
+  color-scheme: ${scheme};
+  --admin-app-bg: ${d.pageBackgroundColor};
+  --admin-sidebar-bg: ${d.surface};
+  --admin-surface: ${d.surface};
+  --admin-surface-raised: ${c.gray2};
+  --admin-surface-muted: ${c.gray3};
+  --admin-surface-accent: ${d.accentMuted};
+  --admin-elevated-top: ${d.surface};
+  --admin-border: ${c.gray6};
+  --admin-border-strong: ${c.gray8};
+  --admin-text-primary: ${c.gray12};
+  --admin-text-secondary: ${c.gray11};
+  --admin-text-muted: ${c.gray10};
+  --admin-primary: ${c.accentControl};
+  --admin-primary-hover: ${c.accentControlHover};
+  --admin-accent-text: ${c.accentLink};
+  --admin-primary-border: color-mix(in srgb, ${c.accentControl} 32%, transparent);
+  --admin-primary-border-hover: color-mix(in srgb, ${c.accentControl} 52%, transparent);
+  --admin-control-text: ${c.accentControlText};
+  --admin-focus-ring: color-mix(in srgb, ${c.accentControl} 20%, transparent);
+  --admin-focus-ring-strong: color-mix(in srgb, ${c.accentControl} 32%, transparent);
+  --admin-action-group-surface: color-mix(in srgb, ${d.surface} 92%, transparent);
 `
+}
+
+const adminLightThemeVariables = buildAdminThemeVariables("light", {
+  colors: lightColors,
+  design: lightDesign,
+})
+
+const adminDarkThemeVariables = buildAdminThemeVariables("dark", {
+  colors: darkColors,
+  design: darkDesign,
+})
 
 export const adminSystemThemeVariables = (theme: Theme) => `
   ${theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables}
@@ -64,32 +66,32 @@ export const adminSystemThemeVariables = (theme: Theme) => `
   }
 `
 
-export const adminAppBackground = "var(--admin-app-bg, #f3f5f8)"
-export const adminTextPrimary = "var(--admin-text-primary, #0f1724)"
-export const adminTextSecondary = "var(--admin-text-secondary, #36414f)"
-export const adminTextMuted = "var(--admin-text-muted, #566273)"
-export const adminBorder = "var(--admin-border, #c8d2de)"
-export const adminBorderStrong = "var(--admin-border-strong, #9ca8b7)"
-export const adminSurface = "var(--admin-surface, #ffffff)"
-export const adminShellSurface = "var(--admin-sidebar-bg, #ffffff)"
-export const adminSurfaceRaised = "var(--admin-surface-raised, #fcfdff)"
-export const adminSurfaceMuted = "var(--admin-surface-muted, #f4f7fb)"
-export const adminSurfaceAccent = "var(--admin-surface-accent, #eef6ff)"
-export const adminElevatedSurfaceTop = "var(--admin-elevated-top, #ffffff)"
-export const adminElevatedBorderDark = "var(--admin-border, #c8d2de)"
-export const adminAccentText = "var(--admin-accent-text, #0969da)"
+export const adminAppBackground = `var(--admin-app-bg, ${lightDesign.pageBackgroundColor})`
+export const adminTextPrimary = `var(--admin-text-primary, ${lightColors.gray12})`
+export const adminTextSecondary = `var(--admin-text-secondary, ${lightColors.gray11})`
+export const adminTextMuted = `var(--admin-text-muted, ${lightColors.gray10})`
+export const adminBorder = `var(--admin-border, ${lightColors.gray6})`
+export const adminBorderStrong = `var(--admin-border-strong, ${lightColors.gray8})`
+export const adminSurface = `var(--admin-surface, ${lightDesign.surface})`
+export const adminShellSurface = `var(--admin-sidebar-bg, ${lightDesign.surface})`
+export const adminSurfaceRaised = `var(--admin-surface-raised, ${lightColors.gray2})`
+export const adminSurfaceMuted = `var(--admin-surface-muted, ${lightColors.gray3})`
+export const adminSurfaceAccent = `var(--admin-surface-accent, ${lightDesign.accentMuted})`
+export const adminElevatedSurfaceTop = `var(--admin-elevated-top, ${lightDesign.surface})`
+export const adminElevatedBorderDark = `var(--admin-border, ${lightColors.gray6})`
+export const adminAccentText = `var(--admin-accent-text, ${lightColors.accentLink})`
 export const adminGold = adminAccentText
-export const adminTeal = "var(--admin-primary, #0969da)"
-export const adminTealHover = "var(--admin-primary-hover, #075bb5)"
-export const adminControlText = "var(--admin-control-text, #ffffff)"
-export const adminTealBorder = "var(--admin-primary-border, rgba(9, 105, 218, 0.32))"
-export const adminTealBorderHover = "var(--admin-primary-border-hover, rgba(9, 105, 218, 0.52))"
-export const adminGoldTintSubtle = "var(--admin-surface-accent, #eef6ff)"
-export const adminGoldTintFocus = "var(--admin-focus-ring, rgba(9, 105, 218, 0.2))"
-export const adminGoldTintFocusStrong = "var(--admin-focus-ring-strong, rgba(9, 105, 218, 0.32))"
-export const adminGoldTintLine = "var(--admin-primary-border, rgba(9, 105, 218, 0.32))"
-export const adminActionGroupDarkSurface = "var(--admin-action-group-surface, rgba(18, 18, 18, 0.92))"
-export const adminActionGroupLightSurface = "var(--admin-action-group-surface, rgba(255, 255, 255, 0.92))"
+export const adminTeal = `var(--admin-primary, ${lightColors.accentControl})`
+export const adminTealHover = `var(--admin-primary-hover, ${lightColors.accentControlHover})`
+export const adminControlText = `var(--admin-control-text, ${lightColors.accentControlText})`
+export const adminTealBorder = `var(--admin-primary-border, color-mix(in srgb, ${lightColors.accentControl} 32%, transparent))`
+export const adminTealBorderHover = `var(--admin-primary-border-hover, color-mix(in srgb, ${lightColors.accentControl} 52%, transparent))`
+export const adminGoldTintSubtle = `var(--admin-surface-accent, ${lightDesign.accentMuted})`
+export const adminGoldTintFocus = `var(--admin-focus-ring, color-mix(in srgb, ${lightColors.accentControl} 20%, transparent))`
+export const adminGoldTintFocusStrong = `var(--admin-focus-ring-strong, color-mix(in srgb, ${lightColors.accentControl} 32%, transparent))`
+export const adminGoldTintLine = `var(--admin-primary-border, color-mix(in srgb, ${lightColors.accentControl} 32%, transparent))`
+export const adminActionGroupDarkSurface = `var(--admin-action-group-surface, color-mix(in srgb, ${darkDesign.surface} 92%, transparent))`
+export const adminActionGroupLightSurface = `var(--admin-action-group-surface, color-mix(in srgb, ${lightDesign.surface} 92%, transparent))`
 
 export const usesDarkAdminSurface = (theme: Theme) => theme.scheme !== "light"
 

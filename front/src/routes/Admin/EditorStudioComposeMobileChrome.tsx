@@ -133,19 +133,17 @@ const MobileComposeStatusBar = styled.div`
       letter-spacing: -0.01em;
     }
 
+    /* 패밀리룩(1222): 파스텔 상태 면 → 헤어라인 보더(면 채색 제거) */
     &[data-tone="loading"] {
       border-color: ${({ theme }) => theme.colors.blue7};
-      background: color-mix(in srgb, ${({ theme }) => theme.colors.blue3} 82%, transparent);
     }
 
     &[data-tone="success"] {
       border-color: ${({ theme }) => theme.colors.green7};
-      background: color-mix(in srgb, ${({ theme }) => theme.colors.green3} 84%, transparent);
     }
 
     &[data-tone="error"] {
       border-color: ${({ theme }) => theme.colors.red7};
-      background: color-mix(in srgb, ${({ theme }) => theme.colors.red3} 84%, transparent);
     }
   }
 `

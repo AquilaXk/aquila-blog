@@ -368,9 +368,9 @@ export const ComposeStatusRow = styled.div`
     line-height: 1.48;
   }
 
+  /* 패밀리룩(1222): 파스텔 상태 알림 면 → 헤어라인 보더 + 상태 텍스트 */
   &[data-tone="loading"] {
     border-color: ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
 
     span {
       color: ${({ theme }) => theme.colors.blue11};
@@ -379,7 +379,6 @@ export const ComposeStatusRow = styled.div`
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.green3};
 
     span {
       color: ${({ theme }) => theme.colors.green11};
@@ -388,7 +387,6 @@ export const ComposeStatusRow = styled.div`
 
   &[data-tone="error"] {
     border-color: ${({ theme }) => theme.colors.red7};
-    background: ${({ theme }) => theme.colors.red3};
 
     span {
       color: ${({ theme }) => theme.colors.red11};

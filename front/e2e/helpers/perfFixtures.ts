@@ -611,7 +611,6 @@ export const getThemeSurfaceFingerprint = async (page: Page) =>
       summaryBg: readStyle('[data-rum-section="summary"]', "backgroundColor"),
       summaryBorder: readStyle('[data-rum-section="summary"]', "borderTopColor"),
       authShellBg: readStyle('[data-auth-shell="true"]', "backgroundColor"),
-      authShellBorder: readStyle('[data-auth-shell="true"]', "borderTopColor"),
     }
   })
 

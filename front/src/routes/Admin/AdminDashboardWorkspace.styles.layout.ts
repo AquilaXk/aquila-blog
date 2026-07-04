@@ -12,7 +12,6 @@ import {
   adminBorderStrong,
   adminControlText,
   adminSurface,
-  adminSurfaceAccent,
   adminSurfaceRaised,
   adminTeal,
   adminTealBorder,
@@ -125,7 +124,6 @@ export const StatusChip = styled.span`
 
   &[data-tone="good"] {
     border-color: ${adminTealBorder};
-    background: ${adminSurfaceAccent};
     color: ${adminTeal};
   }
 
@@ -353,11 +351,11 @@ export const StatusDot = styled.i`
   border-radius: 50%;
   flex: 0 0 auto;
   background: ${adminTeal};
-  box-shadow: 0 0 0 4px rgba(17, 145, 112, 0.12);
+  box-shadow: 0 0 0 4px color-mix(in srgb, ${adminTeal} 14%, transparent);
 
   &[data-tone="warn"] {
     background: ${adminAccentText};
-    box-shadow: 0 0 0 4px rgba(180, 83, 9, 0.14);
+    box-shadow: 0 0 0 4px color-mix(in srgb, ${adminAccentText} 14%, transparent);
   }
 
   &[data-tone="neutral"] {

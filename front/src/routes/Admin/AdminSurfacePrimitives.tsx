@@ -428,22 +428,18 @@ export const AdminInfoStatusItem = styled.div`
   background: ${({ theme }) => adminMutedSurface(theme)};
 
   &[data-tone="good"] {
-    background: ${({ theme }) => theme.colors.statusSuccessSurface};
     color: ${({ theme }) => theme.colors.statusSuccessText};
 
-    span,
     strong {
       color: ${({ theme }) => theme.colors.statusSuccessText};
     }
   }
 
   &[data-tone="warn"] {
-    background: ${({ theme }) => theme.colors.orange2};
-    color: ${({ theme }) => theme.colors.orange10};
+    color: ${({ theme }) => theme.colors.orange11};
 
-    span,
     strong {
-      color: ${({ theme }) => theme.colors.orange10};
+      color: ${({ theme }) => theme.colors.orange11};
     }
   }
 
@@ -491,27 +487,24 @@ export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`
     color: ${({ theme }) => adminMutedText(theme)};
   }
 
+  /* 패밀리룩(1220): 상태 칩은 파스텔 면 대신 헤어라인 보더 + 상태 텍스트로 표현한다. */
   &[data-tone="accent"] {
     border-color: ${({ theme }) => adminStrongBorder(theme)};
-    background: ${({ theme }) => adminAccentSurface(theme)};
     color: ${adminGold};
   }
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
-    background: ${({ theme }) => theme.colors.statusSuccessSurface};
     color: ${({ theme }) => theme.colors.statusSuccessText};
   }
 
   &[data-tone="warn"] {
     border-color: ${({ theme }) => theme.colors.orange7};
-    background: ${({ theme }) => theme.colors.orange2};
-    color: ${({ theme }) => theme.colors.orange10};
+    color: ${({ theme }) => theme.colors.orange11};
   }
 
   &[data-tone="danger"] {
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
     color: ${({ theme }) => theme.colors.statusDangerText};
   }
 `

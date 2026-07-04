@@ -472,22 +472,20 @@ export const PublishModalNotice = styled.div`
     background: transparent;
   }
 
+  /* 패밀리룩(1222): 파스텔 상태 알림 면 → 헤어라인 보더 + 상태 텍스트 */
   &[data-tone="loading"] {
     color: ${({ theme }) => theme.colors.blue11};
     border: 1px solid ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
   }
 
   &[data-tone="success"] {
     color: ${({ theme }) => theme.colors.green11};
     border: 1px solid ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.green3};
   }
 
   &[data-tone="error"] {
     color: ${({ theme }) => theme.colors.red11};
     border: 1px solid ${({ theme }) => theme.colors.red7};
-    background: ${({ theme }) => theme.colors.red3};
   }
 
   @media (max-width: 720px) {

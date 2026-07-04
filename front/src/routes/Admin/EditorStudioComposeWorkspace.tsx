@@ -235,17 +235,18 @@ const Button = styled.button `
     cursor: not-allowed;
   }
 `;
+// 패밀리룩(1222): 파란 발행 버튼 하드코딩 → 공용 accent 사각 컨트롤(scheme별 글자색)
 const PrimaryButton = styled(Button) `
   border-radius: 6px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => (theme.scheme === "dark" ? "#0a58ca" : "#0969da")};
-  background: ${({ theme }) => (theme.scheme === "dark" ? "#0a58ca" : "#0969da")};
-  color: ${({ theme }) => theme.colors.accentControlText};
+  border-color: ${({ theme }) => theme.publicDesign.accent};
+  background: ${({ theme }) => theme.publicDesign.accent};
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => (theme.scheme === "dark" ? "#084298" : "#075bb5")};
-    background: ${({ theme }) => (theme.scheme === "dark" ? "#084298" : "#075bb5")};
-    color: ${({ theme }) => theme.colors.accentControlText};
+    border-color: ${({ theme }) => theme.publicDesign.accentHover};
+    background: ${({ theme }) => theme.publicDesign.accentHover};
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
   }
 `;

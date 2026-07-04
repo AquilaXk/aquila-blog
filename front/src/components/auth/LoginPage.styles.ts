@@ -273,8 +273,8 @@ export const PrimaryButton = styled.button`
   border: 0;
   border-radius: 12px;
   padding: 0.84rem 1rem;
-  background: ${({ theme }) => theme.colors.accentLink};
-  color: ${({ theme }) => theme.colors.accentControlText};
+  background: ${({ theme }) => theme.publicDesign.accent};
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
   font-weight: 700;
   cursor: pointer;
   box-shadow: ${({ theme }) =>

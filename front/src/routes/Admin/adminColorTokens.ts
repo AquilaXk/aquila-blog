@@ -24,6 +24,11 @@ const buildAdminThemeVariables = (scheme: "light" | "dark", palette: SchemePalet
   const surfaceMuted = isLight ? c.gray3 : c.gray2
   const surfaceElevatedTop = isLight ? c.gray1 : c.gray3
   const sidebar = isLight ? c.gray1 : c.gray2
+  // 포인트 블루는 공용 publicDesign.accent(라이트 #155eef / 다크 #78a7ff)를 쓴다.
+  // accentLink/accentControl(blue10/blue9)은 라이트 표면에서 WCAG AA 대비(<4.5)를
+  // 만족하지 못해 접근성 회귀가 발생하므로 사용하지 않는다. 채운 컨트롤의 글자색은
+  // 다크에서 accent가 밝은 블루라 어두운 글자(gray1)가 필요하므로 scheme별로 나눈다.
+  const controlText = isLight ? c.accentControlText : c.gray1
   return `
   color-scheme: ${scheme};
   --admin-app-bg: ${d.pageBackgroundColor};
@@ -38,14 +43,14 @@ const buildAdminThemeVariables = (scheme: "light" | "dark", palette: SchemePalet
   --admin-text-primary: ${c.gray12};
   --admin-text-secondary: ${c.gray11};
   --admin-text-muted: ${c.gray10};
-  --admin-primary: ${c.accentControl};
-  --admin-primary-hover: ${c.accentControlHover};
-  --admin-accent-text: ${c.accentLink};
-  --admin-primary-border: color-mix(in srgb, ${c.accentControl} 32%, transparent);
-  --admin-primary-border-hover: color-mix(in srgb, ${c.accentControl} 52%, transparent);
-  --admin-control-text: ${c.accentControlText};
-  --admin-focus-ring: color-mix(in srgb, ${c.accentControl} 20%, transparent);
-  --admin-focus-ring-strong: color-mix(in srgb, ${c.accentControl} 32%, transparent);
+  --admin-primary: ${d.accent};
+  --admin-primary-hover: ${d.accentHover};
+  --admin-accent-text: ${d.accent};
+  --admin-primary-border: color-mix(in srgb, ${d.accent} 32%, transparent);
+  --admin-primary-border-hover: color-mix(in srgb, ${d.accent} 52%, transparent);
+  --admin-control-text: ${controlText};
+  --admin-focus-ring: color-mix(in srgb, ${d.accent} 20%, transparent);
+  --admin-focus-ring-strong: color-mix(in srgb, ${d.accent} 32%, transparent);
   --admin-action-group-surface: color-mix(in srgb, ${d.surface} 92%, transparent);
 `
 }
@@ -87,17 +92,17 @@ export const adminSurfaceMuted = `var(--admin-surface-muted, ${lightColors.gray3
 export const adminSurfaceAccent = `var(--admin-surface-accent, ${lightDesign.accentMuted})`
 export const adminElevatedSurfaceTop = `var(--admin-elevated-top, ${lightDesign.surface})`
 export const adminElevatedBorderDark = `var(--admin-border, ${lightColors.gray6})`
-export const adminAccentText = `var(--admin-accent-text, ${lightColors.accentLink})`
+export const adminAccentText = `var(--admin-accent-text, ${lightDesign.accent})`
 export const adminGold = adminAccentText
-export const adminTeal = `var(--admin-primary, ${lightColors.accentControl})`
-export const adminTealHover = `var(--admin-primary-hover, ${lightColors.accentControlHover})`
+export const adminTeal = `var(--admin-primary, ${lightDesign.accent})`
+export const adminTealHover = `var(--admin-primary-hover, ${lightDesign.accentHover})`
 export const adminControlText = `var(--admin-control-text, ${lightColors.accentControlText})`
-export const adminTealBorder = `var(--admin-primary-border, color-mix(in srgb, ${lightColors.accentControl} 32%, transparent))`
-export const adminTealBorderHover = `var(--admin-primary-border-hover, color-mix(in srgb, ${lightColors.accentControl} 52%, transparent))`
+export const adminTealBorder = `var(--admin-primary-border, color-mix(in srgb, ${lightDesign.accent} 32%, transparent))`
+export const adminTealBorderHover = `var(--admin-primary-border-hover, color-mix(in srgb, ${lightDesign.accent} 52%, transparent))`
 export const adminGoldTintSubtle = `var(--admin-surface-accent, ${lightDesign.accentMuted})`
-export const adminGoldTintFocus = `var(--admin-focus-ring, color-mix(in srgb, ${lightColors.accentControl} 20%, transparent))`
-export const adminGoldTintFocusStrong = `var(--admin-focus-ring-strong, color-mix(in srgb, ${lightColors.accentControl} 32%, transparent))`
-export const adminGoldTintLine = `var(--admin-primary-border, color-mix(in srgb, ${lightColors.accentControl} 32%, transparent))`
+export const adminGoldTintFocus = `var(--admin-focus-ring, color-mix(in srgb, ${lightDesign.accent} 20%, transparent))`
+export const adminGoldTintFocusStrong = `var(--admin-focus-ring-strong, color-mix(in srgb, ${lightDesign.accent} 32%, transparent))`
+export const adminGoldTintLine = `var(--admin-primary-border, color-mix(in srgb, ${lightDesign.accent} 32%, transparent))`
 export const adminActionGroupDarkSurface = `var(--admin-action-group-surface, color-mix(in srgb, ${darkDesign.surface} 92%, transparent))`
 export const adminActionGroupLightSurface = `var(--admin-action-group-surface, color-mix(in srgb, ${lightDesign.surface} 92%, transparent))`
 

@@ -125,7 +125,7 @@ const SettingsAccountPage = () => {
         .feedback,
         .result {
           margin: 12px 0 0;
-          color: var(--aq-accent-link);
+          color: var(--aq-accent);
           font-weight: 800;
         }
       `}</style>

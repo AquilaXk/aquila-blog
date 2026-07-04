@@ -58,7 +58,7 @@ export const Global = () => {
           --aq-accent: ${darkDesign.accent};
           --aq-accent-muted: ${darkDesign.accentMuted};
           --aq-accent-link: ${darkColors.accentLink};
-          --aq-on-accent: ${darkColors.accentControlText};
+          --aq-on-accent: ${darkColors.gray1};
           --aq-focus-ring: ${darkColors.indigo8};
           --aq-feed-chip-bg: ${darkDesign.surfaceElevated};
           --aq-feed-hero-glow: ${darkDesign.accentMuted};

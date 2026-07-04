@@ -135,7 +135,7 @@ export const Modal = styled.div`
     width: 16px;
     height: 16px;
     margin-top: 0.15rem;
-    accent-color: ${({ theme }) => theme.colors.accentControl};
+    accent-color: ${({ theme }) => theme.publicDesign.accent};
     flex: 0 0 auto;
   }
 
@@ -412,11 +412,11 @@ export const Modal = styled.div`
 
   .primaryAction {
     border: 0;
-    background: ${({ theme }) => theme.colors.accentLink};
-    color: ${({ theme }) => theme.colors.accentControlText};
+    background: ${({ theme }) => theme.publicDesign.accent};
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
     box-shadow: ${({ theme }) =>
       theme.scheme === "light"
-        ? `0 10px 22px color-mix(in srgb, ${theme.colors.accentLink} 18%, transparent)`
+        ? `0 10px 22px color-mix(in srgb, ${theme.publicDesign.accent} 18%, transparent)`
         : "none"};
     transition: filter 0.16s ease, box-shadow 0.16s ease;
 
@@ -472,7 +472,7 @@ export const Modal = styled.div`
     background: transparent;
     min-height: auto;
     padding: 0;
-    color: ${({ theme }) => theme.colors.accentLink};
+    color: ${({ theme }) => theme.publicDesign.accent};
     font-size: 0.86rem;
     font-weight: 700;
     text-decoration: none;

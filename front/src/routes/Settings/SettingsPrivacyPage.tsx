@@ -388,7 +388,7 @@ const SettingsPrivacyPage = () => {
         }
 
         .feedback {
-          color: var(--aq-accent-link);
+          color: var(--aq-accent);
           font-weight: 800;
         }
 

@@ -54,9 +54,9 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(colorTokenSource).toContain('theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables')
     // 패밀리룩 토큰 통합(#1218): 값은 공용 토큰에서 파생, 자체 블루/파스텔 하드코딩 제거.
     expect(colorTokenSource).toContain("createPublicDesignTokens")
-    expect(colorTokenSource).toContain("--admin-primary: ${c.accentControl};")
-    expect(colorTokenSource).toContain("--admin-accent-text: ${c.accentLink};")
-    expect(colorTokenSource).toContain("--admin-control-text: ${c.accentControlText};")
+    expect(colorTokenSource).toContain("--admin-primary: ${d.accent};")
+    expect(colorTokenSource).toContain("--admin-accent-text: ${d.accent};")
+    expect(colorTokenSource).toContain("--admin-control-text: ${controlText};")
     expect(colorTokenSource).toContain("--admin-text-muted: ${c.gray10};")
     expect(colorTokenSource).toContain("export const adminAppBackground = ")
     expect(colorTokenSource).toContain("export const adminTextMuted = ")
@@ -540,9 +540,9 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(tokenSource).not.toContain("#f7f1e3")
     expect(tokenSource).not.toContain("#2d291a")
     // 패밀리룩 토큰 통합(#1218): 자체 블루 하드코딩 대신 공용 accent 토큰에서 파생.
-    expect(tokenSource).toContain("--admin-primary: ${c.accentControl};")
-    expect(tokenSource).toContain("--admin-primary-hover: ${c.accentControlHover};")
-    expect(tokenSource).toContain("--admin-accent-text: ${c.accentLink};")
+    expect(tokenSource).toContain("--admin-primary: ${d.accent};")
+    expect(tokenSource).toContain("--admin-primary-hover: ${d.accentHover};")
+    expect(tokenSource).toContain("--admin-accent-text: ${d.accent};")
     expect(tokenSource).not.toContain("#0969da")
     expect(tokenSource).not.toContain("#7ab6ff")
     // 공용 accent 블루의 대비 요건(포인트 컬러는 절제된 블루 1종).

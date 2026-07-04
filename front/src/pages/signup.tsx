@@ -278,7 +278,7 @@ const GhostIconButton = styled.button`
   height: 30px;
   padding: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 999px;
+  border-radius: 8px;
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.72rem;
@@ -301,16 +301,17 @@ const GhostIconButton = styled.button`
   }
 `
 
+// 패밀리룩(1219): 그린 필 발행 버튼 → 낮은 라운드 사각 accent 컨트롤(scheme별 글자색)
 const PrimaryButton = styled.button`
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 0.84rem 1rem;
-  background: #12b886;
-  color: #fff;
+  background: ${({ theme }) => theme.publicDesign.accent};
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
   font-weight: 700;
   cursor: pointer;
   box-shadow: ${({ theme }) =>
-    theme.scheme === "light" ? "0 10px 22px rgba(18, 184, 134, 0.18)" : "none"};
+    theme.scheme === "light" ? `0 10px 22px color-mix(in srgb, ${theme.publicDesign.accent} 18%, transparent)` : "none"};
   transition: filter 0.16s ease, box-shadow 0.16s ease;
 
   &:hover:not(:disabled) {
@@ -351,7 +352,7 @@ const RequiredConsentBox = styled.div`
     width: 16px;
     height: 16px;
     margin-top: 0.16rem;
-    accent-color: #12b886;
+    accent-color: ${({ theme }) => theme.publicDesign.accent};
     flex: 0 0 auto;
   }
 
@@ -363,26 +364,43 @@ const RequiredConsentBox = styled.div`
   }
 `
 
+// 패밀리룩(1219): 파스텔 상태 박스 → 상태 dot + 텍스트
 const ErrorText = styled.p`
   margin: 0;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
-  background: ${({ theme }) => theme.colors.statusDangerSurface};
+  display: flex;
+  gap: 0.5rem;
   color: ${({ theme }) => theme.colors.statusDangerText};
-  padding: 0.82rem 0.9rem;
   font-size: 0.9rem;
   line-height: 1.55;
+
+  &::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin-top: 0.5rem;
+    border-radius: 999px;
+    background: currentColor;
+  }
 `
 
 const SuccessText = styled.p`
   margin: 0;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.statusSuccessBorder};
-  background: ${({ theme }) => theme.colors.statusSuccessSurface};
-  color: ${({ theme }) => theme.colors.statusSuccessText};
-  padding: 0.82rem 0.9rem;
+  display: flex;
+  gap: 0.5rem;
+  color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.9rem;
   line-height: 1.65;
+
+  &::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin-top: 0.55rem;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.statusSuccessText};
+  }
 
   strong {
     word-break: break-all;

@@ -58,29 +58,23 @@ const Main = styled.main `
 const Backdrop = styled.div `
   position: absolute;
   inset: 0;
-  background:
-    ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => theme.publicDesign.pageBackgroundColor};
 `;
+// 패밀리룩(1219): 라운드 카드 셸 + 그림자 제거 → 여백으로 구획하는 에디토리얼 단일 컬럼.
 const Shell = styled.section `
   position: relative;
   z-index: 1;
-  width: min(520px, 100%);
-  border: 1px solid ${({ theme }) => (theme.colors.gray5)};
-  border-radius: ${({ theme }) => ("22px")};
-  overflow: hidden;
-  background: ${({ theme }) => (theme.colors.gray1)};
-  box-shadow: ${({ theme }) => theme.scheme === "light"
-    ? "0 18px 40px rgba(15, 23, 42, 0.08)"
-    : "0 18px 40px rgba(0, 0, 0, 0.3)"};
+  width: min(480px, 100%);
+  background: transparent;
 `;
 const FormPanel = styled.section `
-  padding: 1.6rem 1.35rem 1.28rem;
+  padding: 0.4rem 0.2rem 1.28rem;
   background: transparent;
   display: grid;
   align-content: start;
 
   @media (max-width: 720px) {
-    padding: 1.2rem 0.9rem 1rem;
+    padding: 0.2rem 0 1rem;
   }
 `;
 const Top = styled.div `
@@ -107,32 +101,34 @@ const SubTitle = styled.p `
   color: ${({ theme }) => theme.colors.gray11};
   line-height: 1.6;
 `;
+// 패밀리룩(1219): 필형 탭 → 헤어라인 위 밑줄 강조 사각 탭.
 const Tabs = styled.div `
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.42rem;
-  margin-bottom: 1.08rem;
+  display: flex;
+  gap: 1.4rem;
+  margin-bottom: 1.4rem;
+  border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
 `;
 const ActiveTab = styled.div `
-  border-radius: ${({ theme }) => ("11px")};
-  border: 1px solid ${({ theme }) => (theme.colors.gray6)};
-  background: ${({ theme }) => theme.scheme === "light"
-    ? theme.colors.gray2
-    : theme.colors.gray3};
+  margin-bottom: -1px;
+  padding: 0 0 0.62rem;
+  border-bottom: 2px solid ${({ theme }) => theme.colors.gray12};
   color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.66rem 0.76rem;
-  text-align: center;
+  font-size: 0.95rem;
   font-weight: 700;
 `;
 const PassiveTab = styled(Link) `
-  border-radius: ${({ theme }) => ("11px")};
-  border: 1px solid ${({ theme }) => (theme.colors.gray5)};
-  background: ${({ theme }) => theme.publicDesign.pageBackgroundColor};
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.66rem 0.76rem;
+  margin-bottom: -1px;
+  padding: 0 0 0.62rem;
+  border-bottom: 2px solid transparent;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.95rem;
   text-align: center;
   text-decoration: none;
   font-weight: 600;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.gray12};
+  }
 `;
 const Body = styled.div `
   form {

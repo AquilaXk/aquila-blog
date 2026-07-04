@@ -1,20 +1,18 @@
 import styled from "@emotion/styled"
 
+// 패밀리룩(1219): 라운드+그림자 카드 입력 → 낮은 라운드 사각 컨트롤(그림자 제거).
 export const NaverField = styled.div`
   position: relative;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
+  border-radius: 8px;
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
   min-height: 76px;
   padding: 1.55rem 0.92rem 0.48rem;
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light" ? "0 1px 0 rgba(15, 23, 42, 0.03)" : "none"};
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.gray7};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "light" ? "0 0 0 2px rgba(148, 163, 184, 0.12)" : "0 0 0 2px rgba(148, 163, 184, 0.1)"};
+    border-color: ${({ theme }) => theme.colors.gray8};
+    box-shadow: 0 0 0 2px ${({ theme }) => theme.publicDesign.accentMuted};
   }
 `
 
@@ -90,7 +88,7 @@ export const GhostIconButton = styled.button`
   height: 44px;
   padding: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 999px;
+  border-radius: 8px;
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.72rem;
@@ -227,8 +225,8 @@ export const IpSecurityToggle = styled.button`
   }
 
   &[data-on="true"] .switch {
-    background: rgba(18, 184, 134, 0.44);
-    border-color: rgba(18, 184, 134, 0.76);
+    background: ${({ theme }) => `color-mix(in srgb, ${theme.publicDesign.accent} 44%, transparent)`};
+    border-color: ${({ theme }) => `color-mix(in srgb, ${theme.publicDesign.accent} 76%, transparent)`};
   }
 
   &[data-on="true"] .thumb {
@@ -236,7 +234,7 @@ export const IpSecurityToggle = styled.button`
   }
 
   &[data-on="true"] .state {
-    color: ${({ theme }) => theme.colors.green10};
+    color: ${({ theme }) => theme.publicDesign.accent};
   }
 `
 
@@ -291,26 +289,43 @@ export const PrimaryButton = styled.button`
   }
 `
 
+// 패밀리룩(1219): 파스텔 상태 박스 → 상태 dot + 텍스트(면 채색/보더 제거).
 export const ErrorText = styled.p`
   margin: 0;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
-  background: ${({ theme }) => theme.colors.statusDangerSurface};
+  display: flex;
+  gap: 0.5rem;
   color: ${({ theme }) => theme.colors.statusDangerText};
-  padding: 0.82rem 0.9rem;
   font-size: 0.9rem;
   line-height: 1.55;
+
+  &::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin-top: 0.5rem;
+    border-radius: 999px;
+    background: currentColor;
+  }
 `
 
 export const SuccessText = styled.p`
   margin: 0;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.statusSuccessBorder};
-  background: ${({ theme }) => theme.colors.statusSuccessSurface};
-  color: ${({ theme }) => theme.colors.statusSuccessText};
-  padding: 0.82rem 0.9rem;
+  display: flex;
+  gap: 0.5rem;
+  color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.87rem;
   line-height: 1.65;
+
+  &::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin-top: 0.55rem;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.statusSuccessText};
+  }
 
   strong {
     font-weight: 800;

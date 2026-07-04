@@ -349,8 +349,8 @@ export const Modal = styled.div`
     }
 
     &.isOn .switch {
-      background: rgba(18, 184, 134, 0.44);
-      border-color: rgba(18, 184, 134, 0.76);
+      background: ${({ theme }) => `color-mix(in srgb, ${theme.publicDesign.accent} 44%, transparent)`};
+      border-color: ${({ theme }) => `color-mix(in srgb, ${theme.publicDesign.accent} 76%, transparent)`};
     }
 
     &.isOn .thumb {
@@ -358,7 +358,7 @@ export const Modal = styled.div`
     }
 
     &.isOn .state {
-      color: ${({ theme }) => theme.colors.green10};
+      color: ${({ theme }) => theme.publicDesign.accent};
     }
   }
 
@@ -387,15 +387,24 @@ export const Modal = styled.div`
     }
   }
 
+  /* 패밀리룩(1219): 파스텔 오류 박스 → 상태 dot + 텍스트 */
   .inlineError {
     margin: 0;
-    border-radius: 10px;
-    border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
+    display: flex;
+    gap: 0.5rem;
     color: ${({ theme }) => theme.colors.statusDangerText};
-    padding: 0.66rem 0.76rem;
     font-size: 0.84rem;
     line-height: 1.5;
+
+    &::before {
+      content: "";
+      flex: 0 0 auto;
+      width: 6px;
+      height: 6px;
+      margin-top: 0.42rem;
+      border-radius: 999px;
+      background: currentColor;
+    }
   }
 
   .primaryAction,
@@ -488,19 +497,19 @@ export const Modal = styled.div`
     gap: 0.9rem;
   }
 
+  /* 패밀리룩(1219): 파스텔 성공 카드 → 좌측 헤어라인 rule + 중립 텍스트 */
   .sentCard {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.8rem;
-    padding: 0.95rem 1rem;
-    border-radius: 16px;
-    border: 1px solid ${({ theme }) => theme.colors.statusSuccessBorder};
-    background: ${({ theme }) => theme.colors.statusSuccessSurface};
-    color: ${({ theme }) => theme.colors.green11};
+    padding: 0.1rem 0 0.1rem 0.9rem;
+    border-left: 2px solid ${({ theme }) => theme.colors.statusSuccessText};
+    color: ${({ theme }) => theme.colors.gray12};
 
     svg {
       font-size: 1.3rem;
       margin-top: 0.1rem;
+      color: ${({ theme }) => theme.colors.statusSuccessText};
     }
 
     strong {

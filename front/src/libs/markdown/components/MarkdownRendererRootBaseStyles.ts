@@ -97,7 +97,7 @@ export const markdownRendererRootBaseStyles = (theme: Theme) => css`
     margin: 0.34rem 0 0;
     width: 0.95rem;
     height: 0.95rem;
-    accent-color: ${ (theme.scheme === "dark" ? "#4493f8" : "#0969da")};
+    accent-color: ${theme.publicDesign.accent};
   }
 
 `

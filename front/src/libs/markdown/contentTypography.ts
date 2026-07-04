@@ -3,6 +3,7 @@ import { css } from "@emotion/react"
 type ThemeLike = {
   colors: Record<string, string>
   scheme?: "light" | "dark"
+  publicDesign: { accent: string; accentHover: string }
 }
 
 export const articleTypographyScale = {
@@ -85,7 +86,7 @@ export const markdownContentTypography = (selector: string, theme: ThemeLike) =>
   }
 
   ${selector} a {
-    color: ${theme.scheme === "dark" ? "#7ab6ff" : "#0969da"};
+    color: ${theme.publicDesign.accent};
     text-decoration: underline;
     text-underline-offset: 0.16em;
     text-decoration-thickness: 0.08em;
@@ -93,7 +94,7 @@ export const markdownContentTypography = (selector: string, theme: ThemeLike) =>
   }
 
   ${selector} a:hover {
-    color: ${theme.scheme === "dark" ? "#a8ceff" : "#0a58ca"};
+    color: ${theme.publicDesign.accentHover};
   }
 
   ${selector} blockquote {

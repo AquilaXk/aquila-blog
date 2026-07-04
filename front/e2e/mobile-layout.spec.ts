@@ -71,8 +71,10 @@ test.describe("모바일 레이아웃 소스 경계", () => {
     expect(rootLayoutSource).not.toContain("resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)")
     expect(adminColorTokenSource).toContain("export const adminSystemThemeVariables = (theme: Theme) =>")
     expect(adminColorTokenSource).toContain('theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables')
-    expect(adminColorTokenSource).toContain("--admin-app-bg: #f3f5f8;")
-    expect(adminColorTokenSource).toContain("--admin-app-bg: #121212;")
+    // 패밀리룩 토큰 통합(#1218): admin 팔레트는 공용 토큰에서 파생되며 자체 블루를 하드코딩하지 않는다.
+    expect(adminColorTokenSource).toContain("createPublicDesignTokens")
+    expect(adminColorTokenSource).toContain("--admin-app-bg: ${d.pageBackgroundColor};")
+    expect(adminColorTokenSource).not.toContain("#0969da")
     expect(adminSurfaceSource).toContain("adminPlainSurface(theme)")
     expect(adminShellSource).toContain("adminSystemThemeVariables(theme)")
     expect(adminShellSource).toContain("background: ${adminAppBackground};")

@@ -14,13 +14,15 @@ const CALLOUT_KIND_MAP: Record<string, CalloutKind> = {
   IMPORTANT: "summary",
 }
 
+// 패밀리룩(1224): 콜아웃 표시 글리프를 이모지 → 모노 텍스트 마커로. (작성 시
+// 이모지로 콜아웃을 만드는 CALLOUT_EMOJI_MAP 파싱은 그대로 유지)
 const CALLOUT_EMOJI_BY_KIND: Record<CalloutKind, string> = {
-  tip: "💡",
-  info: "ℹ️",
-  warning: "⚠️",
-  outline: "📋",
-  example: "✅",
-  summary: "📚",
+  tip: "T",
+  info: "i",
+  warning: "!",
+  outline: "≡",
+  example: "✓",
+  summary: "§",
 }
 
 const CALLOUT_EMOJI_MAP: Array<{ marker: string; kind: CalloutKind }> = [

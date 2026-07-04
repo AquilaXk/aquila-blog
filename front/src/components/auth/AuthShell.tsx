@@ -127,7 +127,7 @@ const ActiveTab = styled.div `
 const PassiveTab = styled(Link) `
   border-radius: ${({ theme }) => ("11px")};
   border: 1px solid ${({ theme }) => (theme.colors.gray5)};
-  background: ${({ theme }) => theme.scheme === "light" ? "#f8fafc" : theme.colors.gray1};
+  background: ${({ theme }) => theme.publicDesign.pageBackgroundColor};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.76rem;
   text-align: center;

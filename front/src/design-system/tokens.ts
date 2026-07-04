@@ -45,6 +45,16 @@ export const control = {
   lg: 44,
 } as const
 
+// 패밀리룩 기준: 섹션 라벨은 모노스페이스 대문자 소형 라벨(FOCUS, UPDATED, ON THIS PAGE 계열).
+// 메인/About 페이지에서 이미 쓰는 스타일을 공용 토큰으로 승격한다.
+export const editorialLabel = {
+  fontFamily: `"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace`,
+  fontSize: "11px",
+  fontWeight: 760,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+} as const
+
 export const breakpoint = {
   sm: 640,
   md: 768,
@@ -63,6 +73,8 @@ export const semanticColors = (theme: Theme) => ({
   textMuted: theme.colors.gray10,
   border: theme.publicDesign.border,
   borderStrong: theme.publicDesign.borderStrong,
+  // 헤어라인(1px rule) 구획용 — 카드 박스 대신 여백+얇은 선으로 구획한다.
+  hairline: theme.publicDesign.border,
   accent: theme.colors.accentControl,
   accentHover: theme.colors.accentControlHover,
   accentText: theme.colors.accentControlText,
@@ -72,6 +84,11 @@ export const semanticColors = (theme: Theme) => ({
   dangerSurface: theme.colors.statusDangerSurface,
   success: theme.colors.statusSuccessText,
   successSurface: theme.colors.statusSuccessSurface,
+  // 상태 표현: 파스텔 배경 면 대신 점(dot)/텍스트로만 상태를 나타낸다.
+  dotNeutral: theme.colors.gray9,
+  dotAccent: theme.colors.accentLink,
+  dotSuccess: theme.colors.statusSuccessText,
+  dotDanger: theme.colors.statusDangerText,
 })
 
 export const designTokens = {
@@ -81,5 +98,6 @@ export const designTokens = {
   typeScale,
   control,
   breakpoint,
+  editorialLabel,
   semanticColors,
 } as const

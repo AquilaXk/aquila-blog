@@ -1351,25 +1351,23 @@ export const StatusPill = styled.span`
   max-width: 5.6rem;
   border-radius: 2px;
   padding: 0.22rem 0.45rem;
-  background: ${surfaceAccent};
+  background: ${surfaceRaised};
   color: ${accentGold};
   font-size: 0.7rem;
   font-weight: 850;
   text-align: center;
   white-space: nowrap;
 
+  /* 패밀리룩(1221): 파스텔 상태 면 대신 중립 base + 상태 텍스트 */
   &[data-status="failed"] {
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
     color: ${({ theme }) => theme.colors.statusDangerText};
   }
 
   &[data-status="cancelled"] {
-    background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray10};
   }
 
   &[data-status="done"] {
-    background: ${({ theme }) => theme.colors.statusSuccessSurface};
     color: ${({ theme }) => theme.colors.statusSuccessText};
   }
 `

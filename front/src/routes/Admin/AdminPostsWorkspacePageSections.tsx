@@ -145,7 +145,6 @@ export const RecentActionList = styled.ul`
 
   li[data-tone="error"] {
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
   }
 
   .copy {
@@ -183,7 +182,6 @@ export const RecentActionList = styled.ul`
 
   li[data-tone="error"] .stateLabel {
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-    background: ${({ theme }) => theme.colors.statusDangerSurface};
     color: ${({ theme }) => theme.colors.statusDangerText};
   }
 

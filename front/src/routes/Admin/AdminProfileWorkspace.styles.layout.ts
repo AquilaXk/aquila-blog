@@ -189,8 +189,7 @@ export const SectionStateBadge = styled.span`
 
   &[data-tone="dirty"] {
     border-color: ${({ theme }) => theme.colors.orange7};
-    color: ${({ theme }) => theme.colors.orange10};
-    background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange11};
   }
 
   &[data-tone="published"] {

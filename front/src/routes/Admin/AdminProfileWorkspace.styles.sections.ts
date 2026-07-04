@@ -12,7 +12,6 @@ import {
 } from "src/routes/Admin/AdminSurfacePrimitives"
 import {
   adminWarningBadgeBorder,
-  adminWarningBadgeSurface,
   adminWarningBadgeText,
 } from "src/routes/Admin/adminColorTokens"
 import { BaseButton, PublishButton } from "./AdminProfileWorkspace.styles.tokens"
@@ -280,21 +279,19 @@ export const ToastCard = styled.div`
   line-height: 1.58;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
 
+  /* 패밀리룩(1221): 토스트는 파스텔 tone 면 대신 중립 카드 + tone 보더/텍스트 */
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.green8};
-    background: ${({ theme }) => theme.colors.green3};
     color: ${({ theme }) => theme.colors.green11};
   }
 
   &[data-tone="error"] {
     border-color: ${({ theme }) => theme.colors.red8};
-    background: ${({ theme }) => theme.colors.red3};
     color: ${({ theme }) => theme.colors.red11};
   }
 
   &[data-tone="loading"] {
     border-color: ${adminWarningBadgeBorder()};
-    background: ${adminWarningBadgeSurface()};
     color: ${adminWarningBadgeText()};
   }
 `

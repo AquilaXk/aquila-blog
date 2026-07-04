@@ -270,9 +270,10 @@ const StyledWrapper = styled.div`
     margin-top: 1.1rem;
   }
 
+  /* 패밀리룩(1225): 본문 링크를 절제된 포인트 컬러(공용 accent)로, 굵기 완화 */
   a {
-    color: ${({ theme }) => theme.colors.accentLink};
-    font-weight: 700;
+    color: ${({ theme }) => theme.publicDesign.accent};
+    font-weight: 600;
     text-decoration: underline;
     text-underline-offset: 3px;
   }

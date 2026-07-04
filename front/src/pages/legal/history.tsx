@@ -133,11 +133,19 @@ const StyledWrapper = styled.div`
     gap: 0.5rem;
   }
 
+  /* 패밀리룩(1225): 항목마다 반복되는 파란 링크 노이즈 완화 → 절제된 muted 링크 */
   a {
-    color: ${({ theme }) => theme.colors.accentLink};
-    font-weight: 760;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 600;
+    font-size: 0.85rem;
     text-decoration: underline;
+    text-decoration-color: ${({ theme }) => theme.colors.gray7};
     text-underline-offset: 3px;
+  }
+
+  a:hover {
+    color: ${({ theme }) => theme.publicDesign.accent};
+    text-decoration-color: currentColor;
   }
 
   @media (max-width: 680px) {

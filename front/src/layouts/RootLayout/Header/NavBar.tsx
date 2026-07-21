@@ -47,6 +47,10 @@ const isTypingTarget = (target: EventTarget | null) => {
   return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT"
 }
 
+const reportFocusFeedSearchFailure = (error: unknown) => {
+  console.error("[NavBar] failed to focus feed search input", error)
+}
+
 const NavBar = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
@@ -112,14 +116,22 @@ const NavBar = () => {
     })()
 
     focusFeedSearchInFlightRef.current = run
-    void run.finally(() => {
-      if (focusFeedSearchInFlightRef.current === run) {
-        focusFeedSearchInFlightRef.current = null
-      }
-    })
+    void run
+      .finally(() => {
+        if (focusFeedSearchInFlightRef.current === run) {
+          focusFeedSearchInFlightRef.current = null
+        }
+      })
+      .catch(() => {
+        // call-site handlers report the rejection; absorb finally-chain rejection only
+      })
 
     return run
   }, [router])
+
+  const requestFocusFeedSearch = useCallback(() => {
+    void focusFeedSearch().catch(reportFocusFeedSearchFailure)
+  }, [focusFeedSearch])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -132,12 +144,12 @@ const NavBar = () => {
       if (event.defaultPrevented || isTypingTarget(event.target)) return
 
       event.preventDefault()
-      void focusFeedSearch()
+      requestFocusFeedSearch()
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [focusFeedSearch])
+  }, [requestFocusFeedSearch])
 
   const handleLogout = async () => {
     await logout()
@@ -176,9 +188,7 @@ const NavBar = () => {
           type="button"
           className="searchTrigger"
           aria-label="글과 태그 검색으로 이동"
-          onClick={() => {
-            void focusFeedSearch()
-          }}
+          onClick={requestFocusFeedSearch}
         >
           <SearchIcon />
           <span>글과 태그 검색</span>

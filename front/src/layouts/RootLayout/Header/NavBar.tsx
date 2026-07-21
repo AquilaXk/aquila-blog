@@ -3,7 +3,7 @@ import { control } from "src/design-system/tokens"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { Suspense, lazy, useCallback, useEffect, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
 import { waitForFeedSearchInputFocus } from "src/routes/Feed/feedSearchFocus"
@@ -57,6 +57,7 @@ const NavBar = () => {
   const showLogin = authStatus !== "authenticated"
   const nextPath = normalizeNextPath(router.asPath)
   const [activeHash, setActiveHash] = useState<string | null>(null)
+  const focusFeedSearchInFlightRef = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
     const syncHash = () => setActiveHash(window.location.hash.replace(/^#/, "").split("?")[0] || "")
@@ -65,44 +66,58 @@ const NavBar = () => {
     return () => window.removeEventListener("hashchange", syncHash)
   }, [])
 
-  const focusFeedSearch = useCallback(async () => {
-    if (router.pathname !== "/") {
-      await new Promise<void>((resolve, reject) => {
-        let settled = false
-        const cleanup = () => {
-          router.events.off("routeChangeComplete", handleComplete)
-          router.events.off("routeChangeError", handleError)
-        }
-        const settle = (action: () => void) => {
-          if (settled) return
-          settled = true
-          cleanup()
-          action()
-        }
-        const handleComplete = (url: string) => {
-          const pathname = new URL(url, window.location.origin).pathname
-          if (pathname === "/") {
-            settle(() => resolve())
-            return
+  const focusFeedSearch = useCallback(() => {
+    if (focusFeedSearchInFlightRef.current) {
+      return focusFeedSearchInFlightRef.current
+    }
+
+    const run = (async () => {
+      if (router.pathname !== "/") {
+        await new Promise<void>((resolve, reject) => {
+          let settled = false
+          const cleanup = () => {
+            router.events.off("routeChangeComplete", handleComplete)
+            router.events.off("routeChangeError", handleError)
           }
-          settle(() => reject(new Error(`unexpected route after search navigation: ${url}`)))
-        }
-        const handleError = (error: Error) => {
-          settle(() => reject(error))
-        }
+          const settle = (action: () => void) => {
+            if (settled) return
+            settled = true
+            cleanup()
+            action()
+          }
+          const handleComplete = (url: string) => {
+            const pathname = new URL(url, window.location.origin).pathname
+            if (pathname === "/") {
+              settle(() => resolve())
+              return
+            }
+            settle(() => reject(new Error(`unexpected route after search navigation: ${url}`)))
+          }
+          const handleError = (error: Error) => {
+            settle(() => reject(error))
+          }
 
-        router.events.on("routeChangeComplete", handleComplete)
-        router.events.on("routeChangeError", handleError)
-        void router.push("/").catch((error: unknown) => {
-          settle(() => reject(error instanceof Error ? error : new Error(String(error))))
+          router.events.on("routeChangeComplete", handleComplete)
+          router.events.on("routeChangeError", handleError)
+          void router.push("/").catch((error: unknown) => {
+            settle(() => reject(error instanceof Error ? error : new Error(String(error))))
+          })
         })
-      })
-    }
+      }
 
-    const focused = await waitForFeedSearchInputFocus()
-    if (!focused) {
-      throw new Error("Failed to focus feed search input")
-    }
+      const focused = await waitForFeedSearchInputFocus()
+      if (!focused) {
+        throw new Error("Failed to focus feed search input")
+      }
+    })()
+
+    focusFeedSearchInFlightRef.current = run.finally(() => {
+      if (focusFeedSearchInFlightRef.current === run) {
+        focusFeedSearchInFlightRef.current = null
+      }
+    })
+
+    return focusFeedSearchInFlightRef.current
   }, [router])
 
   useEffect(() => {

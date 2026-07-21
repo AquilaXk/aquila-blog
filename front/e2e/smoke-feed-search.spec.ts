@@ -9,6 +9,8 @@ import {
 const triggerSearchShortcut = async (page: Page) => {
   // Meta+K는 Chromium browser chrome으로 context를 깨뜨릴 수 있어 ctrlKey 합성 이벤트로 고정한다.
   // (앱 핸들러는 metaKey/ctrlKey 모두 허용)
+  await page.waitForLoadState("domcontentloaded")
+  await page.locator("body").click({ position: { x: 8, y: 8 } })
   await page.evaluate(() => {
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -479,6 +481,16 @@ test.describe("core smoke feed and search", () => {
 
     await page.goto("/about")
     await triggerSearchShortcut(page)
+    await expect(page).toHaveURL((url) => new URL(url).pathname === "/")
+    await waitForFeedSearchInputFocus(page)
+  })
+
+  test("from /about rapid duplicate search triggers still focus feed search input", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/about")
+    await Promise.all([triggerSearchShortcut(page), triggerSearchShortcut(page)])
     await expect(page).toHaveURL((url) => new URL(url).pathname === "/")
     await waitForFeedSearchInputFocus(page)
   })

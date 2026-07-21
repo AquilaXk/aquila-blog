@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 import {
-  applyRootFontScale,
+  prepareRootFontScale,
   DESKTOP_VIEWPORT,
   expectMinTouchTarget,
   expectNoHorizontalOverflow,
@@ -109,8 +109,8 @@ test.describe("adaptivity font-scale", () => {
     test(`루트 폰트 ${percent}%에서 홈 landmark와 가로 overflow를 유지한다`, async ({ page }) => {
       await page.setViewportSize(DESKTOP_VIEWPORT)
       await preparePublicHome(page)
+      await prepareRootFontScale(page, percent)
       await page.goto("/")
-      await applyRootFontScale(page, percent)
 
       await expect(page.locator("main")).toBeVisible()
       await expect(page.locator("h1").first()).toBeVisible()
@@ -121,8 +121,8 @@ test.describe("adaptivity font-scale", () => {
   test("루트 폰트 150%에서 관리자 글 목록 landmark와 가로 overflow를 유지한다", async ({ page }) => {
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await prepareAdminPosts(page)
+    await prepareRootFontScale(page, 150)
     await page.goto("/admin/posts")
-    await applyRootFontScale(page, 150)
 
     await expect(page.getByRole("heading", { name: "글 관리" })).toBeVisible()
     await page.getByRole("button", { name: "전체", exact: true }).click()
@@ -176,8 +176,8 @@ test.describe("adaptivity font-scale", () => {
       })
     })
 
+    await prepareRootFontScale(page, 125)
     await page.goto("/posts/991")
-    await applyRootFontScale(page, 125)
     await expect(page.locator("main")).toBeVisible()
     await expect(page.getByRole("heading", { name: "adaptivity 상세 점검" })).toBeVisible()
     await expectNoHorizontalOverflow(page)

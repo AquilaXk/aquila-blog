@@ -93,9 +93,14 @@ export const expectMinTouchTarget = async (
   expect(box!.height, `${label} height`).toBeGreaterThanOrEqual(TOUCH_TARGET_MIN_PX)
 }
 
-export const applyRootFontScale = async (page: Page, percent: 125 | 150) => {
-  await page.evaluate((scalePercent) => {
-    document.documentElement.style.fontSize = `${(16 * scalePercent) / 100}px`
+/** goto 전에 호출한다. client navigation/hydration에도 루트 fontSize가 유지된다. */
+export const prepareRootFontScale = async (page: Page, percent: 125 | 150) => {
+  await page.addInitScript((scalePercent) => {
+    const apply = () => {
+      document.documentElement.style.fontSize = `${(16 * scalePercent) / 100}px`
+    }
+    apply()
+    document.addEventListener("DOMContentLoaded", apply)
   }, percent)
 }
 

@@ -55,7 +55,7 @@ export const markdownRendererRootCodeStyles = (theme: Theme) => css`
     border-radius: 0;
     width: auto;
     min-width: 44px;
-    min-height: 0;
+    min-height: 44px;
     padding: 0;
     font: inherit;
     font-weight: 700;

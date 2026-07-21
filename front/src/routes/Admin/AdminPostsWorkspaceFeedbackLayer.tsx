@@ -1,5 +1,6 @@
 import styled from "@emotion/styled"
 import { ConfirmDialog } from "src/design-system/ConfirmDialog"
+import { fixedBottomSafeArea, fixedHorizontalSafeArea } from "src/design-system/safeArea"
 import { adminMutedSurface } from "./adminColorTokens"
 import type { WorkspaceConfirmState, WorkspaceToastState } from "./AdminPostsWorkspaceModel"
 
@@ -67,7 +68,7 @@ export const AdminPostsWorkspaceFeedbackLayer: React.FC<AdminPostsWorkspaceFeedb
 const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`
   position: fixed;
   right: 1.2rem;
-  bottom: 1.2rem;
+  ${fixedBottomSafeArea("1.2rem")}
   z-index: 40;
   display: grid;
   gap: 0.55rem;
@@ -103,9 +104,8 @@ const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`
   }
 
   @media (max-width: 767px) {
-    left: 0.85rem;
-    right: 0.85rem;
-    bottom: 0.85rem;
+    ${fixedHorizontalSafeArea("0.85rem")}
+    ${fixedBottomSafeArea("0.85rem")}
     min-width: 0;
     max-width: none;
   }

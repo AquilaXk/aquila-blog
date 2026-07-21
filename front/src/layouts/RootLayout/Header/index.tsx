@@ -97,6 +97,7 @@ const StyledWrapper = styled.div`
   z-index: 50;
   position: sticky;
   top: 0;
+  padding-top: env(safe-area-inset-top, 0px);
   background: var(--aq-header-bg);
   border-bottom: 1px solid var(--aq-border);
   backdrop-filter: blur(14px);

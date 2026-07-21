@@ -237,18 +237,18 @@ test.describe("성능 레이아웃과 표면 예산", () => {
 
       expect(searchWidth).toBeGreaterThanOrEqual(170)
       expect(searchWidth).toBeLessThanOrEqual(190)
-      expect(searchHeight).toBe(34)
+      // HIG P3-2(#1265): 모바일 터치 타깃 최소 44px
+      expect(searchHeight).toBe(44)
       expect(searchY).toBeGreaterThanOrEqual(620)
-      // 패밀리룩(1225): 모바일 메타(Focus/Updated/Repository)를 좁은 3열 → 전폭 행 스택으로
-      // 바꾸면서 히어로가 약간 높아져 검색바 Y가 ~732로 내려간다(의도된 레이아웃).
-      expect(searchY).toBeLessThanOrEqual(745)
+      // 패밀리룩(1225)+HIG P3-2: 메타 스택·검색 44px로 검색바 Y가 ~752까지 내려간다.
+      expect(searchY).toBeLessThanOrEqual(765)
       expect(firstCardWidth).toBeGreaterThanOrEqual(360)
       expect(firstCardWidth).toBeLessThanOrEqual(370)
       expect(firstCardHeight).toBeGreaterThanOrEqual(340)
       expect(firstCardHeight).toBeLessThanOrEqual(430)
       expect(firstCardY).toBeGreaterThanOrEqual(700)
       // 패밀리룩(1225): 위 메타 스택 변경으로 첫 카드 Y도 동일하게 아래로 이동한다.
-      expect(firstCardY).toBeLessThanOrEqual(855)
+      expect(firstCardY).toBeLessThanOrEqual(870)
       continue
     }
 
@@ -271,7 +271,8 @@ test.describe("성능 레이아웃과 표면 예산", () => {
 
       expect(searchWidth).toBeGreaterThanOrEqual(170)
       expect(searchWidth).toBeLessThanOrEqual(190)
-      expect(searchHeight).toBe(34)
+      // HIG P3-2(#1265): ≤768px 검색 필드도 터치 타깃 44px
+      expect(searchHeight).toBe(44)
       expect(searchY).toBeGreaterThanOrEqual(560)
       expect(searchY).toBeLessThanOrEqual(760)
       expect(firstCardWidth).toBeGreaterThanOrEqual(720)

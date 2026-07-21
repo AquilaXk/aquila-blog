@@ -19,7 +19,10 @@ type FeedTokens = {
 const asFiniteNumber = (value: unknown, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback
 
-const touchTokens = (uiTokens.touch ?? {}) as { mobileMinTargetPx?: number }
+const touchTokens = (uiTokens.touch ?? {}) as {
+  mobileMinTargetPx?: number
+  bundleRevision?: string
+}
 const feedTokens = (uiTokens.feed ?? {}) as FeedTokens
 const railTokens = (feedTokens.rail ?? {}) as FeedRailTokens
 const tagTokens = (feedTokens.tags ?? {}) as {
@@ -32,6 +35,8 @@ const FEED_TAG_REPRESENTATIVE_CHIP_DEFAULT = 6
 const FEED_TAG_REPRESENTATIVE_DESKTOP_DEFAULT = 20
 
 export const MOBILE_TOUCH_TARGET_MIN_PX = asFiniteNumber(touchTokens.mobileMinTargetPx, 44)
+/** Referenced so production bundles cannot drop the touch token module as dead code. */
+export const TOUCH_TOKEN_BUNDLE_REVISION = touchTokens.bundleRevision ?? "missing"
 export const FEED_CHIP_GAP_PX = asFiniteNumber(feedTokens.chipGapPx, 6)
 export const FEED_SEARCH_FIELD_MIN_HEIGHT_PX = asFiniteNumber(feedTokens.searchFieldMinHeightPx, 36)
 

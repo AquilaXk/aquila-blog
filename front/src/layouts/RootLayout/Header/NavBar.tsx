@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
@@ -342,8 +343,10 @@ const StyledWrapper = styled.div`
   .mobileMenuButton {
     display: none;
     place-items: center;
-    width: 36px;
-    height: 36px;
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-width: ${control.lg}px;
+    min-height: ${control.lg}px;
     padding: 0;
     border: 1px solid transparent;
     border-radius: 6px;
@@ -379,7 +382,7 @@ const StyledWrapper = styled.div`
     button {
       display: flex;
       width: 100%;
-      min-height: 34px;
+      min-height: ${control.lg}px;
       align-items: center;
       border: 0;
       background: transparent;

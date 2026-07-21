@@ -12,11 +12,25 @@ export const PrimaryInlineButton = styled(AdminTextActionButton)`
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.92rem;
   font-weight: 800;
+
+  @media (max-width: 767px) {
+    min-height: 44px;
+    padding: 0.45rem 0.65rem;
+    display: inline-flex;
+    align-items: center;
+  }
 `
 
 export const GhostButton = styled(AdminTextActionButton)`
   font-size: 0.88rem;
   font-weight: 700;
+
+  @media (max-width: 767px) {
+    min-height: 44px;
+    padding: 0.45rem 0.65rem;
+    display: inline-flex;
+    align-items: center;
+  }
 `
 
 export const VisibilityBadge = styled(AdminStatusPill)<{ "data-tone": string }>`

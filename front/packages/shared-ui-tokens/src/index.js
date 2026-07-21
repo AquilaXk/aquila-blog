@@ -1,6 +1,6 @@
 const uiTokens = {
   touch: {
-    mobileMinTargetPx: 34,
+    mobileMinTargetPx: 44,
   },
   feed: {
     chipGapPx: 6,

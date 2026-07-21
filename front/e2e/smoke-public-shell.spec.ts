@@ -187,6 +187,9 @@ test.describe("core smoke public shell", () => {
   expect(navBarSource).toContain("gap: 7px;")
   expect(navBarSource).toContain("height: 36px;")
   expect(navBarSource).toContain("min-height: 36px;")
+  expect(navBarSource).toContain("width: ${control.lg}px;")
+  expect(navBarSource).toContain("min-width: ${control.lg}px;")
+  expect(navBarSource).toContain("min-height: ${control.lg}px;")
   expect(navBarSource).toContain("border-radius: 6px;")
   expect(navBarSource).toContain("const [activeHash, setActiveHash] = useState<string | null>(null)")
   expect(navBarSource).toContain("window.addEventListener(\"hashchange\", syncHash)")
@@ -207,8 +210,8 @@ test.describe("core smoke public shell", () => {
   expect(navBarSource).toContain(".mobileMenuButton {\n      display: grid;")
   expect(navBarSource).toContain(".mobileMenuPanel {\n      display: grid;")
   expect(notificationBellStyleSource).toContain("@media (max-width: 820px)")
-  expect(notificationBellStyleSource).toContain("width: 36px;")
-  expect(notificationBellStyleSource).toContain("height: 36px;")
+  expect(notificationBellStyleSource).toContain("width: ${control.lg}px;")
+  expect(notificationBellStyleSource).toContain("height: ${control.lg}px;")
   expect(notificationBellStyleSource).toContain("border-radius: 6px;")
   expect(notificationBellStyleSource).not.toContain("@media (max-width: 720px)")
   expect(notificationBellStyleSource).not.toContain("transform: translateY(-1px);")
@@ -222,6 +225,8 @@ test.describe("core smoke public shell", () => {
   expect(logoSource).toContain("blogTitle")
   expect(themeToggleSource).toContain("width: 36px;")
   expect(themeToggleSource).toContain("height: 36px;")
+  expect(themeToggleSource).toContain("@media (max-width: 820px)")
+  expect(themeToggleSource).toContain("min-height: ${control.lg}px;")
   expect(themeToggleSource).toContain("border-radius: 6px;")
   expect(adminShellSource).not.toContain("useAdminProfile")
   expect(adminPageSource).toContain("initialProfileSnapshot?: AdminProfile | null")
@@ -459,7 +464,7 @@ test.describe("core smoke public shell", () => {
   expect(uniqueHeights.length).toBeLessThanOrEqual(2)
   for (const height of uniqueHeights) {
     expect(height).toBeGreaterThanOrEqual(34)
-    expect(height).toBeLessThanOrEqual(40)
+    expect(height).toBeLessThanOrEqual(44)
   }
 })
 

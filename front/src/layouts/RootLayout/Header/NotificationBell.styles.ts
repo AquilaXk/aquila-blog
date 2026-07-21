@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 
 export const StyledWrapper = styled.div`
   position: relative;
@@ -299,10 +300,10 @@ export const StyledWrapper = styled.div`
     }
 
     .trigger {
-      min-width: 36px;
-      min-height: 36px;
-      width: 36px;
-      height: 36px;
+      min-width: ${control.lg}px;
+      min-height: ${control.lg}px;
+      width: ${control.lg}px;
+      height: ${control.lg}px;
 
       svg {
         width: 18px;

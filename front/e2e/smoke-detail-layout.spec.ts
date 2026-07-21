@@ -82,8 +82,10 @@ test.describe("core smoke detail layout", () => {
     expect(headerStyles).toContain("border-radius: 0;")
     expect(headerStyles).not.toContain("border-radius: 10px;")
     expect(sectionStyles).toContain("margin-bottom: 28px;")
-    expect(sectionStyles).toContain("width: 42px;")
-    expect(sectionStyles).toContain("height: 42px;")
+    expect(sectionStyles).toContain("width: 44px;")
+    expect(sectionStyles).toContain("height: 44px;")
+    expect(sectionStyles).toContain("min-width: 44px;")
+    expect(sectionStyles).toContain("min-height: 44px;")
     expect(relatedSource).toContain('data-rum-section="related"')
     expect(relatedSource).toContain("const getRelatedPostMeta = (post: TPost)")
     expect(relatedSource).toContain("post.tags?.[0] || post.category?.[0] || post.type?.[0]")
@@ -536,8 +538,8 @@ test.describe("core smoke detail layout", () => {
   expect(actionMetrics).toEqual({
     position: "static",
     display: "flex",
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
   })
   const compactShareButton = compactActionBar.getByRole("button", { name: /^공유/ })
   await compactShareButton.click()

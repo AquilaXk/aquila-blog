@@ -214,6 +214,25 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
       min-width: 100%;
       max-width: none;
     }
+
+    .aq-table-shell {
+      position: relative;
+    }
+
+    .aq-table-shell::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 1.5rem;
+      pointer-events: none;
+      background: linear-gradient(
+        to right,
+        transparent,
+        ${getTableChromePalette(theme).background}
+      );
+    }
   }
 
 `

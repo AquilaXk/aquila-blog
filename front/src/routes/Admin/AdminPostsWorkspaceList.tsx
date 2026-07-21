@@ -1,3 +1,4 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from "react"
 import {
   ActionRow,
   GhostButton,
@@ -26,6 +27,11 @@ import {
   type ListState,
   type PostListScope,
 } from "./AdminPostsWorkspaceModel"
+import {
+  ADMIN_POSTS_ROW_ATTR,
+  ADMIN_POSTS_ROW_PRIMARY_ATTR,
+  handleAdminPostsListKeyDown,
+} from "./AdminPostsWorkspaceListKeyboard"
 
 type AdminPostsWorkspaceListProps = {
   listScope: PostListScope
@@ -163,6 +169,12 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
   const totalPages = Math.max(currentPage, Math.ceil(listState.total / pageSize))
   const showPager = totalPages > 1
 
+  const rowProps = { [ADMIN_POSTS_ROW_ATTR]: "true" as const }
+  const primaryProps = { [ADMIN_POSTS_ROW_PRIMARY_ATTR]: "true" as const }
+  const onListKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    handleAdminPostsListKeyDown(event, event.currentTarget)
+  }
+
   return (
     <ListCard>
       {!shouldRenderMobileList ? (
@@ -177,9 +189,9 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
               <th className="viewsCell">{isDeletedScope ? "Actions" : "Views"}</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody onKeyDown={onListKeyDown}>
             {listState.rows.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.id} {...rowProps}>
                 <td className="selectCell">
                   <span className="check" aria-hidden="true" />
                 </td>
@@ -188,7 +200,11 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                     {isDeletedScope ? (
                       <TitleText>{buildRowTitle(row)}</TitleText>
                     ) : (
-                      <TitleButton type="button" onClick={() => openEditorForRow(row)}>
+                      <TitleButton
+                        type="button"
+                        {...primaryProps}
+                        onClick={() => openEditorForRow(row)}
+                      >
                         {buildRowTitle(row)}
                       </TitleButton>
                     )}
@@ -207,6 +223,7 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                     <RowActions>
                       <GhostButton
                         type="button"
+                        {...primaryProps}
                         disabled={isDeletedActionPending}
                         onClick={() => onRestorePost(row)}
                       >
@@ -236,16 +253,16 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
       ) : null}
 
       {shouldRenderMobileList ? (
-        <MobileCardList>
+        <MobileCardList onKeyDown={onListKeyDown}>
           {listState.rows.map((row) => (
-            <article key={`mobile-${row.id}`}>
+            <article key={`mobile-${row.id}`} {...rowProps}>
               <header>
                 <span className="id">#{row.id}</span>
               </header>
               {isDeletedScope ? (
                 <TitleText>{buildRowTitle(row)}</TitleText>
               ) : (
-                <TitleButton type="button" onClick={() => openEditorForRow(row)}>
+                <TitleButton type="button" {...primaryProps} onClick={() => openEditorForRow(row)}>
                   {buildRowTitle(row)}
                 </TitleButton>
               )}
@@ -260,6 +277,7 @@ export const AdminPostsWorkspaceList: React.FC<AdminPostsWorkspaceListProps> = (
                 <RowActions>
                   <GhostButton
                     type="button"
+                    {...primaryProps}
                     disabled={isDeletedActionPending}
                     onClick={() => onRestorePost(row)}
                   >

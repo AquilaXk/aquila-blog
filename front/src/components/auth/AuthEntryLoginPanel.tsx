@@ -157,7 +157,7 @@ const AuthEntryLoginPanel = ({
           </div>
         </div>
 
-        <p className="inlineError" role="alert" aria-live="polite" aria-atomic="true">
+        <p className="inlineError" role="status" aria-live="polite" aria-atomic="true">
           {error || null}
         </p>
 

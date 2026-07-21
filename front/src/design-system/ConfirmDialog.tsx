@@ -78,7 +78,7 @@ const ConfirmBackdrop = styled.div`
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(15, 23, 42, 0.42);
+  background: color-mix(in srgb, ${({ theme }) => theme.colors.gray12} 42%, transparent);
 `
 
 const ConfirmPanel = styled.div`

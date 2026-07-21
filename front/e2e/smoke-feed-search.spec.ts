@@ -494,4 +494,18 @@ test.describe("core smoke feed and search", () => {
     await expect(page).toHaveURL((url) => new URL(url).pathname === "/")
     await waitForFeedSearchInputFocus(page)
   })
+
+  test("second search after completed focus still navigates from /about", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/")
+    await triggerSearchShortcut(page)
+    await waitForFeedSearchInputFocus(page)
+
+    await page.goto("/about")
+    await triggerSearchShortcut(page)
+    await expect(page).toHaveURL((url) => new URL(url).pathname === "/")
+    await waitForFeedSearchInputFocus(page)
+  })
 })

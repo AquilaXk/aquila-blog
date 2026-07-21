@@ -111,13 +111,14 @@ const NavBar = () => {
       }
     })()
 
-    focusFeedSearchInFlightRef.current = run.finally(() => {
+    focusFeedSearchInFlightRef.current = run
+    void run.finally(() => {
       if (focusFeedSearchInFlightRef.current === run) {
         focusFeedSearchInFlightRef.current = null
       }
     })
 
-    return focusFeedSearchInFlightRef.current
+    return run
   }, [router])
 
   useEffect(() => {

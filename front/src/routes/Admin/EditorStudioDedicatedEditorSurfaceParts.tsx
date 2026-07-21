@@ -133,7 +133,7 @@ export const EditorStudioSaveState = styled.span `
   text-align: center;
 
   &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green10};
+    color: ${({ theme }) => theme.colors.green12};
   }
 
   &[data-tone="loading"] {

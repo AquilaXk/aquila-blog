@@ -348,12 +348,8 @@ export const StyledWrapper = styled.div `
 
   @media (max-width: 1100px) {
     .detailLayout {
-      grid-template-columns: 52px minmax(0, 1fr);
-      gap: 44px;
-    }
-
-    .rightRail {
-      display: none;
+      grid-template-columns: 52px minmax(0, 1fr) minmax(148px, 180px);
+      gap: 28px;
     }
   }
 
@@ -369,7 +365,8 @@ export const StyledWrapper = styled.div `
       padding: 30px 20px 70px;
     }
 
-    .leftRail {
+    .leftRail,
+    .rightRail {
       display: none;
     }
 

@@ -1,6 +1,7 @@
 export declare const uiTokens: {
   touch: {
     mobileMinTargetPx: number
+    bundleRevision: string
   }
   feed: {
     chipGapPx: number

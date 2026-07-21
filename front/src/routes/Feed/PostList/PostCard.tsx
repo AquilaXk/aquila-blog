@@ -405,6 +405,13 @@ const StyledWrapper = styled.a`
     }
   }
 
+  @media (hover: none), (pointer: coarse) {
+    article > .side .arrowBtn {
+      border-color: var(--post-card-border-strong);
+      color: var(--post-card-border-strong);
+    }
+  }
+
   @media (max-width: 900px) {
     article {
       grid-template-columns: 32px minmax(0, 1fr);

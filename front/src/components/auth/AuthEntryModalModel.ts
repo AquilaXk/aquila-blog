@@ -1,3 +1,5 @@
+import type { RefObject } from "react"
+
 export type RsData<T> = {
   resultCode: string
   msg: string
@@ -16,6 +18,8 @@ export type AuthEntryModalProps = {
   nextPath?: string
   title?: string
   description?: string
+  /** Stable focus restore target when the open trigger unmounts (mobile menu). */
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export const resolveAuthModalContent = (view: AuthModalView, loginTitle: string, loginDescription: string) => {

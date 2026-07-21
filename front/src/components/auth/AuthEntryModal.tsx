@@ -75,6 +75,7 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
   nextPath,
   title = "로그인",
   description = "",
+  returnFocusRef,
 }) => {
   const { refresh, setMe } = useAuthSession()
   const [view, setView] = useState<AuthModalView>("login")
@@ -113,6 +114,7 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
     onClose,
     containerRef: modalRef,
     initialFocusRef: closeButtonRef,
+    returnFocusRef,
     paused: showIpSecurityInfo,
   })
 

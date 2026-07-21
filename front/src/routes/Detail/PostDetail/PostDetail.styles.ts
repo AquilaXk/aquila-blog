@@ -348,8 +348,16 @@ export const StyledWrapper = styled.div `
 
   @media (max-width: 1100px) {
     .detailLayout {
-      grid-template-columns: 52px minmax(0, 1fr) minmax(148px, 180px);
+      grid-template-columns: 52px minmax(0, 1fr);
       gap: 28px;
+    }
+
+    .detailLayout[data-toc="true"] {
+      grid-template-columns: 52px minmax(0, 1fr) minmax(148px, 180px);
+    }
+
+    .detailLayout[data-toc="false"] .rightRail {
+      display: none;
     }
   }
 

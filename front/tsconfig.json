@@ -21,6 +21,11 @@
     "jsxImportSource": "@emotion/react",
     "incremental": true,
     "baseUrl": ".",
+    "paths": {
+      "@shared/ui-tokens": [
+        "packages/shared-ui-tokens/src/index.js"
+      ]
+    },
     "plugins": [
       {
         "name": "next"

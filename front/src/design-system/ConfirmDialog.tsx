@@ -135,9 +135,9 @@ const GhostButton = styled.button`
 `
 
 const ConfirmButton = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
+  border: 1px solid ${({ theme }) => theme.colors.gray12};
   background: transparent;
-  color: ${({ theme }) => theme.colors.statusDangerText};
+  color: ${({ theme }) => theme.colors.gray12};
   min-height: 40px;
   padding: 0 0.85rem;
   border-radius: 8px;
@@ -145,4 +145,9 @@ const ConfirmButton = styled.button`
   font-weight: 800;
   cursor: pointer;
   ${focusVisibleRing}
+
+  &[data-tone="danger"] {
+    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+    color: ${({ theme }) => theme.colors.statusDangerText};
+  }
 `

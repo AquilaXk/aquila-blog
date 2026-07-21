@@ -219,7 +219,7 @@ export const markdownRendererRootTableToggleStyles = (theme: Theme) => css`
       position: relative;
     }
 
-    .aq-table-shell::after {
+    .aq-table-shell[data-scroll-hint="true"]::after {
       content: "";
       position: absolute;
       top: 0;

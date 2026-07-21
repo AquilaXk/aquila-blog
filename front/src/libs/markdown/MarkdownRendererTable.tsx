@@ -3,8 +3,10 @@ import {
   type CSSProperties,
   type ReactNode,
   useContext,
+  useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react"
 import {
   TABLE_MIN_COLUMN_WIDTH_PX,
@@ -39,6 +41,8 @@ export const MarkdownTableRenderer = ({
   layout?: MarkdownTableLayout | null
 }) => {
   const rowCursorRef = useRef(0)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [showScrollHint, setShowScrollHint] = useState(false)
   const isWideOverflowTable = layout?.overflowMode === "wide"
   const columnWidths = layout?.columnWidths
   const normalizedColumnWidths = useMemo(
@@ -92,13 +96,44 @@ export const MarkdownTableRenderer = ({
     [layout?.cells, layout?.columnAlignments, layout?.rowHeights]
   )
 
+  useEffect(() => {
+    const scrollElement = scrollRef.current
+    if (!scrollElement) return
+    const tableElement = scrollElement.querySelector("table")
+
+    const syncScrollHint = () => {
+      const overflowAmount = scrollElement.scrollWidth - scrollElement.clientWidth
+      const remaining = overflowAmount - scrollElement.scrollLeft
+      setShowScrollHint(overflowAmount > 1 && remaining > 1)
+    }
+
+    syncScrollHint()
+    scrollElement.addEventListener("scroll", syncScrollHint, { passive: true })
+    window.addEventListener("resize", syncScrollHint)
+
+    let resizeObserver: ResizeObserver | null = null
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => syncScrollHint())
+      resizeObserver.observe(scrollElement)
+      if (tableElement) resizeObserver.observe(tableElement)
+    }
+
+    return () => {
+      scrollElement.removeEventListener("scroll", syncScrollHint)
+      window.removeEventListener("resize", syncScrollHint)
+      resizeObserver?.disconnect()
+    }
+  }, [explicitTableWidth, isWideOverflowTable, usesExplicitNormalWidth])
+
   return (
     <MarkdownTableRenderContext.Provider value={contextValue}>
       <div
         className="aq-table-shell"
         data-table-width-mode={usesExplicitNormalWidth ? "explicit-normal" : undefined}
+        data-scroll-hint={showScrollHint ? "true" : undefined}
       >
         <div
+          ref={scrollRef}
           className="aq-table-scroll"
           data-table-width-mode={usesExplicitNormalWidth ? "explicit-normal" : undefined}
         >

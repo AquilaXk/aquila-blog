@@ -1,10 +1,11 @@
 import dynamic from "next/dynamic"
-import { FormEvent, useEffect, useMemo, useState } from "react"
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import { SIGNUP_LEGAL_POLICY_VERSION } from "src/apis/backend/legal"
 import AppIcon from "src/components/icons/AppIcon"
+import { useModalFocusTrap } from "src/design-system/useModalFocusTrap"
 import useAuthSession from "src/hooks/useAuthSession"
 import { useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
 import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
@@ -21,6 +22,8 @@ import {
   type RsData,
   type SignupEmailStartResult,
 } from "./AuthEntryModalModel"
+
+const AUTH_ENTRY_DESCRIPTION_ID = "auth-entry-modal-description"
 
 const loadLoginPanel = () => import("./AuthEntryLoginPanel")
 const loadSignupPanel = () => import("./AuthEntrySignupPanel")
@@ -94,6 +97,8 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
     isCoolingDown: signupCooldownActive,
     startCooldown,
   } = useSignupMailCooldown(signupEmail)
+  const modalRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
 
   const normalizedNextPath = useMemo(() => {
     return normalizeNextPath(nextPath)
@@ -102,6 +107,14 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
   const socialItems = useMemo(() => {
     return buildSocialAuthItems(normalizedNextPath)
   }, [normalizedNextPath])
+
+  const { handleKeyDown } = useModalFocusTrap({
+    open,
+    onClose,
+    containerRef: modalRef,
+    initialFocusRef: closeButtonRef,
+    paused: showIpSecurityInfo,
+  })
 
   useEffect(() => {
     if (!open) return
@@ -233,22 +246,36 @@ const AuthEntryModal: React.FC<AuthEntryModalProps> = ({
   }
 
   const currentContent = resolveAuthModalContent(view, title, description)
+  const describedBy = currentContent.body ? AUTH_ENTRY_DESCRIPTION_ID : undefined
 
   const modalNode = (
     <Backdrop onClick={onClose} role="presentation">
       <Modal
+        ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-entry-modal-title"
+        aria-describedby={describedBy}
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         <div className="formPane">
-          <button type="button" className="closeButton" onClick={onClose} aria-label="닫기">
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="closeButton"
+            onClick={onClose}
+            aria-label="닫기"
+          >
             <AppIcon name="close" aria-hidden="true" />
           </button>
 
           <h4 id="auth-entry-modal-title">{currentContent.heading}</h4>
-          {currentContent.body ? <p className="formDescription">{currentContent.body}</p> : null}
+          {currentContent.body ? (
+            <p id={AUTH_ENTRY_DESCRIPTION_ID} className="formDescription">
+              {currentContent.body}
+            </p>
+          ) : null}
 
           {view === "login" && (
             <LoginPanel

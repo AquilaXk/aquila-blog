@@ -25,6 +25,8 @@ type UseModalFocusTrapOptions = {
   onClose: () => void
   containerRef: RefObject<HTMLElement | null>
   initialFocusRef?: RefObject<HTMLElement | null>
+  /** Nested dialog open: keep trigger restore deferred, pause Esc/Tab trap. */
+  paused?: boolean
 }
 
 export const useModalFocusTrap = ({
@@ -32,8 +34,15 @@ export const useModalFocusTrap = ({
   onClose,
   containerRef,
   initialFocusRef,
+  paused = false,
 }: UseModalFocusTrapOptions) => {
   const triggerRef = useRef<HTMLElement | null>(null)
+  const pausedRef = useRef(paused)
+  const trapActive = open && !paused
+
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
 
   useEffect(() => {
     if (!open) return
@@ -41,6 +50,7 @@ export const useModalFocusTrap = ({
     triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
 
     const raf = window.requestAnimationFrame(() => {
+      if (pausedRef.current) return
       const initialTarget =
         initialFocusRef?.current ??
         containerRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
@@ -57,21 +67,21 @@ export const useModalFocusTrap = ({
   }, [open, containerRef, initialFocusRef])
 
   useEffect(() => {
-    if (!open) return
+    if (!trapActive) return
 
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       event.preventDefault()
       onClose()
     }
 
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [open, onClose])
+    window.addEventListener("keydown", handleEscape)
+    return () => window.removeEventListener("keydown", handleEscape)
+  }, [trapActive, onClose])
 
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLElement>) => {
-      if (event.key !== "Tab") return
+      if (!trapActive || event.key !== "Tab") return
 
       const container = containerRef.current
       if (!container) return
@@ -99,7 +109,7 @@ export const useModalFocusTrap = ({
         firstElement.focus()
       }
     },
-    [containerRef]
+    [containerRef, trapActive]
   )
 
   return { handleKeyDown }

@@ -67,10 +67,42 @@ const NavBar = () => {
 
   const focusFeedSearch = useCallback(async () => {
     if (router.pathname !== "/") {
-      await router.push("/")
+      await new Promise<void>((resolve, reject) => {
+        let settled = false
+        const cleanup = () => {
+          router.events.off("routeChangeComplete", handleComplete)
+          router.events.off("routeChangeError", handleError)
+        }
+        const settle = (action: () => void) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          action()
+        }
+        const handleComplete = (url: string) => {
+          const pathname = new URL(url, window.location.origin).pathname
+          if (pathname === "/") {
+            settle(() => resolve())
+            return
+          }
+          settle(() => reject(new Error(`unexpected route after search navigation: ${url}`)))
+        }
+        const handleError = (error: Error) => {
+          settle(() => reject(error))
+        }
+
+        router.events.on("routeChangeComplete", handleComplete)
+        router.events.on("routeChangeError", handleError)
+        void router.push("/").catch((error: unknown) => {
+          settle(() => reject(error instanceof Error ? error : new Error(String(error))))
+        })
+      })
     }
 
-    await waitForFeedSearchInputFocus()
+    const focused = await waitForFeedSearchInputFocus()
+    if (!focused) {
+      throw new Error("Failed to focus feed search input")
+    }
   }, [router])
 
   useEffect(() => {

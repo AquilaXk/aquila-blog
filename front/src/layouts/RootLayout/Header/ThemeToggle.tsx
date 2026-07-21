@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import React from "react"
 import useScheme from "src/hooks/useScheme"
+import { control } from "src/design-system/tokens"
 
 type Props = {}
 
@@ -86,4 +87,10 @@ const StyledWrapper = styled.button`
     display: block;
   }
 
+  @media (max-width: 820px) {
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-width: ${control.lg}px;
+    min-height: ${control.lg}px;
+  }
 `

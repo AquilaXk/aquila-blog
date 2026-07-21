@@ -173,7 +173,7 @@ const StyledWrapper = styled.div`
     }
 
     > .field > .mid {
-      min-height: 34px;
+      min-height: ${MOBILE_TOUCH_TARGET_MIN_PX}px;
       padding: 0.34rem 0;
       font-size: 0.82rem;
       line-height: 1.45;

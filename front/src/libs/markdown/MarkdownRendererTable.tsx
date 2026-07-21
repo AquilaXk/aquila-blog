@@ -99,6 +99,7 @@ export const MarkdownTableRenderer = ({
   useEffect(() => {
     const scrollElement = scrollRef.current
     if (!scrollElement) return
+    const tableElement = scrollElement.querySelector("table")
 
     const syncScrollHint = () => {
       const overflowAmount = scrollElement.scrollWidth - scrollElement.clientWidth
@@ -114,6 +115,7 @@ export const MarkdownTableRenderer = ({
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => syncScrollHint())
       resizeObserver.observe(scrollElement)
+      if (tableElement) resizeObserver.observe(tableElement)
     }
 
     return () => {

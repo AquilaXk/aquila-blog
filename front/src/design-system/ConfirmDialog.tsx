@@ -2,6 +2,7 @@ import type { Theme } from "@emotion/react"
 import styled from "@emotion/styled"
 import { useRef, type ReactNode } from "react"
 import { focusVisibleRing } from "./focusRing"
+import { modalSafeAreaPadding } from "./safeArea"
 import { useModalFocusTrap } from "./useModalFocusTrap"
 
 export type ConfirmDialogTone = "default" | "danger"
@@ -77,7 +78,7 @@ const ConfirmBackdrop = styled.div`
   z-index: 50;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  ${modalSafeAreaPadding}
   background: color-mix(in srgb, ${({ theme }) => theme.colors.gray12} 42%, transparent);
 `
 

@@ -10,8 +10,10 @@ export const MobileSummaryBar = styled.div `
     margin-bottom: 28px;
 
     button {
-      width: 42px;
-      height: 42px;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
       display: inline-flex;
       align-items: center;
       justify-content: center;

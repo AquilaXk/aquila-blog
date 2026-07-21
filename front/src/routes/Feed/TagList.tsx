@@ -9,6 +9,7 @@ import {
   FEED_TAG_RAIL_DESKTOP_MIN_PX,
   FEED_TAG_REPRESENTATIVE_CHIP_LIMIT,
   FEED_TAG_REPRESENTATIVE_DESKTOP_LIMIT,
+  MOBILE_TOUCH_TARGET_MIN_PX,
 } from "./feedUiTokens"
 
 type TagEntry = [string, number]
@@ -393,7 +394,7 @@ const StyledWrapper = styled.div`
     gap: 0.24rem;
     text-align: left;
     white-space: nowrap;
-    min-height: 34px;
+    min-height: ${MOBILE_TOUCH_TARGET_MIN_PX}px;
     border-radius: 999px;
     border: 0;
     background: transparent;
@@ -481,7 +482,7 @@ const StyledWrapper = styled.div`
     }
 
     .chipRail button {
-      min-height: 34px;
+      min-height: ${MOBILE_TOUCH_TARGET_MIN_PX}px;
       padding: 0.28rem 0.82rem;
       border-radius: 999px;
 

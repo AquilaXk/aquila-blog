@@ -78,12 +78,30 @@ test.describe("residual keyboard paths", () => {
 
     await loginTrigger.click()
     await expect(dialog).toBeVisible()
+    const liveError = dialog.locator(".inlineError[aria-live='polite']")
+    await expect(liveError).toHaveCount(1)
     await dialog.getByLabel("이메일").fill("not-an-email")
     await dialog.getByLabel("비밀번호", { exact: true }).fill("x")
     await dialog.getByRole("button", { name: "로그인", exact: true }).click()
-    const liveError = dialog.locator(".inlineError[aria-live='polite']")
-    await expect(liveError).toBeVisible()
     await expect(liveError).toContainText("이메일")
+  })
+
+  test("모바일 메뉴 Login 닫기 후 메뉴 버튼으로 포커스가 복귀한다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await preparePublicHome(page)
+    await mockAvatarAsset(page)
+    await mockAnonymousSession(page)
+    await page.goto("/")
+
+    const menuButton = page.getByRole("button", { name: "메뉴 열기" })
+    await menuButton.click()
+    await page.getByRole("button", { name: "Login", exact: true }).click()
+
+    const dialog = page.getByRole("dialog", { name: "로그인" })
+    await expect(dialog).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(dialog).toHaveCount(0)
+    await expect(menuButton).toBeFocused()
   })
 
   test("Legal TOC jump 후 대상 h2로 포커스가 이동한다", async ({ page }) => {

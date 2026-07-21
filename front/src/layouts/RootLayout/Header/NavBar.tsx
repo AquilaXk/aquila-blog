@@ -3,7 +3,7 @@ import { control } from "src/design-system/tokens"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { Suspense, lazy, useEffect, useState } from "react"
+import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import ThemeToggle from "./ThemeToggle"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
@@ -48,6 +48,8 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
+  const authReturnFocusRef = useRef<HTMLElement | null>(null)
   const isAuthenticated = authStatus === "authenticated"
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
   const showLogin = authStatus !== "authenticated"
@@ -113,7 +115,8 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
             className="loginLink"
             onMouseEnter={preloadAuthEntryModal}
             onFocus={preloadAuthEntryModal}
-            onClick={() => {
+            onClick={(event) => {
+              authReturnFocusRef.current = event.currentTarget
               preloadAuthEntryModal()
               setAuthModalOpen(true)
             }}
@@ -143,6 +146,7 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
         ) : null}
 
         <button
+          ref={mobileMenuButtonRef}
           type="button"
           className="mobileMenuButton"
           aria-label="메뉴 열기"
@@ -169,6 +173,7 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
             <button
               type="button"
               onClick={() => {
+                authReturnFocusRef.current = mobileMenuButtonRef.current
                 setMobileMenuOpen(false)
                 preloadAuthEntryModal()
                 setAuthModalOpen(true)
@@ -196,6 +201,7 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
         onClose={() => setAuthModalOpen(false)}
         nextPath={nextPath}
         title="로그인"
+        returnFocusRef={authReturnFocusRef}
       />
     </StyledWrapper>
   )

@@ -25,6 +25,8 @@ type UseModalFocusTrapOptions = {
   onClose: () => void
   containerRef: RefObject<HTMLElement | null>
   initialFocusRef?: RefObject<HTMLElement | null>
+  /** Prefer this connected element when the click trigger unmounts (e.g. mobile menu). */
+  returnFocusRef?: RefObject<HTMLElement | null>
   /** Nested dialog open: keep trigger restore deferred, pause Esc/Tab trap. */
   paused?: boolean
 }
@@ -34,6 +36,7 @@ export const useModalFocusTrap = ({
   onClose,
   containerRef,
   initialFocusRef,
+  returnFocusRef,
   paused = false,
 }: UseModalFocusTrapOptions) => {
   const triggerRef = useRef<HTMLElement | null>(null)
@@ -47,7 +50,14 @@ export const useModalFocusTrap = ({
   useEffect(() => {
     if (!open) return
 
-    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const preferredReturn = returnFocusRef?.current
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    triggerRef.current =
+      preferredReturn && preferredReturn.isConnected
+        ? preferredReturn
+        : active && active.isConnected
+          ? active
+          : preferredReturn ?? active
 
     const raf = window.requestAnimationFrame(() => {
       if (pausedRef.current) return
@@ -64,7 +74,7 @@ export const useModalFocusTrap = ({
         restoreFocus(trigger)
       })
     }
-  }, [open, containerRef, initialFocusRef])
+  }, [open, containerRef, initialFocusRef, returnFocusRef])
 
   useEffect(() => {
     if (!trapActive) return

@@ -9,7 +9,6 @@ import {
   prepareAdminPosts,
   preparePublicHome,
   readMotionBudget,
-  TOUCH_TARGET_MIN_PX,
 } from "./helpers/adaptivityFixtures"
 import { mockAvatarAsset, mockAnonymousSession } from "./helpers/mobileLayoutFixtures"
 
@@ -23,10 +22,7 @@ test.describe("adaptivity hit-area", () => {
 
     const firstCard = page.locator('[data-ui="feed-post-card"]').first()
     await expect(firstCard).toBeVisible()
-    const cardBox = await firstCard.boundingBox()
-    expect(cardBox).not.toBeNull()
-    expect(cardBox!.width).toBeGreaterThanOrEqual(TOUCH_TARGET_MIN_PX)
-    expect(cardBox!.height).toBeGreaterThanOrEqual(TOUCH_TARGET_MIN_PX)
+    await expectMinTouchTarget(page, firstCard.locator(".arrowBtn").first(), "feed card arrow")
   })
 })
 
@@ -70,15 +66,18 @@ test.describe("adaptivity reduced-motion", () => {
       .poll(async () => page.evaluate(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches))
       .toBe(true)
 
-    const articleBudget = await readMotionBudget(page, '[data-ui="feed-post-card"] article')
-    expect(articleBudget, `article budget=${JSON.stringify(articleBudget)}`).not.toBeNull()
+    const thumbnailBudget = await readMotionBudget(
+      page,
+      '[data-ui="feed-post-card"] article > .side .thumbnail img'
+    )
+    expect(thumbnailBudget, `thumbnail budget=${JSON.stringify(thumbnailBudget)}`).not.toBeNull()
     expect(
-      isNearZeroDuration(articleBudget!.transitionDuration),
-      `article transitionDuration=${articleBudget!.transitionDuration}`
+      isNearZeroDuration(thumbnailBudget!.transitionDuration),
+      `thumbnail transitionDuration=${thumbnailBudget!.transitionDuration}`
     ).toBe(true)
     expect(
-      isNearZeroDuration(articleBudget!.animationDuration),
-      `article animationDuration=${articleBudget!.animationDuration}`
+      isNearZeroDuration(thumbnailBudget!.animationDuration),
+      `thumbnail animationDuration=${thumbnailBudget!.animationDuration}`
     ).toBe(true)
 
     const globalSample = await page.evaluate(() => {

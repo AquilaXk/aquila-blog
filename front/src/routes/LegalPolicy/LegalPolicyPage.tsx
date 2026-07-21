@@ -47,7 +47,7 @@ const LegalPolicyPage = ({
     setActiveSectionId(sectionId)
     const section = document.getElementById(sectionId)
     section?.scrollIntoView({ behavior: "smooth", block: "start" })
-    window.history.replaceState(null, "", `#${sectionId}`)
+    window.history.replaceState(window.history.state, "", `#${sectionId}`)
     const heading = section?.querySelector<HTMLElement>("h2")
     if (!heading) return
     // Hash navigation / smooth scroll can steal focus on the next frame.

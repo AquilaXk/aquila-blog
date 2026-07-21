@@ -371,10 +371,21 @@ const StyledWrapper = styled.a`
       .arrowBtn {
         width: 2.125rem;
         height: 2.125rem;
+        min-width: 2.125rem;
+        min-height: 2.125rem;
         border: 1px solid var(--post-card-border-color);
         display: grid;
         place-items: center;
         color: var(--aq-muted);
+      }
+
+      @media (max-width: 820px), (hover: none), (pointer: coarse) {
+        .arrowBtn {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          min-height: 44px;
+        }
       }
 
       .arrowBtn::before {

@@ -1,19 +1,61 @@
 import { expect, type Page } from "@playwright/test"
 import {
+  createExplorePage,
   mockAdminPostsWorkspaceEndpoints,
   mockAnonymousSession,
   mockAvatarAsset,
-  mockFeedEndpoints,
+  MOBILE_TAG_ENTRIES,
   MOBILE_VIEWPORT,
 } from "./mobileLayoutFixtures"
 
 export const TOUCH_TARGET_MIN_PX = 44
 export const DESKTOP_VIEWPORT = { width: 1440, height: 900 }
 
+const createAdaptivityExplorePage = () => {
+  const page = createExplorePage("adaptivity 카드 overflow 회귀 점검")
+  page.content = page.content.map((item) => ({
+    ...item,
+    thumbnail: "/avatar.png",
+  }))
+  return page
+}
+
+const mockAdaptivityFeedEndpoints = async (page: Page) => {
+  const feedPage = createAdaptivityExplorePage()
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(feedPage),
+    })
+  })
+  await page.route("**/post/api/v1/posts/search**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(feedPage),
+    })
+  })
+  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(feedPage),
+    })
+  })
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(MOBILE_TAG_ENTRIES),
+    })
+  })
+}
+
 export const preparePublicHome = async (page: Page) => {
   await mockAvatarAsset(page)
   await mockAnonymousSession(page)
-  await mockFeedEndpoints(page)
+  await mockAdaptivityFeedEndpoints(page)
 }
 
 export const prepareAdminPosts = async (page: Page) => {

@@ -405,6 +405,18 @@ const StyledWrapper = styled.a`
     }
   }
 
+  @media (hover: none), (pointer: coarse) {
+    article > .side .arrowBtn {
+      border-color: var(--post-card-border-strong);
+      color: var(--post-card-border-strong);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--post-card-border-strong);
+    outline-offset: 2px;
+  }
+
   @media (max-width: 900px) {
     article {
       grid-template-columns: 32px minmax(0, 1fr);

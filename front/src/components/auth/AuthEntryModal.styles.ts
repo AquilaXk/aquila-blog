@@ -396,6 +396,23 @@ export const Modal = styled.div`
     font-size: 0.84rem;
     line-height: 1.5;
 
+    /* Keep empty live regions in the a11y tree so SR can announce later updates. */
+    &:empty {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    &:empty::before {
+      content: none;
+    }
+
     &::before {
       content: "";
       flex: 0 0 auto;

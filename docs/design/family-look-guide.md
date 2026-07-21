@@ -30,6 +30,7 @@
 색·라운드·구획 값은 하드코딩하지 않고 공용 토큰에서만 가져온다.
 
 - Emotion(styled/css, `theme` 접근 가능): `src/design-system/tokens.ts`의 `semanticColors(theme)` / `editorialLabel` / `designTokens`, 또는 `theme.colors.*`·`theme.publicDesign.*`.
+- 인터랙션 primitive·confirm 모달·상태 컴포넌트는 `src/design-system/`(`interactionPrimitives`, `ConfirmDialog`, `StatePresenters`)에서 import한다.
 - 전역 CSS 문자열(`<style jsx>` 등 `theme` 미접근): `src/layouts/RootLayout/ThemeProvider/Global`이 문서 전역에 정의하는 `--aq-*` 커스텀 프로퍼티를 쓴다. 라이트/다크가 자동 전환된다.
 
 ### 주요 토큰 매핑

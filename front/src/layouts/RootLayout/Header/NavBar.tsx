@@ -3,9 +3,10 @@ import { control } from "src/design-system/tokens"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { Suspense, lazy, useEffect, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useState } from "react"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
+import { waitForFeedSearchInputFocus } from "src/routes/Feed/SearchInput"
 
 const primaryLinks = [
   ["notes", "Notes", "/"],
@@ -38,6 +39,14 @@ const MenuIcon = () => (
   </svg>
 )
 
+const isTypingTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+
+  const tagName = target.tagName
+  return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT"
+}
+
 const NavBar = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
@@ -55,6 +64,32 @@ const NavBar = () => {
     window.addEventListener("hashchange", syncHash)
     return () => window.removeEventListener("hashchange", syncHash)
   }, [])
+
+  const focusFeedSearch = useCallback(async () => {
+    if (router.pathname !== "/") {
+      await router.push("/")
+    }
+
+    await waitForFeedSearchInputFocus()
+  }, [router])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isSearchShortcut =
+        (event.metaKey || event.ctrlKey) &&
+        (event.key.toLowerCase() === "k" || event.code === "KeyK")
+      if (!isSearchShortcut) return
+      if (event.defaultPrevented || isTypingTarget(event.target)) return
+
+      event.preventDefault()
+      void focusFeedSearch()
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [focusFeedSearch])
 
   const handleLogout = async () => {
     await logout()
@@ -89,16 +124,18 @@ const NavBar = () => {
       </ul>
 
       <div className="authArea">
-        <Link
-          href={{ pathname: "/", hash: "feed-search-input" }}
+        <button
+          type="button"
           className="searchTrigger"
           aria-label="글과 태그 검색으로 이동"
+          onClick={() => {
+            void focusFeedSearch()
+          }}
         >
           <SearchIcon />
           <span>글과 태그 검색</span>
           <kbd>⌘ K</kbd>
-        </Link>
-
+        </button>
 
         {showLogin ? (
           <button

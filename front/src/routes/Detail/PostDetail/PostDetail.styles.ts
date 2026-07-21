@@ -349,10 +349,14 @@ export const StyledWrapper = styled.div `
   @media (max-width: 1100px) {
     .detailLayout {
       grid-template-columns: 52px minmax(0, 1fr);
-      gap: 44px;
+      gap: 28px;
     }
 
-    .rightRail {
+    .detailLayout[data-toc="true"] {
+      grid-template-columns: 52px minmax(0, 1fr) minmax(148px, 180px);
+    }
+
+    .detailLayout[data-toc="false"] .rightRail {
       display: none;
     }
   }
@@ -369,7 +373,8 @@ export const StyledWrapper = styled.div `
       padding: 30px 20px 70px;
     }
 
-    .leftRail {
+    .leftRail,
+    .rightRail {
       display: none;
     }
 

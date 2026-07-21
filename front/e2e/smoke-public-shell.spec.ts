@@ -180,6 +180,8 @@ test.describe("core smoke public shell", () => {
   expect(navBarSource).toContain(".primaryLinks,")
   expect(navBarSource).toContain('className="searchTrigger"')
   expect(navBarSource).toContain("waitForFeedSearchInputFocus")
+  expect(navBarSource).toContain('from "src/routes/Feed/feedSearchFocus"')
+  expect(navBarSource).not.toContain('from "src/routes/Feed/SearchInput"')
   expect(navBarSource).not.toContain("ThemeToggle")
   expect(navBarSource).not.toContain("showThemeToggle")
   expect(navBarSource).toContain(".searchTrigger,\n    .loginLink,")

@@ -6,7 +6,7 @@ import { useRouter } from "next/router"
 import { Suspense, lazy, useCallback, useEffect, useState } from "react"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
-import { waitForFeedSearchInputFocus } from "src/routes/Feed/SearchInput"
+import { waitForFeedSearchInputFocus } from "src/routes/Feed/feedSearchFocus"
 
 const primaryLinks = [
   ["notes", "Notes", "/"],

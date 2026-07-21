@@ -9,6 +9,17 @@ import {
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
+const canRestoreFocus = (element: HTMLElement | null) => {
+  if (!element?.isConnected) return false
+  if (element.matches(":disabled") || element.getAttribute("aria-disabled") === "true") return false
+  return element.matches(FOCUSABLE_SELECTOR)
+}
+
+const restoreFocus = (element: HTMLElement | null) => {
+  if (!canRestoreFocus(element)) return
+  element.focus({ preventScroll: true })
+}
+
 type UseModalFocusTrapOptions = {
   open: boolean
   onClose: () => void
@@ -38,7 +49,10 @@ export const useModalFocusTrap = ({
 
     return () => {
       window.cancelAnimationFrame(raf)
-      triggerRef.current?.focus()
+      const trigger = triggerRef.current
+      window.requestAnimationFrame(() => {
+        restoreFocus(trigger)
+      })
     }
   }, [open, containerRef, initialFocusRef])
 

@@ -11,8 +11,22 @@ const isEditableTarget = (target: EventTarget | null) => {
   return Boolean(target.closest("input, textarea, select, [contenteditable='true']"))
 }
 
+const isEnabledFocusable = (element: HTMLElement | null) => {
+  if (!element) return false
+  if (element.matches(":disabled") || element.getAttribute("aria-disabled") === "true") return false
+  return true
+}
+
 export const resolveAdminPostsRowPrimary = (row: HTMLElement): HTMLElement | null => {
   return row.querySelector<HTMLElement>(PRIMARY_SELECTOR)
+}
+
+const focusRowPrimary = (row: HTMLElement): boolean => {
+  const primary = resolveAdminPostsRowPrimary(row)
+  if (!isEnabledFocusable(primary)) return false
+  primary!.focus({ preventScroll: true })
+  primary!.scrollIntoView({ block: "nearest" })
+  return true
 }
 
 export const focusAdjacentAdminPostsRow = (
@@ -29,24 +43,31 @@ export const focusAdjacentAdminPostsRow = (
   const currentIndex = rows.indexOf(currentRow)
   if (currentIndex < 0) return false
 
-  let nextIndex = currentIndex
-  if (direction === "prev") nextIndex = Math.max(0, currentIndex - 1)
-  if (direction === "next") nextIndex = Math.min(rows.length - 1, currentIndex + 1)
-  if (direction === "first") nextIndex = 0
-  if (direction === "last") nextIndex = rows.length - 1
-
-  if (nextIndex === currentIndex && direction !== "first" && direction !== "last") {
+  if (direction === "first") {
+    for (let index = 0; index < rows.length; index += 1) {
+      if (focusRowPrimary(rows[index])) return true
+    }
     return false
   }
 
-  const primary = resolveAdminPostsRowPrimary(rows[nextIndex])
-  if (!primary || primary.matches(":disabled") || primary.getAttribute("aria-disabled") === "true") {
+  if (direction === "last") {
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      if (focusRowPrimary(rows[index])) return true
+    }
     return false
   }
 
-  primary.focus({ preventScroll: false })
-  primary.scrollIntoView({ block: "nearest" })
-  return true
+  if (direction === "next") {
+    for (let index = currentIndex + 1; index < rows.length; index += 1) {
+      if (focusRowPrimary(rows[index])) return true
+    }
+    return false
+  }
+
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    if (focusRowPrimary(rows[index])) return true
+  }
+  return false
 }
 
 export const handleAdminPostsListKeyDown = (

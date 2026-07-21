@@ -42,7 +42,7 @@ const AuthEntrySignupPanel = ({
   if (!SIGNUP_ENABLED) {
     return (
       <>
-        <p className="inlineError" role="alert" aria-live="polite" aria-atomic="true">
+        <p className="inlineError" role="status" aria-live="polite" aria-atomic="true">
           회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.
         </p>
         <div className="signupRow">
@@ -88,7 +88,7 @@ const AuthEntrySignupPanel = ({
           )}
         </div>
 
-        <p className="inlineError" role="alert" aria-live="polite" aria-atomic="true">
+        <p className="inlineError" role="status" aria-live="polite" aria-atomic="true">
           {signupError || null}
         </p>
 

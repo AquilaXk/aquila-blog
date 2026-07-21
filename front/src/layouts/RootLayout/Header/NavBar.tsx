@@ -4,13 +4,8 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { Suspense, lazy, useEffect, useState } from "react"
-import ThemeToggle from "./ThemeToggle"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
-
-type Props = {
-  showThemeToggle?: boolean
-}
 
 const primaryLinks = [
   ["notes", "Notes", "/"],
@@ -43,7 +38,7 @@ const MenuIcon = () => (
   </svg>
 )
 
-const NavBar = ({ showThemeToggle = true }: Props) => {
+const NavBar = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
@@ -104,7 +99,6 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
           <kbd>⌘ K</kbd>
         </Link>
 
-        {showThemeToggle ? <ThemeToggle /> : null}
 
         {showLogin ? (
           <button

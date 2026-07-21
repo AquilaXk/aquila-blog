@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useLayoutEffect } from "react"
+import React, { ReactNode, useEffect } from "react"
 import { ThemeProvider } from "./ThemeProvider"
 import useScheme from "src/hooks/useScheme"
 import Header from "./Header"
@@ -14,7 +14,6 @@ import { FLUID_LAYOUT_MAX_PX } from "./layoutTiers"
 
 const PUBLIC_ADMIN_PROFILE_QUERY_KEY = ["member", "adminProfile"] as const
 const INITIAL_PROPS_CANCELLED_MESSAGE = "loading initial props cancelled"
-const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
 const RootAdminProfileContext = React.createContext<AdminProfile | null>(null)
 
 export const useRootAdminProfile = () => React.useContext(RootAdminProfileContext)
@@ -68,7 +67,7 @@ const RootLayout = ({
   initialAdminProfile = null,
   initialAdminProfileShouldRefetch = false,
 }: Props) => {
-  const [scheme] = useScheme()
+  useScheme()
   const { pathname } = useRouter()
   const isPublicBlogRoute = pathname === "/" || pathname === "/about" || pathname === "/posts/[id]"
   const isDedicatedEditorRoute = pathname === "/editor/[id]" || pathname === "/editor/new"
@@ -80,24 +79,10 @@ const RootLayout = ({
     refetchOnMount: isDesignAwareRoute,
     staleTimeMs: isDesignAwareRoute ? 0 : undefined,
   })
-  const effectiveScheme = isPublicBlogRoute ? "light" : scheme
+  const effectiveScheme = "light"
   const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"
   const headerBlogTitle = (isPublicBlogRoute && adminProfile?.blogTitle?.trim()) || CONFIG.blog.title
   useGtagEffect()
-
-  useIsomorphicLayoutEffect(() => {
-    if (!isPublicBlogRoute) return
-    if (typeof document === "undefined") return
-
-    const root = document.documentElement
-    root.dataset.aquilaScheme = "light"
-    root.style.colorScheme = "light"
-
-    return () => {
-      root.dataset.aquilaScheme = scheme
-      root.style.colorScheme = scheme
-    }
-  }, [isPublicBlogRoute, scheme])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -124,7 +109,6 @@ const RootLayout = ({
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (!isNavigationCancelledError(event.reason) && !isRequestCancelledError(event.reason)) return
-      // Route competition can reject in-flight Next.js data loading; treat as expected cancellation.
       event.preventDefault()
     }
 
@@ -169,14 +153,8 @@ const RootLayout = ({
     <ThemeProvider scheme={effectiveScheme} blogDesign={effectiveBlogDesign}>
       <RootAdminProfileContext.Provider value={adminProfile}>
         <Scripts />
-        {/* // TODO: replace react query */}
-        {/* {metaConfig.type !== "Paper" && <Header />} */}
         {isAdminRoute || isDedicatedEditorRoute ? null : (
-          <Header
-            fullWidth={false}
-            showThemeToggle={effectiveBlogDesign === "legacy"}
-            blogTitle={headerBlogTitle}
-          />
+          <Header fullWidth={false} blogTitle={headerBlogTitle} />
         )}
         <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
       </RootAdminProfileContext.Provider>

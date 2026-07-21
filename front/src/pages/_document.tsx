@@ -13,48 +13,22 @@ import { pretendard } from "src/assets"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { HEADER_AUTH_SHELL_BOOTSTRAP_SCRIPT } from "src/libs/headerAuthShell"
 
-const AQUILA_CONFIGURED_SCHEME =
-  CONFIG.blog.scheme === "dark" || CONFIG.blog.scheme === "light" ? CONFIG.blog.scheme : "system"
-
 const AQUILA_SCHEME_BOOTSTRAP_SCRIPT = `
 (function () {
   if (typeof document === "undefined") return;
-  var configuredScheme = "${AQUILA_CONFIGURED_SCHEME}";
-  var cookieMatch = document.cookie.match(/(?:^|; )scheme=(light|dark)(?:;|$)/);
-  var cachedScheme = cookieMatch ? cookieMatch[1] : "";
-  var pathname = window.location && window.location.pathname ? window.location.pathname : "/";
-  var isPublicBlogRoute = pathname === "/" || pathname === "/about" || /^\\/posts\\/[^/]+\\/?$/.test(pathname);
-  var systemDark = false;
-  try {
-    systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  } catch (_) {}
-  var defaultScheme = configuredScheme === "system" ? (systemDark ? "dark" : "light") : configuredScheme;
-  var actualScheme = cachedScheme || defaultScheme;
-  var nextScheme = isPublicBlogRoute ? "light" : actualScheme;
-  var bootstrapSource = isPublicBlogRoute ? "public" : (cachedScheme ? "cookie" : "system");
-  var background = nextScheme === "dark" ? "#121212" : "#f7f7f5";
-  var foreground = nextScheme === "dark" ? "#f5f5f5" : "#101214";
-  var darkPreHydrationGuard = nextScheme === "dark"
-    ? [
-        'html[data-aquila-scheme-bootstrap="dark"] *{color-scheme:dark!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(header,main,nav,aside,section,article,form,label,div,button,input,textarea,select,ul,li,a){border-color:#363636!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(header,nav,aside,section,article,form,div,button,input,textarea,select){background-color:transparent!important;background-image:none!important;box-shadow:none!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(article,input,textarea,select,[role="search"],[class*="Card"],[class*="card"]){background-color:#181818!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(h1,h2,h3,h4,h5,h6,strong,a,button,input,textarea,select){color:#f5f5f5!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body :where(p,span,small,li,dd,dt){color:#b2b2b2!important;}',
-        'html[data-aquila-scheme-bootstrap="dark"] body img{background-color:transparent!important;}'
-      ].join("")
-    : "";
+  var nextScheme = "light";
+  var bootstrapSource = "configured";
+  var background = "#f7f7f5";
+  var foreground = "#101214";
   document.documentElement.dataset.aquilaScheme = nextScheme;
-  document.documentElement.setAttribute("data-aquila-scheme-user", actualScheme);
-  document.documentElement.setAttribute("data-aquila-scheme-config", configuredScheme);
+  document.documentElement.setAttribute("data-aquila-scheme-config", "light");
   document.documentElement.setAttribute("data-aquila-scheme-bootstrap", nextScheme);
   document.documentElement.setAttribute("data-aquila-scheme-bootstrap-source", bootstrapSource);
   document.documentElement.style.colorScheme = nextScheme;
   document.documentElement.style.backgroundColor = background;
   var style = document.createElement("style");
   style.setAttribute("data-aquila-scheme-bootstrap-style", "true");
-  style.textContent = "html[data-aquila-scheme-bootstrap]{background:" + background + ";color-scheme:" + nextScheme + ";}html[data-aquila-scheme-bootstrap] body{background:" + background + ";color:" + foreground + ";color-scheme:" + nextScheme + ";}" + darkPreHydrationGuard;
+  style.textContent = "html[data-aquila-scheme-bootstrap]{background:" + background + ";color-scheme:" + nextScheme + ";}html[data-aquila-scheme-bootstrap] body{background:" + background + ";color:" + foreground + ";color-scheme:" + nextScheme + ";}";
   document.head.appendChild(style);
 })();
 `

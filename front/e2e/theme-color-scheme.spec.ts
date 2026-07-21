@@ -56,7 +56,7 @@ const expectLightFeedSurface = async (page: Page) => {
   await expect(page.locator('[data-ui="feed-post-card"] article').first()).toBeVisible()
   await expect(page.locator('[data-ui="feed-post-card"] .meta').first()).toBeVisible()
   await expect.poll(() => readLightFeedSurface(page)).toEqual({
-    cardBackgroundColor: "rgb(243, 245, 248)",
+    cardBackgroundColor: "rgb(247, 247, 245)",
     categoryColor: "rgb(86, 98, 115)",
     titleColor: "rgb(15, 23, 36)",
     metaColor: "rgb(86, 98, 115)",
@@ -75,8 +75,6 @@ const installSchemeFrameSampler = async (page: Page) => {
       headerBackground: string | null
       headerBorder: string | null
       metaColor: string | null
-      moonDisplay: string | null
-      sunDisplay: string | null
       tagColor: string | null
       time: number
       titleColor: string | null
@@ -99,8 +97,6 @@ const installSchemeFrameSampler = async (page: Page) => {
       const tag = card?.querySelector(".tag")
       const title = card?.querySelector("h2")
       const meta = card?.querySelector(".meta")
-      const sunIcon = document.querySelector(".themeIconLight")
-      const moonIcon = document.querySelector(".themeIconDark")
       const feedBeforeStyle = feed ? window.getComputedStyle(feed, "::before") : null
       const feedBeforeBackground = !feedBeforeStyle
         ? null
@@ -121,8 +117,6 @@ const installSchemeFrameSampler = async (page: Page) => {
         headerBackground: headerStyle?.backgroundColor ?? null,
         headerBorder: headerStyle?.borderBottomColor ?? null,
         metaColor: meta ? window.getComputedStyle(meta).color : null,
-        moonDisplay: moonIcon ? window.getComputedStyle(moonIcon).display : null,
-        sunDisplay: sunIcon ? window.getComputedStyle(sunIcon).display : null,
         tagColor: tag ? window.getComputedStyle(tag).color : null,
         time: Math.round(performance.now() - startedAt),
         titleColor: title ? window.getComputedStyle(title).color : null,
@@ -149,8 +143,6 @@ const readSchemeFrameSamples = async (page: Page) =>
       headerBackground: string | null
       headerBorder: string | null
       metaColor: string | null
-      moonDisplay: string | null
-      sunDisplay: string | null
       tagColor: string | null
       time: number
       titleColor: string | null
@@ -180,59 +172,16 @@ const expectStableUniqueValue = <T,>(values: T[], expected: T) => {
   expect(new Set(values)).toEqual(new Set([expected]))
 }
 
-const assertHomeThemeToggleUsesLightFeedSurface = async (page: Page) => {
-  await page.goto("/")
-  const themeToggle = page.getByRole("button", { name: "테마 전환" })
-  await expect(themeToggle).toBeVisible()
-
-  await expect(readControlScheme(page)).resolves.toEqual({
-    body: "dark",
-    html: "dark",
-    input: "dark",
-  })
-
-  await themeToggle.click()
-  await expect(themeToggle).toBeVisible()
-
-  const nextScheme = await page.evaluate(() => {
-    const input = document.createElement("input")
-    document.body.append(input)
-    const result = {
-      bootstrapScheme: document.documentElement.getAttribute("data-aquila-scheme-bootstrap"),
-      bootstrapStyleCount: document.querySelectorAll('style[data-aquila-scheme-bootstrap-style="true"]').length,
-      datasetScheme: document.documentElement.dataset.aquilaScheme,
-      body: window.getComputedStyle(document.body).colorScheme,
-      html: window.getComputedStyle(document.documentElement).colorScheme,
-      inlineHtmlColorScheme: document.documentElement.style.colorScheme,
-      input: window.getComputedStyle(input).colorScheme,
-    }
-    input.remove()
-    return result
-  })
-
-  expect(nextScheme).toEqual({
-    bootstrapScheme: null,
-    bootstrapStyleCount: 0,
-    datasetScheme: "light",
-    body: "light",
-    html: "light",
-    inlineHtmlColorScheme: "light",
-    input: "light",
-  })
-
-  await expectLightFeedSurface(page)
-}
-
 test.describe("theme color-scheme", () => {
   const firstPaintCases = [
-    { expectedScheme: "dark", label: "쿠키 없음 + OS dark", osScheme: "dark", schemeCookie: null },
-    { expectedScheme: "light", label: "쿠키 없음 + OS light", osScheme: "light", schemeCookie: null },
-    { expectedScheme: "dark", label: "dark cookie + OS light", osScheme: "light", schemeCookie: "dark" },
-    { expectedScheme: "light", label: "light cookie + OS dark", osScheme: "dark", schemeCookie: "light" },
+    { label: "쿠키 없음 + OS dark", osScheme: "dark", schemeCookie: null },
+    { label: "쿠키 없음 + OS light", osScheme: "light", schemeCookie: null },
+    { label: "dark cookie + OS light", osScheme: "light", schemeCookie: "dark" },
+    { label: "light cookie + OS dark", osScheme: "dark", schemeCookie: "light" },
   ] as const
 
   for (const firstPaintCase of firstPaintCases) {
-    test(`${firstPaintCase.label} 새로고침은 public surface scheme이 흔들리지 않는다`, async ({ page }) => {
+    test(`${firstPaintCase.label} 새로고침은 public surface scheme이 light로 고정된다`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: firstPaintCase.osScheme })
       await prepareHomeThemePage(page, firstPaintCase.schemeCookie)
       await installSchemeFrameSampler(page)
@@ -254,23 +203,19 @@ test.describe("theme color-scheme", () => {
       })
 
       await page.goto("/")
-      const themeToggle = page.getByRole("button", { name: "테마 전환" })
-      await expect(themeToggle).toBeVisible()
-      await expect(themeToggle).toHaveAttribute("aria-pressed", firstPaintCase.expectedScheme === "dark" ? "true" : "false")
+      await expect(page.getByRole("button", { name: "테마 전환" })).toHaveCount(0)
       await expect(page.locator('[data-ui="feed-post-card"] article').first()).toBeVisible()
 
       const samples = await readSchemeFrameSamples(page)
       const readySamples = samples.filter((sample) => sample.firstCardBackground !== null)
-      const expectedBodyBackground = firstPaintCase.expectedScheme === "dark" ? "rgb(18, 18, 18)" : "rgb(243, 245, 248)"
-      const expectedText = firstPaintCase.expectedScheme === "dark" ? "rgb(245, 245, 245)" : "rgb(15, 23, 36)"
-      const expectedMuted = firstPaintCase.expectedScheme === "dark" ? "rgb(178, 178, 178)" : "rgb(86, 98, 115)"
-      const expectedBorder = firstPaintCase.expectedScheme === "dark" ? "rgb(54, 54, 54)" : "rgb(200, 210, 222)"
-      const expectedHeaderBackground = firstPaintCase.expectedScheme === "dark" ? "rgb(18, 18, 18)" : "rgb(255, 255, 255)"
-      const expectedSunDisplay = firstPaintCase.expectedScheme === "dark" ? "none" : "flex"
-      const expectedMoonDisplay = firstPaintCase.expectedScheme === "dark" ? "flex" : "none"
+      const expectedBodyBackground = "rgb(247, 247, 245)"
+      const expectedText = "rgb(15, 23, 36)"
+      const expectedMuted = "rgb(86, 98, 115)"
+      const expectedBorder = "rgb(223, 225, 229)"
+      const expectedHeaderBackground = "color(srgb 0.968627 0.968627 0.960784 / 0.92)"
 
       expect(samples.length).toBeGreaterThan(0)
-      expectStableUniqueValue(samples.map((sample) => sample.datasetScheme), firstPaintCase.expectedScheme)
+      expectStableUniqueValue(samples.map((sample) => sample.datasetScheme), "light")
       expectStableUniqueValue(samples.map((sample) => sample.bodyBackground), expectedBodyBackground)
       expectStableUniqueValue(readySamples.map((sample) => sample.feedBeforeBackground), expectedBodyBackground)
       expectStableUniqueValue(readySamples.map((sample) => sample.firstCardBackground), expectedBodyBackground)
@@ -280,23 +225,30 @@ test.describe("theme color-scheme", () => {
       expectStableUniqueValue(readySamples.map((sample) => sample.titleColor), expectedText)
       expectStableUniqueValue(readySamples.map((sample) => sample.tagColor), expectedMuted)
       expectStableUniqueValue(readySamples.map((sample) => sample.metaColor), expectedMuted)
-      expectStableUniqueValue(readySamples.map((sample) => sample.sunDisplay), expectedSunDisplay)
-      expectStableUniqueValue(readySamples.map((sample) => sample.moonDisplay), expectedMoonDisplay)
       expect(readySamples.at(-1)?.bootstrapStyleCount).toBe(0)
-      await expect(page.locator("html")).toHaveAttribute("data-aquila-scheme", firstPaintCase.expectedScheme)
+      await expect(page.locator("html")).toHaveAttribute("data-aquila-scheme", "light")
+      await expect(readControlScheme(page)).resolves.toEqual({
+        body: "light",
+        html: "light",
+        input: "light",
+      })
       expect(await readRuntimeRecoveryReasonCount(page)).toBe(0)
       expect(hydrationErrors).toEqual([])
     })
   }
 
-  test("헤더 테마 토글은 루트, form control, 메인 feed surface를 함께 전환한다", async ({ page }) => {
+  test("홈 shell은 light-only 정책으로 feed surface를 유지한다", async ({ page }) => {
     await prepareHomeThemePage(page)
-    await assertHomeThemeToggleUsesLightFeedSurface(page)
+    await page.goto("/")
+    await expect(page.getByRole("button", { name: "테마 전환" })).toHaveCount(0)
+    await expectLightFeedSurface(page)
   })
 
-  test("모바일 헤더 테마 토글도 메인 feed surface를 함께 전환한다", async ({ page }) => {
+  test("모바일 홈 shell도 light-only 정책을 유지한다", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await prepareHomeThemePage(page)
-    await assertHomeThemeToggleUsesLightFeedSurface(page)
+    await page.goto("/")
+    await expect(page.getByRole("button", { name: "테마 전환" })).toHaveCount(0)
+    await expectLightFeedSurface(page)
   })
 })

@@ -466,6 +466,7 @@ const TopBar = styled.header`
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  min-width: 0;
   min-height: 4rem;
   padding: 0 1.75rem;
   border-bottom: 1px solid ${adminBorder};
@@ -485,7 +486,9 @@ const CompactNav = styled.nav`
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    width: 100%;
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
     overflow-x: auto;
     padding-bottom: 0.12rem;
     scrollbar-width: none;

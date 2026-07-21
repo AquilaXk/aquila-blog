@@ -412,11 +412,6 @@ const StyledWrapper = styled.a`
     }
   }
 
-  &:focus-visible {
-    outline: 2px solid var(--post-card-border-strong);
-    outline-offset: 2px;
-  }
-
   @media (max-width: 900px) {
     article {
       grid-template-columns: 32px minmax(0, 1fr);

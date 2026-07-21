@@ -466,6 +466,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         className="detailLayout"
         data-left-hybrid={leftHybridRailActive}
         data-right-hybrid={rightHybridRailActive}
+        data-toc={showStickyToc ? "true" : "false"}
         data-sticky-rail-safe="true"
       >
         <FloatingActionRail

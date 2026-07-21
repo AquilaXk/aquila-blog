@@ -1,10 +1,39 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import {
   createExplorePage,
   createExplorePost,
   mockAvatarAsset,
   mockFeedEndpoints,
 } from "./helpers/smokeFixtures"
+
+const triggerSearchShortcut = async (page: Page) => {
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "k",
+        code: "KeyK",
+        metaKey: true,
+        ctrlKey: false,
+        bubbles: true,
+      })
+    )
+  })
+}
+
+const waitForFeedSearchInputFocus = async (page: Page) => {
+  const searchInput = page.getByLabel("Search posts by keyword")
+  await expect(searchInput).toBeFocused()
+}
+
+const mockAnonymousSession = async (page: Page) => {
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "401-1", msg: "unauthorized" }),
+    })
+  })
+}
 
 test.beforeEach(async ({ page }) => {
   await mockAvatarAsset(page)
@@ -422,4 +451,32 @@ test.describe("core smoke feed and search", () => {
 
   expect(dataPrefetchRequests).toEqual([])
 })
+
+  test("header search button focuses feed search input", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/")
+    await page.getByRole("button", { name: "글과 태그 검색으로 이동" }).click()
+    await waitForFeedSearchInputFocus(page)
+  })
+
+  test("Meta+K focuses feed search input on home", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/")
+    await triggerSearchShortcut(page)
+    await waitForFeedSearchInputFocus(page)
+  })
+
+  test("from /about Meta+K navigates to / and focuses search input", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/about")
+    await triggerSearchShortcut(page)
+    await expect(page).toHaveURL((url) => new URL(url).pathname === "/")
+    await waitForFeedSearchInputFocus(page)
+  })
 })

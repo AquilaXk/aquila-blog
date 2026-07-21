@@ -7,12 +7,45 @@ import {
   MOBILE_TOUCH_TARGET_MIN_PX,
 } from "./feedUiTokens"
 
+export const FEED_SEARCH_INPUT_ID = "feed-search-input"
+
+export const focusFeedSearchInput = (): boolean => {
+  if (typeof document === "undefined") return false
+
+  const input = document.getElementById(FEED_SEARCH_INPUT_ID)
+  if (!(input instanceof HTMLInputElement)) return false
+
+  input.focus()
+  return true
+}
+
+export const waitForFeedSearchInputFocus = (maxAttempts = 24): Promise<boolean> =>
+  new Promise((resolve) => {
+    const tryFocus = (attempt = 0) => {
+      if (focusFeedSearchInput()) {
+        resolve(true)
+        return
+      }
+
+      if (attempt >= maxAttempts) {
+        resolve(false)
+        return
+      }
+
+      requestAnimationFrame(() => {
+        tryFocus(attempt + 1)
+      })
+    }
+
+    tryFocus()
+  })
+
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
   inputRef?: Ref<HTMLInputElement>
 }
 
 const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
-  const inputId = props.id || "feed-search-input"
+  const inputId = props.id || FEED_SEARCH_INPUT_ID
 
   const focusInput = () => {
     if (typeof inputRef !== "function" && inputRef?.current) {

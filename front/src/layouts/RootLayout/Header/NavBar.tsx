@@ -141,7 +141,7 @@ const NavBar = () => {
         (event.metaKey || event.ctrlKey) &&
         (event.key.toLowerCase() === "k" || event.code === "KeyK")
       if (!isSearchShortcut) return
-      if (event.defaultPrevented || isTypingTarget(event.target)) return
+      if (authModalOpen || event.defaultPrevented || isTypingTarget(event.target)) return
 
       event.preventDefault()
       requestFocusFeedSearch()
@@ -149,7 +149,7 @@ const NavBar = () => {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [requestFocusFeedSearch])
+  }, [authModalOpen, requestFocusFeedSearch])
 
   const handleLogout = async () => {
     await logout()

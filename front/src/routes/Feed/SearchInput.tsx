@@ -15,11 +15,11 @@ export const focusFeedSearchInput = (): boolean => {
   const input = document.getElementById(FEED_SEARCH_INPUT_ID)
   if (!(input instanceof HTMLInputElement)) return false
 
-  input.focus()
-  return true
+  input.focus({ preventScroll: false })
+  return document.activeElement === input
 }
 
-export const waitForFeedSearchInputFocus = (maxAttempts = 24): Promise<boolean> =>
+export const waitForFeedSearchInputFocus = (maxAttempts = 90): Promise<boolean> =>
   new Promise((resolve) => {
     const tryFocus = (attempt = 0) => {
       if (focusFeedSearchInput()) {
@@ -32,9 +32,9 @@ export const waitForFeedSearchInputFocus = (maxAttempts = 24): Promise<boolean> 
         return
       }
 
-      requestAnimationFrame(() => {
+      window.setTimeout(() => {
         tryFocus(attempt + 1)
-      })
+      }, 16)
     }
 
     tryFocus()

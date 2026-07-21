@@ -7,14 +7,17 @@ import {
 } from "./helpers/smokeFixtures"
 
 const triggerSearchShortcut = async (page: Page) => {
+  // Meta+K는 Chromium browser chrome으로 context를 깨뜨릴 수 있어 ctrlKey 합성 이벤트로 고정한다.
+  // (앱 핸들러는 metaKey/ctrlKey 모두 허용)
   await page.evaluate(() => {
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "k",
         code: "KeyK",
-        metaKey: true,
-        ctrlKey: false,
+        ctrlKey: true,
+        metaKey: false,
         bubbles: true,
+        cancelable: true,
       })
     )
   })

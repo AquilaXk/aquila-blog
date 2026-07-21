@@ -396,6 +396,10 @@ export const Modal = styled.div`
     font-size: 0.84rem;
     line-height: 1.5;
 
+    &:empty {
+      display: none;
+    }
+
     &::before {
       content: "";
       flex: 0 0 auto;

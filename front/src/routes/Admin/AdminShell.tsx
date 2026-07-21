@@ -203,6 +203,7 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
               <Link key={`compact-${item.id}`} href={item.href} passHref legacyBehavior>
                 <CompactNavLink data-active={item.id === currentSection ? "true" : "false"} aria-label={item.label}>
                   <AppIcon name={item.icon} />
+                  <span>{item.label}</span>
                 </CompactNavLink>
               </Link>
             ))}
@@ -496,20 +497,42 @@ const CompactNav = styled.nav`
 `
 
 const CompactNavLink = styled.a`
-  width: 2.55rem;
-  height: 2.55rem;
+  min-height: 2.55rem;
+  min-width: 2.55rem;
+  padding: 0.35rem 0.55rem;
   border-radius: 2px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
   flex: 0 0 auto;
   border: 1px solid transparent;
   color: ${adminTextSecondary};
   text-decoration: none;
 
+  span {
+    font-size: 0.72rem;
+    font-weight: 760;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
   &[data-active="true"] {
     border-color: ${adminBorderStrong};
     background: ${adminSurfaceAccent};
     color: ${adminTeal};
+  }
+
+  @media (max-width: 767px) {
+    width: 2.55rem;
+    height: 2.55rem;
+    min-width: 2.55rem;
+    padding: 0;
+    gap: 0;
+
+    span {
+      display: none;
+    }
   }
 `
 

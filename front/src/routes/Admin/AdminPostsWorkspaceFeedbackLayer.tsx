@@ -1,5 +1,6 @@
 import styled from "@emotion/styled"
-import { AdminInlineActionRow } from "./AdminSurfacePrimitives"
+import { ConfirmDialog } from "src/design-system/ConfirmDialog"
+import { adminMutedSurface } from "./adminColorTokens"
 import type { WorkspaceConfirmState, WorkspaceToastState } from "./AdminPostsWorkspaceModel"
 
 type AdminPostsWorkspaceFeedbackLayerProps = {
@@ -39,47 +40,29 @@ export const AdminPostsWorkspaceFeedbackLayer: React.FC<AdminPostsWorkspaceFeedb
       </ToastViewport>
     ) : null}
 
-    {confirmState ? (
-      <ConfirmBackdrop role="presentation" onClick={onConfirmCancel}>
-        <ConfirmDialog
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="workspace-confirm-title"
-          aria-describedby="workspace-confirm-description"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <strong id="workspace-confirm-title">{confirmState.headline}</strong>
-          <p id="workspace-confirm-description">
+    <ConfirmDialog
+      open={Boolean(confirmState)}
+      titleId="workspace-confirm-title"
+      descriptionId="workspace-confirm-description"
+      title={confirmState?.headline ?? ""}
+      description={
+        confirmState ? (
+          <>
             <span className="rowTitle">
               #{confirmState.rowId} {confirmState.rowTitle}
             </span>
             <span>{confirmState.description}</span>
-          </p>
-          <ActionRow>
-            <GhostButton type="button" onClick={onConfirmCancel}>
-              취소
-            </GhostButton>
-            <ConfirmButton type="button" data-tone={confirmState.tone} onClick={onConfirmAction}>
-              {confirmState.confirmLabel}
-            </ConfirmButton>
-          </ActionRow>
-        </ConfirmDialog>
-      </ConfirmBackdrop>
-    ) : null}
+          </>
+        ) : null
+      }
+      confirmLabel={confirmState?.confirmLabel ?? ""}
+      confirmTone={confirmState?.tone ?? "danger"}
+      actionRowBackground={adminMutedSurface}
+      onConfirm={onConfirmAction}
+      onCancel={onConfirmCancel}
+    />
   </>
 )
-
-const ActionRow = styled(AdminInlineActionRow)``
-
-const GhostButton = styled.button`
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0;
-  font-size: 0.88rem;
-  font-weight: 700;
-  cursor: pointer;
-`
 
 const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`
   position: fixed;
@@ -145,57 +128,5 @@ const ToastDismissButton = styled.button`
   padding: 0;
   font-size: 0.82rem;
   font-weight: 700;
-  cursor: pointer;
-`
-
-const ConfirmBackdrop = styled.div`
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgba(15, 23, 42, 0.42);
-`
-
-const ConfirmDialog = styled.div`
-  width: min(28rem, 100%);
-  display: grid;
-  gap: 0.95rem;
-  padding: 1.1rem;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: none;
-
-  > strong {
-    font-size: 1.02rem;
-    letter-spacing: -0.02em;
-  }
-
-  > p {
-    margin: 0;
-    display: grid;
-    gap: 0.3rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
-  }
-
-  .rowTitle {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 800;
-  }
-`
-
-// 패밀리룩(1221): 파스텔 danger 버튼 → danger 아웃라인 사각 컨트롤
-const ConfirmButton = styled.button<{ "data-tone": "danger" }>`
-  border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.statusDangerText};
-  min-height: 40px;
-  padding: 0 0.85rem;
-  border-radius: 8px;
-  font-size: 0.92rem;
-  font-weight: 800;
   cursor: pointer;
 `

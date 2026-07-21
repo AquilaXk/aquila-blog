@@ -252,16 +252,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
     return () => window.clearTimeout(timer)
   }, [toast])
 
-  useEffect(() => {
-    if (!confirmState) return
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      setConfirmState(null)
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [confirmState])
-
   const openWriteRoute = useCallback(
     async (query?: Record<string, string>) => {
       await pushRoute(router, postsWorkspaceCommands.toEditorRoute(query))

@@ -63,8 +63,7 @@ export const handleAdminPostsListKeyDown = (
   const direction =
     key === "ArrowDown" ? "next" : key === "ArrowUp" ? "prev" : key === "Home" ? "first" : "last"
 
-  const moved = focusAdjacentAdminPostsRow(event.target, direction, root)
-  if (moved) {
-    event.preventDefault()
-  }
+  // Boundary no-ops still consume the key so the page does not scroll under focus.
+  focusAdjacentAdminPostsRow(event.target, direction, root)
+  event.preventDefault()
 }

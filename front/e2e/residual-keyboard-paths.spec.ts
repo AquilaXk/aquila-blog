@@ -25,6 +25,11 @@ test.describe("residual keyboard paths", () => {
     await expect(titleButtons.nth(rowCount - 1)).toBeFocused()
     await page.keyboard.press("Home")
     await expect(titleButtons.first()).toBeFocused()
+
+    const scrollBefore = await page.evaluate(() => window.scrollY)
+    await page.keyboard.press("ArrowUp")
+    await expect(titleButtons.first()).toBeFocused()
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(scrollBefore)
   })
 
   test("AuthEntryModal은 focus-trap·Esc·trigger 복귀·aria-live를 유지한다", async ({ page }) => {

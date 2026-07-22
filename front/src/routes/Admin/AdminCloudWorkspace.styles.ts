@@ -535,7 +535,7 @@ export const FileTable = styled.table`
 
   tbody tr {
     display: grid;
-    grid-template-columns: 1.6rem 1.6rem minmax(0, 1fr);
+    grid-template-columns: 1.6rem minmax(0, 1fr) auto;
     grid-template-rows: minmax(4.2rem, auto) auto;
     gap: 0.55rem 0.52rem;
     align-items: center;
@@ -577,30 +577,34 @@ export const FileTable = styled.table`
   }
 
   th:nth-of-type(1),
-  th:nth-of-type(2),
-  td:nth-of-type(1),
-  td:nth-of-type(2) {
+  td:nth-of-type(1) {
+    grid-column: 1;
+    grid-row: 1;
     width: auto;
   }
 
-  th:nth-of-type(3),
-  td:nth-of-type(3) {
+  th:nth-of-type(2),
+  td:nth-of-type(2) {
+    grid-column: 2 / 4;
+    grid-row: 1;
     width: auto;
     min-width: 0;
   }
 
-  th:nth-of-type(4),
-  td:nth-of-type(4) {
+  th:nth-of-type(3),
+  td:nth-of-type(3) {
     grid-column: 1 / 3;
+    grid-row: 2;
     align-self: end;
     width: auto;
     color: ${textMuted};
     font-size: 0.76rem;
   }
 
-  th:nth-of-type(5),
-  td:nth-of-type(5) {
+  th:nth-of-type(4),
+  td:nth-of-type(4) {
     grid-column: 3;
+    grid-row: 2;
     align-self: end;
     justify-self: end;
     width: auto;
@@ -629,16 +633,6 @@ export const RowCheckbox = styled.input`
   width: 1rem;
   height: 1rem;
   accent-color: ${accentGold};
-`
-
-export const FavoriteButton = styled.button`
-  width: 1.75rem;
-  height: 1.75rem;
-  border: 0;
-  background: transparent;
-  color: ${textMuted};
-  cursor: pointer;
-  font-size: 1.15rem;
 `
 
 export const FileTypeIcon = styled.span`

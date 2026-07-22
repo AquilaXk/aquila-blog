@@ -59,7 +59,6 @@ import {
   DocumentFallbackBox,
   EmptyState,
   EmptyTableState,
-  FavoriteButton,
   FileIdentity,
   FileMetaLine,
   FileNameButton,
@@ -564,7 +563,6 @@ const FileTableHead = () => (
   <thead>
     <tr>
       <th aria-label="선택" />
-      <th aria-label="즐겨찾기" />
       <th>이름</th>
       <th>크기</th>
       <th>수정한 날짜</th>
@@ -1000,9 +998,6 @@ const AdminCloudWorkspacePage = () => {
               >
                 ⤴ 올리기
               </PrimaryButton>
-              <SecondaryButton type="button" disabled>
-                새 폴더
-              </SecondaryButton>
               <SecondaryButton type="button" disabled={checkedFileIds.length === 0} onClick={handleDeleteSelected}>
                 선택 삭제
               </SecondaryButton>
@@ -1022,12 +1017,6 @@ const AdminCloudWorkspacePage = () => {
                   </GhostButton>
                 ))}
               </FilterGroup>
-              <ViewModeButton type="button" aria-label="리스트 보기" data-active="true">
-                ☰ 리스트
-              </ViewModeButton>
-              <ViewModeButton type="button" aria-label="그리드 보기" disabled>
-                ⊞ 그리드
-              </ViewModeButton>
               <ViewModeButton
                 type="button"
                 aria-label="상세 패널 보기"
@@ -1057,7 +1046,7 @@ const AdminCloudWorkspacePage = () => {
                 <FileTableHead />
                 <tbody>
                   <tr data-loading-row="true">
-                    <td colSpan={5}>
+                    <td colSpan={4}>
                       <LoadingTableStatus role="status" aria-label="파일 목록 로딩">
                         <SkeletonRows aria-hidden="true">
                           <SkeletonRow data-admin-cloud-skeleton-row="true" />
@@ -1106,15 +1095,6 @@ const AdminCloudWorkspacePage = () => {
                             onChange={() => handleToggleChecked(file.id)}
                           />
                         </SelectBoxCell>
-                        <td>
-                          <FavoriteButton
-                            type="button"
-                            aria-label={`${file.originalFilename} 즐겨찾기 (준비 중)`}
-                            disabled
-                          >
-                            ☆
-                          </FavoriteButton>
-                        </td>
                         <td>
                           <FileIdentity>
                             <FileThumbnail file={file} selected={selected} />

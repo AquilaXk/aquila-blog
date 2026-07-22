@@ -29,8 +29,15 @@ export const Toast = ({
 
   const showActions = Boolean(actions) || Boolean(onOpenChange)
 
+  const isDanger = tone === "danger"
+
   return (
-    <ToastViewport data-tone={tone} role="status" aria-live="polite" $zIndex={zIndex}>
+    <ToastViewport
+      data-tone={tone}
+      role={isDanger ? "alert" : "status"}
+      aria-live={isDanger ? "assertive" : "polite"}
+      $zIndex={zIndex}
+    >
       <div className="copy">
         <span className="dot" aria-hidden="true" />
         <div className="text">

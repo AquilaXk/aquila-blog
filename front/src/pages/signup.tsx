@@ -269,7 +269,9 @@ const NaverInput = styled.input`
   }
 
   @media (max-width: 820px) {
+    box-sizing: border-box;
     min-height: ${control.lg}px;
+    padding-inline-end: calc(${control.lg}px + 1rem);
   }
 `
 

@@ -3,6 +3,8 @@ package com.back.global.storage.adapter
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import com.back.global.storage.metrics.CloudMediaMetrics
+import io.micrometer.core.instrument.MeterRegistry
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -37,6 +39,7 @@ import java.security.MessageDigest
 @Service
 class CloudStorageAdapter(
     private val properties: CloudStorageProperties,
+    private val meterRegistry: MeterRegistry? = null,
 ) : CloudStoragePort {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val initLock = Any()
@@ -90,6 +93,7 @@ class CloudStorageAdapter(
     override fun open(objectKey: String): CloudStoragePort.StoredObject? {
         val client = requireClient()
         validateObjectKey(objectKey)
+        CloudMediaMetrics.recordStorageOperation(meterRegistry, op = "get")
 
         return try {
             val response =
@@ -121,6 +125,7 @@ class CloudStorageAdapter(
     ): CloudStoragePort.StoredObject? {
         val client = requireClient()
         validateObjectKey(objectKey)
+        CloudMediaMetrics.recordStorageOperation(meterRegistry, op = "get_range")
 
         return try {
             val response =
@@ -293,6 +298,7 @@ class CloudStorageAdapter(
     override fun head(objectKey: String): CloudStoragePort.ObjectHead? {
         val client = requireClient()
         validateObjectKey(objectKey)
+        CloudMediaMetrics.recordStorageOperation(meterRegistry, op = "head")
 
         return try {
             val response =

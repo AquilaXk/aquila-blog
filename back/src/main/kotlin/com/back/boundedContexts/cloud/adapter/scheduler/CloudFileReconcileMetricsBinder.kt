@@ -1,6 +1,7 @@
 package com.back.boundedContexts.cloud.adapter.scheduler
 
 import com.back.boundedContexts.cloud.application.service.CloudFileReconcileService
+import com.back.global.storage.metrics.CloudMediaMetrics
 import io.micrometer.core.instrument.FunctionCounter
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
@@ -40,6 +41,14 @@ class CloudFileReconcileMetricsBinder(
         registerGauge(registry, "storage.cloud_file.reconcile.repaired_db_only_soft_deleted", repairedDbOnlySoftDeleted)
         FunctionCounter
             .builder("storage.cloud_file.reconcile.refresh_failures", refreshFailures) { it.get().toDouble() }
+            .register(registry)
+        Gauge
+            .builder(CloudMediaMetrics.RECONCILE_ORPHANS) { bucketOnlyObjects.get().toDouble() }
+            .tag("kind", "object")
+            .register(registry)
+        Gauge
+            .builder(CloudMediaMetrics.RECONCILE_ORPHANS) { dbOnlyMissingObjects.get().toDouble() }
+            .tag("kind", "metadata")
             .register(registry)
     }
 

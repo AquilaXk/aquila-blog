@@ -25,6 +25,12 @@ interface CloudVideoUploadSessionRepositoryPort {
         limit: Int,
     ): List<CloudVideoUploadSession>
 
+    fun countStaleIntermediate(
+        initiatingCutoff: Instant,
+        completingOrAbortingCutoff: Instant,
+        uploadingPartCutoff: Instant,
+    ): Long
+
     fun findNonTerminalObjectKeysByPrefix(
         objectKeyPrefix: String,
         limit: Int,

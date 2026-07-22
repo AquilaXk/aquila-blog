@@ -103,7 +103,8 @@
 - 고아 메타(메타 O, 객체 X): inventory가 truncate되지 않았을 때만 판정한다.
 - 기본은 dry-run(감지·메트릭만). `custom.storage.cloudReconcileRepairEnabled=true`일 때만 고아 객체 삭제/고아 메타 soft-delete를 수행하며, 고아 객체 수가 safety threshold를 넘으면 삭제를 막는다.
 - 주기 실행: `CloudFileReconcileScheduledJob`가 ShedLock(`cloudFileReconcile`)으로 `reconcile()`을 호출한다(기본 `custom.storage.cloudReconcileFixedDelayMs=3600000`).
-- 메트릭: `storage.cloud_file.reconcile.*` (`CloudFileReconcileMetricsBinder`가 `diagnose()` 스냅샷을 갱신).
+- 메트릭: `storage.cloud_file.reconcile.*` 및 `cloud.reconcile.orphans{kind}` (`CloudFileReconcileMetricsBinder`가 `diagnose()` 스냅샷을 갱신).
+- 업로드/재생 RED: `cloud.upload.session.transitions`, `cloud.upload.part.*`, `cloud.upload.session.stuck`, `cloud.playback.*`, `cloud.storage.operations`, `cloud.disk.temp.*` (Grafana `blog-cloud-media`, Alertmanager `cloud-media-alerts.yml`). 검증 절차는 [`docs/ops/cloud-media-metrics-verify.md`](../ops/cloud-media-metrics-verify.md).
 
 ## 실패 후 수동 복구
 

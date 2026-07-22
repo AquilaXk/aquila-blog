@@ -66,6 +66,24 @@ interface CloudVideoUploadSessionRepository :
 
     @Query(
         value = """
+            SELECT COUNT(*)
+            FROM cloud_video_upload_session
+            WHERE (
+                (status = 'INITIATING' AND modified_at <= :initiatingCutoff)
+                OR (status IN ('COMPLETING', 'ABORTING') AND modified_at <= :completingOrAbortingCutoff)
+                OR (status = 'UPLOADING_PART' AND modified_at <= :uploadingPartCutoff)
+            )
+        """,
+        nativeQuery = true,
+    )
+    override fun countStaleIntermediate(
+        initiatingCutoff: Instant,
+        completingOrAbortingCutoff: Instant,
+        uploadingPartCutoff: Instant,
+    ): Long
+
+    @Query(
+        value = """
             SELECT object_key
             FROM cloud_video_upload_session
             WHERE status NOT IN ('COMPLETED', 'CANCELLED', 'EXPIRED', 'FAILED')

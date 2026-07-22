@@ -287,6 +287,12 @@ class CloudFileReconcileServiceTest {
             limit: Int,
         ): List<CloudVideoUploadSession> = emptyList()
 
+        override fun countStaleIntermediate(
+            initiatingCutoff: Instant,
+            completingOrAbortingCutoff: Instant,
+            uploadingPartCutoff: Instant,
+        ): Long = 0
+
         override fun findNonTerminalObjectKeysByPrefix(
             objectKeyPrefix: String,
             limit: Int,

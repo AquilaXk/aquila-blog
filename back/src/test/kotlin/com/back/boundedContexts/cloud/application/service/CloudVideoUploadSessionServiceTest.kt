@@ -1349,6 +1349,18 @@ class CloudVideoUploadSessionServiceTest {
                 }.sortedWith(compareBy<CloudVideoUploadSession> { it.modifiedAt }.thenBy { it.id })
                 .take(limit.coerceAtLeast(1))
 
+        override fun countStaleIntermediate(
+            initiatingCutoff: Instant,
+            completingOrAbortingCutoff: Instant,
+            uploadingPartCutoff: Instant,
+        ): Long =
+            findStaleIntermediate(
+                initiatingCutoff = initiatingCutoff,
+                completingOrAbortingCutoff = completingOrAbortingCutoff,
+                uploadingPartCutoff = uploadingPartCutoff,
+                limit = Int.MAX_VALUE,
+            ).size.toLong()
+
         override fun findNonTerminalObjectKeysByPrefix(
             objectKeyPrefix: String,
             limit: Int,

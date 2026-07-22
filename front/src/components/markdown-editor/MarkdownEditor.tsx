@@ -9,16 +9,18 @@ import {
 } from "react"
 import styled from "@emotion/styled"
 import MarkdownRenderer from "src/libs/markdown/MarkdownRenderer"
+import {
+  MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE,
+  MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE,
+  resolveMarkdownAttachmentLink,
+  resolveMarkdownImageEmbed,
+  validateMarkdownAttachmentSize,
+  type MarkdownFileUploadResult,
+  type MarkdownImageUploadResult,
+} from "./markdownEditorUploadModel"
 
 type MarkdownChangeMeta = {
   editorFocused: boolean
-}
-
-type MarkdownUploadResult = {
-  alt?: string
-  title?: string
-  url?: string
-  src?: string
 }
 
 type MarkdownEditorProps = {
@@ -29,7 +31,9 @@ type MarkdownEditorProps = {
   disableMermaid?: boolean
   onChange: (markdown: string, meta?: MarkdownChangeMeta) => void
   onFlushMarkdownReady?: (flush: (() => string) | null) => void
-  onUploadImage?: (file: File) => Promise<MarkdownUploadResult>
+  onUploadingChange?: (isUploading: boolean) => void
+  onUploadImage?: (file: File) => Promise<MarkdownImageUploadResult>
+  onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
 }
 
 type EditorMode = "write" | "preview" | "split"
@@ -94,7 +98,9 @@ export const MarkdownEditor = ({
   disableMermaid = false,
   onChange,
   onFlushMarkdownReady,
+  onUploadingChange,
   onUploadImage,
+  onUploadFile,
 }: MarkdownEditorProps) => {
   const [mode, setMode] = useState<EditorMode>("split")
   const [uploadError, setUploadError] = useState("")
@@ -103,6 +109,15 @@ export const MarkdownEditor = ({
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
+  const uploadInFlightCountRef = useRef(0)
+
+  const setUploadInFlight = useCallback(
+    (delta: number) => {
+      uploadInFlightCountRef.current = Math.max(0, uploadInFlightCountRef.current + delta)
+      onUploadingChange?.(uploadInFlightCountRef.current > 0)
+    },
+    [onUploadingChange]
+  )
 
   useEffect(() => {
     if (value === valueRef.current) return
@@ -247,27 +262,65 @@ export const MarkdownEditor = ({
     [commitMarkdown, insertMarkdownAtEditorSelection]
   )
 
+  const insertUploadedMarkdown = useCallback(
+    (markdown: string) => {
+      if (insertMarkdownAtEditorSelection(markdown)) return
+      commitMarkdown(`${valueRef.current}${markdown}`, true)
+    },
+    [commitMarkdown, insertMarkdownAtEditorSelection]
+  )
+
   const handleImageInput = useCallback(
     async (file: File | null) => {
       if (!file || !onUploadImage) return
-      let uploaded: MarkdownUploadResult
+      setUploadInFlight(1)
+      let uploaded: MarkdownImageUploadResult
       try {
         uploaded = await onUploadImage(file)
       } catch {
-        setUploadError("이미지 업로드에 실패했습니다.")
+        setUploadError(MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE)
+        return
+      } finally {
+        setUploadInFlight(-1)
+      }
+      const resolved = resolveMarkdownImageEmbed(uploaded, file.name)
+      if ("error" in resolved) {
+        setUploadError(resolved.error)
         return
       }
-      const src = uploaded.url || uploaded.src || ""
-      if (!src) {
-        setUploadError("이미지 업로드 결과 URL을 확인할 수 없습니다.")
-        return
-      }
-      const alt = uploaded.alt || uploaded.title || file.name
-      const imageMarkdown = `\n\n![${alt}](${src})\n`
-      if (insertMarkdownAtEditorSelection(imageMarkdown)) return
-      commitMarkdown(`${valueRef.current}${imageMarkdown}`, true)
+      insertUploadedMarkdown(resolved.markdown)
     },
-    [commitMarkdown, insertMarkdownAtEditorSelection, onUploadImage]
+    [insertUploadedMarkdown, onUploadImage, setUploadInFlight]
+  )
+
+  const handleFileInput = useCallback(
+    async (file: File | null) => {
+      if (!file || !onUploadFile) return
+      const sizeError = validateMarkdownAttachmentSize(file)
+      if (sizeError) {
+        setUploadError(sizeError)
+        return
+      }
+
+      setUploadInFlight(1)
+      let uploaded: MarkdownFileUploadResult
+      try {
+        uploaded = await onUploadFile(file)
+      } catch {
+        setUploadError(MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE)
+        return
+      } finally {
+        setUploadInFlight(-1)
+      }
+
+      const resolved = resolveMarkdownAttachmentLink(uploaded, file.name)
+      if ("error" in resolved) {
+        setUploadError(resolved.error)
+        return
+      }
+      insertUploadedMarkdown(resolved.markdown)
+    },
+    [insertUploadedMarkdown, onUploadFile, setUploadInFlight]
   )
 
   return (
@@ -300,7 +353,7 @@ export const MarkdownEditor = ({
               {snippet.label}
             </ToolbarButton>
           ))}
-          <ImageUploadButton title="이미지" aria-label="이미지" aria-disabled={disabled || !onUploadImage}>
+          <ToolbarUploadButton title="이미지" aria-label="이미지" aria-disabled={disabled || !onUploadImage}>
             Image
             <input
               type="file"
@@ -312,7 +365,19 @@ export const MarkdownEditor = ({
                 event.currentTarget.value = ""
               }}
             />
-          </ImageUploadButton>
+          </ToolbarUploadButton>
+          <ToolbarUploadButton title="파일" aria-label="파일" aria-disabled={disabled || !onUploadFile}>
+            File
+            <input
+              type="file"
+              disabled={disabled || !onUploadFile}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null
+                void handleFileInput(file)
+                event.currentTarget.value = ""
+              }}
+            />
+          </ToolbarUploadButton>
           <ToolbarButton
             type="button"
             title="링크"
@@ -499,7 +564,7 @@ const ToolbarButton = styled.button`
   }
 `
 
-const ImageUploadButton = styled.label`
+const ToolbarUploadButton = styled.label`
   border: 1px solid transparent;
   border-radius: 4px;
   height: 31px;

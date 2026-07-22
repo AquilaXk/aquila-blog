@@ -204,6 +204,10 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     togglePostSelection,
     toggleSelectAllVisiblePosts
   } = props
+  const [isMarkdownUploading, setIsMarkdownUploading] = useState(false)
+  const handleMarkdownUploadingChange = useCallback((nextIsUploading: boolean) => {
+    setIsMarkdownUploading(nextIsUploading)
+  }, [])
   const currentFlags = toFlags(postVisibility)
   const pristineCreateFingerprint = useMemo(
     () =>
@@ -392,6 +396,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     hasEditorMinimumFields,
     hasPlaceholderIssue: Boolean(publishPlaceholderIssue),
     isTempDraftMode,
+    isMarkdownUploading,
   })
   const {
     publishActionTitle,
@@ -545,6 +550,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         previewSummary={resolvedPreviewSummary}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
+        onUploadingChange={handleMarkdownUploadingChange}
         onImageUpload={handleMarkdownEditorImageUpload}
         onFileUpload={handleMarkdownEditorFileUpload}
         mermaidEnabled={MARKDOWN_EDITOR_MERMAID_ENABLED}
@@ -558,6 +564,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       handleMarkdownEditorImageUpload,
       handleFlushMarkdownReady,
       handleEditorCommitDuration,
+      handleMarkdownUploadingChange,
       isMarkdownEditorDisabled,
       postContent,
       postTitle,
@@ -573,6 +580,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         previewSummary={resolvedPreviewSummary}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
+        onUploadingChange={handleMarkdownUploadingChange}
         onImageUpload={handleMarkdownEditorImageUpload}
         onFileUpload={handleMarkdownEditorFileUpload}
         mermaidEnabled={MARKDOWN_EDITOR_MERMAID_ENABLED}
@@ -586,6 +594,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       handleMarkdownEditorImageUpload,
       handleFlushMarkdownReady,
       handleEditorCommitDuration,
+      handleMarkdownUploadingChange,
       isMarkdownEditorDisabled,
       postContent,
       postTitle,

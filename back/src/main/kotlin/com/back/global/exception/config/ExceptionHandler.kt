@@ -398,7 +398,7 @@ class ExceptionHandler(
     ) {
         val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
         val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
-        val reason = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
+        val reason = mvcRejectedReason(ex)
         logger.warn(
             "mvc_request_rejected method={} path={} exceptionClass={} reason={}",
             method,
@@ -407,6 +407,16 @@ class ExceptionHandler(
             reason,
         )
     }
+
+    private fun mvcRejectedReason(ex: Exception): String =
+        when (ex) {
+            is MethodArgumentTypeMismatchException -> {
+                val parameterName = sanitizeLogValue(ex.name, MAX_METHOD_LENGTH)
+                val requiredType = sanitizeLogValue(ex.requiredType?.simpleName, MAX_METHOD_LENGTH)
+                "type_mismatch name=$parameterName requiredType=$requiredType"
+            }
+            else -> SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
+        }
 
     private fun sanitizeLogValue(
         raw: String?,

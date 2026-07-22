@@ -100,10 +100,11 @@ class ExceptionHandlerLogRedactionTest {
             .contains("method=GET")
             .contains("path=/posts/not-a-number")
             .contains("exceptionClass=org.springframework.web.method.annotation.MethodArgumentTypeMismatchException")
-            .contains("reason=")
+            .contains("reason=type_mismatch name=id requiredType=long")
             .doesNotContain("exceptionStack=")
             .doesNotContain("\tat ")
             .doesNotContain("LEAK_TEST_123")
+            .doesNotContain("not-a-number")
         assertThat(event.throwableProxy).isNull()
     }
 }

@@ -56,6 +56,30 @@ import {
   toolbarMarkdownSnippets,
 } from "./markdownEditorToolbarModel"
 
+type MarkdownChangeMeta = {
+  editorFocused: boolean
+}
+
+type MarkdownEditorProps = {
+  value: string
+  previewTitle?: string
+  previewSummary?: string
+  disabled?: boolean
+  disableMermaid?: boolean
+  onChange: (markdown: string, meta?: MarkdownChangeMeta) => void
+  onFlushMarkdownReady?: (flush: (() => string) | null) => void
+  onFocusRequestReady?: (focus: (() => void) | null) => void
+  onRequestSave?: () => void
+  onUploadingChange?: (isUploading: boolean) => void
+  onUploadImage?: (file: File) => Promise<MarkdownImageUploadResult>
+  onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
+}
+
+type TextareaSelection = {
+  from: number
+  to: number
+}
+
 const TEXTAREA_KEYBOARD_HELP =
   "Tab은 2칸 들여쓰기, Shift+Tab은 내어쓰기입니다. Escape를 누른 다음 Tab은 포커스를 다음 요소로 이동합니다."
 

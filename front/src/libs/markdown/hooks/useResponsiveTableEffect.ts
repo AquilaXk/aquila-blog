@@ -52,44 +52,64 @@ const buildHeaderLabels = (table: HTMLTableElement) => {
   })
 }
 
+const applyResponsiveTableLabels = (root: HTMLElement) => {
+  const tables = Array.from(root.querySelectorAll<HTMLTableElement>("table"))
+  tables.forEach((table) => {
+    table.classList.add("aq-table-responsive")
+    const labels = buildHeaderLabels(table)
+
+    const bodyRows =
+      table.tBodies.length > 0
+        ? Array.from(table.tBodies).flatMap((section) => Array.from(section.rows))
+        : Array.from(table.querySelectorAll<HTMLTableRowElement>("tr")).filter((row) => {
+            if (row.closest("thead")) return false
+            return Array.from(row.cells).some((cell) => cell.tagName === "TD")
+          })
+
+    bodyRows.forEach((row) => {
+      const cells = Array.from(row.children).filter((child): child is HTMLTableCellElement => {
+        return child instanceof HTMLTableCellElement && (child.tagName === "TD" || child.tagName === "TH")
+      })
+      let visualColumnIndex = 0
+      cells.forEach((cell, index) => {
+        const colSpan = Math.max(1, cell.colSpan || 1)
+        const columnLabels = labels
+          .slice(visualColumnIndex, visualColumnIndex + colSpan)
+          .filter(Boolean)
+          .filter((value, labelIndex, source) => labelIndex === 0 || value !== source[labelIndex - 1])
+        const label =
+          columnLabels.join(" · ") ||
+          labels[visualColumnIndex] ||
+          `항목 ${index + 1}`
+        cell.setAttribute("data-label", label)
+        visualColumnIndex += colSpan
+      })
+    })
+  })
+}
+
 const useResponsiveTableEffect = (rootRef?: RefObject<HTMLElement | null>, contentKey?: string) => {
   useEffect(() => {
     const root = rootRef?.current
     if (!root) return
 
-    const tables = Array.from(root.querySelectorAll<HTMLTableElement>("table"))
-    tables.forEach((table) => {
-      table.classList.add("aq-table-responsive")
-      const labels = buildHeaderLabels(table)
+    applyResponsiveTableLabels(root)
 
-      const bodyRows =
-        table.tBodies.length > 0
-          ? Array.from(table.tBodies).flatMap((section) => Array.from(section.rows))
-          : Array.from(table.querySelectorAll<HTMLTableRowElement>("tr")).filter((row) => {
-              if (row.closest("thead")) return false
-              return Array.from(row.cells).some((cell) => cell.tagName === "TD")
-            })
+    // ReactMarkdown can replace table nodes on parent re-render without changing contentKey.
+    // Re-apply labels when the markdown subtree mutates so data-label survives remounts.
+    if (typeof MutationObserver === "undefined") return
 
-      bodyRows.forEach((row) => {
-        const cells = Array.from(row.children).filter((child): child is HTMLTableCellElement => {
-          return child instanceof HTMLTableCellElement && (child.tagName === "TD" || child.tagName === "TH")
-        })
-        let visualColumnIndex = 0
-        cells.forEach((cell, index) => {
-          const colSpan = Math.max(1, cell.colSpan || 1)
-          const columnLabels = labels
-            .slice(visualColumnIndex, visualColumnIndex + colSpan)
-            .filter(Boolean)
-            .filter((value, labelIndex, source) => labelIndex === 0 || value !== source[labelIndex - 1])
-          const label =
-            columnLabels.join(" · ") ||
-            labels[visualColumnIndex] ||
-            `항목 ${index + 1}`
-          cell.setAttribute("data-label", label)
-          visualColumnIndex += colSpan
-        })
+    let scheduled = false
+    const observer = new MutationObserver(() => {
+      if (scheduled) return
+      scheduled = true
+      queueMicrotask(() => {
+        scheduled = false
+        applyResponsiveTableLabels(root)
       })
     })
+    observer.observe(root, { childList: true, subtree: true })
+    return () => observer.disconnect()
   }, [contentKey, rootRef])
 }
 

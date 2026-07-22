@@ -5,6 +5,7 @@ export const MobileSummaryBar = styled.div `
   @media (max-width: 820px) {
     position: static;
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     padding: 0;
     margin-bottom: 28px;
@@ -40,6 +41,19 @@ export const MobileSummaryBar = styled.div `
     button span,
     button strong {
       display: none;
+    }
+
+    .mobileSummaryLikeFeedback {
+      flex: 1 1 100%;
+      margin: 0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
+      background: ${({ theme }) => theme.colors.statusDangerSurface};
+      color: ${({ theme }) => theme.colors.statusDangerText};
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 600;
     }
   }
 `;

@@ -185,6 +185,8 @@ const parseJsonBodyMessage = (body: string) => {
   }
 }
 
+export const readApiResultCode = (body: string) => parseJsonBodyMessage(body).resultCode
+
 const looksLikeInternalDiagnosticMessage = (message: string) =>
   /실패:\s/.test(message) || /Exception|endpoint|bucket|provider|stack/i.test(message)
 
@@ -253,17 +255,20 @@ export class ApiError extends Error {
   url: string
   body: string
   userMessage: string
+  resultCode: string | null
   requestId: string | null
 
   constructor(status: number, url: string, body: string, requestId: string | null = null) {
     const userMessage =
       resolveBodyUserMessage(body) || resolveResponseBodyMessage(status, body) || resolveStatusMessage(status)
+    const resultCode = readApiResultCode(body) || null
     super(userMessage)
     this.name = "ApiError"
     this.status = status
     this.url = url
     this.body = body
     this.userMessage = userMessage
+    this.resultCode = resultCode
     this.requestId = normalizeRequestId(requestId)
   }
 }
@@ -279,6 +284,17 @@ export class ApiTimeoutError extends Error {
     this.url = url
     this.timeoutMs = timeoutMs
     this.requestId = null
+  }
+}
+
+export class ApiNetworkError extends Error {
+  userMessage: string
+
+  constructor() {
+    const userMessage = "네트워크 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
+    super(userMessage)
+    this.name = "ApiNetworkError"
+    this.userMessage = userMessage
   }
 }
 
@@ -467,6 +483,10 @@ export const apiFetchWithMeta = async <T>(
 
         if (timedOut) {
           throw new ApiTimeoutError(url, resolvedTimeoutMs)
+        }
+
+        if (error instanceof TypeError || error instanceof DOMException) {
+          throw new ApiNetworkError()
         }
 
         throw error

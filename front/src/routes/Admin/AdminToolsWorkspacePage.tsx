@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { NextPage } from "next"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
-import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
+import { toUserFacingMessage } from "src/apis/backend/errorClassification"
 import useAuthSession from "src/hooks/useAuthSession"
 import type { DashboardSnapshotPayload } from "src/routes/Admin/AdminDashboardWorkspaceModel"
 import {
@@ -153,7 +153,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       pushExecution(key, "success", data, startedAt)
       return data
     } catch (error) {
-      const message = toFriendlyApiMessage(error, "요청 처리 중 오류가 발생했습니다.")
+      const message = toUserFacingMessage(error)
       options?.onError?.(message)
       pushExecution(key, "error", { error: message }, startedAt)
       return null

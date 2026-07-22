@@ -92,7 +92,8 @@ jobs:
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          if [ -z "${NVD_API_KEY}" ]; then
+          # Reject empty or whitespace-only secrets; Gradle only injects isNotBlank() keys.
+          if [[ -z "${NVD_API_KEY//[[:space:]]/}" ]]; then
             echo "ran=false" >> "${GITHUB_OUTPUT}"
             echo "::error title=Backend dependency scan blocked::NVD_API_KEY secret is required for push, scheduled, and manual security scans (#1124, #1344)."
             exit 1

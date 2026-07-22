@@ -93,7 +93,7 @@ export type CodeFenceRecoveryAttempt = {
   content: string
   contentHtml?: string | null
   recovered: boolean
-  source: Exclude<CodeFenceRecoverySource, "unrecovered" | "none">
+  source: CodeFenceRecoverySource
 }
 
 declare global {
@@ -154,7 +154,7 @@ export const resolveEditorCodeFenceRecovery = ({
   contentHtmlBodyCandidate: string
   publicContent?: string
   publicFallbackSucceeded: boolean
-}): CodeFenceRecoveryAttempt & { source: CodeFenceRecoverySource } => {
+}): CodeFenceRecoveryAttempt => {
   const needsRecovery =
     (adminContent.trim().length === 0 && contentHtmlBodyCandidate.trim().length > 0) ||
     hasEmptyFencedCodeBlockBody(adminContent)

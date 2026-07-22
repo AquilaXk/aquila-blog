@@ -179,6 +179,7 @@ test.describe("markdown editor keyboard model", () => {
     expect(editorSource).toContain("current.setSelectionRange(nextFrom, nextTo)")
     expect(editorSource).toContain("handleTabKeyDown")
     expect(editorSource).toContain("handleEnterKeyDown")
+    expect(editorSource).toContain("applyFormatShortcutOrAppend")
     expect(stylesSource).toContain("&:focus-visible")
     expect(stylesSource).toContain("theme.colors.blue8")
 

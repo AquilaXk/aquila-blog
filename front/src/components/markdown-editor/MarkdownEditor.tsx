@@ -305,6 +305,17 @@ export const MarkdownEditor = ({
     [commitMarkdown, insertMarkdownAtEditorSelection]
   )
 
+  const applyFormatShortcutOrAppend = useCallback(
+    (shortcut: Parameters<typeof planFormatShortcutMutation>[3]) => {
+      const { from, to } = resolveActiveSelection()
+      const plan = planFormatShortcutMutation(valueRef.current, from, to, shortcut)
+      if (applyMutationPlan(plan)) return
+      // Preview-only unmounts the textarea; match applySnippet append fallback.
+      commitMarkdown(`${valueRef.current}${plan.replacement}`, true)
+    },
+    [applyMutationPlan, commitMarkdown, resolveActiveSelection]
+  )
+
   const insertUploadedMarkdown = useCallback(
     (markdown: string) => {
       if (insertMarkdownAtEditorSelection(markdown)) return
@@ -545,10 +556,7 @@ export const MarkdownEditor = ({
             aria-label={`링크 (${modShortcutLabel}K)`}
             disabled={disabled}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              const { from, to } = resolveActiveSelection()
-              applyMutationPlan(planFormatShortcutMutation(valueRef.current, from, to, "link"))
-            }}
+            onClick={() => applyFormatShortcutOrAppend("link")}
           >
             Link
           </ToolbarButton>

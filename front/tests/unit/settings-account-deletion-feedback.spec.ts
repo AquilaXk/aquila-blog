@@ -112,3 +112,20 @@ test("ApiError prefers localized body and ignores English proxy/validation copy"
     })).userMessage
   ).toBe("비밀번호를 입력해주세요.")
 })
+
+test("ApiError exposes Hangul proxy copy without resultCode", () => {
+  const proxyHangul = "백엔드 연결이 일시적으로 불안정합니다. 잠시 후 다시 시도해주세요."
+  expect(
+    new ApiError(503, "/api/backend/member/api/v1/privacy/account", JSON.stringify({ message: proxyHangul })).userMessage
+  ).toBe(proxyHangul)
+})
+
+test("ApiError hides diagnostic dumps without resultCode", () => {
+  expect(
+    new ApiError(503, "/api/backend/x", JSON.stringify({ message: "실패: AccessDenied on bucket aquila-private" })).userMessage
+  ).toBe("서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+
+  expect(
+    new ApiError(503, "/api/backend/x", JSON.stringify({ msg: "실패: AccessDenied on bucket aquila-private" })).userMessage
+  ).toBe("서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+})

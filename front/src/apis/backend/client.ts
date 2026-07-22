@@ -185,16 +185,13 @@ const parseJsonBodyMessage = (body: string) => {
   }
 }
 
-const isAppResultCode = (resultCode: string) => /^\d{3}-\d+$/.test(resultCode)
-
 const looksLikeInternalDiagnosticMessage = (message: string) =>
   /실패:\s/.test(message) || /Exception|endpoint|bucket|provider|stack/i.test(message)
 
 const resolveBodyUserMessage = (body: string) => {
-  const { message, resultCode } = parseJsonBodyMessage(body)
+  const { message } = parseJsonBodyMessage(body)
   if (!message) return ""
-  // Only expose app RsData copy that is localized and not an internal diagnostic dump.
-  if (!isAppResultCode(resultCode)) return ""
+  // Only expose localized copy that is not an internal diagnostic dump.
   if (!/[가-힣]/.test(message)) return ""
   if (looksLikeInternalDiagnosticMessage(message)) return ""
   return message

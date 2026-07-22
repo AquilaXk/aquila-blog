@@ -19,6 +19,7 @@ import {
   setOptionalTrackingConsent,
 } from "src/libs/privacy/optionalTrackingConsentCore"
 import { normalizeNextPath, replaceRoute } from "src/libs/router"
+import { EmptyState, Skeleton } from "src/design-system/StatePresenters"
 import SettingsLayout from "./SettingsLayout"
 
 type FeedbackTone = "danger" | "success"
@@ -288,7 +289,12 @@ const SettingsPrivacyPage = () => {
         <section className="panel" aria-label="개인정보 내보내기">
           <h2>내보내기 스냅샷</h2>
           {loading ? (
-            <p className="muted">개인정보 내보내기 데이터를 불러오는 중입니다.</p>
+            <div className="snapshotSkeleton" aria-busy="true" aria-label="개인정보 내보내기 로딩">
+              <Skeleton height="1rem" width="40%" />
+              <Skeleton height="1.25rem" width="70%" />
+              <Skeleton height="1rem" width="55%" />
+              <Skeleton height="1.25rem" width="62%" />
+            </div>
           ) : snapshot ? (
             <dl className="snapshotList">
               <div>
@@ -313,7 +319,10 @@ const SettingsPrivacyPage = () => {
               </div>
             </dl>
           ) : (
-            <p className="muted">조회 가능한 개인정보 스냅샷이 없습니다.</p>
+            <EmptyState
+              label="EXPORT"
+              description="조회 가능한 개인정보 스냅샷이 없습니다."
+            />
           )}
         </section>
 
@@ -355,6 +364,12 @@ const SettingsPrivacyPage = () => {
       </div>
 
       <style jsx>{`
+        .snapshotSkeleton {
+          display: grid;
+          gap: 12px;
+          margin-top: 4px;
+        }
+
         .snapshotList {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));

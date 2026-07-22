@@ -1,22 +1,13 @@
 import styled from "@emotion/styled";
-import { control } from "src/design-system/tokens";
+import { control, layoutBreakpoint } from "src/design-system/tokens";
 export const StyledWrapper = styled.div `
-  --detail-v4-bg: #f7f7f5;
-  --detail-v4-paper: ${({ theme }) => theme.publicDesign.readableSurface};
-  --detail-v4-paper-2: #f0f1f2;
-  --detail-v4-ink: #111216;
-  --detail-v4-muted: #646a73;
-  --detail-v4-faint: #8c9199;
-  --detail-v4-line: #dfe1e5;
-  --detail-v4-line-strong: #c8ccd2;
-  --detail-v4-accent: #155eef;
   width: 100%;
   max-width: none;
   box-sizing: border-box;
   margin: 0 auto;
   min-width: 0;
   padding: 0;
-  color: var(--detail-v4-ink);
+  color: var(--aq-text);
   position: relative;
   z-index: 0;
   isolation: isolate;
@@ -30,7 +21,7 @@ export const StyledWrapper = styled.div `
     z-index: -1;
     width: 100vw;
     transform: translateX(-50%);
-    background: var(--detail-v4-bg);
+    background: var(--aq-page-bg);
     pointer-events: none;
   }
 
@@ -49,7 +40,7 @@ export const StyledWrapper = styled.div `
       height: 100%;
       transform: scaleX(0);
       transform-origin: left center;
-      background: var(--detail-v4-accent);
+      background: var(--aq-accent-link);
     }
   }
 
@@ -57,7 +48,7 @@ export const StyledWrapper = styled.div `
     width: 100%;
     margin: 0 auto;
     padding: 68px 20px 42px;
-    border-bottom: 1px solid var(--detail-v4-line);
+    border-bottom: 1px solid var(--aq-border);
     box-sizing: border-box;
   }
 
@@ -133,9 +124,9 @@ export const StyledWrapper = styled.div `
     justify-content: center;
     padding: 0;
     border-radius: 6px;
-    border: 1px solid var(--detail-v4-line);
-    background: var(--detail-v4-paper);
-    color: var(--detail-v4-muted);
+    border: 1px solid var(--aq-border);
+    background: var(--aq-surface);
+    color: var(--aq-text-secondary);
     cursor: pointer;
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 
@@ -146,9 +137,9 @@ export const StyledWrapper = styled.div `
     }
 
     &:hover {
-      border-color: var(--detail-v4-accent);
-      background: var(--detail-v4-paper);
-      color: var(--detail-v4-accent);
+      border-color: var(--aq-accent-link);
+      background: var(--aq-surface);
+      color: var(--aq-accent-link);
     }
 
     &:disabled {
@@ -171,9 +162,9 @@ export const StyledWrapper = styled.div `
       white-space: nowrap;
       padding: 0.3rem 0.48rem;
       border-radius: 6px;
-      border: 1px solid var(--detail-v4-line);
-      background: var(--detail-v4-paper);
-      color: var(--detail-v4-muted);
+      border: 1px solid var(--aq-border);
+      background: var(--aq-surface);
+      color: var(--aq-text-secondary);
       font-size: 0.68rem;
       line-height: 1;
       font-weight: 700;
@@ -189,15 +180,15 @@ export const StyledWrapper = styled.div `
   }
 
   .floatingLikeButton[data-active="true"] {
-    border-color: var(--detail-v4-accent);
+    border-color: var(--aq-accent-link);
 
     svg {
-      color: var(--detail-v4-accent);
+      color: var(--aq-accent-link);
     }
   }
 
   .floatingShareButton {
-    color: var(--detail-v4-muted);
+    color: var(--aq-text-secondary);
   }
 
   .floatingLikeCluster {
@@ -222,7 +213,7 @@ export const StyledWrapper = styled.div `
     font-size: 10px;
     line-height: 1;
     font-weight: 600;
-    color: var(--detail-v4-faint);
+    color: var(--aq-muted);
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   }
 
@@ -230,12 +221,12 @@ export const StyledWrapper = styled.div `
     font-size: 0.64rem;
     line-height: 1;
     font-weight: 600;
-    color: var(--detail-v4-faint);
+    color: var(--aq-muted);
     text-align: center;
   }
 
   .rightRailInner {
-    border-left: 1px solid var(--detail-v4-line);
+    border-left: 1px solid var(--aq-border);
     padding: 0 0 0 18px;
     background: transparent;
 
@@ -255,7 +246,7 @@ export const StyledWrapper = styled.div `
 
     .rightRailTitle {
       margin: 0;
-      color: var(--detail-v4-ink);
+      color: var(--aq-text);
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       font-size: 0.6875rem;
       line-height: 1;
@@ -265,7 +256,7 @@ export const StyledWrapper = styled.div `
     }
 
     .rightRailMeta {
-      color: var(--detail-v4-faint);
+      color: var(--aq-muted);
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       font-size: 0.6875rem;
       line-height: 1.2;
@@ -273,10 +264,10 @@ export const StyledWrapper = styled.div `
     }
 
     .tocDepthToggle {
-      border: 1px solid var(--detail-v4-line);
+      border: 1px solid var(--aq-border);
       border-radius: 6px;
-      background: var(--detail-v4-paper);
-      color: var(--detail-v4-muted);
+      background: var(--aq-surface);
+      color: var(--aq-text-secondary);
       font-size: 0.71rem;
       font-weight: 700;
       line-height: 1;
@@ -286,8 +277,8 @@ export const StyledWrapper = styled.div `
       flex-shrink: 0;
 
       &:hover {
-        color: var(--detail-v4-ink);
-        border-color: var(--detail-v4-line-strong);
+        color: var(--aq-text);
+        border-color: var(--aq-border-strong);
       }
     }
 
@@ -328,7 +319,7 @@ export const StyledWrapper = styled.div `
       max-width: 100%;
       padding: 0.5rem 0;
       background: transparent;
-      color: var(--detail-v4-muted);
+      color: var(--aq-text-secondary);
       font-size: 12px;
       line-height: 1.4;
       cursor: pointer;
@@ -340,18 +331,18 @@ export const StyledWrapper = styled.div `
     }
 
     button:hover {
-      color: var(--detail-v4-ink);
+      color: var(--aq-text);
       background: transparent;
     }
 
     button[data-active="true"] {
-      color: var(--detail-v4-accent);
+      color: var(--aq-accent-link);
       font-weight: 750;
       background: transparent;
     }
   }
 
-  @media (max-width: 1100px) {
+  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
     .detailLayout {
       grid-template-columns: 52px minmax(0, 1fr);
       gap: 28px;
@@ -371,7 +362,7 @@ export const StyledWrapper = styled.div `
     display: none;
   }
 
-  @media (max-width: 820px) {
+  @media (max-width: ${layoutBreakpoint.navCompact}px) {
     .detailHero {
       padding: 44px 20px 28px;
     }
@@ -395,9 +386,9 @@ export const StyledWrapper = styled.div `
     .mobileToc {
       display: block;
       margin: 0 0 28px;
-      border: 1px solid var(--detail-v4-line);
+      border: 1px solid var(--aq-border);
       border-radius: 6px;
-      background: var(--detail-v4-paper);
+      background: var(--aq-surface);
     }
 
     .mobileTocSummary {
@@ -405,7 +396,7 @@ export const StyledWrapper = styled.div `
       align-items: center;
       min-height: ${control.lg}px;
       padding: 0 0.9rem;
-      color: var(--detail-v4-ink);
+      color: var(--aq-text);
       font-size: 0.875rem;
       font-weight: 750;
       line-height: 1.2;
@@ -446,7 +437,7 @@ export const StyledWrapper = styled.div `
       border: 0;
       border-radius: 0;
       background: transparent;
-      color: var(--detail-v4-muted);
+      color: var(--aq-text-secondary);
       font-size: 0.875rem;
       line-height: 1.4;
       text-align: left;
@@ -457,7 +448,7 @@ export const StyledWrapper = styled.div `
     }
 
     .mobileTocList button[data-active="true"] {
-      color: var(--detail-v4-accent);
+      color: var(--aq-accent-link);
       font-weight: 750;
     }
   }
@@ -472,8 +463,8 @@ export const BodySection = styled.div `
   .leadSummary {
     margin: 0 0 42px;
     padding: 4px 0 4px 20px;
-    border-left: 3px solid #155eef;
-    color: #646a73;
+    border-left: 3px solid var(--aq-accent-link);
+    color: var(--aq-text-secondary);
     font-size: 1.125rem;
     line-height: 1.75;
     word-break: keep-all;

@@ -1,5 +1,5 @@
 import styled from "@emotion/styled"
-import { control } from "src/design-system/tokens"
+import { control, layoutBreakpoint } from "src/design-system/tokens"
 import { useModalFocusTrap } from "src/design-system/useModalFocusTrap"
 import dynamic from "next/dynamic"
 import Link from "next/link"
@@ -602,7 +602,7 @@ const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 820px) {
+  @media (max-width: ${layoutBreakpoint.navCompact}px) {
     .primaryLinks a {
       min-height: ${control.lg}px;
       padding: 0 12px;

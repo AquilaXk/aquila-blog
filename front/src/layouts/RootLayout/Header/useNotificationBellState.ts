@@ -1,5 +1,6 @@
 import { useRouter } from "next/router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { layoutBreakpoint } from "src/design-system/tokens"
 import { ApiError } from "src/apis/backend/client"
 import {
   buildNotificationStreamUrl,
@@ -265,7 +266,7 @@ export const useNotificationBellState = (enabled: boolean) => {
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const media = window.matchMedia("(max-width: 820px)")
+    const media = window.matchMedia(`(max-width: ${layoutBreakpoint.navCompact}px)`)
     const sync = () => {
       setIsMobileViewport(media.matches)
     }

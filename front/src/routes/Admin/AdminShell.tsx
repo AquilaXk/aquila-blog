@@ -7,7 +7,7 @@ import BrandLogoMark from "src/components/branding/BrandMark"
 import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import { CONFIG } from "site.config"
-import { control } from "src/design-system/tokens"
+import { control, layoutBreakpoint } from "src/design-system/tokens"
 import {
   adminAccentText,
   adminAppBackground,
@@ -45,7 +45,7 @@ type NavItem = {
   id: AdminShellSection | "write"
   href: string
   label: string
-  /** ≤1100 CompactNav용 짧은 라벨 (P5-2: icon-only 금지) */
+  /** ≤adminCompact CompactNav용 짧은 라벨 (P5-2: icon-only 금지) */
   shortLabel: string
   icon: IconName
 }
@@ -251,7 +251,7 @@ const ShellFrame = styled.div`
   min-height: 100vh;
   background: ${adminAppBackground};
 
-  @media (max-width: 1100px) {
+  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
     grid-template-columns: minmax(0, 1fr);
     width: 100%;
   }
@@ -270,7 +270,7 @@ const Sidebar = styled.aside`
   border-right: 1px solid ${adminBorder};
   background: ${adminShellSurface};
 
-  @media (max-width: 1100px) {
+  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
     position: static;
     display: none;
   }
@@ -482,7 +482,7 @@ const TopBar = styled.header`
   border-bottom: 1px solid ${adminBorder};
   background: ${adminSurface};
 
-  @media (max-width: 720px) {
+  @media (max-width: ${layoutBreakpoint.editorCompact}px) {
     align-items: flex-start;
     flex-wrap: wrap;
     padding: 0.72rem 0.82rem;
@@ -492,7 +492,7 @@ const TopBar = styled.header`
 const CompactNav = styled.nav`
   display: none;
 
-  @media (max-width: 1100px) {
+  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
     display: flex;
     align-items: center;
     gap: 0.45rem;
@@ -572,7 +572,7 @@ const SecondaryTopAction = styled.a`
   font-size: 0.82rem;
   font-weight: 780;
 
-  @media (max-width: 1100px) {
+  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
     min-height: ${control.lg}px;
   }
 `
@@ -595,7 +595,7 @@ const PrimaryTopAction = styled.a`
     background: ${adminTealHover};
   }
 
-  @media (max-width: 1100px) {
+  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
     min-height: ${control.lg}px;
   }
 `
@@ -612,7 +612,7 @@ const ResponsiveLogoutAction = styled.button`
   color: ${adminTextSecondary};
   cursor: pointer;
 
-  @media (max-width: 1100px) {
+  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
     display: inline-flex;
     width: ${control.lg}px;
     height: ${control.lg}px;

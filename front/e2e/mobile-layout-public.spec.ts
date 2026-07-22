@@ -27,9 +27,11 @@ test.describe("mobile layout public", () => {
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
   await page.getByRole("button", { name: "메뉴 열기" }).click()
+  await expect(page.getByRole("dialog", { name: "메뉴" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Notes" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Topics" })).toBeVisible()
   await expect(page.getByRole("link", { name: "About" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "검색" })).toBeVisible()
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
   await expect(page.locator("a[href^='/posts/'] h2").first()).toBeVisible()
   const moreTagButton = page.getByRole("button", { name: /더보기/ })
@@ -57,6 +59,45 @@ test.describe("mobile layout public", () => {
   expect(secondSnapshot.bodyScrollWidth).toBeLessThanOrEqual(secondSnapshot.viewportWidth)
   expect(Math.abs(firstSnapshot.firstCardWidth - secondSnapshot.firstCardWidth)).toBeLessThanOrEqual(1.5)
 })
+
+  test("모바일 헤더 메뉴는 body portal·focus-trap·검색 진입점을 유지한다", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await page.goto("/")
+    await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
+
+    const menuButton = page.getByRole("button", { name: "메뉴 열기" })
+    await menuButton.click()
+
+    const menu = page.getByRole("dialog", { name: "메뉴" })
+    await expect(menu).toBeVisible()
+
+    const portalParent = await menu.evaluate((element) => element.parentElement?.parentElement?.tagName ?? "")
+    expect(portalParent).toBe("BODY")
+
+    const searchItem = menu.getByRole("button", { name: "검색" })
+    await expect(searchItem).toBeVisible()
+    await expect(searchItem).toHaveAttribute("aria-keyshortcuts", "Meta+K Control+K")
+    await expect(menu.locator("kbd")).toHaveText("⌘K")
+
+    await expect(searchItem).toBeFocused()
+    await page.keyboard.press("Tab")
+    await expect(menu.getByRole("link", { name: "Notes" })).toBeFocused()
+    await page.keyboard.press("Escape")
+    await expect(menu).toHaveCount(0)
+    await expect(menuButton).toBeFocused()
+
+    await menuButton.click()
+    await expect(page.getByRole("dialog", { name: "메뉴" })).toBeVisible()
+    await page.locator('[data-ui="mobile-nav-menu"] [role="presentation"]').click({
+      position: { x: 12, y: 24 },
+    })
+    await expect(page.getByRole("dialog", { name: "메뉴" })).toHaveCount(0)
+
+    await menuButton.click()
+    await page.getByRole("button", { name: "검색" }).click()
+    await expect(page.getByRole("dialog", { name: "메뉴" })).toHaveCount(0)
+    await expect(page.getByLabel("Search posts by keyword")).toBeFocused()
+  })
 
   test("iPhone 15 Pro about 페이지는 V4 프로필 본문과 원형 avatar 계약을 유지한다", async ({ page }) => {
   await addPublicAboutSnapshotCookie(page)

@@ -475,6 +475,28 @@ test.describe("core smoke feed and search", () => {
     await waitForFeedSearchInputFocus(page)
   })
 
+  test("모바일 메뉴 검색과 Ctrl+K는 피드 검색 입력을 연다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/")
+    await page.getByRole("button", { name: "메뉴 열기" }).click()
+    const searchItem = page.getByRole("dialog", { name: "메뉴" }).getByRole("button", { name: "검색" })
+    await expect(searchItem).toBeVisible()
+    await expect(searchItem).toHaveAttribute("aria-keyshortcuts", "Meta+K Control+K")
+    await searchItem.click()
+    await waitForFeedSearchInputFocus(page)
+
+    await page.getByRole("button", { name: "메뉴 열기" }).click()
+    await expect(page.getByRole("dialog", { name: "메뉴" })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("dialog", { name: "메뉴" })).toHaveCount(0)
+
+    await triggerSearchShortcut(page)
+    await waitForFeedSearchInputFocus(page)
+  })
+
   test("from /about Meta+K navigates to / and focuses search input", async ({ page }) => {
     await mockFeedEndpoints(page)
     await mockAnonymousSession(page)

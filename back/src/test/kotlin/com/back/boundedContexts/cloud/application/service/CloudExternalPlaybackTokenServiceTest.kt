@@ -168,6 +168,24 @@ class CloudExternalPlaybackTokenServiceTest {
     }
 
     @Test
+    @DisplayName("유효 token이어도 파일이 없으면 denied 메트릭 경로로 거절한다")
+    fun validTokenDeniesMissingFile() {
+        val issuedToken = "missing-file-token"
+        tokens.savedTokens +=
+            CloudExternalPlaybackToken.create(
+                tokenHash = CloudExternalPlaybackTokenService.hashToken(issuedToken),
+                fileId = 12L,
+                memberId = 7L,
+                purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
+                expiresAt = Instant.parse("2026-06-26T18:00:00Z"),
+            )
+
+        assertThatThrownBy { service.openContent(token = issuedToken, fileId = 12L) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("클라우드 파일")
+    }
+
+    @Test
     @DisplayName("token이 유효해도 저장소 객체가 없으면 404를 반환한다")
     fun validTokenRejectsMissingStoredObject() {
         val file = videoFile(id = 12L, ownerMemberId = 7L)

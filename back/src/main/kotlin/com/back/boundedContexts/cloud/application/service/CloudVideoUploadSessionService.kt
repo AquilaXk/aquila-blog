@@ -16,6 +16,7 @@ import com.back.global.storage.metrics.CloudMediaMetrics
 import com.fasterxml.jackson.annotation.JsonInclude
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import java.io.InputStream
 import java.net.URLEncoder
@@ -269,7 +270,12 @@ class CloudVideoUploadSessionService(
                         if (existing.byteSize != contentLength) {
                             throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
                         }
-                        if (!existing.partSha256.equals(bufferedPart.sha256Hex, ignoreCase = true)) {
+                        val existingSha = existing.partSha256
+                        if (existingSha.isBlank()) {
+                            // legacy blank part_sha256: same-size retry is accepted and backfills the digest.
+                            existing.partSha256 = bufferedPart.sha256Hex
+                            partRepository.save(existing)
+                        } else if (!existingSha.equals(bufferedPart.sha256Hex, ignoreCase = true)) {
                             throw AppException("409-1", PART_CONTENT_CONFLICT_MESSAGE)
                         }
                         extendSessionExpiry(session)
@@ -547,22 +553,31 @@ class CloudVideoUploadSessionService(
         val existing = cloudFileRepository.findActiveByObjectKey(session.objectKey)
         val file =
             existing
-                ?: cloudFileRepository.save(
-                    CloudFile.create(
-                        ownerMemberId = session.ownerMemberId,
-                        objectKey = session.objectKey,
-                        originalFilename = session.originalFilename,
-                        contentType = session.contentType,
-                        byteSize = session.byteSize,
-                        mediaKind = CloudFileMediaKind.VIDEO,
-                        folderPath = session.folderPath,
-                        checksumSha256 = checksumSha256,
-                    ),
-                )
-        if (
-            session.status != CloudVideoUploadSessionStatus.COMPLETED ||
-            session.completedFileId != file.id
-        ) {
+                ?: runCatching {
+                    cloudFileRepository.save(
+                        CloudFile.create(
+                            ownerMemberId = session.ownerMemberId,
+                            objectKey = session.objectKey,
+                            originalFilename = session.originalFilename,
+                            contentType = session.contentType,
+                            byteSize = session.byteSize,
+                            mediaKind = CloudFileMediaKind.VIDEO,
+                            folderPath = session.folderPath,
+                            checksumSha256 = checksumSha256,
+                        ),
+                    )
+                }.getOrElse { exception ->
+                    if (exception !is DataIntegrityViolationException) {
+                        throw exception
+                    }
+                    cloudFileRepository.findActiveByObjectKey(session.objectKey)
+                        ?: throw exception
+                }
+        // Boolean.and is non-short-circuiting so both sides stay coverage-visible.
+        val alreadyCompletedWithSameFile =
+            (session.status == CloudVideoUploadSessionStatus.COMPLETED) and
+                (session.completedFileId == file.id)
+        if (!alreadyCompletedWithSameFile) {
             val fromStatus = session.status
             session.complete(file.id, clock.instant())
             sessionRepository.save(session)

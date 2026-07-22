@@ -145,7 +145,7 @@ const summary = {
   uploadedBytes: ${UPLOADED_BYTES},
   throughputMbps: Number(${THROUGHPUT_MBPS@Q}),
   finalAction: ${FINAL_ACTION@Q},
-  partDurationMs: [${PART_DURATIONS_MS[*]}],
+  partDurationMs: [$(IFS=,; echo "${PART_DURATIONS_MS[*]}")],
   notes: [
     "Run from external uplink (not LAN) for launch criteria.",
     "Compare throughputMbps against uplink baseline x 0.70 in cloud-launch-criteria.md.",

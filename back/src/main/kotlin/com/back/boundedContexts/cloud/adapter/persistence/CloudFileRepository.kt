@@ -48,15 +48,6 @@ interface CloudFileRepository :
         objectKeyPrefix: String,
         pageable: Pageable,
     ): List<CloudFile>
-
-    override fun findActiveByObjectKeyStartingWith(
-        objectKeyPrefix: String,
-        limit: Int,
-    ): List<CloudFile> =
-        findActiveByObjectKeyPrefix(
-            objectKeyPrefix = objectKeyPrefix,
-            pageable = Pageable.ofSize(limit.coerceAtLeast(1)),
-        )
 }
 
 interface CloudFileRepositoryCustom {
@@ -65,5 +56,10 @@ interface CloudFileRepositoryCustom {
         folderPath: String?,
         keyword: String?,
         mediaKind: CloudFileMediaKind?,
+    ): List<CloudFile>
+
+    fun findActiveByObjectKeyStartingWith(
+        objectKeyPrefix: String,
+        limit: Int,
     ): List<CloudFile>
 }

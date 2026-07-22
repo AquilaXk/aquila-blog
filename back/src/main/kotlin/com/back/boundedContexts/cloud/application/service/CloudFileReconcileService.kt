@@ -68,10 +68,13 @@ class CloudFileReconcileService(
                     return degradedDiagnostics(objectPrefix, inventoryLimit)
                 }
 
-        val inFlightObjectKeys =
-            sessionRepository
-                .findNonTerminalObjectKeysByPrefix(objectPrefix, inventoryLimit)
-                .toSet()
+        val inFlightObjectKeysRaw =
+            sessionRepository.findNonTerminalObjectKeysByPrefix(
+                objectKeyPrefix = objectPrefix,
+                limit = inventoryLimit + 1,
+            )
+        val inFlightObjectKeysTruncated = inFlightObjectKeysRaw.size > inventoryLimit
+        val inFlightObjectKeys = inFlightObjectKeysRaw.take(inventoryLimit).toSet()
 
         val dbRows =
             cloudFileRepository.findActiveByObjectKeyStartingWith(
@@ -99,18 +102,23 @@ class CloudFileReconcileService(
                 sampledDbRows.filterNot { it.objectKey in inventoryKeys }
             }
 
+        // DB/in-flight 샘플이 잘리면 bucket-only 판정이 불완전하므로 삭제 금지.
+        val incompleteBucketEvidence = dbRowsTruncated || inFlightObjectKeysTruncated
+        val blockedBySafetyThreshold =
+            repair && orphanBucketObjects.size > cloudStorageProperties.cloudReconcileSafetyThreshold
+        val allowBucketRepair = repair && !blockedBySafetyThreshold && !incompleteBucketEvidence
+        // inventory truncate 시 orphanDbRows는 이미 비어 있어 db-only repair도 차단된다.
+        val allowDbRepair = repair && !blockedBySafetyThreshold && !inventory.isTruncated
         val repairMode =
             when {
                 !repair -> "dry-run"
-                orphanBucketObjects.size > cloudStorageProperties.cloudReconcileSafetyThreshold -> "dry-run-blocked"
+                blockedBySafetyThreshold || incompleteBucketEvidence -> "dry-run-blocked"
                 else -> "repair"
             }
-        val blockedBySafetyThreshold =
-            repair && orphanBucketObjects.size > cloudStorageProperties.cloudReconcileSafetyThreshold
 
         var repairedBucketOnlyDeletedCount = 0
         var repairedDbOnlySoftDeletedCount = 0
-        if (repairMode == "repair") {
+        if (allowBucketRepair) {
             orphanBucketObjects.forEach { summary ->
                 runCatching {
                     cloudStoragePort.delete(summary.objectKey)
@@ -123,6 +131,8 @@ class CloudFileReconcileService(
                     )
                 }
             }
+        }
+        if (allowDbRepair) {
             orphanDbRows.forEach { file ->
                 runCatching {
                     file.markDeleted(now)

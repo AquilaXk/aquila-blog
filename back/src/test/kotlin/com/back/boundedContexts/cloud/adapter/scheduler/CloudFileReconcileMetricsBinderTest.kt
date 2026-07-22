@@ -56,4 +56,42 @@ class CloudFileReconcileMetricsBinderTest {
                 .value(),
         ).isEqualTo(5.0)
     }
+
+    @Test
+    fun `worker disabled면 refresh를 건너뛴다`() {
+        val service = mock(CloudFileReconcileService::class.java)
+        val binder =
+            CloudFileReconcileMetricsBinder(
+                cloudFileReconcileService = service,
+                workerEnabled = false,
+                refreshEnabled = true,
+            )
+
+        binder.refreshSnapshot()
+
+        org.mockito.Mockito.verifyNoInteractions(service)
+    }
+
+    @Test
+    fun `diagnose 실패 시 refresh failure를 증가시킨다`() {
+        val service = mock(CloudFileReconcileService::class.java)
+        given(service.diagnose()).willThrow(IllegalStateException("diagnose failed"))
+        val registry = SimpleMeterRegistry()
+        val binder =
+            CloudFileReconcileMetricsBinder(
+                cloudFileReconcileService = service,
+                workerEnabled = true,
+                refreshEnabled = true,
+            )
+
+        binder.bindTo(registry)
+        binder.refreshSnapshot()
+
+        assertThat(
+            registry
+                .find("storage.cloud_file.reconcile.refresh_failures")
+                .functionCounter()
+                ?.count(),
+        ).isEqualTo(1.0)
+    }
 }

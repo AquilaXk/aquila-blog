@@ -50,6 +50,24 @@ class CloudUploadSessionMetricsBinderTest {
     }
 
     @Test
+    fun `countStale 실패 시 stuck gauge refresh를 건너뛴다`() {
+        val service = mock(CloudVideoUploadSessionService::class.java)
+        given(service.countStaleIntermediateSessions()).willThrow(IllegalStateException("count failed"))
+        val registry = SimpleMeterRegistry()
+        val binder =
+            CloudUploadSessionMetricsBinder(
+                cloudVideoUploadSessionService = service,
+                workerEnabled = true,
+                refreshEnabled = true,
+            )
+
+        binder.bindTo(registry)
+        binder.refreshSnapshot()
+
+        assertThat(registry.get(CloudMediaMetrics.UPLOAD_SESSION_STUCK).gauge().value()).isEqualTo(0.0)
+    }
+
+    @Test
     fun `metrics refresh 기본 주기는 60초다`() {
         val scheduled =
             CloudUploadSessionMetricsBinder::class

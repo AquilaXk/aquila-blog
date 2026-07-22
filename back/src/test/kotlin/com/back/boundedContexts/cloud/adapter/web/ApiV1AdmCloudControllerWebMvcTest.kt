@@ -613,6 +613,53 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     }
 
     @Test
+    @DisplayName("external content AppException 4xx는 playback 메트릭 후 전파된다")
+    fun `external content AppException 4xx는 playback 메트릭 후 전파된다`() {
+        given(cloudExternalPlaybackTokenService.openContent(token = "raw-token", fileId = 12L))
+            .willThrow(AppException("403-1", "외부 재생 token이 올바르지 않거나 만료되었습니다."))
+
+        mvc
+            .get("/system/api/v1/adm/cloud/files/12/external-content") {
+                param("token", "raw-token")
+            }.andExpect {
+                status { isForbidden() }
+                jsonPath("$.resultCode") { value("403-1") }
+            }
+    }
+
+    @Test
+    @DisplayName("external content AppException other code는 playback 메트릭 후 전파된다")
+    fun `external content AppException other code는 playback 메트릭 후 전파된다`() {
+        given(cloudExternalPlaybackTokenService.openContent(token = "raw-token", fileId = 12L))
+            .willThrow(AppException("999-1", "분류되지 않은 오류"))
+
+        val result =
+            mvc
+                .get("/system/api/v1/adm/cloud/files/12/external-content") {
+                    param("token", "raw-token")
+                }.andReturn()
+
+        assertThat(result.resolvedException).isInstanceOf(AppException::class.java)
+        assertThat((result.resolvedException as AppException).rsData.resultCode).isEqualTo("999-1")
+    }
+
+    @Test
+    @DisplayName("external content RuntimeException은 5xx playback 메트릭 후 전파된다")
+    fun `external content RuntimeException은 5xx playback 메트릭 후 전파된다`() {
+        given(cloudExternalPlaybackTokenService.openContent(token = "raw-token", fileId = 12L))
+            .willThrow(IllegalStateException("boom"))
+
+        val result =
+            mvc
+                .get("/system/api/v1/adm/cloud/files/12/external-content") {
+                    param("token", "raw-token")
+                }.andReturn()
+
+        assertThat(result.resolvedException).isInstanceOf(IllegalStateException::class.java)
+        assertThat(result.resolvedException?.message).isEqualTo("boom")
+    }
+
+    @Test
     @DisplayName("external content invalid Range 요청은 416을 반환하고 storage stream을 열지 않는다")
     fun `external content invalid Range 요청은 416을 반환하고 storage stream을 열지 않는다`() {
         given(cloudExternalPlaybackTokenService.getFile(token = "raw-token", fileId = 12L))

@@ -161,5 +161,5 @@ class CloudVideoUploadPart(
     val byteSize: Long,
     /** Part 바이트의 SHA-256 hex(64). multipart complete 시 composite checksum 재료. */
     @field:Column(nullable = false, length = 64)
-    val partSha256: String,
+    var partSha256: String,
 ) : BaseTime(id)

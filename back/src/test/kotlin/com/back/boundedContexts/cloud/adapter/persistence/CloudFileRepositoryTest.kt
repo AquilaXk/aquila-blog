@@ -99,6 +99,57 @@ class CloudFileRepositoryTest : BaseRepositoryIntegrationTest() {
     }
 
     @Test
+    @DisplayName("objectKey prefix 조회는 limit과 삭제 상태를 반영한다")
+    fun `objectKey prefix 조회는 limit과 삭제 상태를 반영한다`() {
+        val owner = memberRepository.saveAndFlush(Member(0, "cloud-prefix-admin", "1234", "클라우드 prefix 관리자"))
+        val first =
+            cloudFileRepository.saveAndFlush(
+                cloudFile(
+                    ownerMemberId = owner.id,
+                    objectKey = "cloud/${owner.id}/videos/a.mp4",
+                    originalFilename = "a.mp4",
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = "videos",
+                ),
+            )
+        cloudFileRepository.saveAndFlush(
+            cloudFile(
+                ownerMemberId = owner.id,
+                objectKey = "cloud/${owner.id}/videos/b.mp4",
+                originalFilename = "b.mp4",
+                mediaKind = CloudFileMediaKind.VIDEO,
+                folderPath = "videos",
+            ),
+        )
+        val deleted =
+            cloudFileRepository.saveAndFlush(
+                cloudFile(
+                    ownerMemberId = owner.id,
+                    objectKey = "cloud/${owner.id}/videos/deleted.mp4",
+                    originalFilename = "deleted.mp4",
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = "videos",
+                ),
+            )
+        deleted.markDeleted(Instant.now())
+        cloudFileRepository.saveAndFlush(deleted)
+
+        val files =
+            cloudFileRepository.findActiveByObjectKeyStartingWith(
+                objectKeyPrefix = "cloud/${owner.id}/videos/",
+                limit = 1,
+            )
+
+        assertThat(files).extracting<Long> { it.id }.containsExactly(first.id)
+        assertThat(
+            cloudFileRepository.findActiveByObjectKeyStartingWith(
+                objectKeyPrefix = "cloud/${owner.id}/videos/",
+                limit = 0,
+            ),
+        ).hasSize(1)
+    }
+
+    @Test
     @DisplayName("파일 목록 검색어는 like 특수문자를 일반 문자로 이스케이프한다")
     fun `파일 목록 검색어는 like 특수문자를 일반 문자로 이스케이프한다`() {
         val owner = memberRepository.saveAndFlush(Member(0, "cloud-escape-admin", "1234", "클라우드 검색 관리자"))

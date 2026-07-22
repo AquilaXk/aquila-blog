@@ -73,16 +73,35 @@ function contentUrl() {
   return `${BASE_URL}/system/api/v1/adm/cloud/files/${FILE_ID}/external-content?token=${encodeURIComponent(PLAYBACK_TOKEN)}`;
 }
 
-function randomInt(minInclusive, maxInclusive) {
-  return Math.floor(Math.random() * (maxInclusive - minInclusive + 1)) + minInclusive;
+/** Deterministic PRNG (mulberry32). Avoid Math.random for Sonar S2245 / QG security rating. */
+function mulberry32(seed) {
+  let state = seed >>> 0;
+  return function next() {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededInt(minInclusive, maxInclusive, seed) {
+  const rand = mulberry32(seed >>> 0);
+  return Math.floor(rand() * (maxInclusive - minInclusive + 1)) + minInclusive;
+}
+
+function vuIterSeed(salt) {
+  const vu = typeof __VU !== "undefined" ? Number(__VU) : 1;
+  const iter = typeof __ITER !== "undefined" ? Number(__ITER) : 0;
+  return (Math.imul(vu, 1_000_003) + Math.imul(iter, 97) + (salt >>> 0)) >>> 0;
 }
 
 function randomSeekStart() {
   if (!Number.isFinite(FILE_BYTE_SIZE) || FILE_BYTE_SIZE <= 0) {
-    return randomInt(0, 4_000_000);
+    return seededInt(0, 4_000_000, vuIterSeed(0x9e3779b9));
   }
   const maxStart = Math.max(0, FILE_BYTE_SIZE - SEEK_RANGE_BYTES - 1);
-  return randomInt(0, maxStart);
+  return seededInt(0, maxStart, vuIterSeed(0x9e3779b9));
 }
 
 function isPlaybackFailure(status) {
@@ -148,7 +167,7 @@ export function setup() {
 
 export function playbackViewer() {
   seekCycle();
-  sleep(randomInt(1, 4));
+  sleep(seededInt(1, 4, vuIterSeed(0x85ebca6b)));
 }
 
 export function seekBurst() {

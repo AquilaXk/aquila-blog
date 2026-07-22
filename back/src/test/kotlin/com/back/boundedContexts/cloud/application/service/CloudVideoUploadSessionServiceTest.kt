@@ -15,6 +15,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.springframework.dao.DataIntegrityViolationException
 import java.io.ByteArrayInputStream
 import java.text.Normalizer
 import java.time.Clock
@@ -264,6 +265,377 @@ class CloudVideoUploadSessionServiceTest {
             .hasMessageContaining("다른 내용")
 
         assertThat(storage.multipartParts).hasSize(1)
+    }
+
+    @Test
+    @DisplayName("빈 partSha256 legacy 행은 같은 크기 재시도에서 digest를 갱신한다")
+    fun `빈 partSha256 legacy 행은 같은 크기 재시도에서 digest를 갱신한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        partRepository.save(
+            CloudVideoUploadPart(
+                sessionId = session.id,
+                partNumber = 1,
+                eTag = "etag-legacy",
+                byteSize = TEST_PART_SIZE_BYTES,
+                partSha256 = "",
+            ),
+        )
+        val part = mp4Part(TEST_PART_SIZE_BYTES.toInt())
+
+        val result = service.uploadPart(7L, session.id, 1, part)
+
+        assertThat(result.session.uploadedParts).containsExactly(1)
+        assertThat(storage.multipartParts).isEmpty()
+        val stored = partRepository.findBySessionIdAndPartNumber(session.id, 1)!!
+        assertThat(stored.partSha256).hasSize(64)
+        assertThat(stored.partSha256).isNotBlank()
+    }
+
+    @Test
+    @DisplayName("완료 시 objectKey 중복 저장은 재조회로 이어진다")
+    fun `완료 시 objectKey 중복 저장은 재조회로 이어진다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val objectKey = sessionRepository.savedSessions.single { it.id == session.id }.objectKey
+        fileRepository.conflictOnNextSaveForObjectKey = objectKey
+
+        val completed = service.complete(7L, session.id)
+
+        assertThat(completed.id).isPositive()
+        assertThat(fileRepository.findActiveByObjectKey(objectKey)?.id).isEqualTo(completed.id)
+        assertThat(sessionRepository.savedSessions.last().status).isEqualTo(CloudVideoUploadSessionStatus.COMPLETED)
+        assertThat(sessionRepository.savedSessions.last().completedFileId).isEqualTo(completed.id)
+    }
+
+    @Test
+    @DisplayName("완료 시 objectKey 중복 저장 후 재조회 실패는 예외를 유지한다")
+    fun `완료 시 objectKey 중복 저장 후 재조회 실패는 예외를 유지한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val objectKey = sessionRepository.savedSessions.single { it.id == session.id }.objectKey
+        fileRepository.conflictOnNextSaveForObjectKey = objectKey
+        fileRepository.conflictWithoutWinner = true
+
+        assertThatThrownBy { service.complete(7L, session.id) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+    }
+
+    @Test
+    @DisplayName("countStaleIntermediateSessions는 repository count를 위임한다")
+    fun `countStaleIntermediateSessions는 repository count를 위임한다`() {
+        val stuck =
+            sessionRepository.save(
+                CloudVideoUploadSession(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/2026/06/17/count-stale.mp4",
+                    uploadId = null,
+                    originalFilename = "stuck.mp4",
+                    contentType = "video/mp4",
+                    byteSize = TEST_PART_SIZE_BYTES,
+                    folderPath = "",
+                    partSizeBytes = TEST_PART_SIZE_BYTES,
+                    totalParts = 1,
+                    expiresAt = Instant.parse("2026-06-18T00:00:00Z"),
+                    status = CloudVideoUploadSessionStatus.INITIATING,
+                ),
+            )
+        stuck.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+        val staleService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T00:20:00Z"), ZoneOffset.UTC),
+            )
+
+        assertThat(staleService.countStaleIntermediateSessions()).isEqualTo(1)
+    }
+
+    @Test
+    @DisplayName("빈 partSha256이면 complete 시 composite checksum을 건너뛴다")
+    fun `빈 partSha256이면 complete 시 composite checksum을 건너뛴다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val part = partRepository.findBySessionIdAndPartNumber(session.id, 1)!!
+        part.partSha256 = ""
+        partRepository.save(part)
+
+        val completed = service.complete(7L, session.id)
+
+        val stored = fileRepository.findActiveByIdAndOwner(completed.id, 7L)!!
+        assertThat(stored.checksumSha256).isNull()
+    }
+
+    @Test
+    @DisplayName("FAILED 세션 complete는 종료된 세션으로 거절한다")
+    fun `FAILED 세션 complete는 종료된 세션으로 거절한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.FAILED
+
+        assertThatThrownBy { service.complete(7L, session.id) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("이미 종료된")
+    }
+
+    @Test
+    @DisplayName("만료된 세션 complete는 410을 반환한다")
+    fun `만료된 세션 complete는 410을 반환한다`() {
+        val mutableClock = MutableClock(Instant.parse("2026-06-17T00:00:00Z"))
+        val cappedService = createService(mutableClock, expiresSeconds = 60, absoluteMaxSeconds = 3_600)
+        val session =
+            cappedService.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        cappedService.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        mutableClock.instant = Instant.parse("2026-06-17T01:00:00Z")
+
+        assertThatThrownBy { cappedService.complete(7L, session.id) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("만료")
+    }
+
+    @Test
+    @DisplayName("stale recovery 중 abort 실패는 세션을 건너뛴다")
+    fun `stale recovery 중 abort 실패는 세션을 건너뛴다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.UPLOADING_PART
+        stored.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+        storage.failingAbortUploadIds += "upload-1"
+        val staleService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T01:30:00Z"), ZoneOffset.UTC),
+            )
+
+        val recovered = staleService.purgeStaleIntermediateSessions(batchSize = 100)
+
+        assertThat(recovered).isZero()
+    }
+
+    @Test
+    @DisplayName("stale ABORTING 세션도 복구한다")
+    fun `stale ABORTING 세션도 복구한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.ABORTING
+        stored.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+        val staleService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T00:45:00Z"), ZoneOffset.UTC),
+            )
+
+        val recovered = staleService.purgeStaleIntermediateSessions(batchSize = 100)
+
+        assertThat(recovered).isEqualTo(1)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+    }
+
+    @Test
+    @DisplayName("무결성 실패 cleanup delete 실패도 FAILED로 정리한다")
+    fun `무결성 실패 cleanup delete 실패도 FAILED로 정리한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        storage.completedObjectContentLengthOverride = stored.byteSize - 1
+        storage.failDeleteObjectKeys += stored.objectKey
+
+        assertThatThrownBy { service.complete(7L, session.id) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("무결성")
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+    }
+
+    @Test
+    @DisplayName("stale 목록의 비대상 상태는 복구에서 건너뛴다")
+    fun `stale 목록의 비대상 상태는 복구에서 건너뛴다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.IN_PROGRESS
+        sessionRepository.extraStaleSessions += stored
+        val staleService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T01:30:00Z"), ZoneOffset.UTC),
+            )
+
+        assertThat(staleService.purgeStaleIntermediateSessions(batchSize = 100)).isZero()
+    }
+
+    @Test
+    @DisplayName("COMPLETED이지만 completedFileId가 다르면 세션을 재동기화한다")
+    fun `COMPLETED이지만 completedFileId가 다르면 세션을 재동기화한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val completed = service.complete(7L, session.id)
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.COMPLETING
+        stored.completedFileId = completed.id + 100
+
+        val again = service.complete(7L, session.id)
+
+        assertThat(again.id).isEqualTo(completed.id)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.completedFileId)
+            .isEqualTo(completed.id)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.COMPLETED)
+    }
+
+    @Test
+    @DisplayName("이미 같은 파일로 COMPLETED면 finishCommittedSession은 재전이를 건너뛴다")
+    fun `이미 같은 파일로 COMPLETED면 finishCommittedSession은 재전이를 건너뛴다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val completed = service.complete(7L, session.id)
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        assertThat(stored.status).isEqualTo(CloudVideoUploadSessionStatus.COMPLETED)
+        assertThat(stored.completedFileId).isEqualTo(completed.id)
+
+        val finish =
+            CloudVideoUploadSessionService::class.java.getDeclaredMethod(
+                "finishCommittedSession",
+                CloudVideoUploadSession::class.java,
+            )
+        finish.isAccessible = true
+        val file = finish.invoke(service, stored) as CloudFile
+
+        assertThat(file.id).isEqualTo(completed.id)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.COMPLETED)
+    }
+
+    @Test
+    @DisplayName("stale INITIATING with uploadId는 abort 후 FAILED로 복구한다")
+    fun `stale INITIATING with uploadId는 abort 후 FAILED로 복구한다`() {
+        val stuck =
+            sessionRepository.save(
+                CloudVideoUploadSession(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/2026/06/17/stuck-init-upload.mp4",
+                    uploadId = "upload-stale-init",
+                    originalFilename = "stuck.mp4",
+                    contentType = "video/mp4",
+                    byteSize = TEST_PART_SIZE_BYTES,
+                    folderPath = "",
+                    partSizeBytes = TEST_PART_SIZE_BYTES,
+                    totalParts = 1,
+                    expiresAt = Instant.parse("2026-06-18T00:00:00Z"),
+                    status = CloudVideoUploadSessionStatus.INITIATING,
+                ),
+            )
+        stuck.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+        val staleService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T00:20:00Z"), ZoneOffset.UTC),
+            )
+
+        val recovered = staleService.purgeStaleIntermediateSessions(batchSize = 100)
+
+        assertThat(recovered).isEqualTo(1)
+        assertThat(storage.abortedUploads.single().uploadId).isEqualTo("upload-stale-init")
+        assertThat(sessionRepository.savedSessions.single { it.id == stuck.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+    }
+
+    @Test
+    @DisplayName("COMPLETED 세션의 파일이 없으면 500을 반환한다")
+    fun `COMPLETED 세션의 파일이 없으면 500을 반환한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.COMPLETED
+        stored.completedFileId = 9_999L
+
+        assertThatThrownBy { service.complete(7L, session.id) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("완료된 업로드 파일")
     }
 
     @Test
@@ -1281,6 +1653,7 @@ class CloudVideoUploadSessionServiceTest {
 
     private class FakeVideoUploadSessionRepository : CloudVideoUploadSessionRepositoryPort {
         val savedSessions = mutableListOf<CloudVideoUploadSession>()
+        val extraStaleSessions = mutableListOf<CloudVideoUploadSession>()
         private var nextId = 1L
         var failAttachUploadIdTransition = false
         val failingTransitions = mutableSetOf<Pair<CloudVideoUploadSessionStatus, CloudVideoUploadSessionStatus>>()
@@ -1336,17 +1709,19 @@ class CloudVideoUploadSessionServiceTest {
             uploadingPartCutoff: Instant,
             limit: Int,
         ): List<CloudVideoUploadSession> =
-            savedSessions
-                .filter { session ->
-                    when (session.status) {
-                        CloudVideoUploadSessionStatus.INITIATING -> session.modifiedAt <= initiatingCutoff
-                        CloudVideoUploadSessionStatus.COMPLETING,
-                        CloudVideoUploadSessionStatus.ABORTING,
-                        -> session.modifiedAt <= completingOrAbortingCutoff
-                        CloudVideoUploadSessionStatus.UPLOADING_PART -> session.modifiedAt <= uploadingPartCutoff
-                        else -> false
-                    }
-                }.sortedWith(compareBy<CloudVideoUploadSession> { it.modifiedAt }.thenBy { it.id })
+            (
+                savedSessions
+                    .filter { session ->
+                        when (session.status) {
+                            CloudVideoUploadSessionStatus.INITIATING -> session.modifiedAt <= initiatingCutoff
+                            CloudVideoUploadSessionStatus.COMPLETING,
+                            CloudVideoUploadSessionStatus.ABORTING,
+                            -> session.modifiedAt <= completingOrAbortingCutoff
+                            CloudVideoUploadSessionStatus.UPLOADING_PART -> session.modifiedAt <= uploadingPartCutoff
+                            else -> false
+                        }
+                    } + extraStaleSessions
+            ).sortedWith(compareBy<CloudVideoUploadSession> { it.modifiedAt }.thenBy { it.id })
                 .take(limit.coerceAtLeast(1))
 
         override fun countStaleIntermediate(
@@ -1483,10 +1858,37 @@ class CloudVideoUploadSessionServiceTest {
         private val files = mutableListOf<CloudFile>()
         private var nextId = 1L
         var failSave = false
+        var conflictOnNextSaveForObjectKey: String? = null
+        var conflictWithoutWinner = false
 
         override fun save(file: CloudFile): CloudFile {
             if (failSave) {
                 throw IllegalStateException("file save failed")
+            }
+            val conflictKey = conflictOnNextSaveForObjectKey
+            if (conflictKey != null && file.objectKey == conflictKey && file.id == 0L) {
+                conflictOnNextSaveForObjectKey = null
+                if (!conflictWithoutWinner && files.none { it.objectKey == conflictKey && it.deletedAt == null }) {
+                    val winner =
+                        CloudFile.create(
+                            id = nextId++,
+                            ownerMemberId = file.ownerMemberId,
+                            objectKey = file.objectKey,
+                            originalFilename = file.originalFilename,
+                            contentType = file.contentType,
+                            byteSize = file.byteSize,
+                            mediaKind = file.mediaKind,
+                            folderPath = file.folderPath,
+                            checksumSha256 = file.checksumSha256,
+                        )
+                    winner.createdAt = Instant.parse("2026-06-17T00:00:00Z")
+                    winner.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+                    files += winner
+                }
+                conflictWithoutWinner = false
+                throw DataIntegrityViolationException(
+                    "duplicate key value violates unique constraint \"uk_cloud_file_object_key\"",
+                )
             }
             val stored =
                 CloudFile.create(
@@ -1540,6 +1942,7 @@ class CloudVideoUploadSessionServiceTest {
         val objectHeadsOnCompleteFailure = mutableMapOf<String, CloudStoragePort.ObjectHead>()
         val listedObjects = mutableListOf<CloudStoragePort.StoredObjectSummary>()
         val deletedObjectKeys = mutableListOf<String>()
+        val failDeleteObjectKeys = mutableSetOf<String>()
         val failingAbortUploadIds = mutableSetOf<String>()
         val failingPartNumbers = mutableSetOf<Int>()
         val failingCompleteUploadIds = mutableSetOf<String>()
@@ -1623,6 +2026,9 @@ class CloudVideoUploadSessionServiceTest {
         ): CloudStoragePort.StoredObject? = CloudStoragePort.StoredObject(ByteArrayInputStream(ByteArray(0)), "video/mp4", 0, "empty.mp4")
 
         override fun delete(objectKey: String) {
+            if (objectKey in failDeleteObjectKeys) {
+                throw IllegalStateException("delete failed")
+            }
             deletedObjectKeys += objectKey
             objectHeads.remove(objectKey)
         }

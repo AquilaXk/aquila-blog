@@ -70,4 +70,30 @@ class CloudTransferLimitsTest {
         }.isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("cloudPhotoMaxFileSizeBytes")
     }
+
+    @Test
+    @DisplayName("part size가 0 이하면 실패한다")
+    fun rejectsNonPositivePartSize() {
+        assertThatThrownBy {
+            CloudTransferLimits.validate(
+                partSizeBytes = 0,
+                directUploadLimits = listOf("maxFileSizeBytes" to 1),
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("cloudVideoResumablePartSizeBytes")
+            .hasMessageContaining("must be > 0")
+    }
+
+    @Test
+    @DisplayName("직접 업로드 한도가 0 이하면 실패한다")
+    fun rejectsNonPositiveDirectUploadLimit() {
+        assertThatThrownBy {
+            CloudTransferLimits.validate(
+                partSizeBytes = 1,
+                directUploadLimits = listOf("maxFileSizeBytes" to 0),
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("maxFileSizeBytes")
+            .hasMessageContaining("must be > 0")
+    }
 }

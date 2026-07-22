@@ -66,4 +66,12 @@ class CloudMediaMetricsTest {
             registry.counter(CloudMediaMetrics.STORAGE_OPERATIONS, "op", "head").count(),
         ).isEqualTo(1.0)
     }
+
+    @Test
+    fun `statusClassOf는 HTTP 상태 구간을 분류한다`() {
+        assertThat(CloudMediaMetrics.statusClassOf(200)).isEqualTo("2xx")
+        assertThat(CloudMediaMetrics.statusClassOf(404)).isEqualTo("4xx")
+        assertThat(CloudMediaMetrics.statusClassOf(503)).isEqualTo("5xx")
+        assertThat(CloudMediaMetrics.statusClassOf(100)).isEqualTo("other")
+    }
 }

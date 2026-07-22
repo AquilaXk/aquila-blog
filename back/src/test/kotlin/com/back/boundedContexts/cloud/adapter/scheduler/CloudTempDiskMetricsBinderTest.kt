@@ -28,4 +28,25 @@ class CloudTempDiskMetricsBinderTest {
         assertThat(registry.get(CloudMediaMetrics.DISK_TEMP_TOTAL_BYTES).gauge().value()).isEqualTo(0.0)
         assertThat(registry.get(CloudMediaMetrics.DISK_TEMP_AVAIL_BYTES).gauge().value()).isEqualTo(0.0)
     }
+
+    @Test
+    fun `tmpdir 조회 실패 시 refresh를 건너뛴다`() {
+        val previous = System.getProperty("java.io.tmpdir")
+        try {
+            System.setProperty("java.io.tmpdir", "/definitely-missing-tmpdir-${System.nanoTime()}")
+            val registry = SimpleMeterRegistry()
+            val binder = CloudTempDiskMetricsBinder(refreshEnabled = true)
+
+            binder.bindTo(registry)
+            binder.refreshSnapshot()
+
+            assertThat(registry.get(CloudMediaMetrics.DISK_TEMP_TOTAL_BYTES).gauge().value()).isEqualTo(0.0)
+        } finally {
+            if (previous == null) {
+                System.clearProperty("java.io.tmpdir")
+            } else {
+                System.setProperty("java.io.tmpdir", previous)
+            }
+        }
+    }
 }

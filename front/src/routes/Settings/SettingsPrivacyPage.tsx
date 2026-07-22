@@ -2,6 +2,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useEffect, useState } from "react"
 import { getLegalReconsentStatus, LegalReconsentStatus, submitLegalReconsent } from "src/apis/backend/legal"
+import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import {
   createPrivacyRequest,
   getPrivacyExport,
@@ -19,6 +20,13 @@ import {
 } from "src/libs/privacy/optionalTrackingConsentCore"
 import { normalizeNextPath, replaceRoute } from "src/libs/router"
 import SettingsLayout from "./SettingsLayout"
+
+type FeedbackTone = "danger" | "success"
+
+type FeedbackState = {
+  tone: FeedbackTone
+  text: string
+}
 
 const dateTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
   dateStyle: "medium",
@@ -50,8 +58,8 @@ const SettingsPrivacyPage = () => {
   const [ageConfirmed, setAgeConfirmed] = useState(false)
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false)
   const [overseasConfirmed, setOverseasConfirmed] = useState(false)
-  const [feedback, setFeedback] = useState("")
-  const [legalFeedback, setLegalFeedback] = useState("")
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null)
+  const [legalFeedback, setLegalFeedback] = useState<FeedbackState | null>(null)
   const [trackingConsent, setTrackingConsent] = useState<OptionalTrackingConsentRecord | null>(null)
   const [trackingAllowed, setTrackingAllowed] = useState(false)
   const [browserPrivacySignal, setBrowserPrivacySignal] = useState(false)
@@ -67,9 +75,12 @@ const SettingsPrivacyPage = () => {
         if (cancelled) return
         setSnapshot(response.data)
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return
-        setFeedback("개인정보 내보내기 데이터를 불러오지 못했습니다.")
+        setFeedback({
+          tone: "danger",
+          text: toFriendlyApiMessage(error, "개인정보 내보내기 데이터를 불러오지 못했습니다."),
+        })
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -78,8 +89,13 @@ const SettingsPrivacyPage = () => {
       .then((status) => {
         if (!cancelled) setLegalReconsent(status)
       })
-      .catch(() => {
-        if (!cancelled) setLegalFeedback("법적 문서 동의 상태를 불러오지 못했습니다.")
+      .catch((error) => {
+        if (!cancelled) {
+          setLegalFeedback({
+            tone: "danger",
+            text: toFriendlyApiMessage(error, "법적 문서 동의 상태를 불러오지 못했습니다."),
+          })
+        }
       })
     return () => {
       cancelled = true
@@ -112,7 +128,7 @@ const SettingsPrivacyPage = () => {
   const submitRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSubmitting(true)
-    setFeedback("")
+    setFeedback(null)
     try {
       const response = await createPrivacyRequest({
         type: requestType,
@@ -122,9 +138,12 @@ const SettingsPrivacyPage = () => {
       if (requestType === "CONSENT_WITHDRAWAL") {
         setOptionalTrackingConsent(false, "privacy-request")
       }
-      setFeedback(response.msg)
-    } catch {
-      setFeedback("개인정보 처리 요청을 접수하지 못했습니다.")
+      setFeedback({ tone: "success", text: response.msg })
+    } catch (error) {
+      setFeedback({
+        tone: "danger",
+        text: toFriendlyApiMessage(error, "개인정보 처리 요청을 접수하지 못했습니다."),
+      })
     } finally {
       setSubmitting(false)
     }
@@ -133,7 +152,7 @@ const SettingsPrivacyPage = () => {
   const submitReconsent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setLegalSubmitting(true)
-    setLegalFeedback("")
+    setLegalFeedback(null)
     try {
       const response = await submitLegalReconsent({
         age14OrOlder: ageConfirmed,
@@ -143,10 +162,13 @@ const SettingsPrivacyPage = () => {
       })
       setLegalReconsent(response.data.legalReconsent)
       setOptionalTrackingConsent(false, "legal-reconsent")
-      setLegalFeedback(response.msg)
+      setLegalFeedback({ tone: "success", text: response.msg })
       await replaceRoute(router, normalizeNextPath(router.query.next, "/"))
-    } catch {
-      setLegalFeedback("최신 약관과 개인정보처리방침 동의를 저장하지 못했습니다.")
+    } catch (error) {
+      setLegalFeedback({
+        tone: "danger",
+        text: toFriendlyApiMessage(error, "최신 약관과 개인정보처리방침 동의를 저장하지 못했습니다."),
+      })
     } finally {
       setLegalSubmitting(false)
     }
@@ -200,7 +222,16 @@ const SettingsPrivacyPage = () => {
           ) : (
             <p className="muted">법적 문서 동의 상태를 확인하는 중입니다.</p>
           )}
-          {legalFeedback ? <p className="feedback">{legalFeedback}</p> : null}
+          {legalFeedback ? (
+            <p
+              className="feedback"
+              data-tone={legalFeedback.tone}
+              role={legalFeedback.tone === "danger" ? "alert" : "status"}
+              aria-live={legalFeedback.tone === "danger" ? undefined : "polite"}
+            >
+              {legalFeedback.text}
+            </p>
+          ) : null}
         </section>
 
         <section className="panel" aria-label="선택 analytics와 RUM 설정">
@@ -305,7 +336,16 @@ const SettingsPrivacyPage = () => {
             </label>
             <button type="submit" disabled={submitting}>{submitting ? "접수 중" : "처리 요청 접수"}</button>
           </form>
-          {feedback ? <p className="feedback">{feedback}</p> : null}
+          {feedback ? (
+            <p
+              className="feedback"
+              data-tone={feedback.tone}
+              role={feedback.tone === "danger" ? "alert" : "status"}
+              aria-live={feedback.tone === "danger" ? undefined : "polite"}
+            >
+              {feedback.text}
+            </p>
+          ) : null}
           {createdRequest ? (
             <p className="requestResult">
               접수 번호 {createdRequest.id} · 상태 {createdRequest.status} · 기한 {formatDateTime(createdRequest.dueAt)}
@@ -380,7 +420,6 @@ const SettingsPrivacyPage = () => {
         }
 
         .muted,
-        .feedback,
         .requestResult {
           margin: 12px 0 0;
           color: var(--aq-text-secondary);
@@ -388,8 +427,30 @@ const SettingsPrivacyPage = () => {
         }
 
         .feedback {
-          color: var(--aq-accent);
+          margin: 12px 0 0;
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
           font-weight: 800;
+          line-height: 1.55;
+        }
+
+        .feedback::before {
+          content: "";
+          width: 8px;
+          height: 8px;
+          margin-top: 0.45em;
+          border-radius: 50%;
+          flex: 0 0 auto;
+          background: currentColor;
+        }
+
+        .feedback[data-tone="danger"] {
+          color: var(--aq-status-danger);
+        }
+
+        .feedback[data-tone="success"] {
+          color: var(--aq-status-success);
         }
 
         @media (max-width: 640px) {

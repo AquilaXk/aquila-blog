@@ -1,9 +1,16 @@
 name: blog_home
 
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   autoheal:
     image: ${AUTOHEAL_IMAGE:?AUTOHEAL_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       AUTOHEAL_CONTAINER_LABEL: autoheal
       AUTOHEAL_INTERVAL: ${AUTOHEAL_INTERVAL_SECONDS:-15}
@@ -15,6 +22,7 @@ services:
   cloudflared:
     image: ${CLOUDFLARED_IMAGE}
     restart: unless-stopped
+    logging: *default-logging
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
     depends_on:
       - caddy
@@ -22,6 +30,7 @@ services:
   caddy:
     image: ${CADDY_IMAGE:?CADDY_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     ports:
       # Public ingress must terminate at Cloudflare Tunnel. Keep host binds on
@@ -38,12 +47,14 @@ services:
   uptime_kuma:
     image: ${UPTIME_KUMA_IMAGE:?UPTIME_KUMA_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     volumes:
       - uptime_kuma_data:/app/data
 
   prometheus:
     image: ${PROMETHEUS_IMAGE:?PROMETHEUS_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -63,6 +74,7 @@ services:
   alertmanager:
     image: ${ALERTMANAGER_IMAGE:?ALERTMANAGER_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     entrypoint:
       - /bin/sh
       - -ec
@@ -187,6 +199,7 @@ services:
   postgres_exporter:
     image: ${POSTGRES_EXPORTER_IMAGE:?POSTGRES_EXPORTER_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       DATA_SOURCE_URI: db_1:5432/postgres?sslmode=disable
       DATA_SOURCE_USER: postgres
@@ -197,6 +210,7 @@ services:
   grafana:
     image: ${GRAFANA_IMAGE:?GRAFANA_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
@@ -224,6 +238,7 @@ services:
   loki:
     image: ${LOKI_IMAGE:?LOKI_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     command:
       - "-config.file=/etc/loki/loki-config.yml"
     volumes:
@@ -233,6 +248,7 @@ services:
   promtail:
     image: ${PROMTAIL_IMAGE:?PROMTAIL_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     command:
       - "-config.file=/etc/promtail/promtail-config.yml"
     volumes:
@@ -246,6 +262,7 @@ services:
   public_edge_probe:
     image: ${NODE_RUNTIME_IMAGE:?NODE_RUNTIME_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     working_dir: /app
     command:
       - "node"
@@ -277,6 +294,7 @@ services:
   docker_runtime_probe:
     image: ${NODE_RUNTIME_IMAGE:?NODE_RUNTIME_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     working_dir: /app
     command:
       - "node"
@@ -289,9 +307,13 @@ services:
       - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1"
       - "--readiness-targets"
       - "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back-worker:8080"
+      - "--disk-paths"
+      - "minio=/host-storage/minio"
     volumes:
       - ./monitoring/docker-runtime-probe.mjs:/app/docker-runtime-probe.mjs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # MinIO data root (same host path as minio_1). Used for filesystem free-space gauges.
+      - ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}:/host-storage:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:9920/healthz || exit 1"]
       interval: 30s
@@ -302,6 +324,7 @@ services:
   back_blue:
     image: ${BACK_BLUE_IMAGE:?BACK_BLUE_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    logging: *default-logging
     mem_limit: ${BACK_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_MEM_RESERVATION:-256m}
     labels:
@@ -335,6 +358,7 @@ services:
   back_green:
     image: ${BACK_GREEN_IMAGE:?BACK_GREEN_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    logging: *default-logging
     mem_limit: ${BACK_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_MEM_RESERVATION:-256m}
     labels:
@@ -367,6 +391,7 @@ services:
     profiles: ["runtime-split"]
     image: ${BACK_READ_IMAGE:?BACK_READ_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    logging: *default-logging
     mem_limit: ${BACK_READ_MEM_LIMIT:-640m}
     mem_reservation: ${BACK_READ_MEM_RESERVATION:-320m}
     labels:
@@ -400,6 +425,7 @@ services:
     profiles: ["runtime-split"]
     image: ${BACK_ADMIN_IMAGE:?BACK_ADMIN_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    logging: *default-logging
     mem_limit: ${BACK_ADMIN_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-256m}
     labels:
@@ -432,6 +458,7 @@ services:
   back_worker:
     image: ${BACK_WORKER_IMAGE:?BACK_WORKER_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    logging: *default-logging
     mem_limit: ${BACK_WORKER_MEM_LIMIT:-768m}
     mem_reservation: ${BACK_WORKER_MEM_RESERVATION:-768m}
     labels:
@@ -464,6 +491,7 @@ services:
   db_1:
     image: ${DB_IMAGE}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${PROD___POSTGRES__PASSWORD:-${PROD___SPRING__DATASOURCE__PASSWORD}}
@@ -476,6 +504,7 @@ services:
   redis_1:
     image: ${REDIS_IMAGE:?REDIS_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
+    logging: *default-logging
     command: >
       redis-server
       --appendonly yes
@@ -484,9 +513,14 @@ services:
   minio_1:
     image: ${MINIO_IMAGE}
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Incomplete multipart cleanup must outlive app session absolute max (#1229: 7d).
+      # Defaults would be 24h and can delete parts of active long uploads.
+      MINIO_API_STALE_UPLOADS_EXPIRY: 8d
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 6h
       TZ: Asia/Seoul
     command: server /data --console-address ":9001"
     volumes:
@@ -511,3 +545,4 @@ volumes:
   loki_data:
   promtail_positions:
   public_edge_probe_data:
+

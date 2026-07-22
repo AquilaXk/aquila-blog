@@ -42,6 +42,11 @@ if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_bl
   exit 1
 fi
 
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/cloud-transfer-limits-and-recovery.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked docs/ops/cloud-transfer-limits-and-recovery.md to be allowed" >&2
+  exit 1
+fi
+
 if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' back/new-report.md && bash '${guard}' >'${guard_output}' 2>&1"; then
   echo "[test] expected tracked back/new-report.md to be rejected" >&2
   exit 1
@@ -59,6 +64,11 @@ fi
 
 if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/legal/privacy-incident-runbook.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
   echo "[test] expected staged docs/legal/privacy-incident-runbook.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/cloud-transfer-limits-and-recovery.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged docs/ops/cloud-transfer-limits-and-recovery.md to be allowed" >&2
   exit 1
 fi
 

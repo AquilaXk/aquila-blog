@@ -44,6 +44,7 @@ test.describe("관리자 표면 공통 계약", () => {
     const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
     const cloudStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspace.styles.ts"), "utf8")
     const cloudPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspacePage.tsx"), "utf8")
+    const cloudModelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspaceModel.ts"), "utf8")
     const primitiveSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"),
       "utf8",
@@ -116,7 +117,9 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(cloudPageSource).toContain('<AppIcon name="package" />')
     expect(cloudPageSource).toContain('<AppIcon name="lock" />')
     expect(cloudPageSource).not.toContain('<span aria-hidden="true">T</span>')
-    expect(cloudPageSource).toContain('선택한 조건에 맞는 파일이 없습니다.')
+    expect(cloudPageSource).toContain("resolveCloudEmptyTitle")
+    expect(cloudModelSource).toContain('선택한 조건에 맞는 파일이 없습니다.')
+    expect(cloudModelSource).not.toContain("아직 올린 파일이 없습니다.")
     expect(cloudPageSource).not.toContain("아직 올린 파일이 없습니다.")
 
     expect(primitiveSource).toContain("adminPlainSurface(theme)")

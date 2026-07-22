@@ -214,7 +214,9 @@ main() {
   require_back_image
 
   section "0" "start core services"
-  compose up -d back_blue back_green caddy cloudflared uptime_kuma loki promtail prometheus grafana
+  compose up -d back_blue back_green caddy cloudflared uptime_kuma \
+    loki promtail prometheus grafana \
+    public_edge_probe docker_runtime_probe postgres_exporter
 
   section "1" "wait for backend health"
   local blue green

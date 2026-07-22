@@ -1,0 +1,38 @@
+{
+  "measuredAt": "2026-07-22T00:00:00.000Z",
+  "runner": {
+    "host": "<external-hostname>",
+    "location": "<city/ISP — not LAN>",
+    "k6Version": "<k6 version>"
+  },
+  "env": {
+    "baseUrl": "https://api.aquilaxk.site",
+    "cloudFileId": "<redacted>",
+    "concurrentViewers": 5,
+    "exclude429": false
+  },
+  "metrics": {
+    "playback_ttfb_ms": {
+      "p95": null,
+      "avg": null
+    },
+    "playback_error_rate": {
+      "rate": null
+    },
+    "playback_range_duration_ms": {
+      "p95": null
+    },
+    "playback_206_rate": {
+      "rate": null
+    }
+  },
+  "thresholds": {
+    "playback_ttfb_ms": "p(95)<1500",
+    "playback_error_rate": "rate<0.01"
+  },
+  "notes": [
+    "416 responses excluded from playback_error_rate",
+    "Token issued via POST .../external-playback-token; TTL 6h",
+    "Test file: mp4 faststart (moov at head) recommended — record in run log"
+  ]
+}

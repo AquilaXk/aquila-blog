@@ -120,43 +120,40 @@ const addEmptyProfileLinksCookie = async (page: Page) => {
     {
       name: "admin_profile_snapshot_v1",
       value: encodeURIComponent(JSON.stringify(profile)),
-      url: "http://127.0.0.1:3000",
+      url: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
     },
   ])
 }
 
 test.describe("home feed product redesign", () => {
-  test("1440px 이상 홈은 포스트 중심 3열과 compact profile/tag chip 구조를 사용한다", async ({ page }) => {
+  test("1440px 이상 홈은 V4 intro·topics rail·list card 구조를 사용한다", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await mockHomeFeedRedesignEndpoints(page)
 
     await page.goto("/")
 
     await expect(page.locator('[data-ui="feed-home-product-shell"]')).toBeVisible()
-    await expect(page.locator('[data-ui="feed-profile-summary"]')).toBeVisible()
-    await expect(page.locator('[data-ui="feed-tag-chip-rail"]')).toBeVisible()
+    await expect(page.locator('[data-ui="feed-brand-role"]')).toBeVisible()
+    await expect(page.getByRole("region", { name: "태그 목록" })).toBeVisible()
+    await expect(page.locator('[data-ui="feed-tag-chip-rail"]')).toBeHidden()
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "AquilaLog")
     await expect(page.locator('meta[name="twitter:title"]')).toHaveAttribute("content", "AquilaLog")
-    await expect(page.locator(".desktopPanel")).toBeHidden()
+    await expect(page.locator(".desktopPanel")).toBeVisible()
     await expect(page.locator(".rt")).toBeHidden()
-    await expect(page.locator('[data-ui="feed-profile-summary"]')).not.toContainText("Posts-")
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+    await expect(page.locator('[data-ui="feed-post-card"]').nth(2)).toBeVisible()
 
     const cardRects = await page.locator('[data-ui="feed-post-card"]').evaluateAll((cards) =>
-      cards.slice(0, 6).map((card) => {
+      cards.slice(0, 3).map((card) => {
         const rect = card.getBoundingClientRect()
         return { left: Math.round(rect.left), top: Math.round(rect.top), width: Math.round(rect.width) }
       })
     )
-    const firstRowTop = cardRects[0]?.top
-    const firstRow = cardRects.filter((rect) => rect.top === firstRowTop)
-    const secondRow = cardRects.filter((rect) => rect.top !== firstRowTop)
-
-    expect(firstRow).toHaveLength(3)
-    expect(secondRow.length).toBeGreaterThanOrEqual(3)
-    expect(Math.min(...firstRow.map((rect) => rect.width))).toBeGreaterThanOrEqual(300)
+    expect(new Set(cardRects.map((rect) => rect.left)).size).toBe(1)
+    expect(Math.min(...cardRects.map((rect) => rect.width))).toBeGreaterThanOrEqual(480)
   })
 
-  test("1440px 미만 데스크톱은 포스트 카드를 2열로 유지한다", async ({ page }) => {
+  test("1280px 데스크톱도 포스트 카드 1열 list 레이아웃을 유지한다", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await mockHomeFeedRedesignEndpoints(page)
 
@@ -169,13 +166,9 @@ test.describe("home feed product redesign", () => {
         return { left: Math.round(rect.left), top: Math.round(rect.top), width: Math.round(rect.width) }
       })
     )
-    const firstRowTop = cardRects[0]?.top
-    const firstRow = cardRects.filter((rect) => rect.top === firstRowTop)
-
-    expect(firstRow).toHaveLength(2)
-    expect(Math.min(...firstRow.map((rect) => rect.width))).toBeGreaterThanOrEqual(360)
+    expect(new Set(cardRects.map((rect) => rect.left)).size).toBe(1)
+    expect(Math.min(...cardRects.map((rect) => rect.width))).toBeGreaterThanOrEqual(420)
   })
-
   test("브랜드 cover fallback은 썸네일 없는 글도 통일된 기술 블로그 카드로 보여준다", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await mockHomeFeedRedesignEndpoints(page)
@@ -209,7 +202,8 @@ test.describe("home feed product redesign", () => {
       hasText: "Spring 운영 패턴",
     })
     await expect(categorizedCard).toBeVisible()
-    await expect(categorizedCard.getByText("Spring", { exact: true })).toHaveCount(2)
+    await expect(categorizedCard.getByText("SPRING", { exact: true })).toBeVisible()
+    await expect(categorizedCard.getByText("Spring", { exact: true })).toBeVisible()
     await expect(categorizedCard.getByText("monitor::Spring", { exact: true })).toHaveCount(0)
   })
 
@@ -237,16 +231,18 @@ test.describe("home feed product redesign", () => {
     await expect(pinnedCover.getByText("Pinned", { exact: true })).toHaveCount(0)
   })
 
-  test("명시적으로 비운 profile 링크는 기본 링크로 되살리지 않는다", async ({ page }) => {
+  test("명시적으로 비운 profile 링크는 홈 intro에 기본 링크로 되살리지 않는다", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await mockHomeFeedRedesignEndpoints(page)
     await addEmptyProfileLinksCookie(page)
 
     await page.goto("/")
 
-    const profileSummary = page.locator('[data-ui="feed-profile-summary"]')
-    await expect(profileSummary).toBeVisible()
-    await expect(profileSummary.locator(".links a")).toHaveCount(0)
+    const intro = page.locator('[data-ui="feed-home-product-shell"] .introCopy')
+    await expect(intro).toBeVisible()
+    await expect(intro.locator("a")).toHaveCount(0)
+    await expect(page.locator('[data-ui="feed-contact-links"]')).toHaveCount(0)
+    await expect(page.locator('[data-ui="feed-service-links"]')).toHaveCount(0)
   })
 
   test("비관리자 empty state는 글 작성이나 admin CTA를 노출하지 않는다", async ({ page }) => {
@@ -288,7 +284,7 @@ test.describe("home feed product redesign", () => {
     await page.goto("/")
 
     await expect(page.locator('[data-ui="feed-tag-chip-rail"]')).toBeVisible()
-    await expect(page.locator('[data-ui="feed-profile-summary"]')).toBeHidden()
+    await expect(page.locator('[data-ui="feed-brand-role"]')).toBeVisible()
     await expect(page.locator(".desktopPanel")).toBeHidden()
     await expect(page.locator('[data-ui="feed-post-card"]').nth(2)).toBeVisible()
 

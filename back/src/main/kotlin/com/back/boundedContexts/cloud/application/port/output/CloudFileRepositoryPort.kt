@@ -17,4 +17,13 @@ interface CloudFileRepositoryPort {
         id: Long,
         ownerMemberId: Long,
     ): CloudFile?
+
+    fun findActiveByObjectKey(objectKey: String): CloudFile?
+
+    fun findByObjectKey(objectKey: String): CloudFile?
+
+    fun findActiveByObjectKeyStartingWith(
+        objectKeyPrefix: String,
+        limit: Int,
+    ): List<CloudFile>
 }

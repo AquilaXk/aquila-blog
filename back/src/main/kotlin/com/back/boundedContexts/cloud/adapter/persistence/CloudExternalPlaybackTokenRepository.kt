@@ -4,7 +4,9 @@ import com.back.boundedContexts.cloud.application.port.output.CloudExternalPlayb
 import com.back.boundedContexts.cloud.model.CloudExternalPlaybackToken
 import com.back.boundedContexts.cloud.model.CloudExternalPlaybackTokenPurpose
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.time.Instant
 
 interface CloudExternalPlaybackTokenRepository :
@@ -26,4 +28,23 @@ interface CloudExternalPlaybackTokenRepository :
         purpose: CloudExternalPlaybackTokenPurpose,
         now: Instant,
     ): CloudExternalPlaybackToken?
+
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
+    @Query(
+        value = """
+        delete from cloud_external_playback_token
+        where id in (
+            select id
+            from cloud_external_playback_token
+            where expires_at < :cutoff
+            order by expires_at asc, id asc
+            limit :limit
+        )
+        """,
+        nativeQuery = true,
+    )
+    override fun deleteByExpiresAtBefore(
+        @Param("cutoff") cutoff: Instant,
+        @Param("limit") limit: Int,
+    ): Int
 }

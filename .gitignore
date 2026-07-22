@@ -20,6 +20,8 @@ docs/*
 !docs/design/**
 !docs/legal/
 !docs/legal/**
+!docs/ops/
+!docs/ops/**
 .cursor/
 .claude/
 .aider/

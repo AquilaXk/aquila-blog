@@ -1,3 +1,4 @@
+import fs from "node:fs"
 import http from "node:http"
 
 const args = process.argv.slice(2)
@@ -15,6 +16,19 @@ const services = optionValue(
 )
   .split(",")
   .map((value) => value.trim())
+  .filter(Boolean)
+const diskPaths = optionValue("--disk-paths", "minio=/host-storage/minio")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean)
+  .map((value) => {
+    const separator = value.indexOf("=")
+    if (separator <= 0) return null
+    return {
+      mount: value.slice(0, separator),
+      path: value.slice(separator + 1),
+    }
+  })
   .filter(Boolean)
 
 const dockerSocketPath = optionValue("--docker-socket", "/var/run/docker.sock")
@@ -134,6 +148,35 @@ const collectServiceMetrics = async (containers, service) => {
   ]
 }
 
+const collectDiskMetrics = () => {
+  const lines = [
+    "# HELP aquila_host_filesystem_avail_bytes Available bytes on a host path watched by docker-runtime-probe.",
+    "# TYPE aquila_host_filesystem_avail_bytes gauge",
+    "# HELP aquila_host_filesystem_size_bytes Total bytes on a host path watched by docker-runtime-probe.",
+    "# TYPE aquila_host_filesystem_size_bytes gauge",
+    "# HELP aquila_host_filesystem_up Whether a watched host path is readable.",
+    "# TYPE aquila_host_filesystem_up gauge",
+  ]
+
+  for (const disk of diskPaths) {
+    try {
+      const stats = fs.statfsSync(disk.path)
+      const bsize = Number(stats.bsize || 0)
+      const blocks = Number(stats.blocks || 0)
+      const bavail = Number(stats.bavail || 0)
+      lines.push(metricLine("aquila_host_filesystem_avail_bytes", { mount: disk.mount, path: disk.path }, bavail * bsize))
+      lines.push(metricLine("aquila_host_filesystem_size_bytes", { mount: disk.mount, path: disk.path }, blocks * bsize))
+      lines.push(metricLine("aquila_host_filesystem_up", { mount: disk.mount, path: disk.path }, 1))
+    } catch {
+      lines.push(metricLine("aquila_host_filesystem_avail_bytes", { mount: disk.mount, path: disk.path }, 0))
+      lines.push(metricLine("aquila_host_filesystem_size_bytes", { mount: disk.mount, path: disk.path }, 0))
+      lines.push(metricLine("aquila_host_filesystem_up", { mount: disk.mount, path: disk.path }, 0))
+    }
+  }
+
+  return lines
+}
+
 const collectMetrics = async () => {
   const containers = await dockerGet("/containers/json?all=1")
   const lines = [
@@ -158,6 +201,7 @@ const collectMetrics = async () => {
   const readinessMetricLines = await Promise.all(readinessTargets.map((target) => probeReadiness(target)))
   lines.push(...serviceMetricLines.flat())
   lines.push(...readinessMetricLines)
+  lines.push(...collectDiskMetrics())
 
   return `${lines.join("\n")}\n`
 }

@@ -13,6 +13,8 @@ import {
 } from "src/libs/server/postDetailPage"
 import type { PublicAdminProfileSource } from "src/libs/adminProfileSource"
 import { buildPostDetailMetadata } from "src/routes/Detail/PostDetail/postDetailMetadataModel"
+import { ErrorState } from "src/design-system/StatePresenters"
+import { resolvePostDetailRenderState } from "src/routes/Detail/postDetailRenderState"
 
 export const getStaticPaths: GetStaticPaths = async () => {
   return await buildCanonicalPostDetailStaticPaths()
@@ -32,8 +34,32 @@ type DetailPageProps = {
 const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({
   initialComments,
 }) => {
-  const { post, isLoading, isNotFound } = usePostQuery()
-  if (isLoading) {
+  const { post, isNotFound, isError, isPending, refetch } = usePostQuery()
+  const renderState = resolvePostDetailRenderState({
+    isNotFound,
+    isError,
+    isPending,
+    hasPost: Boolean(post),
+  })
+
+  if (renderState === "not_found") return <CustomError />
+
+  if (renderState === "error") {
+    return (
+      <ErrorState
+        label="ERROR"
+        title="글을 불러오지 못했습니다"
+        description="일시적인 오류로 글을 불러오지 못했습니다. 잠시 후 다시 시도해주세요."
+        actions={
+          <button type="button" onClick={() => void refetch()}>
+            다시 시도
+          </button>
+        }
+      />
+    )
+  }
+
+  if (renderState === "loading") {
     return (
       <LoadingShell aria-live="polite" aria-busy="true">
         <div className="hero">
@@ -69,7 +95,8 @@ const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({
       </LoadingShell>
     )
   }
-  if (isNotFound || !post) return <CustomError />
+
+  if (!post) return <CustomError />
 
   const meta = buildPostDetailMetadata(post)
 

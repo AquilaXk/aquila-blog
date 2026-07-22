@@ -45,23 +45,40 @@ class CloudFile(
     @field:Column(nullable = false, unique = true, length = 1000)
     val objectKey: String,
     @field:Column(nullable = false, length = 255)
-    val originalFilename: String,
+    var originalFilename: String,
     @field:Column(nullable = false, length = 120)
-    val contentType: String,
+    var contentType: String,
     @field:Column(nullable = false)
-    val byteSize: Long,
+    var byteSize: Long,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 40)
-    val mediaKind: CloudFileMediaKind,
+    var mediaKind: CloudFileMediaKind,
     @field:Column(nullable = false, length = 500)
-    val folderPath: String = "",
+    var folderPath: String = "",
     @field:Column(length = 128)
-    val checksumSha256: String? = null,
+    var checksumSha256: String? = null,
     @field:Column
     var deletedAt: Instant? = null,
 ) : BaseTime(id) {
     fun markDeleted(now: Instant) {
         deletedAt = now
+    }
+
+    fun restoreForCommittedUpload(
+        originalFilename: String,
+        contentType: String,
+        byteSize: Long,
+        mediaKind: CloudFileMediaKind,
+        folderPath: String,
+        checksumSha256: String?,
+    ) {
+        this.originalFilename = originalFilename
+        this.contentType = contentType
+        this.byteSize = byteSize
+        this.mediaKind = mediaKind
+        this.folderPath = folderPath
+        this.checksumSha256 = checksumSha256
+        this.deletedAt = null
     }
 
     companion object {

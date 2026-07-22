@@ -66,7 +66,10 @@ test("resolveAccountDeletionFailure maps other errors to generic danger feedback
 
   expect(
     resolveAccountDeletionFailure(
-      new ApiError(500, "/member/api/v1/privacy/account", JSON.stringify({ msg: "서버가 바쁩니다." }))
+      new ApiError(500, "/member/api/v1/privacy/account", JSON.stringify({
+        resultCode: "500-1",
+        msg: "서버가 바쁩니다.",
+      }))
     )
   ).toEqual({
     kind: "generic",

@@ -5,11 +5,10 @@ import { useEffect, useRef } from "react"
 
 type Props = {
   fullWidth: boolean
-  showThemeToggle?: boolean
   blogTitle?: string
 }
 
-const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle }) => {
+const Header: React.FC<Props> = ({ fullWidth, blogTitle }) => {
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -84,7 +83,7 @@ const Header: React.FC<Props> = ({ fullWidth, showThemeToggle = true, blogTitle 
       <div data-full-width={fullWidth} className="container">
         <Logo blogTitle={blogTitle} />
         <div className="nav">
-          <NavBar showThemeToggle={showThemeToggle} />
+          <NavBar />
         </div>
       </div>
     </StyledWrapper>

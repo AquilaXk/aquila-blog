@@ -3,14 +3,10 @@ import { control } from "src/design-system/tokens"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { Suspense, lazy, useEffect, useRef, useState } from "react"
-import ThemeToggle from "./ThemeToggle"
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
-
-type Props = {
-  showThemeToggle?: boolean
-}
+import { waitForFeedSearchInputFocus } from "src/routes/Feed/feedSearchFocus"
 
 const primaryLinks = [
   ["notes", "Notes", "/"],
@@ -43,18 +39,36 @@ const MenuIcon = () => (
   </svg>
 )
 
-const NavBar = ({ showThemeToggle = true }: Props) => {
+const isTypingTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+
+  const tagName = target.tagName
+  return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT"
+}
+
+const FEED_SEARCH_ROUTE_TIMEOUT_MS = 8_000
+
+const reportFocusFeedSearchFailure = (error: unknown) => {
+  console.error("[NavBar] failed to focus feed search input", error)
+}
+
+const NavBar = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
   const authReturnFocusRef = useRef<HTMLElement | null>(null)
+  const authModalOpenRef = useRef(authModalOpen)
   const isAuthenticated = authStatus === "authenticated"
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
   const showLogin = authStatus !== "authenticated"
   const nextPath = normalizeNextPath(router.asPath)
   const [activeHash, setActiveHash] = useState<string | null>(null)
+  const focusFeedSearchInFlightRef = useRef<Promise<void> | null>(null)
+
+  authModalOpenRef.current = authModalOpen
 
   useEffect(() => {
     const syncHash = () => setActiveHash(window.location.hash.replace(/^#/, "").split("?")[0] || "")
@@ -62,6 +76,104 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
     window.addEventListener("hashchange", syncHash)
     return () => window.removeEventListener("hashchange", syncHash)
   }, [])
+
+  const focusFeedSearch = useCallback(() => {
+    if (focusFeedSearchInFlightRef.current) {
+      return focusFeedSearchInFlightRef.current
+    }
+
+    const run = (async () => {
+      if (router.pathname !== "/") {
+        await new Promise<void>((resolve, reject) => {
+          let settled = false
+          let timeoutId: ReturnType<typeof setTimeout> | undefined
+          const cleanup = () => {
+            if (timeoutId !== undefined) clearTimeout(timeoutId)
+            router.events.off("routeChangeComplete", handleComplete)
+            router.events.off("routeChangeError", handleError)
+          }
+          const settle = (action: () => void) => {
+            if (settled) return
+            settled = true
+            cleanup()
+            action()
+          }
+          const handleComplete = (url: string) => {
+            const pathname = new URL(url, window.location.origin).pathname
+            if (pathname === "/") {
+              settle(() => resolve())
+              return
+            }
+            settle(() => reject(new Error(`unexpected route after search navigation: ${url}`)))
+          }
+          const handleError = (error: Error) => {
+            settle(() => reject(error))
+          }
+
+          router.events.on("routeChangeComplete", handleComplete)
+          router.events.on("routeChangeError", handleError)
+          timeoutId = setTimeout(() => {
+            settle(() => reject(new Error("timed out waiting for feed search route")))
+          }, FEED_SEARCH_ROUTE_TIMEOUT_MS)
+          void router.push("/").catch((error: unknown) => {
+            settle(() => reject(error instanceof Error ? error : new Error(String(error))))
+          })
+        })
+      }
+
+      if (authModalOpenRef.current) {
+        throw new Error("feed search focus aborted: auth modal open")
+      }
+
+      const focused = await waitForFeedSearchInputFocus()
+      if (!focused) {
+        throw new Error("Failed to focus feed search input")
+      }
+      if (authModalOpenRef.current) {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
+        throw new Error("feed search focus aborted: auth modal open")
+      }
+    })()
+
+    focusFeedSearchInFlightRef.current = run
+    void run
+      .finally(() => {
+        if (focusFeedSearchInFlightRef.current === run) {
+          focusFeedSearchInFlightRef.current = null
+        }
+      })
+      .catch(() => {
+        // call-site handlers report the rejection; absorb finally-chain rejection only
+      })
+
+    return run
+  }, [router])
+
+  const requestFocusFeedSearch = useCallback(() => {
+    if (authModalOpen) return
+    setMobileMenuOpen(false)
+    void focusFeedSearch().catch(reportFocusFeedSearchFailure)
+  }, [authModalOpen, focusFeedSearch])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isSearchShortcut =
+        (event.metaKey || event.ctrlKey) &&
+        (event.key.toLowerCase() === "k" || event.code === "KeyK")
+      if (!isSearchShortcut) return
+      if (authModalOpen || event.defaultPrevented || isTypingTarget(event.target)) return
+
+      event.preventDefault()
+      requestFocusFeedSearch()
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [authModalOpen, requestFocusFeedSearch])
 
   const handleLogout = async () => {
     await logout()
@@ -96,17 +208,16 @@ const NavBar = ({ showThemeToggle = true }: Props) => {
       </ul>
 
       <div className="authArea">
-        <Link
-          href={{ pathname: "/", hash: "feed-search-input" }}
+        <button
+          type="button"
           className="searchTrigger"
           aria-label="글과 태그 검색으로 이동"
+          onClick={requestFocusFeedSearch}
         >
           <SearchIcon />
           <span>글과 태그 검색</span>
           <kbd>⌘ K</kbd>
-        </Link>
-
-        {showThemeToggle ? <ThemeToggle /> : null}
+        </button>
 
         {showLogin ? (
           <button

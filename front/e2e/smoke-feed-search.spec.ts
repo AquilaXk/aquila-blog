@@ -1,10 +1,44 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import {
   createExplorePage,
   createExplorePost,
   mockAvatarAsset,
   mockFeedEndpoints,
 } from "./helpers/smokeFixtures"
+
+const triggerSearchShortcut = async (page: Page) => {
+  // Meta+K는 Chromium browser chrome으로 context를 깨뜨릴 수 있어 ctrlKey 합성 이벤트로 고정한다.
+  // (앱 핸들러는 metaKey/ctrlKey 모두 허용)
+  await page.waitForLoadState("domcontentloaded")
+  await page.locator("body").click({ position: { x: 8, y: 8 } })
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "k",
+        code: "KeyK",
+        ctrlKey: true,
+        metaKey: false,
+        bubbles: true,
+        cancelable: true,
+      })
+    )
+  })
+}
+
+const waitForFeedSearchInputFocus = async (page: Page) => {
+  const searchInput = page.getByLabel("Search posts by keyword")
+  await expect(searchInput).toBeFocused()
+}
+
+const mockAnonymousSession = async (page: Page) => {
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "401-1", msg: "unauthorized" }),
+    })
+  })
+}
 
 test.beforeEach(async ({ page }) => {
   await mockAvatarAsset(page)
@@ -422,4 +456,56 @@ test.describe("core smoke feed and search", () => {
 
   expect(dataPrefetchRequests).toEqual([])
 })
+
+  test("header search button focuses feed search input", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/")
+    await page.getByRole("button", { name: "글과 태그 검색으로 이동" }).click()
+    await waitForFeedSearchInputFocus(page)
+  })
+
+  test("Meta+K focuses feed search input on home", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/")
+    await triggerSearchShortcut(page)
+    await waitForFeedSearchInputFocus(page)
+  })
+
+  test("from /about Meta+K navigates to / and focuses search input", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/about")
+    await triggerSearchShortcut(page)
+    await expect(page).toHaveURL((url) => new URL(url).pathname === "/")
+    await waitForFeedSearchInputFocus(page)
+  })
+
+  test("from /about rapid duplicate search triggers still focus feed search input", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/about")
+    await Promise.all([triggerSearchShortcut(page), triggerSearchShortcut(page)])
+    await expect(page).toHaveURL((url) => new URL(url).pathname === "/")
+    await waitForFeedSearchInputFocus(page)
+  })
+
+  test("second search after completed focus still navigates from /about", async ({ page }) => {
+    await mockFeedEndpoints(page)
+    await mockAnonymousSession(page)
+
+    await page.goto("/")
+    await triggerSearchShortcut(page)
+    await waitForFeedSearchInputFocus(page)
+
+    await page.goto("/about")
+    await triggerSearchShortcut(page)
+    await expect(page).toHaveURL((url) => new URL(url).pathname === "/")
+    await waitForFeedSearchInputFocus(page)
+  })
 })

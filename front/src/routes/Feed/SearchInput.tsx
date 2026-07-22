@@ -7,13 +7,16 @@ import {
   MOBILE_TOUCH_TARGET_MIN_PX,
   TOUCH_TOKEN_BUNDLE_REVISION,
 } from "./feedUiTokens"
+import { FEED_SEARCH_INPUT_ID } from "./feedSearchFocus"
+
+export { FEED_SEARCH_INPUT_ID } from "./feedSearchFocus"
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
   inputRef?: Ref<HTMLInputElement>
 }
 
 const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
-  const inputId = props.id || "feed-search-input"
+  const inputId = props.id || FEED_SEARCH_INPUT_ID
 
   const focusInput = () => {
     if (typeof inputRef !== "function" && inputRef?.current) {

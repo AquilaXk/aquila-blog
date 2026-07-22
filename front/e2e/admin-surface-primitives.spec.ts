@@ -71,7 +71,7 @@ test.describe("관리자 표면 공통 계약", () => {
 
     expect(rootLayoutSource).toContain('const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")')
     expect(rootLayoutSource).toContain('const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"')
-    expect(rootLayoutSource).toContain("const effectiveScheme = scheme")
+    expect(rootLayoutSource).toContain('const effectiveScheme = "light"')
     expect(rootLayoutSource).toContain(
       'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
     )
@@ -138,7 +138,7 @@ test.describe("관리자 표면 공통 계약", () => {
       "utf8",
     )
 
-    expect(profileSectionSource).toContain("<h1>프로필</h1>")
+    expect(profileSectionSource).toContain("<h1>개인정보와 계정 설정</h1>")
     expect(profileModelSource).toContain('label: "기본 정보"')
     expect(profileModelSource).not.toContain('label: "프로필"')
   })

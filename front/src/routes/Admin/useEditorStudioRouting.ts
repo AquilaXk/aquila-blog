@@ -13,6 +13,10 @@ import {
   replaceShallowRoutePreservingScroll,
   toLoginPath,
 } from "src/libs/router"
+import {
+  clearScheduledForcedEditorExitUrl,
+  scheduleForcedEditorExitUrl,
+} from "./editorStudioUnsavedExitGuard"
 import type { PostForEditor } from "./EditorStudioWorkspaceControllerRootModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
@@ -110,12 +114,16 @@ export const useEditorStudioRouting = ({
       if (!redirectingRef.current && router.asPath !== "/") {
         redirectingRef.current = true
         void (async () => {
+          scheduleForcedEditorExitUrl("/")
           try {
+            // Activate synchronously inside patched router.replace (routeChangeStart window).
             await replaceRoute(router, "/", { preferHardNavigation: true })
           } catch (error) {
             if (!isNavigationCancelledError(error)) {
               setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
             }
+          } finally {
+            clearScheduledForcedEditorExitUrl()
           }
         })()
       }

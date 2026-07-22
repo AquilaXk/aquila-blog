@@ -7,7 +7,7 @@ import { expect, test } from "./helpers/authoringPlaywright"
 const sourcePath = (...segments: string[]) => resolve(__dirname, "../src", ...segments)
 const frontPath = (...segments: string[]) => resolve(__dirname, "..", ...segments)
 const joinParts = (...parts: string[]) => parts.join("")
-const localDraftStorageKey = "admin.editor.localDraft.v1"
+const localDraftStorageKey = "admin.editor.localDraft.create.v2"
 const onePixelPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64"
@@ -82,6 +82,7 @@ const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft
           category: "",
           visibility: "PUBLIC_UNLISTED",
           savedAt: new Date().toISOString(),
+          source: { kind: "create" },
         })
       )
     },

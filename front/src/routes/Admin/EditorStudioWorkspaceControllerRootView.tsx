@@ -1,6 +1,11 @@
 import { useCallback, useMemo, useState } from "react"
 import { formatDate } from "src/libs/utils"
-import { clampThumbnailZoom, DEFAULT_THUMBNAIL_ZOOM } from "src/libs/thumbnailFocus"
+import {
+  clampThumbnailZoom,
+  DEFAULT_THUMBNAIL_FOCUS_X,
+  DEFAULT_THUMBNAIL_FOCUS_Y,
+  DEFAULT_THUMBNAIL_ZOOM,
+} from "src/libs/thumbnailFocus"
 import { POST_IMAGE_UPLOAD_RULE_LABEL, PROFILE_IMAGE_UPLOAD_RULE_LABEL } from "src/libs/profileImageUpload"
 import { WriterEditorHost } from "./WriterEditorHost"
 import { EditorStudioThumbnailEditorPanel, EditorStudioThumbnailMetaPanel } from "./EditorStudioThumbnailPanels"
@@ -14,6 +19,8 @@ import { EditorStudioContentWorkspace } from "./EditorStudioContentWorkspace"
 import { EditorStudioDedicatedEditorLoadingState, EditorStudioDedicatedEditorSurface } from "./EditorStudioDedicatedEditorSurface"
 import { LIST_SORT_OPTIONS } from "./useEditorStudioListConditions"
 import { deriveComposeViewModel, deriveEditorContentMetrics, deriveEditorPersistenceState, derivePublishActionViewModel, getVisibilityLabel, toFlags, type PublishActionType } from "./editorStudioState"
+import { isEditorUnsavedDirtyByFingerprint } from "./editorStudioUnsavedExitGuard"
+import { useEditorStudioUnsavedExitGuard } from "./useEditorStudioUnsavedExitGuard"
 import { PREVIEW_SUMMARY_MAX_LENGTH, buildEditorStateFingerprint, detectPublishPlaceholderIssue, makePreviewSummary } from "./editorStudioMetaModel"
 import { Main, HeroCard, HeroIntro, StudioStatusItem, StudioStatusStrip, WorkspaceGrid, WorkspaceMain } from "./EditorStudioWorkspaceControllerRoot.styles"
 import { MARKDOWN_EDITOR_MERMAID_ENABLED, COMPOSE_MOBILE_STUDIO_STEPS, GLOBAL_NOTICE_IDLE_TEXT, MANAGE_MOBILE_STUDIO_STEPS, MOBILE_STUDIO_STEP_DESCRIPTION, MOBILE_STUDIO_STEP_LABEL, PREVIEW_CARD_VIEWPORT_ORDER, PREVIEW_CARD_VIEWPORTS, PUBLISH_VISIBILITY_OPTIONS, SHOW_LEGACY_CONTENT_STUDIO, SHOW_LEGACY_PROFILE_STUDIO, SHOW_LEGACY_UTILITY_STUDIO, getMobileStudioStepMoveLabel, recordEditorCommitDurationForRuntimeGuard, type MobileStudioStep, type NoticeTone, type PreviewViewportMode } from "./EditorStudioWorkspaceControllerRootModel"
@@ -104,6 +111,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     isSelectedToolsOpen,
     isTempDraftMode,
     knownTags,
+    getCurrentPostContent,
     lastLocalDraftFingerprintRef,
     listKw,
     listPage,
@@ -115,6 +123,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     loadPostForEditor,
     loadingKey,
     localDraftSavedAt,
+    localDraftSlotLabel,
     member,
     metaNotice,
     mobileComposeStep,
@@ -196,6 +205,22 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     toggleSelectAllVisiblePosts
   } = props
   const currentFlags = toFlags(postVisibility)
+  const pristineCreateFingerprint = useMemo(
+    () =>
+      buildEditorStateFingerprint({
+        title: "",
+        content: "",
+        summary: "",
+        thumbnailUrl: "",
+        thumbnailFocusX: DEFAULT_THUMBNAIL_FOCUS_X,
+        thumbnailFocusY: DEFAULT_THUMBNAIL_FOCUS_Y,
+        thumbnailZoom: DEFAULT_THUMBNAIL_ZOOM,
+        tags: [],
+        category: "",
+        visibility: "PUBLIC_LISTED",
+      }),
+    []
+  )
   const editorStateFingerprint = useMemo(
     () =>
       buildEditorStateFingerprint({
@@ -279,6 +304,73 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   })
   const composeStatusText = editorPersistenceState.text
   const composeStatusTone = editorPersistenceState.tone
+  const isEditorSaving =
+    loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
+  const isEditorUnsavedDirty = isEditorUnsavedDirtyByFingerprint({
+    isSaving: isEditorSaving,
+    editorMode,
+    hasSelectedManagedPost,
+    editorStateFingerprint,
+    serverBaselineFingerprint: serverBaselineEditorFingerprintRef.current,
+    localDraftFingerprint: lastLocalDraftFingerprintRef.current,
+    localDraftSavedAt,
+    pristineCreateFingerprint,
+  })
+  const getIsEditorUnsavedDirty = useCallback(() => {
+    const liveContent =
+      typeof getCurrentPostContent === "function" ? getCurrentPostContent() : postContent
+    return isEditorUnsavedDirtyByFingerprint({
+      isSaving: isEditorSaving,
+      editorMode,
+      hasSelectedManagedPost,
+      editorStateFingerprint: buildEditorStateFingerprint({
+        title: postTitle,
+        content: liveContent,
+        summary: postSummary,
+        thumbnailUrl: postThumbnailUrl,
+        thumbnailFocusX: postThumbnailFocusX,
+        thumbnailFocusY: postThumbnailFocusY,
+        thumbnailZoom: postThumbnailZoom,
+        tags: postTags,
+        category: postCategory,
+        visibility: postVisibility,
+      }),
+      // Read baselines at navigation time so a just-finished save is respected.
+      serverBaselineFingerprint: serverBaselineEditorFingerprintRef.current,
+      localDraftFingerprint: lastLocalDraftFingerprintRef.current,
+      localDraftSavedAt,
+      pristineCreateFingerprint,
+    })
+  }, [
+    editorMode,
+    getCurrentPostContent,
+    hasSelectedManagedPost,
+    isEditorSaving,
+    lastLocalDraftFingerprintRef,
+    localDraftSavedAt,
+    postCategory,
+    postContent,
+    postSummary,
+    postTags,
+    postThumbnailFocusX,
+    postThumbnailFocusY,
+    postThumbnailZoom,
+    postThumbnailUrl,
+    postTitle,
+    postVisibility,
+    pristineCreateFingerprint,
+    serverBaselineEditorFingerprintRef,
+  ])
+  const { requestGuardedAction, dialog: unsavedExitDialog } = useEditorStudioUnsavedExitGuard({
+    enabled: Boolean(sessionMember),
+    isDirty: isEditorUnsavedDirty,
+    getIsDirty: getIsEditorUnsavedDirty,
+  })
+  const handleGuardedExitDedicatedEditor = useCallback(() => {
+    requestGuardedAction(() => {
+      handleExitDedicatedEditor()
+    })
+  }, [handleExitDedicatedEditor, requestGuardedAction])
   const composeSummaryPreview = useMemo(
     () => postSummary.trim() || deferredContentDerived.summary,
     [deferredContentDerived.summary, postSummary]
@@ -372,7 +464,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       label: "브라우저 임시저장",
       tone: localDraftSavedAt ? ("success" as NoticeTone) : ("idle" as NoticeTone),
       text: localDraftSavedAt
-        ? `${localDraftSavedAt.slice(11, 16)} 저장본이 있습니다.`
+        ? `${localDraftSlotLabel || `${localDraftSavedAt.slice(11, 16)}`} 저장본이 있습니다.`
         : "아직 브라우저 임시저장이 없습니다.",
     },
   ].filter(
@@ -526,15 +618,21 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   }
 
   if (shouldShowEditorLoadingState) {
-    return <EditorStudioDedicatedEditorLoadingState />
+    return (
+      <>
+        <EditorStudioDedicatedEditorLoadingState />
+        {unsavedExitDialog}
+      </>
+    )
   }
 
   if (isDedicatedEditorRoute) {
     return (
+      <>
       <EditorStudioDedicatedEditorSurface
         thumbnailImageFileInputRef={thumbnailImageFileInputRef}
         onThumbnailImageFileChange={handleThumbnailImageFileChange}
-        onExit={handleExitDedicatedEditor}
+        onExit={handleGuardedExitDedicatedEditor}
         saveStateText={composeStatusText}
         saveStateTone={composeStatusTone}
         primaryActionDisabled={publishActionTriggerDisabled}
@@ -607,6 +705,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
           ) : null
         }
       />
+      {unsavedExitDialog}
+      </>
     )
   }
 
@@ -942,6 +1042,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         result={result}
         variant="standard"
       />
+      {unsavedExitDialog}
     </Main>
   )
 }

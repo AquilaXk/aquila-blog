@@ -15,8 +15,12 @@ const isPasswordRelatedMessage = (message: string) => /비밀번호/.test(messag
 
 export const resolveAccountDeletionFailure = (error: unknown): AccountDeletionFailure => {
   if (error instanceof ApiError) {
-    // Backend uses HTTP 401 + "비밀번호가 일치하지 않습니다." for wrong password reauth.
-    if (error.status === 400 || (error.status === 401 && isPasswordRelatedMessage(error.userMessage))) {
+    // Backend wrong-password reauth uses HTTP 401 + "비밀번호가 일치하지 않습니다.".
+    // Other 400s (reason validation, oauth confirmation) must stay generic, not password-field.
+    if (
+      (error.status === 400 || error.status === 401) &&
+      isPasswordRelatedMessage(error.userMessage)
+    ) {
       return {
         kind: "password",
         message: error.userMessage || ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE,

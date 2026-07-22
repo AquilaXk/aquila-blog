@@ -139,7 +139,12 @@ const SettingsAccountPage = () => {
             <p className="fieldHint">비밀번호가 없는 소셜 계정은 비워두고 확인 체크 후 진행합니다.</p>
             <label>
               탈퇴 사유
-              <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} />
+              <textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                rows={3}
+                maxLength={500}
+              />
             </label>
             <label className="checkRow">
               <input

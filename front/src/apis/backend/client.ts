@@ -173,9 +173,16 @@ const resolveBodyUserMessage = (body: string) => {
   if (!body.trim()) return ""
 
   try {
-    const parsed = JSON.parse(body) as { message?: unknown; msg?: unknown }
+    const parsed = JSON.parse(body) as { message?: unknown; msg?: unknown; resultCode?: unknown }
     const message = typeof parsed.msg === "string" ? parsed.msg : parsed.message
-    return typeof message === "string" ? message.trim() : ""
+    if (typeof message !== "string") return ""
+    const trimmed = message.trim()
+    if (!trimmed) return ""
+    const hasResultCode = typeof parsed.resultCode === "string" && parsed.resultCode.trim().length > 0
+    const looksLocalized = /[가-힣]/.test(trimmed)
+    // Trust backend RsData (resultCode) or localized copy; ignore proxy English internals.
+    if (hasResultCode || looksLocalized) return trimmed
+    return ""
   } catch {
     return ""
   }

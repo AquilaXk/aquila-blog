@@ -6,17 +6,23 @@ import {
   resolveAccountDeletionFailure,
 } from "../../src/routes/Settings/settingsAccountDeletionFeedback"
 
-test("resolveAccountDeletionFailure maps 400 and password-related 401 to password field errors", () => {
-  const badPassword = resolveAccountDeletionFailure(
-    new ApiError(400, "/member/api/v1/privacy/account", JSON.stringify({ msg: "비밀번호를 입력해주세요." }))
+test("resolveAccountDeletionFailure maps password-related 400/401 to password field errors", () => {
+  const missingPassword = resolveAccountDeletionFailure(
+    new ApiError(400, "/member/api/v1/privacy/account", JSON.stringify({
+      resultCode: "400-1",
+      msg: "비밀번호를 입력해주세요.",
+    }))
   )
-  expect(badPassword).toEqual({
+  expect(missingPassword).toEqual({
     kind: "password",
     message: "비밀번호를 입력해주세요.",
   })
 
   const wrongPassword = resolveAccountDeletionFailure(
-    new ApiError(401, "/member/api/v1/privacy/account", JSON.stringify({ msg: "비밀번호가 일치하지 않습니다." }))
+    new ApiError(401, "/member/api/v1/privacy/account", JSON.stringify({
+      resultCode: "401-1",
+      msg: "비밀번호가 일치하지 않습니다.",
+    }))
   )
   expect(wrongPassword).toEqual({
     kind: "password",
@@ -24,10 +30,24 @@ test("resolveAccountDeletionFailure maps 400 and password-related 401 to passwor
   })
 })
 
-test("resolveAccountDeletionFailure maps non-password 401 to session guidance copy", () => {
+test("resolveAccountDeletionFailure maps non-password 400/401 correctly", () => {
+  const oauthConfirm = resolveAccountDeletionFailure(
+    new ApiError(400, "/member/api/v1/privacy/account", JSON.stringify({
+      resultCode: "400-2",
+      msg: "소셜 계정 탈퇴 확인이 필요합니다.",
+    }))
+  )
+  expect(oauthConfirm).toEqual({
+    kind: "generic",
+    message: "소셜 계정 탈퇴 확인이 필요합니다.",
+  })
+
   expect(
     resolveAccountDeletionFailure(
-      new ApiError(401, "/member/api/v1/privacy/account", JSON.stringify({ msg: "인증이 필요합니다." }))
+      new ApiError(401, "/member/api/v1/privacy/account", JSON.stringify({
+        resultCode: "401-1",
+        msg: "인증이 필요합니다.",
+      }))
     )
   ).toEqual({
     kind: "session",
@@ -35,7 +55,7 @@ test("resolveAccountDeletionFailure maps non-password 401 to session guidance co
   })
 })
 
-test("resolveAccountDeletionFailure maps 403 and other errors to generic danger feedback", () => {
+test("resolveAccountDeletionFailure maps other errors to generic danger feedback", () => {
   const forbidden = resolveAccountDeletionFailure(
     new ApiError(403, "/member/api/v1/privacy/account", JSON.stringify({ msg: "권한이 없습니다." }))
   )
@@ -62,4 +82,16 @@ test("resolveAccountDeletionFailure maps 403 and other errors to generic danger 
     kind: "generic",
     message: ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE,
   })
+})
+
+test("ApiError ignores English proxy body and keeps localized status fallback", () => {
+  expect(new ApiError(502, "/api/backend/x", JSON.stringify({ message: "Backend proxy request failed." })).userMessage)
+    .toBe("서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+
+  expect(
+    new ApiError(400, "/member/api/v1/privacy/account", JSON.stringify({
+      resultCode: "400-1",
+      msg: "비밀번호를 입력해주세요.",
+    })).userMessage
+  ).toBe("비밀번호를 입력해주세요.")
 })

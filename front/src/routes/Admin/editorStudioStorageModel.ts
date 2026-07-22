@@ -202,21 +202,33 @@ export const migrateLocalDraftV1Once = () => {
   if (!raw) return
 
   try {
-    const existingCreate = window.localStorage.getItem(LOCAL_DRAFT_CREATE_STORAGE_KEY)
-    if (!existingCreate) {
-      const migrated = parseLocalDraftPayload(raw, { kind: "create" })
-      if (migrated) {
-        window.localStorage.setItem(
-          LOCAL_DRAFT_CREATE_STORAGE_KEY,
-          JSON.stringify({
-            ...migrated,
-            source: { kind: "create" },
-          })
-        )
+    const existingCreateRaw = window.localStorage.getItem(LOCAL_DRAFT_CREATE_STORAGE_KEY)
+    if (existingCreateRaw) {
+      const existingCreate = parseLocalDraftPayload(existingCreateRaw, { kind: "create" })
+      if (existingCreate) {
+        // Verified readable create.v2 — safe to drop legacy v1.
+        window.localStorage.removeItem(LOCAL_DRAFT_V1_STORAGE_KEY)
+        return
       }
+      // Corrupt/expired create.v2: fall through and try migrating recoverable v1.
     }
-    // Remove v1 only after create.v2 write succeeded, create already existed, or
-    // the legacy payload was unparseable. Keep v1 when setItem throws (quota, etc.).
+
+    const migrated = parseLocalDraftPayload(raw, { kind: "create" })
+    if (!migrated) {
+      // Unrecoverable v1 only — drop it. Keep v1 when create.v2 is bad and v1 is good.
+      if (existingCreateRaw) return
+      window.localStorage.removeItem(LOCAL_DRAFT_V1_STORAGE_KEY)
+      return
+    }
+
+    window.localStorage.setItem(
+      LOCAL_DRAFT_CREATE_STORAGE_KEY,
+      JSON.stringify({
+        ...migrated,
+        source: { kind: "create" },
+      })
+    )
+    // Remove v1 only after create.v2 write succeeded.
     window.localStorage.removeItem(LOCAL_DRAFT_V1_STORAGE_KEY)
   } catch {
     // Preserve recoverable legacy draft when create.v2 persistence fails.

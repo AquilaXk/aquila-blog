@@ -430,6 +430,7 @@ export const EditorStudioWorkspaceController = ({
     loadPostForEditor,
     restoreLocalDraft,
     saveLocalDraft,
+    signalLocalDraftBaselineReady,
     switchToCreateMode,
   } = useEditorStudioDraftLifecycle({
     router,
@@ -663,6 +664,7 @@ export const EditorStudioWorkspaceController = ({
     pretty,
     generateIdempotencyKey,
     removeLocalDraft,
+    signalLocalDraftBaselineReady,
     uploadWithConflictRetry,
     normalizeSafeImageUrl,
     extractImageFileFromClipboard,

@@ -130,6 +130,7 @@ type UseEditorStudioPersistenceParams = {
   pretty: (value: unknown) => string
   generateIdempotencyKey: () => string
   removeLocalDraft: (source: { kind: "create" } | { kind: "post"; postId: string }) => void
+  signalLocalDraftBaselineReady: () => void
   uploadWithConflictRetry: <T>(requestUpload: () => Promise<Response>) => Promise<Response>
   normalizeSafeImageUrl: (raw: string) => string
   extractImageFileFromClipboard: (clipboardData: DataTransfer | null) => File | null
@@ -168,6 +169,7 @@ export const useEditorStudioPersistence = ({
   refreshPublicPostReadViews,
   removeLocalDraft,
   serverBaselineEditorFingerprintRef,
+  signalLocalDraftBaselineReady,
   setEditorMode,
   setIsPreviewThumbnailError,
   setIsTempDraftMode,
@@ -318,6 +320,7 @@ export const useEditorStudioPersistence = ({
         },
         dedupeStrings
       )
+      signalLocalDraftBaselineReady()
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
 
@@ -367,6 +370,7 @@ export const useEditorStudioPersistence = ({
     refreshPublicPostReadViews,
     removeLocalDraft,
     serverBaselineEditorFingerprintRef,
+    signalLocalDraftBaselineReady,
     setEditorMode,
     setIsTempDraftMode,
     setKnownTags,
@@ -468,6 +472,7 @@ export const useEditorStudioPersistence = ({
         },
         dedupeStrings
       )
+      signalLocalDraftBaselineReady()
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
@@ -508,6 +513,7 @@ export const useEditorStudioPersistence = ({
     refreshPublicPostReadViews,
     removeLocalDraft,
     serverBaselineEditorFingerprintRef,
+    signalLocalDraftBaselineReady,
     setIsTempDraftMode,
     setKnownTags,
     setLoadingKey,
@@ -607,6 +613,7 @@ export const useEditorStudioPersistence = ({
         },
         dedupeStrings
       )
+      signalLocalDraftBaselineReady()
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: "새 글 작성이 완료되었습니다." }, "page")
@@ -646,6 +653,7 @@ export const useEditorStudioPersistence = ({
     removeLocalDraft,
     lastLocalDraftFingerprintRef,
     serverBaselineEditorFingerprintRef,
+    signalLocalDraftBaselineReady,
     setIsTempDraftMode,
     setLoadingKey,
     setLocalDraftSavedAt,

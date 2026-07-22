@@ -223,6 +223,7 @@ export const useEditorStudioDraftLifecycle = ({
     saveLocalDraft,
     restoreLocalDraft,
     clearLocalDraft,
+    signalLocalDraftBaselineReady,
   } = useEditorStudioLocalDraftLifecycle({
     buildLocalDraftFingerprint,
     dedupeStrings,
@@ -430,6 +431,7 @@ export const useEditorStudioDraftLifecycle = ({
         visibility: nextVisibility,
       })
       applyLoadedPostContext(resolvedPost)
+      signalLocalDraftBaselineReady()
       setResult(pretty(resolvedPost))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -450,6 +452,7 @@ export const useEditorStudioDraftLifecycle = ({
     setPostTitle,
     setPostVisibility,
     setResult,
+    signalLocalDraftBaselineReady,
     syncEditorMeta,
     toVisibility,
   ])
@@ -517,6 +520,7 @@ export const useEditorStudioDraftLifecycle = ({
       })
       applyLoadedPostContext(tempPost)
       setIsTempDraftMode(true)
+      signalLocalDraftBaselineReady()
       setPublishStatus(
         {
           tone: "success",
@@ -555,6 +559,7 @@ export const useEditorStudioDraftLifecycle = ({
     setPostVisibility,
     setPublishStatus,
     setResult,
+    signalLocalDraftBaselineReady,
     syncEditorMeta,
     tempPostRequestRef,
     toEditorPostRoute,
@@ -567,6 +572,7 @@ export const useEditorStudioDraftLifecycle = ({
     saveLocalDraft,
     restoreLocalDraft,
     clearLocalDraft,
+    signalLocalDraftBaselineReady,
     switchToCreateMode,
     loadPostForEditor,
     handleLoadOrCreateTempPost,

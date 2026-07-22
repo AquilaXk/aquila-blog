@@ -19,6 +19,7 @@ import {
 } from "../../src/routes/Admin/editorStudioMetaModel"
 import {
   decideLocalDraftAutosave,
+  isLocalDraftAutosaveGatedForPostIdTransition,
   isLocalDraftBaselineSettleLoadingKey,
 } from "../../src/routes/Admin/useEditorStudioDraftLifecycleModel"
 
@@ -177,6 +178,47 @@ test.describe("editor local draft context slots", () => {
       migrateLocalDraftV1Once()
       expect(storage.getItem(LOCAL_DRAFT_V1_STORAGE_KEY)).toBe(legacy)
       expect(storage.getItem(LOCAL_DRAFT_CREATE_STORAGE_KEY)).toBeNull()
+    })
+  })
+
+  test("keeps v1 when create.v2 exists but is corrupt or expired", () => {
+    withLocalStorage((storage) => {
+      const legacy = JSON.stringify({
+        title: "legacy-recover",
+        content: "legacy body",
+        summary: "",
+        thumbnailUrl: "",
+        tags: [],
+        category: "",
+        visibility: "PRIVATE",
+        savedAt: new Date().toISOString(),
+      })
+      storage.setItem(LOCAL_DRAFT_V1_STORAGE_KEY, legacy)
+      storage.setItem(LOCAL_DRAFT_CREATE_STORAGE_KEY, "{not-json")
+
+      migrateLocalDraftV1Once()
+      expect(readLocalDraft({ kind: "create" })?.title).toBe("legacy-recover")
+      expect(storage.getItem(LOCAL_DRAFT_V1_STORAGE_KEY)).toBeNull()
+
+      storage.setItem(LOCAL_DRAFT_V1_STORAGE_KEY, legacy)
+      storage.setItem(
+        LOCAL_DRAFT_CREATE_STORAGE_KEY,
+        JSON.stringify({
+          title: "expired-create",
+          content: "expired",
+          summary: "",
+          thumbnailUrl: "",
+          tags: [],
+          category: "",
+          visibility: "PRIVATE",
+          savedAt: new Date(Date.now() - LOCAL_DRAFT_MAX_AGE_MS - 1).toISOString(),
+          source: { kind: "create" },
+        })
+      )
+
+      migrateLocalDraftV1Once()
+      expect(readLocalDraft({ kind: "create" })?.title).toBe("legacy-recover")
+      expect(storage.getItem(LOCAL_DRAFT_V1_STORAGE_KEY)).toBeNull()
     })
   })
 
@@ -366,6 +408,7 @@ test.describe("editor local draft context slots", () => {
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: true,
+        isPostIdTransitionGated: false,
         hasDraftContent: true,
         editorFingerprint: serverFingerprint,
         lastArmedFingerprint: draftFingerprint,
@@ -377,6 +420,7 @@ test.describe("editor local draft context slots", () => {
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: false,
+        isPostIdTransitionGated: false,
         hasDraftContent: true,
         editorFingerprint: serverFingerprint,
         lastArmedFingerprint: draftFingerprint,
@@ -388,6 +432,7 @@ test.describe("editor local draft context slots", () => {
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: false,
+        isPostIdTransitionGated: false,
         hasDraftContent: true,
         editorFingerprint: '{"title":"user-edit"}',
         lastArmedFingerprint: serverFingerprint,
@@ -403,6 +448,7 @@ test.describe("editor local draft context slots", () => {
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: true,
+        isPostIdTransitionGated: false,
         hasDraftContent: true,
         editorFingerprint: publishedFingerprint,
         lastArmedFingerprint: "",
@@ -414,6 +460,7 @@ test.describe("editor local draft context slots", () => {
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: false,
+        isPostIdTransitionGated: false,
         hasDraftContent: true,
         editorFingerprint: publishedFingerprint,
         lastArmedFingerprint: publishedFingerprint,
@@ -425,6 +472,7 @@ test.describe("editor local draft context slots", () => {
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: false,
+        isPostIdTransitionGated: false,
         hasDraftContent: true,
         editorFingerprint: '{"title":"edited-again"}',
         lastArmedFingerprint: publishedFingerprint,
@@ -446,6 +494,7 @@ test.describe("editor local draft context slots", () => {
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: false,
+        isPostIdTransitionGated: false,
         hasDraftContent: true,
         editorFingerprint: dirtyFingerprint,
         lastArmedFingerprint: baselineFingerprint,
@@ -457,11 +506,73 @@ test.describe("editor local draft context slots", () => {
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: true,
+        isPostIdTransitionGated: false,
         hasDraftContent: true,
         editorFingerprint: dirtyFingerprint,
         lastArmedFingerprint: baselineFingerprint,
         pendingRestorableDraftFingerprint: null,
       })
     ).toEqual({ action: "adopt-baseline", fingerprint: dirtyFingerprint })
+  })
+
+  test("failed load/publish settle does not adopt baseline without success signal", () => {
+    const dirtyFingerprint = '{"title":"unsaved-edit"}'
+    const baselineFingerprint = '{"title":"baseline"}'
+
+    // loadingKey cleared after failure: shouldAdoptBaseline stays false → reschedule.
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: false,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: dirtyFingerprint,
+        lastArmedFingerprint: baselineFingerprint,
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "schedule" })
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: true,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: dirtyFingerprint,
+        lastArmedFingerprint: baselineFingerprint,
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "adopt-baseline", fingerprint: dirtyFingerprint })
+  })
+
+  test("gates create-slot autosave while post id transition awaits load", () => {
+    expect(isLocalDraftAutosaveGatedForPostIdTransition("create", "42")).toBe(true)
+    expect(isLocalDraftAutosaveGatedForPostIdTransition("create", "")).toBe(false)
+    expect(isLocalDraftAutosaveGatedForPostIdTransition("edit", "42")).toBe(false)
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: false,
+        isPostIdTransitionGated: true,
+        hasDraftContent: true,
+        editorFingerprint: '{"title":"previous-edit-body"}',
+        lastArmedFingerprint: '{"title":"old"}',
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "skip" })
+
+    // Successful load settle may still adopt baseline even during the transition edge.
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: true,
+        isPostIdTransitionGated: true,
+        hasDraftContent: true,
+        editorFingerprint: '{"title":"loaded"}',
+        lastArmedFingerprint: '{"title":"previous-edit-body"}',
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "adopt-baseline", fingerprint: '{"title":"loaded"}' })
   })
 })

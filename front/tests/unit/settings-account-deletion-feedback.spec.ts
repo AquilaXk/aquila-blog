@@ -96,6 +96,13 @@ test("ApiError prefers localized body and ignores English proxy/validation copy"
   ).toBe("요청 값이 올바르지 않습니다.")
 
   expect(
+    new ApiError(503, "/cloud/api/v1/files", JSON.stringify({
+      resultCode: "503-1",
+      msg: "스토리지 초기화 실패: AccessDenied on bucket aquila-private",
+    })).userMessage
+  ).toBe("서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+
+  expect(
     new ApiError(400, "/member/api/v1/privacy/account", JSON.stringify({
       resultCode: "400-1",
       msg: "비밀번호를 입력해주세요.",

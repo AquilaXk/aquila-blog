@@ -169,30 +169,43 @@ const resolveStatusMessage = (status: number) => {
   return "요청 처리 중 오류가 발생했습니다."
 }
 
-const resolveBodyUserMessage = (body: string) => {
-  if (!body.trim()) return ""
+const parseJsonBodyMessage = (body: string) => {
+  if (!body.trim()) return { message: "", resultCode: "" }
 
   try {
     const parsed = JSON.parse(body) as { message?: unknown; msg?: unknown; resultCode?: unknown }
     const message = typeof parsed.msg === "string" ? parsed.msg : parsed.message
-    if (typeof message !== "string") return ""
-    const trimmed = message.trim()
-    if (!trimmed) return ""
-    const looksLocalized = /[가-힣]/.test(trimmed)
-    // Only localized backend copy is user-facing. Ignore proxy English and framework validation English.
-    if (looksLocalized) return trimmed
-    return ""
+    const resultCode = typeof parsed.resultCode === "string" ? parsed.resultCode.trim() : ""
+    return {
+      message: typeof message === "string" ? message.trim() : "",
+      resultCode,
+    }
   } catch {
-    return ""
+    return { message: "", resultCode: "" }
   }
+}
+
+const isAppResultCode = (resultCode: string) => /^\d{3}-\d+$/.test(resultCode)
+
+const looksLikeInternalDiagnosticMessage = (message: string) =>
+  /실패:\s/.test(message) || /Exception|endpoint|bucket|provider|stack/i.test(message)
+
+const resolveBodyUserMessage = (body: string) => {
+  const { message, resultCode } = parseJsonBodyMessage(body)
+  if (!message) return ""
+  // Only expose app RsData copy that is localized and not an internal diagnostic dump.
+  if (!isAppResultCode(resultCode)) return ""
+  if (!/[가-힣]/.test(message)) return ""
+  if (looksLikeInternalDiagnosticMessage(message)) return ""
+  return message
 }
 
 const resolveResponseBodyMessage = (status: number, body: string) => {
   if (status !== 413) return ""
-  const normalizedMessage = resolveBodyUserMessage(body)
-  if (!normalizedMessage) return ""
-  if (!/(용량|초과|MB|이하)/i.test(normalizedMessage)) return ""
-  return /[가-힣]/.test(normalizedMessage) ? normalizedMessage : ""
+  const { message } = parseJsonBodyMessage(body)
+  if (!message) return ""
+  if (!/(용량|초과|MB|이하)/i.test(message)) return ""
+  return /[가-힣]/.test(message) ? message : ""
 }
 
 const sleep = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs))

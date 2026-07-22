@@ -52,10 +52,14 @@ const SettingsAccountPage = () => {
         oauthAccountDeletionConfirmed: !trimmedPassword && confirmed,
         reason: reason.trim() || undefined,
       })
-      deletionCompletedRef.current = true
-      setRevokedSessionCount(response.data.revokedSessionCount)
+      const revokedCount = response.data?.revokedSessionCount
+      if (typeof revokedCount !== "number" || !Number.isFinite(revokedCount)) {
+        throw new Error("invalid account deletion response")
+      }
+      setRevokedSessionCount(revokedCount)
       setFeedback({ tone: "success", text: response.msg })
       setDeletionCompleted(true)
+      deletionCompletedRef.current = true
       clearMe()
     } catch (error) {
       if (deletionCompletedRef.current) return

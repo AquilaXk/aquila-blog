@@ -456,7 +456,8 @@ class ExceptionHandler(
                 recreateWithCauseIfNeeded(ex, redactedMessage, provisional, redactedCause)
             }
         visited[ex] = copy
-        copy.stackTrace = ex.stackTrace
+        // prod/non-prod 공통: 전달하는 throwable의 프레임 수를 상한으로 잘라 로그 폭주를 막는다.
+        copy.stackTrace = ex.stackTrace.take(MAX_STACK_FRAMES).toTypedArray()
 
         for (suppressed in ex.suppressed) {
             copy.addSuppressed(redactedThrowableForLogging(suppressed, visited))
@@ -604,6 +605,7 @@ class ExceptionHandler(
         private const val MAX_METHOD_LENGTH = 16
         private const val MAX_PATH_LENGTH = 512
         private const val MAX_QUERY_LENGTH = 512
+        private const val MAX_STACK_FRAMES = 30
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
     }
 }

@@ -28,34 +28,8 @@ const authStatusMessages: Record<AuthAction, Partial<Record<number, string>>> = 
   },
 }
 
-const signupPolicyChangedMessage = "약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요."
-
-const readApiResultCode = (body: string) => {
-  if (!body.trim()) return ""
-
-  try {
-    const parsed = JSON.parse(body) as { resultCode?: unknown }
-    return typeof parsed.resultCode === "string" ? parsed.resultCode.trim() : ""
-  } catch {
-    return ""
-  }
-}
-
-export const toFriendlyApiMessage = (error: unknown, fallback: string) => {
-  if (error instanceof ApiTimeoutError) {
-    return "응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요."
-  }
-
-  if (error instanceof ApiError) {
-    return error.userMessage || fallback
-  }
-
-  if (error instanceof Error && error.message.trim()) {
-    return fallback
-  }
-
-  return fallback
-}
+const signupPolicyChangedMessage =
+  "약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요."
 
 export const toAuthErrorMessage = (action: AuthAction, error: unknown, fallback: string) => {
   if (error instanceof ApiTimeoutError) {
@@ -64,7 +38,7 @@ export const toAuthErrorMessage = (action: AuthAction, error: unknown, fallback:
 
   if (error instanceof ApiError) {
     if (action === "signupComplete" && error.status === 409) {
-      if (readApiResultCode(error.body) === "409-4") return signupPolicyChangedMessage
+      if (error.resultCode === "409-4") return signupPolicyChangedMessage
       return "이미 처리되었거나 가입 상태가 변경되었습니다. 처음부터 다시 시도해주세요."
     }
 

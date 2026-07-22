@@ -1,4 +1,5 @@
 import { apiFetch } from "src/apis/backend/client"
+import { toUserFacingMessage } from "src/apis/backend/errorClassification"
 import { useRouter } from "next/router"
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
@@ -186,8 +187,8 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
       })
       await loadComments()
       return true
-    } catch {
-      setError(parentCommentId ? "답글 작성에 실패했습니다." : "댓글 작성에 실패했습니다.")
+    } catch (error) {
+      setError(toUserFacingMessage(error))
       return false
     } finally {
       setIsLoading(false)
@@ -230,8 +231,8 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
         setReplyInput("")
       }
       await loadComments()
-    } catch {
-      setError("댓글 삭제에 실패했습니다.")
+    } catch (error) {
+      setError(toUserFacingMessage(error))
     } finally {
       setIsLoading(false)
     }
@@ -302,8 +303,8 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
       setEditingCommentId(null)
       setEditingCommentInput("")
       await loadComments()
-    } catch {
-      setError("댓글 수정에 실패했습니다.")
+    } catch (error) {
+      setError(toUserFacingMessage(error))
     } finally {
       setIsLoading(false)
     }

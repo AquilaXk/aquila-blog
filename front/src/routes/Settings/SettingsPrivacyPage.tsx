@@ -2,7 +2,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useEffect, useState } from "react"
 import { getLegalReconsentStatus, LegalReconsentStatus, submitLegalReconsent } from "src/apis/backend/legal"
-import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
+import { toUserFacingMessage } from "src/apis/backend/errorClassification"
 import {
   createPrivacyRequest,
   getPrivacyExport,
@@ -79,7 +79,7 @@ const SettingsPrivacyPage = () => {
         if (cancelled) return
         setFeedback({
           tone: "danger",
-          text: toFriendlyApiMessage(error, "개인정보 내보내기 데이터를 불러오지 못했습니다."),
+          text: toUserFacingMessage(error),
         })
       })
       .finally(() => {
@@ -93,7 +93,7 @@ const SettingsPrivacyPage = () => {
         if (!cancelled) {
           setLegalFeedback({
             tone: "danger",
-            text: toFriendlyApiMessage(error, "법적 문서 동의 상태를 불러오지 못했습니다."),
+            text: toUserFacingMessage(error),
           })
         }
       })
@@ -142,7 +142,7 @@ const SettingsPrivacyPage = () => {
     } catch (error) {
       setFeedback({
         tone: "danger",
-        text: toFriendlyApiMessage(error, "개인정보 처리 요청을 접수하지 못했습니다."),
+        text: toUserFacingMessage(error),
       })
     } finally {
       setSubmitting(false)
@@ -167,7 +167,7 @@ const SettingsPrivacyPage = () => {
     } catch (error) {
       setLegalFeedback({
         tone: "danger",
-        text: toFriendlyApiMessage(error, "최신 약관과 개인정보처리방침 동의를 저장하지 못했습니다."),
+        text: toUserFacingMessage(error),
       })
     } finally {
       setLegalSubmitting(false)

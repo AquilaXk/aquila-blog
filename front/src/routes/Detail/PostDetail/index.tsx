@@ -88,6 +88,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     handleEditPost,
     handleSharePost,
     handleToggleLike,
+    likeFeedback,
     likePending,
     shareFeedback,
     shareProgressLabel,
@@ -449,6 +450,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             hideLikeActionOnDesktop={showFloatingLike}
             hideShareActionOnDesktop={showFloatingLike}
             hideActionButtonsOnMobile
+            likeFeedback={likeFeedback}
             shareFeedback={shareFeedback}
             onToggleLike={handleToggleLike}
             onSharePost={handleSharePost}
@@ -475,6 +477,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           active={leftHybridRailActive}
           showFloatingLike={showFloatingLike}
           engagement={engagement}
+          likeFeedback={likeFeedback}
           likePending={likePending}
           shareFeedback={shareFeedback}
           onToggleLike={handleToggleLike}
@@ -487,6 +490,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           {data.type[0] === "Post" ? (
             <MobileSummaryActions
               engagement={engagement}
+              likeFeedback={likeFeedback}
               likePending={likePending}
               shareFeedback={shareFeedback}
               shareProgressLabel={shareProgressLabel}

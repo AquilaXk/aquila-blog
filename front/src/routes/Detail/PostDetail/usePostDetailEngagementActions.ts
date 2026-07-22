@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import type { NextRouter } from "next/router"
 import { ApiError, apiFetch } from "src/apis/backend/client"
+import { toUserFacingMessage } from "src/apis/backend/errorClassification"
 import { queryKey } from "src/constants/queryKey"
 import { pushRoute, replaceRoute } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
@@ -35,9 +36,11 @@ export const usePostDetailEngagementActions = ({
   const didIncrementHitRef = useRef<string | null>(null)
   const likePendingRef = useRef(false)
   const shareFeedbackResetTimerRef = useRef<number | null>(null)
+  const likeFeedbackResetTimerRef = useRef<number | null>(null)
   const [likePending, setLikePending] = useState(false)
   const [adminActionPending, setAdminActionPending] = useState(false)
   const [shareFeedback, setShareFeedback] = useState<ShareFeedback | null>(null)
+  const [likeFeedback, setLikeFeedback] = useState<string | null>(null)
   const [engagement, setEngagement] = useState(() => ({
     likesCount: data?.likesCount ?? 0,
     hitCount: data?.hitCount ?? 0,
@@ -91,8 +94,12 @@ export const usePostDetailEngagementActions = ({
   useEffect(() => {
     return () => {
       if (typeof window === "undefined") return
-      if (shareFeedbackResetTimerRef.current === null) return
-      window.clearTimeout(shareFeedbackResetTimerRef.current)
+      if (shareFeedbackResetTimerRef.current !== null) {
+        window.clearTimeout(shareFeedbackResetTimerRef.current)
+      }
+      if (likeFeedbackResetTimerRef.current !== null) {
+        window.clearTimeout(likeFeedbackResetTimerRef.current)
+      }
     }
   }, [])
 
@@ -104,6 +111,17 @@ export const usePostDetailEngagementActions = ({
     }
     shareFeedbackResetTimerRef.current = window.setTimeout(() => {
       setShareFeedback(null)
+    }, 1600)
+  }, [])
+
+  const flashLikeFeedback = useCallback((message: string) => {
+    if (typeof window === "undefined") return
+    setLikeFeedback(message)
+    if (likeFeedbackResetTimerRef.current !== null) {
+      window.clearTimeout(likeFeedbackResetTimerRef.current)
+    }
+    likeFeedbackResetTimerRef.current = window.setTimeout(() => {
+      setLikeFeedback(null)
     }, 1600)
   }, [])
 
@@ -205,11 +223,13 @@ export const usePostDetailEngagementActions = ({
             : prev
         )
       }
+
+      flashLikeFeedback(toUserFacingMessage(error))
     } finally {
       likePendingRef.current = false
       setLikePending(false)
     }
-  }, [data, engagement.actorHasLiked, engagement.likesCount, loginHref, me, queryClient, router])
+  }, [data, engagement.actorHasLiked, engagement.likesCount, flashLikeFeedback, loginHref, me, queryClient, router])
 
   const handleEditPost = useCallback(async () => {
     if (!data) return
@@ -281,6 +301,7 @@ export const usePostDetailEngagementActions = ({
     handleEditPost,
     handleSharePost,
     handleToggleLike,
+    likeFeedback,
     likePending,
     shareFeedback,
     shareProgressLabel,

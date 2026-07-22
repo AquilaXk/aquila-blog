@@ -1,5 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react"
-import { getApiRequestUrl } from "src/apis/backend/client"
+import { ApiError, apiFetch } from "src/apis/backend/client"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import {
   applyThumbnailTransformToUrl,
@@ -228,20 +228,6 @@ export const recordEditorCommitDurationForRuntimeGuard = (actualDuration: number
   store.editorCommitSamples = nextSamples
 }
 
-const parseResponseErrorBody = async (response: Response): Promise<string> => {
-  const text = await response.text().catch(() => "")
-  if (!text) return ""
-
-  try {
-    const parsed = JSON.parse(text) as { resultCode?: string; msg?: string }
-    const msg = parsed.msg?.trim()
-    if (!msg) return text
-    return parsed.resultCode ? `${msg} (${parsed.resultCode})` : msg
-  } catch {
-    return text
-  }
-}
-
 const waitFor = (ms: number) =>
   new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms)
@@ -252,34 +238,32 @@ const computeConflictRetryDelay = (attempt: number): number =>
 
 const TEMP_POST_CONFLICT_MAX_RETRIES = 2
 
+const throwResponseAsApiError = async (response: Response): Promise<never> => {
+  const body = await response.text().catch(() => "")
+  throw new ApiError(response.status, response.url, body)
+}
+
 export const requestTempPostWithConflictRetry = async (
   resolveExistingTempPost: () => Promise<PostForEditor | null>,
   maxRetries: number = TEMP_POST_CONFLICT_MAX_RETRIES
 ): Promise<RsData<PostForEditor>> => {
-  let lastConflictBody = ""
+  let lastConflictError: ApiError | null = null
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    const response = await fetch(getApiRequestUrl("/post/api/v1/posts/temp"), {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "X-Aquila-CSRF": "1",
-      },
-    })
-
-    if (response.status !== 409) {
-      if (!response.ok) {
-        const body = await parseResponseErrorBody(response)
-        throw new Error(body || `임시글 불러오기 실패 (${response.status})`)
+    try {
+      return await apiFetch<RsData<PostForEditor>>("/post/api/v1/posts/temp", {
+        method: "POST",
+      })
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 409) {
+        throw error
       }
 
-      return (await response.json()) as RsData<PostForEditor>
-    }
-
-    lastConflictBody = await parseResponseErrorBody(response)
-    if (attempt < maxRetries) {
-      await waitFor(computeConflictRetryDelay(attempt))
-      continue
+      lastConflictError = error
+      if (attempt < maxRetries) {
+        await waitFor(computeConflictRetryDelay(attempt))
+        continue
+      }
     }
   }
 
@@ -292,38 +276,34 @@ export const requestTempPostWithConflictRetry = async (
     }
   }
 
-  throw new Error(lastConflictBody || "요청 충돌이 발생했습니다. 다시 시도해주세요.")
+  throw lastConflictError ?? new ApiError(409, "/post/api/v1/posts/temp", "")
 }
 
 export const uploadWithConflictRetry = async (
   requestUpload: () => Promise<Response>,
   maxRetries: number = IMAGE_UPLOAD_CONFLICT_MAX_RETRIES
 ): Promise<Response> => {
-  let lastConflictBody = ""
+  let lastConflictError: ApiError | null = null
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const response = await requestUpload()
     if (response.status !== 409) {
       if (!response.ok) {
-        const body = await parseResponseErrorBody(response)
-        throw new Error(`이미지 업로드 실패 (${response.status}): ${body}`)
+        await throwResponseAsApiError(response)
       }
       return response
     }
 
-    lastConflictBody = await parseResponseErrorBody(response)
+    const body = await response.text().catch(() => "")
+    lastConflictError = new ApiError(409, response.url, body)
     if (attempt >= maxRetries) {
-      throw new Error(
-        `이미지 업로드 실패 (409): ${lastConflictBody || "요청 충돌이 반복되어 업로드를 완료하지 못했습니다."}`
-      )
+      throw lastConflictError
     }
 
     await waitFor(computeConflictRetryDelay(attempt))
   }
 
-  throw new Error(
-    `이미지 업로드 실패 (409): ${lastConflictBody || "요청 충돌이 반복되어 업로드를 완료하지 못했습니다."}`
-  )
+  throw lastConflictError ?? new ApiError(409, "", "")
 }
 
 export const buildEffectiveThumbnailUrl = ({

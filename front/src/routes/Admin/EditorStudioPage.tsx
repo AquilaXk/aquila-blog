@@ -6,6 +6,7 @@ import {
   readAdminProtectedBootstrap,
   type AdminPageProps,
 } from "src/libs/server/adminPage"
+import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetchJson } from "src/libs/server/backend"
 import type { PostForEditor } from "./EditorStudioWorkspaceControllerRootModel"
 import { EditorStudioWorkspaceController } from "./EditorStudioWorkspaceController"
@@ -66,55 +67,60 @@ const fetchInitialEditorPost = async (req: Parameters<GetServerSideProps>[0]["re
 }
 
 export const getEditorStudioPageProps: GetServerSideProps<EditorStudioPageProps> = async ({ req, query }) => {
-  const bootstrapResult = await readAdminProtectedBootstrap<{
-    member: AuthMember
-    profile: Partial<AuthMember>
-  }>(req, "/member/api/v1/adm/members/bootstrap", EDITOR_NEW_ROUTE_PATH)
+  // Playwright/QA는 BACKEND_INTERNAL_URL=127.0.0.1:1 단절 모드에서 cookie 없이
+  // getAdminPageProps(QA bypass)로 editor shell을 띄운다. auth cookie가 없을 때
+  // bootstrap을 호출하면 ApiNetworkError가 GSSP를 500으로 터뜨린다.
+  if (hasServerAuthCookie(req)) {
+    const bootstrapResult = await readAdminProtectedBootstrap<{
+      member: AuthMember
+      profile: Partial<AuthMember>
+    }>(req, "/member/api/v1/adm/members/bootstrap", EDITOR_NEW_ROUTE_PATH)
 
-  if (bootstrapResult.ok) {
-    const { member, profile } = bootstrapResult.value
-    const mergedMember: AuthMember = {
-      ...member,
-      profileImageDirectUrl:
-        profile.profileImageDirectUrl ||
-        profile.profileImageUrl ||
-        member.profileImageDirectUrl ||
-        member.profileImageUrl ||
-        "",
-      profileImageUrl:
-        profile.profileImageUrl ||
-        profile.profileImageDirectUrl ||
-        member.profileImageUrl ||
-        member.profileImageDirectUrl ||
-        "",
-      profileRole: profile.profileRole || member.profileRole || "",
-      profileBio: profile.profileBio || member.profileBio || "",
-      aboutRole: profile.aboutRole || member.aboutRole || "",
-      aboutBio: profile.aboutBio || member.aboutBio || "",
-      aboutDetails: profile.aboutDetails || member.aboutDetails || "",
-      blogTitle: profile.blogTitle || member.blogTitle || "",
-      homeIntroTitle: profile.homeIntroTitle || member.homeIntroTitle || "",
-      homeIntroDescription:
-        profile.homeIntroDescription || member.homeIntroDescription || "",
+    if (bootstrapResult.ok) {
+      const { member, profile } = bootstrapResult.value
+      const mergedMember: AuthMember = {
+        ...member,
+        profileImageDirectUrl:
+          profile.profileImageDirectUrl ||
+          profile.profileImageUrl ||
+          member.profileImageDirectUrl ||
+          member.profileImageUrl ||
+          "",
+        profileImageUrl:
+          profile.profileImageUrl ||
+          profile.profileImageDirectUrl ||
+          member.profileImageUrl ||
+          member.profileImageDirectUrl ||
+          "",
+        profileRole: profile.profileRole || member.profileRole || "",
+        profileBio: profile.profileBio || member.profileBio || "",
+        aboutRole: profile.aboutRole || member.aboutRole || "",
+        aboutBio: profile.aboutBio || member.aboutBio || "",
+        aboutDetails: profile.aboutDetails || member.aboutDetails || "",
+        blogTitle: profile.blogTitle || member.blogTitle || "",
+        homeIntroTitle: profile.homeIntroTitle || member.homeIntroTitle || "",
+        homeIntroDescription:
+          profile.homeIntroDescription || member.homeIntroDescription || "",
+      }
+
+      const initialEditorPost = await fetchInitialEditorPost(req, parseEditorPostId(query.id))
+      const baseProps = buildAdminPagePropsFromMember(mergedMember)
+
+      return {
+        props: {
+          ...baseProps,
+          initialEditorPost,
+        },
+      }
     }
 
-    const initialEditorPost = await fetchInitialEditorPost(req, parseEditorPostId(query.id))
-    const baseProps = buildAdminPagePropsFromMember(mergedMember)
-
-    return {
-      props: {
-        ...baseProps,
-        initialEditorPost,
-      },
-    }
-  }
-
-  if (bootstrapResult.destination) {
-    return {
-      redirect: {
-        destination: bootstrapResult.destination,
-        permanent: false,
-      },
+    if (bootstrapResult.destination) {
+      return {
+        redirect: {
+          destination: bootstrapResult.destination,
+          permanent: false,
+        },
+      }
     }
   }
 

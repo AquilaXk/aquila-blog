@@ -120,7 +120,7 @@ export const serverApiFetchJson = async <T>(
     }
 
     if (error instanceof TypeError) {
-      throw new ApiNetworkError()
+      throw new ApiNetworkError(url)
     }
 
     throw error

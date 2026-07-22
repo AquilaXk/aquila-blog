@@ -103,4 +103,17 @@ test.describe("admin bootstrap state contract", () => {
     expect(profileSource).toContain('name: "admin-profile-workspace"')
     expect(profileSource).toContain('name: "admin-profile-ssr-total"')
   })
+
+  test("editor studio는 auth cookie가 있을 때만 protected bootstrap을 호출하고 없으면 QA guard fallback으로 간다", () => {
+    const editorSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
+      "utf8"
+    )
+
+    expect(editorSource).toContain('import { hasServerAuthCookie } from "src/libs/server/authSession"')
+    expect(editorSource).toContain('"/member/api/v1/adm/members/bootstrap"')
+    expect(editorSource).toContain("if (hasServerAuthCookie(req))")
+    expect(editorSource).toContain("readAdminProtectedBootstrap<{")
+    expect(editorSource).toContain("return await getAdminPageProps(req)")
+  })
 })

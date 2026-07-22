@@ -25,6 +25,48 @@ const filledFenceContent = [
   "outro",
 ].join("\n")
 
+const twoEmptyFences = [
+  "intro",
+  "",
+  "```kotlin",
+  "",
+  "```",
+  "",
+  "```ts",
+  "",
+  "```",
+  "",
+  "outro",
+].join("\n")
+
+const partialHtmlCandidate = [
+  "intro",
+  "",
+  "```kotlin",
+  "fun example() = Unit",
+  "```",
+  "",
+  "```ts",
+  "",
+  "```",
+  "",
+  "outro",
+].join("\n")
+
+const fullPublicCandidate = [
+  "intro",
+  "",
+  "```kotlin",
+  "fun example() = Unit",
+  "```",
+  "",
+  "```ts",
+  "const value = 1",
+  "```",
+  "",
+  "outro",
+].join("\n")
+
 test.describe("editor code fence recovery", () => {
   test("detects visibly empty fenced bodies", () => {
     expect(hasEmptyFencedCodeBlockBody(emptyFenceContent)).toBe(true)
@@ -55,6 +97,49 @@ test.describe("editor code fence recovery", () => {
     expect(result.source).toBe("publicApi")
     expect(result.recovered).toBe(true)
     expect(result.content).toContain("fun example() = Unit")
+  })
+
+  test("empty admin + blank html + public content recovers via publicApi", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: "",
+      contentHtmlBodyCandidate: "",
+      publicContent: filledFenceContent,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("publicApi")
+    expect(result.recovered).toBe(true)
+    expect(result.content).toBe(filledFenceContent)
+  })
+
+  test("partial html recovery prefers publicApi when public fully recovers", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: twoEmptyFences,
+      contentHtmlBodyCandidate: partialHtmlCandidate,
+      publicContent: fullPublicCandidate,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("publicApi")
+    expect(result.recovered).toBe(true)
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(false)
+    expect(result.content).toContain("fun example() = Unit")
+    expect(result.content).toContain("const value = 1")
+  })
+
+  test("complete html recovery uses contentHtml without needing public", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: emptyFenceContent,
+      contentHtmlBodyCandidate: filledFenceContent,
+      publicContent: fullPublicCandidate,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("contentHtml")
+    expect(result.recovered).toBe(true)
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(false)
+    expect(result.content).toContain("fun example() = Unit")
+    expect(result.content).not.toContain("const value = 1")
   })
 
   test("marks unrecovered when PRIVATE-like public fallback is unavailable", () => {

@@ -10,6 +10,7 @@ import { replaceRoute } from "src/libs/router"
 import {
   hasEmptyFencedCodeBlockBody,
   reportCodeFenceRecovery,
+  isCodeFenceRecoveryComplete,
   resolveEditorCodeFenceRecovery,
 } from "./editorCodeFenceRecovery"
 import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
@@ -391,21 +392,23 @@ export const useEditorStudioDraftLifecycle = ({
         resolvedPost.contentHtml
       )
       const needsCodeFenceRecovery =
-        (adminContent.trim().length === 0 && !!resolvedPost.contentHtml) ||
-        hasEmptyFencedCodeBlockBody(adminContent)
+        adminContent.trim().length === 0 || hasEmptyFencedCodeBlockBody(adminContent)
 
       let publicContent: string | undefined
       let publicContentHtml: string | null | undefined
       let publicFallbackSucceeded = false
 
-      // contentHtml 선복원으로 충분하면 공개 API를 호출하지 않는다 (PRIVATE 포함).
+      // contentHtml이 완전 복원(비어 있지 않고 empty fence 없음)일 때만 공개 API를 건너뛴다.
       const htmlFirstRecovery = resolveEditorCodeFenceRecovery({
         adminContent,
         contentHtmlBodyCandidate: htmlRecoverySnapshot.body,
         publicFallbackSucceeded: false,
       })
+      const htmlRecoveryComplete =
+        htmlFirstRecovery.source === "contentHtml" &&
+        isCodeFenceRecoveryComplete(htmlFirstRecovery.content)
 
-      if (needsCodeFenceRecovery && htmlFirstRecovery.source !== "contentHtml") {
+      if (needsCodeFenceRecovery && !htmlRecoveryComplete) {
         try {
           const publicPost = await apiFetch<Pick<PostForEditor, "content" | "contentHtml">>(
             `/post/api/v1/posts/${targetPostId}`

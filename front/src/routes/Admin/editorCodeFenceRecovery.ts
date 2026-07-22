@@ -80,6 +80,10 @@ export const hasEmptyFencedCodeBlockBody = (content: string) =>
     isCodeFenceBodyVisiblyEmpty(block.body)
   )
 
+/** HTML/public recovery is complete only with non-empty content and no empty fences. */
+export const isCodeFenceRecoveryComplete = (content: string) =>
+  content.trim().length > 0 && !hasEmptyFencedCodeBlockBody(content)
+
 export type CodeFenceRecoverySource = "contentHtml" | "publicApi" | "unrecovered" | "none"
 
 export type CodeFenceRecoveryReport = {
@@ -144,6 +148,21 @@ export const applyCandidateCodeFenceRecovery = (
   }
 }
 
+const applyPublicCodeFenceRecovery = (
+  adminContent: string,
+  publicContent: string
+): { content: string; recovered: boolean } => {
+  if (adminContent.trim().length > 0 && publicContent.trim().length > 0) {
+    return applyCandidateCodeFenceRecovery(adminContent, publicContent)
+  }
+
+  return {
+    content: publicContent || adminContent,
+    recovered:
+      (publicContent || "").trim().length > 0 && !hasEmptyFencedCodeBlockBody(publicContent || ""),
+  }
+}
+
 export const resolveEditorCodeFenceRecovery = ({
   adminContent,
   contentHtmlBodyCandidate,
@@ -155,9 +174,9 @@ export const resolveEditorCodeFenceRecovery = ({
   publicContent?: string
   publicFallbackSucceeded: boolean
 }): CodeFenceRecoveryAttempt => {
+  // Empty admin content always needs recovery so public-only restore can run.
   const needsRecovery =
-    (adminContent.trim().length === 0 && contentHtmlBodyCandidate.trim().length > 0) ||
-    hasEmptyFencedCodeBlockBody(adminContent)
+    adminContent.trim().length === 0 || hasEmptyFencedCodeBlockBody(adminContent)
 
   if (!needsRecovery) {
     return {
@@ -169,6 +188,30 @@ export const resolveEditorCodeFenceRecovery = ({
   }
 
   const fromHtml = applyCandidateCodeFenceRecovery(adminContent, contentHtmlBodyCandidate)
+  if (fromHtml.recovered && isCodeFenceRecoveryComplete(fromHtml.content)) {
+    return {
+      content: fromHtml.content,
+      recovered: true,
+      source: "contentHtml",
+    }
+  }
+
+  if (publicFallbackSucceeded && typeof publicContent === "string") {
+    const fromPublic = applyPublicCodeFenceRecovery(adminContent, publicContent)
+
+    if (
+      (fromPublic.recovered || fromPublic.content !== adminContent) &&
+      isCodeFenceRecoveryComplete(fromPublic.content)
+    ) {
+      return {
+        content: fromPublic.content,
+        recovered: true,
+        source: "publicApi",
+      }
+    }
+  }
+
+  // Partial HTML help when public is unavailable or also incomplete.
   if (fromHtml.recovered) {
     return {
       content: fromHtml.content,
@@ -178,15 +221,7 @@ export const resolveEditorCodeFenceRecovery = ({
   }
 
   if (publicFallbackSucceeded && typeof publicContent === "string") {
-    const fromPublic =
-      adminContent.trim().length > 0 && publicContent.trim().length > 0
-        ? applyCandidateCodeFenceRecovery(adminContent, publicContent)
-        : {
-            content: publicContent || adminContent,
-            recovered:
-              (publicContent || "").trim().length > 0 &&
-              !hasEmptyFencedCodeBlockBody(publicContent || ""),
-          }
+    const fromPublic = applyPublicCodeFenceRecovery(adminContent, publicContent)
 
     if (fromPublic.recovered || fromPublic.content !== adminContent) {
       return {

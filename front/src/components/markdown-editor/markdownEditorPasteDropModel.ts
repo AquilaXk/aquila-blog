@@ -147,13 +147,17 @@ export const parseSingleHttpUrl = (text: string): string | null => {
   }
 }
 
+/** Escape characters that break Markdown inline link destinations. */
+export const escapeMarkdownLinkDestination = (url: string): string =>
+  url.replace(/[\\()]/g, "\\$&")
+
 export const planLinkifySelectionWithUrl = (
   selectionStart: number,
   selectionEnd: number,
   selectedText: string,
   url: string
 ): PlannedTextMutation => {
-  const replacement = `[${escapeMarkdownLinkLabel(selectedText)}](${url})`
+  const replacement = `[${escapeMarkdownLinkLabel(selectedText)}](${escapeMarkdownLinkDestination(url)})`
   const cursor = selectionStart + replacement.length
   return {
     rangeStart: selectionStart,

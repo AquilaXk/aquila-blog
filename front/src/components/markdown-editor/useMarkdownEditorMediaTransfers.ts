@@ -128,9 +128,10 @@ export const useMarkdownEditorMediaTransfers = ({
   )
 
   const completeReservedImageUpload = useCallback(
-    async (file: File, placeholder: string) => {
+    async (file: File, placeholder: string, options?: { manageInFlight?: boolean }) => {
       if (!onUploadImage) return
-      setUploadInFlight(1)
+      const manageInFlight = options?.manageInFlight !== false
+      if (manageInFlight) setUploadInFlight(1)
       let uploaded: MarkdownImageUploadResult
       try {
         uploaded = await onUploadImage(file)
@@ -139,7 +140,7 @@ export const useMarkdownEditorMediaTransfers = ({
         reportUploadError(MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE)
         return
       } finally {
-        setUploadInFlight(-1)
+        if (manageInFlight) setUploadInFlight(-1)
       }
 
       const resolved = resolveMarkdownImageEmbed(uploaded, file.name)
@@ -155,9 +156,10 @@ export const useMarkdownEditorMediaTransfers = ({
   )
 
   const completeReservedAttachmentUpload = useCallback(
-    async (file: File, placeholder: string) => {
+    async (file: File, placeholder: string, options?: { manageInFlight?: boolean }) => {
       if (!onUploadFile) return
-      setUploadInFlight(1)
+      const manageInFlight = options?.manageInFlight !== false
+      if (manageInFlight) setUploadInFlight(1)
       let uploaded: MarkdownFileUploadResult
       try {
         uploaded = await onUploadFile(file)
@@ -166,7 +168,7 @@ export const useMarkdownEditorMediaTransfers = ({
         reportUploadError(MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE)
         return
       } finally {
-        setUploadInFlight(-1)
+        if (manageInFlight) setUploadInFlight(-1)
       }
 
       const resolved = resolveMarkdownAttachmentLink(uploaded, file.name)
@@ -182,12 +184,12 @@ export const useMarkdownEditorMediaTransfers = ({
   )
 
   const completeReservedJob = useCallback(
-    async (job: ReservedTransferJob) => {
+    async (job: ReservedTransferJob, options?: { manageInFlight?: boolean }) => {
       if (job.kind === "image") {
-        await completeReservedImageUpload(job.file, job.placeholder)
+        await completeReservedImageUpload(job.file, job.placeholder, options)
         return
       }
-      await completeReservedAttachmentUpload(job.file, job.placeholder)
+      await completeReservedAttachmentUpload(job.file, job.placeholder, options)
     },
     [completeReservedAttachmentUpload, completeReservedImageUpload]
   )
@@ -279,8 +281,16 @@ export const useMarkdownEditorMediaTransfers = ({
         reportUploadError(errors[0])
       }
 
-      for (const job of jobs) {
-        await completeReservedJob(job)
+      if (jobs.length === 0) return
+
+      // Keep onUploadingChange(true) for the whole batch — no false flash between files.
+      setUploadInFlight(jobs.length)
+      try {
+        for (const job of jobs) {
+          await completeReservedJob(job, { manageInFlight: false })
+        }
+      } finally {
+        setUploadInFlight(-jobs.length)
       }
     },
     [
@@ -290,6 +300,7 @@ export const useMarkdownEditorMediaTransfers = ({
       onUploadFile,
       onUploadImage,
       reportUploadError,
+      setUploadInFlight,
     ]
   )
 

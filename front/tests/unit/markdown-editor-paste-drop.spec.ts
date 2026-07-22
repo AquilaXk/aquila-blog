@@ -11,6 +11,7 @@ import {
   listFilesFromDataTransfer,
   parseSingleHttpUrl,
   partitionUploadFiles,
+  escapeMarkdownLinkDestination,
   planAppendAtEnd,
   planLinkifySelectionWithUrl,
   planReplaceExactSubstring,
@@ -150,6 +151,15 @@ test.describe("markdown editor paste/drop model", () => {
     expect(bracketPlan.replacement).toBe("[a\\[b\\]c](https://example.com/x)")
   })
 
+  test("escapes markdown link destinations that contain parentheses", () => {
+    expect(escapeMarkdownLinkDestination("https://example.com/a)")).toBe("https://example.com/a\\)")
+    expect(escapeMarkdownLinkDestination("https://example.com/a(b)")).toBe(
+      "https://example.com/a\\(b\\)"
+    )
+    const plan = planLinkifySelectionWithUrl(0, 4, "docs", "https://example.com/a)")
+    expect(plan.replacement).toBe("[docs](https://example.com/a\\))")
+  })
+
   test("routes multi-file paste through transfer-files and keeps items-only fallback", () => {
     const imageA = makeFile("a.png", "image/png")
     const imageB = makeFile("b.png", "image/png")
@@ -241,6 +251,8 @@ test.describe("markdown editor paste/drop model", () => {
     expect(mediaSource).toContain("completeReservedJob")
     expect(mediaSource).toContain("reportUploadError")
     expect(mediaSource).toContain("clearUploadError: false")
+    expect(mediaSource).toContain("setUploadInFlight(jobs.length)")
+    expect(mediaSource).toContain("manageInFlight: false")
     expect(mediaSource).not.toContain("partitionUploadFiles(files)")
   })
 
@@ -313,6 +325,7 @@ test.describe("markdown editor paste/drop model", () => {
     expect(modelSource).toContain("createUploadPlaceholderId")
     expect(modelSource).toContain("resolvePasteMediaRoute")
     expect(modelSource).toContain("escapeMarkdownLinkLabel")
+    expect(modelSource).toContain("escapeMarkdownLinkDestination")
     expect(modelSource).toContain("planTransferFileReservations")
     expect(rootModelSource).toContain(
       'export { extractImageFileFromClipboard } from "src/components/markdown-editor/markdownEditorPasteDropModel"'

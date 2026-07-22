@@ -16,6 +16,8 @@ on:
       - "COPILOT.md"
       - "docs/**"
       - "tools/guards/check-forbidden-tracked-files.sh"
+      - "tools/guards/check-terraform-no-world-open-sg.sh"
+      - "infra/**"
       - "tools/test/check-forbidden-tracked-files.test.sh"
       - ".github/workflows/**"
 

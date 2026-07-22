@@ -324,6 +324,24 @@ export type CodeFenceRecoveryAttempt = {
   rejectStoredContentHtml: boolean
 }
 
+export const resolveLoadedPostContentHtml = ({
+  postContentHtml,
+  publicContentHtml,
+  fenceRecovery,
+}: {
+  postContentHtml?: string | null
+  publicContentHtml?: string | null
+  fenceRecovery: Pick<CodeFenceRecoveryAttempt, "source" | "rejectStoredContentHtml">
+}) => {
+  if (fenceRecovery.rejectStoredContentHtml) {
+    return publicContentHtml ?? null
+  }
+  if (fenceRecovery.source === "contentHtml") {
+    return postContentHtml ?? null
+  }
+  return publicContentHtml ?? postContentHtml ?? null
+}
+
 declare global {
   interface Window {
     __AQUILA_CODE_FENCE_RECOVERY__?: Array<CodeFenceRecoveryReport & { at: string; path: string }>

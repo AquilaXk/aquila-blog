@@ -8,6 +8,7 @@ import {
   isCandidateInSyncWithAdmin,
   isContentHtmlRecoveryTrustworthy,
   resolveEditorCodeFenceRecovery,
+  resolveLoadedPostContentHtml,
   shouldFetchPublicContentForCodeFenceRecovery,
 } from "../../src/routes/Admin/editorCodeFenceRecovery"
 
@@ -627,5 +628,54 @@ test.describe("editor code fence recovery", () => {
         publicFallbackSucceeded: true,
       })
     ).toBe(false)
+  })
+
+  test("resolveLoadedPostContentHtml keeps admin contentHtml when recovery source is contentHtml", () => {
+    expect(
+      resolveLoadedPostContentHtml({
+        postContentHtml: "<pre>admin html</pre>",
+        publicContentHtml: "<pre>public html</pre>",
+        fenceRecovery: {
+          source: "contentHtml",
+          rejectStoredContentHtml: false,
+        },
+      })
+    ).toBe("<pre>admin html</pre>")
+  })
+
+  test("resolveLoadedPostContentHtml prefers public html when recovery rejects stored html", () => {
+    expect(
+      resolveLoadedPostContentHtml({
+        postContentHtml: "<pre>stale html</pre>",
+        publicContentHtml: "<pre>public html</pre>",
+        fenceRecovery: {
+          source: "unrecovered",
+          rejectStoredContentHtml: true,
+        },
+      })
+    ).toBe("<pre>public html</pre>")
+  })
+
+  test("trusts html recovery when public markdown is derived from contentHtml only", () => {
+    expect(
+      isContentHtmlRecoveryTrustworthy({
+        adminContent: emptyFenceContent,
+        contentHtmlBodyCandidate: filledFenceContent,
+        htmlRecoveredContent: filledFenceContent,
+        publicContent: filledFenceContent,
+        publicFallbackSucceeded: true,
+      })
+    ).toBe(true)
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: emptyFenceContent,
+      contentHtmlBodyCandidate: filledFenceContent,
+      publicContent: filledFenceContent,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("contentHtml")
+    expect(result.recovered).toBe(true)
+    expect(result.rejectStoredContentHtml).toBe(false)
   })
 })

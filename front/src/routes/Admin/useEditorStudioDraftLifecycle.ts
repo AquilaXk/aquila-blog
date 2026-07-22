@@ -12,6 +12,7 @@ import {
   adminContentNeedsCodeFenceRecovery,
   reportCodeFenceRecovery,
   resolveEditorCodeFenceRecovery,
+  resolveLoadedPostContentHtml,
   shouldFetchPublicContentForCodeFenceRecovery,
 } from "./editorCodeFenceRecovery"
 import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
@@ -408,10 +409,14 @@ export const useEditorStudioDraftLifecycle = ({
           const publicPost = await apiFetch<Pick<PostForEditor, "content" | "contentHtml">>(
             `/post/api/v1/posts/${normalizedTargetPostId}`
           )
-          if ((publicPost.content ?? "").trim().length > 0 || publicPost.contentHtml) {
+          publicContentHtml = publicPost.contentHtml
+          const trimmedPublicMarkdown = (publicPost.content ?? "").trim()
+          if (trimmedPublicMarkdown.length > 0) {
             publicContent = publicPost.content ?? ""
-            publicContentHtml = publicPost.contentHtml
             publicFallbackSucceeded = true
+          } else if (publicPost.contentHtml?.trim()) {
+            publicContent = resolveEditorMetaSnapshot("", publicPost.contentHtml).body
+            publicFallbackSucceeded = publicContent.trim().length > 0
           }
         } catch {
           // 비공개/삭제 글 등 공개 읽기 폴백이 불가능한 경우 contentHtml 결과만 사용한다.
@@ -438,9 +443,11 @@ export const useEditorStudioDraftLifecycle = ({
       resolvedPost = {
         ...post,
         content: fenceRecovery.content,
-        contentHtml: fenceRecovery.rejectStoredContentHtml
-          ? (publicContentHtml ?? null)
-          : (publicContentHtml ?? post.contentHtml),
+        contentHtml: resolveLoadedPostContentHtml({
+          postContentHtml: post.contentHtml,
+          publicContentHtml,
+          fenceRecovery,
+        }),
       }
 
       const rawSnapshot = resolveEditorMetaSnapshot(

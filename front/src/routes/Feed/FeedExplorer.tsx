@@ -139,12 +139,20 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     isFetchNextPageErrorRef.current = isFetchNextPageError
   }, [isFetchNextPageError])
 
+  const closeSortMenu = useCallback((restoreTriggerFocus: boolean) => {
+    setSortOpen(false)
+    if (!restoreTriggerFocus) return
+    window.requestAnimationFrame(() => {
+      sortTriggerRef.current?.focus()
+    })
+  }, [])
+
   useEffect(() => {
     if (!sortOpen) return
 
     const handlePointerDown = (event: PointerEvent) => {
       if (sortMenuRef.current?.contains(event.target as Node)) return
-      setSortOpen(false)
+      closeSortMenu(true)
     }
 
     document.addEventListener("pointerdown", handlePointerDown)
@@ -155,7 +163,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
       document.removeEventListener("pointerdown", handlePointerDown)
       window.cancelAnimationFrame(frameId)
     }
-  }, [sortOpen])
+  }, [closeSortMenu, sortOpen])
 
   useEffect(() => {
     restoreSnapshotRef.current = {
@@ -489,20 +497,19 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
   const currentSortLabel =
     FEED_SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? "최신순"
 
-  const closeSortMenu = useCallback((restoreTriggerFocus: boolean) => {
-    setSortOpen(false)
-    if (!restoreTriggerFocus) return
-    window.requestAnimationFrame(() => {
-      sortTriggerRef.current?.focus()
-    })
-  }, [])
-
   const handleSortSelect = useCallback(
     (value: FeedSortMode) => {
+      if (value !== sortMode) {
+        // Drop restore intent so a deep latest scrollY is not reapplied after sort change,
+        // and reset viewport so ranked/latest list swaps do not land on an empty region.
+        restoreStateRef.current = null
+        hasRestoredScrollRef.current = true
+        window.scrollTo({ top: 0, behavior: "auto" })
+      }
       setSortMode(value)
       closeSortMenu(true)
     },
-    [closeSortMenu]
+    [closeSortMenu, sortMode]
   )
 
   const openSortMenu = useCallback((activeIndex: number) => {

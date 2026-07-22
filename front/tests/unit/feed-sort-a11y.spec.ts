@@ -1,10 +1,17 @@
 import { expect, test } from "@playwright/test"
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import {
   buildExploreCursorPath,
   buildFeedCursorPath,
   buildFeedPath,
 } from "../../src/apis/backend/posts/PostApiRequestModel"
 import { queryKey } from "../../src/constants/queryKey"
+import {
+  EXPLORE_POSTS_LATEST_STALE_TIME_MS,
+  EXPLORE_POSTS_RANKED_STALE_TIME_MS,
+  resolveExplorePostsQueryFreshness,
+} from "../../src/hooks/explorePostsQueryFreshness"
 import {
   FEED_SORT_OPTIONS,
   feedSortOptionId,
@@ -46,6 +53,39 @@ test.describe("feed server sort params", () => {
     expect(shouldRestoreFeedExplorerSession("latest")).toBe(true)
     expect(shouldRestoreFeedExplorerSession("views")).toBe(false)
     expect(shouldRestoreFeedExplorerSession("likes")).toBe(false)
+  })
+
+  test("ranked views/likes use shorter staleTime and remount/focus refetch", () => {
+    expect(resolveExplorePostsQueryFreshness("latest")).toEqual({
+      staleTime: EXPLORE_POSTS_LATEST_STALE_TIME_MS,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    })
+    expect(resolveExplorePostsQueryFreshness("views")).toEqual({
+      staleTime: EXPLORE_POSTS_RANKED_STALE_TIME_MS,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+    })
+    expect(resolveExplorePostsQueryFreshness("likes")).toEqual({
+      staleTime: EXPLORE_POSTS_RANKED_STALE_TIME_MS,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+    })
+    expect(EXPLORE_POSTS_RANKED_STALE_TIME_MS).toBeLessThan(EXPLORE_POSTS_LATEST_STALE_TIME_MS)
+  })
+
+  test("sort change resets viewport and outside click restores trigger focus", () => {
+    const feedExplorerSource = readFileSync(
+      path.join(__dirname, "../../src/routes/Feed/FeedExplorer.tsx"),
+      "utf8"
+    )
+    expect(feedExplorerSource).toContain("closeSortMenu(true)")
+    expect(feedExplorerSource).toContain("window.scrollTo({ top: 0, behavior: \"auto\" })")
+    expect(feedExplorerSource).toContain("restoreStateRef.current = null")
+    expect(feedExplorerSource).toContain("hasRestoredScrollRef.current = true")
+    expect(feedExplorerSource).not.toMatch(
+      /handlePointerDown[\s\S]*?setSortOpen\(false\)/
+    )
   })
 })
 

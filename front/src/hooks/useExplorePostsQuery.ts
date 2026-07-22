@@ -13,6 +13,7 @@ import { queryKey } from "src/constants/queryKey"
 import { normalizeKeywordQuery, normalizeOptionalTagQuery } from "src/libs/query/normalize"
 import { TPost } from "src/types"
 import { useMemo } from "react"
+import { resolveExplorePostsQueryFreshness } from "./explorePostsQueryFreshness"
 
 type Params = {
   kw: string
@@ -41,6 +42,7 @@ const useExplorePostsQuery = ({
   const feedMode = normalizedKw.length === 0 && !normalizedTag
   const normalizedSortMode: FeedSortMode =
     sortMode === "views" || sortMode === "likes" ? sortMode : "latest"
+  const queryFreshness = resolveExplorePostsQueryFreshness(normalizedSortMode)
 
   const query = useInfiniteQuery({
     enabled,
@@ -118,10 +120,10 @@ const useExplorePostsQuery = ({
         signal: signal ?? undefined,
       })
     },
-    staleTime: 300_000,
+    staleTime: queryFreshness.staleTime,
     retry: 1,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    refetchOnMount: queryFreshness.refetchOnMount,
+    refetchOnWindowFocus: queryFreshness.refetchOnWindowFocus,
     refetchOnReconnect: false,
     initialPageParam: normalizedKw.length > 0 ? OFFSET_INITIAL_PAGE_PARAM : null,
     getNextPageParam: (lastPage) => {

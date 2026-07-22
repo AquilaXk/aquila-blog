@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -36,6 +37,25 @@ export const LOCAL_DRAFT_BASELINE_SETTLE_LOADING_KEYS = new Set([
 
 export const isLocalDraftBaselineSettleLoadingKey = (loadingKey: string): boolean =>
   LOCAL_DRAFT_BASELINE_SETTLE_LOADING_KEYS.has(loadingKey)
+
+/**
+ * Adopt baseline when a success signal is pending and loading is idle.
+ * Do not require a wasLoading→idle transition from a baseline loadingKey —
+ * a non-baseline key (e.g. uploadThumbnail) can clear loading first while
+ * postOne is still in flight, leaving no transition when the load finishes.
+ */
+export const resolveLocalDraftShouldAdoptBaseline = (input: {
+  loadingKey: string
+  pendingSuccessfulBaseline: boolean
+}): boolean => input.loadingKey.length === 0 && input.pendingSuccessfulBaseline
+
+export type LocalDraftBaselineReadySignal = {
+  /**
+   * Write/publish request snapshot to arm as baseline. Omit on post-load settle so
+   * the latest editor (server content) becomes the baseline.
+   */
+  baselineFingerprint?: string
+}
 
 /**
  * ID field edits switch editorMode to create while keeping the previous body and a
@@ -79,6 +99,12 @@ export type LocalDraftAutosaveDecisionInput = {
    */
   shouldAdoptBaseline: boolean
   /**
+   * Write/publish request snapshot. When set on baseline adopt, arm this fingerprint
+   * instead of the latest editor so in-flight title/summary/tags edits stay dirty.
+   * Null/undefined means adopt `editorFingerprint` (post-load settle).
+   */
+  baselineFingerprint?: string | null
+  /**
    * True while post-id field transition keeps create mode with a pending postId.
    * Blocks create-slot autosave of foreign edit body until load settles.
    */
@@ -96,12 +122,13 @@ export type LocalDraftAutosaveDecisionInput = {
 export type LocalDraftAutosaveDecision =
   | { action: "skip" }
   | { action: "adopt-baseline"; fingerprint: string }
+  | { action: "adopt-baseline-and-schedule"; fingerprint: string }
   | { action: "schedule" }
 
 /**
- * Decide whether autosave should write, adopt the editor as a non-persist baseline,
- * or stay idle. Callers must apply `adopt-baseline` to lastArmedFingerprint without
- * writing storage.
+ * Decide whether autosave should write, adopt a non-persist baseline, or stay idle.
+ * Callers must apply `adopt-baseline` / `adopt-baseline-and-schedule` to
+ * lastArmedFingerprint without treating the adopt itself as a storage write.
  */
 export const decideLocalDraftAutosave = (
   input: LocalDraftAutosaveDecisionInput
@@ -110,10 +137,15 @@ export const decideLocalDraftAutosave = (
     return { action: "skip" }
   }
 
-  // After successful post load / publish settles: arm baseline to current editor so we
-  // neither overwrite a restorable draft with server content nor recreate a cleared slot.
+  // After successful post load / write settles: arm baseline so we neither overwrite a
+  // restorable draft with server content nor recreate a cleared slot. Prefer the request
+  // snapshot when provided — in-flight editor edits must stay dirty and reschedule.
   if (input.shouldAdoptBaseline) {
-    return { action: "adopt-baseline", fingerprint: input.editorFingerprint }
+    const baseline = input.baselineFingerprint ?? input.editorFingerprint
+    if (baseline !== input.editorFingerprint) {
+      return { action: "adopt-baseline-and-schedule", fingerprint: baseline }
+    }
+    return { action: "adopt-baseline", fingerprint: baseline }
   }
 
   // ID-change create transition: do not autosave previous edit body into create.v2.
@@ -244,6 +276,8 @@ export const useEditorStudioLocalDraftLifecycle = ({
   const postVersionRef = useRef(postVersion)
   postVersionRef.current = postVersion
   const pendingSuccessfulBaselineSettleRef = useRef(false)
+  const pendingBaselineFingerprintRef = useRef<string | null>(null)
+  const [baselineReadyEpoch, setBaselineReadyEpoch] = useState(0)
   const isPostIdTransitionGated = isLocalDraftAutosaveGatedForPostIdTransition(
     editorMode,
     postId
@@ -251,8 +285,13 @@ export const useEditorStudioLocalDraftLifecycle = ({
   const isPostIdTransitionGatedRef = useRef(isPostIdTransitionGated)
   isPostIdTransitionGatedRef.current = isPostIdTransitionGated
 
-  const signalLocalDraftBaselineReady = useCallback(() => {
+  const signalLocalDraftBaselineReady = useCallback((signal?: LocalDraftBaselineReadySignal) => {
     pendingSuccessfulBaselineSettleRef.current = true
+    pendingBaselineFingerprintRef.current =
+      typeof signal?.baselineFingerprint === "string" ? signal.baselineFingerprint : null
+    // Force the autosave effect to re-run even when loadingKey is already idle
+    // (non-baseline keys may have cleared it before this success signal).
+    setBaselineReadyEpoch((value) => value + 1)
   }, [])
 
   const localDraftCore = useMemo(
@@ -495,24 +534,17 @@ export const useEditorStudioLocalDraftLifecycle = ({
     setLocalDraftSlotLabel,
   ])
 
-  const wasLoadingRef = useRef(loadingKey.length > 0)
-  const lastNonEmptyLoadingKeyRef = useRef(loadingKey)
-
   useEffect(() => {
-    if (loadingKey.length > 0) {
-      lastNonEmptyLoadingKeyRef.current = loadingKey
-    }
-    const wasLoading = wasLoadingRef.current
-    const isLoading = loadingKey.length > 0
-    wasLoadingRef.current = isLoading
-    const settledBaselineKey =
-      wasLoading &&
-      !isLoading &&
-      isLocalDraftBaselineSettleLoadingKey(lastNonEmptyLoadingKeyRef.current)
-    const shouldAdoptBaseline =
-      settledBaselineKey && pendingSuccessfulBaselineSettleRef.current
-    if (wasLoading && !isLoading) {
+    const shouldAdoptBaseline = resolveLocalDraftShouldAdoptBaseline({
+      loadingKey,
+      pendingSuccessfulBaseline: pendingSuccessfulBaselineSettleRef.current,
+    })
+    const baselineFingerprint = shouldAdoptBaseline
+      ? pendingBaselineFingerprintRef.current
+      : null
+    if (shouldAdoptBaseline) {
       pendingSuccessfulBaselineSettleRef.current = false
+      pendingBaselineFingerprintRef.current = null
     }
 
     const hasDraftContent =
@@ -545,6 +577,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
     const decision = decideLocalDraftAutosave({
       loadingKey,
       shouldAdoptBaseline,
+      baselineFingerprint,
       isPostIdTransitionGated,
       hasDraftContent,
       editorFingerprint: localDraftFingerprint,
@@ -556,9 +589,14 @@ export const useEditorStudioLocalDraftLifecycle = ({
       return
     }
 
-    if (decision.action === "adopt-baseline") {
+    if (
+      decision.action === "adopt-baseline" ||
+      decision.action === "adopt-baseline-and-schedule"
+    ) {
       lastLocalDraftFingerprintRef.current = decision.fingerprint
-      return
+      if (decision.action === "adopt-baseline") {
+        return
+      }
     }
 
     const expectedSource = draftSource
@@ -570,6 +608,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
       window.clearTimeout(timerId)
     }
   }, [
+    baselineReadyEpoch,
     buildLocalDraftFingerprint,
     dedupeStrings,
     draftSource,

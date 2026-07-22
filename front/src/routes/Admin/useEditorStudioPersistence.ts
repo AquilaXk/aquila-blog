@@ -9,7 +9,10 @@ import { normalizeCategoryValue } from "src/libs/utils"
 import { resolveEditorFailureRecovery } from "./editorFailureRecoveryModel"
 import { buildLocalDraftFingerprint } from "./editorStudioMetaModel"
 import { isTempDraftTitlePlaceholder } from "./editorTempDraft"
-import { resolveCreateWritePostId } from "./useEditorStudioDraftLifecycleModel"
+import {
+  resolveCreateWritePostId,
+  type LocalDraftBaselineReadySignal,
+} from "./useEditorStudioDraftLifecycleModel"
 import { useEditorStudioPersistenceUploads } from "./useEditorStudioPersistenceModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
@@ -60,10 +63,10 @@ const armLocalDraftFingerprintBaseline = (
     visibility: PostVisibility
   },
   dedupeStrings: (items: string[]) => string[]
-) => {
-  // After successful publish/modify/clear: baseline to current editor so autosave
-  // does not recreate the removed slot until the user edits again.
-  lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
+): string => {
+  // Arm the *request* snapshot as baseline. In-flight title/summary/tags edits must
+  // stay dirty so autosave can recreate the cleared slot after write settle.
+  const fingerprint = buildLocalDraftFingerprint({
     title: payload.title,
     content: payload.content,
     summary: payload.summary,
@@ -75,6 +78,8 @@ const armLocalDraftFingerprintBaseline = (
     category: payload.category ? normalizeCategoryValue(payload.category) : "",
     visibility: payload.visibility,
   })
+  lastLocalDraftFingerprintRef.current = fingerprint
+  return fingerprint
 }
 
 type UseEditorStudioPersistenceParams = {
@@ -131,7 +136,7 @@ type UseEditorStudioPersistenceParams = {
   pretty: (value: unknown) => string
   generateIdempotencyKey: () => string
   removeLocalDraft: (source: { kind: "create" } | { kind: "post"; postId: string }) => void
-  signalLocalDraftBaselineReady: () => void
+  signalLocalDraftBaselineReady: (signal?: LocalDraftBaselineReadySignal) => void
   uploadWithConflictRetry: <T>(requestUpload: () => Promise<Response>) => Promise<Response>
   normalizeSafeImageUrl: (raw: string) => string
   extractImageFileFromClipboard: (clipboardData: DataTransfer | null) => File | null
@@ -311,23 +316,24 @@ export const useEditorStudioPersistence = ({
             : "비공개"
 
       removeLocalDraft({ kind: "create" })
-      armLocalDraftFingerprintBaseline(
-        lastLocalDraftFingerprintRef,
-        {
-          title: postTitle,
-          content: currentPostContent,
-          summary: postSummary,
-          thumbnailUrl: postThumbnailUrl,
-          thumbnailFocusX: postThumbnailFocusX,
-          thumbnailFocusY: postThumbnailFocusY,
-          thumbnailZoom: postThumbnailZoom,
-          tags: postTags,
-          category: postCategory,
-          visibility: postVisibility,
-        },
-        dedupeStrings
-      )
-      signalLocalDraftBaselineReady()
+      signalLocalDraftBaselineReady({
+        baselineFingerprint: armLocalDraftFingerprintBaseline(
+          lastLocalDraftFingerprintRef,
+          {
+            title: postTitle,
+            content: currentPostContent,
+            summary: postSummary,
+            thumbnailUrl: postThumbnailUrl,
+            thumbnailFocusX: postThumbnailFocusX,
+            thumbnailFocusY: postThumbnailFocusY,
+            thumbnailZoom: postThumbnailZoom,
+            tags: postTags,
+            category: postCategory,
+            visibility: postVisibility,
+          },
+          dedupeStrings
+        ),
+      })
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
 
@@ -463,23 +469,24 @@ export const useEditorStudioPersistence = ({
       })
       await refreshPublicPostReadViews(postId)
       removeLocalDraft({ kind: "post", postId: postId.trim() })
-      armLocalDraftFingerprintBaseline(
-        lastLocalDraftFingerprintRef,
-        {
-          title: postTitle,
-          content: currentPostContent,
-          summary: postSummary,
-          thumbnailUrl: postThumbnailUrl,
-          thumbnailFocusX: postThumbnailFocusX,
-          thumbnailFocusY: postThumbnailFocusY,
-          thumbnailZoom: postThumbnailZoom,
-          tags: postTags,
-          category: postCategory,
-          visibility: postVisibility,
-        },
-        dedupeStrings
-      )
-      signalLocalDraftBaselineReady()
+      signalLocalDraftBaselineReady({
+        baselineFingerprint: armLocalDraftFingerprintBaseline(
+          lastLocalDraftFingerprintRef,
+          {
+            title: postTitle,
+            content: currentPostContent,
+            summary: postSummary,
+            thumbnailUrl: postThumbnailUrl,
+            thumbnailFocusX: postThumbnailFocusX,
+            thumbnailFocusY: postThumbnailFocusY,
+            thumbnailZoom: postThumbnailZoom,
+            tags: postTags,
+            category: postCategory,
+            visibility: postVisibility,
+          },
+          dedupeStrings
+        ),
+      })
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
@@ -604,23 +611,24 @@ export const useEditorStudioPersistence = ({
       await refreshPublicPostReadViews(postId)
       // Temp posts autosave into the post slot; do not wipe an unrelated create-slot draft.
       removeLocalDraft({ kind: "post", postId: postId.trim() })
-      armLocalDraftFingerprintBaseline(
-        lastLocalDraftFingerprintRef,
-        {
-          title: postTitle,
-          content: currentPostContent,
-          summary: postSummary,
-          thumbnailUrl: postThumbnailUrl,
-          thumbnailFocusX: postThumbnailFocusX,
-          thumbnailFocusY: postThumbnailFocusY,
-          thumbnailZoom: postThumbnailZoom,
-          tags: postTags,
-          category: postCategory,
-          visibility: postVisibility,
-        },
-        dedupeStrings
-      )
-      signalLocalDraftBaselineReady()
+      signalLocalDraftBaselineReady({
+        baselineFingerprint: armLocalDraftFingerprintBaseline(
+          lastLocalDraftFingerprintRef,
+          {
+            title: postTitle,
+            content: currentPostContent,
+            summary: postSummary,
+            thumbnailUrl: postThumbnailUrl,
+            thumbnailFocusX: postThumbnailFocusX,
+            thumbnailFocusY: postThumbnailFocusY,
+            thumbnailZoom: postThumbnailZoom,
+            tags: postTags,
+            category: postCategory,
+            visibility: postVisibility,
+          },
+          dedupeStrings
+        ),
+      })
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: "새 글 작성이 완료되었습니다." }, "page")

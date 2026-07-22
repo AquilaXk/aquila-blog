@@ -22,6 +22,7 @@ import {
   isLocalDraftAutosaveGatedForPostIdTransition,
   isLocalDraftBaselineSettleLoadingKey,
   resolveCreateWritePostId,
+  resolveLocalDraftShouldAdoptBaseline,
 } from "../../src/routes/Admin/useEditorStudioDraftLifecycleModel"
 
 const createStorage = (): Storage => {
@@ -514,6 +515,80 @@ test.describe("editor local draft context slots", () => {
         pendingRestorableDraftFingerprint: null,
       })
     ).toEqual({ action: "adopt-baseline", fingerprint: dirtyFingerprint })
+  })
+
+  test("write settle adopts request fingerprint and schedules when editor diverged in flight", () => {
+    const requestFingerprint = '{"title":"published-request"}'
+    const inFlightEditFingerprint = '{"title":"edited-while-publishing"}'
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: true,
+        baselineFingerprint: requestFingerprint,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: inFlightEditFingerprint,
+        lastArmedFingerprint: requestFingerprint,
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({
+      action: "adopt-baseline-and-schedule",
+      fingerprint: requestFingerprint,
+    })
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: true,
+        baselineFingerprint: requestFingerprint,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: requestFingerprint,
+        lastArmedFingerprint: "",
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "adopt-baseline", fingerprint: requestFingerprint })
+  })
+
+  test("load baseline adopts after success signal even when a non-baseline loadingKey raced idle first", () => {
+    // uploadThumbnail (or any non-baseline key) can clear loadingKey before postOne
+    // finishes. Adoption must still arm once the success signal is pending and idle.
+    expect(
+      resolveLocalDraftShouldAdoptBaseline({
+        loadingKey: "uploadThumbnail",
+        pendingSuccessfulBaseline: true,
+      })
+    ).toBe(false)
+
+    expect(
+      resolveLocalDraftShouldAdoptBaseline({
+        loadingKey: "",
+        pendingSuccessfulBaseline: false,
+      })
+    ).toBe(false)
+
+    expect(
+      resolveLocalDraftShouldAdoptBaseline({
+        loadingKey: "",
+        pendingSuccessfulBaseline: true,
+      })
+    ).toBe(true)
+
+    const serverFingerprint = '{"title":"server-loaded"}'
+    const draftFingerprint = '{"title":"local-draft"}'
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: true,
+        baselineFingerprint: null,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: serverFingerprint,
+        lastArmedFingerprint: "",
+        pendingRestorableDraftFingerprint: draftFingerprint,
+      })
+    ).toEqual({ action: "adopt-baseline", fingerprint: serverFingerprint })
   })
 
   test("failed load/publish settle does not adopt baseline without success signal", () => {

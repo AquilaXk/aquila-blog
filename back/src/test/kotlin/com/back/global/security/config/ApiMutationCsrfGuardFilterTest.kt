@@ -1,5 +1,6 @@
 package com.back.global.security.config
 
+import com.back.global.web.ErrorResponseWriterTestSupport
 import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -11,7 +12,6 @@ import org.springframework.mock.env.MockEnvironment
 import org.springframework.mock.web.MockFilterChain
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
-import tools.jackson.databind.ObjectMapper
 
 @DisplayName("ApiMutationCsrfGuardFilter 테스트")
 class ApiMutationCsrfGuardFilterTest {
@@ -120,6 +120,6 @@ class ApiMutationCsrfGuardFilterTest {
                     siteBackUrl = "https://api.aquilaxk.site",
                     siteCookieDomain = "aquilaxk.site",
                 ),
-            objectMapper = ObjectMapper(),
+            errorResponseWriter = ErrorResponseWriterTestSupport.createWriter(),
         )
 }

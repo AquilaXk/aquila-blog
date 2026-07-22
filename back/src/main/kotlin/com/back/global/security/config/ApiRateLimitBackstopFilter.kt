@@ -2,6 +2,8 @@ package com.back.global.security.config
 
 import com.back.global.cache.application.port.output.RedisKeyValuePort
 import com.back.global.exception.application.ErrorCode
+import com.back.global.web.ErrorResponseSource
+import com.back.global.web.ErrorResponseWriter
 import com.back.global.web.application.ClientIpResolver
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.servlet.FilterChain
@@ -12,8 +14,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import org.springframework.core.env.Environment
-import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import java.time.Duration
@@ -25,6 +25,7 @@ class ApiRateLimitBackstopFilter(
     private val redisKeyValuePortProvider: ObjectProvider<RedisKeyValuePort>,
     private val clientIpResolverProvider: ObjectProvider<ClientIpResolver>,
     private val meterRegistryProvider: ObjectProvider<MeterRegistry>,
+    private val errorResponseWriter: ErrorResponseWriter,
     private val environment: Environment,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
     @param:Value("\${custom.security.apiRateLimit.enabled:true}")
@@ -68,7 +69,7 @@ class ApiRateLimitBackstopFilter(
         val redisKeyValuePort = redisKeyValuePortProvider.getIfAvailable()
         if (redisKeyValuePort == null || !redisKeyValuePort.isAvailable()) {
             if (shouldFailClosedWithoutRedis()) {
-                writeUnavailable(response)
+                writeUnavailable(request, response)
                 record(bucket.name, "redis-unavailable")
                 return
             }
@@ -81,7 +82,7 @@ class ApiRateLimitBackstopFilter(
         val count = redisKeyValuePort.increment(key)
         if (count == null) {
             if (shouldFailClosedWithoutRedis()) {
-                writeUnavailable(response)
+                writeUnavailable(request, response)
                 record(bucket.name, "redis-unavailable")
                 return
             }
@@ -93,7 +94,7 @@ class ApiRateLimitBackstopFilter(
             val ttlApplied = redisKeyValuePort.expire(key, WINDOW)
             if (!ttlApplied) {
                 if (shouldFailClosedWithoutRedis()) {
-                    writeUnavailable(response)
+                    writeUnavailable(request, response)
                     record(bucket.name, "redis-unavailable")
                     return
                 }
@@ -104,7 +105,7 @@ class ApiRateLimitBackstopFilter(
         }
 
         if (count > bucket.limit.toLong()) {
-            writeTooManyRequests(response, bucket.name)
+            writeTooManyRequests(request, response)
             record(bucket.name, "rejected")
             meterRegistryProvider.getIfAvailable()?.counter("api_rate_limit_rejected_total", "bucket", bucket.name)?.increment()
             return
@@ -168,26 +169,29 @@ class ApiRateLimitBackstopFilter(
     private fun sanitizeKeyToken(raw: String): String = raw.replace(Regex("[^A-Za-z0-9:._-]"), "_").take(96)
 
     private fun writeTooManyRequests(
+        request: HttpServletRequest,
         response: HttpServletResponse,
-        bucket: String,
     ) {
-        val body = ErrorCode.API_RATE_LIMITED.toRsData()
-        response.status = ErrorCode.API_RATE_LIMITED.status.value()
-        response.setHeader(HttpHeaders.RETRY_AFTER, WINDOW.seconds.toString())
-        response.contentType = MediaType.APPLICATION_JSON_VALUE
-        response.characterEncoding = Charsets.UTF_8.name()
-        response.writer.write(
-            """{"resultCode":"${body.resultCode}","msg":"${body.msg}","bucket":"$bucket"}""",
+        errorResponseWriter.write(
+            request = request,
+            response = response,
+            errorCode = ErrorCode.API_RATE_LIMITED,
+            source = ErrorResponseSource.FILTER,
+            retryAfterSeconds = WINDOW.seconds,
         )
     }
 
-    private fun writeUnavailable(response: HttpServletResponse) {
-        val body = ErrorCode.API_PROTECTION_NOT_READY.toRsData()
-        response.status = ErrorCode.API_PROTECTION_NOT_READY.status.value()
-        response.setHeader(HttpHeaders.RETRY_AFTER, "5")
-        response.contentType = MediaType.APPLICATION_JSON_VALUE
-        response.characterEncoding = Charsets.UTF_8.name()
-        response.writer.write("""{"resultCode":"${body.resultCode}","msg":"${body.msg}"}""")
+    private fun writeUnavailable(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ) {
+        errorResponseWriter.write(
+            request = request,
+            response = response,
+            errorCode = ErrorCode.API_PROTECTION_NOT_READY,
+            source = ErrorResponseSource.FILTER,
+            retryAfterSeconds = 5,
+        )
     }
 
     private fun record(

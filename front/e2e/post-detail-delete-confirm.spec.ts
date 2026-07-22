@@ -3,9 +3,39 @@ import { DESKTOP_VIEWPORT } from "./helpers/adaptivityFixtures"
 import { ADMIN_MEMBER_FIXTURE, mockAvatarAsset } from "./helpers/mobileLayoutFixtures"
 
 const POST_ID = 1253
+const OTHER_POST_ID = 1254
 const POST_TITLE = "상세 삭제 ConfirmDialog E2E"
+const OTHER_POST_TITLE = "다른 글 상세"
 
-const mockDeletablePostDetail = async (page: Page) => {
+const postDetailFixture = (id: number, title: string) => ({
+  id,
+  createdAt: "2026-07-22T00:00:00Z",
+  modifiedAt: "2026-07-22T00:00:00Z",
+  authorId: 1,
+  authorName: "관리자",
+  authorUsername: "aquila",
+  authorProfileImageDirectUrl: "/avatar.png",
+  title,
+  content: "본문",
+  tags: ["삭제테스트"],
+  category: [],
+  published: true,
+  listed: true,
+  likesCount: 0,
+  commentsCount: 0,
+  hitCount: 1,
+  actorHasLiked: false,
+  actorCanModify: true,
+  actorCanDelete: true,
+})
+
+const mockDeletablePostDetail = async (
+  page: Page,
+  options?: { postId?: number; title?: string }
+) => {
+  const postId = options?.postId ?? POST_ID
+  const title = options?.title ?? POST_TITLE
+
   await mockAvatarAsset(page)
 
   await page.route("**/member/api/v1/auth/me", async (route) => {
@@ -16,7 +46,7 @@ const mockDeletablePostDetail = async (page: Page) => {
     })
   })
 
-  await page.route(`**/post/api/v1/posts/${POST_ID}`, async (route) => {
+  await page.route(`**/post/api/v1/posts/${postId}`, async (route) => {
     if (route.request().method() === "DELETE") {
       await route.continue()
       return
@@ -25,31 +55,11 @@ const mockDeletablePostDetail = async (page: Page) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        id: POST_ID,
-        createdAt: "2026-07-22T00:00:00Z",
-        modifiedAt: "2026-07-22T00:00:00Z",
-        authorId: 1,
-        authorName: "관리자",
-        authorUsername: "aquila",
-        authorProfileImageDirectUrl: "/avatar.png",
-        title: POST_TITLE,
-        content: "본문",
-        tags: ["삭제테스트"],
-        category: [],
-        published: true,
-        listed: true,
-        likesCount: 0,
-        commentsCount: 0,
-        hitCount: 1,
-        actorHasLiked: false,
-        actorCanModify: true,
-        actorCanDelete: true,
-      }),
+      body: JSON.stringify(postDetailFixture(postId, title)),
     })
   })
 
-  await page.route(`**/post/api/v1/posts/${POST_ID}/hit`, async (route) => {
+  await page.route(`**/post/api/v1/posts/${postId}/hit`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -161,5 +171,39 @@ test.describe("post detail delete confirm", () => {
     await dialog.getByRole("button", { name: "삭제 확정" }).click()
     await expect(page).toHaveURL(/\/$/)
     await expect(dialog).toHaveCount(0)
+  })
+
+  test("다른 글로 이동하면 삭제 ConfirmDialog 상태가 리셋된다", async ({ page }) => {
+    let otherPostDeleteRequests = 0
+    const dialog = await openDeleteConfirm(page)
+
+    await mockDeletablePostDetail(page, { postId: OTHER_POST_ID, title: OTHER_POST_TITLE })
+    await page.route(`**/post/api/v1/posts/${OTHER_POST_ID}`, async (route) => {
+      if (route.request().method() === "DELETE") {
+        otherPostDeleteRequests += 1
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            resultCode: "200-1",
+            msg: "ok",
+            data: null,
+          }),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(postDetailFixture(OTHER_POST_ID, OTHER_POST_TITLE)),
+      })
+    })
+
+    await page.goto(`/posts/${OTHER_POST_ID}`)
+    await expect(page.getByRole("heading", { name: OTHER_POST_TITLE })).toBeVisible()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByRole("dialog", { name: "글을 삭제할까요?" })).toHaveCount(0)
+    expect(otherPostDeleteRequests).toBe(0)
   })
 })

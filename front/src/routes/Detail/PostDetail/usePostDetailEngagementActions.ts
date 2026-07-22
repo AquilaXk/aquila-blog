@@ -65,6 +65,11 @@ export const usePostDetailEngagementActions = ({
   }, [data, data?.actorHasLiked, data?.hitCount, data?.id, data?.likesCount])
 
   useEffect(() => {
+    setDeleteConfirmOpen(false)
+    setDeleteErrorNotice(null)
+  }, [detailId])
+
+  useEffect(() => {
     if (!detailId) return
     if (didIncrementHitRef.current === detailId) return
     didIncrementHitRef.current = detailId

@@ -22,7 +22,7 @@ LEGACY_MINIO_STOPPED_FOR_MIGRATION="false"
 MINIO_STOPPED_FOR_BACKUP="false"
 MIGRATED_MINIO_DIR_THIS_RUN=""
 COMPOSE_IMAGE_ENV_PREFLIGHT_DONE="false"
-COMPOSE_IMAGE_METADATA_KEYS=(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
+COMPOSE_IMAGE_METADATA_KEYS=(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
 
 read_key_from_text() {
   local key="$1"
@@ -363,7 +363,8 @@ metadata_backend_image_key() {
 
 ensure_compose_image_env_defaults() {
   ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
-  ensure_image_env_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:1.2.0"
+  ensure_image_env_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:latest"
+  ensure_image_env_key_from_local_digest "DOCKER_SOCKET_PROXY_IMAGE" "tecnativa/docker-socket-proxy:0.3.0"
   ensure_image_env_key_from_local_digest "CADDY_IMAGE" "caddy:2.8-alpine"
   ensure_image_env_key_from_local_digest "UPTIME_KUMA_IMAGE" "louislam/uptime-kuma:1"
   ensure_image_env_key_from_local_digest "PROMETHEUS_IMAGE" "prom/prometheus:v2.54.1"

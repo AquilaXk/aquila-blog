@@ -12,7 +12,8 @@
 ## Quarantine
 
 - Legacy/실험용 Terraform 코드는 `infra/legacy/` 아래에만 둔다.
-- `infra/legacy/`에 대한 `terraform apply`는 금지한다. CI guard가 world-open(`0.0.0.0/0`) 인바운드 규칙을 레포 전역에서 감시한다.
+- `infra/legacy/`에 대한 `terraform apply`는 금지한다. CI guard가 world-open(`0.0.0.0/0`) **보안그룹 인바운드** 규칙을 레포 전역(active `.tf`, legacy 제외)에서 감시한다.
+- 로컬 `infra/legacy/terraform.tfvars` / `*.auto.tfvars`는 `.gitignore` 대상이다.
 - 신규 공개 인바운드 prod 경로를 Terraform으로 재도입하지 않는다.
 
 ## Guard

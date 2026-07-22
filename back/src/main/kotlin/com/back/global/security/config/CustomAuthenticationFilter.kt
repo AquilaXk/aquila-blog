@@ -1,6 +1,7 @@
 package com.back.global.security.config
 
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.web.application.ClientIpResolver
 import jakarta.servlet.FilterChain
@@ -71,7 +72,7 @@ class CustomAuthenticationFilter(
                     e,
                 )
                 if (!isPublicApi) {
-                    throw AppException("401-1", "로그인 후 이용해주세요.")
+                    throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")
                 }
                 // 공개 API는 예기치 못한 인증 오류에서도 익명으로 계속 처리한다.
                 SecurityContextHolder.clearContext()

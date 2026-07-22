@@ -9,6 +9,7 @@ import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessio
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
@@ -373,7 +374,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 inputStream = anyInputStream(),
                 contentLength = ArgumentMatchers.eq(-1L),
             ),
-        ).willThrow(AppException("400-1", "업로드 조각 크기가 올바르지 않습니다."))
+        ).willThrow(AppException(ErrorCode.BAD_REQUEST, "업로드 조각 크기가 올바르지 않습니다."))
 
         val controller =
             ApiV1AdmCloudController(

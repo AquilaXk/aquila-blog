@@ -10,6 +10,7 @@ import com.back.boundedContexts.member.subContexts.signupVerification.domain.Mem
 import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.task.application.TaskFacade
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -77,10 +78,10 @@ class MemberSignupVerificationService(
             )
         val canStart = signupStartRateLimitService.checkAndConsume(normalizedEmail, clientIp)
         if (!canStart) {
-            throw AppException("429-2", "이메일 인증 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
+            throw AppException(ErrorCode.SIGNUP_RATE_LIMITED, "이메일 인증 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
         }
         if (memberRepository.existsByEmail(normalizedEmail)) {
-            throw AppException("409-2", "이미 가입된 이메일입니다.")
+            throw AppException(ErrorCode.RESOURCE_CONFLICT, "이미 가입된 이메일입니다.")
         }
 
         val now = Instant.now()
@@ -121,7 +122,7 @@ class MemberSignupVerificationService(
     fun verifyEmail(emailVerificationToken: String): SignupEmailVerifiedSession {
         val normalizedToken = emailVerificationToken.trim()
         if (normalizedToken.isBlank()) {
-            throw AppException("400-2", "회원가입 링크가 올바르지 않습니다.")
+            throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "회원가입 링크가 올바르지 않습니다.")
         }
 
         val now = Instant.now()
@@ -129,12 +130,12 @@ class MemberSignupVerificationService(
             memberSignupVerificationRepository.findByEmailVerificationTokenHash(
                 signupTokenHashService.emailVerificationTokenHash(normalizedToken),
             )
-                ?: throw AppException("404-2", "유효하지 않은 회원가입 링크입니다.")
+                ?: throw AppException(ErrorCode.MEMBER_SESSION_NOT_FOUND, "유효하지 않은 회원가입 링크입니다.")
 
         verification.ensureVerifiable(now)
         if (memberRepository.existsByEmail(verification.email)) {
             verification.cancel(now)
-            throw AppException("404-2", "유효하지 않은 회원가입 링크입니다.")
+            throw AppException(ErrorCode.MEMBER_SESSION_NOT_FOUND, "유효하지 않은 회원가입 링크입니다.")
         }
 
         val sessionToken = UUID.randomUUID().toString()
@@ -161,7 +162,7 @@ class MemberSignupVerificationService(
     ): Member {
         val normalizedToken = signupToken.trim()
         if (normalizedToken.isBlank()) {
-            throw AppException("400-2", "회원가입 세션이 올바르지 않습니다.")
+            throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "회원가입 세션이 올바르지 않습니다.")
         }
 
         val now = Instant.now()
@@ -169,7 +170,7 @@ class MemberSignupVerificationService(
             memberSignupVerificationRepository.findBySignupSessionTokenHash(
                 signupTokenHashService.signupSessionTokenHash(normalizedToken),
             )
-                ?: throw AppException("404-2", "유효하지 않은 회원가입 세션입니다.")
+                ?: throw AppException(ErrorCode.MEMBER_SESSION_NOT_FOUND, "유효하지 않은 회원가입 세션입니다.")
 
         verification.ensureCompletable(now)
         verification.ensureLegalAcceptanceRecorded(now)
@@ -177,7 +178,7 @@ class MemberSignupVerificationService(
         legalAcceptanceApplicationService.validateEmailSignupAcceptance(legalAcceptance)
         if (memberRepository.existsByEmail(verification.email)) {
             verification.cancel(now)
-            throw AppException("404-2", "유효하지 않은 회원가입 세션입니다.")
+            throw AppException(ErrorCode.MEMBER_SESSION_NOT_FOUND, "유효하지 않은 회원가입 세션입니다.")
         }
 
         val member =
@@ -248,10 +249,10 @@ class MemberSignupVerificationService(
         email
             .trim()
             .lowercase(Locale.ROOT)
-            .ifBlank { throw AppException("400-2", "이메일을 입력해주세요.") }
+            .ifBlank { throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "이메일을 입력해주세요.") }
             .also { normalized ->
                 if (normalized.length > MAX_EMAIL_LENGTH || !EMAIL_FORMAT_REGEX.matches(normalized)) {
-                    throw AppException("400-2", "이메일 형식을 확인해주세요.")
+                    throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "이메일 형식을 확인해주세요.")
                 }
             }
 
@@ -263,7 +264,7 @@ class MemberSignupVerificationService(
 
         if (!hasLegalAcceptance) {
             cancel(now)
-            throw AppException("400-2", "회원가입을 진행하려면 이용약관과 개인정보처리방침에 다시 동의해야 합니다.")
+            throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "회원가입을 진행하려면 이용약관과 개인정보처리방침에 다시 동의해야 합니다.")
         }
     }
 
@@ -273,7 +274,7 @@ class MemberSignupVerificationService(
         legalPolicyVersion: String?,
     ): String {
         if (!termsAccepted || !privacyAccepted) {
-            throw AppException("400-2", "회원가입을 진행하려면 이용약관과 개인정보처리방침에 모두 동의해야 합니다.")
+            throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "회원가입을 진행하려면 이용약관과 개인정보처리방침에 모두 동의해야 합니다.")
         }
 
         return legalPolicyVersion
@@ -281,8 +282,8 @@ class MemberSignupVerificationService(
             ?.takeIf { it.isNotBlank() }
             ?.also { version ->
                 if (version.length > 32) {
-                    throw AppException("400-2", "약관 동의 버전이 올바르지 않습니다.")
+                    throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "약관 동의 버전이 올바르지 않습니다.")
                 }
-            } ?: throw AppException("400-2", "약관 동의 버전이 올바르지 않습니다.")
+            } ?: throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "약관 동의 버전이 올바르지 않습니다.")
     }
 }

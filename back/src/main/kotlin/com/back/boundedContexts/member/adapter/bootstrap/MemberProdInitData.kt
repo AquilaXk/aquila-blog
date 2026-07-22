@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AdminProperties
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.ApplicationRunner
@@ -69,7 +70,7 @@ class MemberProdInitData(
                 existingAdmin.email = adminEmail
             } else {
                 throw AppException(
-                    "409-2",
+                    ErrorCode.RESOURCE_CONFLICT,
                     "관리자 이메일($adminEmail)이 다른 계정(memberId=${owner.id})에 이미 연결되어 있습니다. 기존 계정을 정리한 뒤 다시 기동해주세요.",
                 )
             }

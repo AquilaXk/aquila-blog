@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.task.application.TaskProcessingLockDiagnostics
 import com.back.global.task.application.TaskProcessingLockDiagnosticsService
 import com.back.global.task.application.TaskQueueDiagnosticsService
@@ -169,7 +170,7 @@ class SignupMailDiagnosticsService(
     fun sendTestMail(email: String) {
         val diagnostics = diagnose(checkConnection = false)
         if (diagnostics.status !in listOf("READY", "TEST_MODE")) {
-            throw AppException("503-2", "회원가입 메일 설정이 아직 준비되지 않았습니다.")
+            throw AppException(ErrorCode.DEPENDENCY_NOT_READY, "회원가입 메일 설정이 아직 준비되지 않았습니다.")
         }
 
         val verificationLink = "${AppConfig.siteFrontUrl}${normalizeVerifyPath()}#token=test-signup-mail"
@@ -180,7 +181,7 @@ class SignupMailDiagnosticsService(
                 toEmail = email.trim(),
                 verificationLink = verificationLink,
                 expiresAt = Instant.now().plusSeconds(3600),
-            ) ?: throw AppException("503-2", "회원가입 메일 발송 어댑터를 찾지 못했습니다.")
+            ) ?: throw AppException(ErrorCode.DEPENDENCY_NOT_READY, "회원가입 메일 발송 어댑터를 찾지 못했습니다.")
     }
 
     private fun buildMissingKeys(): List<String> {

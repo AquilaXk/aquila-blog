@@ -2,6 +2,7 @@ package com.back.boundedContexts.home.adapter.web
 
 import com.back.global.app.application.AppFacade
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpSession
@@ -79,7 +80,7 @@ class HomeController {
     @GetMapping("/session")
     @Operation(summary = "세션 확인")
     fun session(session: HttpSession): Map<String, Any> {
-        if (AppFacade.isProd) throw AppException("404-1", "존재하지 않는 엔드포인트입니다.")
+        if (AppFacade.isProd) throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 엔드포인트입니다.")
 
         return session.attributeNames
             .asSequence()

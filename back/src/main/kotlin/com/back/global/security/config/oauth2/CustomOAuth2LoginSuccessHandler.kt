@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.config.oauth2.application.OAuth2State
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
@@ -65,7 +66,7 @@ class CustomOAuth2LoginSuccessHandler(
 
         val stateParam =
             request.getParameter("state")
-                ?: throw AppException("400-1", "state 파라미터가 없습니다.")
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "state 파라미터가 없습니다.")
         val state = OAuth2State.decode(stateParam)
         response.sendRedirect(state.redirectUrl)
     }

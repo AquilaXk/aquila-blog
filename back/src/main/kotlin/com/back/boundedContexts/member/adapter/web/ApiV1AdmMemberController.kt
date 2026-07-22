@@ -21,6 +21,7 @@ import com.back.boundedContexts.post.application.port.output.PostImageStoragePor
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.ProfileImageHistoryDto
@@ -302,12 +303,12 @@ class ApiV1AdmMemberController(
         @RequestPart("file") file: MultipartFile,
     ): MemberWithUsernameDto {
         if (file.isEmpty) {
-            throw AppException("400-1", "이미지 파일이 비어 있습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일이 비어 있습니다.")
         }
         val maxAllowedBytes = minOf(PROFILE_IMAGE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
         if (file.size > maxAllowedBytes) {
             val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
-            throw AppException("413-1", "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
+            throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
         }
 
         val member = memberUseCase.findById(id).orElseThrow()
@@ -456,7 +457,7 @@ class ApiV1AdmMemberController(
             val normalizedIcon = link.icon.trim().ifBlank { section.defaultIcon }
             if (normalizedIcon !in section.allowedIcons) {
                 throw AppException(
-                    "400-1",
+                    ErrorCode.BAD_REQUEST,
                     "${section.displayName}[$index].icon 값이 유효하지 않습니다: $normalizedIcon",
                 )
             }
@@ -467,7 +468,7 @@ class ApiV1AdmMemberController(
                 href =
                     normalizeProfileLinkHref(link.href)
                         ?: throw AppException(
-                            "400-1",
+                            ErrorCode.BAD_REQUEST,
                             "${section.displayName}[$index].href 값이 유효하지 않습니다.",
                         ),
             )

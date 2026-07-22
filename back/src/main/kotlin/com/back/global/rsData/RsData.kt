@@ -1,5 +1,6 @@
 package com.back.global.rsData
 
+import com.back.global.exception.application.ErrorCode
 import com.fasterxml.jackson.annotation.JsonIgnore
 
 /**
@@ -33,9 +34,9 @@ data class RsData<T>(
         fun <T> ok(data: T): RsData<T> = RsData("200-1", "성공", data)
 
         fun <T> fail(
-            resultCode: String,
-            msg: String,
-        ): RsData<T> = RsData(resultCode, msg)
+            errorCode: ErrorCode,
+            msg: String = errorCode.defaultUserMessage,
+        ): RsData<T> = RsData(errorCode.code, msg)
 
         @Suppress("UNCHECKED_CAST")
         private fun <T> emptyData(): T = null as T

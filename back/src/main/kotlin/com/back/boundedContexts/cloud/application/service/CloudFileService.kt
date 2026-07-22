@@ -4,6 +4,7 @@ import com.back.boundedContexts.cloud.application.port.output.CloudFileRepositor
 import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
 import org.slf4j.LoggerFactory
@@ -62,7 +63,7 @@ class CloudFileService(
         folderPath: String?,
     ): CloudFileDto =
         inputStream.use { source ->
-            if (contentLength <= 0) throw AppException("400-1", "클라우드 파일이 비어 있습니다.")
+            if (contentLength <= 0) throw AppException(ErrorCode.BAD_REQUEST, "클라우드 파일이 비어 있습니다.")
             val normalizedFolderPath = normalizeFolderPath(folderPath)
             val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
             val tempFile = copyToTempFile(source, contentLength)
@@ -133,7 +134,7 @@ class CloudFileService(
         cloudFileRepository
             .findActiveByIdAndOwner(fileId, ownerMemberId)
             ?.toDto()
-            ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+            ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
     @Transactional(readOnly = true)
     fun openContent(
@@ -143,10 +144,10 @@ class CloudFileService(
         // owner check가 storage open보다 먼저 실행되어야 비소유자가 object 존재 여부를 추론할 수 없다.
         val file =
             cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
-                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
         val storedObject =
             cloudStoragePort.open(file.objectKey)
-                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
             file = file.toDto(),
@@ -162,10 +163,10 @@ class CloudFileService(
     ): CloudFileContent {
         val file =
             cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
-                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
         val storedObject =
             cloudStoragePort.openRange(file.objectKey, range)
-                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
             file = file.toDto(),
@@ -180,7 +181,7 @@ class CloudFileService(
     ) {
         val file =
             cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
-                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         val objectKey = file.objectKey
         file.markDeleted(clock.instant())
@@ -234,7 +235,7 @@ class CloudFileService(
             raw.startsWith("/") ||
             raw.split('/').any { it.isBlank() || it == "." || it == ".." }
         ) {
-            throw AppException("400-1", "유효하지 않은 폴더 경로입니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 폴더 경로입니다.")
         }
 
         val cleaned =
@@ -335,14 +336,14 @@ class CloudFileService(
                         if (read < 0) break
                         total += read
                         if (total > expectedLength) {
-                            throw AppException("400-1", "클라우드 파일 크기가 올바르지 않습니다.")
+                            throw AppException(ErrorCode.BAD_REQUEST, "클라우드 파일 크기가 올바르지 않습니다.")
                         }
                         output.write(buffer, 0, read)
                     }
                 }
             }
             if (total != expectedLength) {
-                throw AppException("400-1", "클라우드 파일 크기가 올바르지 않습니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "클라우드 파일 크기가 올바르지 않습니다.")
             }
             return tempFile
         } catch (ex: Exception) {
@@ -379,7 +380,7 @@ class CloudFileService(
         if (byteSize <= limit.maxBytes) return
 
         throw AppException(
-            "413-1",
+            ErrorCode.PAYLOAD_TOO_LARGE,
             "클라우드 ${limit.label} 파일은 ${formatFileSizeLimit(limit.maxBytes)} 이하여야 합니다.",
         )
     }
@@ -444,14 +445,14 @@ class CloudFileService(
         val header = readHeader(file, 16)
         val detected =
             detectFromSignature(file, header, filename)
-                ?: throw AppException("400-1", "지원하지 않는 클라우드 파일 형식입니다.")
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 클라우드 파일 형식입니다.")
 
         if (
             normalizedDeclared != null &&
             normalizedDeclared in KNOWN_CONTENT_TYPES &&
             !isDeclaredContentTypeCompatible(normalizedDeclared, detected.contentType)
         ) {
-            throw AppException("400-1", "파일 내용과 콘텐츠 타입이 일치하지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "파일 내용과 콘텐츠 타입이 일치하지 않습니다.")
         }
 
         return detected

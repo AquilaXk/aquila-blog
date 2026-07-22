@@ -319,7 +319,7 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
                     match(handler().handlerType(ApiV1PostCommentController::class.java))
                     match(handler().methodName("modify"))
                     status { isForbidden() }
-                    jsonPath("$.resultCode") { value("403-1") }
+                    jsonPath("$.resultCode") { value("403-13") }
                     jsonPath("$.msg") { value("작성자만 댓글을 수정할 수 있습니다.") }
                 }
         }
@@ -408,7 +408,7 @@ class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
                 match(handler().handlerType(ApiV1PostCommentController::class.java))
                 match(handler().methodName("delete"))
                 status { isForbidden() }
-                jsonPath("$.resultCode") { value("403-2") }
+                jsonPath("$.resultCode") { value("403-14") }
                 jsonPath("$.msg") { value("작성자만 댓글을 삭제할 수 있습니다.") }
             }
         }

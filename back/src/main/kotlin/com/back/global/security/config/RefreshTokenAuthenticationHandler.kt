@@ -3,6 +3,7 @@ package com.back.global.security.config
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServletRequest
@@ -25,14 +26,14 @@ class RefreshTokenAuthenticationHandler(
     ) {
         if (tokens.sessionKey.isBlank() || tokens.refreshToken.isBlank()) {
             authCookieService.expireAuthCookies()
-            throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
+            throw AppException(ErrorCode.SESSION_EXPIRED, "세션이 만료되었습니다. 다시 로그인해주세요.")
         }
 
         val refreshedSession =
             memberSessionUseCase.rotateRefreshToken(tokens.sessionKey, tokens.refreshToken)
                 ?: run {
                     authCookieService.expireAuthCookies()
-                    throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
+                    throw AppException(ErrorCode.SESSION_EXPIRED, "세션이 만료되었습니다. 다시 로그인해주세요.")
                 }
 
         val memberSession = refreshedSession.session

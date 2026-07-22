@@ -583,7 +583,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                     """.trimIndent()
             }.andExpect {
                 status { isConflict() }
-                jsonPath("$.resultCode") { value("409-1") }
+                jsonPath("$.resultCode") { value("409-21") }
                 jsonPath("$.msg") { value("이미 탈퇴 처리된 계정입니다.") }
             }
     }

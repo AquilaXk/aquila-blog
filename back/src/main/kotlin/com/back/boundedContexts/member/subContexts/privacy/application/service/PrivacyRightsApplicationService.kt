@@ -29,6 +29,7 @@ import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRe
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -53,7 +54,7 @@ class PrivacyRightsApplicationService(
         val member =
             memberRepository
                 .findById(memberId)
-                .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
+                .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
         val legalAcceptance = memberLegalAcceptanceRepository.findTopByMemberIdOrderByAcceptedAtDesc(memberId)
 
         return PrivacyExportResponse(
@@ -114,7 +115,7 @@ class PrivacyRightsApplicationService(
     ): PrivacyRequestDto {
         val request =
             memberPrivacyRequestRepository.findByIdAndMemberId(requestId, memberId)
-                ?: throw AppException("404-1", "개인정보 처리 요청을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "개인정보 처리 요청을 찾을 수 없습니다.")
 
         return PrivacyRequestDto(request)
     }
@@ -129,7 +130,7 @@ class PrivacyRightsApplicationService(
         val member =
             memberRepository
                 .findByIdForUpdate(memberId)
-                .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
+                .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
 
         verifyAccountDeletionReauthentication(
             member = member,
@@ -138,7 +139,7 @@ class PrivacyRightsApplicationService(
         )
 
         if (memberAccountDeletionRepository.existsByMemberId(member.id)) {
-            throw AppException("409-1", "이미 탈퇴 처리된 계정입니다.")
+            throw AppException(ErrorCode.MEMBER_WITHDRAWN, "이미 탈퇴 처리된 계정입니다.")
         }
 
         val deletedAt = Instant.now()
@@ -173,7 +174,7 @@ class PrivacyRightsApplicationService(
     ) {
         if (member.password.isNullOrBlank()) {
             if (!oauthAccountDeletionConfirmed) {
-                throw AppException("400-2", "소셜 계정 탈퇴 확인이 필요합니다.")
+                throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "소셜 계정 탈퇴 확인이 필요합니다.")
             }
             return
         }
@@ -181,7 +182,7 @@ class PrivacyRightsApplicationService(
         val rawPassword =
             password
                 ?.takeIf { it.isNotBlank() }
-                ?: throw AppException("400-1", "비밀번호를 입력해주세요.")
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "비밀번호를 입력해주세요.")
         memberUseCase.checkPassword(member, rawPassword)
     }
 

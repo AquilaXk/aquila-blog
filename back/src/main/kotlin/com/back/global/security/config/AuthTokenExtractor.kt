@@ -1,6 +1,7 @@
 package com.back.global.security.config
 
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.web.application.Rq
 import org.springframework.http.HttpHeaders
 import org.springframework.stereotype.Component
@@ -50,5 +51,6 @@ class AuthTokenExtractor(
         }
     }
 
-    private fun invalidBearerHeader(): AppException = AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
+    private fun invalidBearerHeader(): AppException =
+        AppException(ErrorCode.INVALID_BEARER, "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
 }

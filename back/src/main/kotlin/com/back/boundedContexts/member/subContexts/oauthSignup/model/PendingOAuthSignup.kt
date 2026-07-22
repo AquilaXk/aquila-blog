@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.subContexts.oauthSignup.model
 
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -69,10 +70,10 @@ class PendingOAuthSignup(
 
     fun ensureReadable(now: Instant) {
         if (cancelledAt != null || consumedAt != null) {
-            throw AppException("410-1", "소셜 회원가입 세션이 더 이상 유효하지 않습니다.")
+            throw AppException(ErrorCode.GONE, "소셜 회원가입 세션이 더 이상 유효하지 않습니다.")
         }
         if (pendingTokenExpiresAt.isBefore(now)) {
-            throw AppException("410-1", "소셜 회원가입 세션이 만료되었습니다. 다시 로그인해주세요.")
+            throw AppException(ErrorCode.GONE, "소셜 회원가입 세션이 만료되었습니다. 다시 로그인해주세요.")
         }
     }
 

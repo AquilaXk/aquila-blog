@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.storage
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -119,7 +120,7 @@ class PostImageStorageAdapter(
             val declaredContentType = normalizeDeclaredContentType(request.contentType)
             val detectedType = detectImageContentType(signature)
             if (detectedType == null || detectedType !in allowedContentTypes) {
-                throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.")
             }
 
             // Browser/OS에 따라 image/x-png 등 별칭이 전달될 수 있어 선언 타입은 정규화 후 참고한다.
@@ -128,7 +129,7 @@ class PostImageStorageAdapter(
                 declaredContentType in allowedContentTypes &&
                 declaredContentType != detectedType
             ) {
-                throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.")
             }
 
             val key = buildObjectKey(request.originalFilename)
@@ -145,7 +146,7 @@ class PostImageStorageAdapter(
                 )
             } catch (e: Exception) {
                 logger.error("Post image upload failed", e)
-                throw AppException("500-1", "이미지 업로드에 실패했습니다.")
+                throw AppException(ErrorCode.INTERNAL_ERROR, "이미지 업로드에 실패했습니다.")
             }
 
             return key
@@ -178,7 +179,7 @@ class PostImageStorageAdapter(
                 )
             } catch (e: Exception) {
                 logger.error("Post file upload failed", e)
-                throw AppException("500-1", "첨부 파일 업로드에 실패했습니다.")
+                throw AppException(ErrorCode.INTERNAL_ERROR, "첨부 파일 업로드에 실패했습니다.")
             }
         } finally {
             preparedUpload.deleteQuietly()
@@ -218,7 +219,7 @@ class PostImageStorageAdapter(
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return null
             logger.error("Post image download failed (objectKey={})", objectKey, e)
-            throw AppException("500-1", errorMessage)
+            throw AppException(ErrorCode.INTERNAL_ERROR, errorMessage)
         }
     }
 
@@ -293,7 +294,7 @@ class PostImageStorageAdapter(
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return
             logger.error("Post image delete failed (objectKey={})", objectKey, e)
-            throw AppException("500-1", errorMessage)
+            throw AppException(ErrorCode.INTERNAL_ERROR, errorMessage)
         }
     }
 
@@ -348,7 +349,7 @@ class PostImageStorageAdapter(
                         if (read == -1) break
                         totalBytes += read
                         if (totalBytes > properties.maxFileSizeBytes) {
-                            throw AppException("400-1", "업로드 파일 크기가 허용 범위를 초과했습니다.")
+                            throw AppException(ErrorCode.BAD_REQUEST, "업로드 파일 크기가 허용 범위를 초과했습니다.")
                         }
                         output.write(buffer, 0, read)
                     }
@@ -356,7 +357,7 @@ class PostImageStorageAdapter(
             }
 
             if (totalBytes != expectedContentLength) {
-                throw AppException("400-1", "업로드 파일 크기 정보가 올바르지 않습니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "업로드 파일 크기 정보가 올바르지 않습니다.")
             }
 
             return PreparedUpload(path = path, contentLength = totalBytes)
@@ -371,9 +372,9 @@ class PostImageStorageAdapter(
         emptyMessage: String,
         oversizedMessage: String,
     ) {
-        if (contentLength <= 0) throw AppException("400-1", emptyMessage)
+        if (contentLength <= 0) throw AppException(ErrorCode.BAD_REQUEST, emptyMessage)
         if (contentLength > properties.maxFileSizeBytes) {
-            throw AppException("400-1", oversizedMessage)
+            throw AppException(ErrorCode.BAD_REQUEST, oversizedMessage)
         }
     }
 
@@ -389,7 +390,7 @@ class PostImageStorageAdapter(
     }
 
     private fun ensureStorageEnabled() {
-        if (!properties.enabled) throw AppException("503-1", "이미지 스토리지가 비활성화되어 있습니다.")
+        if (!properties.enabled) throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "이미지 스토리지가 비활성화되어 있습니다.")
     }
 
     private fun requireClient(): S3Client {
@@ -401,10 +402,10 @@ class PostImageStorageAdapter(
         }
 
         initErrorMessage?.let {
-            throw AppException("503-1", it)
+            throw AppException(ErrorCode.SERVICE_UNAVAILABLE, it)
         }
 
-        return s3Client ?: throw AppException("503-1", "이미지 스토리지가 아직 준비되지 않았습니다.")
+        return s3Client ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "이미지 스토리지가 아직 준비되지 않았습니다.")
     }
 
     private fun buildClient(): S3Client {
@@ -508,7 +509,7 @@ class PostImageStorageAdapter(
             objectKey.startsWith("/") ||
             (prefix.isNotBlank() && !objectKey.startsWith("$prefix/"))
         ) {
-            throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 이미지 경로입니다.")
         }
     }
 
@@ -520,7 +521,7 @@ class PostImageStorageAdapter(
                 .trim('/')
         if (allowedPrefix.isBlank()) {
             if (normalized.contains("..")) {
-                throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 이미지 경로입니다.")
             }
             return if (normalized.isBlank() || normalized.endsWith("/")) normalized else "$normalized/"
         }
@@ -530,7 +531,7 @@ class PostImageStorageAdapter(
             normalized != allowedPrefix &&
             !normalized.startsWith("$allowedPrefix/")
         ) {
-            throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 이미지 경로입니다.")
         }
         return if (normalized.endsWith("/")) normalized else "$normalized/"
     }

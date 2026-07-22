@@ -15,6 +15,7 @@ import com.back.boundedContexts.member.subContexts.legalAcceptance.application.d
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.input.LegalAcceptanceUseCase
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
@@ -125,7 +126,7 @@ class ApiV1AuthController(
         val clientIp = extractClientIp(request)
 
         if (loginAttemptPolicyUseCase.isBlocked(loginAttemptKey, clientIp)) {
-            throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
+            throw AppException(ErrorCode.LOGIN_RATE_LIMITED, "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
         }
 
         val authCandidate =
@@ -134,21 +135,21 @@ class ApiV1AuthController(
                 ?.takeIf { isPasswordValid(it, reqBody.password) }
                 ?: run {
                     val blocked = loginAttemptPolicyUseCase.recordFailure(loginAttemptKey, clientIp)
-                    if (blocked) throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
-                    throw AppException("401-1", "이메일 또는 비밀번호가 올바르지 않습니다.")
+                    if (blocked) throw AppException(ErrorCode.LOGIN_RATE_LIMITED, "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
+                    throw AppException(ErrorCode.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.")
                 }
 
         val member =
             memberUseCase
                 .findById(authCandidate.id)
-                .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
+                .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
 
         loginAttemptPolicyUseCase.clear(loginAttemptKey, clientIp)
 
         val ipSecurityFingerprint =
             if (reqBody.ipSecurity) {
                 authIpSecurityService.fingerprint(clientIp)
-                    ?: throw AppException("400-3", "IP 보안 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.")
+                    ?: throw AppException(ErrorCode.IP_SECURITY_UNAVAILABLE, "IP 보안 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.")
             } else {
                 null
             }
@@ -249,7 +250,7 @@ class ApiV1AuthController(
         val member =
             memberUseCase
                 .findById(securityUser.id)
-                .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
+                .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
 
         legalAcceptanceUseCase.recordLegalReconsent(
             member = member,
@@ -285,11 +286,11 @@ class ApiV1AuthController(
     private fun resolveLoginEmail(reqBody: MemberLoginRequest): String {
         val trimmedEmail = reqBody.email?.trim().orEmpty()
 
-        if (trimmedEmail.isBlank()) throw AppException("400-1", "이메일을 입력해주세요.")
-        if (trimmedEmail.length > MAX_EMAIL_LENGTH) throw AppException("400-2", "이메일 형식을 확인해주세요.")
+        if (trimmedEmail.isBlank()) throw AppException(ErrorCode.BAD_REQUEST, "이메일을 입력해주세요.")
+        if (trimmedEmail.length > MAX_EMAIL_LENGTH) throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "이메일 형식을 확인해주세요.")
 
         val normalized = trimmedEmail.lowercase(Locale.ROOT)
-        if (!EMAIL_FORMAT_REGEX.matches(normalized)) throw AppException("400-2", "이메일 형식을 확인해주세요.")
+        if (!EMAIL_FORMAT_REGEX.matches(normalized)) throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "이메일 형식을 확인해주세요.")
 
         return normalized
     }

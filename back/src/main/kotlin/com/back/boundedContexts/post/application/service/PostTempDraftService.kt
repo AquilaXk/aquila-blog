@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.application.port.output.MemberAttrRepositor
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import kotlin.jvm.optionals.getOrNull
@@ -27,7 +28,7 @@ class PostTempDraftService(
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
         val persistenceAuthor = author.toPersistenceMember()
         if (!tryAcquireTempDraftLock(persistenceAuthor)) {
-            throw AppException("409-2", "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.")
+            throw AppException(ErrorCode.RESOURCE_CONFLICT, "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.")
         }
 
         return try {

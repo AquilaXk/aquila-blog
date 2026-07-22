@@ -72,7 +72,7 @@ class ApiV1MemberControllerTest : BaseControllerIntegrationTest() {
                         status { isConflict() }
                         match(handler().handlerType(ApiV1MemberController::class.java))
                         match(handler().methodName("join"))
-                        jsonPath("$.resultCode") { value("409-1") }
+                        jsonPath("$.resultCode") { value("409-20") }
                         jsonPath("$.msg") { value("이미 존재하는 회원 아이디입니다.") }
                     }
             }

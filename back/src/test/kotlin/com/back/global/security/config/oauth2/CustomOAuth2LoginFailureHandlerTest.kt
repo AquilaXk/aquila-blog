@@ -2,6 +2,7 @@ package com.back.global.security.config.oauth2
 
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.config.oauth2.application.OAuth2State
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -112,7 +113,7 @@ class CustomOAuth2LoginFailureHandlerTest {
             response,
             InternalAuthenticationServiceException(
                 "oauth user service failed",
-                AppException("403-4", "소셜 로그인 신규 가입은 현재 지원하지 않습니다."),
+                AppException(ErrorCode.OAUTH_SIGNUP_REQUIRED),
             ),
         )
 

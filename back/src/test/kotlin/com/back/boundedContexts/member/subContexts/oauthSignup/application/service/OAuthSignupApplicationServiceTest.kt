@@ -12,6 +12,7 @@ import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberL
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.output.PendingOAuthSignupRepositoryPort
 import com.back.boundedContexts.member.subContexts.oauthSignup.model.PendingOAuthSignup
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
@@ -499,7 +500,7 @@ private class RecordingMemberUseCase : MemberUseCase {
         email: String?,
     ): Member {
         if (existingLoginIds.contains(username)) {
-            throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
+            throw AppException(ErrorCode.MEMBER_DUPLICATE, "이미 존재하는 회원 아이디입니다.")
         }
 
         val member =

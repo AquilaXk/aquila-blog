@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.port.input.LoginAttemptPolicy
 import com.back.global.app.application.AppFacade
 import com.back.global.cache.application.port.output.RedisKeyValuePort
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.time.Duration
@@ -156,7 +157,7 @@ class LoginAttemptService(
     private fun resolveRedisAvailability(): Boolean {
         val isRedisAvailable = redisKeyValuePort.isAvailable()
         if (!isRedisAvailable && AppFacade.isProd && requireRedisInProd) {
-            throw AppException("503-2", "로그인 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.")
+            throw AppException(ErrorCode.DEPENDENCY_NOT_READY, "로그인 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.")
         }
         return isRedisAvailable
     }

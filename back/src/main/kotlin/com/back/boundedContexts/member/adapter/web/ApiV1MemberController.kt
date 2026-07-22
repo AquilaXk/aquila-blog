@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.AdminProperties
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.security.application.SecurityTipProvider
 import jakarta.validation.Valid
@@ -40,14 +41,14 @@ class ApiV1MemberController(
         val adminEmail = adminProperties.normalizedEmail
 
         if (adminEmail.isBlank()) {
-            throw AppException("404-1", "관리자 프로필이 설정되지 않았습니다.")
+            throw AppException(ErrorCode.NOT_FOUND, "관리자 프로필이 설정되지 않았습니다.")
         }
 
         val adminMember =
             adminEmail
                 .takeIf { it.isNotBlank() }
                 ?.let(memberUseCase::findByEmail)
-                ?: throw AppException("404-1", "관리자 프로필을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "관리자 프로필을 찾을 수 없습니다.")
 
         return currentMemberProfileQueryUseCase.getPublishedById(adminMember.id)
     }

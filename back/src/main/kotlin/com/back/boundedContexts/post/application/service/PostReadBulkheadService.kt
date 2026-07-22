@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.util.concurrent.Semaphore
@@ -59,11 +60,11 @@ class PostReadBulkheadService(
                 }
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
-                throw AppException("503-1", "요청이 많아 잠시 후 다시 시도해주세요.")
+                throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "요청이 많아 잠시 후 다시 시도해주세요.")
             }
 
         if (!acquired) {
-            throw AppException("503-1", "요청이 많아 잠시 후 다시 시도해주세요.")
+            throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "요청이 많아 잠시 후 다시 시도해주세요.")
         }
 
         try {

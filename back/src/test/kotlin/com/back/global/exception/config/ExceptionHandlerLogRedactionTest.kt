@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -24,7 +25,10 @@ class ExceptionHandlerLogRedactionTest {
         val appender = attachListAppender()
 
         try {
-            handler.handleAppException(AppException("500-9", "failed token=LEAK_TEST_123"), request)
+            handler.handleAppException(
+                AppException(ErrorCode.INTERNAL_ERROR, "failed token=LEAK_TEST_123"),
+                request,
+            )
         } finally {
             detachListAppender(appender)
         }
@@ -32,7 +36,7 @@ class ExceptionHandlerLogRedactionTest {
         val message = appender.list.single().formattedMessage
         assertThat(message)
             .contains("query=token=[REDACTED]&email=[REDACTED]")
-            .contains("exceptionMessage=500-9 : failed token=[REDACTED]")
+            .contains("exceptionMessage=500-1 : failed token=[REDACTED]")
             .doesNotContain("LEAK_TEST_123")
             .doesNotContain("test@example.com")
     }

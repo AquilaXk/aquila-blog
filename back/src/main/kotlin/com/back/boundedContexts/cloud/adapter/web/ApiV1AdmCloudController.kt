@@ -10,6 +10,7 @@ import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessio
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import io.swagger.v3.oas.annotations.Operation
@@ -175,7 +176,7 @@ class ApiV1AdmCloudController(
                 sessionId = sessionId,
             )
         if (partNumber !in 1..session.totalParts) {
-            throw AppException("400-1", "업로드 조각 번호가 올바르지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "업로드 조각 번호가 올바르지 않습니다.")
         }
         val expectedBytes =
             if (partNumber == session.totalParts) {
@@ -185,7 +186,7 @@ class ApiV1AdmCloudController(
             }
         val contentLength = request.contentLengthLong
         if (contentLength > expectedBytes) {
-            throw AppException("400-1", "업로드 조각 크기가 올바르지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "업로드 조각 크기가 올바르지 않습니다.")
         }
 
         return cloudVideoUploadSessionService.uploadPart(
@@ -403,7 +404,7 @@ class ApiV1AdmCloudController(
 
     private fun safeMediaType(contentType: String): MediaType =
         runCatching { MediaType.parseMediaType(contentType) }
-            .getOrElse { throw AppException("500-1", "클라우드 파일 콘텐츠 타입이 올바르지 않습니다.") }
+            .getOrElse { throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 콘텐츠 타입이 올바르지 않습니다.") }
 
     private fun <T : ResponseEntity.BodyBuilder> noStoreHeaders(builder: T): T {
         builder.header(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")

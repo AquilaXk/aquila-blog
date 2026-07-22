@@ -1,23 +1,6 @@
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type UIEvent as ReactUIEvent,
-  type WheelEvent as ReactWheelEvent,
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import MarkdownRenderer from "src/libs/markdown/MarkdownRenderer"
-import {
-  isComposingEditorKeyboardEvent,
-  isSaveShortcut,
-  planFormatShortcutMutation,
-  planHardBreak,
-  planListEnterContinuation,
-  planTabIndentMutation,
-  resolveFormatShortcut,
-} from "./markdownEditorKeyboardModel"
+import { planFormatShortcutMutation } from "./markdownEditorKeyboardModel"
 import {
   MarkdownEditorModeTabs,
   resolveModeForBodyFocus,
@@ -62,20 +45,13 @@ import {
   type PendingToolbarInsertQueue,
 } from "./markdownEditorPendingToolbarInsert"
 import {
-  MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE,
-  MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE,
-  resolveMarkdownAttachmentLink,
-  resolveMarkdownImageEmbed,
-  validateMarkdownAttachmentSize,
   type MarkdownFileUploadResult,
   type MarkdownImageUploadResult,
 } from "./markdownEditorUploadModel"
-import {
-  blockMarkdownSnippets,
-  getWheelDeltaYPixels,
-  modShortcutLabel,
-  toolbarMarkdownSnippets,
-} from "./markdownEditorToolbarModel"
+import { blockMarkdownSnippets, modShortcutLabel, toolbarMarkdownSnippets } from "./markdownEditorToolbarModel"
+import { useMarkdownEditorMediaTransfers } from "./useMarkdownEditorMediaTransfers"
+import { useMarkdownEditorScrollSync } from "./useMarkdownEditorScrollSync"
+import { useMarkdownEditorTextareaKeyboard } from "./useMarkdownEditorTextareaKeyboard"
 
 type MarkdownChangeMeta = {
   editorFocused: boolean
@@ -131,6 +107,7 @@ export const MarkdownEditor = ({
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
+  const documentGenerationRef = useRef(0)
   const uploadInFlightCountRef = useRef(0)
   const allowNativeTabAfterEscapeRef = useRef(false)
   const modeRef = useRef<MarkdownEditorMode>(mode)
@@ -157,6 +134,8 @@ export const MarkdownEditor = ({
     if (value === valueRef.current) return
     valueRef.current = value
     setDraftValue(value)
+    // External replace (e.g. restoreLocalDraft) — invalidate in-flight placeholder completions.
+    documentGenerationRef.current += 1
   }, [value])
 
   useEffect(() => {
@@ -195,10 +174,12 @@ export const MarkdownEditor = ({
   }, [disabled, mode])
 
   const commitMarkdown = useCallback(
-    (nextMarkdown: string, editorFocused = false) => {
+    (nextMarkdown: string, editorFocused = false, options?: { clearUploadError?: boolean }) => {
       valueRef.current = nextMarkdown
       setDraftValue(nextMarkdown)
-      setUploadError("")
+      if (options?.clearUploadError !== false) {
+        setUploadError("")
+      }
       onChange(nextMarkdown, { editorFocused })
     },
     [onChange]
@@ -229,13 +210,13 @@ export const MarkdownEditor = ({
   }, [])
 
   const applyMutationPlan = useCallback(
-    (plan: PlannedTextMutation) => {
+    (plan: PlannedTextMutation, options?: { clearUploadError?: boolean }) => {
       const textarea = textareaRef.current
       if (!textarea || disabled) return false
       textarea.focus()
       const nextMarkdown = applyPlannedTextMutation(textarea, plan)
       selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
-      commitMarkdown(nextMarkdown, true)
+      commitMarkdown(nextMarkdown, true, options)
       const nextFrom = plan.selectionStart
       const nextTo = plan.selectionEnd
       window.requestAnimationFrame(() => {
@@ -250,54 +231,10 @@ export const MarkdownEditor = ({
     [commitMarkdown, disabled]
   )
 
-  const syncScrollPosition = useCallback((source: HTMLElement, target: HTMLElement | null) => {
-    if (!target) return
-
-    const sourceMax = source.scrollHeight - source.clientHeight
-    const targetMax = target.scrollHeight - target.clientHeight
-    if (sourceMax <= 0 || targetMax <= 0) return
-
-    const ratio = source.scrollTop / sourceMax
-    const nextScrollTop = ratio * targetMax
-    if (Math.abs(target.scrollTop - nextScrollTop) < 1) return
-
-    target.scrollTop = nextScrollTop
-  }, [])
-
-  const handleWriteScroll = useCallback(
-    (event: ReactUIEvent<HTMLTextAreaElement>) => {
-      syncScrollPosition(event.currentTarget, previewScrollRef.current)
-    },
-    [syncScrollPosition]
-  )
-
-  const handlePreviewScroll = useCallback(
-    (event: ReactUIEvent<HTMLElement>) => {
-      syncScrollPosition(event.currentTarget, textareaRef.current)
-    },
-    [syncScrollPosition]
-  )
-
-  const handlePreviewWheel = useCallback((event: ReactWheelEvent<HTMLElement>) => {
-    if (event.deltaY === 0) return
-
-    const preview = event.currentTarget
-    const deltaYPixels = getWheelDeltaYPixels(event, preview)
-    const maxScrollTop = preview.scrollHeight - preview.clientHeight
-    const nextScrollTop = preview.scrollTop + deltaYPixels
-    if (nextScrollTop >= 0 && nextScrollTop <= maxScrollTop) return
-
-    event.preventDefault()
-
-    const clampedScrollTop = Math.max(0, Math.min(nextScrollTop, maxScrollTop))
-    const remainingDeltaY = nextScrollTop - clampedScrollTop
-    preview.scrollTop = clampedScrollTop
-    if (remainingDeltaY === 0) return
-
-    window.scrollBy({
-      top: remainingDeltaY,
-    })
-  }, [])
+  const { handleWriteScroll, handlePreviewScroll, handlePreviewWheel } = useMarkdownEditorScrollSync({
+    textareaRef,
+    previewScrollRef,
+  })
 
   const resolveActiveSelection = useCallback(() => {
     const textarea = textareaRef.current
@@ -308,15 +245,51 @@ export const MarkdownEditor = ({
   }, [rememberTextareaSelection])
 
   const applyPlannedMarkdownMutation = useCallback(
-    (plan: PlannedTextMutation) => {
-      if (applyMutationPlan(plan)) return true
+    (plan: PlannedTextMutation, options?: { clearUploadError?: boolean }) => {
+      if (applyMutationPlan(plan, options)) return true
 
       const next = applyPlannedTextMutationToValue(valueRef.current, plan)
       selectionRef.current = { from: next.selectionStart, to: next.selectionEnd }
-      commitMarkdown(next.value, true)
+      commitMarkdown(next.value, true, options)
       return true
     },
     [applyMutationPlan, commitMarkdown]
+  )
+
+  /**
+   * Async upload placeholder swap/remove — keep undo via setRangeText, never steal focus/errors.
+   * Must proceed even when the editor UI is temporarily disabled (e.g. loadingKey), so in-flight
+   * upload completions can still replace/remove placeholders. New user inserts stay blocked elsewhere.
+   */
+  const applyBackgroundMarkdownMutation = useCallback(
+    (plan: PlannedTextMutation) => {
+      const textarea = textareaRef.current
+      const wasFocused = Boolean(textarea && !disabled && document.activeElement === textarea)
+      const commitOptions = { clearUploadError: false as const }
+      // Prefer setRangeText while interactive; when disabled, commit via value path.
+      if (textarea && !disabled) {
+        const nextMarkdown = applyPlannedTextMutation(textarea, plan)
+        selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
+        commitMarkdown(nextMarkdown, wasFocused, commitOptions)
+        if (wasFocused) {
+          const nextFrom = plan.selectionStart
+          const nextTo = plan.selectionEnd
+          window.requestAnimationFrame(() => {
+            const current = textareaRef.current
+            if (!current || document.activeElement !== current) return
+            current.setSelectionRange(nextFrom, nextTo)
+            selectionRef.current = { from: nextFrom, to: nextTo }
+          })
+        }
+        return true
+      }
+
+      const next = applyPlannedTextMutationToValue(valueRef.current, plan)
+      selectionRef.current = { from: next.selectionStart, to: next.selectionEnd }
+      commitMarkdown(next.value, false, commitOptions)
+      return true
+    },
+    [commitMarkdown, disabled]
   )
 
   const planPendingToolbarInsert = useCallback(
@@ -489,172 +462,31 @@ export const MarkdownEditor = ({
     [commitMarkdown, insertMarkdownAtEditorSelection]
   )
 
-  const handleTabKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      if (allowNativeTabAfterEscapeRef.current) {
-        allowNativeTabAfterEscapeRef.current = false
-        return
-      }
-      const { from, to } = rememberTextareaSelection()
-      const tabPlan = planTabIndentMutation(valueRef.current, from, to, event.shiftKey)
-      if (!tabPlan) {
-        if (event.shiftKey) return
-        event.preventDefault()
-        return
-      }
-      event.preventDefault()
-      applyMutationPlan(tabPlan)
-    },
-    [applyMutationPlan, rememberTextareaSelection]
-  )
-
-  const handleEnterKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if (event.key !== "Enter") return false
-
-      if (event.shiftKey) {
-        event.preventDefault()
-        const { from, to } = rememberTextareaSelection()
-        applyMutationPlan(planHardBreak(from, to))
-        return true
-      }
-
-      if (event.metaKey || event.ctrlKey || event.altKey) return false
-
-      const { from, to } = rememberTextareaSelection()
-      const listPlan = planListEnterContinuation(valueRef.current, from, to)
-      if (!listPlan) return true
-      event.preventDefault()
-      applyMutationPlan(listPlan)
-      return true
-    },
-    [applyMutationPlan, rememberTextareaSelection]
-  )
-
-  const handleSaveShortcutKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if (!isSaveShortcut(event)) return false
-      if (!onRequestSave) return true
-      event.preventDefault()
-      onRequestSave()
-      return true
-    },
-    [onRequestSave]
-  )
-
-  const handleFormatShortcutKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
-      const formatShortcut = resolveFormatShortcut(event)
-      if (!formatShortcut) return false
-      event.preventDefault()
-      const { from, to } = rememberTextareaSelection()
-      applyMutationPlan(planFormatShortcutMutation(valueRef.current, from, to, formatShortcut))
-      return true
-    },
-    [applyMutationPlan, rememberTextareaSelection]
-  )
-
-  const handleHomeEndKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if (event.shiftKey || (!event.metaKey && !event.ctrlKey)) return false
-      if (event.key === "Home") {
-        event.preventDefault()
-        setTextareaSelection(0)
-        return true
-      }
-      if (event.key === "End") {
-        event.preventDefault()
-        setTextareaSelection(valueRef.current.length)
-        return true
-      }
-      return false
-    },
-    [setTextareaSelection]
-  )
-
-  const handleTextareaKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      if (disabled || isComposingEditorKeyboardEvent(event)) return
-
-      if (event.key === "Escape") {
-        allowNativeTabAfterEscapeRef.current = true
-        return
-      }
-
-      if (event.key === "Tab") {
-        handleTabKeyDown(event)
-        return
-      }
-
-      allowNativeTabAfterEscapeRef.current = false
-
-      if (handleEnterKeyDown(event)) return
-      if (handleSaveShortcutKeyDown(event)) return
-      if (handleFormatShortcutKeyDown(event)) return
-      handleHomeEndKeyDown(event)
-    },
-    [
+  const { handleImageInput, handleFileInput, handlePaste, handleDragOver, handleDrop } =
+    useMarkdownEditorMediaTransfers({
       disabled,
-      handleEnterKeyDown,
-      handleFormatShortcutKeyDown,
-      handleHomeEndKeyDown,
-      handleSaveShortcutKeyDown,
-      handleTabKeyDown,
-    ]
-  )
+      valueRef,
+      selectionRef,
+      documentGenerationRef,
+      onUploadImage,
+      onUploadFile,
+      applyPlannedMarkdownMutation,
+      applyBackgroundMarkdownMutation,
+      resolveActiveSelection,
+      setUploadInFlight,
+      setUploadError,
+      insertUploadedMarkdown,
+    })
 
-  const handleImageInput = useCallback(
-    async (file: File | null) => {
-      if (!file || !onUploadImage) return
-      setUploadInFlight(1)
-      let uploaded: MarkdownImageUploadResult
-      try {
-        uploaded = await onUploadImage(file)
-      } catch {
-        setUploadError(MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE)
-        return
-      } finally {
-        setUploadInFlight(-1)
-      }
-      const resolved = resolveMarkdownImageEmbed(uploaded, file.name)
-      if ("error" in resolved) {
-        setUploadError(resolved.error)
-        return
-      }
-      insertUploadedMarkdown(resolved.markdown)
-    },
-    [insertUploadedMarkdown, onUploadImage, setUploadInFlight]
-  )
-
-  const handleFileInput = useCallback(
-    async (file: File | null) => {
-      if (!file || !onUploadFile) return
-      const sizeError = validateMarkdownAttachmentSize(file)
-      if (sizeError) {
-        setUploadError(sizeError)
-        return
-      }
-
-      setUploadInFlight(1)
-      let uploaded: MarkdownFileUploadResult
-      try {
-        uploaded = await onUploadFile(file)
-      } catch {
-        setUploadError(MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE)
-        return
-      } finally {
-        setUploadInFlight(-1)
-      }
-
-      const resolved = resolveMarkdownAttachmentLink(uploaded, file.name)
-      if ("error" in resolved) {
-        setUploadError(resolved.error)
-        return
-      }
-      insertUploadedMarkdown(resolved.markdown)
-    },
-    [insertUploadedMarkdown, onUploadFile, setUploadInFlight]
-  )
+  const { handleTextareaKeyDown } = useMarkdownEditorTextareaKeyboard({
+    disabled,
+    valueRef,
+    allowNativeTabAfterEscapeRef,
+    rememberTextareaSelection,
+    applyMutationPlan,
+    setTextareaSelection,
+    onRequestSave,
+  })
 
   return (
     <EditorRoot data-testid="markdown-editor">
@@ -767,6 +599,9 @@ export const MarkdownEditor = ({
                 onKeyUp={rememberTextareaSelection}
                 onMouseUp={rememberTextareaSelection}
                 onSelect={rememberTextareaSelection}
+                onPaste={handlePaste}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
                 onScroll={handleWriteScroll}
               />
             </WriteEditorFrame>

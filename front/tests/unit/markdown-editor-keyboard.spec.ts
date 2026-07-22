@@ -166,6 +166,10 @@ test.describe("markdown editor keyboard model", () => {
   test("mutation helper uses setRangeText to preserve native undo", () => {
     const mutationSource = readFileSync(sourcePath("components", "markdown-editor", "markdownEditorTextMutation.ts"), "utf8")
     const editorSource = readFileSync(sourcePath("components", "markdown-editor", "MarkdownEditor.tsx"), "utf8")
+    const keyboardHookSource = readFileSync(
+      sourcePath("components", "markdown-editor", "useMarkdownEditorTextareaKeyboard.ts"),
+      "utf8"
+    )
     const stylesSource = readFileSync(sourcePath("components", "markdown-editor", "MarkdownEditor.styles.ts"), "utf8")
 
     expect(mutationSource).toContain("textarea.setRangeText(")
@@ -177,8 +181,8 @@ test.describe("markdown editor keyboard model", () => {
     expect(editorSource).toContain("aria-description")
     expect(editorSource).toContain("window.requestAnimationFrame")
     expect(editorSource).toContain("current.setSelectionRange(nextFrom, nextTo)")
-    expect(editorSource).toContain("handleTabKeyDown")
-    expect(editorSource).toContain("handleEnterKeyDown")
+    expect(keyboardHookSource).toContain("handleTabKeyDown")
+    expect(keyboardHookSource).toContain("handleEnterKeyDown")
     expect(editorSource).toContain("applyFormatShortcutOrAppend")
     expect(stylesSource).toContain("&:focus-visible")
     expect(stylesSource).toContain("theme.colors.blue8")

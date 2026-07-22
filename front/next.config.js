@@ -1,146 +1,45 @@
 const path = require("path")
-
-/**
- * @param {string[]} sources
- */
-const uniqueSources = (sources) => [...new Set(sources.filter(Boolean))]
+const { buildContentSecurityPolicy } = require("./src/libs/security/contentSecurityPolicy")
 
 /** Prefer package source over yarn `file:` node_modules copy (Vercel cache drift). */
 const sharedUiTokensEntry = path.resolve(__dirname, "packages/shared-ui-tokens/src/index.js")
 
-/**
- * @param {string | undefined} value
- */
-const originFromEnvUrl = (value) => {
-  const raw = value?.trim()
-  if (!raw) return ""
+const buildSecurityHeaders = () => {
+  // Phase B enforce: hash-based script-src (no script unsafe-inline).
+  // Phase A evidence: keep Report-Only with the same nonce/hash policy for browser/header dumps.
+  const csp = buildContentSecurityPolicy()
 
-  try {
-    const url = new URL(raw)
-    if (url.protocol !== "http:" && url.protocol !== "https:") return ""
-    return url.origin
-  } catch {
-    return ""
-  }
+  return [
+    {
+      key: "X-Content-Type-Options",
+      value: "nosniff",
+    },
+    {
+      key: "X-Frame-Options",
+      value: "SAMEORIGIN",
+    },
+    {
+      key: "Referrer-Policy",
+      value: "strict-origin-when-cross-origin",
+    },
+    {
+      key: "Permissions-Policy",
+      value: "camera=(), microphone=(), geolocation=()",
+    },
+    {
+      key: "Strict-Transport-Security",
+      value: "max-age=31536000; includeSubDomains; preload",
+    },
+    {
+      key: "Content-Security-Policy",
+      value: csp,
+    },
+    {
+      key: "Content-Security-Policy-Report-Only",
+      value: csp,
+    },
+  ]
 }
-
-const configuredRuntimeOrigins = () =>
-  uniqueSources(
-    [
-      process.env.NEXT_PUBLIC_SITE_URL,
-      process.env.NEXT_PUBLIC_BACKEND_URL,
-      process.env.NEXT_PUBLIC_MONITORING_EMBED_URL,
-      process.env.NEXT_PUBLIC_GRAFANA_EMBED_URL,
-      process.env.NEXT_PUBLIC_LOGS_EMBED_URL,
-      process.env.NEXT_PUBLIC_GRAFANA_LOGS_EMBED_URL,
-      process.env.NEXT_PUBLIC_PROMETHEUS_URL,
-      process.env.UPTIME_KUMA_PROXY_ORIGIN,
-    ].map(originFromEnvUrl),
-  )
-
-const buildContentSecurityPolicy = () => {
-  const isDev = process.env.NODE_ENV === "development"
-  const runtimeOrigins = configuredRuntimeOrigins()
-  const aquilaDomains = ["https://*.aquilaxk.site"]
-  const vercelScriptSources = ["https://va.vercel-scripts.com", "https://vercel.live"]
-  const vercelConnectSources = [
-    "https://vitals.vercel-insights.com",
-    "https://vercel.live",
-    "wss://ws-us3.pusher.com",
-  ]
-  const localDevConnectSources = isDev ? ["http://localhost:8080", "http://127.0.0.1:8080"] : []
-  const embedFrameSources = [
-    "https://www.youtube.com",
-    "https://player.vimeo.com",
-    "https://www.loom.com",
-    "https://www.figma.com",
-    "https://codepen.io",
-    "https://codesandbox.io",
-  ]
-  const googleScriptSources = ["https://www.googletagmanager.com"]
-  const googleConnectSources = [
-    "https://www.google-analytics.com",
-    "https://analytics.google.com",
-    "https://region1.google-analytics.com",
-    "https://stats.g.doubleclick.net",
-  ]
-  const imageSources = [
-    "'self'",
-    "data:",
-    "blob:",
-    "https:",
-    "http:",
-    ...aquilaDomains,
-    "https://www.notion.so",
-    "https://lh5.googleusercontent.com",
-    "https://s3-us-west-2.amazonaws.com",
-    "https://avatars.githubusercontent.com",
-    ...googleConnectSources,
-    ...runtimeOrigins,
-  ]
-
-  const directives = [
-    ["default-src", "'self'"],
-    [
-      "script-src",
-      "'self'",
-      "'unsafe-inline'",
-      ...(isDev ? ["'unsafe-eval'"] : []),
-      ...vercelScriptSources,
-      ...googleScriptSources,
-    ],
-    ["style-src", "'self'", "'unsafe-inline'"],
-    ["img-src", ...imageSources],
-    [
-      "connect-src",
-      "'self'",
-      ...aquilaDomains,
-      ...runtimeOrigins,
-      ...localDevConnectSources,
-      ...vercelConnectSources,
-      ...googleConnectSources,
-    ],
-    ["font-src", "'self'", "data:"],
-    ["media-src", "'self'", "blob:", ...aquilaDomains, ...runtimeOrigins],
-    ["frame-src", "'self'", "https://vercel.live", ...runtimeOrigins, ...embedFrameSources],
-    ["object-src", "'none'"],
-    ["base-uri", "'self'"],
-    ["form-action", "'self'"],
-    ["frame-ancestors", "'self'"],
-    ["upgrade-insecure-requests"],
-  ]
-
-  return directives
-    .map(([name, ...sources]) => uniqueSources([name, ...sources]).join(" "))
-    .join("; ")
-}
-
-const buildSecurityHeaders = () => [
-  {
-    key: "X-Content-Type-Options",
-    value: "nosniff",
-  },
-  {
-    key: "X-Frame-Options",
-    value: "SAMEORIGIN",
-  },
-  {
-    key: "Referrer-Policy",
-    value: "strict-origin-when-cross-origin",
-  },
-  {
-    key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=()",
-  },
-  {
-    key: "Strict-Transport-Security",
-    value: "max-age=31536000; includeSubDomains; preload",
-  },
-  {
-    key: "Content-Security-Policy",
-    value: buildContentSecurityPolicy(),
-  },
-]
 
 /**
  * @typedef {{ source: string, destination: string }} RewriteRule

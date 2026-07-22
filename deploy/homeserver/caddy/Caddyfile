@@ -14,14 +14,17 @@
 
 # Uptime Kuma dashboard/status endpoint (optional).
 # Set MONITOR_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
+# ADMIN_EMBED_ORIGINS: space-separated admin UI origins allowed to iframe this host.
 http://{$MONITOR_DOMAIN:status.localhost} {
   reverse_proxy uptime_kuma:3001 {
-    # Allow embedding public status page in admin UI.
+    # Allow embedding public status page in admin UI (XFO only; keep/replace CSP below).
     header_down -X-Frame-Options
-    header_down -Content-Security-Policy
   }
 
   header {
+    # HR-56: do not strip CSP as an embed workaround. Enforce admin-origin frame-ancestors.
+    -X-Frame-Options
+    Content-Security-Policy "frame-ancestors {$ADMIN_EMBED_ORIGINS}"
     X-Content-Type-Options "nosniff"
     Referrer-Policy "strict-origin-when-cross-origin"
     Permissions-Policy "camera=(), microphone=(), geolocation=()"
@@ -42,15 +45,15 @@ http://{$GRAFANA_DOMAIN:grafana.localhost} {
   reverse_proxy grafana:3000 {
     header_up X-WEBAUTH-USER {http.request.header.X-WEBAUTH-USER}
     header_up X-WEBAUTH-NAME {http.request.header.X-WEBAUTH-NAME}
-    # Admin UI iframe embed compatibility.
+    # Admin UI iframe embed compatibility (XFO only; keep/replace CSP below).
     header_down -X-Frame-Options
-    header_down -Content-Security-Policy
   }
 
   header {
-    # Enforce iframe-compatible final response headers even when upstream drifts.
+    # HR-56: do not strip CSP as an embed workaround. Enforce admin-origin frame-ancestors.
+    # ADMIN_EMBED_ORIGINS: space-separated admin UI origins allowed to iframe Grafana.
     -X-Frame-Options
-    -Content-Security-Policy
+    Content-Security-Policy "frame-ancestors {$ADMIN_EMBED_ORIGINS}"
     X-Content-Type-Options "nosniff"
     Referrer-Policy "strict-origin-when-cross-origin"
     Permissions-Policy "camera=(), microphone=(), geolocation=()"

@@ -38,17 +38,32 @@ const getNextConfig = async () => {
   return nextConfigModule.default as NextConfig
 }
 
-const getCspHeader = async () => {
+const getSecurityHeaders = async () => {
   const nextConfig = await getNextConfig()
   const rules = await nextConfig.headers()
   const globalRule = rules.find((rule) => rule.source === "/:path*")
-  const csp = globalRule?.headers.find(
-    (header) => header.key.toLowerCase() === "content-security-policy",
-  )?.value
-
-  expect(csp).toBeTruthy()
-  return csp ?? ""
+  expect(globalRule).toBeTruthy()
+  return globalRule?.headers ?? []
 }
+
+const getHeaderValue = async (headerName: string) => {
+  const headers = await getSecurityHeaders()
+  const value = headers.find((header) => header.key.toLowerCase() === headerName.toLowerCase())
+    ?.value
+
+  expect(value).toBeTruthy()
+  return value ?? ""
+}
+
+const getCspHeader = async () => getHeaderValue("content-security-policy")
+
+const getCspReportOnlyHeader = async () =>
+  getHeaderValue("content-security-policy-report-only")
+
+const hasScriptHashOrNonce = (scriptSrc: string[] | undefined) =>
+  (scriptSrc ?? []).some(
+    (source) => source.startsWith("'sha256-") || source.startsWith("'nonce-"),
+  )
 
 const parseCspDirectives = (csp: string) => {
   const directives = new Map<string, string[]>()
@@ -65,12 +80,18 @@ const parseCspDirectives = (csp: string) => {
 
 test.describe("frontend security headers", () => {
   test("CSP declares script style image connect and font boundaries", async () => {
-    const directives = parseCspDirectives(await getCspHeader())
+    const enforceCsp = await getCspHeader()
+    const reportOnlyCsp = await getCspReportOnlyHeader()
+    const directives = parseCspDirectives(enforceCsp)
 
+    expect(reportOnlyCsp).toBe(enforceCsp)
     expect(directives.get("default-src")).toEqual(["'self'"])
     expect(directives.get("script-src")).toEqual(
-      expect.arrayContaining(["'self'", "'unsafe-inline'", "https://va.vercel-scripts.com"]),
+      expect.arrayContaining(["'self'", "https://va.vercel-scripts.com"]),
     )
+    expect(directives.get("script-src")).not.toContain("'unsafe-inline'")
+    expect(hasScriptHashOrNonce(directives.get("script-src"))).toBe(true)
+    // Emotion critical/runtime styles still require style-src unsafe-inline.
     expect(directives.get("style-src")).toEqual(expect.arrayContaining(["'self'", "'unsafe-inline'"]))
     expect(directives.get("img-src")).toEqual(
       expect.arrayContaining([

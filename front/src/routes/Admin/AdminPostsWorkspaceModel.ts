@@ -1,7 +1,8 @@
 import { isServerTempDraftPost } from "./editorTempDraft"
 import {
-  isLocalDraftExpired,
-  LOCAL_DRAFT_STORAGE_KEY,
+  describeLocalDraftSlot,
+  migrateLocalDraftV1Once,
+  readLocalDraft as readLocalDraftPayload,
 } from "./editorStudioStorageModel"
 
 export type PostListScope = "active" | "deleted"
@@ -53,6 +54,7 @@ export type LocalDraftSummary = {
   savedAt: string
   tagCount: number
   visibility: LocalDraftPayload["visibility"]
+  slotLabel: string
 }
 
 export type ListSort = "MODIFIED_AT" | "CREATED_AT" | "CREATED_AT_ASC"
@@ -203,34 +205,21 @@ export const readLocalDraft = (): LocalDraftSummary | null => {
   if (typeof window === "undefined") return null
 
   try {
-    const raw = window.localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<LocalDraftPayload>
-    if (!parsed || typeof parsed !== "object") return null
+    migrateLocalDraftV1Once()
+    const parsed = readLocalDraftPayload({ kind: "create" })
+    if (!parsed) return null
 
-    const title = typeof parsed.title === "string" ? parsed.title.trim() : ""
-    const content = typeof parsed.content === "string" ? parsed.content.trim() : ""
-    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : ""
-    const savedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : ""
-    if (isLocalDraftExpired(savedAt)) {
-      window.localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY)
-      return null
-    }
-    const tags = Array.isArray(parsed.tags)
-      ? parsed.tags.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      : []
-    const visibility =
-      parsed.visibility === "PRIVATE" || parsed.visibility === "PUBLIC_UNLISTED" || parsed.visibility === "PUBLIC_LISTED"
-        ? parsed.visibility
-        : "PUBLIC_LISTED"
-
+    const title = parsed.title.trim()
+    const content = parsed.content.trim()
+    const summary = parsed.summary.trim()
     if (!title && !summary && !content) return null
 
     return {
       title: title || "제목 없는 임시저장",
-      savedAt,
-      tagCount: tags.length,
-      visibility,
+      savedAt: parsed.savedAt,
+      tagCount: parsed.tags.length,
+      visibility: parsed.visibility,
+      slotLabel: describeLocalDraftSlot(parsed),
     }
   } catch {
     return null

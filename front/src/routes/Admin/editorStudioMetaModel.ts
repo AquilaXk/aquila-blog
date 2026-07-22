@@ -39,6 +39,10 @@ export type ResolvedEditorMetaSnapshot = {
 
 export type MetaUsageMap = Record<string, number>
 
+export type LocalDraftSource =
+  | { kind: "create" }
+  | { kind: "post"; postId: string }
+
 export type LocalDraftPayload = {
   title: string
   content: string
@@ -51,6 +55,7 @@ export type LocalDraftPayload = {
   category: string
   visibility: PostVisibility
   savedAt: string
+  source: LocalDraftSource
 }
 
 const markdownImagePattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/
@@ -513,8 +518,9 @@ export const composeEditorContent = (
   return `---\n${metadataLines.join("\n")}\n---\n\n${normalizedBody}`
 }
 
-export const buildLocalDraftFingerprint = (payload: Omit<LocalDraftPayload, "savedAt">) =>
-  JSON.stringify(payload)
+export const buildLocalDraftFingerprint = (
+  payload: Omit<LocalDraftPayload, "savedAt" | "source">
+) => JSON.stringify(payload)
 
 export const detectPublishPlaceholderIssue = (content: string): string | null => {
   let inFence = false

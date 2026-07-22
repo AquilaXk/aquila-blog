@@ -302,7 +302,7 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(snapshot.likeId).isEqualTo(77)
         assertThat(post.likesCount).isEqualTo(4)
         then(counterService).should().syncLikesCount(post)
-        assertThat(enqueueInvocations(sideEffectQueue)).isEmpty()
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "like-sync")
     }
 
     @Test

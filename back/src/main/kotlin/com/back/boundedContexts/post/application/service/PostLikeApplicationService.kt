@@ -119,6 +119,8 @@ class PostLikeApplicationService(
         val persistenceActor = actor.toPersistenceMember()
         postHydrationService.hydratePostAttrs(post)
         postCounterService.syncLikesCount(post)
+        // syncLikesCount rewrites the authoritative count; ranked FEED/EXPLORE pages must evict.
+        enqueueRankedLikesInvalidation(post.id, "like-sync")
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
         return PostLikeToggleResult(
             isLiked = existingLike != null,

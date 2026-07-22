@@ -18,10 +18,15 @@ test.describe("core smoke public shell", () => {
     const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
 
     expect(useSchemeSource).toContain("LIGHT_SCHEME")
+    expect(useSchemeSource).toContain("Intentional light-only")
+    expect(useSchemeSource).toContain("PR 1275")
+    expect(useSchemeSource).toContain("HIG P5-5")
+    expect(useSchemeSource).toContain("Clamp: requested scheme (including \"dark\") cannot leave light-only.")
     expect(useSchemeSource).not.toContain("resolveBootstrapScheme")
     expect(rootLayoutSource).toContain("useScheme()")
     expect(rootLayoutSource).toContain('const effectiveScheme = "light"')
     expect(rootLayoutSource).not.toContain("showThemeToggle")
+    expect(rootLayoutSource).not.toMatch(/from ["'].*ThemeToggle["']/)
   })
 
   test("OS 다크 첫 로드는 bootstrap guard를 삽입하고 공개 V4 route는 light로 수렴한다", async ({ page }) => {

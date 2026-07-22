@@ -185,6 +185,40 @@ class CloudExternalPlaybackTokenServiceTest {
         assertThat(storage.openedRanges).containsExactly(file.objectKey to (0L..4L))
     }
 
+    @Test
+    @DisplayName("만료 token 정리는 grace를 지난 행만 배치 삭제한다")
+    fun purgeExpiredTokensDeletesPastGraceOnly() {
+        tokens.savedTokens +=
+            CloudExternalPlaybackToken.create(
+                tokenHash = CloudExternalPlaybackTokenService.hashToken("past-grace"),
+                fileId = 12L,
+                memberId = 7L,
+                purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
+                expiresAt = Instant.parse("2026-06-26T10:00:00Z"),
+            )
+        tokens.savedTokens +=
+            CloudExternalPlaybackToken.create(
+                tokenHash = CloudExternalPlaybackTokenService.hashToken("inside-grace"),
+                fileId = 13L,
+                memberId = 7L,
+                purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
+                expiresAt = Instant.parse("2026-06-26T11:30:00Z"),
+            )
+        tokens.savedTokens +=
+            CloudExternalPlaybackToken.create(
+                tokenHash = CloudExternalPlaybackTokenService.hashToken("still-valid"),
+                fileId = 14L,
+                memberId = 7L,
+                purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
+                expiresAt = Instant.parse("2026-06-26T18:00:00Z"),
+            )
+
+        val purgedCount = service.purgeExpiredTokens(batchSize = 100)
+
+        assertThat(purgedCount).isEqualTo(1)
+        assertThat(tokens.savedTokens.map { it.fileId }).containsExactly(13L, 14L)
+    }
+
     private fun videoFile(
         id: Long,
         ownerMemberId: Long,
@@ -270,6 +304,19 @@ class CloudExternalPlaybackTokenServiceTest {
                     it.purpose == purpose &&
                     it.expiresAt.isAfter(now)
             }
+
+        override fun deleteByExpiresAtBefore(
+            cutoff: Instant,
+            limit: Int,
+        ): Int {
+            val toDelete =
+                savedTokens
+                    .filter { it.expiresAt.isBefore(cutoff) }
+                    .sortedWith(compareBy({ it.expiresAt }, { it.id }))
+                    .take(limit.coerceAtLeast(1))
+            savedTokens.removeAll(toDelete.toSet())
+            return toDelete.size
+        }
     }
 
     private class FakeCloudStoragePort : CloudStoragePort {

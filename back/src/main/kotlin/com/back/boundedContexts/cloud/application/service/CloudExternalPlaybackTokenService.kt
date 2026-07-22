@@ -8,6 +8,7 @@ import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.net.URLEncoder
@@ -32,6 +33,8 @@ class CloudExternalPlaybackTokenService(
     private val cloudExternalPlaybackTokenRepository: CloudExternalPlaybackTokenRepositoryPort,
     private val cloudStoragePort: CloudStoragePort,
     private val clock: Clock = Clock.systemUTC(),
+    @param:Value("\${custom.storage.cloudExternalPlaybackTokenCleanupGraceSeconds:3600}")
+    private val cleanupGraceSeconds: Long = 3600,
 ) {
     @Transactional
     fun issue(
@@ -96,6 +99,14 @@ class CloudExternalPlaybackTokenService(
             file = file.toDto(),
             storedObject = storedObject,
         )
+    }
+
+    @Transactional
+    fun purgeExpiredTokens(batchSize: Int): Int {
+        val safeBatchSize = batchSize.coerceIn(1, 1_000)
+        val graceSeconds = cleanupGraceSeconds.coerceAtLeast(0)
+        val cutoff = clock.instant().minusSeconds(graceSeconds)
+        return cloudExternalPlaybackTokenRepository.deleteByExpiresAtBefore(cutoff, safeBatchSize)
     }
 
     private fun findVideoFile(

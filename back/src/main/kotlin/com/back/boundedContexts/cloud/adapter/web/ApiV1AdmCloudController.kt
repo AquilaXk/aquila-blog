@@ -35,6 +35,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestMethod
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.ResponseStatus
@@ -292,6 +293,21 @@ class ApiV1AdmCloudController(
             },
         )
 
+    @RequestMapping(method = [RequestMethod.HEAD], path = ["/files/{id}/content"])
+    @Transactional(readOnly = true)
+    fun contentHead(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+    ): ResponseEntity<Void> =
+        headMetadataResponse(
+            cloudFileService.get(
+                ownerMemberId = securityUser.id,
+                fileId = id,
+            ),
+        )
+
     @GetMapping("/files/{id}/external-content")
     @Transactional(readOnly = true)
     fun externalContent(
@@ -325,6 +341,22 @@ class ApiV1AdmCloudController(
             },
         )
 
+    @RequestMapping(method = [RequestMethod.HEAD], path = ["/files/{id}/external-content"])
+    @Transactional(readOnly = true)
+    fun externalContentHead(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestParam
+        token: String,
+    ): ResponseEntity<Void> =
+        headMetadataResponse(
+            cloudExternalPlaybackTokenService.getFile(
+                token = token,
+                fileId = id,
+            ),
+        )
+
     @DeleteMapping("/files/{id}")
     fun delete(
         @AuthenticationPrincipal securityUser: SecurityUser,
@@ -339,6 +371,15 @@ class ApiV1AdmCloudController(
 
         return RsData("200-1", "클라우드 파일이 삭제되었습니다.")
     }
+
+    private fun headMetadataResponse(file: CloudFileDto): ResponseEntity<Void> =
+        noStoreHeaders(
+            ResponseEntity
+                .ok()
+                .contentType(safeMediaType(file.contentType))
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .contentLength(file.byteSize),
+        ).build()
 
     private fun contentResponse(
         request: HttpServletRequest,

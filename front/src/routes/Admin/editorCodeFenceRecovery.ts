@@ -85,7 +85,8 @@ const blockHasHtmlRecoveryConflictWithPublic = (
 ) => {
   if (!isCodeFenceBodyVisiblyEmpty(adminBlock.body)) return false
   if (!htmlBlock || isCodeFenceBodyVisiblyEmpty(htmlBlock.body)) return false
-  if (!publicBlock) return false
+  // public fence removed: stale html must not persist past a successful public fetch
+  if (!publicBlock) return true
 
   // public empty + html filled: intentional clear vs stale html
   if (isCodeFenceBodyVisiblyEmpty(publicBlock.body)) return true
@@ -110,11 +111,34 @@ const blockHasComplementaryPublicRecoveryPattern = (
   )
 }
 
+const emptyAdminHtmlConflictsWithPublic = (
+  htmlRecoveredContent: string,
+  publicContent: string
+) => {
+  const htmlBlocks = parseFencedCodeBlocks(htmlRecoveredContent.replace(/\r\n?/g, "\n"))
+  const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
+
+  return htmlBlocks.some((htmlBlock, blockIndex) => {
+    if (isCodeFenceBodyVisiblyEmpty(htmlBlock.body)) return false
+
+    const publicBlock = publicBlocks[blockIndex]
+    if (!publicBlock) return true
+    if (isCodeFenceBodyVisiblyEmpty(publicBlock.body)) return true
+    if (htmlBlock.body !== publicBlock.body) return true
+
+    return false
+  })
+}
+
 export const htmlRecoveryConflictsWithPublic = (
   adminContent: string,
   htmlRecoveredContent: string,
   publicContent: string
 ) => {
+  if (adminContent.trim().length === 0) {
+    return emptyAdminHtmlConflictsWithPublic(htmlRecoveredContent, publicContent)
+  }
+
   const adminBlocks = parseFencedCodeBlocks(adminContent.replace(/\r\n?/g, "\n"))
   const htmlBlocks = parseFencedCodeBlocks(htmlRecoveredContent.replace(/\r\n?/g, "\n"))
   const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
@@ -170,31 +194,37 @@ export const isContentHtmlRecoveryTrustworthy = ({
   }
 
   if (publicFallbackSucceeded && typeof publicContent === "string") {
-    const adminBlocks = parseFencedCodeBlocks(adminContent.replace(/\r\n?/g, "\n"))
-    const htmlBlocks = parseFencedCodeBlocks(htmlRecoveredContent.replace(/\r\n?/g, "\n"))
-    const candidateBlocks = parseFencedCodeBlocks(contentHtmlBodyCandidate.replace(/\r\n?/g, "\n"))
-    const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
+    if (adminContent.trim().length === 0) {
+      if (emptyAdminHtmlConflictsWithPublic(htmlRecoveredContent, publicContent)) {
+        return false
+      }
+    } else {
+      const adminBlocks = parseFencedCodeBlocks(adminContent.replace(/\r\n?/g, "\n"))
+      const htmlBlocks = parseFencedCodeBlocks(htmlRecoveredContent.replace(/\r\n?/g, "\n"))
+      const candidateBlocks = parseFencedCodeBlocks(contentHtmlBodyCandidate.replace(/\r\n?/g, "\n"))
+      const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
 
-    const hasUnwaivedConflict = adminBlocks.some((adminBlock, blockIndex) => {
-      const htmlBlock = htmlBlocks[blockIndex]
-      const candidateBlock = candidateBlocks[blockIndex]
-      const publicBlock = publicBlocks[blockIndex]
-      const conflict = blockHasHtmlRecoveryConflictWithPublic(
-        adminBlock,
-        htmlBlock,
-        publicBlock
-      )
-      const complementary = blockHasComplementaryPublicRecoveryPattern(
-        adminBlock,
-        candidateBlock,
-        publicBlock
-      )
+      const hasUnwaivedConflict = adminBlocks.some((adminBlock, blockIndex) => {
+        const htmlBlock = htmlBlocks[blockIndex]
+        const candidateBlock = candidateBlocks[blockIndex]
+        const publicBlock = publicBlocks[blockIndex]
+        const conflict = blockHasHtmlRecoveryConflictWithPublic(
+          adminBlock,
+          htmlBlock,
+          publicBlock
+        )
+        const complementary = blockHasComplementaryPublicRecoveryPattern(
+          adminBlock,
+          candidateBlock,
+          publicBlock
+        )
 
-      return conflict && !complementary
-    })
+        return conflict && !complementary
+      })
 
-    if (hasUnwaivedConflict) {
-      return false
+      if (hasUnwaivedConflict) {
+        return false
+      }
     }
   }
 
@@ -255,9 +285,9 @@ export const shouldMarkCodeFenceRecovered = ({
   return contentHasFencedCodeBlocks(content)
 }
 
-/** Fetch public detail when admin is wholly empty or has empty fenced bodies. */
+/** Fetch public detail only when admin markdown has empty fenced bodies (not wholly cleared). */
 export const shouldFetchPublicContentForCodeFenceRecovery = (adminContent: string) =>
-  adminContent.trim().length === 0 || hasEmptyFencedCodeBlockBody(adminContent)
+  adminContent.trim().length > 0 && hasEmptyFencedCodeBlockBody(adminContent)
 
 export const adminContentNeedsCodeFenceRecovery = (content: string) =>
   content.trim().length === 0 || hasEmptyFencedCodeBlockBody(content)

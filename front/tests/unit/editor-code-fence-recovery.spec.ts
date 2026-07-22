@@ -119,18 +119,18 @@ test.describe("editor code fence recovery", () => {
     expect(result.content).toContain("fun example() = Unit")
   })
 
-  test("empty admin + prose-only html + public fenced content recovers via publicApi", () => {
+  test("empty admin + prose-only html does not fetch public or mark recovered", () => {
     const proseOnlyHtml = "intro without fenced code"
     const result = resolveEditorCodeFenceRecovery({
       adminContent: "",
       contentHtmlBodyCandidate: proseOnlyHtml,
       publicContent: filledFenceContent,
-      publicFallbackSucceeded: true,
+      publicFallbackSucceeded: false,
     })
 
-    expect(result.source).toBe("publicApi")
-    expect(result.recovered).toBe(true)
-    expect(result.content).toBe(filledFenceContent)
+    expect(result.source).toBe("contentHtml")
+    expect(result.recovered).toBe(false)
+    expect(result.content).toBe(proseOnlyHtml)
   })
 
   test("telemetry treats wholly empty admin content as hadEmptyFence", () => {
@@ -139,17 +139,16 @@ test.describe("editor code fence recovery", () => {
     expect(adminContentHadEmptyFenceForTelemetry(filledFenceContent)).toBe(false)
   })
 
-  test("empty admin + blank html + public content recovers via publicApi", () => {
+  test("empty admin + blank html stays unrecovered without public fetch", () => {
     const result = resolveEditorCodeFenceRecovery({
       adminContent: "",
       contentHtmlBodyCandidate: "",
-      publicContent: filledFenceContent,
-      publicFallbackSucceeded: true,
+      publicFallbackSucceeded: false,
     })
 
-    expect(result.source).toBe("publicApi")
-    expect(result.recovered).toBe(true)
-    expect(result.content).toBe(filledFenceContent)
+    expect(result.source).toBe("unrecovered")
+    expect(result.recovered).toBe(false)
+    expect(result.content).toBe("")
   })
 
   test("merges complementary partial html and public candidates sequentially", () => {
@@ -489,10 +488,79 @@ test.describe("editor code fence recovery", () => {
     expect(result.content).toBe("intro without fenced code")
   })
 
-  test("fetches public for completely empty admin and empty-fence admin", () => {
-    expect(shouldFetchPublicContentForCodeFenceRecovery("")).toBe(true)
-    expect(shouldFetchPublicContentForCodeFenceRecovery("   \n")).toBe(true)
+  test("fetches public only for empty-fence admin, not wholly cleared admin", () => {
+    expect(shouldFetchPublicContentForCodeFenceRecovery("")).toBe(false)
+    expect(shouldFetchPublicContentForCodeFenceRecovery("   \n")).toBe(false)
     expect(shouldFetchPublicContentForCodeFenceRecovery(emptyFenceContent)).toBe(true)
     expect(shouldFetchPublicContentForCodeFenceRecovery(filledFenceContent)).toBe(false)
+  })
+
+  test("does not revive cleared empty admin from stale contentHtml when public confirms empty", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: "",
+      contentHtmlBodyCandidate: filledFenceContent,
+      publicContent: "",
+      publicFallbackSucceeded: true,
+    })
+
+    expect(
+      htmlRecoveryConflictsWithPublic("", filledFenceContent, "")
+    ).toBe(true)
+    expect(
+      isContentHtmlRecoveryTrustworthy({
+        adminContent: "",
+        contentHtmlBodyCandidate: filledFenceContent,
+        htmlRecoveredContent: filledFenceContent,
+        publicContent: "",
+        publicFallbackSucceeded: true,
+      })
+    ).toBe(false)
+    expect(result.source).not.toBe("contentHtml")
+    expect(result.recovered).toBe(false)
+    expect(result.content).toBe("")
+    expect(result.content).not.toContain("fun example() = Unit")
+  })
+
+  test("treats missing public fence as html conflict for extra admin empty fences", () => {
+    const adminWithExtraEmptyFence = [
+      "intro",
+      "",
+      "```kotlin",
+      "",
+      "```",
+      "",
+      "```ts",
+      "",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+    const htmlWithBothFilled = fullPublicCandidate
+    const publicWithOneFence = [
+      "intro",
+      "",
+      "```kotlin",
+      "fun example() = Unit",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+
+    expect(
+      htmlRecoveryConflictsWithPublic(
+        adminWithExtraEmptyFence,
+        htmlWithBothFilled,
+        publicWithOneFence
+      )
+    ).toBe(true)
+    expect(
+      isContentHtmlRecoveryTrustworthy({
+        adminContent: adminWithExtraEmptyFence,
+        contentHtmlBodyCandidate: htmlWithBothFilled,
+        htmlRecoveredContent: htmlWithBothFilled,
+        publicContent: publicWithOneFence,
+        publicFallbackSucceeded: true,
+      })
+    ).toBe(false)
   })
 })

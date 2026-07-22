@@ -76,10 +76,13 @@ export type ApiTagCountDto = {
   count: number
 }
 
+export type FeedSortMode = "latest" | "views" | "likes"
+
 export type ExplorePostsParams = {
   kw?: string
   tag?: string
   order?: "asc" | "desc"
+  sortMode?: FeedSortMode
   page?: number
   pageSize?: number
   signal?: AbortSignal

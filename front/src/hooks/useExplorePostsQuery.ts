@@ -7,6 +7,7 @@ import {
   getFeedPostsPage,
   getSearchPostsPage,
 } from "src/apis/backend/posts"
+import type { FeedSortMode } from "src/apis/backend/posts/PostApiDtos"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
 import { normalizeKeywordQuery, normalizeOptionalTagQuery } from "src/libs/query/normalize"
@@ -18,6 +19,7 @@ type Params = {
   tag?: string
   pageSize?: number
   order?: "asc" | "desc"
+  sortMode?: FeedSortMode
   enabled?: boolean
 }
 
@@ -30,12 +32,15 @@ const useExplorePostsQuery = ({
   tag,
   pageSize = FEED_EXPLORE_PAGE_SIZE,
   order = "desc",
+  sortMode = "latest",
   enabled = true,
 }: Params) => {
   const normalizedKw = normalizeKeywordQuery(kw)
   const normalizedTag = normalizeOptionalTagQuery(tag)
   const searchMode = normalizedKw.length > 0 && !normalizedTag
   const feedMode = normalizedKw.length === 0 && !normalizedTag
+  const normalizedSortMode: FeedSortMode =
+    sortMode === "views" || sortMode === "likes" ? sortMode : "latest"
 
   const query = useInfiniteQuery({
     enabled,
@@ -43,18 +48,21 @@ const useExplorePostsQuery = ({
       ? queryKey.postsFeedInfinite({
           pageSize,
           order,
+          sortMode: normalizedSortMode,
         })
       : searchMode
         ? queryKey.postsSearchInfinite({
             kw: normalizedKw,
             pageSize,
             order,
+            sortMode: normalizedSortMode,
           })
         : queryKey.postsExploreInfinite({
             kw: normalizedKw,
             tag: normalizedTag,
             pageSize,
             order,
+            sortMode: normalizedSortMode,
           }),
     queryFn: ({ pageParam, signal }: { pageParam: ExplorePageParam; signal?: AbortSignal }) => {
       const pageNumber = toSafeInt(pageParam, 1)
@@ -63,6 +71,7 @@ const useExplorePostsQuery = ({
         if (typeof pageParam === "number") {
           return getFeedPostsPage({
             order,
+            sortMode: normalizedSortMode,
             page: pageNumber,
             pageSize,
             signal: signal ?? undefined,
@@ -71,6 +80,7 @@ const useExplorePostsQuery = ({
         const cursor = typeof pageParam === "string" ? pageParam : undefined
         return getFeedPostsCursorPage({
           order,
+          sortMode: normalizedSortMode,
           pageSize,
           cursor,
           signal: signal ?? undefined,
@@ -81,6 +91,7 @@ const useExplorePostsQuery = ({
         return getSearchPostsPage({
           kw: normalizedKw,
           order,
+          sortMode: normalizedSortMode,
           page: pageNumber,
           pageSize,
           signal: signal ?? undefined,
@@ -91,6 +102,7 @@ const useExplorePostsQuery = ({
           kw: normalizedKw,
           tag: normalizedTag,
           order,
+          sortMode: normalizedSortMode,
           page: pageNumber,
           pageSize,
           signal: signal ?? undefined,
@@ -100,6 +112,7 @@ const useExplorePostsQuery = ({
       return getExplorePostsCursorPage({
         tag: normalizedTag,
         order,
+        sortMode: normalizedSortMode,
         pageSize,
         cursor,
         signal: signal ?? undefined,

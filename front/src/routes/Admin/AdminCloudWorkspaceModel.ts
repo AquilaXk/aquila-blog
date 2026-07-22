@@ -127,6 +127,45 @@ export const doesCloudFileMatchFilters = (
   return matchesKind && matchesFolderPath && matchesKeyword
 }
 
+export type CloudEmptyStateInput = {
+  activeUploadCount: number
+  debouncedKeyword: string
+  filter: CloudMediaFilter
+  isError: boolean
+  isFetching: boolean
+  isLoading: boolean
+  keyword: string
+}
+
+export const isCloudSearchPending = (keyword: string, debouncedKeyword: string) => keyword !== debouncedKeyword
+
+export const resolveCloudEmptyTitle = ({
+  activeUploadCount,
+  debouncedKeyword,
+  filter,
+  isError,
+  isFetching,
+  isLoading,
+  keyword,
+}: CloudEmptyStateInput) => {
+  if (isLoading) return "파일을 불러오는 중입니다."
+  if (isError) return "파일 목록을 불러오지 못했습니다."
+  if (activeUploadCount > 0) return "업로드 중인 파일이 있습니다."
+  if (isCloudSearchPending(keyword, debouncedKeyword) || isFetching) return "검색 중입니다."
+  if (debouncedKeyword || filter !== "ALL") return "선택한 조건에 맞는 파일이 없습니다."
+  return "표시할 파일이 없습니다."
+}
+
+export const shouldShowCloudEmptyLoading = ({
+  filesCount,
+  isLoading,
+  isSearchPending,
+}: {
+  filesCount: number
+  isLoading: boolean
+  isSearchPending: boolean
+}) => filesCount === 0 && (isLoading || isSearchPending)
+
 export const mergeCloudFiles = (primary: CloudFile[], secondary: CloudFile[]) => {
   const seen = new Set<number>()
   const merged: CloudFile[] = []

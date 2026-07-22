@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test"
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { ApiError } from "../../src/apis/backend/client"
 import {
   isDefinitiveStaleVideoUploadSessionError,
@@ -11,6 +13,15 @@ import {
   toValidPageSize,
 } from "../../src/apis/backend/posts/PostApiRequestModel"
 import { shouldFetchAuthSession } from "../../src/hooks/useAuthSession"
+import { getSearchDebounceMs } from "../../src/hooks/useDebouncedValue"
+import {
+  DASHBOARD_COLLECTION_FAILED_LABEL,
+  DASHBOARD_DATA_MISSING_LABEL,
+  formatDashboardFreshnessLabel,
+  isDashboardQueryCollectionFailed,
+  resolveDashboardCollectionLabel,
+  resolveDashboardDataUpdatedAt,
+} from "../../src/routes/Admin/AdminDashboardWorkspaceModel"
 import { normalizeApiRequestPath } from "../../src/libs/backend/requestPath"
 import { parseMarkdownSegments } from "../../src/libs/markdown/renderingSegmentModel"
 import {
@@ -19,6 +30,11 @@ import {
   readOptionalTrackingConsent,
 } from "../../src/libs/privacy/optionalTrackingConsentCore"
 import { normalizeNextPath } from "../../src/libs/router"
+import {
+  isCloudSearchPending,
+  resolveCloudEmptyTitle,
+  shouldShowCloudEmptyLoading,
+} from "../../src/routes/Admin/AdminCloudWorkspaceModel"
 
 const createStorage = (): Storage => {
   const store = new Map<string, string>()
@@ -214,5 +230,107 @@ caption
     expect(buildExploreCursorPath({ cursor: "", tag: "  TypeScript  ", pageSize: 2 })).toBe(
       "/post/api/v1/posts/explore/cursor?tag=TypeScript&sort=CREATED_AT&pageSize=2"
     )
+    expect(buildFeedCursorPath({ sortMode: "views", pageSize: 24 })).toBe(
+      "/post/api/v1/posts/feed/cursor?sort=HIT_COUNT&pageSize=24"
+    )
+  })
+
+  test("search debounce delay adapts by keyword length", () => {
+    expect(getSearchDebounceMs("")).toBe(0)
+    expect(getSearchDebounceMs("  ")).toBe(0)
+    expect(getSearchDebounceMs("한")).toBe(120)
+    expect(getSearchDebounceMs("검색어")).toBe(180)
+    expect(getSearchDebounceMs("프로젝트스크린샷")).toBe(240)
+  })
+
+  test("cloud empty state follows debounced search and fetch status", () => {
+    const baseInput = {
+      activeUploadCount: 0,
+      debouncedKeyword: "",
+      filter: "ALL" as const,
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      keyword: "",
+    }
+
+    expect(isCloudSearchPending("deploy", "depl")).toBe(true)
+    expect(isCloudSearchPending("deploy", "deploy")).toBe(false)
+
+    expect(
+      resolveCloudEmptyTitle({
+        ...baseInput,
+        keyword: "deploy",
+      })
+    ).toBe("검색 중입니다.")
+
+    expect(
+      resolveCloudEmptyTitle({
+        ...baseInput,
+        debouncedKeyword: "deploy",
+        keyword: "deploy",
+      })
+    ).toBe("선택한 조건에 맞는 파일이 없습니다.")
+
+    expect(
+      resolveCloudEmptyTitle({
+        ...baseInput,
+        debouncedKeyword: "deploy",
+        isFetching: true,
+        keyword: "deploy",
+      })
+    ).toBe("검색 중입니다.")
+
+    expect(
+      resolveCloudEmptyTitle({
+        ...baseInput,
+        debouncedKeyword: "deploy",
+        keyword: "",
+      })
+    ).toBe("검색 중입니다.")
+
+    expect(shouldShowCloudEmptyLoading({ filesCount: 0, isLoading: false, isSearchPending: true })).toBe(true)
+    expect(shouldShowCloudEmptyLoading({ filesCount: 2, isLoading: false, isSearchPending: true })).toBe(false)
+  })
+
+  test("dashboard freshness uses min dataUpdatedAt as HH:mm 기준", () => {
+    const older = Date.UTC(2026, 6, 22, 2, 5, 0)
+    const newer = Date.UTC(2026, 6, 22, 2, 17, 0)
+    expect(resolveDashboardDataUpdatedAt(0, newer, older)).toBe(older)
+    expect(formatDashboardFreshnessLabel(older)).toMatch(/^\d{2}:\d{2} 기준$/)
+    expect(resolveDashboardCollectionLabel({ isError: true, hasData: true })).toBe(
+      DASHBOARD_COLLECTION_FAILED_LABEL
+    )
+    expect(resolveDashboardCollectionLabel({ isError: false, isRefetchError: true, hasData: true })).toBe(
+      DASHBOARD_COLLECTION_FAILED_LABEL
+    )
+    expect(resolveDashboardCollectionLabel({ isError: false, hasData: false })).toBe(
+      DASHBOARD_DATA_MISSING_LABEL
+    )
+    expect(resolveDashboardCollectionLabel({ isError: false, hasData: true })).toBeNull()
+    expect(isDashboardQueryCollectionFailed({ isError: false, isRefetchError: true })).toBe(true)
+    expect(isDashboardQueryCollectionFailed({ isError: true, isRefetchError: false })).toBe(true)
+    expect(isDashboardQueryCollectionFailed({ isError: false, isRefetchError: false })).toBe(false)
+  })
+
+  test("dashboard collection failure flags stay scoped per query", () => {
+    const pageSource = readFileSync(
+      path.resolve(__dirname, "../../src/routes/Admin/AdminDashboardWorkspacePage.tsx"),
+      "utf8"
+    )
+    const viewSource = readFileSync(
+      path.resolve(__dirname, "../../src/routes/Admin/AdminDashboardWorkspaceView.tsx"),
+      "utf8"
+    )
+
+    expect(pageSource).toContain("healthCollectionFailed = isDashboardQueryCollectionFailed(systemHealthQuery)")
+    expect(pageSource).toContain("snapshotCollectionFailed = isDashboardQueryCollectionFailed(dashboardSnapshotQuery)")
+    expect(pageSource).toContain("collectionFailed = healthCollectionFailed || snapshotCollectionFailed")
+    expect(pageSource).toContain("isManualRefreshing")
+    expect(pageSource).toContain("isRefreshing = isManualRefreshing")
+    expect(pageSource).not.toContain("isRefreshing = systemHealthQuery.isFetching")
+    expect(viewSource).toContain("snapshotCollectionFailed")
+    expect(viewSource).not.toMatch(/Public read latency[\s\S]*collectionFailed \?/)
+    expect(viewSource).not.toMatch(/Live logs[\s\S]*collectionFailed \?/)
   })
 })

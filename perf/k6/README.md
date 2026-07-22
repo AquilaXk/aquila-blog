@@ -130,3 +130,88 @@ sum(rate(http_server_requests_seconds_count{uri=~"/post/api/v1/posts/(feed|explo
 - read API p95: feed/explore 2.5s 이하, detail 1.8s 이하
 - read API 5xx rate 1% 미만
 - 급격한 p95 상승 시 최근 배포/DB 부하/캐시 적중률을 함께 확인
+
+## 5) Cloud 재생·업로드 (#1228)
+
+출시 기준 초안: [`cloud-launch-criteria.md`](./cloud-launch-criteria.md)
+
+### 5-1) External playback (동시 시청 + seek)
+
+사전 준비: admin API로 외부 재생 token 발급 (TTL 6h). 자격은 **커밋하지 않고** `__ENV`로 주입.
+
+```bash
+BASE_URL="https://api.aquilaxk.site" \
+CLOUD_FILE_ID="103" \
+CLOUD_PLAYBACK_TOKEN="<token-from-admin-api>" \
+CLOUD_FILE_BYTE_SIZE="8388608" \
+CONCURRENT_VIEWERS="5" \
+k6 run perf/k6/cloud-playback-load.js
+```
+
+- 시나리오: `concurrent_viewers`(constant-vus) + `seek_burst`(ramping-vus)
+- 패턴: HEAD → 초기 range(moov) → 무작위 offset range (플레이어 seek 흉내)
+- threshold: `playback_ttfb_ms` p95 < 1.5s, `playback_error_rate` < 1% (**416 제외**)
+- rate limit: `external-content`에 429 backstop — 측정 전 limit 조건 기록. `EXCLUDE_429=1`로 429 제외 집계 가능
+- **측정 위치**: 홈서버 외부 회선 (LAN 실행 금지 — uplink 상한 과대평가)
+
+결과 export 예:
+
+```bash
+k6 run --summary-export "perf/k6/results/cloud-playback-$(date +%Y%m%d-%H%M%S).json" \
+  perf/k6/cloud-playback-load.js
+```
+
+구조 예시: [`examples/cloud-playback.example.json`](./examples/cloud-playback.example.json)
+
+### 5-2) Multipart part upload (k6 — API 지연·동시 세션)
+
+Admin 인증: `CLOUD_AUTH_COOKIE="accessToken=..."` 또는 `CLOUD_AUTH_HEADER="Bearer ..."`
+
+```bash
+BASE_URL="https://api.aquilaxk.site" \
+CLOUD_AUTH_COOKIE="accessToken=..." \
+PART_SIZE_BYTES="1048576" \
+PARTS_PER_SESSION="3" \
+CONCURRENT_SESSIONS="2" \
+k6 run perf/k6/cloud-upload-parts-load.js
+```
+
+- k6는 part body를 메모리에 유지 → `PART_SIZE_BYTES`는 작게(기본 1MiB)
+- 세션당 part는 **직렬** 업로드(현재 백엔드 구조). VU마다 별도 세션으로 동시성 측정
+- complete 대신 cancel로 종료(스토리지 잔여 최소화)
+
+### 5-3) 5GB 전체 업로드 실측 (curl)
+
+```bash
+chmod +x perf/k6/cloud-upload-5gb-measure.sh
+BASE_URL="https://api.aquilaxk.site" \
+CLOUD_AUTH_COOKIE="accessToken=..." \
+TARGET_GIB="5" \
+./perf/k6/cloud-upload-5gb-measure.sh
+```
+
+- `perf/k6/results/cloud-upload-5gb-<timestamp>.json`에 처리량·part 지연 요약
+- uplink 대비 ≥ 70% 목표는 `cloud-launch-criteria.md` 참고
+
+### 5-4) 공개 read API 간섭 (post-read-load 병행)
+
+별도 스크립트 없이 **두 터미널**에서 동시 실행:
+
+```bash
+# 터미널 A — baseline 또는 부하 중 read API
+BASE_URL="https://api.aquilaxk.site" \
+k6 run --summary-export "perf/k6/results/read-under-cloud-$(date +%Y%m%d-%H%M%S).json" \
+  perf/k6/post-read-load.js
+
+# 터미널 B — cloud 재생 또는 업로드 부하
+BASE_URL="https://api.aquilaxk.site" \
+CLOUD_FILE_ID="103" CLOUD_PLAYBACK_TOKEN="..." CLOUD_FILE_BYTE_SIZE="8388608" \
+k6 run perf/k6/cloud-playback-load.js
+```
+
+판정: baseline `post-read-load` summary와 부하 중 summary의 feed/explore/detail p95를 비교 — **악화 20% 미만** (`cloud-launch-criteria.md`).
+
+### 5-5) results 디렉터리
+
+- `perf/k6/results/*.json`, `*.txt`는 `.gitignore` 대상 (live 자격·측정값 유출 방지)
+- 예상 파일명·메트릭: `cloud-launch-criteria.md` 및 `examples/` 참고

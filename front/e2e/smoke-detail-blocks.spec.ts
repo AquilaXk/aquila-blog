@@ -34,7 +34,10 @@ test.describe("core smoke detail blocks and typography", () => {
       path.resolve(__dirname, "../src/libs/markdown/components/MarkdownRendererRootTableToggleStyles.ts"),
       "utf8"
     )
-    const editorSource = readFileSync(path.resolve(__dirname, "../src/components/markdown-editor/MarkdownEditor.tsx"), "utf8")
+    const editorBlockSnippetsSource = readFileSync(
+      path.resolve(__dirname, "../src/components/markdown-editor/markdownEditorBlockSnippets.ts"),
+      "utf8"
+    )
 
     expect(codeModelSource).toContain("const extractCodeTitle = (meta: string)")
     expect(codeModelSource).toContain("meta.match(/(?:^|\\s)title=")
@@ -94,7 +97,8 @@ test.describe("core smoke detail blocks and typography", () => {
     expect(tableToggleStyleSource).toContain("font-size: 14px;")
     expect(tableToggleStyleSource).toContain("padding: 13px 15px;")
     expect(tableToggleStyleSource).not.toContain("@media (max-width: 480px)")
-    expect(editorSource).toContain('```kotlin title="invalidatePost.kt"')
+    expect(editorBlockSnippetsSource).toContain('joinSnippetLines(["", "```", "", "```", ""])')
+    expect(editorBlockSnippetsSource).not.toContain('```kotlin title="invalidatePost.kt"')
   })
 
   test("상세 페이지 콜아웃과 토글 블록은 작성 문법대로 렌더된다", async ({ page }) => {

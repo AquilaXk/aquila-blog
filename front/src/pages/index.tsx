@@ -97,10 +97,12 @@ export const getStaticProps: GetStaticProps = async () => {
             tag: currentTag || undefined,
             pageSize: FEED_EXPLORE_PAGE_SIZE,
             order: "desc",
+            sortMode: "latest",
           })
         : queryKey.postsFeedInfinite({
             pageSize: FEED_EXPLORE_PAGE_SIZE,
             order: "desc",
+            sortMode: "latest",
           }),
       {
         pages: [

@@ -25,15 +25,22 @@ import {
   StatusRow,
   StatusRows,
 } from "src/routes/Admin/AdminDashboardWorkspace.styles"
+import { DashboardRefreshControls } from "src/routes/Admin/AdminDashboardWorkspaceSections"
 import AdminShell from "src/routes/Admin/AdminShell"
 
 export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
   const {
     chartBars,
+    chartEmptyLabel,
+    collectionFailed,
+    snapshotCollectionFailed,
     dashboardStatusLabel,
     dashboardStatusTone,
+    freshnessLabel,
+    isRefreshing,
     kpiCards,
     logRows,
+    onRefresh,
     priorityRows,
     sessionMember,
   } = props
@@ -51,6 +58,12 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
               </HeroCopy>
               <HeroActions>
                 <StatusChip data-tone={dashboardStatusTone}>{dashboardStatusLabel}</StatusChip>
+                <DashboardRefreshControls
+                  freshnessLabel={freshnessLabel}
+                  collectionFailed={collectionFailed}
+                  isRefreshing={isRefreshing}
+                  onRefresh={onRefresh}
+                />
                 <Link href="/admin/tools" passHref legacyBehavior>
                   <HeaderLink>Doctor 실행</HeaderLink>
                 </Link>
@@ -77,7 +90,11 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
             <PanelCard>
               <PanelHeader>
                 <h2>Public read latency</h2>
-                <StatusChip data-tone={dashboardStatusTone}>LIVE</StatusChip>
+                {snapshotCollectionFailed ? (
+                  <StatusChip data-tone="danger">수집 실패 · 재시도</StatusChip>
+                ) : (
+                  <StatusChip data-tone={dashboardStatusTone}>LIVE</StatusChip>
+                )}
               </PanelHeader>
               <Chart aria-label="운영 스냅샷 기반 지표 차트">
                 {chartBars.length ? (
@@ -92,7 +109,9 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
                     ))}
                   </ChartBars>
                 ) : (
-                  <PrioritySummary data-tone="neutral">데이터 미수집 · 백엔드 확인 필요</PrioritySummary>
+                  <PrioritySummary data-tone={snapshotCollectionFailed ? "warn" : "neutral"}>
+                    {chartEmptyLabel}
+                  </PrioritySummary>
                 )}
               </Chart>
             </PanelCard>
@@ -128,7 +147,11 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
             <PanelCard data-size="wide">
               <PanelHeader>
                 <h2>Live logs</h2>
-                <span>Loki · production</span>
+                {snapshotCollectionFailed ? (
+                  <StatusChip data-tone="danger">수집 실패 · 재시도</StatusChip>
+                ) : (
+                  <span>Loki · production</span>
+                )}
               </PanelHeader>
               <LogLines>
                 {logRows.map((row: any) => (

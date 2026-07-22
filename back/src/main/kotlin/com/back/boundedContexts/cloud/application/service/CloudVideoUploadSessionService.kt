@@ -9,16 +9,22 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadPart
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSession
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
+import com.back.global.storage.application.CloudMultipartCommitDetector
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import com.back.global.storage.metrics.CloudMediaMetrics
 import com.fasterxml.jackson.annotation.JsonInclude
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import java.io.InputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.DigestInputStream
+import java.security.MessageDigest
 import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
@@ -32,6 +38,11 @@ private const val CLOUD_VIDEO_UPLOAD_MAX_FILENAME_CODE_POINTS = 255L
 private const val CLOUD_VIDEO_UPLOAD_MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
 private const val CLOUD_VIDEO_UPLOAD_MAX_MULTIPART_PARTS = 10_000L
 private const val INVALID_PART_SIZE_MESSAGE = "업로드 조각 크기가 올바르지 않습니다."
+private const val PART_CONTENT_CONFLICT_MESSAGE = "이미 다른 내용의 업로드 조각이 저장되어 있습니다."
+private const val MULTIPART_COMPOSITE_CHECKSUM_PREFIX = "sha256-composite:"
+private const val INTEGRITY_MISMATCH_MESSAGE = "완성된 업로드 파일의 무결성 검증에 실패했습니다."
+private const val COMMITTED_OBJECT_NOT_VISIBLE_MESSAGE =
+    "완성된 업로드 객체를 아직 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
 
 data class CloudVideoUploadSessionDto(
     val id: Long,
@@ -69,8 +80,13 @@ class CloudVideoUploadSessionService(
     private val cloudStoragePort: CloudStoragePort,
     private val cloudStorageProperties: CloudStorageProperties = CloudStorageProperties(),
     private val clock: Clock = Clock.systemUTC(),
+    private val meterRegistry: MeterRegistry? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    init {
+        cloudStorageProperties.validateResumableLifetimeAgainstMinioStaleExpiry()
+    }
 
     fun createSession(
         ownerMemberId: Long,
@@ -137,6 +153,11 @@ class CloudVideoUploadSessionService(
             throw AppException("409-1", "대용량 업로드 세션 상태가 변경되었습니다.")
         }
         session.markInitiated(upload.uploadId, now)
+        CloudMediaMetrics.recordSessionTransition(
+            meterRegistry,
+            from = CloudVideoUploadSessionStatus.INITIATING.name,
+            to = CloudVideoUploadSessionStatus.IN_PROGRESS.name,
+        )
 
         return session.toDto(emptyList())
     }
@@ -173,142 +194,227 @@ class CloudVideoUploadSessionService(
         return purgedCount
     }
 
+    fun purgeStaleIntermediateSessions(batchSize: Int): Int {
+        val now = clock.instant()
+        val sessions =
+            sessionRepository.findStaleIntermediate(
+                initiatingCutoff =
+                    now.minusSeconds(
+                        cloudStorageProperties.cloudVideoResumableStaleInitiatingGraceSeconds.coerceAtLeast(1),
+                    ),
+                completingOrAbortingCutoff =
+                    now.minusSeconds(
+                        cloudStorageProperties.cloudVideoResumableStaleCompletingGraceSeconds.coerceAtLeast(1),
+                    ),
+                uploadingPartCutoff =
+                    now.minusSeconds(
+                        cloudStorageProperties.cloudVideoResumableStaleUploadingPartGraceSeconds.coerceAtLeast(1),
+                    ),
+                limit = batchSize.coerceAtLeast(1),
+            )
+        var recoveredCount = 0
+        sessions.forEach { session ->
+            runCatching {
+                if (recoverStaleIntermediateSession(session)) {
+                    recoveredCount++
+                }
+            }.onFailure {
+                log.warn(
+                    "Stale cloud video multipart upload recovery failed (sessionId={}, objectKey={}, status={})",
+                    session.id,
+                    session.objectKey,
+                    session.status,
+                    it,
+                )
+            }
+        }
+        return recoveredCount
+    }
+
+    fun countStaleIntermediateSessions(): Long {
+        val now = clock.instant()
+        return sessionRepository.countStaleIntermediate(
+            initiatingCutoff =
+                now.minusSeconds(
+                    cloudStorageProperties.cloudVideoResumableStaleInitiatingGraceSeconds.coerceAtLeast(1),
+                ),
+            completingOrAbortingCutoff =
+                now.minusSeconds(
+                    cloudStorageProperties.cloudVideoResumableStaleCompletingGraceSeconds.coerceAtLeast(1),
+                ),
+            uploadingPartCutoff =
+                now.minusSeconds(
+                    cloudStorageProperties.cloudVideoResumableStaleUploadingPartGraceSeconds.coerceAtLeast(1),
+                ),
+        )
+    }
+
     fun uploadPart(
         ownerMemberId: Long,
         sessionId: Long,
         partNumber: Int,
         inputStream: InputStream,
         contentLength: Long,
-    ): CloudVideoUploadPartResultDto =
-        inputStream.use { source ->
-            val session = findMutableSession(ownerMemberId, sessionId)
-            validatePartNumber(session, partNumber)
-            validatePartSize(session, partNumber, contentLength)
-            val tempFile = copyPartToTempFile(source, contentLength)
-            try {
-                validateFirstPartSignature(session, partNumber, tempFile)
+    ): CloudVideoUploadPartResultDto {
+        val startedAt = System.nanoTime()
+        return try {
+            inputStream.use { source ->
+                val session = findMutableSession(ownerMemberId, sessionId)
+                validatePartNumber(session, partNumber)
+                validatePartSize(session, partNumber, contentLength)
+                val bufferedPart = copyPartToTempFile(source, contentLength)
+                val tempFile = bufferedPart.path
+                try {
+                    validateFirstPartSignature(session, partNumber, tempFile)
+                    resolveIdempotentPart(session, partNumber, contentLength, bufferedPart, startedAt)?.let { return it }
+                    return uploadNewPart(session, partNumber, contentLength, bufferedPart, tempFile, startedAt)
+                } finally {
+                    deleteTempFileQuietly(tempFile)
+                }
+            }
+        } catch (ex: RuntimeException) {
+            CloudMediaMetrics.recordPartUpload(
+                meterRegistry,
+                result = "failure",
+                durationNanos = System.nanoTime() - startedAt,
+                bytes = contentLength,
+            )
+            throw ex
+        }
+    }
 
-                val existing = partRepository.findBySessionIdAndPartNumber(session.id, partNumber)
-                if (existing != null) {
-                    if (existing.byteSize != contentLength) {
-                        throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
-                    }
-                    return CloudVideoUploadPartResultDto(
-                        session = session.toDto(partRepository.findBySessionId(session.id)),
-                        part = existing.toDto(),
+    private fun resolveIdempotentPart(
+        session: CloudVideoUploadSession,
+        partNumber: Int,
+        contentLength: Long,
+        bufferedPart: BufferedUploadPart,
+        startedAt: Long,
+    ): CloudVideoUploadPartResultDto? {
+        val existing = partRepository.findBySessionIdAndPartNumber(session.id, partNumber) ?: return null
+        if (existing.byteSize != contentLength) {
+            throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
+        }
+        val existingSha = existing.partSha256
+        if (existingSha.isBlank()) {
+            // Legacy blank part_sha256 cannot prove S3 bytes match — replace via re-upload.
+            partRepository.delete(existing)
+            return null
+        }
+        if (!existingSha.equals(bufferedPart.sha256Hex, ignoreCase = true)) {
+            throw AppException("409-1", PART_CONTENT_CONFLICT_MESSAGE)
+        }
+        extendSessionExpiry(session)
+        CloudMediaMetrics.recordPartUpload(
+            meterRegistry,
+            result = "idempotent",
+            durationNanos = System.nanoTime() - startedAt,
+            bytes = contentLength,
+        )
+        return CloudVideoUploadPartResultDto(
+            session = session.toDto(partRepository.findBySessionId(session.id)),
+            part = existing.toDto(),
+        )
+    }
+
+    private fun uploadNewPart(
+        session: CloudVideoUploadSession,
+        partNumber: Int,
+        contentLength: Long,
+        bufferedPart: BufferedUploadPart,
+        tempFile: Path,
+        startedAt: Long,
+    ): CloudVideoUploadPartResultDto {
+        claimStatus(
+            session,
+            expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+            nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+            conflictMessage = "다른 업로드 작업이 진행 중입니다.",
+        )
+        val uploadResult =
+            try {
+                Files.newInputStream(tempFile).use { partStream ->
+                    cloudStoragePort.uploadMultipartPart(
+                        CloudStoragePort.MultipartUploadPartRequest(
+                            objectKey = session.objectKey,
+                            uploadId = requireUploadId(session),
+                            partNumber = partNumber,
+                            inputStream = partStream,
+                            contentLength = contentLength,
+                        ),
                     )
                 }
-
-                claimStatus(
-                    session,
-                    expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-                    nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
-                    conflictMessage = "다른 업로드 작업이 진행 중입니다.",
-                )
-                val uploadResult =
-                    try {
-                        Files.newInputStream(tempFile).use { partStream ->
-                            cloudStoragePort.uploadMultipartPart(
-                                CloudStoragePort.MultipartUploadPartRequest(
-                                    objectKey = session.objectKey,
-                                    uploadId = requireUploadId(session),
-                                    partNumber = partNumber,
-                                    inputStream = partStream,
-                                    contentLength = contentLength,
-                                ),
-                            )
-                        }
-                    } catch (ex: RuntimeException) {
-                        releasePartUploadClaim(session.id)
-                        throw ex
-                    }
-                val savedPart =
-                    try {
-                        partRepository.save(
-                            CloudVideoUploadPart(
-                                sessionId = session.id,
-                                partNumber = partNumber,
-                                eTag = uploadResult.eTag,
-                                byteSize = contentLength,
-                            ),
-                        )
-                    } catch (ex: RuntimeException) {
-                        markFailed(
-                            session.id,
-                            CloudVideoUploadSessionStatus.UPLOADING_PART,
-                            "multipart part metadata save failed: ${ex.message}",
-                        )
-                        throw ex
-                    }
-                transitionStatus(
-                    session.id,
-                    expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
-                    nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-                )
-                session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
-                val parts = partRepository.findBySessionId(session.id)
-
-                return CloudVideoUploadPartResultDto(
-                    session = session.toDto(parts),
-                    part = savedPart.toDto(),
-                )
-            } finally {
-                deleteTempFileQuietly(tempFile)
+            } catch (ex: RuntimeException) {
+                releasePartUploadClaim(session.id)
+                throw ex
             }
-        }
+        val savedPart =
+            try {
+                partRepository.save(
+                    CloudVideoUploadPart(
+                        sessionId = session.id,
+                        partNumber = partNumber,
+                        eTag = uploadResult.eTag,
+                        byteSize = contentLength,
+                        partSha256 = bufferedPart.sha256Hex,
+                    ),
+                )
+            } catch (ex: RuntimeException) {
+                markFailed(
+                    session.id,
+                    CloudVideoUploadSessionStatus.UPLOADING_PART,
+                    "multipart part metadata save failed: ${ex.message}",
+                )
+                throw ex
+            }
+        transitionStatus(
+            session.id,
+            expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+            nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+        )
+        session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
+        extendSessionExpiry(session)
+        CloudMediaMetrics.recordPartUpload(
+            meterRegistry,
+            result = "success",
+            durationNanos = System.nanoTime() - startedAt,
+            bytes = contentLength,
+        )
+        return CloudVideoUploadPartResultDto(
+            session = session.toDto(partRepository.findBySessionId(session.id)),
+            part = savedPart.toDto(),
+        )
+    }
 
     fun complete(
         ownerMemberId: Long,
         sessionId: Long,
     ): CloudFileDto {
-        val session = findMutableSession(ownerMemberId, sessionId)
-        val parts = partRepository.findBySessionId(session.id).sortedBy { it.partNumber }
-        if (parts.size != session.totalParts || parts.map { it.partNumber } != (1..session.totalParts).toList()) {
-            throw AppException("409-1", "아직 업로드되지 않은 동영상 조각이 있습니다.")
+        val session = findOwnedSession(ownerMemberId, sessionId)
+        if (session.status == CloudVideoUploadSessionStatus.COMPLETED) {
+            return completedFileDto(session)
         }
-
-        claimStatus(
-            session,
-            expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-            nextStatus = CloudVideoUploadSessionStatus.COMPLETING,
-            conflictMessage = "다른 업로드 작업이 진행 중입니다.",
-        )
-        try {
-            cloudStoragePort.completeMultipartUpload(
-                CloudStoragePort.MultipartUploadCompleteRequest(
-                    objectKey = session.objectKey,
-                    uploadId = requireUploadId(session),
-                    parts =
-                        parts.map {
-                            CloudStoragePort.CompletedMultipartUploadPart(
-                                partNumber = it.partNumber,
-                                eTag = it.eTag,
-                            )
-                        },
-                ),
-            )
-        } catch (ex: RuntimeException) {
-            markFailed(session.id, CloudVideoUploadSessionStatus.COMPLETING, "multipart complete failed: ${ex.message}")
-            throw ex
+        when (session.status) {
+            CloudVideoUploadSessionStatus.IN_PROGRESS -> {
+                if (expireSessionIfNeeded(session)) {
+                    throw AppException("410-1", "대용량 업로드 세션이 만료되었습니다.")
+                }
+                val parts = requireCompleteParts(session)
+                claimStatus(
+                    session,
+                    expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+                    nextStatus = CloudVideoUploadSessionStatus.COMPLETING,
+                    conflictMessage = "다른 업로드 작업이 진행 중입니다.",
+                )
+                ensureStorageCommitted(session, parts)
+                return finishCommittedSession(session).toDto()
+            }
+            CloudVideoUploadSessionStatus.COMPLETING -> {
+                val parts = requireCompleteParts(session)
+                ensureStorageCommitted(session, parts)
+                return finishCommittedSession(session).toDto()
+            }
+            else -> throw AppException("409-1", "이미 종료된 대용량 업로드 세션입니다.")
         }
-
-        val file =
-            cloudFileRepository.save(
-                CloudFile.create(
-                    ownerMemberId = session.ownerMemberId,
-                    objectKey = session.objectKey,
-                    originalFilename = session.originalFilename,
-                    contentType = session.contentType,
-                    byteSize = session.byteSize,
-                    mediaKind = CloudFileMediaKind.VIDEO,
-                    folderPath = session.folderPath,
-                    checksumSha256 = null,
-                ),
-            )
-        session.complete(file.id, clock.instant())
-        sessionRepository.save(session)
-
-        return file.toDto()
     }
 
     fun cancel(
@@ -331,6 +437,11 @@ class CloudVideoUploadSessionService(
         partRepository.deleteBySessionId(session.id)
         session.cancel(clock.instant())
         sessionRepository.save(session)
+        CloudMediaMetrics.recordSessionTransition(
+            meterRegistry,
+            from = CloudVideoUploadSessionStatus.ABORTING.name,
+            to = CloudVideoUploadSessionStatus.CANCELLED.name,
+        )
     }
 
     private fun findOwnedSession(
@@ -375,6 +486,277 @@ class CloudVideoUploadSessionService(
         partRepository.deleteBySessionId(session.id)
         session.expire(clock.instant())
         sessionRepository.save(session)
+        CloudMediaMetrics.recordSessionTransition(
+            meterRegistry,
+            from = CloudVideoUploadSessionStatus.ABORTING.name,
+            to = CloudVideoUploadSessionStatus.EXPIRED.name,
+        )
+        return true
+    }
+
+    private fun recoverStaleIntermediateSession(session: CloudVideoUploadSession): Boolean =
+        when (session.status) {
+            CloudVideoUploadSessionStatus.INITIATING -> {
+                if (session.uploadId == null) {
+                    markFailed(
+                        session.id,
+                        CloudVideoUploadSessionStatus.INITIATING,
+                        "stale INITIATING session recovered without uploadId",
+                    ) == 1
+                } else {
+                    abortStaleIntermediateSession(session, CloudVideoUploadSessionStatus.INITIATING)
+                }
+            }
+            CloudVideoUploadSessionStatus.UPLOADING_PART ->
+                abortStaleIntermediateSession(session, CloudVideoUploadSessionStatus.UPLOADING_PART)
+            CloudVideoUploadSessionStatus.ABORTING ->
+                abortStaleIntermediateSession(session, CloudVideoUploadSessionStatus.ABORTING)
+            CloudVideoUploadSessionStatus.COMPLETING -> recoverStaleCompletingSession(session)
+            else -> false
+        }
+
+    private fun recoverStaleCompletingSession(session: CloudVideoUploadSession): Boolean {
+        val head = cloudStoragePort.head(session.objectKey)
+        // Transient HeadObject miss: leave COMPLETING for client/stale retry (do not abort/delete).
+        if (head == null) {
+            return false
+        }
+        if (CloudMultipartCommitDetector.isCommitted(head, session.byteSize)) {
+            if (session.status != CloudVideoUploadSessionStatus.COMPLETING) return false
+            finishCommittedSession(session)
+            return true
+        }
+        return abortStaleIntermediateSession(session, CloudVideoUploadSessionStatus.COMPLETING)
+    }
+
+    private fun requireCompleteParts(session: CloudVideoUploadSession): List<CloudVideoUploadPart> {
+        val parts = partRepository.findBySessionId(session.id).sortedBy { it.partNumber }
+        if (parts.size != session.totalParts || parts.map { it.partNumber } != (1..session.totalParts).toList()) {
+            throw AppException("409-1", "아직 업로드되지 않은 동영상 조각이 있습니다.")
+        }
+        return parts
+    }
+
+    private fun ensureStorageCommitted(
+        session: CloudVideoUploadSession,
+        parts: List<CloudVideoUploadPart>,
+    ) {
+        val existingHead = cloudStoragePort.head(session.objectKey)
+        if (CloudMultipartCommitDetector.isCommitted(existingHead, session.byteSize)) {
+            return
+        }
+        try {
+            cloudStoragePort.completeMultipartUpload(
+                CloudStoragePort.MultipartUploadCompleteRequest(
+                    objectKey = session.objectKey,
+                    uploadId = requireUploadId(session),
+                    parts =
+                        parts.map {
+                            CloudStoragePort.CompletedMultipartUploadPart(
+                                partNumber = it.partNumber,
+                                eTag = it.eTag,
+                            )
+                        },
+                ),
+            )
+        } catch (ex: RuntimeException) {
+            val committedHead = cloudStoragePort.head(session.objectKey)
+            if (CloudMultipartCommitDetector.isCommitted(committedHead, session.byteSize)) {
+                return
+            }
+            markFailed(session.id, CloudVideoUploadSessionStatus.COMPLETING, "multipart complete failed: ${ex.message}")
+            throw ex
+        }
+    }
+
+    private fun finishCommittedSession(session: CloudVideoUploadSession): CloudFile {
+        val parts = partRepository.findBySessionId(session.id).sortedBy { it.partNumber }
+        val checksumSha256 = verifyCommittedObjectIntegrity(session, parts)
+        val file = resolveOrCreateCommittedFile(session, checksumSha256)
+        // Boolean.and is non-short-circuiting so both sides stay coverage-visible.
+        val alreadyCompletedWithSameFile =
+            (session.status == CloudVideoUploadSessionStatus.COMPLETED) and
+                (session.completedFileId == file.id)
+        if (!alreadyCompletedWithSameFile) {
+            val fromStatus = session.status
+            session.complete(file.id, clock.instant())
+            sessionRepository.save(session)
+            CloudMediaMetrics.recordSessionTransition(
+                meterRegistry,
+                from = fromStatus.name,
+                to = CloudVideoUploadSessionStatus.COMPLETED.name,
+            )
+        }
+        return file
+    }
+
+    private fun resolveOrCreateCommittedFile(
+        session: CloudVideoUploadSession,
+        checksumSha256: String?,
+    ): CloudFile {
+        cloudFileRepository.findActiveByObjectKey(session.objectKey)?.let { return it }
+        cloudFileRepository.findByObjectKey(session.objectKey)?.let { softDeleted ->
+            return reactivateSoftDeletedFile(softDeleted, session, checksumSha256)
+        }
+        return runCatching {
+            cloudFileRepository.save(
+                CloudFile.create(
+                    ownerMemberId = session.ownerMemberId,
+                    objectKey = session.objectKey,
+                    originalFilename = session.originalFilename,
+                    contentType = session.contentType,
+                    byteSize = session.byteSize,
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = session.folderPath,
+                    checksumSha256 = checksumSha256,
+                ),
+            )
+        }.getOrElse { exception ->
+            if (exception !is DataIntegrityViolationException) {
+                throw exception
+            }
+            cloudFileRepository.findActiveByObjectKey(session.objectKey)?.let { return it }
+            val softDeleted =
+                cloudFileRepository.findByObjectKey(session.objectKey)
+                    ?: throw exception
+            return reactivateSoftDeletedFile(softDeleted, session, checksumSha256)
+        }
+    }
+
+    private fun reactivateSoftDeletedFile(
+        softDeleted: CloudFile,
+        session: CloudVideoUploadSession,
+        checksumSha256: String?,
+    ): CloudFile {
+        softDeleted.restoreForCommittedUpload(
+            originalFilename = session.originalFilename,
+            contentType = session.contentType,
+            byteSize = session.byteSize,
+            mediaKind = CloudFileMediaKind.VIDEO,
+            folderPath = session.folderPath,
+            checksumSha256 = checksumSha256,
+        )
+        return cloudFileRepository.save(softDeleted)
+    }
+
+    private fun verifyCommittedObjectIntegrity(
+        session: CloudVideoUploadSession,
+        parts: List<CloudVideoUploadPart>,
+    ): String? {
+        val head = cloudStoragePort.head(session.objectKey)
+        // Null/not-yet-visible head after complete: keep COMPLETING and ask client to retry.
+        // CloudMultipartCommitDetector.isCommitted(null, ...) is false, but must not delete.
+        if (head == null) {
+            throw AppException("409-1", COMMITTED_OBJECT_NOT_VISIBLE_MESSAGE)
+        }
+        if (!CloudMultipartCommitDetector.isCommitted(head, session.byteSize)) {
+            failIntegrityAndCleanup(
+                session,
+                "multipart integrity size mismatch: head=${head.contentLength}, expected=${session.byteSize}",
+            )
+            throw AppException("409-1", INTEGRITY_MISMATCH_MESSAGE)
+        }
+        if (parts.size != session.totalParts || parts.any { it.partSha256.isBlank() }) {
+            log.warn(
+                "Cloud video multipart composite checksum skipped (sessionId={}, parts={}, totalParts={})",
+                session.id,
+                parts.size,
+                session.totalParts,
+            )
+            return null
+        }
+        return computeCompositeChecksum(parts)
+    }
+
+    private fun failIntegrityAndCleanup(
+        session: CloudVideoUploadSession,
+        reason: String,
+    ) {
+        runCatching { cloudStoragePort.delete(session.objectKey) }
+            .onFailure {
+                log.warn(
+                    "Cloud video multipart integrity cleanup delete failed (sessionId={}, objectKey={})",
+                    session.id,
+                    session.objectKey,
+                    it,
+                )
+            }
+        partRepository.deleteBySessionId(session.id)
+        markFailed(session.id, CloudVideoUploadSessionStatus.COMPLETING, reason)
+    }
+
+    private fun computeCompositeChecksum(parts: List<CloudVideoUploadPart>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        parts.sortedBy { it.partNumber }.forEach { part ->
+            digest.update(part.partSha256.hexToByteArray())
+        }
+        return "$MULTIPART_COMPOSITE_CHECKSUM_PREFIX${digest.digest().toHex()}-${parts.size}"
+    }
+
+    private fun extendSessionExpiry(session: CloudVideoUploadSession) {
+        val now = clock.instant()
+        val slidingSeconds = cloudStorageProperties.cloudVideoResumableExpiresSeconds.coerceAtLeast(60)
+        val absoluteMaxSeconds =
+            cloudStorageProperties.cloudVideoResumableAbsoluteMaxSeconds.coerceAtLeast(slidingSeconds)
+        val absoluteDeadline = session.createdAt.plusSeconds(absoluteMaxSeconds)
+        val candidate = now.plusSeconds(slidingSeconds)
+        val newExpiresAt = if (candidate.isAfter(absoluteDeadline)) absoluteDeadline else candidate
+        if (!newExpiresAt.isAfter(session.expiresAt)) {
+            return
+        }
+        val extended =
+            sessionRepository.extendExpiresAt(
+                id = session.id,
+                newExpiresAt = newExpiresAt,
+                now = now,
+            ) == 1
+        if (extended) {
+            session.expiresAt = newExpiresAt
+        }
+    }
+
+    private fun completedFileDto(session: CloudVideoUploadSession): CloudFileDto {
+        val fileId = session.completedFileId
+        val active =
+            fileId?.let { cloudFileRepository.findActiveByIdAndOwner(it, session.ownerMemberId) }
+                ?: cloudFileRepository.findActiveByObjectKey(session.objectKey)
+        if (active != null) {
+            return active.toDto()
+        }
+        val softDeleted =
+            cloudFileRepository.findByObjectKey(session.objectKey)?.takeIf { file ->
+                file.ownerMemberId == session.ownerMemberId &&
+                    (fileId == null || file.id == fileId)
+            } ?: throw AppException("500-1", "완료된 업로드 파일을 찾을 수 없습니다.")
+        return reactivateSoftDeletedFile(
+            softDeleted,
+            session,
+            checksumSha256 = softDeleted.checksumSha256,
+        ).toDto()
+    }
+
+    private fun abortStaleIntermediateSession(
+        session: CloudVideoUploadSession,
+        expectedStatus: CloudVideoUploadSessionStatus,
+    ): Boolean {
+        val claimed =
+            transitionStatus(
+                session.id,
+                expectedStatus = expectedStatus,
+                nextStatus = CloudVideoUploadSessionStatus.ABORTING,
+                throwOnFailure = false,
+            )
+        if (!claimed) return false
+        session.transitionTo(CloudVideoUploadSessionStatus.ABORTING, clock.instant())
+        abortOrFail(session, finalStatusOnFailure = CloudVideoUploadSessionStatus.ABORTING)
+        partRepository.deleteBySessionId(session.id)
+        session.fail("stale intermediate multipart session recovered", clock.instant())
+        sessionRepository.save(session)
+        CloudMediaMetrics.recordSessionTransition(
+            meterRegistry,
+            from = CloudVideoUploadSessionStatus.ABORTING.name,
+            to = CloudVideoUploadSessionStatus.FAILED.name,
+        )
         return true
     }
 
@@ -410,6 +792,13 @@ class CloudVideoUploadSessionService(
                 nextStatus = nextStatus,
                 now = clock.instant(),
             ) == 1
+        if (changed) {
+            CloudMediaMetrics.recordSessionTransition(
+                meterRegistry,
+                from = expectedStatus.name,
+                to = nextStatus.name,
+            )
+        }
         if (!changed && throwOnFailure) {
             throw AppException("409-1", "대용량 업로드 세션 상태가 변경되었습니다.")
         }
@@ -420,13 +809,22 @@ class CloudVideoUploadSessionService(
         sessionId: Long,
         expectedStatus: CloudVideoUploadSessionStatus,
         reason: String,
-    ) {
-        sessionRepository.markFailed(
-            id = sessionId,
-            expectedStatus = expectedStatus,
-            reason = reason.take(500),
-            now = clock.instant(),
-        )
+    ): Int {
+        val changed =
+            sessionRepository.markFailed(
+                id = sessionId,
+                expectedStatus = expectedStatus,
+                reason = reason.take(500),
+                now = clock.instant(),
+            )
+        if (changed == 1) {
+            CloudMediaMetrics.recordSessionTransition(
+                meterRegistry,
+                from = expectedStatus.name,
+                to = CloudVideoUploadSessionStatus.FAILED.name,
+            )
+        }
+        return changed
     }
 
     private fun releasePartUploadClaim(sessionId: Long) {
@@ -529,18 +927,42 @@ class CloudVideoUploadSessionService(
         }
     }
 
+    private data class BufferedUploadPart(
+        val path: Path,
+        val sha256Hex: String,
+    )
+
     private fun copyPartToTempFile(
         inputStream: InputStream,
         expectedLength: Long,
-    ): Path {
+    ): BufferedUploadPart {
         val tempFile = Files.createTempFile("cloud-upload-part-", ".tmp")
         try {
-            var total = 0L
-            inputStream.use { input ->
+            val digest = MessageDigest.getInstance("SHA-256")
+            val total = writeDigestedPartBytes(inputStream, tempFile, digest, expectedLength)
+            if (total != expectedLength) {
+                throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
+            }
+            return BufferedUploadPart(path = tempFile, sha256Hex = digest.digest().toHex())
+        } catch (ex: Exception) {
+            deleteTempFileQuietly(tempFile)
+            throw ex
+        }
+    }
+
+    private fun writeDigestedPartBytes(
+        inputStream: InputStream,
+        tempFile: Path,
+        digest: MessageDigest,
+        expectedLength: Long,
+    ): Long {
+        var total = 0L
+        inputStream.use { input ->
+            DigestInputStream(input, digest).use { digesting ->
                 Files.newOutputStream(tempFile).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                     while (true) {
-                        val read = input.read(buffer)
+                        val read = digesting.read(buffer)
                         if (read < 0) break
                         total += read
                         if (total > expectedLength) {
@@ -550,13 +972,16 @@ class CloudVideoUploadSessionService(
                     }
                 }
             }
-            if (total != expectedLength) {
-                throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
-            }
-            return tempFile
-        } catch (ex: Exception) {
-            deleteTempFileQuietly(tempFile)
-            throw ex
+        }
+        return total
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    private fun String.hexToByteArray(): ByteArray {
+        require(length % 2 == 0) { "hex length must be even" }
+        return ByteArray(length / 2) { index ->
+            substring(index * 2, index * 2 + 2).toInt(16).toByte()
         }
     }
 

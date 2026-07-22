@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
 } from "react"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
 import SearchInput from "./SearchInput"
@@ -12,12 +13,11 @@ import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
 import TagList from "./TagList"
 import useExplorePostsQuery from "src/hooks/useExplorePostsQuery"
+import { useDebouncedValue } from "src/hooks/useDebouncedValue"
 import { useRouter } from "next/router"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
-import { queryKey } from "src/constants/queryKey"
 import { type ExplorePostsPage } from "src/apis/backend/posts"
-import type { TPost } from "src/types"
 import { normalizeKeywordQuery, normalizeOptionalTagQuery, normalizeTagQuery } from "src/libs/query/normalize"
 import { ExplorerCard, FeedBody, FilterContextBar } from "./FeedExplorer.styles"
 import {
@@ -31,50 +31,31 @@ import {
   resolveRestorePageCap,
   resolveSnapshotPageCap,
   scheduleIdleRevalidate,
+  shouldRestoreFeedExplorerSession,
   toFeedExplorerInfiniteQueryKey,
   toPersistFingerprint,
   toRestoredPageParams,
   toRestoredPage,
   toSnapshotPageParam,
   toSnapshotPage,
-  useDebouncedValue,
   type FeedExplorerRestoreSnapshot,
   type FeedExplorerRestoreState,
   type FeedExplorerSnapshotPage,
   type FeedExplorerSnapshotPageParam,
 } from "./FeedExplorerRestoreModel"
+import {
+  FEED_SORT_OPTIONS,
+  feedSortOptionId,
+  resolveFeedSortListboxKeyDown,
+  resolveFeedSortTriggerKeyDown,
+  type FeedSortMode,
+} from "./FeedSortMenuModel"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
-type FeedSortMode = "latest" | "views" | "likes"
-const FEED_SORT_OPTIONS: Array<{ value: FeedSortMode; label: string }> = [
-  { value: "latest", label: "최신순" },
-  { value: "views", label: "조회순" },
-  { value: "likes", label: "좋아요순" },
-]
 
 type FeedExplorerProps = {
   initialBootstrapDegraded?: boolean
-}
-
-const getPostTime = (post: TPost) => {
-  const value = post.date?.start_date || post.createdTime
-  const time = value ? new Date(value).getTime() : 0
-  return Number.isFinite(time) ? time : 0
-}
-
-const compareLatestPosts = (a: TPost, b: TPost) => getPostTime(b) - getPostTime(a)
-
-const sortFeedPosts = (posts: TPost[], sortMode: FeedSortMode) => {
-  if (sortMode === "latest") return posts
-
-  return [...posts].sort((a, b) => {
-    const primary =
-      sortMode === "views"
-        ? (b.hitCount ?? 0) - (a.hitCount ?? 0)
-        : (b.likesCount ?? 0) - (a.likesCount ?? 0)
-    return primary || compareLatestPosts(a, b)
-  })
 }
 
 const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = false }) => {
@@ -82,10 +63,13 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
   const [q, setQ] = useState("")
   const [sortMode, setSortMode] = useState<FeedSortMode>("latest")
   const [sortOpen, setSortOpen] = useState(false)
+  const [sortActiveIndex, setSortActiveIndex] = useState(0)
   const [isComposing, setIsComposing] = useState(false)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const sortMenuRef = useRef<HTMLDivElement | null>(null)
+  const sortTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const sortListboxRef = useRef<HTMLDivElement | null>(null)
   const restoreStateRef = useRef<FeedExplorerRestoreState | null>(null)
   const restoreQueryPagesRef = useRef<FeedExplorerSnapshotPage[] | null>(null)
   const restoreQueryPageParamsRef = useRef<FeedExplorerSnapshotPageParam[] | null>(null)
@@ -133,6 +117,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     tag: currentTag,
     pageSize: FEED_EXPLORE_PAGE_SIZE,
     order: FEED_EXPLORER_ORDER,
+    sortMode,
     enabled: router.isReady,
   })
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
@@ -154,17 +139,31 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     isFetchNextPageErrorRef.current = isFetchNextPageError
   }, [isFetchNextPageError])
 
+  const closeSortMenu = useCallback((restoreTriggerFocus: boolean) => {
+    setSortOpen(false)
+    if (!restoreTriggerFocus) return
+    window.requestAnimationFrame(() => {
+      sortTriggerRef.current?.focus()
+    })
+  }, [])
+
   useEffect(() => {
     if (!sortOpen) return
 
     const handlePointerDown = (event: PointerEvent) => {
       if (sortMenuRef.current?.contains(event.target as Node)) return
-      setSortOpen(false)
+      closeSortMenu(true)
     }
 
     document.addEventListener("pointerdown", handlePointerDown)
-    return () => document.removeEventListener("pointerdown", handlePointerDown)
-  }, [sortOpen])
+    const frameId = window.requestAnimationFrame(() => {
+      sortListboxRef.current?.focus()
+    })
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [closeSortMenu, sortOpen])
 
   useEffect(() => {
     restoreSnapshotRef.current = {
@@ -225,11 +224,15 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     if (restored.tag !== activeTag) return
     if (restored.q !== normalizedQuery) return
 
+    // Restore snapshots are latest-only (CREATED_AT); never hydrate into views/likes keys.
+    if (!shouldRestoreFeedExplorerSession(sortMode)) return
+
     const restoreQueryKey = toFeedExplorerInfiniteQueryKey({
       kw: normalizedQuery,
       tag: activeTag,
       pageSize: FEED_EXPLORE_PAGE_SIZE,
       order: FEED_EXPLORER_ORDER,
+      sortMode: "latest",
     })
 
     const existingPages = queryClient.getQueryData<InfiniteData<ExplorePostsPage>>(restoreQueryKey)?.pages
@@ -247,12 +250,13 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     })
     hasHydratedQuerySnapshotRef.current = true
     hasAppliedRestoreSnapshotRef.current = true
-  }, [currentTag, normalizedQuery, queryClient])
+  }, [currentTag, normalizedQuery, queryClient, sortMode])
 
   useEffect(() => {
     if (hasScheduledIdleRevalidateRef.current) return
     if (!hasAppliedRestoreSnapshotRef.current) return
     if (!restoreQueryPagesRef.current?.length) return
+    if (!shouldRestoreFeedExplorerSession(sortMode)) return
 
     const restored = restoreStateRef.current
     if (!restored) return
@@ -266,6 +270,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
       tag: activeTag,
       pageSize: FEED_EXPLORE_PAGE_SIZE,
       order: FEED_EXPLORER_ORDER,
+      sortMode: "latest",
     })
 
     hasScheduledIdleRevalidateRef.current = true
@@ -276,10 +281,12 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
         refetchType: "active",
       })
     })
-  }, [currentTag, normalizedQuery, queryClient])
+  }, [currentTag, normalizedQuery, queryClient, sortMode])
 
   const persistFeedExplorerState = useCallback(() => {
     if (typeof window === "undefined") return
+    // sessionStorage restore is latest-only; do not snapshot views/likes ordered pages.
+    if (!shouldRestoreFeedExplorerSession(sortMode)) return
 
     const snapshot = restoreSnapshotRef.current
     const normalizedSnapshotTag = normalizeTagQuery(snapshot.tag)
@@ -311,6 +318,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
         tag: normalizedSnapshotTag,
         pageSize: FEED_EXPLORE_PAGE_SIZE,
         order: FEED_EXPLORER_ORDER,
+        sortMode: "latest",
       })
       const queryData = queryClient.getQueryData<InfiniteData<ExplorePostsPage>>(feedQueryKey)
       const pages = queryData?.pages ?? []
@@ -338,7 +346,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     } catch {
       // ignore sessionStorage quota/permission errors
     }
-  }, [queryClient])
+  }, [queryClient, sortMode])
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return
@@ -382,6 +390,9 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
   }, [persistFeedExplorerState, router.events])
 
   useEffect(() => {
+    // Snapshot hydrate/persist are latest-only; do not prefetch or scroll using that state on views/likes.
+    if (!shouldRestoreFeedExplorerSession(sortMode)) return
+
     const restoreState = restoreStateRef.current
     if (!restoreState || hasRestoredScrollRef.current) return
 
@@ -406,6 +417,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     isFetchingNextPage,
     isInitialLoading,
     loadedPagesCount,
+    sortMode,
   ])
 
   const handleLoadMore = useCallback(() => {
@@ -452,10 +464,6 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
 
   const hasFilter = Boolean(normalizedQuery || currentTag)
   const resultCount = pinnedPosts.length + regularPosts.length
-  const sortedRegularPosts = useMemo(
-    () => sortFeedPosts(regularPosts, sortMode),
-    [regularPosts, sortMode]
-  )
   const showBootstrapDegraded = initialBootstrapDegraded && !hasInitialLoadSucceeded
   const hasQueryFilter = normalizedQuery.length > 0
   const hasTagFilter = Boolean(currentTag)
@@ -489,10 +497,62 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
   const currentSortLabel =
     FEED_SORT_OPTIONS.find((option) => option.value === sortMode)?.label ?? "최신순"
 
-  const handleSortSelect = useCallback((value: FeedSortMode) => {
-    setSortMode(value)
-    setSortOpen(false)
+  const handleSortSelect = useCallback(
+    (value: FeedSortMode) => {
+      if (value !== sortMode) {
+        // Drop restore intent so a deep latest scrollY is not reapplied after sort change,
+        // and reset viewport so ranked/latest list swaps do not land on an empty region.
+        restoreStateRef.current = null
+        hasRestoredScrollRef.current = true
+        window.scrollTo({ top: 0, behavior: "auto" })
+      }
+      setSortMode(value)
+      closeSortMenu(true)
+    },
+    [closeSortMenu, sortMode]
+  )
+
+  const openSortMenu = useCallback((activeIndex: number) => {
+    setSortActiveIndex(activeIndex)
+    setSortOpen(true)
   }, [])
+
+  const handleSortTriggerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>) => {
+      const result = resolveFeedSortTriggerKeyDown(event.key, FEED_SORT_OPTIONS, sortMode)
+      if (result.type === "none") return
+      event.preventDefault()
+      if (result.type === "open") {
+        openSortMenu(result.activeIndex)
+      }
+    },
+    [openSortMenu, sortMode]
+  )
+
+  const handleSortListboxKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      const result = resolveFeedSortListboxKeyDown(event.key, sortActiveIndex, FEED_SORT_OPTIONS)
+      if (result.type === "none") return
+      event.preventDefault()
+      if (result.type === "close") {
+        closeSortMenu(true)
+        return
+      }
+      if (result.type === "move") {
+        setSortActiveIndex(result.activeIndex)
+        return
+      }
+      if (result.type === "select") {
+        handleSortSelect(result.value)
+      }
+    },
+    [closeSortMenu, handleSortSelect, sortActiveIndex]
+  )
+
+  const activeSortOptionId =
+    sortActiveIndex >= 0 && sortActiveIndex < FEED_SORT_OPTIONS.length
+      ? feedSortOptionId(FEED_SORT_OPTIONS[sortActiveIndex].value)
+      : undefined
 
   return (
     <>
@@ -519,25 +579,50 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
               <div className="sortDropdown" ref={sortMenuRef}>
                 <button
                   type="button"
+                  ref={sortTriggerRef}
                   className="sortTrigger"
                   aria-haspopup="listbox"
                   aria-expanded={sortOpen}
-                  onClick={() => setSortOpen((prev) => !prev)}
+                  aria-controls="feed-sort-listbox"
+                  onClick={() => {
+                    if (sortOpen) {
+                      closeSortMenu(false)
+                      return
+                    }
+                    const selectedIndex = Math.max(
+                      0,
+                      FEED_SORT_OPTIONS.findIndex((option) => option.value === sortMode)
+                    )
+                    openSortMenu(selectedIndex)
+                  }}
+                  onKeyDown={handleSortTriggerKeyDown}
                 >
                   {currentSortLabel}
                   <span className="sortChevron" aria-hidden="true" />
                 </button>
                 {sortOpen && (
-                  <div className="sortMenu" role="listbox" aria-label="피드 정렬">
-                    {FEED_SORT_OPTIONS.map((option) => (
+                  <div
+                    id="feed-sort-listbox"
+                    ref={sortListboxRef}
+                    className="sortMenu"
+                    role="listbox"
+                    tabIndex={0}
+                    aria-label="피드 정렬"
+                    aria-activedescendant={activeSortOptionId}
+                    onKeyDown={handleSortListboxKeyDown}
+                  >
+                    {FEED_SORT_OPTIONS.map((option, index) => (
                       <button
                         type="button"
                         key={option.value}
+                        id={feedSortOptionId(option.value)}
                         className="sortOption"
                         role="option"
+                        tabIndex={-1}
                         aria-selected={sortMode === option.value}
-                        data-active={sortMode === option.value}
+                        data-active={sortActiveIndex === index || sortMode === option.value}
                         onClick={() => handleSortSelect(option.value)}
+                        onMouseEnter={() => setSortActiveIndex(index)}
                       >
                         {option.label}
                       </button>
@@ -564,7 +649,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
             </FilterContextBar>
           )}
           <PostList
-            posts={sortedRegularPosts}
+            posts={regularPosts}
             hasFilter={hasFilter}
             hasExternalResults={pinnedPosts.length > 0}
             onClearFilters={handleClearFilters}

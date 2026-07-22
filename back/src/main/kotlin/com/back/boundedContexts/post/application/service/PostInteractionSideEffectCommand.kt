@@ -29,6 +29,8 @@ data class PostInteractionSideEffectPayload(
     val replyReceiverId: Long?,
     val postAuthorId: Long?,
     val likeId: Long?,
+    val rankedCacheInvalidation: PostRankedCacheInvalidationSideEffect = PostRankedCacheInvalidationSideEffect.NONE,
+    val rankedCacheEvictReason: String? = null,
 ) : TaskPayload {
     companion object {
         const val TASK_TYPE = "post.interaction.side-effect"
@@ -38,4 +40,10 @@ data class PostInteractionSideEffectPayload(
 enum class PostInteractionRecommendationSideEffect {
     NONE,
     REFRESH,
+}
+
+enum class PostRankedCacheInvalidationSideEffect {
+    NONE,
+    HIT_COUNT,
+    LIKES_COUNT,
 }

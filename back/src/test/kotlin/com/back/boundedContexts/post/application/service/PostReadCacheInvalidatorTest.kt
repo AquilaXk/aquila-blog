@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.application.service
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.cache.CacheManager
@@ -20,13 +21,27 @@ class PostReadCacheInvalidatorTest {
         // given
         val callbackCalls = mutableListOf<Unit>()
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
         put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=_")
         put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=kotlin")
         put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")
         put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=CREATED_AT:tag=kotlin")
+        put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=HIT_COUNT:tag=_")
+        put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=LIKES_COUNT:tag=_")
         put(
             PostQueryCacheNames.BOOTSTRAP,
             PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT, "Kotlin"),
+        )
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, ""),
+        )
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
         )
         put(PostQueryCacheNames.SEARCH, "page=1:size=30:sort=CREATED_AT:kw=_")
         put(PostQueryCacheNames.SEARCH_NEGATIVE, "page=1:size=30:sort=CREATED_AT:kw=_")
@@ -52,14 +67,32 @@ class PostReadCacheInvalidatorTest {
         // then
         assertThat(callbackCalls).hasSize(1)
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=_")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=kotlin")).isNull()
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=CREATED_AT:tag=kotlin")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=HIT_COUNT:tag=_")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=LIKES_COUNT:tag=_")).isNull()
         assertThat(
             get(
                 PostQueryCacheNames.BOOTSTRAP,
                 PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT, "Kotlin"),
+            ),
+        ).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, ""),
+            ),
+        ).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
             ),
         ).isNull()
         assertThat(get(PostQueryCacheNames.SEARCH, "page=1:size=30:sort=CREATED_AT:kw=_")).isNull()
@@ -103,6 +136,150 @@ class PostReadCacheInvalidatorTest {
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_META, 101L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 101L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 101L)).isNull()
+    }
+
+    @Test
+    @DisplayName("ranked sort 단일 인자 오버로드는 FEED clear와 ranked cursor/bootstrap 축출을 수행한다")
+    fun invalidateRankedSortHotPagesDefaultOverloadEvictsBothRankedSorts() {
+        // given
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED, "page=2:size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED, "page=3:size=24:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, ""),
+        )
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
+        )
+        put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=HIT_COUNT:kw=_:tag=kotlin")
+
+        // when
+        invalidator.invalidateRankedSortHotPages("ranked-default")
+
+        // then — FEED clears all pages/sorts (page 2+ ranked keys are not enumerable)
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=2:size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=3:size=24:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, ""),
+            ),
+        ).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
+            ),
+        ).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=HIT_COUNT:kw=_:tag=kotlin")).isNull()
+    }
+
+    @Test
+    @DisplayName("ranked sort 무효화는 ranked 대상이 없으면 실패한다")
+    fun invalidateRankedSortHotPagesRejectsNonRankedSorts() {
+        assertThatThrownBy {
+            invalidator.invalidateRankedSortHotPages(
+                "invalid",
+                listOf(PostSearchSortType1.CREATED_AT),
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("HIT_COUNT and/or LIKES_COUNT")
+
+        assertThatThrownBy {
+            invalidator.invalidateRankedSortHotPages("invalid", emptyList())
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("HIT_COUNT and/or LIKES_COUNT")
+    }
+
+    @Test
+    @DisplayName("ranked sort 무효화는 FEED를 clear하고 지정 sort의 cursor/bootstrap만 축출하며 explore/search는 clear한다")
+    fun invalidateRankedSortHotPagesEvictsTargetSortAndClearsExploreSearch() {
+        // given
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED, "page=2:size=16:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=_")
+        put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=HIT_COUNT:kw=_:tag=kotlin")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=HIT_COUNT:tag=kotlin")
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT, ""),
+        )
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, ""),
+        )
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
+        )
+        put(PostQueryCacheNames.SEARCH, "page=1:size=30:sort=HIT_COUNT:kw=kotlin")
+        put(PostQueryCacheNames.SEARCH_NEGATIVE, "page=1:size=30:sort=LIKES_COUNT:kw=missing")
+
+        // when — hit path: HIT_COUNT only (FEED still clears all pages; cursor/bootstrap stay selective)
+        invalidator.invalidateRankedSortHotPages("hit", listOf(PostSearchSortType1.HIT_COUNT))
+
+        // then
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=2:size=16:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT")).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")).isEqualTo("cached")
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT, ""),
+            ),
+        ).isEqualTo("cached")
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, ""),
+            ),
+        ).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
+            ),
+        ).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=_")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=HIT_COUNT:kw=_:tag=kotlin")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=HIT_COUNT:tag=kotlin")).isNull()
+        assertThat(get(PostQueryCacheNames.SEARCH, "page=1:size=30:sort=HIT_COUNT:kw=kotlin")).isNull()
+        assertThat(get(PostQueryCacheNames.SEARCH_NEGATIVE, "page=1:size=30:sort=LIKES_COUNT:kw=missing")).isNull()
+
+        // given — restore likes feed entry after explore/search clear
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED, "page=4:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=LIKES_COUNT:kw=_:tag=spring")
+
+        // when — like path: LIKES_COUNT only
+        invalidator.invalidateRankedSortHotPages("like", listOf(PostSearchSortType1.LIKES_COUNT))
+
+        // then
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=4:size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=LIKES_COUNT:kw=_:tag=spring")).isNull()
     }
 
     @Test

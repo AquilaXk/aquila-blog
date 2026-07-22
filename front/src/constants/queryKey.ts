@@ -35,10 +35,13 @@ export const queryKey = {
     tag?: string
     pageSize: number
     order?: "asc" | "desc"
+    sortMode?: "latest" | "views" | "likes"
   }) => {
     const normalizedKw = normalizeKeywordQuery(params.kw)
     const normalizedTag = normalizeTagQuery(params.tag)
     const normalizedOrder = params.order === "asc" ? "asc" : "desc"
+    const normalizedSortMode =
+      params.sortMode === "views" || params.sortMode === "likes" ? params.sortMode : "latest"
     return [
       "posts",
       "explore",
@@ -47,12 +50,19 @@ export const queryKey = {
         kw: normalizedKw,
         pageSize: params.pageSize,
         order: normalizedOrder,
+        sortMode: normalizedSortMode,
         ...(normalizedTag ? { tag: normalizedTag } : {}),
       },
     ] as const
   },
-  postsFeedInfinite: (params: { pageSize: number; order?: "asc" | "desc" }) => {
+  postsFeedInfinite: (params: {
+    pageSize: number
+    order?: "asc" | "desc"
+    sortMode?: "latest" | "views" | "likes"
+  }) => {
     const normalizedOrder = params.order === "asc" ? "asc" : "desc"
+    const normalizedSortMode =
+      params.sortMode === "views" || params.sortMode === "likes" ? params.sortMode : "latest"
     return [
       "posts",
       "feed",
@@ -60,6 +70,7 @@ export const queryKey = {
       {
         pageSize: params.pageSize,
         order: normalizedOrder,
+        sortMode: normalizedSortMode,
       },
     ] as const
   },
@@ -67,9 +78,12 @@ export const queryKey = {
     kw: string
     pageSize: number
     order?: "asc" | "desc"
+    sortMode?: "latest" | "views" | "likes"
   }) => {
     const normalizedKw = normalizeKeywordQuery(params.kw)
     const normalizedOrder = params.order === "asc" ? "asc" : "desc"
+    const normalizedSortMode =
+      params.sortMode === "views" || params.sortMode === "likes" ? params.sortMode : "latest"
     return [
       "posts",
       "search",
@@ -78,6 +92,7 @@ export const queryKey = {
         kw: normalizedKw,
         pageSize: params.pageSize,
         order: normalizedOrder,
+        sortMode: normalizedSortMode,
       },
     ] as const
   },

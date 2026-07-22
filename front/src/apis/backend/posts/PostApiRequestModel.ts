@@ -1,7 +1,7 @@
 import { normalizeKeywordQuery, normalizeTagQuery } from "src/libs/query/normalize"
 import { ApiError } from "../client"
 import { asOpenApiPath } from "../openapiContract"
-import type { ExplorePostsParams } from "./PostApiDtos"
+import type { ExplorePostsParams, FeedSortMode } from "./PostApiDtos"
 
 export const PAGE_SIZE = 30
 export const POSTS_CACHE_TTL_MS = 90_000
@@ -109,7 +109,11 @@ export const recordRuntimeEndpoint = (path: string, paginationMode: "page" | "cu
 export const isAuthRequiredError = (error: unknown) =>
   error instanceof ApiError && (error.status === 401 || error.status === 403)
 
-const toSortParam = (order: "asc" | "desc") => (order === "asc" ? "CREATED_AT_ASC" : "CREATED_AT")
+const toSortParam = (order: "asc" | "desc" = "desc", sortMode: FeedSortMode = "latest") => {
+  if (sortMode === "views") return "HIT_COUNT"
+  if (sortMode === "likes") return "LIKES_COUNT"
+  return order === "asc" ? "CREATED_AT_ASC" : "CREATED_AT"
+}
 
 export const toValidPage = (page: number | undefined) => {
   if (!Number.isFinite(page)) return 1
@@ -125,6 +129,7 @@ export const buildExplorePath = ({
   kw = "",
   tag = "",
   order = "desc",
+  sortMode = "latest",
   page = 1,
   pageSize = PAGE_SIZE,
 }: ExplorePostsParams) => {
@@ -133,7 +138,7 @@ export const buildExplorePath = ({
   const params = new URLSearchParams()
   params.set("kw", normalizedKw)
   params.set("tag", normalizedTag)
-  params.set("sort", toSortParam(order))
+  params.set("sort", toSortParam(order, sortMode))
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   return `${POSTS_EXPLORE_API_PATH}?${params.toString()}`
@@ -142,13 +147,14 @@ export const buildExplorePath = ({
 export const buildSearchPath = ({
   kw = "",
   order = "desc",
+  sortMode = "latest",
   page = 1,
   pageSize = PAGE_SIZE,
 }: ExplorePostsParams) => {
   const normalizedKw = normalizeKeywordQuery(kw)
   const params = new URLSearchParams()
   params.set("kw", normalizedKw)
-  params.set("sort", toSortParam(order))
+  params.set("sort", toSortParam(order, sortMode))
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   return `${POSTS_SEARCH_API_PATH}?${params.toString()}`
@@ -156,11 +162,12 @@ export const buildSearchPath = ({
 
 export const buildFeedPath = ({
   order = "desc",
+  sortMode = "latest",
   page = 1,
   pageSize = PAGE_SIZE,
-}: Pick<ExplorePostsParams, "order" | "page" | "pageSize">) => {
+}: Pick<ExplorePostsParams, "order" | "sortMode" | "page" | "pageSize">) => {
   const params = new URLSearchParams()
-  params.set("sort", toSortParam(order))
+  params.set("sort", toSortParam(order, sortMode))
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   return `${POSTS_FEED_API_PATH}?${params.toString()}`
@@ -168,15 +175,17 @@ export const buildFeedPath = ({
 
 export const buildFeedCursorPath = ({
   order = "desc",
+  sortMode = "latest",
   pageSize = PAGE_SIZE,
   cursor,
 }: {
   order?: "asc" | "desc"
+  sortMode?: FeedSortMode
   pageSize?: number
   cursor?: string
 }) => {
   const params = new URLSearchParams()
-  params.set("sort", toSortParam(order))
+  params.set("sort", toSortParam(order, sortMode))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   if (cursor && cursor.trim()) {
     params.set("cursor", cursor.trim())
@@ -187,18 +196,20 @@ export const buildFeedCursorPath = ({
 export const buildExploreCursorPath = ({
   tag = "",
   order = "desc",
+  sortMode = "latest",
   pageSize = PAGE_SIZE,
   cursor,
 }: {
   tag?: string
   order?: "asc" | "desc"
+  sortMode?: FeedSortMode
   pageSize?: number
   cursor?: string
 }) => {
   const normalizedTag = normalizeTagQuery(tag)
   const params = new URLSearchParams()
   params.set("tag", normalizedTag)
-  params.set("sort", toSortParam(order))
+  params.set("sort", toSortParam(order, sortMode))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   if (cursor && cursor.trim()) {
     params.set("cursor", cursor.trim())
@@ -209,16 +220,18 @@ export const buildExploreCursorPath = ({
 export const buildBootstrapPath = ({
   tag = "",
   order = "desc",
+  sortMode = "latest",
   pageSize = PAGE_SIZE,
 }: {
   tag?: string
   order?: "asc" | "desc"
+  sortMode?: FeedSortMode
   pageSize?: number
 }) => {
   const normalizedTag = normalizeTagQuery(tag)
   const params = new URLSearchParams()
   params.set("tag", normalizedTag)
-  params.set("sort", toSortParam(order))
+  params.set("sort", toSortParam(order, sortMode))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   return `${POSTS_BOOTSTRAP_API_PATH}?${params.toString()}`
 }

@@ -27,6 +27,7 @@ import org.mockito.Mockito.any
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.never
+import org.mockito.Mockito.times
 import java.time.Instant
 import java.util.Optional
 
@@ -149,6 +150,7 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(recovered.likeId).isEqualTo(99)
         then(counterService).should().incrementLikesCount(post)
         then(postRepository).should().flush()
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "like")
 
         // given
         val secondPost = testPost(id = 11)
@@ -163,6 +165,7 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(failedRecovery.isLiked).isTrue()
         assertThat(failedRecovery.likeId).isZero()
         then(counterService).should().syncLikesCount(secondPost)
+        assertRankedLikesEnqueue(sideEffectQueue, secondPost.id, "like-sync")
 
         // given
         val like = PostLike(55, actor, post)
@@ -176,6 +179,95 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(unliked.isLiked).isFalse()
         assertThat(unliked.likeId).isEqualTo(55)
         then(counterService).should().syncLikesCount(post)
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "like-sync")
+    }
+
+    @Test
+    @DisplayName("PostLikeApplicationService는 카운터 변경 시에만 ranked cache 무효화를 비동기로 큐잉한다")
+    fun postLikeApplicationServiceInvalidatesRankedCacheOnlyOnCountChange() {
+        // given
+        val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
+        val postLikeRepository: PostLikeRepositoryPort = mock(PostLikeRepositoryPort::class.java)
+        val hydrationService: PostHydrationService = mock(PostHydrationService::class.java)
+        val counterService: PostCounterService = mock(PostCounterService::class.java)
+        val sideEffectQueue: PostInteractionSideEffectQueue = mock(PostInteractionSideEffectQueue::class.java)
+        val service =
+            PostLikeApplicationService(
+                postRepository = postRepository,
+                postLikeRepository = postLikeRepository,
+                postHydrationService = hydrationService,
+                postCounterService = counterService,
+                postInteractionSideEffectQueue = sideEffectQueue,
+            )
+        val actor = testMember(id = 2)
+        val post = testPost()
+        val existingLike = PostLike(12, actor, post)
+        given(postLikeRepository.insertIfAbsent(actor, post)).willReturn(null)
+        given(postLikeRepository.findByLikerAndPost(actor, post)).willReturn(existingLike)
+
+        // when
+        val noOpLike = service.like(post, actor)
+
+        // then
+        assertThat(noOpLike.isLiked).isTrue()
+        then(counterService).should().ensureLikesCountLoaded(post)
+        assertThat(enqueueInvocations(sideEffectQueue)).isEmpty()
+
+        // given
+        given(postLikeRepository.insertIfAbsent(actor, post)).willReturn(88)
+
+        // when
+        val liked = service.like(post, actor)
+
+        // then
+        assertThat(liked.isLiked).isTrue()
+        then(counterService).should().incrementLikesCount(post)
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "like")
+
+        // given
+        given(postLikeRepository.findByLikerAndPost(actor, post)).willReturn(existingLike)
+        given(postLikeRepository.deleteByLikerAndPost(actor, post)).willReturn(1)
+
+        // when
+        val unliked = service.unlike(post, actor)
+
+        // then
+        assertThat(unliked.isLiked).isFalse()
+        then(counterService).should().decrementLikesCount(post)
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "unlike")
+
+        // given
+        given(postLikeRepository.findByLikerAndPost(actor, post)).willReturn(null)
+        given(postLikeRepository.deleteByLikerAndPost(actor, post)).willReturn(0)
+        val enqueueCountBeforeNoOpUnlike = enqueueInvocations(sideEffectQueue).size
+
+        // when
+        service.unlike(post, actor)
+
+        // then
+        then(counterService).should(times(2)).ensureLikesCountLoaded(post)
+        val noOpUnlikeEnqueue = enqueueInvocations(sideEffectQueue).drop(enqueueCountBeforeNoOpUnlike).single()
+        assertThat(noOpUnlikeEnqueue.arguments[0]).isEqualTo(post.id)
+        assertThat(noOpUnlikeEnqueue.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
+        assertThat(noOpUnlikeEnqueue.arguments[3]).isEqualTo(PostRankedCacheInvalidationSideEffect.NONE)
+
+        // given — like row was already gone but delete still removed a counter-affecting row
+        given(postLikeRepository.findByLikerAndPost(actor, post)).willReturn(null)
+        given(postLikeRepository.deleteByLikerAndPost(actor, post)).willReturn(1)
+        val enqueueCountBeforeOrphanUnlike = enqueueInvocations(sideEffectQueue).size
+
+        // when
+        val orphanUnliked = service.unlike(post, actor)
+
+        // then
+        assertThat(orphanUnliked.isLiked).isFalse()
+        assertThat(orphanUnliked.likeId).isZero()
+        then(counterService).should(times(2)).decrementLikesCount(post)
+        val orphanUnlikeEnqueue = enqueueInvocations(sideEffectQueue).drop(enqueueCountBeforeOrphanUnlike).single()
+        assertThat(orphanUnlikeEnqueue.arguments[0]).isEqualTo(post.id)
+        assertThat(orphanUnlikeEnqueue.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
+        assertThat(orphanUnlikeEnqueue.arguments[3]).isEqualTo(PostRankedCacheInvalidationSideEffect.LIKES_COUNT)
+        assertThat(orphanUnlikeEnqueue.arguments[4]).isEqualTo("unlike")
     }
 
     @Test
@@ -210,6 +302,7 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(snapshot.likeId).isEqualTo(77)
         assertThat(post.likesCount).isEqualTo(4)
         then(counterService).should().syncLikesCount(post)
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "like-sync")
     }
 
     @Test
@@ -338,6 +431,23 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(enqueueInvocation.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
         assertThat(enqueueInvocation.arguments[2]).isInstanceOf(PostCommentDeletedEvent::class.java)
     }
+
+    private fun assertRankedLikesEnqueue(
+        sideEffectQueue: PostInteractionSideEffectQueue,
+        postId: Long,
+        reason: String,
+    ) {
+        val match =
+            enqueueInvocations(sideEffectQueue).last {
+                it.arguments[0] == postId &&
+                    it.arguments[3] == PostRankedCacheInvalidationSideEffect.LIKES_COUNT &&
+                    it.arguments[4] == reason
+            }
+        assertThat(match).isNotNull()
+    }
+
+    private fun enqueueInvocations(sideEffectQueue: PostInteractionSideEffectQueue) =
+        mockingDetails(sideEffectQueue).invocations.filter { it.method.name == "enqueue" }
 
     private fun testMember(id: Long = 1): Member =
         Member(id = id, username = "user-$id", nickname = "작성자$id", apiKey = "api-key-$id").also {

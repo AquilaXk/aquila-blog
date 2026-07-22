@@ -1,6 +1,6 @@
 import { apiFetch } from "src/apis/backend/client"
 import { useRouter } from "next/router"
-import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { CONFIG } from "site.config"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -9,7 +9,14 @@ import { normalizeNextPath } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
+import { ConfirmDialog } from "src/design-system/ConfirmDialog"
 import { Avatar, CommentItem, CommentListSkeleton, ComposerPromptCard, EmptyState, ReplyGroup, ReplyList, SectionHeader, StyledWrapper } from "./CommentBox.styles"
+import {
+  COMMENT_DELETE_CONFIRM_IRREVERSIBLE_GUIDANCE,
+  COMMENT_DELETE_CONFIRM_TITLE,
+} from "./commentActionFailureModel"
+import { buildCommentTree, flattenReplies, type CommentNode } from "./commentTreeModel"
+import { useCommentBoxActions } from "./useCommentBoxActions"
 import { TPost, TPostComment } from "src/types"
 
 const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
@@ -28,40 +35,6 @@ type Props = {
   initialComments?: TPostComment[] | null
 }
 
-type MemberMe = {
-  id: number
-  username: string
-  nickname: string
-  profileImageUrl?: string
-  profileImageDirectUrl?: string
-}
-
-type CommentNode = TPostComment & {
-  replies: CommentNode[]
-}
-
-type RsData<T> = {
-  resultCode: string
-  msg: string
-  data: T
-}
-
-const flattenReplies = (nodes: CommentNode[]): CommentNode[] => {
-  const flattened: CommentNode[] = []
-
-  const walk = (items: CommentNode[]) => {
-    items.forEach((item) => {
-      flattened.push(item)
-      if (item.replies.length > 0) {
-        walk(item.replies)
-      }
-    })
-  }
-
-  walk(nodes)
-  return flattened
-}
-
 const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const router = useRouter()
   const postId = useMemo(() => Number(data.id), [data.id])
@@ -77,21 +50,18 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const { me, authStatus, authUnavailable } = useAuthSession()
   const [comments, setComments] = useState<TPostComment[]>(normalizedInitialComments ?? [])
   const [commentsLoading, setCommentsLoading] = useState(normalizedInitialComments === null)
-  const [commentInput, setCommentInput] = useState("")
-  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
-  const [editingCommentInput, setEditingCommentInput] = useState("")
-  const [replyingToCommentId, setReplyingToCommentId] = useState<number | null>(null)
-  const [replyInput, setReplyInput] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
   const [authPromptOpen, setAuthPromptOpen] = useState(false)
+  const [authPromptDescription, setAuthPromptDescription] = useState(
+    "댓글을 작성하려면 계정 로그인이 필요합니다."
+  )
 
-  const openAuthPrompt = useCallback(() => {
-    if (authStatus === "unavailable") {
-      setError("인증 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.")
-      return
-    }
+  const openAuthPrompt = useCallback((description?: string) => {
+    if (authStatus === "unavailable") return
 
+    preloadAuthEntryModal()
+    setAuthPromptDescription(
+      description || "댓글을 작성하려면 계정 로그인이 필요합니다."
+    )
     setAuthPromptOpen(true)
   }, [authStatus])
 
@@ -133,122 +103,42 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     setAuthPromptOpen(false)
   }, [me])
 
-  const commentTree = useMemo(() => {
-    const map = new Map<number, CommentNode>()
-    const roots: CommentNode[] = []
+  const {
+    cancelEdit,
+    cancelReply,
+    closeDeleteConfirm,
+    commentInput,
+    confirmDeleteComment,
+    deleteConfirm,
+    editingCommentId,
+    editingCommentInput,
+    handleModifyComment,
+    handleReplySubmit,
+    handleWriteComment,
+    inlineError,
+    isLoading,
+    openDeleteConfirm,
+    replyingToCommentId,
+    replyInput,
+    setCommentInput,
+    setEditingCommentInput,
+    setReplyInput,
+    startEdit,
+    startReply,
+  } = useCommentBoxActions({
+    postId,
+    me,
+    authUnavailable,
+    loadComments,
+    openAuthPrompt,
+  })
 
-    comments.forEach((comment) => {
-      map.set(comment.id, { ...comment, replies: [] })
-    })
-
-    comments.forEach((comment) => {
-      const node = map.get(comment.id)
-      if (!node) return
-
-      if (comment.parentCommentId && map.has(comment.parentCommentId)) {
-        map.get(comment.parentCommentId)?.replies.push(node)
-      } else {
-        roots.push(node)
-      }
-    })
-
-    return roots
-  }, [comments])
-
-  const submitComment = async (content: string, parentCommentId?: number | null) => {
-    const trimmed = content.trim()
-
-    if (authUnavailable && !me) {
-      setError("인증 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.")
-      return false
-    }
-
-    if (!me) {
-      openAuthPrompt()
-      return false
-    }
-
-    if (!trimmed) {
-      setError(parentCommentId ? "답글 내용을 입력해주세요." : "댓글 내용을 입력해주세요.")
-      return false
-    }
-
-    setIsLoading(true)
-    setError("")
-
-    try {
-      await apiFetch<RsData<TPostComment>>(`/post/api/v1/posts/${postId}/comments`, {
-        method: "POST",
-        body: JSON.stringify({
-          content: trimmed,
-          ...(parentCommentId ? { parentCommentId } : {}),
-        }),
-      })
-      await loadComments()
-      return true
-    } catch {
-      setError(parentCommentId ? "답글 작성에 실패했습니다." : "댓글 작성에 실패했습니다.")
-      return false
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleWriteComment = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const ok = await submitComment(commentInput)
-    if (ok) setCommentInput("")
-  }
+  const commentTree = useMemo(() => buildCommentTree(comments), [comments])
 
   const handleComposerIntent = useCallback(() => {
     preloadAuthEntryModal()
     if (!me && !authUnavailable) openAuthPrompt()
   }, [authUnavailable, me, openAuthPrompt])
-
-  const handleReplySubmit = async (event: FormEvent<HTMLFormElement>, parentCommentId: number) => {
-    event.preventDefault()
-    const ok = await submitComment(replyInput, parentCommentId)
-    if (!ok) return
-    setReplyInput("")
-    setReplyingToCommentId(null)
-  }
-
-  const handleDeleteComment = async (commentId: number) => {
-    setIsLoading(true)
-    setError("")
-
-    try {
-      await apiFetch<RsData<unknown>>(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
-        method: "DELETE",
-      })
-      if (editingCommentId === commentId) {
-        setEditingCommentId(null)
-        setEditingCommentInput("")
-      }
-      if (replyingToCommentId === commentId) {
-        setReplyingToCommentId(null)
-        setReplyInput("")
-      }
-      await loadComments()
-    } catch {
-      setError("댓글 삭제에 실패했습니다.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const startEdit = (comment: TPostComment) => {
-    setEditingCommentId(comment.id)
-    setEditingCommentInput(comment.content)
-    setReplyingToCommentId(null)
-    setReplyInput("")
-    setError("")
-  }
-
-  const cancelEdit = () => {
-    setEditingCommentId(null)
-    setEditingCommentInput("")
-  }
 
   useEffect(() => {
     const hashIndex = router.asPath.indexOf("#")
@@ -266,48 +156,6 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
 
     return () => window.cancelAnimationFrame(raf)
   }, [comments.length, router.asPath])
-
-  const startReply = (commentId: number, displayName: string, authorId: number) => {
-    if (!me) {
-      openAuthPrompt()
-      return
-    }
-
-    setReplyingToCommentId(commentId)
-    setReplyInput(me.id === authorId ? "" : `@${displayName} `)
-    setEditingCommentId(null)
-    setEditingCommentInput("")
-    setError("")
-  }
-
-  const cancelReply = () => {
-    setReplyingToCommentId(null)
-    setReplyInput("")
-  }
-
-  const handleModifyComment = async (commentId: number) => {
-    if (!editingCommentInput.trim()) {
-      setError("댓글 내용을 입력해주세요.")
-      return
-    }
-
-    setIsLoading(true)
-    setError("")
-
-    try {
-      await apiFetch<RsData<unknown>>(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
-        method: "PUT",
-        body: JSON.stringify({ content: editingCommentInput }),
-      })
-      setEditingCommentId(null)
-      setEditingCommentInput("")
-      await loadComments()
-    } catch {
-      setError("댓글 수정에 실패했습니다.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const renderAvatar = (
     profileImageDirectUrl: string | undefined,
@@ -335,6 +183,18 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     )
   }
 
+  const renderCommentInlineError = (commentId: number) => {
+    if (inlineError?.placement !== "comment" || inlineError.commentId !== commentId) {
+      return null
+    }
+
+    return (
+      <p className="error" role="alert">
+        {inlineError.message}
+      </p>
+    )
+  }
+
   const renderComment = (comment: CommentNode, isReply = false) => {
     const displayName = comment.authorName || "익명"
     const createdLabel = formatShortDateTime(comment.createdAt, CONFIG.lang)
@@ -342,7 +202,6 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     const isOwner = me?.id === comment.authorId
     const canModify = comment.actorCanModify || isOwner
     const canDelete = comment.actorCanDelete || isOwner
-
     const hasReplies = comment.replies.length > 0
 
     return (
@@ -386,7 +245,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
                 {canDelete && (
                   <button
                     type="button"
-                    onClick={() => handleDeleteComment(comment.id)}
+                    onClick={() => openDeleteConfirm(comment)}
                     disabled={isLoading}
                     className="danger"
                   >
@@ -450,15 +309,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
               </form>
             )}
 
-            {!isReply && hasReplies && (
-              <ReplyGroup>
-                <ReplyList>
-                  {flattenReplies(comment.replies).map((reply) => (
-                    <li key={reply.id}>{renderComment(reply, true)}</li>
-                  ))}
-                </ReplyList>
-              </ReplyGroup>
-            )}
+            {renderCommentInlineError(comment.id)}
           </div>
         </CommentItem>
       </Fragment>
@@ -511,10 +362,13 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
               </button>
             </ComposerPromptCard>
           )}
+          {inlineError?.placement === "composer" && (
+            <p className="error" role="alert">
+              {inlineError.message}
+            </p>
+          )}
         </div>
       </form>
-
-      {error && <p className="error">{error}</p>}
 
       {commentsLoading ? (
         <CommentListSkeleton aria-hidden="true">
@@ -547,12 +401,31 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
           <span>아직 등록된 댓글이 없습니다.</span>
         </EmptyState>
       )}
+      <ConfirmDialog
+        open={deleteConfirm != null}
+        titleId="comment-delete-title"
+        descriptionId="comment-delete-description"
+        title={COMMENT_DELETE_CONFIRM_TITLE}
+        description={
+          <>
+            <span>{COMMENT_DELETE_CONFIRM_IRREVERSIBLE_GUIDANCE}</span>
+            <span className="rowTitle">{deleteConfirm?.snippet ?? ""}</span>
+          </>
+        }
+        confirmLabel={isLoading ? "삭제 중..." : "삭제 확정"}
+        cancelLabel="취소"
+        confirmTone="danger"
+        onConfirm={() => {
+          void confirmDeleteComment()
+        }}
+        onCancel={closeDeleteConfirm}
+      />
       <AuthEntryModal
         open={authPromptOpen}
         onClose={closeAuthPrompt}
         nextPath={nextPath}
         title="로그인"
-        description="댓글을 작성하려면 계정 로그인이 필요합니다."
+        description={authPromptDescription}
       />
     </StyledWrapper>
   )

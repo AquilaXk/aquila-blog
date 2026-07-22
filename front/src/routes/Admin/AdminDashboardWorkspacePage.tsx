@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { NextPage } from "next"
-import { useCallback } from "react"
+import { useCallback, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -76,8 +76,12 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     refetchOnMount: false,
   })
 
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false)
   const handleRefresh = useCallback(() => {
-    void Promise.all([systemHealthQuery.refetch(), dashboardSnapshotQuery.refetch()])
+    setIsManualRefreshing(true)
+    void Promise.all([systemHealthQuery.refetch(), dashboardSnapshotQuery.refetch()]).finally(() => {
+      setIsManualRefreshing(false)
+    })
   }, [dashboardSnapshotQuery, systemHealthQuery])
 
   if (!sessionMember) return null
@@ -85,7 +89,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   const healthCollectionFailed = systemHealthQuery.isError
   const snapshotCollectionFailed = dashboardSnapshotQuery.isError
   const collectionFailed = healthCollectionFailed || snapshotCollectionFailed
-  const isRefreshing = systemHealthQuery.isFetching || dashboardSnapshotQuery.isFetching
+  const isRefreshing = isManualRefreshing
   const freshnessLabel = formatDashboardFreshnessLabel(
     resolveDashboardDataUpdatedAt(systemHealthQuery.dataUpdatedAt, dashboardSnapshotQuery.dataUpdatedAt)
   )

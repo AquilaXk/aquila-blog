@@ -570,6 +570,20 @@ test.describe("editor code fence recovery", () => {
     expect(result.recovered).toBe(false)
     expect(result.content).toBe("")
     expect(result.content).not.toContain("fun example() = Unit")
+    expect(result.rejectStoredContentHtml).toBe(true)
+  })
+
+  test("empty admin with stale contentHtml sets rejectStoredContentHtml without public fetch", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: "",
+      contentHtmlBodyCandidate: filledFenceContent,
+      publicFallbackSucceeded: false,
+    })
+
+    expect(result.source).toBe("contentHtml")
+    expect(result.recovered).toBe(true)
+    expect(result.content).toContain("fun example() = Unit")
+    expect(result.rejectStoredContentHtml).toBe(false)
   })
 
   test("treats missing public fence as html conflict for extra admin empty fences", () => {

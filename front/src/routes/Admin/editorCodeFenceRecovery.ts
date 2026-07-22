@@ -487,9 +487,7 @@ export const resolveEditorCodeFenceRecovery = ({
     publicFallbackSucceeded,
   })
   const rejectStoredContentHtml =
-    adminContent.trim().length > 0 &&
-    !htmlRecoveryIsTrustworthy &&
-    fromHtml.content !== adminContent
+    !htmlRecoveryIsTrustworthy && fromHtml.content !== adminContent
   const trustedHtmlContent = htmlRecoveryIsTrustworthy ? fromHtml.content : adminContent
 
   if (publicFallbackSucceeded && typeof publicContent === "string") {

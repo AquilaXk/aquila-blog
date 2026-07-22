@@ -76,7 +76,7 @@ jobs:
           backend=false
           while IFS= read -r file; do
             case "${file}" in
-              back/*|deploy/homeserver/*|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/test/check-forbidden-tracked-files.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml)
+              back/*|deploy/homeserver/*|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml)
                 backend=true
                 break
                 ;;
@@ -166,6 +166,9 @@ jobs:
 
       - name: Guard Terraform world-open security groups
         run: bash tools/guards/check-terraform-no-world-open-sg.sh
+
+      - name: Guard public API Caddy route drift
+        run: bash tools/guards/check-public-api-caddy-drift.sh
 
       - name: Dependency review readiness
         if: github.event_name == 'pull_request'

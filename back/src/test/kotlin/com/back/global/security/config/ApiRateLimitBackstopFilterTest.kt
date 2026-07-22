@@ -32,6 +32,7 @@ class ApiRateLimitBackstopFilterTest {
                 clientIpResolverProvider = objectProvider(ClientIpResolver(), ClientIpResolver::class.java),
                 meterRegistryProvider = objectProvider(SimpleMeterRegistry(), MeterRegistry::class.java),
                 environment = MockEnvironment().apply { setActiveProfiles("test") },
+                publicApiRequestMatcher = TestPublicApiRequestMatchers.defaultMatcher(),
             )
 
         repeat(120) {
@@ -341,6 +342,74 @@ class ApiRateLimitBackstopFilterTest {
         assertThat(redis.expiredKeys()).anyMatch { it.contains("public-read") }
     }
 
+    @Test
+    @DisplayName("한도 값이 0 이하면 필터 생성이 실패한다")
+    fun `non positive rate limits fail filter construction`() {
+        assertThatThrownBy {
+            createFilter(redis = InMemoryRedisKeyValuePort(), publicReadLimitPerMinute = 0)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("publicReadLimitPerMinute")
+
+        assertThatThrownBy {
+            createFilter(redis = InMemoryRedisKeyValuePort(), authenticatedReadLimitPerMinute = 0)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("authenticatedReadLimitPerMinute")
+
+        assertThatThrownBy {
+            createFilter(redis = InMemoryRedisKeyValuePort(), mutationLimitPerMinute = 0)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("mutationLimitPerMinute")
+
+        assertThatThrownBy {
+            createFilter(redis = InMemoryRedisKeyValuePort(), authLimitPerMinute = 0)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("authLimitPerMinute")
+
+        assertThatThrownBy {
+            createFilter(redis = InMemoryRedisKeyValuePort(), sseLimitPerMinute = 0)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("sseLimitPerMinute")
+    }
+
+    @Test
+    @DisplayName("context-path가 있어도 rate-limit path 판정이 동작한다")
+    fun `context path is stripped before rate limit matching`() {
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, publicReadLimitPerMinute = 1)
+
+        assertThat(
+            runFilter(
+                filter,
+                "GET",
+                "/blog/post/api/v1/posts/feed",
+                contextPath = "/blog",
+            ).status,
+        ).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(
+            runFilter(
+                filter,
+                "GET",
+                "/blog/post/api/v1/posts/feed",
+                contextPath = "/blog",
+            ).status,
+        ).isEqualTo(429)
+    }
+
+    @Test
+    @DisplayName("ClientIpResolver가 없으면 기본 resolver로 rate-limit한다")
+    fun `missing client ip resolver falls back to default resolver`() {
+        val redis = InMemoryRedisKeyValuePort()
+        val filter =
+            createFilter(
+                redis = redis,
+                clientIpResolver = null,
+                publicReadLimitPerMinute = 1,
+            )
+
+        assertThat(runFilter(filter, "GET", "/post/api/v1/posts/feed").status).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(filter, "GET", "/post/api/v1/posts/feed").status).isEqualTo(429)
+    }
+
     private fun createFilter(
         redis: RedisKeyValuePort?,
         clientIpResolver: ClientIpResolver? = ClientIpResolver(),
@@ -361,6 +430,7 @@ class ApiRateLimitBackstopFilterTest {
             MockEnvironment().apply {
                 setActiveProfiles(if (prodRuntime) "prod" else "test")
             },
+        publicApiRequestMatcher = TestPublicApiRequestMatchers.defaultMatcher(),
         enabled = enabled,
         requireRedisInProd = requireRedisInProd,
         publicReadLimitPerMinute = publicReadLimitPerMinute,
@@ -387,7 +457,10 @@ class ApiRateLimitBackstopFilterTest {
         contextPath: String = "",
     ): MockHttpServletResponse {
         val request = MockHttpServletRequest(method, path)
-        request.contextPath = contextPath
+        if (contextPath.isNotBlank()) {
+            request.contextPath = contextPath
+            request.requestURI = if (path.startsWith(contextPath)) path else contextPath + path
+        }
         request.remoteAddr = "172.19.0.2"
         request.addHeader("CF-Connecting-IP", "203.0.113.10")
         val response = MockHttpServletResponse()

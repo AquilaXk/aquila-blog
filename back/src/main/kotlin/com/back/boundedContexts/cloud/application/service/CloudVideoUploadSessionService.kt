@@ -41,6 +41,8 @@ private const val INVALID_PART_SIZE_MESSAGE = "업로드 조각 크기가 올바
 private const val PART_CONTENT_CONFLICT_MESSAGE = "이미 다른 내용의 업로드 조각이 저장되어 있습니다."
 private const val MULTIPART_COMPOSITE_CHECKSUM_PREFIX = "sha256-composite:"
 private const val INTEGRITY_MISMATCH_MESSAGE = "완성된 업로드 파일의 무결성 검증에 실패했습니다."
+private const val COMMITTED_OBJECT_NOT_VISIBLE_MESSAGE =
+    "완성된 업로드 객체를 아직 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
 
 data class CloudVideoUploadSessionDto(
     val id: Long,
@@ -271,24 +273,25 @@ class CloudVideoUploadSessionService(
                             throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
                         }
                         val existingSha = existing.partSha256
-                        if (existingSha.isBlank()) {
-                            // legacy blank part_sha256: same-size retry is accepted and backfills the digest.
-                            existing.partSha256 = bufferedPart.sha256Hex
-                            partRepository.save(existing)
-                        } else if (!existingSha.equals(bufferedPart.sha256Hex, ignoreCase = true)) {
-                            throw AppException("409-1", PART_CONTENT_CONFLICT_MESSAGE)
+                        if (existingSha.isNotBlank()) {
+                            if (!existingSha.equals(bufferedPart.sha256Hex, ignoreCase = true)) {
+                                throw AppException("409-1", PART_CONTENT_CONFLICT_MESSAGE)
+                            }
+                            // True idempotent short-circuit only when digest matches stored bytes.
+                            extendSessionExpiry(session)
+                            CloudMediaMetrics.recordPartUpload(
+                                meterRegistry,
+                                result = "idempotent",
+                                durationNanos = System.nanoTime() - startedAt,
+                                bytes = contentLength,
+                            )
+                            return CloudVideoUploadPartResultDto(
+                                session = session.toDto(partRepository.findBySessionId(session.id)),
+                                part = existing.toDto(),
+                            )
                         }
-                        extendSessionExpiry(session)
-                        CloudMediaMetrics.recordPartUpload(
-                            meterRegistry,
-                            result = "idempotent",
-                            durationNanos = System.nanoTime() - startedAt,
-                            bytes = contentLength,
-                        )
-                        return CloudVideoUploadPartResultDto(
-                            session = session.toDto(partRepository.findBySessionId(session.id)),
-                            part = existing.toDto(),
-                        )
+                        // Legacy blank part_sha256 cannot prove S3 bytes match — replace via re-upload.
+                        partRepository.delete(existing)
                     }
 
                     claimStatus(
@@ -499,6 +502,10 @@ class CloudVideoUploadSessionService(
 
     private fun recoverStaleCompletingSession(session: CloudVideoUploadSession): Boolean {
         val head = cloudStoragePort.head(session.objectKey)
+        // Transient HeadObject miss: leave COMPLETING for client/stale retry (do not abort/delete).
+        if (head == null) {
+            return false
+        }
         if (CloudMultipartCommitDetector.isCommitted(head, session.byteSize)) {
             if (session.status != CloudVideoUploadSessionStatus.COMPLETING) return false
             finishCommittedSession(session)
@@ -595,10 +602,15 @@ class CloudVideoUploadSessionService(
         parts: List<CloudVideoUploadPart>,
     ): String? {
         val head = cloudStoragePort.head(session.objectKey)
+        // Null/not-yet-visible head after complete: keep COMPLETING and ask client to retry.
+        // CloudMultipartCommitDetector.isCommitted(null, ...) is false, but must not delete.
+        if (head == null) {
+            throw AppException("409-1", COMMITTED_OBJECT_NOT_VISIBLE_MESSAGE)
+        }
         if (!CloudMultipartCommitDetector.isCommitted(head, session.byteSize)) {
             failIntegrityAndCleanup(
                 session,
-                "multipart integrity size mismatch: head=${head?.contentLength}, expected=${session.byteSize}",
+                "multipart integrity size mismatch: head=${head.contentLength}, expected=${session.byteSize}",
             )
             throw AppException("409-1", INTEGRITY_MISMATCH_MESSAGE)
         }

@@ -71,7 +71,7 @@
 | --- | --- | --- |
 | `INITIATING` | 15분 | `custom.storage.cloudVideoResumableStaleInitiatingGraceSeconds` |
 | `COMPLETING`, `ABORTING` | 30분 | `custom.storage.cloudVideoResumableStaleCompletingGraceSeconds` |
-| `UPLOADING_PART` | 60분 | `custom.storage.cloudVideoResumableStaleUploadingPartGraceSeconds` |
+| `UPLOADING_PART` | 7일 (absolute max와 동일; claim 시각 기준이라 짧은 유예는 전송 중 part를 끊을 수 있음) | `custom.storage.cloudVideoResumableStaleUploadingPartGraceSeconds` |
 
 회수 전이:
 

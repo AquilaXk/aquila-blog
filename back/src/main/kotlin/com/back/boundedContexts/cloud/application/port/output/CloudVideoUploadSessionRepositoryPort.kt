@@ -78,5 +78,7 @@ interface CloudVideoUploadPartRepositoryPort {
 
     fun findBySessionId(sessionId: Long): List<CloudVideoUploadPart>
 
+    fun delete(part: CloudVideoUploadPart)
+
     fun deleteBySessionId(sessionId: Long)
 }

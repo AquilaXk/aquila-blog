@@ -17,5 +17,9 @@ class CloudStoragePropertiesYamlBindingTest {
         assertThat(applicationYaml).contains(
             "cloudVideoResumableAbsoluteMaxSeconds: \${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_ABSOLUTEMAXSECONDS:604800}",
         )
+        assertThat(applicationYaml).contains(
+            "cloudVideoResumableStaleUploadingPartGraceSeconds: " +
+                "\${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_STALEUPLOADINGPARTGRACESECONDS:604800}",
+        )
     }
 }

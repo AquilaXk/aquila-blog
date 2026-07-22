@@ -268,8 +268,8 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
-    @DisplayName("빈 partSha256 legacy 행은 같은 크기 재시도에서 digest를 갱신한다")
-    fun `빈 partSha256 legacy 행은 같은 크기 재시도에서 digest를 갱신한다`() {
+    @DisplayName("빈 partSha256 legacy 행은 재업로드로 S3와 digest를 함께 갱신한다")
+    fun `빈 partSha256 legacy 행은 재업로드로 S3와 digest를 함께 갱신한다`() {
         val session =
             service.createSession(
                 ownerMemberId = 7L,
@@ -292,8 +292,10 @@ class CloudVideoUploadSessionServiceTest {
         val result = service.uploadPart(7L, session.id, 1, part)
 
         assertThat(result.session.uploadedParts).containsExactly(1)
-        assertThat(storage.multipartParts).isEmpty()
+        assertThat(storage.multipartParts).hasSize(1)
+        assertThat(storage.multipartParts.single().partNumber).isEqualTo(1)
         val stored = partRepository.findBySessionIdAndPartNumber(session.id, 1)!!
+        assertThat(stored.eTag).isEqualTo("etag-1")
         assertThat(stored.partSha256).hasSize(64)
         assertThat(stored.partSha256).isNotBlank()
     }
@@ -666,6 +668,33 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
+    @DisplayName("complete 후 HeadObject가 없으면 COMPLETING을 유지하고 객체를 삭제하지 않는다")
+    fun `complete 후 HeadObject가 없으면 COMPLETING을 유지하고 객체를 삭제하지 않는다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        storage.omitHeadOnComplete = true
+
+        assertThatThrownBy {
+            service.complete(7L, session.id)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("아직 확인할 수 없습니다")
+
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        assertThat(stored.status).isEqualTo(CloudVideoUploadSessionStatus.COMPLETING)
+        assertThat(storage.deletedObjectKeys).isEmpty()
+        assertThat(storage.completedUploads).hasSize(1)
+        assertThat(partRepository.findBySessionId(session.id)).hasSize(1)
+        assertThat(fileRepository.findActiveByObjectKey(stored.objectKey)).isNull()
+    }
+
+    @Test
     @DisplayName("상태 조회는 업로드된 조각 번호를 정렬해서 반환한다")
     fun `상태 조회는 업로드된 조각 번호를 정렬해서 반환한다`() {
         val session =
@@ -946,9 +975,10 @@ class CloudVideoUploadSessionServiceTest {
         val stored = sessionRepository.savedSessions.single { it.id == session.id }
         stored.status = CloudVideoUploadSessionStatus.UPLOADING_PART
         stored.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+        // Default uploading-part grace equals absolute max (7d); advance past that cutoff.
         val staleService =
             createService(
-                clock = Clock.fixed(Instant.parse("2026-06-17T01:30:00Z"), ZoneOffset.UTC),
+                clock = Clock.fixed(Instant.parse("2026-06-24T00:00:01Z"), ZoneOffset.UTC),
             )
 
         val recovered = staleService.purgeStaleIntermediateSessions(batchSize = 100)
@@ -960,6 +990,36 @@ class CloudVideoUploadSessionServiceTest {
             .isEqualTo(CloudVideoUploadSessionStatus.FAILED)
         assertThat(sessionRepository.savedSessions.single { it.id == session.id }.failureReason)
             .contains("stale intermediate")
+    }
+
+    @Test
+    @DisplayName("grace 안의 UPLOADING_PART는 최근 claim이면 stale 회수하지 않는다")
+    fun `grace 안의 UPLOADING_PART는 최근 claim이면 stale 회수하지 않는다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.UPLOADING_PART
+        // Claim-time modifiedAt; 90 minutes later is still within absolute-max grace.
+        stored.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+        val staleService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T01:30:00Z"), ZoneOffset.UTC),
+            )
+
+        val recovered = staleService.purgeStaleIntermediateSessions(batchSize = 100)
+
+        assertThat(recovered).isZero()
+        assertThat(storage.abortedUploads).isEmpty()
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.UPLOADING_PART)
+        assertThat(partRepository.findBySessionId(session.id)).hasSize(1)
     }
 
     @Test
@@ -1849,6 +1909,10 @@ class CloudVideoUploadSessionServiceTest {
         override fun findBySessionId(sessionId: Long): List<CloudVideoUploadPart> =
             parts.filter { it.sessionId == sessionId }.sortedBy { it.partNumber }
 
+        override fun delete(part: CloudVideoUploadPart) {
+            parts.removeIf { it.id == part.id || (it.sessionId == part.sessionId && it.partNumber == part.partNumber) }
+        }
+
         override fun deleteBySessionId(sessionId: Long) {
             parts.removeIf { it.sessionId == sessionId }
         }
@@ -1948,6 +2012,7 @@ class CloudVideoUploadSessionServiceTest {
         val failingCompleteUploadIds = mutableSetOf<String>()
         private val uploadedPartSizes = mutableMapOf<String, MutableMap<Int, Long>>()
         var completedObjectContentLengthOverride: Long? = null
+        var omitHeadOnComplete = false
         var failInitiate = false
 
         override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult =
@@ -1986,6 +2051,10 @@ class CloudVideoUploadSessionServiceTest {
                 throw IllegalStateException("complete failed")
             }
             completedUploads += request
+            if (omitHeadOnComplete) {
+                objectHeads.remove(request.objectKey)
+                return
+            }
             val summed = uploadedPartSizes[request.objectKey]?.values?.sum() ?: 0L
             val contentLength = completedObjectContentLengthOverride ?: summed
             objectHeads[request.objectKey] =

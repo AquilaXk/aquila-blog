@@ -340,6 +340,9 @@ custom:
     cloudVideoResumablePartSizeBytes: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES:67108864}
     cloudVideoResumableExpiresSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS:86400}
     cloudVideoResumableAbsoluteMaxSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_ABSOLUTEMAXSECONDS:604800}
+    # UPLOADING_PART stale grace: modifiedAt is claim-time only (not refreshed while streaming),
+    # so default matches absolute max (7d) to avoid aborting in-flight large part uploads.
+    cloudVideoResumableStaleUploadingPartGraceSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_STALEUPLOADINGPARTGRACESECONDS:604800}
     retention:
       tempUploadSeconds: ${CUSTOM__STORAGE__RETENTION__TEMP_UPLOAD_SECONDS:86400}
       replacedProfileImageSeconds: ${CUSTOM__STORAGE__RETENTION__REPLACED_PROFILE_IMAGE_SECONDS:259200}

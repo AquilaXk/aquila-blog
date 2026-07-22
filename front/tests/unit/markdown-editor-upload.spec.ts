@@ -37,6 +37,20 @@ test.describe("markdown editor attachment upload model", () => {
     })
   })
 
+  test("escapes markdown metacharacters in attachment link labels", () => {
+    expect(
+      resolveMarkdownAttachmentLink(
+        {
+          url: "https://cdn.example.test/files/bracket%5B1%5D.pdf",
+          name: "report[1].pdf",
+        },
+        "fallback[1].bin"
+      )
+    ).toEqual({
+      markdown: "\n\n[report\\[1\\].pdf](https://cdn.example.test/files/bracket%5B1%5D.pdf)\n",
+    })
+  })
+
   test("surfaces a toolbar error when the upload response has no url", () => {
     expect(resolveMarkdownAttachmentLink({ name: "missing.pdf" }, "fallback.pdf")).toEqual({
       error: MARKDOWN_ATTACHMENT_URL_MISSING_MESSAGE,

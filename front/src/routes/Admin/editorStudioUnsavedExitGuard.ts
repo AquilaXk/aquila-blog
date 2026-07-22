@@ -49,10 +49,35 @@ export const isEditorUnsavedDirtyByFingerprint = ({
 
 const editorRoutePathname = (url: string) => url.split(/[?#]/)[0] || ""
 
-/** Next router / hard login redirects that must not be blocked by the exit guard. */
+/**
+ * Explicit forced-exit bypass for non-login destinations (e.g. admin-loss → `/`).
+ * Login stays URL-based; home must not bypass on ordinary user clicks.
+ */
+let forcedEditorExitPath: string | null = null
+
+/** Mark the next matching navigation as a forced exit (admin-loss redirect, etc.). */
+export const markForcedEditorExitUrl = (url: string) => {
+  forcedEditorExitPath = editorRoutePathname(url)
+}
+
+/** Clear a pending forced-exit mark (tests / cleanup). */
+export const clearForcedEditorExitUrl = () => {
+  forcedEditorExitPath = null
+}
+
+/** Consume the mark once the matching forced navigation is allowed through. */
+export const consumeForcedEditorExitUrl = (url: string) => {
+  const path = editorRoutePathname(url)
+  if (forcedEditorExitPath !== null && path === forcedEditorExitPath) {
+    forcedEditorExitPath = null
+  }
+}
+
+/** Next router / hard login / marked forced redirects that must not be blocked. */
 export const isForcedEditorExitUrl = (url: string) => {
   const path = editorRoutePathname(url)
-  return path === "/login" || path.startsWith("/login/")
+  if (path === "/login" || path.startsWith("/login/")) return true
+  return forcedEditorExitPath !== null && path === forcedEditorExitPath
 }
 
 /** Same-pathname query/hash updates (compose/manage surface sync) are not leaving. */
@@ -112,16 +137,23 @@ export const resolveEditorRouteNavigationRetry = (
   }
 }
 
+type EditorHistoryLike = Pick<History, "pushState"> & { readonly state?: unknown }
+
 /**
  * After beforePopState blocks a dirty pop, restore the editor URL with pushState.
  * Confirm leave then uses history.back() — the blocked destination sits under the
  * restored entry, so no back/forward guessing or cross-session idx stamps are needed.
+ *
+ * Always pass a captured Next.js history state (from before the pop). `pushState(null)`
+ * makes later Back restore URL-only without re-rendering the editor.
  */
 export const restoreEditorUrlAfterBlockedHistoryPop = (
   editorAsPath: string,
-  history: Pick<History, "pushState"> | null | undefined = typeof globalThis !== "undefined"
+  history: EditorHistoryLike | null | undefined = typeof globalThis !== "undefined"
     ? (globalThis as typeof globalThis & { window?: Window }).window?.history
-    : undefined
+    : undefined,
+  historyState?: unknown
 ) => {
-  history?.pushState(null, "", editorAsPath)
+  const state = typeof historyState !== "undefined" ? historyState : (history?.state ?? null)
+  history?.pushState(state, "", editorAsPath)
 }

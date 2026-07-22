@@ -13,6 +13,7 @@ import {
   replaceShallowRoutePreservingScroll,
   toLoginPath,
 } from "src/libs/router"
+import { markForcedEditorExitUrl } from "./editorStudioUnsavedExitGuard"
 import type { PostForEditor } from "./EditorStudioWorkspaceControllerRootModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
@@ -111,6 +112,9 @@ export const useEditorStudioRouting = ({
         redirectingRef.current = true
         void (async () => {
           try {
+            // Mark so exit guard allows this forced redirect while dirty;
+            // ordinary user navigation to `/` stays guarded.
+            markForcedEditorExitUrl("/")
             await replaceRoute(router, "/", { preferHardNavigation: true })
           } catch (error) {
             if (!isNavigationCancelledError(error)) {

@@ -1,11 +1,13 @@
 import { expect, test } from "@playwright/test"
 import {
   captureEditorRouteNavigationIntent,
+  clearForcedEditorExitUrl,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   isEditorUnsavedDirtyByFingerprint,
   isForcedEditorExitUrl,
   isSamePathEditorSurfaceNavigation,
+  markForcedEditorExitUrl,
   resolveEditorRouteNavigationRetry,
   restoreEditorUrlAfterBlockedHistoryPop,
 } from "../../src/routes/Admin/editorStudioUnsavedExitGuard"
@@ -113,10 +115,26 @@ test.describe("editor unsaved exit guard helpers", () => {
   })
 
   test("allows forced login redirects without blocking", () => {
+    clearForcedEditorExitUrl()
     expect(isForcedEditorExitUrl("/login")).toBe(true)
     expect(isForcedEditorExitUrl("/login?next=%2Feditor%2F1")).toBe(true)
     expect(isForcedEditorExitUrl("/editor/1")).toBe(false)
     expect(isForcedEditorExitUrl("/admin/posts")).toBe(false)
+  })
+
+  test("allows marked admin-loss home redirect but not ordinary home navigation", () => {
+    clearForcedEditorExitUrl()
+    expect(isForcedEditorExitUrl("/")).toBe(false)
+    expect(isForcedEditorExitUrl("/?utm=1")).toBe(false)
+
+    markForcedEditorExitUrl("/")
+    expect(isForcedEditorExitUrl("/")).toBe(true)
+    expect(isForcedEditorExitUrl("/?utm=1")).toBe(true)
+    expect(isForcedEditorExitUrl("/admin/posts")).toBe(false)
+    expect(isForcedEditorExitUrl("/login")).toBe(true)
+
+    clearForcedEditorExitUrl()
+    expect(isForcedEditorExitUrl("/")).toBe(false)
   })
 
   test("allows same-pathname surface query updates without treating them as leaving", () => {
@@ -174,16 +192,40 @@ test.describe("editor unsaved exit guard helpers", () => {
     })
   })
 
-  test("restores editor URL after a blocked history pop without guessing direction", () => {
-    const calls: string[] = []
+  test("restores editor URL after a blocked history pop with preserved Next history state", () => {
+    const calls: Array<{ state: unknown; url: string }> = []
+    const editorNextState = {
+      url: "/editor/1?surface=compose",
+      as: "/editor/1?surface=compose",
+      options: {},
+      __N: true,
+      key: "editor-key",
+    }
+    const destinationState = {
+      url: "/admin/posts",
+      as: "/admin/posts",
+      options: {},
+      __N: true,
+      key: "dest-key",
+    }
     const history = {
-      pushState: (_state: unknown, _unused: string, url?: string | URL | null) => {
-        calls.push(String(url ?? ""))
+      state: destinationState,
+      pushState: (state: unknown, _unused: string, url?: string | URL | null) => {
+        calls.push({ state, url: String(url ?? "") })
       },
     }
 
-    restoreEditorUrlAfterBlockedHistoryPop("/editor/1?surface=compose", history)
-    expect(calls).toEqual(["/editor/1?surface=compose"])
+    restoreEditorUrlAfterBlockedHistoryPop(
+      "/editor/1?surface=compose",
+      history,
+      editorNextState
+    )
+    expect(calls).toEqual([{ state: editorNextState, url: "/editor/1?surface=compose" }])
+
+    calls.length = 0
+    restoreEditorUrlAfterBlockedHistoryPop("/editor/1", history)
+    expect(calls).toEqual([{ state: destinationState, url: "/editor/1" }])
+
     expect(() => restoreEditorUrlAfterBlockedHistoryPop("/editor/1", null)).not.toThrow()
   })
 })

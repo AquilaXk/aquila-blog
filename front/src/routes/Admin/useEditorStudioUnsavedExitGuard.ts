@@ -3,6 +3,7 @@ import { createElement, useCallback, useEffect, useId, useRef, useState } from "
 import { ConfirmDialog } from "src/design-system/ConfirmDialog"
 import {
   captureEditorRouteNavigationIntent,
+  consumeForcedEditorExitUrl,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   isForcedEditorExitUrl,
@@ -42,6 +43,8 @@ export const useEditorStudioUnsavedExitGuard = ({
   const pendingRef = useRef<PendingNavigation | null>(null)
   const allowNavigationRef = useRef(false)
   const pendingRouteIntentRef = useRef<EditorRouteNavigationIntent | null>(null)
+  /** Last Next.js history.state while settled on the editor (before a blocked pop). */
+  const editorHistoryStateRef = useRef<unknown>(null)
   const getIsDirtyRef = useRef(getIsDirty)
   const isDirtyRef = useRef(isDirty)
   getIsDirtyRef.current = getIsDirty
@@ -118,6 +121,11 @@ export const useEditorStudioUnsavedExitGuard = ({
   useEffect(() => {
     if (typeof window === "undefined" || !enabled) return
 
+    const captureEditorHistoryState = () => {
+      editorHistoryStateRef.current = window.history.state
+    }
+    captureEditorHistoryState()
+
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!readIsDirty()) return
       event.preventDefault()
@@ -145,15 +153,23 @@ export const useEditorStudioUnsavedExitGuard = ({
         return true
       }
 
-      if (isForcedEditorExitUrl(as)) return true
+      if (isForcedEditorExitUrl(as)) {
+        consumeForcedEditorExitUrl(as)
+        return true
+      }
       if (isSamePathEditorSurfaceNavigation(router.asPath, as)) return true
       if (!readIsDirty()) return true
 
       pendingRef.current = { kind: "history" }
       setConfirmOpen(true)
-      // Browser already applied the pop; restore editor URL (CodeRabbit) without
-      // history.go undo — confirm leave then uses history.back() only.
-      restoreEditorUrlAfterBlockedHistoryPop(router.asPath)
+      // Browser already applied the pop; restore editor URL with the pre-pop Next
+      // history state so later Back can re-render the editor (not URL-only).
+      restoreEditorUrlAfterBlockedHistoryPop(
+        router.asPath,
+        window.history,
+        editorHistoryStateRef.current
+      )
+      captureEditorHistoryState()
       return false
     })
 
@@ -165,7 +181,10 @@ export const useEditorStudioUnsavedExitGuard = ({
       if (allowNavigationRef.current) return
       if (nextUrl === router.asPath) return
       if (isSamePathEditorSurfaceNavigation(router.asPath, nextUrl)) return
-      if (isForcedEditorExitUrl(nextUrl)) return
+      if (isForcedEditorExitUrl(nextUrl)) {
+        consumeForcedEditorExitUrl(nextUrl)
+        return
+      }
 
       pendingRef.current = {
         kind: "route",
@@ -183,6 +202,7 @@ export const useEditorStudioUnsavedExitGuard = ({
 
     const handleRouteChangeComplete = () => {
       clearAllowNavigation()
+      captureEditorHistoryState()
     }
 
     const handleRouteChangeError = () => {

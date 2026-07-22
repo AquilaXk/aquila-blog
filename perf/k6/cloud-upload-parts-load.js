@@ -27,8 +27,8 @@ const PART_SIZE_BYTES = Number(__ENV.PART_SIZE_BYTES || "1048576");
 const PARTS_PER_SESSION = Number(__ENV.PARTS_PER_SESSION || "3");
 const CONCURRENT_SESSIONS = Number(__ENV.CONCURRENT_SESSIONS || "2");
 const SESSION_BYTE_SIZE = Number(__ENV.SESSION_BYTE_SIZE || String(PART_SIZE_BYTES * PARTS_PER_SESSION));
-const UPLOAD_FILENAME = __ENV.UPLOAD_FILENAME || "k6-part-load.bin";
-const UPLOAD_CONTENT_TYPE = __ENV.UPLOAD_CONTENT_TYPE || "application/octet-stream";
+const UPLOAD_FILENAME = __ENV.UPLOAD_FILENAME || "k6-part-load.mp4";
+const UPLOAD_CONTENT_TYPE = __ENV.UPLOAD_CONTENT_TYPE || "video/mp4";
 const UPLOAD_FOLDER = __ENV.UPLOAD_FOLDER || "/perf-k6";
 
 const partUploadDurationMs = new Trend("cloud_part_upload_duration_ms", true);
@@ -53,7 +53,11 @@ export const options = {
 };
 
 function authHeaders(extra = {}) {
-  const headers = { ...extra };
+  const headers = {
+    // Cookie/Bearer admin mutations require CSRF preflight header.
+    "X-Aquila-CSRF": "1",
+    ...extra,
+  };
   const cookie = (__ENV.CLOUD_AUTH_COOKIE || "").trim();
   const authHeader = (__ENV.CLOUD_AUTH_HEADER || "").trim();
   if (cookie) {
@@ -80,15 +84,28 @@ function recordUpload(res, label) {
   return ok;
 }
 
-function buildPartPayload(sizeBytes) {
+function buildPartPayload(sizeBytes, { withFtyp = false } = {}) {
   const buffer = new Uint8Array(sizeBytes);
   for (let i = 0; i < sizeBytes; i += 1) {
     buffer[i] = i % 256;
   }
+  if (withFtyp && sizeBytes >= 12) {
+    // ISO BMFF: size(4) + 'ftyp' + major brand
+    buffer[0] = 0;
+    buffer[1] = 0;
+    buffer[2] = 0;
+    buffer[3] = 20;
+    buffer[4] = 0x66; // f
+    buffer[5] = 0x74; // t
+    buffer[6] = 0x79; // y
+    buffer[7] = 0x70; // p
+    buffer[8] = 0x69; // i
+    buffer[9] = 0x73; // s
+    buffer[10] = 0x6f; // o
+    buffer[11] = 0x6d; // m
+  }
   return buffer.buffer;
 }
-
-const partPayload = buildPartPayload(PART_SIZE_BYTES);
 
 function createSession() {
   const started = Date.now();
@@ -113,10 +130,11 @@ function createSession() {
   return session;
 }
 
-function uploadPart(sessionId, partNumber) {
+function uploadPart(sessionId, partNumber, partSizeBytes) {
   const url = `${CLOUD_API}/files/video-upload-sessions/${sessionId}/parts/${partNumber}`;
+  const payload = buildPartPayload(partSizeBytes, { withFtyp: partNumber === 1 });
   const started = Date.now();
-  const res = http.put(url, partPayload, {
+  const res = http.put(url, payload, {
     headers: authHeaders({ "Content-Type": "application/octet-stream" }),
     tags: { request: "upload_part", partNumber: String(partNumber) },
   });
@@ -151,8 +169,12 @@ export function uploadSessionParts() {
   }
 
   const totalParts = Math.min(PARTS_PER_SESSION, session.totalParts || PARTS_PER_SESSION);
+  const partSizeBytes = Number(session.partSizeBytes || PART_SIZE_BYTES);
   for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
-    uploadPart(session.id, partNumber);
+    const remaining = SESSION_BYTE_SIZE - (partNumber - 1) * partSizeBytes;
+    const thisSize = Math.min(partSizeBytes, remaining);
+    if (thisSize <= 0) break;
+    uploadPart(session.id, partNumber, thisSize);
     sleep(0.05);
   }
 

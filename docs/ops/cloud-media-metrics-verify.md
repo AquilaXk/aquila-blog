@@ -55,3 +55,12 @@ curl -fsS http://127.0.0.1:9090/api/v1/rules | jq '.data.groups[] | select(.name
 ## 5) 배포 상태
 
 홈서버 배포 스크립트/헬스 체크(`check_deploy_status.sh` 등)가 PASS인지 확인한 뒤, 위 1–3을 같은 환경에서 재실행한다.
+
+## 6) 2026-07-22 실측 메모 (#1318)
+
+- 파일은 배포됨: `monitoring/rules/cloud-media-alerts.yml`, `monitoring/grafana/dashboards/blog-cloud-media.json` (host git `3f103552`).
+- Prometheus는 **파일 반영만으로 rule group이 안 올라올 수 있음** → `POST /-/reload` 후 `aquila-cloud-media` 10개 룰 확인.
+- Grafana API search: `uid=blog-cloud-media`, folder `Aquila`.
+- Gauge: `cloud_upload_session_stuck`, `cloud_disk_temp_avail_bytes`, `cloud_reconcile_orphans` series > 0.
+- Counter: 트래픽 후 `sum(cloud_upload_session_transitions_total)=329`, `sum(cloud_playback_requests_total)=269`.
+- `aquila_host_filesystem_avail_bytes{mount="minio"}` 는 이 환경에서 series=0 (호스트 exporter 라벨 차이 가능) — MinIO disk 알람은 별도 exporter 라벨 정합 follow-up.

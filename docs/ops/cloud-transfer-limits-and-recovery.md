@@ -147,11 +147,14 @@ docker compose exec -T minio mc stat \
 
 ### 3.6 리허설 체크리스트 (홈서버)
 
-- [ ] 95 MiB 직접 업로드 성공, 100 MiB+ 요청이 edge 또는 Caddy에서 413
-- [ ] 고착 세션: SQL 확인 → cancel API → `mc ls --incomplete` 잔여 없음
-- [ ] `mc rm --incomplete`로 고의 incomplete 제거 리허설
-- [ ] playback token DELETE 후 external-content 401/410
-- [ ] `MINIO_API_STALE_UPLOADS_EXPIRY=8d` 확인
+- [x] 100 MiB+ 직접 업로드가 edge에서 **413** (`cloudflare` 본문, 2026-07-22 #1318)
+- [ ] 95 MiB 직접 업로드 성공 (형식 가드/CSRF 때문에 바이너리 smoke는 생략 — resumable video 경로로 대체 검증)
+- [x] incomplete 세션 생성 → `mc ls --incomplete` 확인 → cancel API 후 해당 키 소거
+- [x] `mc rm -r --force --incomplete local/<bucket>/<objectKey>` 로 잔여 incomplete 제거
+- [ ] playback token DELETE 후 external-content 401/410 (토큰 발급·재생 경로는 검증, revoke SQL은 생략)
+- [x] `MINIO_API_STALE_UPLOADS_EXPIRY=8d`, `CLEANUP_INTERVAL=6h` 확인
+
+운영 mutation에는 `X-Aquila-CSRF: 1` 필요. incomplete 제거는 objectKey 단위 `mc rm -r --force --incomplete`가 유효했다.
 
 ## 4. 변경 시 주의
 

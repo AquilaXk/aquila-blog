@@ -76,7 +76,7 @@ jobs:
           backend=false
           while IFS= read -r file; do
             case "${file}" in
-              back/*|deploy/homeserver/*|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml)
+              back/*|deploy/homeserver/*|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/check-r-migration-no-ddl.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|tools/test/check-r-migration-no-ddl.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml)
                 backend=true
                 break
                 ;;
@@ -267,6 +267,12 @@ jobs:
             echo "Migration naming rule violation detected."
             exit 1
           fi
+
+      - name: Guard repeatable migration DDL drift
+        run: bash tools/guards/check-r-migration-no-ddl.sh
+
+      - name: Test repeatable migration DDL guard
+        run: bash tools/test/check-r-migration-no-ddl.test.sh
 
       - name: Run backend PR fast check
         if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request'

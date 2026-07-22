@@ -9,10 +9,21 @@ import kotlin.reflect.KClass
 
 class PostOperationalIndexContractTest {
     private val migrationSql: String =
-        Files.readString(Path.of("src/main/resources/db/migration/R__operational_indexes.sql"))
+        Files.readString(
+            Path.of(
+                "src/main/resources/db/migration/V20260723_01__add_operational_indexes_concurrently.sql",
+            ),
+        )
+
+    private val concurrentIndexConfig: String =
+        Files.readString(
+            Path.of(
+                "src/main/resources/db/migration/V20260723_01__add_operational_indexes_concurrently.sql.conf",
+            ),
+        )
 
     @Test
-    fun `post hard-delete와 cleanup 인덱스는 AfterDDL과 repeatable migration에 함께 선언된다`() {
+    fun `post hard-delete와 cleanup 인덱스는 AfterDDL과 versioned concurrent migration에 함께 선언된다`() {
         val expectedIndexes =
             mapOf(
                 PostComment::class to
@@ -37,6 +48,12 @@ class PostOperationalIndexContractTest {
                 assertThat(migrationSql).contains(indexName)
             }
         }
+    }
+
+    @Test
+    fun `operational index migration is non-transactional concurrent`() {
+        assertThat(concurrentIndexConfig).contains("executeInTransaction=false")
+        assertThat(migrationSql).contains("CREATE INDEX CONCURRENTLY")
     }
 
     private fun KClass<*>.afterDdlSql(): String =

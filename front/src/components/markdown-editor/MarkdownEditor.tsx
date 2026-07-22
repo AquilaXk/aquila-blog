@@ -251,6 +251,37 @@ export const MarkdownEditor = ({
     [applyMutationPlan, commitMarkdown]
   )
 
+  /** Async upload placeholder swap/remove — keep undo via setRangeText, never steal focus. */
+  const applyBackgroundMarkdownMutation = useCallback(
+    (plan: PlannedTextMutation) => {
+      if (disabled) return false
+      const textarea = textareaRef.current
+      const wasFocused = Boolean(textarea && document.activeElement === textarea)
+      if (textarea) {
+        const nextMarkdown = applyPlannedTextMutation(textarea, plan)
+        selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
+        commitMarkdown(nextMarkdown, wasFocused)
+        if (wasFocused) {
+          const nextFrom = plan.selectionStart
+          const nextTo = plan.selectionEnd
+          window.requestAnimationFrame(() => {
+            const current = textareaRef.current
+            if (!current || document.activeElement !== current) return
+            current.setSelectionRange(nextFrom, nextTo)
+            selectionRef.current = { from: nextFrom, to: nextTo }
+          })
+        }
+        return true
+      }
+
+      const next = applyPlannedTextMutationToValue(valueRef.current, plan)
+      selectionRef.current = { from: next.selectionStart, to: next.selectionEnd }
+      commitMarkdown(next.value, false)
+      return true
+    },
+    [commitMarkdown, disabled]
+  )
+
   const planPendingToolbarInsert = useCallback(
     (insert: PendingToolbarInsert): PlannedTextMutation => {
       const { from, to } = resolveActiveSelection()
@@ -429,6 +460,7 @@ export const MarkdownEditor = ({
       onUploadImage,
       onUploadFile,
       applyPlannedMarkdownMutation,
+      applyBackgroundMarkdownMutation,
       resolveActiveSelection,
       setUploadInFlight,
       setUploadError,

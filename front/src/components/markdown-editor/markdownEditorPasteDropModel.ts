@@ -1,4 +1,5 @@
 import type { PlannedTextMutation } from "./markdownEditorTextMutation"
+import { escapeMarkdownLinkLabel } from "./markdownEditorUploadModel"
 
 /** Stable per-upload token so concurrent same-name placeholders never collide. */
 export const createUploadPlaceholderId = (): string => {
@@ -105,7 +106,7 @@ export const planLinkifySelectionWithUrl = (
   selectedText: string,
   url: string
 ): PlannedTextMutation => {
-  const replacement = `[${selectedText}](${url})`
+  const replacement = `[${escapeMarkdownLinkLabel(selectedText)}](${url})`
   const cursor = selectionStart + replacement.length
   return {
     rangeStart: selectionStart,
@@ -147,15 +148,20 @@ export const planReplaceExactSubstring = (
   }
 }
 
-export const planAppendAtEnd = (value: string, markdown: string): PlannedTextMutation => {
+/** Append markdown at EOF while preserving the caller's current caret/selection. */
+export const planAppendAtEnd = (
+  value: string,
+  markdown: string,
+  selectionFrom: number,
+  selectionTo: number
+): PlannedTextMutation => {
   const end = value.length
-  const cursor = end + markdown.length
   return {
     rangeStart: end,
     rangeEnd: end,
     replacement: markdown,
-    selectionStart: cursor,
-    selectionEnd: cursor,
+    selectionStart: selectionFrom,
+    selectionEnd: selectionTo,
   }
 }
 

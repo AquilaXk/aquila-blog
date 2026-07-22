@@ -135,6 +135,18 @@ test.describe("markdown editor paste/drop model", () => {
     expect(applyPlannedTextMutationToValue(value, plan).value).toBe("see [docs](https://example.com) here")
   })
 
+  test("escapes markdown label metacharacters when linkifying a selection", () => {
+    const value = "see foo]bar here"
+    const plan = planLinkifySelectionWithUrl(4, 11, "foo]bar", "https://example.com")
+    expect(plan.replacement).toBe("[foo\\]bar](https://example.com)")
+    expect(applyPlannedTextMutationToValue(value, plan).value).toBe(
+      "see [foo\\]bar](https://example.com) here"
+    )
+
+    const bracketPlan = planLinkifySelectionWithUrl(0, 5, "a[b]c", "https://example.com/x")
+    expect(bracketPlan.replacement).toBe("[a\\[b\\]c](https://example.com/x)")
+  })
+
   test("routes multi-file paste through transfer-files and keeps items-only fallback", () => {
     const imageA = makeFile("a.png", "image/png")
     const imageB = makeFile("b.png", "image/png")
@@ -188,8 +200,25 @@ test.describe("markdown editor paste/drop model", () => {
 
     const edited = "intro ![업로드 중: shot.png edited]() outro"
     expect(findExactSubstringIndex(edited, placeholder)).toBe(-1)
-    const appendPlan = planAppendAtEnd(edited, resolved.markdown)
-    expect(applyPlannedTextMutationToValue(edited, appendPlan).value).toBe(`${edited}${resolved.markdown}`)
+    const caret = 6
+    const appendPlan = planAppendAtEnd(edited, resolved.markdown, caret, caret)
+    expect(appendPlan.selectionStart).toBe(caret)
+    expect(appendPlan.selectionEnd).toBe(caret)
+    const appended = applyPlannedTextMutationToValue(edited, appendPlan)
+    expect(appended.value).toBe(`${edited}${resolved.markdown}`)
+    expect(appended.selectionStart).toBe(caret)
+    expect(appended.selectionEnd).toBe(caret)
+  })
+
+  test("processes mixed transfer files in original array order", () => {
+    const mediaSource = readFileSync(
+      sourcePath("components", "markdown-editor", "useMarkdownEditorMediaTransfers.ts"),
+      "utf8"
+    )
+    expect(mediaSource).toContain("for (const file of files)")
+    expect(mediaSource).toContain("isImageFile(file)")
+    expect(mediaSource).not.toContain("partitionUploadFiles(files)")
+    expect(mediaSource).toContain("applyBackgroundMarkdownMutation")
   })
 
   test("removes an exact placeholder on upload failure without leaving residue", () => {
@@ -243,6 +272,7 @@ test.describe("markdown editor paste/drop model", () => {
     expect(editorSource).toContain("onDragOver={handleDragOver}")
     expect(editorSource).toContain("onDrop={handleDrop}")
     expect(editorSource).toContain("useMarkdownEditorMediaTransfers")
+    expect(editorSource).toContain("applyBackgroundMarkdownMutation")
 
     expect(mediaSource).toContain("buildUploadingImagePlaceholder")
     expect(mediaSource).toContain("createUploadPlaceholderId")
@@ -252,10 +282,12 @@ test.describe("markdown editor paste/drop model", () => {
     expect(mediaSource).toContain("parseSingleHttpUrl")
     expect(mediaSource).toContain("planLinkifySelectionWithUrl")
     expect(mediaSource).toContain("processTransferFiles")
+    expect(mediaSource).toContain("applyBackgroundMarkdownMutation")
 
     expect(modelSource).toContain("![업로드 중:")
     expect(modelSource).toContain("createUploadPlaceholderId")
     expect(modelSource).toContain("resolvePasteMediaRoute")
+    expect(modelSource).toContain("escapeMarkdownLinkLabel")
     expect(rootModelSource).toContain(
       'export { extractImageFileFromClipboard } from "src/components/markdown-editor/markdownEditorPasteDropModel"'
     )

@@ -9,9 +9,9 @@ import {
   buildUploadingAttachmentPlaceholder,
   buildUploadingImagePlaceholder,
   createUploadPlaceholderId,
+  isImageFile,
   listFilesFromDataTransfer,
   parseSingleHttpUrl,
-  partitionUploadFiles,
   planAppendAtEnd,
   planLinkifySelectionWithUrl,
   planReplaceExactSubstring,
@@ -41,6 +41,8 @@ type UseMarkdownEditorMediaTransfersArgs = {
   onUploadImage?: (file: File) => Promise<MarkdownImageUploadResult>
   onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
   applyPlannedMarkdownMutation: (plan: PlannedTextMutation) => boolean
+  /** Placeholder replace/remove after async upload — must not steal focus from other controls. */
+  applyBackgroundMarkdownMutation: (plan: PlannedTextMutation) => boolean
   resolveActiveSelection: () => TextareaSelection
   setUploadInFlight: (delta: number) => void
   setUploadError: (message: string) => void
@@ -54,6 +56,7 @@ export const useMarkdownEditorMediaTransfers = ({
   onUploadImage,
   onUploadFile,
   applyPlannedMarkdownMutation,
+  applyBackgroundMarkdownMutation,
   resolveActiveSelection,
   setUploadInFlight,
   setUploadError,
@@ -69,20 +72,24 @@ export const useMarkdownEditorMediaTransfers = ({
 
   const replaceExactOrAppend = useCallback(
     (exact: string, inlineReplacement: string, appendMarkdown: string) => {
+      const selectionFrom = selectionRef.current.from
+      const selectionTo = selectionRef.current.to
       const plan = planReplaceExactSubstring(
         valueRef.current,
         exact,
         inlineReplacement,
-        selectionRef.current.from,
-        selectionRef.current.to
+        selectionFrom,
+        selectionTo
       )
       if (plan) {
-        applyPlannedMarkdownMutation(plan)
+        applyBackgroundMarkdownMutation(plan)
         return
       }
-      applyPlannedMarkdownMutation(planAppendAtEnd(valueRef.current, appendMarkdown))
+      applyBackgroundMarkdownMutation(
+        planAppendAtEnd(valueRef.current, appendMarkdown, selectionFrom, selectionTo)
+      )
     },
-    [applyPlannedMarkdownMutation, selectionRef, valueRef]
+    [applyBackgroundMarkdownMutation, selectionRef, valueRef]
   )
 
   const removeExactPlaceholder = useCallback(
@@ -94,9 +101,9 @@ export const useMarkdownEditorMediaTransfers = ({
         selectionRef.current.from,
         selectionRef.current.to
       )
-      if (plan) applyPlannedMarkdownMutation(plan)
+      if (plan) applyBackgroundMarkdownMutation(plan)
     },
-    [applyPlannedMarkdownMutation, selectionRef, valueRef]
+    [applyBackgroundMarkdownMutation, selectionRef, valueRef]
   )
 
   const uploadImageWithPlaceholder = useCallback(
@@ -234,16 +241,12 @@ export const useMarkdownEditorMediaTransfers = ({
 
   const processTransferFiles = useCallback(
     async (files: readonly File[]) => {
-      const { images, attachments } = partitionUploadFiles(files)
-      if (onUploadImage) {
-        for (const image of images) {
-          await uploadImageWithPlaceholder(image)
+      for (const file of files) {
+        if (isImageFile(file)) {
+          if (onUploadImage) await uploadImageWithPlaceholder(file)
+          continue
         }
-      }
-      if (onUploadFile) {
-        for (const attachment of attachments) {
-          await uploadAttachmentWithPlaceholder(attachment)
-        }
+        if (onUploadFile) await uploadAttachmentWithPlaceholder(file)
       }
     },
     [onUploadFile, onUploadImage, uploadAttachmentWithPlaceholder, uploadImageWithPlaceholder]

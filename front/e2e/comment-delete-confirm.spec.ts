@@ -4,7 +4,9 @@ import { ADMIN_MEMBER_FIXTURE, mockAvatarAsset } from "./helpers/mobileLayoutFix
 
 const POST_ID = 1254
 const COMMENT_ID = 9101
+const REPLY_ID = 9102
 const COMMENT_CONTENT = "삭제 확인이 필요한 대상 댓글입니다"
+const REPLY_CONTENT = "루트 댓글 아래 보이는 중첩 답글입니다"
 const POST_TITLE = "댓글 삭제 ConfirmDialog E2E"
 
 const postDetailFixture = {
@@ -45,7 +47,19 @@ const commentFixture = {
   actorCanDelete: true,
 }
 
-const mockCommentDetailPage = async (page: Page) => {
+const replyFixture = {
+  ...commentFixture,
+  id: REPLY_ID,
+  createdAt: "2026-07-22T01:05:00Z",
+  modifiedAt: "2026-07-22T01:05:00Z",
+  parentCommentId: COMMENT_ID,
+  content: REPLY_CONTENT,
+}
+
+const mockCommentDetailPage = async (
+  page: Page,
+  comments: typeof commentFixture[] = [commentFixture]
+) => {
   await mockAvatarAsset(page)
 
   await page.route("**/member/api/v1/auth/me", async (route) => {
@@ -60,7 +74,10 @@ const mockCommentDetailPage = async (page: Page) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(postDetailFixture),
+      body: JSON.stringify({
+        ...postDetailFixture,
+        commentsCount: comments.length,
+      }),
     })
   })
 
@@ -85,7 +102,7 @@ const mockCommentDetailPage = async (page: Page) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([commentFixture]),
+      body: JSON.stringify(comments),
     })
   })
 }
@@ -110,6 +127,20 @@ const openCommentDeleteConfirm = async (page: Page) => {
 }
 
 test.describe("comment delete confirm and failure branches", () => {
+  test("루트 댓글 아래 중첩 답글이 보인다", async ({ page }) => {
+    await page.setViewportSize(DESKTOP_VIEWPORT)
+    await mockCommentDetailPage(page, [commentFixture, replyFixture])
+    await page.goto(`/posts/${POST_ID}`)
+    await expect(page.getByRole("heading", { name: POST_TITLE })).toBeVisible()
+
+    const commentsSection = page.locator('[data-rum-section="comments"]')
+    await commentsSection.scrollIntoViewIfNeeded()
+    await expect(commentsSection.getByText(COMMENT_CONTENT)).toBeVisible()
+    await expect(commentsSection.locator(`#comment-${REPLY_ID}`)).toBeVisible()
+    await expect(commentsSection.locator(`#comment-${REPLY_ID}`).getByText(REPLY_CONTENT)).toBeVisible()
+    await expect(commentsSection.locator(`[data-reply="true"] #comment-${REPLY_ID}`)).toHaveCount(1)
+  })
+
   test("삭제 취소는 ConfirmDialog를 닫고 댓글을 유지한다", async ({ page }) => {
     const dialog = await openCommentDeleteConfirm(page)
 

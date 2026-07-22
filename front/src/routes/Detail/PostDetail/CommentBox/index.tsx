@@ -310,6 +310,16 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
             )}
 
             {renderCommentInlineError(comment.id)}
+
+            {!isReply && hasReplies && (
+              <ReplyGroup>
+                <ReplyList>
+                  {flattenReplies(comment.replies).map((reply) => (
+                    <li key={reply.id}>{renderComment(reply, true)}</li>
+                  ))}
+                </ReplyList>
+              </ReplyGroup>
+            )}
           </div>
         </CommentItem>
       </Fragment>

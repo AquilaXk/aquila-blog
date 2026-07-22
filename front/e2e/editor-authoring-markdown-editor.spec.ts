@@ -534,10 +534,9 @@ test.describe("Markdown editor replacement", () => {
 
     const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
     await expect(textarea).toBeVisible()
-    await textarea.click()
-    await textarea.pressSequentially("\n\n추가 입력")
-
-    const focusContract = await textarea.evaluate((element) => {
+    // Playwright click() synthesizes :focus-visible; use focusVisible:false for mouse contract.
+    const mouseFocusContract = await textarea.evaluate((element) => {
+      element.focus({ focusVisible: false })
       const style = window.getComputedStyle(element)
       return {
         active: document.activeElement === element,
@@ -547,10 +546,24 @@ test.describe("Markdown editor replacement", () => {
       }
     })
 
-    expect(focusContract.active).toBe(true)
-    expect(focusContract.outlineStyle).toBe("none")
-    expect(focusContract.outlineWidth).toBe("0px")
-    expect(focusContract.outlineColor).not.toBe("rgb(63, 81, 181)")
+    expect(mouseFocusContract.active).toBe(true)
+    expect(mouseFocusContract.outlineStyle).toBe("none")
+    expect(mouseFocusContract.outlineWidth).toBe("0px")
+    expect(mouseFocusContract.outlineColor).not.toBe("rgb(63, 81, 181)")
+
+    const keyboardFocusContract = await textarea.evaluate((element) => {
+      element.blur()
+      element.focus({ focusVisible: true })
+      const style = window.getComputedStyle(element)
+      return {
+        active: document.activeElement === element,
+        outlineStyle: style.outlineStyle,
+        outlineWidth: style.outlineWidth,
+      }
+    })
+    expect(keyboardFocusContract.active).toBe(true)
+    expect(keyboardFocusContract.outlineStyle).toBe("solid")
+    expect(keyboardFocusContract.outlineWidth).not.toBe("0px")
   })
 
   test("write pane supports native mouse drag text selection", async ({ page }) => {
@@ -955,8 +968,10 @@ test.describe("Markdown editor replacement", () => {
     await page.getByRole("button", { name: "표" }).click()
 
     const editorText = await writePane.locator("textarea").inputValue()
-    expect(editorText.indexOf("| 항목 | 설명 |")).toBeLessThan(editorText.indexOf("omega"))
-    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toContainText("항목")
+    const tableMarker = "|  |  |"
+    expect(editorText.indexOf(tableMarker)).toBeGreaterThan(-1)
+    expect(editorText.indexOf(tableMarker)).toBeLessThan(editorText.indexOf("omega"))
+    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toBeVisible()
   })
 
   test("image upload inserts a url-only upload response at the textarea caret", async ({ page }) => {
@@ -1004,6 +1019,80 @@ test.describe("Markdown editor replacement", () => {
       "src",
       "https://cdn.example.test/post-images/body-image.png"
     )
+  })
+
+  test("file attachment upload inserts a markdown link at the textarea caret", async ({ page }) => {
+    await routeAuthenticatedEditor(page, ["alpha", "omega"].join("\n"))
+    let uploadCalled = false
+    await page.route("**/post/api/v1/posts/files", async (route) => {
+      uploadCalled = true
+      await fulfillJson(route, {
+        resultCode: "201-1",
+        msg: "파일이 업로드되었습니다.",
+        data: {
+          key: "post-files/report.pdf",
+          name: "report.pdf",
+          url: "https://cdn.example.test/post-files/report.pdf",
+        },
+      })
+    })
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const writePane = page.getByTestId("markdown-editor-write-pane")
+    const textarea = writePane.locator("textarea")
+    await expect(textarea).toBeVisible()
+    await textarea.click()
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+Home" : "Control+Home")
+    await page.keyboard.press("ArrowRight")
+
+    const fileInput = page.getByTestId("markdown-editor").locator("input[type='file']:not([accept])")
+    await expect(fileInput).toHaveCount(1)
+    await fileInput.setInputFiles({
+      name: "report.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 attachment"),
+    })
+
+    await expect.poll(() => uploadCalled, { message: "post file upload request should be sent" }).toBe(true)
+    await expect(page.getByText("첨부 파일 업로드에 실패했습니다.")).toHaveCount(0)
+    await expect(page.getByText("첨부 파일은 10MB 이하여야 합니다.")).toHaveCount(0)
+    await expect(page.getByText(/첨부 파일 업로드 실패:/)).toHaveCount(0)
+
+    const editorText = await textarea.inputValue()
+    const fileMarkdown = "[report.pdf](https://cdn.example.test/post-files/report.pdf)"
+    expect(editorText).toContain(fileMarkdown)
+    expect(editorText.indexOf(fileMarkdown)).toBeLessThan(editorText.indexOf("omega"))
+    await expect(page.getByTestId("markdown-editor-preview-pane").getByRole("link", { name: "report.pdf" })).toHaveAttribute(
+      "href",
+      "https://cdn.example.test/post-files/report.pdf"
+    )
+  })
+
+  test("oversized attachment selection shows toolbar error without calling upload", async ({ page }) => {
+    await routeAuthenticatedEditor(page, "body")
+    let uploadCalled = false
+    await page.route("**/post/api/v1/posts/files", async (route) => {
+      uploadCalled = true
+      await route.fulfill({ status: 500, body: "should not upload" })
+    })
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const oversized = Buffer.alloc(10 * 1024 * 1024 + 1, 1)
+    await page
+      .getByTestId("markdown-editor")
+      .locator("input[type='file']:not([accept])")
+      .setInputFiles({
+        name: "too-large.bin",
+        mimeType: "application/octet-stream",
+        buffer: oversized,
+      })
+
+    await expect(page.getByTestId("markdown-editor").getByRole("alert")).toHaveText(
+      "첨부 파일은 10MB 이하여야 합니다."
+    )
+    expect(uploadCalled).toBe(false)
   })
 
   test("preview keeps raw HTML script and javascript URLs out of the rendered DOM", async ({

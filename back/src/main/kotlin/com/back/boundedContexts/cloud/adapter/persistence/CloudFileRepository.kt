@@ -3,6 +3,7 @@ package com.back.boundedContexts.cloud.adapter.persistence
 import com.back.boundedContexts.cloud.application.port.output.CloudFileRepositoryPort
 import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 
@@ -23,6 +24,39 @@ interface CloudFileRepository :
         id: Long,
         ownerMemberId: Long,
     ): CloudFile?
+
+    @Query(
+        """
+        SELECT f
+        FROM CloudFile f
+        WHERE f.objectKey = :objectKey
+          AND f.deletedAt IS NULL
+        """,
+    )
+    override fun findActiveByObjectKey(objectKey: String): CloudFile?
+
+    @Query(
+        """
+        SELECT f
+        FROM CloudFile f
+        WHERE f.objectKey = :objectKey
+        """,
+    )
+    override fun findByObjectKey(objectKey: String): CloudFile?
+
+    @Query(
+        """
+        SELECT f
+        FROM CloudFile f
+        WHERE f.deletedAt IS NULL
+          AND f.objectKey LIKE CONCAT(:objectKeyPrefix, '%')
+        ORDER BY f.id ASC
+        """,
+    )
+    fun findActiveByObjectKeyPrefix(
+        objectKeyPrefix: String,
+        pageable: Pageable,
+    ): List<CloudFile>
 }
 
 interface CloudFileRepositoryCustom {
@@ -31,5 +65,10 @@ interface CloudFileRepositoryCustom {
         folderPath: String?,
         keyword: String?,
         mediaKind: CloudFileMediaKind?,
+    ): List<CloudFile>
+
+    fun findActiveByObjectKeyStartingWith(
+        objectKeyPrefix: String,
+        limit: Int,
     ): List<CloudFile>
 }

@@ -145,6 +145,7 @@ class PostApplicationServiceDeleteResilienceTest {
             postTempDraftService = postTempDraftService,
             postCommentApplicationService = postCommentApplicationService,
             postLikeApplicationService = postLikeApplicationService,
+            postInteractionSideEffectQueue = postInteractionSideEffectQueue,
         )
 
     @Test

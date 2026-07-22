@@ -8,6 +8,7 @@ import {
 } from "src/libs/thumbnailFocus"
 import { POST_IMAGE_UPLOAD_RULE_LABEL, PROFILE_IMAGE_UPLOAD_RULE_LABEL } from "src/libs/profileImageUpload"
 import { WriterEditorHost } from "./WriterEditorHost"
+import { handleMarkdownEditorFocusRequestReady } from "./useEditorStudioWorkspaceControllerRuntime"
 import { EditorStudioThumbnailEditorPanel, EditorStudioThumbnailMetaPanel } from "./EditorStudioThumbnailPanels"
 import { EditorStudioPublishModal } from "./EditorStudioPublishModal"
 import { EditorStudioLegacyProfileSection } from "./EditorStudioLegacyProfileSection"
@@ -204,6 +205,10 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     togglePostSelection,
     toggleSelectAllVisiblePosts
   } = props
+  const [isMarkdownUploading, setIsMarkdownUploading] = useState(false)
+  const handleMarkdownUploadingChange = useCallback((nextIsUploading: boolean) => {
+    setIsMarkdownUploading(nextIsUploading)
+  }, [])
   const currentFlags = toFlags(postVisibility)
   const pristineCreateFingerprint = useMemo(
     () =>
@@ -392,6 +397,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     hasEditorMinimumFields,
     hasPlaceholderIssue: Boolean(publishPlaceholderIssue),
     isTempDraftMode,
+    isMarkdownUploading,
   })
   const {
     publishActionTitle,
@@ -536,6 +542,15 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   const handleEditorCommitDuration = useCallback((actualDuration: number) => {
     recordEditorCommitDurationForRuntimeGuard(actualDuration)
   }, [])
+  const handleDedicatedEditorRequestSave = useCallback(() => {
+    if (publishActionTriggerDisabled) return
+    openPublishModal(editorPrimaryActionType)
+  }, [editorPrimaryActionType, openPublishModal, publishActionTriggerDisabled])
+
+  const handleComposeEditorRequestSave = useCallback(() => {
+    saveLocalDraft()
+  }, [saveLocalDraft])
+
   const dedicatedEditorCanvas = useMemo(
     () => (
       <WriterEditorHost
@@ -545,6 +560,9 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         previewSummary={resolvedPreviewSummary}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
+        onFocusRequestReady={handleMarkdownEditorFocusRequestReady}
+        onRequestSave={handleDedicatedEditorRequestSave}
+        onUploadingChange={handleMarkdownUploadingChange}
         onImageUpload={handleMarkdownEditorImageUpload}
         onFileUpload={handleMarkdownEditorFileUpload}
         mermaidEnabled={MARKDOWN_EDITOR_MERMAID_ENABLED}
@@ -553,11 +571,13 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       />
     ),
     [
+      handleDedicatedEditorRequestSave,
       handleMarkdownEditorChange,
       handleMarkdownEditorFileUpload,
       handleMarkdownEditorImageUpload,
       handleFlushMarkdownReady,
       handleEditorCommitDuration,
+      handleMarkdownUploadingChange,
       isMarkdownEditorDisabled,
       postContent,
       postTitle,
@@ -573,6 +593,9 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         previewSummary={resolvedPreviewSummary}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
+        onFocusRequestReady={handleMarkdownEditorFocusRequestReady}
+        onRequestSave={handleComposeEditorRequestSave}
+        onUploadingChange={handleMarkdownUploadingChange}
         onImageUpload={handleMarkdownEditorImageUpload}
         onFileUpload={handleMarkdownEditorFileUpload}
         mermaidEnabled={MARKDOWN_EDITOR_MERMAID_ENABLED}
@@ -581,11 +604,13 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       />
     ),
     [
+      handleComposeEditorRequestSave,
       handleMarkdownEditorChange,
       handleMarkdownEditorFileUpload,
       handleMarkdownEditorImageUpload,
       handleFlushMarkdownReady,
       handleEditorCommitDuration,
+      handleMarkdownUploadingChange,
       isMarkdownEditorDisabled,
       postContent,
       postTitle,

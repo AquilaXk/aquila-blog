@@ -7,7 +7,14 @@ import {
 } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { replaceRoute } from "src/libs/router"
-import { hasEmptyFencedCodeBlockBody, restoreEmptyFencedCodeBlocks } from "./editorCodeFenceRecovery"
+import {
+  adminContentHadEmptyFenceForTelemetry,
+  adminContentNeedsCodeFenceRecovery,
+  reportCodeFenceRecovery,
+  resolveEditorCodeFenceRecovery,
+  resolveLoadedPostContentHtml,
+  shouldFetchPublicContentForCodeFenceRecovery,
+} from "./editorCodeFenceRecovery"
 import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
 import { isServerTempDraftPost } from "./editorTempDraft"
 import { useEditorStudioLocalDraftLifecycle } from "./useEditorStudioDraftLifecycleModel"
@@ -382,30 +389,65 @@ export const useEditorStudioDraftLifecycle = ({
       let resolvedPost = post
 
       const adminContent = resolvedPost.content ?? ""
-      const shouldFetchPublicPostFallback =
-        (adminContent.trim().length === 0 && resolvedPost.contentHtml) ||
-        hasEmptyFencedCodeBlockBody(adminContent)
+      const adminBodySnapshot = resolveEditorMetaSnapshot(adminContent, null)
+      const htmlRecoverySnapshot = resolveEditorMetaSnapshot(
+        adminContent,
+        resolvedPost.contentHtml
+      )
+      const needsCodeFenceRecovery = adminContentNeedsCodeFenceRecovery(adminContent)
 
-      if (shouldFetchPublicPostFallback) {
+      let publicContent: string | undefined
+      let publicContentHtml: string | null | undefined
+      let publicFallbackSucceeded = false
+
+      // empty-fence complete만으로 public fetch를 건너뛰면 fence title/delimiter 등 메타데이터가 유실될 수 있다.
+      // 완전히 빈 admin은 stale-if-error 캐시 public 본문으로 되살리지 않는다.
+      const shouldFetchPublicContent = shouldFetchPublicContentForCodeFenceRecovery(adminContent)
+
+      if (shouldFetchPublicContent) {
         try {
           const publicPost = await apiFetch<Pick<PostForEditor, "content" | "contentHtml">>(
-            `/post/api/v1/posts/${targetPostId}`
+            `/post/api/v1/posts/${normalizedTargetPostId}`
           )
-          if ((publicPost.content ?? "").trim().length > 0 || publicPost.contentHtml) {
-            const publicContent = publicPost.content ?? ""
-            const restoredContent =
-              adminContent.trim().length > 0 && publicContent.trim().length > 0
-                ? restoreEmptyFencedCodeBlocks(adminContent, publicContent)
-                : publicContent || post.content
-            resolvedPost = {
-              ...post,
-              content: restoredContent,
-              contentHtml: publicPost.contentHtml ?? post.contentHtml,
-            }
+          publicContentHtml = publicPost.contentHtml
+          const trimmedPublicMarkdown = (publicPost.content ?? "").trim()
+          if (trimmedPublicMarkdown.length > 0) {
+            publicContent = publicPost.content ?? ""
+            publicFallbackSucceeded = true
+          } else if (publicPost.contentHtml?.trim()) {
+            publicContent = resolveEditorMetaSnapshot("", publicPost.contentHtml).body
+            publicFallbackSucceeded = publicContent.trim().length > 0
           }
         } catch {
-          // 비공개/삭제 글 등 공개 읽기 폴백이 불가능한 경우 admin payload를 그대로 사용한다.
+          // 비공개/삭제 글 등 공개 읽기 폴백이 불가능한 경우 contentHtml 결과만 사용한다.
         }
+      }
+
+      const fenceRecovery = resolveEditorCodeFenceRecovery({
+        adminContent,
+        adminBodyForSync: adminBodySnapshot.body,
+        contentHtmlBodyCandidate: htmlRecoverySnapshot.body,
+        publicContent,
+        publicFallbackSucceeded,
+      })
+
+      if (needsCodeFenceRecovery) {
+        reportCodeFenceRecovery({
+          postId: normalizedTargetPostId,
+          source: fenceRecovery.source,
+          hadEmptyFence: adminContentHadEmptyFenceForTelemetry(adminContent),
+          recovered: fenceRecovery.recovered,
+        })
+      }
+
+      resolvedPost = {
+        ...post,
+        content: fenceRecovery.content,
+        contentHtml: resolveLoadedPostContentHtml({
+          postContentHtml: post.contentHtml,
+          publicContentHtml,
+          fenceRecovery,
+        }),
       }
 
       const rawSnapshot = resolveEditorMetaSnapshot(

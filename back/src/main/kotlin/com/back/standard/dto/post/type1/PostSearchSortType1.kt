@@ -9,6 +9,8 @@ enum class PostSearchSortType1(
     CREATED_AT_ASC(Sort.by(Sort.Direction.ASC, "createdAt")),
     MODIFIED_AT(Sort.by(Sort.Direction.DESC, "modifiedAt")),
     MODIFIED_AT_ASC(Sort.by(Sort.Direction.ASC, "modifiedAt")),
+    HIT_COUNT(Sort.by(Sort.Direction.DESC, "hitCount")),
+    LIKES_COUNT(Sort.by(Sort.Direction.DESC, "likesCount")),
     ;
 
     val property: String by lazy { sortBy.first().property }

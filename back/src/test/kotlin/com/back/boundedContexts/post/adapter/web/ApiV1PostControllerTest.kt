@@ -199,6 +199,81 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
     }
 
     @Nested
+    inner class AdminCodeFenceContentRoundTrip {
+        private val fencedMarkdown =
+            """
+            intro
+
+            ```kotlin title="invalidatePost.kt"
+            fun example() = Unit
+            ```
+
+            ```
+            nested backticks ``` inside
+            ```
+
+            ```mermaid
+            flowchart TD
+              A[start] --> B[end]
+            ```
+            """.trimIndent()
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `공개 글 저장 후 관리자 단건 조회는 코드펜스 본문을 원문 그대로 반환한다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = postFacade.write(actor, "코드펜스 공개", fencedMarkdown, true, true)
+            entityManager.clear()
+
+            val responseBody =
+                mvc
+                    .get("/post/api/v1/adm/posts/${post.id}")
+                    .andExpect {
+                        status { isOk() }
+                        jsonPath("$.id") { value(post.id) }
+                    }.andReturn()
+                    .response
+                    .contentAsString
+
+            assertThat(JsonPath.read<String>(responseBody, "$.content")).isEqualTo(fencedMarkdown)
+            assertThat(postFacade.findById(post.id).getOrThrow().content).isEqualTo(fencedMarkdown)
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `비공개 글 저장·수정 왕복 후에도 관리자 조회 코드펜스 본문이 보존된다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val created = postFacade.write(actor, "코드펜스 비공개", "draft body", false, false)
+            val version = created.version ?: 0L
+
+            postFacade.modify(
+                actor,
+                created,
+                "코드펜스 비공개",
+                fencedMarkdown,
+                published = false,
+                listed = false,
+                expectedVersion = version,
+            )
+            entityManager.clear()
+
+            val responseBody =
+                mvc
+                    .get("/post/api/v1/adm/posts/${created.id}")
+                    .andExpect {
+                        status { isOk() }
+                        jsonPath("$.published") { value(false) }
+                        jsonPath("$.listed") { value(false) }
+                    }.andReturn()
+                    .response
+                    .contentAsString
+
+            assertThat(JsonPath.read<String>(responseBody, "$.content")).isEqualTo(fencedMarkdown)
+            assertThat(postFacade.findById(created.id).getOrThrow().content).isEqualTo(fencedMarkdown)
+        }
+    }
+
+    @Nested
     inner class GetItem {
         @Test
         fun `성공 - 공개 글`() {
@@ -428,6 +503,34 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("getFeedByCursor"))
+                }
+        }
+
+        @Test
+        fun `feed 커서 조회는 HIT_COUNT 정렬을 CREATED_AT으로 폴백하지 않는다`() {
+            mvc
+                .get("/post/api/v1/posts/feed/cursor") {
+                    param("sort", "HIT_COUNT")
+                    param("pageSize", "5")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
+                    match(handler().methodName("getFeedByCursor"))
+                    jsonPath("$.content") { isArray() }
+                }
+        }
+
+        @Test
+        fun `feed 커서 조회는 LIKES_COUNT 정렬을 허용한다`() {
+            mvc
+                .get("/post/api/v1/posts/feed/cursor") {
+                    param("sort", "LIKES_COUNT")
+                    param("pageSize", "5")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
+                    match(handler().methodName("getFeedByCursor"))
+                    jsonPath("$.content") { isArray() }
                 }
         }
 
@@ -805,6 +908,45 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.content[0].id") { value(titleMatchedPost.id) }
                     jsonPath("$.content[1].id") { value(tagMatchedPost.id) }
                     jsonPath("$.content[2].id") { value(contentMatchedPost.id) }
+                }
+        }
+
+        @Test
+        fun `검색 목록 조회는 keyword가 있어도 HIT_COUNT 정렬을 존중한다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val keyword = "hitsort-${System.currentTimeMillis()}"
+            val titleMatchedLowHits =
+                postFacade.write(
+                    actor,
+                    "제목 $keyword 매칭",
+                    "조회수 정렬보다 관련도가 높은 글",
+                    true,
+                    true,
+                )
+            val contentMatchedHighHits =
+                postFacade.write(
+                    actor,
+                    "본문 매칭 글",
+                    "이 글은 본문에서만 $keyword 를 포함합니다.",
+                    true,
+                    true,
+                )
+
+            setPostCounterAttr(contentMatchedHighHits.id, "hitCount", "hit_count_attr_id", 100)
+            setPostCounterAttr(titleMatchedLowHits.id, "hitCount", "hit_count_attr_id", 1)
+            entityManager.clear()
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", keyword)
+                    param("page", "1")
+                    param("pageSize", "30")
+                    param("sort", "HIT_COUNT")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(2) }
+                    jsonPath("$.content[0].id") { value(contentMatchedHighHits.id) }
+                    jsonPath("$.content[1].id") { value(titleMatchedLowHits.id) }
                 }
         }
 
@@ -1733,5 +1875,59 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.resultCode") { value("404-1") }
                 }
         }
+    }
+
+    private fun setPostCounterAttr(
+        postId: Long,
+        attrName: String,
+        fkColumn: String,
+        value: Int,
+    ) {
+        val existingAttrId =
+            jdbcTemplate
+                .query(
+                    "select id from post_attr where subject_id = ? and name = ?",
+                    { rs, _ -> rs.getLong(1) },
+                    postId,
+                    attrName,
+                ).firstOrNull()
+
+        val attrId =
+            if (existingAttrId != null) {
+                jdbcTemplate.update(
+                    "update post_attr set int_value = ? where id = ?",
+                    value,
+                    existingAttrId,
+                )
+                existingAttrId
+            } else {
+                jdbcTemplate.queryForObject(
+                    """
+                    insert into post_attr (id, subject_id, name, int_value)
+                    values (
+                      nextval(
+                        coalesce(
+                          pg_get_serial_sequence('post_attr', 'id'),
+                          'public.post_attr_seq'
+                        )::regclass
+                      ),
+                      ?,
+                      ?,
+                      ?
+                    )
+                    returning id
+                    """.trimIndent(),
+                    Long::class.java,
+                    postId,
+                    attrName,
+                    value,
+                )!!
+            }
+
+        jdbcTemplate.update(
+            "update post set $fkColumn = ? where id = ?",
+            attrId,
+            postId,
+        )
     }
 }

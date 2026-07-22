@@ -682,7 +682,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -1452,6 +1452,116 @@
         }
       }
     },
+    "/system/api/v1/adm/cloud/files/{id}/external-content" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "externalContent",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        }, {
+          "name" : "token",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "externalContentHead",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        }, {
+          "name" : "token",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/cloud/files/{id}/content" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "content",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head" : {
+        "tags" : [ "api-v-1-adm-cloud-controller" ],
+        "operationId" : "contentHead",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/tasks" : {
       "get" : {
         "tags" : [ "api-v-1-adm-system-controller" ],
@@ -1661,71 +1771,6 @@
         }
       }
     },
-    "/system/api/v1/adm/cloud/files/{id}/external-content" : {
-      "get" : {
-        "tags" : [ "api-v-1-adm-cloud-controller" ],
-        "operationId" : "externalContent",
-        "parameters" : [ {
-          "name" : "id",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64",
-            "exclusiveMinimum" : 0
-          }
-        }, {
-          "name" : "token",
-          "in" : "query",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "type" : "string",
-                  "format" : "binary"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/system/api/v1/adm/cloud/files/{id}/content" : {
-      "get" : {
-        "tags" : [ "api-v-1-adm-cloud-controller" ],
-        "operationId" : "content",
-        "parameters" : [ {
-          "name" : "id",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64",
-            "exclusiveMinimum" : 0
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "OK",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "type" : "string",
-                  "format" : "binary"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/system/api/v1/adm/cloud/files/video-upload-sessions/{sessionId}" : {
       "get" : {
         "tags" : [ "api-v-1-adm-cloud-controller" ],
@@ -1907,7 +1952,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2010,7 +2055,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2056,7 +2101,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2100,7 +2145,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2162,7 +2207,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2214,7 +2259,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2259,7 +2304,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2352,7 +2397,7 @@
           "schema" : {
             "type" : "string",
             "default" : "MODIFIED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         }, {
           "name" : "status",

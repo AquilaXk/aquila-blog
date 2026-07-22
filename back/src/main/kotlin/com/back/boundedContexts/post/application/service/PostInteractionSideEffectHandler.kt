@@ -14,6 +14,7 @@ import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.global.event.application.EventPublisher
 import com.back.global.task.annotation.TaskHandler
 import com.back.standard.dto.EventPayload
+import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
@@ -26,6 +27,7 @@ class PostInteractionSideEffectHandler(
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
     private val postRepository: PostRepositoryPort,
     private val postAttrRepository: PostAttrRepositoryPort,
+    private val postReadCacheInvalidator: PostReadCacheInvalidator,
     private val eventPublisher: EventPublisher,
     transactionManager: PlatformTransactionManager,
 ) {
@@ -47,6 +49,19 @@ class PostInteractionSideEffectHandler(
                     failureMessage = "Failed to refresh recommend feature store after interaction commit",
                 ) {
                     refreshRecommendFeatureStoreIfPublic(payload.postId)
+                }?.let(failures::add)
+        }
+
+        when (payload.rankedCacheInvalidation) {
+            PostRankedCacheInvalidationSideEffect.NONE -> Unit
+            PostRankedCacheInvalidationSideEffect.HIT_COUNT,
+            PostRankedCacheInvalidationSideEffect.LIKES_COUNT,
+            ->
+                runSideEffectInNewTransaction(
+                    postId = payload.postId,
+                    failureMessage = "Failed to invalidate ranked read caches after interaction commit",
+                ) {
+                    invalidateRankedCaches(payload)
                 }?.let(failures::add)
         }
 
@@ -90,6 +105,23 @@ class PostInteractionSideEffectHandler(
         if (!post.published || !post.listed) return
         hydratePostAttrs(post)
         postRecommendFeatureStoreService.refresh(post)
+    }
+
+    private fun invalidateRankedCaches(payload: PostInteractionSideEffectPayload) {
+        val sorts =
+            when (payload.rankedCacheInvalidation) {
+                PostRankedCacheInvalidationSideEffect.NONE -> return
+                PostRankedCacheInvalidationSideEffect.HIT_COUNT -> listOf(PostSearchSortType1.HIT_COUNT)
+                PostRankedCacheInvalidationSideEffect.LIKES_COUNT -> listOf(PostSearchSortType1.LIKES_COUNT)
+            }
+        val reason =
+            payload.rankedCacheEvictReason
+                ?: if (payload.rankedCacheInvalidation == PostRankedCacheInvalidationSideEffect.HIT_COUNT) {
+                    "hit"
+                } else {
+                    "like"
+                }
+        postReadCacheInvalidator.invalidateRankedSortHotPages(reason, sorts)
     }
 
     private fun hydratePostAttrs(post: Post) {

@@ -3,6 +3,8 @@ package com.back.global.storage.adapter
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import com.back.global.storage.metrics.CloudMediaMetrics
+import io.micrometer.core.instrument.MeterRegistry
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -20,7 +22,10 @@ import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
+import software.amazon.awssdk.services.s3.model.NoSuchUploadException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 import software.amazon.awssdk.services.s3.model.UploadPartRequest
@@ -34,6 +39,7 @@ import java.security.MessageDigest
 @Service
 class CloudStorageAdapter(
     private val properties: CloudStorageProperties,
+    private val meterRegistry: MeterRegistry? = null,
 ) : CloudStoragePort {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val initLock = Any()
@@ -87,6 +93,7 @@ class CloudStorageAdapter(
     override fun open(objectKey: String): CloudStoragePort.StoredObject? {
         val client = requireClient()
         validateObjectKey(objectKey)
+        CloudMediaMetrics.recordStorageOperation(meterRegistry, op = "get")
 
         return try {
             val response =
@@ -118,6 +125,7 @@ class CloudStorageAdapter(
     ): CloudStoragePort.StoredObject? {
         val client = requireClient()
         validateObjectKey(objectKey)
+        CloudMediaMetrics.recordStorageOperation(meterRegistry, op = "get_range")
 
         return try {
             val response =
@@ -265,8 +273,10 @@ class CloudStorageAdapter(
                     .uploadId(request.uploadId)
                     .build(),
             )
+        } catch (_: NoSuchUploadException) {
+            return
         } catch (e: S3Exception) {
-            if (e.statusCode() == 404) return
+            if (isMissingMultipartUpload(e)) return
             logger.error(
                 "Cloud multipart abort failed (objectKey={}, uploadId={})",
                 request.objectKey,
@@ -283,6 +293,88 @@ class CloudStorageAdapter(
             )
             throw AppException("500-1", "클라우드 대용량 업로드 취소에 실패했습니다.")
         }
+    }
+
+    override fun head(objectKey: String): CloudStoragePort.ObjectHead? {
+        val client = requireClient()
+        validateObjectKey(objectKey)
+        CloudMediaMetrics.recordStorageOperation(meterRegistry, op = "head")
+
+        return try {
+            val response =
+                client.headObject(
+                    HeadObjectRequest
+                        .builder()
+                        .bucket(properties.bucket)
+                        .key(objectKey)
+                        .build(),
+                )
+            CloudStoragePort.ObjectHead(
+                objectKey = objectKey,
+                contentLength = response.contentLength(),
+                contentType = response.contentType(),
+                eTag = response.eTag(),
+            )
+        } catch (_: NoSuchKeyException) {
+            null
+        } catch (e: S3Exception) {
+            if (e.statusCode() == 404) return null
+            logger.error("Cloud object head failed (objectKey={})", objectKey, e)
+            throw AppException("500-1", "클라우드 파일 메타데이터를 확인하지 못했습니다.")
+        }
+    }
+
+    override fun listObjects(
+        prefix: String,
+        limit: Int,
+    ): CloudStoragePort.StoredObjectListing {
+        val normalizedPrefix = normalizeListPrefix(prefix)
+        val safeLimit = limit.coerceIn(1, MAX_LIST_OBJECTS)
+        val client = requireClient()
+        val objects = mutableListOf<CloudStoragePort.StoredObjectSummary>()
+        var continuationToken: String? = null
+        var hasMore: Boolean
+
+        try {
+            do {
+                val remaining = safeLimit - objects.size
+                val response =
+                    client.listObjectsV2(
+                        ListObjectsV2Request
+                            .builder()
+                            .bucket(properties.bucket)
+                            .prefix(normalizedPrefix)
+                            .maxKeys(remaining.coerceAtMost(S3_PAGE_SIZE))
+                            .continuationToken(continuationToken)
+                            .build(),
+                    )
+                val responseObjects = response.contents()
+
+                responseObjects.forEach { s3Object ->
+                    if (objects.size < safeLimit) {
+                        objects +=
+                            CloudStoragePort.StoredObjectSummary(
+                                objectKey = s3Object.key(),
+                                size = s3Object.size(),
+                                lastModified = s3Object.lastModified(),
+                            )
+                    }
+                }
+
+                continuationToken = response.nextContinuationToken()
+                hasMore = response.isTruncated == true || continuationToken != null || responseObjects.size > remaining
+            } while (objects.size < safeLimit && continuationToken != null)
+        } catch (e: Exception) {
+            logger.error("Cloud object list failed (prefix={})", normalizedPrefix, e)
+            throw AppException("500-1", "클라우드 객체 목록을 조회하지 못했습니다.")
+        }
+
+        return CloudStoragePort.StoredObjectListing(
+            objects = objects,
+            // hasMore already tracks S3 truncation / leftover page keys even when
+            // collected size is below the caller limit (e.g. truncated page with null token).
+            isTruncated = hasMore,
+        )
     }
 
     override fun delete(objectKey: String) {
@@ -420,15 +512,42 @@ class CloudStorageAdapter(
         }
     }
 
+    private fun normalizeListPrefix(prefix: String): String {
+        val allowedPrefix =
+            properties.cloudKeyPrefix
+                .trim()
+                .trim('/')
+                .ifBlank { "cloud" }
+        val normalized =
+            prefix
+                .trim()
+                .trimStart('/')
+                .let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
+        if (
+            normalized.contains("..") ||
+            !(normalized == "$allowedPrefix/" || normalized.startsWith("$allowedPrefix/"))
+        ) {
+            throw AppException("400-1", "유효하지 않은 클라우드 파일 경로입니다.")
+        }
+        return normalized
+    }
+
     private fun decodeStoredOriginalFilename(value: String?): String? {
         val encoded = value?.trim().orEmpty()
         if (encoded.isBlank()) return null
         return runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }.getOrNull()
     }
 
+    private fun isMissingMultipartUpload(error: S3Exception): Boolean {
+        if (error.statusCode() == 404) return true
+        return error.awsErrorDetails()?.errorCode().equals("NoSuchUpload", ignoreCase = true)
+    }
+
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     companion object {
         private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
+        private const val MAX_LIST_OBJECTS = 1_000
+        private const val S3_PAGE_SIZE = 1_000
     }
 }

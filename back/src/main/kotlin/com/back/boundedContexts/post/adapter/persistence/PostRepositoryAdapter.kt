@@ -89,19 +89,19 @@ class PostRepositoryAdapter(
 
     override fun findPublicByCursor(query: PostRepositoryPort.CursorQuery): List<Post> =
         postRepository.findPublicByCursor(
-            query.cursorCreatedAt,
+            query.cursorSortValue,
             query.cursorId,
             query.limit,
-            query.sortAscending,
+            query.sort,
         )
 
     override fun findPublicByTagCursor(query: PostRepositoryPort.TaggedCursorQuery): List<Post> =
         postRepository.findPublicByTagCursor(
             query.tag,
-            query.cursorCreatedAt,
+            query.cursorSortValue,
             query.cursorId,
             query.limit,
-            query.sortAscending,
+            query.sort,
         )
 
     override fun findPublicByAuthorExceptPost(query: PostRepositoryPort.RelatedAuthorQuery): List<Post> =

@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element -- private cloud content needs browser-owned auth cookies. */
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist"
 import {
   type ChangeEvent,
@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { useDebouncedValue } from "src/hooks/useDebouncedValue"
 import {
   deleteCloudFile,
   getCloudFileContentUrl,
@@ -31,8 +32,11 @@ import {
   getCloudKindIconLabel,
   getCloudKindLabel,
   isUploadActive,
+  isCloudSearchPending,
   mergeCloudFiles,
+  resolveCloudEmptyTitle,
   resolveCloudSearchParams,
+  shouldShowCloudEmptyLoading,
   type CloudMediaFilter,
   type UploadQueueItem,
 } from "./AdminCloudWorkspaceModel"
@@ -58,7 +62,6 @@ import {
   DocumentFallbackBox,
   EmptyState,
   EmptyTableState,
-  FavoriteButton,
   FileIdentity,
   FileMetaLine,
   FileNameButton,
@@ -563,7 +566,6 @@ const FileTableHead = () => (
   <thead>
     <tr>
       <th aria-label="선택" />
-      <th aria-label="즐겨찾기" />
       <th>이름</th>
       <th>크기</th>
       <th>수정한 날짜</th>
@@ -577,6 +579,8 @@ const AdminCloudWorkspacePage = () => {
   const uploadControllersRef = useRef<Map<string, AbortController>>(new Map())
   const [filter, setFilter] = useState<CloudMediaFilter>("ALL")
   const [keyword, setKeyword] = useState("")
+  const [isComposing, setIsComposing] = useState(false)
+  const debouncedKeyword = useDebouncedValue(keyword, isComposing)
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null)
   const [checkedFileIds, setCheckedFileIds] = useState<number[]>([])
   const [notice, setNotice] = useState("")
@@ -588,11 +592,12 @@ const AdminCloudWorkspacePage = () => {
   const [isDeletePending, setIsDeletePending] = useState(false)
 
   const filesQuery = useQuery({
-    queryKey: [CLOUD_QUERY_KEY, filter, keyword],
+    queryKey: [CLOUD_QUERY_KEY, filter, debouncedKeyword],
     retry: false,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
     queryFn: () => {
-      const searchParams = resolveCloudSearchParams(keyword)
+      const searchParams = resolveCloudSearchParams(debouncedKeyword)
       return listCloudFiles({
         folderPath: searchParams.folderPath,
         keyword: searchParams.keyword,
@@ -602,8 +607,8 @@ const AdminCloudWorkspacePage = () => {
   })
   const serverFiles = filesQuery.data ?? EMPTY_CLOUD_FILES
   const visibleOptimisticFiles = useMemo(
-    () => optimisticFiles.filter((file) => doesCloudFileMatchFilters(file, filter, keyword)),
-    [filter, keyword, optimisticFiles]
+    () => optimisticFiles.filter((file) => doesCloudFileMatchFilters(file, filter, debouncedKeyword)),
+    [debouncedKeyword, filter, optimisticFiles]
   )
   const files = useMemo(
     () => mergeCloudFiles(visibleOptimisticFiles, serverFiles),
@@ -921,15 +926,21 @@ const AdminCloudWorkspacePage = () => {
   }
 
   const isFileListError = filesQuery.isError
-  const emptyTitle = filesQuery.isLoading
-    ? "파일을 불러오는 중입니다."
-    : isFileListError
-      ? "파일 목록을 불러오지 못했습니다."
-    : activeUploadCount > 0
-      ? "업로드 중인 파일이 있습니다."
-    : keyword || filter !== "ALL"
-      ? "선택한 조건에 맞는 파일이 없습니다."
-      : "표시할 파일이 없습니다."
+  const isSearchPending = isCloudSearchPending(keyword, debouncedKeyword)
+  const emptyTitle = resolveCloudEmptyTitle({
+    activeUploadCount,
+    debouncedKeyword,
+    filter,
+    isError: isFileListError,
+    isFetching: filesQuery.isFetching,
+    isLoading: filesQuery.isLoading,
+    keyword,
+  })
+  const showEmptyLoading = shouldShowCloudEmptyLoading({
+    filesCount: files.length,
+    isLoading: filesQuery.isLoading,
+    isSearchPending,
+  })
 
   return (
     <CloudMain>
@@ -951,8 +962,12 @@ const AdminCloudWorkspacePage = () => {
                 placeholder="클라우드 파일 검색"
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
               />
-              <SearchDetail aria-hidden="true">파일</SearchDetail>
+              <SearchDetail aria-busy={filesQuery.isFetching || isSearchPending ? "true" : "false"}>
+                {filesQuery.isFetching || isSearchPending ? "검색 중" : "파일"}
+              </SearchDetail>
             </CloudSearchField>
           </CloudTitleBar>
 
@@ -992,9 +1007,6 @@ const AdminCloudWorkspacePage = () => {
               >
                 ⤴ 올리기
               </PrimaryButton>
-              <SecondaryButton type="button" disabled>
-                새 폴더
-              </SecondaryButton>
               <SecondaryButton type="button" disabled={checkedFileIds.length === 0} onClick={handleDeleteSelected}>
                 선택 삭제
               </SecondaryButton>
@@ -1014,12 +1026,6 @@ const AdminCloudWorkspacePage = () => {
                   </GhostButton>
                 ))}
               </FilterGroup>
-              <ViewModeButton type="button" aria-label="리스트 보기" data-active="true">
-                ☰ 리스트
-              </ViewModeButton>
-              <ViewModeButton type="button" aria-label="그리드 보기" disabled>
-                ⊞ 그리드
-              </ViewModeButton>
               <ViewModeButton
                 type="button"
                 aria-label="상세 패널 보기"
@@ -1044,12 +1050,12 @@ const AdminCloudWorkspacePage = () => {
           />
 
           <FileTableScroll>
-            {files.length === 0 && filesQuery.isLoading ? (
+            {showEmptyLoading ? (
               <FileTable role="table" aria-busy="true">
                 <FileTableHead />
                 <tbody>
                   <tr data-loading-row="true">
-                    <td colSpan={5}>
+                    <td colSpan={4}>
                       <LoadingTableStatus role="status" aria-label="파일 목록 로딩">
                         <SkeletonRows aria-hidden="true">
                           <SkeletonRow data-admin-cloud-skeleton-row="true" />
@@ -1098,15 +1104,6 @@ const AdminCloudWorkspacePage = () => {
                             onChange={() => handleToggleChecked(file.id)}
                           />
                         </SelectBoxCell>
-                        <td>
-                          <FavoriteButton
-                            type="button"
-                            aria-label={`${file.originalFilename} 즐겨찾기 (준비 중)`}
-                            disabled
-                          >
-                            ☆
-                          </FavoriteButton>
-                        </td>
                         <td>
                           <FileIdentity>
                             <FileThumbnail file={file} selected={selected} />

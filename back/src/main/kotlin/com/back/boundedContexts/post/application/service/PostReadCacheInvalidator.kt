@@ -20,8 +20,67 @@ class PostReadCacheInvalidator(
     private val meterRegistry: MeterRegistry? = null,
 ) {
     private val hotPageSizes = listOf(30, 24, 16)
-    private val hotSorts = listOf(PostSearchSortType1.CREATED_AT)
+    private val hotSorts =
+        listOf(
+            PostSearchSortType1.CREATED_AT,
+            PostSearchSortType1.HIT_COUNT,
+            PostSearchSortType1.LIKES_COUNT,
+        )
+    private val rankedSorts =
+        listOf(
+            PostSearchSortType1.HIT_COUNT,
+            PostSearchSortType1.LIKES_COUNT,
+        )
     private val maxTagCacheEvict = 12
+
+    internal fun invalidateRankedSortHotPages(evictReason: String) {
+        invalidateRankedSortHotPages(evictReason, rankedSorts)
+    }
+
+    internal fun invalidateRankedSortHotPages(
+        evictReason: String,
+        sorts: Collection<PostSearchSortType1>,
+    ) {
+        val targetSorts =
+            sorts
+                .asSequence()
+                .filter { it == PostSearchSortType1.HIT_COUNT || it == PostSearchSortType1.LIKES_COUNT }
+                .distinct()
+                .toList()
+        if (targetSorts.isEmpty()) {
+            throw IllegalArgumentException("ranked sort invalidation requires HIT_COUNT and/or LIKES_COUNT")
+        }
+
+        val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
+        val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
+
+        // FEED offset keys are page×size×sort (page up to 200, size 1..30). Hot-size page=1 eviction
+        // leaves ranked page 2+ stale until TTL; clear the whole FEED cache instead of under-invalidating.
+        cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
+        recordCacheEvict(PostQueryCacheNames.FEED, "clear", evictReason)
+
+        // Untagged cursor-first/bootstrap keys remain enumerable by hot page sizes.
+        hotPageSizes.forEach { pageSize ->
+            targetSorts.forEach { sort ->
+                val sortName = sort.name
+                feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
+                recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
+                bootstrapCache?.evict(
+                    PostPublicReadQueryService.buildBootstrapCacheKey(
+                        pageSize = pageSize,
+                        sort = sort,
+                        tag = "",
+                    ),
+                )
+                recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
+            }
+        }
+
+        // Ranked explore/search entries are keyed by real tag/kw tokens. Evicting only tag=_ or kw=_
+        // leaves stale ranked pages; interaction paths often lack a complete tag/kw set, so clear these
+        // cache names instead of silently under-invalidating.
+        clearRankedInteractionExploreAndSearchCaches(evictReason)
+    }
 
     internal fun invalidateAuthorRepresentation(reason: String) {
         listOf(
@@ -68,35 +127,19 @@ class PostReadCacheInvalidator(
         ) {
             adminPostsFirstPageCache?.evict("page=1:size=20:sort=${PostSearchSortType1.CREATED_AT.name}")
             recordCacheEvict(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "key", request.evictReason)
-            hotPageSizes.forEach { pageSize ->
-                hotSorts.forEach { sort ->
-                    val sortName = sort.name
-                    if (request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES)) {
-                        feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
-                        recordCacheEvict(PostQueryCacheNames.FEED, "key", request.evictReason)
-                        exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
-                        recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", request.evictReason)
-                        feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
-                        recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", request.evictReason)
-                        exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
-                        recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", request.evictReason)
-                        bootstrapCache?.evict(
-                            PostPublicReadQueryService.buildBootstrapCacheKey(
-                                pageSize = pageSize,
-                                sort = sort,
-                                tag = "",
-                            ),
-                        )
-                        recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", request.evictReason)
-                    }
-                    if (request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE)) {
-                        searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                        recordCacheEvict(PostQueryCacheNames.SEARCH, "key", request.evictReason)
-                        searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                        recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "key", request.evictReason)
-                    }
-                }
-            }
+            evictHotAndSearchFirstPages(
+                sorts = hotSorts,
+                includeHotReadPages = request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES),
+                includeSearchFirstPage = request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE),
+                evictReason = request.evictReason,
+                feedCache = feedCache,
+                exploreCache = exploreCache,
+                feedCursorFirstCache = feedCursorFirstCache,
+                exploreCursorFirstCache = exploreCursorFirstCache,
+                bootstrapCache = bootstrapCache,
+                searchCache = searchCache,
+                searchNegativeCache = searchNegativeCache,
+            )
         }
 
         if (request.evicts(PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES)) {
@@ -113,6 +156,62 @@ class PostReadCacheInvalidator(
     }
 
     private fun PostReadCacheInvalidationRequest.evicts(target: PostReadCacheInvalidationTarget): Boolean = scope.evicts(target)
+
+    private fun clearRankedInteractionExploreAndSearchCaches(evictReason: String) {
+        listOf(
+            PostQueryCacheNames.EXPLORE,
+            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
+            PostQueryCacheNames.SEARCH,
+            PostQueryCacheNames.SEARCH_NEGATIVE,
+        ).forEach { cacheName ->
+            cacheManager.getCache(cacheName)?.clear()
+            recordCacheEvict(cacheName, "clear", evictReason)
+        }
+    }
+
+    private fun evictHotAndSearchFirstPages(
+        sorts: List<PostSearchSortType1>,
+        includeHotReadPages: Boolean,
+        includeSearchFirstPage: Boolean,
+        evictReason: String,
+        feedCache: Cache?,
+        exploreCache: Cache?,
+        feedCursorFirstCache: Cache?,
+        exploreCursorFirstCache: Cache?,
+        bootstrapCache: Cache?,
+        searchCache: Cache?,
+        searchNegativeCache: Cache?,
+    ) {
+        hotPageSizes.forEach { pageSize ->
+            sorts.forEach { sort ->
+                val sortName = sort.name
+                if (includeHotReadPages) {
+                    feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
+                    recordCacheEvict(PostQueryCacheNames.FEED, "key", evictReason)
+                    exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
+                    recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", evictReason)
+                    feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
+                    recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
+                    exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
+                    recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", evictReason)
+                    bootstrapCache?.evict(
+                        PostPublicReadQueryService.buildBootstrapCacheKey(
+                            pageSize = pageSize,
+                            sort = sort,
+                            tag = "",
+                        ),
+                    )
+                    recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
+                }
+                if (includeSearchFirstPage) {
+                    searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                    recordCacheEvict(PostQueryCacheNames.SEARCH, "key", evictReason)
+                    searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                    recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "key", evictReason)
+                }
+            }
+        }
+    }
 
     private fun evictImpactedTagPages(
         request: PostReadCacheInvalidationRequest,

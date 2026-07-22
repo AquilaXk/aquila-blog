@@ -31,7 +31,17 @@ test.describe("error boundary launch gate", () => {
     expect(clientErrorsSource).toContain("console.info(\"[rum:client-error] boundary caught client render error\", {")
     expect(clientErrorsSource).toContain('const ALLOWED_SURFACES = new Set(["app", "markdown", "editor"])')
     expect(clientErrorsSource).toContain("ALLOWED_SURFACES.has(surface)")
-    for (const field of ["id", "boundary", "surface", "path", "errorName", "occurredAt"]) {
+    for (const field of [
+      "id",
+      "boundary",
+      "surface",
+      "path",
+      "errorName",
+      "occurredAt",
+      "errorMessage",
+      "stackTop",
+      "category",
+    ]) {
       expect(clientErrorsSource).toContain(`${field},`)
     }
     expect(clientErrorsSource).not.toContain("body.message")

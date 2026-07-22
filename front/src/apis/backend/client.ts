@@ -139,6 +139,18 @@ const isServer = typeof window === "undefined"
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 
+/** Lazy import avoids static cycle: client -> reportApiError -> client. */
+const reportApiFailure = (error: unknown) => {
+  if (isServer) return
+  void import("src/libs/rum/reportApiError")
+    .then(({ reportApiError }) => {
+      reportApiError(error)
+    })
+    .catch(() => {
+      // ignore reporter load failures
+    })
+}
+
 const browserInFlightGetRequests = new Map<string, Promise<unknown>>()
 
 export const evictBrowserRevalidateCacheEntries = (predicate: (url: string) => boolean) => {
@@ -279,6 +291,17 @@ export class ApiTimeoutError extends Error {
     this.url = url
     this.timeoutMs = timeoutMs
     this.requestId = null
+  }
+}
+
+export class ApiNetworkError extends Error {
+  userMessage: string
+
+  constructor() {
+    const userMessage = "네트워크 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
+    super(userMessage)
+    this.name = "ApiNetworkError"
+    this.userMessage = userMessage
   }
 }
 
@@ -466,7 +489,15 @@ export const apiFetchWithMeta = async <T>(
         }
 
         if (timedOut) {
-          throw new ApiTimeoutError(url, resolvedTimeoutMs)
+          const timeoutError = new ApiTimeoutError(url, resolvedTimeoutMs)
+          reportApiFailure(timeoutError)
+          throw timeoutError
+        }
+
+        if (error instanceof TypeError) {
+          const networkError = new ApiNetworkError()
+          reportApiFailure(networkError)
+          throw networkError
         }
 
         throw error
@@ -513,12 +544,14 @@ export const apiFetchWithMeta = async <T>(
       }
 
       const body = await response.text().catch(() => "")
-      throw new ApiError(
+      const apiError = new ApiError(
         response.status,
         url,
         body,
         normalizeRequestId(response.headers.get("x-request-id")),
       )
+      reportApiFailure(apiError)
+      throw apiError
     }
 
     if (response.status === 204) {

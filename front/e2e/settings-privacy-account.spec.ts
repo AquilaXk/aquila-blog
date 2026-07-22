@@ -255,6 +255,35 @@ test("settings account page sends oauth confirmation when password is empty", as
   expect(deletionRequestBody).not.toHaveProperty("password")
 })
 
+test("settings account page completes deletion when revokedSessionCount is missing on 2xx", async ({ page }) => {
+  await fulfillAuthMe(page)
+  await page.route("**/member/api/v1/privacy/account", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "계정 탈퇴가 완료되었습니다.",
+        data: {
+          memberId: authMember.id,
+          deletedAt: "2026-06-22T01:30:00Z",
+        },
+      }),
+    })
+  })
+
+  await page.goto("/settings/account")
+
+  await page.getByLabel("비밀번호 재확인 (이메일 계정)").fill("Abcd1234!")
+  await page.getByRole("checkbox", { name: "계정 탈퇴 영향을 확인했습니다." }).check()
+  await confirmAccountDeletion(page)
+
+  await expect(page.getByRole("heading", { name: "계정 탈퇴 완료" })).toBeVisible()
+  await expect(page.getByText("계정 탈퇴가 완료되었습니다.")).toBeVisible()
+  await expect(page.getByText(/폐기된 세션/)).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "홈으로 이동" })).toBeVisible()
+})
+
 test("settings account page shows password field error for 400 deletion failure", async ({ page }) => {
   await fulfillAuthMe(page)
   await page.route("**/member/api/v1/privacy/account", async (route) => {

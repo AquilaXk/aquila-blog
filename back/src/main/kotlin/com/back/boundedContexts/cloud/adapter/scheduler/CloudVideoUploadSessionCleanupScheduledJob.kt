@@ -9,7 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
 /**
- * 방치된 S3 multipart upload가 외부 스토리지에 계속 남지 않도록 만료된 동영상 세션을 정리합니다.
+ * 만료된 IN_PROGRESS 세션과 중간 상태에 고착된 stale 세션을 정리합니다.
  */
 @Component
 @ConditionalOnProperty(
@@ -31,6 +31,10 @@ class CloudVideoUploadSessionCleanupScheduledJob(
         val purgedCount = cloudVideoUploadSessionService.purgeExpiredSessions(batchSize)
         if (purgedCount > 0) {
             log.info("Purged {} expired cloud video upload sessions", purgedCount)
+        }
+        val staleRecoveredCount = cloudVideoUploadSessionService.purgeStaleIntermediateSessions(batchSize)
+        if (staleRecoveredCount > 0) {
+            log.info("Recovered {} stale intermediate cloud video upload sessions", staleRecoveredCount)
         }
     }
 }

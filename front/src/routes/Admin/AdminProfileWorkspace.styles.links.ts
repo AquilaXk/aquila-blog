@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 import {
   adminGold,
   adminGoldTintLine,
@@ -153,6 +154,10 @@ export const IconPickerButton = styled.button`
   gap: 0.62rem;
   align-items: center;
   color: ${({ theme }) => theme.colors.gray12};
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 `
 
 export const IconPreview = styled.span<{ "data-compact"?: boolean }>`
@@ -203,6 +208,7 @@ export const IconPickerPanel = styled.div`
 
 export const IconOptionButton = styled.button`
   width: 100%;
+  min-height: ${control.lg}px;
   padding: 0.56rem;
   border-radius: 12px;
   border: 1px solid transparent;
@@ -211,6 +217,7 @@ export const IconOptionButton = styled.button`
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.58rem;
   align-items: center;
+  box-sizing: border-box;
 
   &[data-selected="true"] {
     border-color: ${adminWarningBadgeBorder()};

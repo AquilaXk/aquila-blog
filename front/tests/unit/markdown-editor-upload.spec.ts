@@ -77,6 +77,10 @@ test.describe("markdown editor attachment upload model", () => {
       sourcePath("components", "markdown-editor", "MarkdownEditor.tsx"),
       "utf8"
     )
+    const mediaTransfersSource = readFileSync(
+      sourcePath("components", "markdown-editor", "useMarkdownEditorMediaTransfers.ts"),
+      "utf8"
+    )
     const editorViewSource = readFileSync(
       sourcePath("routes", "Admin", "EditorStudioWorkspaceControllerRootView.tsx"),
       "utf8"
@@ -86,12 +90,13 @@ test.describe("markdown editor attachment upload model", () => {
     expect(writerHostSource).toContain("onUploadFile={onFileUpload}")
     expect(writerHostSource).toContain("onUploadingChange={onUploadingChange}")
     expect(markdownEditorSource).toContain("onUploadingChange?: (isUploading: boolean) => void")
-    expect(markdownEditorSource).toContain("setUploadInFlight(1)")
     expect(markdownEditorSource).toContain("onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>")
     expect(markdownEditorSource).toContain('aria-label="파일"')
     expect(markdownEditorSource).toContain("handleFileInput")
-    expect(markdownEditorSource).toContain("validateMarkdownAttachmentSize")
-    expect(markdownEditorSource).toContain("MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE")
+    expect(markdownEditorSource).toContain("setUploadInFlight")
+    expect(mediaTransfersSource).toContain("validateMarkdownAttachmentSize")
+    expect(mediaTransfersSource).toContain("MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE")
+    expect(mediaTransfersSource).toContain("setUploadInFlight(1)")
     expect(editorViewSource).toContain("onUploadingChange={handleMarkdownUploadingChange}")
     expect(editorViewSource).toContain("isMarkdownUploading,")
   })

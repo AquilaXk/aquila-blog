@@ -1,20 +1,20 @@
 package com.back.global.security.config
 
 import com.back.global.exception.application.ErrorCode
+import com.back.global.web.ErrorResponseSource
+import com.back.global.web.ErrorResponseWriter
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.web.filter.OncePerRequestFilter
-import tools.jackson.databind.ObjectMapper
 
 /**
  * 쿠키 인증 mutation 요청은 브라우저가 CORS preflight를 수행할 수 있는 custom header를 요구한다.
  */
 class ApiMutationCsrfGuardFilter(
     private val apiCorsPolicy: ApiCorsPolicy,
-    private val objectMapper: ObjectMapper,
+    private val errorResponseWriter: ErrorResponseWriter,
 ) : OncePerRequestFilter() {
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val method = request.method.uppercase()
@@ -30,13 +30,13 @@ class ApiMutationCsrfGuardFilter(
     ) {
         val origin = request.getHeader(HttpHeaders.ORIGIN)?.trim().orEmpty()
         if (origin.isNotBlank() && !apiCorsPolicy.isAllowedOrigin(origin)) {
-            writeForbidden(response, ErrorCode.CSRF_ORIGIN_DENIED)
+            writeForbidden(request, response, ErrorCode.CSRF_ORIGIN_DENIED)
             return
         }
 
         if (request.getHeader(CSRF_PREFLIGHT_HEADER)?.trim() != CSRF_PREFLIGHT_VALUE) {
             apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
-            writeForbidden(response, ErrorCode.CSRF_PREFLIGHT_REQUIRED)
+            writeForbidden(request, response, ErrorCode.CSRF_PREFLIGHT_REQUIRED)
             return
         }
 
@@ -62,13 +62,16 @@ class ApiMutationCsrfGuardFilter(
     }
 
     private fun writeForbidden(
+        request: HttpServletRequest,
         response: HttpServletResponse,
         errorCode: ErrorCode,
     ) {
-        response.status = HttpServletResponse.SC_FORBIDDEN
-        response.contentType = MediaType.APPLICATION_JSON_VALUE
-        response.characterEncoding = Charsets.UTF_8.name()
-        response.writer.write(objectMapper.writeValueAsString(errorCode.toRsData()))
+        errorResponseWriter.write(
+            request = request,
+            response = response,
+            errorCode = errorCode,
+            source = ErrorResponseSource.FILTER,
+        )
     }
 
     companion object {

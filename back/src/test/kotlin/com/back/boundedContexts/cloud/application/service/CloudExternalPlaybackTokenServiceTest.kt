@@ -1,11 +1,12 @@
 package com.back.boundedContexts.cloud.application.service
 
 import com.back.boundedContexts.cloud.application.port.output.CloudExternalPlaybackTokenRepositoryPort
-import com.back.boundedContexts.cloud.application.port.output.CloudFileRepositoryPort
 import com.back.boundedContexts.cloud.model.CloudExternalPlaybackToken
 import com.back.boundedContexts.cloud.model.CloudExternalPlaybackTokenPurpose
 import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
+import com.back.boundedContexts.cloud.support.InMemoryCloudFileRepository
+import com.back.boundedContexts.cloud.support.StubCloudStoragePort
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
 import org.assertj.core.api.Assertions.assertThat
@@ -20,7 +21,7 @@ import java.time.ZoneOffset
 @DisplayName("CloudExternalPlaybackTokenService 테스트")
 class CloudExternalPlaybackTokenServiceTest {
     private val clock = Clock.fixed(Instant.parse("2026-06-26T12:00:00Z"), ZoneOffset.UTC)
-    private val files = FakeCloudFileRepository()
+    private val files = InMemoryCloudFileRepository()
     private val tokens = FakeCloudExternalPlaybackTokenRepository()
     private val storage = FakeCloudStoragePort()
     private val service =
@@ -151,20 +152,24 @@ class CloudExternalPlaybackTokenServiceTest {
         val file = videoFile(id = 12L, ownerMemberId = 7L)
         files.savedFiles += file
         val expiredToken = "expired-token"
-        tokens.savedTokens +=
-            CloudExternalPlaybackToken.create(
-                tokenHash = CloudExternalPlaybackTokenService.hashToken(expiredToken),
-                fileId = 12L,
-                memberId = 7L,
-                purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
-                expiresAt = Instant.parse("2026-06-26T11:59:59Z"),
-            )
+        tokens.savedTokens += playbackToken(expiredToken, fileId = 12L, expiresAt = Instant.parse("2026-06-26T11:59:59Z"))
 
         assertThatThrownBy { service.openContentRange(token = expiredToken, fileId = 12L, range = 0L..4L) }
             .isInstanceOf(AppException::class.java)
             .hasMessageContaining("외부 재생 token이 올바르지 않거나 만료되었습니다.")
 
         assertThat(storage.openedRanges).isEmpty()
+    }
+
+    @Test
+    @DisplayName("유효 token이어도 파일이 없으면 denied 메트릭 경로로 거절한다")
+    fun validTokenDeniesMissingFile() {
+        val issuedToken = "missing-file-token"
+        tokens.savedTokens += playbackToken(issuedToken, fileId = 12L, expiresAt = Instant.parse("2026-06-26T18:00:00Z"))
+
+        assertThatThrownBy { service.openContent(token = issuedToken, fileId = 12L) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("클라우드 파일")
     }
 
     @Test
@@ -184,6 +189,36 @@ class CloudExternalPlaybackTokenServiceTest {
         assertThat(storage.openedObjects).containsExactly(file.objectKey)
         assertThat(storage.openedRanges).containsExactly(file.objectKey to (0L..4L))
     }
+
+    @Test
+    @DisplayName("만료 token 정리는 grace를 지난 행만 배치 삭제한다")
+    fun purgeExpiredTokensDeletesPastGraceOnly() {
+        tokens.savedTokens +=
+            listOf(
+                playbackToken("past-grace", fileId = 12L, expiresAt = Instant.parse("2026-06-26T10:00:00Z")),
+                playbackToken("inside-grace", fileId = 13L, expiresAt = Instant.parse("2026-06-26T11:30:00Z")),
+                playbackToken("still-valid", fileId = 14L, expiresAt = Instant.parse("2026-06-26T18:00:00Z")),
+            )
+
+        val purgedCount = service.purgeExpiredTokens(batchSize = 100)
+
+        assertThat(purgedCount).isEqualTo(1)
+        assertThat(tokens.savedTokens.map { it.fileId }).containsExactly(13L, 14L)
+    }
+
+    private fun playbackToken(
+        rawToken: String,
+        fileId: Long,
+        expiresAt: Instant,
+        memberId: Long = 7L,
+    ): CloudExternalPlaybackToken =
+        CloudExternalPlaybackToken.create(
+            tokenHash = CloudExternalPlaybackTokenService.hashToken(rawToken),
+            fileId = fileId,
+            memberId = memberId,
+            purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
+            expiresAt = expiresAt,
+        )
 
     private fun videoFile(
         id: Long,
@@ -217,27 +252,6 @@ class CloudExternalPlaybackTokenServiceTest {
             checksumSha256 = "abc",
         )
 
-    private class FakeCloudFileRepository : CloudFileRepositoryPort {
-        val savedFiles = mutableListOf<CloudFile>()
-
-        override fun save(file: CloudFile): CloudFile {
-            savedFiles += file
-            return file
-        }
-
-        override fun findActiveByOwner(
-            ownerMemberId: Long,
-            folderPath: String?,
-            keyword: String?,
-            mediaKind: CloudFileMediaKind?,
-        ): List<CloudFile> = savedFiles.filter { it.ownerMemberId == ownerMemberId && it.deletedAt == null }
-
-        override fun findActiveByIdAndOwner(
-            id: Long,
-            ownerMemberId: Long,
-        ): CloudFile? = savedFiles.firstOrNull { it.id == id && it.ownerMemberId == ownerMemberId && it.deletedAt == null }
-    }
-
     private class FakeCloudExternalPlaybackTokenRepository : CloudExternalPlaybackTokenRepositoryPort {
         val savedTokens = mutableListOf<CloudExternalPlaybackToken>()
 
@@ -258,27 +272,25 @@ class CloudExternalPlaybackTokenServiceTest {
                     it.purpose == purpose &&
                     it.expiresAt.isAfter(now)
             }
+
+        override fun deleteByExpiresAtBefore(
+            cutoff: Instant,
+            limit: Int,
+        ): Int {
+            val toDelete =
+                savedTokens
+                    .filter { it.expiresAt.isBefore(cutoff) }
+                    .sortedWith(compareBy({ it.expiresAt }, { it.id }))
+                    .take(limit.coerceAtLeast(1))
+            savedTokens.removeAll(toDelete.toSet())
+            return toDelete.size
+        }
     }
 
-    private class FakeCloudStoragePort : CloudStoragePort {
+    private class FakeCloudStoragePort : StubCloudStoragePort() {
         val openedObjects = mutableListOf<String>()
         val openedRanges = mutableListOf<Pair<String, LongRange>>()
         val objects = mutableMapOf<String, CloudStoragePort.StoredObject>()
-
-        override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult =
-            CloudStoragePort.UploadResult(request.objectKey, "unused")
-
-        override fun initiateMultipartUpload(
-            request: CloudStoragePort.MultipartUploadInitRequest,
-        ): CloudStoragePort.MultipartUploadInitResult = CloudStoragePort.MultipartUploadInitResult(request.objectKey, "unused")
-
-        override fun uploadMultipartPart(
-            request: CloudStoragePort.MultipartUploadPartRequest,
-        ): CloudStoragePort.MultipartUploadPartResult = CloudStoragePort.MultipartUploadPartResult(request.partNumber, "unused")
-
-        override fun completeMultipartUpload(request: CloudStoragePort.MultipartUploadCompleteRequest) = Unit
-
-        override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) = Unit
 
         override fun open(objectKey: String): CloudStoragePort.StoredObject? {
             openedObjects += objectKey
@@ -292,7 +304,5 @@ class CloudExternalPlaybackTokenServiceTest {
             openedRanges += objectKey to range
             return objects[objectKey]
         }
-
-        override fun delete(objectKey: String) = Unit
     }
 }

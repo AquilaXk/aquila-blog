@@ -278,12 +278,7 @@ enum class ErrorCode(
     ;
 
     init {
-        val prefix =
-            code.substringBefore("-").toIntOrNull()
-                ?: error("ErrorCode $name: code '$code' must be '{status}-{n}'")
-        require(prefix == status.value()) {
-            "ErrorCode $name: code prefix $prefix does not match status ${status.value()}"
-        }
+        ErrorCodeWireRules.requireValidWire(name, code, status)
     }
 
     fun toRsData(): RsData<Void> = RsData(code, defaultUserMessage)
@@ -292,15 +287,8 @@ enum class ErrorCode(
 
     companion object {
         private val byCode: Map<String, ErrorCode> =
-            entries.associateBy { it.code }.also { map ->
-                require(map.size == entries.size) {
-                    val duplicates =
-                        entries
-                            .groupBy { it.code }
-                            .filter { it.value.size > 1 }
-                            .keys
-                    "Duplicate ErrorCode wire values: $duplicates"
-                }
+            entries.associateBy { it.code }.also {
+                ErrorCodeWireRules.requireUniqueWireCodes(entries.map { entry -> entry.code })
             }
 
         fun fromCode(code: String): ErrorCode = byCode[code] ?: error("Unknown ErrorCode: $code")

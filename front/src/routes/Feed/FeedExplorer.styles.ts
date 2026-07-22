@@ -1,4 +1,6 @@
 import styled from "@emotion/styled"
+import { layoutBreakpoint } from "src/design-system/tokens"
+
 const FEED_POST_COLUMN_MAX_WIDTH_REM = 100
 
 export const ExplorerCard = styled.section`
@@ -186,7 +188,7 @@ export const FeedBody = styled.section`
     width: 100%;
   }
 
-  @media (max-width: 1200px) {
+  @media (max-width: ${layoutBreakpoint.feedChipRail}px) {
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
   }

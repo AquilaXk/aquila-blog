@@ -30,21 +30,7 @@ export const buildCanonicalPostUrl = (postId: string | number) => {
   return new URL(path, window.location.origin).toString()
 }
 
-export const extractImageFileFromClipboard = (clipboardData: DataTransfer | null): File | null => {
-  if (!clipboardData) return null
-
-  const directFile = Array.from(clipboardData.files || []).find((file) => file.type.startsWith("image/"))
-  if (directFile) return directFile
-
-  const clipboardItem = Array.from(clipboardData.items || []).find(
-    (item) => item.kind === "file" && item.type.startsWith("image/")
-  )
-  if (!clipboardItem) return null
-
-  const pastedFile = clipboardItem.getAsFile()
-  if (!pastedFile || !pastedFile.type.startsWith("image/")) return null
-  return pastedFile
-}
+export { extractImageFileFromClipboard } from "src/components/markdown-editor/markdownEditorPasteDropModel"
 
 export const normalizeEditorReturnRoute = (value: string) => {
   const normalized = value.trim()

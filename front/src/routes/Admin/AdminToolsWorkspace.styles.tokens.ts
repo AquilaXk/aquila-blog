@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 import {
   AdminActionCardButton,
   AdminInlineActionRow,
@@ -286,8 +287,10 @@ export const DetailsSummary = styled.summary`
   justify-content: space-between;
   align-items: center;
   gap: 0.8rem;
+  min-height: ${control.lg}px;
   padding: 0.84rem 0.95rem;
   cursor: pointer;
+  box-sizing: border-box;
 
   &::-webkit-details-marker {
     display: none;
@@ -321,6 +324,10 @@ export const DiagnosticsTabButton = styled.button`
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 
   &[data-active="true"] {
     color: ${({ theme }) => theme.colors.gray12};

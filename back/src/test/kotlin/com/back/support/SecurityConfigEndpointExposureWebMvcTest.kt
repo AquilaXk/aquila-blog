@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
+import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.config.AccessTokenAuthenticationHandler
@@ -17,7 +18,6 @@ import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.config.LegacyPayloadRecoveryHandler
 import com.back.global.security.config.MemberSessionAuthenticationResolver
 import com.back.global.security.config.PublicApiRequestMatcher
-import com.back.global.security.config.PublicApiRouteContributor
 import com.back.global.security.config.RefreshTokenAuthenticationHandler
 import com.back.global.security.config.SecurityConfig
 import com.back.global.security.config.SecurityContextAuthenticationWriter
@@ -26,9 +26,12 @@ import com.back.global.security.config.oauth2.CustomOAuth2LoginFailureHandler
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
 import com.back.global.security.config.oauth2.CustomOidcUserService
+import com.back.global.web.ErrorResponseWriter
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.application.Rq
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -112,6 +115,22 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
         fun cloudSecurityConfigurer(): CloudSecurityConfigurer = CloudSecurityConfigurer()
 
         @Bean
+        fun publicApiRequestMatcher(
+            authSecurityConfigurer: AuthSecurityConfigurer,
+            memberSecurityConfigurer: MemberSecurityConfigurer,
+            postSecurityConfigurer: PostSecurityConfigurer,
+            cloudSecurityConfigurer: CloudSecurityConfigurer,
+        ): PublicApiRequestMatcher =
+            PublicApiRequestMatcher(
+                listOf(
+                    authSecurityConfigurer,
+                    memberSecurityConfigurer,
+                    postSecurityConfigurer,
+                    cloudSecurityConfigurer,
+                ),
+            )
+
+        @Bean
         fun apiCorsPolicy(environment: Environment): ApiCorsPolicy =
             ApiCorsPolicy(
                 environment = environment,
@@ -121,10 +140,23 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
             )
 
         @Bean
+        fun meterRegistry(): MeterRegistry = SimpleMeterRegistry()
+
+        @Bean
+        fun errorMetrics(meterRegistry: MeterRegistry): ErrorMetrics = ErrorMetrics(meterRegistry)
+
+        @Bean
+        fun errorResponseWriter(
+            objectMapper: ObjectMapper,
+            errorMetrics: ErrorMetrics,
+        ): ErrorResponseWriter = ErrorResponseWriter(objectMapper, errorMetrics)
+
+        @Bean
         fun customAuthenticationFilter(
             apiCorsPolicy: ApiCorsPolicy,
             environment: Environment,
-            objectMapper: ObjectMapper,
+            errorResponseWriter: ErrorResponseWriter,
+            publicApiRequestMatcher: PublicApiRequestMatcher,
         ): CustomAuthenticationFilter {
             val rq = mock(Rq::class.java)
             val actorApplicationService = mock(ActorApplicationService::class.java)
@@ -186,8 +218,8 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                 accessTokenAuthenticationHandler = accessTokenAuthenticationHandler,
                 refreshTokenAuthenticationHandler = refreshTokenAuthenticationHandler,
                 clientIpResolver = mock(ClientIpResolver::class.java),
-                objectMapper = objectMapper,
-                publicApiRequestMatcher = PublicApiRequestMatcher(emptyList<PublicApiRouteContributor>()),
+                errorResponseWriter = errorResponseWriter,
+                publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
                 environment = environment,
             )
@@ -205,7 +237,7 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
             mvc
                 .get("/actuator/health/liveness")
                 .andExpect {
-                    status { isInternalServerError() }
+                    status { isNotFound() }
                 }.andReturn()
                 .response
 
@@ -244,7 +276,7 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
     @DisplayName("prod에서 내부 Prometheus direct scrape는 익명 보안 체인을 통과해 no-handler까지 도달한다")
     fun `prod keeps internal prometheus direct scrape public`() {
         mvc.get("/actuator/prometheus").andExpect {
-            status { isInternalServerError() }
+            status { isNotFound() }
         }
     }
 
@@ -271,7 +303,7 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
             "/v3/api-docs",
         ).forEach { path ->
             mvc.get(path).andExpect {
-                status { isInternalServerError() }
+                status { isNotFound() }
             }
         }
     }
@@ -290,7 +322,7 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
     @WithMockUser(roles = ["ADMIN"])
     fun `prod lets admin pass post file upload security checks to application handler layer`() {
         mvc.post("/post/api/v1/posts/files").andExpect {
-            status { isInternalServerError() }
+            status { isNotFound() }
         }
     }
 
@@ -298,18 +330,18 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
     @DisplayName("prod에서 공개 첨부 파일 다운로드는 익명 보안 체인을 통과해 handler 계층까지 도달한다")
     fun `prod keeps post file download public`() {
         mvc.get("/post/api/v1/files/posts/2026/03/manual.pdf").andExpect {
-            status { isInternalServerError() }
+            status { isNotFound() }
         }
         mvc
             .perform(head("/post/api/v1/files/posts/2026/03/manual.pdf"))
-            .andExpect(status().isInternalServerError)
+            .andExpect(status().isNotFound)
     }
 
     @Test
     @DisplayName("prod에서 liveness probe는 익명 보안 체인을 통과해 no-handler까지 도달한다")
     fun `prod keeps liveness probe public`() {
         mvc.get("/actuator/health/liveness").andExpect {
-            status { isInternalServerError() }
+            status { isNotFound() }
         }
     }
 }
@@ -325,7 +357,7 @@ class SecurityConfigNonProdEndpointExposureWebMvcTest : SecurityConfigEndpointEx
                 .get("/actuator/info") {
                     secure = true
                 }.andExpect {
-                    status { isInternalServerError() }
+                    status { isNotFound() }
                 }.andReturn()
                 .response
 
@@ -348,7 +380,7 @@ class SecurityConfigNonProdEndpointExposureWebMvcTest : SecurityConfigEndpointEx
             "/v3/api-docs",
         ).forEach { path ->
             mvc.get(path).andExpect {
-                status { isInternalServerError() }
+                status { isNotFound() }
             }
         }
     }

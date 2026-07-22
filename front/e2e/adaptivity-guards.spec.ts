@@ -17,7 +17,7 @@ test.describe("adaptivity hit-area", () => {
     await openMobileHome(page)
 
     await expectMinTouchTarget(page, page.getByLabel("Search posts by keyword"), "feed search")
-    await expectMinTouchTarget(page, page.getByRole("button", { name: "메뉴 열기" }), "mobile menu")
+    await expectMinTouchTarget(page, page.getByRole("button", { name: "메뉴" }), "mobile menu")
     await expectMinTouchTarget(page, page.getByRole("button", { name: "전체보기" }), "topic chip")
 
     const firstCard = page.locator('[data-ui="feed-post-card"]').first()

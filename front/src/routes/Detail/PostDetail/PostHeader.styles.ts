@@ -1,4 +1,5 @@
 import styled from "@emotion/styled";
+import { control } from "src/design-system/tokens";
 import { HEADER_AUTH_ADMIN_ATTR } from "src/libs/headerAuthShell";
 export const StyledWrapper = styled.header `
   width: min(100%, 880px);
@@ -361,18 +362,19 @@ export const StyledWrapper = styled.header `
     .metaRow {
       margin-top: 1.15rem;
       align-items: flex-start;
-    }
-  }
-
-  @media (max-width: 820px) {
-    .metaRow {
-      align-items: flex-start;
       flex-direction: column;
     }
 
     .metaUtilities {
       justify-content: flex-start;
       margin-left: 0;
+    }
+
+    .shareFeedbackPill,
+    .adminButton,
+    .likeButton,
+    .shareButton {
+      min-height: ${control.lg}px;
     }
 
     .actions[data-hide-mobile="true"] {

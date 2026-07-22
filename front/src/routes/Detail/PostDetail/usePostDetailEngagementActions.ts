@@ -7,6 +7,7 @@ import { queryKey } from "src/constants/queryKey"
 import { pushRoute, replaceRoute } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import type { PostDetail as PostDetailType } from "src/types"
+import { resolvePostDetailDeleteFailure } from "./postDetailDeleteFailureModel"
 
 type RsData<T> = {
   resultCode: string
@@ -39,6 +40,8 @@ export const usePostDetailEngagementActions = ({
   const likeFeedbackResetTimerRef = useRef<number | null>(null)
   const [likePending, setLikePending] = useState(false)
   const [adminActionPending, setAdminActionPending] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteErrorNotice, setDeleteErrorNotice] = useState<string | null>(null)
   const [shareFeedback, setShareFeedback] = useState<ShareFeedback | null>(null)
   const [likeFeedback, setLikeFeedback] = useState<string | null>(null)
   const [engagement, setEngagement] = useState(() => ({
@@ -63,6 +66,11 @@ export const usePostDetailEngagementActions = ({
       actorHasLiked: data.actorHasLiked ?? false,
     })
   }, [data, data?.actorHasLiked, data?.hitCount, data?.id, data?.likesCount])
+
+  useEffect(() => {
+    setDeleteConfirmOpen(false)
+    setDeleteErrorNotice(null)
+  }, [detailId])
 
   useEffect(() => {
     if (!detailId) return
@@ -240,26 +248,44 @@ export const usePostDetailEngagementActions = ({
     )
   }, [data, router])
 
-  const handleDeletePost = useCallback(async () => {
+  const openDeleteConfirm = useCallback(() => {
+    if (!data || adminActionPending) return
+    setDeleteErrorNotice(null)
+    setDeleteConfirmOpen(true)
+  }, [adminActionPending, data])
+
+  const closeDeleteConfirm = useCallback(() => {
+    if (adminActionPending) return
+    setDeleteConfirmOpen(false)
+    setDeleteErrorNotice(null)
+  }, [adminActionPending])
+
+  const confirmDeletePost = useCallback(async () => {
     if (!data || adminActionPending) return
 
-    if (typeof window !== "undefined") {
-      const confirmed = window.confirm(`정말 "${data.title}" 글을 삭제할까요?`)
-      if (!confirmed) return
-    }
-
     setAdminActionPending(true)
+    setDeleteErrorNotice(null)
 
     try {
       await apiFetch(`/post/api/v1/posts/${data.id}`, {
         method: "DELETE",
       })
       queryClient.removeQueries({ queryKey: queryKey.post(data.id) })
+      setDeleteConfirmOpen(false)
       await replaceRoute(router, "/", { preferHardNavigation: true })
+    } catch (error) {
+      const failure = resolvePostDetailDeleteFailure(error)
+      if (failure.kind === "unauthorized") {
+        setDeleteConfirmOpen(false)
+        setDeleteErrorNotice(null)
+        await pushRoute(router, loginHref)
+        return
+      }
+      setDeleteErrorNotice(failure.message)
     } finally {
       setAdminActionPending(false)
     }
-  }, [adminActionPending, data, queryClient, router])
+  }, [adminActionPending, data, loginHref, queryClient, router])
 
   const handleSharePost = useCallback(async () => {
     if (!data) return
@@ -296,13 +322,17 @@ export const usePostDetailEngagementActions = ({
 
   return {
     adminActionPending,
+    closeDeleteConfirm,
+    confirmDeletePost,
+    deleteConfirmOpen,
+    deleteErrorNotice,
     engagement,
-    handleDeletePost,
     handleEditPost,
     handleSharePost,
     handleToggleLike,
     likeFeedback,
     likePending,
+    openDeleteConfirm,
     shareFeedback,
     shareProgressLabel,
   }

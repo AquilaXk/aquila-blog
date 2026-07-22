@@ -4,6 +4,9 @@ import com.back.boundedContexts.cloud.adapter.web.ApiV1AdmCloudController
 import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenService
 import com.back.boundedContexts.cloud.application.service.CloudFileService
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
+import com.back.global.observability.ErrorMetrics
+import com.back.global.security.config.ApiRateLimitBackstopFilter
+import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
@@ -28,7 +31,11 @@ import org.springframework.test.web.servlet.MockMvc
     excludeFilters = [
         ComponentScan.Filter(
             type = FilterType.ASSIGNABLE_TYPE,
-            classes = [CustomAuthenticationFilter::class],
+            classes = [
+                CustomAuthenticationFilter::class,
+                ApiRateLimitBackstopFilter::class,
+                ApiRuntimeBoundaryFilter::class,
+            ],
         ),
     ],
 )
@@ -48,6 +55,9 @@ abstract class BaseAdmCloudControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext
+
+    @MockitoBean
+    protected lateinit var errorMetrics: ErrorMetrics
 
     @TestConfiguration
     class TestSecurityConfig {

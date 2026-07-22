@@ -26,6 +26,7 @@ is_allowed_markdown() {
     front/README.md|\
     infra/README.md|\
     perf/k6/README.md|\
+    perf/k6/cloud-launch-criteria.md|\
     tools/templates/agent-plan.compact.md|\
     tools/templates/bug-report.compact.md|\
     docs/design/*.md|\

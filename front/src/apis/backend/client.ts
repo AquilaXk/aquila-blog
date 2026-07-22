@@ -169,21 +169,24 @@ const resolveStatusMessage = (status: number) => {
   return "요청 처리 중 오류가 발생했습니다."
 }
 
-const resolveResponseBodyMessage = (status: number, body: string) => {
-  if (status !== 413) return ""
+const resolveBodyUserMessage = (body: string) => {
   if (!body.trim()) return ""
 
   try {
     const parsed = JSON.parse(body) as { message?: unknown; msg?: unknown }
     const message = typeof parsed.msg === "string" ? parsed.msg : parsed.message
-    if (typeof message !== "string") return ""
-    const normalizedMessage = message.trim()
-    if (!normalizedMessage) return ""
-    if (!/(용량|초과|MB|이하)/i.test(normalizedMessage)) return ""
-    return /[가-힣]/.test(normalizedMessage) ? normalizedMessage : ""
+    return typeof message === "string" ? message.trim() : ""
   } catch {
     return ""
   }
+}
+
+const resolveResponseBodyMessage = (status: number, body: string) => {
+  if (status !== 413) return ""
+  const normalizedMessage = resolveBodyUserMessage(body)
+  if (!normalizedMessage) return ""
+  if (!/(용량|초과|MB|이하)/i.test(normalizedMessage)) return ""
+  return /[가-힣]/.test(normalizedMessage) ? normalizedMessage : ""
 }
 
 const sleep = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs))
@@ -230,7 +233,8 @@ export class ApiError extends Error {
   userMessage: string
 
   constructor(status: number, url: string, body: string) {
-    const userMessage = resolveResponseBodyMessage(status, body) || resolveStatusMessage(status)
+    const userMessage =
+      resolveBodyUserMessage(body) || resolveResponseBodyMessage(status, body) || resolveStatusMessage(status)
     super(userMessage)
     this.name = "ApiError"
     this.status = status

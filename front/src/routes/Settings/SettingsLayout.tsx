@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ReactNode } from "react"
 import useAuthSession from "src/hooks/useAuthSession"
+import { colors } from "src/styles/colors"
 
 type SettingsLayoutProps = {
   active: "privacy" | "account"
@@ -70,6 +71,8 @@ export const settingsStyles = `
     margin: 0 auto;
     padding: 48px 0 72px;
     color: var(--aq-text);
+    --aq-status-danger: ${colors.light.statusDangerText};
+    --aq-status-success: ${colors.light.statusSuccessText};
   }
 
   .pageHeader {

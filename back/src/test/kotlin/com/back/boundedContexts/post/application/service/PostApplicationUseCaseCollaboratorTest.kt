@@ -21,7 +21,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.any
@@ -130,7 +129,6 @@ class PostApplicationUseCaseCollaboratorTest {
         val hydrationService: PostHydrationService = mock(PostHydrationService::class.java)
         val counterService: PostCounterService = mock(PostCounterService::class.java)
         val sideEffectQueue: PostInteractionSideEffectQueue = mock(PostInteractionSideEffectQueue::class.java)
-        val cacheInvalidator: PostReadCacheInvalidator = mock(PostReadCacheInvalidator::class.java)
         val service =
             PostLikeApplicationService(
                 postRepository = postRepository,
@@ -138,7 +136,6 @@ class PostApplicationUseCaseCollaboratorTest {
                 postHydrationService = hydrationService,
                 postCounterService = counterService,
                 postInteractionSideEffectQueue = sideEffectQueue,
-                postReadCacheInvalidator = cacheInvalidator,
             )
         val actor = testMember(id = 2)
         val post = testPost()
@@ -153,7 +150,7 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(recovered.likeId).isEqualTo(99)
         then(counterService).should().incrementLikesCount(post)
         then(postRepository).should().flush()
-        then(cacheInvalidator).should().invalidateRankedSortHotPages("like")
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "like")
 
         // given
         val secondPost = testPost(id = 11)
@@ -168,7 +165,7 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(failedRecovery.isLiked).isTrue()
         assertThat(failedRecovery.likeId).isZero()
         then(counterService).should().syncLikesCount(secondPost)
-        then(cacheInvalidator).should().invalidateRankedSortHotPages("like-sync")
+        assertRankedLikesEnqueue(sideEffectQueue, secondPost.id, "like-sync")
 
         // given
         val like = PostLike(55, actor, post)
@@ -182,11 +179,11 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(unliked.isLiked).isFalse()
         assertThat(unliked.likeId).isEqualTo(55)
         then(counterService).should().syncLikesCount(post)
-        then(cacheInvalidator).should(times(2)).invalidateRankedSortHotPages("like-sync")
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "like-sync")
     }
 
     @Test
-    @DisplayName("PostLikeApplicationService는 카운터 변경 시에만 ranked cache를 무효화한다")
+    @DisplayName("PostLikeApplicationService는 카운터 변경 시에만 ranked cache 무효화를 비동기로 큐잉한다")
     fun postLikeApplicationServiceInvalidatesRankedCacheOnlyOnCountChange() {
         // given
         val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
@@ -194,7 +191,6 @@ class PostApplicationUseCaseCollaboratorTest {
         val hydrationService: PostHydrationService = mock(PostHydrationService::class.java)
         val counterService: PostCounterService = mock(PostCounterService::class.java)
         val sideEffectQueue: PostInteractionSideEffectQueue = mock(PostInteractionSideEffectQueue::class.java)
-        val cacheInvalidator: PostReadCacheInvalidator = mock(PostReadCacheInvalidator::class.java)
         val service =
             PostLikeApplicationService(
                 postRepository = postRepository,
@@ -202,7 +198,6 @@ class PostApplicationUseCaseCollaboratorTest {
                 postHydrationService = hydrationService,
                 postCounterService = counterService,
                 postInteractionSideEffectQueue = sideEffectQueue,
-                postReadCacheInvalidator = cacheInvalidator,
             )
         val actor = testMember(id = 2)
         val post = testPost()
@@ -216,7 +211,7 @@ class PostApplicationUseCaseCollaboratorTest {
         // then
         assertThat(noOpLike.isLiked).isTrue()
         then(counterService).should().ensureLikesCountLoaded(post)
-        then(cacheInvalidator).should(never()).invalidateRankedSortHotPages(anyString())
+        assertThat(enqueueInvocations(sideEffectQueue)).isEmpty()
 
         // given
         given(postLikeRepository.insertIfAbsent(actor, post)).willReturn(88)
@@ -227,7 +222,7 @@ class PostApplicationUseCaseCollaboratorTest {
         // then
         assertThat(liked.isLiked).isTrue()
         then(counterService).should().incrementLikesCount(post)
-        then(cacheInvalidator).should().invalidateRankedSortHotPages("like")
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "like")
 
         // given
         given(postLikeRepository.findByLikerAndPost(actor, post)).willReturn(existingLike)
@@ -239,20 +234,22 @@ class PostApplicationUseCaseCollaboratorTest {
         // then
         assertThat(unliked.isLiked).isFalse()
         then(counterService).should().decrementLikesCount(post)
-        then(cacheInvalidator).should().invalidateRankedSortHotPages("unlike")
+        assertRankedLikesEnqueue(sideEffectQueue, post.id, "unlike")
 
         // given
         given(postLikeRepository.findByLikerAndPost(actor, post)).willReturn(null)
         given(postLikeRepository.deleteByLikerAndPost(actor, post)).willReturn(0)
+        val enqueueCountBeforeNoOpUnlike = enqueueInvocations(sideEffectQueue).size
 
         // when
         service.unlike(post, actor)
 
         // then
         then(counterService).should(times(2)).ensureLikesCountLoaded(post)
-        then(cacheInvalidator).should(times(1)).invalidateRankedSortHotPages("like")
-        then(cacheInvalidator).should(times(1)).invalidateRankedSortHotPages("unlike")
-        then(cacheInvalidator).should(never()).invalidateRankedSortHotPages("like-sync")
+        val noOpUnlikeEnqueue = enqueueInvocations(sideEffectQueue).drop(enqueueCountBeforeNoOpUnlike).single()
+        assertThat(noOpUnlikeEnqueue.arguments[0]).isEqualTo(post.id)
+        assertThat(noOpUnlikeEnqueue.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
+        assertThat(noOpUnlikeEnqueue.arguments[3]).isEqualTo(PostRankedCacheInvalidationSideEffect.NONE)
     }
 
     @Test
@@ -264,7 +261,6 @@ class PostApplicationUseCaseCollaboratorTest {
         val hydrationService: PostHydrationService = mock(PostHydrationService::class.java)
         val counterService: PostCounterService = mock(PostCounterService::class.java)
         val sideEffectQueue: PostInteractionSideEffectQueue = mock(PostInteractionSideEffectQueue::class.java)
-        val cacheInvalidator: PostReadCacheInvalidator = mock(PostReadCacheInvalidator::class.java)
         val service =
             PostLikeApplicationService(
                 postRepository = postRepository,
@@ -272,7 +268,6 @@ class PostApplicationUseCaseCollaboratorTest {
                 postHydrationService = hydrationService,
                 postCounterService = counterService,
                 postInteractionSideEffectQueue = sideEffectQueue,
-                postReadCacheInvalidator = cacheInvalidator,
             )
         val actor = testMember(id = 2)
         val post = testPost()
@@ -289,7 +284,7 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(snapshot.likeId).isEqualTo(77)
         assertThat(post.likesCount).isEqualTo(4)
         then(counterService).should().syncLikesCount(post)
-        then(cacheInvalidator).should(never()).invalidateRankedSortHotPages(anyString())
+        assertThat(enqueueInvocations(sideEffectQueue)).isEmpty()
     }
 
     @Test
@@ -418,6 +413,23 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(enqueueInvocation.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
         assertThat(enqueueInvocation.arguments[2]).isInstanceOf(PostCommentDeletedEvent::class.java)
     }
+
+    private fun assertRankedLikesEnqueue(
+        sideEffectQueue: PostInteractionSideEffectQueue,
+        postId: Long,
+        reason: String,
+    ) {
+        val match =
+            enqueueInvocations(sideEffectQueue).last {
+                it.arguments[0] == postId &&
+                    it.arguments[3] == PostRankedCacheInvalidationSideEffect.LIKES_COUNT &&
+                    it.arguments[4] == reason
+            }
+        assertThat(match).isNotNull()
+    }
+
+    private fun enqueueInvocations(sideEffectQueue: PostInteractionSideEffectQueue) =
+        mockingDetails(sideEffectQueue).invocations.filter { it.method.name == "enqueue" }
 
     private fun testMember(id: Long = 1): Member =
         Member(id = id, username = "user-$id", nickname = "작성자$id", apiKey = "api-key-$id").also {

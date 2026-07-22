@@ -34,12 +34,50 @@ class PostReadCacheInvalidator(
     private val maxTagCacheEvict = 12
 
     internal fun invalidateRankedSortHotPages(evictReason: String) {
-        evictHotAndSearchFirstPages(
-            sorts = rankedSorts,
-            includeHotReadPages = true,
-            includeSearchFirstPage = true,
-            evictReason = evictReason,
-        )
+        invalidateRankedSortHotPages(evictReason, rankedSorts)
+    }
+
+    internal fun invalidateRankedSortHotPages(
+        evictReason: String,
+        sorts: Collection<PostSearchSortType1>,
+    ) {
+        val targetSorts =
+            sorts
+                .asSequence()
+                .filter { it == PostSearchSortType1.HIT_COUNT || it == PostSearchSortType1.LIKES_COUNT }
+                .distinct()
+                .toList()
+        if (targetSorts.isEmpty()) {
+            throw IllegalArgumentException("ranked sort invalidation requires HIT_COUNT and/or LIKES_COUNT")
+        }
+
+        val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
+        val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
+        val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
+
+        // Untagged feed/bootstrap keys are enumerable; explore/search are not (see clear below).
+        hotPageSizes.forEach { pageSize ->
+            targetSorts.forEach { sort ->
+                val sortName = sort.name
+                feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
+                recordCacheEvict(PostQueryCacheNames.FEED, "key", evictReason)
+                feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
+                recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
+                bootstrapCache?.evict(
+                    PostPublicReadQueryService.buildBootstrapCacheKey(
+                        pageSize = pageSize,
+                        sort = sort,
+                        tag = "",
+                    ),
+                )
+                recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
+            }
+        }
+
+        // Ranked explore/search entries are keyed by real tag/kw tokens. Evicting only tag=_ or kw=_
+        // leaves stale ranked pages; interaction paths often lack a complete tag/kw set, so clear these
+        // cache names instead of silently under-invalidating.
+        clearRankedInteractionExploreAndSearchCaches(evictReason)
     }
 
     internal fun invalidateAuthorRepresentation(reason: String) {
@@ -116,6 +154,18 @@ class PostReadCacheInvalidator(
     }
 
     private fun PostReadCacheInvalidationRequest.evicts(target: PostReadCacheInvalidationTarget): Boolean = scope.evicts(target)
+
+    private fun clearRankedInteractionExploreAndSearchCaches(evictReason: String) {
+        listOf(
+            PostQueryCacheNames.EXPLORE,
+            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
+            PostQueryCacheNames.SEARCH,
+            PostQueryCacheNames.SEARCH_NEGATIVE,
+        ).forEach { cacheName ->
+            cacheManager.getCache(cacheName)?.clear()
+            recordCacheEvict(cacheName, "clear", evictReason)
+        }
+    }
 
     private fun evictHotAndSearchFirstPages(
         sorts: List<PostSearchSortType1>,

@@ -34,6 +34,7 @@ class PostInteractionSideEffectHandlerTest {
         mock(PostRecommendFeatureStoreService::class.java)
     private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
+    private val postReadCacheInvalidator: PostReadCacheInvalidator = mock(PostReadCacheInvalidator::class.java)
 
     @Test
     @DisplayName("interaction domain event 발행 실패는 task retry를 위해 전파한다")
@@ -139,6 +140,7 @@ class PostInteractionSideEffectHandlerTest {
             postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postRepository = postRepository,
             postAttrRepository = postAttrRepository,
+            postReadCacheInvalidator = postReadCacheInvalidator,
             eventPublisher = EventPublisher(applicationEventPublisher),
             transactionManager = NoopTransactionManager(),
         )

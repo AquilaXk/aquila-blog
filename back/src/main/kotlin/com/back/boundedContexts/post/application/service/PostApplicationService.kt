@@ -51,7 +51,7 @@ class PostApplicationService(
     private val postTempDraftService: PostTempDraftService,
     private val postCommentApplicationService: PostCommentApplicationService,
     private val postLikeApplicationService: PostLikeApplicationService,
-    private val postReadCacheInvalidator: PostReadCacheInvalidator,
+    private val postInteractionSideEffectQueue: PostInteractionSideEffectQueue,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
@@ -503,7 +503,12 @@ class PostApplicationService(
     @Transactional
     fun incrementHit(post: Post) {
         postCounterService.incrementHit(post)
-        postReadCacheInvalidator.invalidateRankedSortHotPages("hit")
+        // Hit traffic is hot-path: defer ranked HIT_COUNT eviction (not LIKES) to the async queue.
+        postInteractionSideEffectQueue.enqueue(
+            postId = post.id,
+            rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.HIT_COUNT,
+            rankedCacheEvictReason = "hit",
+        )
     }
 
     fun getComments(

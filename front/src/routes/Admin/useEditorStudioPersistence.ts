@@ -5,7 +5,9 @@ import {
   type SetStateAction,
 } from "react"
 import { apiFetch } from "src/apis/backend/client"
+import { normalizeCategoryValue } from "src/libs/utils"
 import { resolveEditorFailureRecovery } from "./editorFailureRecoveryModel"
+import { buildLocalDraftFingerprint } from "./editorStudioMetaModel"
 import { isTempDraftTitlePlaceholder } from "./editorTempDraft"
 import { useEditorStudioPersistenceUploads } from "./useEditorStudioPersistenceModel"
 
@@ -41,6 +43,38 @@ type EditorFingerprintPayload = {
 }
 
 const isBrowserOnline = () => typeof navigator === "undefined" ? undefined : navigator.onLine
+
+const armLocalDraftFingerprintBaseline = (
+  lastLocalDraftFingerprintRef: MutableRefObject<string>,
+  payload: {
+    title: string
+    content: string
+    summary: string
+    thumbnailUrl: string
+    thumbnailFocusX: number
+    thumbnailFocusY: number
+    thumbnailZoom: number
+    tags: string[]
+    category: string
+    visibility: PostVisibility
+  },
+  dedupeStrings: (items: string[]) => string[]
+) => {
+  // After successful publish/modify/clear: baseline to current editor so autosave
+  // does not recreate the removed slot until the user edits again.
+  lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
+    title: payload.title,
+    content: payload.content,
+    summary: payload.summary,
+    thumbnailUrl: payload.thumbnailUrl,
+    thumbnailFocusX: payload.thumbnailFocusX,
+    thumbnailFocusY: payload.thumbnailFocusY,
+    thumbnailZoom: payload.thumbnailZoom,
+    tags: dedupeStrings(payload.tags),
+    category: payload.category ? normalizeCategoryValue(payload.category) : "",
+    visibility: payload.visibility,
+  })
+}
 
 type UseEditorStudioPersistenceParams = {
   editorMode: EditorMode
@@ -268,7 +302,22 @@ export const useEditorStudioPersistence = ({
             : "비공개"
 
       removeLocalDraft({ kind: "create" })
-      lastLocalDraftFingerprintRef.current = ""
+      armLocalDraftFingerprintBaseline(
+        lastLocalDraftFingerprintRef,
+        {
+          title: postTitle,
+          content: currentPostContent,
+          summary: postSummary,
+          thumbnailUrl: postThumbnailUrl,
+          thumbnailFocusX: postThumbnailFocusX,
+          thumbnailFocusY: postThumbnailFocusY,
+          thumbnailZoom: postThumbnailZoom,
+          tags: postTags,
+          category: postCategory,
+          visibility: postVisibility,
+        },
+        dedupeStrings
+      )
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
 
@@ -403,7 +452,22 @@ export const useEditorStudioPersistence = ({
       })
       await refreshPublicPostReadViews(postId)
       removeLocalDraft({ kind: "post", postId: postId.trim() })
-      lastLocalDraftFingerprintRef.current = ""
+      armLocalDraftFingerprintBaseline(
+        lastLocalDraftFingerprintRef,
+        {
+          title: postTitle,
+          content: currentPostContent,
+          summary: postSummary,
+          thumbnailUrl: postThumbnailUrl,
+          thumbnailFocusX: postThumbnailFocusX,
+          thumbnailFocusY: postThumbnailFocusY,
+          thumbnailZoom: postThumbnailZoom,
+          tags: postTags,
+          category: postCategory,
+          visibility: postVisibility,
+        },
+        dedupeStrings
+      )
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
@@ -527,7 +591,22 @@ export const useEditorStudioPersistence = ({
       await refreshPublicPostReadViews(postId)
       removeLocalDraft({ kind: "post", postId: postId.trim() })
       removeLocalDraft({ kind: "create" })
-      lastLocalDraftFingerprintRef.current = ""
+      armLocalDraftFingerprintBaseline(
+        lastLocalDraftFingerprintRef,
+        {
+          title: postTitle,
+          content: currentPostContent,
+          summary: postSummary,
+          thumbnailUrl: postThumbnailUrl,
+          thumbnailFocusX: postThumbnailFocusX,
+          thumbnailFocusY: postThumbnailFocusY,
+          thumbnailZoom: postThumbnailZoom,
+          tags: postTags,
+          category: postCategory,
+          visibility: postVisibility,
+        },
+        dedupeStrings
+      )
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: "새 글 작성이 완료되었습니다." }, "page")

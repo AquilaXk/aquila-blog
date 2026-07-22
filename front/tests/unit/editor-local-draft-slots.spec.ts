@@ -17,6 +17,7 @@ import {
   localDraftSourcesEqual,
   type LocalDraftPayload,
 } from "../../src/routes/Admin/editorStudioMetaModel"
+import { decideLocalDraftAutosave } from "../../src/routes/Admin/useEditorStudioDraftLifecycleModel"
 
 const createStorage = (): Storage => {
   const store = new Map<string, string>()
@@ -325,5 +326,80 @@ test.describe("editor local draft context slots", () => {
     expect(
       localDraftSourcesEqual({ kind: "post", postId: "1" }, { kind: "post", postId: "2" })
     ).toBe(false)
+  })
+
+  test("autosave adopts baseline after load settle so server content does not overwrite restorable draft", () => {
+    const serverFingerprint = '{"title":"server"}'
+    const draftFingerprint = '{"title":"local-draft"}'
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        justSettledLoad: true,
+        hasDraftContent: true,
+        editorFingerprint: serverFingerprint,
+        lastArmedFingerprint: draftFingerprint,
+        pendingRestorableDraftFingerprint: draftFingerprint,
+      })
+    ).toEqual({ action: "adopt-baseline", fingerprint: serverFingerprint })
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        justSettledLoad: false,
+        hasDraftContent: true,
+        editorFingerprint: serverFingerprint,
+        lastArmedFingerprint: draftFingerprint,
+        pendingRestorableDraftFingerprint: draftFingerprint,
+      })
+    ).toEqual({ action: "skip" })
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        justSettledLoad: false,
+        hasDraftContent: true,
+        editorFingerprint: '{"title":"user-edit"}',
+        lastArmedFingerprint: serverFingerprint,
+        pendingRestorableDraftFingerprint: draftFingerprint,
+      })
+    ).toEqual({ action: "schedule" })
+  })
+
+  test("autosave does not recreate a cleared slot until editor fingerprint changes", () => {
+    const publishedFingerprint = '{"title":"published"}'
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        justSettledLoad: true,
+        hasDraftContent: true,
+        editorFingerprint: publishedFingerprint,
+        lastArmedFingerprint: "",
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "adopt-baseline", fingerprint: publishedFingerprint })
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        justSettledLoad: false,
+        hasDraftContent: true,
+        editorFingerprint: publishedFingerprint,
+        lastArmedFingerprint: publishedFingerprint,
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "skip" })
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        justSettledLoad: false,
+        hasDraftContent: true,
+        editorFingerprint: '{"title":"edited-again"}',
+        lastArmedFingerprint: publishedFingerprint,
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "schedule" })
   })
 })

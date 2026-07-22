@@ -25,6 +25,64 @@ type PublishNotice = { tone: NoticeTone; text: string }
 type PublishTarget = "page" | "modal"
 type EditorMode = "create" | "edit"
 
+export type LocalDraftAutosaveDecisionInput = {
+  loadingKey: string
+  /** True when loadingKey just transitioned from non-empty to empty. */
+  justSettledLoad: boolean
+  hasDraftContent: boolean
+  editorFingerprint: string
+  lastArmedFingerprint: string
+  /**
+   * Fingerprint of a restorable slot draft, if any.
+   * Used to block server-baseline overwrite before the post-load baseline is adopted.
+   */
+  pendingRestorableDraftFingerprint: string | null
+}
+
+export type LocalDraftAutosaveDecision =
+  | { action: "skip" }
+  | { action: "adopt-baseline"; fingerprint: string }
+  | { action: "schedule" }
+
+/**
+ * Decide whether autosave should write, adopt the editor as a non-persist baseline,
+ * or stay idle. Callers must apply `adopt-baseline` to lastArmedFingerprint without
+ * writing storage.
+ */
+export const decideLocalDraftAutosave = (
+  input: LocalDraftAutosaveDecisionInput
+): LocalDraftAutosaveDecision => {
+  if (input.loadingKey.length > 0) {
+    return { action: "skip" }
+  }
+
+  // After load/switch/publish settles: arm baseline to current editor so we neither
+  // overwrite a restorable draft with server content nor recreate a just-cleared slot.
+  if (input.justSettledLoad) {
+    return { action: "adopt-baseline", fingerprint: input.editorFingerprint }
+  }
+
+  if (!input.hasDraftContent) {
+    return { action: "skip" }
+  }
+
+  if (input.lastArmedFingerprint === input.editorFingerprint) {
+    return { action: "skip" }
+  }
+
+  // Pending restoreable draft still pointed at by lastArmed means load UI hydrated the
+  // stored draft fingerprint before server content arrived — do not overwrite the slot.
+  if (
+    input.pendingRestorableDraftFingerprint != null &&
+    input.pendingRestorableDraftFingerprint !== input.editorFingerprint &&
+    input.lastArmedFingerprint === input.pendingRestorableDraftFingerprint
+  ) {
+    return { action: "skip" }
+  }
+
+  return { action: "schedule" }
+}
+
 type UseEditorStudioLocalDraftLifecycleParams = {
   editorMode: EditorMode
   postId: string
@@ -321,7 +379,8 @@ export const useEditorStudioLocalDraftLifecycle = ({
 
   const clearLocalDraft = useCallback(() => {
     removeLocalDraft(draftSource)
-    lastLocalDraftFingerprintRef.current = ""
+    // Keep editor fingerprint as baseline so autosave does not recreate the cleared slot.
+    lastLocalDraftFingerprintRef.current = localDraftFingerprint
     setLocalDraftSavedAt("")
     setLocalDraftSlotLabel("")
     setPublishStatus(
@@ -334,6 +393,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
   }, [
     draftSource,
     lastLocalDraftFingerprintRef,
+    localDraftFingerprint,
     removeLocalDraft,
     setLocalDraftSavedAt,
     setLocalDraftSlotLabel,
@@ -344,40 +404,29 @@ export const useEditorStudioLocalDraftLifecycle = ({
     migrateLocalDraftV1Once()
     const localDraft = readLocalDraft(draftSource)
     if (!localDraft?.savedAt) {
-      lastLocalDraftFingerprintRef.current = ""
+      // Do not reset lastArmedFingerprint to "" — that re-arms autosave after publish/clear.
       setLocalDraftSavedAt("")
       setLocalDraftSlotLabel("")
       return
     }
 
-    lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
-      title: localDraft.title,
-      content: localDraft.content,
-      summary: localDraft.summary,
-      thumbnailUrl: localDraft.thumbnailUrl,
-      thumbnailFocusX: localDraft.thumbnailFocusX,
-      thumbnailFocusY: localDraft.thumbnailFocusY,
-      thumbnailZoom: localDraft.thumbnailZoom,
-      tags: dedupeStrings(localDraft.tags),
-      category: localDraft.category ? normalizeCategoryValue(localDraft.category) : "",
-      visibility: localDraft.visibility,
-    })
+    // Restore UI only. Do not point lastArmedFingerprint at the stored draft; that would
+    // make server-loaded editor content look dirty and overwrite the restorable slot.
     setLocalDraftSavedAt(localDraft.savedAt)
     setLocalDraftSlotLabel(describeLocalDraftSlot(localDraft))
   }, [
-    buildLocalDraftFingerprint,
-    dedupeStrings,
     draftSource,
-    lastLocalDraftFingerprintRef,
-    normalizeCategoryValue,
     readLocalDraft,
     setLocalDraftSavedAt,
     setLocalDraftSlotLabel,
   ])
 
+  const wasLoadingRef = useRef(loadingKey.length > 0)
+
   useEffect(() => {
-    // Gate autosave until load/switch settles so post A content never lands in post B / create.
-    if (loadingKey.length > 0) return
+    const wasLoading = wasLoadingRef.current
+    const isLoading = loadingKey.length > 0
+    wasLoadingRef.current = isLoading
 
     const hasDraftContent =
       postTitle.trim().length > 0 ||
@@ -387,8 +436,42 @@ export const useEditorStudioLocalDraftLifecycle = ({
       postTags.length > 0 ||
       postCategory.trim().length > 0
 
-    if (!hasDraftContent) return
-    if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) return
+    const pendingDraft = readLocalDraft(draftSource)
+    const pendingRestorableDraftFingerprint =
+      pendingDraft?.savedAt
+        ? buildLocalDraftFingerprint({
+            title: pendingDraft.title,
+            content: pendingDraft.content,
+            summary: pendingDraft.summary,
+            thumbnailUrl: pendingDraft.thumbnailUrl,
+            thumbnailFocusX: pendingDraft.thumbnailFocusX,
+            thumbnailFocusY: pendingDraft.thumbnailFocusY,
+            thumbnailZoom: pendingDraft.thumbnailZoom,
+            tags: dedupeStrings(pendingDraft.tags),
+            category: pendingDraft.category
+              ? normalizeCategoryValue(pendingDraft.category)
+              : "",
+            visibility: pendingDraft.visibility,
+          })
+        : null
+
+    const decision = decideLocalDraftAutosave({
+      loadingKey,
+      justSettledLoad: wasLoading && !isLoading,
+      hasDraftContent,
+      editorFingerprint: localDraftFingerprint,
+      lastArmedFingerprint: lastLocalDraftFingerprintRef.current,
+      pendingRestorableDraftFingerprint,
+    })
+
+    if (decision.action === "skip") {
+      return
+    }
+
+    if (decision.action === "adopt-baseline") {
+      lastLocalDraftFingerprintRef.current = decision.fingerprint
+      return
+    }
 
     const expectedSource = draftSource
     const timerId = window.setTimeout(() => {
@@ -399,16 +482,20 @@ export const useEditorStudioLocalDraftLifecycle = ({
       window.clearTimeout(timerId)
     }
   }, [
+    buildLocalDraftFingerprint,
+    dedupeStrings,
     draftSource,
     lastLocalDraftFingerprintRef,
     loadingKey,
     localDraftFingerprint,
+    normalizeCategoryValue,
     postCategory,
     postContent,
     postSummary,
     postTags,
     postThumbnailUrl,
     postTitle,
+    readLocalDraft,
     saveLocalDraft,
   ])
 

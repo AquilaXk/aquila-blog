@@ -4,11 +4,46 @@ import {
   type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react"
-import styled from "@emotion/styled"
 import MarkdownRenderer from "src/libs/markdown/MarkdownRenderer"
+import {
+  isComposingEditorKeyboardEvent,
+  isSaveShortcut,
+  planFormatShortcutMutation,
+  planHardBreak,
+  planListEnterContinuation,
+  planTabIndentMutation,
+  resolveFormatShortcut,
+} from "./markdownEditorKeyboardModel"
+import {
+  MarkdownEditorModeTabs,
+  resolveModeForBodyFocus,
+  type MarkdownEditorMode,
+} from "./markdownEditorModeTabs"
+import {
+  EditorRoot,
+  EditorToolbar,
+  ToolbarGroup,
+  ToolbarButton,
+  ToolbarUploadButton,
+  ToolbarError,
+  EditorBody,
+  WritePane,
+  WriteEditorFrame,
+  MarkdownTextarea,
+  PreviewPane,
+  PreviewArticle,
+  PreviewHeader,
+} from "./MarkdownEditor.styles"
+import {
+  applyPlannedTextMutation,
+  planToggleWrapSelection,
+  planWrapSelection,
+  type PlannedTextMutation,
+} from "./markdownEditorTextMutation"
 import {
   MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE,
   MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE,
@@ -18,6 +53,12 @@ import {
   type MarkdownFileUploadResult,
   type MarkdownImageUploadResult,
 } from "./markdownEditorUploadModel"
+import {
+  blockMarkdownSnippets,
+  getWheelDeltaYPixels,
+  modShortcutLabel,
+  toolbarMarkdownSnippets,
+} from "./markdownEditorToolbarModel"
 
 type MarkdownChangeMeta = {
   editorFocused: boolean
@@ -31,64 +72,20 @@ type MarkdownEditorProps = {
   disableMermaid?: boolean
   onChange: (markdown: string, meta?: MarkdownChangeMeta) => void
   onFlushMarkdownReady?: (flush: (() => string) | null) => void
+  onFocusRequestReady?: (focus: (() => void) | null) => void
+  onRequestSave?: () => void
   onUploadingChange?: (isUploading: boolean) => void
   onUploadImage?: (file: File) => Promise<MarkdownImageUploadResult>
   onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
 }
-
-type EditorMode = "write" | "preview" | "split"
 
 type TextareaSelection = {
   from: number
   to: number
 }
 
-const toolbarMarkdownSnippets = [
-  { label: "H1", title: "제목 1", before: "# ", after: "" },
-  { label: "H2", title: "제목 2", before: "## ", after: "" },
-  { label: "H3", title: "제목 3", before: "### ", after: "" },
-  { label: "B", title: "굵게", before: "**", after: "**" },
-  { label: "I", title: "기울임", before: "_", after: "_" },
-  { label: ">", title: "인용문", before: "> ", after: "" },
-  { label: "List", title: "목록", before: "- ", after: "" },
-  { label: "Task", title: "작업 목록", before: "- [ ] ", after: "" },
-] as const
-
-const tableSnippet = [
-  "",
-  "| 항목 | 설명 |",
-  "| --- | --- |",
-  "| 값 | 내용 |",
-  "",
-].join("\n")
-
-const codeBlockSnippet = ["", '```kotlin title="invalidatePost.kt"', "fun example() = Unit", "```", ""].join("\n")
-const mermaidSnippet = ["", "```mermaid", "flowchart LR", "    A[Admin write] --> B[DB commit]", "```", ""].join("\n")
-const calloutSnippet = ["", "> [!TIP]", "> **설계 원칙**", "> 내용을 입력하세요.", ""].join("\n")
-const toggleSnippet = ["", ":::toggle 자세히 보기", "내용을 입력하세요.", ":::", ""].join("\n")
-
-const blockMarkdownSnippets = [
-  { label: "Code", title: "코드 블록", snippet: codeBlockSnippet },
-  { label: "Table", title: "표", snippet: tableSnippet },
-  { label: "Mermaid", title: "Mermaid", snippet: mermaidSnippet, disableWhenMermaid: true },
-  { label: "Callout", title: "콜아웃", snippet: calloutSnippet },
-  { label: "Toggle", title: "토글", snippet: toggleSnippet },
-] as const
-
-const WHEEL_DELTA_PIXEL = 0
-const WHEEL_DELTA_LINE = 1
-const WHEEL_DELTA_PAGE = 2
-const DEFAULT_WHEEL_LINE_HEIGHT_PX = 16
-
-const getWheelDeltaYPixels = (event: ReactWheelEvent<HTMLElement>, element: HTMLElement) => {
-  if (event.deltaMode === WHEEL_DELTA_PIXEL) return event.deltaY
-  if (event.deltaMode === WHEEL_DELTA_PAGE) return event.deltaY * element.clientHeight
-  if (event.deltaMode !== WHEEL_DELTA_LINE) return event.deltaY
-
-  const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight)
-  const resolvedLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : DEFAULT_WHEEL_LINE_HEIGHT_PX
-  return event.deltaY * resolvedLineHeight
-}
+const TEXTAREA_KEYBOARD_HELP =
+  "Tab은 2칸 들여쓰기, Shift+Tab은 내어쓰기입니다. Escape를 누른 다음 Tab은 포커스를 다음 요소로 이동합니다."
 
 export const MarkdownEditor = ({
   value,
@@ -98,18 +95,30 @@ export const MarkdownEditor = ({
   disableMermaid = false,
   onChange,
   onFlushMarkdownReady,
+  onFocusRequestReady,
+  onRequestSave,
   onUploadingChange,
   onUploadImage,
   onUploadFile,
 }: MarkdownEditorProps) => {
-  const [mode, setMode] = useState<EditorMode>("split")
+  const [mode, setMode] = useState<MarkdownEditorMode>("split")
   const [uploadError, setUploadError] = useState("")
   const [draftValue, setDraftValue] = useState(value)
+  const editorDomId = useId()
+  const writePanelId = `${editorDomId}-write-panel`
+  const previewPanelId = `${editorDomId}-preview-panel`
+  const writeTabId = `${editorDomId}-write-tab`
+  const previewTabId = `${editorDomId}-preview-tab`
+  const splitTabId = `${editorDomId}-split-tab`
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
   const uploadInFlightCountRef = useRef(0)
+  const allowNativeTabAfterEscapeRef = useRef(false)
+  const modeRef = useRef<MarkdownEditorMode>(mode)
+  const pendingBodyFocusRef = useRef(false)
+  modeRef.current = mode
 
   const setUploadInFlight = useCallback(
     (delta: number) => {
@@ -129,6 +138,36 @@ export const MarkdownEditor = ({
     onFlushMarkdownReady?.(() => valueRef.current)
     return () => onFlushMarkdownReady?.(null)
   }, [onFlushMarkdownReady])
+
+  useEffect(() => {
+    onFocusRequestReady?.(() => {
+      if (disabled) return
+      const nextMode = resolveModeForBodyFocus(modeRef.current)
+      if (nextMode !== modeRef.current) {
+        pendingBodyFocusRef.current = true
+        setMode(nextMode)
+        return
+      }
+      const textarea = textareaRef.current
+      if (textarea) {
+        textarea.focus()
+        return
+      }
+      pendingBodyFocusRef.current = true
+    })
+    return () => onFocusRequestReady?.(null)
+  }, [disabled, onFocusRequestReady])
+
+  useEffect(() => {
+    if (!pendingBodyFocusRef.current || disabled || mode === "preview") return
+    const frame = window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      pendingBodyFocusRef.current = false
+      textarea.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [disabled, mode])
 
   const commitMarkdown = useCallback(
     (nextMarkdown: string, editorFocused = false) => {
@@ -163,6 +202,28 @@ export const MarkdownEditor = ({
     textarea.setSelectionRange(nextSelection.from, nextSelection.to)
     selectionRef.current = nextSelection
   }, [])
+
+  const applyMutationPlan = useCallback(
+    (plan: PlannedTextMutation) => {
+      const textarea = textareaRef.current
+      if (!textarea || disabled) return false
+      textarea.focus()
+      const nextMarkdown = applyPlannedTextMutation(textarea, plan)
+      selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
+      commitMarkdown(nextMarkdown, true)
+      const nextFrom = plan.selectionStart
+      const nextTo = plan.selectionEnd
+      window.requestAnimationFrame(() => {
+        const current = textareaRef.current
+        if (!current) return
+        current.focus()
+        current.setSelectionRange(nextFrom, nextTo)
+        selectionRef.current = { from: nextFrom, to: nextTo }
+      })
+      return true
+    },
+    [commitMarkdown, disabled]
+  )
 
   const syncScrollPosition = useCallback((source: HTMLElement, target: HTMLElement | null) => {
     if (!target) return
@@ -213,53 +274,46 @@ export const MarkdownEditor = ({
     })
   }, [])
 
-  const handleTextareaKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.shiftKey || (!event.metaKey && !event.ctrlKey)) return
-
-      if (event.key === "Home") {
-        event.preventDefault()
-        setTextareaSelection(0)
-        return
-      }
-
-      if (event.key === "End") {
-        event.preventDefault()
-        setTextareaSelection(valueRef.current.length)
-      }
-    },
-    [setTextareaSelection]
-  )
+  const resolveActiveSelection = useCallback(() => {
+    const textarea = textareaRef.current
+    if (textarea && document.activeElement === textarea) {
+      return rememberTextareaSelection()
+    }
+    return selectionRef.current
+  }, [rememberTextareaSelection])
 
   const insertMarkdownAtEditorSelection = useCallback(
-    (before: string, after = "") => {
+    (before: string, after = "", options?: { toggle?: boolean }) => {
       const textarea = textareaRef.current
       if (!textarea || disabled) return false
 
-      const { from: selectionStart, to: selectionEnd } =
-        document.activeElement === textarea ? rememberTextareaSelection() : selectionRef.current
-      const selectedMarkdown = valueRef.current.slice(selectionStart, selectionEnd)
-      const insertedMarkdown = `${before}${selectedMarkdown}${after}`
-      const nextCursorFrom = selectionStart + before.length
-      const nextCursorTo = nextCursorFrom + selectedMarkdown.length
-      const nextMarkdown = `${valueRef.current.slice(0, selectionStart)}${insertedMarkdown}${valueRef.current.slice(selectionEnd)}`
+      const { from: selectionStart, to: selectionEnd } = resolveActiveSelection()
+      const plan = options?.toggle
+        ? planToggleWrapSelection(valueRef.current, selectionStart, selectionEnd, before, after)
+        : planWrapSelection(valueRef.current, selectionStart, selectionEnd, before, after)
 
-      commitMarkdown(nextMarkdown, true)
-      window.requestAnimationFrame(() => {
-        textarea.focus()
-        textarea.setSelectionRange(nextCursorFrom, nextCursorTo)
-      })
-      return true
+      return applyMutationPlan(plan)
     },
-    [commitMarkdown, disabled, rememberTextareaSelection]
+    [applyMutationPlan, disabled, resolveActiveSelection]
   )
 
   const applySnippet = useCallback(
-    (before: string, after = "") => {
-      if (insertMarkdownAtEditorSelection(before, after)) return
+    (before: string, after = "", options?: { toggle?: boolean }) => {
+      if (insertMarkdownAtEditorSelection(before, after, options)) return
       commitMarkdown(`${valueRef.current}${before}${after}`, true)
     },
     [commitMarkdown, insertMarkdownAtEditorSelection]
+  )
+
+  const applyFormatShortcutOrAppend = useCallback(
+    (shortcut: Parameters<typeof planFormatShortcutMutation>[3]) => {
+      const { from, to } = resolveActiveSelection()
+      const plan = planFormatShortcutMutation(valueRef.current, from, to, shortcut)
+      if (applyMutationPlan(plan)) return
+      // Preview-only unmounts the textarea; match applySnippet append fallback.
+      commitMarkdown(`${valueRef.current}${plan.replacement}`, true)
+    },
+    [applyMutationPlan, commitMarkdown, resolveActiveSelection]
   )
 
   const insertUploadedMarkdown = useCallback(
@@ -268,6 +322,120 @@ export const MarkdownEditor = ({
       commitMarkdown(`${valueRef.current}${markdown}`, true)
     },
     [commitMarkdown, insertMarkdownAtEditorSelection]
+  )
+
+  const handleTabKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (allowNativeTabAfterEscapeRef.current) {
+        allowNativeTabAfterEscapeRef.current = false
+        return
+      }
+      const { from, to } = rememberTextareaSelection()
+      const tabPlan = planTabIndentMutation(valueRef.current, from, to, event.shiftKey)
+      if (!tabPlan) {
+        if (event.shiftKey) return
+        event.preventDefault()
+        return
+      }
+      event.preventDefault()
+      applyMutationPlan(tabPlan)
+    },
+    [applyMutationPlan, rememberTextareaSelection]
+  )
+
+  const handleEnterKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (event.key !== "Enter") return false
+
+      if (event.shiftKey) {
+        event.preventDefault()
+        const { from, to } = rememberTextareaSelection()
+        applyMutationPlan(planHardBreak(from, to))
+        return true
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) return false
+
+      const { from, to } = rememberTextareaSelection()
+      const listPlan = planListEnterContinuation(valueRef.current, from, to)
+      if (!listPlan) return true
+      event.preventDefault()
+      applyMutationPlan(listPlan)
+      return true
+    },
+    [applyMutationPlan, rememberTextareaSelection]
+  )
+
+  const handleSaveShortcutKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (!isSaveShortcut(event)) return false
+      if (!onRequestSave) return true
+      event.preventDefault()
+      onRequestSave()
+      return true
+    },
+    [onRequestSave]
+  )
+
+  const handleFormatShortcutKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+      const formatShortcut = resolveFormatShortcut(event)
+      if (!formatShortcut) return false
+      event.preventDefault()
+      const { from, to } = rememberTextareaSelection()
+      applyMutationPlan(planFormatShortcutMutation(valueRef.current, from, to, formatShortcut))
+      return true
+    },
+    [applyMutationPlan, rememberTextareaSelection]
+  )
+
+  const handleHomeEndKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (event.shiftKey || (!event.metaKey && !event.ctrlKey)) return false
+      if (event.key === "Home") {
+        event.preventDefault()
+        setTextareaSelection(0)
+        return true
+      }
+      if (event.key === "End") {
+        event.preventDefault()
+        setTextareaSelection(valueRef.current.length)
+        return true
+      }
+      return false
+    },
+    [setTextareaSelection]
+  )
+
+  const handleTextareaKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (disabled || isComposingEditorKeyboardEvent(event)) return
+
+      if (event.key === "Escape") {
+        allowNativeTabAfterEscapeRef.current = true
+        return
+      }
+
+      if (event.key === "Tab") {
+        handleTabKeyDown(event)
+        return
+      }
+
+      allowNativeTabAfterEscapeRef.current = false
+
+      if (handleEnterKeyDown(event)) return
+      if (handleSaveShortcutKeyDown(event)) return
+      if (handleFormatShortcutKeyDown(event)) return
+      handleHomeEndKeyDown(event)
+    },
+    [
+      disabled,
+      handleEnterKeyDown,
+      handleFormatShortcutKeyDown,
+      handleHomeEndKeyDown,
+      handleSaveShortcutKeyDown,
+      handleTabKeyDown,
+    ]
   )
 
   const handleImageInput = useCallback(
@@ -335,7 +503,11 @@ export const MarkdownEditor = ({
               aria-label={snippet.title}
               disabled={disabled}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applySnippet(snippet.before, snippet.after)}
+              onClick={() =>
+                applySnippet(snippet.before, snippet.after, {
+                  toggle: "toggle" in snippet && snippet.toggle,
+                })
+              }
             >
               {snippet.label}
             </ToolbarButton>
@@ -380,35 +552,41 @@ export const MarkdownEditor = ({
           </ToolbarUploadButton>
           <ToolbarButton
             type="button"
-            title="링크"
-            aria-label="링크"
+            title={`링크 (${modShortcutLabel}K)`}
+            aria-label={`링크 (${modShortcutLabel}K)`}
             disabled={disabled}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applySnippet("[", "](https://)")}
+            onClick={() => applyFormatShortcutOrAppend("link")}
           >
             Link
           </ToolbarButton>
         </ToolbarGroup>
-        <ModeTabs role="tablist" aria-label="Markdown editor mode">
-          <ModeTab type="button" role="tab" aria-selected={mode === "write"} onClick={() => setMode("write")}>
-            Write
-          </ModeTab>
-          <ModeTab type="button" role="tab" aria-selected={mode === "preview"} onClick={() => setMode("preview")}>
-            Preview
-          </ModeTab>
-          <ModeTab type="button" role="tab" aria-selected={mode === "split"} onClick={() => setMode("split")}>
-            Split
-          </ModeTab>
-        </ModeTabs>
+        <MarkdownEditorModeTabs
+          mode={mode}
+          onModeChange={setMode}
+          writePanelId={writePanelId}
+          previewPanelId={previewPanelId}
+          writeTabId={writeTabId}
+          previewTabId={previewTabId}
+          splitTabId={splitTabId}
+        />
       </EditorToolbar>
       {uploadError ? <ToolbarError role="alert">{uploadError}</ToolbarError> : null}
       <EditorBody data-mode={mode}>
         {mode !== "preview" ? (
-          <WritePane data-pane="write" data-testid="markdown-editor-write-pane">
+          <WritePane
+            id={writePanelId}
+            role="tabpanel"
+            aria-labelledby={mode === "split" ? `${writeTabId} ${splitTabId}` : writeTabId}
+            data-pane="write"
+            data-testid="markdown-editor-write-pane"
+          >
             <WriteEditorFrame data-testid="markdown-textarea-frame">
               <MarkdownTextarea
                 ref={textareaRef}
                 aria-label="Markdown 본문"
+                aria-description={TEXTAREA_KEYBOARD_HELP}
+                title={TEXTAREA_KEYBOARD_HELP}
                 spellCheck={false}
                 disabled={disabled}
                 value={draftValue}
@@ -431,6 +609,9 @@ export const MarkdownEditor = ({
         ) : null}
         {mode !== "write" ? (
           <PreviewPane
+            id={previewPanelId}
+            role="tabpanel"
+            aria-labelledby={mode === "split" ? `${previewTabId} ${splitTabId}` : previewTabId}
             ref={previewScrollRef}
             data-pane="preview"
             data-testid="markdown-editor-preview-pane"
@@ -439,9 +620,7 @@ export const MarkdownEditor = ({
             onScroll={handlePreviewScroll}
             onWheel={handlePreviewWheel}
           >
-            <PreviewArticle
-              data-testid="markdown-editor-preview-scroll"
-            >
+            <PreviewArticle data-testid="markdown-editor-preview-scroll">
               {previewTitle || previewSummary ? (
                 <PreviewHeader>
                   <span>Public preview</span>
@@ -457,304 +636,3 @@ export const MarkdownEditor = ({
     </EditorRoot>
   )
 }
-
-const EditorRoot = styled.section`
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 0;
-  overflow: hidden;
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-  color: ${({ theme }) => theme.colors.gray12};
-`
-
-const EditorToolbar = styled.div`
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 12px;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-
-  @media (max-width: 820px) {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-`
-
-const ModeTabs = styled.div`
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-`
-
-const ModeTab = styled.button`
-  border: 0;
-  height: 30px;
-  padding: 0 11px;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-
-  &[aria-selected="true"] {
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
-    color: ${({ theme }) => theme.colors.gray12};
-    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.gray6};
-  }
-
-  &:focus-visible {
-    outline: 2px solid ${({ theme }) => theme.colors.blue8};
-    outline-offset: 2px;
-  }
-`
-
-const ToolbarGroup = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
-
-  @media (max-width: 820px) {
-    width: 100%;
-  }
-`
-
-const ToolbarButton = styled.button`
-  border: 1px solid transparent;
-  border-radius: 4px;
-  height: 31px;
-  min-width: 31px;
-  padding: 0 8px;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
-  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  cursor: pointer;
-
-  &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-`
-
-const ToolbarUploadButton = styled.label`
-  border: 1px solid transparent;
-  border-radius: 4px;
-  height: 31px;
-  min-width: 31px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 8px;
-  color: ${({ theme }) => theme.colors.gray10};
-  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  cursor: pointer;
-
-  &:hover:not([aria-disabled="true"]) {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &[aria-disabled="true"] {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  input {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    opacity: 0;
-    pointer-events: none;
-  }
-`
-
-const ToolbarError = styled.div`
-  padding: 0.55rem 0.85rem;
-  border-bottom: 1px solid rgba(248, 81, 73, 0.35);
-  background: rgba(248, 81, 73, 0.1);
-  color: #ffb4ad;
-  font-size: 0.86rem;
-  font-weight: 600;
-`
-
-const EditorBody = styled.div`
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-
-  &[data-mode="write"],
-  &[data-mode="preview"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  &[data-mode="preview"] [data-testid="markdown-editor-preview-scroll"] {
-    max-width: 820px;
-  }
-
-  @media (max-width: 1100px) {
-    grid-template-columns: minmax(0, 1fr);
-
-    &[data-mode="split"] [data-pane="write"] {
-      height: 46vh;
-      border-right: 0;
-      border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-    }
-
-    &[data-mode="split"] [data-pane="preview"] {
-      height: auto;
-    }
-  }
-`
-
-const WritePane = styled.div`
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: auto;
-  border-right: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: #0f1728;
-`
-
-const WriteEditorFrame = styled.div`
-  min-height: 100%;
-  background: #0f1728;
-  color: #dbe7ff;
-`
-
-const MarkdownTextarea = styled.textarea`
-  width: 100%;
-  height: 100%;
-  min-height: 640px;
-  max-width: none;
-  padding: 30px 32px;
-  border: 0;
-  outline: none;
-  resize: none;
-  background: #0f1728;
-  color: #d9e4f7;
-  caret-color: #dbe7ff;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.78;
-  tab-size: 2;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-
-  &::selection {
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 139, 253, 0.45)" : "rgba(9, 105, 218, 0.24)")};
-  }
-
-  &:focus,
-  &:focus-visible {
-    outline: 0;
-    box-shadow: none;
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.7;
-  }
-
-  @media (max-width: 820px) {
-    padding: 22px 18px;
-  }
-`
-
-const PreviewPane = styled.div`
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-`
-
-const PreviewArticle = styled.article`
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 48px 44px 110px;
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-
-  .aq-markdown {
-    width: min(100%, 760px);
-    max-width: 760px;
-    margin-top: 0;
-    margin-inline: auto;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  .aq-markdown > :first-child {
-    margin-top: 0;
-  }
-
-  @media (max-width: 820px) {
-    padding: 34px 20px 90px;
-  }
-`
-
-const PreviewHeader = styled.header`
-  width: min(100%, 760px);
-  max-width: 760px;
-  margin: 0 auto 34px;
-
-  span {
-    display: block;
-    margin-bottom: 14px;
-    color: ${({ theme }) => theme.publicDesign.accent};
-    font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    margin: 12px 0 18px;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 43px;
-    font-weight: 850;
-    line-height: 1.13;
-    letter-spacing: -0.055em;
-  }
-
-  p {
-    margin: 0;
-    padding: 4px 0 4px 20px;
-    border-left: 3px solid ${({ theme }) => theme.publicDesign.accent};
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 18px;
-    line-height: 1.75;
-  }
-`

@@ -75,6 +75,14 @@ export const isCandidateInSyncWithAdmin = (adminContent: string, candidateConten
   const candidateBlocks = parseFencedCodeBlocks(candidateContent.replace(/\r\n?/g, "\n"))
   if (adminBlocks.length !== candidateBlocks.length) return false
 
+  for (let index = 0; index < adminBlocks.length; index += 1) {
+    const adminOpening = adminBlocks[index]?.lines[0] ?? ""
+    const candidateOpening = candidateBlocks[index]?.lines[0] ?? ""
+    if (adminOpening.trim() !== candidateOpening.trim()) {
+      return false
+    }
+  }
+
   return extractNonFenceProse(adminContent) === extractNonFenceProse(candidateContent)
 }
 

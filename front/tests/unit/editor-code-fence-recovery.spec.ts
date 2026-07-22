@@ -332,6 +332,57 @@ test.describe("editor code fence recovery", () => {
     expect(result.content).not.toContain("fun example() = Unit")
   })
 
+  test("does not restore empty fences from contentHtml when fence opening changed in admin", () => {
+    const adminWithChangedLanguage = [
+      "intro",
+      "",
+      "```typescript",
+      "",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+    const staleHtmlWithKotlin = filledFenceContent
+
+    expect(isCandidateInSyncWithAdmin(adminWithChangedLanguage, staleHtmlWithKotlin)).toBe(false)
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: adminWithChangedLanguage,
+      contentHtmlBodyCandidate: staleHtmlWithKotlin,
+      publicFallbackSucceeded: false,
+    })
+
+    expect(result.source).toBe("unrecovered")
+    expect(result.recovered).toBe(false)
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(true)
+    expect(result.content).not.toContain("fun example() = Unit")
+  })
+
+  test("does not restore empty fences from contentHtml when fence info string changed in admin", () => {
+    const adminWithFenceTitle = [
+      "intro",
+      "",
+      '```kotlin title="Updated"',
+      "",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+    const staleHtmlWithoutTitle = filledFenceContent
+
+    expect(isCandidateInSyncWithAdmin(adminWithFenceTitle, staleHtmlWithoutTitle)).toBe(false)
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: adminWithFenceTitle,
+      contentHtmlBodyCandidate: staleHtmlWithoutTitle,
+      publicFallbackSucceeded: false,
+    })
+
+    expect(result.source).toBe("unrecovered")
+    expect(result.recovered).toBe(false)
+    expect(result.content).not.toContain("fun example() = Unit")
+  })
+
   test("does not restore empty fences from contentHtml when prose is out of sync", () => {
     const adminWithUpdatedProse = [
       "updated intro",

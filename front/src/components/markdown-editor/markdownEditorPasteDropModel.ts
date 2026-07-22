@@ -1,5 +1,8 @@
 import type { PlannedTextMutation } from "./markdownEditorTextMutation"
-import { escapeMarkdownLinkLabel } from "./markdownEditorUploadModel"
+import {
+  escapeMarkdownLinkLabel,
+  validateMarkdownAttachmentSize,
+} from "./markdownEditorUploadModel"
 
 /** Stable per-upload token so concurrent same-name placeholders never collide. */
 export const createUploadPlaceholderId = (): string => {
@@ -54,6 +57,50 @@ export type PasteMediaRoute =
   | { kind: "transfer-files"; files: File[] }
   | { kind: "clipboard-image"; file: File }
   | { kind: "none" }
+
+export type ReservedTransferJob =
+  | { kind: "image"; file: File; placeholder: string }
+  | { kind: "attachment"; file: File; placeholder: string }
+
+/** Plan placeholders/errors for a multi-file paste/drop without awaiting uploads. */
+export const planTransferFileReservations = (
+  files: readonly File[],
+  options: {
+    canUploadImage: boolean
+    canUploadFile: boolean
+    createId?: () => string
+  }
+): { jobs: ReservedTransferJob[]; errors: string[] } => {
+  const createId = options.createId ?? createUploadPlaceholderId
+  const jobs: ReservedTransferJob[] = []
+  const errors: string[] = []
+
+  for (const file of files) {
+    if (isImageFile(file)) {
+      if (!options.canUploadImage) continue
+      jobs.push({
+        kind: "image",
+        file,
+        placeholder: buildUploadingImagePlaceholder(file.name || "image", createId()),
+      })
+      continue
+    }
+
+    if (!options.canUploadFile) continue
+    const sizeError = validateMarkdownAttachmentSize(file)
+    if (sizeError) {
+      errors.push(sizeError)
+      continue
+    }
+    jobs.push({
+      kind: "attachment",
+      file,
+      placeholder: buildUploadingAttachmentPlaceholder(file.name || "file", createId()),
+    })
+  }
+
+  return { jobs, errors }
+}
 
 /**
  * Prefer the full clipboard `files` collection for multi-file paste.

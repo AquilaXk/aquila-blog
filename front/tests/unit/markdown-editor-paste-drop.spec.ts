@@ -14,6 +14,7 @@ import {
   planAppendAtEnd,
   planLinkifySelectionWithUrl,
   planReplaceExactSubstring,
+  planTransferFileReservations,
   readClipboardPlainText,
   resolvePasteMediaRoute,
   toInlineMarkdownSnippet,
@@ -23,6 +24,8 @@ import {
   planReplaceSelection,
 } from "../../src/components/markdown-editor/markdownEditorTextMutation"
 import {
+  MARKDOWN_ATTACHMENT_MAX_BYTES,
+  MARKDOWN_ATTACHMENT_TOO_LARGE_MESSAGE,
   resolveMarkdownAttachmentLink,
   resolveMarkdownImageEmbed,
 } from "../../src/components/markdown-editor/markdownEditorUploadModel"
@@ -210,15 +213,35 @@ test.describe("markdown editor paste/drop model", () => {
     expect(appended.selectionEnd).toBe(caret)
   })
 
-  test("processes mixed transfer files in original array order", () => {
+  test("plans multi-file reservations in original order before any upload await", () => {
+    const pdf = makeFile("doc.pdf", "application/pdf")
+    const image = makeFile("shot.png", "image/png")
+    const oversized = { name: "huge.bin", type: "application/octet-stream", size: MARKDOWN_ATTACHMENT_MAX_BYTES + 1 } as File
+    let id = 0
+    const { jobs, errors } = planTransferFileReservations([pdf, image, oversized], {
+      canUploadImage: true,
+      canUploadFile: true,
+      createId: () => `id-${++id}`,
+    })
+
+    expect(jobs.map((job) => job.kind)).toEqual(["attachment", "image"])
+    expect(jobs[0]?.placeholder).toContain("doc.pdf")
+    expect(jobs[1]?.placeholder).toContain("shot.png")
+    expect(jobs.map((job) => job.placeholder).join("")).toBe(
+      `${jobs[0]?.placeholder}${jobs[1]?.placeholder}`
+    )
+    expect(errors).toEqual([MARKDOWN_ATTACHMENT_TOO_LARGE_MESSAGE])
+
     const mediaSource = readFileSync(
       sourcePath("components", "markdown-editor", "useMarkdownEditorMediaTransfers.ts"),
       "utf8"
     )
-    expect(mediaSource).toContain("for (const file of files)")
-    expect(mediaSource).toContain("isImageFile(file)")
+    expect(mediaSource).toContain("planTransferFileReservations")
+    expect(mediaSource).toContain('jobs.map((job) => job.placeholder).join("")')
+    expect(mediaSource).toContain("completeReservedJob")
+    expect(mediaSource).toContain("reportUploadError")
+    expect(mediaSource).toContain("clearUploadError: false")
     expect(mediaSource).not.toContain("partitionUploadFiles(files)")
-    expect(mediaSource).toContain("applyBackgroundMarkdownMutation")
   })
 
   test("removes an exact placeholder on upload failure without leaving residue", () => {
@@ -273,21 +296,24 @@ test.describe("markdown editor paste/drop model", () => {
     expect(editorSource).toContain("onDrop={handleDrop}")
     expect(editorSource).toContain("useMarkdownEditorMediaTransfers")
     expect(editorSource).toContain("applyBackgroundMarkdownMutation")
+    expect(editorSource).toContain("clearUploadError")
 
     expect(mediaSource).toContain("buildUploadingImagePlaceholder")
     expect(mediaSource).toContain("createUploadPlaceholderId")
     expect(mediaSource).toContain("resolvePasteMediaRoute")
     expect(mediaSource).toContain("uploadImageWithPlaceholder")
-    expect(mediaSource).toContain("uploadAttachmentWithPlaceholder")
+    expect(mediaSource).toContain("planTransferFileReservations")
     expect(mediaSource).toContain("parseSingleHttpUrl")
     expect(mediaSource).toContain("planLinkifySelectionWithUrl")
     expect(mediaSource).toContain("processTransferFiles")
     expect(mediaSource).toContain("applyBackgroundMarkdownMutation")
+    expect(mediaSource).toContain("retainedUploadErrorRef")
 
     expect(modelSource).toContain("![업로드 중:")
     expect(modelSource).toContain("createUploadPlaceholderId")
     expect(modelSource).toContain("resolvePasteMediaRoute")
     expect(modelSource).toContain("escapeMarkdownLinkLabel")
+    expect(modelSource).toContain("planTransferFileReservations")
     expect(rootModelSource).toContain(
       'export { extractImageFileFromClipboard } from "src/components/markdown-editor/markdownEditorPasteDropModel"'
     )

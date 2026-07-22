@@ -171,10 +171,12 @@ export const MarkdownEditor = ({
   }, [disabled, mode])
 
   const commitMarkdown = useCallback(
-    (nextMarkdown: string, editorFocused = false) => {
+    (nextMarkdown: string, editorFocused = false, options?: { clearUploadError?: boolean }) => {
       valueRef.current = nextMarkdown
       setDraftValue(nextMarkdown)
-      setUploadError("")
+      if (options?.clearUploadError !== false) {
+        setUploadError("")
+      }
       onChange(nextMarkdown, { editorFocused })
     },
     [onChange]
@@ -205,13 +207,13 @@ export const MarkdownEditor = ({
   }, [])
 
   const applyMutationPlan = useCallback(
-    (plan: PlannedTextMutation) => {
+    (plan: PlannedTextMutation, options?: { clearUploadError?: boolean }) => {
       const textarea = textareaRef.current
       if (!textarea || disabled) return false
       textarea.focus()
       const nextMarkdown = applyPlannedTextMutation(textarea, plan)
       selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
-      commitMarkdown(nextMarkdown, true)
+      commitMarkdown(nextMarkdown, true, options)
       const nextFrom = plan.selectionStart
       const nextTo = plan.selectionEnd
       window.requestAnimationFrame(() => {
@@ -240,27 +242,28 @@ export const MarkdownEditor = ({
   }, [rememberTextareaSelection])
 
   const applyPlannedMarkdownMutation = useCallback(
-    (plan: PlannedTextMutation) => {
-      if (applyMutationPlan(plan)) return true
+    (plan: PlannedTextMutation, options?: { clearUploadError?: boolean }) => {
+      if (applyMutationPlan(plan, options)) return true
 
       const next = applyPlannedTextMutationToValue(valueRef.current, plan)
       selectionRef.current = { from: next.selectionStart, to: next.selectionEnd }
-      commitMarkdown(next.value, true)
+      commitMarkdown(next.value, true, options)
       return true
     },
     [applyMutationPlan, commitMarkdown]
   )
 
-  /** Async upload placeholder swap/remove — keep undo via setRangeText, never steal focus. */
+  /** Async upload placeholder swap/remove — keep undo via setRangeText, never steal focus/errors. */
   const applyBackgroundMarkdownMutation = useCallback(
     (plan: PlannedTextMutation) => {
       if (disabled) return false
       const textarea = textareaRef.current
       const wasFocused = Boolean(textarea && document.activeElement === textarea)
+      const commitOptions = { clearUploadError: false as const }
       if (textarea) {
         const nextMarkdown = applyPlannedTextMutation(textarea, plan)
         selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
-        commitMarkdown(nextMarkdown, wasFocused)
+        commitMarkdown(nextMarkdown, wasFocused, commitOptions)
         if (wasFocused) {
           const nextFrom = plan.selectionStart
           const nextTo = plan.selectionEnd
@@ -276,7 +279,7 @@ export const MarkdownEditor = ({
 
       const next = applyPlannedTextMutationToValue(valueRef.current, plan)
       selectionRef.current = { from: next.selectionStart, to: next.selectionEnd }
-      commitMarkdown(next.value, false)
+      commitMarkdown(next.value, false, commitOptions)
       return true
     },
     [commitMarkdown, disabled]

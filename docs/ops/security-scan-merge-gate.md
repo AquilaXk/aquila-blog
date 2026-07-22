@@ -19,3 +19,13 @@ Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets
 - Validator: `node tools/guards/check-vulnerability-exceptions.mjs`
 - Required fields per entry: `package`, `cve`, `issue` (`#N` or GitHub issue URL), `owner` (`@handle`), `expiry` (`YYYY-MM-DD`), `reason`
 - Expired or schema-invalid entries fail CI
+- Applied to Trivy image findings, OSV High/Critical, and yarn audit High/Critical (`tools/guards/check-yarn-audit-high.mjs`)
+
+## Frontend audit notes
+
+- Do **not** pass yarn classic `--groups dependencies,devDependencies` — it can audit 0 packages and exit 0 (false pass).
+- Yarn gate parses `yarn audit --json`, fails if `totalDependencies <= 0`, then fails on High/Critical after allowlist.
+
+## Required repository secret
+
+`NVD_API_KEY` must exist in repo Actions secrets. Missing secret fails `backend-dependency-check` on every PR/push (by design).

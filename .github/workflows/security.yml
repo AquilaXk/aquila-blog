@@ -197,24 +197,24 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Yarn audit High/Critical fail
-        working-directory: front
-        run: yarn audit --level high --groups dependencies,devDependencies
+        run: node tools/guards/check-yarn-audit-high.mjs --cwd front
 
       - name: Install OSV Scanner
         env:
-          OSV_SCANNER_VERSION: "v2.0.3"
+          OSV_SCANNER_VERSION: "v2.4.0"
         run: |
           set -euo pipefail
           curl -fsSL -o /tmp/osv-scanner \
             "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
           chmod +x /tmp/osv-scanner
           sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
+          osv-scanner --version
 
       - name: OSV scan frontend yarn.lock
         run: |
           set -euo pipefail
           set +e
-          osv-scanner --lockfile=front/yarn.lock --format json --output="${RUNNER_TEMP}/osv-front.json"
+          osv-scanner --lockfile=front/yarn.lock --format json --output-file="${RUNNER_TEMP}/osv-front.json"
           osv_status=$?
           set -e
           # 0 = clean, 1 = vulns found (still parse), other = tool failure
@@ -222,31 +222,8 @@ jobs:
             echo "osv-scanner failed with status ${osv_status}" >&2
             exit "${osv_status}"
           fi
-          python3 - <<'PY'
-          import json, os, sys
-          path = os.environ["RUNNER_TEMP"] + "/osv-front.json"
-          if not os.path.exists(path) or os.path.getsize(path) == 0:
-              print("OSV report missing", file=sys.stderr)
-              sys.exit(1)
-          data = json.load(open(path, encoding="utf-8"))
-          results = data.get("results") or []
-          blocking = []
-          for result in results:
-              for pkg in result.get("packages") or []:
-                  name = ((pkg.get("package") or {}).get("name")) or "unknown"
-                  for vuln in pkg.get("vulnerabilities") or []:
-                      aliases = " ".join(vuln.get("aliases") or [])
-                      vid = vuln.get("id") or "unknown"
-                      severity = str((vuln.get("database_specific") or {}).get("severity") or "").upper()
-                      if "CRITICAL" in severity or severity == "HIGH" or " HIGH" in f" {severity}":
-                          blocking.append(f"{vid} {name} {severity} {aliases}".strip())
-          if blocking:
-              print("OSV High/Critical findings:")
-              for item in blocking[:100]:
-                  print(f" - {item}")
-              sys.exit(1)
-          print("OSV scan passed for High/Critical severity signals (yarn audit remains primary gate).")
-          PY
+          test -s "${RUNNER_TEMP}/osv-front.json"
+          node tools/guards/check-vulnerability-exceptions.mjs --filter-osv "${RUNNER_TEMP}/osv-front.json"
 
   container-image-scan:
     runs-on: ubuntu-latest
@@ -269,7 +246,7 @@ jobs:
 
       - name: Install Trivy
         env:
-          TRIVY_VERSION: "0.58.1"
+          TRIVY_VERSION: "0.72.0"
         run: |
           set -euo pipefail
           curl -fsSL -o /tmp/trivy.tgz \

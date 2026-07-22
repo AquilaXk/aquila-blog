@@ -284,7 +284,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   const { requestGuardedAction, dialog: unsavedExitDialog } = useEditorStudioUnsavedExitGuard({
     enabled: Boolean(sessionMember),
     isDirty: isEditorUnsavedDirtyLabel(editorPersistenceState.text),
-    router,
   })
   const handleGuardedExitDedicatedEditor = useCallback(() => {
     requestGuardedAction(() => {
@@ -538,7 +537,12 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   }
 
   if (shouldShowEditorLoadingState) {
-    return <EditorStudioDedicatedEditorLoadingState />
+    return (
+      <>
+        <EditorStudioDedicatedEditorLoadingState />
+        {unsavedExitDialog}
+      </>
+    )
   }
 
   if (isDedicatedEditorRoute) {

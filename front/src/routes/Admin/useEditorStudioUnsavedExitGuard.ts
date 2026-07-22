@@ -1,5 +1,5 @@
-import type { NextRouter } from "next/router"
-import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useRouter } from "next/router"
+import { createElement, useCallback, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "src/design-system/ConfirmDialog"
 import {
   EDITOR_UNSAVED_CHANGES_MESSAGE,
@@ -9,7 +9,6 @@ import {
 type UseEditorStudioUnsavedExitGuardParams = {
   enabled: boolean
   isDirty: boolean
-  router: NextRouter
 }
 
 type PendingNavigation = {
@@ -21,10 +20,10 @@ type PendingNavigation = {
 export const useEditorStudioUnsavedExitGuard = ({
   enabled,
   isDirty,
-  router,
 }: UseEditorStudioUnsavedExitGuardParams) => {
   const titleId = useId()
   const descriptionId = useId()
+  const router = useRouter()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const pendingRef = useRef<PendingNavigation | null>(null)
   const allowNavigationRef = useRef(false)
@@ -41,7 +40,15 @@ export const useEditorStudioUnsavedExitGuard = ({
     if (!pending) return
 
     if (pending.kind === "action") {
-      pending.action?.()
+      // handleExitDedicatedEditor uses router.replace and will hit routeChangeStart.
+      allowNavigationRef.current = true
+      try {
+        pending.action?.()
+      } finally {
+        void Promise.resolve().then(() => {
+          allowNavigationRef.current = false
+        })
+      }
       return
     }
 
@@ -96,20 +103,19 @@ export const useEditorStudioUnsavedExitGuard = ({
     }
   }, [enabled, isDirty, router])
 
-  const dialog = (
-    <ConfirmDialog
-      open={confirmOpen}
-      titleId={titleId}
-      descriptionId={descriptionId}
-      title="저장되지 않은 변경이 있습니다"
-      description={EDITOR_UNSAVED_CHANGES_MESSAGE}
-      confirmLabel="나가기"
-      cancelLabel="계속 작성"
-      confirmTone="danger"
-      onConfirm={confirmLeave}
-      onCancel={closeConfirm}
-    />
-  )
+  // Keep this module .ts (no JSX) so next lint/eslint can parse it.
+  const dialog = createElement(ConfirmDialog, {
+    open: confirmOpen,
+    titleId,
+    descriptionId,
+    title: "저장되지 않은 변경이 있습니다",
+    description: EDITOR_UNSAVED_CHANGES_MESSAGE,
+    confirmLabel: "나가기",
+    cancelLabel: "계속 작성",
+    confirmTone: "danger",
+    onConfirm: confirmLeave,
+    onCancel: closeConfirm,
+  })
 
   return {
     requestGuardedAction,

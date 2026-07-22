@@ -432,6 +432,34 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `feed 커서 조회는 HIT_COUNT 정렬을 CREATED_AT으로 폴백하지 않는다`() {
+            mvc
+                .get("/post/api/v1/posts/feed/cursor") {
+                    param("sort", "HIT_COUNT")
+                    param("pageSize", "5")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
+                    match(handler().methodName("getFeedByCursor"))
+                    jsonPath("$.content") { isArray() }
+                }
+        }
+
+        @Test
+        fun `feed 커서 조회는 LIKES_COUNT 정렬을 허용한다`() {
+            mvc
+                .get("/post/api/v1/posts/feed/cursor") {
+                    param("sort", "LIKES_COUNT")
+                    param("pageSize", "5")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostPublicReadController::class.java))
+                    match(handler().methodName("getFeedByCursor"))
+                    jsonPath("$.content") { isArray() }
+                }
+        }
+
+        @Test
         fun `explore 커서 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             postFacade.write(

@@ -9,7 +9,6 @@ import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
-import java.time.Instant
 
 interface PostUseCase {
     fun count(): Long
@@ -150,7 +149,7 @@ interface PostUseCase {
     ): PagedResult<Post>
 
     fun findPublicByCursor(
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
         sort: PostSearchSortType1,
@@ -158,7 +157,7 @@ interface PostUseCase {
 
     fun findPublicByTagCursor(
         tag: String,
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
         sort: PostSearchSortType1,

@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.model.QPost.post
 import com.back.boundedContexts.post.model.QPostAttr.postAttr
+import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.util.QueryDslUtil
 import com.querydsl.core.BooleanBuilder
 import com.querydsl.core.types.dsl.BooleanExpression
@@ -63,19 +64,19 @@ class PostRepositoryImpl(
     ): Page<Post> = findPosts(null, kw, pageable, publicOnly = true, tag = tag)
 
     override fun findPublicByCursor(
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
-        sortAscending: Boolean,
-    ): List<Post> = findPublicPostsByCursor(cursorCreatedAt, cursorId, limit, sortAscending, tag = null)
+        sort: PostSearchSortType1,
+    ): List<Post> = findPublicPostsByCursor(cursorSortValue, cursorId, limit, sort, tag = null)
 
     override fun findPublicByTagCursor(
         tag: String,
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
-        sortAscending: Boolean,
-    ): List<Post> = findPublicPostsByCursor(cursorCreatedAt, cursorId, limit, sortAscending, tag = tag)
+        sort: PostSearchSortType1,
+    ): List<Post> = findPublicPostsByCursor(cursorSortValue, cursorId, limit, sort, tag = tag)
 
     override fun findPublicByAuthorExceptPost(
         authorId: Long,
@@ -241,10 +242,10 @@ class PostRepositoryImpl(
     }
 
     private fun findPublicPostsByCursor(
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
-        sortAscending: Boolean,
+        sort: PostSearchSortType1,
         tag: String?,
         usePostTagIndexTable: Boolean = false,
     ): List<Post> {
@@ -270,19 +271,37 @@ class PostRepositoryImpl(
                 ),
             )
         }
-        buildCursorPredicate(cursorCreatedAt, cursorId, sortAscending)?.let(builder::and)
+        buildCursorPredicate(cursorSortValue, cursorId, sort)?.let(builder::and)
 
         return try {
             val idQuery =
                 queryFactory
                     .select(post.id)
                     .from(post)
-                    .where(builder)
 
-            if (sortAscending) {
-                idQuery.orderBy(post.createdAt.asc(), post.id.asc())
-            } else {
-                idQuery.orderBy(post.createdAt.desc(), post.id.desc())
+            when (sort) {
+                PostSearchSortType1.HIT_COUNT -> idQuery.leftJoin(post.hitCountAttr)
+                PostSearchSortType1.LIKES_COUNT -> idQuery.leftJoin(post.likesCountAttr)
+                else -> Unit
+            }
+
+            idQuery.where(builder)
+
+            when (sort) {
+                PostSearchSortType1.HIT_COUNT -> {
+                    val countExpr = post.hitCountAttr.intValue.coalesce(0)
+                    idQuery.orderBy(countExpr.desc(), post.id.desc())
+                }
+                PostSearchSortType1.LIKES_COUNT -> {
+                    val countExpr = post.likesCountAttr.intValue.coalesce(0)
+                    idQuery.orderBy(countExpr.desc(), post.id.desc())
+                }
+                PostSearchSortType1.CREATED_AT_ASC -> {
+                    idQuery.orderBy(post.createdAt.asc(), post.id.asc())
+                }
+                else -> {
+                    idQuery.orderBy(post.createdAt.desc(), post.id.desc())
+                }
             }
 
             val ids =
@@ -296,10 +315,10 @@ class PostRepositoryImpl(
             if (safeTagToken != null && usePostTagIndexTable && shouldFallbackToLegacyTagPath(exception)) {
                 logger.warn("post_tag_index path failed in cursor feed; fallback to metaTagsIndex", exception)
                 return findPublicPostsByCursor(
-                    cursorCreatedAt = cursorCreatedAt,
+                    cursorSortValue = cursorSortValue,
                     cursorId = cursorId,
                     limit = limit,
-                    sortAscending = sortAscending,
+                    sort = sort,
                     tag = tag,
                     usePostTagIndexTable = false,
                 )
@@ -365,19 +384,38 @@ class PostRepositoryImpl(
     ): BooleanExpression = if (usePostTagIndexTable) buildPostTagIndexPredicate(normalizedTag) else buildTagIndexPredicate(tagLikeToken)
 
     private fun buildCursorPredicate(
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
-        sortAscending: Boolean,
+        sort: PostSearchSortType1,
     ): BooleanExpression? {
-        if (cursorCreatedAt == null || cursorId == null || cursorId <= 0L) return null
-        return if (sortAscending) {
-            post.createdAt
-                .gt(cursorCreatedAt)
-                .or(post.createdAt.eq(cursorCreatedAt).and(post.id.gt(cursorId)))
-        } else {
-            post.createdAt
-                .lt(cursorCreatedAt)
-                .or(post.createdAt.eq(cursorCreatedAt).and(post.id.lt(cursorId)))
+        if (cursorSortValue == null || cursorId == null || cursorId <= 0L) return null
+        return when (sort) {
+            PostSearchSortType1.HIT_COUNT -> {
+                val countExpr = post.hitCountAttr.intValue.coalesce(0)
+                val cursorCount = cursorSortValue.toInt()
+                countExpr
+                    .lt(cursorCount)
+                    .or(countExpr.eq(cursorCount).and(post.id.lt(cursorId)))
+            }
+            PostSearchSortType1.LIKES_COUNT -> {
+                val countExpr = post.likesCountAttr.intValue.coalesce(0)
+                val cursorCount = cursorSortValue.toInt()
+                countExpr
+                    .lt(cursorCount)
+                    .or(countExpr.eq(cursorCount).and(post.id.lt(cursorId)))
+            }
+            PostSearchSortType1.CREATED_AT_ASC -> {
+                val cursorCreatedAt = Instant.ofEpochMilli(cursorSortValue)
+                post.createdAt
+                    .gt(cursorCreatedAt)
+                    .or(post.createdAt.eq(cursorCreatedAt).and(post.id.gt(cursorId)))
+            }
+            else -> {
+                val cursorCreatedAt = Instant.ofEpochMilli(cursorSortValue)
+                post.createdAt
+                    .lt(cursorCreatedAt)
+                    .or(post.createdAt.eq(cursorCreatedAt).and(post.id.lt(cursorId)))
+            }
         }
     }
 
@@ -442,6 +480,12 @@ class PostRepositoryImpl(
         if (requiresAuthorSort(pageable)) {
             idQuery.leftJoin(post.author)
         }
+        if (requiresHitCountSort(pageable)) {
+            idQuery.leftJoin(post.hitCountAttr)
+        }
+        if (requiresLikesCountSort(pageable)) {
+            idQuery.leftJoin(post.likesCountAttr)
+        }
 
         idQuery.where(builder)
 
@@ -450,6 +494,20 @@ class PostRepositoryImpl(
             idQuery.orderBy(
                 buildKeywordRelevanceExpression(normalizedKeyword).desc(),
                 post.createdAt.desc(),
+                post.id.desc(),
+            )
+        } else if (requiresHitCountSort(pageable)) {
+            idQuery.orderBy(
+                post.hitCountAttr.intValue
+                    .coalesce(0)
+                    .desc(),
+                post.id.desc(),
+            )
+        } else if (requiresLikesCountSort(pageable)) {
+            idQuery.orderBy(
+                post.likesCountAttr.intValue
+                    .coalesce(0)
+                    .desc(),
                 post.id.desc(),
             )
         } else {
@@ -473,6 +531,10 @@ class PostRepositoryImpl(
     }
 
     private fun requiresAuthorSort(pageable: Pageable): Boolean = pageable.sort.any { it.property == "authorName" }
+
+    private fun requiresHitCountSort(pageable: Pageable): Boolean = pageable.sort.any { it.property == "hitCount" }
+
+    private fun requiresLikesCountSort(pageable: Pageable): Boolean = pageable.sort.any { it.property == "likesCount" }
 
     /**
      * id 목록 기반으로 Post + author를 로드하고, id 순서를 그대로 복원한다.

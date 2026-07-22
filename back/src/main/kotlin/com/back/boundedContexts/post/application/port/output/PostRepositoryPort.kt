@@ -5,7 +5,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
-import java.time.Instant
+import com.back.standard.dto.post.type1.PostSearchSortType1
 import java.util.Optional
 
 interface PostRepositoryPort {
@@ -34,18 +34,18 @@ interface PostRepositoryPort {
     )
 
     data class CursorQuery(
-        val cursorCreatedAt: Instant?,
+        val cursorSortValue: Long?,
         val cursorId: Long?,
         val limit: Int,
-        val sortAscending: Boolean,
+        val sort: PostSearchSortType1,
     )
 
     data class TaggedCursorQuery(
         val tag: String,
-        val cursorCreatedAt: Instant?,
+        val cursorSortValue: Long?,
         val cursorId: Long?,
         val limit: Int,
-        val sortAscending: Boolean,
+        val sort: PostSearchSortType1,
     )
 
     data class RelatedAuthorQuery(

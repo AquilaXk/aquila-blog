@@ -3,9 +3,9 @@ package com.back.boundedContexts.post.adapter.persistence
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
-import java.time.Instant
 
 interface PostRepositoryCustom {
     fun findQPagedByKw(
@@ -32,18 +32,18 @@ interface PostRepositoryCustom {
     ): Page<Post>
 
     fun findPublicByCursor(
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
-        sortAscending: Boolean,
+        sort: PostSearchSortType1,
     ): List<Post>
 
     fun findPublicByTagCursor(
         tag: String,
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
-        sortAscending: Boolean,
+        sort: PostSearchSortType1,
     ): List<Post>
 
     fun findPublicByAuthorExceptPost(

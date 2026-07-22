@@ -3,6 +3,8 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
+import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.global.app.AppConfig
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -74,7 +76,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         val nextRawPost = postByAuthor(id = 21L)
         given(
             postUseCase.findPublicByCursor(
-                cursorCreatedAt = null,
+                cursorSortValue = null,
                 cursorId = null,
                 limit = 3,
                 sort = PostSearchSortType1.CREATED_AT,
@@ -82,7 +84,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         ).willReturn(listOf(invalidBoundaryPost, nextRawPost))
         given(
             postUseCase.findPublicByCursor(
-                cursorCreatedAt = Instant.parse("2026-01-02T00:00:00Z"),
+                cursorSortValue = Instant.parse("2026-01-02T00:00:00Z").toEpochMilli(),
                 cursorId = 20L,
                 limit = 3,
                 sort = PostSearchSortType1.CREATED_AT,
@@ -116,7 +118,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         val nextRawPost = postByAuthor(id = 23L)
         given(
             postUseCase.findPublicByCursor(
-                cursorCreatedAt = null,
+                cursorSortValue = null,
                 cursorId = null,
                 limit = 3,
                 sort = PostSearchSortType1.CREATED_AT,
@@ -135,6 +137,49 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 .counter()
                 .count(),
         ).isEqualTo(1.0)
+    }
+
+    @Test
+    @DisplayName("HIT_COUNT 커서 feed는 (hitCount, id) 복합 커서로 다음 페이지를 이어간다")
+    fun advancesHitCountCursorByCompositeSortValueAndId() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val service = createService(postUseCase, SimpleMeterRegistry())
+        val first = postByAuthor(id = 31L).also { it.hitCountAttr = PostAttr(1L, it, HIT_COUNT, 50) }
+        val second = postByAuthor(id = 30L).also { it.hitCountAttr = PostAttr(2L, it, HIT_COUNT, 50) }
+        val third = postByAuthor(id = 29L).also { it.hitCountAttr = PostAttr(3L, it, HIT_COUNT, 10) }
+        given(
+            postUseCase.findPublicByCursor(
+                cursorSortValue = null,
+                cursorId = null,
+                limit = 4,
+                sort = PostSearchSortType1.HIT_COUNT,
+            ),
+        ).willReturn(listOf(first, second, third))
+        given(
+            postUseCase.findPublicByCursor(
+                cursorSortValue = 50L,
+                cursorId = 30L,
+                limit = 4,
+                sort = PostSearchSortType1.HIT_COUNT,
+            ),
+        ).willReturn(listOf(third))
+
+        val page = service.getPublicFeedByCursor(null, 2, PostSearchSortType1.HIT_COUNT)
+        val nextPage = service.getPublicFeedByCursor(page.nextCursor, 2, PostSearchSortType1.HIT_COUNT)
+
+        assertThat(page.content.map { it.id }).containsExactly(31L, 30L)
+        assertThat(page.hasNext).isTrue()
+        assertThat(page.nextCursor).isNotBlank()
+        assertThat(nextPage.content.map { it.id }).containsExactly(29L)
+        assertThat(nextPage.hasNext).isFalse()
+        then(postUseCase)
+            .should()
+            .findPublicByCursor(
+                cursorSortValue = 50L,
+                cursorId = 30L,
+                limit = 4,
+                sort = PostSearchSortType1.HIT_COUNT,
+            )
     }
 
     @Test

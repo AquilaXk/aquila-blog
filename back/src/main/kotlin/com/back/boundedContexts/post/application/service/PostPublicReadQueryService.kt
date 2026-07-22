@@ -26,7 +26,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.time.Instant
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -103,12 +102,12 @@ class PostPublicReadQueryService(
                 val parsedCursor = parseCursor(cursor)
                 val rows =
                     postUseCase.findPublicByCursor(
-                        cursorCreatedAt = parsedCursor?.createdAt,
+                        cursorSortValue = parsedCursor?.sortValue,
                         cursorId = parsedCursor?.id,
                         limit = safePageSize + 2,
                         sort = safeSort,
                     )
-                toCursorFeedPageDto(rows, safePageSize)
+                toCursorFeedPageDto(rows, safePageSize, safeSort)
             }
         }
 
@@ -184,12 +183,12 @@ class PostPublicReadQueryService(
                 val rows =
                     postUseCase.findPublicByTagCursor(
                         tag = normalizedTag,
-                        cursorCreatedAt = parsedCursor?.createdAt,
+                        cursorSortValue = parsedCursor?.sortValue,
                         cursorId = parsedCursor?.id,
                         limit = safePageSize + 2,
                         sort = safeSort,
                     )
-                toCursorFeedPageDto(rows, safePageSize)
+                toCursorFeedPageDto(rows, safePageSize, safeSort)
             }
         }
 
@@ -329,7 +328,7 @@ class PostPublicReadQueryService(
                     val rows =
                         if (normalizedTag.isBlank()) {
                             postUseCase.findPublicByCursor(
-                                cursorCreatedAt = null,
+                                cursorSortValue = null,
                                 cursorId = null,
                                 limit = safePageSize + 2,
                                 sort = safeSort,
@@ -337,13 +336,13 @@ class PostPublicReadQueryService(
                         } else {
                             postUseCase.findPublicByTagCursor(
                                 tag = normalizedTag,
-                                cursorCreatedAt = null,
+                                cursorSortValue = null,
                                 cursorId = null,
                                 limit = safePageSize + 2,
                                 sort = safeSort,
                             )
                         }
-                    toCursorFeedPageDto(rows, safePageSize)
+                    toCursorFeedPageDto(rows, safePageSize, safeSort)
                 }
             val tags =
                 postReadBulkheadService.withTagsPermit {
@@ -687,6 +686,7 @@ class PostPublicReadQueryService(
     private fun toCursorFeedPageDto(
         rows: List<Post>,
         pageSize: Int,
+        sort: PostSearchSortType1,
     ): CursorFeedPageDto {
         if (rows.isEmpty()) {
             return CursorFeedPageDto(
@@ -697,7 +697,7 @@ class PostPublicReadQueryService(
             )
         }
 
-        val cursorRows = rows.mapNotNull(::toCursorPostRow)
+        val cursorRows = rows.mapNotNull { post -> toCursorPostRow(post, sort) }
         if (cursorRows.isEmpty()) {
             return CursorFeedPageDto(
                 content = emptyList(),
@@ -715,7 +715,7 @@ class PostPublicReadQueryService(
             }
         val nextCursor =
             if (hasNext) {
-                currentRows.lastOrNull()?.let { encodeCursor(it.createdAt, it.post.id) }
+                currentRows.lastOrNull()?.let { encodeCursor(it.sortValue, it.post.id) }
             } else {
                 null
             }
@@ -760,15 +760,18 @@ class PostPublicReadQueryService(
 
     private data class CursorPostRow(
         val post: Post,
-        val createdAt: Instant,
+        val sortValue: Long,
     )
 
-    private fun requireCursorSort(sort: PostSearchSortType1): PostSearchSortType1 {
-        if (sort == PostSearchSortType1.CREATED_AT || sort == PostSearchSortType1.CREATED_AT_ASC) {
-            return sort
+    private fun requireCursorSort(sort: PostSearchSortType1): PostSearchSortType1 =
+        when (sort) {
+            PostSearchSortType1.CREATED_AT,
+            PostSearchSortType1.CREATED_AT_ASC,
+            PostSearchSortType1.HIT_COUNT,
+            PostSearchSortType1.LIKES_COUNT,
+            -> sort
+            else -> throw AppException("400-1", "커서 조회는 CREATED_AT/HIT_COUNT/LIKES_COUNT 정렬만 지원합니다.")
         }
-        throw AppException("400-1", "커서 조회는 CREATED_AT 정렬만 지원합니다.")
-    }
 
     private fun parseCursor(raw: String?): CursorToken? {
         val value = raw?.trim().orEmpty()
@@ -778,13 +781,13 @@ class PostPublicReadQueryService(
             throw AppException("400-1", "cursor 형식이 올바르지 않습니다.")
         }
 
-        val epochMillis =
+        val sortValue =
             parts[0].toLongOrNull()
-                ?: throw AppException("400-1", "cursor timestamp 형식이 올바르지 않습니다.")
+                ?: throw AppException("400-1", "cursor sortValue 형식이 올바르지 않습니다.")
         val id =
             parts[1].toLongOrNull()
                 ?: throw AppException("400-1", "cursor id 형식이 올바르지 않습니다.")
-        if (epochMillis < 0 || id <= 0L) {
+        if (sortValue < 0 || id <= 0L) {
             throw AppException("400-1", "cursor 값이 유효하지 않습니다.")
         }
 
@@ -792,7 +795,7 @@ class PostPublicReadQueryService(
         if (signature.isBlank()) {
             throw AppException("400-1", "cursor 서명이 비어 있습니다.")
         }
-        val payload = "$epochMillis:$id"
+        val payload = "$sortValue:$id"
         val expectedSignature = signCursorPayload(payload)
         val isSignatureValid =
             MessageDigest.isEqual(
@@ -803,26 +806,37 @@ class PostPublicReadQueryService(
             throw AppException("400-1", "cursor 서명이 유효하지 않습니다.")
         }
 
-        return CursorToken(Instant.ofEpochMilli(epochMillis), id)
+        return CursorToken(sortValue, id)
     }
 
     private fun encodeCursor(
-        createdAt: Instant,
+        sortValue: Long,
         id: Long,
     ): String {
-        val payload = "${createdAt.toEpochMilli()}:$id"
+        val payload = "$sortValue:$id"
         return "$payload:${signCursorPayload(payload)}"
     }
 
-    private fun toCursorPostRow(post: Post): CursorPostRow? {
-        val createdAt =
-            try {
-                post.createdAt
-            } catch (exception: UninitializedPropertyAccessException) {
-                recordFeedPostDtoMappingFailure(post.id, FeedPostDtoMappingFailureType.CORE, exception)
-                return null
+    private fun toCursorPostRow(
+        post: Post,
+        sort: PostSearchSortType1,
+    ): CursorPostRow? {
+        val sortValue =
+            when (sort) {
+                PostSearchSortType1.HIT_COUNT -> post.hitCount.toLong()
+                PostSearchSortType1.LIKES_COUNT -> post.likesCount.toLong()
+                else -> {
+                    val createdAt =
+                        try {
+                            post.createdAt
+                        } catch (exception: UninitializedPropertyAccessException) {
+                            recordFeedPostDtoMappingFailure(post.id, FeedPostDtoMappingFailureType.CORE, exception)
+                            return null
+                        }
+                    createdAt.toEpochMilli()
+                }
             }
-        return CursorPostRow(post, createdAt)
+        return CursorPostRow(post, sortValue)
     }
 
     private fun signCursorPayload(payload: String): String {
@@ -907,7 +921,7 @@ class PostPublicReadQueryService(
     }
 
     private data class CursorToken(
-        val createdAt: Instant,
+        val sortValue: Long,
         val id: Long,
     )
 }

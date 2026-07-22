@@ -363,6 +363,8 @@ class ApiV1PostPublicReadController(
         when (sort) {
             PostSearchSortType1.CREATED_AT,
             PostSearchSortType1.CREATED_AT_ASC,
+            PostSearchSortType1.HIT_COUNT,
+            PostSearchSortType1.LIKES_COUNT,
             -> sort
             else -> PostSearchSortType1.CREATED_AT
         }

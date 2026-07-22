@@ -3064,7 +3064,7 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 kw?: string;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
             };
             header?: never;
             path?: never;
@@ -4070,7 +4070,7 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 kw?: string;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
             };
             header?: never;
             path?: never;
@@ -4119,7 +4119,7 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 kw?: string;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
             };
             header?: never;
             path?: never;
@@ -4143,7 +4143,7 @@ export interface operations {
             query?: {
                 page?: number;
                 pageSize?: number;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
             };
             header?: never;
             path?: never;
@@ -4167,7 +4167,7 @@ export interface operations {
             query?: {
                 cursor?: string;
                 pageSize?: number;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
             };
             header?: never;
             path?: never;
@@ -4193,7 +4193,7 @@ export interface operations {
                 pageSize?: number;
                 kw?: string;
                 tag?: string;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
             };
             header?: never;
             path?: never;
@@ -4218,7 +4218,7 @@ export interface operations {
                 cursor?: string;
                 pageSize?: number;
                 tag?: string;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
             };
             header?: never;
             path?: never;
@@ -4242,7 +4242,7 @@ export interface operations {
             query?: {
                 tag?: string;
                 pageSize?: number;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
             };
             header?: never;
             path?: never;
@@ -4307,7 +4307,7 @@ export interface operations {
                 page?: number;
                 pageSize?: number;
                 kw?: string;
-                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC" | "HIT_COUNT" | "LIKES_COUNT";
                 status?: string;
             };
             header?: never;

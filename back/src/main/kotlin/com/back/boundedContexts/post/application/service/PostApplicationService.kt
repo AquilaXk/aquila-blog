@@ -32,7 +32,6 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
-import java.time.Instant
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
@@ -785,7 +784,7 @@ class PostApplicationService(
         }
 
     fun findPublicByCursor(
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
         sort: PostSearchSortType1,
@@ -793,17 +792,17 @@ class PostApplicationService(
         findAndHydratePublicCursorPosts {
             postRepository.findPublicByCursor(
                 PostRepositoryPort.CursorQuery(
-                    cursorCreatedAt = cursorCreatedAt,
+                    cursorSortValue = cursorSortValue,
                     cursorId = cursorId,
                     limit = limit,
-                    sortAscending = sort.isAsc,
+                    sort = sort,
                 ),
             )
         }
 
     fun findPublicByTagCursor(
         tag: String,
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
         sort: PostSearchSortType1,
@@ -812,10 +811,10 @@ class PostApplicationService(
             postRepository.findPublicByTagCursor(
                 PostRepositoryPort.TaggedCursorQuery(
                     tag = tag,
-                    cursorCreatedAt = cursorCreatedAt,
+                    cursorSortValue = cursorSortValue,
                     cursorId = cursorId,
                     limit = limit,
-                    sortAscending = sort.isAsc,
+                    sort = sort,
                 ),
             )
         }

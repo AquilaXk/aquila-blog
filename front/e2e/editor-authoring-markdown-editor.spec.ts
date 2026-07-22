@@ -968,8 +968,10 @@ test.describe("Markdown editor replacement", () => {
     await page.getByRole("button", { name: "표" }).click()
 
     const editorText = await writePane.locator("textarea").inputValue()
-    expect(editorText.indexOf("| 항목 | 설명 |")).toBeLessThan(editorText.indexOf("omega"))
-    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toContainText("항목")
+    const tableMarker = "|  |  |"
+    expect(editorText.indexOf(tableMarker)).toBeGreaterThan(-1)
+    expect(editorText.indexOf(tableMarker)).toBeLessThan(editorText.indexOf("omega"))
+    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toBeVisible()
   })
 
   test("image upload inserts a url-only upload response at the textarea caret", async ({ page }) => {

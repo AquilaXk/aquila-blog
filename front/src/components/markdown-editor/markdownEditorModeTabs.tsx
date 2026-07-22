@@ -7,6 +7,9 @@ export type MarkdownEditorMode = "write" | "preview" | "split"
 export const resolveModeForBodyFocus = (mode: MarkdownEditorMode): MarkdownEditorMode =>
   mode === "preview" ? "write" : mode
 
+/** Preview-only hides the textarea; toolbar inserts must mount write first. */
+export const resolveModeForToolbarInsert = resolveModeForBodyFocus
+
 const MODE_ORDER: MarkdownEditorMode[] = ["write", "preview", "split"]
 
 const MODE_LABEL: Record<MarkdownEditorMode, string> = {

@@ -21,8 +21,14 @@ import {
 import {
   MarkdownEditorModeTabs,
   resolveModeForBodyFocus,
+  resolveModeForToolbarInsert,
   type MarkdownEditorMode,
 } from "./markdownEditorModeTabs"
+import {
+  DEFAULT_MARKDOWN_EDITOR_MODE,
+  readMarkdownEditorModePreference,
+  writeMarkdownEditorModePreference,
+} from "./markdownEditorModePreference"
 import {
   EditorRoot,
   EditorToolbar,
@@ -40,10 +46,21 @@ import {
 } from "./MarkdownEditor.styles"
 import {
   applyPlannedTextMutation,
+  applyPlannedTextMutationToValue,
   planToggleWrapSelection,
   planWrapSelection,
   type PlannedTextMutation,
 } from "./markdownEditorTextMutation"
+import { planInsertBlockSnippet, type BlockSnippetSpec } from "./markdownEditorBlockSnippets"
+import {
+  emptyPendingToolbarInsertQueue,
+  queuePendingToolbarInsert,
+  resolvePendingToolbarInsertAfterFlushSkip,
+  resolvePendingToolbarInsertWhenModeChanges,
+  shouldSchedulePendingToolbarInsertFlush,
+  type PendingToolbarInsert,
+  type PendingToolbarInsertQueue,
+} from "./markdownEditorPendingToolbarInsert"
 import {
   MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE,
   MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE,
@@ -101,7 +118,7 @@ export const MarkdownEditor = ({
   onUploadImage,
   onUploadFile,
 }: MarkdownEditorProps) => {
-  const [mode, setMode] = useState<MarkdownEditorMode>("split")
+  const [mode, setMode] = useState<MarkdownEditorMode>(DEFAULT_MARKDOWN_EDITOR_MODE)
   const [uploadError, setUploadError] = useState("")
   const [draftValue, setDraftValue] = useState(value)
   const editorDomId = useId()
@@ -118,6 +135,7 @@ export const MarkdownEditor = ({
   const allowNativeTabAfterEscapeRef = useRef(false)
   const modeRef = useRef<MarkdownEditorMode>(mode)
   const pendingBodyFocusRef = useRef(false)
+  const pendingToolbarInsertQueueRef = useRef<PendingToolbarInsertQueue>(emptyPendingToolbarInsertQueue())
   modeRef.current = mode
 
   const setUploadInFlight = useCallback(
@@ -127,6 +145,13 @@ export const MarkdownEditor = ({
     },
     [onUploadingChange]
   )
+
+  useEffect(() => {
+    setMode((current) => {
+      const storedMode = readMarkdownEditorModePreference()
+      return current === storedMode ? current : storedMode
+    })
+  }, [])
 
   useEffect(() => {
     if (value === valueRef.current) return
@@ -282,6 +307,104 @@ export const MarkdownEditor = ({
     return selectionRef.current
   }, [rememberTextareaSelection])
 
+  const applyPlannedMarkdownMutation = useCallback(
+    (plan: PlannedTextMutation) => {
+      if (applyMutationPlan(plan)) return true
+
+      const next = applyPlannedTextMutationToValue(valueRef.current, plan)
+      selectionRef.current = { from: next.selectionStart, to: next.selectionEnd }
+      commitMarkdown(next.value, true)
+      return true
+    },
+    [applyMutationPlan, commitMarkdown]
+  )
+
+  const planPendingToolbarInsert = useCallback(
+    (insert: PendingToolbarInsert): PlannedTextMutation => {
+      const { from, to } = resolveActiveSelection()
+
+      if (insert.kind === "block") {
+        return planInsertBlockSnippet(from, to, insert.spec)
+      }
+
+      if (insert.kind === "format") {
+        return planFormatShortcutMutation(valueRef.current, from, to, insert.shortcut)
+      }
+
+      return insert.toggle
+        ? planToggleWrapSelection(valueRef.current, from, to, insert.before, insert.after)
+        : planWrapSelection(valueRef.current, from, to, insert.before, insert.after)
+    },
+    [resolveActiveSelection]
+  )
+
+  const clearPendingToolbarInsert = useCallback(() => {
+    pendingToolbarInsertQueueRef.current = emptyPendingToolbarInsertQueue()
+  }, [])
+
+  const flushPendingToolbarInsert = useCallback(() => {
+    const queue = pendingToolbarInsertQueueRef.current
+    if (!queue.pending) return
+
+    if (disabled) {
+      pendingToolbarInsertQueueRef.current = resolvePendingToolbarInsertAfterFlushSkip(queue, "disabled")
+      return
+    }
+
+    if (modeRef.current === "preview") {
+      pendingToolbarInsertQueueRef.current = resolvePendingToolbarInsertAfterFlushSkip(queue, "preview")
+      return
+    }
+
+    const textarea = textareaRef.current
+    if (!textarea) {
+      const nextQueue = resolvePendingToolbarInsertAfterFlushSkip(queue, "missing-textarea")
+      pendingToolbarInsertQueueRef.current = nextQueue
+      if (shouldSchedulePendingToolbarInsertFlush(nextQueue)) {
+        window.requestAnimationFrame(() => {
+          flushPendingToolbarInsert()
+        })
+      }
+      return
+    }
+
+    const pending = queue.pending
+    clearPendingToolbarInsert()
+    applyPlannedMarkdownMutation(planPendingToolbarInsert(pending))
+  }, [applyPlannedMarkdownMutation, clearPendingToolbarInsert, disabled, planPendingToolbarInsert])
+
+  const queueToolbarInsertForPreviewMode = useCallback((insert: PendingToolbarInsert) => {
+      pendingToolbarInsertQueueRef.current = queuePendingToolbarInsert(insert)
+      setMode(resolveModeForToolbarInsert(modeRef.current))
+  }, [])
+
+  useEffect(() => {
+    pendingToolbarInsertQueueRef.current = resolvePendingToolbarInsertWhenModeChanges(
+      pendingToolbarInsertQueueRef.current,
+      mode
+    )
+  }, [mode])
+
+  useEffect(() => {
+    if (!disabled) return
+    pendingToolbarInsertQueueRef.current = resolvePendingToolbarInsertAfterFlushSkip(
+      pendingToolbarInsertQueueRef.current,
+      "disabled"
+    )
+  }, [disabled])
+
+  useEffect(() => {
+    if (disabled || mode === "preview") return
+    if (!shouldSchedulePendingToolbarInsertFlush(pendingToolbarInsertQueueRef.current)) return
+
+    const frame = window.requestAnimationFrame(() => {
+      flushPendingToolbarInsert()
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [disabled, flushPendingToolbarInsert, mode])
+
   const insertMarkdownAtEditorSelection = useCallback(
     (before: string, after = "", options?: { toggle?: boolean }) => {
       const textarea = textareaRef.current
@@ -297,23 +420,65 @@ export const MarkdownEditor = ({
     [applyMutationPlan, disabled, resolveActiveSelection]
   )
 
+  const handleModeChange = useCallback((nextMode: MarkdownEditorMode) => {
+    setMode(nextMode)
+    writeMarkdownEditorModePreference(nextMode)
+  }, [])
+
+  const applyBlockSnippet = useCallback(
+    (spec: BlockSnippetSpec) => {
+      if (disabled) return
+
+      if (modeRef.current === "preview") {
+        queueToolbarInsertForPreviewMode({ kind: "block", spec })
+        return
+      }
+
+      const { from, to } = resolveActiveSelection()
+      applyPlannedMarkdownMutation(planInsertBlockSnippet(from, to, spec))
+    },
+    [applyPlannedMarkdownMutation, disabled, queueToolbarInsertForPreviewMode, resolveActiveSelection]
+  )
+
   const applySnippet = useCallback(
     (before: string, after = "", options?: { toggle?: boolean }) => {
+      if (disabled) return
+
+      if (modeRef.current === "preview") {
+        queueToolbarInsertForPreviewMode({ kind: "wrap", before, after, toggle: options?.toggle })
+        return
+      }
+
       if (insertMarkdownAtEditorSelection(before, after, options)) return
-      commitMarkdown(`${valueRef.current}${before}${after}`, true)
+
+      const { from, to } = resolveActiveSelection()
+      const plan = options?.toggle
+        ? planToggleWrapSelection(valueRef.current, from, to, before, after)
+        : planWrapSelection(valueRef.current, from, to, before, after)
+      applyPlannedMarkdownMutation(plan)
     },
-    [commitMarkdown, insertMarkdownAtEditorSelection]
+    [
+      applyPlannedMarkdownMutation,
+      disabled,
+      insertMarkdownAtEditorSelection,
+      queueToolbarInsertForPreviewMode,
+      resolveActiveSelection,
+    ]
   )
 
   const applyFormatShortcutOrAppend = useCallback(
     (shortcut: Parameters<typeof planFormatShortcutMutation>[3]) => {
+      if (disabled) return
+
+      if (modeRef.current === "preview") {
+        queueToolbarInsertForPreviewMode({ kind: "format", shortcut })
+        return
+      }
+
       const { from, to } = resolveActiveSelection()
-      const plan = planFormatShortcutMutation(valueRef.current, from, to, shortcut)
-      if (applyMutationPlan(plan)) return
-      // Preview-only unmounts the textarea; match applySnippet append fallback.
-      commitMarkdown(`${valueRef.current}${plan.replacement}`, true)
+      applyPlannedMarkdownMutation(planFormatShortcutMutation(valueRef.current, from, to, shortcut))
     },
-    [applyMutationPlan, commitMarkdown, resolveActiveSelection]
+    [applyPlannedMarkdownMutation, disabled, queueToolbarInsertForPreviewMode, resolveActiveSelection]
   )
 
   const insertUploadedMarkdown = useCallback(
@@ -520,7 +685,7 @@ export const MarkdownEditor = ({
               aria-label={snippet.title}
               disabled={disabled || ("disableWhenMermaid" in snippet && disableMermaid)}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applySnippet(snippet.snippet)}
+              onClick={() => applyBlockSnippet(snippet)}
             >
               {snippet.label}
             </ToolbarButton>
@@ -563,7 +728,7 @@ export const MarkdownEditor = ({
         </ToolbarGroup>
         <MarkdownEditorModeTabs
           mode={mode}
-          onModeChange={setMode}
+          onModeChange={handleModeChange}
           writePanelId={writePanelId}
           previewPanelId={previewPanelId}
           writeTabId={writeTabId}

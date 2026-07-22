@@ -1,5 +1,7 @@
 import type { WheelEvent as ReactWheelEvent } from "react"
 
+export { blockMarkdownSnippets } from "./markdownEditorBlockSnippets"
+
 export const modShortcutLabel =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
     ? "⌘"
@@ -18,27 +20,6 @@ export const toolbarMarkdownSnippets = [
   { label: "Task", title: "작업 목록", before: "- [ ] ", after: "" },
 ] as const
 
-export const tableSnippet = [
-  "",
-  "| 항목 | 설명 |",
-  "| --- | --- |",
-  "| 값 | 내용 |",
-  "",
-].join("\n")
-
-export const codeBlockSnippet = ["", '```kotlin title="invalidatePost.kt"', "fun example() = Unit", "```", ""].join("\n")
-export const mermaidSnippet = ["", "```mermaid", "flowchart LR", "    A[Admin write] --> B[DB commit]", "```", ""].join("\n")
-export const calloutSnippet = ["", "> [!TIP]", "> **설계 원칙**", "> 내용을 입력하세요.", ""].join("\n")
-export const toggleSnippet = ["", ":::toggle 자세히 보기", "내용을 입력하세요.", ":::", ""].join("\n")
-
-export const blockMarkdownSnippets = [
-  { label: "Code", title: "코드 블록", snippet: codeBlockSnippet },
-  { label: "Table", title: "표", snippet: tableSnippet },
-  { label: "Mermaid", title: "Mermaid", snippet: mermaidSnippet, disableWhenMermaid: true },
-  { label: "Callout", title: "콜아웃", snippet: calloutSnippet },
-  { label: "Toggle", title: "토글", snippet: toggleSnippet },
-] as const
-
 export const WHEEL_DELTA_PIXEL = 0
 export const WHEEL_DELTA_LINE = 1
 export const WHEEL_DELTA_PAGE = 2
@@ -53,4 +34,3 @@ export const getWheelDeltaYPixels = (event: ReactWheelEvent<HTMLElement>, elemen
   const resolvedLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : DEFAULT_WHEEL_LINE_HEIGHT_PX
   return event.deltaY * resolvedLineHeight
 }
-

@@ -84,6 +84,8 @@ WORKDIR /app
 # Spring Boot extracted app (library jars first for Docker cache reuse)
 COPY --from=extractor --chown=app:app /app/app/lib/ ./lib/
 COPY --from=extractor --chown=app:app /app/app/app.jar ./app.jar
+# WORKDIR itself stays root-owned without this; non-root JVM may need to write under /app.
+RUN chown app:app /app
 
 USER app
 

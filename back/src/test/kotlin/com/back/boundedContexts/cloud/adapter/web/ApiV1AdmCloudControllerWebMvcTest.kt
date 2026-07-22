@@ -10,6 +10,7 @@ import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
@@ -21,8 +22,10 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
+import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
+import org.mockito.Mockito.spy
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -647,6 +650,25 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
 
         assertThat(result.resolvedException).isInstanceOf(AppException::class.java)
         assertThat((result.resolvedException as AppException).rsData.resultCode).isEqualTo("500-1")
+    }
+
+    @Test
+    @DisplayName("external content AppException other resultCode는 other playback 메트릭 후 전파된다")
+    fun `external content AppException other resultCode는 other playback 메트릭 후 전파된다`() {
+        // ErrorCode는 4xx/5xx만 있어, statusClass=other 분기는 spy로 resultCode를 주입해 커버한다.
+        val ex = spy(AppException(ErrorCode.INTERNAL_ERROR, "분류되지 않은 응답 코드"))
+        doReturn(RsData<Void>("200-99", "분류되지 않은 응답 코드")).`when`(ex).rsData
+        given(cloudExternalPlaybackTokenService.openContent(token = "raw-token", fileId = 12L))
+            .willThrow(ex)
+
+        val result =
+            mvc
+                .get("/system/api/v1/adm/cloud/files/12/external-content") {
+                    param("token", "raw-token")
+                }.andReturn()
+
+        assertThat(result.resolvedException).isSameAs(ex)
+        assertThat((result.resolvedException as AppException).rsData.resultCode).isEqualTo("200-99")
     }
 
     @Test

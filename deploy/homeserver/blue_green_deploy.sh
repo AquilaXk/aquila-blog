@@ -2371,7 +2371,11 @@ fi
 edge_services_to_boot=(caddy cloudflared)
 compose_up_with_retry "${edge_services_to_boot[@]}"
 ensure_monitoring_bind_mount_permissions
-compose_up_no_deps_with_retry alertmanager loki promtail prometheus grafana
+# force-recreate so json-file max-size/max-file logging from compose applies to
+# long-lived monitoring/probe containers (logging opts bind at container create).
+compose_up_force_recreate_with_retry \
+  alertmanager loki promtail prometheus grafana \
+  public_edge_probe docker_runtime_probe postgres_exporter
 reset_grafana_admin_password
 ensure_caddy_mount_sync
 if [[ "${active_backend_was_running}" == "true" ]]; then

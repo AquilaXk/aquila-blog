@@ -7,9 +7,10 @@ import java.net.Inet6Address
 import java.net.InetAddress
 
 /**
- * 프록시 환경에서 신뢰 가능한 클라이언트 IP를 추출한다.
+ * 애플리케이션 client IP 단일 SoT.
  * - remoteAddr가 내부 프록시(사설/루프백/link-local)일 때만 전달 헤더를 신뢰
  * - Cloudflare/Reverse proxy 헤더 우선순위로 실제 클라이언트 IP를 복원
+ * - “XFF가 있으면 그대로 사용” fallback 금지 (HR-56). 비신뢰 remoteAddr에서는 헤더를 무시한다.
  */
 @Component
 class ClientIpResolver {

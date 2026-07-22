@@ -64,6 +64,7 @@ private const val STRICT_TRANSPORT_SECURITY_HEADER = "Strict-Transport-Security"
 @Import(
     SecurityConfig::class,
     SecurityConfigEndpointExposureWebMvcTestSupport.TestBeans::class,
+    ClientIpResolver::class,
 )
 @TestPropertySource(
     properties = [

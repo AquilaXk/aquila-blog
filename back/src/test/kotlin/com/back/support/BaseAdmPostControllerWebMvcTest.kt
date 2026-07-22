@@ -8,6 +8,7 @@ import com.back.global.observability.ErrorMetrics
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
+import com.back.global.web.application.ClientIpResolver
 import org.junit.jupiter.api.BeforeAll
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
@@ -40,7 +41,7 @@ import org.springframework.test.web.servlet.MockMvc
         ),
     ],
 )
-@Import(BaseAdmPostControllerWebMvcTest.TestSecurityConfig::class)
+@Import(BaseAdmPostControllerWebMvcTest.TestSecurityConfig::class, ClientIpResolver::class)
 abstract class BaseAdmPostControllerWebMvcTest : BaseIntegrationTest() {
     @Autowired
     protected lateinit var mvc: MockMvc

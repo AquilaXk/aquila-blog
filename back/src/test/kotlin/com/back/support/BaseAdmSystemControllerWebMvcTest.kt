@@ -15,6 +15,7 @@ import com.back.global.system.application.AdminDashboardSnapshotService
 import com.back.global.system.application.AdminSystemHealthSnapshotService
 import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskQueueDiagnosticsService
+import com.back.global.web.application.ClientIpResolver
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -44,7 +45,7 @@ import org.springframework.test.web.servlet.MockMvc
         ),
     ],
 )
-@Import(BaseAdmSystemControllerWebMvcTest.TestSecurityConfig::class)
+@Import(BaseAdmSystemControllerWebMvcTest.TestSecurityConfig::class, ClientIpResolver::class)
 abstract class BaseAdmSystemControllerWebMvcTest : BaseIntegrationTest() {
     @Autowired
     protected lateinit var mvc: MockMvc

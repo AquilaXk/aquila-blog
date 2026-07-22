@@ -10,6 +10,7 @@ import com.back.global.security.application.SecurityTipProvider
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
+import com.back.global.web.application.ClientIpResolver
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.mockito.BDDMockito.given
@@ -41,7 +42,7 @@ import org.springframework.web.servlet.mvc.annotation.ResponseStatusExceptionRes
         ),
     ],
 )
-@Import(BaseMemberControllerWebMvcTest.TestSecurityConfig::class)
+@Import(BaseMemberControllerWebMvcTest.TestSecurityConfig::class, ClientIpResolver::class)
 abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
     @Autowired
     protected lateinit var mvc: MockMvc

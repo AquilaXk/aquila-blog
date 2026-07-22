@@ -39,4 +39,14 @@ class ClientIpResolverTest {
 
         assertThat(resolver.resolve(request)).isEqualTo("198.51.100.45")
     }
+
+    @Test
+    @DisplayName("비신뢰 remoteAddr에서는 spoof X-Forwarded-For를 최종 client IP로 채택하지 않는다")
+    fun `spoofed xff is ignored for untrusted remote addr`() {
+        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/me")
+        request.remoteAddr = "203.0.113.50"
+        request.addHeader("X-Forwarded-For", "1.2.3.4, 5.6.7.8")
+
+        assertThat(resolver.resolve(request)).isEqualTo("203.0.113.50")
+    }
 }

@@ -255,38 +255,41 @@ jobs:
           sudo mv /tmp/trivy /usr/local/bin/trivy
           trivy --version
 
-      - name: Resolve runtime base images from Dockerfiles
+      - name: Resolve deploy runtime base images
         id: images
         shell: bash
         run: |
           set -euo pipefail
+          # Backend: final FROM of back/Dockerfile (GHCR build/deploy base).
           back_image="$(grep -E '^FROM[[:space:]]+' back/Dockerfile | tail -n1 | awk '{print $2}')"
-          front_image="$(grep -E '^FROM[[:space:]]+' front/Dockerfile | head -n1 | awk '{print $2}')"
-          if [[ -z "${back_image}" || -z "${front_image}" ]]; then
-            echo "failed to parse Dockerfile FROM images" >&2
+          # Frontend homeserver runtime default (see deploy/homeserver/blue_green_deploy.sh NODE_RUNTIME_IMAGE).
+          # Do not use front/Dockerfile (legacy stub; not the deploy image).
+          front_image="node:20-alpine"
+          if [[ -z "${back_image}" ]]; then
+            echo "failed to parse backend Dockerfile FROM image" >&2
             exit 1
           fi
           echo "back_image=${back_image}" >> "$GITHUB_OUTPUT"
           echo "front_image=${front_image}" >> "$GITHUB_OUTPUT"
           echo "back runtime image: ${back_image}"
-          echo "front base image: ${front_image}"
+          echo "front runtime image: ${front_image}"
 
       - name: Trivy scan backend runtime image
         env:
           IMAGE: ${{ steps.images.outputs.back_image }}
         run: |
           set -euo pipefail
-          # Fail on fixable High/Critical in the deploy runtime base image (#1124).
-          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+          # OS packages only: app/library vulns are gated by NVD/yarn/OSV (#1124).
+          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --pkg-types os \
             --format json --output "${RUNNER_TEMP}/trivy-back.json" "${IMAGE}"
           node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-back.json"
 
-      - name: Trivy scan frontend base image
+      - name: Trivy scan frontend runtime image
         env:
           IMAGE: ${{ steps.images.outputs.front_image }}
         run: |
           set -euo pipefail
-          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --pkg-types os \
             --format json --output "${RUNNER_TEMP}/trivy-front.json" "${IMAGE}"
           node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-front.json"
 

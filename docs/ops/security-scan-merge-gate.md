@@ -13,6 +13,13 @@ PR → `main` merge-blocking vulnerability gates live in `.github/workflows/secu
 
 Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets.
 
+## Container image gate
+
+- Backend: final `FROM` in `back/Dockerfile` (GHCR deploy base)
+- Frontend homeserver: `node:20-alpine` (`NODE_RUNTIME_IMAGE` default) — not `front/Dockerfile`
+- Trivy scope: `--pkg-types os` + `--ignore-unfixed` High/Critical (app/library vulns are covered by NVD/yarn/OSV)
+- Temporary OS exceptions live in `.github/security/vulnerability-exceptions.yml`
+
 ## Exception allowlist
 
 - File: `.github/security/vulnerability-exceptions.yml`

@@ -220,25 +220,49 @@ export const resolveEditorCodeFenceRecovery = ({
     }
   }
 
-  // Partial HTML help when public is unavailable or also incomplete.
-  if (fromHtml.recovered) {
-    return {
-      content: fromHtml.content,
-      recovered: true,
-      source: "contentHtml",
+  if (publicFallbackSucceeded && typeof publicContent === "string") {
+    const fromPublic = applyPublicCodeFenceRecovery(adminContent, publicContent)
+    const sequentialContent = applyPublicCodeFenceRecovery(fromHtml.content, publicContent).content
+
+    const candidates = [
+      { content: sequentialContent, source: "publicApi" as const },
+      { content: fromHtml.content, source: "contentHtml" as const },
+      { content: fromPublic.content, source: "publicApi" as const },
+    ].filter((candidate) => candidate.content !== adminContent)
+
+    const bestCandidate = candidates.reduce<(typeof candidates)[number] | null>(
+      (best, candidate) => {
+        if (!best) return candidate
+
+        const bestEmptyCount = parseFencedCodeBlocks(best.content).filter((block) =>
+          isCodeFenceBodyVisiblyEmpty(block.body)
+        ).length
+        const candidateEmptyCount = parseFencedCodeBlocks(candidate.content).filter((block) =>
+          isCodeFenceBodyVisiblyEmpty(block.body)
+        ).length
+
+        if (candidateEmptyCount < bestEmptyCount) return candidate
+        if (candidateEmptyCount > bestEmptyCount) return best
+        if (candidate.content === sequentialContent) return candidate
+        return best
+      },
+      null
+    )
+
+    if (bestCandidate) {
+      return {
+        content: bestCandidate.content,
+        recovered: isCodeFenceRecoveryComplete(bestCandidate.content),
+        source: bestCandidate.source,
+      }
     }
   }
 
-  if (publicFallbackSucceeded && typeof publicContent === "string") {
-    const fromPublic = applyPublicCodeFenceRecovery(adminContent, publicContent)
-
-    if (fromPublic.recovered || fromPublic.content !== adminContent) {
-      return {
-        content: fromPublic.content,
-        recovered:
-          fromPublic.recovered && isCodeFenceRecoveryComplete(fromPublic.content),
-        source: "publicApi",
-      }
+  if (fromHtml.recovered || fromHtml.content !== adminContent) {
+    return {
+      content: fromHtml.content,
+      recovered: isCodeFenceRecoveryComplete(fromHtml.content),
+      source: "contentHtml",
     }
   }
 

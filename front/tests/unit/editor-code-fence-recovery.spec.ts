@@ -54,6 +54,20 @@ const partialHtmlCandidate = [
   "outro",
 ].join("\n")
 
+const partialPublicCandidate = [
+  "intro",
+  "",
+  "```kotlin",
+  "",
+  "```",
+  "",
+  "```ts",
+  "const value = 1",
+  "```",
+  "",
+  "outro",
+].join("\n")
+
 const fullPublicCandidate = [
   "intro",
   "",
@@ -131,6 +145,34 @@ test.describe("editor code fence recovery", () => {
     expect(result.source).toBe("publicApi")
     expect(result.recovered).toBe(true)
     expect(result.content).toBe(filledFenceContent)
+  })
+
+  test("merges complementary partial html and public candidates sequentially", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: twoEmptyFences,
+      contentHtmlBodyCandidate: partialHtmlCandidate,
+      publicContent: partialPublicCandidate,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("publicApi")
+    expect(result.recovered).toBe(true)
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(false)
+    expect(result.content).toContain("fun example() = Unit")
+    expect(result.content).toContain("const value = 1")
+  })
+
+  test("partial html alone reports recovered false", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: twoEmptyFences,
+      contentHtmlBodyCandidate: partialHtmlCandidate,
+      publicFallbackSucceeded: false,
+    })
+
+    expect(result.source).toBe("contentHtml")
+    expect(result.recovered).toBe(false)
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(true)
+    expect(result.content).toContain("fun example() = Unit")
   })
 
   test("partial html recovery prefers publicApi when public fully recovers", () => {

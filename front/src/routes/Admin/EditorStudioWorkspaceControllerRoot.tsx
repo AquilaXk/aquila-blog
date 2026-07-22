@@ -821,7 +821,7 @@ export const EditorStudioWorkspaceController = ({
         closePublishModal, commentContent, commentId, commitPreviewThumbTransform, copyPostDetailLink,
         deferredPostContent, deferredContentDerived, deleteConfirmNotice, deleteConfirmState, deletePostsFromList,
         deletedListNotice,
-        deleteTagFromCatalog, disabled, editorMode, finalizePreviewThumbPointer, globalNotice,
+        deleteTagFromCatalog, disabled, editorMode, finalizePreviewThumbPointer, getCurrentPostContent, globalNotice,
         handleMarkdownEditorChange, handleMarkdownEditorFileUpload, handleMarkdownEditorImageUpload, handleConfirmPublish, handleContinueSelectedPostEditing,
         handleCreateNewPostFromSelectedPanel, handleDeleteComment, handleDeleteSelectedPost, handleExitDedicatedEditor, handleFlushMarkdownReady, handleHitPost,
         handleLikePost, handleListComments, handleListPageChange, handleListPageSizeChange, handleListSortChange, handleLogout,

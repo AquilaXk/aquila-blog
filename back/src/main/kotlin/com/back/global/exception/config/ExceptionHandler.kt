@@ -428,30 +428,67 @@ class ExceptionHandler(
 
     /**
      * Logback serializes throwable.getMessage() into stack output.
-     * Attach a copy whose message (and cause messages) are redacted while preserving frames.
+     * Attach a same-type copy whose message/cause/suppressed messages are redacted
+     * while preserving frames and exception class names for ops aggregation.
      */
     private fun redactedThrowableForLogging(ex: Throwable): Throwable {
-        val redactedMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
-        val copy =
-            when (ex) {
-                is AppException ->
-                    AppException(
-                        ex.rsData.resultCode,
-                        SensitiveQueryRedactor.redactText(ex.rsData.msg, MAX_QUERY_LENGTH),
-                    )
-                is RuntimeException -> RuntimeException(redactedMessage)
-                else -> Exception(redactedMessage)
-            }
+        val copy = newRedactedThrowableSameType(ex)
         copy.stackTrace = ex.stackTrace
         val cause = ex.cause
         if (cause != null) {
             try {
                 copy.initCause(redactedThrowableForLogging(cause))
             } catch (_: IllegalStateException) {
-                // already has a cause
+                // constructor already attached a cause; keep that redacted instance if possible
             }
         }
+        for (suppressed in ex.suppressed) {
+            copy.addSuppressed(redactedThrowableForLogging(suppressed))
+        }
         return copy
+    }
+
+    private fun newRedactedThrowableSameType(ex: Throwable): Throwable {
+        if (ex is AppException) {
+            return AppException(
+                ex.rsData.resultCode,
+                SensitiveQueryRedactor.redactText(ex.rsData.msg, MAX_QUERY_LENGTH),
+            )
+        }
+
+        val redactedMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
+        val clazz = ex.javaClass
+
+        createThrowableWithMessage(clazz, redactedMessage)?.let { return it }
+
+        // Last resort: keep original runtime/checked distinction only.
+        return if (ex is RuntimeException) {
+            RuntimeException(redactedMessage)
+        } else {
+            Exception(redactedMessage)
+        }
+    }
+
+    private fun createThrowableWithMessage(
+        clazz: Class<out Throwable>,
+        message: String,
+    ): Throwable? {
+        // Prefer (String) so cause stays unset and can be attached via initCause.
+        runCatching {
+            val ctor = clazz.getDeclaredConstructor(String::class.java)
+            ctor.isAccessible = true
+            return ctor.newInstance(message)
+        }
+
+        return runCatching {
+            val ctor = clazz.getDeclaredConstructor()
+            ctor.isAccessible = true
+            val instance = ctor.newInstance()
+            val detailMessage = Throwable::class.java.getDeclaredField("detailMessage")
+            detailMessage.isAccessible = true
+            detailMessage.set(instance, message)
+            instance
+        }.getOrNull()
     }
 
     private fun sanitizeLogValue(

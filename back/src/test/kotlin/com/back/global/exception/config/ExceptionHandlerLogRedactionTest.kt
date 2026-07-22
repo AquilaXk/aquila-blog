@@ -82,6 +82,50 @@ class ExceptionHandlerLogRedactionTest {
     }
 
     @Test
+    @DisplayName("redacted throwable은 원본 예외 타입과 suppressed를 보존한다")
+    fun `redacted throwable preserves type and suppressed`() {
+        val handler = ExceptionHandler()
+        val request = MockHttpServletRequest("GET", "/internal")
+        val appender = ExceptionHandlerListAppenderSupport.attach()
+
+        val suppressed =
+            IllegalStateException("close failed token=LEAK_TEST_123").apply {
+                stackTrace =
+                    arrayOf(
+                        StackTraceElement(
+                            "com.example.Closer",
+                            "close",
+                            "Closer.kt",
+                            12,
+                        ),
+                    )
+            }
+        val unexpected =
+            NullPointerException("boom token=LEAK_TEST_123").apply {
+                addSuppressed(suppressed)
+            }
+
+        try {
+            handler.handleUnexpectedException(unexpected, request)
+        } finally {
+            ExceptionHandlerListAppenderSupport.detach(appender)
+        }
+
+        val event = appender.list.single()
+        assertThat(event.throwableProxy).isNotNull
+        assertThat(event.throwableProxy.className).isEqualTo(NullPointerException::class.java.name)
+        assertThat(event.throwableProxy.message)
+            .contains("token=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
+        assertThat(event.throwableProxy.suppressed).hasSize(1)
+        assertThat(event.throwableProxy.suppressed[0].className)
+            .isEqualTo(IllegalStateException::class.java.name)
+        assertThat(event.throwableProxy.suppressed[0].message)
+            .contains("token=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
+    }
+
+    @Test
     @DisplayName("4xx AppException은 warn 1줄만 남기고 스택을 포함하지 않는다")
     fun `4xx app exception records warn without stack`() {
         val handler = ExceptionHandler()

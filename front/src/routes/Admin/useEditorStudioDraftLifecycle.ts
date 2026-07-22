@@ -12,6 +12,7 @@ import {
   adminContentNeedsCodeFenceRecovery,
   reportCodeFenceRecovery,
   resolveEditorCodeFenceRecovery,
+  shouldFetchPublicContentForCodeFenceRecovery,
 } from "./editorCodeFenceRecovery"
 import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
 import { isServerTempDraftPost } from "./editorTempDraft"
@@ -399,7 +400,8 @@ export const useEditorStudioDraftLifecycle = ({
       let publicFallbackSucceeded = false
 
       // empty-fence complete만으로 public fetch를 건너뛰면 fence title/delimiter 등 메타데이터가 유실될 수 있다.
-      const shouldFetchPublicContent = needsCodeFenceRecovery
+      // 완전히 빈 admin은 stale-if-error 캐시 public 본문으로 되살리지 않는다.
+      const shouldFetchPublicContent = shouldFetchPublicContentForCodeFenceRecovery(adminContent)
 
       if (shouldFetchPublicContent) {
         try {

@@ -7,6 +7,7 @@ import {
   isCandidateInSyncWithAdmin,
   isContentHtmlRecoveryTrustworthy,
   resolveEditorCodeFenceRecovery,
+  shouldFetchPublicContentForCodeFenceRecovery,
 } from "../../src/routes/Admin/editorCodeFenceRecovery"
 
 const emptyFenceContent = [
@@ -380,5 +381,59 @@ test.describe("editor code fence recovery", () => {
 
     expect(result.rejectStoredContentHtml).toBe(true)
     expect(result.source).not.toBe("contentHtml")
+  })
+
+  test("rejects html recovery when public fence body mismatches non-empty html body", () => {
+    const htmlWithCodeA = [
+      "intro",
+      "",
+      "```kotlin",
+      "fun codeA() = Unit",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+    const publicWithCodeB = [
+      "intro",
+      "",
+      "```kotlin",
+      "fun codeB() = Unit",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+
+    expect(
+      htmlRecoveryConflictsWithPublic(emptyFenceContent, htmlWithCodeA, publicWithCodeB)
+    ).toBe(true)
+    expect(
+      isContentHtmlRecoveryTrustworthy({
+        adminContent: emptyFenceContent,
+        contentHtmlBodyCandidate: htmlWithCodeA,
+        htmlRecoveredContent: htmlWithCodeA,
+        publicContent: publicWithCodeB,
+        publicFallbackSucceeded: true,
+      })
+    ).toBe(false)
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: emptyFenceContent,
+      contentHtmlBodyCandidate: htmlWithCodeA,
+      publicContent: publicWithCodeB,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("publicApi")
+    expect(result.recovered).toBe(true)
+    expect(result.rejectStoredContentHtml).toBe(true)
+    expect(result.content).toContain("fun codeB() = Unit")
+    expect(result.content).not.toContain("fun codeA() = Unit")
+  })
+
+  test("skips public fetch for completely empty admin but allows empty-fence admin", () => {
+    expect(shouldFetchPublicContentForCodeFenceRecovery("")).toBe(false)
+    expect(shouldFetchPublicContentForCodeFenceRecovery("   \n")).toBe(false)
+    expect(shouldFetchPublicContentForCodeFenceRecovery(emptyFenceContent)).toBe(true)
+    expect(shouldFetchPublicContentForCodeFenceRecovery(filledFenceContent)).toBe(false)
   })
 })

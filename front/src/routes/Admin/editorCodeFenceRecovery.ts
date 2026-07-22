@@ -93,9 +93,13 @@ export const htmlRecoveryConflictsWithPublic = (
     const htmlBlock = htmlBlocks[blockIndex]
     const publicBlock = publicBlocks[blockIndex]
     if (!htmlBlock || isCodeFenceBodyVisiblyEmpty(htmlBlock.body)) continue
-    if (!publicBlock || !isCodeFenceBodyVisiblyEmpty(publicBlock.body)) continue
+    if (!publicBlock) continue
 
-    return true
+    // public empty + html filled: intentional clear vs stale html
+    if (isCodeFenceBodyVisiblyEmpty(publicBlock.body)) return true
+
+    // both non-empty but different: prefer public over mismatched html
+    if (htmlBlock.body !== publicBlock.body) return true
   }
 
   return false
@@ -187,6 +191,13 @@ export const hasEmptyFencedCodeBlockBody = (content: string) =>
   parseFencedCodeBlocks(content.replace(/\r\n?/g, "\n")).some((block) =>
     isCodeFenceBodyVisiblyEmpty(block.body)
   )
+
+/**
+ * Public detail fallback is only for non-empty admin with empty fences.
+ * Completely empty admin must not hydrate from potentially cached public detail.
+ */
+export const shouldFetchPublicContentForCodeFenceRecovery = (adminContent: string) =>
+  hasEmptyFencedCodeBlockBody(adminContent)
 
 export const adminContentNeedsCodeFenceRecovery = (content: string) =>
   content.trim().length === 0 || hasEmptyFencedCodeBlockBody(content)

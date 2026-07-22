@@ -234,9 +234,9 @@ class ExceptionHandler(
         ex: AppException,
         request: HttpServletRequest,
     ): ResponseEntity<RsData<Void>> {
+        val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
+        val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
         if (ex.rsData.statusCode >= 500) {
-            val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
-            val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
             val query = SensitiveQueryRedactor.redactQuery(request.queryString, MAX_QUERY_LENGTH)
             val exceptionMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
             logger.error(
@@ -248,6 +248,15 @@ class ExceptionHandler(
                 ex.rsData.resultCode,
                 ex::class.qualifiedName,
                 exceptionMessage,
+                ex,
+            )
+        } else {
+            logger.warn(
+                "app_exception status={} method={} path={} resultCode={}",
+                ex.rsData.statusCode,
+                method,
+                path,
+                ex.rsData.resultCode,
             )
         }
 
@@ -301,15 +310,14 @@ class ExceptionHandler(
         val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
         val query = SensitiveQueryRedactor.redactQuery(request.queryString, MAX_QUERY_LENGTH)
         val exceptionMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
-        val exceptionStack = SensitiveQueryRedactor.redactText(ex.stackTraceToString(), MAX_EXCEPTION_STACK_LENGTH)
         logger.error(
-            "unhandled_server_exception method={} path={} query={} exceptionClass={} exceptionMessage={} exceptionStack={}",
+            "unhandled_server_exception method={} path={} query={} exceptionClass={} exceptionMessage={}",
             method,
             path,
             query,
             ex::class.qualifiedName,
             exceptionMessage,
-            exceptionStack,
+            ex,
         )
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -354,7 +362,6 @@ class ExceptionHandler(
         private const val MAX_METHOD_LENGTH = 16
         private const val MAX_PATH_LENGTH = 512
         private const val MAX_QUERY_LENGTH = 512
-        private const val MAX_EXCEPTION_STACK_LENGTH = 4096
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
     }
 }

@@ -8,6 +8,10 @@
                 <timeZone>Asia/Seoul</timeZone>
                 <includeMdc>true</includeMdc>
                 <customFields>{"service":"${appName}","env":"prod"}</customFields>
+                <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                    <maxDepthPerThrowable>30</maxDepthPerThrowable>
+                    <rootCauseFirst>true</rootCauseFirst>
+                </throwableConverter>
             </encoder>
         </appender>
 

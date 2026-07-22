@@ -36,4 +36,4 @@
 - 민감 설정은 코드에 하드코딩하지 않고 secret/env로 주입
 - DB 스키마 변경은 Flyway migration으로 이력 관리
 - CI 필수 게이트(`ktlint`, 테스트, 프론트 lint/build/smoke)를 통과해야 배포
-- 취약점 머지 게이트(NVD dependency-check, dependency review, frontend audit/OSV, container High/Critical, SBOM)는 `docs/ops/security-scan-merge-gate.md`를 따른다
+- 취약점 머지 게이트는 `docs/ops/security-scan-merge-gate.md`를 따른다. PR는 dependency review·frontend audit/OSV·container High/Critical·SBOM을 막고, full NVD `dependency-check`는 `main` push/주간 schedule 게이트다(#1344)

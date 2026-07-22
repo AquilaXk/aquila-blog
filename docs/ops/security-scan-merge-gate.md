@@ -13,6 +13,17 @@ PR → `main` merge-blocking vulnerability gates live in `.github/workflows/secu
 
 NVD API outage on main/schedule remains fail-fast (no silent skip). Do not treat PR green as “NVD clean”; trunk/schedule evidence is the full-scan gate.
 
+### PR-facing Security jobs (typical required-check names)
+
+- `backend-dependency-check` (PR: deferred success only — not a full NVD result)
+- `vulnerability-exception-schema`
+- `frontend-lockfile-audit`
+- `container-image-scan`
+- `sbom`
+- `privacy-drift-gate`
+- `codeql` (java-kotlin / javascript-typescript)
+- plus reusable `dependency-review` from backend quality on PRs
+
 ## Required secrets / vars (names only — never commit values)
 
 | Name | Kind | Purpose |

@@ -1,12 +1,13 @@
 import { dehydrate, DehydratedState } from "@tanstack/react-query"
 import { IncomingMessage } from "http"
 import { GetServerSidePropsResult } from "next"
+import { ApiError } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
 import type { AdminProfile } from "src/hooks/useAdminProfile"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import { createQueryClient } from "src/libs/react-query"
 import { normalizeNextPath, toLoginPath } from "src/libs/router"
-import { serverApiFetch } from "./backend"
+import { serverApiFetchJson } from "./backend"
 import { guardAdminRequest } from "./adminGuard"
 import { hasServerAuthCookie } from "./authSession"
 import {
@@ -80,9 +81,19 @@ export const readAdminProtectedBootstrap = async <T>(
   fallbackPath: string
 ): Promise<AdminProtectedBootstrapResult<T>> => {
   try {
-    const response = await serverApiFetch(req, path)
+    const value = await serverApiFetchJson<T>(req, path)
+    return {
+      ok: true,
+      value,
+    }
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      // 5xx/network/timeout 등 → Next 500 (destination: null 제거)
+      throw error
+    }
+
     const shouldDeferRedirectToFallback = hasServerAuthCookie(req)
-    if (response.status === 401) {
+    if (error.status === 401) {
       return {
         ok: false,
         destination: shouldDeferRedirectToFallback
@@ -90,28 +101,15 @@ export const readAdminProtectedBootstrap = async <T>(
           : toLoginPath(normalizeNextPath(req.url, fallbackPath), fallbackPath),
       }
     }
-    if (response.status === 403) {
+    if (error.status === 403) {
       return {
         ok: false,
         destination: shouldDeferRedirectToFallback ? null : "/",
       }
     }
-    if (!response.ok) {
-      return {
-        ok: false,
-        destination: null,
-      }
-    }
 
-    return {
-      ok: true,
-      value: (await response.json()) as T,
-    }
-  } catch {
-    return {
-      ok: false,
-      destination: null,
-    }
+    // 그 외 HTTP 실패 → Next 500
+    throw error
   }
 }
 

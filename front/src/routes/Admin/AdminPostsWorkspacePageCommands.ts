@@ -4,7 +4,7 @@ import type { AuthMember } from "src/hooks/useAuthSession"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import { hasServerAuthCookie } from "src/libs/server/authSession"
-import { serverApiFetch } from "src/libs/server/backend"
+import { serverApiFetchJson } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import {
@@ -70,11 +70,8 @@ const buildCanonicalPostUrl = (postId: string | number) => {
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
-    const response = await serverApiFetch(req, path)
-    if (!response.ok) return null
-    const contentLength = response.headers.get("content-length")
-    if (contentLength === "0") return null
-    return (await response.json()) as T
+    const value = await serverApiFetchJson<T>(req, path)
+    return value ?? null
   } catch {
     return null
   }
@@ -94,6 +91,9 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
       : null
 
   const bootstrapResult = bootstrapResultPromise ? await bootstrapResultPromise : null
+  if (bootstrapResult && !bootstrapResult.ok) {
+    throw bootstrapResult.error
+  }
   if (bootstrapResult?.ok && !bootstrapResult.value.ok && bootstrapResult.value.destination) {
     return {
       redirect: {

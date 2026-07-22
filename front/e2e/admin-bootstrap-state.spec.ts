@@ -8,6 +8,8 @@ test.describe("admin bootstrap state contract", () => {
 
     expect(adminSource).toContain('"/member/api/v1/adm/members/bootstrap"')
     expect(adminSource).toContain("readAdminProtectedBootstrap<AdminHubBootstrapPayload>(req, \"/member/api/v1/adm/members/bootstrap\", \"/admin\")")
+    expect(adminSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(adminSource).toContain("throw bootstrapResult.error")
     expect(adminSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(adminSource).toContain('profileDescription = "bootstrap"')
   })
@@ -26,6 +28,8 @@ test.describe("admin bootstrap state contract", () => {
 
     expect(postsSource).toContain('"/post/api/v1/adm/posts/bootstrap"')
     expect(postsSource).toContain("readAdminProtectedBootstrap<AdminPostsBootstrapPayload>(")
+    expect(postsSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(postsSource).toContain("throw bootstrapResult.error")
     expect(postsSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(postsSource).toContain('source: "bootstrap"')
   })
@@ -34,11 +38,17 @@ test.describe("admin bootstrap state contract", () => {
     const adminPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/adminPage.ts"), "utf8")
 
     expect(adminPageSource).toContain('import { hasServerAuthCookie } from "./authSession"')
+    expect(adminPageSource).toContain("import { serverApiFetchJson } from \"./backend\"")
+    expect(adminPageSource).toContain("const value = await serverApiFetchJson<T>(req, path)")
     expect(adminPageSource).toContain("const shouldDeferRedirectToFallback = hasServerAuthCookie(req)")
     expect(adminPageSource).toMatch(
       /destination:\s*shouldDeferRedirectToFallback\s*\?\s*null\s*:\s*toLoginPath\(normalizeNextPath\(req\.url, fallbackPath\), fallbackPath\)/
     )
     expect(adminPageSource).toMatch(/destination:\s*shouldDeferRedirectToFallback\s*\?\s*null\s*:\s*"\/"/)
+    expect(adminPageSource).not.toMatch(/if\s*\(\s*!response\.ok\s*\)\s*\{\s*return\s*\{\s*ok:\s*false,\s*destination:\s*null/)
+    expect(adminPageSource).toContain("// 5xx/network/timeout 등 → Next 500 (destination: null 제거)")
+    expect(adminPageSource).toContain("// 그 외 HTTP 실패 → Next 500")
+    expect(adminPageSource).toContain("throw error")
   })
 
   test("운영 진단은 auth/session 선조회 대신 protected bootstrap으로 health summary를 first paint에 주입한다", () => {
@@ -48,6 +58,8 @@ test.describe("admin bootstrap state contract", () => {
 
     expect(toolsSource).toContain('"/system/api/v1/adm/bootstrap"')
     expect(toolsSource).toContain("readAdminProtectedBootstrap<AdminToolsBootstrapPayload>(req, \"/system/api/v1/adm/bootstrap\", \"/admin/tools\")")
+    expect(toolsSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(toolsSource).toContain("throw bootstrapResult.error")
     expect(toolsSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(toolsSource).toContain("systemHealth: bootstrapResult.value.value.health")
     expect(toolsSource).toContain('source: "bootstrap"')
@@ -68,6 +80,8 @@ test.describe("admin bootstrap state contract", () => {
     expect(dashboardSource).toContain(
       "readAdminProtectedBootstrap<AdminDashboardBootstrapPayload>(req, \"/system/api/v1/adm/bootstrap\", \"/admin/dashboard\")"
     )
+    expect(dashboardSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(dashboardSource).toContain("throw bootstrapResult.error")
     expect(dashboardSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(dashboardSource).toContain("value: bootstrapResult.value.value.health")
     expect(dashboardSource).toContain("value: bootstrapResult.value.value.dashboard")
@@ -82,9 +96,24 @@ test.describe("admin bootstrap state contract", () => {
     expect(profileSource).toContain(
       "readAdminProtectedBootstrap<AdminProfileBootstrapPayload>("
     )
+    expect(profileSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(profileSource).toContain("throw bootstrapResult.error")
     expect(profileSource).toContain("initialWorkspace = bootstrapResult.value.value.workspace")
     expect(profileSource).toContain('name: "admin-profile-auth"')
     expect(profileSource).toContain('name: "admin-profile-workspace"')
     expect(profileSource).toContain('name: "admin-profile-ssr-total"')
+  })
+
+  test("editor studio는 auth cookie가 있을 때만 protected bootstrap을 호출하고 없으면 QA guard fallback으로 간다", () => {
+    const editorSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
+      "utf8"
+    )
+
+    expect(editorSource).toContain('import { hasServerAuthCookie } from "src/libs/server/authSession"')
+    expect(editorSource).toContain('"/member/api/v1/adm/members/bootstrap"')
+    expect(editorSource).toContain("if (hasServerAuthCookie(req))")
+    expect(editorSource).toContain("readAdminProtectedBootstrap<{")
+    expect(editorSource).toContain("return await getAdminPageProps(req)")
   })
 })

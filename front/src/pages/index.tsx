@@ -18,7 +18,7 @@ import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { setAdminProfileCache } from "src/hooks/useAdminProfile"
 
 const HOME_ISR_REVALIDATE_SECONDS = 60
-const HOME_QA_SHELL_REVALIDATE_SECONDS = 15
+const HOME_DEGRADED_REVALIDATE_SECONDS = 30
 const IS_QA_STATIC_SHELL_MODE = process.env.ENABLE_QA_ROUTES === "true"
 type HomeBootstrapStatus = "ready" | "degraded" | "shell"
 
@@ -130,7 +130,7 @@ export const getStaticProps: GetStaticProps = async () => {
     },
     revalidate:
       IS_QA_STATIC_SHELL_MODE || !postsLoaded || initialAdminProfileSource === "static-fallback"
-        ? HOME_QA_SHELL_REVALIDATE_SECONDS
+        ? HOME_DEGRADED_REVALIDATE_SECONDS
         : HOME_ISR_REVALIDATE_SECONDS,
   }
 }

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { FormEvent, useState } from "react"
+import { FormEvent, useRef, useState } from "react"
 import { deletePrivacyAccount } from "src/apis/backend/privacy"
 import { ConfirmDialog } from "src/design-system/ConfirmDialog"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -25,19 +25,21 @@ const SettingsAccountPage = () => {
   const [sessionExpired, setSessionExpired] = useState(false)
   const [revokedSessionCount, setRevokedSessionCount] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const deletionInFlightRef = useRef(false)
+  const deletionCompletedRef = useRef(false)
 
   const accountIdentity = me?.nickname?.trim() || me?.username?.trim() || "현재 계정"
 
   const openConfirm = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!confirmed || submitting) return
-    setPasswordError("")
-    setSessionExpired(false)
-    setFeedback(null)
+    if (!confirmed || submitting || deletionInFlightRef.current || deletionCompletedRef.current) return
+    // Keep prior failure feedback if the user cancels the confirm dialog.
     setConfirmOpen(true)
   }
 
   const runDeletion = async () => {
+    if (deletionInFlightRef.current || deletionCompletedRef.current || submitting) return
+    deletionInFlightRef.current = true
     setConfirmOpen(false)
     setSubmitting(true)
     setPasswordError("")
@@ -50,11 +52,13 @@ const SettingsAccountPage = () => {
         oauthAccountDeletionConfirmed: !trimmedPassword && confirmed,
         reason: reason.trim() || undefined,
       })
+      deletionCompletedRef.current = true
       setRevokedSessionCount(response.data.revokedSessionCount)
       setFeedback({ tone: "success", text: response.msg })
       setDeletionCompleted(true)
       clearMe()
     } catch (error) {
+      if (deletionCompletedRef.current) return
       const failure = resolveAccountDeletionFailure(error)
       if (failure.kind === "password") {
         setPasswordError(failure.message)
@@ -66,6 +70,9 @@ const SettingsAccountPage = () => {
       }
     } finally {
       setSubmitting(false)
+      if (!deletionCompletedRef.current) {
+        deletionInFlightRef.current = false
+      }
     }
   }
 

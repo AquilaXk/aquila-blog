@@ -263,7 +263,7 @@ test("settings account page shows password field error for 400 deletion failure"
       contentType: "application/json",
       body: JSON.stringify({
         resultCode: "400-1",
-        msg: "비밀번호가 올바르지 않습니다.",
+        msg: "비밀번호를 입력해주세요.",
       }),
     })
   })
@@ -273,10 +273,35 @@ test("settings account page shows password field error for 400 deletion failure"
   await page.getByRole("checkbox", { name: "계정 탈퇴 영향을 확인했습니다." }).check()
   await confirmAccountDeletion(page)
 
-  const alert = page.getByRole("alert").filter({ hasText: "비밀번호가 올바르지 않습니다." })
+  const alert = page.getByRole("alert").filter({ hasText: "비밀번호를 입력해주세요." })
   await expect(alert).toBeVisible()
   await expect(alert).toHaveAttribute("data-tone", "danger")
   await expect(page.getByRole("heading", { name: "계정 탈퇴 완료" })).toHaveCount(0)
+})
+
+test("settings account page shows password field error for wrong-password 401", async ({ page }) => {
+  await fulfillAuthMe(page)
+  await page.route("**/member/api/v1/privacy/account", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "401-1",
+        msg: "비밀번호가 일치하지 않습니다.",
+      }),
+    })
+  })
+
+  await page.goto("/settings/account")
+  await page.getByLabel("비밀번호 재확인 (이메일 계정)").fill("wrong-password")
+  await page.getByRole("checkbox", { name: "계정 탈퇴 영향을 확인했습니다." }).check()
+  await confirmAccountDeletion(page)
+
+  const alert = page.getByRole("alert").filter({ hasText: "비밀번호가 일치하지 않습니다." })
+  await expect(alert).toBeVisible()
+  await expect(alert).toHaveAttribute("data-tone", "danger")
+  await expect(page.getByRole("heading", { name: "계정 탈퇴 완료" })).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "다시 로그인" })).toHaveCount(0)
 })
 
 test("settings account page guides re-login for 401 deletion failure", async ({ page }) => {

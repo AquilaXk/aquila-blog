@@ -75,6 +75,11 @@ export const settingsStyles = `
     --aq-status-success: ${colors.light.statusSuccessText};
   }
 
+  html[data-aquila-scheme="dark"] .settingsPage {
+    --aq-status-danger: ${colors.dark.statusDangerText};
+    --aq-status-success: ${colors.dark.statusSuccessText};
+  }
+
   .pageHeader {
     display: flex;
     align-items: flex-end;

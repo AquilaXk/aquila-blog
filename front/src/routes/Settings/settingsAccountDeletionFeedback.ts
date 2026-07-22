@@ -11,9 +11,12 @@ export const ACCOUNT_DELETION_SESSION_EXPIRED_MESSAGE =
 export const ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE =
   "계정 확인 상태를 확인했지만 탈퇴를 완료하지 못했습니다."
 
+const isPasswordRelatedMessage = (message: string) => /비밀번호/.test(message)
+
 export const resolveAccountDeletionFailure = (error: unknown): AccountDeletionFailure => {
   if (error instanceof ApiError) {
-    if (error.status === 400 || error.status === 403) {
+    // Backend uses HTTP 401 + "비밀번호가 일치하지 않습니다." for wrong password reauth.
+    if (error.status === 400 || (error.status === 401 && isPasswordRelatedMessage(error.userMessage))) {
       return {
         kind: "password",
         message: error.userMessage || ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE,

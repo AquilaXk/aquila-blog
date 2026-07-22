@@ -15,9 +15,14 @@ import {
   MARKDOWN_EDITOR_MODE_STORAGE_KEY,
   isMarkdownEditorMode,
   readMarkdownEditorModePreference,
+  resolveMarkdownEditorModeAfterHydration,
   writeMarkdownEditorModePreference,
 } from "../../src/components/markdown-editor/markdownEditorModePreference"
-import { applyPlannedTextMutation } from "../../src/components/markdown-editor/markdownEditorTextMutation"
+import {
+  applyPlannedTextMutation,
+  applyPlannedTextMutationToValue,
+} from "../../src/components/markdown-editor/markdownEditorTextMutation"
+import { resolveModeForToolbarInsert } from "../../src/components/markdown-editor/markdownEditorModeTabs"
 
 const blockSpecs = [
   ["code", codeBlockSnippet],
@@ -154,5 +159,32 @@ test.describe("markdown editor mode preference", () => {
 
     writeMarkdownEditorModePreference("bogus" as "write", adapter)
     expect(storage.get(MARKDOWN_EDITOR_MODE_STORAGE_KEY)).toBe("preview")
+  })
+
+  test("SSR render keeps default mode until client storage is applied", () => {
+    const storage = new Map<string, string>([[MARKDOWN_EDITOR_MODE_STORAGE_KEY, "write"]])
+
+    expect(readMarkdownEditorModePreference(null)).toBe(DEFAULT_MARKDOWN_EDITOR_MODE)
+    expect(resolveMarkdownEditorModeAfterHydration(DEFAULT_MARKDOWN_EDITOR_MODE, null)).toBe(
+      DEFAULT_MARKDOWN_EDITOR_MODE
+    )
+    expect(
+      resolveMarkdownEditorModeAfterHydration(DEFAULT_MARKDOWN_EDITOR_MODE, {
+        getItem: (key) => storage.get(key) ?? null,
+      })
+    ).toBe("write")
+  })
+
+  test("preview toolbar inserts switch to write before applying mutation", () => {
+    expect(resolveModeForToolbarInsert("preview")).toBe("write")
+    expect(resolveModeForToolbarInsert("split")).toBe("split")
+  })
+
+  test("value-path mutation inserts at the active selection instead of appending", () => {
+    const plan = planInsertBlockSnippet(5, 5, tableBlockSnippet)
+    const next = applyPlannedTextMutationToValue("alphaomega", plan)
+
+    expect(next.value.indexOf("|  |  |")).toBeLessThan(next.value.indexOf("omega"))
+    expect(next.value).toBe(`alpha${tableBlockSnippet.snippet}omega`)
   })
 })

@@ -9,10 +9,10 @@ export const DEFAULT_MARKDOWN_EDITOR_MODE: MarkdownEditorMode = "split"
 export const isMarkdownEditorMode = (value: unknown): value is MarkdownEditorMode =>
   typeof value === "string" && ALLOWED_MODES.includes(value as MarkdownEditorMode)
 
+type ModePreferenceStorage = Pick<Storage, "getItem"> | null | undefined
+
 export const readMarkdownEditorModePreference = (
-  storage: Pick<Storage, "getItem"> | null | undefined = typeof window === "undefined"
-    ? null
-    : window.localStorage
+  storage: ModePreferenceStorage = typeof window === "undefined" ? null : window.localStorage
 ): MarkdownEditorMode => {
   if (!storage) return DEFAULT_MARKDOWN_EDITOR_MODE
 
@@ -24,6 +24,15 @@ export const readMarkdownEditorModePreference = (
   }
 
   return DEFAULT_MARKDOWN_EDITOR_MODE
+}
+
+/** SSR/hydration must render the default mode before client storage is available. */
+export const resolveMarkdownEditorModeAfterHydration = (
+  renderedMode: MarkdownEditorMode,
+  storage: ModePreferenceStorage = typeof window === "undefined" ? null : window.localStorage
+): MarkdownEditorMode => {
+  const storedMode = readMarkdownEditorModePreference(storage)
+  return renderedMode === storedMode ? renderedMode : storedMode
 }
 
 export const writeMarkdownEditorModePreference = (

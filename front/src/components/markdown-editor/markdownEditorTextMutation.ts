@@ -19,6 +19,15 @@ export const applyPlannedTextMutation = (
   return textarea.value
 }
 
+export const applyPlannedTextMutationToValue = (
+  value: string,
+  plan: PlannedTextMutation
+): { value: string; selectionStart: number; selectionEnd: number } => ({
+  value: `${value.slice(0, plan.rangeStart)}${plan.replacement}${value.slice(plan.rangeEnd)}`,
+  selectionStart: plan.selectionStart,
+  selectionEnd: plan.selectionEnd,
+})
+
 export const planReplaceSelection = (
   selectionStart: number,
   selectionEnd: number,

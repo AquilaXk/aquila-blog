@@ -154,36 +154,79 @@ class PostImageStorageAdapterTest {
     }
 
     @Test
-    @DisplayName("listObjects는 빈 keyPrefix에서 bucket root inventory를 조회한다")
-    fun listObjectsAllowsRootPrefixWhenConfiguredPrefixIsBlank() {
+    @DisplayName("빈 keyPrefix여도 cloud/ 이미지 키는 공개 읽기 전에 거절한다")
+    fun blankKeyPrefixStillRejectsCloudImageKeysOnPublicReadPath() {
         // given
-        val s3Client =
-            RecordingS3Client(
-                ListObjectsV2Response
-                    .builder()
-                    .contents(
-                        s3Object("2026/06/root.png", 10),
-                    ).isTruncated(false)
-                    .build(),
-            )
         val adapter =
             PostImageStorageAdapter(
                 PostImageStorageProperties(
-                    enabled = true,
-                    bucket = TEST_BUCKET,
+                    enabled = false,
+                    keyPrefix = "   ",
+                ),
+            )
+
+        // when & then
+        assertThatThrownBy {
+            adapter.getPostImage("cloud/1/private/2026/06/leaked.png")
+        }.hasMessageContaining("400-1")
+            .hasMessageContaining("유효하지 않은 이미지 경로입니다.")
+    }
+
+    @Test
+    @DisplayName("빈 keyPrefix여도 cloud/ 파일 키는 공개 읽기 전에 거절한다")
+    fun blankKeyPrefixStillRejectsCloudFileKeysOnPublicReadPath() {
+        // given
+        val adapter =
+            PostImageStorageAdapter(
+                PostImageStorageProperties(
+                    enabled = false,
                     keyPrefix = "",
                 ),
             )
-        ReflectionTestUtils.setField(adapter, "s3Client", s3Client)
 
-        // when
-        val listing = adapter.listObjects("", limit = 25)
+        // when & then
+        assertThatThrownBy {
+            adapter.getPostFile("cloud/1/private/2026/06/secret.pdf")
+        }.hasMessageContaining("400-1")
+            .hasMessageContaining("유효하지 않은 이미지 경로입니다.")
+    }
 
-        // then
-        assertThat(s3Client.lastListObjectsRequest!!.prefix()).isEqualTo("")
-        assertThat(listing.objects).containsExactly(
-            PostImageStoragePort.StoredObjectSummary("2026/06/root.png", 10),
-        )
+    @Test
+    @DisplayName("빈 keyPrefix여도 listObjects의 cloud/ inventory 요청을 거절한다")
+    fun blankKeyPrefixStillRejectsCloudListObjectsPrefix() {
+        // given
+        val adapter =
+            PostImageStorageAdapter(
+                PostImageStorageProperties(
+                    enabled = false,
+                    keyPrefix = "",
+                ),
+            )
+
+        // when & then
+        assertThatThrownBy {
+            adapter.listObjects("cloud/2026/06", limit = 25)
+        }.hasMessageContaining("400-1")
+            .hasMessageContaining("유효하지 않은 이미지 경로입니다.")
+    }
+
+    @Test
+    @DisplayName("빈 keyPrefix는 posts 기본값으로 강제되어 posts 키만 허용한다")
+    fun blankKeyPrefixForcesPostsDefaultForPublicReadPath() {
+        // given
+        val adapter =
+            PostImageStorageAdapter(
+                PostImageStorageProperties(
+                    enabled = false,
+                    keyPrefix = "",
+                ),
+            )
+
+        // when & then
+        assertThatThrownBy {
+            adapter.getPostImage("posts/2026/06/image.png")
+        }.hasMessageContaining("503-1")
+            .hasMessageContaining("이미지 스토리지가 비활성화되어 있습니다.")
     }
 
     @Test

@@ -69,7 +69,7 @@ class CloudVideoUploadSession(
     @field:Column(nullable = false)
     val totalParts: Int,
     @field:Column(nullable = false)
-    val expiresAt: Instant,
+    var expiresAt: Instant,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 40)
     var status: CloudVideoUploadSessionStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
@@ -159,4 +159,7 @@ class CloudVideoUploadPart(
     val eTag: String,
     @field:Column(nullable = false)
     val byteSize: Long,
+    /** Part 바이트의 SHA-256 hex(64). multipart complete 시 composite checksum 재료. */
+    @field:Column(nullable = false, length = 64)
+    var partSha256: String,
 ) : BaseTime(id)

@@ -12,15 +12,137 @@ import software.amazon.awssdk.http.AbortableInputStream
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectResponse
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.S3Exception
+import software.amazon.awssdk.services.s3.model.S3Object
 import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 
 @DisplayName("CloudStorageAdapter 테스트")
 class CloudStorageAdapterTest {
     private val objectKey = "cloud/7/video/demo.mp4"
+
+    @Test
+    @DisplayName("head는 S3 HeadObject 메타데이터를 반환한다")
+    fun headReturnsObjectMetadata() {
+        val s3Client =
+            RecordingS3Client(
+                onHeadObject = {
+                    HeadObjectResponse
+                        .builder()
+                        .contentLength(2048)
+                        .contentType("video/mp4")
+                        .eTag("\"etag-1\"")
+                        .build()
+                },
+            ) { error("getObject should not be called") }
+        val adapter = adapterWithClient(s3Client)
+
+        val head = adapter.head(objectKey)
+
+        assertThat(s3Client.lastHeadObjectRequest!!.bucket()).isEqualTo("test-bucket")
+        assertThat(s3Client.lastHeadObjectRequest!!.key()).isEqualTo(objectKey)
+        assertThat(head).isNotNull
+        assertThat(head!!.objectKey).isEqualTo(objectKey)
+        assertThat(head.contentLength).isEqualTo(2048)
+        assertThat(head.contentType).isEqualTo("video/mp4")
+        assertThat(head.eTag).isEqualTo("\"etag-1\"")
+    }
+
+    @Test
+    @DisplayName("head는 S3 NoSuchKey를 null로 변환한다")
+    fun headReturnsNullForNoSuchKey() {
+        val s3Client =
+            RecordingS3Client(
+                onHeadObject = { throw NoSuchKeyException.builder().message("missing").build() },
+            ) { error("getObject should not be called") }
+        val adapter = adapterWithClient(s3Client)
+
+        assertThat(adapter.head(objectKey)).isNull()
+    }
+
+    @Test
+    @DisplayName("listObjects는 ListObjectsV2 페이지네이션으로 prefix 객체를 수집한다")
+    fun listObjectsPaginatesPrefixObjects() {
+        val page1Key = "cloud/7/a.mp4"
+        val page2Key = "cloud/7/b.mp4"
+        val lastModified = Instant.parse("2026-06-17T00:00:00Z")
+        val s3Client =
+            RecordingS3Client(
+                onListObjects = { request ->
+                    if (request.continuationToken() == null) {
+                        ListObjectsV2Response
+                            .builder()
+                            .contents(
+                                S3Object
+                                    .builder()
+                                    .key(page1Key)
+                                    .size(10)
+                                    .lastModified(lastModified)
+                                    .build(),
+                            ).isTruncated(true)
+                            .nextContinuationToken("token-2")
+                            .build()
+                    } else {
+                        ListObjectsV2Response
+                            .builder()
+                            .contents(
+                                S3Object
+                                    .builder()
+                                    .key(page2Key)
+                                    .size(20)
+                                    .lastModified(lastModified)
+                                    .build(),
+                            ).isTruncated(false)
+                            .build()
+                    }
+                },
+            ) { error("getObject should not be called") }
+        val adapter = adapterWithClient(s3Client)
+
+        val listing = adapter.listObjects("cloud/", 10)
+
+        assertThat(s3Client.listObjectsRequestCount).isEqualTo(2)
+        assertThat(listing.isTruncated).isFalse()
+        assertThat(listing.objects).hasSize(2)
+        assertThat(listing.objects.map { it.objectKey }).containsExactly(page1Key, page2Key)
+        assertThat(listing.objects.map { it.size }).containsExactly(10L, 20L)
+        assertThat(listing.objects.map { it.lastModified }).containsOnly(lastModified)
+    }
+
+    @Test
+    @DisplayName("listObjects는 limit 미만이어도 S3 truncated를 유지한다")
+    fun listObjectsKeepsTruncatedWhenBelowLimitButS3HasMore() {
+        val lastModified = Instant.parse("2026-06-17T00:00:00Z")
+        val s3Client =
+            RecordingS3Client(
+                onListObjects = {
+                    ListObjectsV2Response
+                        .builder()
+                        .contents(
+                            S3Object
+                                .builder()
+                                .key("cloud/7/only.mp4")
+                                .size(10)
+                                .lastModified(lastModified)
+                                .build(),
+                        ).isTruncated(true)
+                        .build()
+                },
+            ) { error("getObject should not be called") }
+        val adapter = adapterWithClient(s3Client)
+
+        val listing = adapter.listObjects("cloud/", 10)
+
+        assertThat(listing.objects).hasSize(1)
+        assertThat(listing.isTruncated).isTrue()
+    }
 
     @Test
     @DisplayName("openRange는 S3 Range GET 요청으로 지정 구간만 연다")
@@ -133,14 +255,34 @@ class CloudStorageAdapterTest {
     }
 
     private class RecordingS3Client(
+        private val onHeadObject: () -> HeadObjectResponse = {
+            error("headObject should not be called")
+        },
+        private val onListObjects: (ListObjectsV2Request) -> ListObjectsV2Response = {
+            error("listObjectsV2 should not be called")
+        },
         private val onGetObject: () -> ResponseInputStream<GetObjectResponse>,
     ) : S3Client {
         var lastGetObjectRequest: GetObjectRequest? = null
+            private set
+        var lastHeadObjectRequest: HeadObjectRequest? = null
+            private set
+        var listObjectsRequestCount: Int = 0
             private set
 
         override fun getObject(getObjectRequest: GetObjectRequest): ResponseInputStream<GetObjectResponse> {
             lastGetObjectRequest = getObjectRequest
             return onGetObject()
+        }
+
+        override fun headObject(headObjectRequest: HeadObjectRequest): HeadObjectResponse {
+            lastHeadObjectRequest = headObjectRequest
+            return onHeadObject()
+        }
+
+        override fun listObjectsV2(listObjectsV2Request: ListObjectsV2Request): ListObjectsV2Response {
+            listObjectsRequestCount++
+            return onListObjects(listObjectsV2Request)
         }
 
         override fun serviceName(): String = "s3"

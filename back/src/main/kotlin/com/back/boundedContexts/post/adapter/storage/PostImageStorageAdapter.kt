@@ -483,9 +483,9 @@ class PostImageStorageAdapter(
     private fun buildObjectKey(originalFilename: String?): String {
         val ext = extractExtension(originalFilename)
         val datePath = LocalDate.now().format(datePathFormatter)
-        val prefix = properties.keyPrefix.trim().trim('/')
+        val prefix = resolvedKeyPrefix()
         val uuid = UUID.randomUUID().toString()
-        return if (prefix.isBlank()) "$datePath/$uuid$ext" else "$prefix/$datePath/$uuid$ext"
+        return "$prefix/$datePath/$uuid$ext"
     }
 
     private fun extractExtension(originalFilename: String?): String {
@@ -501,12 +501,12 @@ class PostImageStorageAdapter(
     }
 
     private fun validateObjectKey(objectKey: String) {
-        val prefix = properties.keyPrefix.trim().trim('/')
+        val prefix = resolvedKeyPrefix()
         if (
             objectKey.isBlank() ||
             objectKey.contains("..") ||
             objectKey.startsWith("/") ||
-            (prefix.isNotBlank() && !objectKey.startsWith("$prefix/"))
+            !objectKey.startsWith("$prefix/")
         ) {
             throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
         }
@@ -514,16 +514,7 @@ class PostImageStorageAdapter(
 
     private fun normalizeObjectPrefix(prefix: String): String {
         val normalized = prefix.trim().trimStart('/')
-        val allowedPrefix =
-            properties.keyPrefix
-                .trim()
-                .trim('/')
-        if (allowedPrefix.isBlank()) {
-            if (normalized.contains("..")) {
-                throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
-            }
-            return if (normalized.isBlank() || normalized.endsWith("/")) normalized else "$normalized/"
-        }
+        val allowedPrefix = resolvedKeyPrefix()
         if (
             normalized.isBlank() ||
             normalized.contains("..") ||
@@ -534,6 +525,13 @@ class PostImageStorageAdapter(
         }
         return if (normalized.endsWith("/")) normalized else "$normalized/"
     }
+
+    /** blank/whitespace keyPrefix는 cloud 어댑터와 같이 안전 기본값으로 강제한다. */
+    private fun resolvedKeyPrefix(): String =
+        properties.keyPrefix
+            .trim()
+            .trim('/')
+            .ifBlank { "posts" }
 
     private fun decodeStoredOriginalFilename(value: String?): String? {
         val encoded = value?.trim().orEmpty()

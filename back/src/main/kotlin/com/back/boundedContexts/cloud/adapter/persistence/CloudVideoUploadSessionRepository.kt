@@ -43,6 +43,61 @@ interface CloudVideoUploadSessionRepository :
         limit: Int,
     ): List<CloudVideoUploadSession>
 
+    @Query(
+        value = """
+            SELECT *
+            FROM cloud_video_upload_session
+            WHERE (
+                (status = 'INITIATING' AND modified_at <= :initiatingCutoff)
+                OR (status IN ('COMPLETING', 'ABORTING') AND modified_at <= :completingOrAbortingCutoff)
+                OR (status = 'UPLOADING_PART' AND modified_at <= :uploadingPartCutoff)
+            )
+            ORDER BY modified_at ASC, id ASC
+            LIMIT :limit
+        """,
+        nativeQuery = true,
+    )
+    override fun findStaleIntermediate(
+        initiatingCutoff: Instant,
+        completingOrAbortingCutoff: Instant,
+        uploadingPartCutoff: Instant,
+        limit: Int,
+    ): List<CloudVideoUploadSession>
+
+    @Query(
+        value = """
+            SELECT COUNT(*)
+            FROM cloud_video_upload_session
+            WHERE (
+                (status = 'INITIATING' AND modified_at <= :initiatingCutoff)
+                OR (status IN ('COMPLETING', 'ABORTING') AND modified_at <= :completingOrAbortingCutoff)
+                OR (status = 'UPLOADING_PART' AND modified_at <= :uploadingPartCutoff)
+            )
+        """,
+        nativeQuery = true,
+    )
+    override fun countStaleIntermediate(
+        initiatingCutoff: Instant,
+        completingOrAbortingCutoff: Instant,
+        uploadingPartCutoff: Instant,
+    ): Long
+
+    @Query(
+        value = """
+            SELECT object_key
+            FROM cloud_video_upload_session
+            WHERE status NOT IN ('COMPLETED', 'CANCELLED', 'EXPIRED', 'FAILED')
+              AND object_key LIKE CONCAT(:objectKeyPrefix, '%')
+            ORDER BY id ASC
+            LIMIT :limit
+        """,
+        nativeQuery = true,
+    )
+    override fun findNonTerminalObjectKeysByPrefix(
+        objectKeyPrefix: String,
+        limit: Int,
+    ): List<String>
+
     @Transactional
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(
@@ -99,6 +154,24 @@ interface CloudVideoUploadSessionRepository :
         id: Long,
         expectedStatus: CloudVideoUploadSessionStatus,
         reason: String,
+        now: Instant,
+    ): Int
+
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        """
+        UPDATE CloudVideoUploadSession s
+        SET s.expiresAt = :newExpiresAt,
+            s.modifiedAt = :now
+        WHERE s.id = :id
+          AND s.status = 'IN_PROGRESS'
+          AND s.expiresAt < :newExpiresAt
+        """,
+    )
+    override fun extendExpiresAt(
+        id: Long,
+        newExpiresAt: Instant,
         now: Instant,
     ): Int
 }

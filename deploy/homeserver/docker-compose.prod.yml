@@ -289,9 +289,13 @@ services:
       - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1"
       - "--readiness-targets"
       - "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back-worker:8080"
+      - "--disk-paths"
+      - "minio=/host-storage/minio"
     volumes:
       - ./monitoring/docker-runtime-probe.mjs:/app/docker-runtime-probe.mjs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # MinIO data root (same host path as minio_1). Used for filesystem free-space gauges.
+      - ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}:/host-storage:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:9920/healthz || exit 1"]
       interval: 30s
@@ -487,6 +491,10 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Incomplete multipart cleanup must outlive app session absolute max (#1229: 7d).
+      # Defaults would be 24h and can delete parts of active long uploads.
+      MINIO_API_STALE_UPLOADS_EXPIRY: 8d
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 6h
       TZ: Asia/Seoul
     command: server /data --console-address ":9001"
     volumes:

@@ -10,6 +10,7 @@ import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -27,6 +28,8 @@ class MemberApplicationService(
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val applicationEventPublisher: ApplicationEventPublisher,
 ) {
+    private val logger = LoggerFactory.getLogger(MemberApplicationService::class.java)
+
     companion object {
         private const val USERNAME_MAX_LENGTH = 30
         private const val AUTO_USERNAME_BASE_MAX_LENGTH = 24
@@ -85,6 +88,7 @@ class MemberApplicationService(
             memberProfilePersistenceService.saveProfileImage(member)
             uploadedFileRetentionService.syncProfileImage(member.id, null, member.profileImgUrl)
         }
+        logger.info("member_signup_completed memberId={} actorId={}", member.id, member.id)
 
         return member
     }

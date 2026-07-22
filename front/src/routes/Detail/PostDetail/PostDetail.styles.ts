@@ -366,6 +366,11 @@ export const StyledWrapper = styled.div `
     }
   }
 
+  /* P5-2: phone 전용 접이식 목차 — 821px+에서는 우 TOC rail만 사용 */
+  .mobileToc {
+    display: none;
+  }
+
   @media (max-width: 820px) {
     .detailHero {
       padding: 44px 20px 28px;
@@ -385,6 +390,75 @@ export const StyledWrapper = styled.div `
 
     article {
       max-width: 760px;
+    }
+
+    .mobileToc {
+      display: block;
+      margin: 0 0 28px;
+      border: 1px solid var(--detail-v4-line);
+      border-radius: 6px;
+      background: var(--detail-v4-paper);
+    }
+
+    .mobileTocSummary {
+      display: flex;
+      align-items: center;
+      min-height: ${control.lg}px;
+      padding: 0 0.9rem;
+      color: var(--detail-v4-ink);
+      font-size: 0.875rem;
+      font-weight: 750;
+      line-height: 1.2;
+      cursor: pointer;
+      list-style: none;
+
+      &::-webkit-details-marker {
+        display: none;
+      }
+    }
+
+    .mobileTocList {
+      margin: 0;
+      padding: 0 0.5rem 0.5rem;
+      list-style: none;
+    }
+
+    .mobileTocList li {
+      margin: 0;
+      min-width: 0;
+    }
+
+    .mobileTocList li[data-level="3"] button {
+      padding-left: 1.1rem;
+    }
+
+    .mobileTocList li[data-level="4"] button {
+      padding-left: 1.7rem;
+    }
+
+    .mobileTocList button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      min-height: ${control.lg}px;
+      box-sizing: border-box;
+      padding: 0.5rem 0.4rem;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--detail-v4-muted);
+      font-size: 0.875rem;
+      line-height: 1.4;
+      text-align: left;
+      cursor: pointer;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
+    }
+
+    .mobileTocList button[data-active="true"] {
+      color: var(--detail-v4-accent);
+      font-weight: 750;
     }
   }
 `;

@@ -84,6 +84,11 @@ test.describe("core smoke detail layout", () => {
     expect(detailStyles).toContain("display: block;")
     expect(detailStyles).toContain("padding: 30px 20px 70px;")
     expect(detailStyles).toContain(".leftRail,\n    .rightRail {")
+    // P5-2(#1332): ≤820 접이식 목차 + 821–1100 우 TOC rail 유지
+    expect(detailSource).toContain("PostDetailMobileToc")
+    expect(detailStyles).toContain(".mobileToc")
+    expect(detailStyles).toContain(".mobileTocSummary")
+    expect(detailStyles).toContain(".mobileTocList button")
     expect(detailStyles).not.toContain("@media (max-width: 768px)")
     expect(headerStyles).toContain("border-radius: 0;")
     expect(headerStyles).not.toContain("border-radius: 10px;")
@@ -462,7 +467,7 @@ test.describe("core smoke detail layout", () => {
     .toBe("ready")
 })
 
-  test("모바일 상세는 V4 square 액션 rail만 노출하고 접이식 목차를 만들지 않는다", async ({ page }) => {
+  test("모바일 상세는 square 액션 bar와 접이식 목차(row≥44)를 함께 노출한다", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.addInitScript(() => {
     const clipboard = {
@@ -522,6 +527,7 @@ test.describe("core smoke detail layout", () => {
   const compactActionBar = page.getByLabel("빠른 이동 및 반응")
   const engagementRow = page.locator('[aria-label="post engagement"]')
   const metaViewStat = page.locator(".stats .statChip").filter({ hasText: "6 VIEWS" })
+  const mobileToc = page.locator('[aria-label="접이식 목차"]')
   await expect(page.getByRole("button", { name: /공유/ })).toHaveCount(1)
   await expect(page.getByRole("button", { name: /^좋아요/ })).toHaveCount(1)
   await expect(engagementRow).toBeHidden()
@@ -530,8 +536,13 @@ test.describe("core smoke detail layout", () => {
   await expect(compactActionBar.getByRole("button", { name: /^좋아요/ })).toBeVisible()
   await expect(compactActionBar.getByRole("button", { name: /^공유/ })).toBeVisible()
   await expect(compactActionBar.getByRole("button", { name: /^댓글/ })).toBeVisible()
-  await expect(page.locator('[aria-label="접이식 목차"]')).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "모바일 목차 섹션 01" })).toHaveCount(0)
+  await expect(page.locator("aside.rightRail")).toBeHidden()
+  await expect(mobileToc).toBeVisible()
+  await mobileToc.locator("summary").click()
+  const firstTocRow = mobileToc.getByRole("button", { name: "모바일 목차 섹션 01" })
+  await expect(firstTocRow).toBeVisible()
+  const tocRowBox = await firstTocRow.boundingBox()
+  expect(tocRowBox?.height ?? 0).toBeGreaterThanOrEqual(44)
   const actionMetrics = await compactActionBar.evaluate((bar) => {
     const firstButton = bar.querySelector("button")
     const buttonBox = firstButton?.getBoundingClientRect()
@@ -552,5 +563,63 @@ test.describe("core smoke detail layout", () => {
   const compactShareButton = compactActionBar.getByRole("button", { name: /^공유/ })
   await compactShareButton.click()
   await expect(compactShareButton).toBeVisible()
+})
+
+  test("태블릿 821–1100 상세는 우 TOC rail을 유지한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 })
+
+  const content = [
+    "## 태블릿 목차 섹션 01",
+    "태블릿 TOC rail 유지 회귀를 검증하는 본문입니다. ".repeat(12).trim(),
+    "## 태블릿 목차 섹션 02",
+    "두 번째 섹션 본문입니다. ".repeat(8).trim(),
+  ].join("\n\n")
+
+  await page.route("**/post/api/v1/posts/910", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 910,
+        createdAt: "2026-03-16T00:00:00Z",
+        modifiedAt: "2026-03-16T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "태블릿 TOC rail 유지 테스트",
+        content,
+        tags: ["태블릿"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/910/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/910")
+  await expect(page.getByRole("heading", { name: "태블릿 TOC rail 유지 테스트" })).toBeVisible()
+  const rightToc = page.locator('aside.rightRail nav[aria-label="목차"]')
+  await expect(rightToc).toBeVisible()
+  await expect(rightToc.getByRole("button", { name: "태블릿 목차 섹션 01" })).toBeVisible()
+  await expect(page.locator('[aria-label="접이식 목차"]')).toBeHidden()
 })
 })

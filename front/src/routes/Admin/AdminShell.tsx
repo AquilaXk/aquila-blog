@@ -45,6 +45,8 @@ type NavItem = {
   id: AdminShellSection | "write"
   href: string
   label: string
+  /** ≤1100 CompactNav용 짧은 라벨 (P5-2: icon-only 금지) */
+  shortLabel: string
   icon: IconName
 }
 
@@ -53,42 +55,49 @@ const NAV_ITEMS: NavItem[] = [
     id: "hub",
     href: "/admin",
     label: "허브",
+    shortLabel: "허브",
     icon: "spark",
   },
   {
     id: "dashboard",
     href: "/admin/dashboard",
     label: "운영 대시보드",
+    shortLabel: "대시보드",
     icon: "service",
   },
   {
     id: "posts",
     href: "/admin/posts",
     label: "글 관리",
+    shortLabel: "글",
     icon: "edit",
   },
   {
     id: "write",
     href: "/editor/new",
     label: "새 글 작성",
+    shortLabel: "작성",
     icon: "file",
   },
   {
     id: "cloud",
     href: "/admin/cloud",
     label: "클라우드",
+    shortLabel: "클라우드",
     icon: "cloud",
   },
   {
     id: "tools",
     href: "/admin/tools",
     label: "운영 도구",
+    shortLabel: "도구",
     icon: "laptop",
   },
   {
     id: "profile",
     href: "/admin/profile",
     label: "설정",
+    shortLabel: "설정",
     icon: "camera",
   },
 ]
@@ -204,7 +213,7 @@ const AdminShell = ({ currentSection, member, profileSnapshot = null, children }
               <Link key={`compact-${item.id}`} href={item.href} passHref legacyBehavior>
                 <CompactNavLink data-active={item.id === currentSection ? "true" : "false"} aria-label={item.label}>
                   <AppIcon name={item.icon} />
-                  <span>{item.label}</span>
+                  <span>{item.shortLabel}</span>
                 </CompactNavLink>
               </Link>
             ))}
@@ -515,6 +524,7 @@ const CompactNavLink = styled.a`
   text-decoration: none;
 
   span {
+    display: inline;
     font-size: 0.72rem;
     font-weight: 760;
     line-height: 1;
@@ -525,19 +535,6 @@ const CompactNavLink = styled.a`
     border-color: ${adminBorderStrong};
     background: ${adminSurfaceAccent};
     color: ${adminTeal};
-  }
-
-  @media (max-width: 767px) {
-    width: ${control.lg}px;
-    height: ${control.lg}px;
-    min-width: ${control.lg}px;
-    min-height: ${control.lg}px;
-    padding: 0;
-    gap: 0;
-
-    span {
-      display: none;
-    }
   }
 `
 

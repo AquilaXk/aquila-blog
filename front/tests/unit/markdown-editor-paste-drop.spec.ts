@@ -4,6 +4,7 @@ import path from "path"
 import {
   buildUploadingAttachmentPlaceholder,
   buildUploadingImagePlaceholder,
+  createUploadPlaceholderId,
   extractImageFileFromClipboard,
   findExactSubstringIndex,
   isImageFile,
@@ -14,6 +15,7 @@ import {
   planLinkifySelectionWithUrl,
   planReplaceExactSubstring,
   readClipboardPlainText,
+  resolvePasteMediaRoute,
   toInlineMarkdownSnippet,
 } from "../../src/components/markdown-editor/markdownEditorPasteDropModel"
 import {
@@ -35,9 +37,33 @@ const makeFile = (name: string, type: string): File =>
   }) as File
 
 test.describe("markdown editor paste/drop model", () => {
-  test("builds Korean GitHub-style image and attachment placeholders", () => {
-    expect(buildUploadingImagePlaceholder("shot.png")).toBe("![업로드 중: shot.png…]()")
-    expect(buildUploadingAttachmentPlaceholder("notes.pdf")).toBe("[업로드 중: notes.pdf…]()")
+  test("builds Korean GitHub-style image and attachment placeholders with unique upload ids", () => {
+    const firstId = "upload-a"
+    const secondId = "upload-b"
+    expect(buildUploadingImagePlaceholder("shot.png", firstId)).toBe(
+      "![업로드 중: shot.png · upload-a…]()"
+    )
+    expect(buildUploadingAttachmentPlaceholder("notes.pdf", firstId)).toBe(
+      "[업로드 중: notes.pdf · upload-a…]()"
+    )
+
+    const sameNameA = buildUploadingImagePlaceholder("shot.png", firstId)
+    const sameNameB = buildUploadingImagePlaceholder("shot.png", secondId)
+    expect(sameNameA).not.toBe(sameNameB)
+    expect(createUploadPlaceholderId()).not.toBe(createUploadPlaceholderId())
+
+    const value = `${sameNameA}${sameNameB}`
+    const replaceSecond = planReplaceExactSubstring(
+      value,
+      sameNameB,
+      "![shot.png](https://cdn.example.test/b.png)",
+      0,
+      0
+    )
+    expect(replaceSecond).not.toBeNull()
+    expect(applyPlannedTextMutationToValue(value, replaceSecond!).value).toBe(
+      `${sameNameA}![shot.png](https://cdn.example.test/b.png)`
+    )
   })
 
   test("partitions image vs non-image files for sequential drop handling", () => {
@@ -109,8 +135,41 @@ test.describe("markdown editor paste/drop model", () => {
     expect(applyPlannedTextMutationToValue(value, plan).value).toBe("see [docs](https://example.com) here")
   })
 
+  test("routes multi-file paste through transfer-files and keeps items-only fallback", () => {
+    const imageA = makeFile("a.png", "image/png")
+    const imageB = makeFile("b.png", "image/png")
+    const pdf = makeFile("notes.pdf", "application/pdf")
+    const multiFiles = {
+      files: [imageA, pdf, imageB],
+      items: [],
+    } as unknown as DataTransfer
+
+    expect(
+      resolvePasteMediaRoute(multiFiles, { canUploadImage: true, canUploadFile: true })
+    ).toEqual({
+      kind: "transfer-files",
+      files: [imageA, pdf, imageB],
+    })
+
+    const itemsOnlyImage = makeFile("clip.png", "image/png")
+    const itemsOnly = {
+      files: [],
+      items: [
+        {
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => itemsOnlyImage,
+        },
+      ],
+    } as unknown as DataTransfer
+    expect(resolvePasteMediaRoute(itemsOnly, { canUploadImage: true, canUploadFile: true })).toEqual({
+      kind: "clipboard-image",
+      file: itemsOnlyImage,
+    })
+  })
+
   test("replaces an exact uploading placeholder or appends when edited away", () => {
-    const placeholder = buildUploadingImagePlaceholder("shot.png")
+    const placeholder = buildUploadingImagePlaceholder("shot.png", "upload-1")
     const before = `intro ${placeholder} outro`
     const resolved = resolveMarkdownImageEmbed(
       { url: "https://cdn.example.test/shot.png" },
@@ -134,7 +193,7 @@ test.describe("markdown editor paste/drop model", () => {
   })
 
   test("removes an exact placeholder on upload failure without leaving residue", () => {
-    const placeholder = buildUploadingAttachmentPlaceholder("notes.pdf")
+    const placeholder = buildUploadingAttachmentPlaceholder("notes.pdf", "upload-2")
     const value = `before ${placeholder} after`
     const removePlan = planReplaceExactSubstring(value, placeholder, "", 0, 0)
     expect(removePlan).not.toBeNull()
@@ -142,7 +201,7 @@ test.describe("markdown editor paste/drop model", () => {
   })
 
   test("keeps caret-based insert plan independent from drop coordinates", () => {
-    const placeholder = buildUploadingImagePlaceholder("drop.png")
+    const placeholder = buildUploadingImagePlaceholder("drop.png", "upload-3")
     const value = "alpha beta"
     const caret = 6
     const plan = planReplaceSelection(caret, caret, placeholder)
@@ -186,6 +245,8 @@ test.describe("markdown editor paste/drop model", () => {
     expect(editorSource).toContain("useMarkdownEditorMediaTransfers")
 
     expect(mediaSource).toContain("buildUploadingImagePlaceholder")
+    expect(mediaSource).toContain("createUploadPlaceholderId")
+    expect(mediaSource).toContain("resolvePasteMediaRoute")
     expect(mediaSource).toContain("uploadImageWithPlaceholder")
     expect(mediaSource).toContain("uploadAttachmentWithPlaceholder")
     expect(mediaSource).toContain("parseSingleHttpUrl")
@@ -193,6 +254,8 @@ test.describe("markdown editor paste/drop model", () => {
     expect(mediaSource).toContain("processTransferFiles")
 
     expect(modelSource).toContain("![업로드 중:")
+    expect(modelSource).toContain("createUploadPlaceholderId")
+    expect(modelSource).toContain("resolvePasteMediaRoute")
     expect(rootModelSource).toContain(
       'export { extractImageFileFromClipboard } from "src/components/markdown-editor/markdownEditorPasteDropModel"'
     )

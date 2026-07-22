@@ -1,12 +1,20 @@
 import type { PlannedTextMutation } from "./markdownEditorTextMutation"
 
-/** GitHub-style uploading image placeholder (Korean label). */
-export const buildUploadingImagePlaceholder = (fileName: string): string =>
-  `![업로드 중: ${fileName}…]()`
+/** Stable per-upload token so concurrent same-name placeholders never collide. */
+export const createUploadPlaceholderId = (): string => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+/** GitHub-style uploading image placeholder (Korean label + unique upload id). */
+export const buildUploadingImagePlaceholder = (fileName: string, uploadId: string): string =>
+  `![업로드 중: ${fileName} · ${uploadId}…]()`
 
 /** Uploading attachment placeholder aligned with image paste/drop UX. */
-export const buildUploadingAttachmentPlaceholder = (fileName: string): string =>
-  `[업로드 중: ${fileName}…]()`
+export const buildUploadingAttachmentPlaceholder = (fileName: string, uploadId: string): string =>
+  `[업로드 중: ${fileName} · ${uploadId}…]()`
 
 export const isImageFile = (file: File): boolean => file.type.startsWith("image/")
 
@@ -29,6 +37,48 @@ export const extractImageFileFromClipboard = (clipboardData: DataTransfer | null
 export const listFilesFromDataTransfer = (dataTransfer: DataTransfer | null): File[] => {
   if (!dataTransfer) return []
   return Array.from(dataTransfer.files || [])
+}
+
+export const partitionUploadFiles = (files: readonly File[]): { images: File[]; attachments: File[] } => {
+  const images: File[] = []
+  const attachments: File[] = []
+  for (const file of files) {
+    if (isImageFile(file)) images.push(file)
+    else attachments.push(file)
+  }
+  return { images, attachments }
+}
+
+export type PasteMediaRoute =
+  | { kind: "transfer-files"; files: File[] }
+  | { kind: "clipboard-image"; file: File }
+  | { kind: "none" }
+
+/**
+ * Prefer the full clipboard `files` collection for multi-file paste.
+ * Fall back to item-based image extraction only when `files` is empty.
+ */
+export const resolvePasteMediaRoute = (
+  clipboardData: DataTransfer | null,
+  options: { canUploadImage: boolean; canUploadFile: boolean }
+): PasteMediaRoute => {
+  const files = listFilesFromDataTransfer(clipboardData)
+  if (files.length > 0) {
+    const { images, attachments } = partitionUploadFiles(files)
+    const hasHandledImage = Boolean(options.canUploadImage && images.length > 0)
+    const hasHandledAttachment = Boolean(options.canUploadFile && attachments.length > 0)
+    if (hasHandledImage || hasHandledAttachment) {
+      return { kind: "transfer-files", files }
+    }
+    return { kind: "none" }
+  }
+
+  if (options.canUploadImage) {
+    const imageFile = extractImageFileFromClipboard(clipboardData)
+    if (imageFile) return { kind: "clipboard-image", file: imageFile }
+  }
+
+  return { kind: "none" }
 }
 
 export const readClipboardPlainText = (clipboardData: DataTransfer | null): string => {
@@ -64,16 +114,6 @@ export const planLinkifySelectionWithUrl = (
     selectionStart: cursor,
     selectionEnd: cursor,
   }
-}
-
-export const partitionUploadFiles = (files: readonly File[]): { images: File[]; attachments: File[] } => {
-  const images: File[] = []
-  const attachments: File[] = []
-  for (const file of files) {
-    if (isImageFile(file)) images.push(file)
-    else attachments.push(file)
-  }
-  return { images, attachments }
 }
 
 export const findExactSubstringIndex = (value: string, exact: string): number => {

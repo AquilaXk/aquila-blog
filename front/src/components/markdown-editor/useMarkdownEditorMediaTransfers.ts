@@ -8,7 +8,7 @@ import { planReplaceSelection, type PlannedTextMutation } from "./markdownEditor
 import {
   buildUploadingAttachmentPlaceholder,
   buildUploadingImagePlaceholder,
-  extractImageFileFromClipboard,
+  createUploadPlaceholderId,
   listFilesFromDataTransfer,
   parseSingleHttpUrl,
   partitionUploadFiles,
@@ -16,6 +16,7 @@ import {
   planLinkifySelectionWithUrl,
   planReplaceExactSubstring,
   readClipboardPlainText,
+  resolvePasteMediaRoute,
   toInlineMarkdownSnippet,
 } from "./markdownEditorPasteDropModel"
 import {
@@ -102,7 +103,7 @@ export const useMarkdownEditorMediaTransfers = ({
     async (file: File) => {
       if (!onUploadImage) return
 
-      const placeholder = buildUploadingImagePlaceholder(file.name || "image")
+      const placeholder = buildUploadingImagePlaceholder(file.name || "image", createUploadPlaceholderId())
       insertAtActiveSelection(placeholder)
       setUploadInFlight(1)
       let uploaded: MarkdownImageUploadResult
@@ -145,7 +146,7 @@ export const useMarkdownEditorMediaTransfers = ({
         return
       }
 
-      const placeholder = buildUploadingAttachmentPlaceholder(file.name || "file")
+      const placeholder = buildUploadingAttachmentPlaceholder(file.name || "file", createUploadPlaceholderId())
       insertAtActiveSelection(placeholder)
       setUploadInFlight(1)
       let uploaded: MarkdownFileUploadResult
@@ -252,23 +253,19 @@ export const useMarkdownEditorMediaTransfers = ({
     (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
       if (disabled) return
 
-      const imageFile = extractImageFileFromClipboard(event.clipboardData)
-      if (imageFile && onUploadImage) {
+      const mediaRoute = resolvePasteMediaRoute(event.clipboardData, {
+        canUploadImage: Boolean(onUploadImage),
+        canUploadFile: Boolean(onUploadFile),
+      })
+      if (mediaRoute.kind === "transfer-files") {
         event.preventDefault()
-        void uploadImageWithPlaceholder(imageFile)
+        void processTransferFiles(mediaRoute.files)
         return
       }
-
-      const clipboardFiles = listFilesFromDataTransfer(event.clipboardData)
-      if (clipboardFiles.length > 0 && (onUploadImage || onUploadFile)) {
-        const { images, attachments } = partitionUploadFiles(clipboardFiles)
-        const hasHandledImage = Boolean(onUploadImage && images.length > 0)
-        const hasHandledAttachment = Boolean(onUploadFile && attachments.length > 0)
-        if (hasHandledImage || hasHandledAttachment) {
-          event.preventDefault()
-          void processTransferFiles(clipboardFiles)
-          return
-        }
+      if (mediaRoute.kind === "clipboard-image") {
+        event.preventDefault()
+        void uploadImageWithPlaceholder(mediaRoute.file)
+        return
       }
 
       const { from, to } = resolveActiveSelection()

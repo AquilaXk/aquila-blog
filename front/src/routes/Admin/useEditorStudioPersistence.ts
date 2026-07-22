@@ -525,6 +525,11 @@ export const useEditorStudioPersistence = ({
         visibility: postVisibility,
       })
       await refreshPublicPostReadViews(postId)
+      removeLocalDraft({ kind: "post", postId: postId.trim() })
+      removeLocalDraft({ kind: "create" })
+      lastLocalDraftFingerprintRef.current = ""
+      setLocalDraftSavedAt("")
+      setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: "새 글 작성이 완료되었습니다." }, "page")
       setResult(pretty(response))
       return true
@@ -559,9 +564,13 @@ export const useEditorStudioPersistence = ({
     postVisibility,
     pretty,
     refreshPublicPostReadViews,
+    removeLocalDraft,
+    lastLocalDraftFingerprintRef,
     serverBaselineEditorFingerprintRef,
     setIsTempDraftMode,
     setLoadingKey,
+    setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPostVersion,
     setPostVisibility,
     setPublishStatus,

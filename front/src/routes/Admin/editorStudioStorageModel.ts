@@ -155,9 +155,13 @@ const parseLocalDraftPayload = (
 const listPostDraftEntries = (): Array<{ key: string; savedAtMs: number }> => {
   if (typeof window === "undefined") return []
   const entries: Array<{ key: string; savedAtMs: number }> = []
+  const keys: string[] = []
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index)
     if (!key?.startsWith(LOCAL_DRAFT_POST_STORAGE_KEY_PREFIX) || !key.endsWith(".v2")) continue
+    keys.push(key)
+  }
+  for (const key of keys) {
     const raw = window.localStorage.getItem(key)
     if (!raw) continue
     try {

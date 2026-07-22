@@ -169,6 +169,70 @@ test.describe("editor local draft context slots", () => {
     })
   })
 
+  test("does not skip post draft keys when expired entries are removed during scan", () => {
+    withLocalStorage((storage) => {
+      const now = Date.now()
+      const expiredSavedAt = new Date(now - LOCAL_DRAFT_MAX_AGE_MS - 1).toISOString()
+      const validSavedAt = (offsetMs: number) => new Date(now - offsetMs).toISOString()
+
+      storage.setItem(
+        `${LOCAL_DRAFT_POST_STORAGE_KEY_PREFIX}1.v2`,
+        JSON.stringify({
+          title: "expired",
+          content: "body",
+          summary: "",
+          thumbnailUrl: "",
+          thumbnailFocusX: 50,
+          thumbnailFocusY: 50,
+          thumbnailZoom: 1,
+          tags: [],
+          category: "",
+          visibility: "PUBLIC_LISTED",
+          savedAt: expiredSavedAt,
+          source: { kind: "post", postId: "1" },
+        })
+      )
+
+      for (let index = 2; index <= LOCAL_DRAFT_POST_SLOT_LIMIT + 2; index += 1) {
+        storage.setItem(
+          `${LOCAL_DRAFT_POST_STORAGE_KEY_PREFIX}${index}.v2`,
+          JSON.stringify({
+            title: `post-${index}`,
+            content: "body",
+            summary: "",
+            thumbnailUrl: "",
+            thumbnailFocusX: 50,
+            thumbnailFocusY: 50,
+            thumbnailZoom: 1,
+            tags: [],
+            category: "",
+            visibility: "PUBLIC_LISTED",
+            savedAt: validSavedAt((LOCAL_DRAFT_POST_SLOT_LIMIT + 3 - index) * 1000),
+            source: { kind: "post", postId: String(index) },
+          })
+        )
+      }
+
+      persistLocalDraft(
+        baseDraft({
+          title: "trigger",
+          source: { kind: "post", postId: String(LOCAL_DRAFT_POST_SLOT_LIMIT + 3) },
+          savedAt: new Date(now).toISOString(),
+        })
+      )
+
+      const postKeys = Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter(
+        (key): key is string => Boolean(key?.startsWith(LOCAL_DRAFT_POST_STORAGE_KEY_PREFIX))
+      )
+      expect(storage.getItem(`${LOCAL_DRAFT_POST_STORAGE_KEY_PREFIX}1.v2`)).toBeNull()
+      expect(postKeys.length).toBe(LOCAL_DRAFT_POST_SLOT_LIMIT)
+      expect(readLocalDraft({ kind: "post", postId: "2" })).toBeNull()
+      expect(readLocalDraft({ kind: "post", postId: String(LOCAL_DRAFT_POST_SLOT_LIMIT + 3) })?.title).toBe(
+        "trigger"
+      )
+    })
+  })
+
   test("expires drafts older than 7 days and enforces post slot limit", () => {
     withLocalStorage((storage) => {
       const now = Date.now()

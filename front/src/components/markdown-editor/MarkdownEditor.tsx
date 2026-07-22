@@ -24,6 +24,10 @@ import {
   type MarkdownEditorMode,
 } from "./markdownEditorModeTabs"
 import {
+  readMarkdownEditorModePreference,
+  writeMarkdownEditorModePreference,
+} from "./markdownEditorModePreference"
+import {
   EditorRoot,
   EditorToolbar,
   ToolbarGroup,
@@ -102,7 +106,7 @@ export const MarkdownEditor = ({
   onUploadImage,
   onUploadFile,
 }: MarkdownEditorProps) => {
-  const [mode, setMode] = useState<MarkdownEditorMode>("split")
+  const [mode, setMode] = useState<MarkdownEditorMode>(() => readMarkdownEditorModePreference())
   const [uploadError, setUploadError] = useState("")
   const [draftValue, setDraftValue] = useState(value)
   const editorDomId = useId()
@@ -297,6 +301,11 @@ export const MarkdownEditor = ({
     },
     [applyMutationPlan, disabled, resolveActiveSelection]
   )
+
+  const handleModeChange = useCallback((nextMode: MarkdownEditorMode) => {
+    setMode(nextMode)
+    writeMarkdownEditorModePreference(nextMode)
+  }, [])
 
   const applyBlockSnippet = useCallback(
     (spec: BlockSnippetSpec) => {
@@ -577,7 +586,7 @@ export const MarkdownEditor = ({
         </ToolbarGroup>
         <MarkdownEditorModeTabs
           mode={mode}
-          onModeChange={setMode}
+          onModeChange={handleModeChange}
           writePanelId={writePanelId}
           previewPanelId={previewPanelId}
           writeTabId={writeTabId}

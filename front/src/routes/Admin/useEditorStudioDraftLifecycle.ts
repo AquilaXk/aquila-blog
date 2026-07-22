@@ -8,7 +8,8 @@ import {
 import { apiFetch } from "src/apis/backend/client"
 import { replaceRoute } from "src/libs/router"
 import {
-  hasEmptyFencedCodeBlockBody,
+  adminContentHadEmptyFenceForTelemetry,
+  adminContentNeedsCodeFenceRecovery,
   reportCodeFenceRecovery,
   isCodeFenceRecoveryComplete,
   resolveEditorCodeFenceRecovery,
@@ -391,14 +392,14 @@ export const useEditorStudioDraftLifecycle = ({
         adminContent,
         resolvedPost.contentHtml
       )
-      const needsCodeFenceRecovery =
-        adminContent.trim().length === 0 || hasEmptyFencedCodeBlockBody(adminContent)
+      const needsCodeFenceRecovery = adminContentNeedsCodeFenceRecovery(adminContent)
 
       let publicContent: string | undefined
       let publicContentHtml: string | null | undefined
       let publicFallbackSucceeded = false
 
       // contentHtml이 완전 복원(비어 있지 않고 empty fence 없음)일 때만 공개 API를 건너뛴다.
+      // admin content가 비어 있으면 prose-only HTML이 complete로 오판돼도 public fetch를 시도한다.
       const htmlFirstRecovery = resolveEditorCodeFenceRecovery({
         adminContent,
         contentHtmlBodyCandidate: htmlRecoverySnapshot.body,
@@ -407,8 +408,11 @@ export const useEditorStudioDraftLifecycle = ({
       const htmlRecoveryComplete =
         htmlFirstRecovery.source === "contentHtml" &&
         isCodeFenceRecoveryComplete(htmlFirstRecovery.content)
+      const shouldFetchPublicContent =
+        needsCodeFenceRecovery &&
+        (adminContent.trim().length === 0 || !htmlRecoveryComplete)
 
-      if (needsCodeFenceRecovery && !htmlRecoveryComplete) {
+      if (shouldFetchPublicContent) {
         try {
           const publicPost = await apiFetch<Pick<PostForEditor, "content" | "contentHtml">>(
             `/post/api/v1/posts/${targetPostId}`
@@ -434,7 +438,7 @@ export const useEditorStudioDraftLifecycle = ({
         reportCodeFenceRecovery({
           postId: normalizedTargetPostId,
           source: fenceRecovery.source,
-          hadEmptyFence: hasEmptyFencedCodeBlockBody(adminContent),
+          hadEmptyFence: adminContentHadEmptyFenceForTelemetry(adminContent),
           recovered: fenceRecovery.recovered,
         })
       }

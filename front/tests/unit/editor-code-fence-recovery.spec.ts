@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import {
+  adminContentHadEmptyFenceForTelemetry,
   applyCandidateCodeFenceRecovery,
   hasEmptyFencedCodeBlockBody,
   resolveEditorCodeFenceRecovery,
@@ -97,6 +98,26 @@ test.describe("editor code fence recovery", () => {
     expect(result.source).toBe("publicApi")
     expect(result.recovered).toBe(true)
     expect(result.content).toContain("fun example() = Unit")
+  })
+
+  test("empty admin + prose-only html + public fenced content recovers via publicApi", () => {
+    const proseOnlyHtml = "intro without fenced code"
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: "",
+      contentHtmlBodyCandidate: proseOnlyHtml,
+      publicContent: filledFenceContent,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("publicApi")
+    expect(result.recovered).toBe(true)
+    expect(result.content).toBe(filledFenceContent)
+  })
+
+  test("telemetry treats wholly empty admin content as hadEmptyFence", () => {
+    expect(adminContentHadEmptyFenceForTelemetry("")).toBe(true)
+    expect(adminContentHadEmptyFenceForTelemetry(emptyFenceContent)).toBe(true)
+    expect(adminContentHadEmptyFenceForTelemetry(filledFenceContent)).toBe(false)
   })
 
   test("empty admin + blank html + public content recovers via publicApi", () => {

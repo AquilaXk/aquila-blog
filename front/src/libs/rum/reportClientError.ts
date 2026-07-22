@@ -1,4 +1,10 @@
+import { classifyApiError, type ApiErrorCategory } from "src/apis/backend/errorClassification"
 import { hasOptionalTrackingConsent } from "src/libs/privacy/optionalTrackingConsentCore"
+import {
+  extractStackTop,
+  resolveErrorMessageFromUnknown,
+} from "src/libs/rum/errorPayloadSanitize"
+import { wasApiErrorReported } from "src/libs/rum/reportApiError"
 
 export type ClientErrorBoundaryKind = "global" | "surface"
 
@@ -11,7 +17,10 @@ export type ClientErrorReport = {
   path: string
   errorName: string
   occurredAt: string
+  errorMessage?: string
+  stackTop?: string
   requestId?: string
+  category?: ApiErrorCategory
 }
 
 declare global {
@@ -95,8 +104,14 @@ export const reportClientError = ({
   requestId,
 }: ReportClientErrorInput) => {
   if (typeof window === "undefined") return
+  // apiFetch already reported this failure — skip boundary double-send.
+  if (wasApiErrorReported(error)) return
 
   const resolvedRequestId = resolveRequestId(error, requestId)
+  const errorMessage = resolveErrorMessageFromUnknown(error)
+  const stackTop = extractStackTop(error)
+  const category = classifyApiError(error)
+
   const payload: ClientErrorReport = {
     id,
     boundary,
@@ -104,7 +119,10 @@ export const reportClientError = ({
     path: window.location.pathname,
     errorName: resolveErrorName(error),
     occurredAt: new Date().toISOString(),
+    ...(errorMessage ? { errorMessage } : {}),
+    ...(stackTop ? { stackTop } : {}),
     ...(resolvedRequestId ? { requestId: resolvedRequestId } : {}),
+    category,
   }
 
   window.__AQUILA_CLIENT_ERROR_REPORTS__ = [...(window.__AQUILA_CLIENT_ERROR_REPORTS__ || []), payload]

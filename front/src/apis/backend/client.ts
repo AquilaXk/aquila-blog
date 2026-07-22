@@ -139,6 +139,18 @@ const isServer = typeof window === "undefined"
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 
+/** Lazy import avoids static cycle: client -> reportApiError -> client. */
+const reportApiFailure = (error: unknown) => {
+  if (isServer) return
+  void import("src/libs/rum/reportApiError")
+    .then(({ reportApiError }) => {
+      reportApiError(error)
+    })
+    .catch(() => {
+      // ignore reporter load failures
+    })
+}
+
 const browserInFlightGetRequests = new Map<string, Promise<unknown>>()
 
 export const evictBrowserRevalidateCacheEntries = (predicate: (url: string) => boolean) => {
@@ -186,7 +198,6 @@ const parseJsonBodyMessage = (body: string) => {
 }
 
 export const readApiResultCode = (body: string) => parseJsonBodyMessage(body).resultCode
-
 const looksLikeInternalDiagnosticMessage = (message: string) =>
   /실패:\s/.test(message) || /Exception|endpoint|bucket|provider|stack/i.test(message)
 
@@ -288,12 +299,14 @@ export class ApiTimeoutError extends Error {
 }
 
 export class ApiNetworkError extends Error {
+  url: string
   userMessage: string
 
-  constructor() {
+  constructor(url: string) {
     const userMessage = "네트워크 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
     super(userMessage)
     this.name = "ApiNetworkError"
+    this.url = url
     this.userMessage = userMessage
   }
 }
@@ -482,11 +495,15 @@ export const apiFetchWithMeta = async <T>(
         }
 
         if (timedOut) {
-          throw new ApiTimeoutError(url, resolvedTimeoutMs)
+          const timeoutError = new ApiTimeoutError(url, resolvedTimeoutMs)
+          reportApiFailure(timeoutError)
+          throw timeoutError
         }
 
         if (error instanceof TypeError || error instanceof DOMException) {
-          throw new ApiNetworkError()
+          const networkError = new ApiNetworkError(url)
+          reportApiFailure(networkError)
+          throw networkError
         }
 
         throw error
@@ -533,12 +550,14 @@ export const apiFetchWithMeta = async <T>(
       }
 
       const body = await response.text().catch(() => "")
-      throw new ApiError(
+      const apiError = new ApiError(
         response.status,
         url,
         body,
         normalizeRequestId(response.headers.get("x-request-id")),
       )
+      reportApiFailure(apiError)
+      throw apiError
     }
 
     if (response.status === 204) {

@@ -15,14 +15,21 @@ export const getServerSideProps: GetServerSideProps = async () => {
   }
 }
 
+const createQaCrash = (message: string) => {
+  const error = new Error(message) as Error & { secretToken?: string }
+  // Sensitive values stay off message/stack serialization paths on purpose.
+  error.secretToken = "secret-token"
+  return error
+}
+
 const ThrowingSurface = () => {
   if (typeof window === "undefined") return <p>Preparing local crash fixture.</p>
-  throw new Error("qa local crash secret-token")
+  throw createQaCrash("qa local crash")
 }
 
 const GlobalThrow = () => {
   if (typeof window === "undefined") return <p>Preparing global crash fixture.</p>
-  throw new Error("qa global crash secret-token")
+  throw createQaCrash("qa global crash")
 }
 
 const ErrorBoundaryQaPage: NextPage = () => {

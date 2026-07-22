@@ -12,6 +12,13 @@ import {
 } from "../../src/apis/backend/posts/PostApiRequestModel"
 import { shouldFetchAuthSession } from "../../src/hooks/useAuthSession"
 import { getSearchDebounceMs } from "../../src/hooks/useDebouncedValue"
+import {
+  DASHBOARD_COLLECTION_FAILED_LABEL,
+  DASHBOARD_DATA_MISSING_LABEL,
+  formatDashboardFreshnessLabel,
+  resolveDashboardCollectionLabel,
+  resolveDashboardDataUpdatedAt,
+} from "../../src/routes/Admin/AdminDashboardWorkspaceModel"
 import { normalizeApiRequestPath } from "../../src/libs/backend/requestPath"
 import { parseMarkdownSegments } from "../../src/libs/markdown/renderingSegmentModel"
 import {
@@ -278,5 +285,19 @@ caption
 
     expect(shouldShowCloudEmptyLoading({ filesCount: 0, isLoading: false, isSearchPending: true })).toBe(true)
     expect(shouldShowCloudEmptyLoading({ filesCount: 2, isLoading: false, isSearchPending: true })).toBe(false)
+  })
+
+  test("dashboard freshness uses min dataUpdatedAt as HH:mm 기준", () => {
+    const older = Date.UTC(2026, 6, 22, 2, 5, 0)
+    const newer = Date.UTC(2026, 6, 22, 2, 17, 0)
+    expect(resolveDashboardDataUpdatedAt(0, newer, older)).toBe(older)
+    expect(formatDashboardFreshnessLabel(older)).toMatch(/^\d{2}:\d{2} 기준$/)
+    expect(resolveDashboardCollectionLabel({ isError: true, hasData: true })).toBe(
+      DASHBOARD_COLLECTION_FAILED_LABEL
+    )
+    expect(resolveDashboardCollectionLabel({ isError: false, hasData: false })).toBe(
+      DASHBOARD_DATA_MISSING_LABEL
+    )
+    expect(resolveDashboardCollectionLabel({ isError: false, hasData: true })).toBeNull()
   })
 })

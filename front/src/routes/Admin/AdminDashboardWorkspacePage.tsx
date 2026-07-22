@@ -1,13 +1,16 @@
 import { useQuery } from "@tanstack/react-query"
 import { NextPage } from "next"
+import { useCallback } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import {
   DASHBOARD_BACKEND_CHECK_LABEL,
+  DASHBOARD_COLLECTION_FAILED_LABEL,
   DASHBOARD_DATA_MISSING_LABEL,
   EMPTY_INITIAL_SNAPSHOT,
   formatAge,
+  formatDashboardFreshnessLabel,
   formatInstant,
   getMailStatusLabel,
   getMailStatusTone,
@@ -15,6 +18,8 @@ import {
   getSystemHealthTone,
   getTaskQueueTone,
   hasDashboardSnapshot,
+  resolveDashboardCollectionLabel,
+  resolveDashboardDataUpdatedAt,
   type AdminDashboardInitialSnapshot,
   type DashboardChartBar,
   type DashboardKpiCard,
@@ -48,7 +53,9 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     staleTime: 30_000,
     gcTime: 120_000,
     retry: 1,
-    refetchOnWindowFocus: false,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     refetchOnMount: false,
   })
   const dashboardSnapshotQuery = useQuery({
@@ -63,33 +70,60 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     staleTime: 30_000,
     gcTime: 120_000,
     retry: 1,
-    refetchOnWindowFocus: false,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     refetchOnMount: false,
   })
 
+  const handleRefresh = useCallback(() => {
+    void Promise.all([systemHealthQuery.refetch(), dashboardSnapshotQuery.refetch()])
+  }, [dashboardSnapshotQuery, systemHealthQuery])
+
   if (!sessionMember) return null
 
+  const collectionFailed = systemHealthQuery.isError || dashboardSnapshotQuery.isError
+  const isRefreshing = systemHealthQuery.isFetching || dashboardSnapshotQuery.isFetching
+  const freshnessLabel = formatDashboardFreshnessLabel(
+    resolveDashboardDataUpdatedAt(systemHealthQuery.dataUpdatedAt, dashboardSnapshotQuery.dataUpdatedAt)
+  )
   const rawSystemHealthStatus = systemHealthQuery.data?.status ?? null
   const dashboardSnapshot = dashboardSnapshotQuery.data ?? initialSnapshot.dashboard
   const hasSnapshot = hasDashboardSnapshot(dashboardSnapshot)
+  const snapshotCollectionLabel = resolveDashboardCollectionLabel({
+    isError: dashboardSnapshotQuery.isError,
+    hasData: hasSnapshot,
+  })
+  const healthCollectionLabel = resolveDashboardCollectionLabel({
+    isError: systemHealthQuery.isError,
+    hasData: Boolean(systemHealthQuery.data),
+  })
   const dashboardStatusLabel = getSystemHealthStatusLabel(rawSystemHealthStatus)
   const dashboardStatusTone = getSystemHealthTone(rawSystemHealthStatus)
-  const dashboardSnapshotGeneratedAt = hasSnapshot ? formatInstant(dashboardSnapshot.generatedAt) : DASHBOARD_DATA_MISSING_LABEL
+  const dashboardSnapshotGeneratedAt = hasSnapshot
+    ? formatInstant(dashboardSnapshot.generatedAt)
+    : snapshotCollectionLabel ?? DASHBOARD_DATA_MISSING_LABEL
   const mailStatusLabel = getMailStatusLabel(dashboardSnapshot?.signupMail.status)
   const taskQueueDetail = hasSnapshot
     ? `실패 ${dashboardSnapshot.taskQueue.failedCount} · 정체 ${dashboardSnapshot.taskQueue.staleProcessingCount}`
-    : DASHBOARD_DATA_MISSING_LABEL
+    : snapshotCollectionLabel ?? DASHBOARD_DATA_MISSING_LABEL
   const authSecurityDetail = hasSnapshot
     ? `최근 기록 ${dashboardSnapshot.authSecurity.recentEventCount}건`
-    : DASHBOARD_DATA_MISSING_LABEL
+    : snapshotCollectionLabel ?? DASHBOARD_DATA_MISSING_LABEL
+  const missingOrFailedLabel = snapshotCollectionLabel ?? DASHBOARD_DATA_MISSING_LABEL
+  const missingOrFailedTone = dashboardSnapshotQuery.isError ? "warn" : "neutral"
 
   const kpiCards: DashboardKpiCard[] = [
     {
       key: "health",
       label: "서비스 상태",
-      value: dashboardStatusLabel,
-      detail: `스냅샷 ${dashboardSnapshotGeneratedAt}`,
-      tone: dashboardStatusTone,
+      value: healthCollectionLabel === DASHBOARD_COLLECTION_FAILED_LABEL && !systemHealthQuery.data
+        ? DASHBOARD_COLLECTION_FAILED_LABEL
+        : dashboardStatusLabel,
+      detail: systemHealthQuery.isError
+        ? DASHBOARD_COLLECTION_FAILED_LABEL
+        : `스냅샷 ${dashboardSnapshotGeneratedAt}`,
+      tone: systemHealthQuery.isError ? "warn" : dashboardStatusTone,
       icon: "service",
     },
     {
@@ -97,30 +131,30 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       label: "작업 큐",
       value: hasSnapshot
         ? `${dashboardSnapshot.taskQueue.readyPendingCount} 대기 / ${dashboardSnapshot.taskQueue.processingCount} 처리`
-        : DASHBOARD_DATA_MISSING_LABEL,
+        : missingOrFailedLabel,
       detail: taskQueueDetail,
-      tone: getTaskQueueTone(dashboardSnapshot),
+      tone: hasSnapshot ? getTaskQueueTone(dashboardSnapshot) : missingOrFailedTone,
       icon: "spark",
     },
     {
       key: "mail",
       label: "회원가입 메일",
-      value: mailStatusLabel,
+      value: hasSnapshot ? mailStatusLabel : missingOrFailedLabel,
       detail:
         hasSnapshot && dashboardSnapshot.signupMail.queueLagSeconds != null
           ? `큐 지연 ${formatAge(dashboardSnapshot.signupMail.queueLagSeconds)}`
           : hasSnapshot && dashboardSnapshot.signupMail.latestFailureAt
             ? `최근 실패 ${formatInstant(dashboardSnapshot.signupMail.latestFailureAt)}`
-            : hasSnapshot ? "메일 큐 정상" : DASHBOARD_DATA_MISSING_LABEL,
-      tone: getMailStatusTone(dashboardSnapshot?.signupMail.status),
+            : hasSnapshot ? "메일 큐 정상" : missingOrFailedLabel,
+      tone: hasSnapshot ? getMailStatusTone(dashboardSnapshot?.signupMail.status) : missingOrFailedTone,
       icon: "edit",
     },
     {
       key: "auth-security",
       label: "인증 이상",
-      value: hasSnapshot ? `${dashboardSnapshot.authSecurity.blockedEventCount}건` : DASHBOARD_DATA_MISSING_LABEL,
+      value: hasSnapshot ? `${dashboardSnapshot.authSecurity.blockedEventCount}건` : missingOrFailedLabel,
       detail: authSecurityDetail,
-      tone: hasSnapshot ? (dashboardSnapshot.authSecurity.blockedEventCount ? "warn" : "good") : "neutral",
+      tone: hasSnapshot ? (dashboardSnapshot.authSecurity.blockedEventCount ? "warn" : "good") : missingOrFailedTone,
       icon: "check-circle",
     },
   ]
@@ -171,8 +205,10 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     {
       key: "snapshot-missing",
       title: "운영 스냅샷",
-      summary: `${DASHBOARD_DATA_MISSING_LABEL} · ${DASHBOARD_BACKEND_CHECK_LABEL}`,
-      tone: "neutral",
+      summary: dashboardSnapshotQuery.isError
+        ? DASHBOARD_COLLECTION_FAILED_LABEL
+        : `${DASHBOARD_DATA_MISSING_LABEL} · ${DASHBOARD_BACKEND_CHECK_LABEL}`,
+      tone: missingOrFailedTone,
       href: "/admin/tools",
       actionLabel: "진단 열기",
     },
@@ -296,20 +332,29 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     : [
         {
           key: "snapshot-missing",
-          time: DASHBOARD_DATA_MISSING_LABEL,
-          message: "운영 스냅샷 미수집",
-          detail: DASHBOARD_BACKEND_CHECK_LABEL,
-          tone: "neutral",
+          time: missingOrFailedLabel,
+          message: dashboardSnapshotQuery.isError ? "운영 스냅샷 수집 실패" : "운영 스냅샷 미수집",
+          detail: dashboardSnapshotQuery.isError ? DASHBOARD_COLLECTION_FAILED_LABEL : DASHBOARD_BACKEND_CHECK_LABEL,
+          tone: missingOrFailedTone,
         },
       ]
+
+  const chartEmptyLabel = dashboardSnapshotQuery.isError
+    ? DASHBOARD_COLLECTION_FAILED_LABEL
+    : `${DASHBOARD_DATA_MISSING_LABEL} · ${DASHBOARD_BACKEND_CHECK_LABEL}`
 
   return (
     <AdminDashboardWorkspaceView
       chartBars={chartBars}
+      chartEmptyLabel={chartEmptyLabel}
+      collectionFailed={collectionFailed}
       dashboardStatusLabel={dashboardStatusLabel}
       dashboardStatusTone={dashboardStatusTone}
+      freshnessLabel={freshnessLabel}
+      isRefreshing={isRefreshing}
       kpiCards={kpiCards}
       logRows={logRows}
+      onRefresh={handleRefresh}
       priorityRows={priorityRows}
       sessionMember={sessionMember}
     />

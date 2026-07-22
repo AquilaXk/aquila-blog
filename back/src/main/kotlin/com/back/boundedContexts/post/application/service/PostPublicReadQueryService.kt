@@ -13,6 +13,7 @@ import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -177,7 +178,7 @@ class PostPublicReadQueryService(
                 val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
                 val normalizedTag = tag.trim()
                 if (normalizedTag.isBlank()) {
-                    throw AppException("400-1", "태그 커서 탐색에는 tag 파라미터가 필요합니다.")
+                    throw AppException(ErrorCode.BAD_REQUEST, "태그 커서 탐색에는 tag 파라미터가 필요합니다.")
                 }
                 val parsedCursor = parseCursor(cursor, safeSort)
                 val rows =
@@ -238,7 +239,7 @@ class PostPublicReadQueryService(
         runReadQuery("detail", "id=$id") {
             postReadBulkheadService.withDetailPermit {
                 if (isDetailNegativeCached(id)) {
-                    throw AppException("404-1", "존재하지 않는 글입니다.")
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
                 }
                 val cachedSnapshot = readCachedPublicPostDetailSnapshot(id)
                 if (cachedSnapshot != null) {
@@ -540,7 +541,7 @@ class PostPublicReadQueryService(
                 postUseCase.findPublicDetailContentById(id)
                     ?: run {
                         markDetailNegativeCache(id)
-                        throw AppException("404-1", "존재하지 않는 글입니다.")
+                        throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
                     }
 
             if (shouldCacheDetailContent(loaded)) {
@@ -600,7 +601,7 @@ class PostPublicReadQueryService(
                 postUseCase.findPublicDetailById(id)
                     ?: run {
                         markDetailNegativeCache(id)
-                        throw AppException("404-1", "존재하지 않는 글입니다.")
+                        throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
                     }
             post.checkActorCanRead(null)
             val loaded = PublicPostDetailMetaCacheDto.from(PostWithContentDto(post))
@@ -770,7 +771,11 @@ class PostPublicReadQueryService(
             PostSearchSortType1.HIT_COUNT,
             PostSearchSortType1.LIKES_COUNT,
             -> sort
-            else -> throw AppException("400-1", "커서 조회는 CREATED_AT/HIT_COUNT/LIKES_COUNT 정렬만 지원합니다.")
+            else ->
+                throw AppException(
+                    ErrorCode.BAD_REQUEST,
+                    "커서 조회는 CREATED_AT/HIT_COUNT/LIKES_COUNT 정렬만 지원합니다.",
+                )
         }
 
     private fun parseCursor(
@@ -783,7 +788,7 @@ class PostPublicReadQueryService(
         return when (parts.size) {
             CURSOR_LEGACY_PART_COUNT -> parseLegacyCreatedAtCursor(parts, expectedSort)
             CURSOR_SORT_BOUND_PART_COUNT -> parseSortBoundCursor(parts, expectedSort)
-            else -> throw AppException("400-1", "cursor 형식이 올바르지 않습니다.")
+            else -> throw AppException(ErrorCode.BAD_REQUEST, "cursor 형식이 올바르지 않습니다.")
         }
     }
 
@@ -798,16 +803,16 @@ class PostPublicReadQueryService(
             expectedSort != PostSearchSortType1.CREATED_AT_ASC
         ) {
             throw AppException(
-                "400-1",
+                ErrorCode.BAD_REQUEST,
                 "cursor에 정렬 모드가 없어 ${expectedSort.name} 요청에 사용할 수 없습니다.",
             )
         }
         val sortValue =
             parts[0].toLongOrNull()
-                ?: throw AppException("400-1", "cursor sortValue 형식이 올바르지 않습니다.")
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor sortValue 형식이 올바르지 않습니다.")
         val id =
             parts[1].toLongOrNull()
-                ?: throw AppException("400-1", "cursor id 형식이 올바르지 않습니다.")
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor id 형식이 올바르지 않습니다.")
         verifyCursorToken(sortValue, id, payload = "$sortValue:$id", signature = parts[2])
         return CursorToken(sortValue, id, expectedSort)
     }
@@ -818,17 +823,17 @@ class PostPublicReadQueryService(
     ): CursorToken {
         val sortValue =
             parts[0].toLongOrNull()
-                ?: throw AppException("400-1", "cursor sortValue 형식이 올바르지 않습니다.")
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor sortValue 형식이 올바르지 않습니다.")
         val id =
             parts[1].toLongOrNull()
-                ?: throw AppException("400-1", "cursor id 형식이 올바르지 않습니다.")
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor id 형식이 올바르지 않습니다.")
         val cursorSort =
             runCatching { PostSearchSortType1.valueOf(parts[2].trim()) }.getOrElse {
-                throw AppException("400-1", "cursor 정렬 모드가 올바르지 않습니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "cursor 정렬 모드가 올바르지 않습니다.")
             }
         if (cursorSort != expectedSort) {
             throw AppException(
-                "400-1",
+                ErrorCode.BAD_REQUEST,
                 "cursor 정렬 모드(${cursorSort.name})가 요청 정렬(${expectedSort.name})과 일치하지 않습니다.",
             )
         }
@@ -848,11 +853,11 @@ class PostPublicReadQueryService(
         signature: String,
     ) {
         if (sortValue < 0 || id <= 0L) {
-            throw AppException("400-1", "cursor 값이 유효하지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "cursor 값이 유효하지 않습니다.")
         }
         val trimmedSignature = signature.trim()
         if (trimmedSignature.isBlank()) {
-            throw AppException("400-1", "cursor 서명이 비어 있습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "cursor 서명이 비어 있습니다.")
         }
         val expectedSignature = signCursorPayload(payload)
         val isSignatureValid =
@@ -861,7 +866,7 @@ class PostPublicReadQueryService(
                 trimmedSignature.toByteArray(StandardCharsets.UTF_8),
             )
         if (!isSignatureValid) {
-            throw AppException("400-1", "cursor 서명이 유효하지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "cursor 서명이 유효하지 않습니다.")
         }
     }
 

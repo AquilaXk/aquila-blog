@@ -18,6 +18,7 @@ import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.application.TaskFacade
@@ -121,14 +122,14 @@ class PostApplicationService(
 
         if (existingRequest?.postId != null) {
             return postRepository.findById(existingRequest.postId!!).getOrNull()
-                ?: throw AppException("409-1", "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
+                ?: throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
         }
 
         val requestSlot = existingRequest ?: createIdempotencyRequestSlot(persistenceAuthor, normalizedIdempotencyKey)
 
         if (requestSlot.postId != null) {
             return postRepository.findById(requestSlot.postId!!).getOrNull()
-                ?: throw AppException("409-1", "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
+                ?: throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
         }
 
         val createdPost =
@@ -213,7 +214,7 @@ class PostApplicationService(
         val currentVersion = post.version ?: 0L
         val wasTempDraft = postTempDraftService.isTempDraft(post)
         if (expectedVersion != currentVersion) {
-            throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
+            throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
 
         val previousTitle = post.title
@@ -242,7 +243,7 @@ class PostApplicationService(
                 currentVersion,
                 exception,
             )
-            throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
+            throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
         val afterTags = postTagIndexService.extractNormalizedTags(post.content)
         val isPublic = isPubliclyListed(post)
@@ -333,7 +334,7 @@ class PostApplicationService(
             if (concurrentRequest.postId != null) {
                 return concurrentRequest
             }
-            throw AppException("409-1", "동일한 글 작성 요청이 처리 중입니다. 잠시 후 다시 시도해주세요.")
+            throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "동일한 글 작성 요청이 처리 중입니다. 잠시 후 다시 시도해주세요.")
         }
     }
 
@@ -349,7 +350,7 @@ class PostApplicationService(
 
         val softDeleted = postRepository.softDeleteById(post.id)
         if (!softDeleted) {
-            throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
+            throw AppException(ErrorCode.NOT_FOUND, "${post.id}번 글을 찾을 수 없습니다.")
         }
         if (wasTempDraft) {
             postTempDraftService.updateTempDraftMarker(post.author, null)
@@ -411,7 +412,7 @@ class PostApplicationService(
 
         val softDeleted = postRepository.softDeleteById(post.id)
         if (!softDeleted) {
-            throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
+            throw AppException(ErrorCode.NOT_FOUND, "${post.id}번 글을 찾을 수 없습니다.")
         }
         if (wasTempDraft) {
             postTempDraftService.updateTempDraftMarker(post.author, null)
@@ -665,11 +666,11 @@ class PostApplicationService(
     fun restoreDeletedByIdForAdmin(id: Long): Post {
         val snapshot =
             postRepository.findDeletedSnapshotById(id)
-                ?: throw AppException("404-1", "해당 글을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "해당 글을 찾을 수 없습니다.")
 
         val restored = postRepository.restoreDeletedById(id)
         if (!restored) {
-            throw AppException("404-1", "이미 복구되었거나 존재하지 않는 글입니다.")
+            throw AppException(ErrorCode.NOT_FOUND, "이미 복구되었거나 존재하지 않는 글입니다.")
         }
 
         val authorRef = Member(snapshot.authorId)
@@ -696,7 +697,7 @@ class PostApplicationService(
 
         val restoredPost =
             postRepository.findById(id).getOrNull()
-                ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "복구된 글을 확인할 수 없습니다.")
         val restoredTags = postTagIndexService.extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
         publishPostWriteAfterCommitEvent(
@@ -725,11 +726,11 @@ class PostApplicationService(
     fun hardDeleteDeletedByIdForAdmin(id: Long) {
         val snapshot =
             postRepository.findDeletedSnapshotById(id)
-                ?: throw AppException("404-1", "해당 글을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "해당 글을 찾을 수 없습니다.")
 
         val hardDeleted = postRepository.hardDeleteDeletedById(id)
         if (!hardDeleted) {
-            throw AppException("404-1", "이미 영구삭제되었거나 존재하지 않는 글입니다.")
+            throw AppException(ErrorCode.NOT_FOUND, "이미 영구삭제되었거나 존재하지 않는 글입니다.")
         }
 
         publishPostWriteAfterCommitEvent(

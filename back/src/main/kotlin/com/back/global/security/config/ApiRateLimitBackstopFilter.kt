@@ -1,6 +1,7 @@
 package com.back.global.security.config
 
 import com.back.global.cache.application.port.output.RedisKeyValuePort
+import com.back.global.exception.application.ErrorCode
 import com.back.global.web.application.ClientIpResolver
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.servlet.FilterChain
@@ -171,19 +172,23 @@ class ApiRateLimitBackstopFilter(
         response: HttpServletResponse,
         bucket: String,
     ) {
-        response.status = 429
+        val body = ErrorCode.API_RATE_LIMITED.toRsData()
+        response.status = ErrorCode.API_RATE_LIMITED.status.value()
         response.setHeader(HttpHeaders.RETRY_AFTER, WINDOW.seconds.toString())
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         response.characterEncoding = Charsets.UTF_8.name()
-        response.writer.write("""{"resultCode":"429-10","msg":"요청이 너무 많습니다.","bucket":"$bucket"}""")
+        response.writer.write(
+            """{"resultCode":"${body.resultCode}","msg":"${body.msg}","bucket":"$bucket"}""",
+        )
     }
 
     private fun writeUnavailable(response: HttpServletResponse) {
-        response.status = HttpServletResponse.SC_SERVICE_UNAVAILABLE
+        val body = ErrorCode.API_PROTECTION_NOT_READY.toRsData()
+        response.status = ErrorCode.API_PROTECTION_NOT_READY.status.value()
         response.setHeader(HttpHeaders.RETRY_AFTER, "5")
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         response.characterEncoding = Charsets.UTF_8.name()
-        response.writer.write("""{"resultCode":"503-4","msg":"API 보호 시스템이 준비되지 않았습니다."}""")
+        response.writer.write("""{"resultCode":"${body.resultCode}","msg":"${body.msg}"}""")
     }
 
     private fun record(

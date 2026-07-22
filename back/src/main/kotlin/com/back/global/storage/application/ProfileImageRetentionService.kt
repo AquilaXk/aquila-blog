@@ -3,6 +3,7 @@ package com.back.global.storage.application
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileOwnerType
@@ -85,9 +86,9 @@ class ProfileImageRetentionService(
                 ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
                 ownerId = memberId,
             )
-                ?: throw AppException("404-1", "프로필 이미지를 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "프로필 이미지를 찾을 수 없습니다.")
         if (uploadedFile.objectKey in protectedProfileImgUrls.extractProfileImageObjectKeys()) {
-            throw AppException("400-1", "현재 사용 중인 프로필 이미지는 삭제할 수 없습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "현재 사용 중인 프로필 이미지는 삭제할 수 없습니다.")
         }
 
         postImageStoragePort.deletePostImage(uploadedFile.objectKey)

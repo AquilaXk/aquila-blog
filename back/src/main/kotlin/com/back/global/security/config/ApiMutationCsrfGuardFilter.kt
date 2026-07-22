@@ -1,6 +1,6 @@
 package com.back.global.security.config
 
-import com.back.global.rsData.RsData
+import com.back.global.exception.application.ErrorCode
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -30,13 +30,13 @@ class ApiMutationCsrfGuardFilter(
     ) {
         val origin = request.getHeader(HttpHeaders.ORIGIN)?.trim().orEmpty()
         if (origin.isNotBlank() && !apiCorsPolicy.isAllowedOrigin(origin)) {
-            writeForbidden(response, "403-2", "허용되지 않은 Origin의 요청입니다.")
+            writeForbidden(response, ErrorCode.CSRF_ORIGIN_DENIED)
             return
         }
 
         if (request.getHeader(CSRF_PREFLIGHT_HEADER)?.trim() != CSRF_PREFLIGHT_VALUE) {
             apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
-            writeForbidden(response, "403-3", "CSRF preflight 헤더가 필요합니다.")
+            writeForbidden(response, ErrorCode.CSRF_PREFLIGHT_REQUIRED)
             return
         }
 
@@ -63,13 +63,12 @@ class ApiMutationCsrfGuardFilter(
 
     private fun writeForbidden(
         response: HttpServletResponse,
-        resultCode: String,
-        message: String,
+        errorCode: ErrorCode,
     ) {
         response.status = HttpServletResponse.SC_FORBIDDEN
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         response.characterEncoding = Charsets.UTF_8.name()
-        response.writer.write(objectMapper.writeValueAsString(RsData<Void>(resultCode, message)))
+        response.writer.write(objectMapper.writeValueAsString(errorCode.toRsData()))
     }
 
     companion object {

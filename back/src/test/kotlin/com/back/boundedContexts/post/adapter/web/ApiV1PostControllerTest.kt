@@ -402,7 +402,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
                 status { isForbidden() }
-                jsonPath("$.resultCode") { value("403-3") }
+                jsonPath("$.resultCode") { value("403-11") }
             }
         }
     }
@@ -1284,7 +1284,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     content = """{"title": "제목 new", "content": "내용 new", "version": $staleVersion}"""
                 }.andExpect {
                     status { isConflict() }
-                    jsonPath("$.resultCode") { value("409-1") }
+                    jsonPath("$.resultCode") { value("409-10") }
                 }
         }
 

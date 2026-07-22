@@ -2,6 +2,7 @@ package com.back.global.security.config
 
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.web.application.AuthCookieService
@@ -41,7 +42,7 @@ class AuthIpSecurityVerifier(
         recordMismatch(check)
         check.revokeSessionKey?.let(memberSessionUseCase::revokeSession)
         authCookieService.expireAuthCookies()
-        throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
+        throw AppException(ErrorCode.IP_SECURITY_FAILED, "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
     }
 
     private fun recordMismatch(check: AuthIpSecurityCheck) {

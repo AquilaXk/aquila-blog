@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
@@ -66,12 +67,12 @@ class ApiV1PostImageController(
         @RequestPart("file") file: MultipartFile,
     ): RsData<UploadPostImageResBody> {
         if (file.isEmpty) {
-            throw AppException("400-1", "이미지 파일이 비어 있습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일이 비어 있습니다.")
         }
         val maxAllowedBytes = minOf(POST_IMAGE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
         if (file.size > maxAllowedBytes) {
             val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
-            throw AppException("413-1", "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
+            throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
         }
 
         val uploadRequest =
@@ -111,13 +112,13 @@ class ApiV1PostImageController(
         @RequestPart("file") file: MultipartFile,
     ): RsData<UploadPostFileResBody> {
         if (file.isEmpty) {
-            throw AppException("400-1", "첨부 파일이 비어 있습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "첨부 파일이 비어 있습니다.")
         }
 
         val maxAllowedBytes = minOf(POST_FILE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
         if (file.size > maxAllowedBytes) {
             val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
-            throw AppException("413-1", "첨부 파일은 ${limitMb}MB 이하여야 합니다.")
+            throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "첨부 파일은 ${limitMb}MB 이하여야 합니다.")
         }
 
         val uploadRequest =
@@ -188,7 +189,7 @@ class ApiV1PostImageController(
 
         val image =
             postImageStorageService.getPostImage(objectKey)
-                ?: throw AppException("404-1", "이미지를 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "이미지를 찾을 수 없습니다.")
 
         val rangeHeader = request.getHeader(HttpHeaders.RANGE)
         if (!rangeHeader.isNullOrBlank()) {
@@ -289,7 +290,7 @@ class ApiV1PostImageController(
 
         val storedFile =
             postImageStorageService.getPostFile(objectKey)
-                ?: throw AppException("404-1", "첨부 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "첨부 파일을 찾을 수 없습니다.")
 
         val fallbackFilename = objectKey.substringAfterLast("/").ifBlank { "attachment" }
         val downloadFilename = storedFile.originalFilename?.takeIf(String::isNotBlank) ?: fallbackFilename
@@ -332,7 +333,7 @@ class ApiV1PostImageController(
         if (postRepository.findPublicDetailById(postId) == null) throw postFileNotFound()
     }
 
-    private fun postFileNotFound(): AppException = AppException("404-1", "첨부 파일을 찾을 수 없습니다.")
+    private fun postFileNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "첨부 파일을 찾을 수 없습니다.")
 
     private fun extractObjectKey(
         request: HttpServletRequest,
@@ -341,10 +342,10 @@ class ApiV1PostImageController(
         notFoundMessage: String,
     ): String {
         val path = request.requestURI
-        if (!path.startsWith(prefix)) throw AppException("400-1", invalidPathMessage)
+        if (!path.startsWith(prefix)) throw AppException(ErrorCode.BAD_REQUEST, invalidPathMessage)
 
         val encodedKey = path.removePrefix(prefix).trim()
-        if (encodedKey.isBlank()) throw AppException("404-1", notFoundMessage)
+        if (encodedKey.isBlank()) throw AppException(ErrorCode.NOT_FOUND, notFoundMessage)
         return URLDecoder.decode(encodedKey, StandardCharsets.UTF_8)
     }
 

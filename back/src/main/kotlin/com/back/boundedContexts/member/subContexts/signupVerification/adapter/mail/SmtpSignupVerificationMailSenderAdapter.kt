@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.subContexts.signupVerification.adapter.m
 
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.SignupVerificationMailSenderPort
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Profile
 import org.springframework.mail.javamail.JavaMailSender
@@ -35,7 +36,7 @@ class SmtpSignupVerificationMailSenderAdapter(
         expiresAt: Instant,
     ) {
         if (mailFrom.isBlank()) {
-            throw AppException("503-1", "회원가입 메일 발송 설정이 아직 완료되지 않았습니다.")
+            throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "회원가입 메일 발송 설정이 아직 완료되지 않았습니다.")
         }
 
         val expiresAtText = expiresAt.atZone(SEOUL_ZONE_ID).format(EXPIRES_AT_FORMATTER)

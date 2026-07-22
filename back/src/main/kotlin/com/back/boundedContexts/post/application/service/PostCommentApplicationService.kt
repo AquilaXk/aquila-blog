@@ -13,6 +13,7 @@ import com.back.boundedContexts.post.event.PostCommentDeletedEvent
 import com.back.boundedContexts.post.event.PostCommentModifiedEvent
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -36,7 +37,7 @@ class PostCommentApplicationService(
         val persistedParentComment =
             parentComment?.let {
                 findCommentById(post, it.id)
-                    ?: throw AppException("404-1", "부모 댓글을 찾을 수 없습니다.")
+                    ?: throw AppException(ErrorCode.NOT_FOUND, "부모 댓글을 찾을 수 없습니다.")
             }
         val comment =
             postCommentRepository.save(

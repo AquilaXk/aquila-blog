@@ -161,7 +161,7 @@ class MemberSessionServiceTest {
                 createdIp = "203.0.113.33",
                 userAgent = "test-agent",
             )
-        }.hasMessage("409-1 : 탈퇴 처리된 계정은 세션을 생성할 수 없습니다.")
+        }.hasMessage("409-21 : 탈퇴 처리된 계정은 세션을 생성할 수 없습니다.")
     }
 
     @Test

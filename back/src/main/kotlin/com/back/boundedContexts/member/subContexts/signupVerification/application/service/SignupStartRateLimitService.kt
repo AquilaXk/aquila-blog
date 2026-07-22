@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.subContexts.signupVerification.applicati
 
 import com.back.global.app.application.AppFacade
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -56,7 +57,7 @@ class SignupStartRateLimitService(
     private fun resolveRedisTemplate(): StringRedisTemplate? {
         val redisTemplate = redisTemplateProvider.getIfAvailable()
         if (redisTemplate == null && AppFacade.isProd && requireRedisInProd) {
-            throw AppException("503-3", "회원가입 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.")
+            throw AppException(ErrorCode.SIGNUP_PROTECTION_NOT_READY, "회원가입 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.")
         }
         return redisTemplate
     }

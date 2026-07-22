@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailStartResult
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailVerifyResult
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import io.swagger.v3.oas.annotations.media.Schema
@@ -200,7 +201,7 @@ class ApiV1SignupVerificationController(
 
     private fun requireSignupEnabled() {
         if (!signupEnabled) {
-            throw AppException("503-5", "회원가입은 출시 준비 중입니다.")
+            throw AppException(ErrorCode.SIGNUP_NOT_LAUNCHED, "회원가입은 출시 준비 중입니다.")
         }
     }
 }

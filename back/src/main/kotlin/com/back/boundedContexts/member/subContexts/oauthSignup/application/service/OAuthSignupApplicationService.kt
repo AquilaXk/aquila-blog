@@ -8,6 +8,7 @@ import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.output.PendingOAuthSignupRepositoryPort
 import com.back.boundedContexts.member.subContexts.oauthSignup.model.PendingOAuthSignup
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -49,7 +50,7 @@ class OAuthSignupApplicationService(
         val memberLoginId = oauthSignupHashService.memberLoginId(normalizedProvider, providerSubjectHash)
 
         if (memberUseCase.findByLoginId(memberLoginId) != null) {
-            throw AppException("409-4", "이미 연결된 소셜 계정입니다. 로그인 화면에서 다시 시도해주세요.")
+            throw AppException(ErrorCode.OAUTH_SIGNUP_POLICY, "이미 연결된 소셜 계정입니다. 로그인 화면에서 다시 시도해주세요.")
         }
 
         val now = Instant.now()
@@ -65,7 +66,7 @@ class OAuthSignupApplicationService(
                     providerSubjectHash = providerSubjectHash,
                 )?.also {
                     if (it.consumedAt != null) {
-                        throw AppException("409-4", "이미 처리된 소셜 회원가입입니다. 로그인 화면에서 다시 시도해주세요.")
+                        throw AppException(ErrorCode.OAUTH_SIGNUP_POLICY, "이미 처리된 소셜 회원가입입니다. 로그인 화면에서 다시 시도해주세요.")
                     }
                     it.refresh(
                         pendingTokenHash = pendingTokenHash,
@@ -119,7 +120,7 @@ class OAuthSignupApplicationService(
         legalAcceptanceApplicationService.validateEmailSignupAcceptance(legalAcceptance)
         if (memberUseCase.findByLoginId(pending.memberLoginId) != null) {
             pending.cancel(now)
-            throw AppException("409-4", "이미 연결된 소셜 계정입니다. 로그인 화면에서 다시 시도해주세요.")
+            throw AppException(ErrorCode.OAUTH_SIGNUP_POLICY, "이미 연결된 소셜 계정입니다. 로그인 화면에서 다시 시도해주세요.")
         }
 
         val member =
@@ -150,17 +151,17 @@ class OAuthSignupApplicationService(
         val normalizedToken =
             pendingToken
                 .trim()
-                .ifBlank { throw AppException("400-2", "소셜 회원가입 세션이 올바르지 않습니다.") }
+                .ifBlank { throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "소셜 회원가입 세션이 올바르지 않습니다.") }
 
         return pendingOAuthSignupRepository.findByPendingTokenHash(
             oauthSignupHashService.pendingTokenHash(normalizedToken),
-        ) ?: throw AppException("404-2", "유효하지 않은 소셜 회원가입 세션입니다.")
+        ) ?: throw AppException(ErrorCode.MEMBER_SESSION_NOT_FOUND, "유효하지 않은 소셜 회원가입 세션입니다.")
     }
 
     private fun normalizeProvider(provider: String): String {
         val normalizedProvider = provider.trim().uppercase(Locale.ROOT)
         if (normalizedProvider.isBlank()) {
-            throw AppException("400-2", "소셜 로그인 제공자가 올바르지 않습니다.")
+            throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "소셜 로그인 제공자가 올바르지 않습니다.")
         }
         return normalizedProvider
     }
@@ -168,7 +169,7 @@ class OAuthSignupApplicationService(
     private fun normalizeNickname(nickname: String): String {
         val normalized = nickname.trim().ifBlank { "카카오사용자" }
         if (normalized.length !in 2..30) {
-            throw AppException("400-2", "프로필 이름은 2~30자로 입력해주세요.")
+            throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "프로필 이름은 2~30자로 입력해주세요.")
         }
         return normalized
     }

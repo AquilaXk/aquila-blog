@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.application.port.output.MemberRepositoryP
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
@@ -49,11 +50,11 @@ class MemberApplicationService(
         val normalizedEmail = normalizeEmailOrNull(email)
 
         memberRepository.findByLoginId(username)?.let {
-            throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
+            throw AppException(ErrorCode.MEMBER_DUPLICATE, "이미 존재하는 회원 아이디입니다.")
         }
         normalizedEmail?.let {
             if (memberRepository.existsByEmail(it)) {
-                throw AppException("409-2", "이미 사용 중인 이메일입니다.")
+                throw AppException(ErrorCode.RESOURCE_CONFLICT, "이미 사용 중인 이메일입니다.")
             }
         }
 
@@ -69,14 +70,14 @@ class MemberApplicationService(
                 memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname, normalizedEmail))
             } catch (exception: DataIntegrityViolationException) {
                 if (memberRepository.findByLoginId(username) != null) {
-                    throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
+                    throw AppException(ErrorCode.MEMBER_DUPLICATE, "이미 존재하는 회원 아이디입니다.")
                 }
                 normalizedEmail?.let {
                     if (memberRepository.existsByEmail(it)) {
-                        throw AppException("409-2", "이미 사용 중인 이메일입니다.")
+                        throw AppException(ErrorCode.RESOURCE_CONFLICT, "이미 사용 중인 이메일입니다.")
                     }
                 }
-                throw AppException("409-3", "동시에 처리된 회원가입 요청입니다. 다시 시도해주세요.")
+                throw AppException(ErrorCode.MEMBER_SIGNUP_RACE, "동시에 처리된 회원가입 요청입니다. 다시 시도해주세요.")
             }
         memberProfileHydrator.hydrate(member)
         profileImgUrl?.let {
@@ -101,7 +102,7 @@ class MemberApplicationService(
     ): Member {
         val normalizedEmail =
             normalizeEmailOrNull(email)
-                ?: throw AppException("400-2", "이메일을 입력해주세요.")
+                ?: throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "이메일을 입력해주세요.")
 
         val usernameBase = buildAutoUsernameBase(normalizedEmail)
 
@@ -117,13 +118,13 @@ class MemberApplicationService(
                     email = normalizedEmail,
                 )
             } catch (exception: AppException) {
-                if (exception.rsData.resultCode != "409-1") {
+                if (exception.errorCode != ErrorCode.MEMBER_DUPLICATE) {
                     throw exception
                 }
             }
         }
 
-        throw AppException("500-2", "회원가입 사용자 식별자 생성에 실패했습니다.")
+        throw AppException(ErrorCode.MEMBER_USERNAME_GENERATE_FAILED, "회원가입 사용자 식별자 생성에 실패했습니다.")
     }
 
     @Transactional(readOnly = true)
@@ -153,7 +154,7 @@ class MemberApplicationService(
     ) {
         val hashed = member.password
         if (!passwordEncoder.matches(rawPassword, hashed)) {
-            throw AppException("401-1", "비밀번호가 일치하지 않습니다.")
+            throw AppException(ErrorCode.UNAUTHORIZED, "비밀번호가 일치하지 않습니다.")
         }
     }
 
@@ -279,7 +280,7 @@ class MemberApplicationService(
 
     private fun normalizeZeroBasedPage(page: Int): Int {
         if (page < 1) {
-            throw AppException("400-1", "page는 1 이상이어야 합니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "page는 1 이상이어야 합니다.")
         }
 
         // page >= 1 일 때만 변환하여 underflow 가능성을 제거한다.
@@ -288,7 +289,7 @@ class MemberApplicationService(
 
     private fun normalizePageSize(pageSize: Int): Int {
         if (pageSize !in 1..30) {
-            throw AppException("400-1", "pageSize는 1~30 범위여야 합니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "pageSize는 1~30 범위여야 합니다.")
         }
 
         return pageSize

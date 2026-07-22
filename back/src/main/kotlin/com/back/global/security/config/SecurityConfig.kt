@@ -4,7 +4,7 @@ import com.back.boundedContexts.cloud.config.CloudSecurityConfigurer
 import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
-import com.back.global.rsData.RsData
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
 import com.back.global.security.config.oauth2.CustomOAuth2LoginFailureHandler
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
@@ -139,7 +139,7 @@ class SecurityConfig(
                         applyNoStoreHeaders(response)
                         response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
                         response.status = 401
-                        response.writer.write(objectMapper.writeValueAsString(RsData<Void>("401-1", "로그인 후 이용해주세요.")))
+                        response.writer.write(objectMapper.writeValueAsString(ErrorCode.UNAUTHORIZED.toRsData()))
                     }
 
                 accessDeniedHandler =
@@ -151,7 +151,7 @@ class SecurityConfig(
                         applyNoStoreHeaders(response)
                         response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
                         response.status = 403
-                        response.writer.write(objectMapper.writeValueAsString(RsData<Void>("403-1", "권한이 없습니다.")))
+                        response.writer.write(objectMapper.writeValueAsString(ErrorCode.ACCESS_DENIED.toRsData()))
                     }
             }
         }

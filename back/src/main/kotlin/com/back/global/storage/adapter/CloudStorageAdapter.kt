@@ -1,6 +1,7 @@
 package com.back.global.storage.adapter
 
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
 import com.back.global.storage.metrics.CloudMediaMetrics
@@ -81,7 +82,7 @@ class CloudStorageAdapter(
             }
         } catch (e: Exception) {
             logger.error("Cloud file upload failed (objectKey={})", request.objectKey, e)
-            throw AppException("500-1", "클라우드 파일 업로드에 실패했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 업로드에 실패했습니다.")
         }
 
         return CloudStoragePort.UploadResult(
@@ -115,7 +116,7 @@ class CloudStorageAdapter(
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return null
             logger.error("Cloud file download failed (objectKey={})", objectKey, e)
-            throw AppException("500-1", "클라우드 파일을 불러오지 못했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일을 불러오지 못했습니다.")
         }
     }
 
@@ -148,7 +149,7 @@ class CloudStorageAdapter(
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return null
             logger.error("Cloud file range download failed (objectKey={}, range={}-{})", objectKey, range.first, range.last, e)
-            throw AppException("500-1", "클라우드 파일을 불러오지 못했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일을 불러오지 못했습니다.")
         }
     }
 
@@ -182,7 +183,7 @@ class CloudStorageAdapter(
             )
         } catch (e: Exception) {
             logger.error("Cloud multipart upload init failed (objectKey={})", request.objectKey, e)
-            throw AppException("500-1", "클라우드 대용량 업로드를 시작하지 못했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 대용량 업로드를 시작하지 못했습니다.")
         }
     }
 
@@ -218,7 +219,7 @@ class CloudStorageAdapter(
                 request.partNumber,
                 e,
             )
-            throw AppException("500-1", "클라우드 대용량 업로드 조각 저장에 실패했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 대용량 업로드 조각 저장에 실패했습니다.")
         }
     }
 
@@ -256,7 +257,7 @@ class CloudStorageAdapter(
                 request.uploadId,
                 e,
             )
-            throw AppException("500-1", "클라우드 대용량 업로드 완료에 실패했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 대용량 업로드 완료에 실패했습니다.")
         }
     }
 
@@ -283,7 +284,7 @@ class CloudStorageAdapter(
                 request.uploadId,
                 e,
             )
-            throw AppException("500-1", "클라우드 대용량 업로드 취소에 실패했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 대용량 업로드 취소에 실패했습니다.")
         } catch (e: Exception) {
             logger.error(
                 "Cloud multipart abort failed (objectKey={}, uploadId={})",
@@ -291,7 +292,7 @@ class CloudStorageAdapter(
                 request.uploadId,
                 e,
             )
-            throw AppException("500-1", "클라우드 대용량 업로드 취소에 실패했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 대용량 업로드 취소에 실패했습니다.")
         }
     }
 
@@ -320,7 +321,7 @@ class CloudStorageAdapter(
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return null
             logger.error("Cloud object head failed (objectKey={})", objectKey, e)
-            throw AppException("500-1", "클라우드 파일 메타데이터를 확인하지 못했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 메타데이터를 확인하지 못했습니다.")
         }
     }
 
@@ -366,7 +367,7 @@ class CloudStorageAdapter(
             } while (objects.size < safeLimit && continuationToken != null)
         } catch (e: Exception) {
             logger.error("Cloud object list failed (prefix={})", normalizedPrefix, e)
-            throw AppException("500-1", "클라우드 객체 목록을 조회하지 못했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 객체 목록을 조회하지 못했습니다.")
         }
 
         return CloudStoragePort.StoredObjectListing(
@@ -392,7 +393,7 @@ class CloudStorageAdapter(
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return
             logger.error("Cloud file delete failed (objectKey={})", objectKey, e)
-            throw AppException("500-1", "클라우드 파일 삭제에 실패했습니다.")
+            throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 삭제에 실패했습니다.")
         }
     }
 
@@ -438,15 +439,15 @@ class CloudStorageAdapter(
     }
 
     private fun requireClient(): S3Client {
-        if (!properties.enabled) throw AppException("503-1", "클라우드 스토리지가 비활성화되어 있습니다.")
+        if (!properties.enabled) throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "클라우드 스토리지가 비활성화되어 있습니다.")
 
         if (s3Client == null || initErrorMessage != null) {
             initializeStorage(forceRetry = true)
         }
 
-        initErrorMessage?.let { throw AppException("503-1", it) }
+        initErrorMessage?.let { throw AppException(ErrorCode.SERVICE_UNAVAILABLE, it) }
 
-        return s3Client ?: throw AppException("503-1", "클라우드 스토리지가 아직 준비되지 않았습니다.")
+        return s3Client ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "클라우드 스토리지가 아직 준비되지 않았습니다.")
     }
 
     private fun buildClient(): S3Client {
@@ -508,7 +509,7 @@ class CloudStorageAdapter(
             objectKey.startsWith("/") ||
             !objectKey.startsWith("$prefix/")
         ) {
-            throw AppException("400-1", "유효하지 않은 클라우드 파일 경로입니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 클라우드 파일 경로입니다.")
         }
     }
 
@@ -527,7 +528,7 @@ class CloudStorageAdapter(
             normalized.contains("..") ||
             !(normalized == "$allowedPrefix/" || normalized.startsWith("$allowedPrefix/"))
         ) {
-            throw AppException("400-1", "유효하지 않은 클라우드 파일 경로입니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 클라우드 파일 경로입니다.")
         }
         return normalized
     }

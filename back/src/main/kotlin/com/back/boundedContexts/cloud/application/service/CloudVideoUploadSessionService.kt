@@ -9,6 +9,7 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadPart
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSession
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.CloudMultipartCommitDetector
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
@@ -150,7 +151,7 @@ class CloudVideoUploadSessionService(
         if (!initiated) {
             markFailed(session.id, CloudVideoUploadSessionStatus.INITIATING, "multipart initiate metadata attach failed")
             abortQuietly(upload.objectKey, upload.uploadId)
-            throw AppException("409-1", "대용량 업로드 세션 상태가 변경되었습니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 상태가 변경되었습니다.")
         }
         session.markInitiated(upload.uploadId, now)
         CloudMediaMetrics.recordSessionTransition(
@@ -168,7 +169,7 @@ class CloudVideoUploadSessionService(
     ): CloudVideoUploadSessionDto {
         val session = findOwnedSession(ownerMemberId, sessionId)
         if (expireSessionIfNeeded(session)) {
-            throw AppException("410-1", "대용량 업로드 세션이 만료되었습니다.")
+            throw AppException(ErrorCode.GONE, "대용량 업로드 세션이 만료되었습니다.")
         }
         val parts = partRepository.findBySessionId(session.id)
         return session.toDto(parts)
@@ -292,7 +293,7 @@ class CloudVideoUploadSessionService(
     ): CloudVideoUploadPartResultDto? {
         val existing = partRepository.findBySessionIdAndPartNumber(session.id, partNumber) ?: return null
         if (existing.byteSize != contentLength) {
-            throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
         }
         val existingSha = existing.partSha256
         if (existingSha.isBlank()) {
@@ -301,7 +302,7 @@ class CloudVideoUploadSessionService(
             return null
         }
         if (!existingSha.equals(bufferedPart.sha256Hex, ignoreCase = true)) {
-            throw AppException("409-1", PART_CONTENT_CONFLICT_MESSAGE)
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, PART_CONTENT_CONFLICT_MESSAGE)
         }
         extendSessionExpiry(session)
         CloudMediaMetrics.recordPartUpload(
@@ -396,7 +397,7 @@ class CloudVideoUploadSessionService(
         when (session.status) {
             CloudVideoUploadSessionStatus.IN_PROGRESS -> {
                 if (expireSessionIfNeeded(session)) {
-                    throw AppException("410-1", "대용량 업로드 세션이 만료되었습니다.")
+                    throw AppException(ErrorCode.GONE, "대용량 업로드 세션이 만료되었습니다.")
                 }
                 val parts = requireCompleteParts(session)
                 claimStatus(
@@ -413,7 +414,7 @@ class CloudVideoUploadSessionService(
                 ensureStorageCommitted(session, parts)
                 return finishCommittedSession(session).toDto()
             }
-            else -> throw AppException("409-1", "이미 종료된 대용량 업로드 세션입니다.")
+            else -> throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "이미 종료된 대용량 업로드 세션입니다.")
         }
     }
 
@@ -424,7 +425,7 @@ class CloudVideoUploadSessionService(
         val session = findOwnedSession(ownerMemberId, sessionId)
         if (isTerminalStatus(session.status)) return
         if (session.status != CloudVideoUploadSessionStatus.IN_PROGRESS) {
-            throw AppException("409-1", "다른 업로드 작업이 진행 중입니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "다른 업로드 작업이 진행 중입니다.")
         }
 
         claimStatus(
@@ -449,7 +450,7 @@ class CloudVideoUploadSessionService(
         sessionId: Long,
     ): CloudVideoUploadSession =
         sessionRepository.findByIdAndOwner(sessionId, ownerMemberId)
-            ?: throw AppException("404-1", "대용량 업로드 세션을 찾을 수 없습니다.")
+            ?: throw AppException(ErrorCode.NOT_FOUND, "대용량 업로드 세션을 찾을 수 없습니다.")
 
     private fun findMutableSession(
         ownerMemberId: Long,
@@ -457,10 +458,10 @@ class CloudVideoUploadSessionService(
     ): CloudVideoUploadSession {
         val session = findOwnedSession(ownerMemberId, sessionId)
         if (session.status != CloudVideoUploadSessionStatus.IN_PROGRESS) {
-            throw AppException("409-1", "이미 종료된 대용량 업로드 세션입니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "이미 종료된 대용량 업로드 세션입니다.")
         }
         if (expireSessionIfNeeded(session)) {
-            throw AppException("410-1", "대용량 업로드 세션이 만료되었습니다.")
+            throw AppException(ErrorCode.GONE, "대용량 업로드 세션이 만료되었습니다.")
         }
 
         return session
@@ -532,7 +533,7 @@ class CloudVideoUploadSessionService(
     private fun requireCompleteParts(session: CloudVideoUploadSession): List<CloudVideoUploadPart> {
         val parts = partRepository.findBySessionId(session.id).sortedBy { it.partNumber }
         if (parts.size != session.totalParts || parts.map { it.partNumber } != (1..session.totalParts).toList()) {
-            throw AppException("409-1", "아직 업로드되지 않은 동영상 조각이 있습니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "아직 업로드되지 않은 동영상 조각이 있습니다.")
         }
         return parts
     }
@@ -647,14 +648,14 @@ class CloudVideoUploadSessionService(
         // Null/not-yet-visible head after complete: keep COMPLETING and ask client to retry.
         // CloudMultipartCommitDetector.isCommitted(null, ...) is false, but must not delete.
         if (head == null) {
-            throw AppException("409-1", COMMITTED_OBJECT_NOT_VISIBLE_MESSAGE)
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, COMMITTED_OBJECT_NOT_VISIBLE_MESSAGE)
         }
         if (!CloudMultipartCommitDetector.isCommitted(head, session.byteSize)) {
             failIntegrityAndCleanup(
                 session,
                 "multipart integrity size mismatch: head=${head.contentLength}, expected=${session.byteSize}",
             )
-            throw AppException("409-1", INTEGRITY_MISMATCH_MESSAGE)
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, INTEGRITY_MISMATCH_MESSAGE)
         }
         if (parts.size != session.totalParts || parts.any { it.partSha256.isBlank() }) {
             log.warn(
@@ -727,7 +728,7 @@ class CloudVideoUploadSessionService(
             cloudFileRepository.findByObjectKey(session.objectKey)?.takeIf { file ->
                 file.ownerMemberId == session.ownerMemberId &&
                     (fileId == null || file.id == fileId)
-            } ?: throw AppException("500-1", "완료된 업로드 파일을 찾을 수 없습니다.")
+            } ?: throw AppException(ErrorCode.INTERNAL_ERROR, "완료된 업로드 파일을 찾을 수 없습니다.")
         return reactivateSoftDeletedFile(
             softDeleted,
             session,
@@ -774,7 +775,7 @@ class CloudVideoUploadSessionService(
                 throwOnFailure = false,
             )
         if (!claimed) {
-            throw AppException("409-1", conflictMessage)
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, conflictMessage)
         }
         session.transitionTo(nextStatus, clock.instant())
     }
@@ -800,7 +801,7 @@ class CloudVideoUploadSessionService(
             )
         }
         if (!changed && throwOnFailure) {
-            throw AppException("409-1", "대용량 업로드 세션 상태가 변경되었습니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 상태가 변경되었습니다.")
         }
         return changed
     }
@@ -870,7 +871,7 @@ class CloudVideoUploadSessionService(
     }
 
     private fun requireUploadId(session: CloudVideoUploadSession): String =
-        session.uploadId ?: throw AppException("409-1", "대용량 업로드 세션 초기화가 완료되지 않았습니다.")
+        session.uploadId ?: throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 초기화가 완료되지 않았습니다.")
 
     private fun isTerminalStatus(status: CloudVideoUploadSessionStatus): Boolean =
         when (status) {
@@ -883,10 +884,10 @@ class CloudVideoUploadSessionService(
         }
 
     private fun validateTotalSize(byteSize: Long) {
-        if (byteSize <= 0) throw AppException("400-1", "동영상 파일 크기가 올바르지 않습니다.")
+        if (byteSize <= 0) throw AppException(ErrorCode.BAD_REQUEST, "동영상 파일 크기가 올바르지 않습니다.")
         val maxBytes = cloudStorageProperties.cloudVideoResumableMaxFileSizeBytes
         if (byteSize > maxBytes) {
-            throw AppException("413-1", "클라우드 동영상 파일은 ${formatFileSizeLimit(maxBytes)} 이하여야 합니다.")
+            throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "클라우드 동영상 파일은 ${formatFileSizeLimit(maxBytes)} 이하여야 합니다.")
         }
     }
 
@@ -896,7 +897,7 @@ class CloudVideoUploadSessionService(
     ): Int {
         val totalParts = ((byteSize - 1) / partSizeBytes) + 1
         if (totalParts > CLOUD_VIDEO_UPLOAD_MAX_MULTIPART_PARTS) {
-            throw AppException("400-1", "대용량 동영상 업로드는 최대 10,000개 조각 이하여야 합니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "대용량 동영상 업로드는 최대 10,000개 조각 이하여야 합니다.")
         }
         return totalParts.toInt()
     }
@@ -906,7 +907,7 @@ class CloudVideoUploadSessionService(
         partNumber: Int,
     ) {
         if (partNumber !in 1..session.totalParts) {
-            throw AppException("400-1", "업로드 조각 번호가 올바르지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "업로드 조각 번호가 올바르지 않습니다.")
         }
     }
 
@@ -915,7 +916,7 @@ class CloudVideoUploadSessionService(
         partNumber: Int,
         contentLength: Long,
     ) {
-        if (contentLength <= 0) throw AppException("400-1", "업로드 조각이 비어 있습니다.")
+        if (contentLength <= 0) throw AppException(ErrorCode.BAD_REQUEST, "업로드 조각이 비어 있습니다.")
         val expectedSize =
             if (partNumber == session.totalParts) {
                 session.byteSize - (session.partSizeBytes * (partNumber - 1))
@@ -923,7 +924,7 @@ class CloudVideoUploadSessionService(
                 session.partSizeBytes
             }
         if (contentLength != expectedSize) {
-            throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
+            throw AppException(ErrorCode.BAD_REQUEST, INVALID_PART_SIZE_MESSAGE)
         }
     }
 
@@ -941,7 +942,7 @@ class CloudVideoUploadSessionService(
             val digest = MessageDigest.getInstance("SHA-256")
             val total = writeDigestedPartBytes(inputStream, tempFile, digest, expectedLength)
             if (total != expectedLength) {
-                throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
+                throw AppException(ErrorCode.BAD_REQUEST, INVALID_PART_SIZE_MESSAGE)
             }
             return BufferedUploadPart(path = tempFile, sha256Hex = digest.digest().toHex())
         } catch (ex: Exception) {
@@ -966,7 +967,7 @@ class CloudVideoUploadSessionService(
                         if (read < 0) break
                         total += read
                         if (total > expectedLength) {
-                            throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
+                            throw AppException(ErrorCode.BAD_REQUEST, INVALID_PART_SIZE_MESSAGE)
                         }
                         output.write(buffer, 0, read)
                     }
@@ -998,9 +999,9 @@ class CloudVideoUploadSessionService(
         val bytes = Files.newInputStream(file).use { it.readNBytes(12) }
         val detected =
             detectVideoFromSignature(bytes)
-                ?: throw AppException("400-1", "지원하지 않는 동영상 파일 형식입니다.")
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 동영상 파일 형식입니다.")
         if (detected != session.contentType) {
-            throw AppException("400-1", "동영상 파일 내용과 콘텐츠 타입이 일치하지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "동영상 파일 내용과 콘텐츠 타입이 일치하지 않습니다.")
         }
     }
 
@@ -1027,7 +1028,7 @@ class CloudVideoUploadSessionService(
                 "webm" -> "video/webm"
                 else -> null
             }
-        return fromContentType ?: fromExtension ?: throw AppException("400-1", "지원하지 않는 동영상 파일 형식입니다.")
+        return fromContentType ?: fromExtension ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 동영상 파일 형식입니다.")
     }
 
     private fun detectVideoFromSignature(bytes: ByteArray): String? {
@@ -1053,7 +1054,7 @@ class CloudVideoUploadSessionService(
             raw.startsWith("/") ||
             raw.split('/').any { it.isBlank() || it == "." || it == ".." }
         ) {
-            throw AppException("400-1", "유효하지 않은 폴더 경로입니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 폴더 경로입니다.")
         }
 
         return raw

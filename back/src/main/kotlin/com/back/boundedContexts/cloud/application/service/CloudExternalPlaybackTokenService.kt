@@ -7,6 +7,7 @@ import com.back.boundedContexts.cloud.model.CloudExternalPlaybackTokenPurpose
 import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.metrics.CloudMediaMetrics
 import io.micrometer.core.instrument.MeterRegistry
@@ -86,7 +87,7 @@ class CloudExternalPlaybackTokenService(
         val file = resolveTokenFile(token, fileId)
         val storedObject =
             cloudStoragePort.open(file.objectKey)
-                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
             file = file.toDto(),
@@ -103,7 +104,7 @@ class CloudExternalPlaybackTokenService(
         val file = resolveTokenFile(token, fileId)
         val storedObject =
             cloudStoragePort.openRange(file.objectKey, range)
-                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
             file = file.toDto(),
@@ -131,9 +132,9 @@ class CloudExternalPlaybackTokenService(
     ): CloudFile {
         val file =
             cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
-                ?: throw AppException("404-1", "클라우드 파일을 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
         if (file.mediaKind != CloudFileMediaKind.VIDEO) {
-            throw AppException("400-1", "동영상 파일만 외부 재생할 수 있습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "동영상 파일만 외부 재생할 수 있습니다.")
         }
         return file
     }
@@ -145,7 +146,7 @@ class CloudExternalPlaybackTokenService(
         val normalizedToken = token.trim()
         if (normalizedToken.isBlank()) {
             CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
-            throw AppException("403-1", "외부 재생 token이 올바르지 않거나 만료되었습니다.")
+            throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "외부 재생 token이 올바르지 않거나 만료되었습니다.")
         }
         val playbackToken =
             cloudExternalPlaybackTokenRepository.findValid(
@@ -156,7 +157,7 @@ class CloudExternalPlaybackTokenService(
             )
         if (playbackToken == null) {
             CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
-            throw AppException("403-1", "외부 재생 token이 올바르지 않거나 만료되었습니다.")
+            throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "외부 재생 token이 올바르지 않거나 만료되었습니다.")
         }
 
         return try {

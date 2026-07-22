@@ -2,6 +2,7 @@ package com.back.global.exception.config
 
 import ch.qos.logback.classic.Level
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -25,7 +26,10 @@ class ExceptionHandlerLogRedactionTest {
         val appender = ExceptionHandlerListAppenderSupport.attach()
 
         try {
-            handler.handleAppException(AppException("500-9", "failed token=LEAK_TEST_123"), request)
+            handler.handleAppException(
+                AppException(ErrorCode.INTERNAL_ERROR, "failed token=LEAK_TEST_123"),
+                request,
+            )
         } finally {
             ExceptionHandlerListAppenderSupport.detach(appender)
         }
@@ -34,7 +38,7 @@ class ExceptionHandlerLogRedactionTest {
         assertThat(event.level).isEqualTo(Level.ERROR)
         assertThat(event.formattedMessage)
             .contains("query=token=[REDACTED]&email=[REDACTED]")
-            .contains("exceptionMessage=500-9 : failed token=[REDACTED]")
+            .contains("exceptionMessage=500-1 : failed token=[REDACTED]")
             .doesNotContain("exceptionStack=")
             .doesNotContain("LEAK_TEST_123")
             .doesNotContain("test@example.com")
@@ -214,7 +218,7 @@ class ExceptionHandlerLogRedactionTest {
 
         val response =
             try {
-                handler.handleAppException(AppException("404-1", "not found token=LEAK_TEST_123"), request)
+                handler.handleAppException(AppException(ErrorCode.NOT_FOUND, "not found token=LEAK_TEST_123"), request)
             } finally {
                 ExceptionHandlerListAppenderSupport.detach(appender)
             }

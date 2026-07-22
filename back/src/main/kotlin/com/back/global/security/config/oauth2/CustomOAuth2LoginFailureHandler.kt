@@ -1,6 +1,7 @@
 package com.back.global.security.config.oauth2
 
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.config.oauth2.application.OAuth2State
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -67,7 +68,7 @@ internal fun buildOAuth2LoginFailureRedirectUrl(
 private fun resolveOAuth2LoginFailureCode(exception: AuthenticationException): String =
     when {
         containsOAuthSignupDisabledException(exception) -> OAUTH_SIGNUP_DISABLED_ERROR
-        containsAppExceptionCode(exception, "403-4") -> OAUTH_SIGNUP_REQUIRED_ERROR
+        containsAppExceptionCode(exception, ErrorCode.OAUTH_SIGNUP_REQUIRED.code) -> OAUTH_SIGNUP_REQUIRED_ERROR
         else -> OAUTH_FAILED_ERROR
     }
 

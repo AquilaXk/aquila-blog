@@ -1,5 +1,6 @@
 package com.back.global.security.config
 
+import com.back.global.exception.application.ErrorCode
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -45,11 +46,12 @@ class ApiRuntimeBoundaryFilter(
         }
 
         apiCorsPolicy?.applyResponseHeadersIfAllowed(request, response)
-        response.status = HttpServletResponse.SC_SERVICE_UNAVAILABLE
+        response.status = ErrorCode.SERVICE_UNAVAILABLE.status.value()
         response.setHeader("Retry-After", "1")
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         response.characterEncoding = Charsets.UTF_8.name()
-        response.writer.write("""{"resultCode":"503-1","msg":"현재 런타임 모드에서 차단된 API입니다."}""")
+        val body = ErrorCode.SERVICE_UNAVAILABLE.toRsData("현재 런타임 모드에서 차단된 API입니다.")
+        response.writer.write("""{"resultCode":"${body.resultCode}","msg":"${body.msg}"}""")
     }
 
     private fun isAllowed(

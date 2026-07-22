@@ -3,11 +3,15 @@ package com.back.global.exception.application
 import com.back.global.rsData.RsData
 
 class AppException(
-    private val resultCode: String,
-    private val msg: String,
+    val errorCode: ErrorCode,
+    overrideMessage: String? = null,
+    cause: Throwable? = null,
 ) : RuntimeException(
-        "$resultCode : $msg",
+        "${errorCode.code} : ${overrideMessage ?: errorCode.defaultUserMessage}",
+        cause,
     ) {
+    private val userMessage: String = overrideMessage ?: errorCode.defaultUserMessage
+
     val rsData: RsData<Void>
-        get() = RsData(resultCode, msg)
+        get() = RsData(errorCode.code, userMessage)
 }

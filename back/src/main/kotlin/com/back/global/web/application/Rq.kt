@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.app.application.AppFacade
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.domain.SecurityUser
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -40,7 +41,7 @@ class Rq(
                 }
 
     val actor: Member
-        get() = actorOrNull ?: throw AppException("401-1", "로그인 후 이용해주세요.")
+        get() = actorOrNull ?: throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")
 
     val clientIp: String
         get() = clientIpResolver.resolve(req)

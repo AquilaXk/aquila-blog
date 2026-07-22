@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.model
 
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column
@@ -84,11 +85,11 @@ class MemberSignupVerification(
 
     fun ensureVerifiable(now: Instant) {
         if (cancelledAt != null || consumedAt != null) {
-            throw AppException("410-1", "회원가입 링크가 더 이상 유효하지 않습니다.")
+            throw AppException(ErrorCode.GONE, "회원가입 링크가 더 이상 유효하지 않습니다.")
         }
 
         if (verifiedAt == null && emailVerificationExpiresAt.isBefore(now)) {
-            throw AppException("410-1", "회원가입 링크가 만료되었습니다. 다시 시도해주세요.")
+            throw AppException(ErrorCode.GONE, "회원가입 링크가 만료되었습니다. 다시 시도해주세요.")
         }
     }
 
@@ -104,15 +105,15 @@ class MemberSignupVerification(
 
     fun ensureCompletable(now: Instant) {
         if (cancelledAt != null || consumedAt != null) {
-            throw AppException("410-1", "회원가입 세션이 더 이상 유효하지 않습니다.")
+            throw AppException(ErrorCode.GONE, "회원가입 세션이 더 이상 유효하지 않습니다.")
         }
 
         if (verifiedAt == null || signupSessionTokenHash.isNullOrBlank() || signupSessionExpiresAt == null) {
-            throw AppException("401-4", "이메일 인증이 완료되지 않았습니다.")
+            throw AppException(ErrorCode.EMAIL_NOT_VERIFIED, "이메일 인증이 완료되지 않았습니다.")
         }
 
         if (signupSessionExpiresAt!!.isBefore(now)) {
-            throw AppException("410-1", "회원가입 세션이 만료되었습니다. 이메일 인증부터 다시 진행해주세요.")
+            throw AppException(ErrorCode.GONE, "회원가입 세션이 만료되었습니다. 이메일 인증부터 다시 진행해주세요.")
         }
     }
 

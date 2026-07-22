@@ -28,7 +28,8 @@ test.describe("frontend legacy boundary", () => {
     expect(legacySlugRoute).toContain("extractPostIdFromLegacySlug")
     expect(legacySlugRoute).toContain("toCanonicalPostPath(post.id)")
     expect(legacySlugRoute).toContain("permanent: true")
-    expect(legacySlugRoute).toContain("const LegacyPostRedirectPage = () => null")
+    expect(legacySlugRoute).toContain("res.statusCode = 404")
+    expect(legacySlugRoute).toContain("<CustomError />")
     expect(legacySlugRoute).not.toContain("getStaticProps")
     expect(legacySlugRoute).not.toContain("MarkdownRenderer")
 

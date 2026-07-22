@@ -193,6 +193,28 @@
       "evidenceRequirement": "legal policy and tracking regression test output",
       "launchDecision": "완료",
       "evidenceArtifacts": ["front/e2e/legal-policy-pages.spec.ts", "front/e2e/privacy-tracking-consent.spec.ts"]
+    },
+    {
+      "issue": 1127,
+      "status": "Closed",
+      "category": "필수 출시 전 완료",
+      "target": "Soft-launch 출시 범위와 privacy freeze 키 계약 고정",
+      "evidenceRequirement": "Soft-launch=admin publish+anonymous public read ONLY; signup/OAuth signup/RUM/`CUSTOM__AI__SUMMARY__ENABLED` false/0; live smoke",
+      "launchDecision": "완료",
+      "disabledByFlag": true,
+      "disabledEvidence": [
+        "deploy/env/env.contract.json",
+        ".github/workflows/deploy.yml",
+        "docs/design/privacy-launch-gate-checklist.md",
+        "docs/design/launch-gate-operations.md"
+      ],
+      "evidenceArtifacts": [
+        "docs/design/privacy-launch-gate-checklist.md",
+        "docs/design/launch-gate-operations.md",
+        "deploy/env/env.contract.json",
+        "issue #1127",
+        "issue #1256"
+      ]
     }
   ]
 }

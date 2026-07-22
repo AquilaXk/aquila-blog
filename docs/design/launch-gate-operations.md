@@ -5,6 +5,8 @@
 ## Scope
 
 - Issue: #958
+- Soft-launch 범위 (Locked — #1127 / epic #1256): **관리자 글 발행 + 비로그인 공개 열람 ONLY**
+- Soft-launch freeze 키: `CUSTOM__MEMBER__SIGNUP__ENABLED=false`, `CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=false`, `NEXT_PUBLIC_SIGNUP_ENABLED=false`, `NEXT_PUBLIC_RUM_SAMPLE_RATE=0`, `CUSTOM__AI__SUMMARY__ENABLED=false` (AI 실키는 SUMMARY, TAG 아님)
 - 적용 대상: release readiness, GitHub Actions CI/CD, 홈서버 배포, QA, monitoring, legal/public pages, privacy launch gate
 - 기본 흐름: issue 확인 -> work branch -> PR -> CI/security -> code review -> merge -> post-merge CI/CD 확인
 
@@ -37,6 +39,7 @@
 | Mobile/keyboard/200% zoom QA | `docs/design/release-ui-qa-matrix.md` run table과 artifact | matrix pass run 연결 | 핵심 viewport 또는 keyboard/zoom failure |
 | Privacy/terms/contact | public URL 또는 PR evidence | privacy, terms, contact 접근 가능 | 법적/연락처 페이지 미공개 |
 | Privacy launch gate | `docs/design/privacy-launch-gate-checklist.md`의 matrix와 evidence | 개인정보 필수 출시 전 완료 항목 closed, 공개 정책 gate pass, 법무/운영 owner evidence 존재 | 개인정보 launch-blocking issue open, policy-code drift, 법무/운영 owner evidence 없음 |
+| Soft-launch feature freeze | #1127 Locked decision, `deploy/env/env.contract.json`, deploy privacy freeze step, live UI smoke | Soft-launch 범위 문서와 5개 freeze 키가 false/0으로 일치하고 signup/OAuth signup/RUM/AI SUMMARY가 공개되지 않음 | freeze 키 drift, Soft-launch 범위 밖 기능 enable, TAG 키로 SUMMARY를 오인 |
 
 ## Evidence Collection
 

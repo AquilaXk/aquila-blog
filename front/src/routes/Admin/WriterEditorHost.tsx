@@ -9,6 +9,7 @@ type WriterEditorHostProps = {
   previewSummary?: string
   onMarkdownChange: (markdown: string, meta?: { editorFocused: boolean }) => void
   onFlushMarkdownReady: (flush: (() => string) | null) => void
+  onUploadingChange?: (isUploading: boolean) => void
   onImageUpload: (file: File) => Promise<{ alt?: string; title?: string; url?: string; src?: string }>
   onFileUpload?: (file: File) => Promise<{
     url?: string
@@ -29,6 +30,7 @@ export const WriterEditorHost = ({
   previewSummary,
   onMarkdownChange,
   onFlushMarkdownReady,
+  onUploadingChange,
   onImageUpload,
   onFileUpload,
   mermaidEnabled,
@@ -48,6 +50,7 @@ export const WriterEditorHost = ({
         previewSummary={previewSummary}
         onChange={onMarkdownChange}
         onFlushMarkdownReady={onFlushMarkdownReady}
+        onUploadingChange={onUploadingChange}
         onUploadImage={onImageUpload}
         onUploadFile={onFileUpload}
         disableMermaid={!mermaidEnabled}

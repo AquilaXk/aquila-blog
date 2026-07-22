@@ -9,6 +9,7 @@ import {
   resolveMarkdownImageEmbed,
   validateMarkdownAttachmentSize,
 } from "../../src/components/markdown-editor/markdownEditorUploadModel"
+import { derivePublishActionViewModel } from "../../src/routes/Admin/editorStudioState"
 
 const sourcePath = (...parts: string[]) => path.resolve(__dirname, "../../src", ...parts)
 
@@ -76,13 +77,38 @@ test.describe("markdown editor attachment upload model", () => {
       sourcePath("components", "markdown-editor", "MarkdownEditor.tsx"),
       "utf8"
     )
+    const editorViewSource = readFileSync(
+      sourcePath("routes", "Admin", "EditorStudioWorkspaceControllerRootView.tsx"),
+      "utf8"
+    )
 
     expect(writerHostSource).toContain("onFileUpload,")
     expect(writerHostSource).toContain("onUploadFile={onFileUpload}")
+    expect(writerHostSource).toContain("onUploadingChange={onUploadingChange}")
+    expect(markdownEditorSource).toContain("onUploadingChange?: (isUploading: boolean) => void")
+    expect(markdownEditorSource).toContain("setUploadInFlight(1)")
     expect(markdownEditorSource).toContain("onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>")
     expect(markdownEditorSource).toContain('aria-label="파일"')
     expect(markdownEditorSource).toContain("handleFileInput")
     expect(markdownEditorSource).toContain("validateMarkdownAttachmentSize")
     expect(markdownEditorSource).toContain("MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE")
+    expect(editorViewSource).toContain("onUploadingChange={handleMarkdownUploadingChange}")
+    expect(editorViewSource).toContain("isMarkdownUploading,")
+  })
+
+  test("blocks publish actions while markdown attachment upload is in flight", () => {
+    const publishActionViewModel = derivePublishActionViewModel({
+      publishActionType: "create",
+      editorMode: "create",
+      loadingKey: "",
+      hasEditorMinimumFields: true,
+      hasPlaceholderIssue: false,
+      isTempDraftMode: false,
+      isMarkdownUploading: true,
+    })
+
+    expect(publishActionViewModel.publishActionTriggerDisabled).toBe(true)
+    expect(publishActionViewModel.publishActionButtonDisabled).toBe(true)
+    expect(publishActionViewModel.mobilePrimaryActionDisabled).toBe(true)
   })
 })

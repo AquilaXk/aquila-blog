@@ -101,6 +101,7 @@ export const derivePublishActionViewModel = ({
   hasEditorMinimumFields,
   hasPlaceholderIssue,
   isTempDraftMode,
+  isMarkdownUploading = false,
 }: {
   publishActionType: PublishActionType
   editorMode: EditorMode
@@ -108,12 +109,14 @@ export const derivePublishActionViewModel = ({
   hasEditorMinimumFields: boolean
   hasPlaceholderIssue: boolean
   isTempDraftMode: boolean
+  isMarkdownUploading?: boolean
 }) => {
   const publishActionTriggerDisabled =
     loadingKey === "writePost" ||
     loadingKey === "modifyPost" ||
     loadingKey === "publishTempPost" ||
-    loadingKey === "postTemp"
+    loadingKey === "postTemp" ||
+    isMarkdownUploading
 
   return {
     publishActionTitle:
@@ -134,13 +137,14 @@ export const derivePublishActionViewModel = ({
           : loadingKey === "publishTempPost"
             ? "작성 중..."
             : "새 글 작성",
-    publishActionButtonDisabled: isPublishActionDisabled({
-      publishActionType,
-      editorMode,
-      loadingKey,
-      hasEditorMinimumFields,
-      hasPlaceholderIssue,
-    }),
+    publishActionButtonDisabled:
+      isPublishActionDisabled({
+        publishActionType,
+        editorMode,
+        loadingKey,
+        hasEditorMinimumFields,
+        hasPlaceholderIssue,
+      }) || isMarkdownUploading,
     publishActionTriggerDisabled,
     mobilePrimaryActionLabel:
       editorMode === "create"

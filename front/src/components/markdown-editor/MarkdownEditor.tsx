@@ -31,6 +31,7 @@ type MarkdownEditorProps = {
   disableMermaid?: boolean
   onChange: (markdown: string, meta?: MarkdownChangeMeta) => void
   onFlushMarkdownReady?: (flush: (() => string) | null) => void
+  onUploadingChange?: (isUploading: boolean) => void
   onUploadImage?: (file: File) => Promise<MarkdownImageUploadResult>
   onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
 }
@@ -97,6 +98,7 @@ export const MarkdownEditor = ({
   disableMermaid = false,
   onChange,
   onFlushMarkdownReady,
+  onUploadingChange,
   onUploadImage,
   onUploadFile,
 }: MarkdownEditorProps) => {
@@ -107,6 +109,15 @@ export const MarkdownEditor = ({
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
+  const uploadInFlightCountRef = useRef(0)
+
+  const setUploadInFlight = useCallback(
+    (delta: number) => {
+      uploadInFlightCountRef.current = Math.max(0, uploadInFlightCountRef.current + delta)
+      onUploadingChange?.(uploadInFlightCountRef.current > 0)
+    },
+    [onUploadingChange]
+  )
 
   useEffect(() => {
     if (value === valueRef.current) return
@@ -262,12 +273,15 @@ export const MarkdownEditor = ({
   const handleImageInput = useCallback(
     async (file: File | null) => {
       if (!file || !onUploadImage) return
+      setUploadInFlight(1)
       let uploaded: MarkdownImageUploadResult
       try {
         uploaded = await onUploadImage(file)
       } catch {
         setUploadError(MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE)
         return
+      } finally {
+        setUploadInFlight(-1)
       }
       const resolved = resolveMarkdownImageEmbed(uploaded, file.name)
       if ("error" in resolved) {
@@ -276,7 +290,7 @@ export const MarkdownEditor = ({
       }
       insertUploadedMarkdown(resolved.markdown)
     },
-    [insertUploadedMarkdown, onUploadImage]
+    [insertUploadedMarkdown, onUploadImage, setUploadInFlight]
   )
 
   const handleFileInput = useCallback(
@@ -288,12 +302,15 @@ export const MarkdownEditor = ({
         return
       }
 
+      setUploadInFlight(1)
       let uploaded: MarkdownFileUploadResult
       try {
         uploaded = await onUploadFile(file)
       } catch {
         setUploadError(MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE)
         return
+      } finally {
+        setUploadInFlight(-1)
       }
 
       const resolved = resolveMarkdownAttachmentLink(uploaded, file.name)
@@ -303,7 +320,7 @@ export const MarkdownEditor = ({
       }
       insertUploadedMarkdown(resolved.markdown)
     },
-    [insertUploadedMarkdown, onUploadFile]
+    [insertUploadedMarkdown, onUploadFile, setUploadInFlight]
   )
 
   return (

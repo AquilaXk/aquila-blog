@@ -415,8 +415,12 @@ print_grafana_embed_status() {
   if [[ -n "${xfo}" && "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
     echo "WARN: grafana embed response still sends frame-blocking X-Frame-Options=${xfo}"
   fi
-  if [[ -n "${csp}" && "${csp}" == *"frame-ancestors"* ]]; then
-    echo "WARN: grafana embed response includes frame-ancestors CSP; verify admin origin is allowed"
+  if [[ -z "${csp}" || "${csp}" != *"frame-ancestors"* ]]; then
+    echo "WARN: grafana embed response missing frame-ancestors CSP; admin origin allowlist required"
+  elif [[ "${csp}" != *"aquilaxk.site"* && "${csp}" != *"*"* ]]; then
+    echo "WARN: grafana embed frame-ancestors may omit admin origin allowlist: ${csp}"
+  else
+    echo "INFO: grafana embed CSP keeps frame-ancestors admin origin allowlist"
   fi
 }
 

@@ -18,6 +18,7 @@ import {
   getSystemHealthTone,
   getTaskQueueTone,
   hasDashboardSnapshot,
+  isDashboardQueryCollectionFailed,
   resolveDashboardCollectionLabel,
   resolveDashboardDataUpdatedAt,
   type AdminDashboardInitialSnapshot,
@@ -86,8 +87,8 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
 
   if (!sessionMember) return null
 
-  const healthCollectionFailed = systemHealthQuery.isError
-  const snapshotCollectionFailed = dashboardSnapshotQuery.isError
+  const healthCollectionFailed = isDashboardQueryCollectionFailed(systemHealthQuery)
+  const snapshotCollectionFailed = isDashboardQueryCollectionFailed(dashboardSnapshotQuery)
   const collectionFailed = healthCollectionFailed || snapshotCollectionFailed
   const isRefreshing = isManualRefreshing
   const freshnessLabel = formatDashboardFreshnessLabel(
@@ -98,10 +99,12 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
   const hasSnapshot = hasDashboardSnapshot(dashboardSnapshot)
   const snapshotCollectionLabel = resolveDashboardCollectionLabel({
     isError: dashboardSnapshotQuery.isError,
+    isRefetchError: dashboardSnapshotQuery.isRefetchError,
     hasData: hasSnapshot,
   })
   const healthCollectionLabel = resolveDashboardCollectionLabel({
     isError: systemHealthQuery.isError,
+    isRefetchError: systemHealthQuery.isRefetchError,
     hasData: Boolean(systemHealthQuery.data),
   })
   const dashboardStatusLabel = getSystemHealthStatusLabel(rawSystemHealthStatus)
@@ -117,7 +120,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     ? `최근 기록 ${dashboardSnapshot.authSecurity.recentEventCount}건`
     : snapshotCollectionLabel ?? DASHBOARD_DATA_MISSING_LABEL
   const missingOrFailedLabel = snapshotCollectionLabel ?? DASHBOARD_DATA_MISSING_LABEL
-  const missingOrFailedTone = dashboardSnapshotQuery.isError ? "warn" : "neutral"
+  const missingOrFailedTone = snapshotCollectionFailed ? "warn" : "neutral"
 
   const kpiCards: DashboardKpiCard[] = [
     {
@@ -126,10 +129,10 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       value: healthCollectionLabel === DASHBOARD_COLLECTION_FAILED_LABEL && !systemHealthQuery.data
         ? DASHBOARD_COLLECTION_FAILED_LABEL
         : dashboardStatusLabel,
-      detail: systemHealthQuery.isError
+      detail: healthCollectionFailed
         ? DASHBOARD_COLLECTION_FAILED_LABEL
         : `스냅샷 ${dashboardSnapshotGeneratedAt}`,
-      tone: systemHealthQuery.isError ? "warn" : dashboardStatusTone,
+      tone: healthCollectionFailed ? "warn" : dashboardStatusTone,
       icon: "service",
     },
     {
@@ -211,7 +214,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
     {
       key: "snapshot-missing",
       title: "운영 스냅샷",
-      summary: dashboardSnapshotQuery.isError
+      summary: snapshotCollectionFailed
         ? DASHBOARD_COLLECTION_FAILED_LABEL
         : `${DASHBOARD_DATA_MISSING_LABEL} · ${DASHBOARD_BACKEND_CHECK_LABEL}`,
       tone: missingOrFailedTone,
@@ -339,13 +342,13 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
         {
           key: "snapshot-missing",
           time: missingOrFailedLabel,
-          message: dashboardSnapshotQuery.isError ? "운영 스냅샷 수집 실패" : "운영 스냅샷 미수집",
-          detail: dashboardSnapshotQuery.isError ? DASHBOARD_COLLECTION_FAILED_LABEL : DASHBOARD_BACKEND_CHECK_LABEL,
+          message: snapshotCollectionFailed ? "운영 스냅샷 수집 실패" : "운영 스냅샷 미수집",
+          detail: snapshotCollectionFailed ? DASHBOARD_COLLECTION_FAILED_LABEL : DASHBOARD_BACKEND_CHECK_LABEL,
           tone: missingOrFailedTone,
         },
       ]
 
-  const chartEmptyLabel = dashboardSnapshotQuery.isError
+  const chartEmptyLabel = snapshotCollectionFailed
     ? DASHBOARD_COLLECTION_FAILED_LABEL
     : `${DASHBOARD_DATA_MISSING_LABEL} · ${DASHBOARD_BACKEND_CHECK_LABEL}`
 

@@ -18,6 +18,7 @@ import {
   DASHBOARD_COLLECTION_FAILED_LABEL,
   DASHBOARD_DATA_MISSING_LABEL,
   formatDashboardFreshnessLabel,
+  isDashboardQueryCollectionFailed,
   resolveDashboardCollectionLabel,
   resolveDashboardDataUpdatedAt,
 } from "../../src/routes/Admin/AdminDashboardWorkspaceModel"
@@ -297,10 +298,16 @@ caption
     expect(resolveDashboardCollectionLabel({ isError: true, hasData: true })).toBe(
       DASHBOARD_COLLECTION_FAILED_LABEL
     )
+    expect(resolveDashboardCollectionLabel({ isError: false, isRefetchError: true, hasData: true })).toBe(
+      DASHBOARD_COLLECTION_FAILED_LABEL
+    )
     expect(resolveDashboardCollectionLabel({ isError: false, hasData: false })).toBe(
       DASHBOARD_DATA_MISSING_LABEL
     )
     expect(resolveDashboardCollectionLabel({ isError: false, hasData: true })).toBeNull()
+    expect(isDashboardQueryCollectionFailed({ isError: false, isRefetchError: true })).toBe(true)
+    expect(isDashboardQueryCollectionFailed({ isError: true, isRefetchError: false })).toBe(true)
+    expect(isDashboardQueryCollectionFailed({ isError: false, isRefetchError: false })).toBe(false)
   })
 
   test("dashboard collection failure flags stay scoped per query", () => {
@@ -313,8 +320,8 @@ caption
       "utf8"
     )
 
-    expect(pageSource).toContain("healthCollectionFailed = systemHealthQuery.isError")
-    expect(pageSource).toContain("snapshotCollectionFailed = dashboardSnapshotQuery.isError")
+    expect(pageSource).toContain("healthCollectionFailed = isDashboardQueryCollectionFailed(systemHealthQuery)")
+    expect(pageSource).toContain("snapshotCollectionFailed = isDashboardQueryCollectionFailed(dashboardSnapshotQuery)")
     expect(pageSource).toContain("collectionFailed = healthCollectionFailed || snapshotCollectionFailed")
     expect(pageSource).toContain("isManualRefreshing")
     expect(pageSource).toContain("isRefreshing = isManualRefreshing")

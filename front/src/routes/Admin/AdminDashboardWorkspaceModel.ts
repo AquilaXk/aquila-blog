@@ -114,11 +114,24 @@ export const formatDashboardFreshnessLabel = (dataUpdatedAtMs: number) => {
   return `${formatted} 기준`
 }
 
+export const isDashboardQueryCollectionFailed = (options: {
+  isError: boolean
+  isRefetchError: boolean
+}) => options.isError || options.isRefetchError
+
 export const resolveDashboardCollectionLabel = (options: {
   isError: boolean
+  isRefetchError?: boolean
   hasData: boolean
 }) => {
-  if (options.isError) return DASHBOARD_COLLECTION_FAILED_LABEL
+  if (
+    isDashboardQueryCollectionFailed({
+      isError: options.isError,
+      isRefetchError: options.isRefetchError ?? false,
+    })
+  ) {
+    return DASHBOARD_COLLECTION_FAILED_LABEL
+  }
   if (!options.hasData) return DASHBOARD_DATA_MISSING_LABEL
   return null
 }

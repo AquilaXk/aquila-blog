@@ -168,7 +168,7 @@ cloud-media 검증·패널 매핑은 [`docs/ops/cloud-media-metrics-verify.md`](
 | AquilaBackRuntimeSplitScrapeDown | 실행 중 read/admin scrape down (3m) | `up{component=~"read\|admin"}` + docker probe | runtime-split 컨테이너·스크rape target |
 | AquilaTaskDlqRateHigh | DLQ rate >0 (10m) | `task_processor_result_total{status="dlq"}` | 실패 핸들러·replay 정책 |
 | AquilaPostSearchIndexLagP95High | 검색 인덱스 lag p95 >120s (10m) | `post_search_index_task_lag_seconds_bucket` | search index worker·큐 |
-| AquilaDockerRuntimeProbeScrapeDown | docker_runtime_probe scrape down (3m) | `up{job="docker_runtime_probe"}` | **이메일 drop route** — probe 컨테이너·docker.sock·steady_state_guard |
+| AquilaDockerRuntimeProbeScrapeDown | docker_runtime_probe scrape down (3m) | `up{job="docker_runtime_probe"}` | **이메일 drop route** — probe 컨테이너·docker.sock(:ro)·steady_state_guard (autoheal은 `docker_socket_proxy` TCP만 사용) |
 | AquilaContainerRestarted | 핵심 컨테이너 restart 증가 (15m) | Runtime Guard / docker restart 메트릭 | 배포 churn·OOM·crash loop 로그 |
 | AquilaContainerOomKilled | OOMKilled 보고 | Runtime Guard / memory 패널 | limit limit·heap·호스트 메모리 |
 | AquilaApiRateLimitRejectedHigh | Redis rate-limit reject >0.5 rps (5m) | `api_rate_limit_rejected_total` + Logs `resultCode=429-10` | Cloudflare WAF/rate limit·공격 IP |

@@ -75,13 +75,19 @@ ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.en
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends wget \
+ && groupadd --system --gid 10001 app \
+ && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Spring Boot extracted app (library jars first for Docker cache reuse)
-COPY --from=extractor /app/app/lib/ ./lib/
-COPY --from=extractor /app/app/app.jar ./app.jar
+COPY --from=extractor --chown=app:app /app/app/lib/ ./lib/
+COPY --from=extractor --chown=app:app /app/app/app.jar ./app.jar
+# WORKDIR itself stays root-owned without this; non-root JVM may need to write under /app.
+RUN chown app:app /app
+
+USER app
 
 # ── t3.micro JVM 최적화 ──
 ENTRYPOINT ["java", \

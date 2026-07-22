@@ -143,6 +143,7 @@ const baseHomeServerEnv = [
   "CF_TUNNEL_TOKEN=cloudflare-tunnel-token-value",
   "CLOUDFLARED_IMAGE=cloudflare/cloudflared@sha256:4444444444444444444444444444444444444444444444444444444444444444",
   "AUTOHEAL_IMAGE=willfarrell/autoheal@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "DOCKER_SOCKET_PROXY_IMAGE=tecnativa/docker-socket-proxy@sha256:7777777777777777777777777777777777777777777777777777777777777777",
   "CADDY_IMAGE=caddy@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "UPTIME_KUMA_IMAGE=louislam/uptime-kuma@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
   "PROMETHEUS_IMAGE=prom/prometheus@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -520,6 +521,7 @@ test("runtime service images are env-backed in compose and digest-validated by c
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const runtimeImageKeys = [
     "AUTOHEAL_IMAGE",
+    "DOCKER_SOCKET_PROXY_IMAGE",
     "CADDY_IMAGE",
     "UPTIME_KUMA_IMAGE",
     "PROMETHEUS_IMAGE",
@@ -584,7 +586,8 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
   const runtimeImageDefaults = [
     ["CLOUDFLARED_IMAGE", "cloudflare/cloudflared:latest"],
-    ["AUTOHEAL_IMAGE", "willfarrell/autoheal:1.2.0"],
+    ["AUTOHEAL_IMAGE", "willfarrell/autoheal:latest"],
+    ["DOCKER_SOCKET_PROXY_IMAGE", "tecnativa/docker-socket-proxy:0.3.0"],
     ["CADDY_IMAGE", "caddy:2.8-alpine"],
     ["UPTIME_KUMA_IMAGE", "louislam/uptime-kuma:1"],
     ["PROMETHEUS_IMAGE", "prom/prometheus:v2.54.1"],
@@ -1376,11 +1379,11 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.doesNotMatch(backupScript, forbiddenSecretBackupCopyPattern)
   assert.match(backupScript, /secret_files_copied=false/)
   assert.match(backupScript, /is_digest_image_value\(\)/)
-  assert.match(backupScript, /compose_image_keys=\(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
+  assert.match(backupScript, /compose_image_keys=\(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
   assert.match(backupScript, /is_digest_image_value "\$\{image_value\}"/)
   assert.doesNotMatch(externalBackupScript, forbiddenSecretBackupCopyPattern)
   assert.match(externalBackupScript, /secret_files_copied=false/)
-  assert.match(externalBackupScript, /COMPOSE_IMAGE_METADATA_KEYS=\(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
+  assert.match(externalBackupScript, /COMPOSE_IMAGE_METADATA_KEYS=\(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
   assert.match(externalBackupScript, /echo "\$\{image_key\}=\$\{image_value\}"/)
   assert.match(externalBackupScript, /metadata_backend_image_key\(\)/)
   assert.match(externalBackupScript, /for image_key in BACK_BLUE_IMAGE BACK_GREEN_IMAGE BACK_READ_IMAGE BACK_ADMIN_IMAGE BACK_WORKER_IMAGE/)
@@ -1389,7 +1392,7 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(backupScript, /back_blue_image=/)
   assert.match(backupScript, /back_green_image=/)
   assert.match(rollbackScript, /backup_image_key_for_service\(\)/)
-  assert.match(rollbackScript, /COMPOSE_IMAGE_METADATA_KEYS=\(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
+  assert.match(rollbackScript, /COMPOSE_IMAGE_METADATA_KEYS=\(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
   assert.match(rollbackScript, /restore_compose_image_metadata/)
   assert.match(rollbackScript, /local key metadata_key repaired_value metadata_image legacy_image\s+repaired_value=""/)
   assert.match(rollbackScript, /rollback \$\{key\} restored from backup_metadata/)

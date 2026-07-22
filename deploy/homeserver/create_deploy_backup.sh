@@ -85,7 +85,7 @@ back_green_image="$(container_image_for_service "back_green" || true)"
 back_read_image="$(container_image_for_service "back_read" || true)"
 back_admin_image="$(container_image_for_service "back_admin" || true)"
 back_worker_image="$(container_image_for_service "back_worker" || true)"
-compose_image_keys=(AUTOHEAL_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
+compose_image_keys=(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
 
 {
   echo "created_at=${TIMESTAMP}"

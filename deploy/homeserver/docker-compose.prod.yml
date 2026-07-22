@@ -6,7 +6,26 @@ x-default-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+x-no-new-privileges: &no-new-privileges
+  - no-new-privileges:true
+
+x-cap-drop-all: &cap-drop-all
+  - ALL
+
 services:
+  # Sole host docker.sock holder for autoheal restart API (CONTAINERS+POST only).
+  docker_socket_proxy:
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:?DOCKER_SOCKET_PROXY_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      CONTAINERS: "1"
+      POST: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+
   autoheal:
     image: ${AUTOHEAL_IMAGE:?AUTOHEAL_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
@@ -16,8 +35,12 @@ services:
       AUTOHEAL_INTERVAL: ${AUTOHEAL_INTERVAL_SECONDS:-15}
       AUTOHEAL_START_PERIOD: ${AUTOHEAL_START_PERIOD_SECONDS:-300}
       AUTOHEAL_DEFAULT_STOP_TIMEOUT: 30
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # willfarrell/autoheal >= latest: tcp:// maps to http:// (1.2.0 incorrectly used https://)
+      DOCKER_SOCK: tcp://docker_socket_proxy:2375
+    depends_on:
+      - docker_socket_proxy
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
 
   cloudflared:
     image: ${CLOUDFLARED_IMAGE}
@@ -258,6 +281,8 @@ services:
       - promtail_positions:/var/lib/promtail
     depends_on:
       - loki
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
 
   public_edge_probe:
     image: ${NODE_RUNTIME_IMAGE:?NODE_RUNTIME_IMAGE is required (sha256 digest required)}
@@ -320,6 +345,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
 
   back_blue:
     image: ${BACK_BLUE_IMAGE:?BACK_BLUE_IMAGE is required (sha-pinned; latest forbidden)}
@@ -350,6 +377,8 @@ services:
       - db_1
       - redis_1
       - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       default:
         aliases:
@@ -382,6 +411,8 @@ services:
       - db_1
       - redis_1
       - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       default:
         aliases:
@@ -416,6 +447,8 @@ services:
       - db_1
       - redis_1
       - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       default:
         aliases:
@@ -450,6 +483,8 @@ services:
       - db_1
       - redis_1
       - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       default:
         aliases:
@@ -483,6 +518,8 @@ services:
       - db_1
       - redis_1
       - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       default:
         aliases:

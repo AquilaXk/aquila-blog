@@ -18,7 +18,6 @@ import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.config.LegacyPayloadRecoveryHandler
 import com.back.global.security.config.MemberSessionAuthenticationResolver
 import com.back.global.security.config.PublicApiRequestMatcher
-import com.back.global.security.config.PublicApiRouteContributor
 import com.back.global.security.config.RefreshTokenAuthenticationHandler
 import com.back.global.security.config.SecurityConfig
 import com.back.global.security.config.SecurityContextAuthenticationWriter
@@ -116,6 +115,22 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
         fun cloudSecurityConfigurer(): CloudSecurityConfigurer = CloudSecurityConfigurer()
 
         @Bean
+        fun publicApiRequestMatcher(
+            authSecurityConfigurer: AuthSecurityConfigurer,
+            memberSecurityConfigurer: MemberSecurityConfigurer,
+            postSecurityConfigurer: PostSecurityConfigurer,
+            cloudSecurityConfigurer: CloudSecurityConfigurer,
+        ): PublicApiRequestMatcher =
+            PublicApiRequestMatcher(
+                listOf(
+                    authSecurityConfigurer,
+                    memberSecurityConfigurer,
+                    postSecurityConfigurer,
+                    cloudSecurityConfigurer,
+                ),
+            )
+
+        @Bean
         fun apiCorsPolicy(environment: Environment): ApiCorsPolicy =
             ApiCorsPolicy(
                 environment = environment,
@@ -141,6 +156,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
             apiCorsPolicy: ApiCorsPolicy,
             environment: Environment,
             errorResponseWriter: ErrorResponseWriter,
+            publicApiRequestMatcher: PublicApiRequestMatcher,
         ): CustomAuthenticationFilter {
             val rq = mock(Rq::class.java)
             val actorApplicationService = mock(ActorApplicationService::class.java)
@@ -203,7 +219,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                 refreshTokenAuthenticationHandler = refreshTokenAuthenticationHandler,
                 clientIpResolver = mock(ClientIpResolver::class.java),
                 errorResponseWriter = errorResponseWriter,
-                publicApiRequestMatcher = PublicApiRequestMatcher(emptyList<PublicApiRouteContributor>()),
+                publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
                 environment = environment,
             )

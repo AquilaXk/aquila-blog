@@ -5,6 +5,7 @@ import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackT
 import com.back.boundedContexts.cloud.application.service.CloudFileService
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
 import com.back.global.security.config.ApiRateLimitBackstopFilter
+import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
@@ -32,6 +33,7 @@ import org.springframework.test.web.servlet.MockMvc
             classes = [
                 CustomAuthenticationFilter::class,
                 ApiRateLimitBackstopFilter::class,
+                ApiRuntimeBoundaryFilter::class,
             ],
         ),
     ],

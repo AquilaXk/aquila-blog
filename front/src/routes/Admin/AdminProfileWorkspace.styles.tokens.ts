@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 import {
   AdminInfoPanelCard,
   AdminPaneHeader,
@@ -54,6 +55,10 @@ export const BaseButton = styled.button`
     color 0.18s ease,
     transform 0.18s ease;
 
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
+
   &:hover:not(:disabled) {
     border-color: ${adminBorderStrong};
     background: ${adminSurfaceMuted};
@@ -75,6 +80,10 @@ export const GhostButton = styled(BaseButton)`
   border-radius: 0;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 
   &:hover:not(:disabled) {
     border-color: transparent;
@@ -108,6 +117,10 @@ export const MiniButton = styled(BaseButton)`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.8rem;
 
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
+
   &:hover:not(:disabled) {
     border-color: transparent;
     background: transparent;
@@ -137,4 +150,8 @@ export const PreviewAnchor = styled.a`
   font-size: 0.8rem;
   font-weight: 700;
   text-decoration: none;
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 `

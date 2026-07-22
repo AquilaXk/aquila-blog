@@ -712,7 +712,7 @@ configure_runtime_split_env() {
   upsert_env_key "ADMIN_API_UPSTREAM" "back_admin"
   upsert_env_key "CUSTOM__RUNTIME__API_MODE_BLUE" "${split_api_mode}"
   upsert_env_key "CUSTOM__RUNTIME__API_MODE_GREEN" "${split_api_mode}"
-  upsert_env_key "CUSTOM__RUNTIME__API_MODE_WORKER" "all"
+  upsert_env_key "CUSTOM__RUNTIME__API_MODE_WORKER" "none"
 
   echo "runtime-split enabled: stage=${RUNTIME_SPLIT_STAGE}, blue/green apiMode=${split_api_mode}, read/admin upstream fixed"
 }

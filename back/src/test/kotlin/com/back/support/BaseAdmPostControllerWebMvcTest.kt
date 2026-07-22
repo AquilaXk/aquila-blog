@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.port.input.AdminPostListSnapsho
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.global.app.AppConfig
 import com.back.global.security.config.ApiRateLimitBackstopFilter
+import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import org.junit.jupiter.api.BeforeAll
 import org.springframework.beans.factory.annotation.Autowired
@@ -33,6 +34,7 @@ import org.springframework.test.web.servlet.MockMvc
             classes = [
                 CustomAuthenticationFilter::class,
                 ApiRateLimitBackstopFilter::class,
+                ApiRuntimeBoundaryFilter::class,
             ],
         ),
     ],

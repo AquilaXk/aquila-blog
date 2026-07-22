@@ -10,7 +10,13 @@ type WriterEditorHostProps = {
   onMarkdownChange: (markdown: string, meta?: { editorFocused: boolean }) => void
   onFlushMarkdownReady: (flush: (() => string) | null) => void
   onImageUpload: (file: File) => Promise<{ alt?: string; title?: string; url?: string; src?: string }>
-  onFileUpload?: (file: File) => Promise<unknown>
+  onFileUpload?: (file: File) => Promise<{
+    url?: string
+    name?: string
+    mimeType?: string
+    sizeBytes?: number
+    description?: string
+  }>
   mermaidEnabled: boolean
   disabled?: boolean
   onCommitDuration?: (actualDuration: number) => void
@@ -24,6 +30,7 @@ export const WriterEditorHost = ({
   onMarkdownChange,
   onFlushMarkdownReady,
   onImageUpload,
+  onFileUpload,
   mermaidEnabled,
   disabled = false,
   onCommitDuration,
@@ -42,6 +49,7 @@ export const WriterEditorHost = ({
         onChange={onMarkdownChange}
         onFlushMarkdownReady={onFlushMarkdownReady}
         onUploadImage={onImageUpload}
+        onUploadFile={onFileUpload}
         disableMermaid={!mermaidEnabled}
         disabled={disabled}
       />

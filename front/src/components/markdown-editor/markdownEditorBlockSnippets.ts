@@ -33,10 +33,10 @@ export const codeBlockSnippet: BlockSnippetSpec = (() => {
 })()
 
 export const mermaidBlockSnippet: BlockSnippetSpec = (() => {
-  const snippet = joinSnippetLines(["", "```mermaid", "flowchart TD", "    A --> B", "```", ""])
+  const snippet = joinSnippetLines(["", "```mermaid", "flowchart TD", "    A --> B", "    ", "```", ""])
   return {
     snippet,
-    cursorOffset: cursorAfter(snippet, "    A --> B") + "    ".length,
+    cursorOffset: cursorAfter(snippet, "    A --> B\n    "),
   }
 })()
 

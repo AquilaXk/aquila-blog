@@ -52,6 +52,15 @@ test.describe("markdown editor block snippets", () => {
     expect(mermaidBlockSnippet.snippet).not.toContain("DB commit")
   })
 
+  test("mermaid snippet cursor lands on an editable indented diagram line", () => {
+    const plan = planInsertBlockSnippet(0, 0, mermaidBlockSnippet)
+    const inserted = plan.replacement
+
+    expect(inserted.slice(plan.selectionStart - 4, plan.selectionStart)).toBe("    ")
+    expect(inserted[plan.selectionStart]).not.toBe("`")
+    expect(inserted.slice(plan.selectionStart)).not.toMatch(/^```/)
+  })
+
   test("callout and toggle snippets keep structure without body filler", () => {
     expect(calloutBlockSnippet.snippet).toBe("\n> [!TIP]\n> \n")
     expect(toggleBlockSnippet.snippet).toBe("\n:::toggle \n\n:::\n")

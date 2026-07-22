@@ -1,7 +1,12 @@
+const path = require("path")
+
 /**
  * @param {string[]} sources
  */
 const uniqueSources = (sources) => [...new Set(sources.filter(Boolean))]
+
+/** Prefer package source over yarn `file:` node_modules copy (Vercel cache drift). */
+const sharedUiTokensEntry = path.resolve(__dirname, "packages/shared-ui-tokens/src/index.js")
 
 /**
  * @param {string | undefined} value
@@ -204,6 +209,12 @@ module.exports = {
    * @param {import("webpack").Configuration} config
    */
   webpack(config) {
+    config.resolve = config.resolve || {}
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      "@shared/ui-tokens": sharedUiTokensEntry,
+    }
+
     const existingIgnoreWarnings = Array.isArray(config.ignoreWarnings) ? config.ignoreWarnings : []
     config.ignoreWarnings = [
       ...existingIgnoreWarnings,

@@ -263,6 +263,10 @@ export const PostsDesktopTable = styled.table`
     border-bottom: none;
   }
 
+  tbody tr:focus-within td {
+    background: ${({ theme }) => theme.colors.gray2};
+  }
+
   @media (max-width: 900px) {
     display: none;
   }
@@ -369,6 +373,10 @@ export const MobileCardList = styled.div`
     border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
+  }
+
+  article:focus-within {
+    border-color: ${({ theme }) => theme.colors.gray8};
   }
 
   header {

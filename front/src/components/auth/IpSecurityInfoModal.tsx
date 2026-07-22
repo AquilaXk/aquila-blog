@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
-import { useEffect } from "react"
+import { useRef } from "react"
 import { createPortal } from "react-dom"
+import { useModalFocusTrap } from "src/design-system/useModalFocusTrap"
 
 type Props = {
   open: boolean
@@ -8,27 +9,27 @@ type Props = {
 }
 
 const IpSecurityInfoModal: React.FC<Props> = ({ open, onClose }) => {
-  useEffect(() => {
-    if (!open) return
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
-    }
-
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [open, onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const { handleKeyDown } = useModalFocusTrap({
+    open,
+    onClose,
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+  })
 
   if (!open || typeof document === "undefined") return null
 
   return createPortal(
     <Backdrop role="presentation" onClick={onClose}>
       <Dialog
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="ip-security-info-title"
         id="ip-security-info-dialog"
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         <Header>
           <LockMark aria-hidden="true">🔒</LockMark>
@@ -72,7 +73,7 @@ const IpSecurityInfoModal: React.FC<Props> = ({ open, onClose }) => {
         </Notice>
 
         <ActionRow>
-          <CloseButton type="button" onClick={onClose}>
+          <CloseButton ref={closeButtonRef} type="button" onClick={onClose}>
             확인
           </CloseButton>
         </ActionRow>

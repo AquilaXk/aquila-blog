@@ -1,6 +1,8 @@
 const uiTokens = {
   touch: {
     mobileMinTargetPx: 44,
+    // Forces production rebuild when Vercel retains a stale 34px touch token bundle (#1277).
+    bundleRevision: "2026-07-22-1277-alias",
   },
   feed: {
     chipGapPx: 6,

@@ -5,6 +5,7 @@ import {
   FEED_SEARCH_FIELD_MIN_HEIGHT_PX,
   FEED_TAG_RAIL_CHIP_MAX_PX,
   MOBILE_TOUCH_TARGET_MIN_PX,
+  TOUCH_TOKEN_BUNDLE_REVISION,
 } from "./feedUiTokens"
 import { FEED_SEARCH_INPUT_ID } from "./feedSearchFocus"
 
@@ -29,7 +30,7 @@ const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
   }
 
   return (
-    <StyledWrapper>
+    <StyledWrapper data-touch-token-revision={TOUCH_TOKEN_BUNDLE_REVISION}>
       <div className="field">
         <span className="searchIcon" aria-hidden="true">
           <AppIcon name="search" />

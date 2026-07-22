@@ -230,6 +230,9 @@ caption
     expect(buildExploreCursorPath({ cursor: "", tag: "  TypeScript  ", pageSize: 2 })).toBe(
       "/post/api/v1/posts/explore/cursor?tag=TypeScript&sort=CREATED_AT&pageSize=2"
     )
+    expect(buildFeedCursorPath({ sortMode: "views", pageSize: 24 })).toBe(
+      "/post/api/v1/posts/feed/cursor?sort=HIT_COUNT&pageSize=24"
+    )
   })
 
   test("search debounce delay adapts by keyword length", () => {

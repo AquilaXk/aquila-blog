@@ -40,6 +40,7 @@ class PostLikeApplicationService(
             val recoveredLikeId = postLikeRepository.insertIfAbsent(persistenceActor, post)
             if (recoveredLikeId == null) {
                 postCounterService.syncLikesCount(post)
+                enqueueRankedLikesInvalidation(post.id, "like-sync")
                 return PostLikeToggleResult(
                     isLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post),
                     likeId = 0L,
@@ -70,6 +71,12 @@ class PostLikeApplicationService(
         val postAuthorId = post.author.id
         val existingLikeId = existingLike?.id
         val deletedCount = postLikeRepository.deleteByLikerAndPost(persistenceActor, post)
+        val rankedCacheEvictReason =
+            when {
+                deletedCount > 1 -> "like-sync"
+                deletedCount == 1 -> "unlike"
+                else -> null
+            }
         if (deletedCount > 1) {
             postCounterService.syncLikesCount(post)
         } else if (deletedCount == 1) {
@@ -84,11 +91,20 @@ class PostLikeApplicationService(
                 postId = post.id,
                 recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
                 domainEvent = PostUnlikedEvent(UUID.randomUUID(), post.id, postAuthorId, existingLikeId, MemberDto(actor)),
+                rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.LIKES_COUNT,
+                rankedCacheEvictReason = rankedCacheEvictReason,
             )
         } else {
             postInteractionSideEffectQueue.enqueue(
                 postId = post.id,
                 recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
+                rankedCacheInvalidation =
+                    if (rankedCacheEvictReason != null) {
+                        PostRankedCacheInvalidationSideEffect.LIKES_COUNT
+                    } else {
+                        PostRankedCacheInvalidationSideEffect.NONE
+                    },
+                rankedCacheEvictReason = rankedCacheEvictReason,
             )
         }
 
@@ -103,6 +119,8 @@ class PostLikeApplicationService(
         val persistenceActor = actor.toPersistenceMember()
         postHydrationService.hydratePostAttrs(post)
         postCounterService.syncLikesCount(post)
+        // syncLikesCount rewrites the authoritative count; ranked FEED/EXPLORE pages must evict.
+        enqueueRankedLikesInvalidation(post.id, "like-sync")
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
         return PostLikeToggleResult(
             isLiked = existingLike != null,
@@ -152,6 +170,19 @@ class PostLikeApplicationService(
             postId = post.id,
             recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
             domainEvent = PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, likeId, MemberDto(actor)),
+            rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.LIKES_COUNT,
+            rankedCacheEvictReason = "like",
+        )
+    }
+
+    private fun enqueueRankedLikesInvalidation(
+        postId: Long,
+        reason: String,
+    ) {
+        postInteractionSideEffectQueue.enqueue(
+            postId = postId,
+            rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.LIKES_COUNT,
+            rankedCacheEvictReason = reason,
         )
     }
 }

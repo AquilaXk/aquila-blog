@@ -211,6 +211,7 @@ export const getExplorePostsPage = async ({
   kw = "",
   tag = "",
   order = "desc",
+  sortMode = "latest",
   page = 1,
   pageSize = PAGE_SIZE,
   signal,
@@ -223,6 +224,7 @@ export const getExplorePostsPage = async ({
         kw,
         tag,
         order,
+        sortMode,
         page,
         pageSize,
       })
@@ -238,16 +240,18 @@ export const getExplorePostsPage = async ({
 
 export const getFeedPostsPage = async ({
   order = "desc",
+  sortMode = "latest",
   page = 1,
   pageSize = PAGE_SIZE,
   signal,
-}: Pick<ExplorePostsParams, "order" | "page" | "pageSize" | "signal"> = {}): Promise<ExplorePostsPage> => {
+}: Pick<ExplorePostsParams, "order" | "sortMode" | "page" | "pageSize" | "signal"> = {}): Promise<ExplorePostsPage> => {
   const fallbackPageNumber = toValidPage(page)
   const fallbackPageSize = toValidPageSize(pageSize)
   const response = await apiFetchWithMeta<PageDto<ApiPostDto>>(
     (() => {
       const endpoint = buildFeedPath({
         order,
+        sortMode,
         page,
         pageSize,
       })
@@ -264,11 +268,13 @@ export const getFeedPostsPage = async ({
 
 export const getFeedPostsCursorPage = async ({
   order = "desc",
+  sortMode = "latest",
   pageSize = PAGE_SIZE,
   cursor,
   signal,
 }: {
   order?: "asc" | "desc"
+  sortMode?: ExplorePostsParams["sortMode"]
   pageSize?: number
   cursor?: string
   signal?: AbortSignal
@@ -276,7 +282,7 @@ export const getFeedPostsCursorPage = async ({
   const safePageSize = toValidPageSize(pageSize)
   const normalizedCursor = typeof cursor === "string" && cursor.trim() ? cursor.trim() : undefined
   if (!normalizedCursor && readPublicCursorDisabled()) {
-    const fallback = await getFeedPostsPage({ order, page: 1, pageSize: safePageSize, signal })
+    const fallback = await getFeedPostsPage({ order, sortMode, page: 1, pageSize: safePageSize, signal })
     return {
       ...fallback,
       hasNext: fallback.pageNumber * fallback.pageSize < fallback.totalCount,
@@ -290,6 +296,7 @@ export const getFeedPostsCursorPage = async ({
       (() => {
         const endpoint = buildFeedCursorPath({
           order,
+          sortMode,
           pageSize: safePageSize,
           cursor: normalizedCursor,
         })
@@ -309,7 +316,7 @@ export const getFeedPostsCursorPage = async ({
 
     // 커서 모드가 불안정할 때 홈 첫 진입이 깨지지 않도록 1페이지 API로 복구한다.
     if (!normalizedCursor) {
-      const fallback = await getFeedPostsPage({ order, page: 1, pageSize: safePageSize, signal })
+      const fallback = await getFeedPostsPage({ order, sortMode, page: 1, pageSize: safePageSize, signal })
       return {
         ...fallback,
         hasNext: fallback.pageNumber * fallback.pageSize < fallback.totalCount,
@@ -328,12 +335,14 @@ export const getFeedPostsCursorPage = async ({
 export const getExplorePostsCursorPage = async ({
   tag = "",
   order = "desc",
+  sortMode = "latest",
   pageSize = PAGE_SIZE,
   cursor,
   signal,
 }: {
   tag?: string
   order?: "asc" | "desc"
+  sortMode?: ExplorePostsParams["sortMode"]
   pageSize?: number
   cursor?: string
   signal?: AbortSignal
@@ -341,7 +350,15 @@ export const getExplorePostsCursorPage = async ({
   const safePageSize = toValidPageSize(pageSize)
   const normalizedCursor = typeof cursor === "string" && cursor.trim() ? cursor.trim() : undefined
   if (!normalizedCursor && readPublicCursorDisabled()) {
-    const fallback = await getExplorePostsPage({ kw: "", tag, order, page: 1, pageSize: safePageSize, signal })
+    const fallback = await getExplorePostsPage({
+      kw: "",
+      tag,
+      order,
+      sortMode,
+      page: 1,
+      pageSize: safePageSize,
+      signal,
+    })
     return {
       ...fallback,
       hasNext: fallback.pageNumber * fallback.pageSize < fallback.totalCount,
@@ -356,6 +373,7 @@ export const getExplorePostsCursorPage = async ({
         const endpoint = buildExploreCursorPath({
           tag,
           order,
+          sortMode,
           pageSize: safePageSize,
           cursor: normalizedCursor,
         })
@@ -375,7 +393,15 @@ export const getExplorePostsCursorPage = async ({
 
     // 태그 탐색도 첫 진입 시 page API로 복구해 UX 단절을 막는다.
     if (!normalizedCursor) {
-      const fallback = await getExplorePostsPage({ kw: "", tag, order, page: 1, pageSize: safePageSize, signal })
+      const fallback = await getExplorePostsPage({
+        kw: "",
+        tag,
+        order,
+        sortMode,
+        page: 1,
+        pageSize: safePageSize,
+        signal,
+      })
       return {
         ...fallback,
         hasNext: fallback.pageNumber * fallback.pageSize < fallback.totalCount,
@@ -394,6 +420,7 @@ export const getExplorePostsCursorPage = async ({
 export const getSearchPostsPage = async ({
   kw = "",
   order = "desc",
+  sortMode = "latest",
   page = 1,
   pageSize = PAGE_SIZE,
   signal,
@@ -405,6 +432,7 @@ export const getSearchPostsPage = async ({
       const endpoint = buildSearchPath({
         kw,
         order,
+        sortMode,
         page,
         pageSize,
       })

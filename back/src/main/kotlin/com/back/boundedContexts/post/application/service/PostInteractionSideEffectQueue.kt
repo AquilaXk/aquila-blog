@@ -22,6 +22,8 @@ class PostInteractionSideEffectQueue(
         postId: Long,
         recommendationAction: PostInteractionRecommendationSideEffect = PostInteractionRecommendationSideEffect.NONE,
         domainEvent: EventPayload? = null,
+        rankedCacheInvalidation: PostRankedCacheInvalidationSideEffect = PostRankedCacheInvalidationSideEffect.NONE,
+        rankedCacheEvictReason: String? = null,
         operationUid: UUID = UUID.randomUUID(),
     ) {
         if (domainEvent != null && recommendationAction != PostInteractionRecommendationSideEffect.NONE) {
@@ -29,12 +31,16 @@ class PostInteractionSideEffectQueue(
                 postId = postId,
                 recommendationAction = PostInteractionRecommendationSideEffect.NONE,
                 domainEvent = domainEvent,
+                rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.NONE,
+                rankedCacheEvictReason = null,
                 operationUid = operationUid,
             )
             addTask(
                 postId = postId,
                 recommendationAction = recommendationAction,
                 domainEvent = null,
+                rankedCacheInvalidation = rankedCacheInvalidation,
+                rankedCacheEvictReason = rankedCacheEvictReason,
                 operationUid = refreshTaskUid(domainEvent),
             )
             return
@@ -44,6 +50,8 @@ class PostInteractionSideEffectQueue(
             postId = postId,
             recommendationAction = recommendationAction,
             domainEvent = domainEvent,
+            rankedCacheInvalidation = rankedCacheInvalidation,
+            rankedCacheEvictReason = rankedCacheEvictReason,
             operationUid = operationUid,
         )
     }
@@ -52,6 +60,8 @@ class PostInteractionSideEffectQueue(
         postId: Long,
         recommendationAction: PostInteractionRecommendationSideEffect,
         domainEvent: EventPayload?,
+        rankedCacheInvalidation: PostRankedCacheInvalidationSideEffect,
+        rankedCacheEvictReason: String?,
         operationUid: UUID,
     ) {
         taskFacade.addToQueue(
@@ -69,6 +79,8 @@ class PostInteractionSideEffectQueue(
                 replyReceiverId = replyReceiverId(domainEvent),
                 postAuthorId = postAuthorId(domainEvent),
                 likeId = likeId(domainEvent),
+                rankedCacheInvalidation = rankedCacheInvalidation,
+                rankedCacheEvictReason = rankedCacheEvictReason,
             ),
             inlineWhenEnabled = false,
         )

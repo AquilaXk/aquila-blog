@@ -32,7 +32,6 @@ import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
-import java.time.Instant
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
@@ -52,6 +51,7 @@ class PostApplicationService(
     private val postTempDraftService: PostTempDraftService,
     private val postCommentApplicationService: PostCommentApplicationService,
     private val postLikeApplicationService: PostLikeApplicationService,
+    private val postInteractionSideEffectQueue: PostInteractionSideEffectQueue,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
@@ -501,7 +501,15 @@ class PostApplicationService(
     ): PostLikeToggleResult = postLikeApplicationService.readLikeSnapshot(post, actor)
 
     @Transactional
-    fun incrementHit(post: Post) = postCounterService.incrementHit(post)
+    fun incrementHit(post: Post) {
+        postCounterService.incrementHit(post)
+        // Hit traffic is hot-path: defer ranked HIT_COUNT eviction (not LIKES) to the async queue.
+        postInteractionSideEffectQueue.enqueue(
+            postId = post.id,
+            rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.HIT_COUNT,
+            rankedCacheEvictReason = "hit",
+        )
+    }
 
     fun getComments(
         post: Post,
@@ -785,7 +793,7 @@ class PostApplicationService(
         }
 
     fun findPublicByCursor(
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
         sort: PostSearchSortType1,
@@ -793,17 +801,17 @@ class PostApplicationService(
         findAndHydratePublicCursorPosts {
             postRepository.findPublicByCursor(
                 PostRepositoryPort.CursorQuery(
-                    cursorCreatedAt = cursorCreatedAt,
+                    cursorSortValue = cursorSortValue,
                     cursorId = cursorId,
                     limit = limit,
-                    sortAscending = sort.isAsc,
+                    sort = sort,
                 ),
             )
         }
 
     fun findPublicByTagCursor(
         tag: String,
-        cursorCreatedAt: Instant?,
+        cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
         sort: PostSearchSortType1,
@@ -812,10 +820,10 @@ class PostApplicationService(
             postRepository.findPublicByTagCursor(
                 PostRepositoryPort.TaggedCursorQuery(
                     tag = tag,
-                    cursorCreatedAt = cursorCreatedAt,
+                    cursorSortValue = cursorSortValue,
                     cursorId = cursorId,
                     limit = limit,
-                    sortAscending = sort.isAsc,
+                    sort = sort,
                 ),
             )
         }

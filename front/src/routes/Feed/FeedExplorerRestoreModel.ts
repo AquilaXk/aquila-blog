@@ -333,26 +333,36 @@ export const pruneFeedExplorerStateStorage = (storage: Storage) => {
     })
 }
 
+/** Session restore (scroll + prefetch) is latest-only; ranked sorts must not reuse that state. */
+export const shouldRestoreFeedExplorerSession = (
+  sortMode: "latest" | "views" | "likes"
+): boolean => sortMode === "latest"
+
 export const toFeedExplorerInfiniteQueryKey = ({
   kw,
   tag,
   pageSize,
   order,
+  sortMode = "latest",
 }: {
   kw: string
   tag: string
   pageSize: number
   order: "asc" | "desc"
+  sortMode?: "latest" | "views" | "likes"
 }) => {
   const normalizedKw = normalizeKeywordQuery(kw)
   const normalizedTag = normalizeTagQuery(tag)
   const searchMode = normalizedKw.length > 0 && !normalizedTag
   const feedMode = normalizedKw.length === 0 && !normalizedTag
+  const normalizedSortMode =
+    sortMode === "views" || sortMode === "likes" ? sortMode : "latest"
 
   if (feedMode) {
     return queryKey.postsFeedInfinite({
       pageSize,
       order,
+      sortMode: normalizedSortMode,
     })
   }
 
@@ -361,6 +371,7 @@ export const toFeedExplorerInfiniteQueryKey = ({
       kw: normalizedKw,
       pageSize,
       order,
+      sortMode: normalizedSortMode,
     })
   }
 
@@ -369,6 +380,7 @@ export const toFeedExplorerInfiniteQueryKey = ({
     tag: normalizedTag || undefined,
     pageSize,
     order,
+    sortMode: normalizedSortMode,
   })
 }
 

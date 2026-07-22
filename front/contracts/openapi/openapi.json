@@ -682,7 +682,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -1907,7 +1907,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2010,7 +2010,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2056,7 +2056,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2100,7 +2100,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2162,7 +2162,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2214,7 +2214,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2259,7 +2259,7 @@
           "schema" : {
             "type" : "string",
             "default" : "CREATED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         } ],
         "responses" : {
@@ -2352,7 +2352,7 @@
           "schema" : {
             "type" : "string",
             "default" : "MODIFIED_AT",
-            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC", "HIT_COUNT", "LIKES_COUNT" ]
           }
         }, {
           "name" : "status",

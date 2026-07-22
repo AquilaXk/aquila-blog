@@ -10,9 +10,12 @@ import {
   buildUploadingImagePlaceholder,
   extractImageFileFromClipboard,
   listFilesFromDataTransfer,
+  parseSingleHttpUrl,
   partitionUploadFiles,
   planAppendAtEnd,
+  planLinkifySelectionWithUrl,
   planReplaceExactSubstring,
+  readClipboardPlainText,
   toInlineMarkdownSnippet,
 } from "./markdownEditorPasteDropModel"
 import {
@@ -264,15 +267,29 @@ export const useMarkdownEditorMediaTransfers = ({
         if (hasHandledImage || hasHandledAttachment) {
           event.preventDefault()
           void processTransferFiles(clipboardFiles)
+          return
         }
       }
+
+      const { from, to } = resolveActiveSelection()
+      if (from === to) return
+
+      const url = parseSingleHttpUrl(readClipboardPlainText(event.clipboardData))
+      if (!url) return
+
+      event.preventDefault()
+      const selectedText = valueRef.current.slice(from, to)
+      applyPlannedMarkdownMutation(planLinkifySelectionWithUrl(from, to, selectedText, url))
     },
     [
+      applyPlannedMarkdownMutation,
       disabled,
       onUploadFile,
       onUploadImage,
       processTransferFiles,
+      resolveActiveSelection,
       uploadImageWithPlaceholder,
+      valueRef,
     ]
   )
 

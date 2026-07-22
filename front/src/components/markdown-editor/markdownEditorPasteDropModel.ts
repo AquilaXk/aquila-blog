@@ -31,6 +31,41 @@ export const listFilesFromDataTransfer = (dataTransfer: DataTransfer | null): Fi
   return Array.from(dataTransfer.files || [])
 }
 
+export const readClipboardPlainText = (clipboardData: DataTransfer | null): string => {
+  if (!clipboardData) return ""
+  return String(clipboardData.getData("text/plain") || "")
+}
+
+/** True when clipboard text is a single http(s) URL with no surrounding whitespace tokens. */
+export const parseSingleHttpUrl = (text: string): string | null => {
+  const trimmed = text.trim()
+  if (!trimmed || /\s/.test(trimmed)) return null
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null
+    return trimmed
+  } catch {
+    return null
+  }
+}
+
+export const planLinkifySelectionWithUrl = (
+  selectionStart: number,
+  selectionEnd: number,
+  selectedText: string,
+  url: string
+): PlannedTextMutation => {
+  const replacement = `[${selectedText}](${url})`
+  const cursor = selectionStart + replacement.length
+  return {
+    rangeStart: selectionStart,
+    rangeEnd: selectionEnd,
+    replacement,
+    selectionStart: cursor,
+    selectionEnd: cursor,
+  }
+}
+
 export const partitionUploadFiles = (files: readonly File[]): { images: File[]; attachments: File[] } => {
   const images: File[] = []
   const attachments: File[] = []

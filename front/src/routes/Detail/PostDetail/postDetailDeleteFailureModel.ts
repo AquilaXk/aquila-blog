@@ -1,4 +1,4 @@
-import { ApiError, ApiTimeoutError } from "src/apis/backend/client"
+import { ApiError, ApiNetworkError, ApiTimeoutError } from "src/apis/backend/client"
 
 export const POST_DETAIL_DELETE_GENERIC_FAILURE_MESSAGE = "삭제에 실패했습니다"
 
@@ -14,6 +14,7 @@ export type PostDetailDeleteFailure =
   | { kind: "error"; message: string }
 
 const isNetworkTransportError = (error: unknown) => {
+  if (error instanceof ApiNetworkError) return true
   if (error instanceof TypeError) return true
   if (!(error instanceof Error)) return false
   return /failed to fetch|networkerror|load failed|network request failed/i.test(error.message)

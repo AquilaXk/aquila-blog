@@ -123,19 +123,17 @@ export const useEditorStudioProfileCommands = ({
       const requestUpload = async () => {
         const formData = new FormData()
         formData.append("file", prepared.file, prepared.file.name)
+        const uploadUrl = `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`
         try {
-          return await fetch(
-            `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
-            {
-              method: "POST",
-              headers: PROFILE_IMAGE_CSRF_PREFLIGHT_HEADERS,
-              credentials: "include",
-              body: formData,
-            }
-          )
+          return await fetch(uploadUrl, {
+            method: "POST",
+            headers: PROFILE_IMAGE_CSRF_PREFLIGHT_HEADERS,
+            credentials: "include",
+            body: formData,
+          })
         } catch (error) {
           if (error instanceof TypeError) {
-            throw new ApiNetworkError()
+            throw new ApiNetworkError(uploadUrl)
           }
           throw error
         }

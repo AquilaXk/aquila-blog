@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.application.service
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.cache.CacheManager
@@ -135,6 +136,66 @@ class PostReadCacheInvalidatorTest {
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_META, 101L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 101L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 101L)).isNull()
+    }
+
+    @Test
+    @DisplayName("ranked sort 단일 인자 오버로드는 HIT_COUNT와 LIKES_COUNT를 함께 축출한다")
+    fun invalidateRankedSortHotPagesDefaultOverloadEvictsBothRankedSorts() {
+        // given
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, ""),
+        )
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
+        )
+        put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=HIT_COUNT:kw=_:tag=kotlin")
+
+        // when
+        invalidator.invalidateRankedSortHotPages("ranked-default")
+
+        // then
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, ""),
+            ),
+        ).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.LIKES_COUNT, ""),
+            ),
+        ).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=HIT_COUNT:kw=_:tag=kotlin")).isNull()
+    }
+
+    @Test
+    @DisplayName("ranked sort 무효화는 ranked 대상이 없으면 실패한다")
+    fun invalidateRankedSortHotPagesRejectsNonRankedSorts() {
+        assertThatThrownBy {
+            invalidator.invalidateRankedSortHotPages(
+                "invalid",
+                listOf(PostSearchSortType1.CREATED_AT),
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("HIT_COUNT and/or LIKES_COUNT")
+
+        assertThatThrownBy {
+            invalidator.invalidateRankedSortHotPages("invalid", emptyList())
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("HIT_COUNT and/or LIKES_COUNT")
     }
 
     @Test

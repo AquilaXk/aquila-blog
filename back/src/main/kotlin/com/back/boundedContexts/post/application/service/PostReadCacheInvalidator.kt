@@ -172,13 +172,13 @@ class PostReadCacheInvalidator(
         includeHotReadPages: Boolean,
         includeSearchFirstPage: Boolean,
         evictReason: String,
-        feedCache: Cache? = cacheManager.getCache(PostQueryCacheNames.FEED),
-        exploreCache: Cache? = cacheManager.getCache(PostQueryCacheNames.EXPLORE),
-        feedCursorFirstCache: Cache? = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST),
-        exploreCursorFirstCache: Cache? = cacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST),
-        bootstrapCache: Cache? = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP),
-        searchCache: Cache? = cacheManager.getCache(PostQueryCacheNames.SEARCH),
-        searchNegativeCache: Cache? = cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE),
+        feedCache: Cache?,
+        exploreCache: Cache?,
+        feedCursorFirstCache: Cache?,
+        exploreCursorFirstCache: Cache?,
+        bootstrapCache: Cache?,
+        searchCache: Cache?,
+        searchNegativeCache: Cache?,
     ) {
         hotPageSizes.forEach { pageSize ->
             sorts.forEach { sort ->

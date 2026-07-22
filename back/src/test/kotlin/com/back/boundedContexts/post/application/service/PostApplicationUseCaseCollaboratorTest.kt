@@ -250,6 +250,24 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(noOpUnlikeEnqueue.arguments[0]).isEqualTo(post.id)
         assertThat(noOpUnlikeEnqueue.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
         assertThat(noOpUnlikeEnqueue.arguments[3]).isEqualTo(PostRankedCacheInvalidationSideEffect.NONE)
+
+        // given — like row was already gone but delete still removed a counter-affecting row
+        given(postLikeRepository.findByLikerAndPost(actor, post)).willReturn(null)
+        given(postLikeRepository.deleteByLikerAndPost(actor, post)).willReturn(1)
+        val enqueueCountBeforeOrphanUnlike = enqueueInvocations(sideEffectQueue).size
+
+        // when
+        val orphanUnliked = service.unlike(post, actor)
+
+        // then
+        assertThat(orphanUnliked.isLiked).isFalse()
+        assertThat(orphanUnliked.likeId).isZero()
+        then(counterService).should(times(2)).decrementLikesCount(post)
+        val orphanUnlikeEnqueue = enqueueInvocations(sideEffectQueue).drop(enqueueCountBeforeOrphanUnlike).single()
+        assertThat(orphanUnlikeEnqueue.arguments[0]).isEqualTo(post.id)
+        assertThat(orphanUnlikeEnqueue.arguments[1]).isEqualTo(PostInteractionRecommendationSideEffect.REFRESH)
+        assertThat(orphanUnlikeEnqueue.arguments[3]).isEqualTo(PostRankedCacheInvalidationSideEffect.LIKES_COUNT)
+        assertThat(orphanUnlikeEnqueue.arguments[4]).isEqualTo("unlike")
     }
 
     @Test

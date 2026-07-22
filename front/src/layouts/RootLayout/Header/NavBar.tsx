@@ -60,12 +60,15 @@ const NavBar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
   const authReturnFocusRef = useRef<HTMLElement | null>(null)
+  const authModalOpenRef = useRef(authModalOpen)
   const isAuthenticated = authStatus === "authenticated"
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
   const showLogin = authStatus !== "authenticated"
   const nextPath = normalizeNextPath(router.asPath)
   const [activeHash, setActiveHash] = useState<string | null>(null)
   const focusFeedSearchInFlightRef = useRef<Promise<void> | null>(null)
+
+  authModalOpenRef.current = authModalOpen
 
   useEffect(() => {
     const syncHash = () => setActiveHash(window.location.hash.replace(/^#/, "").split("?")[0] || "")
@@ -118,9 +121,19 @@ const NavBar = () => {
         })
       }
 
+      if (authModalOpenRef.current) {
+        throw new Error("feed search focus aborted: auth modal open")
+      }
+
       const focused = await waitForFeedSearchInputFocus()
       if (!focused) {
         throw new Error("Failed to focus feed search input")
+      }
+      if (authModalOpenRef.current) {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
+        throw new Error("feed search focus aborted: auth modal open")
       }
     })()
 

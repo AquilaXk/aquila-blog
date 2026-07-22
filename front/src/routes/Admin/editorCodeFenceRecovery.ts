@@ -231,12 +231,33 @@ export const hasEmptyFencedCodeBlockBody = (content: string) =>
     isCodeFenceBodyVisiblyEmpty(block.body)
   )
 
+export const contentHasFencedCodeBlocks = (content: string) =>
+  parseFencedCodeBlocks(content.replace(/\r\n?/g, "\n")).length > 0
+
 /**
- * Public detail fallback is only for non-empty admin with empty fences.
- * Completely empty admin must not hydrate from potentially cached public detail.
+ * Empty admin prose-only html is content replacement, not code-fence recovery.
+ * Public API confirmation or restored fenced blocks are required for recovered:true.
  */
+export const shouldMarkCodeFenceRecovered = ({
+  adminWasEmpty,
+  content,
+  source,
+  publicFallbackSucceeded,
+}: {
+  adminWasEmpty: boolean
+  content: string
+  source: CodeFenceRecoverySource
+  publicFallbackSucceeded: boolean
+}) => {
+  if (!isCodeFenceRecoveryComplete(content)) return false
+  if (!adminWasEmpty) return true
+  if (source === "publicApi" && publicFallbackSucceeded) return true
+  return contentHasFencedCodeBlocks(content)
+}
+
+/** Fetch public detail when admin is wholly empty or has empty fenced bodies. */
 export const shouldFetchPublicContentForCodeFenceRecovery = (adminContent: string) =>
-  hasEmptyFencedCodeBlockBody(adminContent)
+  adminContent.trim().length === 0 || hasEmptyFencedCodeBlockBody(adminContent)
 
 export const adminContentNeedsCodeFenceRecovery = (content: string) =>
   content.trim().length === 0 || hasEmptyFencedCodeBlockBody(content)
@@ -364,7 +385,9 @@ export const applyCandidateCodeFenceRecovery = (
   if (content.trim().length === 0) {
     return {
       content: normalizedCandidate,
-      recovered: normalizedCandidate.trim().length > 0,
+      recovered:
+        normalizedCandidate.trim().length > 0 &&
+        contentHasFencedCodeBlocks(normalizedCandidate),
     }
   }
 
@@ -443,7 +466,12 @@ export const resolveEditorCodeFenceRecovery = ({
     ) {
       return {
         content: metadataMerged,
-        recovered: true,
+        recovered: shouldMarkCodeFenceRecovered({
+          adminWasEmpty,
+          content: metadataMerged,
+          source: "publicApi",
+          publicFallbackSucceeded: true,
+        }),
         source: "publicApi",
         rejectStoredContentHtml,
       }
@@ -463,7 +491,12 @@ export const resolveEditorCodeFenceRecovery = ({
   ) {
     return {
       content: fromHtml.content,
-      recovered: true,
+      recovered: shouldMarkCodeFenceRecovered({
+        adminWasEmpty,
+        content: fromHtml.content,
+        source: "contentHtml",
+        publicFallbackSucceeded,
+      }),
       source: "contentHtml",
       rejectStoredContentHtml: false,
     }
@@ -478,7 +511,12 @@ export const resolveEditorCodeFenceRecovery = ({
     ) {
       return {
         content: fromPublic.content,
-        recovered: true,
+        recovered: shouldMarkCodeFenceRecovered({
+          adminWasEmpty,
+          content: fromPublic.content,
+          source: "publicApi",
+          publicFallbackSucceeded: true,
+        }),
         source: "publicApi",
         rejectStoredContentHtml,
       }
@@ -522,7 +560,12 @@ export const resolveEditorCodeFenceRecovery = ({
     if (bestCandidate) {
       return {
         content: bestCandidate.content,
-        recovered: isCodeFenceRecoveryComplete(bestCandidate.content),
+        recovered: shouldMarkCodeFenceRecovered({
+          adminWasEmpty,
+          content: bestCandidate.content,
+          source: bestCandidate.source,
+          publicFallbackSucceeded: true,
+        }),
         source: bestCandidate.source,
         rejectStoredContentHtml,
       }
@@ -535,7 +578,12 @@ export const resolveEditorCodeFenceRecovery = ({
   ) {
     return {
       content: fromHtml.content,
-      recovered: isCodeFenceRecoveryComplete(fromHtml.content),
+      recovered: shouldMarkCodeFenceRecovered({
+        adminWasEmpty,
+        content: fromHtml.content,
+        source: "contentHtml",
+        publicFallbackSucceeded,
+      }),
       source: "contentHtml",
       rejectStoredContentHtml: false,
     }

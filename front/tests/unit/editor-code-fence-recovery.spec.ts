@@ -477,9 +477,21 @@ test.describe("editor code fence recovery", () => {
     expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(true)
   })
 
-  test("skips public fetch for completely empty admin but allows empty-fence admin", () => {
-    expect(shouldFetchPublicContentForCodeFenceRecovery("")).toBe(false)
-    expect(shouldFetchPublicContentForCodeFenceRecovery("   \n")).toBe(false)
+  test("empty admin + prose-only html without public does not mark recovered", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: "",
+      contentHtmlBodyCandidate: "intro without fenced code",
+      publicFallbackSucceeded: false,
+    })
+
+    expect(result.source).toBe("contentHtml")
+    expect(result.recovered).toBe(false)
+    expect(result.content).toBe("intro without fenced code")
+  })
+
+  test("fetches public for completely empty admin and empty-fence admin", () => {
+    expect(shouldFetchPublicContentForCodeFenceRecovery("")).toBe(true)
+    expect(shouldFetchPublicContentForCodeFenceRecovery("   \n")).toBe(true)
     expect(shouldFetchPublicContentForCodeFenceRecovery(emptyFenceContent)).toBe(true)
     expect(shouldFetchPublicContentForCodeFenceRecovery(filledFenceContent)).toBe(false)
   })

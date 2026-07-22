@@ -13,10 +13,7 @@ import kotlin.reflect.KClass
 @DisplayName("Privacy retention 운영 인덱스 계약 테스트")
 class PrivacyRetentionOperationalIndexContractTest {
     private val productionMigrationSql: String =
-        listOf(
-            "db/migration/R__operational_indexes.sql",
-            "db/migration/V20260623_03__add_privacy_retention_indexes_concurrently.sql",
-        ).joinToString("\n", transform = ::readResource)
+        readResource("db/migration/V20260623_03__add_privacy_retention_indexes_concurrently.sql")
 
     private val concurrentIndexConfig: String =
         readResource("db/migration/V20260623_03__add_privacy_retention_indexes_concurrently.sql.conf")

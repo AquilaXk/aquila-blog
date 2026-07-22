@@ -1278,9 +1278,6 @@ validate_db_runtime_role_env() {
   runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
   flyway_user="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__USER")")"
   flyway_password="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__PASSWORD")")"
-  if [[ -z "${flyway_user}" ]]; then
-    flyway_user="postgres"
-  fi
 
   if [[ -z "${runtime_user}" ]]; then
     echo "runtime datasource user must be set (PROD___SPRING__DATASOURCE__USERNAME)" >&2
@@ -1290,12 +1287,20 @@ validate_db_runtime_role_env() {
     echo "runtime datasource user must not be postgres" >&2
     return 1
   fi
+  if [[ -z "${flyway_user}" ]]; then
+    echo "flyway user must be set (PROD___SPRING__FLYWAY__USER); postgres/superuser fallback is forbidden" >&2
+    return 1
+  fi
+  if [[ "${flyway_user}" == "postgres" ]]; then
+    echo "flyway user must not be postgres superuser (PROD___SPRING__FLYWAY__USER)" >&2
+    return 1
+  fi
   if [[ "${runtime_user}" == "${flyway_user}" ]]; then
     echo "runtime datasource user and flyway user must be separated" >&2
     return 1
   fi
   if [[ -z "${flyway_password}" ]]; then
-    echo "flyway password must be set (PROD___SPRING__FLYWAY__PASSWORD); back containers no longer receive PROD___POSTGRES__PASSWORD" >&2
+    echo "flyway password must be set (PROD___SPRING__FLYWAY__PASSWORD); postgres password fallback is forbidden" >&2
     return 1
   fi
 }
@@ -1356,13 +1361,18 @@ provision_db_runtime_role() {
   runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
   runtime_password="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__PASSWORD")")"
   flyway_user="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__USER")")"
-  if [[ -z "${flyway_user}" ]]; then
-    flyway_user="postgres"
-  fi
   db_name="$(resolve_prod_db_name)"
 
   if [[ -z "${runtime_user}" || -z "${runtime_password}" ]]; then
     echo "runtime datasource credential is incomplete" >&2
+    return 1
+  fi
+  if [[ -z "${flyway_user}" ]]; then
+    echo "flyway user must be set (PROD___SPRING__FLYWAY__USER); postgres/superuser fallback is forbidden" >&2
+    return 1
+  fi
+  if [[ "${flyway_user}" == "postgres" ]]; then
+    echo "flyway user must not be postgres superuser (PROD___SPRING__FLYWAY__USER)" >&2
     return 1
   fi
 

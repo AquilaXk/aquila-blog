@@ -175,6 +175,7 @@ const baseHomeServerEnv = [
   "GRAFANA_ROOT_URL=https://grafana.aquilaxk.site",
   "PROD___SPRING__DATASOURCE__USERNAME=blog_app",
   "PROD___SPRING__DATASOURCE__PASSWORD=valid-db-password",
+  "PROD___SPRING__FLYWAY__USER=blog_flyway",
   "PROD___SPRING__FLYWAY__PASSWORD=valid-flyway-password",
   "PROD___POSTGRES__PASSWORD=valid-postgres-password",
   "PROD___POSTGRES_EXPORTER__USERNAME=postgres_exporter",
@@ -1495,15 +1496,24 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   const compose = readFileSync(composePath, "utf8")
   const applicationProd = readFileSync(applicationProdPath, "utf8")
   const deployScript = readFileSync(deployScriptPath, "utf8")
+  const contract = JSON.parse(readFileSync(contractPath, "utf8"))
+  const envExample = readFileSync(envExamplePath, "utf8")
+  const doctorScript = readFileSync(path.join(repoRoot, "deploy/homeserver/doctor.sh"), "utf8")
 
   assert.match(applicationProd, /username:\s*"\$\{PROD___SPRING__DATASOURCE__USERNAME\}"/)
-  assert.match(applicationProd, /flyway:\n(?:.*\n)*\s+user:\s*"\$\{PROD___SPRING__FLYWAY__USER:postgres\}"/)
-  assert.match(applicationProd, /password:\s*"\$\{PROD___SPRING__FLYWAY__PASSWORD:\$\{PROD___POSTGRES__PASSWORD\}\}"/)
+  assert.match(applicationProd, /baseline-on-migrate:\s*false/)
+  assert.match(applicationProd, /flyway:\n(?:.*\n)*\s+user:\s*"\$\{PROD___SPRING__FLYWAY__USER\}"/)
+  assert.match(applicationProd, /password:\s*"\$\{PROD___SPRING__FLYWAY__PASSWORD\}"/)
+  assert.doesNotMatch(applicationProd, /PROD___SPRING__FLYWAY__USER:postgres/)
+  assert.doesNotMatch(applicationProd, /PROD___SPRING__FLYWAY__PASSWORD:\$\{PROD___POSTGRES__PASSWORD\}/)
   assert.match(applicationProd, /lock-retry-count:\s*\$\{PROD___SPRING__FLYWAY__LOCK_RETRY_COUNT:300\}/)
   assert.match(compose, /POSTGRES_PASSWORD:\s*\$\{PROD___POSTGRES__PASSWORD:-\$\{PROD___SPRING__DATASOURCE__PASSWORD\}\}/)
   assert.match(deployScript, /validate_db_runtime_role_env/)
   assert.match(deployScript, /provision_db_runtime_role/)
   assert.match(deployScript, /runtime datasource user must not be postgres/)
+  assert.match(deployScript, /flyway user must be set \(PROD___SPRING__FLYWAY__USER\)/)
+  assert.match(deployScript, /flyway user must not be postgres superuser/)
+  assert.doesNotMatch(deployScript, /flyway_user="postgres"/)
   assert.match(deployScript, /set_config\('app\.runtime_user',\s*:'runtime_user',\s*false\)/)
   assert.match(deployScript, /runtime_user text := current_setting\('app\.runtime_user'\)/)
   assert(!deployScript.includes("runtime_user text := :'runtime_user'"))
@@ -1511,6 +1521,21 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   assert.match(deployScript, /ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS/)
   assert.match(deployScript, /GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public/)
   assert.match(deployScript, /GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public/)
+  assert.match(envExample, /^PROD___SPRING__FLYWAY__USER=blog_flyway$/m)
+  assert.doesNotMatch(envExample, /^PROD___SPRING__FLYWAY__USER=postgres$/m)
+  assert.match(doctorScript, /print_env_key_status "PROD___SPRING__FLYWAY__USER"/)
+  assert.match(doctorScript, /print_env_key_status "PROD___SPRING__FLYWAY__PASSWORD"/)
+
+  const flywayUser = (contract.targets["home-server-source"].keys || []).find(
+    (key) => key.name === "PROD___SPRING__FLYWAY__USER",
+  )
+  const flywayPassword = (contract.targets["home-server-source"].keys || []).find(
+    (key) => key.name === "PROD___SPRING__FLYWAY__PASSWORD",
+  )
+  assert.equal(flywayUser?.required, true)
+  assert.deepEqual(flywayUser?.forbiddenValues, ["postgres"])
+  assert.equal(flywayPassword?.required, true)
+  assert.equal(flywayPassword?.secret, true)
 })
 
 test("homeserver compose splits service env files, networks, and exporter pg_monitor role", () => {
@@ -1567,11 +1592,16 @@ test("homeserver compose splits service env files, networks, and exporter pg_mon
   const flywayPassword = (contract.targets["home-server-source"].keys || []).find(
     (key) => key.name === "PROD___SPRING__FLYWAY__PASSWORD",
   )
+  const flywayUser = (contract.targets["home-server-source"].keys || []).find(
+    (key) => key.name === "PROD___SPRING__FLYWAY__USER",
+  )
   assert.equal(exporterPassword?.secret, true)
   assert.equal(exporterPassword?.minLength, 8)
   assert.equal(flywayPassword?.secret, true)
   assert.equal(flywayPassword?.minLength, 8)
-  assert.notEqual(flywayPassword?.required, false)
+  assert.equal(flywayPassword?.required, true)
+  assert.equal(flywayUser?.required, true)
+  assert.deepEqual(flywayUser?.forbiddenValues, ["postgres"])
 })
 
 test("blue-green deploy pauses autoheal while staging a candidate backend", () => {

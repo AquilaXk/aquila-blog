@@ -4,7 +4,10 @@ import { deletePrivacyAccount } from "src/apis/backend/privacy"
 import { ConfirmDialog } from "src/design-system/ConfirmDialog"
 import useAuthSession from "src/hooks/useAuthSession"
 import SettingsLayout, { settingsStyles } from "./SettingsLayout"
-import { resolveAccountDeletionFailure } from "./settingsAccountDeletionFeedback"
+import {
+  parseAccountDeletionRevokedSessionCount,
+  resolveAccountDeletionFailure,
+} from "./settingsAccountDeletionFeedback"
 
 type FeedbackTone = "danger" | "success"
 
@@ -52,15 +55,11 @@ const SettingsAccountPage = () => {
         oauthAccountDeletionConfirmed: !trimmedPassword && confirmed,
         reason: reason.trim() || undefined,
       })
-      const revokedCount = response.data?.revokedSessionCount
-      if (typeof revokedCount !== "number" || !Number.isFinite(revokedCount)) {
-        throw new Error("invalid account deletion response")
-      }
-      setRevokedSessionCount(revokedCount)
-      setFeedback({ tone: "success", text: response.msg })
-      setDeletionCompleted(true)
       deletionCompletedRef.current = true
+      setDeletionCompleted(true)
       clearMe()
+      setRevokedSessionCount(parseAccountDeletionRevokedSessionCount(response.data?.revokedSessionCount))
+      setFeedback({ tone: "success", text: response.msg })
     } catch (error) {
       if (deletionCompletedRef.current) return
       const failure = resolveAccountDeletionFailure(error)

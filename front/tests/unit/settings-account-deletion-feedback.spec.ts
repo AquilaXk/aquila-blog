@@ -3,8 +3,31 @@ import { ApiError, ApiTimeoutError } from "../../src/apis/backend/client"
 import {
   ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE,
   ACCOUNT_DELETION_SESSION_EXPIRED_MESSAGE,
+  parseAccountDeletionRevokedSessionCount,
   resolveAccountDeletionFailure,
 } from "../../src/routes/Settings/settingsAccountDeletionFeedback"
+
+test("parseAccountDeletionRevokedSessionCount accepts finite numbers only", () => {
+  expect(parseAccountDeletionRevokedSessionCount(2)).toBe(2)
+  expect(parseAccountDeletionRevokedSessionCount(0)).toBe(0)
+  expect(parseAccountDeletionRevokedSessionCount(undefined)).toBeNull()
+  expect(parseAccountDeletionRevokedSessionCount(null)).toBeNull()
+  expect(parseAccountDeletionRevokedSessionCount("2")).toBeNull()
+  expect(parseAccountDeletionRevokedSessionCount(Number.NaN)).toBeNull()
+  expect(parseAccountDeletionRevokedSessionCount(Number.POSITIVE_INFINITY)).toBeNull()
+})
+
+test("account deletion success treats 2xx without revokedSessionCount as terminal completion", () => {
+  const missingCount = parseAccountDeletionRevokedSessionCount(undefined)
+  expect(missingCount).toBeNull()
+
+  const malformedCount = parseAccountDeletionRevokedSessionCount("not-a-number")
+  expect(malformedCount).toBeNull()
+})
+
+test("account deletion success keeps revokedSessionCount when response includes a finite number", () => {
+  expect(parseAccountDeletionRevokedSessionCount(3)).toBe(3)
+})
 
 test("resolveAccountDeletionFailure maps password-related 400/401 to password field errors", () => {
   const missingPassword = resolveAccountDeletionFailure(

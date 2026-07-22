@@ -13,6 +13,13 @@ export const ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE =
 
 const isPasswordRelatedMessage = (message: string) => /비밀번호/.test(message)
 
+export const parseAccountDeletionRevokedSessionCount = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+  return null
+}
+
 export const resolveAccountDeletionFailure = (error: unknown): AccountDeletionFailure => {
   if (error instanceof ApiError) {
     // Backend wrong-password reauth uses HTTP 401 + "비밀번호가 일치하지 않습니다.".

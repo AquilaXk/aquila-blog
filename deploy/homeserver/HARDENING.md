@@ -46,6 +46,22 @@ ss -tulpen | grep -E '127\.0\.0\.1:(80|443)\b'
 curl -sS -o /dev/null -w '%{http_code}\n' https://<api_domain>/actuator/health
 ```
 
+## Redis 영속 계약 (#1129)
+
+- 운영 `redis_1`은 `appendonly yes` + named volume `redis_data:/data`를 사용한다. ephemeral 계약으로 바꾸지 않는다.
+- 회원 로그인 세션 Source of Truth는 DB다. Redis는 cache / rate-limit / ShedLock 상태를 담으며, 컨테이너 recreate 후에도 AOF가 volume에 남아야 한다.
+- recreate 생존 검증(운영 또는 staging):
+
+```bash
+# 예시: redis-cli로 키를 쓴 뒤 force-recreate 후 키가 남아 있는지 확인
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+  exec redis_1 redis-cli -a "$PROD___SPRING__DATA__REDIS__PASSWORD" SET aquila:redis:persist-smoke 1 EX 3600
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+  up -d --force-recreate redis_1
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+  exec redis_1 redis-cli -a "$PROD___SPRING__DATA__REDIS__PASSWORD" GET aquila:redis:persist-smoke
+```
+
 ## 롤백
 
 서버 콘솔에서:

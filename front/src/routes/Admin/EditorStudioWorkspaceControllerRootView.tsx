@@ -8,6 +8,7 @@ import {
 } from "src/libs/thumbnailFocus"
 import { POST_IMAGE_UPLOAD_RULE_LABEL, PROFILE_IMAGE_UPLOAD_RULE_LABEL } from "src/libs/profileImageUpload"
 import { WriterEditorHost } from "./WriterEditorHost"
+import { handleMarkdownEditorFocusRequestReady } from "./useEditorStudioWorkspaceControllerRuntime"
 import { EditorStudioThumbnailEditorPanel, EditorStudioThumbnailMetaPanel } from "./EditorStudioThumbnailPanels"
 import { EditorStudioPublishModal } from "./EditorStudioPublishModal"
 import { EditorStudioLegacyProfileSection } from "./EditorStudioLegacyProfileSection"
@@ -541,6 +542,15 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   const handleEditorCommitDuration = useCallback((actualDuration: number) => {
     recordEditorCommitDurationForRuntimeGuard(actualDuration)
   }, [])
+  const handleDedicatedEditorRequestSave = useCallback(() => {
+    if (publishActionTriggerDisabled) return
+    openPublishModal(editorPrimaryActionType)
+  }, [editorPrimaryActionType, openPublishModal, publishActionTriggerDisabled])
+
+  const handleComposeEditorRequestSave = useCallback(() => {
+    saveLocalDraft()
+  }, [saveLocalDraft])
+
   const dedicatedEditorCanvas = useMemo(
     () => (
       <WriterEditorHost
@@ -550,6 +560,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         previewSummary={resolvedPreviewSummary}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
+        onFocusRequestReady={handleMarkdownEditorFocusRequestReady}
+        onRequestSave={handleDedicatedEditorRequestSave}
         onUploadingChange={handleMarkdownUploadingChange}
         onImageUpload={handleMarkdownEditorImageUpload}
         onFileUpload={handleMarkdownEditorFileUpload}
@@ -559,6 +571,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       />
     ),
     [
+      handleDedicatedEditorRequestSave,
       handleMarkdownEditorChange,
       handleMarkdownEditorFileUpload,
       handleMarkdownEditorImageUpload,
@@ -580,6 +593,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         previewSummary={resolvedPreviewSummary}
         onMarkdownChange={handleMarkdownEditorChange}
         onFlushMarkdownReady={handleFlushMarkdownReady}
+        onFocusRequestReady={handleMarkdownEditorFocusRequestReady}
+        onRequestSave={handleComposeEditorRequestSave}
         onUploadingChange={handleMarkdownUploadingChange}
         onImageUpload={handleMarkdownEditorImageUpload}
         onFileUpload={handleMarkdownEditorFileUpload}
@@ -589,6 +604,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       />
     ),
     [
+      handleComposeEditorRequestSave,
       handleMarkdownEditorChange,
       handleMarkdownEditorFileUpload,
       handleMarkdownEditorImageUpload,

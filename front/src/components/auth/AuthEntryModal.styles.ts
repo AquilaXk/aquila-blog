@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 
 export const Backdrop = styled.div`
   position: fixed;
@@ -545,6 +546,29 @@ export const Modal = styled.div`
   .sentActions {
     display: grid;
     gap: 0.55rem;
+  }
+
+  @media (max-width: 820px) {
+    .closeButton {
+      min-width: ${control.lg}px;
+      width: ${control.lg}px;
+      height: ${control.lg}px;
+      min-height: ${control.lg}px;
+    }
+
+    .naverFieldInput {
+      min-height: ${control.lg}px;
+    }
+
+    .primaryAction,
+    .secondaryAction {
+      min-height: ${control.lg}px;
+    }
+
+    .inlineLinkButton {
+      min-height: ${control.lg}px;
+      align-items: center;
+    }
   }
 
   @media (max-width: 640px) {

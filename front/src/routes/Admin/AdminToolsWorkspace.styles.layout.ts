@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 import {
   AdminActionCardButton,
   AdminInlineActionRow,
@@ -286,6 +287,10 @@ export const PrimaryButton = styled.button`
     opacity: 0.56;
     cursor: not-allowed;
   }
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 `
 
 export const DangerPanel = styled.div`
@@ -351,6 +356,10 @@ export const DangerButton = styled.button`
     opacity: 0.5;
     cursor: not-allowed;
   }
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 `
 
 export const ResultFilterRow = styled.div`
@@ -372,6 +381,10 @@ export const ResultFilterButton = styled.button`
   font-size: 0.78rem;
   font-weight: 800;
   cursor: pointer;
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};

@@ -63,6 +63,15 @@ export const breakpoint = {
   xxl: 1440,
 } as const
 
+/** Named layout breakpoints (HIG P5-4). Prefer these over magic widths in Nav/Admin/Editor/Feed. */
+export const layoutBreakpoint = {
+  editorCompact: 720,
+  navCompact: 820,
+  adminCompact: 1100,
+  feedChipRail: 1200,
+  feedSidebar: 1441,
+} as const
+
 export const semanticColors = (theme: Theme) => ({
   canvas: theme.publicDesign.pageBackgroundColor,
   surface: theme.publicDesign.surface,
@@ -98,6 +107,7 @@ export const designTokens = {
   typeScale,
   control,
   breakpoint,
+  layoutBreakpoint,
   editorialLabel,
   semanticColors,
 } as const

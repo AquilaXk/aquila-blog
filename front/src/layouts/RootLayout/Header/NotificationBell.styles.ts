@@ -1,5 +1,5 @@
 import styled from "@emotion/styled"
-import { control } from "src/design-system/tokens"
+import { control, layoutBreakpoint } from "src/design-system/tokens"
 
 export const StyledWrapper = styled.div`
   position: relative;
@@ -286,7 +286,7 @@ export const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 820px) {
+  @media (max-width: ${layoutBreakpoint.navCompact}px) {
     .mobileBackdrop {
       display: block;
       position: fixed;

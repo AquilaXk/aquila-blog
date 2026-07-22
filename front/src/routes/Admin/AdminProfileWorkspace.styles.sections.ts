@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 import {
   AdminInfoPanelCard,
   AdminPaneHeader,
@@ -69,7 +70,7 @@ export const PreviewToggleButton = styled.button`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 34px;
+    min-height: ${control.lg}px;
     padding: 0 0.82rem;
     border-radius: 2px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -96,12 +97,20 @@ export const DockSecondaryButton = styled(BaseButton)`
   border-radius: 2px;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 `
 
 export const DockPrimaryButton = styled(PublishButton)`
   min-height: 40px;
   padding: 0 1rem;
   border-radius: 2px;
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 `
 
 export const PreviewViewport = styled(AdminInfoPanelCard)`
@@ -363,6 +372,13 @@ export const ModalCloseButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
+
+  @media (max-width: 1100px) {
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-width: ${control.lg}px;
+    min-height: ${control.lg}px;
+  }
 `
 
 export const ModalConstraintList = styled.ul`
@@ -442,6 +458,13 @@ export const ModalHistoryAction = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
+
+  @media (max-width: 1100px) {
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-width: ${control.lg}px;
+    min-height: ${control.lg}px;
+  }
 
   &:disabled {
     opacity: 0.42;

@@ -24,6 +24,13 @@ import type { EditorMode, PublishActionType } from "./editorStudioState"
 
 type PublishNoticeTarget = "auto" | "page" | "modal"
 
+const markdownEditorFocusRequestRef: { current: (() => void) | null } = { current: null }
+
+/** Bound from WriterEditorHost without threading through Root.tsx props. */
+export const handleMarkdownEditorFocusRequestReady = (focus: (() => void) | null) => {
+  markdownEditorFocusRequestRef.current = focus
+}
+
 type UseEditorStudioWorkspaceControllerRuntimeArgs = {
   isPublishModalOpen: boolean
   loadingKey: string
@@ -123,6 +130,7 @@ export const useEditorStudioWorkspaceControllerRuntime = ({
     if (isComposingKeyboardEvent(event)) return
     if (event.key === "Enter") {
       event.preventDefault()
+      markdownEditorFocusRequestRef.current?.()
     }
   }, [])
 

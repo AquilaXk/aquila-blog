@@ -5,6 +5,8 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.security.application.AuthSecurityEventService
+import com.back.global.security.config.ApiRateLimitBackstopFilter
+import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.system.adapter.web.ApiV1AdmSystemController
@@ -33,7 +35,11 @@ import org.springframework.test.web.servlet.MockMvc
     excludeFilters = [
         ComponentScan.Filter(
             type = FilterType.ASSIGNABLE_TYPE,
-            classes = [CustomAuthenticationFilter::class],
+            classes = [
+                CustomAuthenticationFilter::class,
+                ApiRateLimitBackstopFilter::class,
+                ApiRuntimeBoundaryFilter::class,
+            ],
         ),
     ],
 )

@@ -46,6 +46,9 @@ const usePostQuery = () => {
     staleMeta: hasRouteId ? (staleMetaByRouteId.get(routeId) ?? null) : null,
     isLoading: !hasRouteId || query.isLoading || (query.isFetching && query.data === undefined),
     isNotFound: hasRouteId && query.status === "success" && query.data === null,
+    isError: query.isError,
+    isPending: !hasRouteId || query.isPending,
+    refetch: query.refetch,
   }
 }
 

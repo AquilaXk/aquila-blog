@@ -305,6 +305,37 @@ compose_up_no_deps_with_retry() {
   return 1
 }
 
+compose_up_force_recreate_no_deps_with_retry() {
+  local max_attempts=4
+  local attempt=1
+  local output=""
+  LAST_COMPOSE_UP_SERVICES="$*"
+  LAST_COMPOSE_UP_OUTPUT=""
+  while [[ "${attempt}" -le "${max_attempts}" ]]; do
+    if output="$(compose up -d --force-recreate --no-deps "$@" 2>&1)"; then
+      LAST_COMPOSE_UP_OUTPUT="${output}"
+      echo "${output}"
+      return 0
+    fi
+
+    LAST_COMPOSE_UP_OUTPUT="${output}"
+
+    if grep -Eqi "network sandbox .* not found|context deadline exceeded|is not running|No such container" <<< "${output}"; then
+      echo "compose up --force-recreate --no-deps retry (${attempt}/${max_attempts}) for services [$*]: ${output}" >&2
+      sleep 2
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    echo "${output}" >&2
+    return 1
+  done
+
+  echo "compose up --force-recreate --no-deps failed after ${max_attempts} retries for services [$*]" >&2
+  echo "${output}" >&2
+  return 1
+}
+
 backend_container_id_any_state() {
   local backend="$1"
   docker ps -aq \
@@ -681,7 +712,7 @@ configure_runtime_split_env() {
   upsert_env_key "ADMIN_API_UPSTREAM" "back_admin"
   upsert_env_key "CUSTOM__RUNTIME__API_MODE_BLUE" "${split_api_mode}"
   upsert_env_key "CUSTOM__RUNTIME__API_MODE_GREEN" "${split_api_mode}"
-  upsert_env_key "CUSTOM__RUNTIME__API_MODE_WORKER" "all"
+  upsert_env_key "CUSTOM__RUNTIME__API_MODE_WORKER" "none"
 
   echo "runtime-split enabled: stage=${RUNTIME_SPLIT_STAGE}, blue/green apiMode=${split_api_mode}, read/admin upstream fixed"
 }
@@ -2371,7 +2402,11 @@ fi
 edge_services_to_boot=(caddy cloudflared)
 compose_up_with_retry "${edge_services_to_boot[@]}"
 ensure_monitoring_bind_mount_permissions
-compose_up_no_deps_with_retry alertmanager loki promtail prometheus grafana
+# force-recreate --no-deps so json-file max-size/max-file logging applies without
+# recreating backend/DB dependencies (logging opts bind at container create).
+compose_up_force_recreate_no_deps_with_retry \
+  alertmanager loki promtail prometheus grafana \
+  public_edge_probe docker_runtime_probe postgres_exporter
 reset_grafana_admin_password
 ensure_caddy_mount_sync
 if [[ "${active_backend_was_running}" == "true" ]]; then

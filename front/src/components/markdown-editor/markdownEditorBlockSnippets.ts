@@ -60,7 +60,11 @@ export const planInsertBlockSnippet = (
   selectionStart: number,
   selectionEnd: number,
   spec: BlockSnippetSpec
-): PlannedTextMutation => planReplaceSelection(selectionStart, selectionEnd, spec.snippet, spec.cursorOffset)
+): PlannedTextMutation => {
+  const insertAt = selectionStart
+  const replaceEnd = selectionStart === selectionEnd ? selectionEnd : insertAt
+  return planReplaceSelection(insertAt, replaceEnd, spec.snippet, spec.cursorOffset)
+}
 
 export const blockMarkdownSnippets = [
   { label: "Code", title: "코드 블록", ...codeBlockSnippet },

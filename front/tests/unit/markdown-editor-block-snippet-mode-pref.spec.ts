@@ -200,6 +200,15 @@ test.describe("markdown editor mode preference", () => {
     expect(next.value).toBe(`alpha${tableBlockSnippet.snippet}omega`)
   })
 
+  test("block insert preserves non-empty selection instead of replacing it", () => {
+    const plan = planInsertBlockSnippet(5, 9, codeBlockSnippet)
+    const next = applyPlannedTextMutationToValue("alphaomega", plan)
+
+    expect(next.value).toBe(`alpha${codeBlockSnippet.snippet}omega`)
+    expect(next.selectionStart).toBe(5 + codeBlockSnippet.cursorOffset)
+    expect(next.selectionEnd).toBe(5 + codeBlockSnippet.cursorOffset)
+  })
+
   test("falls back when window.localStorage access throws SecurityError", () => {
     const previousWindow = (globalThis as { window?: unknown }).window
     Object.defineProperty(globalThis, "window", {
@@ -236,6 +245,12 @@ test.describe("markdown editor pending toolbar insert queue", () => {
     )
   })
 
+  test("clears stale queue when disabled before pending flush runs", () => {
+    expect(resolvePendingToolbarInsertAfterFlushSkip(queuedBlock, "disabled")).toEqual(
+      emptyPendingToolbarInsertQueue()
+    )
+  })
+
   test("clears stale queue when mode returns to preview", () => {
     expect(resolvePendingToolbarInsertWhenModeChanges(queuedBlock, "preview")).toEqual(
       emptyPendingToolbarInsertQueue()
@@ -252,5 +267,7 @@ test.describe("markdown editor pending toolbar insert queue", () => {
     const editorSource = readFileSync(sourcePath("components", "markdown-editor", "MarkdownEditor.tsx"), "utf8")
     expect(editorSource).toContain("resolvePendingToolbarInsertWhenModeChanges")
     expect(editorSource).toContain('resolvePendingToolbarInsertAfterFlushSkip(queue, "preview")')
+    expect(editorSource).toContain('resolvePendingToolbarInsertAfterFlushSkip(')
+    expect(editorSource).toContain('"disabled"')
   })
 })

@@ -386,6 +386,14 @@ export const MarkdownEditor = ({
   }, [mode])
 
   useEffect(() => {
+    if (!disabled) return
+    pendingToolbarInsertQueueRef.current = resolvePendingToolbarInsertAfterFlushSkip(
+      pendingToolbarInsertQueueRef.current,
+      "disabled"
+    )
+  }, [disabled])
+
+  useEffect(() => {
     if (disabled || mode === "preview") return
     if (!shouldSchedulePendingToolbarInsertFlush(pendingToolbarInsertQueueRef.current)) return
 

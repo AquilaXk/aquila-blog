@@ -105,6 +105,127 @@ class ErrorResponseWriterTest {
         assertThat(response.contentAsString).contains("\"resultCode\":\"429-10\"")
     }
 
+    @Test
+    @DisplayName("이미 committed된 응답이면 본문·메트릭을 쓰지 않고 warn만 남긴다")
+    fun `skips body and metrics when response already committed`() {
+        val meterRegistry = SimpleMeterRegistry()
+        val writer = ErrorResponseWriterTestSupport.createWriter(meterRegistry)
+        val request = MockHttpServletRequest("GET", "/member/api/v1/members/me")
+        val response =
+            MockHttpServletResponse().apply {
+                setCommitted(true)
+            }
+        val appender = attachListAppender()
+
+        try {
+            writer.write(
+                request = request,
+                response = response,
+                errorCode = ErrorCode.UNAUTHORIZED,
+                source = ErrorResponseSource.SECURITY,
+                cause = IllegalStateException("already written"),
+            )
+        } finally {
+            detachListAppender(appender)
+        }
+
+        assertThat(response.contentAsString).isEmpty()
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(appender.list.single().formattedMessage)
+            .contains("error_response_committed")
+            .contains("path=/member/api/v1/members/me")
+            .contains("code=401-1")
+            .contains("source=security")
+        assertThat(meterRegistry.find(ErrorMetrics.METRIC_NAME).counter()).isNull()
+    }
+
+    @Test
+    @DisplayName("DEVELOPER 에러는 exceptionClass를 포함한 error 로그를 남긴다")
+    fun `logs developer error with exception class and without cause placeholder`() {
+        val writer = ErrorResponseWriterTestSupport.createWriter()
+        val withCauseAppender = attachListAppender()
+
+        try {
+            writer.write(
+                request = MockHttpServletRequest("GET", "/member/api/v1/members/me"),
+                response = MockHttpServletResponse(),
+                errorCode = ErrorCode.INTERNAL_ERROR,
+                source = ErrorResponseSource.FILTER,
+                cause = IllegalStateException("boom"),
+            )
+        } finally {
+            detachListAppender(withCauseAppender)
+        }
+
+        assertThat(withCauseAppender.list.single().formattedMessage)
+            .contains("kind=DEVELOPER")
+            .contains("exceptionClass=java.lang.IllegalStateException")
+            .contains("exceptionMessage=boom")
+
+        val withoutCauseAppender = attachListAppender()
+        try {
+            writer.write(
+                request = MockHttpServletRequest("GET", "/member/api/v1/members/me"),
+                response = MockHttpServletResponse(),
+                errorCode = ErrorCode.INTERNAL_ERROR,
+                source = ErrorResponseSource.FILTER,
+            )
+        } finally {
+            detachListAppender(withoutCauseAppender)
+        }
+
+        assertThat(withoutCauseAppender.list.single().formattedMessage)
+            .contains("kind=DEVELOPER")
+            .contains("exceptionClass=-")
+    }
+
+    @Test
+    @DisplayName("method/path가 비어 있거나 공백·제어문자만이면 로그에 - 로 기록한다")
+    fun `sanitizes blank and control-only method and path to dash`() {
+        val writer = ErrorResponseWriterTestSupport.createWriter()
+        val blankRequest =
+            MockHttpServletRequest().apply {
+                method = ""
+                requestURI = ""
+            }
+        val controlOnlyRequest =
+            MockHttpServletRequest().apply {
+                method = "GET"
+                requestURI = "\n\r\t"
+            }
+        val blankAppender = attachListAppender()
+
+        try {
+            writer.write(
+                request = blankRequest,
+                response = MockHttpServletResponse(),
+                errorCode = ErrorCode.UNAUTHORIZED,
+                source = ErrorResponseSource.SECURITY,
+            )
+        } finally {
+            detachListAppender(blankAppender)
+        }
+
+        assertThat(blankAppender.list.single().formattedMessage)
+            .contains("method=-")
+            .contains("path=-")
+
+        val controlAppender = attachListAppender()
+        try {
+            writer.write(
+                request = controlOnlyRequest,
+                response = MockHttpServletResponse(),
+                errorCode = ErrorCode.UNAUTHORIZED,
+                source = ErrorResponseSource.SECURITY,
+            )
+        } finally {
+            detachListAppender(controlAppender)
+        }
+
+        assertThat(controlAppender.list.single().formattedMessage)
+            .contains("path=-")
+    }
+
     private fun attachListAppender(): ListAppender<ILoggingEvent> {
         val logger = LoggerFactory.getLogger(ErrorResponseWriter::class.java) as Logger
         return ListAppender<ILoggingEvent>().also {

@@ -7,7 +7,11 @@ import {
 } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { replaceRoute } from "src/libs/router"
-import { hasEmptyFencedCodeBlockBody, restoreEmptyFencedCodeBlocks } from "./editorCodeFenceRecovery"
+import {
+  hasEmptyFencedCodeBlockBody,
+  reportCodeFenceRecovery,
+  resolveEditorCodeFenceRecovery,
+} from "./editorCodeFenceRecovery"
 import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
 import { isServerTempDraftPost } from "./editorTempDraft"
 import { useEditorStudioLocalDraftLifecycle } from "./useEditorStudioDraftLifecycleModel"
@@ -382,30 +386,60 @@ export const useEditorStudioDraftLifecycle = ({
       let resolvedPost = post
 
       const adminContent = resolvedPost.content ?? ""
-      const shouldFetchPublicPostFallback =
-        (adminContent.trim().length === 0 && resolvedPost.contentHtml) ||
+      const htmlRecoverySnapshot = resolveEditorMetaSnapshot(
+        adminContent,
+        resolvedPost.contentHtml
+      )
+      const needsCodeFenceRecovery =
+        (adminContent.trim().length === 0 && !!resolvedPost.contentHtml) ||
         hasEmptyFencedCodeBlockBody(adminContent)
 
-      if (shouldFetchPublicPostFallback) {
+      let publicContent: string | undefined
+      let publicContentHtml: string | null | undefined
+      let publicFallbackSucceeded = false
+
+      // contentHtml 선복원으로 충분하면 공개 API를 호출하지 않는다 (PRIVATE 포함).
+      const htmlFirstRecovery = resolveEditorCodeFenceRecovery({
+        adminContent,
+        contentHtmlBodyCandidate: htmlRecoverySnapshot.body,
+        publicFallbackSucceeded: false,
+      })
+
+      if (needsCodeFenceRecovery && htmlFirstRecovery.source !== "contentHtml") {
         try {
           const publicPost = await apiFetch<Pick<PostForEditor, "content" | "contentHtml">>(
             `/post/api/v1/posts/${targetPostId}`
           )
           if ((publicPost.content ?? "").trim().length > 0 || publicPost.contentHtml) {
-            const publicContent = publicPost.content ?? ""
-            const restoredContent =
-              adminContent.trim().length > 0 && publicContent.trim().length > 0
-                ? restoreEmptyFencedCodeBlocks(adminContent, publicContent)
-                : publicContent || post.content
-            resolvedPost = {
-              ...post,
-              content: restoredContent,
-              contentHtml: publicPost.contentHtml ?? post.contentHtml,
-            }
+            publicContent = publicPost.content ?? ""
+            publicContentHtml = publicPost.contentHtml
+            publicFallbackSucceeded = true
           }
         } catch {
-          // 비공개/삭제 글 등 공개 읽기 폴백이 불가능한 경우 admin payload를 그대로 사용한다.
+          // 비공개/삭제 글 등 공개 읽기 폴백이 불가능한 경우 contentHtml 결과만 사용한다.
         }
+      }
+
+      const fenceRecovery = resolveEditorCodeFenceRecovery({
+        adminContent,
+        contentHtmlBodyCandidate: htmlRecoverySnapshot.body,
+        publicContent,
+        publicFallbackSucceeded,
+      })
+
+      if (needsCodeFenceRecovery) {
+        reportCodeFenceRecovery({
+          postId: normalizedTargetPostId,
+          source: fenceRecovery.source,
+          hadEmptyFence: hasEmptyFencedCodeBlockBody(adminContent),
+          recovered: fenceRecovery.recovered,
+        })
+      }
+
+      resolvedPost = {
+        ...post,
+        content: fenceRecovery.content,
+        contentHtml: publicContentHtml ?? post.contentHtml,
       }
 
       const rawSnapshot = resolveEditorMetaSnapshot(

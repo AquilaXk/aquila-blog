@@ -79,3 +79,127 @@ export const hasEmptyFencedCodeBlockBody = (content: string) =>
   parseFencedCodeBlocks(content.replace(/\r\n?/g, "\n")).some((block) =>
     isCodeFenceBodyVisiblyEmpty(block.body)
   )
+
+export type CodeFenceRecoverySource = "contentHtml" | "publicApi" | "unrecovered" | "none"
+
+export type CodeFenceRecoveryReport = {
+  postId: string
+  source: CodeFenceRecoverySource
+  hadEmptyFence: boolean
+  recovered: boolean
+}
+
+export type CodeFenceRecoveryAttempt = {
+  content: string
+  contentHtml?: string | null
+  recovered: boolean
+  source: Exclude<CodeFenceRecoverySource, "unrecovered" | "none">
+}
+
+declare global {
+  interface Window {
+    __AQUILA_CODE_FENCE_RECOVERY__?: Array<CodeFenceRecoveryReport & { at: string; path: string }>
+  }
+}
+
+export const reportCodeFenceRecovery = (report: CodeFenceRecoveryReport) => {
+  if (typeof window === "undefined") return
+
+  const entry = {
+    ...report,
+    at: new Date().toISOString(),
+    path: window.location.pathname,
+  }
+  window.__AQUILA_CODE_FENCE_RECOVERY__ = [...(window.__AQUILA_CODE_FENCE_RECOVERY__ || []), entry]
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[editor-code-fence-recovery]", entry)
+  }
+}
+
+export const applyCandidateCodeFenceRecovery = (
+  content: string,
+  candidateContent: string
+): { content: string; recovered: boolean } => {
+  if (!hasEmptyFencedCodeBlockBody(content) && content.trim().length > 0) {
+    return { content, recovered: false }
+  }
+
+  const normalizedCandidate = candidateContent.replace(/\r\n?/g, "\n")
+  if (!normalizedCandidate.trim()) {
+    return { content, recovered: false }
+  }
+
+  if (content.trim().length === 0) {
+    return {
+      content: normalizedCandidate,
+      recovered: normalizedCandidate.trim().length > 0,
+    }
+  }
+
+  const restored = restoreEmptyFencedCodeBlocks(content, normalizedCandidate)
+  return {
+    content: restored,
+    recovered: restored !== content,
+  }
+}
+
+export const resolveEditorCodeFenceRecovery = ({
+  adminContent,
+  contentHtmlBodyCandidate,
+  publicContent,
+  publicFallbackSucceeded,
+}: {
+  adminContent: string
+  contentHtmlBodyCandidate: string
+  publicContent?: string
+  publicFallbackSucceeded: boolean
+}): CodeFenceRecoveryAttempt & { source: CodeFenceRecoverySource } => {
+  const needsRecovery =
+    (adminContent.trim().length === 0 && contentHtmlBodyCandidate.trim().length > 0) ||
+    hasEmptyFencedCodeBlockBody(adminContent)
+
+  if (!needsRecovery) {
+    return {
+      content: adminContent,
+      contentHtml: undefined,
+      recovered: false,
+      source: "none",
+    }
+  }
+
+  const fromHtml = applyCandidateCodeFenceRecovery(adminContent, contentHtmlBodyCandidate)
+  if (fromHtml.recovered) {
+    return {
+      content: fromHtml.content,
+      recovered: true,
+      source: "contentHtml",
+    }
+  }
+
+  if (publicFallbackSucceeded && typeof publicContent === "string") {
+    const fromPublic =
+      adminContent.trim().length > 0 && publicContent.trim().length > 0
+        ? applyCandidateCodeFenceRecovery(adminContent, publicContent)
+        : {
+            content: publicContent || adminContent,
+            recovered:
+              (publicContent || "").trim().length > 0 &&
+              !hasEmptyFencedCodeBlockBody(publicContent || ""),
+          }
+
+    if (fromPublic.recovered || fromPublic.content !== adminContent) {
+      return {
+        content: fromPublic.content,
+        recovered: fromPublic.recovered || fromPublic.content !== adminContent,
+        source: "publicApi",
+      }
+    }
+  }
+
+  return {
+    content: fromHtml.content,
+    recovered: false,
+    source: "unrecovered",
+  }
+}

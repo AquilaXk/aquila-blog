@@ -78,6 +78,38 @@ export const isCandidateInSyncWithAdmin = (adminContent: string, candidateConten
   return extractNonFenceProse(adminContent) === extractNonFenceProse(candidateContent)
 }
 
+const blockHasHtmlRecoveryConflictWithPublic = (
+  adminBlock: ParsedFencedCodeBlock,
+  htmlBlock: ParsedFencedCodeBlock | undefined,
+  publicBlock: ParsedFencedCodeBlock | undefined
+) => {
+  if (!isCodeFenceBodyVisiblyEmpty(adminBlock.body)) return false
+  if (!htmlBlock || isCodeFenceBodyVisiblyEmpty(htmlBlock.body)) return false
+  if (!publicBlock) return false
+
+  // public empty + html filled: intentional clear vs stale html
+  if (isCodeFenceBodyVisiblyEmpty(publicBlock.body)) return true
+
+  // both non-empty but different: prefer public over mismatched html
+  if (htmlBlock.body !== publicBlock.body) return true
+
+  return false
+}
+
+const blockHasComplementaryPublicRecoveryPattern = (
+  adminBlock: ParsedFencedCodeBlock,
+  htmlBlock: ParsedFencedCodeBlock | undefined,
+  publicBlock: ParsedFencedCodeBlock | undefined
+) => {
+  if (!isCodeFenceBodyVisiblyEmpty(adminBlock.body)) return false
+
+  return (
+    !!publicBlock &&
+    !isCodeFenceBodyVisiblyEmpty(publicBlock.body) &&
+    (!htmlBlock || isCodeFenceBodyVisiblyEmpty(htmlBlock.body))
+  )
+}
+
 export const htmlRecoveryConflictsWithPublic = (
   adminContent: string,
   htmlRecoveredContent: string,
@@ -87,22 +119,13 @@ export const htmlRecoveryConflictsWithPublic = (
   const htmlBlocks = parseFencedCodeBlocks(htmlRecoveredContent.replace(/\r\n?/g, "\n"))
   const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
 
-  for (const [blockIndex, adminBlock] of adminBlocks.entries()) {
-    if (!isCodeFenceBodyVisiblyEmpty(adminBlock.body)) continue
-
-    const htmlBlock = htmlBlocks[blockIndex]
-    const publicBlock = publicBlocks[blockIndex]
-    if (!htmlBlock || isCodeFenceBodyVisiblyEmpty(htmlBlock.body)) continue
-    if (!publicBlock) continue
-
-    // public empty + html filled: intentional clear vs stale html
-    if (isCodeFenceBodyVisiblyEmpty(publicBlock.body)) return true
-
-    // both non-empty but different: prefer public over mismatched html
-    if (htmlBlock.body !== publicBlock.body) return true
-  }
-
-  return false
+  return adminBlocks.some((adminBlock, blockIndex) =>
+    blockHasHtmlRecoveryConflictWithPublic(
+      adminBlock,
+      htmlBlocks[blockIndex],
+      publicBlocks[blockIndex]
+    )
+  )
 }
 
 export const hasComplementaryPublicRecoveryPattern = (
@@ -114,17 +137,13 @@ export const hasComplementaryPublicRecoveryPattern = (
   const htmlBlocks = parseFencedCodeBlocks(contentHtmlBodyCandidate.replace(/\r\n?/g, "\n"))
   const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
 
-  return adminBlocks.some((adminBlock, blockIndex) => {
-    if (!isCodeFenceBodyVisiblyEmpty(adminBlock.body)) return false
-
-    const publicBlock = publicBlocks[blockIndex]
-    const htmlBlock = htmlBlocks[blockIndex]
-    return (
-      !!publicBlock &&
-      !isCodeFenceBodyVisiblyEmpty(publicBlock.body) &&
-      (!htmlBlock || isCodeFenceBodyVisiblyEmpty(htmlBlock.body))
+  return adminBlocks.some((adminBlock, blockIndex) =>
+    blockHasComplementaryPublicRecoveryPattern(
+      adminBlock,
+      htmlBlocks[blockIndex],
+      publicBlocks[blockIndex]
     )
-  })
+  )
 }
 
 export const isContentHtmlRecoveryTrustworthy = ({
@@ -150,13 +169,33 @@ export const isContentHtmlRecoveryTrustworthy = ({
     return false
   }
 
-  if (
-    publicFallbackSucceeded &&
-    typeof publicContent === "string" &&
-    htmlRecoveryConflictsWithPublic(adminContent, htmlRecoveredContent, publicContent) &&
-    !hasComplementaryPublicRecoveryPattern(adminContent, contentHtmlBodyCandidate, publicContent)
-  ) {
-    return false
+  if (publicFallbackSucceeded && typeof publicContent === "string") {
+    const adminBlocks = parseFencedCodeBlocks(adminContent.replace(/\r\n?/g, "\n"))
+    const htmlBlocks = parseFencedCodeBlocks(htmlRecoveredContent.replace(/\r\n?/g, "\n"))
+    const candidateBlocks = parseFencedCodeBlocks(contentHtmlBodyCandidate.replace(/\r\n?/g, "\n"))
+    const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
+
+    const hasUnwaivedConflict = adminBlocks.some((adminBlock, blockIndex) => {
+      const htmlBlock = htmlBlocks[blockIndex]
+      const candidateBlock = candidateBlocks[blockIndex]
+      const publicBlock = publicBlocks[blockIndex]
+      const conflict = blockHasHtmlRecoveryConflictWithPublic(
+        adminBlock,
+        htmlBlock,
+        publicBlock
+      )
+      const complementary = blockHasComplementaryPublicRecoveryPattern(
+        adminBlock,
+        candidateBlock,
+        publicBlock
+      )
+
+      return conflict && !complementary
+    })
+
+    if (hasUnwaivedConflict) {
+      return false
+    }
   }
 
   return true

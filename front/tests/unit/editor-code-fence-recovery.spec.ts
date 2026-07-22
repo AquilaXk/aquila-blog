@@ -4,6 +4,7 @@ import {
   applyCandidateCodeFenceRecovery,
   hasEmptyFencedCodeBlockBody,
   htmlRecoveryConflictsWithPublic,
+  hasComplementaryPublicRecoveryPattern,
   isCandidateInSyncWithAdmin,
   isContentHtmlRecoveryTrustworthy,
   resolveEditorCodeFenceRecovery,
@@ -152,10 +153,24 @@ test.describe("editor code fence recovery", () => {
   })
 
   test("merges complementary partial html and public candidates sequentially", () => {
+    const htmlWithFirstFenceOnly = [
+      "intro",
+      "",
+      "```kotlin",
+      "fun example() = Unit",
+      "```",
+      "",
+      "```ts",
+      "",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+
     const result = resolveEditorCodeFenceRecovery({
       adminContent: twoEmptyFences,
-      contentHtmlBodyCandidate: partialHtmlCandidate,
-      publicContent: partialPublicCandidate,
+      contentHtmlBodyCandidate: htmlWithFirstFenceOnly,
+      publicContent: fullPublicCandidate,
       publicFallbackSucceeded: true,
     })
 
@@ -428,6 +443,38 @@ test.describe("editor code fence recovery", () => {
     expect(result.rejectStoredContentHtml).toBe(true)
     expect(result.content).toContain("fun codeB() = Unit")
     expect(result.content).not.toContain("fun codeA() = Unit")
+  })
+
+  test("does not waive conflict on one fence because another fence is complementary", () => {
+    expect(
+      htmlRecoveryConflictsWithPublic(twoEmptyFences, partialHtmlCandidate, partialPublicCandidate)
+    ).toBe(true)
+    expect(
+      hasComplementaryPublicRecoveryPattern(twoEmptyFences, partialHtmlCandidate, partialPublicCandidate)
+    ).toBe(true)
+    expect(
+      isContentHtmlRecoveryTrustworthy({
+        adminContent: twoEmptyFences,
+        contentHtmlBodyCandidate: partialHtmlCandidate,
+        htmlRecoveredContent: partialHtmlCandidate,
+        publicContent: partialPublicCandidate,
+        publicFallbackSucceeded: true,
+      })
+    ).toBe(false)
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: twoEmptyFences,
+      contentHtmlBodyCandidate: partialHtmlCandidate,
+      publicContent: partialPublicCandidate,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("publicApi")
+    expect(result.recovered).toBe(false)
+    expect(result.rejectStoredContentHtml).toBe(true)
+    expect(result.content).toContain("const value = 1")
+    expect(result.content).not.toContain("fun example() = Unit")
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(true)
   })
 
   test("skips public fetch for completely empty admin but allows empty-fence admin", () => {

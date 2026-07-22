@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import {
+  allowForcedEditorExitRoute,
   captureEditorRouteNavigationIntent,
   clearForcedEditorExitUrl,
   defaultEditorRouteNavigationIntent,
@@ -10,6 +11,7 @@ import {
   markForcedEditorExitUrl,
   resolveEditorRouteNavigationRetry,
   restoreEditorUrlAfterBlockedHistoryPop,
+  shouldBlockEditorBeforeUnload,
 } from "../../src/routes/Admin/editorStudioUnsavedExitGuard"
 
 test.describe("editor unsaved exit guard helpers", () => {
@@ -190,6 +192,27 @@ test.describe("editor unsaved exit guard helpers", () => {
       method: "push",
       options: {},
     })
+  })
+
+  test("consumes forced-exit mark on clean early-return navigation paths", () => {
+    clearForcedEditorExitUrl()
+    markForcedEditorExitUrl("/")
+
+    expect(allowForcedEditorExitRoute("/")).toBe(true)
+    expect(isForcedEditorExitUrl("/")).toBe(false)
+    expect(allowForcedEditorExitRoute("/")).toBe(false)
+
+    markForcedEditorExitUrl("/")
+    expect(allowForcedEditorExitRoute("/admin/posts")).toBe(false)
+    expect(isForcedEditorExitUrl("/")).toBe(true)
+    clearForcedEditorExitUrl()
+  })
+
+  test("skips beforeunload prompt when forced-exit bypass is active", () => {
+    expect(shouldBlockEditorBeforeUnload(true, false)).toBe(true)
+    expect(shouldBlockEditorBeforeUnload(true, true)).toBe(false)
+    expect(shouldBlockEditorBeforeUnload(false, false)).toBe(false)
+    expect(shouldBlockEditorBeforeUnload(false, true)).toBe(false)
   })
 
   test("restores editor URL after a blocked history pop with preserved Next history state", () => {

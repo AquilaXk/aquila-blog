@@ -80,6 +80,17 @@ export const isForcedEditorExitUrl = (url: string) => {
   return forcedEditorExitPath !== null && path === forcedEditorExitPath
 }
 
+/** Allow forced exit navigation: consume mark and signal beforeunload bypass. */
+export const allowForcedEditorExitRoute = (url: string) => {
+  if (!isForcedEditorExitUrl(url)) return false
+  consumeForcedEditorExitUrl(url)
+  return true
+}
+
+/** Whether beforeunload should block leaving (honors forced-exit bypass). */
+export const shouldBlockEditorBeforeUnload = (isDirty: boolean, bypassForcedExit: boolean) =>
+  isDirty && !bypassForcedExit
+
 /** Same-pathname query/hash updates (compose/manage surface sync) are not leaving. */
 export const isSamePathEditorSurfaceNavigation = (currentUrl: string, nextUrl: string) =>
   editorRoutePathname(currentUrl) === editorRoutePathname(nextUrl)

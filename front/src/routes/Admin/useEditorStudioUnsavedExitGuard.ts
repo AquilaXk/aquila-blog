@@ -2,14 +2,14 @@ import { useRouter } from "next/router"
 import { createElement, useCallback, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "src/design-system/ConfirmDialog"
 import {
+  allowForcedEditorExitRoute,
   captureEditorRouteNavigationIntent,
-  consumeForcedEditorExitUrl,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
-  isForcedEditorExitUrl,
   isSamePathEditorSurfaceNavigation,
   resolveEditorRouteNavigationRetry,
   restoreEditorUrlAfterBlockedHistoryPop,
+  shouldBlockEditorBeforeUnload,
   type EditorRouteNavigationIntent,
 } from "./editorStudioUnsavedExitGuard"
 
@@ -42,6 +42,8 @@ export const useEditorStudioUnsavedExitGuard = ({
   const [confirmOpen, setConfirmOpen] = useState(false)
   const pendingRef = useRef<PendingNavigation | null>(null)
   const allowNavigationRef = useRef(false)
+  /** Set when forced exit is allowed so preferHardNavigation reload skips beforeunload. */
+  const allowBeforeUnloadBypassRef = useRef(false)
   const pendingRouteIntentRef = useRef<EditorRouteNavigationIntent | null>(null)
   /** Last Next.js history.state while settled on the editor (before a blocked pop). */
   const editorHistoryStateRef = useRef<unknown>(null)
@@ -127,7 +129,7 @@ export const useEditorStudioUnsavedExitGuard = ({
     captureEditorHistoryState()
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!readIsDirty()) return
+      if (!shouldBlockEditorBeforeUnload(readIsDirty(), allowBeforeUnloadBypassRef.current)) return
       event.preventDefault()
       event.returnValue = EDITOR_UNSAVED_CHANGES_MESSAGE
       return EDITOR_UNSAVED_CHANGES_MESSAGE
@@ -153,8 +155,8 @@ export const useEditorStudioUnsavedExitGuard = ({
         return true
       }
 
-      if (isForcedEditorExitUrl(as)) {
-        consumeForcedEditorExitUrl(as)
+      if (allowForcedEditorExitRoute(as)) {
+        allowBeforeUnloadBypassRef.current = true
         return true
       }
       if (isSamePathEditorSurfaceNavigation(router.asPath, as)) return true
@@ -177,14 +179,15 @@ export const useEditorStudioUnsavedExitGuard = ({
       const capturedIntent = pendingRouteIntentRef.current
       pendingRouteIntentRef.current = null
 
+      if (allowForcedEditorExitRoute(nextUrl)) {
+        allowBeforeUnloadBypassRef.current = true
+        return
+      }
+
       if (!readIsDirty()) return
       if (allowNavigationRef.current) return
       if (nextUrl === router.asPath) return
       if (isSamePathEditorSurfaceNavigation(router.asPath, nextUrl)) return
-      if (isForcedEditorExitUrl(nextUrl)) {
-        consumeForcedEditorExitUrl(nextUrl)
-        return
-      }
 
       pendingRef.current = {
         kind: "route",
@@ -207,6 +210,7 @@ export const useEditorStudioUnsavedExitGuard = ({
 
     const handleRouteChangeError = () => {
       clearAllowNavigation()
+      allowBeforeUnloadBypassRef.current = false
     }
 
     window.addEventListener("beforeunload", handleBeforeUnload)
@@ -223,6 +227,7 @@ export const useEditorStudioUnsavedExitGuard = ({
       router.replace = originalReplace
       pendingRouteIntentRef.current = null
       clearAllowNavigation()
+      allowBeforeUnloadBypassRef.current = false
     }
   }, [clearAllowNavigation, enabled, readIsDirty, router])
 

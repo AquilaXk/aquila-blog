@@ -242,13 +242,20 @@ const resolveTimeoutMs = (path: string, init: ApiFetchOptions) => {
   return DEFAULT_API_FETCH_TIMEOUT_MS
 }
 
+const normalizeRequestId = (value: string | null | undefined): string | null => {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
 export class ApiError extends Error {
   status: number
   url: string
   body: string
   userMessage: string
+  requestId: string | null
 
-  constructor(status: number, url: string, body: string) {
+  constructor(status: number, url: string, body: string, requestId: string | null = null) {
     const userMessage =
       resolveBodyUserMessage(body) || resolveResponseBodyMessage(status, body) || resolveStatusMessage(status)
     super(userMessage)
@@ -257,18 +264,21 @@ export class ApiError extends Error {
     this.url = url
     this.body = body
     this.userMessage = userMessage
+    this.requestId = normalizeRequestId(requestId)
   }
 }
 
 export class ApiTimeoutError extends Error {
   url: string
   timeoutMs: number
+  requestId: null
 
   constructor(url: string, timeoutMs: number) {
     super("요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.")
     this.name = "ApiTimeoutError"
     this.url = url
     this.timeoutMs = timeoutMs
+    this.requestId = null
   }
 }
 
@@ -503,7 +513,12 @@ export const apiFetchWithMeta = async <T>(
       }
 
       const body = await response.text().catch(() => "")
-      throw new ApiError(response.status, url, body)
+      throw new ApiError(
+        response.status,
+        url,
+        body,
+        normalizeRequestId(response.headers.get("x-request-id")),
+      )
     }
 
     if (response.status === 204) {

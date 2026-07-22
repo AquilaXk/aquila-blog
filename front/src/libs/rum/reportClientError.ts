@@ -11,6 +11,7 @@ export type ClientErrorReport = {
   path: string
   errorName: string
   occurredAt: string
+  requestId?: string
 }
 
 declare global {
@@ -24,9 +25,11 @@ type ReportClientErrorInput = {
   boundary: ClientErrorBoundaryKind
   surface: ClientErrorSurface
   error: unknown
+  requestId?: string | null
 }
 
 const CLIENT_ERROR_ENDPOINT = "/api/rum/client-errors"
+const MAX_REQUEST_ID_LENGTH = 64
 
 export const createClientErrorId = () => {
   const timestamp = Date.now().toString(36)
@@ -37,6 +40,26 @@ export const createClientErrorId = () => {
 const resolveErrorName = (error: unknown) => {
   if (error instanceof Error && error.name.trim()) return error.name.trim().slice(0, 80)
   return "Error"
+}
+
+const resolveRequestId = (error: unknown, explicit?: string | null) => {
+  const candidates = [
+    explicit,
+    typeof error === "object" &&
+    error !== null &&
+    "requestId" in error &&
+    typeof (error as { requestId: unknown }).requestId === "string"
+      ? (error as { requestId: string }).requestId
+      : null,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue
+    const normalized = candidate.trim().slice(0, MAX_REQUEST_ID_LENGTH)
+    if (normalized) return normalized
+  }
+
+  return undefined
 }
 
 const sendClientError = (payload: ClientErrorReport) => {
@@ -64,9 +87,16 @@ const sendClientError = (payload: ClientErrorReport) => {
   })
 }
 
-export const reportClientError = ({ id, boundary, surface, error }: ReportClientErrorInput) => {
+export const reportClientError = ({
+  id,
+  boundary,
+  surface,
+  error,
+  requestId,
+}: ReportClientErrorInput) => {
   if (typeof window === "undefined") return
 
+  const resolvedRequestId = resolveRequestId(error, requestId)
   const payload: ClientErrorReport = {
     id,
     boundary,
@@ -74,6 +104,7 @@ export const reportClientError = ({ id, boundary, surface, error }: ReportClient
     path: window.location.pathname,
     errorName: resolveErrorName(error),
     occurredAt: new Date().toISOString(),
+    ...(resolvedRequestId ? { requestId: resolvedRequestId } : {}),
   }
 
   window.__AQUILA_CLIENT_ERROR_REPORTS__ = [...(window.__AQUILA_CLIENT_ERROR_REPORTS__ || []), payload]

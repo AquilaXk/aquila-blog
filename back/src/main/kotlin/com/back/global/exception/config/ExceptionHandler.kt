@@ -267,7 +267,7 @@ class ExceptionHandler(
                 ex.rsData.resultCode,
                 ex::class.qualifiedName,
                 exceptionMessage,
-                ex,
+                redactedThrowableForLogging(ex),
             )
         } else {
             logger.warn(
@@ -336,7 +336,7 @@ class ExceptionHandler(
             query,
             ex::class.qualifiedName,
             exceptionMessage,
-            ex,
+            redactedThrowableForLogging(ex),
         )
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -425,6 +425,34 @@ class ExceptionHandler(
             }
             else -> SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
         }
+
+    /**
+     * Logback serializes throwable.getMessage() into stack output.
+     * Attach a copy whose message (and cause messages) are redacted while preserving frames.
+     */
+    private fun redactedThrowableForLogging(ex: Throwable): Throwable {
+        val redactedMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
+        val copy =
+            when (ex) {
+                is AppException ->
+                    AppException(
+                        ex.rsData.resultCode,
+                        SensitiveQueryRedactor.redactText(ex.rsData.msg, MAX_QUERY_LENGTH),
+                    )
+                is RuntimeException -> RuntimeException(redactedMessage)
+                else -> Exception(redactedMessage)
+            }
+        copy.stackTrace = ex.stackTrace
+        val cause = ex.cause
+        if (cause != null) {
+            try {
+                copy.initCause(redactedThrowableForLogging(cause))
+            } catch (_: IllegalStateException) {
+                // already has a cause
+            }
+        }
+        return copy
+    }
 
     private fun sanitizeLogValue(
         raw: String?,

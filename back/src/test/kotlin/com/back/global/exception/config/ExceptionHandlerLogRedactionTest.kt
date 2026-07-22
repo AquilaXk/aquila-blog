@@ -38,6 +38,9 @@ class ExceptionHandlerLogRedactionTest {
             .doesNotContain("test@example.com")
         assertThat(event.throwableProxy).isNotNull
         assertThat(event.throwableProxy.className).isEqualTo(AppException::class.java.name)
+        assertThat(event.throwableProxy.message)
+            .contains("token=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
     }
 
     @Test
@@ -71,6 +74,11 @@ class ExceptionHandlerLogRedactionTest {
             .doesNotContain("STATE_123")
         assertThat(event.throwableProxy).isNotNull
         assertThat(event.throwableProxy.className).isEqualTo(RuntimeException::class.java.name)
+        assertThat(event.throwableProxy.message)
+            .contains("code=[REDACTED]")
+            .contains("state=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
+            .doesNotContain("STATE_123")
     }
 
     @Test

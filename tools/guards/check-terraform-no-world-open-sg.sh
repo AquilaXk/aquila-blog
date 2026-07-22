@@ -16,6 +16,10 @@ sg_rule = re.compile(
     r'resource\s+"aws_security_group_rule"\s+"[^"]+"\s*\{([^{}]|\{[^{}]*\})*\}',
     re.MULTILINE,
 )
+vpc_ingress_rule = re.compile(
+    r'resource\s+"aws_vpc_security_group_ingress_rule"\s+"[^"]+"\s*\{([^{}]|\{[^{}]*\})*\}',
+    re.MULTILINE,
+)
 findings = []
 
 for path in Path(".").rglob("*.tf"):
@@ -32,6 +36,11 @@ for path in Path(".").rglob("*.tf"):
         if 'type' in block and re.search(r'type\s*=\s*"ingress"', block) and "0.0.0.0/0" in block:
             line = text.count("\n", 0, match.start()) + 1
             findings.append(f"{path}:{line}: world-open aws_security_group_rule ingress")
+    for match in vpc_ingress_rule.finditer(text):
+        block = match.group(0)
+        if "0.0.0.0/0" in block:
+            line = text.count("\n", 0, match.start()) + 1
+            findings.append(f"{path}:{line}: world-open aws_vpc_security_group_ingress_rule")
 
 print("\n".join(findings), end="")
 PY

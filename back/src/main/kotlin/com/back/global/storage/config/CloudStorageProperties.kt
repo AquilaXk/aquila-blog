@@ -10,6 +10,9 @@ const val DEFAULT_CLOUD_VIDEO_RESUMABLE_EXPIRES_SECONDS: Long = 24L * 60 * 60
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_INITIATING_GRACE_SECONDS: Long = 15L * 60
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_COMPLETING_GRACE_SECONDS: Long = 30L * 60
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_UPLOADING_PART_GRACE_SECONDS: Long = 60L * 60
+const val DEFAULT_CLOUD_RECONCILE_OBJECT_GRACE_SECONDS: Long = 24L * 60 * 60
+const val DEFAULT_CLOUD_RECONCILE_INVENTORY_LIMIT: Int = 1_000
+const val DEFAULT_CLOUD_RECONCILE_SAFETY_THRESHOLD: Int = 25
 
 @ConfigurationProperties("custom.storage")
 data class CloudStorageProperties(
@@ -32,4 +35,9 @@ data class CloudStorageProperties(
     var cloudVideoResumableStaleInitiatingGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_INITIATING_GRACE_SECONDS,
     var cloudVideoResumableStaleCompletingGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_COMPLETING_GRACE_SECONDS,
     var cloudVideoResumableStaleUploadingPartGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_UPLOADING_PART_GRACE_SECONDS,
+    var cloudReconcileInventoryLimit: Int = DEFAULT_CLOUD_RECONCILE_INVENTORY_LIMIT,
+    var cloudReconcileObjectGraceSeconds: Long = DEFAULT_CLOUD_RECONCILE_OBJECT_GRACE_SECONDS,
+    var cloudReconcileSafetyThreshold: Int = DEFAULT_CLOUD_RECONCILE_SAFETY_THRESHOLD,
+    var cloudReconcileRepairEnabled: Boolean = false,
+    var cloudReconcileMetricsRefreshEnabled: Boolean = true,
 )

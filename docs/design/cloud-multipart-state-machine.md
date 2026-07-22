@@ -13,7 +13,8 @@
 | Session repository port | `back/src/main/kotlin/com/back/boundedContexts/cloud/application/port/output/CloudVideoUploadSessionRepositoryPort.kt` |
 | Part repository port | `back/src/main/kotlin/com/back/boundedContexts/cloud/application/port/output/CloudVideoUploadSessionRepositoryPort.kt` |
 | Cleanup scheduler | `back/src/main/kotlin/com/back/boundedContexts/cloud/adapter/scheduler/CloudVideoUploadSessionCleanupScheduledJob.kt` |
-| Storage adapter contract | `back/src/main/kotlin/com/back/global/storage/application/port/output/CloudStoragePort.kt` |
+| cloud_file reconcile | `CloudFileReconcileService` + ShedLock `CloudFileReconcileScheduledJob` + `CloudFileReconcileMetricsBinder` |
+| Storage adapter contract | `back/src/main/kotlin/com/back/global/storage/application/port/output/CloudStoragePort.kt` (`head`, `listObjects`) |
 
 ## 상태
 
@@ -36,6 +37,8 @@
 - `uploadPart`는 `IN_PROGRESS -> UPLOADING_PART -> IN_PROGRESS`로 claim을 잡고 해제한다.
 - 같은 `sessionId + partNumber`가 이미 저장되어 있고 byte size가 같으면 기존 part 응답을 반환한다.
 - `complete`는 모든 part number가 `1..totalParts`로 존재할 때만 `IN_PROGRESS -> COMPLETING -> COMPLETED`로 진행한다.
+- `complete`는 이미 `COMPLETED`인 session에 대해 같은 `CloudFile` 결과를 멱등 반환한다(`sessionId`가 idempotency key).
+- `COMPLETING` session에 대한 `complete` 재호출은 허용된다. HeadObject 커밋 판정 후 메타데이터 저장만 승계하거나, 미커밋이면 remote complete를 다시 시도한다.
 - `cancel`과 expiry cleanup은 `IN_PROGRESS -> ABORTING -> CANCELLED|EXPIRED` 경로를 사용한다.
 - terminal status는 `COMPLETED`, `CANCELLED`, `EXPIRED`, `FAILED`이다.
 
@@ -44,8 +47,10 @@
 - multipart upload는 client-driven API 흐름이므로 일반 task retry 대상이 아니다.
 - part upload 중 remote storage 호출이 실패하면 `UPLOADING_PART -> IN_PROGRESS`로 claim을 풀고 client가 같은 part를 다시 보낼 수 있게 한다.
 - part metadata 저장 실패는 remote part가 이미 저장됐을 수 있으므로 session을 `FAILED`로 표시한다.
-- remote complete 호출 자체가 실패하면 `COMPLETING` 기준 `FAILED`로 표시한다.
-- remote complete가 성공한 뒤 `CloudFile` 저장 또는 session `COMPLETED` 저장이 실패하면 row가 `COMPLETING`에 남을 수 있다. 이 상태는 client retry로 재완료할 수 없으므로 stuck completion 복구 대상으로 본다.
+- remote complete 호출이 실패하면 즉시 `FAILED`로 보내지 않고 HeadObject로 커밋 여부를 먼저 판정한다.
+  - `objectKey` 존재 AND `contentLength == session.byteSize`이면 storage 커밋으로 보고 메타데이터 저장으로 승계한다(`NoSuchUpload` 포함).
+  - 미커밋이면 `COMPLETING` 기준 `FAILED`로 표시한다.
+- remote complete가 성공한 뒤 `CloudFile` 저장 또는 session `COMPLETED` 저장이 실패하면 row를 `COMPLETING`에 유지한다(`FAILED`로 잠그지 않음). client는 같은 session id로 `complete`를 재호출해 메타데이터 저장에 수렴한다.
 - abort 실패는 `ABORTING` 기준 `FAILED`로 표시한다.
 - expired session cleanup은 scheduler가 batch로 호출하며 session 단위 실패를 warn log로 격리하고 다음 batch에서 다른 session 처리를 계속한다.
 
@@ -77,11 +82,21 @@
 
 ## Idempotency key
 
-- Session identity: `CloudVideoUploadSession.id`.
+- Session identity: `CloudVideoUploadSession.id` — 같은 session의 `complete` 재호출은 항상 같은 `CloudFile`로 수렴한다.
 - Remote object identity: `CloudVideoUploadSession.objectKey`, DB unique column.
 - Remote upload identity: `CloudVideoUploadSession.uploadId`.
 - Part identity: unique constraint `session_id + part_number` on `CloudVideoUploadPart`.
-- Completed file identity: `completedFileId`; complete가 성공하면 같은 session은 terminal status라 재완료되지 않는다.
+- Completed file identity: `completedFileId`; 이미 `COMPLETED`면 remote complete를 다시 호출하지 않고 기존 파일을 반환한다.
+- Storage commit detector: `CloudMultipartCommitDetector`(`HeadObject` + `contentLength == byteSize`). stale `COMPLETING` 회수와 complete retry가 공유한다.
+
+## cloud_file ↔ storage reconcile
+
+- `CloudFileReconcileService`가 `cloud/` prefix `listObjects`와 active `cloud_file` 행을 양방향 대사한다.
+- 고아 객체(스토리지 O, 메타 X): 진행 중(non-terminal) session `objectKey`와 최근 생성 객체(기본 24h grace)는 제외한다.
+- 고아 메타(메타 O, 객체 X): inventory가 truncate되지 않았을 때만 판정한다.
+- 기본은 dry-run(감지·메트릭만). `custom.storage.cloudReconcileRepairEnabled=true`일 때만 고아 객체 삭제/고아 메타 soft-delete를 수행하며, 고아 객체 수가 safety threshold를 넘으면 삭제를 막는다.
+- 주기 실행: `CloudFileReconcileScheduledJob`가 ShedLock(`cloudFileReconcile`)으로 `reconcile()`을 호출한다(기본 `custom.storage.cloudReconcileFixedDelayMs=3600000`).
+- 메트릭: `storage.cloud_file.reconcile.*` (`CloudFileReconcileMetricsBinder`가 `diagnose()` 스냅샷을 갱신).
 
 ## 실패 후 수동 복구
 

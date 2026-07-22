@@ -1134,6 +1134,18 @@ class CloudFileServiceTest {
                     it.ownerMemberId == ownerMemberId &&
                     it.deletedAt == null
             }
+
+        override fun findActiveByObjectKey(objectKey: String): CloudFile? =
+            savedFiles.firstOrNull { it.objectKey == objectKey && it.deletedAt == null }
+
+        override fun findActiveByObjectKeyStartingWith(
+            objectKeyPrefix: String,
+            limit: Int,
+        ): List<CloudFile> =
+            savedFiles
+                .filter { it.deletedAt == null && it.objectKey.startsWith(objectKeyPrefix) }
+                .sortedBy { it.id }
+                .take(limit.coerceAtLeast(1))
     }
 
     private class FakeCloudStoragePort : CloudStoragePort {
@@ -1173,6 +1185,11 @@ class CloudFileServiceTest {
         override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) = Unit
 
         override fun head(objectKey: String): CloudStoragePort.ObjectHead? = null
+
+        override fun listObjects(
+            prefix: String,
+            limit: Int,
+        ): CloudStoragePort.StoredObjectListing = CloudStoragePort.StoredObjectListing(objects = emptyList(), isTruncated = false)
 
         override fun open(objectKey: String): CloudStoragePort.StoredObject? {
             openedObjectKeys += objectKey

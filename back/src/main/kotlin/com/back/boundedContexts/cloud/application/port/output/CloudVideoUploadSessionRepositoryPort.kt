@@ -25,6 +25,11 @@ interface CloudVideoUploadSessionRepositoryPort {
         limit: Int,
     ): List<CloudVideoUploadSession>
 
+    fun findNonTerminalObjectKeysByPrefix(
+        objectKeyPrefix: String,
+        limit: Int,
+    ): List<String>
+
     fun attachUploadIdAndTransition(
         id: Long,
         expectedStatus: CloudVideoUploadSessionStatus,

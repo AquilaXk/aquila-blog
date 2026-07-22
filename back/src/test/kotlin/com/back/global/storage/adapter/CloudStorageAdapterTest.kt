@@ -14,11 +14,15 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectResponse
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.S3Exception
+import software.amazon.awssdk.services.s3.model.S3Object
 import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 
 @DisplayName("CloudStorageAdapter 테스트")
 class CloudStorageAdapterTest {
@@ -61,6 +65,55 @@ class CloudStorageAdapterTest {
         val adapter = adapterWithClient(s3Client)
 
         assertThat(adapter.head(objectKey)).isNull()
+    }
+
+    @Test
+    @DisplayName("listObjects는 ListObjectsV2 페이지네이션으로 prefix 객체를 수집한다")
+    fun listObjectsPaginatesPrefixObjects() {
+        val page1Key = "cloud/7/a.mp4"
+        val page2Key = "cloud/7/b.mp4"
+        val lastModified = Instant.parse("2026-06-17T00:00:00Z")
+        val s3Client =
+            RecordingS3Client(
+                onListObjects = { request ->
+                    if (request.continuationToken() == null) {
+                        ListObjectsV2Response
+                            .builder()
+                            .contents(
+                                S3Object
+                                    .builder()
+                                    .key(page1Key)
+                                    .size(10)
+                                    .lastModified(lastModified)
+                                    .build(),
+                            ).isTruncated(true)
+                            .nextContinuationToken("token-2")
+                            .build()
+                    } else {
+                        ListObjectsV2Response
+                            .builder()
+                            .contents(
+                                S3Object
+                                    .builder()
+                                    .key(page2Key)
+                                    .size(20)
+                                    .lastModified(lastModified)
+                                    .build(),
+                            ).isTruncated(false)
+                            .build()
+                    }
+                },
+            ) { error("getObject should not be called") }
+        val adapter = adapterWithClient(s3Client)
+
+        val listing = adapter.listObjects("cloud/", 10)
+
+        assertThat(s3Client.listObjectsRequestCount).isEqualTo(2)
+        assertThat(listing.isTruncated).isFalse()
+        assertThat(listing.objects).hasSize(2)
+        assertThat(listing.objects.map { it.objectKey }).containsExactly(page1Key, page2Key)
+        assertThat(listing.objects.map { it.size }).containsExactly(10L, 20L)
+        assertThat(listing.objects.map { it.lastModified }).containsOnly(lastModified)
     }
 
     @Test
@@ -177,11 +230,16 @@ class CloudStorageAdapterTest {
         private val onHeadObject: () -> HeadObjectResponse = {
             error("headObject should not be called")
         },
+        private val onListObjects: (ListObjectsV2Request) -> ListObjectsV2Response = {
+            error("listObjectsV2 should not be called")
+        },
         private val onGetObject: () -> ResponseInputStream<GetObjectResponse>,
     ) : S3Client {
         var lastGetObjectRequest: GetObjectRequest? = null
             private set
         var lastHeadObjectRequest: HeadObjectRequest? = null
+            private set
+        var listObjectsRequestCount: Int = 0
             private set
 
         override fun getObject(getObjectRequest: GetObjectRequest): ResponseInputStream<GetObjectResponse> {
@@ -192,6 +250,11 @@ class CloudStorageAdapterTest {
         override fun headObject(headObjectRequest: HeadObjectRequest): HeadObjectResponse {
             lastHeadObjectRequest = headObjectRequest
             return onHeadObject()
+        }
+
+        override fun listObjectsV2(listObjectsV2Request: ListObjectsV2Request): ListObjectsV2Response {
+            listObjectsRequestCount++
+            return onListObjects(listObjectsV2Request)
         }
 
         override fun serviceName(): String = "s3"

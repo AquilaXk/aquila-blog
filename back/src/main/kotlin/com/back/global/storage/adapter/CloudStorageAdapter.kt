@@ -21,6 +21,7 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.NoSuchUploadException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
@@ -317,6 +318,57 @@ class CloudStorageAdapter(
         }
     }
 
+    override fun listObjects(
+        prefix: String,
+        limit: Int,
+    ): CloudStoragePort.StoredObjectListing {
+        val normalizedPrefix = normalizeListPrefix(prefix)
+        val safeLimit = limit.coerceIn(1, MAX_LIST_OBJECTS)
+        val client = requireClient()
+        val objects = mutableListOf<CloudStoragePort.StoredObjectSummary>()
+        var continuationToken: String? = null
+        var hasMore: Boolean
+
+        try {
+            do {
+                val remaining = safeLimit - objects.size
+                val response =
+                    client.listObjectsV2(
+                        ListObjectsV2Request
+                            .builder()
+                            .bucket(properties.bucket)
+                            .prefix(normalizedPrefix)
+                            .maxKeys(remaining.coerceAtMost(S3_PAGE_SIZE))
+                            .continuationToken(continuationToken)
+                            .build(),
+                    )
+                val responseObjects = response.contents()
+
+                responseObjects.forEach { s3Object ->
+                    if (objects.size < safeLimit) {
+                        objects +=
+                            CloudStoragePort.StoredObjectSummary(
+                                objectKey = s3Object.key(),
+                                size = s3Object.size(),
+                                lastModified = s3Object.lastModified(),
+                            )
+                    }
+                }
+
+                continuationToken = response.nextContinuationToken()
+                hasMore = response.isTruncated == true || continuationToken != null || responseObjects.size > remaining
+            } while (objects.size < safeLimit && continuationToken != null)
+        } catch (e: Exception) {
+            logger.error("Cloud object list failed (prefix={})", normalizedPrefix, e)
+            throw AppException("500-1", "클라우드 객체 목록을 조회하지 못했습니다.")
+        }
+
+        return CloudStoragePort.StoredObjectListing(
+            objects = objects,
+            isTruncated = hasMore && objects.size >= safeLimit,
+        )
+    }
+
     override fun delete(objectKey: String) {
         val client = requireClient()
         validateObjectKey(objectKey)
@@ -452,6 +504,26 @@ class CloudStorageAdapter(
         }
     }
 
+    private fun normalizeListPrefix(prefix: String): String {
+        val allowedPrefix =
+            properties.cloudKeyPrefix
+                .trim()
+                .trim('/')
+                .ifBlank { "cloud" }
+        val normalized =
+            prefix
+                .trim()
+                .trimStart('/')
+                .let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
+        if (
+            normalized.contains("..") ||
+            !(normalized == "$allowedPrefix/" || normalized.startsWith("$allowedPrefix/"))
+        ) {
+            throw AppException("400-1", "유효하지 않은 클라우드 파일 경로입니다.")
+        }
+        return normalized
+    }
+
     private fun decodeStoredOriginalFilename(value: String?): String? {
         val encoded = value?.trim().orEmpty()
         if (encoded.isBlank()) return null
@@ -467,5 +539,7 @@ class CloudStorageAdapter(
 
     companion object {
         private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
+        private const val MAX_LIST_OBJECTS = 1_000
+        private const val S3_PAGE_SIZE = 1_000
     }
 }

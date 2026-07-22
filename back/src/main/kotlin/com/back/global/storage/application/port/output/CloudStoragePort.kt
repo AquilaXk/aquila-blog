@@ -1,6 +1,7 @@
 package com.back.global.storage.application.port.output
 
 import java.io.InputStream
+import java.time.Instant
 
 interface CloudStoragePort {
     class UploadRequest(
@@ -114,6 +115,20 @@ interface CloudStoragePort {
         val eTag: String?,
     )
 
+    data class StoredObjectSummary(
+        val objectKey: String,
+        val size: Long,
+        val lastModified: Instant?,
+    )
+
+    /**
+     * prefix listing 결과. [isTruncated]=true이면 [limit] 밖에 추가 객체가 있을 수 있다.
+     */
+    data class StoredObjectListing(
+        val objects: List<StoredObjectSummary>,
+        val isTruncated: Boolean,
+    )
+
     /**
      * S3 호환 클라이언트가 반환한 네트워크 스트림을 감싼다.
      * 응답을 반환하거나 복사한 호출자는 연결 풀이 고갈되지 않도록 반드시 닫아야 한다.
@@ -140,6 +155,14 @@ interface CloudStoragePort {
     fun abortMultipartUpload(request: MultipartUploadAbortRequest)
 
     fun head(objectKey: String): ObjectHead?
+
+    /**
+     * ListObjectsV2 페이지네이션으로 prefix 아래 객체를 최대 [limit]개까지 수집한다.
+     */
+    fun listObjects(
+        prefix: String,
+        limit: Int,
+    ): StoredObjectListing
 
     fun open(objectKey: String): StoredObject?
 

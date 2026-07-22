@@ -64,6 +64,22 @@ interface CloudVideoUploadSessionRepository :
         limit: Int,
     ): List<CloudVideoUploadSession>
 
+    @Query(
+        value = """
+            SELECT object_key
+            FROM cloud_video_upload_session
+            WHERE status NOT IN ('COMPLETED', 'CANCELLED', 'EXPIRED', 'FAILED')
+              AND object_key LIKE CONCAT(:objectKeyPrefix, '%')
+            ORDER BY id ASC
+            LIMIT :limit
+        """,
+        nativeQuery = true,
+    )
+    override fun findNonTerminalObjectKeysByPrefix(
+        objectKeyPrefix: String,
+        limit: Int,
+    ): List<String>
+
     @Transactional
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(

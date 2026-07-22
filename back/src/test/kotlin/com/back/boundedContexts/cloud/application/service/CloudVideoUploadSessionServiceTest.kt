@@ -880,6 +880,92 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
+    @DisplayName("complete metadata 실패 후 COMPLETING 재호출은 CloudFile로 수렴한다")
+    fun `complete metadata 실패 후 COMPLETING 재호출은 CloudFile로 수렴한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        fileRepository.failSave = true
+        assertThatThrownBy { service.complete(7L, session.id) }
+            .isInstanceOf(IllegalStateException::class.java)
+
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        storage.objectHeads[stored.objectKey] =
+            CloudStoragePort.ObjectHead(
+                objectKey = stored.objectKey,
+                contentLength = stored.byteSize,
+                contentType = "video/mp4",
+                eTag = "etag-committed",
+            )
+        fileRepository.failSave = false
+
+        val completed = service.complete(7L, session.id)
+
+        assertThat(completed.originalFilename).isEqualTo("movie.mp4")
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.COMPLETED)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.completedFileId)
+            .isEqualTo(completed.id)
+        assertThat(storage.completedUploads).hasSize(1)
+    }
+
+    @Test
+    @DisplayName("이미 COMPLETED 세션 complete는 같은 CloudFile을 멱등 반환한다")
+    fun `이미 COMPLETED 세션 complete는 같은 CloudFile을 멱등 반환한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val first = service.complete(7L, session.id)
+
+        val second = service.complete(7L, session.id)
+
+        assertThat(second.id).isEqualTo(first.id)
+        assertThat(storage.completedUploads).hasSize(1)
+    }
+
+    @Test
+    @DisplayName("complete 실패 후 HeadObject 커밋이면 FAILED 없이 메타데이터로 승계한다")
+    fun `complete 실패 후 HeadObject 커밋이면 메타데이터로 승계한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        storage.failingCompleteUploadIds += "upload-1"
+        storage.objectHeadsOnCompleteFailure[stored.objectKey] =
+            CloudStoragePort.ObjectHead(
+                objectKey = stored.objectKey,
+                contentLength = stored.byteSize,
+                contentType = "video/mp4",
+                eTag = "etag-committed",
+            )
+
+        val completed = service.complete(7L, session.id)
+
+        assertThat(completed.id).isPositive()
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.COMPLETED)
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.failureReason).isNull()
+    }
+
+    @Test
     @DisplayName("선점 상태의 세션은 cancel과 cleanup이 동시에 처리하지 않는다")
     fun `선점 상태는 cancel과 cleanup을 막는다`() {
         val session =
@@ -1152,6 +1238,24 @@ class CloudVideoUploadSessionServiceTest {
                 }.sortedWith(compareBy<CloudVideoUploadSession> { it.modifiedAt }.thenBy { it.id })
                 .take(limit.coerceAtLeast(1))
 
+        override fun findNonTerminalObjectKeysByPrefix(
+            objectKeyPrefix: String,
+            limit: Int,
+        ): List<String> =
+            savedSessions
+                .filter {
+                    it.status !in
+                        setOf(
+                            CloudVideoUploadSessionStatus.COMPLETED,
+                            CloudVideoUploadSessionStatus.CANCELLED,
+                            CloudVideoUploadSessionStatus.EXPIRED,
+                            CloudVideoUploadSessionStatus.FAILED,
+                        ) &&
+                        it.objectKey.startsWith(objectKeyPrefix)
+                }.sortedBy { it.id }
+                .map { it.objectKey }
+                .take(limit.coerceAtLeast(1))
+
         override fun attachUploadIdAndTransition(
             id: Long,
             expectedStatus: CloudVideoUploadSessionStatus,
@@ -1272,7 +1376,19 @@ class CloudVideoUploadSessionServiceTest {
         override fun findActiveByIdAndOwner(
             id: Long,
             ownerMemberId: Long,
-        ): CloudFile? = files.firstOrNull { it.id == id && it.ownerMemberId == ownerMemberId }
+        ): CloudFile? = files.firstOrNull { it.id == id && it.ownerMemberId == ownerMemberId && it.deletedAt == null }
+
+        override fun findActiveByObjectKey(objectKey: String): CloudFile? =
+            files.firstOrNull { it.objectKey == objectKey && it.deletedAt == null }
+
+        override fun findActiveByObjectKeyStartingWith(
+            objectKeyPrefix: String,
+            limit: Int,
+        ): List<CloudFile> =
+            files
+                .filter { it.deletedAt == null && it.objectKey.startsWith(objectKeyPrefix) }
+                .sortedBy { it.id }
+                .take(limit.coerceAtLeast(1))
     }
 
     private class FakeCloudStoragePort : CloudStoragePort {
@@ -1281,6 +1397,9 @@ class CloudVideoUploadSessionServiceTest {
         val completedUploads = mutableListOf<CloudStoragePort.MultipartUploadCompleteRequest>()
         val abortedUploads = mutableListOf<CloudStoragePort.MultipartUploadAbortRequest>()
         val objectHeads = mutableMapOf<String, CloudStoragePort.ObjectHead>()
+        val objectHeadsOnCompleteFailure = mutableMapOf<String, CloudStoragePort.ObjectHead>()
+        val listedObjects = mutableListOf<CloudStoragePort.StoredObjectSummary>()
+        val deletedObjectKeys = mutableListOf<String>()
         val failingAbortUploadIds = mutableSetOf<String>()
         val failingPartNumbers = mutableSetOf<Int>()
         val failingCompleteUploadIds = mutableSetOf<String>()
@@ -1317,6 +1436,7 @@ class CloudVideoUploadSessionServiceTest {
 
         override fun completeMultipartUpload(request: CloudStoragePort.MultipartUploadCompleteRequest) {
             if (request.uploadId in failingCompleteUploadIds) {
+                objectHeads.putAll(objectHeadsOnCompleteFailure)
                 throw IllegalStateException("complete failed")
             }
             completedUploads += request
@@ -1331,6 +1451,17 @@ class CloudVideoUploadSessionServiceTest {
 
         override fun head(objectKey: String): CloudStoragePort.ObjectHead? = objectHeads[objectKey]
 
+        override fun listObjects(
+            prefix: String,
+            limit: Int,
+        ): CloudStoragePort.StoredObjectListing {
+            val matched = listedObjects.filter { it.objectKey.startsWith(prefix) }.take(limit.coerceAtLeast(1))
+            return CloudStoragePort.StoredObjectListing(
+                objects = matched,
+                isTruncated = listedObjects.count { it.objectKey.startsWith(prefix) } > matched.size,
+            )
+        }
+
         override fun open(objectKey: String): CloudStoragePort.StoredObject? =
             CloudStoragePort.StoredObject(ByteArrayInputStream(ByteArray(0)), "video/mp4", 0, "empty.mp4")
 
@@ -1339,7 +1470,9 @@ class CloudVideoUploadSessionServiceTest {
             range: LongRange,
         ): CloudStoragePort.StoredObject? = CloudStoragePort.StoredObject(ByteArrayInputStream(ByteArray(0)), "video/mp4", 0, "empty.mp4")
 
-        override fun delete(objectKey: String) = Unit
+        override fun delete(objectKey: String) {
+            deletedObjectKeys += objectKey
+        }
     }
 
     companion object {

@@ -20,7 +20,12 @@ class PostReadCacheInvalidator(
     private val meterRegistry: MeterRegistry? = null,
 ) {
     private val hotPageSizes = listOf(30, 24, 16)
-    private val hotSorts = listOf(PostSearchSortType1.CREATED_AT)
+    private val hotSorts =
+        listOf(
+            PostSearchSortType1.CREATED_AT,
+            PostSearchSortType1.HIT_COUNT,
+            PostSearchSortType1.LIKES_COUNT,
+        )
     private val maxTagCacheEvict = 12
 
     internal fun invalidateAuthorRepresentation(reason: String) {

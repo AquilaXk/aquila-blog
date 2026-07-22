@@ -10,6 +10,20 @@ import {
 import styled from "@emotion/styled"
 import MarkdownRenderer from "src/libs/markdown/MarkdownRenderer"
 import {
+  isComposingEditorKeyboardEvent,
+  isSaveShortcut,
+  planFormatShortcutMutation,
+  planHardBreak,
+  planListEnterContinuation,
+  resolveFormatShortcut,
+} from "./markdownEditorKeyboardModel"
+import {
+  applyPlannedTextMutation,
+  planToggleWrapSelection,
+  planWrapSelection,
+  type PlannedTextMutation,
+} from "./markdownEditorTextMutation"
+import {
   MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE,
   MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE,
   resolveMarkdownAttachmentLink,
@@ -31,6 +45,8 @@ type MarkdownEditorProps = {
   disableMermaid?: boolean
   onChange: (markdown: string, meta?: MarkdownChangeMeta) => void
   onFlushMarkdownReady?: (flush: (() => string) | null) => void
+  onFocusRequestReady?: (focus: (() => void) | null) => void
+  onRequestSave?: () => void
   onUploadingChange?: (isUploading: boolean) => void
   onUploadImage?: (file: File) => Promise<MarkdownImageUploadResult>
   onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
@@ -43,12 +59,19 @@ type TextareaSelection = {
   to: number
 }
 
+const modShortcutLabel =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
+    ? "⌘"
+    : "Ctrl+"
+
 const toolbarMarkdownSnippets = [
   { label: "H1", title: "제목 1", before: "# ", after: "" },
   { label: "H2", title: "제목 2", before: "## ", after: "" },
   { label: "H3", title: "제목 3", before: "### ", after: "" },
-  { label: "B", title: "굵게", before: "**", after: "**" },
-  { label: "I", title: "기울임", before: "_", after: "_" },
+  { label: "B", title: `굵게 (${modShortcutLabel}B)`, before: "**", after: "**", toggle: true },
+  { label: "I", title: `기울임 (${modShortcutLabel}I)`, before: "_", after: "_", toggle: true },
+  { label: "S", title: `취소선 (${modShortcutLabel}Shift+X)`, before: "~~", after: "~~", toggle: true },
+  { label: "`", title: `인라인 코드 (${modShortcutLabel}E)`, before: "`", after: "`", toggle: true },
   { label: ">", title: "인용문", before: "> ", after: "" },
   { label: "List", title: "목록", before: "- ", after: "" },
   { label: "Task", title: "작업 목록", before: "- [ ] ", after: "" },
@@ -98,6 +121,8 @@ export const MarkdownEditor = ({
   disableMermaid = false,
   onChange,
   onFlushMarkdownReady,
+  onFocusRequestReady,
+  onRequestSave,
   onUploadingChange,
   onUploadImage,
   onUploadFile,
@@ -129,6 +154,15 @@ export const MarkdownEditor = ({
     onFlushMarkdownReady?.(() => valueRef.current)
     return () => onFlushMarkdownReady?.(null)
   }, [onFlushMarkdownReady])
+
+  useEffect(() => {
+    onFocusRequestReady?.(() => {
+      const textarea = textareaRef.current
+      if (!textarea || disabled) return
+      textarea.focus()
+    })
+    return () => onFocusRequestReady?.(null)
+  }, [disabled, onFocusRequestReady])
 
   const commitMarkdown = useCallback(
     (nextMarkdown: string, editorFocused = false) => {
@@ -163,6 +197,19 @@ export const MarkdownEditor = ({
     textarea.setSelectionRange(nextSelection.from, nextSelection.to)
     selectionRef.current = nextSelection
   }, [])
+
+  const applyMutationPlan = useCallback(
+    (plan: PlannedTextMutation) => {
+      const textarea = textareaRef.current
+      if (!textarea || disabled) return false
+      textarea.focus()
+      const nextMarkdown = applyPlannedTextMutation(textarea, plan)
+      selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
+      commitMarkdown(nextMarkdown, true)
+      return true
+    },
+    [commitMarkdown, disabled]
+  )
 
   const syncScrollPosition = useCallback((source: HTMLElement, target: HTMLElement | null) => {
     if (!target) return
@@ -213,8 +260,81 @@ export const MarkdownEditor = ({
     })
   }, [])
 
+  const resolveActiveSelection = useCallback(() => {
+    const textarea = textareaRef.current
+    if (textarea && document.activeElement === textarea) {
+      return rememberTextareaSelection()
+    }
+    return selectionRef.current
+  }, [rememberTextareaSelection])
+
+  const insertMarkdownAtEditorSelection = useCallback(
+    (before: string, after = "", options?: { toggle?: boolean }) => {
+      const textarea = textareaRef.current
+      if (!textarea || disabled) return false
+
+      const { from: selectionStart, to: selectionEnd } = resolveActiveSelection()
+      const plan = options?.toggle
+        ? planToggleWrapSelection(valueRef.current, selectionStart, selectionEnd, before, after)
+        : planWrapSelection(valueRef.current, selectionStart, selectionEnd, before, after)
+
+      return applyMutationPlan(plan)
+    },
+    [applyMutationPlan, disabled, resolveActiveSelection]
+  )
+
+  const applySnippet = useCallback(
+    (before: string, after = "", options?: { toggle?: boolean }) => {
+      if (insertMarkdownAtEditorSelection(before, after, options)) return
+      commitMarkdown(`${valueRef.current}${before}${after}`, true)
+    },
+    [commitMarkdown, insertMarkdownAtEditorSelection]
+  )
+
+  const insertUploadedMarkdown = useCallback(
+    (markdown: string) => {
+      if (insertMarkdownAtEditorSelection(markdown)) return
+      commitMarkdown(`${valueRef.current}${markdown}`, true)
+    },
+    [commitMarkdown, insertMarkdownAtEditorSelection]
+  )
+
   const handleTextareaKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (disabled || isComposingEditorKeyboardEvent(event)) return
+
+      if (event.key === "Enter" && event.shiftKey) {
+        event.preventDefault()
+        const { from, to } = rememberTextareaSelection()
+        applyMutationPlan(planHardBreak(from, to))
+        return
+      }
+
+      if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const { from, to } = rememberTextareaSelection()
+        const listPlan = planListEnterContinuation(valueRef.current, from, to)
+        if (listPlan) {
+          event.preventDefault()
+          applyMutationPlan(listPlan)
+        }
+        return
+      }
+
+      if (isSaveShortcut(event)) {
+        if (!onRequestSave) return
+        event.preventDefault()
+        onRequestSave()
+        return
+      }
+
+      const formatShortcut = resolveFormatShortcut(event)
+      if (formatShortcut) {
+        event.preventDefault()
+        const { from, to } = rememberTextareaSelection()
+        applyMutationPlan(planFormatShortcutMutation(valueRef.current, from, to, formatShortcut))
+        return
+      }
+
       if (event.shiftKey || (!event.metaKey && !event.ctrlKey)) return
 
       if (event.key === "Home") {
@@ -228,46 +348,7 @@ export const MarkdownEditor = ({
         setTextareaSelection(valueRef.current.length)
       }
     },
-    [setTextareaSelection]
-  )
-
-  const insertMarkdownAtEditorSelection = useCallback(
-    (before: string, after = "") => {
-      const textarea = textareaRef.current
-      if (!textarea || disabled) return false
-
-      const { from: selectionStart, to: selectionEnd } =
-        document.activeElement === textarea ? rememberTextareaSelection() : selectionRef.current
-      const selectedMarkdown = valueRef.current.slice(selectionStart, selectionEnd)
-      const insertedMarkdown = `${before}${selectedMarkdown}${after}`
-      const nextCursorFrom = selectionStart + before.length
-      const nextCursorTo = nextCursorFrom + selectedMarkdown.length
-      const nextMarkdown = `${valueRef.current.slice(0, selectionStart)}${insertedMarkdown}${valueRef.current.slice(selectionEnd)}`
-
-      commitMarkdown(nextMarkdown, true)
-      window.requestAnimationFrame(() => {
-        textarea.focus()
-        textarea.setSelectionRange(nextCursorFrom, nextCursorTo)
-      })
-      return true
-    },
-    [commitMarkdown, disabled, rememberTextareaSelection]
-  )
-
-  const applySnippet = useCallback(
-    (before: string, after = "") => {
-      if (insertMarkdownAtEditorSelection(before, after)) return
-      commitMarkdown(`${valueRef.current}${before}${after}`, true)
-    },
-    [commitMarkdown, insertMarkdownAtEditorSelection]
-  )
-
-  const insertUploadedMarkdown = useCallback(
-    (markdown: string) => {
-      if (insertMarkdownAtEditorSelection(markdown)) return
-      commitMarkdown(`${valueRef.current}${markdown}`, true)
-    },
-    [commitMarkdown, insertMarkdownAtEditorSelection]
+    [applyMutationPlan, disabled, onRequestSave, rememberTextareaSelection, setTextareaSelection]
   )
 
   const handleImageInput = useCallback(
@@ -335,7 +416,11 @@ export const MarkdownEditor = ({
               aria-label={snippet.title}
               disabled={disabled}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applySnippet(snippet.before, snippet.after)}
+              onClick={() =>
+                applySnippet(snippet.before, snippet.after, {
+                  toggle: "toggle" in snippet && snippet.toggle,
+                })
+              }
             >
               {snippet.label}
             </ToolbarButton>
@@ -380,11 +465,14 @@ export const MarkdownEditor = ({
           </ToolbarUploadButton>
           <ToolbarButton
             type="button"
-            title="링크"
-            aria-label="링크"
+            title={`링크 (${modShortcutLabel}K)`}
+            aria-label={`링크 (${modShortcutLabel}K)`}
             disabled={disabled}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => applySnippet("[", "](https://)")}
+            onClick={() => {
+              const { from, to } = resolveActiveSelection()
+              applyMutationPlan(planFormatShortcutMutation(valueRef.current, from, to, "link"))
+            }}
           >
             Link
           </ToolbarButton>
@@ -439,9 +527,7 @@ export const MarkdownEditor = ({
             onScroll={handlePreviewScroll}
             onWheel={handlePreviewWheel}
           >
-            <PreviewArticle
-              data-testid="markdown-editor-preview-scroll"
-            >
+            <PreviewArticle data-testid="markdown-editor-preview-scroll">
               {previewTitle || previewSummary ? (
                 <PreviewHeader>
                   <span>Public preview</span>

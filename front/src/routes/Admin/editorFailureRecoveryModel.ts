@@ -146,6 +146,11 @@ const buildNextActions = (type: EditorFailureType) => {
 
 const canRetryFailure = (type: EditorFailureType) => type !== "unknown"
 
+const appendRequestIdDetail = (statusText: string, error: unknown) => {
+  if (!(error instanceof ApiError) || !error.requestId) return statusText
+  return `${statusText} (요청 ID: ${error.requestId})`
+}
+
 export const resolveEditorFailureRecovery = (
   error: unknown,
   { action, isOnline }: ResolveEditorFailureRecoveryParams,
@@ -156,7 +161,10 @@ export const resolveEditorFailureRecovery = (
   const nextActions = buildNextActions(type)
 
   return {
-    statusText: `${actionLabel} 실패: ${message} ${nextActions.join(" · ")}`,
+    statusText: appendRequestIdDetail(
+      `${actionLabel} 실패: ${message} ${nextActions.join(" · ")}`,
+      error,
+    ),
     result: {
       errorType: type,
       message,
@@ -178,7 +186,10 @@ export const resolveEditorUploadFailureRecovery = (
   const nextActions = buildNextActions(type)
 
   return {
-    statusText: `${uploadLabel} 업로드 실패: "${fileName}" 파일별 실패 상태입니다. ${message} ${nextActions.join(" · ")} 다시 시도할 수 있습니다.`,
+    statusText: appendRequestIdDetail(
+      `${uploadLabel} 업로드 실패: "${fileName}" 파일별 실패 상태입니다. ${message} ${nextActions.join(" · ")} 다시 시도할 수 있습니다.`,
+      error,
+    ),
     result: {
       errorType: type,
       message,

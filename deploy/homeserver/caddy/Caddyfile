@@ -98,6 +98,8 @@ http://{$API_DOMAIN} {
   header @corsAllowed {
     ?Access-Control-Allow-Origin "{http.request.header.Origin}"
     ?Access-Control-Allow-Credentials "true"
+    # Browser JS can read X-Request-Id from cross-origin API error responses.
+    ?Access-Control-Expose-Headers "X-Request-Id"
     ?Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import styled from "@emotion/styled"
 import { CONFIG } from "site.config"
@@ -43,6 +43,19 @@ const LegalPolicyPage = ({
     [activeSectionId, policy.sections],
   )
 
+  const moveToSection = useCallback((sectionId: string) => {
+    setActiveSectionId(sectionId)
+    const section = document.getElementById(sectionId)
+    section?.scrollIntoView({ behavior: "smooth", block: "start" })
+    window.history.replaceState(window.history.state, "", `#${sectionId}`)
+    const heading = section?.querySelector<HTMLElement>("h2")
+    if (!heading) return
+    // Hash navigation / smooth scroll can steal focus on the next frame.
+    window.requestAnimationFrame(() => {
+      heading.focus({ preventScroll: true })
+    })
+  }, [])
+
   useEffect(() => {
     const sectionElements = policy.sections
       .map((section) => document.getElementById(section.id))
@@ -66,11 +79,18 @@ const LegalPolicyPage = ({
     return () => observer.disconnect()
   }, [policy.sections])
 
-  const moveToSection = (sectionId: string) => {
-    setActiveSectionId(sectionId)
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" })
-    window.history.replaceState(null, "", `#${sectionId}`)
-  }
+  useLayoutEffect(() => {
+    const applyHashFocus = () => {
+      const hashId = window.location.hash.replace(/^#/, "")
+      if (!hashId) return
+      if (!policy.sections.some((section) => section.id === hashId)) return
+      moveToSection(hashId)
+    }
+
+    applyHashFocus()
+    window.addEventListener("hashchange", applyHashFocus)
+    return () => window.removeEventListener("hashchange", applyHashFocus)
+  }, [moveToSection, policy.sections])
 
   return (
     <StyledWrapper>
@@ -153,6 +173,10 @@ const LegalPolicyPage = ({
                   key={section.id}
                   href={`#${section.id}`}
                   aria-current={activeSection?.id === section.id ? "true" : undefined}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    moveToSection(section.id)
+                  }}
                 >
                   {section.title}
                 </a>
@@ -164,8 +188,15 @@ const LegalPolicyPage = ({
             {policy.sections.map((section) => (
               <section key={section.id} id={section.id}>
                 <div className="sectionHeading">
-                  <h2>{section.title}</h2>
-                  <a href={`#${section.id}`} aria-label={`${section.title} 섹션 링크`}>
+                  <h2 tabIndex={-1}>{section.title}</h2>
+                  <a
+                    href={`#${section.id}`}
+                    aria-label={`${section.title} 섹션 링크`}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      moveToSection(section.id)
+                    }}
+                  >
                     #
                   </a>
                 </div>
@@ -392,6 +423,16 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 1.18rem;
     line-height: 1.35;
+  }
+
+  h2:focus {
+    outline: none;
+  }
+
+  h2:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.colors.gray8};
+    outline-offset: 3px;
+    border-radius: 2px;
   }
 
   .sectionHeading {

@@ -56,6 +56,8 @@ const NavBar = () => {
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
+  const authReturnFocusRef = useRef<HTMLElement | null>(null)
   const isAuthenticated = authStatus === "authenticated"
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
   const showLogin = authStatus !== "authenticated"
@@ -202,7 +204,8 @@ const NavBar = () => {
             className="loginLink"
             onMouseEnter={preloadAuthEntryModal}
             onFocus={preloadAuthEntryModal}
-            onClick={() => {
+            onClick={(event) => {
+              authReturnFocusRef.current = event.currentTarget
               preloadAuthEntryModal()
               setAuthModalOpen(true)
             }}
@@ -232,6 +235,7 @@ const NavBar = () => {
         ) : null}
 
         <button
+          ref={mobileMenuButtonRef}
           type="button"
           className="mobileMenuButton"
           aria-label="메뉴 열기"
@@ -258,6 +262,7 @@ const NavBar = () => {
             <button
               type="button"
               onClick={() => {
+                authReturnFocusRef.current = mobileMenuButtonRef.current
                 setMobileMenuOpen(false)
                 preloadAuthEntryModal()
                 setAuthModalOpen(true)
@@ -285,6 +290,7 @@ const NavBar = () => {
         onClose={() => setAuthModalOpen(false)}
         nextPath={nextPath}
         title="로그인"
+        returnFocusRef={authReturnFocusRef}
       />
     </StyledWrapper>
   )

@@ -157,7 +157,9 @@ const AuthEntryLoginPanel = ({
           </div>
         </div>
 
-        {error && <p className="inlineError">{error}</p>}
+        <p className="inlineError" role="status" aria-live="polite" aria-atomic="true">
+          {error || null}
+        </p>
 
         <button type="submit" className="primaryAction" disabled={loading}>
           {loading ? "로그인 중..." : "로그인"}

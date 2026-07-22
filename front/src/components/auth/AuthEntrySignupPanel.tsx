@@ -42,7 +42,9 @@ const AuthEntrySignupPanel = ({
   if (!SIGNUP_ENABLED) {
     return (
       <>
-        <p className="inlineError">회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.</p>
+        <p className="inlineError" role="status" aria-live="polite" aria-atomic="true">
+          회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.
+        </p>
         <div className="signupRow">
           <span>이미 계정이 있으신가요?</span>
           <button type="button" className="inlineLinkButton" onClick={onSwitchToLogin}>
@@ -86,7 +88,9 @@ const AuthEntrySignupPanel = ({
           )}
         </div>
 
-        {signupError && <p className="inlineError">{signupError}</p>}
+        <p className="inlineError" role="status" aria-live="polite" aria-atomic="true">
+          {signupError || null}
+        </p>
 
         <div className="requiredConsentBox" aria-label="회원가입 필수 동의">
           <p>회원가입을 진행하려면 필수 약관과 개인정보처리방침에 동의해야 합니다.</p>

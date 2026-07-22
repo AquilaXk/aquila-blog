@@ -6,7 +6,7 @@ import {
   readAdminProtectedBootstrap,
   type AdminPageProps,
 } from "src/libs/server/adminPage"
-import { serverApiFetch } from "src/libs/server/backend"
+import { serverApiFetchJson } from "src/libs/server/backend"
 import type { PostForEditor } from "./EditorStudioWorkspaceControllerRootModel"
 import { EditorStudioWorkspaceController } from "./EditorStudioWorkspaceController"
 
@@ -55,12 +55,11 @@ const fetchInitialEditorPost = async (req: Parameters<GetServerSideProps>[0]["re
   if (!postId) return null
 
   try {
-    const response = await serverApiFetch(req, `/post/api/v1/adm/posts/${postId}`, {
+    const payload = await serverApiFetchJson<unknown>(req, `/post/api/v1/adm/posts/${postId}`, {
       cache: "no-store",
       timeoutMs: 6_000,
     })
-    if (!response.ok) return null
-    return normalizeInitialEditorPost(await response.json())
+    return normalizeInitialEditorPost(payload)
   } catch {
     return null
   }

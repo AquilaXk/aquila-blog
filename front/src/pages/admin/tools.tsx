@@ -9,7 +9,7 @@ import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import { hasServerAuthCookie } from "src/libs/server/authSession"
-import { serverApiFetch } from "src/libs/server/backend"
+import { serverApiFetchJson } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
@@ -407,13 +407,8 @@ const persistMailSnapshotCookie = (diagnostics: SignupMailDiagnostics) => {
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
-    const response = await serverApiFetch(req, path)
-    if (!response.ok) return null
-
-    const contentLength = response.headers.get("content-length")
-    if (contentLength === "0") return null
-
-    return (await response.json()) as T
+    const value = await serverApiFetchJson<T>(req, path)
+    return value ?? null
   } catch {
     return null
   }

@@ -9,7 +9,7 @@ import {
   normalizeLegacyBlogScheme,
 } from "src/libs/profileWorkspace"
 import type { PublicAdminProfileSource, StaticAdminProfileSeedSource } from "src/libs/adminProfileSource"
-import { serverApiFetch } from "./backend"
+import { serverApiFetchJson } from "./backend"
 
 type FetchServerAdminProfileOptions = {
   timeoutMs?: number
@@ -60,11 +60,9 @@ export const fetchServerAdminProfile = async (
   options: FetchServerAdminProfileOptions = {}
 ): Promise<AdminProfile | null> => {
   try {
-    const response = await serverApiFetch(req, "/member/api/v1/members/adminProfile", {
+    return await serverApiFetchJson<AdminProfile>(req, "/member/api/v1/members/adminProfile", {
       timeoutMs: options.timeoutMs,
     })
-    if (!response.ok) return null
-    return (await response.json()) as AdminProfile
   } catch {
     return null
   }

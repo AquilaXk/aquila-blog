@@ -9,7 +9,7 @@ import {
   hasServerAuthCookie,
   resolvePublicAdminProfileSnapshot,
 } from "src/libs/server/adminProfile"
-import { serverApiFetch } from "src/libs/server/backend"
+import { serverApiFetchJson } from "src/libs/server/backend"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminShell from "src/routes/Admin/AdminShell"
 
@@ -89,11 +89,8 @@ const EMPTY_OPERATIONAL_SNAPSHOT: AdminHubOperationalSnapshot = {
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
-    const response = await serverApiFetch(req, path)
-    if (!response.ok) return null
-    const contentLength = response.headers.get("content-length")
-    if (contentLength === "0") return null
-    return (await response.json()) as T
+    const value = await serverApiFetchJson<T>(req, path)
+    return value ?? null
   } catch {
     return null
   }

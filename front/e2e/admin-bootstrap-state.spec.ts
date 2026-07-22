@@ -34,11 +34,17 @@ test.describe("admin bootstrap state contract", () => {
     const adminPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/adminPage.ts"), "utf8")
 
     expect(adminPageSource).toContain('import { hasServerAuthCookie } from "./authSession"')
+    expect(adminPageSource).toContain("import { serverApiFetchJson } from \"./backend\"")
+    expect(adminPageSource).toContain("const value = await serverApiFetchJson<T>(req, path)")
     expect(adminPageSource).toContain("const shouldDeferRedirectToFallback = hasServerAuthCookie(req)")
     expect(adminPageSource).toMatch(
       /destination:\s*shouldDeferRedirectToFallback\s*\?\s*null\s*:\s*toLoginPath\(normalizeNextPath\(req\.url, fallbackPath\), fallbackPath\)/
     )
     expect(adminPageSource).toMatch(/destination:\s*shouldDeferRedirectToFallback\s*\?\s*null\s*:\s*"\/"/)
+    expect(adminPageSource).not.toMatch(/if\s*\(\s*!response\.ok\s*\)\s*\{\s*return\s*\{\s*ok:\s*false,\s*destination:\s*null/)
+    expect(adminPageSource).toContain("// 5xx/network/timeout 등 → Next 500 (destination: null 제거)")
+    expect(adminPageSource).toContain("// 그 외 HTTP 실패 → Next 500")
+    expect(adminPageSource).toContain("throw error")
   })
 
   test("운영 진단은 auth/session 선조회 대신 protected bootstrap으로 health summary를 first paint에 주입한다", () => {

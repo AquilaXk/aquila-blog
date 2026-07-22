@@ -837,6 +837,45 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `검색 목록 조회는 keyword가 있어도 HIT_COUNT 정렬을 존중한다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val keyword = "hitsort-${System.currentTimeMillis()}"
+            val titleMatchedLowHits =
+                postFacade.write(
+                    actor,
+                    "제목 $keyword 매칭",
+                    "조회수 정렬보다 관련도가 높은 글",
+                    true,
+                    true,
+                )
+            val contentMatchedHighHits =
+                postFacade.write(
+                    actor,
+                    "본문 매칭 글",
+                    "이 글은 본문에서만 $keyword 를 포함합니다.",
+                    true,
+                    true,
+                )
+
+            setPostCounterAttr(contentMatchedHighHits.id, "hitCount", "hit_count_attr_id", 100)
+            setPostCounterAttr(titleMatchedLowHits.id, "hitCount", "hit_count_attr_id", 1)
+            entityManager.clear()
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", keyword)
+                    param("page", "1")
+                    param("pageSize", "30")
+                    param("sort", "HIT_COUNT")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(2) }
+                    jsonPath("$.content[0].id") { value(contentMatchedHighHits.id) }
+                    jsonPath("$.content[1].id") { value(titleMatchedLowHits.id) }
+                }
+        }
+
+        @Test
         fun `검색 목록 조회는 멀티 토큰 검색에서 구문 미일치 제목도 후보 상단에 유지한다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val tokenA = "spring${System.currentTimeMillis()}"
@@ -1761,5 +1800,59 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.resultCode") { value("404-1") }
                 }
         }
+    }
+
+    private fun setPostCounterAttr(
+        postId: Long,
+        attrName: String,
+        fkColumn: String,
+        value: Int,
+    ) {
+        val existingAttrId =
+            jdbcTemplate
+                .query(
+                    "select id from post_attr where subject_id = ? and name = ?",
+                    { rs, _ -> rs.getLong(1) },
+                    postId,
+                    attrName,
+                ).firstOrNull()
+
+        val attrId =
+            if (existingAttrId != null) {
+                jdbcTemplate.update(
+                    "update post_attr set int_value = ? where id = ?",
+                    value,
+                    existingAttrId,
+                )
+                existingAttrId
+            } else {
+                jdbcTemplate.queryForObject(
+                    """
+                    insert into post_attr (id, subject_id, name, int_value)
+                    values (
+                      nextval(
+                        coalesce(
+                          pg_get_serial_sequence('post_attr', 'id'),
+                          'public.post_attr_seq'
+                        )::regclass
+                      ),
+                      ?,
+                      ?,
+                      ?
+                    )
+                    returning id
+                    """.trimIndent(),
+                    Long::class.java,
+                    postId,
+                    attrName,
+                    value,
+                )!!
+            }
+
+        jdbcTemplate.update(
+            "update post set $fkColumn = ? where id = ?",
+            attrId,
+            postId,
+        )
     }
 }

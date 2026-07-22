@@ -490,13 +490,7 @@ class PostRepositoryImpl(
         idQuery.where(builder)
 
         val normalizedKeyword = kw.trim()
-        if (normalizedKeyword.isNotBlank()) {
-            idQuery.orderBy(
-                buildKeywordRelevanceExpression(normalizedKeyword).desc(),
-                post.createdAt.desc(),
-                post.id.desc(),
-            )
-        } else if (requiresHitCountSort(pageable)) {
+        if (requiresHitCountSort(pageable)) {
             idQuery.orderBy(
                 post.hitCountAttr.intValue
                     .coalesce(0)
@@ -508,6 +502,12 @@ class PostRepositoryImpl(
                 post.likesCountAttr.intValue
                     .coalesce(0)
                     .desc(),
+                post.id.desc(),
+            )
+        } else if (normalizedKeyword.isNotBlank()) {
+            idQuery.orderBy(
+                buildKeywordRelevanceExpression(normalizedKeyword).desc(),
+                post.createdAt.desc(),
                 post.id.desc(),
             )
         } else {

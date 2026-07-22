@@ -32,8 +32,11 @@ import {
   getCloudKindIconLabel,
   getCloudKindLabel,
   isUploadActive,
+  isCloudSearchPending,
   mergeCloudFiles,
+  resolveCloudEmptyTitle,
   resolveCloudSearchParams,
+  shouldShowCloudEmptyLoading,
   type CloudMediaFilter,
   type UploadQueueItem,
 } from "./AdminCloudWorkspaceModel"
@@ -923,15 +926,21 @@ const AdminCloudWorkspacePage = () => {
   }
 
   const isFileListError = filesQuery.isError
-  const emptyTitle = filesQuery.isLoading
-    ? "파일을 불러오는 중입니다."
-    : isFileListError
-      ? "파일 목록을 불러오지 못했습니다."
-    : activeUploadCount > 0
-      ? "업로드 중인 파일이 있습니다."
-    : keyword || filter !== "ALL"
-      ? "선택한 조건에 맞는 파일이 없습니다."
-      : "표시할 파일이 없습니다."
+  const isSearchPending = isCloudSearchPending(keyword, debouncedKeyword)
+  const emptyTitle = resolveCloudEmptyTitle({
+    activeUploadCount,
+    debouncedKeyword,
+    filter,
+    isError: isFileListError,
+    isFetching: filesQuery.isFetching,
+    isLoading: filesQuery.isLoading,
+    keyword,
+  })
+  const showEmptyLoading = shouldShowCloudEmptyLoading({
+    filesCount: files.length,
+    isLoading: filesQuery.isLoading,
+    isSearchPending,
+  })
 
   return (
     <CloudMain>
@@ -956,8 +965,8 @@ const AdminCloudWorkspacePage = () => {
                 onCompositionStart={() => setIsComposing(true)}
                 onCompositionEnd={() => setIsComposing(false)}
               />
-              <SearchDetail aria-busy={filesQuery.isFetching ? "true" : "false"}>
-                {filesQuery.isFetching ? "검색 중" : "파일"}
+              <SearchDetail aria-busy={filesQuery.isFetching || isSearchPending ? "true" : "false"}>
+                {filesQuery.isFetching || isSearchPending ? "검색 중" : "파일"}
               </SearchDetail>
             </CloudSearchField>
           </CloudTitleBar>
@@ -1041,7 +1050,7 @@ const AdminCloudWorkspacePage = () => {
           />
 
           <FileTableScroll>
-            {files.length === 0 && filesQuery.isLoading ? (
+            {showEmptyLoading ? (
               <FileTable role="table" aria-busy="true">
                 <FileTableHead />
                 <tbody>

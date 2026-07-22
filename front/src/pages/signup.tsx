@@ -1,5 +1,6 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps } from "next"
+import { control } from "src/design-system/tokens"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
@@ -266,6 +267,12 @@ const NaverInput = styled.input`
   &:focus {
     outline: none;
   }
+
+  @media (max-width: 820px) {
+    box-sizing: border-box;
+    min-height: ${control.lg}px;
+    padding-inline-end: calc(${control.lg}px + 1rem);
+  }
 `
 
 const GhostIconButton = styled.button`
@@ -299,12 +306,20 @@ const GhostIconButton = styled.button`
   svg {
     font-size: 0.74rem;
   }
+
+  @media (max-width: 820px) {
+    min-width: ${control.lg}px;
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-height: ${control.lg}px;
+  }
 `
 
 // 패밀리룩(1219): 그린 필 발행 버튼 → 낮은 라운드 사각 accent 컨트롤(scheme별 글자색)
 const PrimaryButton = styled.button`
   border: 0;
   border-radius: 8px;
+  min-height: ${control.lg}px;
   padding: 0.84rem 1rem;
   background: ${({ theme }) => theme.publicDesign.accent};
   color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
@@ -435,5 +450,11 @@ const FooterText = styled.div`
     flex-wrap: wrap;
     gap: 0.35rem 0.7rem;
     margin-top: 0.25rem;
+  }
+
+  @media (max-width: 820px) {
+    a {
+      min-height: ${control.lg}px;
+    }
   }
 `

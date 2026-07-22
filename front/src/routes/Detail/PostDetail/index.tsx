@@ -4,6 +4,7 @@ import dynamic from "next/dynamic"
 import PostHeader from "./PostHeader"
 import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
+import { ConfirmDialog } from "src/design-system/ConfirmDialog"
 import { toLoginPath } from "src/libs/router"
 import { readHeaderAuthShellSnapshot } from "src/libs/headerAuthShell"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
@@ -15,6 +16,7 @@ import { RelatedPostsSection } from "./PostDetailRelatedSection"
 import { collectTocFromArticle, createObserverRegistry, createRafScheduler, isSameToc, type TocItem } from "./PostDetailTocModel"
 import { LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX, RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX, applyHybridRail, clearInlineRailStyle, measureHybridRail, resolveRailTopOffset } from "./PostDetailRailModel"
 import { FloatingActionRail, MobileSummaryActions, RightTocRail } from "./PostDetailActionSections"
+import PostDetailMobileToc from "./PostDetailMobileToc"
 import { usePostDetailEngagementActions } from "./usePostDetailEngagementActions"
 import { usePostDetailRelatedPosts } from "./usePostDetailRelatedPosts"
 import { RecoverableSurfaceBoundary } from "src/components/error/ErrorBoundary"
@@ -83,12 +85,16 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const showFloatingLike = data?.type[0] === "Post"
   const {
     adminActionPending,
+    closeDeleteConfirm,
+    confirmDeletePost,
+    deleteConfirmOpen,
+    deleteErrorNotice,
     engagement,
-    handleDeletePost,
     handleEditPost,
     handleSharePost,
     handleToggleLike,
     likePending,
+    openDeleteConfirm,
     shareFeedback,
     shareProgressLabel,
   } = usePostDetailEngagementActions({
@@ -457,11 +463,35 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             useAdminShellFallback
             adminActionPending={adminActionPending}
             onEditPost={handleEditPost}
-            onDeletePost={handleDeletePost}
+            onDeletePost={openDeleteConfirm}
             deckSummary={headerDeckSummaryText}
           />
         </section>
       )}
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        titleId="post-detail-delete-title"
+        descriptionId="post-detail-delete-description"
+        title="글을 삭제할까요?"
+        description={
+          <>
+            <span>삭제 후에는 삭제 글 목록에서 복구할 수 있습니다.</span>
+            <span className="rowTitle">{data.title}</span>
+            {deleteErrorNotice ? (
+              <span role="alert" data-tone="error">
+                {deleteErrorNotice}
+              </span>
+            ) : null}
+          </>
+        }
+        confirmLabel={adminActionPending ? "삭제 중..." : "삭제 확정"}
+        cancelLabel="취소"
+        confirmTone="danger"
+        onConfirm={() => {
+          void confirmDeletePost()
+        }}
+        onCancel={closeDeleteConfirm}
+      />
       <div
         className="detailLayout"
         data-left-hybrid={leftHybridRailActive}
@@ -496,6 +526,13 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               onToggleLike={handleToggleLike}
               onSharePost={handleSharePost}
               onScrollToComments={() => scrollSectionIntoView(commentsSectionRef.current)}
+            />
+          ) : null}
+          {showStickyToc ? (
+            <PostDetailMobileToc
+              items={visibleTocItems}
+              activeTocId={activeTocId}
+              onNavigate={handleTocNavigate}
             />
           ) : null}
           <BodySection data-rum-section="body">

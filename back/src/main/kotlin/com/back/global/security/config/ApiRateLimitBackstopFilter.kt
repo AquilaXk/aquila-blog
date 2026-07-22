@@ -27,6 +27,7 @@ class ApiRateLimitBackstopFilter(
     private val meterRegistryProvider: ObjectProvider<MeterRegistry>,
     private val errorResponseWriter: ErrorResponseWriter,
     private val environment: Environment,
+    private val publicApiRequestMatcher: PublicApiRequestMatcher,
     @param:Value("\${custom.security.apiRateLimit.enabled:true}")
     private val enabled: Boolean = true,
     @param:Value("\${custom.security.apiRateLimit.requireRedisInProd:true}")
@@ -126,7 +127,7 @@ class ApiRateLimitBackstopFilter(
         if (isAuthPath(path)) {
             return Bucket("auth", authLimitPerMinute)
         }
-        if (method in SAFE_METHODS && isPublicReadPath(path)) {
+        if (method in SAFE_METHODS && publicApiRequestMatcher.isPublicReadSafe(method, path)) {
             return Bucket("public-read", publicReadLimitPerMinute)
         }
         if (method in SAFE_METHODS && isAuthenticatedReadPath(path)) {
@@ -142,8 +143,6 @@ class ApiRateLimitBackstopFilter(
         AUTH_PATHS.any { it.matches(path) } ||
             path.startsWith("/oauth2/") ||
             path.startsWith("/login/oauth2/")
-
-    private fun isPublicReadPath(path: String): Boolean = PUBLIC_READ_PATHS.any { it.matches(path) } || PUBLIC_DETAIL_PATH.matches(path)
 
     private fun isAuthenticatedReadPath(path: String): Boolean = AUTHENTICATED_READ_PATHS.any { it.matches(path) }
 
@@ -218,24 +217,6 @@ class ApiRateLimitBackstopFilter(
                 Regex("^/member/api/v\\d+/signup/email/verify$"),
                 Regex("^/member/api/v\\d+/signup/complete$"),
             )
-        private val PUBLIC_READ_PATHS =
-            listOf(
-                Regex("^/post/api/v\\d+/posts$"),
-                Regex("^/post/api/v\\d+/posts/feed$"),
-                Regex("^/post/api/v\\d+/posts/feed/cursor$"),
-                Regex("^/post/api/v\\d+/posts/bootstrap$"),
-                Regex("^/post/api/v\\d+/posts/explore$"),
-                Regex("^/post/api/v\\d+/posts/explore/cursor$"),
-                Regex("^/post/api/v\\d+/posts/search$"),
-                Regex("^/post/api/v\\d+/posts/tags$"),
-                Regex("^/post/api/v\\d+/posts/related/author$"),
-                Regex("^/post/api/v\\d+/posts/\\d+/comments$"),
-                Regex("^/post/api/v\\d+/posts/\\d+/comments/\\d+$"),
-                Regex("^/post/api/v\\d+/images/.*"),
-                Regex("^/post/api/v\\d+/files/.*"),
-                Regex("^/system/api/v\\d+/adm/cloud/files/\\d+/external-content$"),
-            )
-        private val PUBLIC_DETAIL_PATH = Regex("^/post/api/v\\d+/posts/\\d+$")
         private val AUTHENTICATED_READ_PATHS =
             listOf(
                 Regex("^/member/api/v\\d+/notifications$"),

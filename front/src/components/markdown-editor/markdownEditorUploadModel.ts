@@ -28,7 +28,7 @@ export const validateMarkdownAttachmentSize = (file: File): string | null => {
   return null
 }
 
-const escapeMarkdownLinkLabel = (value: string) => value.replace(/[\\[\]]/g, "\\$&")
+export const escapeMarkdownLinkLabel = (value: string) => value.replace(/[\\[\]]/g, "\\$&")
 
 export const resolveMarkdownAttachmentLink = (
   uploaded: MarkdownFileUploadResult,

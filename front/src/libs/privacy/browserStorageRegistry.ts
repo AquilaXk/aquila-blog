@@ -1,4 +1,5 @@
 import { FEED_EXPLORER_RESTORE_KEY_PREFIX } from "src/libs/feed/feedRestoreCache"
+import { MARKDOWN_EDITOR_MODE_STORAGE_KEY } from "src/components/markdown-editor/markdownEditorModePreference"
 export {
   OPTIONAL_TRACKING_CONSENT_CHANGE_EVENT,
   OPTIONAL_TRACKING_CONSENT_STORAGE_KEY,
@@ -128,6 +129,15 @@ export const registeredBrowserStorageKeys: BrowserStorageRegistryEntry[] = [
     retention: "until login preference changes or browser storage is cleared",
     deletion: "login preference change or browser storage deletion",
     stores: "boolean IP security preference",
+  },
+  {
+    area: "localStorage",
+    key: MARKDOWN_EDITOR_MODE_STORAGE_KEY,
+    purpose: "markdown-editor-mode-preference",
+    required: false,
+    retention: "until editor mode preference changes or browser storage is cleared",
+    deletion: "editor mode preference change or browser storage deletion",
+    stores: "write, preview, or split markdown editor mode",
   },
   {
     area: "localStorage",

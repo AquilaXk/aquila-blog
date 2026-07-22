@@ -10,6 +10,7 @@ import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
@@ -21,8 +22,10 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
+import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
+import org.mockito.Mockito.spy
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -36,6 +39,10 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.multipart
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.multipart.MultipartFile
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -610,6 +617,77 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     }
 
     @Test
+    @DisplayName("external content AppException 4xx는 playback 메트릭 후 전파된다")
+    fun `external content AppException 4xx는 playback 메트릭 후 전파된다`() {
+        given(cloudExternalPlaybackTokenService.openContent(token = "raw-token", fileId = 12L))
+            .willThrow(
+                AppException(
+                    ErrorCode.CLOUD_PLAYBACK_DENIED,
+                    "외부 재생 token이 올바르지 않거나 만료되었습니다.",
+                ),
+            )
+
+        mvc
+            .get("/system/api/v1/adm/cloud/files/12/external-content") {
+                param("token", "raw-token")
+            }.andExpect {
+                status { isForbidden() }
+                jsonPath("$.resultCode") { value("403-30") }
+            }
+    }
+
+    @Test
+    @DisplayName("external content AppException 5xx는 playback 메트릭 후 전파된다")
+    fun `external content AppException 5xx는 playback 메트릭 후 전파된다`() {
+        given(cloudExternalPlaybackTokenService.openContent(token = "raw-token", fileId = 12L))
+            .willThrow(AppException(ErrorCode.INTERNAL_ERROR, "분류되지 않은 오류"))
+
+        val result =
+            mvc
+                .get("/system/api/v1/adm/cloud/files/12/external-content") {
+                    param("token", "raw-token")
+                }.andReturn()
+
+        assertThat(result.resolvedException).isInstanceOf(AppException::class.java)
+        assertThat((result.resolvedException as AppException).rsData.resultCode).isEqualTo("500-1")
+    }
+
+    @Test
+    @DisplayName("external content AppException other resultCode는 other playback 메트릭 후 전파된다")
+    fun `external content AppException other resultCode는 other playback 메트릭 후 전파된다`() {
+        // ErrorCode는 4xx/5xx만 있어, statusClass=other 분기는 spy로 resultCode를 주입해 커버한다.
+        val ex = spy(AppException(ErrorCode.INTERNAL_ERROR, "분류되지 않은 응답 코드"))
+        doReturn(RsData<Void>("200-99", "분류되지 않은 응답 코드")).`when`(ex).rsData
+        given(cloudExternalPlaybackTokenService.openContent(token = "raw-token", fileId = 12L))
+            .willThrow(ex)
+
+        val result =
+            mvc
+                .get("/system/api/v1/adm/cloud/files/12/external-content") {
+                    param("token", "raw-token")
+                }.andReturn()
+
+        assertThat(result.resolvedException).isSameAs(ex)
+        assertThat((result.resolvedException as AppException).rsData.resultCode).isEqualTo("200-99")
+    }
+
+    @Test
+    @DisplayName("external content RuntimeException은 5xx playback 메트릭 후 전파된다")
+    fun `external content RuntimeException은 5xx playback 메트릭 후 전파된다`() {
+        given(cloudExternalPlaybackTokenService.openContent(token = "raw-token", fileId = 12L))
+            .willThrow(IllegalStateException("boom"))
+
+        val result =
+            mvc
+                .get("/system/api/v1/adm/cloud/files/12/external-content") {
+                    param("token", "raw-token")
+                }.andReturn()
+
+        assertThat(result.resolvedException).isInstanceOf(IllegalStateException::class.java)
+        assertThat(result.resolvedException?.message).isEqualTo("boom")
+    }
+
+    @Test
     @DisplayName("external content invalid Range 요청은 416을 반환하고 storage stream을 열지 않는다")
     fun `external content invalid Range 요청은 416을 반환하고 storage stream을 열지 않는다`() {
         given(cloudExternalPlaybackTokenService.getFile(token = "raw-token", fileId = 12L))
@@ -632,6 +710,71 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 status { isRequestedRangeNotSatisfiable() }
                 header { string(HttpHeaders.CONTENT_RANGE, "bytes */10") }
             }
+
+        then(cloudExternalPlaybackTokenService).should().getFile(token = "raw-token", fileId = 12L)
+        then(cloudExternalPlaybackTokenService).shouldHaveNoMoreInteractions()
+        then(cloudFileService).shouldHaveNoInteractions()
+    }
+
+    @Test
+    @DisplayName("content HEAD는 DB 메타만으로 헤더를 반환하고 storage를 열지 않는다")
+    fun `content HEAD는 DB 메타만으로 헤더를 반환하고 storage를 열지 않는다`() {
+        val admin = adminUser(id = 7L)
+        given(cloudFileService.get(ownerMemberId = 7L, fileId = 12L))
+            .willReturn(
+                sampleDto(
+                    id = 12L,
+                    ownerMemberId = 7L,
+                    originalFilename = "demo.mp4",
+                    contentType = "video/mp4",
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    byteSize = 2048L,
+                ),
+            )
+
+        mvc
+            .perform(
+                head("/system/api/v1/adm/cloud/files/12/content")
+                    .with(user(admin)),
+            ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+            .andExpect(header().longValue(HttpHeaders.CONTENT_LENGTH, 2048L))
+            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "video/mp4"))
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0"))
+            .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+            .andExpect(content().string(""))
+
+        then(cloudFileService).should().get(ownerMemberId = 7L, fileId = 12L)
+        then(cloudFileService).shouldHaveNoMoreInteractions()
+        then(cloudExternalPlaybackTokenService).shouldHaveNoInteractions()
+    }
+
+    @Test
+    @DisplayName("external content HEAD는 token 검증 후 DB 메타만으로 헤더를 반환하고 storage를 열지 않는다")
+    fun `external content HEAD는 token 검증 후 DB 메타만으로 헤더를 반환하고 storage를 열지 않는다`() {
+        given(cloudExternalPlaybackTokenService.getFile(token = "raw-token", fileId = 12L))
+            .willReturn(
+                sampleDto(
+                    id = 12L,
+                    ownerMemberId = 7L,
+                    originalFilename = "demo.mp4",
+                    contentType = "video/mp4",
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    byteSize = 4096L,
+                ),
+            )
+
+        mvc
+            .perform(
+                head("/system/api/v1/adm/cloud/files/12/external-content")
+                    .param("token", "raw-token"),
+            ).andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+            .andExpect(header().longValue(HttpHeaders.CONTENT_LENGTH, 4096L))
+            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "video/mp4"))
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0"))
+            .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+            .andExpect(content().string(""))
 
         then(cloudExternalPlaybackTokenService).should().getFile(token = "raw-token", fileId = 12L)
         then(cloudExternalPlaybackTokenService).shouldHaveNoMoreInteractions()

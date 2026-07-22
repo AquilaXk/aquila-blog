@@ -7,6 +7,7 @@ import com.back.global.security.config.ApiCorsPolicy
 import com.back.global.security.config.ApiMutationCsrfGuardFilter
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.AuthCookieNames
+import com.back.global.security.config.TestPublicApiRequestMatchers
 import com.back.global.web.application.ClientIpResolver
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -177,6 +178,7 @@ class ErrorFilterResponseShapeTest {
             MockEnvironment().apply {
                 setActiveProfiles(if (prodRuntime) "prod" else "test")
             },
+        publicApiRequestMatcher = TestPublicApiRequestMatchers.defaultMatcher(),
         publicReadLimitPerMinute = publicReadLimitPerMinute,
         requireRedisInProd = requireRedisInProd,
     )

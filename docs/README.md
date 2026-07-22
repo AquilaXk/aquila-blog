@@ -28,6 +28,12 @@ Agent-only 작업 메모와 로컬 상태 파일은 `.gitignore` 대상이므로
 | [Privacy Launch Gate Checklist](design/privacy-launch-gate-checklist.md) | Privacy launch checklist |
 | [Code Comment Policy](design/code-comment-policy.md) | Code comment policy |
 
+## Tracked Ops Runbooks
+
+| Document | Description |
+| --- | --- |
+| [Cloud Transfer Limits and Recovery](ops/cloud-transfer-limits-and-recovery.md) | Edge/Caddy/Spring size limits, Cloudflare ToS risk, upload/playback recovery commands |
+
 ## Tracked Legal / Privacy Runbooks
 
 | Document | Description |

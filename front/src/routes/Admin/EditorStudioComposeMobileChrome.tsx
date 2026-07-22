@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 
 type EditorStudioComposeMobileChromeTone = "idle" | "loading" | "success" | "error"
 
@@ -72,7 +73,7 @@ const MobilePrimaryActionBar = styled.div`
     > button {
       width: 100%;
       justify-content: center;
-      min-height: 40px;
+      min-height: ${control.lg}px;
     }
   }
 `

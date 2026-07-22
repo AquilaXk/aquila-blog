@@ -9,6 +9,9 @@ import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.CloudStoragePort
+import com.back.global.storage.metrics.CloudMediaMetrics
+import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.net.URLEncoder
@@ -33,13 +36,22 @@ class CloudExternalPlaybackTokenService(
     private val cloudExternalPlaybackTokenRepository: CloudExternalPlaybackTokenRepositoryPort,
     private val cloudStoragePort: CloudStoragePort,
     private val clock: Clock = Clock.systemUTC(),
+    @param:Value("\${custom.storage.cloudExternalPlaybackTokenCleanupGraceSeconds:3600}")
+    private val cleanupGraceSeconds: Long = 3600,
+    private val meterRegistry: MeterRegistry? = null,
 ) {
     @Transactional
     fun issue(
         ownerMemberId: Long,
         fileId: Long,
     ): CloudExternalPlaybackTokenDto {
-        val file = findVideoFile(ownerMemberId, fileId)
+        val file =
+            try {
+                findVideoFile(ownerMemberId, fileId)
+            } catch (ex: AppException) {
+                CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
+                throw ex
+            }
         val rawToken = generateRawToken()
         val expiresAt = clock.instant().plus(TOKEN_TTL)
         cloudExternalPlaybackTokenRepository.save(
@@ -51,6 +63,7 @@ class CloudExternalPlaybackTokenService(
                 expiresAt = expiresAt,
             ),
         )
+        CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "issued")
 
         return CloudExternalPlaybackTokenDto(
             fileId = file.id,
@@ -99,6 +112,20 @@ class CloudExternalPlaybackTokenService(
         )
     }
 
+    @Transactional
+    fun purgeExpiredTokens(batchSize: Int): Int {
+        val safeBatchSize = batchSize.coerceIn(1, 1_000)
+        val graceSeconds = cleanupGraceSeconds.coerceAtLeast(0)
+        val cutoff = clock.instant().minusSeconds(graceSeconds)
+        val deleted = cloudExternalPlaybackTokenRepository.deleteByExpiresAtBefore(cutoff, safeBatchSize)
+        CloudMediaMetrics.recordTokenOperation(
+            meterRegistry,
+            op = "expired-cleaned",
+            amount = deleted.toDouble(),
+        )
+        return deleted
+    }
+
     private fun findVideoFile(
         ownerMemberId: Long,
         fileId: Long,
@@ -118,6 +145,7 @@ class CloudExternalPlaybackTokenService(
     ): CloudFile {
         val normalizedToken = token.trim()
         if (normalizedToken.isBlank()) {
+            CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
             throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "외부 재생 token이 올바르지 않거나 만료되었습니다.")
         }
         val playbackToken =
@@ -126,9 +154,18 @@ class CloudExternalPlaybackTokenService(
                 fileId = fileId,
                 purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
                 now = clock.instant(),
-            ) ?: throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "외부 재생 token이 올바르지 않거나 만료되었습니다.")
+            )
+        if (playbackToken == null) {
+            CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
+            throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "외부 재생 token이 올바르지 않거나 만료되었습니다.")
+        }
 
-        return findVideoFile(playbackToken.memberId, fileId)
+        return try {
+            findVideoFile(playbackToken.memberId, fileId)
+        } catch (ex: AppException) {
+            CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
+            throw ex
+        }
     }
 
     private fun CloudFile.toDto(): CloudFileDto =

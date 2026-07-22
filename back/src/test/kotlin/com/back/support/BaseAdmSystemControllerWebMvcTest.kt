@@ -7,6 +7,7 @@ import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorS
 import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.config.ApiRateLimitBackstopFilter
+import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.system.adapter.web.ApiV1AdmSystemController
@@ -38,6 +39,7 @@ import org.springframework.test.web.servlet.MockMvc
             classes = [
                 CustomAuthenticationFilter::class,
                 ApiRateLimitBackstopFilter::class,
+                ApiRuntimeBoundaryFilter::class,
             ],
         ),
     ],

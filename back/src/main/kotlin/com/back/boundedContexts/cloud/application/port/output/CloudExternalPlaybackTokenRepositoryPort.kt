@@ -13,4 +13,9 @@ interface CloudExternalPlaybackTokenRepositoryPort {
         purpose: CloudExternalPlaybackTokenPurpose,
         now: Instant,
     ): CloudExternalPlaybackToken?
+
+    fun deleteByExpiresAtBefore(
+        cutoff: Instant,
+        limit: Int,
+    ): Int
 }

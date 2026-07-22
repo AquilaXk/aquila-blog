@@ -3,6 +3,8 @@ front/.idea/
 front/tsconfig.tsbuildinfo
 infra/terraform.tfvars
 infra/*.auto.tfvars
+infra/legacy/terraform.tfvars
+infra/legacy/*.auto.tfvars
 deploy/homeserver/.env.prod
 deploy/homeserver/.deploy-backups/
 deploy/homeserver/*.backup
@@ -20,6 +22,8 @@ docs/*
 !docs/design/**
 !docs/legal/
 !docs/legal/**
+!docs/ops/
+!docs/ops/**
 .cursor/
 .claude/
 .aider/

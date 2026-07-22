@@ -8,6 +8,7 @@ import com.back.global.app.AppConfig
 import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.SecurityTipProvider
 import com.back.global.security.config.ApiRateLimitBackstopFilter
+import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
@@ -35,6 +36,7 @@ import org.springframework.web.servlet.mvc.annotation.ResponseStatusExceptionRes
             classes = [
                 CustomAuthenticationFilter::class,
                 ApiRateLimitBackstopFilter::class,
+                ApiRuntimeBoundaryFilter::class,
             ],
         ),
     ],

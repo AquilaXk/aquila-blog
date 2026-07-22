@@ -9,6 +9,7 @@ import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.observability.ErrorMetrics
 import com.back.global.security.config.ApiRateLimitBackstopFilter
+import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.junit.jupiter.api.BeforeAll
@@ -37,6 +38,7 @@ import org.springframework.test.web.servlet.MockMvc
             classes = [
                 CustomAuthenticationFilter::class,
                 ApiRateLimitBackstopFilter::class,
+                ApiRuntimeBoundaryFilter::class,
             ],
         ),
     ],

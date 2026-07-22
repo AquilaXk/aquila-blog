@@ -26,6 +26,22 @@ class PublicApiRequestMatcher(
         return normalized in SAFE_METHODS && matches(normalized, path)
     }
 
+    /**
+     * Caddy `@publicReadFallback` / `back_read`와 동일한 edge public-read subset.
+     * runtime split(READ/ADMIN) 판정은 이 subset을 사용한다.
+     */
+    fun isEdgePublicReadSafe(
+        method: String,
+        path: String,
+    ): Boolean {
+        val normalized = method.uppercase()
+        if (normalized !in SAFE_METHODS) return false
+        return routes.any { route ->
+            PublicApiCaddyReadPaths.isEdgePublicReadRoute(route.pattern) &&
+                route.matches(normalized, path)
+        }
+    }
+
     fun publicApiRoutes(): List<PublicApiRouteSpec> = routes
 
     fun edgePublicReadCaddyPaths(): Set<String> = PublicApiCaddyReadPaths.export(routes)

@@ -64,11 +64,13 @@ class ApiRuntimeBoundaryFilter(
         // CORS preflight는 실제 메서드 권한 판단 이전에 항상 통과시켜야 브라우저가 본 요청 결과를 해석할 수 있다.
         if (method == "OPTIONS") return true
 
-        val isPublicReadApi = publicApiRequestMatcher.isPublicReadSafe(method, path)
+        // Caddy는 post/cloud edge public-read만 back_read로 보낸다.
+        // member public GET은 back_admin으로 가므로, split 판정도 edge subset을 공유한다.
+        val isEdgePublicReadApi = publicApiRequestMatcher.isEdgePublicReadSafe(method, path)
         return when (mode) {
             RuntimeApiMode.ALL -> true
-            RuntimeApiMode.READ -> isPublicReadApi
-            RuntimeApiMode.ADMIN -> !isPublicReadApi
+            RuntimeApiMode.READ -> isEdgePublicReadApi
+            RuntimeApiMode.ADMIN -> !isEdgePublicReadApi
             RuntimeApiMode.WORKER, RuntimeApiMode.NONE -> false
         }
     }

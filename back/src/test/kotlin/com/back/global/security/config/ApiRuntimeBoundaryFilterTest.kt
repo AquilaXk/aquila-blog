@@ -165,6 +165,32 @@ class ApiRuntimeBoundaryFilterTest {
     }
 
     @Test
+    @DisplayName("admin 모드는 member public GET을 edge public-read가 아니므로 허용한다")
+    fun `admin mode allows member public get endpoints`() {
+        val filter = createFilter("admin")
+        val request =
+            MockHttpServletRequest("GET", "/member/api/v1/members/1/redirectToProfileImg")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
+    @Test
+    @DisplayName("read 모드는 member public GET을 edge subset 밖이므로 차단한다")
+    fun `read mode blocks member public get endpoints`() {
+        val filter = createFilter("read")
+        val request =
+            MockHttpServletRequest("GET", "/member/api/v1/members/1/redirectToProfileImg")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+    }
+
+    @Test
     @DisplayName("isAllowed는 all 모드를 항상 허용한다")
     fun `isAllowed returns true for all mode`() {
         val filter = createFilter("all")

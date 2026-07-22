@@ -1,9 +1,12 @@
 import { useRouter } from "next/router"
 import { createElement, useCallback, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "src/design-system/ConfirmDialog"
+import type { UrlObject } from "url"
 import {
+  activateScheduledForcedEditorExitIfMatching,
   allowForcedEditorExitRoute,
   captureEditorRouteNavigationIntent,
+  clearForcedEditorExitUrl,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   isSamePathEditorSurfaceNavigation,
@@ -29,6 +32,24 @@ type PendingNavigation = {
   url?: string
   action?: () => void
   routeIntent?: EditorRouteNavigationIntent
+}
+
+const resolveRouterNavigationUrl = (
+  url: string | UrlObject,
+  asPath?: string | UrlObject | null
+): string => {
+  if (typeof url === "string") return url
+  if (typeof asPath === "string") return asPath
+  const pathname = typeof url.pathname === "string" ? url.pathname : ""
+  const search =
+    typeof url.query === "string"
+      ? url.query.startsWith("?")
+        ? url.query
+        : `?${url.query}`
+      : url.query && typeof url.query === "object"
+        ? `?${new URLSearchParams(url.query as Record<string, string>).toString()}`
+        : ""
+  return `${pathname}${search}`
 }
 
 export const useEditorStudioUnsavedExitGuard = ({
@@ -140,11 +161,13 @@ export const useEditorStudioUnsavedExitGuard = ({
 
     router.push = ((url, as, options) => {
       pendingRouteIntentRef.current = captureEditorRouteNavigationIntent("push", options)
+      activateScheduledForcedEditorExitIfMatching(resolveRouterNavigationUrl(url, as))
       return originalPush(url, as, options)
     }) as typeof router.push
 
     router.replace = ((url, as, options) => {
       pendingRouteIntentRef.current = captureEditorRouteNavigationIntent("replace", options)
+      activateScheduledForcedEditorExitIfMatching(resolveRouterNavigationUrl(url, as))
       return originalReplace(url, as, options)
     }) as typeof router.replace
 
@@ -211,6 +234,7 @@ export const useEditorStudioUnsavedExitGuard = ({
     const handleRouteChangeError = () => {
       clearAllowNavigation()
       allowBeforeUnloadBypassRef.current = false
+      clearForcedEditorExitUrl()
     }
 
     window.addEventListener("beforeunload", handleBeforeUnload)
@@ -228,6 +252,7 @@ export const useEditorStudioUnsavedExitGuard = ({
       pendingRouteIntentRef.current = null
       clearAllowNavigation()
       allowBeforeUnloadBypassRef.current = false
+      clearForcedEditorExitUrl()
     }
   }, [clearAllowNavigation, enabled, readIsDirty, router])
 

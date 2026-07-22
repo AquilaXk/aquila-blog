@@ -1,14 +1,17 @@
 import { expect, test } from "@playwright/test"
 import {
+  activateScheduledForcedEditorExitIfMatching,
   allowForcedEditorExitRoute,
   captureEditorRouteNavigationIntent,
   clearForcedEditorExitUrl,
+  clearScheduledForcedEditorExitUrl,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   isEditorUnsavedDirtyByFingerprint,
   isForcedEditorExitUrl,
   isSamePathEditorSurfaceNavigation,
   markForcedEditorExitUrl,
+  scheduleForcedEditorExitUrl,
   resolveEditorRouteNavigationRetry,
   restoreEditorUrlAfterBlockedHistoryPop,
   shouldBlockEditorBeforeUnload,
@@ -136,6 +139,31 @@ test.describe("editor unsaved exit guard helpers", () => {
     expect(isForcedEditorExitUrl("/login")).toBe(true)
 
     clearForcedEditorExitUrl()
+    expect(isForcedEditorExitUrl("/")).toBe(false)
+  })
+
+  test("scheduled forced exit does not bypass until router navigation activates it", () => {
+    clearForcedEditorExitUrl()
+    scheduleForcedEditorExitUrl("/")
+
+    // Async gap before router.replace: user click to `/` must stay guarded.
+    expect(isForcedEditorExitUrl("/")).toBe(false)
+    expect(isForcedEditorExitUrl("/?utm=1")).toBe(false)
+
+    activateScheduledForcedEditorExitIfMatching("/")
+    expect(isForcedEditorExitUrl("/")).toBe(true)
+
+    clearForcedEditorExitUrl()
+  })
+
+  test("clears stale scheduled mark when forced redirect never reaches router", () => {
+    clearForcedEditorExitUrl()
+    scheduleForcedEditorExitUrl("/")
+    clearScheduledForcedEditorExitUrl()
+
+    expect(isForcedEditorExitUrl("/")).toBe(false)
+    markForcedEditorExitUrl("/")
+    expect(allowForcedEditorExitRoute("/")).toBe(true)
     expect(isForcedEditorExitUrl("/")).toBe(false)
   })
 

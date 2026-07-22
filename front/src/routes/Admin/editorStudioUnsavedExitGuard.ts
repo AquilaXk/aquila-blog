@@ -52,24 +52,52 @@ const editorRoutePathname = (url: string) => url.split(/[?#]/)[0] || ""
 /**
  * Explicit forced-exit bypass for non-login destinations (e.g. admin-loss → `/`).
  * Login stays URL-based; home must not bypass on ordinary user clicks.
+ *
+ * Schedule → activate (sync with router.push/replace) → consume (routeChangeStart)
+ * so the mark cannot bypass unrelated navigations in the async gap before routeChangeStart.
  */
-let forcedEditorExitPath: string | null = null
+let scheduledForcedEditorExitPath: string | null = null
+let activeForcedEditorExitPath: string | null = null
 
-/** Mark the next matching navigation as a forced exit (admin-loss redirect, etc.). */
-export const markForcedEditorExitUrl = (url: string) => {
-  forcedEditorExitPath = editorRoutePathname(url)
+/** Schedule a forced exit; does not bypass until activateScheduledForcedEditorExitIfMatching. */
+export const scheduleForcedEditorExitUrl = (url: string) => {
+  scheduledForcedEditorExitPath = editorRoutePathname(url)
 }
 
-/** Clear a pending forced-exit mark (tests / cleanup). */
+/**
+ * Activate a scheduled forced exit synchronously with the matching router call.
+ * Tests may call this immediately after schedule to simulate in-flight navigation.
+ */
+export const activateScheduledForcedEditorExitIfMatching = (url: string) => {
+  const path = editorRoutePathname(url)
+  if (scheduledForcedEditorExitPath !== null && path === scheduledForcedEditorExitPath) {
+    activeForcedEditorExitPath = scheduledForcedEditorExitPath
+    scheduledForcedEditorExitPath = null
+  }
+}
+
+/** @deprecated Prefer schedule + activate; immediate mark for unit tests only. */
+export const markForcedEditorExitUrl = (url: string) => {
+  scheduleForcedEditorExitUrl(url)
+  activateScheduledForcedEditorExitIfMatching(url)
+}
+
+/** Clear scheduled/active forced-exit marks (tests / cleanup / failed redirect). */
 export const clearForcedEditorExitUrl = () => {
-  forcedEditorExitPath = null
+  scheduledForcedEditorExitPath = null
+  activeForcedEditorExitPath = null
+}
+
+/** Drop a schedule that never reached router.push/replace (failed/cancelled redirect). */
+export const clearScheduledForcedEditorExitUrl = () => {
+  scheduledForcedEditorExitPath = null
 }
 
 /** Consume the mark once the matching forced navigation is allowed through. */
 export const consumeForcedEditorExitUrl = (url: string) => {
   const path = editorRoutePathname(url)
-  if (forcedEditorExitPath !== null && path === forcedEditorExitPath) {
-    forcedEditorExitPath = null
+  if (activeForcedEditorExitPath !== null && path === activeForcedEditorExitPath) {
+    activeForcedEditorExitPath = null
   }
 }
 
@@ -77,7 +105,7 @@ export const consumeForcedEditorExitUrl = (url: string) => {
 export const isForcedEditorExitUrl = (url: string) => {
   const path = editorRoutePathname(url)
   if (path === "/login" || path.startsWith("/login/")) return true
-  return forcedEditorExitPath !== null && path === forcedEditorExitPath
+  return activeForcedEditorExitPath !== null && path === activeForcedEditorExitPath
 }
 
 /** Allow forced exit navigation: consume mark and signal beforeunload bypass. */

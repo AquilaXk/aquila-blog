@@ -17,6 +17,8 @@ on:
       - "docs/**"
       - "tools/guards/check-forbidden-tracked-files.sh"
       - "tools/guards/check-terraform-no-world-open-sg.sh"
+      - "tools/guards/check-public-api-caddy-drift.sh"
+      - "tools/guards/public-api-read-caddy-paths.sot"
       - "infra/**"
       - "tools/test/check-forbidden-tracked-files.test.sh"
       - ".github/workflows/**"

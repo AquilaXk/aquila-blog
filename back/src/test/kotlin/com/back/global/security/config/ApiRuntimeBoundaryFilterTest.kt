@@ -14,7 +14,7 @@ class ApiRuntimeBoundaryFilterTest {
     @Test
     @DisplayName("read 모드에서 댓글 조회 GET 경로는 차단하지 않는다")
     fun `read mode allows comments get endpoint`() {
-        val filter = ApiRuntimeBoundaryFilter("read", createApiCorsPolicy())
+        val filter = createFilter("read")
         val request = MockHttpServletRequest("GET", "/post/api/v1/posts/466/comments")
         val response = MockHttpServletResponse()
 
@@ -24,9 +24,27 @@ class ApiRuntimeBoundaryFilterTest {
     }
 
     @Test
+    @DisplayName("read 모드에서 related/author와 images GET 경로는 차단하지 않는다")
+    fun `read mode allows related author and images get endpoints`() {
+        val filter = createFilter("read")
+
+        for (path in listOf(
+            "/post/api/v1/posts/related/author",
+            "/post/api/v1/images/posts/2026/03/cover.webp",
+        )) {
+            val request = MockHttpServletRequest("GET", path)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+    }
+
+    @Test
     @DisplayName("read 모드에서 외부 cloud content GET HEAD 경로는 차단하지 않는다")
     fun `read mode allows external cloud content get and head endpoints`() {
-        val filter = ApiRuntimeBoundaryFilter("read", createApiCorsPolicy())
+        val filter = createFilter("read")
 
         for (method in listOf("GET", "HEAD")) {
             val request = MockHttpServletRequest(method, "/system/api/v1/adm/cloud/files/12/external-content")
@@ -41,7 +59,7 @@ class ApiRuntimeBoundaryFilterTest {
     @Test
     @DisplayName("read 모드에서 게시글 첨부파일 GET HEAD 경로는 차단하지 않는다")
     fun `read mode allows post file get and head endpoints`() {
-        val filter = ApiRuntimeBoundaryFilter("read", createApiCorsPolicy())
+        val filter = createFilter("read")
 
         for (method in listOf("GET", "HEAD")) {
             val request = MockHttpServletRequest(method, "/post/api/v1/files/posts/2026/03/manual.pdf")
@@ -54,9 +72,24 @@ class ApiRuntimeBoundaryFilterTest {
     }
 
     @Test
+    @DisplayName("worker/none 모드는 API를 fail-closed로 차단한다")
+    fun `worker and none modes fail closed for api`() {
+        for (mode in listOf("worker", "none")) {
+            val filter = createFilter(mode)
+            val request = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+            assertThat(response.contentAsString).contains("503-1")
+        }
+    }
+
+    @Test
     @DisplayName("런타임 경계 503 응답에도 CORS 헤더를 포함한다")
     fun `blocked runtime boundary response includes cors headers`() {
-        val filter = ApiRuntimeBoundaryFilter("read", createApiCorsPolicy())
+        val filter = createFilter("read")
         val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/comments")
         request.addHeader("Origin", "https://www.aquilaxk.site")
         val response = MockHttpServletResponse()
@@ -73,7 +106,7 @@ class ApiRuntimeBoundaryFilterTest {
     @Test
     @DisplayName("admin 모드에서도 댓글 경로 OPTIONS preflight는 차단하지 않는다")
     fun `admin mode allows comments options preflight`() {
-        val filter = ApiRuntimeBoundaryFilter("admin", createApiCorsPolicy())
+        val filter = createFilter("admin")
         val request = MockHttpServletRequest("OPTIONS", "/post/api/v1/posts/466/comments")
         request.addHeader("Origin", "https://www.aquilaxk.site")
         request.addHeader("Access-Control-Request-Method", "POST")
@@ -83,6 +116,13 @@ class ApiRuntimeBoundaryFilterTest {
 
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
     }
+
+    private fun createFilter(mode: String): ApiRuntimeBoundaryFilter =
+        ApiRuntimeBoundaryFilter(
+            mode,
+            createApiCorsPolicy(),
+            TestPublicApiRequestMatchers.defaultMatcher(),
+        )
 
     private fun createApiCorsPolicy(): ApiCorsPolicy =
         ApiCorsPolicy(

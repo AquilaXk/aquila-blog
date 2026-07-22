@@ -32,6 +32,7 @@ class ApiRateLimitBackstopFilterTest {
                 clientIpResolverProvider = objectProvider(ClientIpResolver(), ClientIpResolver::class.java),
                 meterRegistryProvider = objectProvider(SimpleMeterRegistry(), MeterRegistry::class.java),
                 environment = MockEnvironment().apply { setActiveProfiles("test") },
+                publicApiRequestMatcher = TestPublicApiRequestMatchers.defaultMatcher(),
             )
 
         repeat(120) {
@@ -361,6 +362,7 @@ class ApiRateLimitBackstopFilterTest {
             MockEnvironment().apply {
                 setActiveProfiles(if (prodRuntime) "prod" else "test")
             },
+        publicApiRequestMatcher = TestPublicApiRequestMatchers.defaultMatcher(),
         enabled = enabled,
         requireRedisInProd = requireRedisInProd,
         publicReadLimitPerMinute = publicReadLimitPerMinute,

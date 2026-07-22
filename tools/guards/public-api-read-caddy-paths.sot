@@ -1,0 +1,15 @@
+/post/api/v1/files/*
+/post/api/v1/images/*
+/post/api/v1/posts
+/post/api/v1/posts/*
+/post/api/v1/posts/*/comments
+/post/api/v1/posts/*/comments/*
+/post/api/v1/posts/bootstrap
+/post/api/v1/posts/explore
+/post/api/v1/posts/explore/cursor
+/post/api/v1/posts/feed
+/post/api/v1/posts/feed/cursor
+/post/api/v1/posts/related/author
+/post/api/v1/posts/search
+/post/api/v1/posts/tags
+/system/api/v1/adm/cloud/files/*/external-content

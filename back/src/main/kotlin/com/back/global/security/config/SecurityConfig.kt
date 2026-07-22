@@ -10,13 +10,14 @@ import com.back.global.security.config.oauth2.CustomOAuth2LoginFailureHandler
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
 import com.back.global.security.config.oauth2.CustomOidcUserService
+import com.back.global.web.ErrorResponseSource
+import com.back.global.web.ErrorResponseWriter
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
-import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -26,7 +27,6 @@ import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 import org.springframework.security.web.util.matcher.RequestMatcher
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
-import tools.jackson.databind.ObjectMapper
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -44,7 +44,7 @@ class SecurityConfig(
     private val postSecurityConfigurer: PostSecurityConfigurer,
     private val cloudSecurityConfigurer: CloudSecurityConfigurer,
     private val apiCorsPolicy: ApiCorsPolicy,
-    private val objectMapper: ObjectMapper,
+    private val errorResponseWriter: ErrorResponseWriter,
     private val environment: Environment,
 ) {
     @Bean
@@ -132,26 +132,26 @@ class SecurityConfig(
             exceptionHandling {
                 authenticationEntryPoint =
                     AuthenticationEntryPoint { request, response, _ ->
-                        if (response.isCommitted) {
-                            return@AuthenticationEntryPoint
-                        }
                         apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
                         applyNoStoreHeaders(response)
-                        response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
-                        response.status = 401
-                        response.writer.write(objectMapper.writeValueAsString(ErrorCode.UNAUTHORIZED.toRsData()))
+                        errorResponseWriter.write(
+                            request = request,
+                            response = response,
+                            errorCode = ErrorCode.UNAUTHORIZED,
+                            source = ErrorResponseSource.SECURITY,
+                        )
                     }
 
                 accessDeniedHandler =
                     AccessDeniedHandler { request, response, _ ->
-                        if (response.isCommitted) {
-                            return@AccessDeniedHandler
-                        }
                         apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
                         applyNoStoreHeaders(response)
-                        response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
-                        response.status = 403
-                        response.writer.write(objectMapper.writeValueAsString(ErrorCode.ACCESS_DENIED.toRsData()))
+                        errorResponseWriter.write(
+                            request = request,
+                            response = response,
+                            errorCode = ErrorCode.ACCESS_DENIED,
+                            source = ErrorResponseSource.SECURITY,
+                        )
                     }
             }
         }
@@ -169,7 +169,7 @@ class SecurityConfig(
     fun apiMutationCsrfGuardFilter(): ApiMutationCsrfGuardFilter =
         ApiMutationCsrfGuardFilter(
             apiCorsPolicy = apiCorsPolicy,
-            objectMapper = objectMapper,
+            errorResponseWriter = errorResponseWriter,
         )
 
     private fun applyNoStoreHeaders(response: HttpServletResponse) {

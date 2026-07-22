@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
+import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.config.AccessTokenAuthenticationHandler
@@ -26,9 +27,12 @@ import com.back.global.security.config.oauth2.CustomOAuth2LoginFailureHandler
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
 import com.back.global.security.config.oauth2.CustomOidcUserService
+import com.back.global.web.ErrorResponseWriter
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.application.Rq
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -121,10 +125,22 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
             )
 
         @Bean
+        fun meterRegistry(): MeterRegistry = SimpleMeterRegistry()
+
+        @Bean
+        fun errorMetrics(meterRegistry: MeterRegistry): ErrorMetrics = ErrorMetrics(meterRegistry)
+
+        @Bean
+        fun errorResponseWriter(
+            objectMapper: ObjectMapper,
+            errorMetrics: ErrorMetrics,
+        ): ErrorResponseWriter = ErrorResponseWriter(objectMapper, errorMetrics)
+
+        @Bean
         fun customAuthenticationFilter(
             apiCorsPolicy: ApiCorsPolicy,
             environment: Environment,
-            objectMapper: ObjectMapper,
+            errorResponseWriter: ErrorResponseWriter,
         ): CustomAuthenticationFilter {
             val rq = mock(Rq::class.java)
             val actorApplicationService = mock(ActorApplicationService::class.java)
@@ -186,7 +202,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                 accessTokenAuthenticationHandler = accessTokenAuthenticationHandler,
                 refreshTokenAuthenticationHandler = refreshTokenAuthenticationHandler,
                 clientIpResolver = mock(ClientIpResolver::class.java),
-                objectMapper = objectMapper,
+                errorResponseWriter = errorResponseWriter,
                 publicApiRequestMatcher = PublicApiRequestMatcher(emptyList<PublicApiRouteContributor>()),
                 apiCorsPolicy = apiCorsPolicy,
                 environment = environment,

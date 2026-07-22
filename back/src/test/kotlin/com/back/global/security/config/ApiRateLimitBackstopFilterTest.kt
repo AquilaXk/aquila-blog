@@ -1,6 +1,7 @@
 package com.back.global.security.config
 
 import com.back.global.cache.application.port.output.RedisKeyValuePort
+import com.back.global.web.ErrorResponseWriterTestSupport
 import com.back.global.web.application.ClientIpResolver
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -31,6 +32,7 @@ class ApiRateLimitBackstopFilterTest {
                 redisKeyValuePortProvider = objectProvider(redis, RedisKeyValuePort::class.java),
                 clientIpResolverProvider = objectProvider(ClientIpResolver(), ClientIpResolver::class.java),
                 meterRegistryProvider = objectProvider(SimpleMeterRegistry(), MeterRegistry::class.java),
+                errorResponseWriter = ErrorResponseWriterTestSupport.createWriter(),
                 environment = MockEnvironment().apply { setActiveProfiles("test") },
             )
 
@@ -56,6 +58,8 @@ class ApiRateLimitBackstopFilterTest {
         assertThat(limited.status).isEqualTo(429)
         assertThat(limited.getHeader("Retry-After")).isEqualTo("60")
         assertThat(limited.contentAsString).contains("\"resultCode\":\"429-10\"")
+        assertThat(limited.contentAsString).doesNotContain("\"bucket\"")
+        assertThat(limited.contentType).startsWith("application/json")
         assertThat(redis.expiredKeys()).anyMatch { it.contains("public-read") && it.contains("203.0.113.10") }
         assertThat(
             meterRegistry
@@ -102,7 +106,9 @@ class ApiRateLimitBackstopFilterTest {
         val limited = runFilter(filter, "GET", path)
 
         assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString).contains("public-read")
+        assertThat(limited.contentAsString)
+            .contains("\"resultCode\":\"429-10\"")
+            .doesNotContain("\"bucket\"")
         assertThat(redis.expiredKeys()).anyMatch { it.contains("public-read") }
     }
 
@@ -129,20 +135,25 @@ class ApiRateLimitBackstopFilterTest {
     @Test
     @DisplayName("SSE 신규 연결은 public read와 별도 bucket으로 제한한다")
     fun `sse stream open is rate limited separately`() {
-        val filter = createFilter(redis = InMemoryRedisKeyValuePort(), sseLimitPerMinute = 1)
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, sseLimitPerMinute = 1)
 
         assertThat(runFilter(filter, "GET", "/member/api/v1/notifications/stream").status).isEqualTo(HttpServletResponse.SC_OK)
 
         val limited = runFilter(filter, "GET", "/member/api/v1/notifications/stream")
 
         assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString).contains("sse-open")
+        assertThat(limited.contentAsString)
+            .contains("\"resultCode\":\"429-10\"")
+            .doesNotContain("\"bucket\"")
+        assertThat(redis.expiredKeys()).anyMatch { it.contains("sse-open") }
     }
 
     @Test
     @DisplayName("알림 polling GET은 authenticated-read bucket으로 제한한다")
     fun `notification polling get endpoints use authenticated read bucket`() {
-        val filter = createFilter(redis = InMemoryRedisKeyValuePort(), authenticatedReadLimitPerMinute = 2)
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, authenticatedReadLimitPerMinute = 2)
 
         assertThat(runFilter(filter, "GET", "/member/api/v1/notifications/snapshot").status)
             .isEqualTo(HttpServletResponse.SC_OK)
@@ -152,33 +163,44 @@ class ApiRateLimitBackstopFilterTest {
         val limited = runFilter(filter, "GET", "/member/api/v1/notifications")
 
         assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString).contains("authenticated-read")
+        assertThat(limited.contentAsString)
+            .contains("\"resultCode\":\"429-10\"")
+            .doesNotContain("\"bucket\"")
+        assertThat(redis.expiredKeys()).anyMatch { it.contains("authenticated-read") }
     }
 
     @Test
     @DisplayName("OAuth와 signup/auth 요청은 auth bucket으로 제한한다")
     fun `oauth and signup auth paths use auth bucket`() {
-        val filter = createFilter(redis = InMemoryRedisKeyValuePort(), authLimitPerMinute = 1)
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, authLimitPerMinute = 1)
 
         assertThat(runFilter(filter, "GET", "/login/oauth2/code/github").status).isEqualTo(HttpServletResponse.SC_OK)
 
         val limited = runFilter(filter, "POST", "/member/api/v1/signup/email/start")
 
         assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString).contains("auth")
+        assertThat(limited.contentAsString)
+            .contains("\"resultCode\":\"429-10\"")
+            .doesNotContain("\"bucket\"")
+        assertThat(redis.expiredKeys()).anyMatch { it.contains(":auth:") }
     }
 
     @Test
     @DisplayName("mutating API는 mutation bucket으로 제한한다")
     fun `mutating api uses mutation bucket`() {
-        val filter = createFilter(redis = InMemoryRedisKeyValuePort(), mutationLimitPerMinute = 1)
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, mutationLimitPerMinute = 1)
 
         assertThat(runFilter(filter, "POST", "/post/api/v1/posts/1/hit").status).isEqualTo(HttpServletResponse.SC_OK)
 
         val limited = runFilter(filter, "DELETE", "/post/api/v1/posts/1")
 
         assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString).contains("mutation")
+        assertThat(limited.contentAsString)
+            .contains("\"resultCode\":\"429-10\"")
+            .doesNotContain("\"bucket\"")
+        assertThat(redis.expiredKeys()).anyMatch { it.contains("mutation") }
     }
 
     @Test
@@ -357,6 +379,7 @@ class ApiRateLimitBackstopFilterTest {
         redisKeyValuePortProvider = objectProvider(redis, RedisKeyValuePort::class.java),
         clientIpResolverProvider = objectProvider(clientIpResolver, ClientIpResolver::class.java),
         meterRegistryProvider = objectProvider(meterRegistry, MeterRegistry::class.java),
+        errorResponseWriter = ErrorResponseWriterTestSupport.createWriter(),
         environment =
             MockEnvironment().apply {
                 setActiveProfiles(if (prodRuntime) "prod" else "test")

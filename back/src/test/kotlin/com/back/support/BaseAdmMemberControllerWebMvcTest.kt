@@ -7,6 +7,7 @@ import com.back.boundedContexts.member.subContexts.legalAcceptance.application.p
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
+import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
 import org.junit.jupiter.api.BeforeAll
@@ -32,7 +33,10 @@ import org.springframework.test.web.servlet.MockMvc
     excludeFilters = [
         ComponentScan.Filter(
             type = FilterType.ASSIGNABLE_TYPE,
-            classes = [CustomAuthenticationFilter::class],
+            classes = [
+                CustomAuthenticationFilter::class,
+                ApiRateLimitBackstopFilter::class,
+            ],
         ),
     ],
 )

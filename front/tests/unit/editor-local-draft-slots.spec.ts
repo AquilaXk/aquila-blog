@@ -23,6 +23,7 @@ import {
   isLocalDraftBaselineSettleLoadingKey,
   resolveCreateWritePostId,
   resolveLocalDraftShouldAdoptBaseline,
+  shouldReleasePostIdTransitionGate,
 } from "../../src/routes/Admin/useEditorStudioDraftLifecycleModel"
 
 const createStorage = (): Storage => {
@@ -725,19 +726,61 @@ test.describe("editor local draft context slots", () => {
     ).toEqual({ action: "adopt-baseline", fingerprint: '{"title":"loaded"}' })
   })
 
-  test("failed post load settle clears post id transition gate for autosave", () => {
-    expect(isLocalDraftAutosaveGatedForPostIdTransition("create", "42", false)).toBe(false)
+  test("failed post load settle keeps gate until user edits or edit context restores", () => {
+    const staleBodyFingerprint = '{"title":"post-a-body"}'
+
+    expect(isLocalDraftAutosaveGatedForPostIdTransition("create", "42", true)).toBe(true)
+
+    expect(
+      shouldReleasePostIdTransitionGate({
+        editorMode: "create",
+        postId: "42",
+        editorFingerprint: staleBodyFingerprint,
+        transitionBaselineFingerprint: staleBodyFingerprint,
+        awaitingLoad: true,
+      })
+    ).toBe(false)
+
+    expect(
+      shouldReleasePostIdTransitionGate({
+        editorMode: "create",
+        postId: "42",
+        editorFingerprint: '{"title":"user-edited"}',
+        transitionBaselineFingerprint: staleBodyFingerprint,
+        awaitingLoad: true,
+      })
+    ).toBe(true)
+
+    expect(
+      shouldReleasePostIdTransitionGate({
+        editorMode: "edit",
+        postId: "42",
+        editorFingerprint: staleBodyFingerprint,
+        transitionBaselineFingerprint: staleBodyFingerprint,
+        awaitingLoad: true,
+      })
+    ).toBe(true)
+
+    expect(
+      shouldReleasePostIdTransitionGate({
+        editorMode: "create",
+        postId: "",
+        editorFingerprint: staleBodyFingerprint,
+        transitionBaselineFingerprint: staleBodyFingerprint,
+        awaitingLoad: true,
+      })
+    ).toBe(true)
 
     expect(
       decideLocalDraftAutosave({
         loadingKey: "",
         shouldAdoptBaseline: false,
-        isPostIdTransitionGated: false,
+        isPostIdTransitionGated: true,
         hasDraftContent: true,
-        editorFingerprint: '{"title":"edited-after-failed-load"}',
-        lastArmedFingerprint: '{"title":"previous-edit-body"}',
+        editorFingerprint: staleBodyFingerprint,
+        lastArmedFingerprint: '{"title":"old"}',
         pendingRestorableDraftFingerprint: null,
       })
-    ).toEqual({ action: "schedule" })
+    ).toEqual({ action: "skip" })
   })
 })

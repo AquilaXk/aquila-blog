@@ -69,6 +69,35 @@ export const isLocalDraftAutosaveGatedForPostIdTransition = (
 ): boolean =>
   awaitingPostLoad && editorMode === "create" && postId.trim().length > 0
 
+/**
+ * Failed post load must not release the create-slot gate immediately — stale edit body
+ * would autosave into create.v2. Release only when edit context restores or the user edits.
+ */
+export const shouldReleasePostIdTransitionGate = (input: {
+  editorMode: EditorMode
+  postId: string
+  editorFingerprint: string
+  transitionBaselineFingerprint: string | null
+  awaitingLoad: boolean
+}): boolean => {
+  if (!input.awaitingLoad) {
+    return false
+  }
+  if (input.editorMode === "edit") {
+    return true
+  }
+  if (input.postId.trim().length === 0) {
+    return true
+  }
+  if (
+    input.transitionBaselineFingerprint != null &&
+    input.editorFingerprint !== input.transitionBaselineFingerprint
+  ) {
+    return true
+  }
+  return false
+}
+
 const CREATE_WRITE_MISSING_POST_ID_STATUS_TEXT =
   "글 작성 응답에 글 ID가 없습니다. 로컬 임시저장은 유지됩니다. 다시 시도해주세요."
 
@@ -295,9 +324,9 @@ export const useEditorStudioLocalDraftLifecycle = ({
   const [baselineReadyEpoch, setBaselineReadyEpoch] = useState(0)
   const [postLoadInFlightEpoch, setPostLoadInFlightEpoch] = useState(0)
   const [postIdTransitionAwaitingLoad, setPostIdTransitionAwaitingLoad] = useState(false)
+  const postIdTransitionEditorFingerprintRef = useRef<string | null>(null)
   const prevEditorModeRef = useRef(editorMode)
   const prevPostIdRef = useRef(postId)
-  const prevLoadingKeyRef = useRef(loadingKey)
   const isPostIdTransitionGated = isLocalDraftAutosaveGatedForPostIdTransition(
     editorMode,
     postId,
@@ -308,42 +337,6 @@ export const useEditorStudioLocalDraftLifecycle = ({
   const isPostLoadInFlight = postLoadInFlightCountRef.current > 0
   const isPostLoadInFlightRef = useRef(isPostLoadInFlight)
   isPostLoadInFlightRef.current = isPostLoadInFlight
-
-  useEffect(() => {
-    const normalizedPostId = postId.trim()
-    const prevNormalizedPostId = prevPostIdRef.current.trim()
-    const postIdChanged = normalizedPostId !== prevNormalizedPostId
-    const enteredCreateWithPostId =
-      editorMode === "create" &&
-      normalizedPostId.length > 0 &&
-      (prevEditorModeRef.current === "edit" || postIdChanged)
-
-    if (enteredCreateWithPostId) {
-      setPostIdTransitionAwaitingLoad(true)
-    }
-
-    if (editorMode === "edit") {
-      setPostIdTransitionAwaitingLoad(false)
-    }
-
-    prevEditorModeRef.current = editorMode
-    prevPostIdRef.current = postId
-  }, [editorMode, postId])
-
-  useEffect(() => {
-    const postLoadFailedSettle =
-      prevLoadingKeyRef.current === "postOne" &&
-      loadingKey.length === 0 &&
-      !pendingSuccessfulBaselineSettleRef.current &&
-      editorMode === "create" &&
-      postId.trim().length > 0
-
-    if (postLoadFailedSettle) {
-      setPostIdTransitionAwaitingLoad(false)
-    }
-
-    prevLoadingKeyRef.current = loadingKey
-  }, [baselineReadyEpoch, editorMode, loadingKey, postId])
 
   const signalLocalDraftBaselineReady = useCallback((signal?: LocalDraftBaselineReadySignal) => {
     pendingSuccessfulBaselineSettleRef.current = true
@@ -397,6 +390,37 @@ export const useEditorStudioLocalDraftLifecycle = ({
     () => buildLocalDraftFingerprint(localDraftCore),
     [buildLocalDraftFingerprint, localDraftCore]
   )
+
+  useEffect(() => {
+    const normalizedPostId = postId.trim()
+    const prevNormalizedPostId = prevPostIdRef.current.trim()
+    const postIdChanged = normalizedPostId !== prevNormalizedPostId
+    const enteredCreateWithPostId =
+      editorMode === "create" &&
+      normalizedPostId.length > 0 &&
+      (prevEditorModeRef.current === "edit" || postIdChanged)
+
+    if (enteredCreateWithPostId) {
+      setPostIdTransitionAwaitingLoad(true)
+      postIdTransitionEditorFingerprintRef.current = localDraftFingerprint
+    }
+
+    if (
+      shouldReleasePostIdTransitionGate({
+        editorMode,
+        postId: normalizedPostId,
+        editorFingerprint: localDraftFingerprint,
+        transitionBaselineFingerprint: postIdTransitionEditorFingerprintRef.current,
+        awaitingLoad: postIdTransitionAwaitingLoad,
+      })
+    ) {
+      setPostIdTransitionAwaitingLoad(false)
+      postIdTransitionEditorFingerprintRef.current = null
+    }
+
+    prevEditorModeRef.current = editorMode
+    prevPostIdRef.current = postId
+  }, [editorMode, localDraftFingerprint, postId, postIdTransitionAwaitingLoad])
 
   const saveLocalDraft = useCallback((options?: {
     silent?: boolean

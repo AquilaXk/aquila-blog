@@ -74,6 +74,34 @@ test.describe("editor unsaved exit guard helpers", () => {
       })
     ).toBe(false)
 
+    // Unrestored local draft metadata must not make pristine /editor/new dirty
+    // (that would block the automatic replace to /editor/{id}).
+    expect(
+      isEditorUnsavedDirtyByFingerprint({
+        isSaving: false,
+        editorMode: "create",
+        hasSelectedManagedPost: false,
+        editorStateFingerprint: pristine,
+        serverBaselineFingerprint: "",
+        localDraftFingerprint: localSaved,
+        localDraftSavedAt: "2026-07-22T01:00:00.000Z",
+        pristineCreateFingerprint: pristine,
+      })
+    ).toBe(false)
+
+    expect(
+      isEditorUnsavedDirtyByFingerprint({
+        isSaving: false,
+        editorMode: "create",
+        hasSelectedManagedPost: false,
+        editorStateFingerprint: metaOnly,
+        serverBaselineFingerprint: "",
+        localDraftFingerprint: localSaved,
+        localDraftSavedAt: "2026-07-22T01:00:00.000Z",
+        pristineCreateFingerprint: pristine,
+      })
+    ).toBe(true)
+
     expect(
       isEditorUnsavedDirtyByFingerprint({
         isSaving: true,
@@ -154,6 +182,19 @@ test.describe("editor unsaved exit guard helpers", () => {
     expect(resolveEditorHistoryNavigationDirection(2, 3)).toBe("forward")
     expect(resolveEditorHistoryNavigationDirection(2, 1)).toBe("back")
     expect(resolveEditorHistoryNavigationDirection(2, null)).toBe("back")
+    // Unstamped forward (pre-guard history entry) must use session indices.
+    expect(
+      resolveEditorHistoryNavigationDirection(2, null, {
+        currentSessionIndex: 4,
+        destinationSessionIndex: 5,
+      })
+    ).toBe("forward")
+    expect(
+      resolveEditorHistoryNavigationDirection(2, null, {
+        currentSessionIndex: 4,
+        destinationSessionIndex: 3,
+      })
+    ).toBe("back")
     expect(resolveEditorHistoryNavigationDelta("forward")).toBe(1)
     expect(resolveEditorHistoryNavigationDelta("back")).toBe(-1)
 

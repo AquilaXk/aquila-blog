@@ -15,6 +15,10 @@ export type EditorUnsavedDirtyFingerprintInput = {
 /**
  * Dirty for exit-guard purposes: compare fingerprints, not persistence display text.
  * Empty title+body must still block when meta (or cleared edit baseline) differs.
+ *
+ * Create-mode local drafts: `localDraftSavedAt` alone means "restore available", not that
+ * the draft is loaded into the editor. Only use the local-draft fingerprint as baseline
+ * after the editor has left the pristine create state (restored, autosaved, or edited).
  */
 export const isEditorUnsavedDirtyByFingerprint = ({
   isSaving,
@@ -35,7 +39,9 @@ export const isEditorUnsavedDirtyByFingerprint = ({
     return editorStateFingerprint !== pristineCreateFingerprint
   }
 
-  if (localDraftSavedAt) {
+  const hasActiveLocalDraftBaseline =
+    Boolean(localDraftSavedAt) && editorStateFingerprint !== pristineCreateFingerprint
+  if (hasActiveLocalDraftBaseline) {
     return editorStateFingerprint !== localDraftFingerprint
   }
   return editorStateFingerprint !== pristineCreateFingerprint
@@ -125,11 +131,49 @@ export const withEditorUnsavedGuardHistoryIdx = (
   [EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY]: idx,
 })
 
+export type EditorHistorySessionIndices = {
+  currentSessionIndex: number | null
+  destinationSessionIndex: number | null
+}
+
+/** Browser session history index (Navigation API) when available. */
+export const readEditorSessionHistoryIndex = (): number | null => {
+  if (typeof window === "undefined") return null
+  const navigation = (
+    window as Window & {
+      navigation?: { currentEntry?: { index?: number } | null } | null
+    }
+  ).navigation
+  const index = navigation?.currentEntry?.index
+  return typeof index === "number" && Number.isFinite(index) ? index : null
+}
+
+/**
+ * Prefer stamped guard indices. When the destination was created before the guard
+ * stamped history (common after Back into the editor, then Forward), fall back to
+ * browser session history indices so Forward is not misclassified as Back.
+ */
 export const resolveEditorHistoryNavigationDirection = (
   currentIdx: number,
-  destinationIdx: number | null
-): EditorHistoryNavigationDirection =>
-  destinationIdx != null && destinationIdx > currentIdx ? "forward" : "back"
+  destinationIdx: number | null,
+  sessionIndices?: EditorHistorySessionIndices | null
+): EditorHistoryNavigationDirection => {
+  if (destinationIdx != null) {
+    return destinationIdx > currentIdx ? "forward" : "back"
+  }
+
+  const currentSessionIndex = sessionIndices?.currentSessionIndex
+  const destinationSessionIndex = sessionIndices?.destinationSessionIndex
+  if (
+    typeof currentSessionIndex === "number" &&
+    typeof destinationSessionIndex === "number" &&
+    currentSessionIndex !== destinationSessionIndex
+  ) {
+    return destinationSessionIndex > currentSessionIndex ? "forward" : "back"
+  }
+
+  return "back"
+}
 
 export const resolveEditorHistoryNavigationDelta = (
   direction: EditorHistoryNavigationDirection

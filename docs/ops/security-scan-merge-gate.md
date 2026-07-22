@@ -37,6 +37,8 @@ Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets
 
 `NVD_API_KEY` must exist in repo Actions secrets. Missing secret fails `backend-dependency-check` on every PR/push (by design).
 
+`backend-dependency-check` caches `~/.gradle/dependency-check-data` and allows up to 120 minutes so the first cold NVD sync is not cancelled by the old 45-minute job timeout.
+
 ### Local template / owner env
 
 | Location | Purpose |

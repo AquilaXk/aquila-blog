@@ -43,7 +43,8 @@ jobs:
 
   backend-dependency-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Cold NVD sync can exceed 45m; warm cache runs are much shorter (#1124).
+    timeout-minutes: 120
     permissions:
       contents: read
     steps:
@@ -58,6 +59,14 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: gradle
+
+      - name: Cache OWASP dependency-check NVD data
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.gradle/dependency-check-data
+          key: owasp-nvd-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            owasp-nvd-${{ runner.os }}-
 
       - name: Run backend dependency vulnerability scan
         id: backend_dependency_scan

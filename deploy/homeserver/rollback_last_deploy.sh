@@ -12,7 +12,10 @@ BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
 CADDY_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
-NETWORK_NAME="blog_home_default"
+EDGE_NETWORK_NAME="blog_home_edge"
+APP_NETWORK_NAME="blog_home_app"
+OBSERVE_NETWORK_NAME="blog_home_observe"
+NETWORK_NAME="${EDGE_NETWORK_NAME}"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-20}"
@@ -54,6 +57,7 @@ resolve_compose_profiles() {
 
 compose() {
   local profiles
+  bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
   profiles="$(resolve_compose_profiles)"
   if [[ -n "${profiles}" ]]; then
     COMPOSE_PROFILES="${profiles}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -577,7 +581,7 @@ probe_backend_http_code() {
   local backend="$1"
   local host
   host="$(backend_http_host "${backend}")"
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --network "${APP_NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
     -s -o /dev/null -w "%{http_code}" \

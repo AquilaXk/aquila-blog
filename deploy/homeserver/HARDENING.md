@@ -46,6 +46,13 @@ ss -tulpen | grep -E '127\.0\.0\.1:(80|443)\b'
 curl -sS -o /dev/null -w '%{http_code}\n' https://<api_domain>/actuator/health
 ```
 
+## Env / network 분리 (#1130)
+
+- Host `deploy/homeserver/.env.prod`는 `docker compose --env-file` 치환용이다. 컨테이너 `env_file`로 통째로 넣지 않는다.
+- 배포 스크립트는 `materialize_service_env.sh`로 `.env.caddy.prod` / `.env.back.prod`를 생성한다(gitignore).
+- `postgres_exporter`는 `PROD___POSTGRES_EXPORTER__*` + `pg_monitor` 전용 role만 사용한다(superuser 금지).
+- Compose networks: `blog_home_edge` / `blog_home_app` / `blog_home_data` / `blog_home_observe`.
+
 ## Redis 영속 계약 (#1129)
 
 - 운영 `redis_1`은 `appendonly yes` + named volume `redis_data:/data`를 사용한다. ephemeral 계약으로 바꾸지 않는다.

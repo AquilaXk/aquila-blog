@@ -11,6 +11,7 @@ WWW_URL="https://www.aquilaxk.site/"
 API_ROOT_URL="https://api.aquilaxk.site/"
 
 compose() {
+  bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 

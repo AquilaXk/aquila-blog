@@ -7,11 +7,15 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
-NETWORK_NAME="blog_home_default"
+EDGE_NETWORK_NAME="blog_home_edge"
+APP_NETWORK_NAME="blog_home_app"
+OBSERVE_NETWORK_NAME="blog_home_observe"
+NETWORK_NAME="${EDGE_NETWORK_NAME}"
 
 declare -a FAILURES=()
 
 compose() {
+  bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -102,7 +106,7 @@ query_grafana_datasource_uid_status() {
 
   local response code
   response="$(
-    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
       --connect-timeout 3 \
       --max-time 8 \
       -sS \

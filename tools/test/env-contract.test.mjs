@@ -175,7 +175,10 @@ const baseHomeServerEnv = [
   "GRAFANA_ROOT_URL=https://grafana.aquilaxk.site",
   "PROD___SPRING__DATASOURCE__USERNAME=blog_app",
   "PROD___SPRING__DATASOURCE__PASSWORD=valid-db-password",
+  "PROD___SPRING__FLYWAY__PASSWORD=valid-flyway-password",
   "PROD___POSTGRES__PASSWORD=valid-postgres-password",
+  "PROD___POSTGRES_EXPORTER__USERNAME=postgres_exporter",
+  "PROD___POSTGRES_EXPORTER__PASSWORD=valid-exporter-password",
   "PROD___SPRING__DATA__REDIS__PASSWORD=valid-redis-password",
   "CUSTOM__JWT__SECRET_KEY=abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz",
   "CUSTOM__ADMIN__USERNAME=관리자",
@@ -1508,6 +1511,67 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   assert.match(deployScript, /ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS/)
   assert.match(deployScript, /GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public/)
   assert.match(deployScript, /GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public/)
+})
+
+test("homeserver compose splits service env files, networks, and exporter pg_monitor role", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const contract = JSON.parse(readFileSync(contractPath, "utf8"))
+  const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8")
+  const exporterSql = readFileSync(
+    path.join(repoRoot, "deploy/homeserver/sql/provision_postgres_exporter_role.sql"),
+    "utf8",
+  )
+  const materializeScript = readFileSync(
+    path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"),
+    "utf8",
+  )
+
+  assert.doesNotMatch(compose, /env_file:\n\s+- \.\/\.env\.prod\b/)
+  assert.match(compose, /env_file:\n\s+- \.\/\.env\.caddy\.prod\b/)
+  assert.match(compose, /env_file:\n\s+- \.\/\.env\.back\.prod\b/)
+  assert.match(
+    compose,
+    /DATA_SOURCE_USER:\s+\$\{PROD___POSTGRES_EXPORTER__USERNAME:-postgres_exporter\}/,
+  )
+  assert.match(
+    compose,
+    /DATA_SOURCE_PASS:\s+\$\{PROD___POSTGRES_EXPORTER__PASSWORD:\?PROD___POSTGRES_EXPORTER__PASSWORD is required\}/,
+  )
+  assert.doesNotMatch(compose, /DATA_SOURCE_USER:\s+postgres\b/)
+  assert.doesNotMatch(compose, /DATA_SOURCE_PASS:\s+\$\{PROD___POSTGRES__PASSWORD\}/)
+
+  assert.match(compose, /name:\s+blog_home_edge/)
+  assert.match(compose, /name:\s+blog_home_app/)
+  assert.match(compose, /name:\s+blog_home_data/)
+  assert.match(compose, /name:\s+blog_home_observe/)
+  assert.doesNotMatch(compose, /^\s+default:\s*$/m)
+
+  assert.match(deployScript, /materialize_service_env/)
+  assert.match(deployScript, /validate_postgres_exporter_env/)
+  assert.match(deployScript, /provision_postgres_exporter_role/)
+  assert.match(deployScript, /EDGE_NETWORK_NAME="blog_home_edge"/)
+  assert.match(deployScript, /APP_NETWORK_NAME="blog_home_app"/)
+  assert.match(deployScript, /OBSERVE_NETWORK_NAME="blog_home_observe"/)
+  assert.match(exporterSql, /GRANT pg_monitor TO/)
+  assert.match(exporterSql, /NOSUPERUSER/)
+  assert.match(exporterSql, /exporter user must not be postgres/)
+  assert.match(materializeScript, /PROD___POSTGRES__PASSWORD/)
+  assert.match(materializeScript, /is_back_key|PROD___SPRING__/)
+  assert.match(gitignore, /deploy\/homeserver\/\.env\.back\.prod/)
+  assert.match(gitignore, /deploy\/homeserver\/\.env\.caddy\.prod/)
+
+  const exporterPassword = (contract.targets["home-server-source"].keys || []).find(
+    (key) => key.name === "PROD___POSTGRES_EXPORTER__PASSWORD",
+  )
+  const flywayPassword = (contract.targets["home-server-source"].keys || []).find(
+    (key) => key.name === "PROD___SPRING__FLYWAY__PASSWORD",
+  )
+  assert.equal(exporterPassword?.secret, true)
+  assert.equal(exporterPassword?.minLength, 8)
+  assert.equal(flywayPassword?.secret, true)
+  assert.equal(flywayPassword?.minLength, 8)
+  assert.notEqual(flywayPassword?.required, false)
 })
 
 test("blue-green deploy pauses autoheal while staging a candidate backend", () => {

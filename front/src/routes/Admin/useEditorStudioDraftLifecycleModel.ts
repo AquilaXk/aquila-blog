@@ -6,7 +6,13 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react"
+import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
 import type { PostVisibility } from "./editorStudioState"
+import {
+  describeLocalDraftSlot,
+  migrateLocalDraftV1Once,
+  resolveLocalDraftSource,
+} from "./editorStudioStorageModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
 type NoticeTone = "idle" | "loading" | "success" | "error"
@@ -14,21 +20,9 @@ type PublishNotice = { tone: NoticeTone; text: string }
 type PublishTarget = "page" | "modal"
 type EditorMode = "create" | "edit"
 
-type LocalDraftPayload = {
-  title: string
-  content: string
-  summary: string
-  thumbnailUrl: string
-  thumbnailFocusX: number
-  thumbnailFocusY: number
-  thumbnailZoom: number
-  tags: string[]
-  category: string
-  visibility: PostVisibility
-  savedAt: string
-}
-
 type UseEditorStudioLocalDraftLifecycleParams = {
+  editorMode: EditorMode
+  postId: string
   postTitle: string
   postContent: string
   getCurrentPostContent: () => string
@@ -57,13 +51,14 @@ type UseEditorStudioLocalDraftLifecycleParams = {
   setPostVisibility: StudioSetState<PostVisibility>
   setKnownTags: StudioSetState<string[]>
   setLocalDraftSavedAt: StudioSetState<string>
+  setLocalDraftSlotLabel: StudioSetState<string>
   setPublishStatus: (notice: PublishNotice, target?: PublishTarget) => void
   dedupeStrings: (items: string[]) => string[]
   normalizeCategoryValue: (value: string) => string
-  buildLocalDraftFingerprint: (payload: Omit<LocalDraftPayload, "savedAt">) => string
+  buildLocalDraftFingerprint: (payload: Omit<LocalDraftPayload, "savedAt" | "source">) => string
   persistLocalDraft: (payload: LocalDraftPayload) => void
-  readLocalDraft: () => LocalDraftPayload | null
-  removeLocalDraft: () => void
+  readLocalDraft: (source: LocalDraftSource) => LocalDraftPayload | null
+  removeLocalDraft: (source: LocalDraftSource) => void
   lastLocalDraftFingerprintRef: MutableRefObject<string>
   lastWriteFingerprintRef: MutableRefObject<string>
   lastWriteIdempotencyKeyRef: MutableRefObject<string>
@@ -72,6 +67,7 @@ type UseEditorStudioLocalDraftLifecycleParams = {
 export const useEditorStudioLocalDraftLifecycle = ({
   buildLocalDraftFingerprint,
   dedupeStrings,
+  editorMode,
   lastLocalDraftFingerprintRef,
   lastWriteFingerprintRef,
   lastWriteIdempotencyKeyRef,
@@ -80,6 +76,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
   postCategory,
   postContent,
   getCurrentPostContent,
+  postId,
   postSummary,
   postTags,
   postThumbnailFocusX,
@@ -94,6 +91,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
   setIsTempDraftMode,
   setKnownTags,
   setLocalDraftSavedAt,
+  setLocalDraftSlotLabel,
   setPostCategory,
   setPostContent,
   setPostId,
@@ -109,6 +107,11 @@ export const useEditorStudioLocalDraftLifecycle = ({
   setPreviewThumbnailSourceUrl,
   setPublishStatus,
 }: UseEditorStudioLocalDraftLifecycleParams) => {
+  const draftSource = useMemo(
+    () => resolveLocalDraftSource(editorMode, postId),
+    [editorMode, postId]
+  )
+
   const localDraftCore = useMemo(
     () => ({
       title: postTitle,
@@ -157,33 +160,38 @@ export const useEditorStudioLocalDraftLifecycle = ({
     const payload: LocalDraftPayload = {
       ...currentLocalDraftCore,
       savedAt: new Date().toISOString(),
+      source: draftSource,
     }
 
     persistLocalDraft(payload)
     lastLocalDraftFingerprintRef.current = currentLocalDraftFingerprint
     setLocalDraftSavedAt(payload.savedAt)
+    setLocalDraftSlotLabel(describeLocalDraftSlot(payload))
 
     if (!options?.silent) {
       setPublishStatus(
         {
           tone: "success",
-          text: `브라우저 임시저장 완료 (${payload.savedAt.slice(11, 16)})`,
+          text: `브라우저 임시저장 완료 (${describeLocalDraftSlot(payload)})`,
         },
         "page"
       )
     }
   }, [
     buildLocalDraftFingerprint,
+    draftSource,
     getCurrentPostContent,
     lastLocalDraftFingerprintRef,
     localDraftCore,
     persistLocalDraft,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPublishStatus,
   ])
 
   const restoreLocalDraft = useCallback(() => {
-    const draft = readLocalDraft()
+    migrateLocalDraftV1Once()
+    const draft = readLocalDraft(draftSource)
     if (!draft) {
       setPublishStatus(
         {
@@ -195,9 +203,14 @@ export const useEditorStudioLocalDraftLifecycle = ({
       return
     }
 
-    setEditorMode("create")
+    if (draft.source.kind === "post") {
+      setEditorMode("edit")
+      setPostId(draft.source.postId)
+    } else {
+      setEditorMode("create")
+      setPostId("")
+    }
     setIsTempDraftMode(false)
-    setPostId("")
     setPostVersion(null)
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
@@ -228,16 +241,18 @@ export const useEditorStudioLocalDraftLifecycle = ({
 
     setKnownTags((prev) => dedupeStrings([...prev, ...draft.tags]).sort((a, b) => a.localeCompare(b)))
     setLocalDraftSavedAt(draft.savedAt || "")
+    setLocalDraftSlotLabel(describeLocalDraftSlot(draft))
     setPublishStatus(
       {
         tone: "success",
-        text: `브라우저 임시글을 불러왔습니다${draft.savedAt ? ` (${draft.savedAt.slice(11, 16)})` : ""}.`,
+        text: `브라우저 임시글을 불러왔습니다 (${describeLocalDraftSlot(draft)}).`,
       },
       "page"
     )
   }, [
     buildLocalDraftFingerprint,
     dedupeStrings,
+    draftSource,
     lastLocalDraftFingerprintRef,
     lastWriteFingerprintRef,
     lastWriteIdempotencyKeyRef,
@@ -247,6 +262,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
     setIsTempDraftMode,
     setKnownTags,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPostCategory,
     setPostContent,
     setPostId,
@@ -264,9 +280,10 @@ export const useEditorStudioLocalDraftLifecycle = ({
   ])
 
   const clearLocalDraft = useCallback(() => {
-    removeLocalDraft()
+    removeLocalDraft(draftSource)
     lastLocalDraftFingerprintRef.current = ""
     setLocalDraftSavedAt("")
+    setLocalDraftSlotLabel("")
     setPublishStatus(
       {
         tone: "success",
@@ -274,11 +291,24 @@ export const useEditorStudioLocalDraftLifecycle = ({
       },
       "page"
     )
-  }, [lastLocalDraftFingerprintRef, removeLocalDraft, setLocalDraftSavedAt, setPublishStatus])
+  }, [
+    draftSource,
+    lastLocalDraftFingerprintRef,
+    removeLocalDraft,
+    setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
+    setPublishStatus,
+  ])
 
   useEffect(() => {
-    const localDraft = readLocalDraft()
-    if (!localDraft?.savedAt) return
+    migrateLocalDraftV1Once()
+    const localDraft = readLocalDraft(draftSource)
+    if (!localDraft?.savedAt) {
+      lastLocalDraftFingerprintRef.current = ""
+      setLocalDraftSavedAt("")
+      setLocalDraftSlotLabel("")
+      return
+    }
 
     lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
       title: localDraft.title,
@@ -293,13 +323,16 @@ export const useEditorStudioLocalDraftLifecycle = ({
       visibility: localDraft.visibility,
     })
     setLocalDraftSavedAt(localDraft.savedAt)
+    setLocalDraftSlotLabel(describeLocalDraftSlot(localDraft))
   }, [
     buildLocalDraftFingerprint,
     dedupeStrings,
+    draftSource,
     lastLocalDraftFingerprintRef,
     normalizeCategoryValue,
     readLocalDraft,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
   ])
 
   useEffect(() => {

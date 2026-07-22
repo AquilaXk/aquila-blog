@@ -72,6 +72,7 @@ type UseEditorStudioPersistenceParams = {
   setPostVisibility: StudioSetState<PostVisibility>
   setKnownTags: StudioSetState<string[]>
   setLocalDraftSavedAt: StudioSetState<string>
+  setLocalDraftSlotLabel: StudioSetState<string>
   setPublishStatus: (notice: PublishNotice, target?: PublishTarget) => void
   setLoadingKey: StudioSetState<string>
   setResult: StudioSetState<string>
@@ -94,7 +95,7 @@ type UseEditorStudioPersistenceParams = {
   refreshPublicPostReadViews: (affectedPostId?: string | number) => Promise<void>
   pretty: (value: unknown) => string
   generateIdempotencyKey: () => string
-  removeLocalDraft: () => void
+  removeLocalDraft: (source: { kind: "create" } | { kind: "post"; postId: string }) => void
   uploadWithConflictRetry: <T>(requestUpload: () => Promise<Response>) => Promise<Response>
   normalizeSafeImageUrl: (raw: string) => string
   extractImageFileFromClipboard: (clipboardData: DataTransfer | null) => File | null
@@ -139,6 +140,7 @@ export const useEditorStudioPersistence = ({
   setKnownTags,
   setLoadingKey,
   setLocalDraftSavedAt,
+  setLocalDraftSlotLabel,
   setPostId,
   setPostThumbnailFocusX,
   setPostThumbnailFocusY,
@@ -265,9 +267,10 @@ export const useEditorStudioPersistence = ({
             ? "링크 공개(목록 미노출)"
             : "비공개"
 
-      removeLocalDraft()
+      removeLocalDraft({ kind: "create" })
       lastLocalDraftFingerprintRef.current = ""
       setLocalDraftSavedAt("")
+      setLocalDraftSlotLabel("")
 
       setPublishStatus(
         {
@@ -320,6 +323,7 @@ export const useEditorStudioPersistence = ({
     setKnownTags,
     setLoadingKey,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPostId,
     setPostVersion,
     setPublishStatus,
@@ -398,6 +402,10 @@ export const useEditorStudioPersistence = ({
         visibility: postVisibility,
       })
       await refreshPublicPostReadViews(postId)
+      removeLocalDraft({ kind: "post", postId: postId.trim() })
+      lastLocalDraftFingerprintRef.current = ""
+      setLocalDraftSavedAt("")
+      setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
       setResult(pretty(response))
       return true
@@ -420,6 +428,7 @@ export const useEditorStudioPersistence = ({
     editorMode,
     effectiveThumbnailUrl,
     getCurrentPostContent,
+    lastLocalDraftFingerprintRef,
     postCategory,
     postId,
     postSummary,
@@ -433,10 +442,13 @@ export const useEditorStudioPersistence = ({
     postVisibility,
     pretty,
     refreshPublicPostReadViews,
+    removeLocalDraft,
     serverBaselineEditorFingerprintRef,
     setIsTempDraftMode,
     setKnownTags,
     setLoadingKey,
+    setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPostVersion,
     setPublishStatus,
     setResult,

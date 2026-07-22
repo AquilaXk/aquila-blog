@@ -115,6 +115,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     loadPostForEditor,
     loadingKey,
     localDraftSavedAt,
+    localDraftSlotLabel,
     member,
     metaNotice,
     mobileComposeStep,
@@ -372,7 +373,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
       label: "브라우저 임시저장",
       tone: localDraftSavedAt ? ("success" as NoticeTone) : ("idle" as NoticeTone),
       text: localDraftSavedAt
-        ? `${localDraftSavedAt.slice(11, 16)} 저장본이 있습니다.`
+        ? `${localDraftSlotLabel || `${localDraftSavedAt.slice(11, 16)}`} 저장본이 있습니다.`
         : "아직 브라우저 임시저장이 없습니다.",
     },
   ].filter(

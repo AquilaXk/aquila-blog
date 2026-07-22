@@ -8,6 +8,7 @@ import {
 import { apiFetch } from "src/apis/backend/client"
 import { replaceRoute } from "src/libs/router"
 import { hasEmptyFencedCodeBlockBody, restoreEmptyFencedCodeBlocks } from "./editorCodeFenceRecovery"
+import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
 import { isServerTempDraftPost } from "./editorTempDraft"
 import { useEditorStudioLocalDraftLifecycle } from "./useEditorStudioDraftLifecycleModel"
 
@@ -18,20 +19,6 @@ type PublishTarget = "page" | "modal"
 type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
 type EditorMode = "create" | "edit"
 type ComposeMobileStudioStep = "edit" | "publish"
-
-type LocalDraftPayload = {
-  title: string
-  content: string
-  summary: string
-  thumbnailUrl: string
-  thumbnailFocusX: number
-  thumbnailFocusY: number
-  thumbnailZoom: number
-  tags: string[]
-  category: string
-  visibility: PostVisibility
-  savedAt: string
-}
 
 type ResolvedEditorMetaSnapshot = {
   body: string
@@ -106,6 +93,7 @@ type UseEditorStudioDraftLifecycleParams = {
   postTags: string[]
   postCategory: string
   postVisibility: PostVisibility
+  editorMode: EditorMode
   isCompactMobileLayout: boolean
   setEditorMode: StudioSetState<EditorMode>
   setIsTempDraftMode: StudioSetState<boolean>
@@ -124,6 +112,7 @@ type UseEditorStudioDraftLifecycleParams = {
   setPostVisibility: StudioSetState<PostVisibility>
   setKnownTags: StudioSetState<string[]>
   setLocalDraftSavedAt: StudioSetState<string>
+  setLocalDraftSlotLabel: StudioSetState<string>
   setLoadingKey: StudioSetState<string>
   setResult: StudioSetState<string>
   setIsNewEditorBootstrapPending: StudioSetState<boolean>
@@ -132,10 +121,10 @@ type UseEditorStudioDraftLifecycleParams = {
   setPublishStatus: (notice: PublishNotice, target?: PublishTarget) => void
   dedupeStrings: (items: string[]) => string[]
   normalizeCategoryValue: (value: string) => string
-  buildLocalDraftFingerprint: (payload: Omit<LocalDraftPayload, "savedAt">) => string
+  buildLocalDraftFingerprint: (payload: Omit<LocalDraftPayload, "savedAt" | "source">) => string
   persistLocalDraft: (payload: LocalDraftPayload) => void
-  readLocalDraft: () => LocalDraftPayload | null
-  removeLocalDraft: () => void
+  readLocalDraft: (source: LocalDraftSource) => LocalDraftPayload | null
+  removeLocalDraft: (source: LocalDraftSource) => void
   buildEditorStateFingerprint: (payload: EditorFingerprintPayload) => string
   pretty: (value: unknown) => string
   resolveEditorMetaSnapshot: (content: string, contentHtml?: string | null) => ResolvedEditorMetaSnapshot
@@ -168,6 +157,7 @@ export const useEditorStudioDraftLifecycle = ({
   defaultThumbnailFocusX,
   defaultThumbnailFocusY,
   defaultThumbnailZoom,
+  editorMode,
   isBlankServerTempDraft,
   isCompactMobileLayout,
   lastLocalDraftFingerprintRef,
@@ -200,6 +190,7 @@ export const useEditorStudioDraftLifecycle = ({
   setKnownTags,
   setLoadingKey,
   setLocalDraftSavedAt,
+  setLocalDraftSlotLabel,
   setMobileComposeStep,
   setPostCategory,
   setPostContent,
@@ -229,6 +220,7 @@ export const useEditorStudioDraftLifecycle = ({
   } = useEditorStudioLocalDraftLifecycle({
     buildLocalDraftFingerprint,
     dedupeStrings,
+    editorMode,
     lastLocalDraftFingerprintRef,
     lastWriteFingerprintRef,
     lastWriteIdempotencyKeyRef,
@@ -237,6 +229,7 @@ export const useEditorStudioDraftLifecycle = ({
     postCategory,
     postContent,
     getCurrentPostContent,
+    postId,
     postSummary,
     postTags,
     postThumbnailFocusX,
@@ -251,6 +244,7 @@ export const useEditorStudioDraftLifecycle = ({
     setIsTempDraftMode,
     setKnownTags,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPostCategory,
     setPostContent,
     setPostId,

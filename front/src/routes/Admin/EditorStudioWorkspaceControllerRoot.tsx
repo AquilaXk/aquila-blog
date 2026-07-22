@@ -184,6 +184,7 @@ export const EditorStudioWorkspaceController = ({
   const [previewThumbnailSourceUrl, setPreviewThumbnailSourceUrl] = useState("")
   const [previewViewport, setPreviewViewport] = useState<PreviewViewportMode>("desktop")
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
+  const [localDraftSlotLabel, setLocalDraftSlotLabel] = useState("")
   const [mobileManageStep, setMobileManageStep] = useState<ManageMobileStudioStep>("query")
   const [mobileComposeStep, setMobileComposeStep] = useState<ComposeMobileStudioStep>("edit")
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
@@ -445,6 +446,7 @@ export const EditorStudioWorkspaceController = ({
     postTags,
     postCategory,
     postVisibility,
+    editorMode,
     isCompactMobileLayout,
     setEditorMode,
     setIsTempDraftMode,
@@ -463,6 +465,7 @@ export const EditorStudioWorkspaceController = ({
     setPostVisibility,
     setKnownTags,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setLoadingKey,
     setResult,
     setIsNewEditorBootstrapPending,
@@ -638,6 +641,7 @@ export const EditorStudioWorkspaceController = ({
     setPostVisibility,
     setKnownTags,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPublishStatus,
     setLoadingKey,
     setResult,
@@ -835,7 +839,7 @@ export const EditorStudioWorkspaceController = ({
         isSelectedToolsOpen, isTempDraftMode, knownTags, lastLocalDraftFingerprintRef, listKw,
         listPage,
         listPageSize, listQuickPreset, listScope, listSort, loadAdminPosts,
-        loadPostForEditor, loadingKey, localDraftSavedAt, member, metaNotice,
+        loadPostForEditor, loadingKey, localDraftSavedAt, localDraftSlotLabel, member, metaNotice,
         mobileComposeStep, mobileManageStep, modifiedSortOrder, openDeleteConfirm, openPostDetailRoute,
         openPublishModal, openThumbnailFileInput, postCategory, postContent, postId,
         postSummary, postTags, postThumbnailFocusX, postThumbnailFocusY, postThumbnailUrl,

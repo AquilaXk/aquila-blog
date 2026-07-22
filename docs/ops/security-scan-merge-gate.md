@@ -29,3 +29,17 @@ Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets
 ## Required repository secret
 
 `NVD_API_KEY` must exist in repo Actions secrets. Missing secret fails `backend-dependency-check` on every PR/push (by design).
+
+### Local template / owner env
+
+| Location | Purpose |
+| --- | --- |
+| `back/.env.default` | Tracked template (`NVD_API_KEY=NEED_TO_SET`) |
+| `back/.env` (gitignored) | Owner local value; also used when exporting for local `dependencyCheckAnalyze` |
+
+After filling `back/.env`, sync the Actions secret (do not commit the value):
+
+```bash
+# from repo root, with NVD_API_KEY set in the shell or extracted from back/.env
+gh secret set NVD_API_KEY --body "$NVD_API_KEY"
+```

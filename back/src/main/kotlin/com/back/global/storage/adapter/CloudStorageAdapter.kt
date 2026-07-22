@@ -371,7 +371,9 @@ class CloudStorageAdapter(
 
         return CloudStoragePort.StoredObjectListing(
             objects = objects,
-            isTruncated = hasMore && objects.size >= safeLimit,
+            // hasMore already tracks S3 truncation / leftover page keys even when
+            // collected size is below the caller limit (e.g. truncated page with null token).
+            isTruncated = hasMore,
         )
     }
 

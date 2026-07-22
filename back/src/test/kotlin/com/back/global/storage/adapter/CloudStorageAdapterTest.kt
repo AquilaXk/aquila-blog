@@ -117,6 +117,34 @@ class CloudStorageAdapterTest {
     }
 
     @Test
+    @DisplayName("listObjects는 limit 미만이어도 S3 truncated를 유지한다")
+    fun listObjectsKeepsTruncatedWhenBelowLimitButS3HasMore() {
+        val lastModified = Instant.parse("2026-06-17T00:00:00Z")
+        val s3Client =
+            RecordingS3Client(
+                onListObjects = {
+                    ListObjectsV2Response
+                        .builder()
+                        .contents(
+                            S3Object
+                                .builder()
+                                .key("cloud/7/only.mp4")
+                                .size(10)
+                                .lastModified(lastModified)
+                                .build(),
+                        ).isTruncated(true)
+                        .build()
+                },
+            ) { error("getObject should not be called") }
+        val adapter = adapterWithClient(s3Client)
+
+        val listing = adapter.listObjects("cloud/", 10)
+
+        assertThat(listing.objects).hasSize(1)
+        assertThat(listing.isTruncated).isTrue()
+    }
+
+    @Test
     @DisplayName("openRange는 S3 Range GET 요청으로 지정 구간만 연다")
     fun openRangeUsesS3RangeRequest() {
         // given

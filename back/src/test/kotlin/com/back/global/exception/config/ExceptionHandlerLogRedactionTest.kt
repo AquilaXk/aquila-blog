@@ -5,6 +5,8 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.observability.ErrorMetrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -14,10 +16,12 @@ import org.springframework.mock.web.MockHttpServletRequest
 
 @DisplayName("ExceptionHandler 로그 redaction 테스트")
 class ExceptionHandlerLogRedactionTest {
+    private fun newHandler(): ExceptionHandler = ExceptionHandler(ErrorMetrics(SimpleMeterRegistry()))
+
     @Test
     @DisplayName("5xx AppException 로그는 민감 query value를 남기지 않는다")
     fun `app exception log redacts sensitive query values`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request =
             MockHttpServletRequest("GET", "/member/api/v1/signup/email/verify").apply {
                 queryString = "token=LEAK_TEST_123&email=test@example.com"
@@ -44,7 +48,7 @@ class ExceptionHandlerLogRedactionTest {
     @Test
     @DisplayName("unexpected exception message 안의 URL query도 마스킹한다")
     fun `unexpected exception log redacts query tokens inside exception message`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request =
             MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
                 queryString = "code=LEAK_TEST_123&state=STATE_123&page=1"

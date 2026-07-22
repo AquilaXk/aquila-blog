@@ -4,6 +4,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.exception.application.ErrorKind
 import com.back.global.jpa.application.ProdSequenceGuardService
+import com.back.global.observability.ErrorMetrics
 import com.back.global.rsData.RsData
 import com.back.global.web.logging.SensitiveQueryRedactor
 import jakarta.persistence.OptimisticLockException
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler as SpringExcepti
 
 @RestControllerAdvice
 class ExceptionHandler(
+    private val errorMetrics: ErrorMetrics,
     @Autowired(required = false)
     private val prodSequenceGuardService: ProdSequenceGuardService? = null,
 ) {
@@ -34,10 +36,7 @@ class ExceptionHandler(
     @SpringExceptionHandler(NoSuchElementException::class)
     fun handleNoSuchElementException(
         @Suppress("UNUSED_PARAMETER") ex: NoSuchElementException,
-    ): ResponseEntity<RsData<Void>> =
-        ResponseEntity
-            .status(ErrorCode.NOT_FOUND.status)
-            .body(ErrorCode.NOT_FOUND.toRsData())
+    ): ResponseEntity<RsData<Void>> = respond(ErrorCode.NOT_FOUND)
 
     @SpringExceptionHandler(ConstraintViolationException::class)
     fun handleConstraintViolationException(e: ConstraintViolationException): ResponseEntity<RsData<Void>> {
@@ -55,9 +54,7 @@ class ExceptionHandler(
                 }.sorted()
                 .joinToString("\n")
 
-        return ResponseEntity
-            .status(ErrorCode.BAD_REQUEST.status)
-            .body(ErrorCode.BAD_REQUEST.toRsData(message))
+        return respond(ErrorCode.BAD_REQUEST, message)
     }
 
     @SpringExceptionHandler(MethodArgumentNotValidException::class)
@@ -71,18 +68,13 @@ class ExceptionHandler(
                 .sorted()
                 .joinToString("\n")
 
-        return ResponseEntity
-            .status(ErrorCode.BAD_REQUEST.status)
-            .body(ErrorCode.BAD_REQUEST.toRsData(message))
+        return respond(ErrorCode.BAD_REQUEST, message)
     }
 
     @SpringExceptionHandler(HttpMessageNotReadableException::class)
     fun handleHttpMessageNotReadableException(
         @Suppress("UNUSED_PARAMETER") e: HttpMessageNotReadableException,
-    ): ResponseEntity<RsData<Void>> =
-        ResponseEntity
-            .status(ErrorCode.BAD_REQUEST.status)
-            .body(ErrorCode.BAD_REQUEST.toRsData("요청 본문이 올바르지 않습니다."))
+    ): ResponseEntity<RsData<Void>> = respond(ErrorCode.BAD_REQUEST, "요청 본문이 올바르지 않습니다.")
 
     @SpringExceptionHandler(MaxUploadSizeExceededException::class)
     fun handleMaxUploadSizeExceededException(
@@ -98,9 +90,7 @@ class ExceptionHandler(
             path,
             reason,
         )
-        return ResponseEntity
-            .status(ErrorCode.PAYLOAD_TOO_LARGE.status)
-            .body(ErrorCode.PAYLOAD_TOO_LARGE.toRsData())
+        return respond(ErrorCode.PAYLOAD_TOO_LARGE)
     }
 
     @SpringExceptionHandler(MultipartException::class)
@@ -117,24 +107,19 @@ class ExceptionHandler(
             path,
             reason,
         )
-        return ResponseEntity
-            .status(ErrorCode.BAD_REQUEST.status)
-            .body(ErrorCode.BAD_REQUEST.toRsData("업로드 요청 형식이 올바르지 않습니다. 파일을 다시 선택해주세요."))
+        return respond(ErrorCode.BAD_REQUEST, "업로드 요청 형식이 올바르지 않습니다. 파일을 다시 선택해주세요.")
     }
 
     @SpringExceptionHandler(MissingRequestHeaderException::class)
     fun handleMissingRequestHeaderException(e: MissingRequestHeaderException): ResponseEntity<RsData<Void>> =
-        ResponseEntity
-            .status(ErrorCode.BAD_REQUEST.status)
-            .body(
-                ErrorCode.BAD_REQUEST.toRsData(
-                    "%s-%s-%s".format(
-                        e.headerName,
-                        "NotBlank",
-                        e.localizedMessage,
-                    ),
-                ),
-            )
+        respond(
+            ErrorCode.BAD_REQUEST,
+            "%s-%s-%s".format(
+                e.headerName,
+                "NotBlank",
+                e.localizedMessage,
+            ),
+        )
 
     @SpringExceptionHandler(AppException::class)
     fun handleAppException(
@@ -172,6 +157,8 @@ class ExceptionHandler(
                 )
         }
 
+        increment(ex.errorCode)
+
         val response =
             ResponseEntity
                 .status(ex.rsData.statusCode)
@@ -188,17 +175,14 @@ class ExceptionHandler(
     fun handleDataIntegrityViolationException(ex: DataIntegrityViolationException): ResponseEntity<RsData<Void>> {
         val repaired = prodSequenceGuardService?.repairIfSequenceDrift(ex) == true
         logger.warn("Data integrity violation", ex)
-        return ResponseEntity
-            .status(ErrorCode.DB_CONFLICT.status)
-            .body(
-                ErrorCode.DB_CONFLICT.toRsData(
-                    if (repaired) {
-                        "요청 충돌을 감지해 서버를 자동 보정했습니다. 잠시 후 다시 시도해주세요."
-                    } else {
-                        ErrorCode.DB_CONFLICT.defaultUserMessage
-                    },
-                ),
-            )
+        return respond(
+            ErrorCode.DB_CONFLICT,
+            if (repaired) {
+                "요청 충돌을 감지해 서버를 자동 보정했습니다. 잠시 후 다시 시도해주세요."
+            } else {
+                ErrorCode.DB_CONFLICT.defaultUserMessage
+            },
+        )
     }
 
     @SpringExceptionHandler(
@@ -207,9 +191,10 @@ class ExceptionHandler(
     )
     fun handleOptimisticLockException(ex: Exception): ResponseEntity<RsData<Void>> {
         logger.warn("Optimistic lock conflict", ex)
-        return ResponseEntity
-            .status(ErrorCode.DB_CONFLICT.status)
-            .body(ErrorCode.DB_CONFLICT.toRsData("다른 요청이 먼저 반영되어 충돌이 발생했습니다. 최신 상태를 확인 후 다시 시도해주세요."))
+        return respond(
+            ErrorCode.DB_CONFLICT,
+            "다른 요청이 먼저 반영되어 충돌이 발생했습니다. 최신 상태를 확인 후 다시 시도해주세요.",
+        )
     }
 
     @SpringExceptionHandler(Exception::class)
@@ -231,9 +216,25 @@ class ExceptionHandler(
             exceptionMessage,
             exceptionStack,
         )
+        return respond(ErrorCode.INTERNAL_ERROR)
+    }
+
+    private fun respond(
+        errorCode: ErrorCode,
+        message: String? = null,
+    ): ResponseEntity<RsData<Void>> {
+        increment(errorCode)
         return ResponseEntity
-            .status(ErrorCode.INTERNAL_ERROR.status)
-            .body(ErrorCode.INTERNAL_ERROR.toRsData())
+            .status(errorCode.status)
+            .body(if (message == null) errorCode.toRsData() else errorCode.toRsData(message))
+    }
+
+    private fun increment(errorCode: ErrorCode) {
+        errorMetrics.increment(
+            code = errorCode.code,
+            status = errorCode.status.value(),
+            source = ErrorMetrics.SOURCE_HANDLER,
+        )
     }
 
     private fun sanitizeLogValue(

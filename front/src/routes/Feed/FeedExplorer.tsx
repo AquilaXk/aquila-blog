@@ -31,6 +31,7 @@ import {
   resolveRestorePageCap,
   resolveSnapshotPageCap,
   scheduleIdleRevalidate,
+  shouldRestoreFeedExplorerSession,
   toFeedExplorerInfiniteQueryKey,
   toPersistFingerprint,
   toRestoredPageParams,
@@ -216,7 +217,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     if (restored.q !== normalizedQuery) return
 
     // Restore snapshots are latest-only (CREATED_AT); never hydrate into views/likes keys.
-    if (sortMode !== "latest") return
+    if (!shouldRestoreFeedExplorerSession(sortMode)) return
 
     const restoreQueryKey = toFeedExplorerInfiniteQueryKey({
       kw: normalizedQuery,
@@ -247,7 +248,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     if (hasScheduledIdleRevalidateRef.current) return
     if (!hasAppliedRestoreSnapshotRef.current) return
     if (!restoreQueryPagesRef.current?.length) return
-    if (sortMode !== "latest") return
+    if (!shouldRestoreFeedExplorerSession(sortMode)) return
 
     const restored = restoreStateRef.current
     if (!restored) return
@@ -277,7 +278,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
   const persistFeedExplorerState = useCallback(() => {
     if (typeof window === "undefined") return
     // sessionStorage restore is latest-only; do not snapshot views/likes ordered pages.
-    if (sortMode !== "latest") return
+    if (!shouldRestoreFeedExplorerSession(sortMode)) return
 
     const snapshot = restoreSnapshotRef.current
     const normalizedSnapshotTag = normalizeTagQuery(snapshot.tag)
@@ -381,6 +382,9 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
   }, [persistFeedExplorerState, router.events])
 
   useEffect(() => {
+    // Snapshot hydrate/persist are latest-only; do not prefetch or scroll using that state on views/likes.
+    if (!shouldRestoreFeedExplorerSession(sortMode)) return
+
     const restoreState = restoreStateRef.current
     if (!restoreState || hasRestoredScrollRef.current) return
 
@@ -405,6 +409,7 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
     isFetchingNextPage,
     isInitialLoading,
     loadedPagesCount,
+    sortMode,
   ])
 
   const handleLoadMore = useCallback(() => {

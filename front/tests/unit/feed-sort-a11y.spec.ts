@@ -12,6 +12,7 @@ import {
   resolveFeedSortTriggerKeyDown,
   toFeedApiSortParam,
 } from "../../src/routes/Feed/FeedSortMenuModel"
+import { shouldRestoreFeedExplorerSession } from "../../src/routes/Feed/FeedExplorerRestoreModel"
 
 test.describe("feed server sort params", () => {
   test("maps sortMode to HIT_COUNT/LIKES_COUNT API sort values", () => {
@@ -39,6 +40,12 @@ test.describe("feed server sort params", () => {
     expect(latestKey[3]).toMatchObject({ sortMode: "latest" })
     expect(viewsKey[3]).toMatchObject({ sortMode: "views" })
     expect(JSON.stringify(latestKey)).not.toBe(JSON.stringify(viewsKey))
+  })
+
+  test("session restore scroll/prefetch is latest-only", () => {
+    expect(shouldRestoreFeedExplorerSession("latest")).toBe(true)
+    expect(shouldRestoreFeedExplorerSession("views")).toBe(false)
+    expect(shouldRestoreFeedExplorerSession("likes")).toBe(false)
   })
 })
 

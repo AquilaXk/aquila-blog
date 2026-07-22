@@ -333,6 +333,11 @@ export const pruneFeedExplorerStateStorage = (storage: Storage) => {
     })
 }
 
+/** Session restore (scroll + prefetch) is latest-only; ranked sorts must not reuse that state. */
+export const shouldRestoreFeedExplorerSession = (
+  sortMode: "latest" | "views" | "likes"
+): boolean => sortMode === "latest"
+
 export const toFeedExplorerInfiniteQueryKey = ({
   kw,
   tag,

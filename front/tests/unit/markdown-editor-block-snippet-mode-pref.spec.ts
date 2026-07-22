@@ -33,6 +33,7 @@ import {
   resolvePendingToolbarInsertWhenModeChanges,
   shouldSchedulePendingToolbarInsertFlush,
 } from "../../src/components/markdown-editor/markdownEditorPendingToolbarInsert"
+import { registeredBrowserStorageKeys } from "../../src/libs/privacy/browserStorageRegistry"
 
 const sourcePath = (...parts: string[]) => path.resolve(__dirname, "../../src", ...parts)
 
@@ -207,6 +208,18 @@ test.describe("markdown editor mode preference", () => {
     expect(next.value).toBe(`alpha${codeBlockSnippet.snippet}omega`)
     expect(next.selectionStart).toBe(5 + codeBlockSnippet.cursorOffset)
     expect(next.selectionEnd).toBe(5 + codeBlockSnippet.cursorOffset)
+  })
+
+  test("markdown editor mode storage key is registered for privacy inventory", () => {
+    expect(registeredBrowserStorageKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          area: "localStorage",
+          key: MARKDOWN_EDITOR_MODE_STORAGE_KEY,
+          purpose: "markdown-editor-mode-preference",
+        }),
+      ])
+    )
   })
 
   test("falls back when window.localStorage access throws SecurityError", () => {

@@ -11,6 +11,7 @@ import {
   toValidPageSize,
 } from "../../src/apis/backend/posts/PostApiRequestModel"
 import { shouldFetchAuthSession } from "../../src/hooks/useAuthSession"
+import { getSearchDebounceMs } from "../../src/hooks/useDebouncedValue"
 import { normalizeApiRequestPath } from "../../src/libs/backend/requestPath"
 import { parseMarkdownSegments } from "../../src/libs/markdown/renderingSegmentModel"
 import {
@@ -214,5 +215,13 @@ caption
     expect(buildExploreCursorPath({ cursor: "", tag: "  TypeScript  ", pageSize: 2 })).toBe(
       "/post/api/v1/posts/explore/cursor?tag=TypeScript&sort=CREATED_AT&pageSize=2"
     )
+  })
+
+  test("search debounce delay adapts by keyword length", () => {
+    expect(getSearchDebounceMs("")).toBe(0)
+    expect(getSearchDebounceMs("  ")).toBe(0)
+    expect(getSearchDebounceMs("한")).toBe(120)
+    expect(getSearchDebounceMs("검색어")).toBe(180)
+    expect(getSearchDebounceMs("프로젝트스크린샷")).toBe(240)
   })
 })

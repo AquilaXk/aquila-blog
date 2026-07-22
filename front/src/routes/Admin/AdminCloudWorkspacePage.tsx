@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element -- private cloud content needs browser-owned auth cookies. */
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist"
 import {
   type ChangeEvent,
@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { useDebouncedValue } from "src/hooks/useDebouncedValue"
 import {
   deleteCloudFile,
   getCloudFileContentUrl,
@@ -577,6 +578,8 @@ const AdminCloudWorkspacePage = () => {
   const uploadControllersRef = useRef<Map<string, AbortController>>(new Map())
   const [filter, setFilter] = useState<CloudMediaFilter>("ALL")
   const [keyword, setKeyword] = useState("")
+  const [isComposing, setIsComposing] = useState(false)
+  const debouncedKeyword = useDebouncedValue(keyword, isComposing)
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null)
   const [checkedFileIds, setCheckedFileIds] = useState<number[]>([])
   const [notice, setNotice] = useState("")
@@ -588,11 +591,12 @@ const AdminCloudWorkspacePage = () => {
   const [isDeletePending, setIsDeletePending] = useState(false)
 
   const filesQuery = useQuery({
-    queryKey: [CLOUD_QUERY_KEY, filter, keyword],
+    queryKey: [CLOUD_QUERY_KEY, filter, debouncedKeyword],
     retry: false,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
     queryFn: () => {
-      const searchParams = resolveCloudSearchParams(keyword)
+      const searchParams = resolveCloudSearchParams(debouncedKeyword)
       return listCloudFiles({
         folderPath: searchParams.folderPath,
         keyword: searchParams.keyword,
@@ -602,8 +606,8 @@ const AdminCloudWorkspacePage = () => {
   })
   const serverFiles = filesQuery.data ?? EMPTY_CLOUD_FILES
   const visibleOptimisticFiles = useMemo(
-    () => optimisticFiles.filter((file) => doesCloudFileMatchFilters(file, filter, keyword)),
-    [filter, keyword, optimisticFiles]
+    () => optimisticFiles.filter((file) => doesCloudFileMatchFilters(file, filter, debouncedKeyword)),
+    [debouncedKeyword, filter, optimisticFiles]
   )
   const files = useMemo(
     () => mergeCloudFiles(visibleOptimisticFiles, serverFiles),
@@ -951,8 +955,12 @@ const AdminCloudWorkspacePage = () => {
                 placeholder="클라우드 파일 검색"
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
               />
-              <SearchDetail aria-hidden="true">파일</SearchDetail>
+              <SearchDetail aria-busy={filesQuery.isFetching ? "true" : "false"}>
+                {filesQuery.isFetching ? "검색 중" : "파일"}
+              </SearchDetail>
             </CloudSearchField>
           </CloudTitleBar>
 

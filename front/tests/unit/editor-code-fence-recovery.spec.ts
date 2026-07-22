@@ -11,6 +11,7 @@ import {
   resolveLoadedPostContentHtml,
   shouldFetchPublicContentForCodeFenceRecovery,
 } from "../../src/routes/Admin/editorCodeFenceRecovery"
+import { resolveEditorMetaSnapshot } from "../../src/routes/Admin/editorStudioMetaModel"
 
 const emptyFenceContent = [
   "intro",
@@ -643,7 +644,7 @@ test.describe("editor code fence recovery", () => {
     ).toBe("<pre>admin html</pre>")
   })
 
-  test("resolveLoadedPostContentHtml prefers public html when recovery rejects stored html", () => {
+  test("resolveLoadedPostContentHtml omits html when recovery rejects stored html", () => {
     expect(
       resolveLoadedPostContentHtml({
         postContentHtml: "<pre>stale html</pre>",
@@ -653,7 +654,33 @@ test.describe("editor code fence recovery", () => {
           rejectStoredContentHtml: true,
         },
       })
-    ).toBe("<pre>public html</pre>")
+    ).toBeNull()
+  })
+
+  test("rejected html contentHtml does not revive cleared fences via meta sync", () => {
+    const staleHtml = [
+      "<p>intro</p>",
+      "<pre><code class=\"language-kotlin\">fun example() = Unit</code></pre>",
+      "<p>outro</p>",
+    ].join("")
+    const recoveredContent = resolveEditorCodeFenceRecovery({
+      adminContent: emptyFenceContent,
+      contentHtmlBodyCandidate: filledFenceContent,
+      publicContent: emptyFenceContent,
+      publicFallbackSucceeded: true,
+    })
+    const loadedContentHtml = resolveLoadedPostContentHtml({
+      postContentHtml: staleHtml,
+      publicContentHtml: staleHtml,
+      fenceRecovery: recoveredContent,
+    })
+
+    expect(recoveredContent.rejectStoredContentHtml).toBe(true)
+    expect(loadedContentHtml).toBeNull()
+
+    const snapshot = resolveEditorMetaSnapshot(recoveredContent.content, loadedContentHtml)
+    expect(snapshot.body).not.toContain("fun example() = Unit")
+    expect(hasEmptyFencedCodeBlockBody(snapshot.body)).toBe(true)
   })
 
   test("trusts html recovery when public markdown is derived from contentHtml only", () => {

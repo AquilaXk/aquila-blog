@@ -334,7 +334,8 @@ export const resolveLoadedPostContentHtml = ({
   fenceRecovery: Pick<CodeFenceRecoveryAttempt, "source" | "rejectStoredContentHtml">
 }) => {
   if (fenceRecovery.rejectStoredContentHtml) {
-    return publicContentHtml ?? null
+    // Avoid passing rejected HTML into syncEditorMeta; restoreEmptyFencedCodeBlocks would revive cleared fences.
+    return null
   }
   if (fenceRecovery.source === "contentHtml") {
     return postContentHtml ?? null

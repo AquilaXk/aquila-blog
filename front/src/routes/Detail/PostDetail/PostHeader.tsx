@@ -21,6 +21,7 @@ type Props = {
   hitCount?: number
   actorHasLiked?: boolean
   likePending?: boolean
+  likeFeedback?: string | null
   hideLikeActionOnDesktop?: boolean
   hideShareActionOnDesktop?: boolean
   hideActionButtonsOnMobile?: boolean
@@ -45,6 +46,7 @@ const PostHeader: React.FC<Props> = ({
   hitCount,
   actorHasLiked = false,
   likePending = false,
+  likeFeedback = null,
   hideLikeActionOnDesktop = false,
   hideShareActionOnDesktop = false,
   hideActionButtonsOnMobile = false,
@@ -212,6 +214,17 @@ const PostHeader: React.FC<Props> = ({
                     </button>
                   )}
                 </div>
+                {likeFeedback ? (
+                  <span
+                    className="shareFeedbackPill"
+                    data-hide-desktop={hideLikeActionOnDesktop}
+                    data-hide-mobile={hideActionButtonsOnMobile}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {likeFeedback}
+                  </span>
+                ) : null}
                 {shareFeedback && (
                   <span
                     className="shareFeedbackPill"

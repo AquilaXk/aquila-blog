@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react"
 import type { QueryClient } from "@tanstack/react-query"
-import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { ApiNetworkError, apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import {
   buildImageOptimizationSummary,
@@ -123,15 +123,20 @@ export const useEditorStudioProfileCommands = ({
       const requestUpload = async () => {
         const formData = new FormData()
         formData.append("file", prepared.file, prepared.file.name)
-        return await fetch(
-          `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
-          {
+        const uploadUrl = `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`
+        try {
+          return await fetch(uploadUrl, {
             method: "POST",
             headers: PROFILE_IMAGE_CSRF_PREFLIGHT_HEADERS,
             credentials: "include",
             body: formData,
+          })
+        } catch (error) {
+          if (error instanceof TypeError) {
+            throw new ApiNetworkError(uploadUrl)
           }
-        )
+          throw error
+        }
       }
 
       setProfileImageNotice({ tone: "loading", text: "요청 충돌 여부를 확인하며 업로드 중입니다..." })

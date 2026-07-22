@@ -20,6 +20,7 @@ import {
   type CloudFile,
   type CloudMediaKind,
 } from "src/apis/backend/cloud"
+import { toUserFacingMessage } from "src/apis/backend/errorClassification"
 import AppIcon from "src/components/icons/AppIcon"
 import {
   CLOUD_FILTERS,
@@ -866,8 +867,8 @@ const AdminCloudWorkspacePage = () => {
       setCheckedFileIds((current) => current.filter((id) => id !== file.id))
       removeDeletedFilesFromCloudCaches(deletedIds)
       if (selectedFileId === file.id) setSelectedFileId(null)
-    } catch {
-      setToast({ tone: "error", text: `${file.originalFilename} 삭제 실패` })
+    } catch (error) {
+      setToast({ tone: "error", text: toUserFacingMessage(error) })
     } finally {
       await queryClient.invalidateQueries({ queryKey: [CLOUD_QUERY_KEY] })
     }
@@ -883,6 +884,7 @@ const AdminCloudWorkspacePage = () => {
     const deletedFiles = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
     const deletedIds = new Set(deletedFiles.map((file) => file.id))
     const failedCount = targets.length - deletedIds.size
+    const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === "rejected")
 
     if (deletedIds.size > 0) {
       setOptimisticFiles((current) => current.filter((file) => !deletedIds.has(file.id)))
@@ -893,7 +895,11 @@ const AdminCloudWorkspacePage = () => {
 
     if (failedCount > 0) {
       const failureText =
-        deletedIds.size > 0 ? `${deletedIds.size}개 삭제 완료, ${failedCount}개 실패` : `${failedCount}개 파일 삭제 실패`
+        deletedIds.size > 0
+          ? `${deletedIds.size}개 삭제 완료, ${failedCount}개 실패`
+          : firstFailure
+            ? toUserFacingMessage(firstFailure.reason)
+            : `${failedCount}개 파일 삭제 실패`
       setToast({ tone: "error", text: failureText })
     } else {
       const successText = `${deletedIds.size}개 파일 삭제 완료`

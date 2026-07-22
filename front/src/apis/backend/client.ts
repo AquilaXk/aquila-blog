@@ -197,6 +197,7 @@ const parseJsonBodyMessage = (body: string) => {
   }
 }
 
+export const readApiResultCode = (body: string) => parseJsonBodyMessage(body).resultCode
 const looksLikeInternalDiagnosticMessage = (message: string) =>
   /실패:\s/.test(message) || /Exception|endpoint|bucket|provider|stack/i.test(message)
 
@@ -265,17 +266,20 @@ export class ApiError extends Error {
   url: string
   body: string
   userMessage: string
+  resultCode: string | null
   requestId: string | null
 
   constructor(status: number, url: string, body: string, requestId: string | null = null) {
     const userMessage =
       resolveBodyUserMessage(body) || resolveResponseBodyMessage(status, body) || resolveStatusMessage(status)
+    const resultCode = readApiResultCode(body) || null
     super(userMessage)
     this.name = "ApiError"
     this.status = status
     this.url = url
     this.body = body
     this.userMessage = userMessage
+    this.resultCode = resultCode
     this.requestId = normalizeRequestId(requestId)
   }
 }
@@ -496,7 +500,7 @@ export const apiFetchWithMeta = async <T>(
           throw timeoutError
         }
 
-        if (error instanceof TypeError) {
+        if (error instanceof TypeError || error instanceof DOMException) {
           const networkError = new ApiNetworkError(url)
           reportApiFailure(networkError)
           throw networkError

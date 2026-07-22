@@ -17,6 +17,7 @@ type FloatingActionRailProps = {
   active: boolean
   showFloatingLike: boolean
   engagement: EngagementState
+  likeFeedback: string | null
   likePending: boolean
   shareFeedback: ShareFeedback
   onToggleLike: () => void
@@ -31,6 +32,7 @@ export const FloatingActionRail = ({
   active,
   showFloatingLike,
   engagement,
+  likeFeedback,
   likePending,
   shareFeedback,
   onToggleLike,
@@ -84,6 +86,11 @@ export const FloatingActionRail = ({
               <AppIcon name="message" />
             </button>
           </div>
+          {likeFeedback ? (
+            <span className="floatingShareFeedback" role="status" aria-live="polite">
+              {likeFeedback}
+            </span>
+          ) : null}
           {shareFeedback ? (
             <span className="floatingShareFeedback" role="status" aria-live="polite">
               {shareFeedback === "failed" ? "공유 실패" : "복사 완료"}
@@ -97,6 +104,7 @@ export const FloatingActionRail = ({
 
 type MobileSummaryActionsProps = {
   engagement: EngagementState
+  likeFeedback: string | null
   likePending: boolean
   shareFeedback: ShareFeedback
   shareProgressLabel: string | null
@@ -110,6 +118,7 @@ type MobileSummaryActionsProps = {
 
 export const MobileSummaryActions = ({
   engagement,
+  likeFeedback,
   likePending,
   shareFeedback,
   shareProgressLabel,
@@ -164,6 +173,11 @@ export const MobileSummaryActions = ({
       <span>댓글</span>
       <strong>{commentsProgressLabel}</strong>
     </button>
+    {likeFeedback ? (
+      <span className="mobileSummaryLikeFeedback" role="status" aria-live="polite">
+        {likeFeedback}
+      </span>
+    ) : null}
   </MobileSummaryBar>
 )
 

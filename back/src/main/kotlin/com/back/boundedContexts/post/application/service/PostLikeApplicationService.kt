@@ -44,13 +44,17 @@ class PostLikeApplicationService(
             if (recoveredLikeId == null) {
                 postCounterService.syncLikesCount(post)
                 enqueueRankedLikesInvalidation(post.id, "like-sync")
-                return logLikeCompleted(
-                    post,
-                    actor,
-                    PostLikeToggleResult(
-                        isLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post),
-                        likeId = 0L,
-                    ),
+                val stillLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post)
+                // insert 이중 실패 동기화 경로는 상태 변경 완료가 아니므로 _completed 를 쓰지 않는다.
+                logger.info(
+                    "post_like_sync_reconciled postId={} actorId={} isLiked={}",
+                    post.id,
+                    actor.id,
+                    stillLiked,
+                )
+                return PostLikeToggleResult(
+                    isLiked = stillLiked,
+                    likeId = 0L,
                 )
             }
 

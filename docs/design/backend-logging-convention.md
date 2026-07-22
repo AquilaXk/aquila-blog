@@ -38,7 +38,7 @@
 |---|---|
 | `PostApplicationService` | `post_create_completed`, `post_update_completed`, `post_delete_completed` |
 | `PostCommentApplicationService` | `post_comment_create_completed`, `post_comment_update_completed`, `post_comment_delete_completed` |
-| `PostLikeApplicationService` | `post_like_completed`, `post_unlike_completed` |
+| `PostLikeApplicationService` | `post_like_completed`, `post_unlike_completed`, `post_like_sync_reconciled` |
 | `MemberApplicationService` | `member_signup_completed` |
 | `PrivacyRightsApplicationService` | `member_withdraw_completed` |
 | `CloudFileService` | `cloud_file_upload_completed`, `cloud_file_delete_completed` |

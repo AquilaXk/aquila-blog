@@ -428,8 +428,8 @@ class ExceptionHandler(
         }
 
     /**
-     * Logback serializes throwable className + message into stack output.
-     * Attach a same-runtime-class copy whose message/cause/suppressed messages are redacted.
+     * Logback은 스택 출력에 throwable의 className과 message를 넣는다.
+     * 원본과 같은 런타임 타입의 복사본을 만들고, message/cause/suppressed 메시지만 마스킹한다.
      */
     private fun redactedThrowableForLogging(ex: Throwable): Throwable = redactedThrowableForLogging(ex, IdentityHashMap())
 
@@ -440,7 +440,7 @@ class ExceptionHandler(
         visited[ex]?.let { return it }
 
         val redactedMessage = redactedExceptionMessage(ex)
-        // Provisional copy first so cyclic cause/suppressed graphs can terminate.
+        // 순환 cause/suppressed 그래프에서 재귀가 끝나도록 임시 복사본을 먼저 등록한다.
         val provisional =
             createThrowableCopy(ex, redactedMessage, cause = null)
                 ?: fallbackRedactedThrowable(ex, redactedMessage)
@@ -451,8 +451,8 @@ class ExceptionHandler(
             if (redactedCause == null) {
                 provisional
             } else {
-                // CompletionException(String, Throwable) initializes cause even with null,
-                // so initCause cannot attach later — recreate with the redacted cause.
+                // CompletionException(String, Throwable)처럼 null cause도 생성 시 고정되면
+                // 이후 initCause가 실패한다. 마스킹된 cause로 다시 생성한다.
                 recreateWithCauseIfNeeded(ex, redactedMessage, provisional, redactedCause)
             }
         visited[ex] = copy
@@ -482,7 +482,7 @@ class ExceptionHandler(
         }
         return createThrowableCopy(ex, redactedMessage, redactedCause)
             ?: provisional.also {
-                // Last resort: keep provisional (cause may be absent) rather than failing logging.
+                // 마지막 수단: 로깅 자체가 깨지지 않도록 임시 복사본을 유지한다(cause가 없을 수 있음).
             }
     }
 
@@ -515,12 +515,12 @@ class ExceptionHandler(
         message: String,
         cause: Throwable?,
     ): Throwable? {
-        // Prefer public (String) so cause stays unset and can be attached via initCause.
+        // public (String) 생성자를 우선한다. cause가 비어 있어야 이후 initCause로 붙일 수 있다.
         runCatching {
             return clazz.getConstructor(String::class.java).newInstance(message)
         }
 
-        // Prefer (String, Throwable) with the real redacted cause when available.
+        // cause가 있으면 (String, Throwable)에 마스킹된 cause를 바로 넣어 생성한다.
         if (cause != null) {
             runCatching {
                 val instance =
@@ -535,7 +535,7 @@ class ExceptionHandler(
             }
         }
 
-        // Other public ctors (e.g. DateTimeParseException(String, CharSequence, int)).
+        // 그 외 public 생성자 (예: DateTimeParseException(String, CharSequence, int)).
         for (ctor in clazz.constructors.sortedBy { it.parameterCount }) {
             val instance =
                 runCatching {
@@ -546,9 +546,9 @@ class ExceptionHandler(
                     ctor.newInstance(*args) as Throwable
                 }.getOrNull() ?: continue
 
-            // Keep only copies whose message is already the redacted value (no private-field writes).
+            // private 필드 수정 없이, message가 이미 마스킹된 복사본만 사용한다.
             if (instance.message != message) continue
-            // If we needed a cause but this ctor left it unset/null, keep looking when cause != null.
+            // cause가 필요한데 이 생성자가 cause를 비웠거나 다른 값이면 다음 생성자를 본다.
             if (cause != null && instance.cause !== cause && instance.cause != null) continue
             if (cause != null && instance.cause == null) continue
             return instance

@@ -50,6 +50,114 @@ const parseFencedCodeBlocks = (content: string): ParsedFencedCodeBlock[] => {
   return blocks
 }
 
+const normalizeProseForComparison = (value: string) =>
+  value.replace(/\r\n?/g, "\n").replace(/\s+/g, " ").trim()
+
+export const extractNonFenceProse = (content: string): string => {
+  const normalized = content.replace(/\r\n?/g, "\n")
+  const blocks = parseFencedCodeBlocks(normalized)
+  if (blocks.length === 0) return normalizeProseForComparison(normalized)
+
+  const lines = normalized.split("\n")
+  const fenceLineIndexes = new Set<number>()
+  for (const block of blocks) {
+    for (let lineIndex = block.startLine; lineIndex <= block.endLine; lineIndex += 1) {
+      fenceLineIndexes.add(lineIndex)
+    }
+  }
+
+  const proseLines = lines.filter((_, index) => !fenceLineIndexes.has(index))
+  return normalizeProseForComparison(proseLines.join("\n"))
+}
+
+export const isCandidateInSyncWithAdmin = (adminContent: string, candidateContent: string) => {
+  const adminBlocks = parseFencedCodeBlocks(adminContent.replace(/\r\n?/g, "\n"))
+  const candidateBlocks = parseFencedCodeBlocks(candidateContent.replace(/\r\n?/g, "\n"))
+  if (adminBlocks.length !== candidateBlocks.length) return false
+
+  return extractNonFenceProse(adminContent) === extractNonFenceProse(candidateContent)
+}
+
+export const htmlRecoveryConflictsWithPublic = (
+  adminContent: string,
+  htmlRecoveredContent: string,
+  publicContent: string
+) => {
+  const adminBlocks = parseFencedCodeBlocks(adminContent.replace(/\r\n?/g, "\n"))
+  const htmlBlocks = parseFencedCodeBlocks(htmlRecoveredContent.replace(/\r\n?/g, "\n"))
+  const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
+
+  for (const [blockIndex, adminBlock] of adminBlocks.entries()) {
+    if (!isCodeFenceBodyVisiblyEmpty(adminBlock.body)) continue
+
+    const htmlBlock = htmlBlocks[blockIndex]
+    const publicBlock = publicBlocks[blockIndex]
+    if (!htmlBlock || isCodeFenceBodyVisiblyEmpty(htmlBlock.body)) continue
+    if (!publicBlock || !isCodeFenceBodyVisiblyEmpty(publicBlock.body)) continue
+
+    return true
+  }
+
+  return false
+}
+
+export const hasComplementaryPublicRecoveryPattern = (
+  adminContent: string,
+  contentHtmlBodyCandidate: string,
+  publicContent: string
+) => {
+  const adminBlocks = parseFencedCodeBlocks(adminContent.replace(/\r\n?/g, "\n"))
+  const htmlBlocks = parseFencedCodeBlocks(contentHtmlBodyCandidate.replace(/\r\n?/g, "\n"))
+  const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
+
+  return adminBlocks.some((adminBlock, blockIndex) => {
+    if (!isCodeFenceBodyVisiblyEmpty(adminBlock.body)) return false
+
+    const publicBlock = publicBlocks[blockIndex]
+    const htmlBlock = htmlBlocks[blockIndex]
+    return (
+      !!publicBlock &&
+      !isCodeFenceBodyVisiblyEmpty(publicBlock.body) &&
+      (!htmlBlock || isCodeFenceBodyVisiblyEmpty(htmlBlock.body))
+    )
+  })
+}
+
+export const isContentHtmlRecoveryTrustworthy = ({
+  adminContent,
+  adminBodyForSync,
+  contentHtmlBodyCandidate,
+  htmlRecoveredContent,
+  publicContent,
+  publicFallbackSucceeded,
+}: {
+  adminContent: string
+  adminBodyForSync?: string
+  contentHtmlBodyCandidate: string
+  htmlRecoveredContent: string
+  publicContent?: string
+  publicFallbackSucceeded: boolean
+}) => {
+  const adminSyncBase = adminBodyForSync ?? adminContent
+  if (
+    adminSyncBase.trim().length > 0 &&
+    !isCandidateInSyncWithAdmin(adminSyncBase, contentHtmlBodyCandidate)
+  ) {
+    return false
+  }
+
+  if (
+    publicFallbackSucceeded &&
+    typeof publicContent === "string" &&
+    htmlRecoveryConflictsWithPublic(adminContent, htmlRecoveredContent, publicContent) &&
+    !hasComplementaryPublicRecoveryPattern(adminContent, contentHtmlBodyCandidate, publicContent)
+  ) {
+    return false
+  }
+
+  return true
+}
+
 export const restoreEmptyFencedCodeBlocks = (content: string, recoveredContent: string) => {
   const recoveredBlocks = parseFencedCodeBlocks(recoveredContent.replace(/\r\n?/g, "\n"))
   if (!recoveredBlocks.some((block) => !isCodeFenceBodyVisiblyEmpty(block.body))) return content
@@ -104,6 +212,7 @@ export type CodeFenceRecoveryAttempt = {
   contentHtml?: string | null
   recovered: boolean
   source: CodeFenceRecoverySource
+  rejectStoredContentHtml: boolean
 }
 
 declare global {
@@ -233,11 +342,13 @@ const applyPublicCodeFenceRecovery = (
 
 export const resolveEditorCodeFenceRecovery = ({
   adminContent,
+  adminBodyForSync,
   contentHtmlBodyCandidate,
   publicContent,
   publicFallbackSucceeded,
 }: {
   adminContent: string
+  adminBodyForSync?: string
   contentHtmlBodyCandidate: string
   publicContent?: string
   publicFallbackSucceeded: boolean
@@ -251,43 +362,60 @@ export const resolveEditorCodeFenceRecovery = ({
       contentHtml: undefined,
       recovered: false,
       source: "none",
+      rejectStoredContentHtml: false,
     }
   }
 
   const fromHtml = applyCandidateCodeFenceRecovery(adminContent, contentHtmlBodyCandidate)
+  const htmlRecoveryIsTrustworthy = isContentHtmlRecoveryTrustworthy({
+    adminContent,
+    adminBodyForSync,
+    contentHtmlBodyCandidate,
+    htmlRecoveredContent: fromHtml.content,
+    publicContent,
+    publicFallbackSucceeded,
+  })
+  const rejectStoredContentHtml =
+    adminContent.trim().length > 0 &&
+    !htmlRecoveryIsTrustworthy &&
+    fromHtml.content !== adminContent
+  const trustedHtmlContent = htmlRecoveryIsTrustworthy ? fromHtml.content : adminContent
 
   if (publicFallbackSucceeded && typeof publicContent === "string") {
-    const metadataMergeBase = isCodeFenceRecoveryComplete(fromHtml.content)
-      ? fromHtml.content
+    const metadataMergeBase = isCodeFenceRecoveryComplete(trustedHtmlContent)
+      ? trustedHtmlContent
       : adminContent
     const metadataMerged = mergeFaithfulPublicFencedBlocks(metadataMergeBase, publicContent)
 
     if (
       isCodeFenceRecoveryComplete(metadataMerged) &&
-      publicContentHasRicherFenceMetadata(fromHtml.content, publicContent)
+      publicContentHasRicherFenceMetadata(trustedHtmlContent, publicContent)
     ) {
       return {
         content: metadataMerged,
         recovered: true,
         source: "publicApi",
+        rejectStoredContentHtml,
       }
     }
   }
 
   if (
+    htmlRecoveryIsTrustworthy &&
     fromHtml.recovered &&
     isCodeFenceRecoveryComplete(fromHtml.content) &&
     !adminWasEmpty &&
     !(
       publicFallbackSucceeded &&
       typeof publicContent === "string" &&
-      publicContentHasRicherFenceMetadata(fromHtml.content, publicContent)
+      publicContentHasRicherFenceMetadata(trustedHtmlContent, publicContent)
     )
   ) {
     return {
       content: fromHtml.content,
       recovered: true,
       source: "contentHtml",
+      rejectStoredContentHtml: false,
     }
   }
 
@@ -302,17 +430,23 @@ export const resolveEditorCodeFenceRecovery = ({
         content: fromPublic.content,
         recovered: true,
         source: "publicApi",
+        rejectStoredContentHtml,
       }
     }
   }
 
   if (publicFallbackSucceeded && typeof publicContent === "string") {
     const fromPublic = applyPublicCodeFenceRecovery(adminContent, publicContent)
-    const sequentialContent = applyPublicCodeFenceRecovery(fromHtml.content, publicContent).content
+    const sequentialContent = applyPublicCodeFenceRecovery(
+      htmlRecoveryIsTrustworthy ? fromHtml.content : adminContent,
+      publicContent
+    ).content
 
     const candidates = [
       { content: sequentialContent, source: "publicApi" as const },
-      { content: fromHtml.content, source: "contentHtml" as const },
+      ...(htmlRecoveryIsTrustworthy
+        ? [{ content: fromHtml.content, source: "contentHtml" as const }]
+        : []),
       { content: fromPublic.content, source: "publicApi" as const },
     ].filter((candidate) => candidate.content !== adminContent)
 
@@ -340,21 +474,27 @@ export const resolveEditorCodeFenceRecovery = ({
         content: bestCandidate.content,
         recovered: isCodeFenceRecoveryComplete(bestCandidate.content),
         source: bestCandidate.source,
+        rejectStoredContentHtml,
       }
     }
   }
 
-  if (fromHtml.recovered || fromHtml.content !== adminContent) {
+  if (
+    htmlRecoveryIsTrustworthy &&
+    (fromHtml.recovered || fromHtml.content !== adminContent)
+  ) {
     return {
       content: fromHtml.content,
       recovered: isCodeFenceRecoveryComplete(fromHtml.content),
       source: "contentHtml",
+      rejectStoredContentHtml: false,
     }
   }
 
   return {
-    content: fromHtml.content,
+    content: adminContent,
     recovered: false,
     source: "unrecovered",
+    rejectStoredContentHtml,
   }
 }

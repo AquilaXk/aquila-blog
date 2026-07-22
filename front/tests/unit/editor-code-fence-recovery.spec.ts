@@ -3,6 +3,9 @@ import {
   adminContentHadEmptyFenceForTelemetry,
   applyCandidateCodeFenceRecovery,
   hasEmptyFencedCodeBlockBody,
+  htmlRecoveryConflictsWithPublic,
+  isCandidateInSyncWithAdmin,
+  isContentHtmlRecoveryTrustworthy,
   resolveEditorCodeFenceRecovery,
 } from "../../src/routes/Admin/editorCodeFenceRecovery"
 
@@ -277,5 +280,105 @@ test.describe("editor code fence recovery", () => {
     const result = applyCandidateCodeFenceRecovery("", filledFenceContent)
     expect(result.recovered).toBe(true)
     expect(result.content).toBe(filledFenceContent)
+  })
+
+  test("does not restore intentionally cleared fence from stale contentHtml when public confirms empty", () => {
+    const adminWithClearedFence = emptyFenceContent
+    const staleHtmlWithOldCode = filledFenceContent
+    const publicWithEmptyFence = emptyFenceContent
+
+    expect(
+      htmlRecoveryConflictsWithPublic(
+        adminWithClearedFence,
+        staleHtmlWithOldCode,
+        publicWithEmptyFence
+      )
+    ).toBe(true)
+    expect(
+      isContentHtmlRecoveryTrustworthy({
+        adminContent: adminWithClearedFence,
+        contentHtmlBodyCandidate: staleHtmlWithOldCode,
+        htmlRecoveredContent: staleHtmlWithOldCode,
+        publicContent: publicWithEmptyFence,
+        publicFallbackSucceeded: true,
+      })
+    ).toBe(false)
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: adminWithClearedFence,
+      contentHtmlBodyCandidate: staleHtmlWithOldCode,
+      publicContent: publicWithEmptyFence,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).not.toBe("contentHtml")
+    expect(result.recovered).toBe(false)
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(true)
+    expect(result.content).not.toContain("fun example() = Unit")
+  })
+
+  test("does not restore empty fences from contentHtml when prose is out of sync", () => {
+    const adminWithUpdatedProse = [
+      "updated intro",
+      "",
+      "```kotlin",
+      "",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+    const staleHtml = filledFenceContent
+
+    expect(isCandidateInSyncWithAdmin(adminWithUpdatedProse, staleHtml)).toBe(false)
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: adminWithUpdatedProse,
+      contentHtmlBodyCandidate: staleHtml,
+      publicFallbackSucceeded: false,
+    })
+
+    expect(result.source).toBe("unrecovered")
+    expect(result.recovered).toBe(false)
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(true)
+    expect(result.content).not.toContain("fun example() = Unit")
+  })
+
+  test("sync check uses parsed admin body so frontmatter does not block private recovery", () => {
+    const adminWithFrontmatter = [
+      "tags: kotlin",
+      "",
+      "intro",
+      "",
+      "```kotlin",
+      "",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+    const htmlCandidate = filledFenceContent
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: adminWithFrontmatter,
+      adminBodyForSync: emptyFenceContent,
+      contentHtmlBodyCandidate: htmlCandidate,
+      publicFallbackSucceeded: false,
+    })
+
+    expect(result.source).toBe("contentHtml")
+    expect(result.recovered).toBe(true)
+    expect(result.rejectStoredContentHtml).toBe(false)
+    expect(result.content).toContain("fun example() = Unit")
+  })
+
+  test("marks stale html for rejection when public confirms intentional empty fence", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: emptyFenceContent,
+      contentHtmlBodyCandidate: filledFenceContent,
+      publicContent: emptyFenceContent,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.rejectStoredContentHtml).toBe(true)
+    expect(result.source).not.toBe("contentHtml")
   })
 })

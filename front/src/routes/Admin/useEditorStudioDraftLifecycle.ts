@@ -387,6 +387,7 @@ export const useEditorStudioDraftLifecycle = ({
       let resolvedPost = post
 
       const adminContent = resolvedPost.content ?? ""
+      const adminBodySnapshot = resolveEditorMetaSnapshot(adminContent, null)
       const htmlRecoverySnapshot = resolveEditorMetaSnapshot(
         adminContent,
         resolvedPost.contentHtml
@@ -417,6 +418,7 @@ export const useEditorStudioDraftLifecycle = ({
 
       const fenceRecovery = resolveEditorCodeFenceRecovery({
         adminContent,
+        adminBodyForSync: adminBodySnapshot.body,
         contentHtmlBodyCandidate: htmlRecoverySnapshot.body,
         publicContent,
         publicFallbackSucceeded,
@@ -434,7 +436,9 @@ export const useEditorStudioDraftLifecycle = ({
       resolvedPost = {
         ...post,
         content: fenceRecovery.content,
-        contentHtml: publicContentHtml ?? post.contentHtml,
+        contentHtml: fenceRecovery.rejectStoredContentHtml
+          ? (publicContentHtml ?? null)
+          : (publicContentHtml ?? post.contentHtml),
       }
 
       const rawSnapshot = resolveEditorMetaSnapshot(

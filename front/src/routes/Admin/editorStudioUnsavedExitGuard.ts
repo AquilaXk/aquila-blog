@@ -112,69 +112,16 @@ export const resolveEditorRouteNavigationRetry = (
   }
 }
 
-export type EditorHistoryNavigationDirection = "back" | "forward"
-
-/** Stamped onto `history.state` so beforePopState can recover back vs forward. */
-export const EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY = "__editorUnsavedGuardIdx"
-
-export const readEditorUnsavedGuardHistoryIdx = (state: unknown): number | null => {
-  if (!state || typeof state !== "object") return null
-  const value = (state as Record<string, unknown>)[EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY]
-  return typeof value === "number" && Number.isFinite(value) ? value : null
-}
-
-export const withEditorUnsavedGuardHistoryIdx = (
-  state: unknown,
-  idx: number
-): Record<string, unknown> => ({
-  ...(state && typeof state === "object" ? (state as Record<string, unknown>) : {}),
-  [EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY]: idx,
-})
-
-export type EditorHistorySessionIndices = {
-  currentSessionIndex: number | null
-  destinationSessionIndex: number | null
-}
-
-/** Browser session history index (Navigation API) when available. */
-export const readEditorSessionHistoryIndex = (): number | null => {
-  if (typeof window === "undefined") return null
-  const navigation = (
-    window as Window & {
-      navigation?: { currentEntry?: { index?: number } | null } | null
-    }
-  ).navigation
-  const index = navigation?.currentEntry?.index
-  return typeof index === "number" && Number.isFinite(index) ? index : null
-}
-
 /**
- * Prefer stamped guard indices. When the destination was created before the guard
- * stamped history (common after Back into the editor, then Forward), fall back to
- * browser session history indices so Forward is not misclassified as Back.
+ * After beforePopState blocks a dirty pop, restore the editor URL with pushState.
+ * Confirm leave then uses history.back() — the blocked destination sits under the
+ * restored entry, so no back/forward guessing or cross-session idx stamps are needed.
  */
-export const resolveEditorHistoryNavigationDirection = (
-  currentIdx: number,
-  destinationIdx: number | null,
-  sessionIndices?: EditorHistorySessionIndices | null
-): EditorHistoryNavigationDirection => {
-  if (destinationIdx != null) {
-    return destinationIdx > currentIdx ? "forward" : "back"
-  }
-
-  const currentSessionIndex = sessionIndices?.currentSessionIndex
-  const destinationSessionIndex = sessionIndices?.destinationSessionIndex
-  if (
-    typeof currentSessionIndex === "number" &&
-    typeof destinationSessionIndex === "number" &&
-    currentSessionIndex !== destinationSessionIndex
-  ) {
-    return destinationSessionIndex > currentSessionIndex ? "forward" : "back"
-  }
-
-  return "back"
+export const restoreEditorUrlAfterBlockedHistoryPop = (
+  editorAsPath: string,
+  history: Pick<History, "pushState"> | null | undefined = typeof globalThis !== "undefined"
+    ? (globalThis as typeof globalThis & { window?: Window }).window?.history
+    : undefined
+) => {
+  history?.pushState(null, "", editorAsPath)
 }
-
-export const resolveEditorHistoryNavigationDelta = (
-  direction: EditorHistoryNavigationDirection
-): number => (direction === "forward" ? 1 : -1)

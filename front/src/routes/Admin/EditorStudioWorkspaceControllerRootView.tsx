@@ -111,6 +111,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     isSelectedToolsOpen,
     isTempDraftMode,
     knownTags,
+    getCurrentPostContent,
     lastLocalDraftFingerprintRef,
     listKw,
     listPage,
@@ -304,18 +305,65 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   const composeStatusTone = editorPersistenceState.tone
   const isEditorSaving =
     loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
-  const { requestGuardedAction, dialog: unsavedExitDialog } = useEditorStudioUnsavedExitGuard({
-    enabled: Boolean(sessionMember),
-    isDirty: isEditorUnsavedDirtyByFingerprint({
+  const isEditorUnsavedDirty = isEditorUnsavedDirtyByFingerprint({
+    isSaving: isEditorSaving,
+    editorMode,
+    hasSelectedManagedPost,
+    editorStateFingerprint,
+    serverBaselineFingerprint: serverBaselineEditorFingerprintRef.current,
+    localDraftFingerprint: lastLocalDraftFingerprintRef.current,
+    localDraftSavedAt,
+    pristineCreateFingerprint,
+  })
+  const getIsEditorUnsavedDirty = useCallback(() => {
+    const liveContent =
+      typeof getCurrentPostContent === "function" ? getCurrentPostContent() : postContent
+    return isEditorUnsavedDirtyByFingerprint({
       isSaving: isEditorSaving,
       editorMode,
       hasSelectedManagedPost,
-      editorStateFingerprint,
+      editorStateFingerprint: buildEditorStateFingerprint({
+        title: postTitle,
+        content: liveContent,
+        summary: postSummary,
+        thumbnailUrl: postThumbnailUrl,
+        thumbnailFocusX: postThumbnailFocusX,
+        thumbnailFocusY: postThumbnailFocusY,
+        thumbnailZoom: postThumbnailZoom,
+        tags: postTags,
+        category: postCategory,
+        visibility: postVisibility,
+      }),
+      // Read baselines at navigation time so a just-finished save is respected.
       serverBaselineFingerprint: serverBaselineEditorFingerprintRef.current,
       localDraftFingerprint: lastLocalDraftFingerprintRef.current,
       localDraftSavedAt,
       pristineCreateFingerprint,
-    }),
+    })
+  }, [
+    editorMode,
+    getCurrentPostContent,
+    hasSelectedManagedPost,
+    isEditorSaving,
+    lastLocalDraftFingerprintRef,
+    localDraftSavedAt,
+    postCategory,
+    postContent,
+    postSummary,
+    postTags,
+    postThumbnailFocusX,
+    postThumbnailFocusY,
+    postThumbnailZoom,
+    postThumbnailUrl,
+    postTitle,
+    postVisibility,
+    pristineCreateFingerprint,
+    serverBaselineEditorFingerprintRef,
+  ])
+  const { requestGuardedAction, dialog: unsavedExitDialog } = useEditorStudioUnsavedExitGuard({
+    enabled: Boolean(sessionMember),
+    isDirty: isEditorUnsavedDirty,
+    getIsDirty: getIsEditorUnsavedDirty,
   })
   const handleGuardedExitDedicatedEditor = useCallback(() => {
     requestGuardedAction(() => {

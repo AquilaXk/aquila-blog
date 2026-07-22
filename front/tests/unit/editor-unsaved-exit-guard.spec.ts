@@ -3,15 +3,11 @@ import {
   captureEditorRouteNavigationIntent,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
-  EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY,
   isEditorUnsavedDirtyByFingerprint,
   isForcedEditorExitUrl,
   isSamePathEditorSurfaceNavigation,
-  readEditorUnsavedGuardHistoryIdx,
-  resolveEditorHistoryNavigationDelta,
-  resolveEditorHistoryNavigationDirection,
   resolveEditorRouteNavigationRetry,
-  withEditorUnsavedGuardHistoryIdx,
+  restoreEditorUrlAfterBlockedHistoryPop,
 } from "../../src/routes/Admin/editorStudioUnsavedExitGuard"
 
 test.describe("editor unsaved exit guard helpers", () => {
@@ -178,45 +174,16 @@ test.describe("editor unsaved exit guard helpers", () => {
     })
   })
 
-  test("resolves history direction and delta from stamped indices", () => {
-    expect(resolveEditorHistoryNavigationDirection(2, 3)).toBe("forward")
-    expect(resolveEditorHistoryNavigationDirection(2, 1)).toBe("back")
-    expect(resolveEditorHistoryNavigationDirection(2, null)).toBe("back")
-    // Unstamped forward (pre-guard history entry) must use session indices.
-    expect(
-      resolveEditorHistoryNavigationDirection(2, null, {
-        currentSessionIndex: 4,
-        destinationSessionIndex: 5,
-      })
-    ).toBe("forward")
-    expect(
-      resolveEditorHistoryNavigationDirection(2, null, {
-        currentSessionIndex: 4,
-        destinationSessionIndex: 3,
-      })
-    ).toBe("back")
-    expect(resolveEditorHistoryNavigationDelta("forward")).toBe(1)
-    expect(resolveEditorHistoryNavigationDelta("back")).toBe(-1)
+  test("restores editor URL after a blocked history pop without guessing direction", () => {
+    const calls: string[] = []
+    const history = {
+      pushState: (_state: unknown, _unused: string, url?: string | URL | null) => {
+        calls.push(String(url ?? ""))
+      },
+    }
 
-    const stamped = withEditorUnsavedGuardHistoryIdx({ __N: true, as: "/editor/1" }, 4)
-    expect(stamped[EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY]).toBe(4)
-    expect(readEditorUnsavedGuardHistoryIdx(stamped)).toBe(4)
-    expect(readEditorUnsavedGuardHistoryIdx(null)).toBe(null)
-    expect(readEditorUnsavedGuardHistoryIdx({ as: "/editor/1" })).toBe(null)
-  })
-
-  test("same-pathname surface navigation stays local and history idx helpers stay consistent", () => {
-    expect(
-      isSamePathEditorSurfaceNavigation(
-        "/editor/1?surface=compose",
-        "/editor/1?surface=manage"
-      )
-    ).toBe(true)
-
-    // Allowed same-path pops sync to the destination stamp (not a push +1).
-    const currentIdx = 2
-    const destinationIdx = 1
-    expect(resolveEditorHistoryNavigationDirection(currentIdx, destinationIdx)).toBe("back")
-    expect(destinationIdx).toBe(currentIdx + resolveEditorHistoryNavigationDelta("back"))
+    restoreEditorUrlAfterBlockedHistoryPop("/editor/1?surface=compose", history)
+    expect(calls).toEqual(["/editor/1?surface=compose"])
+    expect(() => restoreEditorUrlAfterBlockedHistoryPop("/editor/1", null)).not.toThrow()
   })
 })

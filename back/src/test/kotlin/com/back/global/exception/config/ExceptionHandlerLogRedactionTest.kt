@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import java.time.format.DateTimeParseException
+import java.util.concurrent.CompletionException
 
 @DisplayName("ExceptionHandler 로그 redaction 테스트")
 class ExceptionHandlerLogRedactionTest {
@@ -103,6 +104,35 @@ class ExceptionHandlerLogRedactionTest {
         val event = appender.list.single()
         assertThat(event.throwableProxy).isNotNull
         assertThat(event.throwableProxy.message)
+            .contains("token=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
+    }
+
+    @Test
+    @DisplayName("CompletionException처럼 cause가 생성자 고정인 예외도 루트 cause를 보존한다")
+    fun `completion exception preserves redacted cause chain`() {
+        val handler = ExceptionHandler()
+        val request = MockHttpServletRequest("GET", "/internal")
+        val appender = ExceptionHandlerListAppenderSupport.attach()
+
+        val root = IllegalStateException("root token=LEAK_TEST_123")
+        val unexpected = CompletionException("wrap token=LEAK_TEST_123", root)
+
+        try {
+            handler.handleUnexpectedException(unexpected, request)
+        } finally {
+            ExceptionHandlerListAppenderSupport.detach(appender)
+        }
+
+        val event = appender.list.single()
+        assertThat(event.throwableProxy).isNotNull
+        assertThat(event.throwableProxy.className).isEqualTo(CompletionException::class.java.name)
+        assertThat(event.throwableProxy.message)
+            .contains("token=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
+        assertThat(event.throwableProxy.cause).isNotNull
+        assertThat(event.throwableProxy.cause.className).isEqualTo(IllegalStateException::class.java.name)
+        assertThat(event.throwableProxy.cause.message)
             .contains("token=[REDACTED]")
             .doesNotContain("LEAK_TEST_123")
     }

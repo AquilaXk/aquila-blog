@@ -439,47 +439,100 @@ class ExceptionHandler(
     ): Throwable {
         visited[ex]?.let { return it }
 
-        val copy = newRedactedThrowableSameType(ex)
-        // Register before recursing so cyclic cause/suppressed graphs terminate.
+        val redactedMessage = redactedExceptionMessage(ex)
+        // Provisional copy first so cyclic cause/suppressed graphs can terminate.
+        val provisional =
+            createThrowableCopy(ex, redactedMessage, cause = null)
+                ?: fallbackRedactedThrowable(ex, redactedMessage)
+        visited[ex] = provisional
+
+        val redactedCause = ex.cause?.let { redactedThrowableForLogging(it, visited) }
+        val copy =
+            if (redactedCause == null) {
+                provisional
+            } else {
+                // CompletionException(String, Throwable) initializes cause even with null,
+                // so initCause cannot attach later — recreate with the redacted cause.
+                recreateWithCauseIfNeeded(ex, redactedMessage, provisional, redactedCause)
+            }
         visited[ex] = copy
         copy.stackTrace = ex.stackTrace
 
-        val cause = ex.cause
-        if (cause != null) {
-            attachCause(copy, redactedThrowableForLogging(cause, visited))
-        }
         for (suppressed in ex.suppressed) {
             copy.addSuppressed(redactedThrowableForLogging(suppressed, visited))
         }
         return copy
     }
 
-    private fun newRedactedThrowableSameType(ex: Throwable): Throwable {
+    private fun redactedExceptionMessage(ex: Throwable): String =
+        if (ex is AppException) {
+            "${ex.rsData.resultCode} : ${SensitiveQueryRedactor.redactText(ex.rsData.msg, MAX_QUERY_LENGTH)}"
+        } else {
+            SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
+        }
+
+    private fun recreateWithCauseIfNeeded(
+        ex: Throwable,
+        redactedMessage: String,
+        provisional: Throwable,
+        redactedCause: Throwable,
+    ): Throwable {
+        if (attachCause(provisional, redactedCause)) {
+            return provisional
+        }
+        return createThrowableCopy(ex, redactedMessage, redactedCause)
+            ?: provisional.also {
+                // Last resort: keep provisional (cause may be absent) rather than failing logging.
+            }
+    }
+
+    private fun createThrowableCopy(
+        ex: Throwable,
+        redactedMessage: String,
+        cause: Throwable?,
+    ): Throwable? {
         if (ex is AppException) {
             return AppException(
                 ex.rsData.resultCode,
                 SensitiveQueryRedactor.redactText(ex.rsData.msg, MAX_QUERY_LENGTH),
             )
         }
+        return createThrowableWithMessage(ex.javaClass, redactedMessage, cause)
+    }
 
-        val redactedMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
-        createThrowableWithMessage(ex.javaClass, redactedMessage)?.let { return it }
-
-        // Extremely rare: JVM blocks Unsafe allocateInstance. Keep logging available.
-        return if (ex is RuntimeException) {
+    private fun fallbackRedactedThrowable(
+        ex: Throwable,
+        redactedMessage: String,
+    ): Throwable =
+        if (ex is RuntimeException) {
             RuntimeException(redactedMessage)
         } else {
             Exception(redactedMessage)
         }
-    }
 
     private fun createThrowableWithMessage(
         clazz: Class<out Throwable>,
         message: String,
+        cause: Throwable?,
     ): Throwable? {
         // Prefer public (String) so cause stays unset and can be attached via initCause.
         runCatching {
             return clazz.getConstructor(String::class.java).newInstance(message)
+        }
+
+        // Prefer (String, Throwable) with the real redacted cause when available.
+        if (cause != null) {
+            runCatching {
+                val instance =
+                    clazz
+                        .getConstructor(String::class.java, Throwable::class.java)
+                        .newInstance(message, cause)
+                if (instance.message == message) return instance
+            }
+            runCatching {
+                val instance = clazz.getConstructor(Throwable::class.java).newInstance(cause)
+                if (instance.message == message || instance.cause === cause) return instance
+            }
         }
 
         // Other public ctors (e.g. DateTimeParseException(String, CharSequence, int)).
@@ -488,13 +541,16 @@ class ExceptionHandler(
                 runCatching {
                     val args =
                         Array(ctor.parameterCount) { index ->
-                            defaultThrowableCtorArg(ctor.parameterTypes[index], message)
+                            defaultThrowableCtorArg(ctor.parameterTypes[index], message, cause)
                         }
                     ctor.newInstance(*args) as Throwable
                 }.getOrNull() ?: continue
 
             // Keep only copies whose message is already the redacted value (no private-field writes).
             if (instance.message != message) continue
+            // If we needed a cause but this ctor left it unset/null, keep looking when cause != null.
+            if (cause != null && instance.cause !== cause && instance.cause != null) continue
+            if (cause != null && instance.cause == null) continue
             return instance
         }
         return null
@@ -503,10 +559,11 @@ class ExceptionHandler(
     private fun defaultThrowableCtorArg(
         type: Class<*>,
         message: String,
+        cause: Throwable?,
     ): Any? =
         when {
             type == String::class.java || type == CharSequence::class.java -> message
-            type == Throwable::class.java -> null
+            type == Throwable::class.java -> cause
             type == Integer.TYPE || type == Integer::class.java -> 0
             type == java.lang.Long.TYPE || type == java.lang.Long::class.java -> 0L
             type == java.lang.Boolean.TYPE || type == java.lang.Boolean::class.java -> false
@@ -517,13 +574,13 @@ class ExceptionHandler(
     private fun attachCause(
         target: Throwable,
         cause: Throwable,
-    ) {
+    ): Boolean =
         try {
             target.initCause(cause)
+            true
         } catch (_: IllegalStateException) {
-            // Some public ctors already set cause; leave that instance as-is.
+            false
         }
-    }
 
     private fun sanitizeLogValue(
         raw: String?,

@@ -2,8 +2,12 @@ import { useRouter } from "next/router"
 import { createElement, useCallback, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "src/design-system/ConfirmDialog"
 import {
+  captureEditorRouteNavigationIntent,
+  defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   isForcedEditorExitUrl,
+  resolveEditorRouteNavigationRetry,
+  type EditorRouteNavigationIntent,
 } from "./editorStudioUnsavedExitGuard"
 
 type UseEditorStudioUnsavedExitGuardParams = {
@@ -15,6 +19,7 @@ type PendingNavigation = {
   kind: "route" | "action"
   url?: string
   action?: () => void
+  routeIntent?: EditorRouteNavigationIntent
 }
 
 export const useEditorStudioUnsavedExitGuard = ({
@@ -27,6 +32,7 @@ export const useEditorStudioUnsavedExitGuard = ({
   const [confirmOpen, setConfirmOpen] = useState(false)
   const pendingRef = useRef<PendingNavigation | null>(null)
   const allowNavigationRef = useRef(false)
+  const pendingRouteIntentRef = useRef<EditorRouteNavigationIntent | null>(null)
 
   const closeConfirm = useCallback(() => {
     pendingRef.current = null
@@ -53,8 +59,10 @@ export const useEditorStudioUnsavedExitGuard = ({
     }
 
     if (!pending.url) return
+    const retry = resolveEditorRouteNavigationRetry(pending.url, pending.routeIntent)
     allowNavigationRef.current = true
-    void router.push(pending.url).finally(() => {
+    const navigate = retry.method === "replace" ? router.replace.bind(router) : router.push.bind(router)
+    void navigate(retry.url, undefined, retry.options).finally(() => {
       allowNavigationRef.current = false
     })
   }, [router])
@@ -80,12 +88,32 @@ export const useEditorStudioUnsavedExitGuard = ({
       return EDITOR_UNSAVED_CHANGES_MESSAGE
     }
 
+    const originalPush = router.push.bind(router)
+    const originalReplace = router.replace.bind(router)
+
+    router.push = ((url, as, options) => {
+      pendingRouteIntentRef.current = captureEditorRouteNavigationIntent("push", options)
+      return originalPush(url, as, options)
+    }) as typeof router.push
+
+    router.replace = ((url, as, options) => {
+      pendingRouteIntentRef.current = captureEditorRouteNavigationIntent("replace", options)
+      return originalReplace(url, as, options)
+    }) as typeof router.replace
+
     const handleRouteChangeStart = (nextUrl: string) => {
+      const capturedIntent = pendingRouteIntentRef.current
+      pendingRouteIntentRef.current = null
+
       if (allowNavigationRef.current) return
       if (nextUrl === router.asPath) return
       if (isForcedEditorExitUrl(nextUrl)) return
 
-      pendingRef.current = { kind: "route", url: nextUrl }
+      pendingRef.current = {
+        kind: "route",
+        url: nextUrl,
+        routeIntent: capturedIntent ?? defaultEditorRouteNavigationIntent(),
+      }
       setConfirmOpen(true)
       router.events.emit("routeChangeError")
       const error = new Error("Navigation aborted due to unsaved editor changes.") as Error & {
@@ -100,6 +128,9 @@ export const useEditorStudioUnsavedExitGuard = ({
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload)
       router.events.off("routeChangeStart", handleRouteChangeStart)
+      router.push = originalPush
+      router.replace = originalReplace
+      pendingRouteIntentRef.current = null
     }
   }, [enabled, isDirty, router])
 

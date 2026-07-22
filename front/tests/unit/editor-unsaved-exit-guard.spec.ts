@@ -1,8 +1,11 @@
 import { expect, test } from "@playwright/test"
 import {
+  captureEditorRouteNavigationIntent,
+  defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   isEditorUnsavedDirtyLabel,
   isForcedEditorExitUrl,
+  resolveEditorRouteNavigationRetry,
 } from "../../src/routes/Admin/editorStudioUnsavedExitGuard"
 
 test.describe("editor unsaved exit guard helpers", () => {
@@ -23,5 +26,40 @@ test.describe("editor unsaved exit guard helpers", () => {
 
   test("keeps a stable user-facing unsaved message", () => {
     expect(EDITOR_UNSAVED_CHANGES_MESSAGE).toContain("저장되지 않은 변경")
+  })
+
+  test("captures push and replace navigation intent with transition options", () => {
+    expect(captureEditorRouteNavigationIntent("push")).toEqual({ method: "push" })
+    expect(captureEditorRouteNavigationIntent("replace", { shallow: true, scroll: false })).toEqual({
+      method: "replace",
+      shallow: true,
+      scroll: false,
+    })
+  })
+
+  test("retries blocked navigation with the captured method and options", () => {
+    expect(resolveEditorRouteNavigationRetry("/admin/posts", null)).toEqual({
+      url: "/admin/posts",
+      method: "push",
+      options: {},
+    })
+    expect(
+      resolveEditorRouteNavigationRetry("/editor/1?panel=preview", {
+        method: "replace",
+        shallow: true,
+        scroll: false,
+      })
+    ).toEqual({
+      url: "/editor/1?panel=preview",
+      method: "replace",
+      options: { shallow: true, scroll: false },
+    })
+    expect(
+      resolveEditorRouteNavigationRetry("/editor/2", defaultEditorRouteNavigationIntent())
+    ).toEqual({
+      url: "/editor/2",
+      method: "push",
+      options: {},
+    })
   })
 })

@@ -1,7 +1,17 @@
-# Security scan merge gate (#1124)
+# Security scan merge gate (#1124, #1344)
 
 PR → `main` merge-blocking vulnerability gates live in `.github/workflows/security.yml` and
 `.github/workflows/reusable-backend-quality.yml` (dependency review).
+
+## Backend NVD path split (#1344)
+
+| Event | `backend-dependency-check` |
+| --- | --- |
+| `pull_request` | Full OWASP/NVD `dependencyCheckAnalyze` **does not run**. Job succeeds immediately so required-check name drift does not block PRs. PR still relies on dependency-review, yarn audit, OSV, Trivy, and exception schema. |
+| `push` to `main` | Full NVD scan, fail-closed if `NVD_API_KEY` missing |
+| weekly `schedule` / `workflow_dispatch` | Full NVD scan, fail-closed if `NVD_API_KEY` missing |
+
+NVD API outage on main/schedule remains fail-fast (no silent skip). Do not treat PR green as “NVD clean”; trunk/schedule evidence is the full-scan gate.
 
 ## Required secrets / vars (names only — never commit values)
 
@@ -35,9 +45,9 @@ Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets
 
 ## Required repository secret
 
-`NVD_API_KEY` must exist in repo Actions secrets. Missing secret fails `backend-dependency-check` on every PR/push (by design).
+`NVD_API_KEY` must exist in repo Actions secrets. Missing secret fails full `backend-dependency-check` on `main` push, weekly schedule, and `workflow_dispatch` (by design). PR path does not consume the secret (#1344).
 
-`backend-dependency-check` caches `~/.gradle/dependency-check-data` and allows up to 120 minutes so the first cold NVD sync is not cancelled by the old 45-minute job timeout.
+Full `backend-dependency-check` caches `~/.gradle/dependency-check-data` and allows up to 120 minutes so the first cold NVD sync is not cancelled by the old 45-minute job timeout.
 
 ### Local template / owner env
 

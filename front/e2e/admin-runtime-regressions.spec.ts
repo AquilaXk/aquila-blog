@@ -21,9 +21,9 @@ test.describe("관리자 런타임 회귀 계약", () => {
     expect(clientSource).toContain("safePath.startsWith(\"/system/api/v1/adm/\")")
     expect(clientSource).toContain("return `${BROWSER_BACKEND_PROXY_PREFIX}${safePath}`")
     expect(notificationsSource).toContain("return new URL(NOTIFICATIONS_STREAM_API_PATH, `${apiBaseUrl}/`).toString()")
-    expect(editorRootModelSource).toContain('import { getApiRequestUrl } from "src/apis/backend/client"')
-    expect(editorRootModelSource).toContain('fetch(getApiRequestUrl("/post/api/v1/posts/temp"), {')
-    expect(editorRootModelSource).toContain('"X-Aquila-CSRF": "1"')
+    expect(editorRootModelSource).toContain('import { ApiError, apiFetch } from "src/apis/backend/client"')
+    expect(editorRootModelSource).toContain('apiFetch<RsData<PostForEditor>>("/post/api/v1/posts/temp", {')
+    expect(editorRootModelSource).not.toContain('fetch(getApiRequestUrl("/post/api/v1/posts/temp"), {')
     expect(editorRootModelSource).not.toContain('fetch(`${getApiBaseUrl()}/post/api/v1/posts/temp`, {')
 
     expect(existsSync(proxySourcePath)).toBe(true)

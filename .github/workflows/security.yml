@@ -43,7 +43,8 @@ jobs:
 
   backend-dependency-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Cold NVD sync can exceed 45m; warm cache runs are much shorter (#1124).
+    timeout-minutes: 120
     permissions:
       contents: read
     steps:
@@ -59,6 +60,14 @@ jobs:
           java-version: "25"
           cache: gradle
 
+      - name: Cache OWASP dependency-check NVD data
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.gradle/dependency-check-data
+          key: owasp-nvd-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            owasp-nvd-${{ runner.os }}-
+
       - name: Run backend dependency vulnerability scan
         id: backend_dependency_scan
         working-directory: back
@@ -67,11 +76,7 @@ jobs:
         run: |
           if [ -z "${NVD_API_KEY}" ]; then
             echo "ran=false" >> "${GITHUB_OUTPUT}"
-            if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] || [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-              echo "::warning title=Backend dependency scan skipped::NVD_API_KEY secret is not configured for this ${GITHUB_EVENT_NAME} context; dependency-check requires it for reliable CI scans."
-              exit 0
-            fi
-            echo "::error title=Backend dependency scan blocked::NVD_API_KEY secret is required for scheduled and manual security scans."
+            echo "::error title=Backend dependency scan blocked::NVD_API_KEY secret is required for pull_request, push, scheduled, and manual security scans (#1124)."
             exit 1
           fi
           echo "ran=true" >> "${GITHUB_OUTPUT}"
@@ -156,3 +161,188 @@ jobs:
         uses: github/codeql-action/analyze@256d634097be96e792d6764f9edaefc4320557b1 # v4
         with:
           upload: never
+
+  vulnerability-exception-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+
+      - name: Validate vulnerability exception allowlist
+        run: |
+          node tools/guards/check-vulnerability-exceptions.mjs
+          node --test tools/test/vulnerability-exceptions.test.mjs
+
+  frontend-lockfile-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: front/yarn.lock
+
+      - name: Install frontend dependencies
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Yarn audit High/Critical fail
+        run: node tools/guards/check-yarn-audit-high.mjs --cwd front
+
+      - name: Install OSV Scanner
+        env:
+          OSV_SCANNER_VERSION: "v2.4.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          chmod +x /tmp/osv-scanner
+          sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
+          osv-scanner --version
+
+      - name: OSV scan frontend yarn.lock
+        run: |
+          set -euo pipefail
+          set +e
+          osv-scanner --lockfile=front/yarn.lock --format json --output-file="${RUNNER_TEMP}/osv-front.json"
+          osv_status=$?
+          set -e
+          # 0 = clean, 1 = vulns found (still parse), other = tool failure
+          if [ "${osv_status}" -gt 1 ]; then
+            echo "osv-scanner failed with status ${osv_status}" >&2
+            exit "${osv_status}"
+          fi
+          test -s "${RUNNER_TEMP}/osv-front.json"
+          node tools/guards/check-vulnerability-exceptions.mjs --filter-osv "${RUNNER_TEMP}/osv-front.json"
+
+  container-image-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+
+      - name: Validate vulnerability exception allowlist
+        run: node tools/guards/check-vulnerability-exceptions.mjs
+
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.72.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/trivy.tgz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Resolve deploy runtime base images
+        id: images
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Backend: final FROM of back/Dockerfile (GHCR build/deploy base).
+          back_image="$(grep -E '^FROM[[:space:]]+' back/Dockerfile | tail -n1 | awk '{print $2}')"
+          # Frontend homeserver runtime default (see deploy/homeserver/blue_green_deploy.sh NODE_RUNTIME_IMAGE).
+          # Do not use front/Dockerfile (legacy stub; not the deploy image).
+          # Pin floating tag to digest so Trivy scans a fixed image (same tag family as deploy).
+          front_tag="node:20-alpine"
+          docker pull "${front_tag}"
+          front_image="$(docker image inspect --format '{{index .RepoDigests 0}}' "${front_tag}")"
+          if [[ -z "${back_image}" ]]; then
+            echo "failed to parse backend Dockerfile FROM image" >&2
+            exit 1
+          fi
+          if [[ -z "${front_image}" || "${front_image}" != *@sha256:* ]]; then
+            echo "failed to resolve frontend runtime image digest from ${front_tag}" >&2
+            exit 1
+          fi
+          echo "back_image=${back_image}" >> "$GITHUB_OUTPUT"
+          echo "front_image=${front_image}" >> "$GITHUB_OUTPUT"
+          echo "back runtime image: ${back_image}"
+          echo "front runtime image: ${front_image} (from ${front_tag})"
+
+      - name: Trivy scan backend runtime image
+        env:
+          IMAGE: ${{ steps.images.outputs.back_image }}
+        run: |
+          set -euo pipefail
+          # OS packages only: app/library vulns are gated by NVD/yarn/OSV (#1124).
+          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --pkg-types os \
+            --format json --output "${RUNNER_TEMP}/trivy-back.json" "${IMAGE}"
+          node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-back.json"
+
+      - name: Trivy scan frontend runtime image
+        env:
+          IMAGE: ${{ steps.images.outputs.front_image }}
+        run: |
+          set -euo pipefail
+          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --pkg-types os \
+            --format json --output "${RUNNER_TEMP}/trivy-front.json" "${IMAGE}"
+          node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-front.json"
+
+  sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Install Syft
+        env:
+          SYFT_VERSION: "v1.19.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/syft.tgz \
+            "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
+          tar -xzf /tmp/syft.tgz -C /tmp syft
+          sudo mv /tmp/syft /usr/local/bin/syft
+          syft version
+
+      - name: Generate CycloneDX SBOMs
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/sbom"
+          syft dir:front -o cyclonedx-json="${RUNNER_TEMP}/sbom/front.cdx.json"
+          syft dir:back -o cyclonedx-json="${RUNNER_TEMP}/sbom/back.cdx.json"
+          test -s "${RUNNER_TEMP}/sbom/front.cdx.json"
+          test -s "${RUNNER_TEMP}/sbom/back.cdx.json"
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: sbom-cyclonedx
+          path: ${{ runner.temp }}/sbom/*.cdx.json
+          if-no-files-found: error

@@ -125,19 +125,8 @@ class ExceptionHandlerLogRedactionTest {
 
         val event = appender.list.single()
         assertThat(event.throwableProxy).isNotNull
+        assertThat(event.throwableProxy.className).isEqualTo(DateTimeParseException::class.java.name)
         assertThat(event.throwableProxy.message)
-            .contains("token=[REDACTED]")
-            .doesNotContain("LEAK_TEST_123")
-
-        val redactedMethod =
-            ExceptionHandler::class.java.getDeclaredMethod(
-                "redactedThrowableForLogging",
-                Throwable::class.java,
-            )
-        redactedMethod.isAccessible = true
-        val redacted = redactedMethod.invoke(handler, unexpected) as Throwable
-        assertThat(redacted.toString())
-            .startsWith(DateTimeParseException::class.java.name)
             .contains("token=[REDACTED]")
             .doesNotContain("LEAK_TEST_123")
     }

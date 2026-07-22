@@ -428,9 +428,8 @@ class ExceptionHandler(
         }
 
     /**
-     * Logback serializes throwable.getMessage()/toString() into stack output.
-     * Attach a copy whose message/cause/suppressed messages are redacted while
-     * preserving frames and original class names (via same-type copy or toString).
+     * Logback serializes throwable className + message into stack output.
+     * Attach a same-runtime-class copy whose message/cause/suppressed messages are redacted.
      */
     private fun redactedThrowableForLogging(ex: Throwable): Throwable = redactedThrowableForLogging(ex, IdentityHashMap())
 
@@ -447,11 +446,7 @@ class ExceptionHandler(
 
         val cause = ex.cause
         if (cause != null) {
-            try {
-                copy.initCause(redactedThrowableForLogging(cause, visited))
-            } catch (_: IllegalStateException) {
-                // constructor already attached a cause
-            }
+            attachCause(copy, redactedThrowableForLogging(cause, visited))
         }
         for (suppressed in ex.suppressed) {
             copy.addSuppressed(redactedThrowableForLogging(suppressed, visited))
@@ -470,43 +465,63 @@ class ExceptionHandler(
         val redactedMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
         createThrowableWithMessage(ex.javaClass, redactedMessage)?.let { return it }
 
-        // Constructor-free fallback: keep original type in stack first line via toString().
-        return RedactedLoggingThrowable(ex.javaClass.name, redactedMessage)
+        // Extremely rare: JVM blocks Unsafe allocateInstance. Keep logging available.
+        return if (ex is RuntimeException) {
+            RuntimeException(redactedMessage)
+        } else {
+            Exception(redactedMessage)
+        }
     }
 
     private fun createThrowableWithMessage(
         clazz: Class<out Throwable>,
         message: String,
     ): Throwable? {
-        // Prefer (String) so cause stays unset and can be attached via initCause.
+        // Prefer public (String) so cause stays unset and can be attached via initCause.
         runCatching {
-            val ctor = clazz.getDeclaredConstructor(String::class.java)
-            ctor.isAccessible = true
-            return ctor.newInstance(message)
+            return clazz.getConstructor(String::class.java).newInstance(message)
         }
 
-        return runCatching {
-            val ctor = clazz.getDeclaredConstructor()
-            ctor.isAccessible = true
-            val instance = ctor.newInstance()
-            val detailMessage = Throwable::class.java.getDeclaredField("detailMessage")
-            detailMessage.isAccessible = true
-            detailMessage.set(instance, message)
-            instance
-        }.getOrNull()
+        // Other public ctors (e.g. DateTimeParseException(String, CharSequence, int)).
+        for (ctor in clazz.constructors.sortedBy { it.parameterCount }) {
+            val instance =
+                runCatching {
+                    val args =
+                        Array(ctor.parameterCount) { index ->
+                            defaultThrowableCtorArg(ctor.parameterTypes[index], message)
+                        }
+                    ctor.newInstance(*args) as Throwable
+                }.getOrNull() ?: continue
+
+            // Keep only copies whose message is already the redacted value (no private-field writes).
+            if (instance.message != message) continue
+            return instance
+        }
+        return null
     }
 
-    /**
-     * Used when the original exception type cannot be constructed safely.
-     * Logback stack first line uses [toString], so ops still sees the original class name.
-     */
-    private class RedactedLoggingThrowable(
-        private val originalClassName: String,
-        message: String?,
-    ) : RuntimeException(message) {
-        override fun toString(): String {
-            val msg = localizedMessage
-            return if (msg.isNullOrEmpty()) originalClassName else "$originalClassName: $msg"
+    private fun defaultThrowableCtorArg(
+        type: Class<*>,
+        message: String,
+    ): Any? =
+        when {
+            type == String::class.java || type == CharSequence::class.java -> message
+            type == Throwable::class.java -> null
+            type == Integer.TYPE || type == Integer::class.java -> 0
+            type == java.lang.Long.TYPE || type == java.lang.Long::class.java -> 0L
+            type == java.lang.Boolean.TYPE || type == java.lang.Boolean::class.java -> false
+            type.isEnum -> type.enumConstants.firstOrNull()
+            else -> null
+        }
+
+    private fun attachCause(
+        target: Throwable,
+        cause: Throwable,
+    ) {
+        try {
+            target.initCause(cause)
+        } catch (_: IllegalStateException) {
+            // Some public ctors already set cause; leave that instance as-is.
         }
     }
 

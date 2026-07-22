@@ -127,6 +127,68 @@ export const reportCodeFenceRecovery = (report: CodeFenceRecoveryReport) => {
   }
 }
 
+const fenceOpeningMetadataScore = (openingLine: string) => {
+  const match = openingLine.trim().match(/^([`~]{3,})(.*)$/)
+  if (!match) return 0
+
+  const delimiter = match[1]
+  const info = match[2].trim()
+  let score = info.length
+  if (delimiter[0] === "~") score += 100
+  return score
+}
+
+export const publicContentHasRicherFenceMetadata = (
+  reconstructedContent: string,
+  publicMarkdown: string
+) => {
+  const reconBlocks = parseFencedCodeBlocks(reconstructedContent.replace(/\r\n?/g, "\n"))
+  const publicBlocks = parseFencedCodeBlocks(publicMarkdown.replace(/\r\n?/g, "\n"))
+  if (publicBlocks.length === 0) return false
+
+  const compareCount = Math.min(reconBlocks.length, publicBlocks.length)
+  for (let index = 0; index < compareCount; index += 1) {
+    const reconOpening = reconBlocks[index]?.lines[0] ?? ""
+    const publicOpening = publicBlocks[index]?.lines[0] ?? ""
+    if (fenceOpeningMetadataScore(publicOpening) > fenceOpeningMetadataScore(reconOpening)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+const mergeFaithfulPublicFencedBlocks = (content: string, publicContent: string) => {
+  const publicBlocks = parseFencedCodeBlocks(publicContent.replace(/\r\n?/g, "\n"))
+  if (!publicBlocks.some((block) => !isCodeFenceBodyVisiblyEmpty(block.body))) return content
+
+  const normalized = content.replace(/\r\n?/g, "\n")
+  const lines = normalized.split("\n")
+  const targetBlocks = parseFencedCodeBlocks(normalized)
+  let lineOffset = 0
+
+  for (const [blockIndex, block] of targetBlocks.entries()) {
+    const publicBlock = publicBlocks[blockIndex]
+    if (!publicBlock || isCodeFenceBodyVisiblyEmpty(publicBlock.body)) continue
+
+    const publicOpening = publicBlock.lines[0] ?? ""
+    const blockOpening = block.lines[0] ?? ""
+    const shouldReplaceWholeBlock =
+      isCodeFenceBodyVisiblyEmpty(block.body) ||
+      fenceOpeningMetadataScore(publicOpening) > fenceOpeningMetadataScore(blockOpening)
+
+    if (!shouldReplaceWholeBlock) continue
+
+    const replacementLines = publicBlock.lines
+    const startLine = block.startLine + lineOffset
+    const deleteCount = block.endLine - block.startLine + 1
+    lines.splice(startLine, deleteCount, ...replacementLines)
+    lineOffset += replacementLines.length - deleteCount
+  }
+
+  return lines.join("\n")
+}
+
 export const applyCandidateCodeFenceRecovery = (
   content: string,
   candidateContent: string
@@ -193,10 +255,34 @@ export const resolveEditorCodeFenceRecovery = ({
   }
 
   const fromHtml = applyCandidateCodeFenceRecovery(adminContent, contentHtmlBodyCandidate)
+
+  if (publicFallbackSucceeded && typeof publicContent === "string") {
+    const metadataMergeBase = isCodeFenceRecoveryComplete(fromHtml.content)
+      ? fromHtml.content
+      : adminContent
+    const metadataMerged = mergeFaithfulPublicFencedBlocks(metadataMergeBase, publicContent)
+
+    if (
+      isCodeFenceRecoveryComplete(metadataMerged) &&
+      publicContentHasRicherFenceMetadata(fromHtml.content, publicContent)
+    ) {
+      return {
+        content: metadataMerged,
+        recovered: true,
+        source: "publicApi",
+      }
+    }
+  }
+
   if (
     fromHtml.recovered &&
     isCodeFenceRecoveryComplete(fromHtml.content) &&
-    !adminWasEmpty
+    !adminWasEmpty &&
+    !(
+      publicFallbackSucceeded &&
+      typeof publicContent === "string" &&
+      publicContentHasRicherFenceMetadata(fromHtml.content, publicContent)
+    )
   ) {
     return {
       content: fromHtml.content,

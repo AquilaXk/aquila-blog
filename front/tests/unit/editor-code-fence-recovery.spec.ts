@@ -190,6 +190,48 @@ test.describe("editor code fence recovery", () => {
     expect(result.content).toContain("const value = 1")
   })
 
+  test("prefers public when html recovery is complete but public preserves richer fence metadata", () => {
+    const adminWithPlainFence = [
+      "intro",
+      "",
+      "```",
+      "",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+    const htmlFilledFence = [
+      "intro",
+      "",
+      "```kotlin",
+      "fun example() = Unit",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+    const publicWithFenceTitle = [
+      "intro",
+      "",
+      '```kotlin title="Example"',
+      "fun example() = Unit",
+      "```",
+      "",
+      "outro",
+    ].join("\n")
+
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: adminWithPlainFence,
+      contentHtmlBodyCandidate: htmlFilledFence,
+      publicContent: publicWithFenceTitle,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("publicApi")
+    expect(result.recovered).toBe(true)
+    expect(result.content).toContain('title="Example"')
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(false)
+  })
+
   test("complete html recovery uses contentHtml without needing public", () => {
     const result = resolveEditorCodeFenceRecovery({
       adminContent: emptyFenceContent,

@@ -11,7 +11,6 @@ import {
   adminContentHadEmptyFenceForTelemetry,
   adminContentNeedsCodeFenceRecovery,
   reportCodeFenceRecovery,
-  isCodeFenceRecoveryComplete,
   resolveEditorCodeFenceRecovery,
 } from "./editorCodeFenceRecovery"
 import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
@@ -398,19 +397,8 @@ export const useEditorStudioDraftLifecycle = ({
       let publicContentHtml: string | null | undefined
       let publicFallbackSucceeded = false
 
-      // contentHtml이 완전 복원(비어 있지 않고 empty fence 없음)일 때만 공개 API를 건너뛴다.
-      // admin content가 비어 있으면 prose-only HTML이 complete로 오판돼도 public fetch를 시도한다.
-      const htmlFirstRecovery = resolveEditorCodeFenceRecovery({
-        adminContent,
-        contentHtmlBodyCandidate: htmlRecoverySnapshot.body,
-        publicFallbackSucceeded: false,
-      })
-      const htmlRecoveryComplete =
-        htmlFirstRecovery.source === "contentHtml" &&
-        isCodeFenceRecoveryComplete(htmlFirstRecovery.content)
-      const shouldFetchPublicContent =
-        needsCodeFenceRecovery &&
-        (adminContent.trim().length === 0 || !htmlRecoveryComplete)
+      // empty-fence complete만으로 public fetch를 건너뛰면 fence title/delimiter 등 메타데이터가 유실될 수 있다.
+      const shouldFetchPublicContent = needsCodeFenceRecovery
 
       if (shouldFetchPublicContent) {
         try {

@@ -160,6 +160,9 @@ export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async (
       : null
 
   const bootstrapResult = bootstrapResultPromise ? await bootstrapResultPromise : null
+  if (bootstrapResult && !bootstrapResult.ok) {
+    throw bootstrapResult.error
+  }
   if (bootstrapResult?.ok && !bootstrapResult.value.ok && bootstrapResult.value.destination) {
     return {
       redirect: {

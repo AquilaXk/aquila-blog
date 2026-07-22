@@ -8,6 +8,8 @@ test.describe("admin bootstrap state contract", () => {
 
     expect(adminSource).toContain('"/member/api/v1/adm/members/bootstrap"')
     expect(adminSource).toContain("readAdminProtectedBootstrap<AdminHubBootstrapPayload>(req, \"/member/api/v1/adm/members/bootstrap\", \"/admin\")")
+    expect(adminSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(adminSource).toContain("throw bootstrapResult.error")
     expect(adminSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(adminSource).toContain('profileDescription = "bootstrap"')
   })
@@ -26,6 +28,8 @@ test.describe("admin bootstrap state contract", () => {
 
     expect(postsSource).toContain('"/post/api/v1/adm/posts/bootstrap"')
     expect(postsSource).toContain("readAdminProtectedBootstrap<AdminPostsBootstrapPayload>(")
+    expect(postsSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(postsSource).toContain("throw bootstrapResult.error")
     expect(postsSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(postsSource).toContain('source: "bootstrap"')
   })
@@ -54,6 +58,8 @@ test.describe("admin bootstrap state contract", () => {
 
     expect(toolsSource).toContain('"/system/api/v1/adm/bootstrap"')
     expect(toolsSource).toContain("readAdminProtectedBootstrap<AdminToolsBootstrapPayload>(req, \"/system/api/v1/adm/bootstrap\", \"/admin/tools\")")
+    expect(toolsSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(toolsSource).toContain("throw bootstrapResult.error")
     expect(toolsSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(toolsSource).toContain("systemHealth: bootstrapResult.value.value.health")
     expect(toolsSource).toContain('source: "bootstrap"')
@@ -74,6 +80,8 @@ test.describe("admin bootstrap state contract", () => {
     expect(dashboardSource).toContain(
       "readAdminProtectedBootstrap<AdminDashboardBootstrapPayload>(req, \"/system/api/v1/adm/bootstrap\", \"/admin/dashboard\")"
     )
+    expect(dashboardSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(dashboardSource).toContain("throw bootstrapResult.error")
     expect(dashboardSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
     expect(dashboardSource).toContain("value: bootstrapResult.value.value.health")
     expect(dashboardSource).toContain("value: bootstrapResult.value.value.dashboard")
@@ -88,6 +96,8 @@ test.describe("admin bootstrap state contract", () => {
     expect(profileSource).toContain(
       "readAdminProtectedBootstrap<AdminProfileBootstrapPayload>("
     )
+    expect(profileSource).toContain("if (bootstrapResult && !bootstrapResult.ok)")
+    expect(profileSource).toContain("throw bootstrapResult.error")
     expect(profileSource).toContain("initialWorkspace = bootstrapResult.value.value.workspace")
     expect(profileSource).toContain('name: "admin-profile-auth"')
     expect(profileSource).toContain('name: "admin-profile-workspace"')

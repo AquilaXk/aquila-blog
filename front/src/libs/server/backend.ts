@@ -142,7 +142,11 @@ export const serverApiFetchJson = async <T>(
 
   const contentType = response.headers.get("content-type")?.toLowerCase() || ""
   if (contentType.includes("application/json")) {
-    return (await response.json()) as T
+    try {
+      return (await response.json()) as T
+    } catch {
+      throw new ApiError(response.status, url, "")
+    }
   }
 
   const body = await response.text()

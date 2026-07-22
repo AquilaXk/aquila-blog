@@ -60,6 +60,22 @@ test("serverApiFetchJson throws ApiError with status/body/userMessage on HTTP fa
   }
 })
 
+test("serverApiFetchJson wraps JSON Content-Type parse failure as ApiError", async () => {
+  globalThis.fetch = (async () =>
+    new Response("{not-json", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as typeof fetch
+
+  try {
+    await serverApiFetchJson(createReq(), "/member/api/v1/auth/me")
+    throw new Error("expected ApiError")
+  } catch (error) {
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).status).toBe(200)
+  }
+})
+
 test("serverApiFetchJson wraps transport TypeError as ApiNetworkError", async () => {
   globalThis.fetch = (async () => {
     throw new TypeError("fetch failed")

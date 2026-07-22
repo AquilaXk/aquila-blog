@@ -1,4 +1,4 @@
-import { ApiError, ApiTimeoutError } from "src/apis/backend/client"
+import { ApiError, ApiNetworkError, ApiTimeoutError } from "src/apis/backend/client"
 
 export type EditorFailureAction = "write" | "modify" | "publish-temp"
 export type EditorUploadFailureKind = "image" | "file" | "thumbnail"
@@ -54,8 +54,9 @@ const retryAction = "네트워크와 상태를 확인한 뒤 다시 시도"
 const isBrowserOffline = (isOnline: boolean | undefined) => isOnline === false
 
 const isFetchTransportError = (error: unknown) =>
-  error instanceof TypeError &&
-  /failed to fetch|networkerror|load failed|fetch/i.test(error.message)
+  error instanceof ApiNetworkError ||
+  (error instanceof TypeError &&
+    /failed to fetch|networkerror|load failed|fetch/i.test(error.message))
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message.trim()

@@ -34,8 +34,11 @@ test.describe("error boundary launch gate", () => {
     for (const field of ["id", "boundary", "surface", "path", "errorName", "occurredAt"]) {
       expect(clientErrorsSource).toContain(`${field},`)
     }
+    for (const field of ["errorMessage", "stackTop", "category", "requestId", "status", "url"]) {
+      expect(clientErrorsSource).toContain(`{ ${field} }`)
+    }
     expect(clientErrorsSource).not.toContain("body.message")
-    expect(clientErrorsSource).not.toContain("body.stack")
+    expect(clientErrorsSource).not.toMatch(/\bbody\.stack\b(?!Top)/)
   })
 
   test("global render exception shows recoverable 500 UX and sanitized telemetry", async ({ page }) => {

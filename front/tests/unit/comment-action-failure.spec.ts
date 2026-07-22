@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { ApiError, ApiTimeoutError } from "../../src/apis/backend/client"
+import { ApiError, ApiNetworkError, ApiTimeoutError } from "../../src/apis/backend/client"
 import {
   COMMENT_ACTION_NETWORK_FAILURE_MESSAGE,
   COMMENT_CREATE_FAILURE_MESSAGE,
@@ -93,6 +93,11 @@ test("resolveCommentActionFailure maps timeout and network errors", () => {
   })
 
   expect(resolveCommentActionFailure(new TypeError("Failed to fetch"), "delete")).toEqual({
+    kind: "error",
+    message: COMMENT_ACTION_NETWORK_FAILURE_MESSAGE,
+  })
+
+  expect(resolveCommentActionFailure(new ApiNetworkError("/post/api/v1/posts/1/comments"), "delete")).toEqual({
     kind: "error",
     message: COMMENT_ACTION_NETWORK_FAILURE_MESSAGE,
   })

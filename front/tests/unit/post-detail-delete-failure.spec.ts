@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { ApiError, ApiTimeoutError } from "../../src/apis/backend/client"
+import { ApiError, ApiNetworkError, ApiTimeoutError } from "../../src/apis/backend/client"
 import {
   POST_DETAIL_DELETE_GENERIC_FAILURE_MESSAGE,
   POST_DETAIL_DELETE_NETWORK_FAILURE_MESSAGE,
@@ -56,6 +56,11 @@ test("resolvePostDetailDeleteFailure maps timeout and network errors", () => {
   })
 
   expect(resolvePostDetailDeleteFailure(new TypeError("Failed to fetch"))).toEqual({
+    kind: "error",
+    message: POST_DETAIL_DELETE_NETWORK_FAILURE_MESSAGE,
+  })
+
+  expect(resolvePostDetailDeleteFailure(new ApiNetworkError("/post/api/v1/posts/1"))).toEqual({
     kind: "error",
     message: POST_DETAIL_DELETE_NETWORK_FAILURE_MESSAGE,
   })

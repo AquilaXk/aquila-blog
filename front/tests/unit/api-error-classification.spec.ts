@@ -28,7 +28,7 @@ test("ApiError exposes resultCode from body JSON", () => {
 
 test("classifyApiError maps timeout and network first", () => {
   expect(classifyApiError(new ApiTimeoutError("/x", 1_000))).toBe("timeout")
-  expect(classifyApiError(new ApiNetworkError())).toBe("network")
+  expect(classifyApiError(new ApiNetworkError("/x"))).toBe("network")
 })
 
 test("classifyApiError maps ApiError status categories", () => {
@@ -57,7 +57,7 @@ test("toUserFacingMessage uses category fallbacks", () => {
   expect(toUserFacingMessage(new ApiTimeoutError("/x", 1_000))).toBe(
     "요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
   )
-  expect(toUserFacingMessage(new ApiNetworkError())).toBe(
+  expect(toUserFacingMessage(new ApiNetworkError("/x"))).toBe(
     "네트워크 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
   )
   expect(toUserFacingMessage(new Error("raw"))).toBe(

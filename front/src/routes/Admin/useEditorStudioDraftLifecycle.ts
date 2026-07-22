@@ -406,7 +406,7 @@ export const useEditorStudioDraftLifecycle = ({
       if (shouldFetchPublicContent) {
         try {
           const publicPost = await apiFetch<Pick<PostForEditor, "content" | "contentHtml">>(
-            `/post/api/v1/posts/${targetPostId}`
+            `/post/api/v1/posts/${normalizedTargetPostId}`
           )
           if ((publicPost.content ?? "").trim().length > 0 || publicPost.contentHtml) {
             publicContent = publicPost.content ?? ""

@@ -99,7 +99,7 @@ class PostPublicReadQueryService(
             postReadBulkheadService.withFeedPermit {
                 val safeSort = requireCursorSort(sort)
                 val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
-                val parsedCursor = parseCursor(cursor)
+                val parsedCursor = parseCursor(cursor, safeSort)
                 val rows =
                     postUseCase.findPublicByCursor(
                         cursorSortValue = parsedCursor?.sortValue,
@@ -179,7 +179,7 @@ class PostPublicReadQueryService(
                 if (normalizedTag.isBlank()) {
                     throw AppException("400-1", "태그 커서 탐색에는 tag 파라미터가 필요합니다.")
                 }
-                val parsedCursor = parseCursor(cursor)
+                val parsedCursor = parseCursor(cursor, safeSort)
                 val rows =
                     postUseCase.findPublicByTagCursor(
                         tag = normalizedTag,
@@ -715,7 +715,7 @@ class PostPublicReadQueryService(
             }
         val nextCursor =
             if (hasNext) {
-                currentRows.lastOrNull()?.let { encodeCursor(it.sortValue, it.post.id) }
+                currentRows.lastOrNull()?.let { encodeCursor(it.sortValue, it.post.id, sort) }
             } else {
                 null
             }
@@ -773,47 +773,99 @@ class PostPublicReadQueryService(
             else -> throw AppException("400-1", "커서 조회는 CREATED_AT/HIT_COUNT/LIKES_COUNT 정렬만 지원합니다.")
         }
 
-    private fun parseCursor(raw: String?): CursorToken? {
+    private fun parseCursor(
+        raw: String?,
+        expectedSort: PostSearchSortType1,
+    ): CursorToken? {
         val value = raw?.trim().orEmpty()
         if (value.isBlank()) return null
-        val parts = value.split(":", limit = 3)
-        if (parts.size != 3) {
-            throw AppException("400-1", "cursor 형식이 올바르지 않습니다.")
+        val parts = value.split(":")
+        return when (parts.size) {
+            CURSOR_LEGACY_PART_COUNT -> parseLegacyCreatedAtCursor(parts, expectedSort)
+            CURSOR_SORT_BOUND_PART_COUNT -> parseSortBoundCursor(parts, expectedSort)
+            else -> throw AppException("400-1", "cursor 형식이 올바르지 않습니다.")
         }
+    }
 
+    private fun parseLegacyCreatedAtCursor(
+        parts: List<String>,
+        expectedSort: PostSearchSortType1,
+    ): CursorToken {
+        if (expectedSort != PostSearchSortType1.CREATED_AT) {
+            throw AppException(
+                "400-1",
+                "cursor에 정렬 모드가 없어 ${expectedSort.name} 요청에 사용할 수 없습니다.",
+            )
+        }
         val sortValue =
             parts[0].toLongOrNull()
                 ?: throw AppException("400-1", "cursor sortValue 형식이 올바르지 않습니다.")
         val id =
             parts[1].toLongOrNull()
                 ?: throw AppException("400-1", "cursor id 형식이 올바르지 않습니다.")
+        verifyCursorToken(sortValue, id, payload = "$sortValue:$id", signature = parts[2])
+        return CursorToken(sortValue, id, PostSearchSortType1.CREATED_AT)
+    }
+
+    private fun parseSortBoundCursor(
+        parts: List<String>,
+        expectedSort: PostSearchSortType1,
+    ): CursorToken {
+        val sortValue =
+            parts[0].toLongOrNull()
+                ?: throw AppException("400-1", "cursor sortValue 형식이 올바르지 않습니다.")
+        val id =
+            parts[1].toLongOrNull()
+                ?: throw AppException("400-1", "cursor id 형식이 올바르지 않습니다.")
+        val cursorSort =
+            runCatching { PostSearchSortType1.valueOf(parts[2].trim()) }.getOrElse {
+                throw AppException("400-1", "cursor 정렬 모드가 올바르지 않습니다.")
+            }
+        if (cursorSort != expectedSort) {
+            throw AppException(
+                "400-1",
+                "cursor 정렬 모드(${cursorSort.name})가 요청 정렬(${expectedSort.name})과 일치하지 않습니다.",
+            )
+        }
+        verifyCursorToken(
+            sortValue,
+            id,
+            payload = "$sortValue:$id:${cursorSort.name}",
+            signature = parts[3],
+        )
+        return CursorToken(sortValue, id, cursorSort)
+    }
+
+    private fun verifyCursorToken(
+        sortValue: Long,
+        id: Long,
+        payload: String,
+        signature: String,
+    ) {
         if (sortValue < 0 || id <= 0L) {
             throw AppException("400-1", "cursor 값이 유효하지 않습니다.")
         }
-
-        val signature = parts[2].trim()
-        if (signature.isBlank()) {
+        val trimmedSignature = signature.trim()
+        if (trimmedSignature.isBlank()) {
             throw AppException("400-1", "cursor 서명이 비어 있습니다.")
         }
-        val payload = "$sortValue:$id"
         val expectedSignature = signCursorPayload(payload)
         val isSignatureValid =
             MessageDigest.isEqual(
                 expectedSignature.toByteArray(StandardCharsets.UTF_8),
-                signature.toByteArray(StandardCharsets.UTF_8),
+                trimmedSignature.toByteArray(StandardCharsets.UTF_8),
             )
         if (!isSignatureValid) {
             throw AppException("400-1", "cursor 서명이 유효하지 않습니다.")
         }
-
-        return CursorToken(sortValue, id)
     }
 
     private fun encodeCursor(
         sortValue: Long,
         id: Long,
+        sort: PostSearchSortType1,
     ): String {
-        val payload = "$sortValue:$id"
+        val payload = "$sortValue:$id:${sort.name}"
         return "$payload:${signCursorPayload(payload)}"
     }
 
@@ -917,11 +969,14 @@ class PostPublicReadQueryService(
         private const val MAX_CURSOR_PAGE_SIZE = 30
         private const val CURSOR_HMAC_ALGORITHM = "HmacSHA256"
         private const val CURSOR_SIGNATURE_BYTES = 18
+        private const val CURSOR_LEGACY_PART_COUNT = 3
+        private const val CURSOR_SORT_BOUND_PART_COUNT = 4
         private const val DEFAULT_CURSOR_SIGNING_SECRET = "aquila-post-cursor-signing-secret-change-me"
     }
 
     private data class CursorToken(
         val sortValue: Long,
         val id: Long,
+        val sort: PostSearchSortType1,
     )
 }

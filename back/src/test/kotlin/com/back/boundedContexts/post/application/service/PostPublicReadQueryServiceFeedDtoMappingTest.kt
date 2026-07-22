@@ -6,10 +6,12 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.global.app.AppConfig
+import com.back.global.exception.application.AppException
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -18,12 +20,17 @@ import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.times
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
+import java.nio.charset.StandardCharsets
 import java.time.Instant
+import java.util.Base64
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 @DisplayName("공개 게시글 feed DTO 매핑")
 class PostPublicReadQueryServiceFeedDtoMappingTest {
     companion object {
         private const val MAPPING_FAILURE_METRIC = "post.feed.dto.mapping.failure"
+        private const val CURSOR_TEST_SECRET = "test-secret"
 
         @JvmStatic
         @BeforeAll
@@ -180,6 +187,57 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 limit = 4,
                 sort = PostSearchSortType1.HIT_COUNT,
             )
+        assertThat(page.nextCursor).contains(":HIT_COUNT:")
+    }
+
+    @Test
+    @DisplayName("legacy CREATED_AT 커서는 CREATED_AT 요청에서만 허용한다")
+    fun acceptsLegacyCreatedAtCursorOnlyForCreatedAtSort() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val service = createService(postUseCase, SimpleMeterRegistry())
+        val nextRawPost = postByAuthor(id = 41L)
+        val legacyCursor = signLegacyCursor(sortValue = 1_767_312_000_000L, id = 40L)
+        given(
+            postUseCase.findPublicByCursor(
+                cursorSortValue = 1_767_312_000_000L,
+                cursorId = 40L,
+                limit = 3,
+                sort = PostSearchSortType1.CREATED_AT,
+            ),
+        ).willReturn(listOf(nextRawPost))
+
+        val page = service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.CREATED_AT)
+
+        assertThat(page.content.map { it.id }).containsExactly(41L)
+        assertThatThrownBy {
+            service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.HIT_COUNT)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("정렬 모드가 없어")
+    }
+
+    @Test
+    @DisplayName("sort-bound 커서는 요청 정렬과 다르면 400으로 거절한다")
+    fun rejectsSortBoundCursorWhenRequestSortDoesNotMatch() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val service = createService(postUseCase, SimpleMeterRegistry())
+        val first = postByAuthor(id = 51L).also { it.hitCountAttr = PostAttr(1L, it, HIT_COUNT, 20) }
+        val second = postByAuthor(id = 50L).also { it.hitCountAttr = PostAttr(2L, it, HIT_COUNT, 10) }
+        given(
+            postUseCase.findPublicByCursor(
+                cursorSortValue = null,
+                cursorId = null,
+                limit = 3,
+                sort = PostSearchSortType1.HIT_COUNT,
+            ),
+        ).willReturn(listOf(first, second))
+
+        val page = service.getPublicFeedByCursor(null, 1, PostSearchSortType1.HIT_COUNT)
+
+        assertThat(page.nextCursor).isNotBlank()
+        assertThatThrownBy {
+            service.getPublicFeedByCursor(page.nextCursor, 1, PostSearchSortType1.LIKES_COUNT)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("일치하지 않습니다")
     }
 
     @Test
@@ -226,10 +284,22 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 ),
             cacheManager = ConcurrentMapCacheManager(),
             meterRegistry = meterRegistry,
-            cursorSigningSecret = "test-secret",
+            cursorSigningSecret = CURSOR_TEST_SECRET,
             detailContentCacheMaxChars = 120000,
             detailSnapshotCacheMaxChars = 180000,
         )
+
+    private fun signLegacyCursor(
+        sortValue: Long,
+        id: Long,
+    ): String {
+        val payload = "$sortValue:$id"
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(CURSOR_TEST_SECRET.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
+        val digest = mac.doFinal(payload.toByteArray(StandardCharsets.UTF_8))
+        val signature = Base64.getUrlEncoder().withoutPadding().encodeToString(digest.copyOf(18))
+        return "$payload:$signature"
+    }
 
     private fun postByAuthor(id: Long): Post =
         postWithoutAuditTimestamps(id).apply {

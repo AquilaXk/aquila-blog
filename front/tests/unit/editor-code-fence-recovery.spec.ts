@@ -142,6 +142,20 @@ test.describe("editor code fence recovery", () => {
     expect(result.content).not.toContain("const value = 1")
   })
 
+  test("does not mark recovered when public fallback only partially fills fences", () => {
+    const result = resolveEditorCodeFenceRecovery({
+      adminContent: twoEmptyFences,
+      contentHtmlBodyCandidate: "",
+      publicContent: partialHtmlCandidate,
+      publicFallbackSucceeded: true,
+    })
+
+    expect(result.source).toBe("publicApi")
+    expect(result.recovered).toBe(false)
+    expect(hasEmptyFencedCodeBlockBody(result.content)).toBe(true)
+    expect(result.content).toContain("fun example() = Unit")
+  })
+
   test("marks unrecovered when PRIVATE-like public fallback is unavailable", () => {
     const result = resolveEditorCodeFenceRecovery({
       adminContent: emptyFenceContent,

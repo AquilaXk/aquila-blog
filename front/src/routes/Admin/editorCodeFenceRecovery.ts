@@ -226,7 +226,8 @@ export const resolveEditorCodeFenceRecovery = ({
     if (fromPublic.recovered || fromPublic.content !== adminContent) {
       return {
         content: fromPublic.content,
-        recovered: fromPublic.recovered || fromPublic.content !== adminContent,
+        recovered:
+          fromPublic.recovered && isCodeFenceRecoveryComplete(fromPublic.content),
         source: "publicApi",
       }
     }

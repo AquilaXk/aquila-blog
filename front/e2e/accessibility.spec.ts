@@ -6,7 +6,7 @@ const AVATAR_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
 const AVATAR_PNG = Buffer.from(AVATAR_PNG_BASE64, "base64")
 const testBaseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
-const localDraftStorageKey = "admin.editor.localDraft.v1"
+const localDraftStorageKey = "admin.editor.localDraft.create.v2"
 const adminMember = {
   id: 1,
   username: "qa-admin",
@@ -89,6 +89,7 @@ const mockAuthenticatedEditor = async (page: Page) => {
           category: "",
           visibility: "PUBLIC_UNLISTED",
           savedAt: new Date().toISOString(),
+          source: { kind: "create" },
         })
       )
     },

@@ -96,6 +96,7 @@ export const AdminPostsWorkspaceRecentWork: React.FC<AdminPostsWorkspaceRecentWo
                 </ResumeHeader>
                 <ResumeTitle>{localDraft.title}</ResumeTitle>
                 <ResumeMeta>
+                  <span>{localDraft.slotLabel}</span>
                   <VisibilityBadge data-tone={localDraft.visibility}>
                     {visibilityLabelFromValue(localDraft.visibility)}
                   </VisibilityBadge>

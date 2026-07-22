@@ -13,6 +13,7 @@ import {
 import {
   DEFAULT_MARKDOWN_EDITOR_MODE,
   MARKDOWN_EDITOR_MODE_STORAGE_KEY,
+  getBrowserModePreferenceStorage,
   isMarkdownEditorMode,
   readMarkdownEditorModePreference,
   resolveMarkdownEditorModeAfterHydration,
@@ -186,5 +187,31 @@ test.describe("markdown editor mode preference", () => {
 
     expect(next.value.indexOf("|  |  |")).toBeLessThan(next.value.indexOf("omega"))
     expect(next.value).toBe(`alpha${tableBlockSnippet.snippet}omega`)
+  })
+
+  test("falls back when window.localStorage access throws SecurityError", () => {
+    const previousWindow = (globalThis as { window?: unknown }).window
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        get localStorage() {
+          throw new DOMException("Denied", "SecurityError")
+        },
+      },
+    })
+    try {
+      expect(getBrowserModePreferenceStorage()).toBeNull()
+      expect(readMarkdownEditorModePreference()).toBe(DEFAULT_MARKDOWN_EDITOR_MODE)
+      expect(() => writeMarkdownEditorModePreference("write")).not.toThrow()
+    } finally {
+      if (previousWindow === undefined) {
+        Reflect.deleteProperty(globalThis, "window")
+      } else {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: previousWindow,
+        })
+      }
+    }
   })
 })

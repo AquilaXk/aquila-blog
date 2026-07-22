@@ -191,11 +191,12 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
     }
 
     @Test
-    @DisplayName("legacy CREATED_AT 커서는 CREATED_AT 요청에서만 허용한다")
-    fun acceptsLegacyCreatedAtCursorOnlyForCreatedAtSort() {
+    @DisplayName("legacy CREATED_AT 커서는 CREATED_AT/CREATED_AT_ASC 요청에서 허용한다")
+    fun acceptsLegacyCreatedAtCursorForCreatedAtSorts() {
         val postUseCase = mock(PostUseCase::class.java)
         val service = createService(postUseCase, SimpleMeterRegistry())
         val nextRawPost = postByAuthor(id = 41L)
+        val ascNextRawPost = postByAuthor(id = 42L)
         val legacyCursor = signLegacyCursor(sortValue = 1_767_312_000_000L, id = 40L)
         given(
             postUseCase.findPublicByCursor(
@@ -205,10 +206,20 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 sort = PostSearchSortType1.CREATED_AT,
             ),
         ).willReturn(listOf(nextRawPost))
+        given(
+            postUseCase.findPublicByCursor(
+                cursorSortValue = 1_767_312_000_000L,
+                cursorId = 40L,
+                limit = 3,
+                sort = PostSearchSortType1.CREATED_AT_ASC,
+            ),
+        ).willReturn(listOf(ascNextRawPost))
 
         val page = service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.CREATED_AT)
+        val ascPage = service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.CREATED_AT_ASC)
 
         assertThat(page.content.map { it.id }).containsExactly(41L)
+        assertThat(ascPage.content.map { it.id }).containsExactly(42L)
         assertThatThrownBy {
             service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.HIT_COUNT)
         }.isInstanceOf(AppException::class.java)

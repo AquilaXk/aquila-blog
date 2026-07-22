@@ -791,7 +791,12 @@ class PostPublicReadQueryService(
         parts: List<String>,
         expectedSort: PostSearchSortType1,
     ): CursorToken {
-        if (expectedSort != PostSearchSortType1.CREATED_AT) {
+        // Legacy 3-part tokens predate sort binding; accept for both created-at directions.
+        // New 4-part tokens remain sort-bound via parseSortBoundCursor.
+        if (
+            expectedSort != PostSearchSortType1.CREATED_AT &&
+            expectedSort != PostSearchSortType1.CREATED_AT_ASC
+        ) {
             throw AppException(
                 "400-1",
                 "cursor에 정렬 모드가 없어 ${expectedSort.name} 요청에 사용할 수 없습니다.",
@@ -804,7 +809,7 @@ class PostPublicReadQueryService(
             parts[1].toLongOrNull()
                 ?: throw AppException("400-1", "cursor id 형식이 올바르지 않습니다.")
         verifyCursorToken(sortValue, id, payload = "$sortValue:$id", signature = parts[2])
-        return CursorToken(sortValue, id, PostSearchSortType1.CREATED_AT)
+        return CursorToken(sortValue, id, expectedSort)
     }
 
     private fun parseSortBoundCursor(

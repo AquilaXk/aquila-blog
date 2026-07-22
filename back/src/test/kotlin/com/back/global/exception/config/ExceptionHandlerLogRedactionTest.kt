@@ -1,15 +1,13 @@
 package com.back.global.exception.config
 
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import com.back.global.exception.application.AppException
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.slf4j.LoggerFactory
+import org.springframework.core.MethodParameter
 import org.springframework.http.HttpStatus
 import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 
 @DisplayName("ExceptionHandler 로그 redaction 테스트")
 class ExceptionHandlerLogRedactionTest {
@@ -21,12 +19,12 @@ class ExceptionHandlerLogRedactionTest {
             MockHttpServletRequest("GET", "/member/api/v1/signup/email/verify").apply {
                 queryString = "token=LEAK_TEST_123&email=test@example.com"
             }
-        val appender = attachListAppender()
+        val appender = ExceptionHandlerListAppenderSupport.attach()
 
         try {
             handler.handleAppException(AppException("500-9", "failed token=LEAK_TEST_123"), request)
         } finally {
-            detachListAppender(appender)
+            ExceptionHandlerListAppenderSupport.detach(appender)
         }
 
         val message = appender.list.single().formattedMessage
@@ -45,7 +43,7 @@ class ExceptionHandlerLogRedactionTest {
             MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
                 queryString = "code=LEAK_TEST_123&state=STATE_123&page=1"
             }
-        val appender = attachListAppender()
+        val appender = ExceptionHandlerListAppenderSupport.attach()
 
         val response =
             try {
@@ -54,7 +52,7 @@ class ExceptionHandlerLogRedactionTest {
                     request,
                 )
             } finally {
-                detachListAppender(appender)
+                ExceptionHandlerListAppenderSupport.detach(appender)
             }
 
         assertThat(response.statusCode).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -66,16 +64,47 @@ class ExceptionHandlerLogRedactionTest {
             .doesNotContain("STATE_123")
     }
 
-    private fun attachListAppender(): ListAppender<ILoggingEvent> {
-        val logger = LoggerFactory.getLogger(ExceptionHandler::class.java) as Logger
-        return ListAppender<ILoggingEvent>().also {
-            it.start()
-            logger.addAppender(it)
-        }
-    }
+    @Test
+    @DisplayName("mvc_request_rejected warn 로그는 스택 트레이스를 남기지 않는다")
+    fun `mvc request rejected warn log does not include stack trace`() {
+        val handler = ExceptionHandler()
+        val request = MockHttpServletRequest("GET", "/posts/not-a-number")
+        val appender = ExceptionHandlerListAppenderSupport.attach()
 
-    private fun detachListAppender(appender: ListAppender<ILoggingEvent>) {
-        val logger = LoggerFactory.getLogger(ExceptionHandler::class.java) as Logger
-        logger.detachAppender(appender)
+        val method =
+            MvcExceptionFixtureController::class.java.getDeclaredMethod(
+                "typeMismatch",
+                Long::class.javaPrimitiveType,
+            )
+        val parameter = MethodParameter(method, 0)
+        val response =
+            try {
+                handler.handleMethodArgumentTypeMismatchException(
+                    MethodArgumentTypeMismatchException(
+                        "not-a-number",
+                        Long::class.java,
+                        "id",
+                        parameter,
+                        IllegalArgumentException("failed token=LEAK_TEST_123"),
+                    ),
+                    request,
+                )
+            } finally {
+                ExceptionHandlerListAppenderSupport.detach(appender)
+            }
+
+        assertThat(response.statusCode).isEqualTo(HttpStatus.BAD_REQUEST)
+        val event = appender.list.single()
+        assertThat(event.formattedMessage)
+            .contains("mvc_request_rejected")
+            .contains("method=GET")
+            .contains("path=/posts/not-a-number")
+            .contains("exceptionClass=org.springframework.web.method.annotation.MethodArgumentTypeMismatchException")
+            .contains("reason=type_mismatch name=id requiredType=long")
+            .doesNotContain("exceptionStack=")
+            .doesNotContain("\tat ")
+            .doesNotContain("LEAK_TEST_123")
+            .doesNotContain("For input string")
+        assertThat(event.throwableProxy).isNull()
     }
 }

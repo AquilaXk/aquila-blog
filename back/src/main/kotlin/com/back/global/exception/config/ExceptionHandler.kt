@@ -9,17 +9,28 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.MessageSourceResolvable
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.OptimisticLockingFailureException
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.validation.FieldError
+import org.springframework.web.HttpMediaTypeNotAcceptableException
+import org.springframework.web.HttpMediaTypeNotSupportedException
+import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
+import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.method.annotation.HandlerMethodValidationException
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.multipart.MultipartException
+import org.springframework.web.servlet.NoHandlerFoundException
+import org.springframework.web.servlet.resource.NoResourceFoundException
 import org.springframework.web.bind.annotation.ExceptionHandler as SpringExceptionHandler
 
 @RestControllerAdvice
@@ -73,6 +84,108 @@ class ExceptionHandler(
             .status(HttpStatus.BAD_REQUEST)
             .body(RsData("400-1", message))
     }
+
+    @SpringExceptionHandler(HandlerMethodValidationException::class)
+    fun handleHandlerMethodValidationException(
+        e: HandlerMethodValidationException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> {
+        if (e.isForReturnValue) {
+            return handleUnexpectedException(e, request)
+        }
+        return mvcClientError(
+            status = HttpStatus.BAD_REQUEST,
+            resultCode = "400-1",
+            message = formatHandlerMethodValidationMessage(e),
+            ex = e,
+            request = request,
+        )
+    }
+
+    @SpringExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun handleHttpRequestMethodNotSupportedException(
+        e: HttpRequestMethodNotSupportedException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> =
+        mvcClientError(
+            status = HttpStatus.METHOD_NOT_ALLOWED,
+            resultCode = "405-1",
+            message = "지원하지 않는 요청 방식입니다.",
+            ex = e,
+            request = request,
+            headers = e.headers,
+        )
+
+    @SpringExceptionHandler(MethodArgumentTypeMismatchException::class)
+    fun handleMethodArgumentTypeMismatchException(
+        e: MethodArgumentTypeMismatchException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> =
+        mvcClientError(
+            status = HttpStatus.BAD_REQUEST,
+            resultCode = "400-1",
+            message = "요청 값 형식이 올바르지 않습니다.",
+            ex = e,
+            request = request,
+        )
+
+    @SpringExceptionHandler(MissingServletRequestParameterException::class)
+    fun handleMissingServletRequestParameterException(
+        e: MissingServletRequestParameterException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> =
+        mvcClientError(
+            status = HttpStatus.BAD_REQUEST,
+            resultCode = "400-1",
+            message = "필수 요청 값이 누락되었습니다: ${e.parameterName}",
+            ex = e,
+            request = request,
+        )
+
+    @SpringExceptionHandler(HttpMediaTypeNotSupportedException::class)
+    fun handleHttpMediaTypeNotSupportedException(
+        e: HttpMediaTypeNotSupportedException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> =
+        mvcClientError(
+            status = HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+            resultCode = "415-1",
+            message = "지원하지 않는 요청 형식입니다.",
+            ex = e,
+            request = request,
+            headers = e.headers,
+        )
+
+    @SpringExceptionHandler(HttpMediaTypeNotAcceptableException::class)
+    fun handleHttpMediaTypeNotAcceptableException(
+        e: HttpMediaTypeNotAcceptableException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> =
+        mvcClientError(
+            status = HttpStatus.NOT_ACCEPTABLE,
+            resultCode = "406-1",
+            message = "지원하지 않는 응답 형식입니다.",
+            ex = e,
+            request = request,
+            headers = e.headers,
+            contentType = MediaType.APPLICATION_JSON,
+        )
+
+    @SpringExceptionHandler(
+        NoResourceFoundException::class,
+        NoHandlerFoundException::class,
+    )
+    fun handleNotFoundMappingException(
+        e: Exception,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> =
+        mvcClientError(
+            status = HttpStatus.NOT_FOUND,
+            resultCode = "404-1",
+            message = "해당 데이터가 존재하지 않습니다.",
+            ex = e,
+            request = request,
+        )
 
     @SpringExceptionHandler(HttpMessageNotReadableException::class)
     fun handleHttpMessageNotReadableException(
@@ -221,6 +334,89 @@ class ExceptionHandler(
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(RsData("500-1", "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."))
     }
+
+    private fun mvcClientError(
+        status: HttpStatus,
+        resultCode: String,
+        message: String,
+        ex: Exception,
+        request: HttpServletRequest,
+        headers: HttpHeaders = HttpHeaders.EMPTY,
+        contentType: MediaType? = null,
+    ): ResponseEntity<RsData<Void>> {
+        logMvcRequestRejected(ex, request)
+        val builder =
+            ResponseEntity
+                .status(status)
+                .headers(headers)
+        if (contentType != null) {
+            builder.contentType(contentType)
+        }
+        return builder.body(RsData(resultCode, message))
+    }
+
+    private fun formatHandlerMethodValidationMessage(e: HandlerMethodValidationException): String {
+        val parameterMessages =
+            e.parameterValidationResults
+                .asSequence()
+                .flatMap { result ->
+                    val parameterName = result.methodParameter.parameterName ?: "value"
+                    result.resolvableErrors.asSequence().map { err ->
+                        formatResolvableValidationError(parameterName, err)
+                    }
+                }
+        val crossParameterMessages =
+            e.crossParameterValidationResults
+                .asSequence()
+                .map { err -> formatResolvableValidationError("method", err) }
+        return (parameterMessages + crossParameterMessages)
+            .sorted()
+            .joinToString("\n")
+    }
+
+    private fun formatResolvableValidationError(
+        parameterName: String,
+        err: MessageSourceResolvable,
+    ): String =
+        when (err) {
+            is FieldError -> "${err.field}-${err.code}-${err.defaultMessage}"
+            else -> {
+                val code =
+                    err.codes
+                        ?.firstOrNull { !it.contains('.') }
+                        ?: err.codes
+                            ?.firstOrNull()
+                            ?.substringBefore('.')
+                        ?: "Invalid"
+                "$parameterName-$code-${err.defaultMessage}"
+            }
+        }
+
+    private fun logMvcRequestRejected(
+        ex: Exception,
+        request: HttpServletRequest,
+    ) {
+        val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
+        val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
+        val reason = mvcRejectedReason(ex)
+        logger.warn(
+            "mvc_request_rejected method={} path={} exceptionClass={} reason={}",
+            method,
+            path,
+            ex::class.qualifiedName,
+            reason,
+        )
+    }
+
+    private fun mvcRejectedReason(ex: Exception): String =
+        when (ex) {
+            is MethodArgumentTypeMismatchException -> {
+                val parameterName = sanitizeLogValue(ex.name, MAX_METHOD_LENGTH)
+                val requiredType = sanitizeLogValue(ex.requiredType?.simpleName, MAX_METHOD_LENGTH)
+                "type_mismatch name=$parameterName requiredType=$requiredType"
+            }
+            else -> SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
+        }
 
     private fun sanitizeLogValue(
         raw: String?,

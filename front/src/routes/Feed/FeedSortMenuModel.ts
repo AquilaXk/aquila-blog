@@ -17,15 +17,18 @@ export type FeedSortMenuKeyResult =
 
 export const resolveFeedSortTriggerKeyDown = (
   key: string,
-  optionCount: number
+  options: Array<{ value: FeedSortMode }>,
+  selected: FeedSortMode
 ): FeedSortMenuKeyResult => {
-  if (key === "ArrowDown" || key === "Enter" || key === " ") {
-    return { type: "open", activeIndex: optionCount > 0 ? 0 : -1 }
+  if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") {
+    return { type: "none" }
   }
-  if (key === "ArrowUp") {
-    return { type: "open", activeIndex: optionCount > 0 ? optionCount - 1 : -1 }
+  if (options.length <= 0) {
+    return { type: "open", activeIndex: -1 }
   }
-  return { type: "none" }
+  // Match mouse open: highlight the currently selected sort so Enter keeps the same value.
+  const selectedIndex = options.findIndex((option) => option.value === selected)
+  return { type: "open", activeIndex: selectedIndex >= 0 ? selectedIndex : 0 }
 }
 
 export const resolveFeedSortListboxKeyDown = (

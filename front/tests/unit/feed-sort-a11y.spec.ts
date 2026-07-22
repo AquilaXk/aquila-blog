@@ -43,16 +43,24 @@ test.describe("feed server sort params", () => {
 })
 
 test.describe("feed sort dropdown keyboard model", () => {
-  test("trigger Enter/Space/ArrowDown opens with first option active", () => {
-    expect(resolveFeedSortTriggerKeyDown("Enter", FEED_SORT_OPTIONS.length)).toEqual({
+  test("trigger Enter/Space/ArrowDown/ArrowUp opens on currently selected option", () => {
+    expect(resolveFeedSortTriggerKeyDown("Enter", FEED_SORT_OPTIONS, "likes")).toEqual({
       type: "open",
-      activeIndex: 0,
+      activeIndex: 2,
     })
-    expect(resolveFeedSortTriggerKeyDown(" ", FEED_SORT_OPTIONS.length)).toEqual({
+    expect(resolveFeedSortTriggerKeyDown(" ", FEED_SORT_OPTIONS, "views")).toEqual({
       type: "open",
-      activeIndex: 0,
+      activeIndex: 1,
     })
-    expect(resolveFeedSortTriggerKeyDown("ArrowDown", FEED_SORT_OPTIONS.length)).toEqual({
+    expect(resolveFeedSortTriggerKeyDown("ArrowDown", FEED_SORT_OPTIONS, "views")).toEqual({
+      type: "open",
+      activeIndex: 1,
+    })
+    expect(resolveFeedSortTriggerKeyDown("ArrowUp", FEED_SORT_OPTIONS, "likes")).toEqual({
+      type: "open",
+      activeIndex: 2,
+    })
+    expect(resolveFeedSortTriggerKeyDown("Enter", FEED_SORT_OPTIONS, "latest")).toEqual({
       type: "open",
       activeIndex: 0,
     })

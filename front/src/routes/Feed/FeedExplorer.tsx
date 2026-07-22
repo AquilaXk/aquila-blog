@@ -507,14 +507,14 @@ const FeedExplorer: React.FC<FeedExplorerProps> = ({ initialBootstrapDegraded = 
 
   const handleSortTriggerKeyDown = useCallback(
     (event: KeyboardEvent<HTMLButtonElement>) => {
-      const result = resolveFeedSortTriggerKeyDown(event.key, FEED_SORT_OPTIONS.length)
+      const result = resolveFeedSortTriggerKeyDown(event.key, FEED_SORT_OPTIONS, sortMode)
       if (result.type === "none") return
       event.preventDefault()
       if (result.type === "open") {
         openSortMenu(result.activeIndex)
       }
     },
-    [openSortMenu]
+    [openSortMenu, sortMode]
   )
 
   const handleSortListboxKeyDown = useCallback(

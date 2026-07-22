@@ -4,13 +4,15 @@
 #
 # Required env:
 #   BASE_URL          API origin (default: https://api.aquilaxk.site)
-#   CLOUD_AUTH_COOKIE or CLOUD_AUTH_HEADER
+#   CLOUD_AUTH_COOKIE or CLOUD_AUTH_HEADER or CLOUD_AUTH_COOKIE_FILE
 # Optional:
 #   TARGET_GIB        total upload size in GiB (default: 5)
 #   PART_SIZE_BYTES   part size (default: 67108864 = 64MiB)
 #   UPLOAD_FOLDER     cloud folder path (default: /perf-k6)
 #   OUT_DIR           results directory (default: perf/k6/results)
 #   SKIP_COMPLETE=1   cancel instead of complete (default: complete)
+#   CLOUD_AUTH_COOKIE_FILE  re-read Cookie header value before each part
+#                           (for accessToken TTL ~20m during multi-hour/5GiB runs)
 #
 # Example:
 #   BASE_URL="https://api.aquilaxk.site" \
@@ -31,8 +33,12 @@ UPLOAD_FILENAME="${UPLOAD_FILENAME:-perf-5gb-measure.mp4}"
 UPLOAD_CONTENT_TYPE="${UPLOAD_CONTENT_TYPE:-video/mp4}"
 SKIP_COMPLETE="${SKIP_COMPLETE:-0}"
 
-if [[ -z "${CLOUD_AUTH_COOKIE:-}" && -z "${CLOUD_AUTH_HEADER:-}" ]]; then
-  echo "error: set CLOUD_AUTH_COOKIE or CLOUD_AUTH_HEADER" >&2
+if [[ -z "${CLOUD_AUTH_COOKIE:-}" && -z "${CLOUD_AUTH_HEADER:-}" && -z "${CLOUD_AUTH_COOKIE_FILE:-}" ]]; then
+  echo "error: set CLOUD_AUTH_COOKIE, CLOUD_AUTH_HEADER, or CLOUD_AUTH_COOKIE_FILE" >&2
+  exit 1
+fi
+if [[ -n "${CLOUD_AUTH_COOKIE_FILE:-}" && ! -f "${CLOUD_AUTH_COOKIE_FILE}" ]]; then
+  echo "error: CLOUD_AUTH_COOKIE_FILE not found: ${CLOUD_AUTH_COOKIE_FILE}" >&2
   exit 1
 fi
 
@@ -46,13 +52,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
-curl_auth_args=(-sS -H "X-Aquila-CSRF: 1")
-if [[ -n "${CLOUD_AUTH_COOKIE:-}" ]]; then
-  curl_auth_args+=(-H "Cookie: ${CLOUD_AUTH_COOKIE}")
-fi
-if [[ -n "${CLOUD_AUTH_HEADER:-}" ]]; then
-  curl_auth_args+=(-H "Authorization: ${CLOUD_AUTH_HEADER}")
-fi
+build_curl_auth_args() {
+  curl_auth_args=(-sS -H "X-Aquila-CSRF: 1")
+  local cookie_value="${CLOUD_AUTH_COOKIE:-}"
+  if [[ -n "${CLOUD_AUTH_COOKIE_FILE:-}" ]]; then
+    cookie_value="$(tr -d '\r\n' < "${CLOUD_AUTH_COOKIE_FILE}")"
+  fi
+  if [[ -n "${cookie_value}" ]]; then
+    curl_auth_args+=(-H "Cookie: ${cookie_value}")
+  fi
+  if [[ -n "${CLOUD_AUTH_HEADER:-}" ]]; then
+    curl_auth_args+=(-H "Authorization: ${CLOUD_AUTH_HEADER}")
+  fi
+}
+
+build_curl_auth_args
 
 BYTE_SIZE="$(python3 - <<PY
 print(int(float("${TARGET_GIB}") * 1024 * 1024 * 1024))
@@ -62,6 +76,7 @@ TOTAL_PARTS=$(( (BYTE_SIZE + PART_SIZE_BYTES - 1) / PART_SIZE_BYTES ))
 
 echo "creating ${TARGET_GIB}GiB session (${TOTAL_PARTS} parts x ${PART_SIZE_BYTES} bytes)..."
 
+build_curl_auth_args
 SESSION_JSON="$(curl "${curl_auth_args[@]}" \
   -X POST "${CLOUD_API}/files/video-upload-sessions" \
   -H "Content-Type: application/json" \
@@ -120,6 +135,7 @@ PY
     THIS_SIZE="${PART_SIZE_BYTES}"
   fi
 
+  build_curl_auth_args
   PART_START="$(python3 - <<'PY'
 import time
 print(int(time.time() * 1000))
@@ -139,6 +155,7 @@ PY
 
   if [[ "${HTTP_CODE}" != "200" ]]; then
     echo "part ${part} failed: HTTP ${HTTP_CODE}" >&2
+    build_curl_auth_args
     curl "${curl_auth_args[@]}" -X DELETE "${CLOUD_API}/files/video-upload-sessions/${SESSION_ID}" >/dev/null || true
     exit 1
   fi
@@ -159,6 +176,7 @@ PY
 fi
 
 FINAL_ACTION="complete"
+build_curl_auth_args
 if [[ "${SKIP_COMPLETE}" == "1" ]]; then
   FINAL_ACTION="cancel"
   curl "${curl_auth_args[@]}" -X DELETE "${CLOUD_API}/files/video-upload-sessions/${SESSION_ID}" >/dev/null

@@ -509,6 +509,8 @@ services:
       redis-server
       --appendonly yes
       --requirepass ${PROD___SPRING__DATA__REDIS__PASSWORD}
+    volumes:
+      - redis_data:/data
 
   minio_1:
     image: ${MINIO_IMAGE}
@@ -536,6 +538,7 @@ services:
 
 volumes:
   db_data:
+  redis_data:
   caddy_data:
   caddy_config:
   uptime_kuma_data:

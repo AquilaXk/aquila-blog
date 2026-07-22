@@ -21,6 +21,7 @@ import {
   decideLocalDraftAutosave,
   isLocalDraftAutosaveGatedForPostIdTransition,
   isLocalDraftBaselineSettleLoadingKey,
+  resolveCreateWritePostId,
 } from "../../src/routes/Admin/useEditorStudioDraftLifecycleModel"
 
 const createStorage = (): Storage => {
@@ -543,6 +544,31 @@ test.describe("editor local draft context slots", () => {
         pendingRestorableDraftFingerprint: null,
       })
     ).toEqual({ action: "adopt-baseline", fingerprint: dirtyFingerprint })
+  })
+
+  test("resolveCreateWritePostId rejects missing or blank ids", () => {
+    expect(resolveCreateWritePostId(undefined)).toEqual({
+      ok: false,
+      statusText: "글 작성 응답에 글 ID가 없습니다. 로컬 임시저장은 유지됩니다. 다시 시도해주세요.",
+    })
+    expect(resolveCreateWritePostId(null)).toEqual({
+      ok: false,
+      statusText: "글 작성 응답에 글 ID가 없습니다. 로컬 임시저장은 유지됩니다. 다시 시도해주세요.",
+    })
+    expect(resolveCreateWritePostId({})).toEqual({
+      ok: false,
+      statusText: "글 작성 응답에 글 ID가 없습니다. 로컬 임시저장은 유지됩니다. 다시 시도해주세요.",
+    })
+    expect(resolveCreateWritePostId({ id: "" })).toEqual({
+      ok: false,
+      statusText: "글 작성 응답에 글 ID가 없습니다. 로컬 임시저장은 유지됩니다. 다시 시도해주세요.",
+    })
+    expect(resolveCreateWritePostId({ id: "   " })).toEqual({
+      ok: false,
+      statusText: "글 작성 응답에 글 ID가 없습니다. 로컬 임시저장은 유지됩니다. 다시 시도해주세요.",
+    })
+    expect(resolveCreateWritePostId({ id: 42 })).toEqual({ ok: true, postId: "42" })
+    expect(resolveCreateWritePostId({ id: " 7 " })).toEqual({ ok: true, postId: "7" })
   })
 
   test("gates create-slot autosave while post id transition awaits load", () => {

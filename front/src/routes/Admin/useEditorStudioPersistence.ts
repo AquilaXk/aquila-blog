@@ -9,6 +9,7 @@ import { normalizeCategoryValue } from "src/libs/utils"
 import { resolveEditorFailureRecovery } from "./editorFailureRecoveryModel"
 import { buildLocalDraftFingerprint } from "./editorStudioMetaModel"
 import { isTempDraftTitlePlaceholder } from "./editorTempDraft"
+import { resolveCreateWritePostId } from "./useEditorStudioDraftLifecycleModel"
 import { useEditorStudioPersistenceUploads } from "./useEditorStudioPersistenceModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
@@ -274,27 +275,33 @@ export const useEditorStudioPersistence = ({
       })
 
       setResult(pretty(response))
-      if (response?.data?.id) {
-        setPostId(String(response.data.id))
-        setPostVersion(typeof response.data.version === "number" ? response.data.version : null)
-        setEditorMode("edit")
-        setIsTempDraftMode(false)
-        serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
-          title: postTitle,
-          content: currentPostContent,
-          summary: postSummary,
-          thumbnailUrl: postThumbnailUrl,
-          thumbnailFocusX: postThumbnailFocusX,
-          thumbnailFocusY: postThumbnailFocusY,
-          thumbnailZoom: postThumbnailZoom,
-          tags: postTags,
-          category: postCategory,
-          visibility: postVisibility,
-        })
-        lastWriteFingerprintRef.current = ""
-        lastWriteIdempotencyKeyRef.current = ""
+
+      const createWritePostId = resolveCreateWritePostId(response?.data)
+      if (!createWritePostId.ok) {
+        setPublishStatus({ tone: "error", text: createWritePostId.statusText })
+        setResult(pretty({ error: createWritePostId.statusText, response }))
+        return false
       }
-      await refreshPublicPostReadViews(response?.data?.id)
+
+      setPostId(createWritePostId.postId)
+      setPostVersion(typeof response.data?.version === "number" ? response.data.version : null)
+      setEditorMode("edit")
+      setIsTempDraftMode(false)
+      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
+        title: postTitle,
+        content: currentPostContent,
+        summary: postSummary,
+        thumbnailUrl: postThumbnailUrl,
+        thumbnailFocusX: postThumbnailFocusX,
+        thumbnailFocusY: postThumbnailFocusY,
+        thumbnailZoom: postThumbnailZoom,
+        tags: postTags,
+        category: postCategory,
+        visibility: postVisibility,
+      })
+      lastWriteFingerprintRef.current = ""
+      lastWriteIdempotencyKeyRef.current = ""
+      await refreshPublicPostReadViews(createWritePostId.postId)
 
       const visibilityText =
         postVisibility === "PUBLIC_LISTED"

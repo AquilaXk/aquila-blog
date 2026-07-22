@@ -46,6 +46,30 @@ export const isLocalDraftAutosaveGatedForPostIdTransition = (
   postId: string
 ): boolean => editorMode === "create" && postId.trim().length > 0
 
+const CREATE_WRITE_MISSING_POST_ID_STATUS_TEXT =
+  "글 작성 응답에 글 ID가 없습니다. 로컬 임시저장은 유지됩니다. 다시 시도해주세요."
+
+export type CreateWritePostIdResolution =
+  | { ok: true; postId: string }
+  | { ok: false; statusText: string }
+
+/** Create-mode write success must include a non-empty post id before draft cleanup. */
+export const resolveCreateWritePostId = (
+  writeResult: { id?: number | string } | null | undefined
+): CreateWritePostIdResolution => {
+  const rawId = writeResult?.id
+  if (rawId == null || rawId === "") {
+    return { ok: false, statusText: CREATE_WRITE_MISSING_POST_ID_STATUS_TEXT }
+  }
+
+  const postId = String(rawId).trim()
+  if (!postId) {
+    return { ok: false, statusText: CREATE_WRITE_MISSING_POST_ID_STATUS_TEXT }
+  }
+
+  return { ok: true, postId }
+}
+
 export type LocalDraftAutosaveDecisionInput = {
   loadingKey: string
   /**

@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.event.PostLikedEvent
 import com.back.boundedContexts.post.event.PostUnlikedEvent
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -21,6 +22,8 @@ class PostLikeApplicationService(
     private val postCounterService: PostCounterService,
     private val postInteractionSideEffectQueue: PostInteractionSideEffectQueue,
 ) {
+    private val logger = LoggerFactory.getLogger(PostLikeApplicationService::class.java)
+
     @Transactional
     fun like(
         post: Post,
@@ -34,30 +37,34 @@ class PostLikeApplicationService(
             val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
             if (existingLike != null) {
                 postCounterService.ensureLikesCountLoaded(post)
-                return PostLikeToggleResult(true, existingLike.id)
+                return logLikeCompleted(post, actor, PostLikeToggleResult(true, existingLike.id))
             }
 
             val recoveredLikeId = postLikeRepository.insertIfAbsent(persistenceActor, post)
             if (recoveredLikeId == null) {
                 postCounterService.syncLikesCount(post)
                 enqueueRankedLikesInvalidation(post.id, "like-sync")
-                return PostLikeToggleResult(
-                    isLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post),
-                    likeId = 0L,
+                return logLikeCompleted(
+                    post,
+                    actor,
+                    PostLikeToggleResult(
+                        isLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post),
+                        likeId = 0L,
+                    ),
                 )
             }
 
             postCounterService.incrementLikesCount(post)
             postRepository.flush()
             enqueueLiked(post, actor, recoveredLikeId)
-            return PostLikeToggleResult(true, recoveredLikeId)
+            return logLikeCompleted(post, actor, PostLikeToggleResult(true, recoveredLikeId))
         }
 
         postCounterService.incrementLikesCount(post)
         postRepository.flush()
         enqueueLiked(post, actor, insertedLikeId)
 
-        return PostLikeToggleResult(true, insertedLikeId)
+        return logLikeCompleted(post, actor, PostLikeToggleResult(true, insertedLikeId))
     }
 
     @Transactional
@@ -108,7 +115,14 @@ class PostLikeApplicationService(
             )
         }
 
-        return PostLikeToggleResult(false, existingLikeId ?: 0L)
+        val result = PostLikeToggleResult(false, existingLikeId ?: 0L)
+        logger.info(
+            "post_unlike_completed postId={} actorId={} likeId={}",
+            post.id,
+            actor.id,
+            result.likeId,
+        )
+        return result
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -159,6 +173,20 @@ class PostLikeApplicationService(
             .findByLikerAndPostIn(liker.toPersistenceMember(), posts)
             .map { it.post.id }
             .toSet()
+    }
+
+    private fun logLikeCompleted(
+        post: Post,
+        actor: Member,
+        result: PostLikeToggleResult,
+    ): PostLikeToggleResult {
+        logger.info(
+            "post_like_completed postId={} actorId={} likeId={}",
+            post.id,
+            actor.id,
+            result.likeId,
+        )
+        return result
     }
 
     private fun enqueueLiked(

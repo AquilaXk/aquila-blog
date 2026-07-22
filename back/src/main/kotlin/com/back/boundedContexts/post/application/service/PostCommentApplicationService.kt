@@ -14,6 +14,7 @@ import com.back.boundedContexts.post.event.PostCommentModifiedEvent
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -26,6 +27,8 @@ class PostCommentApplicationService(
     private val postCounterService: PostCounterService,
     private val postInteractionSideEffectQueue: PostInteractionSideEffectQueue,
 ) {
+    private val logger = LoggerFactory.getLogger(PostCommentApplicationService::class.java)
+
     @Transactional
     fun writeComment(
         author: Member,
@@ -61,6 +64,12 @@ class PostCommentApplicationService(
                     persistedParentComment?.author?.id,
                 ),
         )
+        logger.info(
+            "post_comment_create_completed postId={} commentId={} actorId={}",
+            post.id,
+            comment.id,
+            author.id,
+        )
 
         return comment
     }
@@ -82,6 +91,12 @@ class PostCommentApplicationService(
                     PostDto(postComment.post),
                     MemberDto(actor),
                 ),
+        )
+        logger.info(
+            "post_comment_update_completed postId={} commentId={} actorId={}",
+            postComment.post.id,
+            postComment.id,
+            actor.id,
         )
     }
 
@@ -129,6 +144,12 @@ class PostCommentApplicationService(
 
         postCounterService.savePostAttr(post.commentsCountAttr)
         postRepository.flush()
+        logger.info(
+            "post_comment_delete_completed postId={} commentId={} actorId={}",
+            post.id,
+            postComment.id,
+            actor.id,
+        )
     }
 
     @Transactional

@@ -1,5 +1,8 @@
 package com.back.boundedContexts.cloud.application.service
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.back.boundedContexts.cloud.application.port.output.CloudFileRepositoryPort
 import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
@@ -10,6 +13,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -82,6 +86,40 @@ class CloudFileServiceTest {
         assertThat(result.folderPath).isEqualTo("docs")
         assertThat(repository.savedFiles.single().objectKey).startsWith("cloud/7/docs/")
         assertThat(storage.uploaded.single().objectKey).isEqualTo(repository.savedFiles.single().objectKey)
+    }
+
+    @Test
+    @DisplayName("업로드 완료 info 로그는 fileId/actorId만 남기고 원본 파일명을 포함하지 않는다")
+    fun `upload는 completed info 로그에 파일명을 남기지 않는다`() {
+        val secretFilename = "secret-contract-LEAK.pdf"
+        val logger = LoggerFactory.getLogger(CloudFileService::class.java) as Logger
+        val appender =
+            ListAppender<ILoggingEvent>().also {
+                it.start()
+                logger.addAppender(it)
+            }
+
+        try {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = secretFilename,
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = "docs",
+            )
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        val message = appender.list.map { it.formattedMessage }.single { it.contains("cloud_file_upload_completed") }
+        assertThat(message)
+            .contains("cloud_file_upload_completed")
+            .contains("fileId=")
+            .contains("actorId=7")
+            .doesNotContain(secretFilename)
+            .doesNotContain("requestId")
+            .doesNotContain("email")
+            .doesNotContain("token")
     }
 
     @Test

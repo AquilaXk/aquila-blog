@@ -104,6 +104,11 @@ class CloudFileService(
                             checksumSha256 = uploadResult.checksumSha256,
                         ),
                     )
+                logger.info(
+                    "cloud_file_upload_completed fileId={} actorId={}",
+                    saved.id,
+                    ownerMemberId,
+                )
 
                 return saved.toDto()
             } finally {
@@ -187,6 +192,7 @@ class CloudFileService(
         file.markDeleted(clock.instant())
         cloudFileRepository.save(file)
         deleteObjectAfterCommit(objectKey)
+        logger.info("cloud_file_delete_completed fileId={} actorId={}", fileId, ownerMemberId)
     }
 
     private fun deleteObjectAfterCommit(objectKey: String) {

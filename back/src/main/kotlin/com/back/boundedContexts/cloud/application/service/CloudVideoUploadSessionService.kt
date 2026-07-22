@@ -138,6 +138,11 @@ class CloudVideoUploadSessionService(
             throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 상태가 변경되었습니다.")
         }
         session.markInitiated(upload.uploadId, now)
+        log.info(
+            "cloud_video_session_create_completed sessionId={} actorId={}",
+            session.id,
+            ownerMemberId,
+        )
 
         return session.toDto(emptyList())
     }
@@ -308,6 +313,12 @@ class CloudVideoUploadSessionService(
             )
         session.complete(file.id, clock.instant())
         sessionRepository.save(session)
+        log.info(
+            "cloud_video_session_complete_completed sessionId={} fileId={} actorId={}",
+            session.id,
+            file.id,
+            ownerMemberId,
+        )
 
         return file.toDto()
     }
@@ -376,6 +387,11 @@ class CloudVideoUploadSessionService(
         partRepository.deleteBySessionId(session.id)
         session.expire(clock.instant())
         sessionRepository.save(session)
+        log.info(
+            "cloud_video_session_expire_completed sessionId={} actorId={}",
+            session.id,
+            session.ownerMemberId,
+        )
         return true
     }
 

@@ -211,6 +211,15 @@ export const MarkdownEditor = ({
       const nextMarkdown = applyPlannedTextMutation(textarea, plan)
       selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
       commitMarkdown(nextMarkdown, true)
+      const nextFrom = plan.selectionStart
+      const nextTo = plan.selectionEnd
+      window.requestAnimationFrame(() => {
+        const current = textareaRef.current
+        if (!current) return
+        current.focus()
+        current.setSelectionRange(nextFrom, nextTo)
+        selectionRef.current = { from: nextFrom, to: nextTo }
+      })
       return true
     },
     [commitMarkdown, disabled]
@@ -304,6 +313,89 @@ export const MarkdownEditor = ({
     [commitMarkdown, insertMarkdownAtEditorSelection]
   )
 
+  const handleTabKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (allowNativeTabAfterEscapeRef.current) {
+        allowNativeTabAfterEscapeRef.current = false
+        return
+      }
+      const { from, to } = rememberTextareaSelection()
+      const tabPlan = planTabIndentMutation(valueRef.current, from, to, event.shiftKey)
+      if (!tabPlan) {
+        if (event.shiftKey) return
+        event.preventDefault()
+        return
+      }
+      event.preventDefault()
+      applyMutationPlan(tabPlan)
+    },
+    [applyMutationPlan, rememberTextareaSelection]
+  )
+
+  const handleEnterKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (event.key !== "Enter") return false
+
+      if (event.shiftKey) {
+        event.preventDefault()
+        const { from, to } = rememberTextareaSelection()
+        applyMutationPlan(planHardBreak(from, to))
+        return true
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) return false
+
+      const { from, to } = rememberTextareaSelection()
+      const listPlan = planListEnterContinuation(valueRef.current, from, to)
+      if (!listPlan) return true
+      event.preventDefault()
+      applyMutationPlan(listPlan)
+      return true
+    },
+    [applyMutationPlan, rememberTextareaSelection]
+  )
+
+  const handleSaveShortcutKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (!isSaveShortcut(event)) return false
+      if (!onRequestSave) return true
+      event.preventDefault()
+      onRequestSave()
+      return true
+    },
+    [onRequestSave]
+  )
+
+  const handleFormatShortcutKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+      const formatShortcut = resolveFormatShortcut(event)
+      if (!formatShortcut) return false
+      event.preventDefault()
+      const { from, to } = rememberTextareaSelection()
+      applyMutationPlan(planFormatShortcutMutation(valueRef.current, from, to, formatShortcut))
+      return true
+    },
+    [applyMutationPlan, rememberTextareaSelection]
+  )
+
+  const handleHomeEndKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+      if (event.shiftKey || (!event.metaKey && !event.ctrlKey)) return false
+      if (event.key === "Home") {
+        event.preventDefault()
+        setTextareaSelection(0)
+        return true
+      }
+      if (event.key === "End") {
+        event.preventDefault()
+        setTextareaSelection(valueRef.current.length)
+        return true
+      }
+      return false
+    },
+    [setTextareaSelection]
+  )
+
   const handleTextareaKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (disabled || isComposingEditorKeyboardEvent(event)) return
@@ -314,72 +406,25 @@ export const MarkdownEditor = ({
       }
 
       if (event.key === "Tab") {
-        if (allowNativeTabAfterEscapeRef.current) {
-          allowNativeTabAfterEscapeRef.current = false
-          return
-        }
-        const { from, to } = rememberTextareaSelection()
-        const tabPlan = planTabIndentMutation(valueRef.current, from, to, event.shiftKey)
-        if (!tabPlan) {
-          if (event.shiftKey) return
-          event.preventDefault()
-          return
-        }
-        event.preventDefault()
-        applyMutationPlan(tabPlan)
+        handleTabKeyDown(event)
         return
       }
 
-      if (event.key !== "Escape" && event.key !== "Tab") {
-        allowNativeTabAfterEscapeRef.current = false
-      }
+      allowNativeTabAfterEscapeRef.current = false
 
-      if (event.key === "Enter" && event.shiftKey) {
-        event.preventDefault()
-        const { from, to } = rememberTextareaSelection()
-        applyMutationPlan(planHardBreak(from, to))
-        return
-      }
-
-      if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        const { from, to } = rememberTextareaSelection()
-        const listPlan = planListEnterContinuation(valueRef.current, from, to)
-        if (listPlan) {
-          event.preventDefault()
-          applyMutationPlan(listPlan)
-        }
-        return
-      }
-
-      if (isSaveShortcut(event)) {
-        if (!onRequestSave) return
-        event.preventDefault()
-        onRequestSave()
-        return
-      }
-
-      const formatShortcut = resolveFormatShortcut(event)
-      if (formatShortcut) {
-        event.preventDefault()
-        const { from, to } = rememberTextareaSelection()
-        applyMutationPlan(planFormatShortcutMutation(valueRef.current, from, to, formatShortcut))
-        return
-      }
-
-      if (event.shiftKey || (!event.metaKey && !event.ctrlKey)) return
-
-      if (event.key === "Home") {
-        event.preventDefault()
-        setTextareaSelection(0)
-        return
-      }
-
-      if (event.key === "End") {
-        event.preventDefault()
-        setTextareaSelection(valueRef.current.length)
-      }
+      if (handleEnterKeyDown(event)) return
+      if (handleSaveShortcutKeyDown(event)) return
+      if (handleFormatShortcutKeyDown(event)) return
+      handleHomeEndKeyDown(event)
     },
-    [applyMutationPlan, disabled, onRequestSave, rememberTextareaSelection, setTextareaSelection]
+    [
+      disabled,
+      handleEnterKeyDown,
+      handleFormatShortcutKeyDown,
+      handleHomeEndKeyDown,
+      handleSaveShortcutKeyDown,
+      handleTabKeyDown,
+    ]
   )
 
   const handleImageInput = useCallback(

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 import { readFileSync } from "fs"
 import path from "path"
 import {
+  isOffsetInsideFencedCodeBlock,
   matchListMarkerLine,
   planFormatShortcutMutation,
   planHardBreak,
@@ -102,6 +103,18 @@ test.describe("markdown editor keyboard model", () => {
     expect(matchListMarkerLine("1. ").kind).toBe("ordered")
   })
 
+  test("does not continue list markers inside fenced code blocks", () => {
+    const fenced = ["```ts", "- item", "```"].join("\n")
+    const caretInCode = fenced.indexOf("- item") + "- item".length
+    expect(isOffsetInsideFencedCodeBlock(fenced, caretInCode)).toBe(true)
+    expect(planListEnterContinuation(fenced, caretInCode, caretInCode)).toBeNull()
+
+    const afterFence = ["```ts", "- item", "```", "", "- outside"].join("\n")
+    const caretOutside = afterFence.lastIndexOf("- outside") + "- outside".length
+    expect(isOffsetInsideFencedCodeBlock(afterFence, caretOutside)).toBe(false)
+    expect(planListEnterContinuation(afterFence, caretOutside, caretOutside)?.replacement).toBe("\n- ")
+  })
+
   test("indents and outdents multi-line selections with Tab / Shift+Tab", () => {
     const value = "alpha\nbeta\ngamma"
     const indented = planTabIndentMutation(value, 0, value.length, false)
@@ -153,6 +166,7 @@ test.describe("markdown editor keyboard model", () => {
   test("mutation helper uses setRangeText to preserve native undo", () => {
     const mutationSource = readFileSync(sourcePath("components", "markdown-editor", "markdownEditorTextMutation.ts"), "utf8")
     const editorSource = readFileSync(sourcePath("components", "markdown-editor", "MarkdownEditor.tsx"), "utf8")
+    const stylesSource = readFileSync(sourcePath("components", "markdown-editor", "MarkdownEditor.styles.ts"), "utf8")
 
     expect(mutationSource).toContain("textarea.setRangeText(")
     expect(mutationSource).toContain("export const applyPlannedTextMutation")
@@ -161,6 +175,12 @@ test.describe("markdown editor keyboard model", () => {
     expect(editorSource).toContain("onFocusRequestReady")
     expect(editorSource).toContain("allowNativeTabAfterEscapeRef")
     expect(editorSource).toContain("aria-description")
+    expect(editorSource).toContain("window.requestAnimationFrame")
+    expect(editorSource).toContain("current.setSelectionRange(nextFrom, nextTo)")
+    expect(editorSource).toContain("handleTabKeyDown")
+    expect(editorSource).toContain("handleEnterKeyDown")
+    expect(stylesSource).toContain("&:focus-visible")
+    expect(stylesSource).toContain("theme.colors.blue8")
 
     const textarea = {
       value: "hello",

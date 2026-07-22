@@ -187,10 +187,14 @@ export const MarkdownTextarea = styled.textarea`
     background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 139, 253, 0.45)" : "rgba(9, 105, 218, 0.24)")};
   }
 
-  &:focus,
-  &:focus-visible {
+  &:focus {
     outline: 0;
     box-shadow: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.colors.blue8};
+    outline-offset: -2px;
   }
 
   &:disabled {

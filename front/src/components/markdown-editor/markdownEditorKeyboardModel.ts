@@ -33,6 +33,52 @@ export const isComposingEditorKeyboardEvent = (event: {
   return nativeEvent.isComposing === true || nativeEvent.keyCode === 229
 }
 
+const FENCE_LINE_RE = /^(?<indent> {0,3})(?<fence>`{3,}|~{3,})(?<info>.*)$/
+
+/** True when caret offset is on a content line inside an open ```/~~~ fence. */
+export const isOffsetInsideFencedCodeBlock = (value: string, offset: number): boolean => {
+  const clamped = Math.max(0, Math.min(offset, value.length))
+  const before = value.slice(0, clamped)
+  const lines = before.split("\n")
+  let inFence = false
+  let openMarker = ""
+  let openLen = 0
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? ""
+    const isCurrentLine = index === lines.length - 1
+    const match = FENCE_LINE_RE.exec(line)
+    if (!match?.groups) {
+      if (isCurrentLine) return inFence
+      continue
+    }
+
+    const fence = match.groups.fence ?? ""
+    const marker = fence[0] ?? ""
+    const len = fence.length
+    const info = match.groups.info ?? ""
+
+    if (!inFence) {
+      if (isCurrentLine) return false
+      inFence = true
+      openMarker = marker
+      openLen = len
+      continue
+    }
+
+    if (marker === openMarker && len >= openLen && info.trim() === "") {
+      if (isCurrentLine) return false
+      inFence = false
+      openMarker = ""
+      openLen = 0
+    } else if (isCurrentLine) {
+      return true
+    }
+  }
+
+  return inFence
+}
+
 export const matchListMarkerLine = (line: string): ListMarkerMatch | null => {
   const task = /^(?<indent>\s*)(?<marker>- \[[ xX]\] )(?<content>.*)$/.exec(line)
   if (task?.groups) {
@@ -83,6 +129,8 @@ export const planListEnterContinuation = (
   selectionStart: number,
   selectionEnd: number
 ): PlannedTextMutation | null => {
+  if (isOffsetInsideFencedCodeBlock(value, selectionStart)) return null
+
   const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1
   const nextBreak = value.indexOf("\n", selectionStart)
   const lineEnd = nextBreak === -1 ? value.length : nextBreak

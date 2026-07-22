@@ -8,6 +8,11 @@
                 <timeZone>Asia/Seoul</timeZone>
                 <includeMdc>true</includeMdc>
                 <customFields>{"service":"${appName}","env":"prod"}</customFields>
+                <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                    <maxDepthPerThrowable>30</maxDepthPerThrowable>
+                    <maxLength>4096</maxLength>
+                    <rootCauseFirst>true</rootCauseFirst>
+                </throwableConverter>
             </encoder>
         </appender>
 
@@ -19,7 +24,8 @@
     <springProfile name="!prod">
         <appender name="PLAIN_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder>
-                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] rid=%X{requestId:-na} %logger{36} - %msg%n</pattern>
+                <!-- %ex{30}: non-prod에서도 스택 프레임 수를 제한해 로그 폭주를 막는다. -->
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] rid=%X{requestId:-na} %logger{36} - %msg%n%ex{30}</pattern>
             </encoder>
         </appender>
 

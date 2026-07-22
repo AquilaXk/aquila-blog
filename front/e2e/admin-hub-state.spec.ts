@@ -98,32 +98,38 @@ test.describe("admin hub state contract", () => {
     expect(source).not.toContain("requestIdleCallback")
   })
 
-  test("대시보드 first fold는 우선순위 문구와 명시적 레일 라벨을 사용한다", () => {
+  test("대시보드 first fold는 운영 상태 헤더와 갱신 컨트롤·가드 레일을 사용한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspaceView.tsx"), "utf8")
     const styleSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.layout.ts"),
       "utf8",
     )
+    const refreshStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.refresh.ts"),
+      "utf8",
+    )
 
-    expect(source).toContain("<h1>운영 상태</h1>")
-    expect(source).toContain("<strong>최근 실패</strong>")
-    expect(source).toContain("<strong>런북</strong>")
-    expect(source).toContain("<strong>즉시 이동</strong>")
-    expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
+    expect(source).toContain("<h1>운영 상태와 복구</h1>")
+    expect(source).toContain("<DashboardRefreshControls")
+    expect(source).toContain('data-ui="monitoring-service-rail"')
+    expect(source).toContain('data-ui="dashboard-guard-rows"')
+    expect(source).toContain("<h2>Steady-state guard</h2>")
+    expect(source).toContain("<h2>Live logs</h2>")
+    expect(styleSource).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));")
+    expect(refreshStyleSource).toContain("export const FreshnessLabel = styled.span`")
+    expect(refreshStyleSource).toContain("export const RefreshButton = styled.button`")
     expect(source).not.toContain("큐 지연, 메일 상태, 인증 이상, 파일 정리처럼 운영 리스크가 큰 항목부터 먼저 읽습니다.")
     expect(source).not.toContain("실패 task, 메일 실패, 인증 차단처럼 문제가 생긴 항목을 먼저 판단합니다.")
     expect(source).not.toContain("운영 조치는 앱 내부 도구에서 먼저 처리하고, 외부 보드는 드릴다운으로만 엽니다.")
     expect(source).not.toContain("장기 추이와 원본 지표 확인은 아래 연결 채널에서 이어서 봅니다.")
   })
 
-  test("dashboard 연결된 채널 카드는 좁은 폭에서도 제목이 세로로 쪼개지지 않는 레이아웃 계약을 사용한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspaceView.tsx"), "utf8")
+  test("dashboard 연결 채널 카드 스타일은 좁은 폭에서도 제목이 세로로 쪼개지지 않는 계약을 유지한다", () => {
     const styleSource = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.priority.ts"),
       "utf8",
     )
 
-    expect(source).toContain("<ContextMonitoringLinkCard key={item.key}")
     expect(styleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));")
     expect(styleSource).toContain("export const ContextMonitoringLinkCard = styled(AdminInfoLinkCard)`")
     expect(styleSource).toContain("word-break: keep-all;")

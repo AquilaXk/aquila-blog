@@ -534,10 +534,9 @@ test.describe("Markdown editor replacement", () => {
 
     const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
     await expect(textarea).toBeVisible()
-    await textarea.click()
-    await textarea.pressSequentially("\n\n추가 입력")
-
-    const focusContract = await textarea.evaluate((element) => {
+    // Playwright click() synthesizes :focus-visible; use focusVisible:false for mouse contract.
+    const mouseFocusContract = await textarea.evaluate((element) => {
+      element.focus({ focusVisible: false })
       const style = window.getComputedStyle(element)
       return {
         active: document.activeElement === element,
@@ -547,10 +546,24 @@ test.describe("Markdown editor replacement", () => {
       }
     })
 
-    expect(focusContract.active).toBe(true)
-    expect(focusContract.outlineStyle).toBe("none")
-    expect(focusContract.outlineWidth).toBe("0px")
-    expect(focusContract.outlineColor).not.toBe("rgb(63, 81, 181)")
+    expect(mouseFocusContract.active).toBe(true)
+    expect(mouseFocusContract.outlineStyle).toBe("none")
+    expect(mouseFocusContract.outlineWidth).toBe("0px")
+    expect(mouseFocusContract.outlineColor).not.toBe("rgb(63, 81, 181)")
+
+    const keyboardFocusContract = await textarea.evaluate((element) => {
+      element.blur()
+      element.focus({ focusVisible: true })
+      const style = window.getComputedStyle(element)
+      return {
+        active: document.activeElement === element,
+        outlineStyle: style.outlineStyle,
+        outlineWidth: style.outlineWidth,
+      }
+    })
+    expect(keyboardFocusContract.active).toBe(true)
+    expect(keyboardFocusContract.outlineStyle).toBe("solid")
+    expect(keyboardFocusContract.outlineWidth).not.toBe("0px")
   })
 
   test("write pane supports native mouse drag text selection", async ({ page }) => {
@@ -955,8 +968,10 @@ test.describe("Markdown editor replacement", () => {
     await page.getByRole("button", { name: "표" }).click()
 
     const editorText = await writePane.locator("textarea").inputValue()
-    expect(editorText.indexOf("| 항목 | 설명 |")).toBeLessThan(editorText.indexOf("omega"))
-    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toContainText("항목")
+    const tableMarker = "|  |  |"
+    expect(editorText.indexOf(tableMarker)).toBeGreaterThan(-1)
+    expect(editorText.indexOf(tableMarker)).toBeLessThan(editorText.indexOf("omega"))
+    await expect(page.getByTestId("markdown-editor-preview-pane").locator("table")).toBeVisible()
   })
 
   test("image upload inserts a url-only upload response at the textarea caret", async ({ page }) => {

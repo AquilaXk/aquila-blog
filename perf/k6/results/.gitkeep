@@ -1,0 +1,2 @@
+# k6 summary exports and curl harness output go here.
+# *.json and *.txt are gitignored — see perf/k6/README.md and cloud-launch-criteria.md.

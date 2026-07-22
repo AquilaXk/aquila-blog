@@ -70,6 +70,11 @@ http://{$API_DOMAIN} {
     format json
   }
 
+  # Align with Cloudflare free-plan body limit (100 MiB). Oversized bodies get 413 before Spring.
+  request_body {
+    max_size 100MB
+  }
+
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     X-Content-Type-Options "nosniff"

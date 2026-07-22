@@ -9,6 +9,8 @@ type WriterEditorHostProps = {
   previewSummary?: string
   onMarkdownChange: (markdown: string, meta?: { editorFocused: boolean }) => void
   onFlushMarkdownReady: (flush: (() => string) | null) => void
+  onFocusRequestReady?: (focus: (() => void) | null) => void
+  onRequestSave?: () => void
   onUploadingChange?: (isUploading: boolean) => void
   onImageUpload: (file: File) => Promise<{ alt?: string; title?: string; url?: string; src?: string }>
   onFileUpload?: (file: File) => Promise<{
@@ -30,6 +32,8 @@ export const WriterEditorHost = ({
   previewSummary,
   onMarkdownChange,
   onFlushMarkdownReady,
+  onFocusRequestReady,
+  onRequestSave,
   onUploadingChange,
   onImageUpload,
   onFileUpload,
@@ -50,6 +54,8 @@ export const WriterEditorHost = ({
         previewSummary={previewSummary}
         onChange={onMarkdownChange}
         onFlushMarkdownReady={onFlushMarkdownReady}
+        onFocusRequestReady={onFocusRequestReady}
+        onRequestSave={onRequestSave}
         onUploadingChange={onUploadingChange}
         onUploadImage={onImageUpload}
         onUploadFile={onFileUpload}

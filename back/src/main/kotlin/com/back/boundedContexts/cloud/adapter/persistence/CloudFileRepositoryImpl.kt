@@ -11,6 +11,26 @@ import java.util.Locale
 class CloudFileRepositoryImpl(
     private val entityManager: EntityManager,
 ) : CloudFileRepositoryCustom {
+    override fun findActiveByObjectKeyStartingWith(
+        objectKeyPrefix: String,
+        limit: Int,
+    ): List<CloudFile> {
+        val safeLimit = limit.coerceAtLeast(1)
+        return entityManager
+            .createQuery(
+                """
+                SELECT f
+                FROM CloudFile f
+                WHERE f.deletedAt IS NULL
+                  AND f.objectKey LIKE CONCAT(:objectKeyPrefix, '%')
+                ORDER BY f.id ASC
+                """.trimIndent(),
+                CloudFile::class.java,
+            ).setParameter("objectKeyPrefix", objectKeyPrefix)
+            .setMaxResults(safeLimit)
+            .resultList
+    }
+
     override fun findActiveByOwner(
         ownerMemberId: Long,
         folderPath: String?,

@@ -475,7 +475,7 @@ export const apiFetchWithMeta = async <T>(
           throw new ApiTimeoutError(url, resolvedTimeoutMs)
         }
 
-        if (error instanceof TypeError) {
+        if (error instanceof TypeError || error instanceof DOMException) {
           throw new ApiNetworkError()
         }
 

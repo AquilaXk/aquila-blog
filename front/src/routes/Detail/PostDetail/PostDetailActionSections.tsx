@@ -134,14 +134,14 @@ export const MobileSummaryActions = ({
       type="button"
       data-active={engagement.actorHasLiked}
       data-tone="accent"
-      aria-label={likeFeedback ? likeFeedback : `좋아요 ${engagement.likesCount}`}
+      aria-label={`좋아요 ${engagement.likesCount}`}
       aria-pressed={engagement.actorHasLiked}
       disabled={likePending}
       onClick={onToggleLike}
     >
       <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
       <span>좋아요</span>
-      <strong>{likeFeedback ? "실패" : engagement.likesCount}</strong>
+      <strong>{engagement.likesCount}</strong>
     </button>
     <button
       type="button"
@@ -173,6 +173,11 @@ export const MobileSummaryActions = ({
       <span>댓글</span>
       <strong>{commentsProgressLabel}</strong>
     </button>
+    {likeFeedback ? (
+      <span className="mobileSummaryLikeFeedback" role="status" aria-live="polite">
+        {likeFeedback}
+      </span>
+    ) : null}
   </MobileSummaryBar>
 )
 

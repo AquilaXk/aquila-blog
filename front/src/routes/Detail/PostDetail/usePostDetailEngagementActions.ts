@@ -230,9 +230,8 @@ export const usePostDetailEngagementActions = ({
               }
             : prev
         )
+        flashLikeFeedback(toUserFacingMessage(error))
       }
-
-      flashLikeFeedback(toUserFacingMessage(error))
     } finally {
       likePendingRef.current = false
       setLikePending(false)

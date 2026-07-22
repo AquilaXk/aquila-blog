@@ -12,6 +12,7 @@ import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.web.application.ClientIpResolver
 import org.junit.jupiter.api.BeforeAll
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
@@ -43,7 +44,7 @@ import org.springframework.test.web.servlet.MockMvc
         ),
     ],
 )
-@Import(BaseAdmMemberControllerWebMvcTest.TestSecurityConfig::class)
+@Import(BaseAdmMemberControllerWebMvcTest.TestSecurityConfig::class, ClientIpResolver::class)
 abstract class BaseAdmMemberControllerWebMvcTest : BaseIntegrationTest() {
     @Autowired
     protected lateinit var mvc: MockMvc

@@ -82,7 +82,9 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
 
   if (!sessionMember) return null
 
-  const collectionFailed = systemHealthQuery.isError || dashboardSnapshotQuery.isError
+  const healthCollectionFailed = systemHealthQuery.isError
+  const snapshotCollectionFailed = dashboardSnapshotQuery.isError
+  const collectionFailed = healthCollectionFailed || snapshotCollectionFailed
   const isRefreshing = systemHealthQuery.isFetching || dashboardSnapshotQuery.isFetching
   const freshnessLabel = formatDashboardFreshnessLabel(
     resolveDashboardDataUpdatedAt(systemHealthQuery.dataUpdatedAt, dashboardSnapshotQuery.dataUpdatedAt)
@@ -348,6 +350,7 @@ const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
       chartBars={chartBars}
       chartEmptyLabel={chartEmptyLabel}
       collectionFailed={collectionFailed}
+      snapshotCollectionFailed={snapshotCollectionFailed}
       dashboardStatusLabel={dashboardStatusLabel}
       dashboardStatusTone={dashboardStatusTone}
       freshnessLabel={freshnessLabel}

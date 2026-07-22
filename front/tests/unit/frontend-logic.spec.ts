@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test"
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { ApiError } from "../../src/apis/backend/client"
 import {
   isDefinitiveStaleVideoUploadSessionError,
@@ -299,5 +301,23 @@ caption
       DASHBOARD_DATA_MISSING_LABEL
     )
     expect(resolveDashboardCollectionLabel({ isError: false, hasData: true })).toBeNull()
+  })
+
+  test("dashboard collection failure flags stay scoped per query", () => {
+    const pageSource = readFileSync(
+      path.resolve(__dirname, "../../src/routes/Admin/AdminDashboardWorkspacePage.tsx"),
+      "utf8"
+    )
+    const viewSource = readFileSync(
+      path.resolve(__dirname, "../../src/routes/Admin/AdminDashboardWorkspaceView.tsx"),
+      "utf8"
+    )
+
+    expect(pageSource).toContain("healthCollectionFailed = systemHealthQuery.isError")
+    expect(pageSource).toContain("snapshotCollectionFailed = dashboardSnapshotQuery.isError")
+    expect(pageSource).toContain("collectionFailed = healthCollectionFailed || snapshotCollectionFailed")
+    expect(viewSource).toContain("snapshotCollectionFailed")
+    expect(viewSource).not.toMatch(/Public read latency[\s\S]*collectionFailed \?/)
+    expect(viewSource).not.toMatch(/Live logs[\s\S]*collectionFailed \?/)
   })
 })

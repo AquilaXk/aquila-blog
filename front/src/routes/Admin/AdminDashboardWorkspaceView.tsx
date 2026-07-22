@@ -33,6 +33,7 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
     chartBars,
     chartEmptyLabel,
     collectionFailed,
+    snapshotCollectionFailed,
     dashboardStatusLabel,
     dashboardStatusTone,
     freshnessLabel,
@@ -89,7 +90,7 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
             <PanelCard>
               <PanelHeader>
                 <h2>Public read latency</h2>
-                {collectionFailed ? (
+                {snapshotCollectionFailed ? (
                   <StatusChip data-tone="danger">수집 실패 · 재시도</StatusChip>
                 ) : (
                   <StatusChip data-tone={dashboardStatusTone}>LIVE</StatusChip>
@@ -108,7 +109,7 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
                     ))}
                   </ChartBars>
                 ) : (
-                  <PrioritySummary data-tone={collectionFailed ? "warn" : "neutral"}>
+                  <PrioritySummary data-tone={snapshotCollectionFailed ? "warn" : "neutral"}>
                     {chartEmptyLabel}
                   </PrioritySummary>
                 )}
@@ -146,7 +147,7 @@ export const AdminDashboardWorkspaceView = (props: Record<string, any>) => {
             <PanelCard data-size="wide">
               <PanelHeader>
                 <h2>Live logs</h2>
-                {collectionFailed ? (
+                {snapshotCollectionFailed ? (
                   <StatusChip data-tone="danger">수집 실패 · 재시도</StatusChip>
                 ) : (
                   <span>Loki · production</span>

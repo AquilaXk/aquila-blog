@@ -6,6 +6,7 @@ import {
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   isForcedEditorExitUrl,
+  isSamePathEditorSurfaceNavigation,
   resolveEditorRouteNavigationRetry,
   type EditorRouteNavigationIntent,
 } from "./editorStudioUnsavedExitGuard"
@@ -16,7 +17,7 @@ type UseEditorStudioUnsavedExitGuardParams = {
 }
 
 type PendingNavigation = {
-  kind: "route" | "action"
+  kind: "route" | "action" | "history"
   url?: string
   action?: () => void
   routeIntent?: EditorRouteNavigationIntent
@@ -55,6 +56,17 @@ export const useEditorStudioUnsavedExitGuard = ({
           allowNavigationRef.current = false
         })
       }
+      return
+    }
+
+    if (pending.kind === "history") {
+      // beforePopState already cancelled the pop and restored asPath via pushState.
+      // Retry the browser history move (not router.push) so history is not duplicated.
+      allowNavigationRef.current = true
+      window.history.back()
+      void Promise.resolve().then(() => {
+        allowNavigationRef.current = false
+      })
       return
     }
 
@@ -101,12 +113,24 @@ export const useEditorStudioUnsavedExitGuard = ({
       return originalReplace(url, as, options)
     }) as typeof router.replace
 
+    router.beforePopState(({ as }) => {
+      if (allowNavigationRef.current) return true
+      if (isForcedEditorExitUrl(as)) return true
+      if (isSamePathEditorSurfaceNavigation(router.asPath, as)) return true
+
+      pendingRef.current = { kind: "history" }
+      setConfirmOpen(true)
+      window.history.pushState(null, "", router.asPath)
+      return false
+    })
+
     const handleRouteChangeStart = (nextUrl: string) => {
       const capturedIntent = pendingRouteIntentRef.current
       pendingRouteIntentRef.current = null
 
       if (allowNavigationRef.current) return
       if (nextUrl === router.asPath) return
+      if (isSamePathEditorSurfaceNavigation(router.asPath, nextUrl)) return
       if (isForcedEditorExitUrl(nextUrl)) return
 
       pendingRef.current = {
@@ -128,6 +152,7 @@ export const useEditorStudioUnsavedExitGuard = ({
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload)
       router.events.off("routeChangeStart", handleRouteChangeStart)
+      router.beforePopState(() => true)
       router.push = originalPush
       router.replace = originalReplace
       pendingRouteIntentRef.current = null

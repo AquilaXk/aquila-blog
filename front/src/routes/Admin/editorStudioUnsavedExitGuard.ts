@@ -2,13 +2,19 @@ export const EDITOR_UNSAVED_CHANGES_MESSAGE =
   "저장되지 않은 변경이 있습니다. 이 페이지를 나가면 변경 내용이 사라질 수 있습니다."
 
 export const isEditorUnsavedDirtyLabel = (persistenceText: string) =>
-  persistenceText === "저장되지 않은 변경"
+  persistenceText === "저장되지 않은 변경" || persistenceText === "저장 중"
+
+const editorRoutePathname = (url: string) => url.split(/[?#]/)[0] || ""
 
 /** Next router / hard login redirects that must not be blocked by the exit guard. */
 export const isForcedEditorExitUrl = (url: string) => {
-  const path = url.split(/[?#]/)[0] || ""
+  const path = editorRoutePathname(url)
   return path === "/login" || path.startsWith("/login/")
 }
+
+/** Same-pathname query/hash updates (compose/manage surface sync) are not leaving. */
+export const isSamePathEditorSurfaceNavigation = (currentUrl: string, nextUrl: string) =>
+  editorRoutePathname(currentUrl) === editorRoutePathname(nextUrl)
 
 export type EditorRouteNavigationMethod = "push" | "replace"
 

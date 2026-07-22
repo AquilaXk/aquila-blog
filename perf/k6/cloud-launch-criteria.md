@@ -51,6 +51,7 @@
 - [Cloudflare Application Services terms](https://www.cloudflare.com/service-specific-terms-application-services/) — 자체 호스팅 대용량·동영상 CDN 서빙 제한 가능.
 - admin 전용 + 외부 token 소량 공유로 **절대 트래픽은 작음**.
 - **Provisional 동시 시청 상한**: 실측 전 **동시 5명** soft cap, 실측 후 조정. 약관 리스크는 [#1233](https://github.com/AquilaXk/aquila-blog/issues/1233)에 결론 회신.
+- 전송 경로 크기 한도·장애 복구·정책 옵션 메뉴: [`docs/ops/cloud-transfer-limits-and-recovery.md`](../../docs/ops/cloud-transfer-limits-and-recovery.md) (#1232).
 
 ## 아키텍처 결정 (실측 후 확정)
 

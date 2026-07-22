@@ -2,7 +2,8 @@ package com.back.global.storage.config
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 
-const val DEFAULT_CLOUD_DOCUMENT_MAX_SIZE_BYTES: Long = 100L * 1024 * 1024
+/** 직접 업로드 기본 상한 = Cloudflare edge 실효 payload(≈95 MiB). */
+const val DEFAULT_CLOUD_DOCUMENT_MAX_SIZE_BYTES: Long = CloudTransferLimits.EFFECTIVE_PAYLOAD_MAX_BYTES
 const val DEFAULT_CLOUD_PHOTO_MAX_SIZE_BYTES: Long = 50L * 1024 * 1024
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_MAX_SIZE_BYTES: Long = 5L * 1024 * 1024 * 1024
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_PART_SIZE_BYTES: Long = 64L * 1024 * 1024
@@ -68,5 +69,23 @@ data class CloudStorageProperties(
             "custom.storage.cloudVideoResumableAbsoluteMaxSeconds($absoluteMax) must be >= " +
                 "cloudVideoResumableExpiresSeconds($sliding)"
         }
+    }
+
+    /**
+     * 단일 요청 경로(직접 업로드·resumable part)가 Cloudflare edge 실효 상한을 넘지 않는지 검증한다.
+     * resumable 전체 파일 상한(5GB)은 part 단위 전송이므로 여기서 검사하지 않는다.
+     */
+    fun validateAgainstEdgeTransferLimits() {
+        CloudTransferLimits.validate(
+            partSizeBytes = cloudVideoResumablePartSizeBytes,
+            directUploadLimits =
+                listOf(
+                    "maxFileSizeBytes" to maxFileSizeBytes,
+                    "cloudDocumentMaxFileSizeBytes" to cloudDocumentMaxFileSizeBytes,
+                    "cloudPhotoMaxFileSizeBytes" to cloudPhotoMaxFileSizeBytes,
+                    "cloudArchiveMaxFileSizeBytes" to cloudArchiveMaxFileSizeBytes,
+                    "cloudVideoMaxFileSizeBytes" to cloudVideoMaxFileSizeBytes,
+                ),
+        )
     }
 }

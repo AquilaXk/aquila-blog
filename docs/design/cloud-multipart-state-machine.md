@@ -107,6 +107,9 @@
 
 ## 실패 후 수동 복구
 
+실행 명령 단위 운영 절차(한도 표·`mc ls --incomplete`·token 삭제 SQL)는
+[`docs/ops/cloud-transfer-limits-and-recovery.md`](../ops/cloud-transfer-limits-and-recovery.md)를 따른다.
+
 1. session status를 DB에서 확인한다: `cloud_video_upload_session.status`, `failure_reason`, `object_key`, `upload_id`, `expires_at`.
 2. `FAILED`가 `INITIATING` failure이고 uploadId가 없다면 remote multipart가 생성되지 않았거나 attach 전에 실패한 상태다. client가 새 session을 만들게 한다.
 3. `FAILED`가 `UPLOADING_PART` metadata save failure이면 remote part가 있을 수 있다. 같은 objectKey/uploadId를 remote storage에서 abort한 뒤 session을 운영 기록에 남기고 client에게 새 session을 만들게 한다.

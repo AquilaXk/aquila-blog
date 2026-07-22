@@ -8,8 +8,9 @@ import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
 /**
- * post/cloud storage prefix 상호 배타 기동 가드.
- * #1232 한도 가드와 같은 storage config 지점에 후속 확장할 수 있다.
+ * storage config 기동 가드.
+ * - post/cloud prefix 상호 배타 (#1234)
+ * - 전송 경로(edge) 한도 정합 (#1232)
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
@@ -22,5 +23,6 @@ class StoragePrefixIsolationValidator(
             postKeyPrefix = postImageStorageProperties.keyPrefix,
             cloudKeyPrefix = cloudStorageProperties.cloudKeyPrefix,
         )
+        cloudStorageProperties.validateAgainstEdgeTransferLimits()
     }
 }

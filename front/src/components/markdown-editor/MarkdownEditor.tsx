@@ -256,14 +256,18 @@ export const MarkdownEditor = ({
     [applyMutationPlan, commitMarkdown]
   )
 
-  /** Async upload placeholder swap/remove — keep undo via setRangeText, never steal focus/errors. */
+  /**
+   * Async upload placeholder swap/remove — keep undo via setRangeText, never steal focus/errors.
+   * Must proceed even when the editor UI is temporarily disabled (e.g. loadingKey), so in-flight
+   * upload completions can still replace/remove placeholders. New user inserts stay blocked elsewhere.
+   */
   const applyBackgroundMarkdownMutation = useCallback(
     (plan: PlannedTextMutation) => {
-      if (disabled) return false
       const textarea = textareaRef.current
-      const wasFocused = Boolean(textarea && document.activeElement === textarea)
+      const wasFocused = Boolean(textarea && !disabled && document.activeElement === textarea)
       const commitOptions = { clearUploadError: false as const }
-      if (textarea) {
+      // Prefer setRangeText while interactive; when disabled, commit via value path.
+      if (textarea && !disabled) {
         const nextMarkdown = applyPlannedTextMutation(textarea, plan)
         selectionRef.current = { from: plan.selectionStart, to: plan.selectionEnd }
         commitMarkdown(nextMarkdown, wasFocused, commitOptions)

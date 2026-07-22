@@ -14,7 +14,7 @@ export const resolvePostDetailRenderState = ({
   hasPost,
 }: PostDetailRenderStateInput): PostDetailRenderState => {
   if (isNotFound) return "not_found"
-  if (isError) return "error"
+  if (isError && !hasPost) return "error"
   if (isPending && !hasPost) return "loading"
   if (!hasPost) return "not_found"
   return "ready"

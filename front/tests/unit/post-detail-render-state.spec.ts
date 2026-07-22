@@ -55,3 +55,14 @@ test("ready post renders content even if not pending", () => {
     }),
   ).toBe("ready")
 })
+
+test("background refetch error with cached post stays ready", () => {
+  expect(
+    resolvePostDetailRenderState({
+      isNotFound: false,
+      isError: true,
+      isPending: false,
+      hasPost: true,
+    }),
+  ).toBe("ready")
+})

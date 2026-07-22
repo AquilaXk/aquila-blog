@@ -67,6 +67,7 @@ const RootLayout = ({
   initialAdminProfile = null,
   initialAdminProfileShouldRefetch = false,
 }: Props) => {
+  // Enforce intentional light-only DOM/query scheme (PR 1275 / HIG P5-5).
   useScheme()
   const { pathname } = useRouter()
   const isPublicBlogRoute = pathname === "/" || pathname === "/about" || pathname === "/posts/[id]"
@@ -79,7 +80,7 @@ const RootLayout = ({
     refetchOnMount: isDesignAwareRoute,
     staleTimeMs: isDesignAwareRoute ? 0 : undefined,
   })
-  const effectiveScheme = "light"
+  const effectiveScheme = "light" // intentional light-only; do not wire dark/toggle
   const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"
   const headerBlogTitle = (isPublicBlogRoute && adminProfile?.blogTitle?.trim()) || CONFIG.blog.title
   useGtagEffect()

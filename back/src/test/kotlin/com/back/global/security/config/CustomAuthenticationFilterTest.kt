@@ -9,6 +9,7 @@ import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAu
 import com.back.global.app.AppConfig
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
+import com.back.global.web.ErrorResponseWriterTestSupport
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.application.Rq
@@ -31,7 +32,6 @@ import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
-import tools.jackson.databind.ObjectMapper
 import java.lang.reflect.Modifier
 import java.time.Instant
 
@@ -702,7 +702,7 @@ class CustomAuthenticationFilterTest {
                 accessTokenAuthenticationHandler = accessTokenAuthenticationHandler,
                 refreshTokenAuthenticationHandler = refreshTokenAuthenticationHandler,
                 clientIpResolver = clientIpResolver,
-                objectMapper = ObjectMapper(),
+                errorResponseWriter = ErrorResponseWriterTestSupport.createWriter(),
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
                 environment = MockEnvironment().apply { setActiveProfiles(profile) },

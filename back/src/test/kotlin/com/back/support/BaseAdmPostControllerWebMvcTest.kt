@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.adapter.web.ApiV1AdmPostController
 import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.global.app.AppConfig
+import com.back.global.observability.ErrorMetrics
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
@@ -52,6 +53,9 @@ abstract class BaseAdmPostControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext
+
+    @MockitoBean
+    protected lateinit var errorMetrics: ErrorMetrics
 
     companion object {
         @JvmStatic

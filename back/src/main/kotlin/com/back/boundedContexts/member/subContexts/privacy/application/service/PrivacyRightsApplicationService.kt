@@ -31,6 +31,7 @@ import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.UploadedFileRetentionService
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -49,6 +50,8 @@ class PrivacyRightsApplicationService(
     private val postUseCase: PostUseCase,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
+    private val logger = LoggerFactory.getLogger(PrivacyRightsApplicationService::class.java)
+
     @Transactional(readOnly = true)
     fun exportFor(memberId: Long): PrivacyExportResponse {
         val member =
@@ -159,6 +162,7 @@ class PrivacyRightsApplicationService(
             ),
         )
         memberAccountDeletionRepository.flush()
+        logger.info("member_withdraw_completed memberId={} actorId={}", member.id, member.id)
 
         return AccountDeletionResult(
             memberId = member.id,

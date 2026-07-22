@@ -13,6 +13,9 @@ export const ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE =
 
 const isPasswordRelatedMessage = (message: string) => /비밀번호/.test(message)
 
+const appendRequestId = (message: string, requestId: string | null) =>
+  requestId ? `${message} (요청 ID: ${requestId})` : message
+
 export const parseAccountDeletionRevokedSessionCount = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value
@@ -30,18 +33,24 @@ export const resolveAccountDeletionFailure = (error: unknown): AccountDeletionFa
     ) {
       return {
         kind: "password",
-        message: error.userMessage || ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE,
+        message: appendRequestId(
+          error.userMessage || ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE,
+          error.requestId,
+        ),
       }
     }
     if (error.status === 401) {
       return {
         kind: "session",
-        message: ACCOUNT_DELETION_SESSION_EXPIRED_MESSAGE,
+        message: appendRequestId(ACCOUNT_DELETION_SESSION_EXPIRED_MESSAGE, error.requestId),
       }
     }
     return {
       kind: "generic",
-      message: error.userMessage || ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE,
+      message: appendRequestId(
+        error.userMessage || ACCOUNT_DELETION_GENERIC_FAILURE_MESSAGE,
+        error.requestId,
+      ),
     }
   }
 

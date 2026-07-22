@@ -10,6 +10,7 @@ import {
   useTransition,
 } from "react"
 import { apiFetch } from "src/apis/backend/client"
+import { layoutBreakpoint } from "src/design-system/tokens"
 import useAuthSession from "src/hooks/useAuthSession"
 import {
   compareCategoryValues,
@@ -372,7 +373,7 @@ export const EditorStudioWorkspaceController = ({
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const media = window.matchMedia("(max-width: 720px)")
+    const media = window.matchMedia(`(max-width: ${layoutBreakpoint.editorCompact}px)`)
     const sync = () => {
       setIsCompactMobileLayout(media.matches)
     }

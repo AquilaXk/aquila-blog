@@ -2,17 +2,16 @@ package com.back.global.security.config
 
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
-import com.back.global.rsData.RsData
+import com.back.global.web.ErrorResponseSource
+import com.back.global.web.ErrorResponseWriter
 import com.back.global.web.application.ClientIpResolver
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.core.env.Environment
-import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
-import tools.jackson.databind.ObjectMapper
 
 /**
  * API 요청의 쿠키/JWT 인증을 SecurityContext로 연결하는 servlet filter입니다.
@@ -26,7 +25,7 @@ class CustomAuthenticationFilter(
     private val accessTokenAuthenticationHandler: AccessTokenAuthenticationHandler,
     private val refreshTokenAuthenticationHandler: RefreshTokenAuthenticationHandler,
     private val clientIpResolver: ClientIpResolver,
-    private val objectMapper: ObjectMapper,
+    private val errorResponseWriter: ErrorResponseWriter,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
     private val apiCorsPolicy: ApiCorsPolicy,
     private val environment: Environment,
@@ -79,22 +78,15 @@ class CustomAuthenticationFilter(
             }
             filterChain.doFilter(request, response)
         } catch (e: AppException) {
-            if (response.isCommitted) {
-                val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
-                log.warn(
-                    "authentication_app_exception_response_committed path={} code={}",
-                    path,
-                    e.rsData.resultCode,
-                    e,
-                )
-                return
-            }
-            val rsData: RsData<Void> = e.rsData
-
             apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
-            response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
-            response.status = rsData.statusCode
-            response.writer.write(objectMapper.writeValueAsString(rsData))
+            errorResponseWriter.write(
+                request = request,
+                response = response,
+                errorCode = e.errorCode,
+                source = ErrorResponseSource.FILTER,
+                rsData = e.rsData,
+                cause = e,
+            )
         }
     }
 

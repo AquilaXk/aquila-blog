@@ -181,6 +181,32 @@ class PostInteractionSideEffectHandlerTest {
     }
 
     @Test
+    @DisplayName("ranked 기본 인자를 생략한 payload 생성은 default constructor 경로를 탄다")
+    fun payloadConstructionUsesDefaultRankedCacheArgs() {
+        // given & when — omit trailing defaults so Kotlin $default ctor (JaCoCo L34) is exercised
+        val payload =
+            PostInteractionSideEffectPayload(
+                uid = UUID.randomUUID(),
+                aggregateType = "Post",
+                aggregateId = 10L,
+                postId = 10L,
+                recommendationAction = PostInteractionRecommendationSideEffect.NONE,
+                domainEventUid = null,
+                domainEventType = null,
+                postCommentDto = null,
+                postDto = null,
+                actorDto = null,
+                replyReceiverId = null,
+                postAuthorId = null,
+                likeId = null,
+            )
+
+        // then
+        assertThat(payload.rankedCacheInvalidation).isEqualTo(PostRankedCacheInvalidationSideEffect.NONE)
+        assertThat(payload.rankedCacheEvictReason).isNull()
+    }
+
+    @Test
     @DisplayName("ranked cache invalidation NONE은 캐시 축출을 호출하지 않는다")
     fun invalidateRankedCachesNoOpForNone() {
         // given

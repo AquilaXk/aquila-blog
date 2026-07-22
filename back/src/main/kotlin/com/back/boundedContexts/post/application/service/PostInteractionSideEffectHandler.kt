@@ -116,10 +116,10 @@ class PostInteractionSideEffectHandler(
             }
         val reason =
             payload.rankedCacheEvictReason
-                ?: when (payload.rankedCacheInvalidation) {
-                    PostRankedCacheInvalidationSideEffect.HIT_COUNT -> "hit"
-                    PostRankedCacheInvalidationSideEffect.LIKES_COUNT -> "like"
-                    PostRankedCacheInvalidationSideEffect.NONE -> return
+                ?: if (payload.rankedCacheInvalidation == PostRankedCacheInvalidationSideEffect.HIT_COUNT) {
+                    "hit"
+                } else {
+                    "like"
                 }
         postReadCacheInvalidator.invalidateRankedSortHotPages(reason, sorts)
     }

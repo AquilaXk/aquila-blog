@@ -53,6 +53,15 @@ import {
 } from "./markdownEditorTextMutation"
 import { planInsertBlockSnippet, type BlockSnippetSpec } from "./markdownEditorBlockSnippets"
 import {
+  emptyPendingToolbarInsertQueue,
+  queuePendingToolbarInsert,
+  resolvePendingToolbarInsertAfterFlushSkip,
+  resolvePendingToolbarInsertWhenModeChanges,
+  shouldSchedulePendingToolbarInsertFlush,
+  type PendingToolbarInsert,
+  type PendingToolbarInsertQueue,
+} from "./markdownEditorPendingToolbarInsert"
+import {
   MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE,
   MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE,
   resolveMarkdownAttachmentLink,
@@ -92,11 +101,6 @@ type TextareaSelection = {
   to: number
 }
 
-type PendingToolbarInsert =
-  | { kind: "block"; spec: BlockSnippetSpec }
-  | { kind: "wrap"; before: string; after: string; toggle?: boolean }
-  | { kind: "format"; shortcut: Parameters<typeof planFormatShortcutMutation>[3] }
-
 const TEXTAREA_KEYBOARD_HELP =
   "Tab은 2칸 들여쓰기, Shift+Tab은 내어쓰기입니다. Escape를 누른 다음 Tab은 포커스를 다음 요소로 이동합니다."
 
@@ -131,7 +135,7 @@ export const MarkdownEditor = ({
   const allowNativeTabAfterEscapeRef = useRef(false)
   const modeRef = useRef<MarkdownEditorMode>(mode)
   const pendingBodyFocusRef = useRef(false)
-  const pendingToolbarInsertRef = useRef<PendingToolbarInsert | null>(null)
+  const pendingToolbarInsertQueueRef = useRef<PendingToolbarInsertQueue>(emptyPendingToolbarInsertQueue())
   modeRef.current = mode
 
   const setUploadInFlight = useCallback(
@@ -334,30 +338,63 @@ export const MarkdownEditor = ({
     [resolveActiveSelection]
   )
 
+  const clearPendingToolbarInsert = useCallback(() => {
+    pendingToolbarInsertQueueRef.current = emptyPendingToolbarInsertQueue()
+  }, [])
+
   const flushPendingToolbarInsert = useCallback(() => {
-    const pending = pendingToolbarInsertRef.current
-    if (!pending || disabled || modeRef.current === "preview") return
+    const queue = pendingToolbarInsertQueueRef.current
+    if (!queue.pending) return
+
+    if (disabled) {
+      pendingToolbarInsertQueueRef.current = resolvePendingToolbarInsertAfterFlushSkip(queue, "disabled")
+      return
+    }
+
+    if (modeRef.current === "preview") {
+      pendingToolbarInsertQueueRef.current = resolvePendingToolbarInsertAfterFlushSkip(queue, "preview")
+      return
+    }
 
     const textarea = textareaRef.current
-    if (!textarea) return
+    if (!textarea) {
+      const nextQueue = resolvePendingToolbarInsertAfterFlushSkip(queue, "missing-textarea")
+      pendingToolbarInsertQueueRef.current = nextQueue
+      if (shouldSchedulePendingToolbarInsertFlush(nextQueue)) {
+        window.requestAnimationFrame(() => {
+          flushPendingToolbarInsert()
+        })
+      }
+      return
+    }
 
-    pendingToolbarInsertRef.current = null
+    const pending = queue.pending
+    clearPendingToolbarInsert()
     applyPlannedMarkdownMutation(planPendingToolbarInsert(pending))
-  }, [applyPlannedMarkdownMutation, disabled, planPendingToolbarInsert])
+  }, [applyPlannedMarkdownMutation, clearPendingToolbarInsert, disabled, planPendingToolbarInsert])
 
   const queueToolbarInsertForPreviewMode = useCallback((insert: PendingToolbarInsert) => {
-    pendingToolbarInsertRef.current = insert
-    setMode(resolveModeForToolbarInsert(modeRef.current))
+      pendingToolbarInsertQueueRef.current = queuePendingToolbarInsert(insert)
+      setMode(resolveModeForToolbarInsert(modeRef.current))
   }, [])
 
   useEffect(() => {
+    pendingToolbarInsertQueueRef.current = resolvePendingToolbarInsertWhenModeChanges(
+      pendingToolbarInsertQueueRef.current,
+      mode
+    )
+  }, [mode])
+
+  useEffect(() => {
     if (disabled || mode === "preview") return
-    if (!pendingToolbarInsertRef.current) return
+    if (!shouldSchedulePendingToolbarInsertFlush(pendingToolbarInsertQueueRef.current)) return
 
     const frame = window.requestAnimationFrame(() => {
       flushPendingToolbarInsert()
     })
-    return () => window.cancelAnimationFrame(frame)
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
   }, [disabled, flushPendingToolbarInsert, mode])
 
   const insertMarkdownAtEditorSelection = useCallback(

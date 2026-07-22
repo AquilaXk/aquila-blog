@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test"
+import { readFileSync } from "fs"
+import path from "path"
 import {
   BLOCK_SNIPPET_SAMPLE_MARKERS,
   blockMarkdownSnippets,
@@ -19,11 +21,20 @@ import {
   resolveMarkdownEditorModeAfterHydration,
   writeMarkdownEditorModePreference,
 } from "../../src/components/markdown-editor/markdownEditorModePreference"
+import { resolveModeForToolbarInsert } from "../../src/components/markdown-editor/markdownEditorModeTabs"
 import {
   applyPlannedTextMutation,
   applyPlannedTextMutationToValue,
 } from "../../src/components/markdown-editor/markdownEditorTextMutation"
-import { resolveModeForToolbarInsert } from "../../src/components/markdown-editor/markdownEditorModeTabs"
+import {
+  emptyPendingToolbarInsertQueue,
+  queuePendingToolbarInsert,
+  resolvePendingToolbarInsertAfterFlushSkip,
+  resolvePendingToolbarInsertWhenModeChanges,
+  shouldSchedulePendingToolbarInsertFlush,
+} from "../../src/components/markdown-editor/markdownEditorPendingToolbarInsert"
+
+const sourcePath = (...parts: string[]) => path.resolve(__dirname, "../../src", ...parts)
 
 const blockSpecs = [
   ["code", codeBlockSnippet],
@@ -213,5 +224,33 @@ test.describe("markdown editor mode preference", () => {
         })
       }
     }
+  })
+})
+
+test.describe("markdown editor pending toolbar insert queue", () => {
+  const queuedBlock = queuePendingToolbarInsert({ kind: "block", spec: tableBlockSnippet })
+
+  test("clears stale queue when preview flush is skipped", () => {
+    expect(resolvePendingToolbarInsertAfterFlushSkip(queuedBlock, "preview")).toEqual(
+      emptyPendingToolbarInsertQueue()
+    )
+  })
+
+  test("clears stale queue when mode returns to preview", () => {
+    expect(resolvePendingToolbarInsertWhenModeChanges(queuedBlock, "preview")).toEqual(
+      emptyPendingToolbarInsertQueue()
+    )
+    expect(resolvePendingToolbarInsertWhenModeChanges(queuedBlock, "write")).toBe(queuedBlock)
+  })
+
+  test("keeps in-flight preview transition when textarea is not mounted yet", () => {
+    expect(resolvePendingToolbarInsertAfterFlushSkip(queuedBlock, "missing-textarea")).toBe(queuedBlock)
+    expect(shouldSchedulePendingToolbarInsertFlush(queuedBlock)).toBe(true)
+  })
+
+  test("MarkdownEditor clears preview pending queue on mode change", () => {
+    const editorSource = readFileSync(sourcePath("components", "markdown-editor", "MarkdownEditor.tsx"), "utf8")
+    expect(editorSource).toContain("resolvePendingToolbarInsertWhenModeChanges")
+    expect(editorSource).toContain('resolvePendingToolbarInsertAfterFlushSkip(queue, "preview")')
   })
 })

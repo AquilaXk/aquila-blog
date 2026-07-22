@@ -43,9 +43,9 @@ export const useModalFocusTrap = ({
   const pausedRef = useRef(paused)
   const trapActive = open && !paused
 
-  useEffect(() => {
-    pausedRef.current = paused
-  }, [paused])
+  // Keep in sync during render so close cleanup sees nested-dialog pause
+  // before effect ordering can leave a stale false and steal focus back.
+  pausedRef.current = paused
 
   useEffect(() => {
     if (!open) return
@@ -71,6 +71,7 @@ export const useModalFocusTrap = ({
       window.cancelAnimationFrame(raf)
       const trigger = triggerRef.current
       window.requestAnimationFrame(() => {
+        if (pausedRef.current) return
         restoreFocus(trigger)
       })
     }

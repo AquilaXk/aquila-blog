@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 
 // 패밀리룩(1219): 라운드+그림자 카드 입력 → 낮은 라운드 사각 컨트롤(그림자 제거).
 export const NaverField = styled.div`
@@ -59,6 +60,10 @@ export const NaverInput = styled.input`
 
   &[data-password="true"] {
     padding-right: 8.35rem;
+  }
+
+  @media (max-width: 820px) {
+    min-height: ${control.lg}px;
   }
 `
 
@@ -270,6 +275,7 @@ export const IpSecurityInfoButton = styled.button`
 export const PrimaryButton = styled.button`
   border: 0;
   border-radius: 12px;
+  min-height: ${control.lg}px;
   padding: 0.84rem 1rem;
   background: ${({ theme }) => theme.publicDesign.accent};
   color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
@@ -346,6 +352,12 @@ export const FooterText = styled.p`
     flex-wrap: wrap;
     gap: 0.35rem 0.7rem;
     margin-top: 0.25rem;
+  }
+
+  @media (max-width: 820px) {
+    a {
+      min-height: ${control.lg}px;
+    }
   }
 `
 

@@ -67,7 +67,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     gap: 7px;
     min-width: 0;
-    min-height: 36px;
+    min-height: ${FEED_SEARCH_FIELD_MIN_HEIGHT_PX}px;
     padding: 0 10px;
     border-radius: 0;
     border: 1px solid var(--aq-border);

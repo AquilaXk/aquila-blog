@@ -18,6 +18,24 @@ interface CloudVideoUploadSessionRepositoryPort {
         limit: Int,
     ): List<CloudVideoUploadSession>
 
+    fun findStaleIntermediate(
+        initiatingCutoff: Instant,
+        completingOrAbortingCutoff: Instant,
+        uploadingPartCutoff: Instant,
+        limit: Int,
+    ): List<CloudVideoUploadSession>
+
+    fun countStaleIntermediate(
+        initiatingCutoff: Instant,
+        completingOrAbortingCutoff: Instant,
+        uploadingPartCutoff: Instant,
+    ): Long
+
+    fun findNonTerminalObjectKeysByPrefix(
+        objectKeyPrefix: String,
+        limit: Int,
+    ): List<String>
+
     fun attachUploadIdAndTransition(
         id: Long,
         expectedStatus: CloudVideoUploadSessionStatus,
@@ -39,6 +57,15 @@ interface CloudVideoUploadSessionRepositoryPort {
         reason: String,
         now: Instant,
     ): Int
+
+    /**
+     * Sliding 만료 연장. `expiresAt < newExpiresAt`일 때만 갱신한다(동시 연장 CAS).
+     */
+    fun extendExpiresAt(
+        id: Long,
+        newExpiresAt: Instant,
+        now: Instant,
+    ): Int
 }
 
 interface CloudVideoUploadPartRepositoryPort {
@@ -50,6 +77,8 @@ interface CloudVideoUploadPartRepositoryPort {
     ): CloudVideoUploadPart?
 
     fun findBySessionId(sessionId: Long): List<CloudVideoUploadPart>
+
+    fun delete(part: CloudVideoUploadPart)
 
     fun deleteBySessionId(sessionId: Long)
 }

@@ -3,9 +3,10 @@ package com.back.boundedContexts.cloud.application.service
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import com.back.boundedContexts.cloud.application.port.output.CloudFileRepositoryPort
 import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
+import com.back.boundedContexts.cloud.support.InMemoryCloudFileRepository
+import com.back.boundedContexts.cloud.support.StubCloudStoragePort
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
@@ -28,7 +29,7 @@ import java.util.zip.ZipOutputStream
 
 @DisplayName("관리자 클라우드 파일 서비스 테스트")
 class CloudFileServiceTest {
-    private val repository = FakeCloudFileRepository()
+    private val repository = InMemoryCloudFileRepository()
     private val storage = FakeCloudStoragePort()
     private val service =
         CloudFileService(
@@ -1116,65 +1117,7 @@ class CloudFileServiceTest {
         val mediaKind: CloudFileMediaKind,
     )
 
-    private class FakeCloudFileRepository : CloudFileRepositoryPort {
-        val savedFiles = mutableListOf<CloudFile>()
-        var onSave: ((CloudFile) -> Unit)? = null
-        var assignAuditTimestamps: Boolean = false
-        private var nextId = 1L
-
-        override fun save(file: CloudFile): CloudFile {
-            val stored =
-                if (file.id == 0L) {
-                    CloudFile.create(
-                        id = nextId++,
-                        ownerMemberId = file.ownerMemberId,
-                        objectKey = file.objectKey,
-                        originalFilename = file.originalFilename,
-                        contentType = file.contentType,
-                        byteSize = file.byteSize,
-                        mediaKind = file.mediaKind,
-                        folderPath = file.folderPath,
-                        checksumSha256 = file.checksumSha256,
-                    )
-                } else {
-                    file
-                }
-            if (assignAuditTimestamps) {
-                stored.createdAt = Instant.parse("2026-06-12T00:00:00Z")
-                stored.modifiedAt = Instant.parse("2026-06-12T00:00:00Z")
-            }
-            onSave?.invoke(stored)
-            savedFiles.removeIf { it.id == stored.id }
-            savedFiles += stored
-            return stored
-        }
-
-        override fun findActiveByOwner(
-            ownerMemberId: Long,
-            folderPath: String?,
-            keyword: String?,
-            mediaKind: CloudFileMediaKind?,
-        ): List<CloudFile> =
-            savedFiles.filter {
-                it.ownerMemberId == ownerMemberId &&
-                    it.deletedAt == null &&
-                    (folderPath == null || it.folderPath == folderPath) &&
-                    (keyword.isNullOrBlank() || it.originalFilename.contains(keyword, ignoreCase = true)) &&
-                    (mediaKind == null || it.mediaKind == mediaKind)
-            }
-
-        override fun findActiveByIdAndOwner(
-            id: Long,
-            ownerMemberId: Long,
-        ): CloudFile? =
-            savedFiles.firstOrNull {
-                it.id == id &&
-                    it.ownerMemberId == ownerMemberId &&
-                    it.deletedAt == null
-            }
-    }
-
-    private class FakeCloudStoragePort : CloudStoragePort {
+    private class FakeCloudStoragePort : StubCloudStoragePort() {
         val uploaded = mutableListOf<CloudStoragePort.UploadRequest>()
         val openedObjectKeys = mutableListOf<String>()
         val openedRanges = mutableListOf<Pair<String, LongRange>>()
@@ -1189,26 +1132,6 @@ class CloudFileServiceTest {
                 checksumSha256 = "test-checksum",
             )
         }
-
-        override fun initiateMultipartUpload(
-            request: CloudStoragePort.MultipartUploadInitRequest,
-        ): CloudStoragePort.MultipartUploadInitResult =
-            CloudStoragePort.MultipartUploadInitResult(
-                objectKey = request.objectKey,
-                uploadId = "unused",
-            )
-
-        override fun uploadMultipartPart(
-            request: CloudStoragePort.MultipartUploadPartRequest,
-        ): CloudStoragePort.MultipartUploadPartResult =
-            CloudStoragePort.MultipartUploadPartResult(
-                partNumber = request.partNumber,
-                eTag = "unused",
-            )
-
-        override fun completeMultipartUpload(request: CloudStoragePort.MultipartUploadCompleteRequest) = Unit
-
-        override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) = Unit
 
         override fun open(objectKey: String): CloudStoragePort.StoredObject? {
             openedObjectKeys += objectKey

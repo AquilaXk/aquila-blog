@@ -21,9 +21,14 @@ data class PublicApiRouteSpec(
         authorize.authorize(method, pattern, authorize.permitAll)
     }
 
-    fun matches(request: HttpServletRequest): Boolean {
-        if (method != null && request.method != method.name()) return false
+    fun matches(request: HttpServletRequest): Boolean = matches(request.method, request.requestURI)
 
-        return pathPattern.matches(PathContainer.parsePath(request.requestURI))
+    fun matches(
+        rawMethod: String,
+        path: String,
+    ): Boolean {
+        if (method != null && rawMethod.uppercase() != method.name()) return false
+
+        return pathPattern.matches(PathContainer.parsePath(path))
     }
 }

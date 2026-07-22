@@ -3,10 +3,12 @@ import {
   activateScheduledForcedEditorExitIfMatching,
   allowForcedEditorExitRoute,
   captureEditorRouteNavigationIntent,
+  clearActiveForcedEditorExitUrl,
   clearForcedEditorExitUrl,
   clearScheduledForcedEditorExitUrl,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
+  isEditorStudioBootstrapNavigation,
   isEditorUnsavedDirtyByFingerprint,
   isForcedEditorExitUrl,
   isSamePathEditorSurfaceNavigation,
@@ -181,6 +183,30 @@ test.describe("editor unsaved exit guard helpers", () => {
       isSamePathEditorSurfaceNavigation("/editor/1?surface=compose", "/editor/2?surface=manage")
     ).toBe(false)
     expect(isSamePathEditorSurfaceNavigation("/editor/1", "/admin/posts")).toBe(false)
+  })
+
+  test("allows studio bootstrap navigation from /editor/new to /editor/{id}", () => {
+    expect(isEditorStudioBootstrapNavigation("/editor/new", "/editor/42")).toBe(true)
+    expect(
+      isEditorStudioBootstrapNavigation("/editor/new?source=local-draft", "/editor/42?returnTo=%2Fadmin%2Fposts")
+    ).toBe(true)
+    expect(isEditorStudioBootstrapNavigation("/editor/new", "/editor/new")).toBe(false)
+    expect(isEditorStudioBootstrapNavigation("/editor/new", "/admin/posts")).toBe(false)
+    expect(isEditorStudioBootstrapNavigation("/editor/1", "/editor/2")).toBe(false)
+  })
+
+  test("active clear on route abort preserves scheduled forced-exit marks", () => {
+    clearForcedEditorExitUrl()
+    markForcedEditorExitUrl("/")
+    scheduleForcedEditorExitUrl("/")
+    // Unrelated abort must drop only the in-flight active mark.
+    clearActiveForcedEditorExitUrl()
+    expect(isForcedEditorExitUrl("/")).toBe(false)
+
+    activateScheduledForcedEditorExitIfMatching("/")
+    expect(isForcedEditorExitUrl("/")).toBe(true)
+
+    clearForcedEditorExitUrl()
   })
 
   test("keeps a stable user-facing unsaved message", () => {

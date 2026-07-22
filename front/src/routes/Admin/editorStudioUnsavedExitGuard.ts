@@ -88,6 +88,14 @@ export const clearForcedEditorExitUrl = () => {
   activeForcedEditorExitPath = null
 }
 
+/**
+ * Clear only the in-flight active mark (routeChangeError / aborted navigation).
+ * Must not wipe a scheduled admin-loss mark waiting for router.push/replace.
+ */
+export const clearActiveForcedEditorExitUrl = () => {
+  activeForcedEditorExitPath = null
+}
+
 /** Drop a schedule that never reached router.push/replace (failed/cancelled redirect). */
 export const clearScheduledForcedEditorExitUrl = () => {
   scheduledForcedEditorExitPath = null
@@ -122,6 +130,19 @@ export const shouldBlockEditorBeforeUnload = (isDirty: boolean, bypassForcedExit
 /** Same-pathname query/hash updates (compose/manage surface sync) are not leaving. */
 export const isSamePathEditorSurfaceNavigation = (currentUrl: string, nextUrl: string) =>
   editorRoutePathname(currentUrl) === editorRoutePathname(nextUrl)
+
+/**
+ * Internal studio bootstrap: automatic replace from `/editor/new` → `/editor/{id}`
+ * after temp-post create. Must not be blocked by a dirty exit guard.
+ */
+export const isEditorStudioBootstrapNavigation = (currentUrl: string, nextUrl: string) => {
+  const current = editorRoutePathname(currentUrl)
+  const next = editorRoutePathname(nextUrl)
+  if (current !== "/editor/new") return false
+  if (!next.startsWith("/editor/")) return false
+  const segment = next.slice("/editor/".length)
+  return segment.length > 0 && segment !== "new" && !segment.includes("/")
+}
 
 export type EditorRouteNavigationMethod = "push" | "replace"
 

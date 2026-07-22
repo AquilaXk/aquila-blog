@@ -6,9 +6,11 @@ import {
   activateScheduledForcedEditorExitIfMatching,
   allowForcedEditorExitRoute,
   captureEditorRouteNavigationIntent,
+  clearActiveForcedEditorExitUrl,
   clearForcedEditorExitUrl,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
+  isEditorStudioBootstrapNavigation,
   isSamePathEditorSurfaceNavigation,
   resolveEditorRouteNavigationRetry,
   restoreEditorUrlAfterBlockedHistoryPop,
@@ -211,6 +213,8 @@ export const useEditorStudioUnsavedExitGuard = ({
       if (allowNavigationRef.current) return
       if (nextUrl === router.asPath) return
       if (isSamePathEditorSurfaceNavigation(router.asPath, nextUrl)) return
+      // Temp-post bootstrap replace must proceed even if the new editor is already dirty.
+      if (isEditorStudioBootstrapNavigation(router.asPath, nextUrl)) return
 
       pendingRef.current = {
         kind: "route",
@@ -234,7 +238,8 @@ export const useEditorStudioUnsavedExitGuard = ({
     const handleRouteChangeError = () => {
       clearAllowNavigation()
       allowBeforeUnloadBypassRef.current = false
-      clearForcedEditorExitUrl()
+      // Keep scheduled admin-loss marks; only drop an in-flight active bypass.
+      clearActiveForcedEditorExitUrl()
     }
 
     window.addEventListener("beforeunload", handleBeforeUnload)

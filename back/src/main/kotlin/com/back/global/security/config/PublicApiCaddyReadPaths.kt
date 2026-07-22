@@ -24,9 +24,6 @@ object PublicApiCaddyReadPaths {
         path = path.replace("/api/*/", "/api/v1/")
         path = path.replace(Regex("\\{[^}]+\\}"), "*")
         path = path.replace("/**", "/*")
-        if (path.endsWith("/**")) {
-            path = path.removeSuffix("/**") + "/*"
-        }
         return path
     }
 }

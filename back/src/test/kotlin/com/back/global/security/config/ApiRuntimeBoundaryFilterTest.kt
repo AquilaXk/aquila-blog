@@ -117,6 +117,86 @@ class ApiRuntimeBoundaryFilterTest {
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
     }
 
+    @Test
+    @DisplayName("read 모드에서 actuator와 non-api 경로는 필터를 건너뛴다")
+    fun `read mode skips actuator and non api paths`() {
+        val filter = createFilter("read")
+
+        for (path in listOf("/actuator/health", "/favicon.ico")) {
+            val request = MockHttpServletRequest("GET", path)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+    }
+
+    @Test
+    @DisplayName("context-path가 있어도 runtime boundary path 판정이 동작한다")
+    fun `context path is stripped before runtime boundary matching`() {
+        val filter = createFilter("read")
+        val request = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
+        request.contextPath = "/blog"
+        request.requestURI = "/blog/post/api/v1/posts/feed"
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
+    @Test
+    @DisplayName("cors policy가 없어도 차단 응답은 503으로 종료된다")
+    fun `blocked response works without cors policy`() {
+        val filter =
+            ApiRuntimeBoundaryFilter(
+                "none",
+                null,
+                TestPublicApiRequestMatchers.defaultMatcher(),
+            )
+        val request = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+        assertThat(response.contentAsString).contains("503-1")
+    }
+
+    @Test
+    @DisplayName("isAllowed는 all 모드를 항상 허용한다")
+    fun `isAllowed returns true for all mode`() {
+        val filter = createFilter("all")
+        val method =
+            ApiRuntimeBoundaryFilter::class.java.getDeclaredMethod(
+                "isAllowed",
+                RuntimeApiMode::class.java,
+                String::class.java,
+                String::class.java,
+            )
+        method.isAccessible = true
+
+        val allowed =
+            method.invoke(
+                filter,
+                RuntimeApiMode.ALL,
+                "GET",
+                "/post/api/v1/posts/feed",
+            ) as Boolean
+
+        assertThat(allowed).isTrue()
+    }
+
+    @Test
+    @DisplayName("PublicApiRequestMatcher publicApiRoutes는 contributor 경로를 노출한다")
+    fun `public api routes are exposed from matcher`() {
+        val routes = TestPublicApiRequestMatchers.defaultMatcher().publicApiRoutes()
+
+        assertThat(routes).isNotEmpty
+        assertThat(routes.map { it.pattern }).anyMatch { it.contains("/posts/feed") }
+    }
+
     private fun createFilter(mode: String): ApiRuntimeBoundaryFilter =
         ApiRuntimeBoundaryFilter(
             mode,

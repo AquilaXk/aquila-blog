@@ -17,11 +17,12 @@ const SettingsLayout = ({ active, title, children }: SettingsLayoutProps) => {
   if (authStatus === "loading") {
     return (
       <main className="settingsPage" aria-busy="true">
-        <div className="stateBlock" aria-label="인증 상태 확인 중">
-          <Skeleton height="0.75rem" width="6rem" />
-          <Skeleton height="2rem" width="12rem" />
-          <Skeleton height="1rem" width="70%" />
-          <Skeleton height="1rem" width="48%" />
+        <div className="stateBlock" role="status" aria-live="polite">
+          <p className="srOnly">인증 상태 확인 중</p>
+          <Skeleton height="0.75rem" width="6rem" aria-hidden="true" />
+          <Skeleton height="2rem" width="12rem" aria-hidden="true" />
+          <Skeleton height="1rem" width="70%" aria-hidden="true" />
+          <Skeleton height="1rem" width="48%" aria-hidden="true" />
         </div>
         <style jsx global>{settingsStyles}</style>
       </main>
@@ -171,6 +172,18 @@ export const settingsStyles = `
     display: grid;
     gap: 12px;
     margin-top: 48px;
+  }
+
+  .srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .settingsPage .primaryLink,

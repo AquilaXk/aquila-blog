@@ -1,8 +1,45 @@
 export const EDITOR_UNSAVED_CHANGES_MESSAGE =
   "저장되지 않은 변경이 있습니다. 이 페이지를 나가면 변경 내용이 사라질 수 있습니다."
 
-export const isEditorUnsavedDirtyLabel = (persistenceText: string) =>
-  persistenceText === "저장되지 않은 변경" || persistenceText === "저장 중"
+export type EditorUnsavedDirtyFingerprintInput = {
+  isSaving: boolean
+  editorMode: "create" | "edit"
+  hasSelectedManagedPost: boolean
+  editorStateFingerprint: string
+  serverBaselineFingerprint: string
+  localDraftFingerprint: string
+  localDraftSavedAt: string
+  pristineCreateFingerprint: string
+}
+
+/**
+ * Dirty for exit-guard purposes: compare fingerprints, not persistence display text.
+ * Empty title+body must still block when meta (or cleared edit baseline) differs.
+ */
+export const isEditorUnsavedDirtyByFingerprint = ({
+  isSaving,
+  editorMode,
+  hasSelectedManagedPost,
+  editorStateFingerprint,
+  serverBaselineFingerprint,
+  localDraftFingerprint,
+  localDraftSavedAt,
+  pristineCreateFingerprint,
+}: EditorUnsavedDirtyFingerprintInput): boolean => {
+  if (isSaving) return true
+
+  if (editorMode === "edit") {
+    if (hasSelectedManagedPost) {
+      return editorStateFingerprint !== serverBaselineFingerprint
+    }
+    return editorStateFingerprint !== pristineCreateFingerprint
+  }
+
+  if (localDraftSavedAt) {
+    return editorStateFingerprint !== localDraftFingerprint
+  }
+  return editorStateFingerprint !== pristineCreateFingerprint
+}
 
 const editorRoutePathname = (url: string) => url.split(/[?#]/)[0] || ""
 

@@ -153,7 +153,24 @@ export const useEditorStudioUnsavedExitGuard = ({
       }
 
       if (isForcedEditorExitUrl(as)) return true
-      if (isSamePathEditorSurfaceNavigation(router.asPath, as)) return true
+
+      if (isSamePathEditorSurfaceNavigation(router.asPath, as)) {
+        // Same-pathname query/surface pops still move history; sync idx so a later
+        // forward/back is not misclassified from a stale push increment.
+        const samePathDestinationIdx = readEditorUnsavedGuardHistoryIdx(window.history.state)
+        if (samePathDestinationIdx != null) {
+          historyIdxRef.current = samePathDestinationIdx
+        } else {
+          const samePathDirection = resolveEditorHistoryNavigationDirection(
+            historyIdxRef.current,
+            samePathDestinationIdx
+          )
+          historyIdxRef.current += resolveEditorHistoryNavigationDelta(samePathDirection)
+        }
+        skipHistoryIdxUpdateRef.current = true
+        stampCurrentHistoryIdx()
+        return true
+      }
 
       const destinationIdx = readEditorUnsavedGuardHistoryIdx(window.history.state)
       const direction = resolveEditorHistoryNavigationDirection(

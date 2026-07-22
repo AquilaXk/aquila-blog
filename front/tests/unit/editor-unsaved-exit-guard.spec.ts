@@ -4,7 +4,7 @@ import {
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY,
-  isEditorUnsavedDirtyLabel,
+  isEditorUnsavedDirtyByFingerprint,
   isForcedEditorExitUrl,
   isSamePathEditorSurfaceNavigation,
   readEditorUnsavedGuardHistoryIdx,
@@ -15,12 +15,77 @@ import {
 } from "../../src/routes/Admin/editorStudioUnsavedExitGuard"
 
 test.describe("editor unsaved exit guard helpers", () => {
-  test("treats dirty and in-flight save labels as unsaved", () => {
-    expect(isEditorUnsavedDirtyLabel("저장되지 않은 변경")).toBe(true)
-    expect(isEditorUnsavedDirtyLabel("저장 중")).toBe(true)
-    expect(isEditorUnsavedDirtyLabel("자동 저장됨")).toBe(false)
-    expect(isEditorUnsavedDirtyLabel("저장됨")).toBe(false)
-    expect(isEditorUnsavedDirtyLabel("")).toBe(false)
+  test("detects dirty from fingerprint diffs even when title and body are empty", () => {
+    const pristine = '{"title":"","content":"","meta":"pristine"}'
+    const metaOnly = '{"title":"","content":"","meta":"tags-changed"}'
+    const clearedEdit = '{"title":"","content":"","meta":"cleared"}'
+    const serverBaseline = '{"title":"Saved","content":"Body","meta":"ok"}'
+    const localSaved = '{"title":"Draft","content":"","meta":"ok"}'
+
+    expect(
+      isEditorUnsavedDirtyByFingerprint({
+        isSaving: false,
+        editorMode: "create",
+        hasSelectedManagedPost: false,
+        editorStateFingerprint: pristine,
+        serverBaselineFingerprint: "",
+        localDraftFingerprint: "",
+        localDraftSavedAt: "",
+        pristineCreateFingerprint: pristine,
+      })
+    ).toBe(false)
+
+    expect(
+      isEditorUnsavedDirtyByFingerprint({
+        isSaving: false,
+        editorMode: "create",
+        hasSelectedManagedPost: false,
+        editorStateFingerprint: metaOnly,
+        serverBaselineFingerprint: "",
+        localDraftFingerprint: "",
+        localDraftSavedAt: "",
+        pristineCreateFingerprint: pristine,
+      })
+    ).toBe(true)
+
+    expect(
+      isEditorUnsavedDirtyByFingerprint({
+        isSaving: false,
+        editorMode: "edit",
+        hasSelectedManagedPost: true,
+        editorStateFingerprint: clearedEdit,
+        serverBaselineFingerprint: serverBaseline,
+        localDraftFingerprint: "",
+        localDraftSavedAt: "",
+        pristineCreateFingerprint: pristine,
+      })
+    ).toBe(true)
+
+    expect(
+      isEditorUnsavedDirtyByFingerprint({
+        isSaving: false,
+        editorMode: "create",
+        hasSelectedManagedPost: false,
+        editorStateFingerprint: localSaved,
+        serverBaselineFingerprint: "",
+        localDraftFingerprint: localSaved,
+        localDraftSavedAt: "2026-07-22T01:00:00.000Z",
+        pristineCreateFingerprint: pristine,
+      })
+    ).toBe(false)
+
+    expect(
+      isEditorUnsavedDirtyByFingerprint({
+        isSaving: true,
+        editorMode: "create",
+        hasSelectedManagedPost: false,
+        editorStateFingerprint: pristine,
+        serverBaselineFingerprint: "",
+        localDraftFingerprint: "",
+        localDraftSavedAt: "",
+        pristineCreateFingerprint: pristine,
+      })
+    ).toBe(true)
   })
 
   test("allows forced login redirects without blocking", () => {
@@ -97,5 +162,20 @@ test.describe("editor unsaved exit guard helpers", () => {
     expect(readEditorUnsavedGuardHistoryIdx(stamped)).toBe(4)
     expect(readEditorUnsavedGuardHistoryIdx(null)).toBe(null)
     expect(readEditorUnsavedGuardHistoryIdx({ as: "/editor/1" })).toBe(null)
+  })
+
+  test("same-pathname surface navigation stays local and history idx helpers stay consistent", () => {
+    expect(
+      isSamePathEditorSurfaceNavigation(
+        "/editor/1?surface=compose",
+        "/editor/1?surface=manage"
+      )
+    ).toBe(true)
+
+    // Allowed same-path pops sync to the destination stamp (not a push +1).
+    const currentIdx = 2
+    const destinationIdx = 1
+    expect(resolveEditorHistoryNavigationDirection(currentIdx, destinationIdx)).toBe("back")
+    expect(destinationIdx).toBe(currentIdx + resolveEditorHistoryNavigationDelta("back"))
   })
 })

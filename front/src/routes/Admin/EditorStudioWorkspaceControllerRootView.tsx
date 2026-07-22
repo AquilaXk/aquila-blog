@@ -1,6 +1,11 @@
 import { useCallback, useMemo, useState } from "react"
 import { formatDate } from "src/libs/utils"
-import { clampThumbnailZoom, DEFAULT_THUMBNAIL_ZOOM } from "src/libs/thumbnailFocus"
+import {
+  clampThumbnailZoom,
+  DEFAULT_THUMBNAIL_FOCUS_X,
+  DEFAULT_THUMBNAIL_FOCUS_Y,
+  DEFAULT_THUMBNAIL_ZOOM,
+} from "src/libs/thumbnailFocus"
 import { POST_IMAGE_UPLOAD_RULE_LABEL, PROFILE_IMAGE_UPLOAD_RULE_LABEL } from "src/libs/profileImageUpload"
 import { WriterEditorHost } from "./WriterEditorHost"
 import { EditorStudioThumbnailEditorPanel, EditorStudioThumbnailMetaPanel } from "./EditorStudioThumbnailPanels"
@@ -14,7 +19,7 @@ import { EditorStudioContentWorkspace } from "./EditorStudioContentWorkspace"
 import { EditorStudioDedicatedEditorLoadingState, EditorStudioDedicatedEditorSurface } from "./EditorStudioDedicatedEditorSurface"
 import { LIST_SORT_OPTIONS } from "./useEditorStudioListConditions"
 import { deriveComposeViewModel, deriveEditorContentMetrics, deriveEditorPersistenceState, derivePublishActionViewModel, getVisibilityLabel, toFlags, type PublishActionType } from "./editorStudioState"
-import { isEditorUnsavedDirtyLabel } from "./editorStudioUnsavedExitGuard"
+import { isEditorUnsavedDirtyByFingerprint } from "./editorStudioUnsavedExitGuard"
 import { useEditorStudioUnsavedExitGuard } from "./useEditorStudioUnsavedExitGuard"
 import { PREVIEW_SUMMARY_MAX_LENGTH, buildEditorStateFingerprint, detectPublishPlaceholderIssue, makePreviewSummary } from "./editorStudioMetaModel"
 import { Main, HeroCard, HeroIntro, StudioStatusItem, StudioStatusStrip, WorkspaceGrid, WorkspaceMain } from "./EditorStudioWorkspaceControllerRoot.styles"
@@ -198,6 +203,22 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     toggleSelectAllVisiblePosts
   } = props
   const currentFlags = toFlags(postVisibility)
+  const pristineCreateFingerprint = useMemo(
+    () =>
+      buildEditorStateFingerprint({
+        title: "",
+        content: "",
+        summary: "",
+        thumbnailUrl: "",
+        thumbnailFocusX: DEFAULT_THUMBNAIL_FOCUS_X,
+        thumbnailFocusY: DEFAULT_THUMBNAIL_FOCUS_Y,
+        thumbnailZoom: DEFAULT_THUMBNAIL_ZOOM,
+        tags: [],
+        category: "",
+        visibility: "PUBLIC_LISTED",
+      }),
+    []
+  )
   const editorStateFingerprint = useMemo(
     () =>
       buildEditorStateFingerprint({
@@ -281,9 +302,20 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   })
   const composeStatusText = editorPersistenceState.text
   const composeStatusTone = editorPersistenceState.tone
+  const isEditorSaving =
+    loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
   const { requestGuardedAction, dialog: unsavedExitDialog } = useEditorStudioUnsavedExitGuard({
     enabled: Boolean(sessionMember),
-    isDirty: isEditorUnsavedDirtyLabel(editorPersistenceState.text),
+    isDirty: isEditorUnsavedDirtyByFingerprint({
+      isSaving: isEditorSaving,
+      editorMode,
+      hasSelectedManagedPost,
+      editorStateFingerprint,
+      serverBaselineFingerprint: serverBaselineEditorFingerprintRef.current,
+      localDraftFingerprint: lastLocalDraftFingerprintRef.current,
+      localDraftSavedAt,
+      pristineCreateFingerprint,
+    }),
   })
   const handleGuardedExitDedicatedEditor = useCallback(() => {
     requestGuardedAction(() => {

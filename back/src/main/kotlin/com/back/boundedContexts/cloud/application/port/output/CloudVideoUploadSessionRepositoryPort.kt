@@ -51,6 +51,15 @@ interface CloudVideoUploadSessionRepositoryPort {
         reason: String,
         now: Instant,
     ): Int
+
+    /**
+     * Sliding 만료 연장. `expiresAt < newExpiresAt`일 때만 갱신한다(동시 연장 CAS).
+     */
+    fun extendExpiresAt(
+        id: Long,
+        newExpiresAt: Instant,
+        now: Instant,
+    ): Int
 }
 
 interface CloudVideoUploadPartRepositoryPort {

@@ -316,6 +316,12 @@ class CloudFileReconcileServiceTest {
             reason: String,
             now: Instant,
         ): Int = 0
+
+        override fun extendExpiresAt(
+            id: Long,
+            newExpiresAt: Instant,
+            now: Instant,
+        ): Int = 0
     }
 
     private class FakeCloudStoragePort : CloudStoragePort {

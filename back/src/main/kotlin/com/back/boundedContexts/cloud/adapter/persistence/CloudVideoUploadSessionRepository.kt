@@ -138,6 +138,24 @@ interface CloudVideoUploadSessionRepository :
         reason: String,
         now: Instant,
     ): Int
+
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+        """
+        UPDATE CloudVideoUploadSession s
+        SET s.expiresAt = :newExpiresAt,
+            s.modifiedAt = :now
+        WHERE s.id = :id
+          AND s.status = 'IN_PROGRESS'
+          AND s.expiresAt < :newExpiresAt
+        """,
+    )
+    override fun extendExpiresAt(
+        id: Long,
+        newExpiresAt: Instant,
+        now: Instant,
+    ): Int
 }
 
 interface CloudVideoUploadPartRepository :

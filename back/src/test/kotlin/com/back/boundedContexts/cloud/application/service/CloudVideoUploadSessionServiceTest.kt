@@ -58,7 +58,11 @@ class CloudVideoUploadSessionServiceTest {
             contentLength = bytes.size.toLong(),
         )
 
-    private fun createService(clock: Clock): CloudVideoUploadSessionService =
+    private fun createService(
+        clock: Clock,
+        expiresSeconds: Long = 3_600,
+        absoluteMaxSeconds: Long = 7L * 24 * 60 * 60,
+    ): CloudVideoUploadSessionService =
         CloudVideoUploadSessionService(
             sessionRepository = sessionRepository,
             partRepository = partRepository,
@@ -69,7 +73,8 @@ class CloudVideoUploadSessionServiceTest {
                     maxFileSizeBytes = TEST_PART_SIZE_BYTES,
                     cloudVideoResumableMaxFileSizeBytes = 5L * 1024 * 1024 * 1024,
                     cloudVideoResumablePartSizeBytes = TEST_PART_SIZE_BYTES,
-                    cloudVideoResumableExpiresSeconds = 3_600,
+                    cloudVideoResumableExpiresSeconds = expiresSeconds,
+                    cloudVideoResumableAbsoluteMaxSeconds = absoluteMaxSeconds,
                 ),
             clock = clock,
         )
@@ -179,8 +184,113 @@ class CloudVideoUploadSessionServiceTest {
         ).containsExactly(1, 2)
         assertThat(completed.mediaKind).isEqualTo(CloudFileMediaKind.VIDEO)
         assertThat(completed.originalFilename).isEqualTo("movie.mp4")
+        val storedFile = fileRepository.findActiveByIdAndOwner(completed.id, 7L)!!
+        assertThat(storedFile.checksumSha256).startsWith("sha256-composite:")
+        assertThat(storedFile.checksumSha256).endsWith("-2")
         assertThat(sessionRepository.savedSessions.last().status).isEqualTo(CloudVideoUploadSessionStatus.COMPLETED)
         assertThat(sessionRepository.savedSessions.last().completedFileId).isEqualTo(completed.id)
+    }
+
+    @Test
+    @DisplayName("파트 업로드 성공 시 세션 만료를 sliding 연장한다")
+    fun `파트 업로드 성공은 세션 만료를 sliding 연장한다`() {
+        val mutableClock = MutableClock(Instant.parse("2026-06-17T00:00:00Z"))
+        val slidingService = createService(mutableClock, expiresSeconds = 3_600, absoluteMaxSeconds = 86_400)
+        val session =
+            slidingService.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        assertThat(session.expiresAt).isEqualTo(Instant.parse("2026-06-17T01:00:00Z"))
+
+        mutableClock.instant = Instant.parse("2026-06-17T00:30:00Z")
+        val uploaded =
+            slidingService.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+
+        assertThat(uploaded.session.expiresAt).isEqualTo(Instant.parse("2026-06-17T01:30:00Z"))
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.expiresAt)
+            .isEqualTo(Instant.parse("2026-06-17T01:30:00Z"))
+    }
+
+    @Test
+    @DisplayName("파트 업로드 sliding 연장은 절대 상한을 넘지 않는다")
+    fun `파트 업로드 sliding 연장은 절대 상한을 넘지 않는다`() {
+        val mutableClock = MutableClock(Instant.parse("2026-06-17T00:00:00Z"))
+        val cappedService = createService(mutableClock, expiresSeconds = 3_600, absoluteMaxSeconds = 7_200)
+        val session =
+            cappedService.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        val part = mp4Part(TEST_PART_SIZE_BYTES.toInt())
+        mutableClock.instant = Instant.parse("2026-06-17T00:50:00Z")
+        cappedService.uploadPart(7L, session.id, 1, part)
+
+        mutableClock.instant = Instant.parse("2026-06-17T01:30:00Z")
+        val uploaded = cappedService.uploadPart(7L, session.id, 1, part)
+
+        // createdAt+2h absolute cap; sliding now+1h would be 02:30 and is clamped.
+        assertThat(uploaded.session.expiresAt).isEqualTo(Instant.parse("2026-06-17T02:00:00Z"))
+    }
+
+    @Test
+    @DisplayName("파트 재전송은 같은 크기여도 SHA-256이 다르면 거절한다")
+    fun `파트 재전송은 같은 크기 다른 내용이면 거절한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        val firstPart = mp4Part(TEST_PART_SIZE_BYTES.toInt())
+        service.uploadPart(7L, session.id, 1, firstPart)
+
+        val conflicting =
+            firstPart.copyOf().also {
+                it[100] = (it[100] + 1).toByte()
+            }
+
+        assertThatThrownBy {
+            service.uploadPart(7L, session.id, 1, conflicting)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("다른 내용")
+
+        assertThat(storage.multipartParts).hasSize(1)
+    }
+
+    @Test
+    @DisplayName("완료 시 HeadObject 크기가 세션과 다르면 FAILED로 정리한다")
+    fun `완료는 크기 불일치 시 FAILED로 정리한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        storage.completedObjectContentLengthOverride = TEST_PART_SIZE_BYTES - 1
+
+        assertThatThrownBy {
+            service.complete(7L, session.id)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("무결성")
+
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        assertThat(stored.status).isEqualTo(CloudVideoUploadSessionStatus.FAILED)
+        assertThat(stored.failureReason).contains("size mismatch")
+        assertThat(storage.deletedObjectKeys).contains(stored.objectKey)
+        assertThat(partRepository.findBySessionId(session.id)).isEmpty()
+        assertThat(fileRepository.findActiveByObjectKey(stored.objectKey)).isNull()
     }
 
     @Test
@@ -310,6 +420,7 @@ class CloudVideoUploadSessionServiceTest {
                 partNumber = 1,
                 eTag = "etag-stale",
                 byteSize = 1,
+                partSha256 = "00".repeat(32),
             ),
         )
 
@@ -1296,6 +1407,22 @@ class CloudVideoUploadSessionServiceTest {
             session.fail(reason, now)
             return 1
         }
+
+        override fun extendExpiresAt(
+            id: Long,
+            newExpiresAt: Instant,
+            now: Instant,
+        ): Int {
+            val session =
+                savedSessions.firstOrNull {
+                    it.id == id &&
+                        it.status == CloudVideoUploadSessionStatus.IN_PROGRESS &&
+                        it.expiresAt < newExpiresAt
+                } ?: return 0
+            session.expiresAt = newExpiresAt
+            session.modifiedAt = now
+            return 1
+        }
     }
 
     private class FakeVideoUploadPartRepository : CloudVideoUploadPartRepositoryPort {
@@ -1315,6 +1442,7 @@ class CloudVideoUploadSessionServiceTest {
                         partNumber = part.partNumber,
                         eTag = part.eTag,
                         byteSize = part.byteSize,
+                        partSha256 = part.partSha256,
                     )
                 } else {
                     part
@@ -1403,6 +1531,8 @@ class CloudVideoUploadSessionServiceTest {
         val failingAbortUploadIds = mutableSetOf<String>()
         val failingPartNumbers = mutableSetOf<Int>()
         val failingCompleteUploadIds = mutableSetOf<String>()
+        private val uploadedPartSizes = mutableMapOf<String, MutableMap<Int, Long>>()
+        var completedObjectContentLengthOverride: Long? = null
         var failInitiate = false
 
         override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult =
@@ -1428,6 +1558,7 @@ class CloudVideoUploadSessionServiceTest {
                 throw IllegalStateException("part upload failed")
             }
             multipartParts += request
+            uploadedPartSizes.getOrPut(request.objectKey) { mutableMapOf() }[request.partNumber] = request.contentLength
             return CloudStoragePort.MultipartUploadPartResult(
                 partNumber = request.partNumber,
                 eTag = "etag-${request.partNumber}",
@@ -1440,6 +1571,15 @@ class CloudVideoUploadSessionServiceTest {
                 throw IllegalStateException("complete failed")
             }
             completedUploads += request
+            val summed = uploadedPartSizes[request.objectKey]?.values?.sum() ?: 0L
+            val contentLength = completedObjectContentLengthOverride ?: summed
+            objectHeads[request.objectKey] =
+                CloudStoragePort.ObjectHead(
+                    objectKey = request.objectKey,
+                    contentLength = contentLength,
+                    contentType = "video/mp4",
+                    eTag = "etag-complete",
+                )
         }
 
         override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) {
@@ -1472,7 +1612,18 @@ class CloudVideoUploadSessionServiceTest {
 
         override fun delete(objectKey: String) {
             deletedObjectKeys += objectKey
+            objectHeads.remove(objectKey)
         }
+    }
+
+    private class MutableClock(
+        var instant: Instant,
+    ) : Clock() {
+        override fun getZone(): ZoneOffset = ZoneOffset.UTC
+
+        override fun withZone(zone: java.time.ZoneId): Clock = this
+
+        override fun instant(): Instant = instant
     }
 
     companion object {

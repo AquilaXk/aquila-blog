@@ -20,6 +20,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.DigestInputStream
+import java.security.MessageDigest
 import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
@@ -33,6 +35,9 @@ private const val CLOUD_VIDEO_UPLOAD_MAX_FILENAME_CODE_POINTS = 255L
 private const val CLOUD_VIDEO_UPLOAD_MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
 private const val CLOUD_VIDEO_UPLOAD_MAX_MULTIPART_PARTS = 10_000L
 private const val INVALID_PART_SIZE_MESSAGE = "업로드 조각 크기가 올바르지 않습니다."
+private const val PART_CONTENT_CONFLICT_MESSAGE = "이미 다른 내용의 업로드 조각이 저장되어 있습니다."
+private const val MULTIPART_COMPOSITE_CHECKSUM_PREFIX = "sha256-composite:"
+private const val INTEGRITY_MISMATCH_MESSAGE = "완성된 업로드 파일의 무결성 검증에 실패했습니다."
 
 data class CloudVideoUploadSessionDto(
     val id: Long,
@@ -72,6 +77,10 @@ class CloudVideoUploadSessionService(
     private val clock: Clock = Clock.systemUTC(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    init {
+        cloudStorageProperties.validateResumableLifetimeAgainstMinioStaleExpiry()
+    }
 
     fun createSession(
         ownerMemberId: Long,
@@ -222,7 +231,8 @@ class CloudVideoUploadSessionService(
             val session = findMutableSession(ownerMemberId, sessionId)
             validatePartNumber(session, partNumber)
             validatePartSize(session, partNumber, contentLength)
-            val tempFile = copyPartToTempFile(source, contentLength)
+            val bufferedPart = copyPartToTempFile(source, contentLength)
+            val tempFile = bufferedPart.path
             try {
                 validateFirstPartSignature(session, partNumber, tempFile)
 
@@ -231,6 +241,10 @@ class CloudVideoUploadSessionService(
                     if (existing.byteSize != contentLength) {
                         throw AppException("409-1", "이미 다른 크기의 업로드 조각이 저장되어 있습니다.")
                     }
+                    if (!existing.partSha256.equals(bufferedPart.sha256Hex, ignoreCase = true)) {
+                        throw AppException("409-1", PART_CONTENT_CONFLICT_MESSAGE)
+                    }
+                    extendSessionExpiry(session)
                     return CloudVideoUploadPartResultDto(
                         session = session.toDto(partRepository.findBySessionId(session.id)),
                         part = existing.toDto(),
@@ -268,6 +282,7 @@ class CloudVideoUploadSessionService(
                                 partNumber = partNumber,
                                 eTag = uploadResult.eTag,
                                 byteSize = contentLength,
+                                partSha256 = bufferedPart.sha256Hex,
                             ),
                         )
                     } catch (ex: RuntimeException) {
@@ -284,6 +299,7 @@ class CloudVideoUploadSessionService(
                     nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
                 )
                 session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
+                extendSessionExpiry(session)
                 val parts = partRepository.findBySessionId(session.id)
 
                 return CloudVideoUploadPartResultDto(
@@ -466,6 +482,8 @@ class CloudVideoUploadSessionService(
     }
 
     private fun finishCommittedSession(session: CloudVideoUploadSession): CloudFile {
+        val parts = partRepository.findBySessionId(session.id).sortedBy { it.partNumber }
+        val checksumSha256 = verifyCommittedObjectIntegrity(session, parts)
         val existing = cloudFileRepository.findActiveByObjectKey(session.objectKey)
         val file =
             existing
@@ -478,7 +496,7 @@ class CloudVideoUploadSessionService(
                         byteSize = session.byteSize,
                         mediaKind = CloudFileMediaKind.VIDEO,
                         folderPath = session.folderPath,
-                        checksumSha256 = null,
+                        checksumSha256 = checksumSha256,
                     ),
                 )
         if (
@@ -489,6 +507,77 @@ class CloudVideoUploadSessionService(
             sessionRepository.save(session)
         }
         return file
+    }
+
+    private fun verifyCommittedObjectIntegrity(
+        session: CloudVideoUploadSession,
+        parts: List<CloudVideoUploadPart>,
+    ): String? {
+        val head = cloudStoragePort.head(session.objectKey)
+        if (!CloudMultipartCommitDetector.isCommitted(head, session.byteSize)) {
+            failIntegrityAndCleanup(
+                session,
+                "multipart integrity size mismatch: head=${head?.contentLength}, expected=${session.byteSize}",
+            )
+            throw AppException("409-1", INTEGRITY_MISMATCH_MESSAGE)
+        }
+        if (parts.size != session.totalParts || parts.any { it.partSha256.isBlank() }) {
+            log.warn(
+                "Cloud video multipart composite checksum skipped (sessionId={}, parts={}, totalParts={})",
+                session.id,
+                parts.size,
+                session.totalParts,
+            )
+            return null
+        }
+        return computeCompositeChecksum(parts)
+    }
+
+    private fun failIntegrityAndCleanup(
+        session: CloudVideoUploadSession,
+        reason: String,
+    ) {
+        runCatching { cloudStoragePort.delete(session.objectKey) }
+            .onFailure {
+                log.warn(
+                    "Cloud video multipart integrity cleanup delete failed (sessionId={}, objectKey={})",
+                    session.id,
+                    session.objectKey,
+                    it,
+                )
+            }
+        partRepository.deleteBySessionId(session.id)
+        markFailed(session.id, CloudVideoUploadSessionStatus.COMPLETING, reason)
+    }
+
+    private fun computeCompositeChecksum(parts: List<CloudVideoUploadPart>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        parts.sortedBy { it.partNumber }.forEach { part ->
+            digest.update(part.partSha256.hexToByteArray())
+        }
+        return "$MULTIPART_COMPOSITE_CHECKSUM_PREFIX${digest.digest().toHex()}-${parts.size}"
+    }
+
+    private fun extendSessionExpiry(session: CloudVideoUploadSession) {
+        val now = clock.instant()
+        val slidingSeconds = cloudStorageProperties.cloudVideoResumableExpiresSeconds.coerceAtLeast(60)
+        val absoluteMaxSeconds =
+            cloudStorageProperties.cloudVideoResumableAbsoluteMaxSeconds.coerceAtLeast(slidingSeconds)
+        val absoluteDeadline = session.createdAt.plusSeconds(absoluteMaxSeconds)
+        val candidate = now.plusSeconds(slidingSeconds)
+        val newExpiresAt = if (candidate.isAfter(absoluteDeadline)) absoluteDeadline else candidate
+        if (!newExpiresAt.isAfter(session.expiresAt)) {
+            return
+        }
+        val extended =
+            sessionRepository.extendExpiresAt(
+                id = session.id,
+                newExpiresAt = newExpiresAt,
+                now = now,
+            ) == 1
+        if (extended) {
+            session.expiresAt = newExpiresAt
+        }
     }
 
     private fun completedFileDto(session: CloudVideoUploadSession): CloudFileDto {
@@ -670,34 +759,51 @@ class CloudVideoUploadSessionService(
         }
     }
 
+    private data class BufferedUploadPart(
+        val path: Path,
+        val sha256Hex: String,
+    )
+
     private fun copyPartToTempFile(
         inputStream: InputStream,
         expectedLength: Long,
-    ): Path {
+    ): BufferedUploadPart {
         val tempFile = Files.createTempFile("cloud-upload-part-", ".tmp")
         try {
             var total = 0L
+            val digest = MessageDigest.getInstance("SHA-256")
             inputStream.use { input ->
-                Files.newOutputStream(tempFile).use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        if (total > expectedLength) {
-                            throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
+                DigestInputStream(input, digest).use { digesting ->
+                    Files.newOutputStream(tempFile).use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            val read = digesting.read(buffer)
+                            if (read < 0) break
+                            total += read
+                            if (total > expectedLength) {
+                                throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
+                            }
+                            output.write(buffer, 0, read)
                         }
-                        output.write(buffer, 0, read)
                     }
                 }
             }
             if (total != expectedLength) {
                 throw AppException("400-1", INVALID_PART_SIZE_MESSAGE)
             }
-            return tempFile
+            return BufferedUploadPart(path = tempFile, sha256Hex = digest.digest().toHex())
         } catch (ex: Exception) {
             deleteTempFileQuietly(tempFile)
             throw ex
+        }
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    private fun String.hexToByteArray(): ByteArray {
+        require(length % 2 == 0) { "hex length must be even" }
+        return ByteArray(length / 2) { index ->
+            substring(index * 2, index * 2 + 2).toInt(16).toByte()
         }
     }
 

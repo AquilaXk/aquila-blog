@@ -35,8 +35,15 @@
 - `createSession`은 `INITIATING` row를 먼저 저장한 뒤 remote `initiateMultipartUpload`을 호출한다.
 - uploadId attach는 `INITIATING -> IN_PROGRESS` compare-and-set 전이다.
 - `uploadPart`는 `IN_PROGRESS -> UPLOADING_PART -> IN_PROGRESS`로 claim을 잡고 해제한다.
-- 같은 `sessionId + partNumber`가 이미 저장되어 있고 byte size가 같으면 기존 part 응답을 반환한다.
+- part 업로드 성공 시 `expiresAt`을 sliding 연장한다(`now + cloudVideoResumableExpiresSeconds`, 기본 24h).
+  절대 상한은 `createdAt + cloudVideoResumableAbsoluteMaxSeconds`(기본 7d)이며,
+  MinIO `MINIO_API_STALE_UPLOADS_EXPIRY`(8d) − margin(1d) 이하여야 한다.
+- 같은 `sessionId + partNumber`가 이미 저장되어 있고 byte size와 `partSha256`이 같으면 기존 part 응답을 반환한다.
+  byte size 또는 SHA-256이 다르면 409로 거절한다(조용한 무시 금지).
 - `complete`는 모든 part number가 `1..totalParts`로 존재할 때만 `IN_PROGRESS -> COMPLETING -> COMPLETED`로 진행한다.
+- `complete` 승격 시 HeadObject `contentLength == session.byteSize`를 재확인하고,
+  part SHA-256들로 composite checksum(`sha256-composite:<hex>-<N>`)을 `CloudFile.checksumSha256`에 저장한다.
+  크기 불일치면 객체를 삭제한 뒤 session을 `FAILED`로 둔다.
 - `complete`는 이미 `COMPLETED`인 session에 대해 같은 `CloudFile` 결과를 멱등 반환한다(`sessionId`가 idempotency key).
 - `COMPLETING` session에 대한 `complete` 재호출은 허용된다. HeadObject 커밋 판정 후 메타데이터 저장만 승계하거나, 미커밋이면 remote complete를 다시 시도한다.
 - `cancel`과 expiry cleanup은 `IN_PROGRESS -> ABORTING -> CANCELLED|EXPIRED` 경로를 사용한다.

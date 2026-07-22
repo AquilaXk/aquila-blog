@@ -1,6 +1,9 @@
 name: Backup Restore Drill
 
 on:
+  # 매월 1일 15:00 UTC — release/main 게이트용 자동 evidence. 실패 시 우회 금지(fail-fast).
+  schedule:
+    - cron: "0 15 1 * *"
   workflow_dispatch:
     inputs:
       backup_set_id:
@@ -114,10 +117,11 @@ jobs:
           HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
           HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
-          BACKUP_SET_ID: ${{ inputs.backup_set_id }}
-          BACKUP_CLASS: ${{ inputs.backup_class }}
-          RPO_TARGET_MINUTES: ${{ inputs.rpo_target_minutes }}
-          RTO_TARGET_MINUTES: ${{ inputs.rto_target_minutes }}
+          # schedule 실행에는 inputs가 없으므로 dispatch 기본값과 동일하게 폴백한다.
+          BACKUP_SET_ID: ${{ inputs.backup_set_id || '' }}
+          BACKUP_CLASS: ${{ inputs.backup_class || 'daily' }}
+          RPO_TARGET_MINUTES: ${{ inputs.rpo_target_minutes || '1440' }}
+          RTO_TARGET_MINUTES: ${{ inputs.rto_target_minutes || '120' }}
         shell: bash
         run: |
           set -euo pipefail

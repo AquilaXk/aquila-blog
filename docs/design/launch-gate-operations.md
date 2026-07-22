@@ -70,11 +70,19 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 - Public edge probe: `deploy/homeserver/monitoring/public-edge-probe.mjs`
 - Alert examples: `deploy/homeserver/monitoring/prometheus-task-alerts.example.yml`
 
+## Backend CI Gate Paths
+
+- PR path: `.github/workflows/backend-ci.yml` → reusable backend quality가 `./gradlew ciFastCheck`만 실행한다. 속도용 의도적 fast path이며, PR green만으로 merge 완료/출시 가능으로 취급하지 않는다.
+- main/release path: `.github/workflows/ci.yml`(push to `main`) → 같은 reusable job이 `./gradlew check`를 실행한다. `check`는 `testcontainersTest`를 포함하며 main trunk required gate다.
+- PR에서 잡지 못한 Testcontainers 회귀는 main CI 실패로 차단한다. drill 실패나 main full check 실패를 무시하고 배포를 계속하는 우회는 금지다.
+
 ## Backup Restore Drill Evidence
 
-- 수동 실행: GitHub Actions `Backup Restore Drill` workflow를 `workflow_dispatch`로 실행한다.
-- 기본 대상: `backup_class=daily`, `backup_set_id`는 비워 두면 최신 daily PostgreSQL backup을 사용한다.
+- 자동 실행: `.github/workflows/backup-restore-drill.yml`이 monthly `schedule`(`cron: 0 15 1 * *`, UTC)로 매월 1회 실행된다. 실패는 fail-fast이며 skip/ignore로 배포를 우회하지 않는다.
+- 수동 실행: 같은 workflow를 `workflow_dispatch`로도 실행할 수 있다.
+- 기본 대상: `backup_class=daily`, `backup_set_id`는 비워 두면 최신 daily PostgreSQL backup을 사용한다(schedule도 동일 기본값).
 - 통과 증거: workflow artifact `backup-restore-drill` 안의 `restore-drill-summary.md`, `restore-drill-result.env`, `restore-privacy-gate.txt`, `minio-checksums.sha256`.
+- main/release 게이트: launch/release 판정 전에 **최근 30일 이내** 성공한 `Backup Restore Drill` run과 artifact 링크를 증거로 남긴다. 최근 성공 artifact가 없으면 go 판정을 하지 않는다.
 - DB 검증: 임시 PostgreSQL container에 `dump.sql.enc`를 복호화해 복원하고 `flyway_schema_history`, `post` row count, 최신 public post(`listed = true`) 조회를 확인한다.
 - Object 검증: `minio-data.tar.gz.enc`를 복호화한 archive에서 운영 object 샘플 1개 이상을 선택해 `sha256sum`을 기록한다.
 - Privacy gate: `AQUILA_RESTORE_PRIVACY_GATE_SCRIPT`가 tombstone replay 또는 동등한 삭제 검증을 수행하고 traffic open 전 `status=pass` evidence를 남긴다.
@@ -88,14 +96,16 @@ Before merge:
 - [ ] #958 또는 관련 launch gate issue가 PR에 연결되어 있다.
 - [ ] P0/P1 launch-blocking issue 상태를 확인했다.
 - [ ] CI, CodeQL, backend dependency-check run/artifact evidence를 확인했다. dependency-check skip이면 block 또는 명시적 defer note를 기록했다.
+- [ ] PR backend green이 `ciFastCheck` fast path임을 인지하고, Testcontainers full 검증은 merge 후 main `check` gate에 의존함을 기록했다.
 - [ ] CodeRabbit review 또는 Codex CLI fallback review가 PR review로 남아 있다.
 - [ ] unresolved review thread와 requested changes가 없다.
 - [ ] 배포 영향 범위를 `docs-only`, `frontend`, `backend`, `deploy` 중 하나로 기록했다.
 - [ ] 필요한 QA/legal/monitoring evidence가 PR 본문 또는 연결 문서에 있다.
+- [ ] launch/release면 최근 30일 `backup-restore-drill` 성공 artifact 링크가 있다.
 
 After merge:
 
-- [ ] main CI status를 확인했다.
+- [ ] main CI status를 확인했다(`backend-ci` full `check` 포함).
 - [ ] `Deploy to Home Server` workflow status를 확인했다.
 - [ ] deploy 대상 변경이면 live E2E 또는 live probe 결과를 확인했다.
 - [ ] docs-only 변경이면 deploy skip 또는 no-op 사유를 기록했다.

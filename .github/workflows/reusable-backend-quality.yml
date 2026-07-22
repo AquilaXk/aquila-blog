@@ -268,10 +268,17 @@ jobs:
             exit 1
           fi
 
-      - name: Run backend fast check
-        if: steps.changes.outputs.backend == 'true'
+      - name: Run backend PR fast check
+        if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request'
         working-directory: back
         run: ./gradlew ciFastCheck --rerun-tasks
+
+      # main/push(release trunk)는 Testcontainers를 포함한 full check를 required로 실행한다.
+      # PR는 속도용 ciFastCheck만 유지하며, merge 완료 판정은 main gate가 담당한다.
+      - name: Run backend full check
+        if: steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
+        working-directory: back
+        run: ./gradlew check --rerun-tasks
 
       - name: Set up Node.js for contract drift check
         if: steps.changes.outputs.backend == 'true'

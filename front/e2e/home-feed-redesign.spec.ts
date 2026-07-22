@@ -120,7 +120,7 @@ const addEmptyProfileLinksCookie = async (page: Page) => {
     {
       name: "admin_profile_snapshot_v1",
       value: encodeURIComponent(JSON.stringify(profile)),
-      url: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3100",
+      url: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
     },
   ])
 }

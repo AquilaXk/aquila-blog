@@ -47,6 +47,8 @@ const isTypingTarget = (target: EventTarget | null) => {
   return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT"
 }
 
+const FEED_SEARCH_ROUTE_TIMEOUT_MS = 8_000
+
 const reportFocusFeedSearchFailure = (error: unknown) => {
   console.error("[NavBar] failed to focus feed search input", error)
 }
@@ -81,7 +83,9 @@ const NavBar = () => {
       if (router.pathname !== "/") {
         await new Promise<void>((resolve, reject) => {
           let settled = false
+          let timeoutId: ReturnType<typeof setTimeout> | undefined
           const cleanup = () => {
+            if (timeoutId !== undefined) clearTimeout(timeoutId)
             router.events.off("routeChangeComplete", handleComplete)
             router.events.off("routeChangeError", handleError)
           }
@@ -105,6 +109,9 @@ const NavBar = () => {
 
           router.events.on("routeChangeComplete", handleComplete)
           router.events.on("routeChangeError", handleError)
+          timeoutId = setTimeout(() => {
+            settle(() => reject(new Error("timed out waiting for feed search route")))
+          }, FEED_SEARCH_ROUTE_TIMEOUT_MS)
           void router.push("/").catch((error: unknown) => {
             settle(() => reject(error instanceof Error ? error : new Error(String(error))))
           })
@@ -132,8 +139,10 @@ const NavBar = () => {
   }, [router])
 
   const requestFocusFeedSearch = useCallback(() => {
+    if (authModalOpen) return
+    setMobileMenuOpen(false)
     void focusFeedSearch().catch(reportFocusFeedSearchFailure)
-  }, [focusFeedSearch])
+  }, [authModalOpen, focusFeedSearch])
 
   useEffect(() => {
     if (typeof window === "undefined") return

@@ -5,8 +5,14 @@ import {
   type SetStateAction,
 } from "react"
 import { apiFetch } from "src/apis/backend/client"
+import { normalizeCategoryValue } from "src/libs/utils"
 import { resolveEditorFailureRecovery } from "./editorFailureRecoveryModel"
+import { buildLocalDraftFingerprint } from "./editorStudioMetaModel"
 import { isTempDraftTitlePlaceholder } from "./editorTempDraft"
+import {
+  resolveCreateWritePostId,
+  type LocalDraftBaselineReadySignal,
+} from "./useEditorStudioDraftLifecycleModel"
 import { useEditorStudioPersistenceUploads } from "./useEditorStudioPersistenceModel"
 
 type StudioSetState<T> = Dispatch<SetStateAction<T>>
@@ -42,6 +48,40 @@ type EditorFingerprintPayload = {
 
 const isBrowserOnline = () => typeof navigator === "undefined" ? undefined : navigator.onLine
 
+const armLocalDraftFingerprintBaseline = (
+  lastLocalDraftFingerprintRef: MutableRefObject<string>,
+  payload: {
+    title: string
+    content: string
+    summary: string
+    thumbnailUrl: string
+    thumbnailFocusX: number
+    thumbnailFocusY: number
+    thumbnailZoom: number
+    tags: string[]
+    category: string
+    visibility: PostVisibility
+  },
+  dedupeStrings: (items: string[]) => string[]
+): string => {
+  // Arm the *request* snapshot as baseline. In-flight title/summary/tags edits must
+  // stay dirty so autosave can recreate the cleared slot after write settle.
+  const fingerprint = buildLocalDraftFingerprint({
+    title: payload.title,
+    content: payload.content,
+    summary: payload.summary,
+    thumbnailUrl: payload.thumbnailUrl,
+    thumbnailFocusX: payload.thumbnailFocusX,
+    thumbnailFocusY: payload.thumbnailFocusY,
+    thumbnailZoom: payload.thumbnailZoom,
+    tags: dedupeStrings(payload.tags),
+    category: payload.category ? normalizeCategoryValue(payload.category) : "",
+    visibility: payload.visibility,
+  })
+  lastLocalDraftFingerprintRef.current = fingerprint
+  return fingerprint
+}
+
 type UseEditorStudioPersistenceParams = {
   editorMode: EditorMode
   postId: string
@@ -72,6 +112,7 @@ type UseEditorStudioPersistenceParams = {
   setPostVisibility: StudioSetState<PostVisibility>
   setKnownTags: StudioSetState<string[]>
   setLocalDraftSavedAt: StudioSetState<string>
+  setLocalDraftSlotLabel: StudioSetState<string>
   setPublishStatus: (notice: PublishNotice, target?: PublishTarget) => void
   setLoadingKey: StudioSetState<string>
   setResult: StudioSetState<string>
@@ -94,7 +135,8 @@ type UseEditorStudioPersistenceParams = {
   refreshPublicPostReadViews: (affectedPostId?: string | number) => Promise<void>
   pretty: (value: unknown) => string
   generateIdempotencyKey: () => string
-  removeLocalDraft: () => void
+  removeLocalDraft: (source: { kind: "create" } | { kind: "post"; postId: string }) => void
+  signalLocalDraftBaselineReady: (signal?: LocalDraftBaselineReadySignal) => void
   uploadWithConflictRetry: <T>(requestUpload: () => Promise<Response>) => Promise<Response>
   normalizeSafeImageUrl: (raw: string) => string
   extractImageFileFromClipboard: (clipboardData: DataTransfer | null) => File | null
@@ -133,12 +175,14 @@ export const useEditorStudioPersistence = ({
   refreshPublicPostReadViews,
   removeLocalDraft,
   serverBaselineEditorFingerprintRef,
+  signalLocalDraftBaselineReady,
   setEditorMode,
   setIsPreviewThumbnailError,
   setIsTempDraftMode,
   setKnownTags,
   setLoadingKey,
   setLocalDraftSavedAt,
+  setLocalDraftSlotLabel,
   setPostId,
   setPostThumbnailFocusX,
   setPostThumbnailFocusY,
@@ -236,27 +280,33 @@ export const useEditorStudioPersistence = ({
       })
 
       setResult(pretty(response))
-      if (response?.data?.id) {
-        setPostId(String(response.data.id))
-        setPostVersion(typeof response.data.version === "number" ? response.data.version : null)
-        setEditorMode("edit")
-        setIsTempDraftMode(false)
-        serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
-          title: postTitle,
-          content: currentPostContent,
-          summary: postSummary,
-          thumbnailUrl: postThumbnailUrl,
-          thumbnailFocusX: postThumbnailFocusX,
-          thumbnailFocusY: postThumbnailFocusY,
-          thumbnailZoom: postThumbnailZoom,
-          tags: postTags,
-          category: postCategory,
-          visibility: postVisibility,
-        })
-        lastWriteFingerprintRef.current = ""
-        lastWriteIdempotencyKeyRef.current = ""
+
+      const createWritePostId = resolveCreateWritePostId(response?.data)
+      if (!createWritePostId.ok) {
+        setPublishStatus({ tone: "error", text: createWritePostId.statusText })
+        setResult(pretty({ error: createWritePostId.statusText, response }))
+        return false
       }
-      await refreshPublicPostReadViews(response?.data?.id)
+
+      setPostId(createWritePostId.postId)
+      setPostVersion(typeof response.data?.version === "number" ? response.data.version : null)
+      setEditorMode("edit")
+      setIsTempDraftMode(false)
+      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
+        title: postTitle,
+        content: currentPostContent,
+        summary: postSummary,
+        thumbnailUrl: postThumbnailUrl,
+        thumbnailFocusX: postThumbnailFocusX,
+        thumbnailFocusY: postThumbnailFocusY,
+        thumbnailZoom: postThumbnailZoom,
+        tags: postTags,
+        category: postCategory,
+        visibility: postVisibility,
+      })
+      lastWriteFingerprintRef.current = ""
+      lastWriteIdempotencyKeyRef.current = ""
+      await refreshPublicPostReadViews(createWritePostId.postId)
 
       const visibilityText =
         postVisibility === "PUBLIC_LISTED"
@@ -265,9 +315,27 @@ export const useEditorStudioPersistence = ({
             ? "링크 공개(목록 미노출)"
             : "비공개"
 
-      removeLocalDraft()
-      lastLocalDraftFingerprintRef.current = ""
+      removeLocalDraft({ kind: "create" })
+      signalLocalDraftBaselineReady({
+        baselineFingerprint: armLocalDraftFingerprintBaseline(
+          lastLocalDraftFingerprintRef,
+          {
+            title: postTitle,
+            content: currentPostContent,
+            summary: postSummary,
+            thumbnailUrl: postThumbnailUrl,
+            thumbnailFocusX: postThumbnailFocusX,
+            thumbnailFocusY: postThumbnailFocusY,
+            thumbnailZoom: postThumbnailZoom,
+            tags: postTags,
+            category: postCategory,
+            visibility: postVisibility,
+          },
+          dedupeStrings
+        ),
+      })
       setLocalDraftSavedAt("")
+      setLocalDraftSlotLabel("")
 
       setPublishStatus(
         {
@@ -315,11 +383,13 @@ export const useEditorStudioPersistence = ({
     refreshPublicPostReadViews,
     removeLocalDraft,
     serverBaselineEditorFingerprintRef,
+    signalLocalDraftBaselineReady,
     setEditorMode,
     setIsTempDraftMode,
     setKnownTags,
     setLoadingKey,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPostId,
     setPostVersion,
     setPublishStatus,
@@ -398,6 +468,27 @@ export const useEditorStudioPersistence = ({
         visibility: postVisibility,
       })
       await refreshPublicPostReadViews(postId)
+      removeLocalDraft({ kind: "post", postId: postId.trim() })
+      signalLocalDraftBaselineReady({
+        baselineFingerprint: armLocalDraftFingerprintBaseline(
+          lastLocalDraftFingerprintRef,
+          {
+            title: postTitle,
+            content: currentPostContent,
+            summary: postSummary,
+            thumbnailUrl: postThumbnailUrl,
+            thumbnailFocusX: postThumbnailFocusX,
+            thumbnailFocusY: postThumbnailFocusY,
+            thumbnailZoom: postThumbnailZoom,
+            tags: postTags,
+            category: postCategory,
+            visibility: postVisibility,
+          },
+          dedupeStrings
+        ),
+      })
+      setLocalDraftSavedAt("")
+      setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
       setResult(pretty(response))
       return true
@@ -420,6 +511,7 @@ export const useEditorStudioPersistence = ({
     editorMode,
     effectiveThumbnailUrl,
     getCurrentPostContent,
+    lastLocalDraftFingerprintRef,
     postCategory,
     postId,
     postSummary,
@@ -433,10 +525,14 @@ export const useEditorStudioPersistence = ({
     postVisibility,
     pretty,
     refreshPublicPostReadViews,
+    removeLocalDraft,
     serverBaselineEditorFingerprintRef,
+    signalLocalDraftBaselineReady,
     setIsTempDraftMode,
     setKnownTags,
     setLoadingKey,
+    setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPostVersion,
     setPublishStatus,
     setResult,
@@ -513,6 +609,28 @@ export const useEditorStudioPersistence = ({
         visibility: postVisibility,
       })
       await refreshPublicPostReadViews(postId)
+      // Temp posts autosave into the post slot; do not wipe an unrelated create-slot draft.
+      removeLocalDraft({ kind: "post", postId: postId.trim() })
+      signalLocalDraftBaselineReady({
+        baselineFingerprint: armLocalDraftFingerprintBaseline(
+          lastLocalDraftFingerprintRef,
+          {
+            title: postTitle,
+            content: currentPostContent,
+            summary: postSummary,
+            thumbnailUrl: postThumbnailUrl,
+            thumbnailFocusX: postThumbnailFocusX,
+            thumbnailFocusY: postThumbnailFocusY,
+            thumbnailZoom: postThumbnailZoom,
+            tags: postTags,
+            category: postCategory,
+            visibility: postVisibility,
+          },
+          dedupeStrings
+        ),
+      })
+      setLocalDraftSavedAt("")
+      setLocalDraftSlotLabel("")
       setPublishStatus({ tone: "success", text: "새 글 작성이 완료되었습니다." }, "page")
       setResult(pretty(response))
       return true
@@ -547,9 +665,14 @@ export const useEditorStudioPersistence = ({
     postVisibility,
     pretty,
     refreshPublicPostReadViews,
+    removeLocalDraft,
+    lastLocalDraftFingerprintRef,
     serverBaselineEditorFingerprintRef,
+    signalLocalDraftBaselineReady,
     setIsTempDraftMode,
     setLoadingKey,
+    setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPostVersion,
     setPostVisibility,
     setPublishStatus,

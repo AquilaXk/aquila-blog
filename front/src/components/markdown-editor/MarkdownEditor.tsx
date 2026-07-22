@@ -44,6 +44,7 @@ import {
   planWrapSelection,
   type PlannedTextMutation,
 } from "./markdownEditorTextMutation"
+import { planInsertBlockSnippet, type BlockSnippetSpec } from "./markdownEditorBlockSnippets"
 import {
   MARKDOWN_ATTACHMENT_UPLOAD_FAILED_MESSAGE,
   MARKDOWN_IMAGE_UPLOAD_FAILED_MESSAGE,
@@ -297,6 +298,19 @@ export const MarkdownEditor = ({
     [applyMutationPlan, disabled, resolveActiveSelection]
   )
 
+  const applyBlockSnippet = useCallback(
+    (spec: BlockSnippetSpec) => {
+      const textarea = textareaRef.current
+      if (textarea && !disabled) {
+        const { from: selectionStart, to: selectionEnd } = resolveActiveSelection()
+        const plan = planInsertBlockSnippet(selectionStart, selectionEnd, spec)
+        if (applyMutationPlan(plan)) return
+      }
+      commitMarkdown(`${valueRef.current}${spec.snippet}`, true)
+    },
+    [applyMutationPlan, commitMarkdown, disabled, resolveActiveSelection]
+  )
+
   const applySnippet = useCallback(
     (before: string, after = "", options?: { toggle?: boolean }) => {
       if (insertMarkdownAtEditorSelection(before, after, options)) return
@@ -520,7 +534,7 @@ export const MarkdownEditor = ({
               aria-label={snippet.title}
               disabled={disabled || ("disableWhenMermaid" in snippet && disableMermaid)}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applySnippet(snippet.snippet)}
+              onClick={() => applyBlockSnippet(snippet)}
             >
               {snippet.label}
             </ToolbarButton>

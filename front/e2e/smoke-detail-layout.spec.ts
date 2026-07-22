@@ -67,7 +67,8 @@ test.describe("core smoke detail layout", () => {
     expect(detailStyles).toContain("border-left: 1px solid var(--detail-v4-line);")
     expect(detailStyles).toContain("padding: 0 0 0 18px;")
     expect(detailStyles).toContain("margin-bottom: 14px;")
-    expect(detailStyles).toContain("padding: 7px 0;")
+    expect(detailStyles).toContain("min-height: ${control.lg}px;")
+    expect(detailStyles).toContain("padding: 0.5rem 0;")
     expect(detailStyles).toContain("font-size: 12px;")
     expect(detailStyles).toContain("font-weight: 750;")
     expect(detailStyles).not.toContain("button[data-active=\"true\"]::before")
@@ -412,7 +413,9 @@ test.describe("core smoke detail layout", () => {
   })
 
   expect(tocDensityMetrics.listHeight).toBeLessThanOrEqual(560)
-  expect(tocDensityMetrics.maxRowHeight).toBeLessThanOrEqual(34)
+  // HIG P5-1(#1331): TOC row hit area ≥44 (dense ≤34 계약 폐기)
+  expect(tocDensityMetrics.maxRowHeight).toBeGreaterThanOrEqual(44)
+  expect(tocDensityMetrics.maxRowHeight).toBeLessThanOrEqual(64)
   expect(tocDensityMetrics.rowFontSize).toBeLessThanOrEqual(13.5)
 
   await page.evaluate(() => {

@@ -7,6 +7,7 @@ import BrandLogoMark from "src/components/branding/BrandMark"
 import ProfileImage from "src/components/ProfileImage"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import { CONFIG } from "site.config"
+import { control } from "src/design-system/tokens"
 import {
   adminAccentText,
   adminAppBackground,
@@ -500,8 +501,8 @@ const CompactNav = styled.nav`
 `
 
 const CompactNavLink = styled.a`
-  min-height: 2.55rem;
-  min-width: 2.55rem;
+  min-height: ${control.lg}px;
+  min-width: ${control.lg}px;
   padding: 0.35rem 0.55rem;
   border-radius: 2px;
   display: inline-flex;
@@ -527,9 +528,10 @@ const CompactNavLink = styled.a`
   }
 
   @media (max-width: 767px) {
-    width: 2.55rem;
-    height: 2.55rem;
-    min-width: 2.55rem;
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-width: ${control.lg}px;
+    min-height: ${control.lg}px;
     padding: 0;
     gap: 0;
 
@@ -572,6 +574,10 @@ const SecondaryTopAction = styled.a`
   text-decoration: none;
   font-size: 0.82rem;
   font-weight: 780;
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 `
 
 const PrimaryTopAction = styled.a`
@@ -591,6 +597,10 @@ const PrimaryTopAction = styled.a`
   &:hover {
     background: ${adminTealHover};
   }
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 `
 
 const ResponsiveLogoutAction = styled.button`
@@ -607,6 +617,10 @@ const ResponsiveLogoutAction = styled.button`
 
   @media (max-width: 1100px) {
     display: inline-flex;
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-width: ${control.lg}px;
+    min-height: ${control.lg}px;
   }
 `
 

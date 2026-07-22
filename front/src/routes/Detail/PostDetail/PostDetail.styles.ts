@@ -1,4 +1,5 @@
 import styled from "@emotion/styled";
+import { control } from "src/design-system/tokens";
 export const StyledWrapper = styled.div `
   --detail-v4-bg: #f7f7f5;
   --detail-v4-paper: ${({ theme }) => theme.publicDesign.readableSurface};
@@ -123,8 +124,10 @@ export const StyledWrapper = styled.div `
   }
 
   .floatingActionButton {
-    width: 42px;
-    height: 42px;
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-width: ${control.lg}px;
+    min-height: ${control.lg}px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -277,7 +280,8 @@ export const StyledWrapper = styled.div `
       font-size: 0.71rem;
       font-weight: 700;
       line-height: 1;
-      padding: 0.32rem 0.5rem;
+      min-height: ${control.lg}px;
+      padding: 0 0.5rem;
       cursor: pointer;
       flex-shrink: 0;
 
@@ -314,14 +318,15 @@ export const StyledWrapper = styled.div `
 
     button {
       width: 100%;
-      display: block;
+      display: flex;
+      align-items: center;
       text-align: left;
       border: 0;
       border-radius: 0;
-      min-height: 0;
+      min-height: ${control.lg}px;
       box-sizing: border-box;
       max-width: 100%;
-      padding: 7px 0;
+      padding: 0.5rem 0;
       background: transparent;
       color: var(--detail-v4-muted);
       font-size: 12px;

@@ -514,16 +514,34 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 820px) {
+    .primaryLinks a {
+      min-height: ${control.lg}px;
+      padding: 0 12px;
+    }
+
+    .authArea {
+      gap: 7px;
+      min-height: ${control.lg}px;
+    }
+
+    .searchTrigger {
+      height: ${control.lg}px;
+      min-height: ${control.lg}px;
+    }
+
+    .loginLink,
+    .adminLink,
+    .logoutBtn {
+      height: ${control.lg}px;
+      min-height: ${control.lg}px;
+    }
+
     .primaryLinks,
     .searchTrigger,
     .loginLink,
     .adminLink,
     .logoutBtn {
       display: none;
-    }
-
-    .authArea {
-      gap: 7px;
     }
 
     .mobileMenuButton {

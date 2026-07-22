@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 import {
   AdminInfoPanelCard,
   AdminPaneHeader,
@@ -53,6 +54,10 @@ export const BaseButton = styled.button`
     background-color 0.18s ease,
     color 0.18s ease,
     transform 0.18s ease;
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 
   &:hover:not(:disabled) {
     border-color: ${adminBorderStrong};

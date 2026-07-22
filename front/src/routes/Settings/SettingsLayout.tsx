@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { ReactNode } from "react"
+import { control } from "src/design-system/tokens"
 import useAuthSession from "src/hooks/useAuthSession"
 import { colors } from "src/styles/colors"
 
@@ -119,6 +120,8 @@ export const settingsStyles = `
   }
 
   .settingsPage .tabs a {
+    display: inline-flex;
+    align-items: center;
     padding: 0 0 10px;
     margin-bottom: -1px;
     border-bottom: 2px solid transparent;
@@ -169,6 +172,14 @@ export const settingsStyles = `
     color: var(--aq-on-accent);
     font-weight: 800;
     cursor: pointer;
+  }
+
+  @media (max-width: 820px) {
+    .settingsPage .tabs a,
+    .settingsPage .primaryLink,
+    .settingsPage button {
+      min-height: ${control.lg}px;
+    }
   }
 
   .primaryLink {

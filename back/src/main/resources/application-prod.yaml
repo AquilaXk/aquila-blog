@@ -57,9 +57,9 @@ management:
 logging:
   level:
     com.back: INFO
-    org.hibernate.orm.jdbc.bind: INFO
-    org.hibernate.orm.jdbc.extract: INFO
-    org.hibernate.orm.jdbc.batch: INFO
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.orm.jdbc.extract: WARN
+    org.hibernate.orm.jdbc.batch: WARN
     org.springframework.transaction.interceptor: INFO
 custom:
   cache:

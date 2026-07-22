@@ -31,6 +31,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.multipart.MultipartException
 import org.springframework.web.servlet.NoHandlerFoundException
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import java.util.IdentityHashMap
 import org.springframework.web.bind.annotation.ExceptionHandler as SpringExceptionHandler
 
 @RestControllerAdvice
@@ -427,23 +428,33 @@ class ExceptionHandler(
         }
 
     /**
-     * Logback serializes throwable.getMessage() into stack output.
-     * Attach a same-type copy whose message/cause/suppressed messages are redacted
-     * while preserving frames and exception class names for ops aggregation.
+     * Logback serializes throwable.getMessage()/toString() into stack output.
+     * Attach a copy whose message/cause/suppressed messages are redacted while
+     * preserving frames and original class names (via same-type copy or toString).
      */
-    private fun redactedThrowableForLogging(ex: Throwable): Throwable {
+    private fun redactedThrowableForLogging(ex: Throwable): Throwable = redactedThrowableForLogging(ex, IdentityHashMap())
+
+    private fun redactedThrowableForLogging(
+        ex: Throwable,
+        visited: IdentityHashMap<Throwable, Throwable>,
+    ): Throwable {
+        visited[ex]?.let { return it }
+
         val copy = newRedactedThrowableSameType(ex)
+        // Register before recursing so cyclic cause/suppressed graphs terminate.
+        visited[ex] = copy
         copy.stackTrace = ex.stackTrace
+
         val cause = ex.cause
         if (cause != null) {
             try {
-                copy.initCause(redactedThrowableForLogging(cause))
+                copy.initCause(redactedThrowableForLogging(cause, visited))
             } catch (_: IllegalStateException) {
-                // constructor already attached a cause; keep that redacted instance if possible
+                // constructor already attached a cause
             }
         }
         for (suppressed in ex.suppressed) {
-            copy.addSuppressed(redactedThrowableForLogging(suppressed))
+            copy.addSuppressed(redactedThrowableForLogging(suppressed, visited))
         }
         return copy
     }
@@ -457,16 +468,10 @@ class ExceptionHandler(
         }
 
         val redactedMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
-        val clazz = ex.javaClass
+        createThrowableWithMessage(ex.javaClass, redactedMessage)?.let { return it }
 
-        createThrowableWithMessage(clazz, redactedMessage)?.let { return it }
-
-        // Last resort: keep original runtime/checked distinction only.
-        return if (ex is RuntimeException) {
-            RuntimeException(redactedMessage)
-        } else {
-            Exception(redactedMessage)
-        }
+        // Constructor-free fallback: keep original type in stack first line via toString().
+        return RedactedLoggingThrowable(ex.javaClass.name, redactedMessage)
     }
 
     private fun createThrowableWithMessage(
@@ -489,6 +494,20 @@ class ExceptionHandler(
             detailMessage.set(instance, message)
             instance
         }.getOrNull()
+    }
+
+    /**
+     * Used when the original exception type cannot be constructed safely.
+     * Logback stack first line uses [toString], so ops still sees the original class name.
+     */
+    private class RedactedLoggingThrowable(
+        private val originalClassName: String,
+        message: String?,
+    ) : RuntimeException(message) {
+        override fun toString(): String {
+            val msg = localizedMessage
+            return if (msg.isNullOrEmpty()) originalClassName else "$originalClassName: $msg"
+        }
     }
 
     private fun sanitizeLogValue(

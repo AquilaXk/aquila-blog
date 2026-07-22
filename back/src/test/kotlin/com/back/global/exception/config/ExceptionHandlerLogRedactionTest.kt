@@ -9,6 +9,7 @@ import org.springframework.core.MethodParameter
 import org.springframework.http.HttpStatus
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import java.time.format.DateTimeParseException
 
 @DisplayName("ExceptionHandler 로그 redaction 테스트")
 class ExceptionHandlerLogRedactionTest {
@@ -79,6 +80,66 @@ class ExceptionHandlerLogRedactionTest {
             .contains("state=[REDACTED]")
             .doesNotContain("LEAK_TEST_123")
             .doesNotContain("STATE_123")
+    }
+
+    @Test
+    @DisplayName("순환 cause 그래프도 StackOverflow 없이 redaction 로그를 남긴다")
+    fun `cyclic cause graph does not overflow while redacting`() {
+        val handler = ExceptionHandler()
+        val request = MockHttpServletRequest("GET", "/internal")
+        val appender = ExceptionHandlerListAppenderSupport.attach()
+
+        val a = RuntimeException("a token=LEAK_TEST_123")
+        val b = RuntimeException("b token=LEAK_TEST_123")
+        a.initCause(b)
+        b.addSuppressed(a)
+
+        try {
+            handler.handleUnexpectedException(a, request)
+        } finally {
+            ExceptionHandlerListAppenderSupport.detach(appender)
+        }
+
+        val event = appender.list.single()
+        assertThat(event.throwableProxy).isNotNull
+        assertThat(event.throwableProxy.message)
+            .contains("token=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
+    }
+
+    @Test
+    @DisplayName("생성자 없는 예외 타입도 스택 첫 줄에 원본 클래스명을 남긴다")
+    fun `constructorless exception preserves original class name in stack`() {
+        val handler = ExceptionHandler()
+        val request = MockHttpServletRequest("GET", "/internal")
+        val appender = ExceptionHandlerListAppenderSupport.attach()
+
+        val unexpected =
+            DateTimeParseException("failed token=LEAK_TEST_123", "2026-13-01", 5)
+
+        try {
+            handler.handleUnexpectedException(unexpected, request)
+        } finally {
+            ExceptionHandlerListAppenderSupport.detach(appender)
+        }
+
+        val event = appender.list.single()
+        assertThat(event.throwableProxy).isNotNull
+        assertThat(event.throwableProxy.message)
+            .contains("token=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
+
+        val redactedMethod =
+            ExceptionHandler::class.java.getDeclaredMethod(
+                "redactedThrowableForLogging",
+                Throwable::class.java,
+            )
+        redactedMethod.isAccessible = true
+        val redacted = redactedMethod.invoke(handler, unexpected) as Throwable
+        assertThat(redacted.toString())
+            .startsWith(DateTimeParseException::class.java.name)
+            .contains("token=[REDACTED]")
+            .doesNotContain("LEAK_TEST_123")
     }
 
     @Test

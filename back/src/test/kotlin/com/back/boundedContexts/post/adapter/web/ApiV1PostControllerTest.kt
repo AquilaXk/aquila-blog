@@ -199,6 +199,81 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
     }
 
     @Nested
+    inner class AdminCodeFenceContentRoundTrip {
+        private val fencedMarkdown =
+            """
+            intro
+
+            ```kotlin title="invalidatePost.kt"
+            fun example() = Unit
+            ```
+
+            ```
+            nested backticks ``` inside
+            ```
+
+            ```mermaid
+            flowchart TD
+              A[start] --> B[end]
+            ```
+            """.trimIndent()
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `공개 글 저장 후 관리자 단건 조회는 코드펜스 본문을 원문 그대로 반환한다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = postFacade.write(actor, "코드펜스 공개", fencedMarkdown, true, true)
+            entityManager.clear()
+
+            val responseBody =
+                mvc
+                    .get("/post/api/v1/adm/posts/${post.id}")
+                    .andExpect {
+                        status { isOk() }
+                        jsonPath("$.id") { value(post.id) }
+                    }.andReturn()
+                    .response
+                    .contentAsString
+
+            assertThat(JsonPath.read<String>(responseBody, "$.content")).isEqualTo(fencedMarkdown)
+            assertThat(postFacade.findById(post.id).getOrThrow().content).isEqualTo(fencedMarkdown)
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `비공개 글 저장·수정 왕복 후에도 관리자 조회 코드펜스 본문이 보존된다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val created = postFacade.write(actor, "코드펜스 비공개", "draft body", false, false)
+            val version = created.version ?: 0L
+
+            postFacade.modify(
+                actor,
+                created,
+                "코드펜스 비공개",
+                fencedMarkdown,
+                published = false,
+                listed = false,
+                expectedVersion = version,
+            )
+            entityManager.clear()
+
+            val responseBody =
+                mvc
+                    .get("/post/api/v1/adm/posts/${created.id}")
+                    .andExpect {
+                        status { isOk() }
+                        jsonPath("$.published") { value(false) }
+                        jsonPath("$.listed") { value(false) }
+                    }.andReturn()
+                    .response
+                    .contentAsString
+
+            assertThat(JsonPath.read<String>(responseBody, "$.content")).isEqualTo(fencedMarkdown)
+            assertThat(postFacade.findById(created.id).getOrThrow().content).isEqualTo(fencedMarkdown)
+        }
+    }
+
+    @Nested
     inner class GetItem {
         @Test
         fun `성공 - 공개 글`() {

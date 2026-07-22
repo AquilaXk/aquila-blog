@@ -104,7 +104,7 @@ class ExceptionHandlerLogRedactionTest {
             .doesNotContain("exceptionStack=")
             .doesNotContain("\tat ")
             .doesNotContain("LEAK_TEST_123")
-            .doesNotContain("not-a-number")
+            .doesNotContain("For input string")
         assertThat(event.throwableProxy).isNull()
     }
 }

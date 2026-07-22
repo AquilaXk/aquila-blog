@@ -9,6 +9,7 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadPart
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSession
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
+import com.back.global.storage.application.CloudMultipartCommitDetector
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
 import com.fasterxml.jackson.annotation.JsonInclude
@@ -171,6 +172,43 @@ class CloudVideoUploadSessionService(
             }
         }
         return purgedCount
+    }
+
+    fun purgeStaleIntermediateSessions(batchSize: Int): Int {
+        val now = clock.instant()
+        val sessions =
+            sessionRepository.findStaleIntermediate(
+                initiatingCutoff =
+                    now.minusSeconds(
+                        cloudStorageProperties.cloudVideoResumableStaleInitiatingGraceSeconds.coerceAtLeast(1),
+                    ),
+                completingOrAbortingCutoff =
+                    now.minusSeconds(
+                        cloudStorageProperties.cloudVideoResumableStaleCompletingGraceSeconds.coerceAtLeast(1),
+                    ),
+                uploadingPartCutoff =
+                    now.minusSeconds(
+                        cloudStorageProperties.cloudVideoResumableStaleUploadingPartGraceSeconds.coerceAtLeast(1),
+                    ),
+                limit = batchSize.coerceAtLeast(1),
+            )
+        var recoveredCount = 0
+        sessions.forEach { session ->
+            runCatching {
+                if (recoverStaleIntermediateSession(session)) {
+                    recoveredCount++
+                }
+            }.onFailure {
+                log.warn(
+                    "Stale cloud video multipart upload recovery failed (sessionId={}, objectKey={}, status={})",
+                    session.id,
+                    session.objectKey,
+                    session.status,
+                    it,
+                )
+            }
+        }
+        return recoveredCount
     }
 
     fun uploadPart(
@@ -378,6 +416,75 @@ class CloudVideoUploadSessionService(
         return true
     }
 
+    private fun recoverStaleIntermediateSession(session: CloudVideoUploadSession): Boolean =
+        when (session.status) {
+            CloudVideoUploadSessionStatus.INITIATING -> {
+                if (session.uploadId == null) {
+                    markFailed(
+                        session.id,
+                        CloudVideoUploadSessionStatus.INITIATING,
+                        "stale INITIATING session recovered without uploadId",
+                    ) == 1
+                } else {
+                    abortStaleIntermediateSession(session, CloudVideoUploadSessionStatus.INITIATING)
+                }
+            }
+            CloudVideoUploadSessionStatus.UPLOADING_PART ->
+                abortStaleIntermediateSession(session, CloudVideoUploadSessionStatus.UPLOADING_PART)
+            CloudVideoUploadSessionStatus.ABORTING ->
+                abortStaleIntermediateSession(session, CloudVideoUploadSessionStatus.ABORTING)
+            CloudVideoUploadSessionStatus.COMPLETING -> recoverStaleCompletingSession(session)
+            else -> false
+        }
+
+    private fun recoverStaleCompletingSession(session: CloudVideoUploadSession): Boolean {
+        val head = cloudStoragePort.head(session.objectKey)
+        if (CloudMultipartCommitDetector.isCommitted(head, session.byteSize)) {
+            return finishCommittedCompletingSession(session)
+        }
+        return abortStaleIntermediateSession(session, CloudVideoUploadSessionStatus.COMPLETING)
+    }
+
+    private fun finishCommittedCompletingSession(session: CloudVideoUploadSession): Boolean {
+        if (session.status != CloudVideoUploadSessionStatus.COMPLETING) return false
+        val file =
+            cloudFileRepository.save(
+                CloudFile.create(
+                    ownerMemberId = session.ownerMemberId,
+                    objectKey = session.objectKey,
+                    originalFilename = session.originalFilename,
+                    contentType = session.contentType,
+                    byteSize = session.byteSize,
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = session.folderPath,
+                    checksumSha256 = null,
+                ),
+            )
+        session.complete(file.id, clock.instant())
+        sessionRepository.save(session)
+        return true
+    }
+
+    private fun abortStaleIntermediateSession(
+        session: CloudVideoUploadSession,
+        expectedStatus: CloudVideoUploadSessionStatus,
+    ): Boolean {
+        val claimed =
+            transitionStatus(
+                session.id,
+                expectedStatus = expectedStatus,
+                nextStatus = CloudVideoUploadSessionStatus.ABORTING,
+                throwOnFailure = false,
+            )
+        if (!claimed) return false
+        session.transitionTo(CloudVideoUploadSessionStatus.ABORTING, clock.instant())
+        abortOrFail(session, finalStatusOnFailure = CloudVideoUploadSessionStatus.ABORTING)
+        partRepository.deleteBySessionId(session.id)
+        session.fail("stale intermediate multipart session recovered", clock.instant())
+        sessionRepository.save(session)
+        return true
+    }
+
     private fun claimStatus(
         session: CloudVideoUploadSession,
         expectedStatus: CloudVideoUploadSessionStatus,
@@ -420,14 +527,13 @@ class CloudVideoUploadSessionService(
         sessionId: Long,
         expectedStatus: CloudVideoUploadSessionStatus,
         reason: String,
-    ) {
+    ): Int =
         sessionRepository.markFailed(
             id = sessionId,
             expectedStatus = expectedStatus,
             reason = reason.take(500),
             now = clock.instant(),
         )
-    }
 
     private fun releasePartUploadClaim(sessionId: Long) {
         transitionStatus(

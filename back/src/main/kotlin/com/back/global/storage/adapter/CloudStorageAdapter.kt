@@ -20,7 +20,9 @@ import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
+import software.amazon.awssdk.services.s3.model.NoSuchUploadException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 import software.amazon.awssdk.services.s3.model.UploadPartRequest
@@ -265,8 +267,10 @@ class CloudStorageAdapter(
                     .uploadId(request.uploadId)
                     .build(),
             )
+        } catch (_: NoSuchUploadException) {
+            return
         } catch (e: S3Exception) {
-            if (e.statusCode() == 404) return
+            if (isMissingMultipartUpload(e)) return
             logger.error(
                 "Cloud multipart abort failed (objectKey={}, uploadId={})",
                 request.objectKey,
@@ -282,6 +286,34 @@ class CloudStorageAdapter(
                 e,
             )
             throw AppException("500-1", "클라우드 대용량 업로드 취소에 실패했습니다.")
+        }
+    }
+
+    override fun head(objectKey: String): CloudStoragePort.ObjectHead? {
+        val client = requireClient()
+        validateObjectKey(objectKey)
+
+        return try {
+            val response =
+                client.headObject(
+                    HeadObjectRequest
+                        .builder()
+                        .bucket(properties.bucket)
+                        .key(objectKey)
+                        .build(),
+                )
+            CloudStoragePort.ObjectHead(
+                objectKey = objectKey,
+                contentLength = response.contentLength(),
+                contentType = response.contentType(),
+                eTag = response.eTag(),
+            )
+        } catch (_: NoSuchKeyException) {
+            null
+        } catch (e: S3Exception) {
+            if (e.statusCode() == 404) return null
+            logger.error("Cloud object head failed (objectKey={})", objectKey, e)
+            throw AppException("500-1", "클라우드 파일 메타데이터를 확인하지 못했습니다.")
         }
     }
 
@@ -424,6 +456,11 @@ class CloudStorageAdapter(
         val encoded = value?.trim().orEmpty()
         if (encoded.isBlank()) return null
         return runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }.getOrNull()
+    }
+
+    private fun isMissingMultipartUpload(error: S3Exception): Boolean {
+        if (error.statusCode() == 404) return true
+        return error.awsErrorDetails()?.errorCode().equals("NoSuchUpload", ignoreCase = true)
     }
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }

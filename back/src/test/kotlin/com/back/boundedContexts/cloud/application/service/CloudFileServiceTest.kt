@@ -1172,6 +1172,8 @@ class CloudFileServiceTest {
 
         override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) = Unit
 
+        override fun head(objectKey: String): CloudStoragePort.ObjectHead? = null
+
         override fun open(objectKey: String): CloudStoragePort.StoredObject? {
             openedObjectKeys += objectKey
             return objects[objectKey]

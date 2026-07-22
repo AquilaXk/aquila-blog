@@ -105,6 +105,16 @@ interface CloudStoragePort {
     )
 
     /**
+     * HeadObject 메타데이터. 객체가 없으면 [head]가 null을 반환한다.
+     */
+    data class ObjectHead(
+        val objectKey: String,
+        val contentLength: Long,
+        val contentType: String?,
+        val eTag: String?,
+    )
+
+    /**
      * S3 호환 클라이언트가 반환한 네트워크 스트림을 감싼다.
      * 응답을 반환하거나 복사한 호출자는 연결 풀이 고갈되지 않도록 반드시 닫아야 한다.
      */
@@ -128,6 +138,8 @@ interface CloudStoragePort {
     fun completeMultipartUpload(request: MultipartUploadCompleteRequest)
 
     fun abortMultipartUpload(request: MultipartUploadAbortRequest)
+
+    fun head(objectKey: String): ObjectHead?
 
     fun open(objectKey: String): StoredObject?
 

@@ -43,6 +43,27 @@ interface CloudVideoUploadSessionRepository :
         limit: Int,
     ): List<CloudVideoUploadSession>
 
+    @Query(
+        value = """
+            SELECT *
+            FROM cloud_video_upload_session
+            WHERE (
+                (status = 'INITIATING' AND modified_at <= :initiatingCutoff)
+                OR (status IN ('COMPLETING', 'ABORTING') AND modified_at <= :completingOrAbortingCutoff)
+                OR (status = 'UPLOADING_PART' AND modified_at <= :uploadingPartCutoff)
+            )
+            ORDER BY modified_at ASC, id ASC
+            LIMIT :limit
+        """,
+        nativeQuery = true,
+    )
+    override fun findStaleIntermediate(
+        initiatingCutoff: Instant,
+        completingOrAbortingCutoff: Instant,
+        uploadingPartCutoff: Instant,
+        limit: Int,
+    ): List<CloudVideoUploadSession>
+
     @Transactional
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(

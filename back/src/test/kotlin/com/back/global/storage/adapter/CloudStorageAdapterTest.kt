@@ -12,6 +12,8 @@ import software.amazon.awssdk.http.AbortableInputStream
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectResponse
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.S3Exception
 import java.io.ByteArrayInputStream
@@ -21,6 +23,45 @@ import java.nio.charset.StandardCharsets
 @DisplayName("CloudStorageAdapter 테스트")
 class CloudStorageAdapterTest {
     private val objectKey = "cloud/7/video/demo.mp4"
+
+    @Test
+    @DisplayName("head는 S3 HeadObject 메타데이터를 반환한다")
+    fun headReturnsObjectMetadata() {
+        val s3Client =
+            RecordingS3Client(
+                onHeadObject = {
+                    HeadObjectResponse
+                        .builder()
+                        .contentLength(2048)
+                        .contentType("video/mp4")
+                        .eTag("\"etag-1\"")
+                        .build()
+                },
+            ) { error("getObject should not be called") }
+        val adapter = adapterWithClient(s3Client)
+
+        val head = adapter.head(objectKey)
+
+        assertThat(s3Client.lastHeadObjectRequest!!.bucket()).isEqualTo("test-bucket")
+        assertThat(s3Client.lastHeadObjectRequest!!.key()).isEqualTo(objectKey)
+        assertThat(head).isNotNull
+        assertThat(head!!.objectKey).isEqualTo(objectKey)
+        assertThat(head.contentLength).isEqualTo(2048)
+        assertThat(head.contentType).isEqualTo("video/mp4")
+        assertThat(head.eTag).isEqualTo("\"etag-1\"")
+    }
+
+    @Test
+    @DisplayName("head는 S3 NoSuchKey를 null로 변환한다")
+    fun headReturnsNullForNoSuchKey() {
+        val s3Client =
+            RecordingS3Client(
+                onHeadObject = { throw NoSuchKeyException.builder().message("missing").build() },
+            ) { error("getObject should not be called") }
+        val adapter = adapterWithClient(s3Client)
+
+        assertThat(adapter.head(objectKey)).isNull()
+    }
 
     @Test
     @DisplayName("openRange는 S3 Range GET 요청으로 지정 구간만 연다")
@@ -133,14 +174,24 @@ class CloudStorageAdapterTest {
     }
 
     private class RecordingS3Client(
+        private val onHeadObject: () -> HeadObjectResponse = {
+            error("headObject should not be called")
+        },
         private val onGetObject: () -> ResponseInputStream<GetObjectResponse>,
     ) : S3Client {
         var lastGetObjectRequest: GetObjectRequest? = null
+            private set
+        var lastHeadObjectRequest: HeadObjectRequest? = null
             private set
 
         override fun getObject(getObjectRequest: GetObjectRequest): ResponseInputStream<GetObjectResponse> {
             lastGetObjectRequest = getObjectRequest
             return onGetObject()
+        }
+
+        override fun headObject(headObjectRequest: HeadObjectRequest): HeadObjectResponse {
+            lastHeadObjectRequest = headObjectRequest
+            return onHeadObject()
         }
 
         override fun serviceName(): String = "s3"

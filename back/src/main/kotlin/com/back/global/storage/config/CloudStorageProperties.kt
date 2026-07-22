@@ -7,6 +7,9 @@ const val DEFAULT_CLOUD_PHOTO_MAX_SIZE_BYTES: Long = 50L * 1024 * 1024
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_MAX_SIZE_BYTES: Long = 5L * 1024 * 1024 * 1024
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_PART_SIZE_BYTES: Long = 64L * 1024 * 1024
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_EXPIRES_SECONDS: Long = 24L * 60 * 60
+const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_INITIATING_GRACE_SECONDS: Long = 15L * 60
+const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_COMPLETING_GRACE_SECONDS: Long = 30L * 60
+const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_UPLOADING_PART_GRACE_SECONDS: Long = 60L * 60
 
 @ConfigurationProperties("custom.storage")
 data class CloudStorageProperties(
@@ -26,4 +29,7 @@ data class CloudStorageProperties(
     var cloudVideoResumableMaxFileSizeBytes: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_MAX_SIZE_BYTES,
     var cloudVideoResumablePartSizeBytes: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_PART_SIZE_BYTES,
     var cloudVideoResumableExpiresSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_EXPIRES_SECONDS,
+    var cloudVideoResumableStaleInitiatingGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_INITIATING_GRACE_SECONDS,
+    var cloudVideoResumableStaleCompletingGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_COMPLETING_GRACE_SECONDS,
+    var cloudVideoResumableStaleUploadingPartGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_UPLOADING_PART_GRACE_SECONDS,
 )

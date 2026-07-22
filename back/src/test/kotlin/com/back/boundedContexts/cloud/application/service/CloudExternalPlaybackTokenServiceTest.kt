@@ -280,6 +280,8 @@ class CloudExternalPlaybackTokenServiceTest {
 
         override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) = Unit
 
+        override fun head(objectKey: String): CloudStoragePort.ObjectHead? = null
+
         override fun open(objectKey: String): CloudStoragePort.StoredObject? {
             openedObjects += objectKey
             return objects[objectKey]

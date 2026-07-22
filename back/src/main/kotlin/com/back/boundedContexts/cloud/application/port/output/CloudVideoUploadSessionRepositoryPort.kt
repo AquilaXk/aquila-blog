@@ -18,6 +18,13 @@ interface CloudVideoUploadSessionRepositoryPort {
         limit: Int,
     ): List<CloudVideoUploadSession>
 
+    fun findStaleIntermediate(
+        initiatingCutoff: Instant,
+        completingOrAbortingCutoff: Instant,
+        uploadingPartCutoff: Instant,
+        limit: Int,
+    ): List<CloudVideoUploadSession>
+
     fun attachUploadIdAndTransition(
         id: Long,
         expectedStatus: CloudVideoUploadSessionStatus,

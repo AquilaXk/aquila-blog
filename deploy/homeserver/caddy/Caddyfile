@@ -2,6 +2,16 @@
   email {$CADDY_EMAIL}
 }
 
+# Cloudflare Tunnel → Caddy trusted-edge client IP.
+# Capture CF-Connecting-IP, strip client-controllable hop headers, then re-emit
+# only trusted values upstream (HR-56: no silent trust-all XFF).
+(trusted_edge_client_ip) {
+	header_up CF-Connecting-IP {vars.trusted_client_ip}
+	header_up X-Forwarded-For {vars.trusted_client_ip}
+	header_up X-Real-IP {vars.trusted_client_ip}
+	header_up -True-Client-IP
+}
+
 # Uptime Kuma dashboard/status endpoint (optional).
 # Set MONITOR_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
 http://{$MONITOR_DOMAIN:status.localhost} {
@@ -75,6 +85,17 @@ http://{$API_DOMAIN} {
     max_size 100MB
   }
 
+  # Capture trusted client IP before stripping spoofable hop headers.
+  vars {
+    trusted_client_ip {http.request.header.CF-Connecting-IP}
+  }
+  request_header {
+    -X-Forwarded-For
+    -CF-Connecting-IP
+    -True-Client-IP
+    -X-Real-IP
+  }
+
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     X-Content-Type-Options "nosniff"
@@ -144,6 +165,7 @@ http://{$API_DOMAIN} {
     }
 
     reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+      import trusted_edge_client_ip
       header_up Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
@@ -173,6 +195,7 @@ http://{$API_DOMAIN} {
   }
   handle @publicReadFallback {
     reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
+      import trusted_edge_client_ip
       header_up Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
@@ -194,6 +217,7 @@ http://{$API_DOMAIN} {
   }
   handle @adminApi {
     reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+      import trusted_edge_client_ip
       header_up Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
@@ -217,6 +241,7 @@ http://{$API_DOMAIN} {
       # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
       # Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
       # callback URLs, so we pin the upstream scheme/host to the external URL.
+      import trusted_edge_client_ip
       header_up Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443

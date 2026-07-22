@@ -215,8 +215,11 @@ export const migrateLocalDraftV1Once = () => {
         )
       }
     }
-  } finally {
+    // Remove v1 only after create.v2 write succeeded, create already existed, or
+    // the legacy payload was unparseable. Keep v1 when setItem throws (quota, etc.).
     window.localStorage.removeItem(LOCAL_DRAFT_V1_STORAGE_KEY)
+  } catch {
+    // Preserve recoverable legacy draft when create.v2 persistence fails.
   }
 }
 

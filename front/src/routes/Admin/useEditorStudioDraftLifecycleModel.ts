@@ -25,10 +25,26 @@ type PublishNotice = { tone: NoticeTone; text: string }
 type PublishTarget = "page" | "modal"
 type EditorMode = "create" | "edit"
 
+/** loadingKey values whose settle should adopt editor fingerprint as autosave baseline. */
+export const LOCAL_DRAFT_BASELINE_SETTLE_LOADING_KEYS = new Set([
+  "postOne",
+  "postTemp",
+  "writePost",
+  "modifyPost",
+  "publishTempPost",
+])
+
+export const isLocalDraftBaselineSettleLoadingKey = (loadingKey: string): boolean =>
+  LOCAL_DRAFT_BASELINE_SETTLE_LOADING_KEYS.has(loadingKey)
+
 export type LocalDraftAutosaveDecisionInput = {
   loadingKey: string
-  /** True when loadingKey just transitioned from non-empty to empty. */
-  justSettledLoad: boolean
+  /**
+   * True only when a post-load / publish loadingKey just settled.
+   * Unrelated settles (list refresh, upload, profile, …) must stay false so pending
+   * edits are rescheduled instead of being adopted as a saved baseline.
+   */
+  shouldAdoptBaseline: boolean
   hasDraftContent: boolean
   editorFingerprint: string
   lastArmedFingerprint: string
@@ -56,9 +72,9 @@ export const decideLocalDraftAutosave = (
     return { action: "skip" }
   }
 
-  // After load/switch/publish settles: arm baseline to current editor so we neither
+  // After post load / publish settles: arm baseline to current editor so we neither
   // overwrite a restorable draft with server content nor recreate a just-cleared slot.
-  if (input.justSettledLoad) {
+  if (input.shouldAdoptBaseline) {
     return { action: "adopt-baseline", fingerprint: input.editorFingerprint }
   }
 
@@ -422,11 +438,19 @@ export const useEditorStudioLocalDraftLifecycle = ({
   ])
 
   const wasLoadingRef = useRef(loadingKey.length > 0)
+  const lastNonEmptyLoadingKeyRef = useRef(loadingKey)
 
   useEffect(() => {
+    if (loadingKey.length > 0) {
+      lastNonEmptyLoadingKeyRef.current = loadingKey
+    }
     const wasLoading = wasLoadingRef.current
     const isLoading = loadingKey.length > 0
     wasLoadingRef.current = isLoading
+    const shouldAdoptBaseline =
+      wasLoading &&
+      !isLoading &&
+      isLocalDraftBaselineSettleLoadingKey(lastNonEmptyLoadingKeyRef.current)
 
     const hasDraftContent =
       postTitle.trim().length > 0 ||
@@ -457,7 +481,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
 
     const decision = decideLocalDraftAutosave({
       loadingKey,
-      justSettledLoad: wasLoading && !isLoading,
+      shouldAdoptBaseline,
       hasDraftContent,
       editorFingerprint: localDraftFingerprint,
       lastArmedFingerprint: lastLocalDraftFingerprintRef.current,

@@ -589,8 +589,8 @@ export const useEditorStudioPersistence = ({
         visibility: postVisibility,
       })
       await refreshPublicPostReadViews(postId)
+      // Temp posts autosave into the post slot; do not wipe an unrelated create-slot draft.
       removeLocalDraft({ kind: "post", postId: postId.trim() })
-      removeLocalDraft({ kind: "create" })
       armLocalDraftFingerprintBaseline(
         lastLocalDraftFingerprintRef,
         {

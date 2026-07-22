@@ -17,7 +17,10 @@ import {
   localDraftSourcesEqual,
   type LocalDraftPayload,
 } from "../../src/routes/Admin/editorStudioMetaModel"
-import { decideLocalDraftAutosave } from "../../src/routes/Admin/useEditorStudioDraftLifecycleModel"
+import {
+  decideLocalDraftAutosave,
+  isLocalDraftBaselineSettleLoadingKey,
+} from "../../src/routes/Admin/useEditorStudioDraftLifecycleModel"
 
 const createStorage = (): Storage => {
   const store = new Map<string, string>()
@@ -147,6 +150,33 @@ test.describe("editor local draft context slots", () => {
       migrateLocalDraftV1Once()
       expect(readLocalDraft({ kind: "create" })?.title).toBe("legacy")
       expect(storage.getItem(LOCAL_DRAFT_V1_STORAGE_KEY)).toBeNull()
+    })
+  })
+
+  test("keeps v1 legacy draft when create.v2 write fails", () => {
+    withLocalStorage((storage) => {
+      const legacy = JSON.stringify({
+        title: "legacy-keep",
+        content: "legacy body",
+        summary: "",
+        thumbnailUrl: "",
+        tags: [],
+        category: "",
+        visibility: "PRIVATE",
+        savedAt: new Date().toISOString(),
+      })
+      storage.setItem(LOCAL_DRAFT_V1_STORAGE_KEY, legacy)
+      const originalSetItem = storage.setItem.bind(storage)
+      storage.setItem = (key: string, value: string) => {
+        if (key === LOCAL_DRAFT_CREATE_STORAGE_KEY) {
+          throw new Error("quota exceeded")
+        }
+        originalSetItem(key, value)
+      }
+
+      migrateLocalDraftV1Once()
+      expect(storage.getItem(LOCAL_DRAFT_V1_STORAGE_KEY)).toBe(legacy)
+      expect(storage.getItem(LOCAL_DRAFT_CREATE_STORAGE_KEY)).toBeNull()
     })
   })
 
@@ -335,7 +365,7 @@ test.describe("editor local draft context slots", () => {
     expect(
       decideLocalDraftAutosave({
         loadingKey: "",
-        justSettledLoad: true,
+        shouldAdoptBaseline: true,
         hasDraftContent: true,
         editorFingerprint: serverFingerprint,
         lastArmedFingerprint: draftFingerprint,
@@ -346,7 +376,7 @@ test.describe("editor local draft context slots", () => {
     expect(
       decideLocalDraftAutosave({
         loadingKey: "",
-        justSettledLoad: false,
+        shouldAdoptBaseline: false,
         hasDraftContent: true,
         editorFingerprint: serverFingerprint,
         lastArmedFingerprint: draftFingerprint,
@@ -357,7 +387,7 @@ test.describe("editor local draft context slots", () => {
     expect(
       decideLocalDraftAutosave({
         loadingKey: "",
-        justSettledLoad: false,
+        shouldAdoptBaseline: false,
         hasDraftContent: true,
         editorFingerprint: '{"title":"user-edit"}',
         lastArmedFingerprint: serverFingerprint,
@@ -372,7 +402,7 @@ test.describe("editor local draft context slots", () => {
     expect(
       decideLocalDraftAutosave({
         loadingKey: "",
-        justSettledLoad: true,
+        shouldAdoptBaseline: true,
         hasDraftContent: true,
         editorFingerprint: publishedFingerprint,
         lastArmedFingerprint: "",
@@ -383,7 +413,7 @@ test.describe("editor local draft context slots", () => {
     expect(
       decideLocalDraftAutosave({
         loadingKey: "",
-        justSettledLoad: false,
+        shouldAdoptBaseline: false,
         hasDraftContent: true,
         editorFingerprint: publishedFingerprint,
         lastArmedFingerprint: publishedFingerprint,
@@ -394,12 +424,44 @@ test.describe("editor local draft context slots", () => {
     expect(
       decideLocalDraftAutosave({
         loadingKey: "",
-        justSettledLoad: false,
+        shouldAdoptBaseline: false,
         hasDraftContent: true,
         editorFingerprint: '{"title":"edited-again"}',
         lastArmedFingerprint: publishedFingerprint,
         pendingRestorableDraftFingerprint: null,
       })
     ).toEqual({ action: "schedule" })
+  })
+
+  test("unrelated loading settle reschedules pending dirty editor instead of adopting baseline", () => {
+    expect(isLocalDraftBaselineSettleLoadingKey("postOne")).toBe(true)
+    expect(isLocalDraftBaselineSettleLoadingKey("publishTempPost")).toBe(true)
+    expect(isLocalDraftBaselineSettleLoadingKey("uploadThumbnail")).toBe(false)
+    expect(isLocalDraftBaselineSettleLoadingKey("postList")).toBe(false)
+
+    const baselineFingerprint = '{"title":"baseline"}'
+    const dirtyFingerprint = '{"title":"pending-edit"}'
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: false,
+        hasDraftContent: true,
+        editorFingerprint: dirtyFingerprint,
+        lastArmedFingerprint: baselineFingerprint,
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "schedule" })
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: true,
+        hasDraftContent: true,
+        editorFingerprint: dirtyFingerprint,
+        lastArmedFingerprint: baselineFingerprint,
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "adopt-baseline", fingerprint: dirtyFingerprint })
   })
 })

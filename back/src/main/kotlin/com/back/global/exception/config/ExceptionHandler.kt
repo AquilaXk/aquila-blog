@@ -89,14 +89,18 @@ class ExceptionHandler(
     fun handleHandlerMethodValidationException(
         e: HandlerMethodValidationException,
         request: HttpServletRequest,
-    ): ResponseEntity<RsData<Void>> =
-        mvcClientError(
+    ): ResponseEntity<RsData<Void>> {
+        if (e.isForReturnValue) {
+            return handleUnexpectedException(e, request)
+        }
+        return mvcClientError(
             status = HttpStatus.BAD_REQUEST,
             resultCode = "400-1",
             message = formatHandlerMethodValidationMessage(e),
             ex = e,
             request = request,
         )
+    }
 
     @SpringExceptionHandler(HttpRequestMethodNotSupportedException::class)
     fun handleHttpRequestMethodNotSupportedException(
@@ -149,6 +153,7 @@ class ExceptionHandler(
             message = "지원하지 않는 요청 형식입니다.",
             ex = e,
             request = request,
+            headers = e.headers,
         )
 
     @SpringExceptionHandler(HttpMediaTypeNotAcceptableException::class)
@@ -162,6 +167,7 @@ class ExceptionHandler(
             message = "지원하지 않는 응답 형식입니다.",
             ex = e,
             request = request,
+            headers = e.headers,
             contentType = MediaType.APPLICATION_JSON,
         )
 
@@ -349,16 +355,24 @@ class ExceptionHandler(
         return builder.body(RsData(resultCode, message))
     }
 
-    private fun formatHandlerMethodValidationMessage(e: HandlerMethodValidationException): String =
-        e.parameterValidationResults
-            .asSequence()
-            .flatMap { result ->
-                val parameterName = result.methodParameter.parameterName ?: "value"
-                result.resolvableErrors.asSequence().map { err ->
-                    formatResolvableValidationError(parameterName, err)
+    private fun formatHandlerMethodValidationMessage(e: HandlerMethodValidationException): String {
+        val parameterMessages =
+            e.parameterValidationResults
+                .asSequence()
+                .flatMap { result ->
+                    val parameterName = result.methodParameter.parameterName ?: "value"
+                    result.resolvableErrors.asSequence().map { err ->
+                        formatResolvableValidationError(parameterName, err)
+                    }
                 }
-            }.sorted()
+        val crossParameterMessages =
+            e.crossParameterValidationResults
+                .asSequence()
+                .map { err -> formatResolvableValidationError("method", err) }
+        return (parameterMessages + crossParameterMessages)
+            .sorted()
             .joinToString("\n")
+    }
 
     private fun formatResolvableValidationError(
         parameterName: String,

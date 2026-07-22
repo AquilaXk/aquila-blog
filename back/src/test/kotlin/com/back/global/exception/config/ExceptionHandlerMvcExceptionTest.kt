@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
+import org.springframework.context.support.DefaultMessageSourceResolvable
+import org.springframework.core.MethodParameter
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
@@ -25,8 +27,12 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean
+import org.springframework.validation.method.MethodValidationResult
+import org.springframework.validation.method.ParameterValidationResult
+import org.springframework.web.method.annotation.HandlerMethodValidationException
 import org.springframework.web.servlet.NoHandlerFoundException
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import java.util.function.BiFunction
 import java.util.stream.Stream
 
 @DisplayName("ExceptionHandler Spring MVC 표준 예외 매핑 테스트")
@@ -63,7 +69,8 @@ class ExceptionHandlerMvcExceptionTest {
         resultCode: String,
         msg: String,
         exceptionClass: String,
-        expectedAllow: String?,
+        expectedHeaderName: String?,
+        expectedHeaderValue: String?,
     ) {
         val actions =
             mockMvc
@@ -71,7 +78,7 @@ class ExceptionHandlerMvcExceptionTest {
                 .andExpect(status().`is`(expectedStatus))
                 .andExpect(jsonPath("$.resultCode").value(resultCode))
                 .andExpect(jsonPath("$.msg").value(msg))
-        expectAllowHeader(actions, expectedAllow)
+        expectResponseHeader(actions, expectedHeaderName, expectedHeaderValue)
         assertWarnLogWithoutStack(exceptionClass)
     }
 
@@ -100,12 +107,77 @@ class ExceptionHandlerMvcExceptionTest {
         assertThat(response.body?.resultCode).isEqualTo("404-1")
     }
 
-    private fun expectAllowHeader(
+    @Test
+    @DisplayName("HandlerMethodValidationException return-value 검증 실패 -> 500-1")
+    fun `maps return value validation failure to 500-1`() {
+        val method = MvcExceptionFixtureController::class.java.getDeclaredMethod("ok")
+        val returnParameter = MethodParameter(method, -1)
+        val resolvable =
+            DefaultMessageSourceResolvable(
+                arrayOf("NotNull", "NotNull.return"),
+                null,
+                "must not be null",
+            )
+        val parameterResult =
+            ParameterValidationResult(
+                returnParameter,
+                null,
+                listOf(resolvable),
+                null,
+                null,
+                null,
+                BiFunction { message, _ -> message },
+            )
+        val validationResult =
+            MethodValidationResult.create(
+                MvcExceptionFixtureController(),
+                method,
+                listOf(parameterResult),
+            )
+        assertThat(validationResult.isForReturnValue).isTrue()
+        val response =
+            ExceptionHandler().handleHandlerMethodValidationException(
+                HandlerMethodValidationException(validationResult),
+                MockHttpServletRequest("GET", "/mvc-exception-fixture/ok"),
+            )
+        assertThat(response.statusCode.value()).isEqualTo(500)
+        assertThat(response.body?.resultCode).isEqualTo("500-1")
+    }
+
+    @Test
+    @DisplayName("HandlerMethodValidationException cross-parameter 메시지 포함")
+    fun `includes cross parameter validation messages`() {
+        val method = MvcExceptionFixtureController::class.java.getDeclaredMethod("ok")
+        val crossError =
+            DefaultMessageSourceResolvable(
+                arrayOf("CrossParam", "CrossParam.method"),
+                null,
+                "cross parameter invalid",
+            )
+        val validationResult =
+            MethodValidationResult.create(
+                MvcExceptionFixtureController(),
+                method,
+                emptyList(),
+                listOf(crossError),
+            )
+        val response =
+            ExceptionHandler().handleHandlerMethodValidationException(
+                HandlerMethodValidationException(validationResult),
+                MockHttpServletRequest("GET", "/mvc-exception-fixture/ok"),
+            )
+        assertThat(response.statusCode.value()).isEqualTo(400)
+        assertThat(response.body?.resultCode).isEqualTo("400-1")
+        assertThat(response.body?.msg).isEqualTo("method-CrossParam-cross parameter invalid")
+    }
+
+    private fun expectResponseHeader(
         actions: ResultActions,
-        expectedAllow: String?,
+        expectedHeaderName: String?,
+        expectedHeaderValue: String?,
     ) {
-        if (expectedAllow != null) {
-            actions.andExpect(header().string("Allow", expectedAllow))
+        if (expectedHeaderName != null && expectedHeaderValue != null) {
+            actions.andExpect(header().string(expectedHeaderName, expectedHeaderValue))
         }
     }
 
@@ -136,6 +208,7 @@ class ExceptionHandlerMvcExceptionTest {
                     "405-1",
                     "지원하지 않는 요청 방식입니다.",
                     "org.springframework.web.HttpRequestMethodNotSupportedException",
+                    "Allow",
                     "GET",
                 ),
                 Arguments.of(
@@ -146,6 +219,7 @@ class ExceptionHandlerMvcExceptionTest {
                     "요청 값 형식이 올바르지 않습니다.",
                     "org.springframework.web.method.annotation.MethodArgumentTypeMismatchException",
                     null,
+                    null,
                 ),
                 Arguments.of(
                     "MissingServletRequestParameterException -> 400-1",
@@ -154,6 +228,7 @@ class ExceptionHandlerMvcExceptionTest {
                     "400-1",
                     "필수 요청 값이 누락되었습니다: required",
                     "org.springframework.web.bind.MissingServletRequestParameterException",
+                    null,
                     null,
                 ),
                 Arguments.of(
@@ -164,9 +239,10 @@ class ExceptionHandlerMvcExceptionTest {
                     "id-Min-must be greater than or equal to 1",
                     "org.springframework.web.method.annotation.HandlerMethodValidationException",
                     null,
+                    null,
                 ),
                 Arguments.of(
-                    "HttpMediaTypeNotSupportedException -> 415-1",
+                    "HttpMediaTypeNotSupportedException -> 415-1 + Accept",
                     post("/mvc-exception-fixture/json-only")
                         .contentType(MediaType.TEXT_PLAIN)
                         .content("plain"),
@@ -174,7 +250,8 @@ class ExceptionHandlerMvcExceptionTest {
                     "415-1",
                     "지원하지 않는 요청 형식입니다.",
                     "org.springframework.web.HttpMediaTypeNotSupportedException",
-                    null,
+                    "Accept",
+                    "application/json",
                 ),
                 Arguments.of(
                     "HttpMediaTypeNotAcceptableException -> 406-1",
@@ -184,6 +261,7 @@ class ExceptionHandlerMvcExceptionTest {
                     "지원하지 않는 응답 형식입니다.",
                     "org.springframework.web.HttpMediaTypeNotAcceptableException",
                     null,
+                    null,
                 ),
                 Arguments.of(
                     "NoHandlerFoundException unmapped URL -> 404-1",
@@ -192,6 +270,7 @@ class ExceptionHandlerMvcExceptionTest {
                     "404-1",
                     "해당 데이터가 존재하지 않습니다.",
                     "org.springframework.web.servlet.NoHandlerFoundException",
+                    null,
                     null,
                 ),
             )

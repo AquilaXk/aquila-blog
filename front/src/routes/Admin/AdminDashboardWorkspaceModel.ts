@@ -91,6 +91,50 @@ export const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
 export const ADMIN_DASHBOARD_DISPLAY_TIME_ZONE = "Asia/Seoul"
 export const DASHBOARD_DATA_MISSING_LABEL = "데이터 미수집"
 export const DASHBOARD_BACKEND_CHECK_LABEL = "백엔드 확인 필요"
+export const DASHBOARD_COLLECTION_FAILED_LABEL = "수집 실패 · 재시도"
+export const DASHBOARD_REFRESH_LABEL = "새로고침"
+export const DASHBOARD_REFRESHING_LABEL = "새로고침 중…"
+
+export const resolveDashboardDataUpdatedAt = (...timestamps: number[]) => {
+  const valid = timestamps.filter((value) => Number.isFinite(value) && value > 0)
+  if (!valid.length) return 0
+  return Math.min(...valid)
+}
+
+export const formatDashboardFreshnessLabel = (dataUpdatedAtMs: number) => {
+  if (!dataUpdatedAtMs) return null
+
+  const formatted = new Intl.DateTimeFormat("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: ADMIN_DASHBOARD_DISPLAY_TIME_ZONE,
+  }).format(new Date(dataUpdatedAtMs))
+
+  return `${formatted} 기준`
+}
+
+export const isDashboardQueryCollectionFailed = (options: {
+  isError: boolean
+  isRefetchError: boolean
+}) => options.isError || options.isRefetchError
+
+export const resolveDashboardCollectionLabel = (options: {
+  isError: boolean
+  isRefetchError?: boolean
+  hasData: boolean
+}) => {
+  if (
+    isDashboardQueryCollectionFailed({
+      isError: options.isError,
+      isRefetchError: options.isRefetchError ?? false,
+    })
+  ) {
+    return DASHBOARD_COLLECTION_FAILED_LABEL
+  }
+  if (!options.hasData) return DASHBOARD_DATA_MISSING_LABEL
+  return null
+}
 
 export const hasDashboardSnapshot = (
   snapshot: DashboardSnapshotPayload | null | undefined

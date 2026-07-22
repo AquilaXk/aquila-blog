@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test"
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { ApiError } from "../../src/apis/backend/client"
 import {
   isDefinitiveStaleVideoUploadSessionError,
@@ -12,6 +14,14 @@ import {
 } from "../../src/apis/backend/posts/PostApiRequestModel"
 import { shouldFetchAuthSession } from "../../src/hooks/useAuthSession"
 import { getSearchDebounceMs } from "../../src/hooks/useDebouncedValue"
+import {
+  DASHBOARD_COLLECTION_FAILED_LABEL,
+  DASHBOARD_DATA_MISSING_LABEL,
+  formatDashboardFreshnessLabel,
+  isDashboardQueryCollectionFailed,
+  resolveDashboardCollectionLabel,
+  resolveDashboardDataUpdatedAt,
+} from "../../src/routes/Admin/AdminDashboardWorkspaceModel"
 import { normalizeApiRequestPath } from "../../src/libs/backend/requestPath"
 import { parseMarkdownSegments } from "../../src/libs/markdown/renderingSegmentModel"
 import {
@@ -278,5 +288,46 @@ caption
 
     expect(shouldShowCloudEmptyLoading({ filesCount: 0, isLoading: false, isSearchPending: true })).toBe(true)
     expect(shouldShowCloudEmptyLoading({ filesCount: 2, isLoading: false, isSearchPending: true })).toBe(false)
+  })
+
+  test("dashboard freshness uses min dataUpdatedAt as HH:mm 기준", () => {
+    const older = Date.UTC(2026, 6, 22, 2, 5, 0)
+    const newer = Date.UTC(2026, 6, 22, 2, 17, 0)
+    expect(resolveDashboardDataUpdatedAt(0, newer, older)).toBe(older)
+    expect(formatDashboardFreshnessLabel(older)).toMatch(/^\d{2}:\d{2} 기준$/)
+    expect(resolveDashboardCollectionLabel({ isError: true, hasData: true })).toBe(
+      DASHBOARD_COLLECTION_FAILED_LABEL
+    )
+    expect(resolveDashboardCollectionLabel({ isError: false, isRefetchError: true, hasData: true })).toBe(
+      DASHBOARD_COLLECTION_FAILED_LABEL
+    )
+    expect(resolveDashboardCollectionLabel({ isError: false, hasData: false })).toBe(
+      DASHBOARD_DATA_MISSING_LABEL
+    )
+    expect(resolveDashboardCollectionLabel({ isError: false, hasData: true })).toBeNull()
+    expect(isDashboardQueryCollectionFailed({ isError: false, isRefetchError: true })).toBe(true)
+    expect(isDashboardQueryCollectionFailed({ isError: true, isRefetchError: false })).toBe(true)
+    expect(isDashboardQueryCollectionFailed({ isError: false, isRefetchError: false })).toBe(false)
+  })
+
+  test("dashboard collection failure flags stay scoped per query", () => {
+    const pageSource = readFileSync(
+      path.resolve(__dirname, "../../src/routes/Admin/AdminDashboardWorkspacePage.tsx"),
+      "utf8"
+    )
+    const viewSource = readFileSync(
+      path.resolve(__dirname, "../../src/routes/Admin/AdminDashboardWorkspaceView.tsx"),
+      "utf8"
+    )
+
+    expect(pageSource).toContain("healthCollectionFailed = isDashboardQueryCollectionFailed(systemHealthQuery)")
+    expect(pageSource).toContain("snapshotCollectionFailed = isDashboardQueryCollectionFailed(dashboardSnapshotQuery)")
+    expect(pageSource).toContain("collectionFailed = healthCollectionFailed || snapshotCollectionFailed")
+    expect(pageSource).toContain("isManualRefreshing")
+    expect(pageSource).toContain("isRefreshing = isManualRefreshing")
+    expect(pageSource).not.toContain("isRefreshing = systemHealthQuery.isFetching")
+    expect(viewSource).toContain("snapshotCollectionFailed")
+    expect(viewSource).not.toMatch(/Public read latency[\s\S]*collectionFailed \?/)
+    expect(viewSource).not.toMatch(/Live logs[\s\S]*collectionFailed \?/)
   })
 })

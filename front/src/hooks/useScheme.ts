@@ -34,14 +34,20 @@ const useScheme = (): [SchemeType, SetScheme] => {
 
   const setScheme = useCallback(
     (_scheme: SchemeType) => {
-      queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)
+      const current = queryClient.getQueryData<SchemeType>(queryKey.scheme())
+      if (current !== LIGHT_SCHEME) {
+        queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)
+      }
       clearSchemeBootstrapStyle()
     },
     [queryClient]
   )
 
   useIsomorphicLayoutEffect(() => {
-    queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)
+    const current = queryClient.getQueryData<SchemeType>(queryKey.scheme())
+    if (current !== LIGHT_SCHEME) {
+      queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)
+    }
     clearSchemeBootstrapStyle()
   }, [queryClient])
 

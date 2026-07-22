@@ -110,7 +110,39 @@ test.describe("RSS feed contract", () => {
 
     expect(res.statusCode).toBe(200)
     expect(headers.get("content-type")).toBe(RSS_FEED_CONTENT_TYPE)
+    expect(headers.get("cache-control")).toBe(
+      "public, s-maxage=600, stale-while-revalidate=3600, stale-if-error=86400"
+    )
     expect(chunks.join("")).toContain("<title>RSS Post 1</title>")
     expect(chunks.join("")).not.toContain("RSS Post 2")
+  })
+
+  test("feed route returns 503 with Retry-After when collection fails", async () => {
+    const chunks: string[] = []
+    const headers = new Map<string, string>()
+    const res = {
+      statusCode: 0,
+      setHeader: (name: string, value: string) => headers.set(name.toLowerCase(), value),
+      write: (chunk: string) => chunks.push(chunk),
+      end: () => undefined,
+    }
+    const originalError = console.error
+    console.error = () => undefined
+
+    try {
+      const getServerSideProps = createFeedServerSideProps(async () => {
+        throw new Error("backend unavailable")
+      })
+
+      await getServerSideProps({ res } as unknown as GetServerSidePropsContext)
+
+      expect(res.statusCode).toBe(503)
+      expect(headers.get("retry-after")).toBe("300")
+      expect(headers.get("cache-control")).toBe("no-store")
+      expect(chunks.join("")).toBe("Service Unavailable")
+      expect(chunks.join("")).not.toContain("<rss")
+    } finally {
+      console.error = originalError
+    }
   })
 })

@@ -1,18 +1,17 @@
 package com.back.boundedContexts.cloud.application.service
 
-import com.back.boundedContexts.cloud.application.port.output.CloudFileRepositoryPort
 import com.back.boundedContexts.cloud.application.port.output.CloudVideoUploadSessionRepositoryPort
 import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSession
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
+import com.back.boundedContexts.cloud.support.InMemoryCloudFileRepository
+import com.back.boundedContexts.cloud.support.StubCloudStoragePort
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import java.io.ByteArrayInputStream
-import java.io.InputStream
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -20,7 +19,7 @@ import java.time.ZoneOffset
 @DisplayName("CloudFileReconcileService 테스트")
 class CloudFileReconcileServiceTest {
     private val clock = Clock.fixed(Instant.parse("2026-07-22T00:00:00Z"), ZoneOffset.UTC)
-    private val fileRepository = FakeCloudFileRepository()
+    private val fileRepository = InMemoryCloudFileRepository()
     private val sessionRepository = FakeCloudVideoUploadSessionRepository()
     private val storage = FakeCloudStoragePort()
     private val properties =
@@ -46,24 +45,8 @@ class CloudFileReconcileServiceTest {
     fun `grace가 지난 고아 객체와 고아 메타를 dry-run으로 감지한다`() {
         val orphanObjectKey = "cloud/7/orphan-object.mp4"
         val orphanMetaKey = "cloud/7/orphan-meta.mp4"
-        storage.listedObjects +=
-            CloudStoragePort.StoredObjectSummary(
-                objectKey = orphanObjectKey,
-                size = 10,
-                lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-            )
-        fileRepository.save(
-            CloudFile.create(
-                ownerMemberId = 7L,
-                objectKey = orphanMetaKey,
-                originalFilename = "orphan-meta.mp4",
-                contentType = "video/mp4",
-                byteSize = 10,
-                mediaKind = CloudFileMediaKind.VIDEO,
-                folderPath = "",
-                checksumSha256 = null,
-            ),
-        )
+        storage.listedObjects += agedObject(orphanObjectKey)
+        fileRepository.save(videoFile(orphanMetaKey))
 
         val diagnostics = service.diagnose()
 
@@ -74,6 +57,7 @@ class CloudFileReconcileServiceTest {
         assertThat(diagnostics.sampleDbOnlyObjectKeys).containsExactly(orphanMetaKey)
         assertThat(storage.deletedObjectKeys).isEmpty()
         assertThat(fileRepository.savedFiles.single().deletedAt).isNull()
+        assertThat(service.lastRepairSnapshot()).isNull()
     }
 
     @Test
@@ -84,11 +68,7 @@ class CloudFileReconcileServiceTest {
         sessionRepository.nonTerminalObjectKeys += inFlightKey
         storage.listedObjects +=
             listOf(
-                CloudStoragePort.StoredObjectSummary(
-                    objectKey = inFlightKey,
-                    size = 10,
-                    lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-                ),
+                agedObject(inFlightKey),
                 CloudStoragePort.StoredObjectSummary(
                     objectKey = recentKey,
                     size = 10,
@@ -106,31 +86,8 @@ class CloudFileReconcileServiceTest {
     @DisplayName("inventory truncate면 고아 메타를 판정하지 않는다")
     fun `inventory truncate면 고아 메타를 판정하지 않는다`() {
         properties.cloudReconcileInventoryLimit = 1
-        storage.listedObjects +=
-            listOf(
-                CloudStoragePort.StoredObjectSummary(
-                    objectKey = "cloud/7/a.mp4",
-                    size = 1,
-                    lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-                ),
-                CloudStoragePort.StoredObjectSummary(
-                    objectKey = "cloud/7/b.mp4",
-                    size = 1,
-                    lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-                ),
-            )
-        fileRepository.save(
-            CloudFile.create(
-                ownerMemberId = 7L,
-                objectKey = "cloud/7/missing.mp4",
-                originalFilename = "missing.mp4",
-                contentType = "video/mp4",
-                byteSize = 1,
-                mediaKind = CloudFileMediaKind.VIDEO,
-                folderPath = "",
-                checksumSha256 = null,
-            ),
-        )
+        storage.listedObjects += listOf(agedObject("cloud/7/a.mp4", size = 1), agedObject("cloud/7/b.mp4", size = 1))
+        fileRepository.save(videoFile("cloud/7/missing.mp4", byteSize = 1))
 
         val diagnostics = service.diagnose()
 
@@ -144,24 +101,8 @@ class CloudFileReconcileServiceTest {
         properties.cloudReconcileRepairEnabled = true
         val orphanObjectKey = "cloud/7/orphan-object.mp4"
         val orphanMetaKey = "cloud/7/orphan-meta.mp4"
-        storage.listedObjects +=
-            CloudStoragePort.StoredObjectSummary(
-                objectKey = orphanObjectKey,
-                size = 10,
-                lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-            )
-        fileRepository.save(
-            CloudFile.create(
-                ownerMemberId = 7L,
-                objectKey = orphanMetaKey,
-                originalFilename = "orphan-meta.mp4",
-                contentType = "video/mp4",
-                byteSize = 10,
-                mediaKind = CloudFileMediaKind.VIDEO,
-                folderPath = "",
-                checksumSha256 = null,
-            ),
-        )
+        storage.listedObjects += agedObject(orphanObjectKey)
+        fileRepository.save(videoFile(orphanMetaKey))
 
         val diagnostics = service.reconcile(sampleSize = 5, repair = true)
 
@@ -171,6 +112,12 @@ class CloudFileReconcileServiceTest {
         assertThat(storage.deletedObjectKeys).containsExactly(orphanObjectKey)
         assertThat(fileRepository.savedFiles.single { it.objectKey == orphanMetaKey }.deletedAt)
             .isEqualTo(clock.instant())
+        assertThat(service.lastRepairSnapshot()).isEqualTo(
+            CloudFileReconcileRepairSnapshot(
+                repairedBucketOnlyDeletedCount = 1,
+                repairedDbOnlySoftDeletedCount = 1,
+            ),
+        )
     }
 
     @Test
@@ -178,19 +125,7 @@ class CloudFileReconcileServiceTest {
     fun `safety threshold를 넘으면 repair를 차단한다`() {
         properties.cloudReconcileRepairEnabled = true
         properties.cloudReconcileSafetyThreshold = 1
-        storage.listedObjects +=
-            listOf(
-                CloudStoragePort.StoredObjectSummary(
-                    objectKey = "cloud/7/a.mp4",
-                    size = 1,
-                    lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-                ),
-                CloudStoragePort.StoredObjectSummary(
-                    objectKey = "cloud/7/b.mp4",
-                    size = 1,
-                    lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-                ),
-            )
+        storage.listedObjects += listOf(agedObject("cloud/7/a.mp4", size = 1), agedObject("cloud/7/b.mp4", size = 1))
 
         val diagnostics = service.reconcile(sampleSize = 5, repair = true)
 
@@ -218,25 +153,9 @@ class CloudFileReconcileServiceTest {
     fun `dbRowsTruncated면 bucket-only repair를 차단한다`() {
         properties.cloudReconcileRepairEnabled = true
         properties.cloudReconcileInventoryLimit = 1
-        storage.listedObjects +=
-            CloudStoragePort.StoredObjectSummary(
-                objectKey = "cloud/7/orphan-object.mp4",
-                size = 10,
-                lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-            )
+        storage.listedObjects += agedObject("cloud/7/orphan-object.mp4")
         repeat(2) { index ->
-            fileRepository.save(
-                CloudFile.create(
-                    ownerMemberId = 7L,
-                    objectKey = "cloud/7/active-$index.mp4",
-                    originalFilename = "active-$index.mp4",
-                    contentType = "video/mp4",
-                    byteSize = 10,
-                    mediaKind = CloudFileMediaKind.VIDEO,
-                    folderPath = "",
-                    checksumSha256 = null,
-                ),
-            )
+            fileRepository.save(videoFile("cloud/7/active-$index.mp4"))
         }
 
         val diagnostics = service.reconcile(sampleSize = 5, repair = true)
@@ -253,12 +172,7 @@ class CloudFileReconcileServiceTest {
         properties.cloudReconcileRepairEnabled = true
         properties.cloudReconcileInventoryLimit = 1
         sessionRepository.nonTerminalObjectKeys += listOf("cloud/7/in-flight-a.mp4", "cloud/7/in-flight-b.mp4")
-        storage.listedObjects +=
-            CloudStoragePort.StoredObjectSummary(
-                objectKey = "cloud/7/orphan-object.mp4",
-                size = 10,
-                lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-            )
+        storage.listedObjects += agedObject("cloud/7/orphan-object.mp4")
 
         val diagnostics = service.reconcile(sampleSize = 5, repair = true)
 
@@ -272,12 +186,7 @@ class CloudFileReconcileServiceTest {
     fun `bucket delete 실패는 카운트하지 않고 계속 진행한다`() {
         properties.cloudReconcileRepairEnabled = true
         storage.failDeleteObjectKeys += "cloud/7/orphan-object.mp4"
-        storage.listedObjects +=
-            CloudStoragePort.StoredObjectSummary(
-                objectKey = "cloud/7/orphan-object.mp4",
-                size = 10,
-                lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-            )
+        storage.listedObjects += agedObject("cloud/7/orphan-object.mp4")
 
         val diagnostics = service.reconcile(sampleSize = 5, repair = true)
 
@@ -289,18 +198,7 @@ class CloudFileReconcileServiceTest {
     @DisplayName("db-only soft-delete 실패는 카운트하지 않고 계속 진행한다")
     fun `db-only soft-delete 실패는 카운트하지 않고 계속 진행한다`() {
         properties.cloudReconcileRepairEnabled = true
-        fileRepository.save(
-            CloudFile.create(
-                ownerMemberId = 7L,
-                objectKey = "cloud/7/orphan-meta.mp4",
-                originalFilename = "orphan-meta.mp4",
-                contentType = "video/mp4",
-                byteSize = 10,
-                mediaKind = CloudFileMediaKind.VIDEO,
-                folderPath = "",
-                checksumSha256 = null,
-            ),
-        )
+        fileRepository.save(videoFile("cloud/7/orphan-meta.mp4"))
         fileRepository.failSave = true
 
         val diagnostics = service.reconcile(sampleSize = 5, repair = true)
@@ -340,39 +238,9 @@ class CloudFileReconcileServiceTest {
     fun `dbRowsTruncated여도 inventory가 완전하면 db-only soft-delete는 허용한다`() {
         properties.cloudReconcileRepairEnabled = true
         properties.cloudReconcileInventoryLimit = 1
-        // inventory에 active-0만 있고, active-1은 샘플 밖 + inventory에도 없음 → orphan meta for sampled row only.
-        // With limit=1, sampled db row is active-0 (id order). active-0 is in inventory → no db orphan.
-        // Add orphan-meta as first id so it is the sampled row and missing from inventory.
-        fileRepository.save(
-            CloudFile.create(
-                ownerMemberId = 7L,
-                objectKey = "cloud/7/orphan-meta.mp4",
-                originalFilename = "orphan-meta.mp4",
-                contentType = "video/mp4",
-                byteSize = 10,
-                mediaKind = CloudFileMediaKind.VIDEO,
-                folderPath = "",
-                checksumSha256 = null,
-            ),
-        )
-        fileRepository.save(
-            CloudFile.create(
-                ownerMemberId = 7L,
-                objectKey = "cloud/7/active-extra.mp4",
-                originalFilename = "active-extra.mp4",
-                contentType = "video/mp4",
-                byteSize = 10,
-                mediaKind = CloudFileMediaKind.VIDEO,
-                folderPath = "",
-                checksumSha256 = null,
-            ),
-        )
-        storage.listedObjects +=
-            CloudStoragePort.StoredObjectSummary(
-                objectKey = "cloud/7/bucket-orphan.mp4",
-                size = 10,
-                lastModified = Instant.parse("2026-07-20T00:00:00Z"),
-            )
+        fileRepository.save(videoFile("cloud/7/orphan-meta.mp4"))
+        fileRepository.save(videoFile("cloud/7/active-extra.mp4"))
+        storage.listedObjects += agedObject("cloud/7/bucket-orphan.mp4")
 
         val diagnostics = service.reconcile(sampleSize = 5, repair = true)
 
@@ -386,63 +254,32 @@ class CloudFileReconcileServiceTest {
             .isEqualTo(clock.instant())
     }
 
-    private class FakeCloudFileRepository : CloudFileRepositoryPort {
-        val savedFiles = mutableListOf<CloudFile>()
-        private var nextId = 1L
-        var failSave = false
-
-        override fun save(file: CloudFile): CloudFile {
-            if (failSave) {
-                throw IllegalStateException("save failed")
-            }
-            val stored =
-                if (file.id == 0L) {
-                    CloudFile
-                        .create(
-                            id = nextId++,
-                            ownerMemberId = file.ownerMemberId,
-                            objectKey = file.objectKey,
-                            originalFilename = file.originalFilename,
-                            contentType = file.contentType,
-                            byteSize = file.byteSize,
-                            mediaKind = file.mediaKind,
-                            folderPath = file.folderPath,
-                            checksumSha256 = file.checksumSha256,
-                        ).also { it.deletedAt = file.deletedAt }
-                } else {
-                    file
-                }
-            savedFiles.removeIf { it.id == stored.id || it.objectKey == stored.objectKey }
-            savedFiles += stored
-            return stored
-        }
-
-        override fun findActiveByOwner(
-            ownerMemberId: Long,
-            folderPath: String?,
-            keyword: String?,
-            mediaKind: CloudFileMediaKind?,
-        ): List<CloudFile> = savedFiles.filter { it.ownerMemberId == ownerMemberId && it.deletedAt == null }
-
-        override fun findActiveByIdAndOwner(
-            id: Long,
-            ownerMemberId: Long,
-        ): CloudFile? = savedFiles.firstOrNull { it.id == id && it.ownerMemberId == ownerMemberId && it.deletedAt == null }
-
-        override fun findActiveByObjectKey(objectKey: String): CloudFile? =
-            savedFiles.firstOrNull { it.objectKey == objectKey && it.deletedAt == null }
-
-        override fun findByObjectKey(objectKey: String): CloudFile? = savedFiles.firstOrNull { it.objectKey == objectKey }
-
-        override fun findActiveByObjectKeyStartingWith(
-            objectKeyPrefix: String,
-            limit: Int,
-        ): List<CloudFile> =
-            savedFiles
-                .filter { it.deletedAt == null && it.objectKey.startsWith(objectKeyPrefix) }
-                .sortedBy { it.id }
-                .take(limit.coerceAtLeast(1))
+    private fun videoFile(
+        objectKey: String,
+        byteSize: Long = 10,
+    ): CloudFile {
+        val filename = objectKey.substringAfterLast('/')
+        return CloudFile.create(
+            ownerMemberId = 7L,
+            objectKey = objectKey,
+            originalFilename = filename,
+            contentType = "video/mp4",
+            byteSize = byteSize,
+            mediaKind = CloudFileMediaKind.VIDEO,
+            folderPath = "",
+            checksumSha256 = null,
+        )
     }
+
+    private fun agedObject(
+        objectKey: String,
+        size: Long = 10,
+    ): CloudStoragePort.StoredObjectSummary =
+        CloudStoragePort.StoredObjectSummary(
+            objectKey = objectKey,
+            size = size,
+            lastModified = Instant.parse("2026-07-20T00:00:00Z"),
+        )
 
     private class FakeCloudVideoUploadSessionRepository : CloudVideoUploadSessionRepositoryPort {
         val nonTerminalObjectKeys = mutableListOf<String>()
@@ -509,27 +346,11 @@ class CloudFileReconcileServiceTest {
         ): Int = 0
     }
 
-    private class FakeCloudStoragePort : CloudStoragePort {
+    private class FakeCloudStoragePort : StubCloudStoragePort() {
         val listedObjects = mutableListOf<CloudStoragePort.StoredObjectSummary>()
         val deletedObjectKeys = mutableListOf<String>()
+        val failDeleteObjectKeys = mutableSetOf<String>()
         var failListObjects = false
-
-        override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult =
-            CloudStoragePort.UploadResult(request.objectKey, "checksum")
-
-        override fun initiateMultipartUpload(
-            request: CloudStoragePort.MultipartUploadInitRequest,
-        ): CloudStoragePort.MultipartUploadInitResult = CloudStoragePort.MultipartUploadInitResult(request.objectKey, "upload-1")
-
-        override fun uploadMultipartPart(
-            request: CloudStoragePort.MultipartUploadPartRequest,
-        ): CloudStoragePort.MultipartUploadPartResult = CloudStoragePort.MultipartUploadPartResult(request.partNumber, "etag")
-
-        override fun completeMultipartUpload(request: CloudStoragePort.MultipartUploadCompleteRequest) = Unit
-
-        override fun abortMultipartUpload(request: CloudStoragePort.MultipartUploadAbortRequest) = Unit
-
-        override fun head(objectKey: String): CloudStoragePort.ObjectHead? = null
 
         override fun listObjects(
             prefix: String,
@@ -553,15 +374,11 @@ class CloudFileReconcileServiceTest {
             range: LongRange,
         ): CloudStoragePort.StoredObject? = CloudStoragePort.StoredObject(emptyStream(), "video/mp4", 0, "empty.mp4")
 
-        val failDeleteObjectKeys = mutableSetOf<String>()
-
         override fun delete(objectKey: String) {
             if (objectKey in failDeleteObjectKeys) {
                 throw IllegalStateException("delete failed")
             }
             deletedObjectKeys += objectKey
         }
-
-        private fun emptyStream(): InputStream = ByteArrayInputStream(ByteArray(0))
     }
 }

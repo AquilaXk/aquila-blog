@@ -63,13 +63,16 @@ class CloudFileReconcileMetricsBinder(
 
         runCatching { cloudFileReconcileService.diagnose() }
             .onSuccess { diagnostics ->
+                // Inventory/orphan gauges come from dry-run diagnose.
                 bucketOnlyObjects.set(diagnostics.bucketOnlyObjectCount.toLong())
                 dbOnlyMissingObjects.set(diagnostics.dbOnlyMissingObjectCount.toLong())
                 inventoryAvailable.set(if (diagnostics.inventoryAvailable) 1 else 0)
                 inventoryTruncated.set(if (diagnostics.inventoryTruncated) 1 else 0)
                 dbRowsTruncated.set(if (diagnostics.dbRowsTruncated) 1 else 0)
-                repairedBucketOnlyDeleted.set(diagnostics.repairedBucketOnlyDeletedCount.toLong())
-                repairedDbOnlySoftDeleted.set(diagnostics.repairedDbOnlySoftDeletedCount.toLong())
+                // Repair gauges reflect the last real reconcile(repair=true) job, not dry-run zeros.
+                val lastRepair = cloudFileReconcileService.lastRepairSnapshot()
+                repairedBucketOnlyDeleted.set(lastRepair?.repairedBucketOnlyDeletedCount?.toLong() ?: 0L)
+                repairedDbOnlySoftDeleted.set(lastRepair?.repairedDbOnlySoftDeletedCount?.toLong() ?: 0L)
             }.onFailure { exception ->
                 refreshFailures.incrementAndGet()
                 logger.warn("Skip cloud_file reconcile metrics refresh due to diagnostics error", exception)

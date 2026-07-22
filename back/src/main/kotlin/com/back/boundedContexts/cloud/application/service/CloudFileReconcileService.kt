@@ -7,6 +7,7 @@ import com.back.global.storage.config.CloudStorageProperties
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Clock
+import java.util.concurrent.atomic.AtomicReference
 
 data class CloudFileReconcileDiagnostics(
     val objectPrefix: String,
@@ -25,6 +26,11 @@ data class CloudFileReconcileDiagnostics(
     val repairMode: String = "dry-run",
 )
 
+data class CloudFileReconcileRepairSnapshot(
+    val repairedBucketOnlyDeletedCount: Int,
+    val repairedDbOnlySoftDeletedCount: Int,
+)
+
 /**
  * cloud_file 메타 ↔ `cloud/` prefix 스토리지 객체를 양방향 대사한다.
  * 기본은 dry-run(감지·메트릭만). repair는 명시적으로 켠 경우에만 수행한다.
@@ -38,8 +44,11 @@ class CloudFileReconcileService(
     private val clock: Clock = Clock.systemUTC(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val lastRepairSnapshotRef = AtomicReference<CloudFileReconcileRepairSnapshot?>(null)
 
     fun diagnose(sampleSize: Int = 5): CloudFileReconcileDiagnostics = reconcile(sampleSize = sampleSize, repair = false)
+
+    fun lastRepairSnapshot(): CloudFileReconcileRepairSnapshot? = lastRepairSnapshotRef.get()
 
     fun reconcile(): CloudFileReconcileDiagnostics =
         reconcile(
@@ -65,7 +74,10 @@ class CloudFileReconcileService(
                         objectPrefix,
                         exception,
                     )
-                    return degradedDiagnostics(objectPrefix, inventoryLimit)
+                    return rememberRepairIfNeeded(
+                        repair,
+                        degradedDiagnostics(objectPrefix, inventoryLimit),
+                    )
                 }
 
         val inFlightObjectKeysRaw =
@@ -148,22 +160,40 @@ class CloudFileReconcileService(
             }
         }
 
-        return CloudFileReconcileDiagnostics(
-            objectPrefix = objectPrefix,
-            inventoryLimit = inventoryLimit,
-            inventoryObjectCount = inventory.objects.size,
-            inventoryAvailable = true,
-            inventoryTruncated = inventory.isTruncated,
-            dbRowsTruncated = dbRowsTruncated,
-            bucketOnlyObjectCount = orphanBucketObjects.size,
-            sampleBucketOnlyObjectKeys = orphanBucketObjects.map { it.objectKey }.take(safeSampleSize),
-            dbOnlyMissingObjectCount = orphanDbRows.size,
-            sampleDbOnlyObjectKeys = orphanDbRows.map { it.objectKey }.take(safeSampleSize),
-            repairedBucketOnlyDeletedCount = repairedBucketOnlyDeletedCount,
-            repairedDbOnlySoftDeletedCount = repairedDbOnlySoftDeletedCount,
-            blockedBySafetyThreshold = blockedBySafetyThreshold,
-            repairMode = repairMode,
+        return rememberRepairIfNeeded(
+            repair,
+            CloudFileReconcileDiagnostics(
+                objectPrefix = objectPrefix,
+                inventoryLimit = inventoryLimit,
+                inventoryObjectCount = inventory.objects.size,
+                inventoryAvailable = true,
+                inventoryTruncated = inventory.isTruncated,
+                dbRowsTruncated = dbRowsTruncated,
+                bucketOnlyObjectCount = orphanBucketObjects.size,
+                sampleBucketOnlyObjectKeys = orphanBucketObjects.map { it.objectKey }.take(safeSampleSize),
+                dbOnlyMissingObjectCount = orphanDbRows.size,
+                sampleDbOnlyObjectKeys = orphanDbRows.map { it.objectKey }.take(safeSampleSize),
+                repairedBucketOnlyDeletedCount = repairedBucketOnlyDeletedCount,
+                repairedDbOnlySoftDeletedCount = repairedDbOnlySoftDeletedCount,
+                blockedBySafetyThreshold = blockedBySafetyThreshold,
+                repairMode = repairMode,
+            ),
         )
+    }
+
+    private fun rememberRepairIfNeeded(
+        repair: Boolean,
+        diagnostics: CloudFileReconcileDiagnostics,
+    ): CloudFileReconcileDiagnostics {
+        if (repair) {
+            lastRepairSnapshotRef.set(
+                CloudFileReconcileRepairSnapshot(
+                    repairedBucketOnlyDeletedCount = diagnostics.repairedBucketOnlyDeletedCount,
+                    repairedDbOnlySoftDeletedCount = diagnostics.repairedDbOnlySoftDeletedCount,
+                ),
+            )
+        }
+        return diagnostics
     }
 
     private fun degradedDiagnostics(

@@ -93,7 +93,7 @@ test.describe("residual keyboard paths", () => {
     await mockAnonymousSession(page)
     await page.goto("/")
 
-    const menuButton = page.getByRole("button", { name: "메뉴 열기" })
+    const menuButton = page.getByRole("button", { name: "메뉴" })
     await menuButton.click()
     await page.getByRole("button", { name: "Login", exact: true }).click()
 

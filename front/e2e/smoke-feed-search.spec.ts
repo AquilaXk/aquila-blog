@@ -481,14 +481,14 @@ test.describe("core smoke feed and search", () => {
     await mockAnonymousSession(page)
 
     await page.goto("/")
-    await page.getByRole("button", { name: "메뉴 열기" }).click()
+    await page.getByRole("button", { name: "메뉴" }).click()
     const searchItem = page.getByRole("dialog", { name: "메뉴" }).getByRole("button", { name: "검색" })
     await expect(searchItem).toBeVisible()
     await expect(searchItem).toHaveAttribute("aria-keyshortcuts", "Meta+K Control+K")
     await searchItem.click()
     await waitForFeedSearchInputFocus(page)
 
-    await page.getByRole("button", { name: "메뉴 열기" }).click()
+    await page.getByRole("button", { name: "메뉴" }).click()
     await expect(page.getByRole("dialog", { name: "메뉴" })).toBeVisible()
     await page.keyboard.press("Escape")
     await expect(page.getByRole("dialog", { name: "메뉴" })).toHaveCount(0)

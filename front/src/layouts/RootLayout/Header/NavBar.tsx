@@ -101,6 +101,17 @@ const NavBar = () => {
     return () => window.removeEventListener("hashchange", syncHash)
   }, [])
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const media = window.matchMedia(`(max-width: ${layoutBreakpoint.navCompact}px)`)
+    const closeWhenDesktop = () => {
+      if (!media.matches) setMobileMenuOpen(false)
+    }
+    closeWhenDesktop()
+    media.addEventListener("change", closeWhenDesktop)
+    return () => media.removeEventListener("change", closeWhenDesktop)
+  }, [mobileMenuOpen])
+
   const focusFeedSearch = useCallback(() => {
     if (focusFeedSearchInFlightRef.current) {
       return focusFeedSearchInFlightRef.current
@@ -353,7 +364,7 @@ const NavBar = () => {
           ref={mobileMenuButtonRef}
           type="button"
           className="mobileMenuButton"
-          aria-label={mobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
+          aria-label="메뉴"
           aria-expanded={mobileMenuOpen}
           aria-haspopup="dialog"
           onClick={() => setMobileMenuOpen((value) => !value)}

@@ -26,7 +26,7 @@ test.describe("mobile layout public", () => {
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
-  await page.getByRole("button", { name: "메뉴 열기" }).click()
+  await page.getByRole("button", { name: "메뉴" }).click()
   await expect(page.getByRole("dialog", { name: "메뉴" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Notes" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Topics" })).toBeVisible()
@@ -65,7 +65,7 @@ test.describe("mobile layout public", () => {
     await page.goto("/")
     await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
 
-    const menuButton = page.getByRole("button", { name: "메뉴 열기" })
+    const menuButton = page.getByRole("button", { name: "메뉴" })
     await menuButton.click()
 
     const menu = page.getByRole("dialog", { name: "메뉴" })

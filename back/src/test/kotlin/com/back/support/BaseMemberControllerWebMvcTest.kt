@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.application.port.input.CurrentMemberProfi
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
+import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.SecurityTipProvider
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
@@ -59,6 +60,9 @@ abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext
+
+    @MockitoBean
+    protected lateinit var errorMetrics: ErrorMetrics
 
     companion object {
         @JvmStatic

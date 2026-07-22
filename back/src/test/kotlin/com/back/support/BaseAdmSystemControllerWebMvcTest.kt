@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.subContexts.notification.application.serv
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
 import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
+import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
@@ -80,6 +81,9 @@ abstract class BaseAdmSystemControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext
+
+    @MockitoBean
+    protected lateinit var errorMetrics: ErrorMetrics
 
     @TestConfiguration
     class TestSecurityConfig {

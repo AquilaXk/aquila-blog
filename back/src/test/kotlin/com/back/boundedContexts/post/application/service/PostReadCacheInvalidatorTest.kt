@@ -139,12 +139,14 @@ class PostReadCacheInvalidatorTest {
     }
 
     @Test
-    @DisplayName("ranked sort 단일 인자 오버로드는 HIT_COUNT와 LIKES_COUNT를 함께 축출한다")
+    @DisplayName("ranked sort 단일 인자 오버로드는 FEED clear와 ranked cursor/bootstrap 축출을 수행한다")
     fun invalidateRankedSortHotPagesDefaultOverloadEvictsBothRankedSorts() {
         // given
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED, "page=2:size=30:sort=HIT_COUNT")
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED, "page=3:size=24:sort=LIKES_COUNT")
         put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")
         put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")
         put(
@@ -160,10 +162,12 @@ class PostReadCacheInvalidatorTest {
         // when
         invalidator.invalidateRankedSortHotPages("ranked-default")
 
-        // then
-        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isEqualTo("cached")
+        // then — FEED clears all pages/sorts (page 2+ ranked keys are not enumerable)
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=2:size=30:sort=HIT_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=3:size=24:sort=LIKES_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")).isNull()
         assertThat(
@@ -199,11 +203,12 @@ class PostReadCacheInvalidatorTest {
     }
 
     @Test
-    @DisplayName("ranked sort 무효화는 지정 sort의 feed만 키 축출하고 explore/search는 clear한다")
+    @DisplayName("ranked sort 무효화는 FEED를 clear하고 지정 sort의 cursor/bootstrap만 축출하며 explore/search는 clear한다")
     fun invalidateRankedSortHotPagesEvictsTargetSortAndClearsExploreSearch() {
         // given
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")
+        put(PostQueryCacheNames.FEED, "page=2:size=16:sort=HIT_COUNT")
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
         put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=_")
         put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=HIT_COUNT:kw=_:tag=kotlin")
@@ -226,13 +231,14 @@ class PostReadCacheInvalidatorTest {
         put(PostQueryCacheNames.SEARCH, "page=1:size=30:sort=HIT_COUNT:kw=kotlin")
         put(PostQueryCacheNames.SEARCH_NEGATIVE, "page=1:size=30:sort=LIKES_COUNT:kw=missing")
 
-        // when — hit path: HIT_COUNT only
+        // when — hit path: HIT_COUNT only (FEED still clears all pages; cursor/bootstrap stay selective)
         invalidator.invalidateRankedSortHotPages("hit", listOf(PostSearchSortType1.HIT_COUNT))
 
         // then
-        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")).isNull()
-        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.FEED, "page=2:size=16:sort=HIT_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT")).isEqualTo("cached")
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")).isEqualTo("cached")
@@ -262,6 +268,8 @@ class PostReadCacheInvalidatorTest {
 
         // given — restore likes feed entry after explore/search clear
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED, "page=4:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
         put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=LIKES_COUNT:kw=_:tag=spring")
 
         // when — like path: LIKES_COUNT only
@@ -269,7 +277,8 @@ class PostReadCacheInvalidatorTest {
 
         // then
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
-        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.FEED, "page=4:size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=LIKES_COUNT:kw=_:tag=spring")).isNull()
     }
 

@@ -51,16 +51,18 @@ class PostReadCacheInvalidator(
             throw IllegalArgumentException("ranked sort invalidation requires HIT_COUNT and/or LIKES_COUNT")
         }
 
-        val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
         val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
         val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
 
-        // Untagged feed/bootstrap keys are enumerable; explore/search are not (see clear below).
+        // FEED offset keys are page×size×sort (page up to 200, size 1..30). Hot-size page=1 eviction
+        // leaves ranked page 2+ stale until TTL; clear the whole FEED cache instead of under-invalidating.
+        cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
+        recordCacheEvict(PostQueryCacheNames.FEED, "clear", evictReason)
+
+        // Untagged cursor-first/bootstrap keys remain enumerable by hot page sizes.
         hotPageSizes.forEach { pageSize ->
             targetSorts.forEach { sort ->
                 val sortName = sort.name
-                feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
-                recordCacheEvict(PostQueryCacheNames.FEED, "key", evictReason)
                 feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
                 recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
                 bootstrapCache?.evict(

@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react"
-import styled from "@emotion/styled"
 import MarkdownRenderer from "src/libs/markdown/MarkdownRenderer"
 import {
   isComposingEditorKeyboardEvent,
@@ -20,6 +19,21 @@ import {
   resolveFormatShortcut,
 } from "./markdownEditorKeyboardModel"
 import { MarkdownEditorModeTabs, type MarkdownEditorMode } from "./markdownEditorModeTabs"
+import {
+  EditorRoot,
+  EditorToolbar,
+  ToolbarGroup,
+  ToolbarButton,
+  ToolbarUploadButton,
+  ToolbarError,
+  EditorBody,
+  WritePane,
+  WriteEditorFrame,
+  MarkdownTextarea,
+  PreviewPane,
+  PreviewArticle,
+  PreviewHeader,
+} from "./MarkdownEditor.styles"
 import {
   applyPlannedTextMutation,
   planToggleWrapSelection,
@@ -35,87 +49,15 @@ import {
   type MarkdownFileUploadResult,
   type MarkdownImageUploadResult,
 } from "./markdownEditorUploadModel"
-
-type MarkdownChangeMeta = {
-  editorFocused: boolean
-}
-
-type MarkdownEditorProps = {
-  value: string
-  previewTitle?: string
-  previewSummary?: string
-  disabled?: boolean
-  disableMermaid?: boolean
-  onChange: (markdown: string, meta?: MarkdownChangeMeta) => void
-  onFlushMarkdownReady?: (flush: (() => string) | null) => void
-  onFocusRequestReady?: (focus: (() => void) | null) => void
-  onRequestSave?: () => void
-  onUploadingChange?: (isUploading: boolean) => void
-  onUploadImage?: (file: File) => Promise<MarkdownImageUploadResult>
-  onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
-}
-
-type TextareaSelection = {
-  from: number
-  to: number
-}
+import {
+  blockMarkdownSnippets,
+  getWheelDeltaYPixels,
+  modShortcutLabel,
+  toolbarMarkdownSnippets,
+} from "./markdownEditorToolbarModel"
 
 const TEXTAREA_KEYBOARD_HELP =
   "Tab은 2칸 들여쓰기, Shift+Tab은 내어쓰기입니다. Escape를 누른 다음 Tab은 포커스를 다음 요소로 이동합니다."
-
-const modShortcutLabel =
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
-    ? "⌘"
-    : "Ctrl+"
-
-const toolbarMarkdownSnippets = [
-  { label: "H1", title: "제목 1", before: "# ", after: "" },
-  { label: "H2", title: "제목 2", before: "## ", after: "" },
-  { label: "H3", title: "제목 3", before: "### ", after: "" },
-  { label: "B", title: `굵게 (${modShortcutLabel}B)`, before: "**", after: "**", toggle: true },
-  { label: "I", title: `기울임 (${modShortcutLabel}I)`, before: "_", after: "_", toggle: true },
-  { label: "S", title: `취소선 (${modShortcutLabel}Shift+X)`, before: "~~", after: "~~", toggle: true },
-  { label: "`", title: `인라인 코드 (${modShortcutLabel}E)`, before: "`", after: "`", toggle: true },
-  { label: ">", title: "인용문", before: "> ", after: "" },
-  { label: "List", title: "목록", before: "- ", after: "" },
-  { label: "Task", title: "작업 목록", before: "- [ ] ", after: "" },
-] as const
-
-const tableSnippet = [
-  "",
-  "| 항목 | 설명 |",
-  "| --- | --- |",
-  "| 값 | 내용 |",
-  "",
-].join("\n")
-
-const codeBlockSnippet = ["", '```kotlin title="invalidatePost.kt"', "fun example() = Unit", "```", ""].join("\n")
-const mermaidSnippet = ["", "```mermaid", "flowchart LR", "    A[Admin write] --> B[DB commit]", "```", ""].join("\n")
-const calloutSnippet = ["", "> [!TIP]", "> **설계 원칙**", "> 내용을 입력하세요.", ""].join("\n")
-const toggleSnippet = ["", ":::toggle 자세히 보기", "내용을 입력하세요.", ":::", ""].join("\n")
-
-const blockMarkdownSnippets = [
-  { label: "Code", title: "코드 블록", snippet: codeBlockSnippet },
-  { label: "Table", title: "표", snippet: tableSnippet },
-  { label: "Mermaid", title: "Mermaid", snippet: mermaidSnippet, disableWhenMermaid: true },
-  { label: "Callout", title: "콜아웃", snippet: calloutSnippet },
-  { label: "Toggle", title: "토글", snippet: toggleSnippet },
-] as const
-
-const WHEEL_DELTA_PIXEL = 0
-const WHEEL_DELTA_LINE = 1
-const WHEEL_DELTA_PAGE = 2
-const DEFAULT_WHEEL_LINE_HEIGHT_PX = 16
-
-const getWheelDeltaYPixels = (event: ReactWheelEvent<HTMLElement>, element: HTMLElement) => {
-  if (event.deltaMode === WHEEL_DELTA_PIXEL) return event.deltaY
-  if (event.deltaMode === WHEEL_DELTA_PAGE) return event.deltaY * element.clientHeight
-  if (event.deltaMode !== WHEEL_DELTA_LINE) return event.deltaY
-
-  const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight)
-  const resolvedLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : DEFAULT_WHEEL_LINE_HEIGHT_PX
-  return event.deltaY * resolvedLineHeight
-}
 
 export const MarkdownEditor = ({
   value,
@@ -589,272 +531,3 @@ export const MarkdownEditor = ({
     </EditorRoot>
   )
 }
-
-const EditorRoot = styled.section`
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 0;
-  overflow: hidden;
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-  color: ${({ theme }) => theme.colors.gray12};
-`
-
-const EditorToolbar = styled.div`
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 12px;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-
-  @media (max-width: 820px) {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-`
-
-const ToolbarGroup = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
-
-  @media (max-width: 820px) {
-    width: 100%;
-  }
-`
-
-const ToolbarButton = styled.button`
-  border: 1px solid transparent;
-  border-radius: 4px;
-  height: 31px;
-  min-width: 31px;
-  padding: 0 8px;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
-  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  cursor: pointer;
-
-  &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-`
-
-const ToolbarUploadButton = styled.label`
-  border: 1px solid transparent;
-  border-radius: 4px;
-  height: 31px;
-  min-width: 31px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 8px;
-  color: ${({ theme }) => theme.colors.gray10};
-  font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  cursor: pointer;
-
-  &:hover:not([aria-disabled="true"]) {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &[aria-disabled="true"] {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  input {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    opacity: 0;
-    pointer-events: none;
-  }
-`
-
-const ToolbarError = styled.div`
-  padding: 0.55rem 0.85rem;
-  border-bottom: 1px solid rgba(248, 81, 73, 0.35);
-  background: rgba(248, 81, 73, 0.1);
-  color: #ffb4ad;
-  font-size: 0.86rem;
-  font-weight: 600;
-`
-
-const EditorBody = styled.div`
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-
-  &[data-mode="write"],
-  &[data-mode="preview"] {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  &[data-mode="preview"] [data-testid="markdown-editor-preview-scroll"] {
-    max-width: 820px;
-  }
-
-  @media (max-width: 1100px) {
-    grid-template-columns: minmax(0, 1fr);
-
-    &[data-mode="split"] [data-pane="write"] {
-      height: 46vh;
-      border-right: 0;
-      border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-    }
-
-    &[data-mode="split"] [data-pane="preview"] {
-      height: auto;
-    }
-  }
-`
-
-const WritePane = styled.div`
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: auto;
-  border-right: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: #0f1728;
-`
-
-const WriteEditorFrame = styled.div`
-  min-height: 100%;
-  background: #0f1728;
-  color: #dbe7ff;
-`
-
-const MarkdownTextarea = styled.textarea`
-  width: 100%;
-  height: 100%;
-  min-height: 640px;
-  max-width: none;
-  padding: 30px 32px;
-  border: 0;
-  outline: none;
-  resize: none;
-  background: #0f1728;
-  color: #d9e4f7;
-  caret-color: #dbe7ff;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.78;
-  tab-size: 2;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-
-  &::selection {
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 139, 253, 0.45)" : "rgba(9, 105, 218, 0.24)")};
-  }
-
-  &:focus,
-  &:focus-visible {
-    outline: 0;
-    box-shadow: none;
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.7;
-  }
-
-  @media (max-width: 820px) {
-    padding: 22px 18px;
-  }
-`
-
-const PreviewPane = styled.div`
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-`
-
-const PreviewArticle = styled.article`
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 48px 44px 110px;
-  background: ${({ theme }) => theme.publicDesign.readableSurface};
-
-  .aq-markdown {
-    width: min(100%, 760px);
-    max-width: 760px;
-    margin-top: 0;
-    margin-inline: auto;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  .aq-markdown > :first-child {
-    margin-top: 0;
-  }
-
-  @media (max-width: 820px) {
-    padding: 34px 20px 90px;
-  }
-`
-
-const PreviewHeader = styled.header`
-  width: min(100%, 760px);
-  max-width: 760px;
-  margin: 0 auto 34px;
-
-  span {
-    display: block;
-    margin-bottom: 14px;
-    color: ${({ theme }) => theme.publicDesign.accent};
-    font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    margin: 12px 0 18px;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 43px;
-    font-weight: 850;
-    line-height: 1.13;
-    letter-spacing: -0.055em;
-  }
-
-  p {
-    margin: 0;
-    padding: 4px 0 4px 20px;
-    border-left: 3px solid ${({ theme }) => theme.publicDesign.accent};
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 18px;
-    line-height: 1.75;
-  }
-`

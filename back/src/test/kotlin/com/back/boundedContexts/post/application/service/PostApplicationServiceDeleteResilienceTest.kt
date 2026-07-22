@@ -127,6 +127,7 @@ class PostApplicationServiceDeleteResilienceTest {
             postHydrationService = postHydrationService,
             postCounterService = postCounterService,
             postInteractionSideEffectQueue = postInteractionSideEffectQueue,
+            postReadCacheInvalidator = postReadCacheInvalidator,
         )
 
     private val service =
@@ -145,6 +146,7 @@ class PostApplicationServiceDeleteResilienceTest {
             postTempDraftService = postTempDraftService,
             postCommentApplicationService = postCommentApplicationService,
             postLikeApplicationService = postLikeApplicationService,
+            postReadCacheInvalidator = postReadCacheInvalidator,
         )
 
     @Test

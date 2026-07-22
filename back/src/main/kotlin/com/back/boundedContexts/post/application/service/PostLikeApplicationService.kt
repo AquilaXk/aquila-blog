@@ -20,6 +20,7 @@ class PostLikeApplicationService(
     private val postHydrationService: PostHydrationService,
     private val postCounterService: PostCounterService,
     private val postInteractionSideEffectQueue: PostInteractionSideEffectQueue,
+    private val postReadCacheInvalidator: PostReadCacheInvalidator,
 ) {
     @Transactional
     fun like(
@@ -40,6 +41,7 @@ class PostLikeApplicationService(
             val recoveredLikeId = postLikeRepository.insertIfAbsent(persistenceActor, post)
             if (recoveredLikeId == null) {
                 postCounterService.syncLikesCount(post)
+                postReadCacheInvalidator.invalidateRankedSortHotPages("like-sync")
                 return PostLikeToggleResult(
                     isLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post),
                     likeId = 0L,
@@ -48,12 +50,14 @@ class PostLikeApplicationService(
 
             postCounterService.incrementLikesCount(post)
             postRepository.flush()
+            postReadCacheInvalidator.invalidateRankedSortHotPages("like")
             enqueueLiked(post, actor, recoveredLikeId)
             return PostLikeToggleResult(true, recoveredLikeId)
         }
 
         postCounterService.incrementLikesCount(post)
         postRepository.flush()
+        postReadCacheInvalidator.invalidateRankedSortHotPages("like")
         enqueueLiked(post, actor, insertedLikeId)
 
         return PostLikeToggleResult(true, insertedLikeId)
@@ -72,8 +76,10 @@ class PostLikeApplicationService(
         val deletedCount = postLikeRepository.deleteByLikerAndPost(persistenceActor, post)
         if (deletedCount > 1) {
             postCounterService.syncLikesCount(post)
+            postReadCacheInvalidator.invalidateRankedSortHotPages("like-sync")
         } else if (deletedCount == 1) {
             postCounterService.decrementLikesCount(post)
+            postReadCacheInvalidator.invalidateRankedSortHotPages("unlike")
         } else {
             postCounterService.ensureLikesCountLoaded(post)
         }

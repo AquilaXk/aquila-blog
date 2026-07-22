@@ -51,6 +51,7 @@ class PostApplicationService(
     private val postTempDraftService: PostTempDraftService,
     private val postCommentApplicationService: PostCommentApplicationService,
     private val postLikeApplicationService: PostLikeApplicationService,
+    private val postReadCacheInvalidator: PostReadCacheInvalidator,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
@@ -500,7 +501,10 @@ class PostApplicationService(
     ): PostLikeToggleResult = postLikeApplicationService.readLikeSnapshot(post, actor)
 
     @Transactional
-    fun incrementHit(post: Post) = postCounterService.incrementHit(post)
+    fun incrementHit(post: Post) {
+        postCounterService.incrementHit(post)
+        postReadCacheInvalidator.invalidateRankedSortHotPages("hit")
+    }
 
     fun getComments(
         post: Post,

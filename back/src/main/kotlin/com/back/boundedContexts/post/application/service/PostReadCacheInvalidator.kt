@@ -26,7 +26,21 @@ class PostReadCacheInvalidator(
             PostSearchSortType1.HIT_COUNT,
             PostSearchSortType1.LIKES_COUNT,
         )
+    private val rankedSorts =
+        listOf(
+            PostSearchSortType1.HIT_COUNT,
+            PostSearchSortType1.LIKES_COUNT,
+        )
     private val maxTagCacheEvict = 12
+
+    internal fun invalidateRankedSortHotPages(evictReason: String) {
+        evictHotAndSearchFirstPages(
+            sorts = rankedSorts,
+            includeHotReadPages = true,
+            includeSearchFirstPage = true,
+            evictReason = evictReason,
+        )
+    }
 
     internal fun invalidateAuthorRepresentation(reason: String) {
         listOf(
@@ -73,35 +87,19 @@ class PostReadCacheInvalidator(
         ) {
             adminPostsFirstPageCache?.evict("page=1:size=20:sort=${PostSearchSortType1.CREATED_AT.name}")
             recordCacheEvict(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "key", request.evictReason)
-            hotPageSizes.forEach { pageSize ->
-                hotSorts.forEach { sort ->
-                    val sortName = sort.name
-                    if (request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES)) {
-                        feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
-                        recordCacheEvict(PostQueryCacheNames.FEED, "key", request.evictReason)
-                        exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
-                        recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", request.evictReason)
-                        feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
-                        recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", request.evictReason)
-                        exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
-                        recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", request.evictReason)
-                        bootstrapCache?.evict(
-                            PostPublicReadQueryService.buildBootstrapCacheKey(
-                                pageSize = pageSize,
-                                sort = sort,
-                                tag = "",
-                            ),
-                        )
-                        recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", request.evictReason)
-                    }
-                    if (request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE)) {
-                        searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                        recordCacheEvict(PostQueryCacheNames.SEARCH, "key", request.evictReason)
-                        searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                        recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "key", request.evictReason)
-                    }
-                }
-            }
+            evictHotAndSearchFirstPages(
+                sorts = hotSorts,
+                includeHotReadPages = request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES),
+                includeSearchFirstPage = request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE),
+                evictReason = request.evictReason,
+                feedCache = feedCache,
+                exploreCache = exploreCache,
+                feedCursorFirstCache = feedCursorFirstCache,
+                exploreCursorFirstCache = exploreCursorFirstCache,
+                bootstrapCache = bootstrapCache,
+                searchCache = searchCache,
+                searchNegativeCache = searchNegativeCache,
+            )
         }
 
         if (request.evicts(PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES)) {
@@ -118,6 +116,50 @@ class PostReadCacheInvalidator(
     }
 
     private fun PostReadCacheInvalidationRequest.evicts(target: PostReadCacheInvalidationTarget): Boolean = scope.evicts(target)
+
+    private fun evictHotAndSearchFirstPages(
+        sorts: List<PostSearchSortType1>,
+        includeHotReadPages: Boolean,
+        includeSearchFirstPage: Boolean,
+        evictReason: String,
+        feedCache: Cache? = cacheManager.getCache(PostQueryCacheNames.FEED),
+        exploreCache: Cache? = cacheManager.getCache(PostQueryCacheNames.EXPLORE),
+        feedCursorFirstCache: Cache? = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST),
+        exploreCursorFirstCache: Cache? = cacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST),
+        bootstrapCache: Cache? = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP),
+        searchCache: Cache? = cacheManager.getCache(PostQueryCacheNames.SEARCH),
+        searchNegativeCache: Cache? = cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE),
+    ) {
+        hotPageSizes.forEach { pageSize ->
+            sorts.forEach { sort ->
+                val sortName = sort.name
+                if (includeHotReadPages) {
+                    feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
+                    recordCacheEvict(PostQueryCacheNames.FEED, "key", evictReason)
+                    exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
+                    recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", evictReason)
+                    feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
+                    recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
+                    exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
+                    recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", evictReason)
+                    bootstrapCache?.evict(
+                        PostPublicReadQueryService.buildBootstrapCacheKey(
+                            pageSize = pageSize,
+                            sort = sort,
+                            tag = "",
+                        ),
+                    )
+                    recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
+                }
+                if (includeSearchFirstPage) {
+                    searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                    recordCacheEvict(PostQueryCacheNames.SEARCH, "key", evictReason)
+                    searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                    recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "key", evictReason)
+                }
+            }
+        }
+    }
 
     private fun evictImpactedTagPages(
         request: PostReadCacheInvalidationRequest,

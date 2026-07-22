@@ -108,6 +108,12 @@ export type LocalDraftAutosaveDecisionInput = {
    */
   baselineFingerprint?: string | null
   /**
+   * True while a postOne/postTemp request is still in flight.
+   * Shared loadingKey can be cleared by uploadThumbnail (etc.) before the load settles;
+   * block schedule until the actual post-load counter reaches zero.
+   */
+  isPostLoadInFlight?: boolean
+  /**
    * True while post-id field transition keeps create mode with a pending postId.
    * Blocks create-slot autosave of foreign edit body until load settles.
    */
@@ -149,6 +155,11 @@ export const decideLocalDraftAutosave = (
       return { action: "adopt-baseline-and-schedule", fingerprint: baseline }
     }
     return { action: "adopt-baseline", fingerprint: baseline }
+  }
+
+  // Post load still running even if a non-baseline key cleared shared loadingKey first.
+  if (input.isPostLoadInFlight) {
+    return { action: "skip" }
   }
 
   // ID-change create transition: do not autosave previous edit body into create.v2.
@@ -280,7 +291,9 @@ export const useEditorStudioLocalDraftLifecycle = ({
   postVersionRef.current = postVersion
   const pendingSuccessfulBaselineSettleRef = useRef(false)
   const pendingBaselineFingerprintRef = useRef<string | null>(null)
+  const postLoadInFlightCountRef = useRef(0)
   const [baselineReadyEpoch, setBaselineReadyEpoch] = useState(0)
+  const [postLoadInFlightEpoch, setPostLoadInFlightEpoch] = useState(0)
   const [postIdTransitionAwaitingLoad, setPostIdTransitionAwaitingLoad] = useState(false)
   const prevEditorModeRef = useRef(editorMode)
   const prevPostIdRef = useRef(postId)
@@ -292,6 +305,9 @@ export const useEditorStudioLocalDraftLifecycle = ({
   )
   const isPostIdTransitionGatedRef = useRef(isPostIdTransitionGated)
   isPostIdTransitionGatedRef.current = isPostIdTransitionGated
+  const isPostLoadInFlight = postLoadInFlightCountRef.current > 0
+  const isPostLoadInFlightRef = useRef(isPostLoadInFlight)
+  isPostLoadInFlightRef.current = isPostLoadInFlight
 
   useEffect(() => {
     const normalizedPostId = postId.trim()
@@ -338,6 +354,16 @@ export const useEditorStudioLocalDraftLifecycle = ({
     setBaselineReadyEpoch((value) => value + 1)
   }, [])
 
+  const beginLocalDraftPostLoad = useCallback(() => {
+    postLoadInFlightCountRef.current += 1
+    setPostLoadInFlightEpoch((value) => value + 1)
+  }, [])
+
+  const endLocalDraftPostLoad = useCallback(() => {
+    postLoadInFlightCountRef.current = Math.max(0, postLoadInFlightCountRef.current - 1)
+    setPostLoadInFlightEpoch((value) => value + 1)
+  }, [])
+
   const localDraftCore = useMemo(
     () => ({
       title: postTitle,
@@ -378,6 +404,10 @@ export const useEditorStudioLocalDraftLifecycle = ({
   }) => {
     // Skip while load/switch transitions: postId/editorMode can settle before content does.
     if (loadingKeyRef.current.length > 0) {
+      return
+    }
+    // Shared loadingKey may already be idle while postOne/postTemp is still fetching.
+    if (isPostLoadInFlightRef.current) {
       return
     }
     // ID field changed to create+pending postId: do not write previous body into create.v2.
@@ -460,12 +490,16 @@ export const useEditorStudioLocalDraftLifecycle = ({
         setPostVersion(null)
       }
       // Same post without stored version: keep current postVersion for modify/temp-publish.
+      // Same open temp post: keep isTempDraftMode so restore stays on publish-temp path.
+      if (draft.source.postId !== postId) {
+        setIsTempDraftMode(false)
+      }
     } else {
       setEditorMode("create")
       setPostId("")
       setPostVersion(null)
+      setIsTempDraftMode(false)
     }
-    setIsTempDraftMode(false)
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
     lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
@@ -622,6 +656,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
       loadingKey,
       shouldAdoptBaseline,
       baselineFingerprint,
+      isPostLoadInFlight,
       isPostIdTransitionGated,
       hasDraftContent,
       editorFingerprint: localDraftFingerprint,
@@ -657,12 +692,14 @@ export const useEditorStudioLocalDraftLifecycle = ({
     dedupeStrings,
     draftSource,
     isPostIdTransitionGated,
+    isPostLoadInFlight,
     lastLocalDraftFingerprintRef,
     loadingKey,
     localDraftFingerprint,
     normalizeCategoryValue,
     postCategory,
     postContent,
+    postLoadInFlightEpoch,
     postSummary,
     postTags,
     postThumbnailUrl,
@@ -677,5 +714,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
     restoreLocalDraft,
     clearLocalDraft,
     signalLocalDraftBaselineReady,
+    beginLocalDraftPostLoad,
+    endLocalDraftPostLoad,
   }
 }

@@ -591,6 +591,53 @@ test.describe("editor local draft context slots", () => {
     ).toEqual({ action: "adopt-baseline", fingerprint: serverFingerprint })
   })
 
+  test("blocks autosave schedule while post load is in flight even if loadingKey is idle", () => {
+    // Concurrent uploadThumbnail (etc.) can clear shared loadingKey before postOne settles.
+    // Stale editor body must not schedule into the newly targeted slot draft.
+    const previousPostFingerprint = '{"title":"previous-post-body"}'
+    const targetSlotDraftFingerprint = '{"title":"target-slot-draft"}'
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: false,
+        isPostLoadInFlight: true,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: previousPostFingerprint,
+        lastArmedFingerprint: "",
+        pendingRestorableDraftFingerprint: targetSlotDraftFingerprint,
+      })
+    ).toEqual({ action: "skip" })
+
+    // Success settle still adopts baseline even if the in-flight flag races the signal.
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: true,
+        isPostLoadInFlight: true,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: '{"title":"server-loaded"}',
+        lastArmedFingerprint: "",
+        pendingRestorableDraftFingerprint: targetSlotDraftFingerprint,
+      })
+    ).toEqual({ action: "adopt-baseline", fingerprint: '{"title":"server-loaded"}' })
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: false,
+        isPostLoadInFlight: false,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: previousPostFingerprint,
+        lastArmedFingerprint: "",
+        pendingRestorableDraftFingerprint: targetSlotDraftFingerprint,
+      })
+    ).toEqual({ action: "schedule" })
+  })
+
   test("failed load/publish settle does not adopt baseline without success signal", () => {
     const dirtyFingerprint = '{"title":"unsaved-edit"}'
     const baselineFingerprint = '{"title":"baseline"}'

@@ -224,6 +224,8 @@ export const useEditorStudioDraftLifecycle = ({
     restoreLocalDraft,
     clearLocalDraft,
     signalLocalDraftBaselineReady,
+    beginLocalDraftPostLoad,
+    endLocalDraftPostLoad,
   } = useEditorStudioLocalDraftLifecycle({
     buildLocalDraftFingerprint,
     dedupeStrings,
@@ -356,6 +358,7 @@ export const useEditorStudioDraftLifecycle = ({
     targetPostId: string = postId,
     options: LoadPostForEditorOptions = {}
   ) => {
+    beginLocalDraftPostLoad()
     try {
       setLoadingKey("postOne")
       const normalizedTargetPostId = targetPostId.trim()
@@ -437,12 +440,15 @@ export const useEditorStudioDraftLifecycle = ({
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
     } finally {
+      endLocalDraftPostLoad()
       setLoadingKey("")
     }
   }, [
     applyLoadedPostContext,
+    beginLocalDraftPostLoad,
     buildEditorStateFingerprint,
     buildEmptyEditorMetaSnapshot,
+    endLocalDraftPostLoad,
     isBlankServerTempDraft,
     postId,
     pretty,
@@ -475,6 +481,7 @@ export const useEditorStudioDraftLifecycle = ({
     source?: string
     returnTo?: string
   }) => {
+    beginLocalDraftPostLoad()
     try {
       setLoadingKey("postTemp")
       setPublishStatus({ tone: "loading", text: "새 글을 준비하고 있습니다..." }, "page")
@@ -538,12 +545,15 @@ export const useEditorStudioDraftLifecycle = ({
       setResult(pretty({ error: message }))
       setIsNewEditorBootstrapPending(false)
     } finally {
+      endLocalDraftPostLoad()
       setLoadingKey("")
     }
   }, [
     applyLoadedPostContext,
+    beginLocalDraftPostLoad,
     buildEditorStateFingerprint,
     buildEmptyEditorMetaSnapshot,
+    endLocalDraftPostLoad,
     isBlankServerTempDraft,
     isCompactMobileLayout,
     pretty,

@@ -107,6 +107,7 @@ export const MarkdownEditor = ({
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
+  const documentGenerationRef = useRef(0)
   const uploadInFlightCountRef = useRef(0)
   const allowNativeTabAfterEscapeRef = useRef(false)
   const modeRef = useRef<MarkdownEditorMode>(mode)
@@ -133,6 +134,8 @@ export const MarkdownEditor = ({
     if (value === valueRef.current) return
     valueRef.current = value
     setDraftValue(value)
+    // External replace (e.g. restoreLocalDraft) — invalidate in-flight placeholder completions.
+    documentGenerationRef.current += 1
   }, [value])
 
   useEffect(() => {
@@ -460,6 +463,7 @@ export const MarkdownEditor = ({
       disabled,
       valueRef,
       selectionRef,
+      documentGenerationRef,
       onUploadImage,
       onUploadFile,
       applyPlannedMarkdownMutation,

@@ -12,13 +12,27 @@ export const createUploadPlaceholderId = (): string => {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+/** Normalize + escape file names used inside uploading placeholders. */
+export const sanitizeUploadPlaceholderFileName = (fileName: string): string => {
+  const normalized = String(fileName || "")
+    .replace(/[\r\n\u2028\u2029]+/g, " ")
+    .trim()
+  return escapeMarkdownLinkLabel(normalized || "file")
+}
+
+/** Append missing-placeholder results only when the document was not externally replaced. */
+export const shouldAppendMissingPlaceholder = (
+  startedGeneration: number,
+  currentGeneration: number
+): boolean => startedGeneration === currentGeneration
+
 /** GitHub-style uploading image placeholder (Korean label + unique upload id). */
 export const buildUploadingImagePlaceholder = (fileName: string, uploadId: string): string =>
-  `![업로드 중: ${fileName} · ${uploadId}…]()`
+  `![업로드 중: ${sanitizeUploadPlaceholderFileName(fileName)} · ${uploadId}…]()`
 
 /** Uploading attachment placeholder aligned with image paste/drop UX. */
 export const buildUploadingAttachmentPlaceholder = (fileName: string, uploadId: string): string =>
-  `[업로드 중: ${fileName} · ${uploadId}…]()`
+  `[업로드 중: ${sanitizeUploadPlaceholderFileName(fileName)} · ${uploadId}…]()`
 
 export const isImageFile = (file: File): boolean => file.type.startsWith("image/")
 

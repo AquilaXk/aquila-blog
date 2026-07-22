@@ -18,6 +18,8 @@ import {
   planTransferFileReservations,
   readClipboardPlainText,
   resolvePasteMediaRoute,
+  sanitizeUploadPlaceholderFileName,
+  shouldAppendMissingPlaceholder,
   toInlineMarkdownSnippet,
 } from "../../src/components/markdown-editor/markdownEditorPasteDropModel"
 import {
@@ -50,6 +52,17 @@ test.describe("markdown editor paste/drop model", () => {
     expect(buildUploadingAttachmentPlaceholder("notes.pdf", firstId)).toBe(
       "[업로드 중: notes.pdf · upload-a…]()"
     )
+    expect(sanitizeUploadPlaceholderFileName("evil](https://x)\n.png")).toBe(
+      "evil\\](https://x) .png"
+    )
+    expect(buildUploadingImagePlaceholder("a]b.png", "id-1")).toBe(
+      "![업로드 중: a\\]b.png · id-1…]()"
+    )
+    expect(buildUploadingAttachmentPlaceholder("a]b.pdf", "id-2")).toBe(
+      "[업로드 중: a\\]b.pdf · id-2…]()"
+    )
+    expect(shouldAppendMissingPlaceholder(3, 3)).toBe(true)
+    expect(shouldAppendMissingPlaceholder(3, 4)).toBe(false)
 
     const sameNameA = buildUploadingImagePlaceholder("shot.png", firstId)
     const sameNameB = buildUploadingImagePlaceholder("shot.png", secondId)
@@ -309,6 +322,7 @@ test.describe("markdown editor paste/drop model", () => {
     expect(editorSource).toContain("useMarkdownEditorMediaTransfers")
     expect(editorSource).toContain("applyBackgroundMarkdownMutation")
     expect(editorSource).toContain("clearUploadError")
+    expect(editorSource).toContain("documentGenerationRef")
 
     expect(mediaSource).toContain("buildUploadingImagePlaceholder")
     expect(mediaSource).toContain("createUploadPlaceholderId")
@@ -320,12 +334,15 @@ test.describe("markdown editor paste/drop model", () => {
     expect(mediaSource).toContain("processTransferFiles")
     expect(mediaSource).toContain("applyBackgroundMarkdownMutation")
     expect(mediaSource).toContain("retainedUploadErrorRef")
+    expect(mediaSource).toContain("shouldAppendMissingPlaceholder")
+    expect(mediaSource).toContain("startedGeneration")
 
     expect(modelSource).toContain("![업로드 중:")
     expect(modelSource).toContain("createUploadPlaceholderId")
     expect(modelSource).toContain("resolvePasteMediaRoute")
     expect(modelSource).toContain("escapeMarkdownLinkLabel")
     expect(modelSource).toContain("escapeMarkdownLinkDestination")
+    expect(modelSource).toContain("sanitizeUploadPlaceholderFileName")
     expect(modelSource).toContain("planTransferFileReservations")
     expect(rootModelSource).toContain(
       'export { extractImageFileFromClipboard } from "src/components/markdown-editor/markdownEditorPasteDropModel"'

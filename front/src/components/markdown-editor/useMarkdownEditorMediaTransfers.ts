@@ -17,6 +17,7 @@ import {
   planTransferFileReservations,
   readClipboardPlainText,
   resolvePasteMediaRoute,
+  shouldAppendMissingPlaceholder,
   toInlineMarkdownSnippet,
   type ReservedTransferJob,
 } from "./markdownEditorPasteDropModel"
@@ -43,6 +44,7 @@ type UseMarkdownEditorMediaTransfersArgs = {
   disabled: boolean
   valueRef: MutableRefObject<string>
   selectionRef: MutableRefObject<TextareaSelection>
+  documentGenerationRef: MutableRefObject<number>
   onUploadImage?: (file: File) => Promise<MarkdownImageUploadResult>
   onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
   applyPlannedMarkdownMutation: (plan: PlannedTextMutation, options?: MarkdownMutationOptions) => boolean
@@ -58,6 +60,7 @@ export const useMarkdownEditorMediaTransfers = ({
   disabled,
   valueRef,
   selectionRef,
+  documentGenerationRef,
   onUploadImage,
   onUploadFile,
   applyPlannedMarkdownMutation,
@@ -91,8 +94,18 @@ export const useMarkdownEditorMediaTransfers = ({
     [applyPlannedMarkdownMutation, resolveActiveSelection]
   )
 
+  /**
+   * Replace placeholder in-place when still present.
+   * If missing: append only when the document generation is unchanged (user edited placeholder).
+   * If generation advanced (draft restore / external replace), drop the completion silently.
+   */
   const replaceExactOrAppend = useCallback(
-    (exact: string, inlineReplacement: string, appendMarkdown: string) => {
+    (
+      exact: string,
+      inlineReplacement: string,
+      appendMarkdown: string,
+      startedGeneration: number
+    ) => {
       const selectionFrom = selectionRef.current.from
       const selectionTo = selectionRef.current.to
       const plan = planReplaceExactSubstring(
@@ -106,11 +119,14 @@ export const useMarkdownEditorMediaTransfers = ({
         applyBackgroundMarkdownMutation(plan)
         return
       }
+      if (!shouldAppendMissingPlaceholder(startedGeneration, documentGenerationRef.current)) {
+        return
+      }
       applyBackgroundMarkdownMutation(
         planAppendAtEnd(valueRef.current, appendMarkdown, selectionFrom, selectionTo)
       )
     },
-    [applyBackgroundMarkdownMutation, selectionRef, valueRef]
+    [applyBackgroundMarkdownMutation, documentGenerationRef, selectionRef, valueRef]
   )
 
   const removeExactPlaceholder = useCallback(
@@ -128,9 +144,14 @@ export const useMarkdownEditorMediaTransfers = ({
   )
 
   const completeReservedImageUpload = useCallback(
-    async (file: File, placeholder: string, options?: { manageInFlight?: boolean }) => {
+    async (
+      file: File,
+      placeholder: string,
+      options?: { manageInFlight?: boolean; startedGeneration: number }
+    ) => {
       if (!onUploadImage) return
       const manageInFlight = options?.manageInFlight !== false
+      const startedGeneration = options?.startedGeneration ?? documentGenerationRef.current
       if (manageInFlight) setUploadInFlight(1)
       let uploaded: MarkdownImageUploadResult
       try {
@@ -150,15 +171,32 @@ export const useMarkdownEditorMediaTransfers = ({
         return
       }
 
-      replaceExactOrAppend(placeholder, toInlineMarkdownSnippet(resolved.markdown), resolved.markdown)
+      replaceExactOrAppend(
+        placeholder,
+        toInlineMarkdownSnippet(resolved.markdown),
+        resolved.markdown,
+        startedGeneration
+      )
     },
-    [onUploadImage, removeExactPlaceholder, replaceExactOrAppend, reportUploadError, setUploadInFlight]
+    [
+      documentGenerationRef,
+      onUploadImage,
+      removeExactPlaceholder,
+      replaceExactOrAppend,
+      reportUploadError,
+      setUploadInFlight,
+    ]
   )
 
   const completeReservedAttachmentUpload = useCallback(
-    async (file: File, placeholder: string, options?: { manageInFlight?: boolean }) => {
+    async (
+      file: File,
+      placeholder: string,
+      options?: { manageInFlight?: boolean; startedGeneration: number }
+    ) => {
       if (!onUploadFile) return
       const manageInFlight = options?.manageInFlight !== false
+      const startedGeneration = options?.startedGeneration ?? documentGenerationRef.current
       if (manageInFlight) setUploadInFlight(1)
       let uploaded: MarkdownFileUploadResult
       try {
@@ -178,13 +216,28 @@ export const useMarkdownEditorMediaTransfers = ({
         return
       }
 
-      replaceExactOrAppend(placeholder, toInlineMarkdownSnippet(resolved.markdown), resolved.markdown)
+      replaceExactOrAppend(
+        placeholder,
+        toInlineMarkdownSnippet(resolved.markdown),
+        resolved.markdown,
+        startedGeneration
+      )
     },
-    [onUploadFile, removeExactPlaceholder, replaceExactOrAppend, reportUploadError, setUploadInFlight]
+    [
+      documentGenerationRef,
+      onUploadFile,
+      removeExactPlaceholder,
+      replaceExactOrAppend,
+      reportUploadError,
+      setUploadInFlight,
+    ]
   )
 
   const completeReservedJob = useCallback(
-    async (job: ReservedTransferJob, options?: { manageInFlight?: boolean }) => {
+    async (
+      job: ReservedTransferJob,
+      options: { manageInFlight?: boolean; startedGeneration: number }
+    ) => {
       if (job.kind === "image") {
         await completeReservedImageUpload(job.file, job.placeholder, options)
         return
@@ -198,11 +251,18 @@ export const useMarkdownEditorMediaTransfers = ({
     async (file: File) => {
       if (!onUploadImage) return
       clearUploadError()
+      const startedGeneration = documentGenerationRef.current
       const placeholder = buildUploadingImagePlaceholder(file.name || "image", createUploadPlaceholderId())
       insertAtActiveSelection(placeholder)
-      await completeReservedImageUpload(file, placeholder)
+      await completeReservedImageUpload(file, placeholder, { startedGeneration })
     },
-    [clearUploadError, completeReservedImageUpload, insertAtActiveSelection, onUploadImage]
+    [
+      clearUploadError,
+      completeReservedImageUpload,
+      documentGenerationRef,
+      insertAtActiveSelection,
+      onUploadImage,
+    ]
   )
 
   const handleImageInput = useCallback(
@@ -263,6 +323,7 @@ export const useMarkdownEditorMediaTransfers = ({
   const processTransferFiles = useCallback(
     async (files: readonly File[]) => {
       clearUploadError()
+      const startedGeneration = documentGenerationRef.current
 
       const { jobs, errors } = planTransferFileReservations(files, {
         canUploadImage: Boolean(onUploadImage),
@@ -287,7 +348,7 @@ export const useMarkdownEditorMediaTransfers = ({
       setUploadInFlight(jobs.length)
       try {
         for (const job of jobs) {
-          await completeReservedJob(job, { manageInFlight: false })
+          await completeReservedJob(job, { manageInFlight: false, startedGeneration })
         }
       } finally {
         setUploadInFlight(-jobs.length)
@@ -296,6 +357,7 @@ export const useMarkdownEditorMediaTransfers = ({
     [
       clearUploadError,
       completeReservedJob,
+      documentGenerationRef,
       insertAtActiveSelection,
       onUploadFile,
       onUploadImage,

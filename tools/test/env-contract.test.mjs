@@ -398,7 +398,11 @@ test("homeserver monitoring runtime files stay readable by container users", () 
   assert.match(steadyStateGuard, /find "\$\{SCRIPT_DIR\}\/monitoring" -type d -exec chmod 0755/)
   assert.match(deployScript, /find "\$\{SCRIPT_DIR\}\/monitoring" -type f -exec chmod 0644/)
   assert.match(steadyStateGuard, /find "\$\{SCRIPT_DIR\}\/monitoring" -type f -exec chmod 0644/)
-  assert.match(deployScript, /compose_up_no_deps_with_retry alertmanager loki promtail prometheus grafana/)
+  assert.match(
+    deployScript,
+    /compose_up_force_recreate_no_deps_with_retry[\s\S]*?alertmanager loki promtail prometheus grafana[\s\S]*?public_edge_probe docker_runtime_probe postgres_exporter/,
+  )
+  assert.match(deployScript, /compose up -d --force-recreate --no-deps/)
   assert.match(deployScript, /grafana cli admin reset-admin-password "\$\{grafana_password\}"/)
   assert.match(steadyStateGuard, /grafana cli admin reset-admin-password "\$\{grafana_password\}"/)
 })

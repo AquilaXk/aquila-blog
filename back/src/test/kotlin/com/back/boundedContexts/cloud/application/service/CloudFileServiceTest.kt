@@ -1138,6 +1138,8 @@ class CloudFileServiceTest {
         override fun findActiveByObjectKey(objectKey: String): CloudFile? =
             savedFiles.firstOrNull { it.objectKey == objectKey && it.deletedAt == null }
 
+        override fun findByObjectKey(objectKey: String): CloudFile? = savedFiles.firstOrNull { it.objectKey == objectKey }
+
         override fun findActiveByObjectKeyStartingWith(
             objectKeyPrefix: String,
             limit: Int,

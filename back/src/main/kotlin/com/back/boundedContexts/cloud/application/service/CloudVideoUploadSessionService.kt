@@ -557,29 +557,7 @@ class CloudVideoUploadSessionService(
     private fun finishCommittedSession(session: CloudVideoUploadSession): CloudFile {
         val parts = partRepository.findBySessionId(session.id).sortedBy { it.partNumber }
         val checksumSha256 = verifyCommittedObjectIntegrity(session, parts)
-        val existing = cloudFileRepository.findActiveByObjectKey(session.objectKey)
-        val file =
-            existing
-                ?: runCatching {
-                    cloudFileRepository.save(
-                        CloudFile.create(
-                            ownerMemberId = session.ownerMemberId,
-                            objectKey = session.objectKey,
-                            originalFilename = session.originalFilename,
-                            contentType = session.contentType,
-                            byteSize = session.byteSize,
-                            mediaKind = CloudFileMediaKind.VIDEO,
-                            folderPath = session.folderPath,
-                            checksumSha256 = checksumSha256,
-                        ),
-                    )
-                }.getOrElse { exception ->
-                    if (exception !is DataIntegrityViolationException) {
-                        throw exception
-                    }
-                    cloudFileRepository.findActiveByObjectKey(session.objectKey)
-                        ?: throw exception
-                }
+        val file = resolveOrCreateCommittedFile(session, checksumSha256)
         // Boolean.and is non-short-circuiting so both sides stay coverage-visible.
         val alreadyCompletedWithSameFile =
             (session.status == CloudVideoUploadSessionStatus.COMPLETED) and
@@ -595,6 +573,55 @@ class CloudVideoUploadSessionService(
             )
         }
         return file
+    }
+
+    private fun resolveOrCreateCommittedFile(
+        session: CloudVideoUploadSession,
+        checksumSha256: String?,
+    ): CloudFile {
+        cloudFileRepository.findActiveByObjectKey(session.objectKey)?.let { return it }
+        cloudFileRepository.findByObjectKey(session.objectKey)?.let { softDeleted ->
+            return reactivateSoftDeletedFile(softDeleted, session, checksumSha256)
+        }
+        return runCatching {
+            cloudFileRepository.save(
+                CloudFile.create(
+                    ownerMemberId = session.ownerMemberId,
+                    objectKey = session.objectKey,
+                    originalFilename = session.originalFilename,
+                    contentType = session.contentType,
+                    byteSize = session.byteSize,
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = session.folderPath,
+                    checksumSha256 = checksumSha256,
+                ),
+            )
+        }.getOrElse { exception ->
+            if (exception !is DataIntegrityViolationException) {
+                throw exception
+            }
+            cloudFileRepository.findActiveByObjectKey(session.objectKey)
+                ?: cloudFileRepository.findByObjectKey(session.objectKey)?.let { softDeleted ->
+                    reactivateSoftDeletedFile(softDeleted, session, checksumSha256)
+                }
+                ?: throw exception
+        }
+    }
+
+    private fun reactivateSoftDeletedFile(
+        softDeleted: CloudFile,
+        session: CloudVideoUploadSession,
+        checksumSha256: String?,
+    ): CloudFile {
+        softDeleted.restoreForCommittedUpload(
+            originalFilename = session.originalFilename,
+            contentType = session.contentType,
+            byteSize = session.byteSize,
+            mediaKind = CloudFileMediaKind.VIDEO,
+            folderPath = session.folderPath,
+            checksumSha256 = checksumSha256,
+        )
+        return cloudFileRepository.save(softDeleted)
     }
 
     private fun verifyCommittedObjectIntegrity(
@@ -675,11 +702,22 @@ class CloudVideoUploadSessionService(
 
     private fun completedFileDto(session: CloudVideoUploadSession): CloudFileDto {
         val fileId = session.completedFileId
-        val file =
+        val active =
             fileId?.let { cloudFileRepository.findActiveByIdAndOwner(it, session.ownerMemberId) }
                 ?: cloudFileRepository.findActiveByObjectKey(session.objectKey)
-                ?: throw AppException("500-1", "완료된 업로드 파일을 찾을 수 없습니다.")
-        return file.toDto()
+        if (active != null) {
+            return active.toDto()
+        }
+        val softDeleted =
+            cloudFileRepository.findByObjectKey(session.objectKey)?.takeIf { file ->
+                file.ownerMemberId == session.ownerMemberId &&
+                    (fileId == null || file.id == fileId)
+            } ?: throw AppException("500-1", "완료된 업로드 파일을 찾을 수 없습니다.")
+        return reactivateSoftDeletedFile(
+            softDeleted,
+            session,
+            checksumSha256 = softDeleted.checksumSha256,
+        ).toDto()
     }
 
     private fun abortStaleIntermediateSession(

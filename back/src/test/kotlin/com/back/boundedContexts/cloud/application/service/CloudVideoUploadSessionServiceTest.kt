@@ -324,6 +324,86 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
+    @DisplayName("완료 시 soft-deleted CloudFile이 있으면 재활성 후 세션을 완료한다")
+    fun `완료 시 soft-deleted CloudFile이 있으면 재활성 후 세션을 완료한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "videos",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val storedSession = sessionRepository.savedSessions.single { it.id == session.id }
+        val softDeleted =
+            fileRepository.seed(
+                CloudFile.create(
+                    ownerMemberId = 7L,
+                    objectKey = storedSession.objectKey,
+                    originalFilename = "old-name.mp4",
+                    contentType = "video/mp4",
+                    byteSize = 1L,
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = "old",
+                    checksumSha256 = "deadbeef",
+                ),
+            )
+        softDeleted.markDeleted(Instant.parse("2026-06-16T00:00:00Z"))
+        fileRepository.seed(softDeleted)
+
+        val completed = service.complete(7L, session.id)
+
+        assertThat(completed.id).isEqualTo(softDeleted.id)
+        assertThat(completed.originalFilename).isEqualTo("movie.mp4")
+        assertThat(completed.folderPath).isEqualTo("videos")
+        assertThat(completed.byteSize).isEqualTo(TEST_PART_SIZE_BYTES)
+        val restored = fileRepository.findActiveByObjectKey(storedSession.objectKey)!!
+        assertThat(restored.id).isEqualTo(softDeleted.id)
+        assertThat(restored.deletedAt).isNull()
+        assertThat(restored.checksumSha256).startsWith("sha256-composite:")
+        assertThat(sessionRepository.savedSessions.last().status).isEqualTo(CloudVideoUploadSessionStatus.COMPLETED)
+        assertThat(sessionRepository.savedSessions.last().completedFileId).isEqualTo(softDeleted.id)
+    }
+
+    @Test
+    @DisplayName("완료 시 unique 충돌 후 soft-deleted CloudFile을 재활성한다")
+    fun `완료 시 unique 충돌 후 soft-deleted CloudFile을 재활성한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "videos",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val storedSession = sessionRepository.savedSessions.single { it.id == session.id }
+        val softDeleted =
+            fileRepository.seed(
+                CloudFile.create(
+                    ownerMemberId = 7L,
+                    objectKey = storedSession.objectKey,
+                    originalFilename = "old-name.mp4",
+                    contentType = "video/mp4",
+                    byteSize = 1L,
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = "old",
+                    checksumSha256 = "deadbeef",
+                ),
+            )
+        softDeleted.markDeleted(Instant.parse("2026-06-16T00:00:00Z"))
+        fileRepository.seed(softDeleted)
+        fileRepository.hideByObjectKeyUntilConflict = true
+
+        val completed = service.complete(7L, session.id)
+
+        assertThat(completed.id).isEqualTo(softDeleted.id)
+        assertThat(fileRepository.findActiveByObjectKey(storedSession.objectKey)?.id).isEqualTo(softDeleted.id)
+        assertThat(sessionRepository.savedSessions.last().completedFileId).isEqualTo(softDeleted.id)
+    }
+
+    @Test
     @DisplayName("완료 시 objectKey 중복 저장 후 재조회 실패는 예외를 유지한다")
     fun `완료 시 objectKey 중복 저장 후 재조회 실패는 예외를 유지한다`() {
         val session =
@@ -692,6 +772,72 @@ class CloudVideoUploadSessionServiceTest {
         assertThat(storage.completedUploads).hasSize(1)
         assertThat(partRepository.findBySessionId(session.id)).hasSize(1)
         assertThat(fileRepository.findActiveByObjectKey(stored.objectKey)).isNull()
+    }
+
+    @Test
+    @DisplayName("stale COMPLETING은 HeadObject가 없으면 abort/delete 없이 유지한다")
+    fun `stale COMPLETING은 HeadObject가 없으면 abort delete 없이 유지한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.COMPLETING
+        stored.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+        storage.objectHeads.remove(stored.objectKey)
+        val staleService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T00:45:00Z"), ZoneOffset.UTC),
+            )
+
+        val recovered = staleService.purgeStaleIntermediateSessions(batchSize = 100)
+
+        assertThat(recovered).isZero()
+        assertThat(storage.abortedUploads).isEmpty()
+        assertThat(storage.deletedObjectKeys).isEmpty()
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.COMPLETING)
+        assertThat(partRepository.findBySessionId(session.id)).hasSize(1)
+    }
+
+    @Test
+    @DisplayName("stale recovery 중 예외는 배치를 중단하지 않고 warn만 남긴다")
+    fun `stale recovery 중 예외는 배치를 중단하지 않고 warn만 남긴다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val stored = sessionRepository.savedSessions.single { it.id == session.id }
+        stored.status = CloudVideoUploadSessionStatus.COMPLETING
+        stored.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+        storage.objectHeads[stored.objectKey] =
+            CloudStoragePort.ObjectHead(
+                objectKey = stored.objectKey,
+                contentLength = stored.byteSize,
+                contentType = "video/mp4",
+                eTag = "etag-committed",
+            )
+        fileRepository.failSave = true
+        val staleService =
+            createService(
+                clock = Clock.fixed(Instant.parse("2026-06-17T00:45:00Z"), ZoneOffset.UTC),
+            )
+
+        val recovered = staleService.purgeStaleIntermediateSessions(batchSize = 100)
+
+        assertThat(recovered).isZero()
+        assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.COMPLETING)
     }
 
     @Test
@@ -1479,6 +1625,33 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
+    @DisplayName("COMPLETED 세션의 soft-deleted CloudFile은 complete 시 재활성된다")
+    fun `COMPLETED 세션의 soft-deleted CloudFile은 complete 시 재활성된다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        val first = service.complete(7L, session.id)
+        val softDeleted =
+            fileRepository.findByObjectKey(
+                sessionRepository.savedSessions.single { it.id == session.id }.objectKey,
+            )!!
+        softDeleted.markDeleted(Instant.parse("2026-06-16T12:00:00Z"))
+        fileRepository.seed(softDeleted)
+
+        val second = service.complete(7L, session.id)
+
+        assertThat(second.id).isEqualTo(first.id)
+        assertThat(fileRepository.findActiveByObjectKey(softDeleted.objectKey)?.id).isEqualTo(first.id)
+        assertThat(fileRepository.findByObjectKey(softDeleted.objectKey)?.deletedAt).isNull()
+    }
+
+    @Test
     @DisplayName("complete 실패 후 HeadObject 커밋이면 FAILED 없이 메타데이터로 승계한다")
     fun `complete 실패 후 HeadObject 커밋이면 메타데이터로 승계한다`() {
         val session =
@@ -1924,10 +2097,43 @@ class CloudVideoUploadSessionServiceTest {
         var failSave = false
         var conflictOnNextSaveForObjectKey: String? = null
         var conflictWithoutWinner = false
+        var hideByObjectKeyUntilConflict = false
+
+        fun seed(file: CloudFile): CloudFile {
+            val stored =
+                if (file.id == 0L) {
+                    CloudFile
+                        .create(
+                            id = nextId++,
+                            ownerMemberId = file.ownerMemberId,
+                            objectKey = file.objectKey,
+                            originalFilename = file.originalFilename,
+                            contentType = file.contentType,
+                            byteSize = file.byteSize,
+                            mediaKind = file.mediaKind,
+                            folderPath = file.folderPath,
+                            checksumSha256 = file.checksumSha256,
+                        ).also { it.deletedAt = file.deletedAt }
+                } else {
+                    file
+                }
+            stored.createdAt = Instant.parse("2026-06-17T00:00:00Z")
+            stored.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
+            files.removeIf { it.id == stored.id || it.objectKey == stored.objectKey }
+            files += stored
+            return stored
+        }
 
         override fun save(file: CloudFile): CloudFile {
             if (failSave) {
                 throw IllegalStateException("file save failed")
+            }
+            if (file.id != 0L) {
+                val existingIndex = files.indexOfFirst { it.id == file.id }
+                if (existingIndex >= 0) {
+                    files[existingIndex] = file
+                    return file
+                }
             }
             val conflictKey = conflictOnNextSaveForObjectKey
             if (conflictKey != null && file.objectKey == conflictKey && file.id == 0L) {
@@ -1950,6 +2156,13 @@ class CloudVideoUploadSessionServiceTest {
                     files += winner
                 }
                 conflictWithoutWinner = false
+                hideByObjectKeyUntilConflict = false
+                throw DataIntegrityViolationException(
+                    "duplicate key value violates unique constraint \"uk_cloud_file_object_key\"",
+                )
+            }
+            if (file.id == 0L && files.any { it.objectKey == file.objectKey }) {
+                hideByObjectKeyUntilConflict = false
                 throw DataIntegrityViolationException(
                     "duplicate key value violates unique constraint \"uk_cloud_file_object_key\"",
                 )
@@ -1986,6 +2199,13 @@ class CloudVideoUploadSessionServiceTest {
 
         override fun findActiveByObjectKey(objectKey: String): CloudFile? =
             files.firstOrNull { it.objectKey == objectKey && it.deletedAt == null }
+
+        override fun findByObjectKey(objectKey: String): CloudFile? {
+            if (hideByObjectKeyUntilConflict) {
+                return null
+            }
+            return files.firstOrNull { it.objectKey == objectKey }
+        }
 
         override fun findActiveByObjectKeyStartingWith(
             objectKeyPrefix: String,

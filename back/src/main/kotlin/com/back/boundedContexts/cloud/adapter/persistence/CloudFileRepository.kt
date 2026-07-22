@@ -39,6 +39,15 @@ interface CloudFileRepository :
         """
         SELECT f
         FROM CloudFile f
+        WHERE f.objectKey = :objectKey
+        """,
+    )
+    override fun findByObjectKey(objectKey: String): CloudFile?
+
+    @Query(
+        """
+        SELECT f
+        FROM CloudFile f
         WHERE f.deletedAt IS NULL
           AND f.objectKey LIKE CONCAT(:objectKeyPrefix, '%')
         ORDER BY f.id ASC

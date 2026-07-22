@@ -99,6 +99,28 @@ class CloudFileRepositoryTest : BaseRepositoryIntegrationTest() {
     }
 
     @Test
+    @DisplayName("findByObjectKey는 soft-deleted 행도 조회한다")
+    fun `findByObjectKey는 soft-deleted 행도 조회한다`() {
+        val owner = memberRepository.saveAndFlush(Member(0, "cloud-by-key-admin", "1234", "클라우드 key 관리자"))
+        val deleted =
+            cloudFileRepository.saveAndFlush(
+                cloudFile(
+                    ownerMemberId = owner.id,
+                    objectKey = "cloud/${owner.id}/videos/soft-deleted.mp4",
+                    originalFilename = "soft-deleted.mp4",
+                    mediaKind = CloudFileMediaKind.VIDEO,
+                    folderPath = "videos",
+                ),
+            )
+        deleted.markDeleted(Instant.now())
+        cloudFileRepository.saveAndFlush(deleted)
+
+        assertThat(cloudFileRepository.findActiveByObjectKey(deleted.objectKey)).isNull()
+        assertThat(cloudFileRepository.findByObjectKey(deleted.objectKey)?.id).isEqualTo(deleted.id)
+        assertThat(cloudFileRepository.findByObjectKey(deleted.objectKey)?.deletedAt).isNotNull()
+    }
+
+    @Test
     @DisplayName("objectKey prefix 조회는 limit과 삭제 상태를 반영한다")
     fun `objectKey prefix 조회는 limit과 삭제 상태를 반영한다`() {
         val owner = memberRepository.saveAndFlush(Member(0, "cloud-prefix-admin", "1234", "클라우드 prefix 관리자"))

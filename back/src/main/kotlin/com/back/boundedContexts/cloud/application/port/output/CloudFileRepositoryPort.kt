@@ -20,6 +20,8 @@ interface CloudFileRepositoryPort {
 
     fun findActiveByObjectKey(objectKey: String): CloudFile?
 
+    fun findByObjectKey(objectKey: String): CloudFile?
+
     fun findActiveByObjectKeyStartingWith(
         objectKeyPrefix: String,
         limit: Int,

@@ -184,6 +184,7 @@ export const EditorStudioWorkspaceController = ({
   const [previewThumbnailSourceUrl, setPreviewThumbnailSourceUrl] = useState("")
   const [previewViewport, setPreviewViewport] = useState<PreviewViewportMode>("desktop")
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
+  const [localDraftSlotLabel, setLocalDraftSlotLabel] = useState("")
   const [mobileManageStep, setMobileManageStep] = useState<ManageMobileStudioStep>("query")
   const [mobileComposeStep, setMobileComposeStep] = useState<ComposeMobileStudioStep>("edit")
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
@@ -429,11 +430,14 @@ export const EditorStudioWorkspaceController = ({
     loadPostForEditor,
     restoreLocalDraft,
     saveLocalDraft,
+    signalLocalDraftBaselineReady,
     switchToCreateMode,
   } = useEditorStudioDraftLifecycle({
     router,
     toEditorPostRoute,
     postId,
+    postVersion,
+    loadingKey,
     postTitle,
     postContent,
     getCurrentPostContent,
@@ -445,6 +449,7 @@ export const EditorStudioWorkspaceController = ({
     postTags,
     postCategory,
     postVisibility,
+    editorMode,
     isCompactMobileLayout,
     setEditorMode,
     setIsTempDraftMode,
@@ -463,6 +468,7 @@ export const EditorStudioWorkspaceController = ({
     setPostVisibility,
     setKnownTags,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setLoadingKey,
     setResult,
     setIsNewEditorBootstrapPending,
@@ -638,6 +644,7 @@ export const EditorStudioWorkspaceController = ({
     setPostVisibility,
     setKnownTags,
     setLocalDraftSavedAt,
+    setLocalDraftSlotLabel,
     setPublishStatus,
     setLoadingKey,
     setResult,
@@ -657,6 +664,7 @@ export const EditorStudioWorkspaceController = ({
     pretty,
     generateIdempotencyKey,
     removeLocalDraft,
+    signalLocalDraftBaselineReady,
     uploadWithConflictRetry,
     normalizeSafeImageUrl,
     extractImageFileFromClipboard,
@@ -821,7 +829,7 @@ export const EditorStudioWorkspaceController = ({
         closePublishModal, commentContent, commentId, commitPreviewThumbTransform, copyPostDetailLink,
         deferredPostContent, deferredContentDerived, deleteConfirmNotice, deleteConfirmState, deletePostsFromList,
         deletedListNotice,
-        deleteTagFromCatalog, disabled, editorMode, finalizePreviewThumbPointer, globalNotice,
+        deleteTagFromCatalog, disabled, editorMode, finalizePreviewThumbPointer, getCurrentPostContent, globalNotice,
         handleMarkdownEditorChange, handleMarkdownEditorFileUpload, handleMarkdownEditorImageUpload, handleConfirmPublish, handleContinueSelectedPostEditing,
         handleCreateNewPostFromSelectedPanel, handleDeleteComment, handleDeleteSelectedPost, handleExitDedicatedEditor, handleFlushMarkdownReady, handleHitPost,
         handleLikePost, handleListComments, handleListPageChange, handleListPageSizeChange, handleListSortChange, handleLogout,
@@ -835,7 +843,7 @@ export const EditorStudioWorkspaceController = ({
         isSelectedToolsOpen, isTempDraftMode, knownTags, lastLocalDraftFingerprintRef, listKw,
         listPage,
         listPageSize, listQuickPreset, listScope, listSort, loadAdminPosts,
-        loadPostForEditor, loadingKey, localDraftSavedAt, member, metaNotice,
+        loadPostForEditor, loadingKey, localDraftSavedAt, localDraftSlotLabel, member, metaNotice,
         mobileComposeStep, mobileManageStep, modifiedSortOrder, openDeleteConfirm, openPostDetailRoute,
         openPublishModal, openThumbnailFileInput, postCategory, postContent, postId,
         postSummary, postTags, postThumbnailFocusX, postThumbnailFocusY, postThumbnailUrl,

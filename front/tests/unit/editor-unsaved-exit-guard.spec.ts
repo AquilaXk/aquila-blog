@@ -3,10 +3,15 @@ import {
   captureEditorRouteNavigationIntent,
   defaultEditorRouteNavigationIntent,
   EDITOR_UNSAVED_CHANGES_MESSAGE,
+  EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY,
   isEditorUnsavedDirtyLabel,
   isForcedEditorExitUrl,
   isSamePathEditorSurfaceNavigation,
+  readEditorUnsavedGuardHistoryIdx,
+  resolveEditorHistoryNavigationDelta,
+  resolveEditorHistoryNavigationDirection,
   resolveEditorRouteNavigationRetry,
+  withEditorUnsavedGuardHistoryIdx,
 } from "../../src/routes/Admin/editorStudioUnsavedExitGuard"
 
 test.describe("editor unsaved exit guard helpers", () => {
@@ -78,5 +83,19 @@ test.describe("editor unsaved exit guard helpers", () => {
       method: "push",
       options: {},
     })
+  })
+
+  test("resolves history direction and delta from stamped indices", () => {
+    expect(resolveEditorHistoryNavigationDirection(2, 3)).toBe("forward")
+    expect(resolveEditorHistoryNavigationDirection(2, 1)).toBe("back")
+    expect(resolveEditorHistoryNavigationDirection(2, null)).toBe("back")
+    expect(resolveEditorHistoryNavigationDelta("forward")).toBe(1)
+    expect(resolveEditorHistoryNavigationDelta("back")).toBe(-1)
+
+    const stamped = withEditorUnsavedGuardHistoryIdx({ __N: true, as: "/editor/1" }, 4)
+    expect(stamped[EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY]).toBe(4)
+    expect(readEditorUnsavedGuardHistoryIdx(stamped)).toBe(4)
+    expect(readEditorUnsavedGuardHistoryIdx(null)).toBe(null)
+    expect(readEditorUnsavedGuardHistoryIdx({ as: "/editor/1" })).toBe(null)
   })
 })

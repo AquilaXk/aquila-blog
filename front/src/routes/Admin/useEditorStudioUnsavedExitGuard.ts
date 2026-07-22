@@ -7,7 +7,12 @@ import {
   EDITOR_UNSAVED_CHANGES_MESSAGE,
   isForcedEditorExitUrl,
   isSamePathEditorSurfaceNavigation,
+  readEditorUnsavedGuardHistoryIdx,
+  resolveEditorHistoryNavigationDelta,
+  resolveEditorHistoryNavigationDirection,
   resolveEditorRouteNavigationRetry,
+  withEditorUnsavedGuardHistoryIdx,
+  type EditorHistoryNavigationDirection,
   type EditorRouteNavigationIntent,
 } from "./editorStudioUnsavedExitGuard"
 
@@ -21,6 +26,7 @@ type PendingNavigation = {
   url?: string
   action?: () => void
   routeIntent?: EditorRouteNavigationIntent
+  historyDirection?: EditorHistoryNavigationDirection
 }
 
 export const useEditorStudioUnsavedExitGuard = ({
@@ -34,6 +40,23 @@ export const useEditorStudioUnsavedExitGuard = ({
   const pendingRef = useRef<PendingNavigation | null>(null)
   const allowNavigationRef = useRef(false)
   const pendingRouteIntentRef = useRef<EditorRouteNavigationIntent | null>(null)
+  const historyIdxRef = useRef(0)
+  const undoingHistoryGuardRef = useRef(false)
+  const skipHistoryIdxUpdateRef = useRef(false)
+  const pendingHistoryDirectionRef = useRef<EditorHistoryNavigationDirection | null>(null)
+  const lastRouteMethodRef = useRef<"push" | "replace">("push")
+
+  const clearAllowNavigation = useCallback(() => {
+    allowNavigationRef.current = false
+  }, [])
+
+  const stampCurrentHistoryIdx = useCallback(() => {
+    if (typeof window === "undefined") return
+    window.history.replaceState(
+      withEditorUnsavedGuardHistoryIdx(window.history.state, historyIdxRef.current),
+      ""
+    )
+  }, [])
 
   const closeConfirm = useCallback(() => {
     pendingRef.current = null
@@ -48,35 +71,27 @@ export const useEditorStudioUnsavedExitGuard = ({
 
     if (pending.kind === "action") {
       // handleExitDedicatedEditor uses router.replace and will hit routeChangeStart.
+      // Keep allow until routeChangeComplete / routeChangeError clears it.
       allowNavigationRef.current = true
-      try {
-        pending.action?.()
-      } finally {
-        void Promise.resolve().then(() => {
-          allowNavigationRef.current = false
-        })
-      }
+      pending.action?.()
       return
     }
 
     if (pending.kind === "history") {
-      // beforePopState already cancelled the pop and restored asPath via pushState.
-      // Retry the browser history move (not router.push) so history is not duplicated.
+      // Keep allow until beforePopState consumes it (popstate is after microtasks).
+      const direction = pending.historyDirection ?? "back"
       allowNavigationRef.current = true
-      window.history.back()
-      void Promise.resolve().then(() => {
-        allowNavigationRef.current = false
-      })
+      pendingHistoryDirectionRef.current = direction
+      window.history.go(resolveEditorHistoryNavigationDelta(direction))
       return
     }
 
     if (!pending.url) return
     const retry = resolveEditorRouteNavigationRetry(pending.url, pending.routeIntent)
     allowNavigationRef.current = true
+    lastRouteMethodRef.current = retry.method
     const navigate = retry.method === "replace" ? router.replace.bind(router) : router.push.bind(router)
-    void navigate(retry.url, undefined, retry.options).finally(() => {
-      allowNavigationRef.current = false
-    })
+    void navigate(retry.url, undefined, retry.options)
   }, [router])
 
   const requestGuardedAction = useCallback(
@@ -94,6 +109,14 @@ export const useEditorStudioUnsavedExitGuard = ({
   useEffect(() => {
     if (typeof window === "undefined" || !enabled || !isDirty) return
 
+    const existingIdx = readEditorUnsavedGuardHistoryIdx(window.history.state)
+    if (existingIdx == null) {
+      historyIdxRef.current = 0
+      stampCurrentHistoryIdx()
+    } else {
+      historyIdxRef.current = existingIdx
+    }
+
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = EDITOR_UNSAVED_CHANGES_MESSAGE
@@ -104,23 +127,49 @@ export const useEditorStudioUnsavedExitGuard = ({
     const originalReplace = router.replace.bind(router)
 
     router.push = ((url, as, options) => {
+      lastRouteMethodRef.current = "push"
       pendingRouteIntentRef.current = captureEditorRouteNavigationIntent("push", options)
       return originalPush(url, as, options)
     }) as typeof router.push
 
     router.replace = ((url, as, options) => {
+      lastRouteMethodRef.current = "replace"
       pendingRouteIntentRef.current = captureEditorRouteNavigationIntent("replace", options)
       return originalReplace(url, as, options)
     }) as typeof router.replace
 
     router.beforePopState(({ as }) => {
-      if (allowNavigationRef.current) return true
+      // Undo move after a blocked pop — let Next sync back to the editor URL.
+      if (undoingHistoryGuardRef.current) {
+        undoingHistoryGuardRef.current = false
+        skipHistoryIdxUpdateRef.current = true
+        return true
+      }
+
+      // Allowed retry after confirm — clear here so a microtask cannot race popstate.
+      if (allowNavigationRef.current) {
+        clearAllowNavigation()
+        return true
+      }
+
       if (isForcedEditorExitUrl(as)) return true
       if (isSamePathEditorSurfaceNavigation(router.asPath, as)) return true
 
-      pendingRef.current = { kind: "history" }
+      const destinationIdx = readEditorUnsavedGuardHistoryIdx(window.history.state)
+      const direction = resolveEditorHistoryNavigationDirection(
+        historyIdxRef.current,
+        destinationIdx
+      )
+      pendingRef.current = { kind: "history", historyDirection: direction }
       setConfirmOpen(true)
-      window.history.pushState(null, "", router.asPath)
+
+      // Browser already applied the pop; undo with the opposite delta (not pushState)
+      // so confirm can replay the original back/forward direction.
+      undoingHistoryGuardRef.current = true
+      const undoDelta = -resolveEditorHistoryNavigationDelta(direction)
+      queueMicrotask(() => {
+        window.history.go(undoDelta)
+      })
       return false
     })
 
@@ -147,17 +196,56 @@ export const useEditorStudioUnsavedExitGuard = ({
       throw error
     }
 
+    const handleRouteChangeComplete = () => {
+      clearAllowNavigation()
+
+      if (skipHistoryIdxUpdateRef.current) {
+        skipHistoryIdxUpdateRef.current = false
+        stampCurrentHistoryIdx()
+        return
+      }
+
+      const historyDirection = pendingHistoryDirectionRef.current
+      if (historyDirection) {
+        pendingHistoryDirectionRef.current = null
+        historyIdxRef.current += resolveEditorHistoryNavigationDelta(historyDirection)
+        stampCurrentHistoryIdx()
+        return
+      }
+
+      if (lastRouteMethodRef.current === "replace") {
+        stampCurrentHistoryIdx()
+        return
+      }
+
+      historyIdxRef.current += 1
+      stampCurrentHistoryIdx()
+    }
+
+    const handleRouteChangeError = () => {
+      clearAllowNavigation()
+      pendingHistoryDirectionRef.current = null
+    }
+
     window.addEventListener("beforeunload", handleBeforeUnload)
     router.events.on("routeChangeStart", handleRouteChangeStart)
+    router.events.on("routeChangeComplete", handleRouteChangeComplete)
+    router.events.on("routeChangeError", handleRouteChangeError)
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload)
       router.events.off("routeChangeStart", handleRouteChangeStart)
+      router.events.off("routeChangeComplete", handleRouteChangeComplete)
+      router.events.off("routeChangeError", handleRouteChangeError)
       router.beforePopState(() => true)
       router.push = originalPush
       router.replace = originalReplace
       pendingRouteIntentRef.current = null
+      pendingHistoryDirectionRef.current = null
+      undoingHistoryGuardRef.current = false
+      skipHistoryIdxUpdateRef.current = false
+      clearAllowNavigation()
     }
-  }, [enabled, isDirty, router])
+  }, [clearAllowNavigation, enabled, isDirty, router, stampCurrentHistoryIdx])
 
   // Keep this module .ts (no JSX) so next lint/eslint can parse it.
   const dialog = createElement(ConfirmDialog, {

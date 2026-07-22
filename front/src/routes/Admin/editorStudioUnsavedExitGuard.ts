@@ -68,3 +68,32 @@ export const resolveEditorRouteNavigationRetry = (
     options: buildEditorRouteNavigationOptions(resolvedIntent),
   }
 }
+
+export type EditorHistoryNavigationDirection = "back" | "forward"
+
+/** Stamped onto `history.state` so beforePopState can recover back vs forward. */
+export const EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY = "__editorUnsavedGuardIdx"
+
+export const readEditorUnsavedGuardHistoryIdx = (state: unknown): number | null => {
+  if (!state || typeof state !== "object") return null
+  const value = (state as Record<string, unknown>)[EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY]
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+export const withEditorUnsavedGuardHistoryIdx = (
+  state: unknown,
+  idx: number
+): Record<string, unknown> => ({
+  ...(state && typeof state === "object" ? (state as Record<string, unknown>) : {}),
+  [EDITOR_UNSAVED_GUARD_HISTORY_IDX_KEY]: idx,
+})
+
+export const resolveEditorHistoryNavigationDirection = (
+  currentIdx: number,
+  destinationIdx: number | null
+): EditorHistoryNavigationDirection =>
+  destinationIdx != null && destinationIdx > currentIdx ? "forward" : "back"
+
+export const resolveEditorHistoryNavigationDelta = (
+  direction: EditorHistoryNavigationDirection
+): number => (direction === "forward" ? 1 : -1)

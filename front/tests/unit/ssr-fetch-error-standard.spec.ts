@@ -41,6 +41,21 @@ test("serverApiFetchJson returns parsed JSON on success", async () => {
   })
 })
 
+test("serverApiFetchJson normalizes empty success responses to null", async () => {
+  globalThis.fetch = (async () => new Response(null, { status: 204 })) as typeof fetch
+  await expect(serverApiFetchJson(createReq(), "/member/api/v1/auth/logout")).resolves.toBeNull()
+
+  globalThis.fetch = (async () =>
+    new Response("", {
+      status: 200,
+      headers: { "content-length": "0" },
+    })) as typeof fetch
+  await expect(serverApiFetchJson(createReq(), "/member/api/v1/auth/me")).resolves.toBeNull()
+
+  globalThis.fetch = (async () => new Response("", { status: 200 })) as typeof fetch
+  await expect(serverApiFetchJson(createReq(), "/member/api/v1/auth/me")).resolves.toBeNull()
+})
+
 test("serverApiFetchJson throws ApiError with status/body/userMessage on HTTP failure", async () => {
   globalThis.fetch = (async () =>
     new Response(JSON.stringify({ msg: "권한이 없습니다." }), {

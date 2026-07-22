@@ -132,12 +132,12 @@ export const serverApiFetchJson = async <T>(
   }
 
   if (response.status === 204) {
-    return undefined as T
+    return null as T
   }
 
   const contentLength = response.headers.get("content-length")
   if (contentLength === "0") {
-    return undefined as T
+    return null as T
   }
 
   const contentType = response.headers.get("content-type")?.toLowerCase() || ""
@@ -151,7 +151,7 @@ export const serverApiFetchJson = async <T>(
 
   const body = await response.text()
   if (!body) {
-    return undefined as T
+    return null as T
   }
 
   try {

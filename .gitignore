@@ -6,6 +6,8 @@ infra/*.auto.tfvars
 infra/legacy/terraform.tfvars
 infra/legacy/*.auto.tfvars
 deploy/homeserver/.env.prod
+deploy/homeserver/.env.back.prod
+deploy/homeserver/.env.caddy.prod
 deploy/homeserver/.deploy-backups/
 deploy/homeserver/*.backup
 deploy/homeserver/*.enc

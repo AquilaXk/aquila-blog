@@ -13,7 +13,11 @@ CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
 RELEASE_STATE_FILE="${SCRIPT_DIR}/.backend-release-state.env"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-blog_home}"
-NETWORK_NAME="blog_home_default"
+EDGE_NETWORK_NAME="blog_home_edge"
+APP_NETWORK_NAME="blog_home_app"
+OBSERVE_NETWORK_NAME="blog_home_observe"
+NETWORK_NAME="${EDGE_NETWORK_NAME}"
+MATERIALIZE_SERVICE_ENV_SCRIPT="${SCRIPT_DIR}/materialize_service_env.sh"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-120}"
@@ -56,6 +60,7 @@ run_diagnostic_command() {
 run_compose_diagnostic() {
   local timeout_seconds="${DIAGNOSTIC_TIMEOUT_SECONDS:-15}"
   local profiles
+  materialize_service_env_files
   profiles="$(resolve_compose_profiles)"
 
   if command -v timeout >/dev/null 2>&1; then
@@ -143,8 +148,13 @@ resolve_compose_profiles() {
   echo "${profiles},runtime-split"
 }
 
+materialize_service_env_files() {
+  bash "${MATERIALIZE_SERVICE_ENV_SCRIPT}" "${ENV_FILE}"
+}
+
 compose() {
   local profiles
+  materialize_service_env_files
   profiles="$(resolve_compose_profiles)"
   if [[ -n "${profiles}" ]]; then
     COMPOSE_PROFILES="${profiles}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -537,7 +547,7 @@ probe_grafana_embed_headers() {
 }
 
 probe_grafana_internal_health() {
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 10 \
     -o /dev/null \
@@ -1264,9 +1274,10 @@ resolve_prod_db_name() {
 }
 
 validate_db_runtime_role_env() {
-  local runtime_user flyway_user
+  local runtime_user flyway_user flyway_password
   runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
   flyway_user="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__USER")")"
+  flyway_password="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__PASSWORD")")"
   if [[ -z "${flyway_user}" ]]; then
     flyway_user="postgres"
   fi
@@ -1283,6 +1294,61 @@ validate_db_runtime_role_env() {
     echo "runtime datasource user and flyway user must be separated" >&2
     return 1
   fi
+  if [[ -z "${flyway_password}" ]]; then
+    echo "flyway password must be set (PROD___SPRING__FLYWAY__PASSWORD); back containers no longer receive PROD___POSTGRES__PASSWORD" >&2
+    return 1
+  fi
+}
+
+validate_postgres_exporter_env() {
+  local exporter_user exporter_password
+  exporter_user="$(trim_quotes "$(env_value "PROD___POSTGRES_EXPORTER__USERNAME")")"
+  exporter_password="$(trim_quotes "$(env_value "PROD___POSTGRES_EXPORTER__PASSWORD")")"
+  if [[ -z "${exporter_user}" ]]; then
+    exporter_user="postgres_exporter"
+  fi
+  if [[ -z "${exporter_password}" ]]; then
+    echo "postgres exporter password must be set (PROD___POSTGRES_EXPORTER__PASSWORD)" >&2
+    return 1
+  fi
+  if [[ "${exporter_user}" == "postgres" ]]; then
+    echo "postgres exporter user must not be postgres" >&2
+    return 1
+  fi
+  if ! [[ "${exporter_user}" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    echo "postgres exporter user must match postgres identifier pattern: ${exporter_user}" >&2
+    return 1
+  fi
+}
+
+provision_postgres_exporter_role() {
+  local exporter_user exporter_password sql_file
+  exporter_user="$(trim_quotes "$(env_value "PROD___POSTGRES_EXPORTER__USERNAME")")"
+  exporter_password="$(trim_quotes "$(env_value "PROD___POSTGRES_EXPORTER__PASSWORD")")"
+  if [[ -z "${exporter_user}" ]]; then
+    exporter_user="postgres_exporter"
+  fi
+  sql_file="${SCRIPT_DIR}/sql/provision_postgres_exporter_role.sql"
+
+  if [[ -z "${exporter_password}" ]]; then
+    echo "postgres exporter credential is incomplete" >&2
+    return 1
+  fi
+  if [[ ! -f "${sql_file}" ]]; then
+    echo "missing exporter role SQL: ${sql_file}" >&2
+    return 1
+  fi
+
+  if compose exec -T db_1 psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+    -v exporter_user="${exporter_user}" \
+    -v exporter_password="${exporter_password}" \
+    -f - < "${sql_file}" >/dev/null 2>&1; then
+    echo "postgres exporter role provisioned: user=${exporter_user} (pg_monitor)"
+    return 0
+  fi
+
+  echo "postgres exporter role provision failed" >&2
+  return 1
 }
 
 provision_db_runtime_role() {
@@ -1926,7 +1992,7 @@ check_backend_health() {
   while [[ "${attempt}" -le "${HEALTHCHECK_RETRIES}" ]]; do
     local code
     code="$({
-      docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+      docker run --rm --network "${APP_NETWORK_NAME}" curlimages/curl:8.7.1 \
         --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
         --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
         -s -o /dev/null -w "%{http_code}" \
@@ -2420,6 +2486,8 @@ warn_grafana_embed_origin_route
 warn_grafana_embed_public_route
 validate_db_runtime_role_env
 provision_db_runtime_role
+validate_postgres_exporter_env
+provision_postgres_exporter_role
 ensure_db_runtime_guards || true
 pause_autoheal_for_blue_green
 compose pull "${next_backend}"

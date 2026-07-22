@@ -7,11 +7,15 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
-NETWORK_NAME="blog_home_default"
+EDGE_NETWORK_NAME="blog_home_edge"
+APP_NETWORK_NAME="blog_home_app"
+OBSERVE_NETWORK_NAME="blog_home_observe"
+NETWORK_NAME="${EDGE_NETWORK_NAME}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 compose() {
+  bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -213,7 +217,7 @@ inspect_grafana_embed_headers() {
 }
 
 inspect_grafana_internal_health() {
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 10 \
     -o /dev/null \
@@ -223,7 +227,7 @@ inspect_grafana_internal_health() {
 }
 
 inspect_loki_internal_ready() {
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 10 \
     -o /dev/null \
@@ -233,7 +237,7 @@ inspect_loki_internal_ready() {
 }
 
 inspect_promtail_internal_ready() {
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 10 \
     -o /dev/null \
@@ -250,7 +254,7 @@ inspect_grafana_loki_datasource_status() {
   [[ -n "${admin_password}" ]] || admin_password="change_me_grafana_password"
 
   response="$(
-    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
       --connect-timeout 3 \
       --max-time 10 \
       -sS \

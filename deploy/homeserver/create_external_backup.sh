@@ -520,6 +520,7 @@ encrypt_stream_to_file() {
 }
 
 compose() {
+  bash "${SCRIPT_DIR}/materialize_service_env.sh" "${COMPOSE_ENV_FILE}"
   docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 

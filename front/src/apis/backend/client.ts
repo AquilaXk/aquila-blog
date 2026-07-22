@@ -295,12 +295,14 @@ export class ApiTimeoutError extends Error {
 }
 
 export class ApiNetworkError extends Error {
+  url: string
   userMessage: string
 
-  constructor() {
+  constructor(url: string) {
     const userMessage = "네트워크 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
     super(userMessage)
     this.name = "ApiNetworkError"
+    this.url = url
     this.userMessage = userMessage
   }
 }
@@ -495,7 +497,7 @@ export const apiFetchWithMeta = async <T>(
         }
 
         if (error instanceof TypeError) {
-          const networkError = new ApiNetworkError()
+          const networkError = new ApiNetworkError(url)
           reportApiFailure(networkError)
           throw networkError
         }

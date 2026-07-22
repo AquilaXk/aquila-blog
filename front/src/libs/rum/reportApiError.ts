@@ -88,6 +88,7 @@ const resolveStatus = (error: unknown): number | undefined => {
 const resolveRequestUrlPath = (error: unknown) => {
   if (error instanceof ApiError) return toUrlPathOnly(error.url)
   if (error instanceof ApiTimeoutError) return toUrlPathOnly(error.url)
+  if (error instanceof ApiNetworkError) return toUrlPathOnly(error.url)
   return ""
 }
 

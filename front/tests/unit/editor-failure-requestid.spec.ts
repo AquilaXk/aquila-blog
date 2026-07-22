@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { ApiError, ApiTimeoutError } from "../../src/apis/backend/client"
+import { ApiError, ApiNetworkError, ApiTimeoutError } from "../../src/apis/backend/client"
 import {
   resolveEditorFailureRecovery,
   resolveEditorUploadFailureRecovery,
@@ -27,6 +27,17 @@ test("editor failure statusText omits requestId for timeout and missing header",
 
   expect(timeout.statusText).not.toContain("요청 ID")
   expect(missing.statusText).not.toContain("요청 ID")
+})
+
+test("editor failure maps ApiNetworkError to offline recovery", () => {
+  const recovery = resolveEditorFailureRecovery(new ApiNetworkError("/post/api/v1/posts"), {
+    action: "write",
+    isOnline: true,
+  })
+
+  expect(recovery.result.errorType).toBe("offline")
+  expect(recovery.result.canRetry).toBe(true)
+  expect(recovery.statusText).toContain("오프라인")
 })
 
 test("editor upload failure statusText appends requestId when present", () => {

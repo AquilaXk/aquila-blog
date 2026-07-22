@@ -31,21 +31,14 @@ test.describe("error boundary launch gate", () => {
     expect(clientErrorsSource).toContain("console.info(\"[rum:client-error] boundary caught client render error\", {")
     expect(clientErrorsSource).toContain('const ALLOWED_SURFACES = new Set(["app", "markdown", "editor"])')
     expect(clientErrorsSource).toContain("ALLOWED_SURFACES.has(surface)")
-    for (const field of [
-      "id",
-      "boundary",
-      "surface",
-      "path",
-      "errorName",
-      "occurredAt",
-      "errorMessage",
-      "stackTop",
-      "category",
-    ]) {
+    for (const field of ["id", "boundary", "surface", "path", "errorName", "occurredAt"]) {
       expect(clientErrorsSource).toContain(`${field},`)
     }
+    for (const field of ["errorMessage", "stackTop", "category", "requestId", "status", "url"]) {
+      expect(clientErrorsSource).toContain(`{ ${field} }`)
+    }
     expect(clientErrorsSource).not.toContain("body.message")
-    expect(clientErrorsSource).not.toContain("body.stack")
+    expect(clientErrorsSource).not.toMatch(/\bbody\.stack\b(?!Top)/)
   })
 
   test("global render exception shows recoverable 500 UX and sanitized telemetry", async ({ page }) => {

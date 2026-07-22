@@ -188,7 +188,7 @@ test.describe("core smoke public shell", () => {
   expect(navBarSource).toContain("useModalFocusTrap({")
   expect(navBarSource).toContain("returnFocusRef: mobileMenuButtonRef")
   expect(navBarSource).toContain('from "src/styles/zIndexes"')
-  expect(navBarSource).toContain("zIndexes.dropdownMenu")
+  expect(navBarSource).toContain("zIndexes.mobileNavOverlay")
   expect(navBarSource).toContain('data-ui="mobile-nav-search"')
   expect(navBarSource).toContain('aria-keyshortcuts="Meta+K Control+K"')
   expect(navBarSource).toContain(".primaryLinks,")

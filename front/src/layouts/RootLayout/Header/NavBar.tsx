@@ -391,17 +391,14 @@ export default NavBar
 const MobileMenuLayer = styled.div`
   position: fixed;
   inset: 0;
-  z-index: ${zIndexes.dropdownMenu};
+  z-index: ${zIndexes.mobileNavOverlay};
   pointer-events: none;
 `
 
 const MobileMenuBackdrop = styled.div`
   position: fixed;
-  top: var(--app-header-height, 58px);
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: ${zIndexes.dropdownMenu};
+  inset: 0;
+  z-index: ${zIndexes.mobileNavOverlay};
   background: color-mix(in srgb, var(--aq-text) 28%, transparent);
   pointer-events: auto;
 `
@@ -410,7 +407,7 @@ const MobileMenuPanel = styled.div`
   position: fixed;
   top: calc(var(--app-header-height, 58px) + 8px);
   right: max(0.75rem, env(safe-area-inset-right, 0px));
-  z-index: ${zIndexes.dropdownMenu};
+  z-index: ${zIndexes.mobileNavOverlay};
   display: grid;
   width: min(220px, calc(100vw - 1.5rem));
   border: 1px solid var(--aq-border-strong);

@@ -4,6 +4,7 @@ import {
   type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react"
@@ -15,8 +16,10 @@ import {
   planFormatShortcutMutation,
   planHardBreak,
   planListEnterContinuation,
+  planTabIndentMutation,
   resolveFormatShortcut,
 } from "./markdownEditorKeyboardModel"
+import { MarkdownEditorModeTabs, type MarkdownEditorMode } from "./markdownEditorModeTabs"
 import {
   applyPlannedTextMutation,
   planToggleWrapSelection,
@@ -52,12 +55,13 @@ type MarkdownEditorProps = {
   onUploadFile?: (file: File) => Promise<MarkdownFileUploadResult>
 }
 
-type EditorMode = "write" | "preview" | "split"
-
 type TextareaSelection = {
   from: number
   to: number
 }
+
+const TEXTAREA_KEYBOARD_HELP =
+  "Tab은 2칸 들여쓰기, Shift+Tab은 내어쓰기입니다. Escape를 누른 다음 Tab은 포커스를 다음 요소로 이동합니다."
 
 const modShortcutLabel =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)
@@ -127,14 +131,21 @@ export const MarkdownEditor = ({
   onUploadImage,
   onUploadFile,
 }: MarkdownEditorProps) => {
-  const [mode, setMode] = useState<EditorMode>("split")
+  const [mode, setMode] = useState<MarkdownEditorMode>("split")
   const [uploadError, setUploadError] = useState("")
   const [draftValue, setDraftValue] = useState(value)
+  const editorDomId = useId()
+  const writePanelId = `${editorDomId}-write-panel`
+  const previewPanelId = `${editorDomId}-preview-panel`
+  const writeTabId = `${editorDomId}-write-tab`
+  const previewTabId = `${editorDomId}-preview-tab`
+  const splitTabId = `${editorDomId}-split-tab`
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const valueRef = useRef(value)
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
   const uploadInFlightCountRef = useRef(0)
+  const allowNativeTabAfterEscapeRef = useRef(false)
 
   const setUploadInFlight = useCallback(
     (delta: number) => {
@@ -302,6 +313,32 @@ export const MarkdownEditor = ({
   const handleTextareaKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (disabled || isComposingEditorKeyboardEvent(event)) return
+
+      if (event.key === "Escape") {
+        allowNativeTabAfterEscapeRef.current = true
+        return
+      }
+
+      if (event.key === "Tab") {
+        if (allowNativeTabAfterEscapeRef.current) {
+          allowNativeTabAfterEscapeRef.current = false
+          return
+        }
+        const { from, to } = rememberTextareaSelection()
+        const tabPlan = planTabIndentMutation(valueRef.current, from, to, event.shiftKey)
+        if (!tabPlan) {
+          if (event.shiftKey) return
+          event.preventDefault()
+          return
+        }
+        event.preventDefault()
+        applyMutationPlan(tabPlan)
+        return
+      }
+
+      if (event.key !== "Escape" && event.key !== "Tab") {
+        allowNativeTabAfterEscapeRef.current = false
+      }
 
       if (event.key === "Enter" && event.shiftKey) {
         event.preventDefault()
@@ -477,26 +514,32 @@ export const MarkdownEditor = ({
             Link
           </ToolbarButton>
         </ToolbarGroup>
-        <ModeTabs role="tablist" aria-label="Markdown editor mode">
-          <ModeTab type="button" role="tab" aria-selected={mode === "write"} onClick={() => setMode("write")}>
-            Write
-          </ModeTab>
-          <ModeTab type="button" role="tab" aria-selected={mode === "preview"} onClick={() => setMode("preview")}>
-            Preview
-          </ModeTab>
-          <ModeTab type="button" role="tab" aria-selected={mode === "split"} onClick={() => setMode("split")}>
-            Split
-          </ModeTab>
-        </ModeTabs>
+        <MarkdownEditorModeTabs
+          mode={mode}
+          onModeChange={setMode}
+          writePanelId={writePanelId}
+          previewPanelId={previewPanelId}
+          writeTabId={writeTabId}
+          previewTabId={previewTabId}
+          splitTabId={splitTabId}
+        />
       </EditorToolbar>
       {uploadError ? <ToolbarError role="alert">{uploadError}</ToolbarError> : null}
       <EditorBody data-mode={mode}>
         {mode !== "preview" ? (
-          <WritePane data-pane="write" data-testid="markdown-editor-write-pane">
+          <WritePane
+            id={writePanelId}
+            role="tabpanel"
+            aria-labelledby={mode === "split" ? `${writeTabId} ${splitTabId}` : writeTabId}
+            data-pane="write"
+            data-testid="markdown-editor-write-pane"
+          >
             <WriteEditorFrame data-testid="markdown-textarea-frame">
               <MarkdownTextarea
                 ref={textareaRef}
                 aria-label="Markdown 본문"
+                aria-description={TEXTAREA_KEYBOARD_HELP}
+                title={TEXTAREA_KEYBOARD_HELP}
                 spellCheck={false}
                 disabled={disabled}
                 value={draftValue}
@@ -519,6 +562,9 @@ export const MarkdownEditor = ({
         ) : null}
         {mode !== "write" ? (
           <PreviewPane
+            id={previewPanelId}
+            role="tabpanel"
+            aria-labelledby={mode === "split" ? `${previewTabId} ${splitTabId}` : previewTabId}
             ref={previewScrollRef}
             data-pane="preview"
             data-testid="markdown-editor-preview-pane"
@@ -577,38 +623,6 @@ const EditorToolbar = styled.div`
   @media (max-width: 820px) {
     align-items: flex-start;
     flex-direction: column;
-  }
-`
-
-const ModeTabs = styled.div`
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.publicDesign.surfaceElevated};
-`
-
-const ModeTab = styled.button`
-  border: 0;
-  height: 30px;
-  padding: 0 11px;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-
-  &[aria-selected="true"] {
-    background: ${({ theme }) => theme.publicDesign.readableSurface};
-    color: ${({ theme }) => theme.colors.gray12};
-    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.gray6};
-  }
-
-  &:focus-visible {
-    outline: 2px solid ${({ theme }) => theme.colors.blue8};
-    outline-offset: 2px;
   }
 `
 

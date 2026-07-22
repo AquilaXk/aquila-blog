@@ -27,8 +27,8 @@ TARGET_GIB="${TARGET_GIB:-5}"
 PART_SIZE_BYTES="${PART_SIZE_BYTES:-67108864}"
 UPLOAD_FOLDER="${UPLOAD_FOLDER:-/perf-k6}"
 OUT_DIR="${OUT_DIR:-${SCRIPT_DIR}/results}"
-UPLOAD_FILENAME="${UPLOAD_FILENAME:-perf-5gb-measure.bin}"
-UPLOAD_CONTENT_TYPE="${UPLOAD_CONTENT_TYPE:-application/octet-stream}"
+UPLOAD_FILENAME="${UPLOAD_FILENAME:-perf-5gb-measure.mp4}"
+UPLOAD_CONTENT_TYPE="${UPLOAD_CONTENT_TYPE:-video/mp4}"
 SKIP_COMPLETE="${SKIP_COMPLETE:-0}"
 
 if [[ -z "${CLOUD_AUTH_COOKIE:-}" && -z "${CLOUD_AUTH_HEADER:-}" ]]; then
@@ -46,7 +46,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-curl_auth_args=(-sS)
+curl_auth_args=(-sS -H "X-Aquila-CSRF: 1")
 if [[ -n "${CLOUD_AUTH_COOKIE:-}" ]]; then
   curl_auth_args+=(-H "Cookie: ${CLOUD_AUTH_COOKIE}")
 fi
@@ -54,7 +54,10 @@ if [[ -n "${CLOUD_AUTH_HEADER:-}" ]]; then
   curl_auth_args+=(-H "Authorization: ${CLOUD_AUTH_HEADER}")
 fi
 
-BYTE_SIZE=$((TARGET_GIB * 1024 * 1024 * 1024))
+BYTE_SIZE="$(python3 - <<PY
+print(int(float("${TARGET_GIB}") * 1024 * 1024 * 1024))
+PY
+)"
 TOTAL_PARTS=$(( (BYTE_SIZE + PART_SIZE_BYTES - 1) / PART_SIZE_BYTES ))
 
 echo "creating ${TARGET_GIB}GiB session (${TOTAL_PARTS} parts x ${PART_SIZE_BYTES} bytes)..."
@@ -70,8 +73,27 @@ if [[ -z "${SESSION_ID}" ]]; then
   exit 1
 fi
 
+# Prefer server-selected part size when present in session response.
+SERVER_PART_SIZE="$(printf '%s' "${SESSION_JSON}" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{const j=JSON.parse(d);process.stdout.write(String(j.data?.partSizeBytes||""));});')"
+if [[ -n "${SERVER_PART_SIZE}" ]]; then
+  PART_SIZE_BYTES="${SERVER_PART_SIZE}"
+  TOTAL_PARTS=$(( (BYTE_SIZE + PART_SIZE_BYTES - 1) / PART_SIZE_BYTES ))
+  echo "using server partSizeBytes=${PART_SIZE_BYTES} totalParts=${TOTAL_PARTS}"
+fi
+
 # single reusable part payload on disk (last part may be smaller — handled per request)
 dd if=/dev/zero of="${PART_FILE}" bs="${PART_SIZE_BYTES}" count=1 status=none 2>/dev/null
+# ISO BMFF ftyp so first-part signature validation accepts video/mp4
+python3 - <<PY
+from pathlib import Path
+p = Path("${PART_FILE}")
+data = bytearray(p.read_bytes())
+if len(data) >= 12:
+    data[0:4] = (20).to_bytes(4, "big")
+    data[4:8] = b"ftyp"
+    data[8:12] = b"isom"
+    p.write_bytes(data)
+PY
 
 START_EPOCH="$(date +%s)"
 UPLOADED_BYTES=0
@@ -81,6 +103,18 @@ for (( part=1; part<=TOTAL_PARTS; part++ )); do
   if (( part == TOTAL_PARTS )); then
     LAST_SIZE=$((BYTE_SIZE - PART_SIZE_BYTES * (TOTAL_PARTS - 1)))
     dd if=/dev/zero of="${PART_FILE}" bs="${LAST_SIZE}" count=1 status=none 2>/dev/null
+    if (( part == 1 )); then
+      python3 - <<PY
+from pathlib import Path
+p = Path("${PART_FILE}")
+data = bytearray(p.read_bytes())
+if len(data) >= 12:
+    data[0:4] = (20).to_bytes(4, "big")
+    data[4:8] = b"ftyp"
+    data[8:12] = b"isom"
+    p.write_bytes(data)
+PY
+    fi
     THIS_SIZE="${LAST_SIZE}"
   else
     THIS_SIZE="${PART_SIZE_BYTES}"
@@ -132,28 +166,31 @@ else
   curl "${curl_auth_args[@]}" -X POST "${CLOUD_API}/files/video-upload-sessions/${SESSION_ID}/complete" >/dev/null
 fi
 
-node - <<NODE >"${SUMMARY_FILE}"
-const summary = {
-  measuredAt: new Date().toISOString(),
-  baseUrl: ${BASE_URL@Q},
-  sessionId: ${SESSION_ID},
-  targetGib: ${TARGET_GIB},
-  byteSize: ${BYTE_SIZE},
-  partSizeBytes: ${PART_SIZE_BYTES},
-  totalParts: ${TOTAL_PARTS},
-  elapsedSec: ${ELAPSED_SEC},
-  uploadedBytes: ${UPLOADED_BYTES},
-  throughputMbps: Number(${THROUGHPUT_MBPS@Q}),
-  finalAction: ${FINAL_ACTION@Q},
-  partDurationMs: [$(IFS=,; echo "${PART_DURATIONS_MS[*]}")],
-  notes: [
-    "Run from external uplink (not LAN) for launch criteria.",
-    "Compare throughputMbps against uplink baseline x 0.70 in cloud-launch-criteria.md.",
-    "Optional: mc cp to MinIO bucket for storage-only baseline (not included)."
-  ]
-};
-console.log(JSON.stringify(summary, null, 2));
-NODE
+PART_DURATIONS_CSV="$(IFS=,; echo "${PART_DURATIONS_MS[*]}")"
+python3 - <<PY >"${SUMMARY_FILE}"
+import json
+from datetime import datetime, timezone
+summary = {
+    "measuredAt": datetime.now(timezone.utc).isoformat(),
+    "baseUrl": """${BASE_URL}""",
+    "sessionId": int("${SESSION_ID}"),
+    "targetGib": float("${TARGET_GIB}"),
+    "byteSize": int("${BYTE_SIZE}"),
+    "partSizeBytes": int("${PART_SIZE_BYTES}"),
+    "totalParts": int("${TOTAL_PARTS}"),
+    "elapsedSec": int("${ELAPSED_SEC}"),
+    "uploadedBytes": int("${UPLOADED_BYTES}"),
+    "throughputMbps": float("${THROUGHPUT_MBPS}"),
+    "finalAction": """${FINAL_ACTION}""",
+    "partDurationMs": [int(x) for x in """${PART_DURATIONS_CSV}""".split(",") if x],
+    "notes": [
+        "Run from external uplink (not LAN) for launch criteria.",
+        "Compare throughputMbps against uplink baseline x 0.70 in cloud-launch-criteria.md.",
+        "Optional: mc cp to MinIO bucket for storage-only baseline (not included).",
+    ],
+}
+print(json.dumps(summary, indent=2))
+PY
 
 echo "summary=${SUMMARY_FILE}"
 echo "elapsed_sec=${ELAPSED_SEC} throughput_mbps=${THROUGHPUT_MBPS} action=${FINAL_ACTION}"

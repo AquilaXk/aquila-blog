@@ -9,8 +9,11 @@ import {
   planTabIndentMutation,
   resolveFormatShortcut,
 } from "../../src/components/markdown-editor/markdownEditorKeyboardModel"
+import { resolveModeForBodyFocus } from "../../src/components/markdown-editor/markdownEditorModeTabs"
 import {
   applyPlannedTextMutation,
+  planIndentLines,
+  planOutdentLines,
   planToggleWrapSelection,
 } from "../../src/components/markdown-editor/markdownEditorTextMutation"
 
@@ -106,6 +109,45 @@ test.describe("markdown editor keyboard model", () => {
 
     const outdented = planTabIndentMutation(indented!.replacement, 0, indented!.replacement.length, true)
     expect(outdented?.replacement).toBe(value)
+  })
+
+  test("adjusts selection by indent applied only before each selection edge", () => {
+    const value = "alpha\nbeta\ngamma"
+    // Select only the middle line ("beta"): offsets 6..10
+    const indented = planIndentLines(value, 6, 10)
+    expect(indented).toEqual({
+      rangeStart: 6,
+      rangeEnd: 10,
+      replacement: "  beta",
+      // lineStart === selectionStart → start stays; end moves by indent on that line
+      selectionStart: 6,
+      selectionEnd: 12,
+    })
+
+    // Partial multi-line: from mid "alpha" through mid "gamma"
+    const partial = planIndentLines(value, 2, 13)
+    expect(partial.replacement).toBe("  alpha\n  beta\n  gamma")
+    expect(partial.selectionStart).toBe(4) // +2 on first line only
+    expect(partial.selectionEnd).toBe(19) // +2 per line with lineStart < end
+
+    const outdented = planOutdentLines(partial.replacement, partial.selectionStart, partial.selectionEnd)
+    expect(outdented).toEqual({
+      rangeStart: 0,
+      rangeEnd: partial.replacement.length,
+      replacement: value,
+      selectionStart: 2,
+      selectionEnd: 13,
+    })
+  })
+
+  test("body focus from title switches preview mode to write", () => {
+    expect(resolveModeForBodyFocus("preview")).toBe("write")
+    expect(resolveModeForBodyFocus("write")).toBe("write")
+    expect(resolveModeForBodyFocus("split")).toBe("split")
+
+    const editorSource = readFileSync(sourcePath("components", "markdown-editor", "MarkdownEditor.tsx"), "utf8")
+    expect(editorSource).toContain("resolveModeForBodyFocus")
+    expect(editorSource).toContain("pendingBodyFocusRef")
   })
 
   test("mutation helper uses setRangeText to preserve native undo", () => {

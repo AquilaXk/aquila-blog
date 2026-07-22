@@ -18,7 +18,11 @@ import {
   planTabIndentMutation,
   resolveFormatShortcut,
 } from "./markdownEditorKeyboardModel"
-import { MarkdownEditorModeTabs, type MarkdownEditorMode } from "./markdownEditorModeTabs"
+import {
+  MarkdownEditorModeTabs,
+  resolveModeForBodyFocus,
+  type MarkdownEditorMode,
+} from "./markdownEditorModeTabs"
 import {
   EditorRoot,
   EditorToolbar,
@@ -112,6 +116,9 @@ export const MarkdownEditor = ({
   const selectionRef = useRef<TextareaSelection>({ from: 0, to: 0 })
   const uploadInFlightCountRef = useRef(0)
   const allowNativeTabAfterEscapeRef = useRef(false)
+  const modeRef = useRef<MarkdownEditorMode>(mode)
+  const pendingBodyFocusRef = useRef(false)
+  modeRef.current = mode
 
   const setUploadInFlight = useCallback(
     (delta: number) => {
@@ -134,12 +141,33 @@ export const MarkdownEditor = ({
 
   useEffect(() => {
     onFocusRequestReady?.(() => {
+      if (disabled) return
+      const nextMode = resolveModeForBodyFocus(modeRef.current)
+      if (nextMode !== modeRef.current) {
+        pendingBodyFocusRef.current = true
+        setMode(nextMode)
+        return
+      }
       const textarea = textareaRef.current
-      if (!textarea || disabled) return
-      textarea.focus()
+      if (textarea) {
+        textarea.focus()
+        return
+      }
+      pendingBodyFocusRef.current = true
     })
     return () => onFocusRequestReady?.(null)
   }, [disabled, onFocusRequestReady])
+
+  useEffect(() => {
+    if (!pendingBodyFocusRef.current || disabled || mode === "preview") return
+    const frame = window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      pendingBodyFocusRef.current = false
+      textarea.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [disabled, mode])
 
   const commitMarkdown = useCallback(
     (nextMarkdown: string, editorFocused = false) => {

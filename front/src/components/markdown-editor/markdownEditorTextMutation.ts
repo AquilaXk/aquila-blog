@@ -136,15 +136,24 @@ export const planIndentLines = (
   const { blockStart, blockEnd } = selectionLineBounds(value, selectionStart, selectionEnd)
   const block = value.slice(blockStart, blockEnd)
   const lines = block.split("\n")
-  const nextBlock = lines.map((line) => `${indent}${line}`).join("\n")
-  const inserted = indent.length * lines.length
-  const anchorMoved = selectionStart === blockStart ? 0 : indent.length
+  let cursor = blockStart
+  let insertedBeforeStart = 0
+  let insertedBeforeEnd = 0
+
+  const nextLines = lines.map((line) => {
+    const lineStart = cursor
+    cursor += line.length + 1
+    if (lineStart < selectionStart) insertedBeforeStart += indent.length
+    if (lineStart < selectionEnd) insertedBeforeEnd += indent.length
+    return `${indent}${line}`
+  })
+
   return {
     rangeStart: blockStart,
     rangeEnd: blockEnd,
-    replacement: nextBlock,
-    selectionStart: selectionStart + anchorMoved,
-    selectionEnd: selectionEnd + inserted,
+    replacement: nextLines.join("\n"),
+    selectionStart: selectionStart + insertedBeforeStart,
+    selectionEnd: selectionEnd + insertedBeforeEnd,
   }
 }
 
@@ -157,7 +166,8 @@ export const planOutdentLines = (
   const { blockStart, blockEnd } = selectionLineBounds(value, selectionStart, selectionEnd)
   const block = value.slice(blockStart, blockEnd)
   const lines = block.split("\n")
-  let removedBeforeSelection = 0
+  let removedBeforeStart = 0
+  let removedBeforeEnd = 0
   let removedTotal = 0
   let cursor = blockStart
 
@@ -168,7 +178,10 @@ export const planOutdentLines = (
     if (!match) return line
     const removeCount = match[0] === "\t" ? 1 : Math.min(match[0].length, indentSize)
     if (lineStart < selectionStart) {
-      removedBeforeSelection += Math.min(removeCount, selectionStart - lineStart)
+      removedBeforeStart += Math.min(removeCount, selectionStart - lineStart)
+    }
+    if (lineStart < selectionEnd) {
+      removedBeforeEnd += Math.min(removeCount, selectionEnd - lineStart)
     }
     removedTotal += removeCount
     return line.slice(removeCount)
@@ -180,7 +193,7 @@ export const planOutdentLines = (
     rangeStart: blockStart,
     rangeEnd: blockEnd,
     replacement: nextLines.join("\n"),
-    selectionStart: Math.max(blockStart, selectionStart - removedBeforeSelection),
-    selectionEnd: Math.max(blockStart, selectionEnd - removedTotal),
+    selectionStart: Math.max(blockStart, selectionStart - removedBeforeStart),
+    selectionEnd: Math.max(blockStart, selectionEnd - removedBeforeEnd),
   }
 }

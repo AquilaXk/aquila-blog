@@ -3,6 +3,10 @@ import styled from "@emotion/styled"
 
 export type MarkdownEditorMode = "write" | "preview" | "split"
 
+/** Preview unmounts the textarea; body focus must switch to write first. */
+export const resolveModeForBodyFocus = (mode: MarkdownEditorMode): MarkdownEditorMode =>
+  mode === "preview" ? "write" : mode
+
 const MODE_ORDER: MarkdownEditorMode[] = ["write", "preview", "split"]
 
 const MODE_LABEL: Record<MarkdownEditorMode, string> = {

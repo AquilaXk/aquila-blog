@@ -59,12 +59,15 @@ export type LocalDraftBaselineReadySignal = {
 
 /**
  * ID field edits switch editorMode to create while keeping the previous body and a
- * non-empty postId. Autosave must stay gated until a successful load settles into edit.
+ * non-empty postId. Autosave stays gated only while awaiting the first load settle.
+ * After a failed load settles, awaitingPostLoad is cleared so user edits autosave again.
  */
 export const isLocalDraftAutosaveGatedForPostIdTransition = (
   editorMode: "create" | "edit",
-  postId: string
-): boolean => editorMode === "create" && postId.trim().length > 0
+  postId: string,
+  awaitingPostLoad = true
+): boolean =>
+  awaitingPostLoad && editorMode === "create" && postId.trim().length > 0
 
 const CREATE_WRITE_MISSING_POST_ID_STATUS_TEXT =
   "글 작성 응답에 글 ID가 없습니다. 로컬 임시저장은 유지됩니다. 다시 시도해주세요."
@@ -278,12 +281,53 @@ export const useEditorStudioLocalDraftLifecycle = ({
   const pendingSuccessfulBaselineSettleRef = useRef(false)
   const pendingBaselineFingerprintRef = useRef<string | null>(null)
   const [baselineReadyEpoch, setBaselineReadyEpoch] = useState(0)
+  const [postIdTransitionAwaitingLoad, setPostIdTransitionAwaitingLoad] = useState(false)
+  const prevEditorModeRef = useRef(editorMode)
+  const prevPostIdRef = useRef(postId)
+  const prevLoadingKeyRef = useRef(loadingKey)
   const isPostIdTransitionGated = isLocalDraftAutosaveGatedForPostIdTransition(
     editorMode,
-    postId
+    postId,
+    postIdTransitionAwaitingLoad
   )
   const isPostIdTransitionGatedRef = useRef(isPostIdTransitionGated)
   isPostIdTransitionGatedRef.current = isPostIdTransitionGated
+
+  useEffect(() => {
+    const normalizedPostId = postId.trim()
+    const prevNormalizedPostId = prevPostIdRef.current.trim()
+    const postIdChanged = normalizedPostId !== prevNormalizedPostId
+    const enteredCreateWithPostId =
+      editorMode === "create" &&
+      normalizedPostId.length > 0 &&
+      (prevEditorModeRef.current === "edit" || postIdChanged)
+
+    if (enteredCreateWithPostId) {
+      setPostIdTransitionAwaitingLoad(true)
+    }
+
+    if (editorMode === "edit") {
+      setPostIdTransitionAwaitingLoad(false)
+    }
+
+    prevEditorModeRef.current = editorMode
+    prevPostIdRef.current = postId
+  }, [editorMode, postId])
+
+  useEffect(() => {
+    const postLoadFailedSettle =
+      prevLoadingKeyRef.current === "postOne" &&
+      loadingKey.length === 0 &&
+      !pendingSuccessfulBaselineSettleRef.current &&
+      editorMode === "create" &&
+      postId.trim().length > 0
+
+    if (postLoadFailedSettle) {
+      setPostIdTransitionAwaitingLoad(false)
+    }
+
+    prevLoadingKeyRef.current = loadingKey
+  }, [baselineReadyEpoch, editorMode, loadingKey, postId])
 
   const signalLocalDraftBaselineReady = useCallback((signal?: LocalDraftBaselineReadySignal) => {
     pendingSuccessfulBaselineSettleRef.current = true

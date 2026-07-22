@@ -648,6 +648,7 @@ test.describe("editor local draft context slots", () => {
 
   test("gates create-slot autosave while post id transition awaits load", () => {
     expect(isLocalDraftAutosaveGatedForPostIdTransition("create", "42")).toBe(true)
+    expect(isLocalDraftAutosaveGatedForPostIdTransition("create", "42", false)).toBe(false)
     expect(isLocalDraftAutosaveGatedForPostIdTransition("create", "")).toBe(false)
     expect(isLocalDraftAutosaveGatedForPostIdTransition("edit", "42")).toBe(false)
 
@@ -675,5 +676,21 @@ test.describe("editor local draft context slots", () => {
         pendingRestorableDraftFingerprint: null,
       })
     ).toEqual({ action: "adopt-baseline", fingerprint: '{"title":"loaded"}' })
+  })
+
+  test("failed post load settle clears post id transition gate for autosave", () => {
+    expect(isLocalDraftAutosaveGatedForPostIdTransition("create", "42", false)).toBe(false)
+
+    expect(
+      decideLocalDraftAutosave({
+        loadingKey: "",
+        shouldAdoptBaseline: false,
+        isPostIdTransitionGated: false,
+        hasDraftContent: true,
+        editorFingerprint: '{"title":"edited-after-failed-load"}',
+        lastArmedFingerprint: '{"title":"previous-edit-body"}',
+        pendingRestorableDraftFingerprint: null,
+      })
+    ).toEqual({ action: "schedule" })
   })
 })

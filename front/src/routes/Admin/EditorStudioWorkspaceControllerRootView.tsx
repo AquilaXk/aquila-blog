@@ -14,6 +14,8 @@ import { EditorStudioContentWorkspace } from "./EditorStudioContentWorkspace"
 import { EditorStudioDedicatedEditorLoadingState, EditorStudioDedicatedEditorSurface } from "./EditorStudioDedicatedEditorSurface"
 import { LIST_SORT_OPTIONS } from "./useEditorStudioListConditions"
 import { deriveComposeViewModel, deriveEditorContentMetrics, deriveEditorPersistenceState, derivePublishActionViewModel, getVisibilityLabel, toFlags, type PublishActionType } from "./editorStudioState"
+import { isEditorUnsavedDirtyLabel } from "./editorStudioUnsavedExitGuard"
+import { useEditorStudioUnsavedExitGuard } from "./useEditorStudioUnsavedExitGuard"
 import { PREVIEW_SUMMARY_MAX_LENGTH, buildEditorStateFingerprint, detectPublishPlaceholderIssue, makePreviewSummary } from "./editorStudioMetaModel"
 import { Main, HeroCard, HeroIntro, StudioStatusItem, StudioStatusStrip, WorkspaceGrid, WorkspaceMain } from "./EditorStudioWorkspaceControllerRoot.styles"
 import { MARKDOWN_EDITOR_MERMAID_ENABLED, COMPOSE_MOBILE_STUDIO_STEPS, GLOBAL_NOTICE_IDLE_TEXT, MANAGE_MOBILE_STUDIO_STEPS, MOBILE_STUDIO_STEP_DESCRIPTION, MOBILE_STUDIO_STEP_LABEL, PREVIEW_CARD_VIEWPORT_ORDER, PREVIEW_CARD_VIEWPORTS, PUBLISH_VISIBILITY_OPTIONS, SHOW_LEGACY_CONTENT_STUDIO, SHOW_LEGACY_PROFILE_STUDIO, SHOW_LEGACY_UTILITY_STUDIO, getMobileStudioStepMoveLabel, recordEditorCommitDurationForRuntimeGuard, type MobileStudioStep, type NoticeTone, type PreviewViewportMode } from "./EditorStudioWorkspaceControllerRootModel"
@@ -279,6 +281,16 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
   })
   const composeStatusText = editorPersistenceState.text
   const composeStatusTone = editorPersistenceState.tone
+  const { requestGuardedAction, dialog: unsavedExitDialog } = useEditorStudioUnsavedExitGuard({
+    enabled: Boolean(sessionMember),
+    isDirty: isEditorUnsavedDirtyLabel(editorPersistenceState.text),
+    router,
+  })
+  const handleGuardedExitDedicatedEditor = useCallback(() => {
+    requestGuardedAction(() => {
+      handleExitDedicatedEditor()
+    })
+  }, [handleExitDedicatedEditor, requestGuardedAction])
   const composeSummaryPreview = useMemo(
     () => postSummary.trim() || deferredContentDerived.summary,
     [deferredContentDerived.summary, postSummary]
@@ -531,10 +543,11 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
 
   if (isDedicatedEditorRoute) {
     return (
+      <>
       <EditorStudioDedicatedEditorSurface
         thumbnailImageFileInputRef={thumbnailImageFileInputRef}
         onThumbnailImageFileChange={handleThumbnailImageFileChange}
-        onExit={handleExitDedicatedEditor}
+        onExit={handleGuardedExitDedicatedEditor}
         saveStateText={composeStatusText}
         saveStateTone={composeStatusTone}
         primaryActionDisabled={publishActionTriggerDisabled}
@@ -607,6 +620,8 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
           ) : null
         }
       />
+      {unsavedExitDialog}
+      </>
     )
   }
 
@@ -942,6 +957,7 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
         result={result}
         variant="standard"
       />
+      {unsavedExitDialog}
     </Main>
   )
 }

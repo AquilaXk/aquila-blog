@@ -12,6 +12,7 @@ import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
 import TagList from "./TagList"
 import useExplorePostsQuery from "src/hooks/useExplorePostsQuery"
+import { useDebouncedValue } from "src/hooks/useDebouncedValue"
 import { useRouter } from "next/router"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
@@ -37,7 +38,6 @@ import {
   toRestoredPage,
   toSnapshotPageParam,
   toSnapshotPage,
-  useDebouncedValue,
   type FeedExplorerRestoreSnapshot,
   type FeedExplorerRestoreState,
   type FeedExplorerSnapshotPage,

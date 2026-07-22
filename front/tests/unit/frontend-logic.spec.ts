@@ -11,6 +11,7 @@ import {
   toValidPageSize,
 } from "../../src/apis/backend/posts/PostApiRequestModel"
 import { shouldFetchAuthSession } from "../../src/hooks/useAuthSession"
+import { getSearchDebounceMs } from "../../src/hooks/useDebouncedValue"
 import { normalizeApiRequestPath } from "../../src/libs/backend/requestPath"
 import { parseMarkdownSegments } from "../../src/libs/markdown/renderingSegmentModel"
 import {
@@ -19,6 +20,11 @@ import {
   readOptionalTrackingConsent,
 } from "../../src/libs/privacy/optionalTrackingConsentCore"
 import { normalizeNextPath } from "../../src/libs/router"
+import {
+  isCloudSearchPending,
+  resolveCloudEmptyTitle,
+  shouldShowCloudEmptyLoading,
+} from "../../src/routes/Admin/AdminCloudWorkspaceModel"
 
 const createStorage = (): Storage => {
   const store = new Map<string, string>()
@@ -214,5 +220,63 @@ caption
     expect(buildExploreCursorPath({ cursor: "", tag: "  TypeScript  ", pageSize: 2 })).toBe(
       "/post/api/v1/posts/explore/cursor?tag=TypeScript&sort=CREATED_AT&pageSize=2"
     )
+  })
+
+  test("search debounce delay adapts by keyword length", () => {
+    expect(getSearchDebounceMs("")).toBe(0)
+    expect(getSearchDebounceMs("  ")).toBe(0)
+    expect(getSearchDebounceMs("한")).toBe(120)
+    expect(getSearchDebounceMs("검색어")).toBe(180)
+    expect(getSearchDebounceMs("프로젝트스크린샷")).toBe(240)
+  })
+
+  test("cloud empty state follows debounced search and fetch status", () => {
+    const baseInput = {
+      activeUploadCount: 0,
+      debouncedKeyword: "",
+      filter: "ALL" as const,
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      keyword: "",
+    }
+
+    expect(isCloudSearchPending("deploy", "depl")).toBe(true)
+    expect(isCloudSearchPending("deploy", "deploy")).toBe(false)
+
+    expect(
+      resolveCloudEmptyTitle({
+        ...baseInput,
+        keyword: "deploy",
+      })
+    ).toBe("검색 중입니다.")
+
+    expect(
+      resolveCloudEmptyTitle({
+        ...baseInput,
+        debouncedKeyword: "deploy",
+        keyword: "deploy",
+      })
+    ).toBe("선택한 조건에 맞는 파일이 없습니다.")
+
+    expect(
+      resolveCloudEmptyTitle({
+        ...baseInput,
+        debouncedKeyword: "deploy",
+        isFetching: true,
+        keyword: "deploy",
+      })
+    ).toBe("검색 중입니다.")
+
+    expect(
+      resolveCloudEmptyTitle({
+        ...baseInput,
+        debouncedKeyword: "deploy",
+        keyword: "",
+      })
+    ).toBe("검색 중입니다.")
+
+    expect(shouldShowCloudEmptyLoading({ filesCount: 0, isLoading: false, isSearchPending: true })).toBe(true)
+    expect(shouldShowCloudEmptyLoading({ filesCount: 2, isLoading: false, isSearchPending: true })).toBe(false)
   })
 })

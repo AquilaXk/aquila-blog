@@ -178,10 +178,9 @@ const resolveBodyUserMessage = (body: string) => {
     if (typeof message !== "string") return ""
     const trimmed = message.trim()
     if (!trimmed) return ""
-    const hasResultCode = typeof parsed.resultCode === "string" && parsed.resultCode.trim().length > 0
     const looksLocalized = /[가-힣]/.test(trimmed)
-    // Trust backend RsData (resultCode) or localized copy; ignore proxy English internals.
-    if (hasResultCode || looksLocalized) return trimmed
+    // Only localized backend copy is user-facing. Ignore proxy English and framework validation English.
+    if (looksLocalized) return trimmed
     return ""
   } catch {
     return ""

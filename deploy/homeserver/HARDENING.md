@@ -54,12 +54,22 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://<api_domain>/actuator/health
 
 ```bash
 # 예시: redis-cli로 키를 쓴 뒤 force-recreate 후 키가 남아 있는지 확인
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
-  exec redis_1 redis-cli -a "$PROD___SPRING__DATA__REDIS__PASSWORD" SET aquila:redis:persist-smoke 1 EX 3600
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
-  up -d --force-recreate redis_1
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
-  exec redis_1 redis-cli -a "$PROD___SPRING__DATA__REDIS__PASSWORD" GET aquila:redis:persist-smoke
+# --env-file은 compose 치환용이라 셸에 export되지 않으므로, .env.prod에서 비밀번호를 읽어 전달한다.
+set -a
+# shellcheck disable=SC1091
+source deploy/homeserver/.env.prod
+set +a
+COMPOSE=(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml)
+"${COMPOSE[@]}" exec redis_1 redis-cli -a "${PROD___SPRING__DATA__REDIS__PASSWORD}" SET aquila:redis:persist-smoke 1 EX 3600
+"${COMPOSE[@]}" up -d --force-recreate redis_1
+# AOF 로드가 끝날 때까지 준비 상태를 기다린 뒤 GET한다.
+for _ in $(seq 1 60); do
+  if "${COMPOSE[@]}" exec redis_1 redis-cli -a "${PROD___SPRING__DATA__REDIS__PASSWORD}" PING | grep -q PONG; then
+    break
+  fi
+  sleep 1
+done
+"${COMPOSE[@]}" exec redis_1 redis-cli -a "${PROD___SPRING__DATA__REDIS__PASSWORD}" GET aquila:redis:persist-smoke
 ```
 
 ## 롤백

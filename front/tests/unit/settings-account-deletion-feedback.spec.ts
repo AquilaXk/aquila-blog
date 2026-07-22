@@ -110,6 +110,34 @@ test("resolveAccountDeletionFailure maps other errors to generic danger feedback
   })
 })
 
+test("resolveAccountDeletionFailure appends requestId when present", () => {
+  expect(
+    resolveAccountDeletionFailure(
+      new ApiError(
+        500,
+        "/member/api/v1/privacy/account",
+        JSON.stringify({ msg: "서버가 바쁩니다." }),
+        "req-del-1",
+      ),
+    ),
+  ).toEqual({
+    kind: "generic",
+    message: "서버가 바쁩니다. (요청 ID: req-del-1)",
+  })
+
+  expect(
+    resolveAccountDeletionFailure(
+      new ApiError(401, "/member/api/v1/privacy/account", JSON.stringify({
+        resultCode: "401-1",
+        msg: "인증이 필요합니다.",
+      }), "req-session"),
+    ),
+  ).toEqual({
+    kind: "session",
+    message: `${ACCOUNT_DELETION_SESSION_EXPIRED_MESSAGE} (요청 ID: req-session)`,
+  })
+})
+
 test("ApiError prefers localized body and ignores English proxy/validation copy", () => {
   expect(new ApiError(502, "/api/backend/x", JSON.stringify({ message: "Backend proxy request failed." })).userMessage)
     .toBe("서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")

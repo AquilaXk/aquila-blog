@@ -159,6 +159,11 @@ class CloudVideoUploadSessionService(
             from = CloudVideoUploadSessionStatus.INITIATING.name,
             to = CloudVideoUploadSessionStatus.IN_PROGRESS.name,
         )
+        log.info(
+            "cloud_video_session_create_completed sessionId={} actorId={}",
+            session.id,
+            ownerMemberId,
+        )
 
         return session.toDto(emptyList())
     }
@@ -492,6 +497,11 @@ class CloudVideoUploadSessionService(
             from = CloudVideoUploadSessionStatus.ABORTING.name,
             to = CloudVideoUploadSessionStatus.EXPIRED.name,
         )
+        log.info(
+            "cloud_video_session_expire_completed sessionId={} actorId={}",
+            session.id,
+            session.ownerMemberId,
+        )
         return true
     }
 
@@ -586,6 +596,12 @@ class CloudVideoUploadSessionService(
                 meterRegistry,
                 from = fromStatus.name,
                 to = CloudVideoUploadSessionStatus.COMPLETED.name,
+            )
+            log.info(
+                "cloud_video_session_complete_completed sessionId={} fileId={} actorId={}",
+                session.id,
+                file.id,
+                session.ownerMemberId,
             )
         }
         return file

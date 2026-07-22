@@ -111,6 +111,7 @@ class PostApplicationService(
                     createdTags,
                 ),
             )
+            logger.info("post_create_completed postId={} actorId={}", created.id, author.id)
             return created
         }
 
@@ -172,6 +173,7 @@ class PostApplicationService(
                 createdTags,
             ),
         )
+        logger.info("post_create_completed postId={} actorId={}", createdPost.id, author.id)
 
         return createdPost
     }
@@ -285,6 +287,7 @@ class PostApplicationService(
                 afterTags,
             ),
         )
+        logger.info("post_update_completed postId={} actorId={}", post.id, actor.id)
     }
 
     private fun writeNewPost(
@@ -392,6 +395,7 @@ class PostApplicationService(
                 emptyList(),
             ),
         )
+        logger.info("post_delete_completed postId={} actorId={}", post.id, actor.id)
     }
 
     @Transactional

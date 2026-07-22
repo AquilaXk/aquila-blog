@@ -31,6 +31,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.multipart.MultipartException
 import org.springframework.web.servlet.NoHandlerFoundException
 import org.springframework.web.servlet.resource.NoResourceFoundException
+import java.util.IdentityHashMap
 import org.springframework.web.bind.annotation.ExceptionHandler as SpringExceptionHandler
 
 @RestControllerAdvice
@@ -253,9 +254,9 @@ class ExceptionHandler(
         ex: AppException,
         request: HttpServletRequest,
     ): ResponseEntity<RsData<Void>> {
+        val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
+        val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
         if (ex.rsData.statusCode >= 500) {
-            val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
-            val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
             val query = SensitiveQueryRedactor.redactQuery(request.queryString, MAX_QUERY_LENGTH)
             val exceptionMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
             logger.error(
@@ -267,6 +268,15 @@ class ExceptionHandler(
                 ex.rsData.resultCode,
                 ex::class.qualifiedName,
                 exceptionMessage,
+                redactedThrowableForLogging(ex),
+            )
+        } else {
+            logger.warn(
+                "app_exception status={} method={} path={} resultCode={}",
+                ex.rsData.statusCode,
+                method,
+                path,
+                ex.rsData.resultCode,
             )
         }
 
@@ -320,15 +330,14 @@ class ExceptionHandler(
         val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
         val query = SensitiveQueryRedactor.redactQuery(request.queryString, MAX_QUERY_LENGTH)
         val exceptionMessage = SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
-        val exceptionStack = SensitiveQueryRedactor.redactText(ex.stackTraceToString(), MAX_EXCEPTION_STACK_LENGTH)
         logger.error(
-            "unhandled_server_exception method={} path={} query={} exceptionClass={} exceptionMessage={} exceptionStack={}",
+            "unhandled_server_exception method={} path={} query={} exceptionClass={} exceptionMessage={}",
             method,
             path,
             query,
             ex::class.qualifiedName,
             exceptionMessage,
-            exceptionStack,
+            redactedThrowableForLogging(ex),
         )
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -418,6 +427,162 @@ class ExceptionHandler(
             else -> SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
         }
 
+    /**
+     * Logback은 스택 출력에 throwable의 className과 message를 넣는다.
+     * 원본과 같은 런타임 타입의 복사본을 만들고, message/cause/suppressed 메시지만 마스킹한다.
+     */
+    private fun redactedThrowableForLogging(ex: Throwable): Throwable = redactedThrowableForLogging(ex, IdentityHashMap())
+
+    private fun redactedThrowableForLogging(
+        ex: Throwable,
+        visited: IdentityHashMap<Throwable, Throwable>,
+    ): Throwable {
+        visited[ex]?.let { return it }
+
+        val redactedMessage = redactedExceptionMessage(ex)
+        // 순환 cause/suppressed 그래프에서 재귀가 끝나도록 임시 복사본을 먼저 등록한다.
+        val provisional =
+            createThrowableCopy(ex, redactedMessage, cause = null)
+                ?: fallbackRedactedThrowable(ex, redactedMessage)
+        visited[ex] = provisional
+
+        val redactedCause = ex.cause?.let { redactedThrowableForLogging(it, visited) }
+        val copy =
+            if (redactedCause == null) {
+                provisional
+            } else {
+                // CompletionException(String, Throwable)처럼 null cause도 생성 시 고정되면
+                // 이후 initCause가 실패한다. 마스킹된 cause로 다시 생성한다.
+                recreateWithCauseIfNeeded(ex, redactedMessage, provisional, redactedCause)
+            }
+        visited[ex] = copy
+        // prod/non-prod 공통: 전달하는 throwable의 프레임 수를 상한으로 잘라 로그 폭주를 막는다.
+        copy.stackTrace = ex.stackTrace.take(MAX_STACK_FRAMES).toTypedArray()
+
+        for (suppressed in ex.suppressed) {
+            copy.addSuppressed(redactedThrowableForLogging(suppressed, visited))
+        }
+        return copy
+    }
+
+    private fun redactedExceptionMessage(ex: Throwable): String =
+        if (ex is AppException) {
+            "${ex.rsData.resultCode} : ${SensitiveQueryRedactor.redactText(ex.rsData.msg, MAX_QUERY_LENGTH)}"
+        } else {
+            SensitiveQueryRedactor.redactText(ex.message, MAX_QUERY_LENGTH)
+        }
+
+    private fun recreateWithCauseIfNeeded(
+        ex: Throwable,
+        redactedMessage: String,
+        provisional: Throwable,
+        redactedCause: Throwable,
+    ): Throwable {
+        if (attachCause(provisional, redactedCause)) {
+            return provisional
+        }
+        return createThrowableCopy(ex, redactedMessage, redactedCause)
+            ?: provisional.also {
+                // 마지막 수단: 로깅 자체가 깨지지 않도록 임시 복사본을 유지한다(cause가 없을 수 있음).
+            }
+    }
+
+    private fun createThrowableCopy(
+        ex: Throwable,
+        redactedMessage: String,
+        cause: Throwable?,
+    ): Throwable? {
+        if (ex is AppException) {
+            return AppException(
+                ex.rsData.resultCode,
+                SensitiveQueryRedactor.redactText(ex.rsData.msg, MAX_QUERY_LENGTH),
+            )
+        }
+        return createThrowableWithMessage(ex.javaClass, redactedMessage, cause)
+    }
+
+    private fun fallbackRedactedThrowable(
+        ex: Throwable,
+        redactedMessage: String,
+    ): Throwable =
+        if (ex is RuntimeException) {
+            RuntimeException(redactedMessage)
+        } else {
+            Exception(redactedMessage)
+        }
+
+    private fun createThrowableWithMessage(
+        clazz: Class<out Throwable>,
+        message: String,
+        cause: Throwable?,
+    ): Throwable? {
+        // public (String) 생성자를 우선한다. cause가 비어 있어야 이후 initCause로 붙일 수 있다.
+        runCatching {
+            return clazz.getConstructor(String::class.java).newInstance(message)
+        }
+
+        // cause가 있으면 (String, Throwable)에 마스킹된 cause를 바로 넣어 생성한다.
+        if (cause != null) {
+            runCatching {
+                val instance =
+                    clazz
+                        .getConstructor(String::class.java, Throwable::class.java)
+                        .newInstance(message, cause)
+                if (instance.message == message) return instance
+            }
+            runCatching {
+                val instance = clazz.getConstructor(Throwable::class.java).newInstance(cause)
+                if (instance.message == message || instance.cause === cause) return instance
+            }
+        }
+
+        // 그 외 public 생성자 (예: DateTimeParseException(String, CharSequence, int)).
+        for (ctor in clazz.constructors.sortedBy { it.parameterCount }) {
+            val instance =
+                runCatching {
+                    val args =
+                        Array(ctor.parameterCount) { index ->
+                            defaultThrowableCtorArg(ctor.parameterTypes[index], message, cause)
+                        }
+                    ctor.newInstance(*args) as Throwable
+                }.getOrNull() ?: continue
+
+            // private 필드 수정 없이, message가 이미 마스킹된 복사본만 사용한다.
+            if (instance.message != message) continue
+            // cause가 필요한데 이 생성자가 cause를 비웠거나 다른 값이면 다음 생성자를 본다.
+            if (cause != null && instance.cause !== cause && instance.cause != null) continue
+            if (cause != null && instance.cause == null) continue
+            return instance
+        }
+        return null
+    }
+
+    private fun defaultThrowableCtorArg(
+        type: Class<*>,
+        message: String,
+        cause: Throwable?,
+    ): Any? =
+        when {
+            type == String::class.java || type == CharSequence::class.java -> message
+            type == Throwable::class.java -> cause
+            type == Integer.TYPE || type == Integer::class.java -> 0
+            type == java.lang.Long.TYPE || type == java.lang.Long::class.java -> 0L
+            type == java.lang.Boolean.TYPE || type == java.lang.Boolean::class.java -> false
+            type.isEnum -> type.enumConstants.firstOrNull()
+            else -> null
+        }
+
+    private fun attachCause(
+        target: Throwable,
+        cause: Throwable,
+    ): Boolean =
+        try {
+            target.initCause(cause)
+            true
+        } catch (_: IllegalStateException) {
+            false
+        }
+
     private fun sanitizeLogValue(
         raw: String?,
         maxLength: Int,
@@ -440,7 +605,7 @@ class ExceptionHandler(
         private const val MAX_METHOD_LENGTH = 16
         private const val MAX_PATH_LENGTH = 512
         private const val MAX_QUERY_LENGTH = 512
-        private const val MAX_EXCEPTION_STACK_LENGTH = 4096
+        private const val MAX_STACK_FRAMES = 30
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
     }
 }

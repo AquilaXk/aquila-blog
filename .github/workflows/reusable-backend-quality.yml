@@ -164,6 +164,9 @@ jobs:
       - name: Test forbidden tracked file guard
         run: bash tools/test/check-forbidden-tracked-files.test.sh
 
+      - name: Guard Terraform world-open security groups
+        run: bash tools/guards/check-terraform-no-world-open-sg.sh
+
       - name: Dependency review readiness
         if: github.event_name == 'pull_request'
         id: dependency_review

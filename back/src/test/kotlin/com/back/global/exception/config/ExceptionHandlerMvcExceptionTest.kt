@@ -3,6 +3,8 @@ package com.back.global.exception.config
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import com.back.global.observability.ErrorMetrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -40,6 +42,8 @@ class ExceptionHandlerMvcExceptionTest {
     private lateinit var mockMvc: MockMvc
     private lateinit var appender: ListAppender<ILoggingEvent>
 
+    private fun newHandler(): ExceptionHandler = ExceptionHandler(ErrorMetrics(SimpleMeterRegistry()))
+
     @BeforeEach
     fun setUp() {
         val validator =
@@ -49,7 +53,7 @@ class ExceptionHandlerMvcExceptionTest {
         mockMvc =
             MockMvcBuilders
                 .standaloneSetup(MvcExceptionFixtureController())
-                .setControllerAdvice(ExceptionHandler())
+                .setControllerAdvice(newHandler())
                 .setValidator(validator)
                 .build()
         appender = ExceptionHandlerListAppenderSupport.attach()
@@ -86,7 +90,7 @@ class ExceptionHandlerMvcExceptionTest {
     @DisplayName("NoHandlerFoundException 직접 매핑 -> 404-1")
     fun `maps no handler found exception to 404-1`() {
         val response =
-            ExceptionHandler().handleNotFoundMappingException(
+            newHandler().handleNotFoundMappingException(
                 NoHandlerFoundException("GET", "/missing-unmapped", HttpHeaders()),
                 MockHttpServletRequest("GET", "/missing-unmapped"),
             )
@@ -99,7 +103,7 @@ class ExceptionHandlerMvcExceptionTest {
     @DisplayName("NoResourceFoundException 직접 매핑 -> 404-1")
     fun `maps no resource found exception to 404-1`() {
         val response =
-            ExceptionHandler().handleNotFoundMappingException(
+            newHandler().handleNotFoundMappingException(
                 NoResourceFoundException(HttpMethod.GET, "/missing-resource", "/missing-resource"),
                 MockHttpServletRequest("GET", "/missing-resource"),
             )
@@ -136,7 +140,7 @@ class ExceptionHandlerMvcExceptionTest {
             )
         assertThat(validationResult.isForReturnValue).isTrue()
         val response =
-            ExceptionHandler().handleHandlerMethodValidationException(
+            newHandler().handleHandlerMethodValidationException(
                 HandlerMethodValidationException(validationResult),
                 MockHttpServletRequest("GET", "/mvc-exception-fixture/ok"),
             )
@@ -162,7 +166,7 @@ class ExceptionHandlerMvcExceptionTest {
                 listOf(crossError),
             )
         val response =
-            ExceptionHandler().handleHandlerMethodValidationException(
+            newHandler().handleHandlerMethodValidationException(
                 HandlerMethodValidationException(validationResult),
                 MockHttpServletRequest("GET", "/mvc-exception-fixture/ok"),
             )

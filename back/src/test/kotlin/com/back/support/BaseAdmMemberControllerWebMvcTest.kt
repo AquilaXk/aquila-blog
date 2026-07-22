@@ -7,6 +7,7 @@ import com.back.boundedContexts.member.subContexts.legalAcceptance.application.p
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
+import com.back.global.observability.ErrorMetrics
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
@@ -64,6 +65,9 @@ abstract class BaseAdmMemberControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext
+
+    @MockitoBean
+    protected lateinit var errorMetrics: ErrorMetrics
 
     companion object {
         @JvmStatic

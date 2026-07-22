@@ -3,6 +3,8 @@ package com.back.global.exception.config
 import ch.qos.logback.classic.Level
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.observability.ErrorMetrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -15,10 +17,12 @@ import java.util.concurrent.CompletionException
 
 @DisplayName("ExceptionHandler 로그 redaction 테스트")
 class ExceptionHandlerLogRedactionTest {
+    private fun newHandler(): ExceptionHandler = ExceptionHandler(ErrorMetrics(SimpleMeterRegistry()))
+
     @Test
     @DisplayName("5xx AppException 로그는 민감 query value를 남기지 않고 throwable로 스택을 전달한다")
     fun `app exception log redacts sensitive query values`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request =
             MockHttpServletRequest("GET", "/member/api/v1/signup/email/verify").apply {
                 queryString = "token=LEAK_TEST_123&email=test@example.com"
@@ -52,7 +56,7 @@ class ExceptionHandlerLogRedactionTest {
     @Test
     @DisplayName("unexpected exception은 exceptionStack 문자열 없이 throwable로 스택을 전달하고 message를 마스킹한다")
     fun `unexpected exception log redacts query tokens inside exception message`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request =
             MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
                 queryString = "code=LEAK_TEST_123&state=STATE_123&page=1"
@@ -90,7 +94,7 @@ class ExceptionHandlerLogRedactionTest {
     @Test
     @DisplayName("순환 cause 그래프도 StackOverflow 없이 redaction 로그를 남긴다")
     fun `cyclic cause graph does not overflow while redacting`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request = MockHttpServletRequest("GET", "/internal")
         val appender = ExceptionHandlerListAppenderSupport.attach()
 
@@ -115,7 +119,7 @@ class ExceptionHandlerLogRedactionTest {
     @Test
     @DisplayName("CompletionException처럼 cause가 생성자 고정인 예외도 루트 cause를 보존한다")
     fun `completion exception preserves redacted cause chain`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request = MockHttpServletRequest("GET", "/internal")
         val appender = ExceptionHandlerListAppenderSupport.attach()
 
@@ -144,7 +148,7 @@ class ExceptionHandlerLogRedactionTest {
     @Test
     @DisplayName("생성자 없는 예외 타입도 스택 첫 줄에 원본 클래스명을 남긴다")
     fun `constructorless exception preserves original class name in stack`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request = MockHttpServletRequest("GET", "/internal")
         val appender = ExceptionHandlerListAppenderSupport.attach()
 
@@ -168,7 +172,7 @@ class ExceptionHandlerLogRedactionTest {
     @Test
     @DisplayName("redacted throwable은 원본 예외 타입과 suppressed를 보존한다")
     fun `redacted throwable preserves type and suppressed`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request = MockHttpServletRequest("GET", "/internal")
         val appender = ExceptionHandlerListAppenderSupport.attach()
 
@@ -212,7 +216,7 @@ class ExceptionHandlerLogRedactionTest {
     @Test
     @DisplayName("4xx AppException은 warn 1줄만 남기고 스택을 포함하지 않는다")
     fun `4xx app exception records warn without stack`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request = MockHttpServletRequest("GET", "/posts/private")
         val appender = ExceptionHandlerListAppenderSupport.attach()
 
@@ -237,7 +241,7 @@ class ExceptionHandlerLogRedactionTest {
     @Test
     @DisplayName("mvc_request_rejected warn 로그는 스택 트레이스를 남기지 않는다")
     fun `mvc request rejected warn log does not include stack trace`() {
-        val handler = ExceptionHandler()
+        val handler = newHandler()
         val request = MockHttpServletRequest("GET", "/posts/not-a-number")
         val appender = ExceptionHandlerListAppenderSupport.attach()
 

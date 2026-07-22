@@ -1,0 +1,21 @@
+groups:
+  - name: aquila-app-exceptions
+    rules:
+      - alert: AquilaAppException5xxSpike
+        # 503-* 는 bulkhead/launch-gate 등 의도된 USER 응답이므로 critical 스파이크에서 제외한다.
+        expr: sum(rate(app_exception_total{status="500"}[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "App exception 500 spike detected"
+          description: "app_exception_total status=500 rate={{ $value }} for 5m. Check ExceptionHandler and filter/security error sources by resultCode (excludes intentional 503)."
+
+      - alert: AquilaAppException403Spike
+        expr: sum(rate(app_exception_total{status="403"}[10m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "App exception 403 spike detected"
+          description: "app_exception_total 403 rate={{ $value }} for 10m. Check CSRF/access-denied abuse signals by resultCode."

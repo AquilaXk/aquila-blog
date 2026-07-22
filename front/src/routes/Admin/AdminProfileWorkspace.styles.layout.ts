@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { control } from "src/design-system/tokens"
 import {
   AdminInfoPanelCard,
   AdminPaneHeader,
@@ -128,7 +129,7 @@ export const SectionRailButton = styled(AdminWorkspaceSectionNavButton)`
   }
 
   @media (max-width: 760px) {
-    min-height: 36px;
+    min-height: ${control.lg}px;
     padding: 0 0.78rem;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     font-size: 0.8rem;
@@ -338,6 +339,10 @@ export const Input = styled.input`
   padding: 0.82rem 0.95rem;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
+
   &::placeholder {
     color: ${({ theme }) => theme.colors.gray9};
   }
@@ -494,6 +499,10 @@ export const SegmentButton = styled.button`
   background: transparent;
   color: ${({ theme }) => theme.colors.gray10};
   font-weight: 700;
+
+  @media (max-width: 1100px) {
+    min-height: ${control.lg}px;
+  }
 
   &[data-active="true"] {
     background: ${({ theme }) => theme.colors.gray1};

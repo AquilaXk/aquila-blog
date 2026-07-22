@@ -16,6 +16,7 @@ import { RelatedPostsSection } from "./PostDetailRelatedSection"
 import { collectTocFromArticle, createObserverRegistry, createRafScheduler, isSameToc, type TocItem } from "./PostDetailTocModel"
 import { LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX, RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX, applyHybridRail, clearInlineRailStyle, measureHybridRail, resolveRailTopOffset } from "./PostDetailRailModel"
 import { FloatingActionRail, MobileSummaryActions, RightTocRail } from "./PostDetailActionSections"
+import PostDetailMobileToc from "./PostDetailMobileToc"
 import { usePostDetailEngagementActions } from "./usePostDetailEngagementActions"
 import { usePostDetailRelatedPosts } from "./usePostDetailRelatedPosts"
 import { RecoverableSurfaceBoundary } from "src/components/error/ErrorBoundary"
@@ -525,6 +526,13 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               onToggleLike={handleToggleLike}
               onSharePost={handleSharePost}
               onScrollToComments={() => scrollSectionIntoView(commentsSectionRef.current)}
+            />
+          ) : null}
+          {showStickyToc ? (
+            <PostDetailMobileToc
+              items={visibleTocItems}
+              activeTocId={activeTocId}
+              onNavigate={handleTocNavigate}
             />
           ) : null}
           <BodySection data-rum-section="body">

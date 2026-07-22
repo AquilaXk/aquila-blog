@@ -1,5 +1,7 @@
 import Link from "next/link"
 import { ReactNode } from "react"
+import { EmptyState, Skeleton } from "src/design-system/StatePresenters"
+import { control, layoutBreakpoint } from "src/design-system/tokens"
 import useAuthSession from "src/hooks/useAuthSession"
 import { colors } from "src/styles/colors"
 
@@ -15,7 +17,13 @@ const SettingsLayout = ({ active, title, children }: SettingsLayoutProps) => {
   if (authStatus === "loading") {
     return (
       <main className="settingsPage" aria-busy="true">
-        <p className="statusText">인증 상태를 확인하는 중입니다.</p>
+        <div className="stateBlock" role="status" aria-live="polite">
+          <p className="srOnly">인증 상태 확인 중</p>
+          <Skeleton height="0.75rem" width="6rem" aria-hidden="true" />
+          <Skeleton height="2rem" width="12rem" aria-hidden="true" />
+          <Skeleton height="1rem" width="70%" aria-hidden="true" />
+          <Skeleton height="1rem" width="48%" aria-hidden="true" />
+        </div>
         <style jsx global>{settingsStyles}</style>
       </main>
     )
@@ -24,11 +32,16 @@ const SettingsLayout = ({ active, title, children }: SettingsLayoutProps) => {
   if (authStatus !== "authenticated" || !me) {
     return (
       <main className="settingsPage">
-        <section className="emptyState" aria-label="로그인 필요">
-          <h1>설정</h1>
-          <p>로그인 후 개인정보와 계정 설정을 관리할 수 있습니다.</p>
-          <Link className="primaryLink" href={`/login?next=/settings/${active}`}>로그인</Link>
-        </section>
+        <EmptyState
+          label="SETTINGS"
+          title="설정"
+          description="로그인 후 개인정보와 계정 설정을 관리할 수 있습니다."
+          actions={
+            <Link className="primaryLink" href={`/login?next=/settings/${active}`}>
+              로그인
+            </Link>
+          }
+        />
         <style jsx global>{settingsStyles}</style>
       </main>
     )
@@ -119,6 +132,8 @@ export const settingsStyles = `
   }
 
   .settingsPage .tabs a {
+    display: inline-flex;
+    align-items: center;
     padding: 0 0 10px;
     margin-bottom: -1px;
     border-bottom: 2px solid transparent;
@@ -153,10 +168,22 @@ export const settingsStyles = `
     letter-spacing: 0;
   }
 
-  .statusText,
-  .emptyState {
+  .stateBlock {
+    display: grid;
+    gap: 12px;
     margin-top: 48px;
-    color: var(--aq-text-secondary);
+  }
+
+  .srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .settingsPage .primaryLink,
@@ -171,6 +198,14 @@ export const settingsStyles = `
     cursor: pointer;
   }
 
+  @media (max-width: ${layoutBreakpoint.navCompact}px) {
+    .settingsPage .tabs a,
+    .settingsPage .primaryLink,
+    .settingsPage button {
+      min-height: ${control.lg}px;
+    }
+  }
+
   .primaryLink {
     display: inline-flex;
     align-items: center;
@@ -183,7 +218,7 @@ export const settingsStyles = `
     background: var(--aq-border-strong);
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: ${layoutBreakpoint.editorCompact}px) {
     .settingsPage {
       width: min(100% - 24px, 980px);
       padding-top: 28px;

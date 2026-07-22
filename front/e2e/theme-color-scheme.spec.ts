@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test"
 import type { Page } from "@playwright/test"
+import { readFileSync } from "fs"
+import path from "path"
 import { addPublicAboutSnapshotCookie, mockAvatarAsset, mockFeedEndpoints } from "./helpers/smokeFixtures"
 
 type SchemeCookie = "dark" | "light" | null
@@ -173,6 +175,60 @@ const expectStableUniqueValue = <T,>(values: T[], expected: T) => {
 }
 
 test.describe("theme color-scheme", () => {
+  test("useScheme는 intentional light-only 정책이며 setScheme이 light를 이탈할 수 없다", () => {
+    const useSchemeSource = readFileSync(path.resolve(__dirname, "../src/hooks/useScheme.ts"), "utf8")
+    const rootLayoutSource = readFileSync(
+      path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"),
+      "utf8"
+    )
+
+    expect(useSchemeSource).toContain("Intentional light-only")
+    expect(useSchemeSource).toContain("PR 1275")
+    expect(useSchemeSource).toContain("HIG P5-5")
+    expect(useSchemeSource).toContain("Do not restore dark runtime or a header theme toggle")
+    expect(useSchemeSource).toContain("const LIGHT_SCHEME: SchemeType = \"light\"")
+    expect(useSchemeSource).toContain("Clamp: requested scheme (including \"dark\") cannot leave light-only.")
+    expect(useSchemeSource).toContain("queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)")
+    expect(useSchemeSource).toContain("root.dataset.aquilaScheme = LIGHT_SCHEME")
+    expect(useSchemeSource).toContain("root.style.colorScheme = LIGHT_SCHEME")
+    expect(useSchemeSource).not.toContain("resolveBootstrapScheme")
+    expect(useSchemeSource).not.toContain("setCookie")
+    expect(useSchemeSource).not.toMatch(/setQueryData\(queryKey\.scheme\(\),\s*["']dark["']\)/)
+    expect(useSchemeSource).not.toContain('dataset.aquilaScheme = "dark"')
+    expect(rootLayoutSource).toContain("useScheme()")
+    expect(rootLayoutSource).toContain('const effectiveScheme = "light"')
+    expect(rootLayoutSource).not.toContain("showThemeToggle")
+    expect(rootLayoutSource).not.toMatch(/from ["'].*ThemeToggle["']/)
+  })
+
+  test("hydrate 후 html scheme·colorScheme은 light이고 ThemeToggle이 없다", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" })
+    await prepareHomeThemePage(page, "dark")
+    await page.goto("/")
+
+    await expect(page.getByRole("button", { name: "테마 전환" })).toHaveCount(0)
+    await expect(page.locator('[data-ui="theme-toggle"]')).toHaveCount(0)
+    await expect(page.locator("html")).toHaveAttribute("data-aquila-scheme", "light")
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          attr: document.documentElement.getAttribute("data-aquila-scheme"),
+          style: document.documentElement.style.colorScheme,
+          computed: window.getComputedStyle(document.documentElement).colorScheme,
+        }))
+      )
+      .toEqual({
+        attr: "light",
+        style: "light",
+        computed: "light",
+      })
+    await expect(readControlScheme(page)).resolves.toEqual({
+      body: "light",
+      html: "light",
+      input: "light",
+    })
+  })
+
   const firstPaintCases = [
     { label: "쿠키 없음 + OS dark", osScheme: "dark", schemeCookie: null },
     { label: "쿠키 없음 + OS light", osScheme: "light", schemeCookie: null },

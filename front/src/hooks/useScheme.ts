@@ -1,3 +1,7 @@
+/**
+ * Intentional light-only public/admin shell (PR 1275 / HIG P5-5).
+ * Do not restore dark runtime or a header theme toggle — same-day merge removed it by design.
+ */
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useEffect, useLayoutEffect } from "react"
 import { queryKey } from "src/constants/queryKey"
@@ -34,20 +38,15 @@ const useScheme = (): [SchemeType, SetScheme] => {
 
   const setScheme = useCallback(
     (_scheme: SchemeType) => {
-      const current = queryClient.getQueryData<SchemeType>(queryKey.scheme())
-      if (current !== LIGHT_SCHEME) {
-        queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)
-      }
+      // Clamp: requested scheme (including "dark") cannot leave light-only.
+      queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)
       clearSchemeBootstrapStyle()
     },
     [queryClient]
   )
 
   useIsomorphicLayoutEffect(() => {
-    const current = queryClient.getQueryData<SchemeType>(queryKey.scheme())
-    if (current !== LIGHT_SCHEME) {
-      queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)
-    }
+    queryClient.setQueryData(queryKey.scheme(), LIGHT_SCHEME)
     clearSchemeBootstrapStyle()
   }, [queryClient])
 

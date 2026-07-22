@@ -2,6 +2,7 @@ import NavBar from "./NavBar"
 import Logo from "./Logo"
 import styled from "@emotion/styled"
 import { useEffect, useRef } from "react"
+import { layoutBreakpoint } from "src/design-system/tokens"
 
 type Props = {
   fullWidth: boolean
@@ -114,7 +115,7 @@ const StyledWrapper = styled.div`
     min-height: 64px;
     margin: 0 auto;
 
-    @media (max-width: 820px) {
+    @media (max-width: ${layoutBreakpoint.navCompact}px) {
       width: min(calc(100% - 24px), 1240px);
       min-height: 58px;
       gap: 10px;
@@ -135,7 +136,7 @@ const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 820px) {
+  @media (max-width: ${layoutBreakpoint.navCompact}px) {
     .container {
       padding-left: 0;
       padding-right: 0;

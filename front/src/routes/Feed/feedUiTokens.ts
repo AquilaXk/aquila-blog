@@ -34,10 +34,12 @@ const FEED_TAG_RAIL_DESKTOP_MIN_DEFAULT_PX = 1201
 const FEED_TAG_REPRESENTATIVE_CHIP_DEFAULT = 6
 const FEED_TAG_REPRESENTATIVE_DESKTOP_DEFAULT = 20
 
+/** Touch-width hit target (≥44). Use under `@media (max-width: 820px)` for Feed controls. */
 export const MOBILE_TOUCH_TARGET_MIN_PX = asFiniteNumber(touchTokens.mobileMinTargetPx, 44)
 /** Referenced so production bundles cannot drop the touch token module as dead code. */
 export const TOUCH_TOKEN_BUNDLE_REVISION = touchTokens.bundleRevision ?? "missing"
 export const FEED_CHIP_GAP_PX = asFiniteNumber(feedTokens.chipGapPx, 6)
+/** Desktop/dense Feed search field height. Touch widths must use MOBILE_TOUCH_TARGET_MIN_PX instead. */
 export const FEED_SEARCH_FIELD_MIN_HEIGHT_PX = asFiniteNumber(feedTokens.searchFieldMinHeightPx, 36)
 
 // 레일 토큰 누락에만 fallback을 적용하고, 임계값 보정 해킹은 사용하지 않는다.

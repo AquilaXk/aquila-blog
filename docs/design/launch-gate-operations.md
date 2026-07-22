@@ -8,6 +8,7 @@
 - Soft-launch 제품 범위 목표 (Locked — #1127 / epic #1256): 관리자 글 발행 + 비로그인 공개 열람
 - Soft-launch freeze 키(이 gate 강제 범위): `CUSTOM__MEMBER__SIGNUP__ENABLED=false`, `CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=false`, `NEXT_PUBLIC_SIGNUP_ENABLED=false`, `NEXT_PUBLIC_RUM_SAMPLE_RATE=0`, `CUSTOM__AI__SUMMARY__ENABLED=false` (AI 실키는 SUMMARY, TAG 아님)
 - Soft-launch 명시적 예외: 관리자 로그인/발행 필수. 기존 회원 로그인·댓글 쓰기는 5-key freeze 범위 밖(별도 issue)
+- Soft-launch freeze 운영 경로: homeserver deploy/env.contract + deploy.yml. Vercel 프로젝트 env는 Soft-launch 운영 SoT가 아니다.
 - 적용 대상: release readiness, GitHub Actions CI/CD, 홈서버 배포, QA, monitoring, legal/public pages, privacy launch gate
 - 기본 흐름: issue 확인 -> work branch -> PR -> CI/security -> code review -> merge -> post-merge CI/CD 확인
 

@@ -131,6 +131,11 @@ const parseLocalDraftPayload = (
         ? clampThumbnailZoom(parsed.thumbnailZoom)
         : legacyZoom
 
+    const postVersion =
+      typeof parsed.postVersion === "number" && Number.isFinite(parsed.postVersion)
+        ? parsed.postVersion
+        : null
+
     return {
       title: typeof parsed.title === "string" ? parsed.title : "",
       content: typeof parsed.content === "string" ? parsed.content : "",
@@ -146,6 +151,7 @@ const parseLocalDraftPayload = (
       visibility: isValidVisibility ? visibility : "PUBLIC_LISTED",
       savedAt,
       source,
+      postVersion,
     }
   } catch {
     return null

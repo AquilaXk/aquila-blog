@@ -82,6 +82,8 @@ type UseEditorStudioDraftLifecycleParams = {
   router: NextRouter
   toEditorPostRoute: (id: string | number) => string
   postId: string
+  postVersion: number | null
+  loadingKey: string
   postTitle: string
   postContent: string
   getCurrentPostContent: () => string
@@ -121,7 +123,9 @@ type UseEditorStudioDraftLifecycleParams = {
   setPublishStatus: (notice: PublishNotice, target?: PublishTarget) => void
   dedupeStrings: (items: string[]) => string[]
   normalizeCategoryValue: (value: string) => string
-  buildLocalDraftFingerprint: (payload: Omit<LocalDraftPayload, "savedAt" | "source">) => string
+  buildLocalDraftFingerprint: (
+    payload: Omit<LocalDraftPayload, "savedAt" | "source" | "postVersion">
+  ) => string
   persistLocalDraft: (payload: LocalDraftPayload) => void
   readLocalDraft: (source: LocalDraftSource) => LocalDraftPayload | null
   removeLocalDraft: (source: LocalDraftSource) => void
@@ -163,6 +167,7 @@ export const useEditorStudioDraftLifecycle = ({
   lastLocalDraftFingerprintRef,
   lastWriteFingerprintRef,
   lastWriteIdempotencyKeyRef,
+  loadingKey,
   normalizeCategoryValue,
   persistLocalDraft,
   postCategory,
@@ -176,6 +181,7 @@ export const useEditorStudioDraftLifecycle = ({
   postThumbnailUrl,
   postThumbnailZoom,
   postTitle,
+  postVersion,
   postVisibility,
   pretty,
   readLocalDraft,
@@ -224,6 +230,7 @@ export const useEditorStudioDraftLifecycle = ({
     lastLocalDraftFingerprintRef,
     lastWriteFingerprintRef,
     lastWriteIdempotencyKeyRef,
+    loadingKey,
     normalizeCategoryValue,
     persistLocalDraft,
     postCategory,
@@ -237,6 +244,7 @@ export const useEditorStudioDraftLifecycle = ({
     postThumbnailUrl,
     postThumbnailZoom,
     postTitle,
+    postVersion,
     postVisibility,
     readLocalDraft,
     removeLocalDraft,

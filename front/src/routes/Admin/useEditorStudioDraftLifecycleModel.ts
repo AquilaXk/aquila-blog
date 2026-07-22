@@ -2,11 +2,16 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
 } from "react"
-import type { LocalDraftPayload, LocalDraftSource } from "./editorStudioMetaModel"
+import {
+  localDraftSourcesEqual,
+  type LocalDraftPayload,
+  type LocalDraftSource,
+} from "./editorStudioMetaModel"
 import type { PostVisibility } from "./editorStudioState"
 import {
   describeLocalDraftSlot,
@@ -23,6 +28,8 @@ type EditorMode = "create" | "edit"
 type UseEditorStudioLocalDraftLifecycleParams = {
   editorMode: EditorMode
   postId: string
+  postVersion: number | null
+  loadingKey: string
   postTitle: string
   postContent: string
   getCurrentPostContent: () => string
@@ -55,7 +62,7 @@ type UseEditorStudioLocalDraftLifecycleParams = {
   setPublishStatus: (notice: PublishNotice, target?: PublishTarget) => void
   dedupeStrings: (items: string[]) => string[]
   normalizeCategoryValue: (value: string) => string
-  buildLocalDraftFingerprint: (payload: Omit<LocalDraftPayload, "savedAt" | "source">) => string
+  buildLocalDraftFingerprint: (payload: Omit<LocalDraftPayload, "savedAt" | "source" | "postVersion">) => string
   persistLocalDraft: (payload: LocalDraftPayload) => void
   readLocalDraft: (source: LocalDraftSource) => LocalDraftPayload | null
   removeLocalDraft: (source: LocalDraftSource) => void
@@ -71,6 +78,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
   lastLocalDraftFingerprintRef,
   lastWriteFingerprintRef,
   lastWriteIdempotencyKeyRef,
+  loadingKey,
   normalizeCategoryValue,
   persistLocalDraft,
   postCategory,
@@ -84,6 +92,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
   postThumbnailUrl,
   postThumbnailZoom,
   postTitle,
+  postVersion,
   postVisibility,
   readLocalDraft,
   removeLocalDraft,
@@ -111,6 +120,12 @@ export const useEditorStudioLocalDraftLifecycle = ({
     () => resolveLocalDraftSource(editorMode, postId),
     [editorMode, postId]
   )
+  const draftSourceRef = useRef(draftSource)
+  draftSourceRef.current = draftSource
+  const loadingKeyRef = useRef(loadingKey)
+  loadingKeyRef.current = loadingKey
+  const postVersionRef = useRef(postVersion)
+  postVersionRef.current = postVersion
 
   const localDraftCore = useMemo(
     () => ({
@@ -146,7 +161,20 @@ export const useEditorStudioLocalDraftLifecycle = ({
     [buildLocalDraftFingerprint, localDraftCore]
   )
 
-  const saveLocalDraft = useCallback((options?: { silent?: boolean }) => {
+  const saveLocalDraft = useCallback((options?: {
+    silent?: boolean
+    expectedSource?: LocalDraftSource
+  }) => {
+    // Skip while load/switch transitions: postId/editorMode can settle before content does.
+    if (loadingKeyRef.current.length > 0) {
+      return
+    }
+
+    const source = draftSourceRef.current
+    if (options?.expectedSource && !localDraftSourcesEqual(options.expectedSource, source)) {
+      return
+    }
+
     const currentLocalDraftCore = {
       ...localDraftCore,
       content: getCurrentPostContent(),
@@ -157,10 +185,16 @@ export const useEditorStudioLocalDraftLifecycle = ({
       return
     }
 
+    const resolvedPostVersion =
+      source.kind === "post" && typeof postVersionRef.current === "number"
+        ? postVersionRef.current
+        : null
+
     const payload: LocalDraftPayload = {
       ...currentLocalDraftCore,
       savedAt: new Date().toISOString(),
-      source: draftSource,
+      source,
+      postVersion: resolvedPostVersion,
     }
 
     persistLocalDraft(payload)
@@ -179,7 +213,6 @@ export const useEditorStudioLocalDraftLifecycle = ({
     }
   }, [
     buildLocalDraftFingerprint,
-    draftSource,
     getCurrentPostContent,
     lastLocalDraftFingerprintRef,
     localDraftCore,
@@ -206,12 +239,18 @@ export const useEditorStudioLocalDraftLifecycle = ({
     if (draft.source.kind === "post") {
       setEditorMode("edit")
       setPostId(draft.source.postId)
+      if (typeof draft.postVersion === "number") {
+        setPostVersion(draft.postVersion)
+      } else if (postId !== draft.source.postId) {
+        setPostVersion(null)
+      }
+      // Same post without stored version: keep current postVersion for modify/temp-publish.
     } else {
       setEditorMode("create")
       setPostId("")
+      setPostVersion(null)
     }
     setIsTempDraftMode(false)
-    setPostVersion(null)
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
     lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
@@ -257,6 +296,7 @@ export const useEditorStudioLocalDraftLifecycle = ({
     lastWriteFingerprintRef,
     lastWriteIdempotencyKeyRef,
     normalizeCategoryValue,
+    postId,
     readLocalDraft,
     setEditorMode,
     setIsTempDraftMode,
@@ -336,6 +376,9 @@ export const useEditorStudioLocalDraftLifecycle = ({
   ])
 
   useEffect(() => {
+    // Gate autosave until load/switch settles so post A content never lands in post B / create.
+    if (loadingKey.length > 0) return
+
     const hasDraftContent =
       postTitle.trim().length > 0 ||
       postContent.trim().length > 0 ||
@@ -347,15 +390,18 @@ export const useEditorStudioLocalDraftLifecycle = ({
     if (!hasDraftContent) return
     if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) return
 
+    const expectedSource = draftSource
     const timerId = window.setTimeout(() => {
-      saveLocalDraft({ silent: true })
+      saveLocalDraft({ silent: true, expectedSource })
     }, 1200)
 
     return () => {
       window.clearTimeout(timerId)
     }
   }, [
+    draftSource,
     lastLocalDraftFingerprintRef,
+    loadingKey,
     localDraftFingerprint,
     postCategory,
     postContent,

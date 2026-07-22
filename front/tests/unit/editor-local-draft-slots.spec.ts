@@ -13,7 +13,10 @@ import {
   removeLocalDraft,
   resolveLocalDraftSource,
 } from "../../src/routes/Admin/editorStudioStorageModel"
-import type { LocalDraftPayload } from "../../src/routes/Admin/editorStudioMetaModel"
+import {
+  localDraftSourcesEqual,
+  type LocalDraftPayload,
+} from "../../src/routes/Admin/editorStudioMetaModel"
 
 const createStorage = (): Storage => {
   const store = new Map<string, string>()
@@ -287,5 +290,40 @@ test.describe("editor local draft context slots", () => {
     )
     expect(postLabel).toContain("#15")
     expect(postLabel).toContain("수정 중")
+  })
+
+  test("persists and reads postVersion for post-slot drafts", () => {
+    withLocalStorage(() => {
+      persistLocalDraft(
+        baseDraft({
+          title: "versioned",
+          source: { kind: "post", postId: "21" },
+          savedAt: new Date().toISOString(),
+          postVersion: 7,
+        })
+      )
+      expect(readLocalDraft({ kind: "post", postId: "21" })?.postVersion).toBe(7)
+
+      persistLocalDraft(
+        baseDraft({
+          title: "create",
+          source: { kind: "create" },
+          savedAt: new Date().toISOString(),
+          postVersion: null,
+        })
+      )
+      expect(readLocalDraft({ kind: "create" })?.postVersion).toBeNull()
+    })
+  })
+
+  test("localDraftSourcesEqual distinguishes create and post slots", () => {
+    expect(localDraftSourcesEqual({ kind: "create" }, { kind: "create" })).toBe(true)
+    expect(localDraftSourcesEqual({ kind: "create" }, { kind: "post", postId: "1" })).toBe(false)
+    expect(
+      localDraftSourcesEqual({ kind: "post", postId: "1" }, { kind: "post", postId: "1" })
+    ).toBe(true)
+    expect(
+      localDraftSourcesEqual({ kind: "post", postId: "1" }, { kind: "post", postId: "2" })
+    ).toBe(false)
   })
 })

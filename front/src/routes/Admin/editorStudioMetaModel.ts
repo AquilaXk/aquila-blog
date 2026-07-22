@@ -56,6 +56,16 @@ export type LocalDraftPayload = {
   visibility: PostVisibility
   savedAt: string
   source: LocalDraftSource
+  /** Optimistic-lock version for post-slot drafts; create drafts omit/null. */
+  postVersion?: number | null
+}
+
+export type LocalDraftFingerprintPayload = Omit<LocalDraftPayload, "savedAt" | "source" | "postVersion">
+
+export const localDraftSourcesEqual = (left: LocalDraftSource, right: LocalDraftSource): boolean => {
+  if (left.kind === "create" && right.kind === "create") return true
+  if (left.kind === "post" && right.kind === "post") return left.postId === right.postId
+  return false
 }
 
 const markdownImagePattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/
@@ -518,9 +528,8 @@ export const composeEditorContent = (
   return `---\n${metadataLines.join("\n")}\n---\n\n${normalizedBody}`
 }
 
-export const buildLocalDraftFingerprint = (
-  payload: Omit<LocalDraftPayload, "savedAt" | "source">
-) => JSON.stringify(payload)
+export const buildLocalDraftFingerprint = (payload: LocalDraftFingerprintPayload) =>
+  JSON.stringify(payload)
 
 export const detectPublishPlaceholderIssue = (content: string): string | null => {
   let inFence = false

@@ -435,6 +435,8 @@ export const EditorStudioWorkspaceController = ({
     router,
     toEditorPostRoute,
     postId,
+    postVersion,
+    loadingKey,
     postTitle,
     postContent,
     getCurrentPostContent,

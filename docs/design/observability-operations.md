@@ -5,8 +5,9 @@
 - Epic: #1288 / Issue: #1300
 - 기준 tip: `feat/error-metrics-alerts` (ErrorCode + `ErrorResponseWriter` + `app_exception_total` + error alerts)
 - 코드표: [`docs/design/error-codes.md`](./error-codes.md)
-- Alert rules: `deploy/homeserver/monitoring/rules/*.yml`
+- Alert rules: `deploy/homeserver/monitoring/rules/*.yml` (`task-alerts.yml` + `error-alerts.yml` + `cloud-media-alerts.yml`)
 - 로그 대시보드: Grafana **Aquila Logs Overview** (`blog-logs-overview.json`)
+- 클라우드 미디어: Grafana **Blog Cloud Media** (`blog-cloud-media.json`) — 검증 보조 [`docs/ops/cloud-media-metrics-verify.md`](../ops/cloud-media-metrics-verify.md)
 
 > **검증 범위 (PR)**  
 > LogQL/PromQL은 저장소 dashboard JSON의 라벨·필드 규약과 best-effort로 정합했다.  
@@ -22,17 +23,36 @@
 {compose_project="blog_home",service=~"back_.*|back.*"}
 ```
 
-로그 패턴: `rid=%X{requestId}` (`logback-spring.xml`), 구조화 메시지에 `resultCode=…`, `requestId=…`가 함께 찍힌다.
+로그 패턴 (`logback-spring.xml`):
+
+| 프로필 | 인코더 | requestId 형태 |
+| --- | --- | --- |
+| **prod** | `LogstashEncoder` (`includeMdc=true`) | JSON 필드 `requestId` (MDC). plain `rid=` 접두는 **없다** |
+| **!prod** | plain pattern | `rid=%X{requestId}` + 메시지 본문의 `resultCode=` / `requestId=` |
+
+구조화 메시지(`app_exception` / `error_response` / `api_error`)에는 양쪽 모두 `resultCode=…`가 찍힌다. **홈서버(prod) Loki 조회는 JSON `requestId`가 정본**이다.
 
 ### 1.1 requestId로 단일 요청 추적
 
 대시보드 변수 `$requestId`와 동일. UUID 또는 `X-Request-Id` 값을 그대로 넣는다.
 
+프로필 무관하게 UUID 문자열로 찾기 (prod JSON·!prod plain 모두 매칭):
+
 ```logql
 {compose_project="blog_home",service=~"back_.*|back.*"} |= "<REQUEST_ID>"
 ```
 
-`rid=` 접두로 좁히기:
+**prod** — JSON/Logstash MDC `requestId`로 좁히기:
+
+```logql
+{compose_project="blog_home",service=~"back_.*|back.*"} |= `"requestId":"<REQUEST_ID>"`
+```
+
+```logql
+{compose_project="blog_home",service=~"back_.*|back.*"} | json | requestId="<REQUEST_ID>"
+```
+
+**!prod only** — plain console의 `rid=` 접두:
 
 ```logql
 {compose_project="blog_home",service=~"back_.*|back.*"} |= "rid=<REQUEST_ID>"
@@ -116,7 +136,8 @@ topk(10, sum by (code) (rate(app_exception_total[5m])))
    필요 시 `status`/`source`(`handler`|`filter`|`security`)로 분해.
 2. **같은 구간의 Loki에서 해당 `resultCode` 필터**  
    `|= "resultCode=<code>"` → 경로·메시·스택 패턴 확인.
-3. **대표 로그에서 `rid=` / `requestId=` 추출** 후 §1.1로 단일 요청 타임라인 복원.
+3. **대표 로그에서 requestId 추출** 후 §1.1로 단일 요청 타임라인 복원.  
+   prod: JSON `requestId` 필드 · !prod: plain `rid=` / 메시지 `requestId=`.
 4. **HTTP status만 보이는 패널과 교차**  
    `http_server_requests_*`의 5xx/403과 `app_exception_total`이 어긋나면 filter/security 경로(`ErrorResponseWriter`) 또는 status-only 응답을 의심한다.
 5. **프론트 RUM**  
@@ -128,7 +149,8 @@ topk(10, sum by (code) (rate(app_exception_total[5m])))
 
 ## 2. Alert → 대응 매핑 표
 
-소스: `deploy/homeserver/monitoring/rules/task-alerts.yml`, `error-alerts.yml` (**43 rules, 누락 없음**).
+소스: `deploy/homeserver/monitoring/rules/task-alerts.yml` (41) + `error-alerts.yml` (2) + `cloud-media-alerts.yml` (10) = **53 rules**.  
+cloud-media 검증·패널 매핑은 [`docs/ops/cloud-media-metrics-verify.md`](../ops/cloud-media-metrics-verify.md)와 Grafana **Blog Cloud Media** (`blog-cloud-media.json`)를 본다.
 
 | Alert | 의미 | 첫 확인 대시보드·쿼리 | 1차 조치 |
 | --- | --- | --- | --- |
@@ -173,8 +195,18 @@ topk(10, sum by (code) (rate(app_exception_total[5m])))
 | AquilaPublicEdgeProbeRouteDown | edge route probe fail (5m) | Public Edge route panels | Cloudflare / Vercel / origin |
 | AquilaExternalBackupFailed | backup failure counter↑ (30m) | deploy workflow / backup 메트릭 | 배포 로그·backup 스토리지 |
 | AquilaDeployRollbackDetected | rollback counter↑ (30m) | deploy workflow | 실패 gate·rollback 사유 |
-| AquilaAppException5xxSpike | `app_exception_total` 5xx rate >0.2 (5m) | Logs Overview「App Exception Top-N」 + §1.4 | code/source별 분해 → Loki `resultCode` → requestId |
+| AquilaAppException5xxSpike | `app_exception_total{status="500"}` rate >0.2 (5m). **500만** — 의도된 `503-*` USER 응답은 제외 (`error-alerts.yml`) | Logs Overview「App Exception Top-N」 + §1.4 (`status="500"`) | code/source별 분해 → Loki `resultCode` → requestId |
 | AquilaAppException403Spike | `app_exception_total` 403 rate >1 (10m) | 동일 + `code=~"403-.*"` | CSRF/AccessDenied/abuse (`403-1`~`403-3` 등) |
+| AquilaCloudUploadFailureRateWarning | upload FAILED/created >5% (15m, created≥5) | Blog Cloud Media「Upload session funnel」 | multipart/MinIO 오류·[`cloud-media-metrics-verify.md`](../ops/cloud-media-metrics-verify.md) |
+| AquilaCloudUploadFailureRateCritical | upload FAILED/created >20% (15m, created≥5) | 동일 | 스토리지/multipart 경로 즉시 조사 |
+| AquilaCloudUploadSessionStuck | `cloud_upload_session_stuck` >0 (30m) | Blog Cloud Media「Stuck intermediate sessions」 | cleanup job·세션 복구 |
+| AquilaCloudPlayback5xxHigh | playback 5xx ratio >2% (10m) | Blog Cloud Media「Playback request rate」 | MinIO GET/HEAD·playback token |
+| AquilaCloudTempDiskLowWarning | `java.io.tmpdir` free <15% (10m) | Blog Cloud Media「Temp disk free ratio」 | part buffering·디스크 확보 |
+| AquilaCloudTempDiskLowCritical | temp free <5% (5m) | 동일 | 업로드 part buffer 실패 직전 |
+| AquilaCloudMinioDiskLowWarning | MinIO volume free <15% (10m) | Blog Cloud Media「MinIO disk free ratio」 | `AQUILA_EXTERNAL_STORAGE_ROOT` 확장 |
+| AquilaCloudMinioDiskLowCritical | MinIO free <5% (5m) | 동일 | object write 실패 위험 |
+| AquilaCloudReconcileOrphansDetected | `cloud_reconcile_orphans` >0 (15m, info) | Blog Cloud Media「Reconcile orphans」 | diagnose 후 repair 여부 판단 |
+| AquilaCloudReconcileOrphansSpike | orphans >25 (15m) | 동일 | prefix isolation·incomplete upload·repair threshold |
 
 대시보드 파일 매핑:
 
@@ -182,6 +214,7 @@ topk(10, sum by (code) (rate(app_exception_total[5m])))
 | --- | --- |
 | Aquila Blog Overview | `blog-overview.json` |
 | Aquila Logs Overview | `blog-logs-overview.json` |
+| Blog Cloud Media | `blog-cloud-media.json` |
 | Aquila Feed Performance | `blog-feed-performance.json` |
 | Aquila Public Edge Probe | `blog-public-edge.json` |
 | Blog Runtime Guard Baseline | `blog-runtime-guard-baseline.json` |
@@ -226,7 +259,7 @@ cd /path/to/deploy/homeserver
 | Robots / Notification Snapshot | origin vs public 코드 기대값 | edge/origin 불일치 |
 | Back Container States·Memory | blue/green/read/admin/worker 정상 | 메모리 압박·비정상 status |
 | 서비스 Logs (tail) | 최근 에러 시그니처 부재 또는 설명 가능 | caddy/cloudflared/loki/promtail/back/db/redis |
-| 5xx Correlation (last 15m) | proxy/app/db 상위 시그니처·`rid=` 상위 | 해당 `requestId`로 §1.1 LogQL |
+| 5xx Correlation (last 15m) | proxy/app/db 상위 시그니처·requestId 상위 | prod JSON이면 `requestId` 필드, !prod plain이면 `rid=` — §1.1 LogQL. `doctor.sh`는 현재 `rid=` grep이라 **prod에서는 “requestId not found”가 나올 수 있음** → Loki §1.1(prod)로 교차 |
 
 종료 코드: 필수 env 파일 부재 등 fatal만 non-zero. 대부분 섹션은 수집 실패해도 이어진다.
 
@@ -282,7 +315,7 @@ flowchart LR
   EH["ExceptionHandler\nsource=handler"]
   EC["ErrorCode\nresultCode + status + kind"]
   EM["ErrorMetrics\napp_exception_total\ncode,status,source"]
-  Logs["Structured logs\nrid= · resultCode=\napp_exception / error_response"]
+  Logs["Structured logs\nprod: JSON requestId\n!prod: rid=\nresultCode · app_exception"]
   Promtail[Promtail]
   Loki[Loki]
   Act["/actuator/prometheus"]
@@ -322,4 +355,4 @@ flowchart LR
 
 ### 운영자가 기억하는 한 줄
 
-**메트릭(`code`)으로 무엇을, 로그(`resultCode`+`rid`)로 왜를 보고, 알림 메일은 앱/데이터면 장애에만 쓰고 probe scrape-down은 steady_state_guard에 맡긴다.**
+**메트릭(`code`)으로 무엇을, 로그(`resultCode`+prod JSON `requestId` / !prod `rid=`)로 왜를 보고, 알림 메일은 앱/데이터면 장애에만 쓰고 probe scrape-down은 steady_state_guard에 맡긴다.**

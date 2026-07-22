@@ -199,7 +199,7 @@
       "status": "Closed",
       "category": "필수 출시 전 완료",
       "target": "Soft-launch 출시 범위와 privacy freeze 키 계약 고정",
-      "evidenceRequirement": "Soft-launch=admin publish+anonymous public read ONLY; signup/OAuth signup/RUM/`CUSTOM__AI__SUMMARY__ENABLED` false/0; live smoke",
+      "evidenceRequirement": "Soft-launch 제품 목표=admin publish+anonymous public read; gate=5-key signup/OAuth signup/RUM/`CUSTOM__AI__SUMMARY__ENABLED` false/0; 기존 회원 로그인·쓰기는 예외; live smoke",
       "launchDecision": "완료",
       "disabledByFlag": true,
       "disabledEvidence": [

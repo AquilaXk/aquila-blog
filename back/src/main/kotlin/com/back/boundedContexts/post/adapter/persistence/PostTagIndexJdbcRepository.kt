@@ -6,6 +6,7 @@ import org.springframework.dao.DataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
 import java.util.concurrent.atomic.AtomicReference
 
@@ -20,7 +21,12 @@ class PostTagIndexJdbcRepository(
 ) : PostTagIndexRepositoryPort {
     private val logger = LoggerFactory.getLogger(PostTagIndexJdbcRepository::class.java)
     private val tableAvailable = AtomicReference<Boolean?>(null)
-    private val transactionTemplate = TransactionTemplate(transactionManager)
+
+    // REQUIRES_NEW: tag-index 실패가 상위 post write 트랜잭션을 rollback-only로 오염시키지 않게 한다.
+    private val transactionTemplate =
+        TransactionTemplate(transactionManager).apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
 
     override fun replacePostTags(
         postId: Long,

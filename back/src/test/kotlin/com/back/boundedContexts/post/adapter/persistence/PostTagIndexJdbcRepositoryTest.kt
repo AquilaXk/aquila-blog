@@ -51,6 +51,7 @@ class PostTagIndexJdbcRepositoryTest {
 
         assertThat(transactionManager.rollbackCount).isEqualTo(1)
         assertThat(transactionManager.commitCount).isEqualTo(0)
+        assertThat(transactionManager.lastPropagation).isEqualTo(TransactionDefinition.PROPAGATION_REQUIRES_NEW)
         verify(jdbcTemplate, times(1)).update(anyString(), eq(10L))
         verify(jdbcTemplate, times(1)).batchUpdate(
             anyString(),
@@ -73,8 +74,12 @@ class PostTagIndexJdbcRepositoryTest {
     private class TrackingTransactionManager : PlatformTransactionManager {
         var commitCount = 0
         var rollbackCount = 0
+        var lastPropagation: Int? = null
 
-        override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
+        override fun getTransaction(definition: TransactionDefinition?): TransactionStatus {
+            lastPropagation = definition?.propagationBehavior
+            return SimpleTransactionStatus()
+        }
 
         @Throws(TransactionException::class)
         override fun commit(status: TransactionStatus) {

@@ -1,0 +1,134 @@
+package com.back.global.security.application
+
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.security.application.port.output.AuthSecurityEventStore
+import com.back.global.security.domain.AuthSecurityEventType
+import com.back.global.security.model.AuthSecurityEvent
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
+import java.security.MessageDigest
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+
+data class AuthSecurityEventDto(
+    val id: Long,
+    val createdAt: Instant,
+    val eventType: String,
+    val memberId: Long?,
+    val loginIdentifier: String?,
+    val rememberLoginEnabled: Boolean,
+    val ipSecurityEnabled: Boolean,
+    val clientIpFingerprint: String?,
+    val requestPath: String?,
+    val reason: String?,
+)
+
+/**
+ * 인증 보안 이벤트 저장/조회 유스케이스를 제공합니다.
+ */
+@Service
+class AuthSecurityEventService(
+    private val authSecurityEventStore: AuthSecurityEventStore,
+    @param:Value("\${custom.privacy.retention.authSecurityEventDays:\${custom.auth.securityEvent.retentionDays:30}}")
+    private val retentionDays: Int = 30,
+) {
+    /**
+     * 로그인 성공 시 적용된 정책값을 운영 관측용 이벤트로 남깁니다.
+     * REQUIRES_NEW로 처리해 이후 요청 흐름 실패와 독립적으로 기록을 보장합니다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun recordLoginPolicyApplied(
+        member: Member,
+        loginIdentifier: String,
+        requestPath: String,
+    ) {
+        authSecurityEventStore.save(
+            AuthSecurityEvent(
+                eventType = AuthSecurityEventType.LOGIN_POLICY_APPLIED,
+                memberId = member.id,
+                loginIdentifier = minimizedLoginIdentifier(member.id, loginIdentifier),
+                rememberLoginEnabled = member.rememberLoginEnabled,
+                ipSecurityEnabled = member.ipSecurityEnabled,
+                clientIpFingerprint = member.ipSecurityFingerprint,
+                requestPath = requestPath.take(255),
+                reason = null,
+            ),
+        )
+    }
+
+    /**
+     * IP 보안 불일치 차단 시도를 운영 관측용 이벤트로 남깁니다.
+     * REQUIRES_NEW로 처리해 차단 예외와 무관하게 기록이 유실되지 않게 합니다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun recordIpSecurityMismatchBlocked(
+        memberId: Long?,
+        loginIdentifier: String?,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        expectedIpFingerprint: String?,
+        requestPath: String,
+        reason: String,
+    ) {
+        authSecurityEventStore.save(
+            AuthSecurityEvent(
+                eventType = AuthSecurityEventType.IP_SECURITY_MISMATCH_BLOCKED,
+                memberId = memberId,
+                loginIdentifier = minimizedLoginIdentifier(memberId, loginIdentifier),
+                rememberLoginEnabled = rememberLoginEnabled,
+                ipSecurityEnabled = ipSecurityEnabled,
+                clientIpFingerprint = expectedIpFingerprint,
+                requestPath = requestPath.take(255),
+                reason = reason.take(160),
+            ),
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun getRecent(limit: Int): List<AuthSecurityEventDto> = authSecurityEventStore.findRecent(limit).map { it.toDto() }
+
+    @Transactional
+    fun purgeExpired(
+        batchSize: Int,
+        now: Instant = Instant.now(),
+    ): Int {
+        val cutoff = now.minus(retentionDays.coerceAtLeast(1).toLong(), ChronoUnit.DAYS)
+        return authSecurityEventStore.deleteExpiredBefore(cutoff, batchSize.coerceIn(1, 1_000))
+    }
+
+    private fun AuthSecurityEvent.toDto(): AuthSecurityEventDto =
+        AuthSecurityEventDto(
+            id = id,
+            createdAt = createdAt,
+            eventType = eventType.name,
+            memberId = memberId,
+            loginIdentifier = loginIdentifier,
+            rememberLoginEnabled = rememberLoginEnabled,
+            ipSecurityEnabled = ipSecurityEnabled,
+            clientIpFingerprint = maskFingerprint(clientIpFingerprint),
+            requestPath = requestPath,
+            reason = reason,
+        )
+
+    private fun maskFingerprint(value: String?): String? {
+        if (value.isNullOrBlank()) return null
+        if (value.length <= 16) return value
+        return "${value.take(12)}...${value.takeLast(4)}"
+    }
+
+    private fun minimizedLoginIdentifier(
+        memberId: Long?,
+        loginIdentifier: String?,
+    ): String? {
+        if (memberId != null || loginIdentifier.isNullOrBlank()) return null
+        val normalized = loginIdentifier.trim().lowercase()
+        val digest =
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(normalized.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        return "sha256:$digest"
+    }
+}

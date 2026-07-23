@@ -1,0 +1,13 @@
+name: Frontend CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-ci:
+    uses: ./.github/workflows/reusable-frontend-verify.yml

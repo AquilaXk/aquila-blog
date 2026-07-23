@@ -1,0 +1,58 @@
+retentionRules:
+  - activityId: account_registration_email
+    retention: accountLifetimeUntilDeletionOrLegalHold
+    destruction: softDeleteThenAnonymizeOrHardDeleteAfterRetention
+    followUp: issue999
+  - activityId: signup_email_verification
+    retention: token/session expiry plus custom.privacy.retention.signupVerificationDays default 7 days
+    destruction: expireCancelConsumeThenPrivacyRetentionCleanupPurge
+    followUp: issue998, issue1000
+  - activityId: kakao_oauth_existing_login
+    retention: accountLifetimeForLinkedIdentifier; transientStateCookieUntilCallback
+    destruction: unlinkOrAccountDeletion; transientCookieExpiry
+    followUp: issue997
+  - activityId: kakao_oauth_pending_signup
+    retention: pendingTokenTtlThenPurge; accountLifetimeAfterConsent
+    destruction: expireCancelConsumeThenPurgeByRetentionJob; unlinkOrAccountDeletion
+    followUp: issue997
+  - activityId: auth_session_and_cookies
+    retention: revoked sessions custom.privacy.retention.revokedSessionDays default 30 days; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; signup_session untilSignupExpiry; auth.signupMailCooldown.v1 untilCooldownExpiryOrTabClose; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
+    destruction: revokeSessionExpireCookiePurgeExpiredSessions; auth.signupMailCooldown.v1 expires hashed entries; auth.login.* browserPreferenceDeletion
+    followUp: issue995
+  - activityId: user_content_posts_comments
+    retention: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* untilTabCloseOrBrowserStorageClear
+    destruction: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* tabCloseOrBrowserStorageDeletion
+    followUp: issue999
+  - activityId: file_uploads_profile_post_cloud
+    retention: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry; aquila-cloud-video-upload-session:* untilUploadCompleteCancelOrStale
+    destruction: objectDeleteAndMetadataMarkDeleted; backupExpiryOrTombstoneFutureWork; aquila-cloud-video-upload-session:* localStorageClearOnCompleteCancelOrStale
+    followUp: issue1004
+  - activityId: auth_security_events
+    retention: custom.privacy.retention.authSecurityEventDays default 30 days
+    destruction: scheduledPurgeAndLogRetentionExpiry
+    followUp: issue1000, issue1001
+  - activityId: member_action_logs
+    retention: custom.privacy.retention.memberActionLogDays default 90 days
+    destruction: privacyRetentionCleanup scheduled batch purge
+    followUp: issue1000, issue1001
+  - activityId: notifications_sse
+    retention: custom.privacy.retention.notificationDays default 60 days
+    destruction: privacyRetentionCleanup scheduled batch purge; account deletion removes account-visible access
+    followUp: issue1000
+  - activityId: analytics_and_rum
+    retention: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 JSON record untilConsentChangeOrBrowserStorageClear
+    destruction: providerRetentionControlsAndLocalLogExpiry; privacy.optionalTrackingConsent.v1 preferenceDeletion
+    followUp: providerRetentionReview
+  - activityId: ai_summary_gemini
+    retention: noRawPromptRetentionIntended; providerRetentionRequiresContractReview
+    destruction: noLocalPersistence; providerDeletionControlsReviewRequired
+    followUp: issue1003
+  - activityId: backup_and_restore
+    retention: backupClassRetentionPolicyInDeployScripts; privacyTombstoneFutureWork
+    destruction: pruneExternalBackupsAndDeployBackupRotation; encryptedDeletionFutureWork
+    followUp: issue1004
+
+principles:
+  - Security or legal hold data must be separated from account-visible data during deletion handling.
+  - Backup retention can outlive database deletion, so restore must replay deletion tombstones before traffic opens.
+  - Analytics, RUM, and AI external processing must prefer aggregate or transient handling that does not require user identification.

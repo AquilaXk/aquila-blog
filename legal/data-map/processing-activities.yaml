@@ -1,0 +1,502 @@
+activities:
+  - id: account_registration_email
+    name: 이메일 회원가입 계정 생성
+    dataCategories:
+      - email
+      - nickname
+      - passwordHash
+      - legalAcceptanceVersion
+      - legalAcceptanceTimestamp
+      - accountIdentifier
+      - apiKey
+    dataSubjects:
+      - registeredMember
+    purpose: 이메일 인증 기반 계정 제공, 로그인 식별, 약관 및 개인정보처리방침 동의 증빙
+    legalBasis: contractAndConsent
+    collectionSource: /signup 이메일 회원가입 form
+    requiredOrOptional: required
+    systemOfRecord: PostgreSQL member, member_signup_verification
+    processors:
+      - home_server_postgresql
+      - smtp_provider_unconfirmed
+    overseasTransfer: reviewRequired:smtp-provider-region-unconfirmed
+    retentionRule: accountLifetimeUntilDeletionOrLegalHold
+    destructionMethod: softDeleteThenAnonymizeOrHardDeleteAfterRetention
+    accessRoles:
+      - accountOwner
+      - serviceAdmin
+      - databaseOperator
+    encryption: passwordHashAndTransportTls; databaseDiskEncryptionReviewRequired
+    userRightsHandler: privacyRequestEmailAndFutureAccountDeletionFlow
+    codeOwner: back/member-auth
+    policySectionId: privacy-collection-account
+    enabledByEnv: custom.member.signup.enabled defaults false via CUSTOM__MEMBER__SIGNUP__ENABLED; NEXT_PUBLIC_SIGNUP_ENABLED defaults false
+    reviewRequired:
+      - SMTP provider name, region, DPA, retention policy must be finalized before commercial launch.
+
+  - id: signup_email_verification
+    name: 회원가입 이메일 인증 링크 발송과 세션 검증
+    dataCategories:
+      - email
+      - emailVerificationToken
+      - signupSessionToken
+      - verificationExpiry
+      - legalAcceptanceVersion
+      - legalAcceptanceTimestamp
+      - signupEmailRateLimitKey
+      - signupIpRateLimitKey
+    dataSubjects:
+      - signupApplicant
+    purpose: 회원가입 요청자가 이메일 소유자인지 확인하고 in-flight 가입 세션을 제한
+    legalBasis: contractPreparationAndConsentEvidence
+    collectionSource: /member/api/v1/signup/email/start and verification link
+    requiredOrOptional: required
+    systemOfRecord: PostgreSQL member_signup_verification; outbound SMTP task queue
+    processors:
+      - home_server_postgresql
+      - home_server_redis
+      - smtp_provider_unconfirmed
+    overseasTransfer: reviewRequired:smtp-provider-region-unconfirmed
+    retentionRule: token/session expiry plus custom.privacy.retention.signupVerificationDays default 7 days
+    destructionMethod: expireCancelConsumeThenPrivacyRetentionCleanupPurge
+    accessRoles:
+      - signupApplicant
+      - serviceAdmin
+      - databaseOperator
+    encryption: randomTokenAtRestCurrentlyPlaintext; hashMigrationTrackedByIssue998; transportTls
+    userRightsHandler: privacyRequestEmailAndExpiredTokenPurge
+    codeOwner: back/member-signup-verification
+    policySectionId: privacy-collection-signup-verification
+    enabledByEnv: custom.member.signup.enabled defaults false via CUSTOM__MEMBER__SIGNUP__ENABLED
+    reviewRequired:
+      - Token hash migration is tracked separately and must complete before unrestricted signup.
+
+  - id: kakao_oauth_existing_login
+    name: Kakao OAuth 기존 연결 계정 로그인
+    dataCategories:
+      - oauthProvider
+      - oauthProviderSubject
+      - emailWhenProvided
+      - authState
+      - redirectOrigin
+    dataSubjects:
+      - registeredMember
+      - oauthApplicant
+    purpose: 기존 연결 계정 로그인과 OAuth CSRF state 검증
+    legalBasis: contractAndLegitimateSecurityInterest
+    collectionSource: Kakao OAuth redirect and Spring Security OAuth2 client
+    requiredOrOptional: optionalLoginMethod
+    systemOfRecord: PostgreSQL member; OAuth2 state cookie/session
+    processors:
+      - kakao_oauth
+      - home_server_postgresql
+    overseasTransfer: noPlannedOverseasTransferByService; Kakao processing terms apply
+    retentionRule: accountLifetimeForLinkedIdentifier; transientStateCookieUntilCallback
+    destructionMethod: unlinkOrAccountDeletion; transientCookieExpiry
+    accessRoles:
+      - accountOwner
+      - serviceAdmin
+      - databaseOperator
+    encryption: transportTls; legacyProviderSubjectMayExistInAccountRecord; newAccountsUseProviderSubjectHashLoginId
+    userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
+    codeOwner: back/oauth2
+    policySectionId: privacy-collection-oauth
+    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id; existing login remains available while signup freeze is on
+    reviewRequired:
+      - Legacy connected accounts may still contain provider subject in member login_id until unlink/migration policy is finalized.
+
+  - id: kakao_oauth_pending_signup
+    name: Kakao OAuth 신규 가입 pending 동의
+    dataCategories:
+      - oauthProvider
+      - oauthProviderSubjectHash
+      - pendingOAuthSignupTokenHash
+      - profileNickname
+      - profileImageUrl
+      - authState
+      - redirectOrigin
+      - legalAcceptanceVersion
+      - legalAcceptanceTimestamp
+    dataSubjects:
+      - oauthApplicant
+      - registeredMemberAfterConsent
+    purpose: Kakao OAuth 신규 사용자를 로컬 약관·개인정보·연령 동의 완료 전 pending 상태로 제한하고 동의 완료 후 계정 생성
+    legalBasis: contractPreparationAndConsentEvidence
+    collectionSource: Kakao OAuth redirect, /signup/social/complete, /member/api/v1/signup/social/*
+    requiredOrOptional: optionalSignupMethod
+    systemOfRecord: PostgreSQL pending_oauth_signup, member, member_legal_acceptance
+    processors:
+      - kakao_oauth
+      - home_server_postgresql
+    overseasTransfer: noPlannedOverseasTransferByService; Kakao processing terms apply
+    retentionRule: pendingTokenTtlThenPurge; accountLifetimeAfterConsent
+    destructionMethod: expireCancelConsumeThenPurgeByRetentionJob; unlinkOrAccountDeletion
+    accessRoles:
+      - signupApplicant
+      - accountOwner
+      - serviceAdmin
+      - databaseOperator
+    encryption: pendingTokenHmacHashAtRest; providerSubjectHmacHashAtRest; transportTls
+    userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
+    codeOwner: back/oauth-signup; front/signup-social-complete
+    policySectionId: privacy-collection-oauth
+    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id; custom.member.oauth-signup.enabled defaults false via CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED
+    reviewRequired:
+      - Pending signup purge job and OAuth unlink/account deletion workflow remain tracked by issue1000 and issue999.
+
+  - id: auth_session_and_cookies
+    name: 인증 세션, refresh token, 보안 cookie
+    dataCategories:
+      - accessToken
+      - refreshTokenHash
+      - sessionKey
+      - authCookie
+      - apiKey cookie
+      - accessToken cookie
+      - refreshToken cookie
+      - sessionKey cookie
+      - signup_session cookie
+      - auth.login.keepSignedIn
+      - auth.login.ipSecurityOn
+      - auth.signupMailCooldown.v1
+      - auth:me:anon-probe-suppress-until:v1
+      - header.auth-shell.v1
+      - createdIp
+      - userAgent
+      - ipSecurityFingerprint
+      - rememberLoginPreference
+      - loginAttemptIdentifierKey
+      - loginAttemptIpKey
+    dataSubjects:
+      - registeredMember
+    purpose: 로그인 상태 유지, 세션 탈취 방지, IP 보안 정책 적용
+    legalBasis: contractAndLegitimateSecurityInterest
+    collectionSource: login form, auth filter, browser cookies
+    requiredOrOptional: requiredForLogin; ipSecurityOptional
+    systemOfRecord: PostgreSQL member_session; HttpOnly browser cookies
+    processors:
+      - home_server_postgresql
+      - home_server_redis
+      - vercel_frontend_hosting
+      - cloudflare_dns_proxy
+    overseasTransfer: possibleViaVercelOrCloudflareEdge
+    retentionRule: revoked sessions custom.privacy.retention.revokedSessionDays default 30 days; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; signup_session untilSignupExpiry; auth.signupMailCooldown.v1 untilCooldownExpiryOrTabClose; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
+    destructionMethod: revokeSessionExpireCookiePurgeExpiredSessions; auth.signupMailCooldown.v1 expires hashed entries; auth.login.* browserPreferenceDeletion
+    accessRoles:
+      - accountOwner
+      - serviceAdmin
+      - databaseOperator
+    encryption: refreshTokenHashAtRest; HttpOnlySecureSameSiteCookies; transportTls
+    userRightsHandler: logoutAllSessionsAndPrivacyRequestEmail
+    codeOwner: back/auth-session
+    policySectionId: privacy-collection-session
+    enabledByEnv: custom.prod.cookieDomain; custom.prod.frontUrl
+    reviewRequired:
+      - Cookie inventory is published in cookies.ko-KR.v1.0.2 and must stay aligned with browserStorageRegistry.
+
+  - id: user_content_posts_comments
+    name: 게시글, 댓글, 공개 프로필 콘텐츠
+    dataCategories:
+      - postTitle
+      - postMarkdownContent
+      - postRenderedHtml
+      - commentContent
+      - profileNickname
+      - profileRole
+      - profileBio
+      - profileImageUrl
+      - aboutRole
+      - aboutBio
+      - aboutDetails
+      - profileServiceLinks
+      - profileContactLinks
+      - postHitDedupHash
+      - admin.editor.localDraft.v1
+      - admin.editor.customTags
+      - admin.editor.customCategories
+      - admin.contentStudio.listConditions.v1
+      - editor.actual-preview.v1:*
+      - posts:public-cursor-disabled:v1
+      - posts:runtime-endpoints:v1
+      - feed.restore.*
+    dataSubjects:
+      - registeredMember
+      - publicVisitorWhenViewing
+    purpose: 블로그 콘텐츠 작성, 공개 열람, 댓글 커뮤니케이션, 프로필 표시
+    legalBasis: contractAndUserPublishedContent
+    collectionSource: admin editor, comment form, profile editor
+    requiredOrOptional: optionalUserGeneratedContent
+    systemOfRecord: PostgreSQL post, post_comment, member profile columns, member_attr profile/home fields
+    processors:
+      - home_server_postgresql
+      - home_server_redis
+      - vercel_frontend_hosting
+      - cloudflare_dns_proxy
+    overseasTransfer: possibleViaVercelOrCloudflareEdge
+    retentionRule: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* untilTabCloseOrBrowserStorageClear
+    destructionMethod: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* tabCloseOrBrowserStorageDeletion
+    accessRoles:
+      - contentAuthor
+      - serviceAdmin
+      - databaseOperator
+      - publicVisitorForPublishedContent
+    encryption: transportTls; databaseDiskEncryptionReviewRequired
+    userRightsHandler: privacyRequestEmailAndContentDeletionFlow
+    codeOwner: back/post
+    policySectionId: privacy-collection-content
+    enabledByEnv: alwaysEnabledForBlogCore
+    reviewRequired:
+      - User-entered sensitive data in content remains user responsibility but deletion handling must be operationalized.
+
+  - id: file_uploads_profile_post_cloud
+    name: 게시글·프로필·관리자 cloud 파일 업로드
+    dataCategories:
+      - objectKey
+      - originalFilename
+      - contentType
+      - fileSize
+      - mediaKind
+      - checksumSha256
+      - ownerMemberId
+      - ownerObjectId
+      - aquila-cloud-video-upload-session:*
+    dataSubjects:
+      - registeredMember
+      - contentAuthor
+    purpose: 이미지, 첨부 파일, 프로필 이미지, 관리자 파일 보관과 제공
+    legalBasis: contractAndUserPublishedContent
+    collectionSource: multipart upload endpoints and admin cloud workspace
+    requiredOrOptional: optionalUserGeneratedContent
+    systemOfRecord: PostgreSQL uploaded_file, cloud_file; MinIO object storage
+    processors:
+      - home_server_postgresql
+      - home_server_minio
+      - home_server_backup_storage
+      - cloudflare_dns_proxy
+    overseasTransfer: noPlannedOverseasTransferForObjectStorage; edgeTransferPossibleViaCloudflare
+    retentionRule: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry; aquila-cloud-video-upload-session:* untilUploadCompleteCancelOrStale
+    destructionMethod: objectDeleteAndMetadataMarkDeleted; backupExpiryOrTombstoneFutureWork; aquila-cloud-video-upload-session:* localStorageClearOnCompleteCancelOrStale
+    accessRoles:
+      - contentAuthor
+      - serviceAdmin
+      - storageOperator
+      - publicVisitorForPublishedObjects
+    encryption: transportTls; objectStorageDiskEncryptionReviewRequired
+    userRightsHandler: privacyRequestEmailAndFutureAccountDeletionFlow
+    codeOwner: back/storage-cloud
+    policySectionId: privacy-collection-files
+    enabledByEnv: custom.storage.*; AQUILA_EXTERNAL_STORAGE_ROOT
+    reviewRequired:
+      - Backup tombstone handling is tracked by issue1004.
+
+  - id: auth_security_events
+    name: 인증 보안 이벤트와 IP 보안 감사
+    dataCategories:
+      - eventType
+      - memberId
+      - loginIdentifier
+      - rememberLoginEnabled
+      - ipSecurityEnabled
+      - clientIpFingerprint
+      - loginAttemptIdentifierKey
+      - loginAttemptIpKey
+      - requestPath
+      - reason
+    dataSubjects:
+      - registeredMember
+      - loginApplicant
+    purpose: 로그인 이상행위 감지, 세션 재사용 탐지, 보안 감사
+    legalBasis: legitimateSecurityInterest
+    collectionSource: login controller, auth filter, security event service
+    requiredOrOptional: requiredForSecurity
+    systemOfRecord: PostgreSQL auth_security_event; application logs
+    processors:
+      - home_server_postgresql
+      - home_server_redis
+      - grafana_loki_monitoring
+    overseasTransfer: noPlannedOverseasTransferForDatabase; monitoringHostLocal
+    retentionRule: custom.privacy.retention.authSecurityEventDays default 30 days
+    destructionMethod: scheduledPurgeAndLogRetentionExpiry
+    accessRoles:
+      - serviceAdmin
+      - securityOperator
+      - databaseOperator
+    encryption: clientIpFingerprintInsteadOfRawIp; transportTls
+    userRightsHandler: privacyRequestEmailSubjectToSecurityAuditException
+    codeOwner: back/security
+    policySectionId: privacy-collection-security-log
+    enabledByEnv: alwaysEnabledForAuthSecurity
+    reviewRequired:
+      - loginIdentifier stores null for member-known success events and one-way hash for anonymous blocked identifiers.
+
+  - id: member_action_logs
+    name: 관리자·사용자 action log
+    dataCategories:
+      - actionType
+      - primaryTarget
+      - secondaryTarget
+      - actorMemberId
+      - actionDataText
+    dataSubjects:
+      - registeredMember
+      - affectedContentOwner
+    purpose: 관리자 작업 추적, 콘텐츠 변경 감사, 오남용 조사
+    legalBasis: legitimateSecurityAndOperationalInterest
+    collectionSource: domain events and member action log listener
+    requiredOrOptional: requiredForAdminAudit
+    systemOfRecord: PostgreSQL member_action_log
+    processors:
+      - home_server_postgresql
+      - grafana_loki_monitoring
+    overseasTransfer: noPlannedOverseasTransferForDatabase
+    retentionRule: custom.privacy.retention.memberActionLogDays default 90 days
+    destructionMethod: privacyRetentionCleanup scheduled batch purge
+    accessRoles:
+      - serviceAdmin
+      - securityOperator
+      - databaseOperator
+    encryption: transportTls; rawDataMinimizationRequired
+    userRightsHandler: privacyRequestEmailSubjectToAuditException
+    codeOwner: back/member-action-log
+    policySectionId: privacy-collection-action-log
+    enabledByEnv: alwaysEnabledForAuditableActions
+    reviewRequired:
+      - action log data stores structured_audit_v1 metadata without post/comment body text.
+
+  - id: notifications_sse
+    name: 알림과 SSE 연결 상태
+    dataCategories:
+      - receiverMemberId
+      - notificationType
+      - eventUid
+      - readAt
+      - lastNotificationId
+      - notificationRelayPayload
+      - unreadCount
+    dataSubjects:
+      - registeredMember
+    purpose: 댓글 등 서비스 이벤트 알림, unread count 제공, SSE 재연결 복구
+    legalBasis: contractAndLegitimateOperationalInterest
+    collectionSource: post/comment domain events and notification API
+    requiredOrOptional: requiredForNotificationFeature
+    systemOfRecord: PostgreSQL member_notification; SSE runtime memory; Redis pub/sub relay
+    processors:
+      - home_server_postgresql
+      - home_server_redis
+      - vercel_frontend_hosting
+      - cloudflare_dns_proxy
+    overseasTransfer: possibleViaVercelOrCloudflareEdge
+    retentionRule: custom.privacy.retention.notificationDays default 60 days
+    destructionMethod: privacyRetentionCleanup scheduled batch purge; account deletion removes account-visible access
+    accessRoles:
+      - accountOwner
+      - serviceAdmin
+      - databaseOperator
+    encryption: transportTls
+    userRightsHandler: privacyRequestEmailAndFutureAccountDeletionFlow
+    codeOwner: back/member-notification
+    policySectionId: privacy-collection-notification
+    enabledByEnv: alwaysEnabledForLoggedInMembers
+    reviewRequired: []
+
+  - id: analytics_and_rum
+    name: Google Analytics, Vercel Speed Insights, custom RUM
+    dataCategories:
+      - pagePath
+      - webVitalsMetric
+      - performanceRating
+      - browserEventMetadata
+      - aggregatedUsageEvent
+      - privacy.optionalTrackingConsent.v1
+    dataSubjects:
+      - publicVisitor
+      - registeredMemberWhenLoggedIn
+    purpose: 페이지 품질, 성능, 오류 추적, 이용 흐름 집계 분석
+    legalBasis: consentOrLegitimateAnalyticsInterestReviewRequired
+    collectionSource: browser runtime after optional tracking consent, Next.js API route /api/rum/vitals and /api/rum/client-errors
+    requiredOrOptional: optionalAnalyticsExceptEssentialOperationalMetrics
+    systemOfRecord: Google Analytics, Vercel analytics, application logs for custom RUM
+    processors:
+      - google_analytics
+      - vercel_frontend_hosting
+      - grafana_loki_monitoring
+    overseasTransfer: possibleViaGoogleAndVercelGlobalInfrastructure
+    retentionRule: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 JSON record untilConsentChangeOrBrowserStorageClear
+    destructionMethod: providerRetentionControlsAndLocalLogExpiry; privacy.optionalTrackingConsent.v1 preferenceDeletion
+    accessRoles:
+      - serviceAdmin
+      - analyticsOperator
+    encryption: transportTls; aggregateMetricsPreferred
+    userRightsHandler: /settings/privacy preference and consent withdrawal
+    codeOwner: front/analytics-rum
+    policySectionId: privacy-cookie-analytics
+    enabledByEnv: CONFIG.googleAnalytics.enable with optional tracking consent; Vercel analytics package in production only after optional tracking consent; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0 and explicit non-zero enables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging; Do Not Track and Global Privacy Control block optional tracking
+    reviewRequired: []
+
+  - id: ai_summary_gemini
+    name: Gemini optional AI 예정 기능 검토
+    dataCategories:
+      - postTitle
+      - postMarkdownContent
+      - generatedSummary
+      - aiTraceId
+    dataSubjects:
+      - contentAuthor
+      - peopleMentionedInDraftContent
+    purpose: 향후 관리자 글 작성 보조 기능 검토
+    legalBasis: explicitAdminActionAndExternalProcessingReviewRequired
+    collectionSource: future admin editor AI request
+    requiredOrOptional: optionalAdminTool
+    systemOfRecord: no current runtime processing; future transient request to backend AI service only after gate approval
+    processors:
+      - google_gemini
+      - vercel_frontend_hosting
+      - home_server_postgresql
+    overseasTransfer: possibleViaGoogleGeminiGlobalInfrastructure
+    retentionRule: noRawPromptRetentionIntended; providerRetentionRequiresContractReview
+    destructionMethod: noLocalPersistence; providerDeletionControlsReviewRequired
+    accessRoles:
+      - serviceAdmin
+      - contentAuthorAdmin
+    encryption: transportTls; serverSideApiKeySecret
+    userRightsHandler: contentDeletionAndExternalProcessingDisclosureFutureWork
+    codeOwner: back/post-ai; front/admin-editor
+    policySectionId: privacy-processor-ai
+    enabledByEnv: custom.ai.summary.enabled defaults false via CUSTOM__AI__SUMMARY__ENABLED; custom.ai.summary.gemini.*
+    reviewRequired:
+      - Production default-off, PII block, and DPA/region/retention/training opt-out startup checks are enforced by issue1003.
+
+  - id: backup_and_restore
+    name: PostgreSQL, MinIO, deploy rollback backup
+    dataCategories:
+      - databaseSnapshot
+      - objectStorageArchive
+      - backupMetadata
+      - deploymentConfigSnapshot
+      - operationalLogs
+    dataSubjects:
+      - registeredMember
+      - contentAuthor
+      - publicVisitorWhenLogsExist
+    purpose: 장애 복구, 배포 rollback, 데이터 손실 방지, restore drill
+    legalBasis: legitimateOperationalAndSecurityInterest
+    collectionSource: deploy and backup scripts
+    requiredOrOptional: requiredForOperations
+    systemOfRecord: home server backup directory under external storage root
+    processors:
+      - home_server_backup_storage
+      - github_actions
+      - ghcr_container_registry
+    overseasTransfer: possibleViaGitHubActionsLogsAndContainerRegistryMetadata
+    retentionRule: backupClassRetentionPolicyInDeployScripts; privacyTombstoneFutureWork
+    destructionMethod: pruneExternalBackupsAndDeployBackupRotation; encryptedDeletionFutureWork
+    accessRoles:
+      - infrastructureOperator
+      - serviceAdmin
+    encryption: backupEncryptionRequiredByIssue1004; transportTlsForImageRegistry
+    userRightsHandler: restoreTombstoneReplayFutureWork
+    codeOwner: deploy/home-server
+    policySectionId: privacy-retention-backup
+    enabledByEnv: AQUILA_BACKUP_ROOT; deploy workflow_run
+    reviewRequired:
+      - Backup encryption and restore tombstone replay are tracked by issue1004.

@@ -1,0 +1,139 @@
+package com.back.global.web.application
+
+import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.app.application.AppFacade
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
+import com.back.global.security.domain.SecurityUser
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
+import org.springframework.http.HttpHeaders
+import org.springframework.http.ResponseCookie
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.stereotype.Component
+import java.time.Duration
+import java.util.Locale
+
+@Component
+class Rq(
+    private val req: HttpServletRequest,
+    private val resp: HttpServletResponse,
+    private val actorApplicationService: ActorApplicationService,
+    private val clientIpResolver: ClientIpResolver,
+) {
+    private val logger = LoggerFactory.getLogger(Rq::class.java)
+
+    val actorOrNull: Member?
+        get() =
+            (SecurityContextHolder.getContext()?.authentication?.principal as? SecurityUser)
+                ?.let { securityUser ->
+                    runCatching { actorApplicationService.memberOf(securityUser) }
+                        .onFailure { exception ->
+                            logger.warn(
+                                "actor_resolution_fallback actorId={} reason={}",
+                                securityUser.id,
+                                exception::class.java.simpleName,
+                                exception,
+                            )
+                        }.getOrNull()
+                }
+
+    val actor: Member
+        get() = actorOrNull ?: throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")
+
+    val clientIp: String
+        get() = clientIpResolver.resolve(req)
+
+    val userAgent: String
+        get() = req.getHeader("User-" + "A" + "gent").orEmpty()
+
+    fun getHeader(
+        name: String,
+        defaultValue: String,
+    ): String = req.getHeader(name) ?: defaultValue
+
+    fun setHeader(
+        name: String,
+        value: String,
+    ) {
+        resp.setHeader(name, value)
+    }
+
+    fun getCookieValue(
+        name: String,
+        defaultValue: String,
+    ): String =
+        req.cookies
+            ?.asSequence()
+            ?.filter { it.name == name }
+            ?.mapNotNull { it.value.takeIf(String::isNotBlank) }
+            ?.lastOrNull()
+            ?: defaultValue
+
+    fun setCookie(
+        name: String,
+        value: String?,
+        maxAgeSeconds: Int = 60 * 60 * 24 * 365,
+        sessionOnly: Boolean = false,
+        useConfiguredDomain: Boolean = true,
+    ) {
+        val builder =
+            ResponseCookie
+                .from(name, value ?: "")
+                .path("/")
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+
+        when {
+            value.isNullOrBlank() -> builder.maxAge(Duration.ZERO)
+            !sessionOnly -> builder.maxAge(Duration.ofSeconds(maxAgeSeconds.coerceAtLeast(1).toLong()))
+        }
+
+        if (useConfiguredDomain) {
+            val rawCookieDomain = AppFacade.siteCookieDomain.trim()
+            val cookieDomain =
+                AuthCookieDomainPolicy.resolve(
+                    configuredDomain = rawCookieDomain,
+                    frontUrl = AppFacade.siteFrontUrl,
+                    backUrl = AppFacade.siteBackUrl,
+                )
+
+            if (rawCookieDomain.isNotBlank() && rawCookieDomain != cookieDomain) {
+                logger.warn(
+                    "auth_cookie_domain_normalized configured={} effective={} frontUrl={} backUrl={}",
+                    rawCookieDomain,
+                    cookieDomain,
+                    AppFacade.siteFrontUrl,
+                    AppFacade.siteBackUrl,
+                )
+            }
+
+            if (cookieDomain.isNotBlank()) {
+                builder.domain(cookieDomain)
+            }
+        }
+
+        resp.addHeader(HttpHeaders.SET_COOKIE, builder.build().toString())
+    }
+
+    fun deleteCookie(name: String) {
+        setCookie(name, null, 0)
+    }
+
+    fun hasRole(role: String): Boolean {
+        val normalized =
+            role
+                .trim()
+                .uppercase(Locale.ROOT)
+        if (normalized.isBlank()) return false
+        val requiredAuthority = if (normalized.startsWith("ROLE_")) normalized else "ROLE_$normalized"
+
+        val authentication = SecurityContextHolder.getContext().authentication ?: return false
+        return authentication.authorities.any {
+            it.authority.equals(requiredAuthority, ignoreCase = true)
+        }
+    }
+}

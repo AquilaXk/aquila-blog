@@ -25,6 +25,11 @@ on:
         required: false
         default: false
         type: boolean
+      allow_deploy_without_ci_success:
+        description: "DANGEROUS: Skip verifying a successful CI run for this SHA before manual deploy."
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: homeserver-deploy-main
@@ -41,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     if: >
       (
         github.event_name == 'workflow_run' &&
@@ -69,6 +75,38 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Require successful CI for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+          ALLOW_DEPLOY_WITHOUT_CI_SUCCESS: ${{ github.event.inputs.allow_deploy_without_ci_success || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${ALLOW_DEPLOY_WITHOUT_CI_SUCCESS}" = "true" ]; then
+            echo "WARNING: skipping CI success gate for workflow_dispatch (allow_deploy_without_ci_success=true) deploy_sha=${DEPLOY_SHA}" >&2
+            exit 0
+          fi
+
+          if [ -z "${DEPLOY_SHA}" ]; then
+            echo "deploy sha is empty; cannot verify CI success" >&2
+            exit 1
+          fi
+
+          # Mirror workflow_run gating: successful CI push to main for this SHA.
+          SUCCESS_RUN_ID="$(
+            gh api               "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${DEPLOY_SHA}&status=completed&per_page=50"               --jq '.workflow_runs[] | select(.conclusion == "success" and .event == "push" and .head_branch == "main") | .id'               | head -n 1 || true
+          )"
+
+          if [ -z "${SUCCESS_RUN_ID}" ]; then
+            echo "workflow_dispatch blocked: no successful CI push run found for deploy_sha=${DEPLOY_SHA}" >&2
+            exit 1
+          fi
+
+          echo "workflow_dispatch CI success gate passed: deploy_sha=${DEPLOY_SHA} ci_run_id=${SUCCESS_RUN_ID}"
 
       - name: Calculate deploy targets and image tags
         id: meta

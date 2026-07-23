@@ -1,0 +1,437 @@
+package com.back.boundedContexts.post.adapter.web
+
+import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
+import com.back.boundedContexts.post.application.service.PostApplicationService
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostComment
+import com.back.global.security.config.AuthCookieNames
+import com.back.standard.extensions.getOrThrow
+import com.back.support.BaseControllerIntegrationTest
+import jakarta.servlet.http.Cookie
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.test.context.support.WithUserDetails
+import org.springframework.test.web.servlet.delete
+import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.put
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
+
+@org.junit.jupiter.api.DisplayName("ApiV1PostCommentController 테스트")
+class ApiV1PostCommentControllerTest : BaseControllerIntegrationTest() {
+    @Autowired
+    private lateinit var postFacade: PostApplicationService
+
+    @Autowired
+    private lateinit var actorApplicationService: ActorApplicationService
+
+    @Autowired
+    private lateinit var memberSessionUseCase: MemberSessionUseCase
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
+
+    private lateinit var post: Post
+    private lateinit var commentByAuthor: PostComment
+
+    @BeforeEach
+    fun setUp() {
+        val user1 = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+        val user3 = actorApplicationService.findByEmail("user3@test.com").getOrThrow()
+
+        post = postFacade.write(user1, "댓글 게시글", "댓글 게시글 내용", true, true)
+        commentByAuthor = postFacade.writeComment(user1, post, "댓글 내용1")
+        postFacade.writeComment(user3, post, "댓글 내용2")
+    }
+
+    @Nested
+    inner class GetItems {
+        @Test
+        fun `게시글의 댓글 목록을 조회하면 생성된 댓글 목록이 정상 반환된다`() {
+            val postId = post.id
+            val comments = postFacade.getComments(postFacade.findById(postId).getOrThrow(), 200)
+
+            val resultActions = mvc.get("/post/api/v1/posts/$postId/comments")
+
+            resultActions.andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("getItems"))
+                status { isOk() }
+                jsonPath("$.length()") { value(comments.size) }
+            }
+
+            for (i in comments.indices) {
+                val postComment = comments[i]
+                resultActions.andExpect {
+                    jsonPath("$[$i].id") { value(postComment.id) }
+                    jsonPath("$[$i].authorId") { value(postComment.author.id) }
+                    jsonPath("$[$i].authorName") { value(postComment.author.name) }
+                    jsonPath("$[$i].postId") { value(postComment.post.id) }
+                    jsonPath("$[$i].content") { value(postComment.content) }
+                }
+            }
+        }
+
+        @Test
+        fun `실패 - 존재하지 않는 글`() {
+            mvc.get("/post/api/v1/posts/${Int.MAX_VALUE}/comments").andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("getItems"))
+                status { isNotFound() }
+                jsonPath("$.resultCode") { value("404-1") }
+            }
+        }
+
+        @Test
+        fun `댓글 목록 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
+            mvc
+                .get("/post/api/v1/posts/${post.id}/comments") {
+                    cookie(Cookie(AuthCookieNames.API_KEY, "invalid-api-key"))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "invalid-access-token"))
+                    header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("getItems"))
+                }
+        }
+
+        @Test
+        fun `관리자 인증 쿠키가 있으면 비공개 글의 댓글 목록도 조회할 수 있다`() {
+            val user1 = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val privatePost = postFacade.write(user1, "비공개 댓글 점검용", "비공개 내용", false, false)
+            postFacade.writeComment(user1, privatePost, "비공개 댓글")
+            val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
+            jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
+            val session =
+                memberSessionUseCase.createSession(
+                    member = admin,
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                    createdIp = null,
+                    userAgent = null,
+                )
+            val accessToken =
+                actorApplicationService.genAccessToken(
+                    member = admin,
+                    sessionKey = session.sessionKey,
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                )
+
+            mvc
+                .get("/post/api/v1/posts/${privatePost.id}/comments") {
+                    cookie(Cookie(AuthCookieNames.API_KEY, admin.apiKey))
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, accessToken))
+                    cookie(Cookie(AuthCookieNames.SESSION_KEY, session.sessionKey))
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("getItems"))
+                    jsonPath("$.length()") { value(1) }
+                }
+        }
+    }
+
+    @Nested
+    inner class GetItem {
+        @Test
+        fun `존재하는 댓글 식별자로 댓글을 조회하면 상세 정보가 정상 반환된다`() {
+            val postId = post.id
+            val id = commentByAuthor.id
+            val postComment = postFacade.findCommentById(postFacade.findById(postId).getOrThrow(), id).getOrThrow()
+
+            mvc.get("/post/api/v1/posts/$postId/comments/$id").andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("getItem"))
+                status { isOk() }
+                jsonPath("$.id") { value(postComment.id) }
+                jsonPath("$.authorId") { value(postComment.author.id) }
+                jsonPath("$.authorName") { value(postComment.author.name) }
+                jsonPath("$.postId") { value(postComment.post.id) }
+                jsonPath("$.content") { value(postComment.content) }
+            }
+        }
+
+        @Test
+        fun `실패 - 존재하지 않는 댓글`() {
+            mvc.get("/post/api/v1/posts/${post.id}/comments/${Int.MAX_VALUE}").andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("getItem"))
+                status { isNotFound() }
+                jsonPath("$.resultCode") { value("404-1") }
+            }
+        }
+    }
+
+    @Nested
+    inner class Write {
+        @Test
+        @WithUserDetails("user1@test.com")
+        fun `인증된 사용자가 댓글을 작성하면 새 댓글이 정상 생성된다`() {
+            val postId = post.id
+
+            val resultActions =
+                mvc.post("/post/api/v1/posts/$postId/comments") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "새 댓글 내용"}"""
+                }
+
+            val postComment = postFacade.getComments(postFacade.findById(postId).getOrThrow(), 200).last()
+
+            resultActions.andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("write"))
+                status { isCreated() }
+                jsonPath("$.resultCode") { value("201-1") }
+                jsonPath("$.msg") { value("${postComment.id}번 댓글이 작성되었습니다.") }
+                jsonPath("$.data.id") { value(postComment.id) }
+                jsonPath("$.data.authorId") { value(postComment.author.id) }
+                jsonPath("$.data.postId") { value(postComment.post.id) }
+                jsonPath("$.data.content") { value("새 댓글 내용") }
+            }
+        }
+
+        @Test
+        fun `쿠키 인증 댓글 작성은 CSRF preflight 헤더가 없으면 거부된다`() {
+            val postId = post.id
+            val authCookies = loginAuthCookies("user1@test.com")
+
+            mvc
+                .post("/post/api/v1/posts/$postId/comments") {
+                    authCookies.forEach { cookie(it) }
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "csrf 없는 댓글"}"""
+                }.andExpect {
+                    status { isForbidden() }
+                    jsonPath("$.resultCode") { value("403-3") }
+                    jsonPath("$.msg") { value("CSRF preflight 헤더가 필요합니다.") }
+                }
+        }
+
+        @Test
+        fun `쿠키 인증 댓글 작성은 CSRF preflight 헤더가 있으면 처리된다`() {
+            val postId = post.id
+            val authCookies = loginAuthCookies("user1@test.com")
+
+            mvc
+                .post("/post/api/v1/posts/$postId/comments") {
+                    authCookies.forEach { cookie(it) }
+                    header("X-Aquila-CSRF", "1")
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "csrf 헤더 댓글"}"""
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("write"))
+                    status { isCreated() }
+                    jsonPath("$.resultCode") { value("201-1") }
+                    jsonPath("$.data.content") { value("csrf 헤더 댓글") }
+                }
+        }
+
+        @Test
+        @WithUserDetails("user3@test.com")
+        fun `인증된 사용자가 기존 댓글에 대댓글을 작성하면 부모 댓글 식별자가 함께 저장된다`() {
+            val postId = post.id
+
+            mvc
+                .post("/post/api/v1/posts/$postId/comments") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "대댓글 내용", "parentCommentId": ${commentByAuthor.id}}"""
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("write"))
+                    status { isCreated() }
+                    jsonPath("$.data.content") { value("대댓글 내용") }
+                    jsonPath("$.data.parentCommentId") { value(commentByAuthor.id) }
+                }
+        }
+
+        @Test
+        fun `실패 - 인증 없이`() {
+            mvc
+                .post("/post/api/v1/posts/${post.id}/comments") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "내용"}"""
+                }.andExpect {
+                    status { isUnauthorized() }
+                    jsonPath("$.resultCode") { value("401-1") }
+                }
+        }
+
+        @Test
+        @WithUserDetails("user1@test.com")
+        fun `실패 - 빈 내용`() {
+            mvc
+                .post("/post/api/v1/posts/${post.id}/comments") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": ""}"""
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("write"))
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-1") }
+                }
+        }
+    }
+
+    @Nested
+    inner class Modify {
+        @Test
+        @WithUserDetails("user1@test.com")
+        fun `작성자가 댓글을 수정 요청하면 내용이 정상적으로 변경된다`() {
+            val postId = post.id
+            val id = commentByAuthor.id
+
+            mvc
+                .put("/post/api/v1/posts/$postId/comments/$id") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "내용 new"}"""
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("modify"))
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.msg") { value("${id}번 댓글이 수정되었습니다.") }
+                }
+        }
+
+        @Test
+        @WithUserDetails("user3@test.com")
+        fun `실패 - 권한 없음`() {
+            val postId = post.id
+            val id = commentByAuthor.id
+
+            mvc
+                .put("/post/api/v1/posts/$postId/comments/$id") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"content": "내용 new"}"""
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("modify"))
+                    status { isForbidden() }
+                    jsonPath("$.resultCode") { value("403-13") }
+                    jsonPath("$.msg") { value("작성자만 댓글을 수정할 수 있습니다.") }
+                }
+        }
+    }
+
+    @Nested
+    inner class Delete {
+        @Test
+        @WithUserDetails("user1@test.com")
+        fun `작성자가 댓글 삭제 요청 시 댓글이 정상 삭제된다`() {
+            val postId = post.id
+            val id = commentByAuthor.id
+
+            mvc.delete("/post/api/v1/posts/$postId/comments/$id").andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("delete"))
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.msg") { value("${id}번 댓글이 삭제되었습니다.") }
+            }
+
+            val deletedAtExists =
+                jdbcTemplate.queryForObject(
+                    "select count(*) from post_comment where id = ? and deleted_at is not null",
+                    Int::class.java,
+                    id,
+                )
+
+            org.assertj.core.api.Assertions
+                .assertThat(deletedAtExists)
+                .isEqualTo(1)
+        }
+
+        @Test
+        @WithUserDetails("user1@test.com")
+        fun `부모 댓글을 삭제하면 그 대댓글도 함께 삭제된다`() {
+            val reply =
+                postFacade.writeComment(
+                    actorApplicationService.findByEmail("user3@test.com").getOrThrow(),
+                    post,
+                    "대댓글",
+                    commentByAuthor,
+                )
+            val nestedReply =
+                postFacade.writeComment(
+                    actorApplicationService.findByEmail("user1@test.com").getOrThrow(),
+                    post,
+                    "중첩 대댓글",
+                    reply,
+                )
+            val postId = post.id
+            val id = commentByAuthor.id
+
+            mvc.delete("/post/api/v1/posts/$postId/comments/$id").andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("delete"))
+                status { isOk() }
+            }
+
+            mvc.get("/post/api/v1/posts/$postId/comments").andExpect {
+                status { isOk() }
+                jsonPath("$.length()") { value(1) }
+            }
+
+            val deletedRepliesCount =
+                jdbcTemplate.queryForObject(
+                    "select count(*) from post_comment where id in (?, ?, ?) and deleted_at is not null",
+                    Int::class.java,
+                    id,
+                    reply.id,
+                    nestedReply.id,
+                )
+
+            org.assertj.core.api.Assertions
+                .assertThat(deletedRepliesCount)
+                .isEqualTo(3)
+        }
+
+        @Test
+        @WithUserDetails("user3@test.com")
+        fun `실패 - 권한 없음`() {
+            val postId = post.id
+            val id = commentByAuthor.id
+
+            mvc.delete("/post/api/v1/posts/$postId/comments/$id").andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("delete"))
+                status { isForbidden() }
+                jsonPath("$.resultCode") { value("403-14") }
+                jsonPath("$.msg") { value("작성자만 댓글을 삭제할 수 있습니다.") }
+            }
+        }
+    }
+
+    private fun loginAuthCookies(email: String): List<Cookie> =
+        mvc
+            .post("/member/api/v1/auth/login") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "email": "$email",
+                        "password": "1234"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+            }.andReturn()
+            .response
+            .cookies
+            .filter {
+                it.name in AuthCookieNames.MUTATION_CSRF_GUARD_COOKIE_NAMES &&
+                    it.value.isNotBlank()
+            }
+}

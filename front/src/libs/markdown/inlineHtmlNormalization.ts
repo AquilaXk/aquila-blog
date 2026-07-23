@@ -1,0 +1,141 @@
+const TABLE_SEPARATOR_LINE_PATTERN = /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/
+const FENCE_MARKER_PATTERN = /^(`{3,}|~{3,})/
+
+const isTableSeparatorLine = (line: string) => TABLE_SEPARATOR_LINE_PATTERN.test(line)
+
+const isLikelyTableRow = (line: string) => {
+  const trimmed = line.trim()
+  if (!trimmed.includes("|")) return false
+  return /^\|?.+\|.+\|?$/.test(trimmed)
+}
+
+const wrapWithMarkdownMark = (content: string, marker: string) => {
+  const normalized = decodeLegacyHtmlEntities(content).trim()
+  if (!normalized) return ""
+  return `${marker}${normalized}${marker}`
+}
+
+const wrapWithMarkdownCodeMark = (content: string) => {
+  const normalized = decodeLegacyHtmlEntities(content).trim()
+  if (!normalized) return ""
+  const backtickRuns = normalized.match(/`+/g)
+  const longestRun = backtickRuns?.reduce((max, run) => Math.max(max, run.length), 0) ?? 0
+  const marker = "`".repeat(longestRun + 1)
+  const paddedContent =
+    normalized.startsWith("`") || normalized.endsWith("`") ? ` ${normalized} ` : normalized
+  return `${marker}${paddedContent}${marker}`
+}
+
+const LEGACY_HTML_ENTITY_MAP: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: " ",
+  quot: '"',
+}
+
+const decodeLegacyHtmlCodePoint = (codePoint: number, fallback: string) => {
+  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return fallback
+  return String.fromCodePoint(codePoint)
+}
+
+const decodeLegacyHtmlEntities = (input: string) =>
+  String(input || "").replace(/&(#x[\da-f]+|#\d+|amp|apos|gt|lt|nbsp|quot);/gi, (entity, token: string) => {
+    const normalizedToken = token.toLowerCase()
+    if (normalizedToken.startsWith("#x")) {
+      const codePoint = Number.parseInt(normalizedToken.slice(2), 16)
+      return decodeLegacyHtmlCodePoint(codePoint, entity)
+    }
+    if (normalizedToken.startsWith("#")) {
+      const codePoint = Number.parseInt(normalizedToken.slice(1), 10)
+      return decodeLegacyHtmlCodePoint(codePoint, entity)
+    }
+    return LEGACY_HTML_ENTITY_MAP[normalizedToken] || entity
+  })
+
+const normalizeCodeTagMatch = (rawInner: string) => {
+  return wrapWithMarkdownCodeMark(String(rawInner || ""))
+}
+
+export const normalizeLegacyInlineHtmlSpans = (input: string) => {
+  if (!input) return input
+  if (!input.includes("<") && !input.includes("&lt;")) return input
+
+  let normalized = input
+  normalized = normalized.replace(
+    /<\s*code(?:\s+[^>]*)?\s*>([\s\S]*?)<\s*\/\s*code\s*>/gi,
+    (_match, rawInner: string) => normalizeCodeTagMatch(rawInner)
+  )
+  normalized = normalized.replace(
+    /&lt;\s*code(?:\s+[^&]*)?&gt;([\s\S]*?)&lt;\s*\/\s*code\s*&gt;/gi,
+    (_match, rawInner: string) => normalizeCodeTagMatch(rawInner)
+  )
+  normalized = normalized.replace(
+    /<\s*(?:strong|b)(?:\s+[^>]*)?\s*>([\s\S]*?)<\s*\/\s*(?:strong|b)\s*>/gi,
+    (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "**")
+  )
+  normalized = normalized.replace(
+    /&lt;\s*(?:strong|b)(?:\s+[^&]*)?&gt;([\s\S]*?)&lt;\s*\/\s*(?:strong|b)\s*&gt;/gi,
+    (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "**")
+  )
+  normalized = normalized.replace(
+    /<\s*(?:em|i)(?:\s+[^>]*)?\s*>([\s\S]*?)<\s*\/\s*(?:em|i)\s*>/gi,
+    (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "*")
+  )
+  normalized = normalized.replace(
+    /&lt;\s*(?:em|i)(?:\s+[^&]*)?&gt;([\s\S]*?)&lt;\s*\/\s*(?:em|i)\s*&gt;/gi,
+    (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "*")
+  )
+  normalized = normalized.replace(
+    /<\s*(?:del|s)(?:\s+[^>]*)?\s*>([\s\S]*?)<\s*\/\s*(?:del|s)\s*>/gi,
+    (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "~~")
+  )
+  normalized = normalized.replace(
+    /&lt;\s*(?:del|s)(?:\s+[^&]*)?&gt;([\s\S]*?)&lt;\s*\/\s*(?:del|s)\s*&gt;/gi,
+    (_match, rawInner: string) => wrapWithMarkdownMark(String(rawInner || ""), "~~")
+  )
+
+  return normalized
+}
+
+export const normalizeLegacyInlineHtmlMarkdown = (markdown: string) => {
+  if (!markdown) return markdown
+  if (!markdown.includes("<") && !markdown.includes("&lt;")) return markdown
+
+  let activeFenceMarker = ""
+
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const trimmedStart = line.trimStart()
+      const fenceMatch = trimmedStart.match(FENCE_MARKER_PATTERN)
+
+      if (fenceMatch) {
+        const marker = fenceMatch[1]
+        if (!activeFenceMarker) {
+          activeFenceMarker = marker
+        } else if (marker[0] === activeFenceMarker[0] && marker.length >= activeFenceMarker.length) {
+          activeFenceMarker = ""
+        }
+        return line
+      }
+
+      if (activeFenceMarker) return line
+      return normalizeLegacyInlineHtmlSpans(line)
+    })
+    .join("\n")
+}
+
+export const normalizeInlineHtmlInMarkdownTables = (markdown: string) => {
+  if (!markdown || (!markdown.includes("<") && !markdown.includes("&lt;"))) return markdown
+
+  return markdown
+    .split("\n")
+    .map((line) => {
+      if (!line.includes("<")) return line
+      if (!isLikelyTableRow(line) || isTableSeparatorLine(line)) return line
+      return normalizeLegacyInlineHtmlSpans(line)
+    })
+    .join("\n")
+}

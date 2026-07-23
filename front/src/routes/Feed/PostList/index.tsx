@@ -1,0 +1,559 @@
+import React, { RefObject, memo, useEffect, useRef, useState } from "react"
+import styled from "@emotion/styled"
+import Link from "next/link"
+import PostCard from "src/routes/Feed/PostList/PostCard"
+import InitialLoadErrorState from "src/routes/Feed/PostList/InitialLoadErrorState"
+import AppIcon from "src/components/icons/AppIcon"
+import useAuthSession from "src/hooks/useAuthSession"
+import { TPost } from "src/types"
+
+type Props = {
+  posts: TPost[]
+  hasFilter?: boolean
+  hasExternalResults?: boolean
+  onClearFilters?: () => void
+  isInitialLoading?: boolean
+  isInitialLoadError?: boolean
+  isFetchingNextPage?: boolean
+  isFetchNextPageError?: boolean
+  hasNextPage?: boolean
+  onLoadMore?: () => void
+  onRetryInitialLoad?: () => void
+  onRetryLoadMore?: () => void
+  loadMoreTriggerRef?: RefObject<HTMLDivElement | null>
+}
+
+type EmptyPostStateProps = {
+  hasFilter: boolean
+  onClearFilters?: () => void
+}
+
+const INITIAL_SKELETON_KEYS = Array.from({ length: 6 }, (_, index) => `skeleton-initial-${index}`)
+const NEXT_SKELETON_KEYS = Array.from({ length: 4 }, (_, index) => `skeleton-next-${index}`)
+const FILTER_SKELETON_KEYS = Array.from({ length: 4 }, (_, index) => `skeleton-filter-${index}`)
+const DEFERRED_MOUNT_INITIAL_COUNT = 8
+const DEFERRED_MOUNT_BATCH_COUNT = 8
+const DEFERRED_MOUNT_ROOT_MARGIN = "680px 0px"
+
+const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClearFilters }) => {
+  const { me, authStatus } = useAuthSession()
+  const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
+  const emptyStateMessage = isAdmin ? "첫 글을 발행해보세요." : "곧 새로운 글을 준비하겠습니다."
+
+  return (
+    <section className="emptyState" aria-live="polite">
+      <div className="emptyIcon" aria-hidden="true">
+        <AppIcon name={hasFilter ? "search" : "edit"} />
+      </div>
+      <h3>{hasFilter ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</h3>
+      <p>{hasFilter ? "다른 검색어를 입력해보세요." : emptyStateMessage}</p>
+      <div className="emptyActions">
+        {hasFilter ? (
+          <button type="button" onClick={onClearFilters} className="actionBtn actionBtn--primary">
+            <AppIcon name="search" />
+            초기화
+          </button>
+        ) : isAdmin ? (
+          <Link href="/editor/new" className="actionBtn actionBtn--primary">
+            <AppIcon name="edit" />
+            첫 글 작성
+          </Link>
+        ) : (
+          <Link href="/about" className="actionBtn actionBtn--primary">
+            <AppIcon name="service" />
+            블로그 소개
+          </Link>
+        )}
+        {!hasFilter && isAdmin && (
+          <Link href="/admin" className="actionBtn">
+            <AppIcon name="service" />
+            관리자 허브
+          </Link>
+        )}
+      </div>
+    </section>
+  )
+}
+
+const EmptyPostState = memo(EmptyPostStateInner)
+EmptyPostState.displayName = "EmptyPostState"
+
+const FilterLoadingStateInner: React.FC = () => (
+  <section className="searchLoadingState" aria-live="polite">
+    <div className="searchLoadingHeading">
+      <div className="searchLoadingIcon" aria-hidden="true">
+        <AppIcon name="search" />
+      </div>
+      <div className="searchLoadingCopy">
+        <h3>검색 결과를 불러오는 중...</h3>
+        <p>입력한 조건에 맞는 글을 카드 레이아웃 기준으로 정리하고 있습니다.</p>
+      </div>
+    </div>
+    <div className="searchLoadingGrid skeletonGrid" aria-hidden="true">
+      {FILTER_SKELETON_KEYS.map((key) => (
+        <article key={key} className="skeletonCard" />
+      ))}
+    </div>
+  </section>
+)
+
+const FilterLoadingState = memo(FilterLoadingStateInner)
+FilterLoadingState.displayName = "FilterLoadingState"
+
+const PostList: React.FC<Props> = ({
+  posts,
+  hasFilter = false,
+  hasExternalResults = false,
+  onClearFilters,
+  isInitialLoading = false,
+  isInitialLoadError = false,
+  isFetchingNextPage = false,
+  isFetchNextPageError = false,
+  hasNextPage = false,
+  onLoadMore,
+  onRetryInitialLoad,
+  onRetryLoadMore,
+  loadMoreTriggerRef,
+}) => {
+  const deferredMountTriggerRef = useRef<HTMLDivElement | null>(null)
+  const previousFirstPostIdRef = useRef<string | null>(null)
+  const [mountedCardCount, setMountedCardCount] = useState(() =>
+    Math.min(posts.length, DEFERRED_MOUNT_INITIAL_COUNT)
+  )
+  const showInitialLoadError = !isInitialLoading && isInitialLoadError && !posts.length && !hasExternalResults
+  const showEmptyState = !showInitialLoadError && !isInitialLoading && !posts.length && !hasExternalResults
+
+  useEffect(() => {
+    const nextFirstPostId = posts[0] ? String(posts[0].id) : null
+    const previousFirstPostId = previousFirstPostIdRef.current
+    const hasListReplaced =
+      Boolean(previousFirstPostId) && Boolean(nextFirstPostId) && previousFirstPostId !== nextFirstPostId
+    const nextInitialCount = Math.min(posts.length, DEFERRED_MOUNT_INITIAL_COUNT)
+
+    setMountedCardCount((prev) => {
+      if (hasListReplaced) return nextInitialCount
+      if (posts.length < prev) return posts.length
+      if (prev < nextInitialCount) return nextInitialCount
+      return prev
+    })
+
+    previousFirstPostIdRef.current = nextFirstPostId
+    if (!posts.length) {
+      previousFirstPostIdRef.current = null
+    }
+  }, [posts])
+
+  useEffect(() => {
+    if (mountedCardCount >= posts.length) return
+    const triggerNode = deferredMountTriggerRef.current
+    if (!triggerNode || typeof IntersectionObserver === "undefined") {
+      setMountedCardCount(posts.length)
+      return
+    }
+
+    let disposed = false
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        if (disposed) return
+        setMountedCardCount((prev) =>
+          Math.min(posts.length, Math.max(prev, DEFERRED_MOUNT_INITIAL_COUNT) + DEFERRED_MOUNT_BATCH_COUNT)
+        )
+      },
+      {
+        root: null,
+        rootMargin: DEFERRED_MOUNT_ROOT_MARGIN,
+        threshold: 0.01,
+      }
+    )
+
+    observer.observe(triggerNode)
+    return () => {
+      disposed = true
+      observer.disconnect()
+    }
+  }, [mountedCardCount, posts.length])
+
+  return (
+    <StyledWrapper>
+      {isInitialLoading &&
+        (hasFilter ? (
+          <FilterLoadingState />
+        ) : (
+          <div className="skeletonGrid" aria-hidden="true">
+            {INITIAL_SKELETON_KEYS.map((key) => (
+              <article key={key} className="skeletonCard" />
+            ))}
+          </div>
+        ))}
+      {showInitialLoadError && (
+        <InitialLoadErrorState hasFilter={hasFilter} onRetryInitialLoad={onRetryInitialLoad} />
+      )}
+      {showEmptyState && <EmptyPostState hasFilter={hasFilter} onClearFilters={onClearFilters} />}
+      {posts.map((post, index) => {
+        const shouldMountCard = index < mountedCardCount
+        const isTriggerCard = !shouldMountCard && index === mountedCardCount
+
+        return (
+          <div
+            key={post.id}
+            ref={isTriggerCard ? deferredMountTriggerRef : null}
+            className="deferredPostCardWrap"
+          >
+            {shouldMountCard ? (
+              <PostCard data={post} layout="regular" index={index} />
+            ) : (
+              <article className="deferredPostCardPlaceholder" aria-hidden="true" />
+            )}
+          </div>
+        )
+      })}
+      {(hasNextPage || isFetchingNextPage || isFetchNextPageError) && (
+        <section className="loadMoreArea">
+          <div ref={loadMoreTriggerRef} className="loadMoreTrigger" aria-hidden="true" />
+          {isFetchNextPageError && !isFetchingNextPage && (
+            <div className="loadMoreError" role="alert" aria-live="assertive">
+              <strong>다음 글을 불러오지 못했습니다.</strong>
+              <span>기존 목록은 유지했습니다. 잠시 후 다시 시도해주세요.</span>
+              <button type="button" className="loadMoreButton" onClick={onRetryLoadMore ?? onLoadMore}>
+                다시 시도
+              </button>
+            </div>
+          )}
+          {hasNextPage && !isFetchNextPageError && (
+            <button
+              type="button"
+              className="loadMoreButton"
+              onClick={onLoadMore}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage ? "불러오는 중..." : "더보기"}
+            </button>
+          )}
+          {isFetchingNextPage && (
+            <div className="loadMoreSkeletonShell" aria-hidden="true">
+              <div className="loadMoreSkeletonCopy">
+                <strong>다음 글을 정리하는 중...</strong>
+                <span>현재 카드 레이아웃을 유지한 채 다음 페이지를 이어 붙입니다.</span>
+              </div>
+              <div className="skeletonGrid">
+                {NEXT_SKELETON_KEYS.map((key) => (
+                  <article key={key} className="skeletonCard" />
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+    </StyledWrapper>
+  )
+}
+
+export default memo(PostList)
+
+const StyledWrapper = styled.div`
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  align-items: start;
+  overflow-anchor: none;
+
+  .emptyState {
+    grid-column: 1 / -1;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    padding: 1rem 0;
+    min-height: 10rem;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    text-align: center;
+    gap: 0.5rem;
+
+    .emptyIcon {
+      width: 2.1rem;
+      height: 2.1rem;
+      border-radius: 8px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: transparent;
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 1.08rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h3 {
+      margin: 0;
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    p {
+      margin: 0;
+      color: ${({ theme }) => theme.colors.gray10};
+      line-height: 1.6;
+      font-size: 0.94rem;
+    }
+
+    .emptyActions {
+      margin-top: 0.35rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .actionBtn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      min-height: 36px;
+      padding: 0 0.82rem;
+      border-radius: 8px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: transparent;
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .actionBtn--primary {
+      border-color: ${({ theme }) => theme.colors.blue7};
+      color: ${({ theme }) => theme.colors.blue11};
+    }
+  }
+
+  .searchLoadingState {
+    grid-column: 1 / -1;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    min-height: 16rem;
+    padding: 1rem 0;
+    display: grid;
+    gap: 0.9rem;
+
+    .searchLoadingHeading {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
+
+    .searchLoadingIcon {
+      width: 2.1rem;
+      height: 2.1rem;
+      border-radius: 8px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      color: ${({ theme }) => theme.colors.blue10};
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      background: ${({ theme }) => theme.colors.gray2};
+    }
+
+    .searchLoadingCopy {
+      display: grid;
+      gap: 0.16rem;
+    }
+
+    h3 {
+      margin: 0;
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    p {
+      margin: 0;
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+  }
+
+  .searchLoadingGrid {
+    padding-top: 0.1rem;
+  }
+
+  .loadMoreArea {
+    grid-column: 1 / -1;
+    display: grid;
+    justify-items: center;
+    gap: 0.8rem;
+    padding-top: 0.35rem;
+  }
+
+  .loadMoreSkeletonShell {
+    width: 100%;
+    display: grid;
+    gap: 0.72rem;
+  }
+
+  .loadMoreError {
+    width: min(100%, 34rem);
+    display: grid;
+    justify-items: center;
+    gap: 0.42rem;
+    border-top: 1px solid ${({ theme }) => theme.colors.red6};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.red6};
+    padding: 0.85rem 0;
+    text-align: center;
+
+    strong {
+      color: ${({ theme }) => theme.colors.red11};
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+
+    span {
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+  }
+
+  .loadMoreSkeletonCopy {
+    display: grid;
+    gap: 0.12rem;
+    justify-items: center;
+    text-align: center;
+
+    strong {
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+
+    span {
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+  }
+
+  .loadMoreTrigger {
+    width: 100%;
+    height: 1px;
+  }
+
+  .loadMoreButton {
+    min-height: 36px;
+    padding: 0 0.9rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.16s ease;
+
+    &:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+  }
+
+  .skeletonGrid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
+    align-items: start;
+
+    @media (min-width: 768px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    @media (min-width: 1440px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .skeletonCard {
+    position: relative;
+    overflow: hidden;
+    min-height: 11.5rem;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+    background: transparent;
+
+    &::before,
+    &::after {
+      content: "";
+      display: block;
+      background:
+        linear-gradient(
+          90deg,
+          ${({ theme }) => theme.colors.gray2} 0%,
+          ${({ theme }) => theme.colors.gray3} 50%,
+          ${({ theme }) => theme.colors.gray2} 100%
+        );
+      background-size: 240% 100%;
+      animation: feed-card-skeleton-pulse 1.1s ease-in-out infinite;
+    }
+
+    &::before {
+      width: min(100%, 12rem);
+      aspect-ratio: 1.45 / 1;
+      margin-left: auto;
+    }
+
+    &::after {
+      margin: 0.95rem 0 1rem;
+      border-radius: 4px;
+      min-height: 4.4rem;
+    }
+  }
+
+  .deferredPostCardWrap {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .deferredPostCardPlaceholder {
+    width: 100%;
+    min-height: 11.5rem;
+    border-radius: 0;
+    border-bottom: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray4}`};
+    background: transparent;
+  }
+
+  @media (max-width: 640px) {
+    .skeletonCard {
+      min-height: 24rem;
+      border-radius: 13px;
+
+      &::after {
+        margin: 0.86rem 0.9rem 0.86rem;
+        min-height: 9.6rem;
+      }
+    }
+
+    .deferredPostCardPlaceholder {
+      min-height: 24rem;
+      border-radius: 4px;
+    }
+  }
+
+  @keyframes feed-card-skeleton-pulse {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: 0 0;
+    }
+  }
+`

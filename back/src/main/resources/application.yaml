@@ -1,0 +1,449 @@
+server:
+  port: 8080
+  shutdown: graceful
+  forward-headers-strategy: native
+spring:
+  application:
+    name: back
+  config:
+    import: optional:file:.env[.properties]
+  output:
+    ansi:
+      enabled: always
+  threads:
+    virtual:
+      enabled: true
+  web:
+    resources:
+      add-mappings: false
+  jackson:
+    serialization:
+      fail-on-empty-beans: false
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            client-id: ${SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID:}
+            scope: openid, profile_nickname, profile_image
+            client-name: Kakao
+            authorization-grant-type: authorization_code
+            redirect-uri: '${custom.site.backUrl}/login/oauth2/code/{registrationId}'
+        provider:
+          kakao:
+            issuer-uri: https://kauth.kakao.com
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            jwk-set-uri: https://kauth.kakao.com/.well-known/jwks.json
+            user-info-uri: https://kapi.kakao.com/v1/oidc/userinfo
+            user-name-attribute: sub
+  mail:
+    host: ${SPRING__MAIL__HOST:}
+    port: ${SPRING__MAIL__PORT:587}
+    username: ${SPRING__MAIL__USERNAME:}
+    password: ${SPRING__MAIL__PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__AUTH:true}
+          starttls:
+            enable: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:true}
+  data:
+    redis:
+      host: ${custom.site.redisHost}
+      port: ${custom.site.redisPort}
+      password: ${SPRING__DATA__REDIS__PASSWORD:}
+      database: ${custom.site.redisDatabase}
+      repositories:
+        enabled: false
+  datasource:
+    url: jdbc:postgresql://${custom.site.dbHost}:${custom.site.dbPort}/${custom.site.dbName}?reWriteBatchedInserts=true
+    username: ${SPRING__DATASOURCE__USERNAME:postgres}
+    password: ${SPRING__DATASOURCE__PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      auto-commit: false
+  servlet:
+    multipart:
+      # Cloudflare edge 100MiB − multipart overhead ≈ 95MiB 실효 파일 / 요청 상한 100MiB
+      max-file-size: ${CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE:95MB}
+      max-request-size: ${CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE:100MB}
+  flyway:
+    enabled: false
+  sql:
+    init:
+      mode: never
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: com.back.global.jpa.config.CustomPostgreSQLDialect
+        default_batch_fetch_size: 128
+        jdbc:
+          batch_size: 128
+          order_inserts: true
+        session:
+          events:
+            log:
+              LOG_QUERIES_SLOWER_THAN_MS: ${CUSTOM__JPA__SLOW_QUERY_LOG_MS:1200}
+        format_sql: false
+        highlight_sql: false
+        use_sql_comments: false
+    show-sql: false
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] rid=%X{requestId:-na} %logger{36} - %msg%n"
+  level:
+    com.back: INFO
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.orm.jdbc.extract: WARN
+    org.hibernate.orm.jdbc.batch: WARN
+    org.springframework.transaction.interceptor: INFO
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: ping,db
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        post.search_index.task.duration: true
+        post.search_index.task.lag: true
+        post.search_engine.mirror.duration: true
+        post.search_engine.mirror.task.lag: true
+        post.search.pipeline.shadow.external.duration: true
+        post.search.pipeline.shadow.delta: true
+        cdn.purge.duration: true
+        task.processor.handler.duration: true
+        task.processor.fetch.limit: true
+      percentiles:
+        http.server.requests: 0.95,0.99
+        post.search_index.task.duration: 0.95,0.99
+        post.search_index.task.lag: 0.95,0.99
+        post.search_engine.mirror.duration: 0.95,0.99
+        post.search_engine.mirror.task.lag: 0.95,0.99
+        post.search.pipeline.shadow.external.duration: 0.95,0.99
+        post.search.pipeline.shadow.delta: 0.95,0.99
+        cdn.purge.duration: 0.95,0.99
+        task.processor.handler.duration: 0.95,0.99
+        task.processor.fetch.limit: 0.95,0.99
+custom:
+  bootstrap:
+    seed-demo-data-enabled: ${CUSTOM__BOOTSTRAP__SEED_DEMO_DATA_ENABLED:false}
+  dbBaseName: blog
+  dev:
+    cookieDomain: localhost
+    frontUrl: "http://${custom.dev.cookieDomain}:3000"
+    backUrl: "http://${custom.dev.cookieDomain}:${server.port}"
+    dbHost: localhost
+    dbPort: 5432
+    dbName: "${custom.dbBaseName}_dev"
+    redisHost: localhost
+    redisPort: 6379
+    redisDatabase: 0
+  test:
+    cookieDomain: localhost
+    frontUrl: "http://${custom.test.cookieDomain}:3000"
+    backUrl: "http://${custom.test.cookieDomain}:${server.port}"
+    dbHost: localhost
+    dbPort: ${CUSTOM__TEST__DB_PORT:15432}
+    dbName: "${custom.dbBaseName}_test"
+    redisHost: localhost
+    redisPort: ${CUSTOM__TEST__REDIS_PORT:16379}
+    redisDatabase: 1
+  prod:
+    cookieDomain: blog.oa.gg
+    frontUrl: "https://www.${custom.prod.cookieDomain}"
+    backUrl: "https://api.${custom.prod.cookieDomain}"
+    dbHost: pg_1
+    dbPort: 5432
+    dbName: "${custom.dbBaseName}_prod"
+    redisHost: redis_1
+    redisPort: 6379
+    redisDatabase: 0
+  site:
+    cookieDomain: "${custom.dev.cookieDomain}"
+    frontUrl: "${custom.dev.frontUrl}"
+    backUrl: "${custom.dev.backUrl}"
+    dbHost: "${custom.dev.dbHost}"
+    dbPort: "${custom.dev.dbPort}"
+    dbName: "${custom.dev.dbName}"
+    redisHost: "${custom.dev.redisHost}"
+    redisPort: "${custom.dev.redisPort}"
+    redisDatabase: "${custom.dev.redisDatabase}"
+  member:
+    signup:
+      enabled: ${CUSTOM__MEMBER__SIGNUP__ENABLED:false}
+      legacyDirectJoinEnabled: ${CUSTOM__MEMBER__SIGNUP__LEGACY_DIRECT_JOIN_ENABLED:false}
+      verifyPath: ${CUSTOM__MEMBER__SIGNUP__VERIFY_PATH:/signup/verify}
+      emailExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__EMAIL_EXPIRATION_SECONDS:86400}
+      sessionExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__SESSION_EXPIRATION_SECONDS:3600}
+      mailFrom: ${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:}
+      mailSubject: ${CUSTOM__MEMBER__SIGNUP__MAIL_SUBJECT:[AquilaXk] 회원가입 이메일 인증}
+      startRateLimit:
+        maxAttemptsPerEmail: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPEREMAIL:5}
+        maxAttemptsPerIp: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPERIP:20}
+        windowSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__WINDOWSECONDS:3600}
+        memoryMaxEntries: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_MAX_ENTRIES:10000}
+        memoryCleanupIntervalSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
+        requireRedisInProd: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__REQUIRE_REDIS_IN_PROD:true}
+    oauth-signup:
+      enabled: ${CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED:false}
+    notification:
+      realtime:
+        enabled: ${CUSTOM__MEMBER__NOTIFICATION__REALTIME__ENABLED:true}
+        nodeId: ${CUSTOM__MEMBER__NOTIFICATION__REALTIME__NODE_ID:${random.uuid}}
+      sse:
+        maxEmittersPerMember: ${CUSTOM__MEMBER__NOTIFICATION__SSE__MAX_EMITTERS_PER_MEMBER:3}
+        maxGlobalEmitters: ${CUSTOM__MEMBER__NOTIFICATION__SSE__MAX_GLOBAL_EMITTERS:2000}
+        heartbeatSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__HEARTBEAT_SECONDS:20}
+        replayProbeSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_PROBE_SECONDS:60}
+        replayBatchSize: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_BATCH_SIZE:50}
+  admin:
+    username: "${CUSTOM__ADMIN__USERNAME:}"
+    email: "${CUSTOM__ADMIN__EMAIL:}"
+    password: "${CUSTOM__ADMIN__PASSWORD:}"
+    bootstrap:
+      rotatePasswordOnStartup: ${CUSTOM__ADMIN__BOOTSTRAP__ROTATE_PASSWORD_ON_STARTUP:false}
+  security:
+    apiRateLimit:
+      enabled: ${CUSTOM__SECURITY__API_RATE_LIMIT__ENABLED:true}
+      requireRedisInProd: ${CUSTOM__SECURITY__API_RATE_LIMIT__REQUIRE_REDIS_IN_PROD:true}
+      publicReadLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__PUBLIC_READ_LIMIT_PER_MINUTE:120}
+      authenticatedReadLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__AUTHENTICATED_READ_LIMIT_PER_MINUTE:120}
+      mutationLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__MUTATION_LIMIT_PER_MINUTE:60}
+      authLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__AUTH_LIMIT_PER_MINUTE:20}
+      sseLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__SSE_LIMIT_PER_MINUTE:30}
+  auth:
+    cookie:
+      apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:604800}
+    session:
+      freshLookupGraceSeconds: ${CUSTOM__AUTH__SESSION__FRESH_LOOKUP_GRACE_SECONDS:15}
+      touchMinIntervalSeconds: ${CUSTOM__AUTH__SESSION__TOUCH_MIN_INTERVAL_SECONDS:60}
+      maxActivePerMember: ${CUSTOM__AUTH__SESSION__MAX_ACTIVE_PER_MEMBER:32}
+      revokedRetentionDays: ${CUSTOM__AUTH__SESSION__REVOKED_RETENTION_DAYS:30}
+      cleanup:
+        batchSize: ${CUSTOM__AUTH__SESSION__CLEANUP__BATCH_SIZE:500}
+        fixedDelayMs: ${CUSTOM__AUTH__SESSION__CLEANUP__FIXED_DELAY_MS:3600000}
+    securityEvent:
+      retentionDays: ${CUSTOM__AUTH__SECURITY_EVENT__RETENTION_DAYS:30}
+      cleanup:
+        batchSize: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__BATCH_SIZE:1000}
+        maxBatches: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__MAX_BATCHES:100}
+        fixedDelayMs: ${CUSTOM__AUTH__SECURITY_EVENT__CLEANUP__FIXED_DELAY_MS:3600000}
+    login:
+      maxAttempts: ${CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS:5}
+      windowSeconds: ${CUSTOM__AUTH__LOGIN__WINDOW_SECONDS:300}
+      lockSeconds: ${CUSTOM__AUTH__LOGIN__LOCK_SECONDS:600}
+      memoryMaxEntries: ${CUSTOM__AUTH__LOGIN__MEMORY_MAX_ENTRIES:10000}
+      memoryCleanupIntervalSeconds: ${CUSTOM__AUTH__LOGIN__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
+      requireRedisInProd: ${CUSTOM__AUTH__LOGIN__REQUIRE_REDIS_IN_PROD:true}
+  jwt:
+    secretKey: "${CUSTOM__JWT__SECRET_KEY:}"
+  accessToken:
+    expirationSeconds: 1200
+  task:
+    processor:
+      fixedDelayMs: ${CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS:60000}
+      batchSize: ${CUSTOM__TASK__PROCESSOR__BATCH_SIZE:50}
+      processingTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS:900}
+      maxConcurrent: ${CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT:8}
+      handlerTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__HANDLER_TIMEOUT_SECONDS:120}
+      dynamicConcurrencyEnabled: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_CONCURRENCY_ENABLED:true}
+      dynamicMinConcurrent: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_MIN_CONCURRENT:2}
+      dynamicBacklogPerSlot: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BACKLOG_PER_SLOT:25}
+      dynamicBatchSizeEnabled: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_SIZE_ENABLED:true}
+      dynamicBatchMinSize: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_MIN_SIZE:4}
+      dynamicBatchBacklogPerStep: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_BACKLOG_PER_STEP:120}
+      dynamicBatchTargetHandlerDurationMs: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_TARGET_HANDLER_DURATION_MS:900}
+      dynamicBatchMaxPrefetchMultiplier: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_MAX_PREFETCH_MULTIPLIER:2}
+      perTypeMaxConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_MAX_CONCURRENT:post.search-index.sync=4,post.read.prewarm=2,post.search-engine.mirror=1}
+      perTypeAutoTuneEnabled: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_ENABLED:true}
+      perTypeAutoTuneMinConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_MIN_CONCURRENT:1}
+      perTypeAutoTuneRefreshMs: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_REFRESH_MS:15000}
+      inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
+    diagnostics:
+      cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:30}
+    metrics:
+      refreshEnabled: ${CUSTOM__TASK__METRICS__REFRESH_ENABLED:true}
+      refreshFixedDelayMs: ${CUSTOM__TASK__METRICS__REFRESH_FIXED_DELAY_MS:60000}
+  runtime:
+    worker-enabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
+    apiMode: ${CUSTOM__RUNTIME__API_MODE:all}
+  privacy:
+    retention:
+      signupVerificationDays: ${CUSTOM__PRIVACY__RETENTION__SIGNUP_VERIFICATION_DAYS:7}
+      revokedSessionDays: ${CUSTOM__PRIVACY__RETENTION__REVOKED_SESSION_DAYS:${CUSTOM__AUTH__SESSION__REVOKED_RETENTION_DAYS:30}}
+      authSecurityEventDays: ${CUSTOM__PRIVACY__RETENTION__AUTH_SECURITY_EVENT_DAYS:${CUSTOM__AUTH__SECURITY_EVENT__RETENTION_DAYS:30}}
+      memberActionLogDays: ${CUSTOM__PRIVACY__RETENTION__MEMBER_ACTION_LOG_DAYS:90}
+      notificationDays: ${CUSTOM__PRIVACY__RETENTION__NOTIFICATION_DAYS:60}
+      privacyRequestDays: ${CUSTOM__PRIVACY__RETENTION__PRIVACY_REQUEST_DAYS:30}
+      cleanup:
+        batchSize: ${CUSTOM__PRIVACY__RETENTION__CLEANUP__BATCH_SIZE:500}
+        maxBatches: ${CUSTOM__PRIVACY__RETENTION__CLEANUP__MAX_BATCHES:20}
+        fixedDelayMs: ${CUSTOM__PRIVACY__RETENTION__CLEANUP__FIXED_DELAY_MS:3600000}
+  cache:
+    ttl-seconds: 3600
+    ttl-overrides:
+      member-admin-profile-v2: 120
+      member-session-active-v1: ${CUSTOM__CACHE__MEMBER_SESSION_ACTIVE_TTL_SECONDS:15}
+      system-admin-health-summary-v1: ${CUSTOM__CACHE__SYSTEM_ADMIN_HEALTH_SUMMARY_TTL_SECONDS:5}
+      post-admin-posts-first-page-v1: ${CUSTOM__CACHE__POST_ADMIN_POSTS_FIRST_PAGE_TTL_SECONDS:8}
+      post-bootstrap-v1: ${CUSTOM__CACHE__POST_BOOTSTRAP_TTL_SECONDS:8}
+      post-feed-v4: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:8}
+      post-feed-cursor-first-v1: ${CUSTOM__CACHE__POST_FEED_CURSOR_FIRST_TTL_SECONDS:8}
+      post-explore-v4: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:8}
+      post-explore-cursor-first-v1: ${CUSTOM__CACHE__POST_EXPLORE_CURSOR_FIRST_TTL_SECONDS:8}
+      post-search-v1: ${CUSTOM__CACHE__POST_SEARCH_TTL_SECONDS:8}
+      post-search-negative-v1: ${CUSTOM__CACHE__POST_SEARCH_NEGATIVE_TTL_SECONDS:20}
+      post-tags-v4: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:12}
+      post-detail-public-snapshot-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_SNAPSHOT_TTL_SECONDS:20}
+      post-detail-public-meta-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_META_TTL_SECONDS:15}
+      post-detail-public-content-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_CONTENT_TTL_SECONDS:15}
+      post-detail-public-negative-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_NEGATIVE_TTL_SECONDS:20}
+  revalidate:
+    url: "${CUSTOM__REVALIDATE__URL:}"
+    token: "${CUSTOM__REVALIDATE__TOKEN:}"
+  cdn:
+    purge:
+      enabled: ${CUSTOM__CDN__PURGE__ENABLED:false}
+      url: "${CUSTOM__CDN__PURGE__URL:}"
+      token: "${CUSTOM__CDN__PURGE__TOKEN:}"
+      connectTimeoutMs: ${CUSTOM__CDN__PURGE__CONNECT_TIMEOUT_MS:1200}
+      requestTimeoutMs: ${CUSTOM__CDN__PURGE__REQUEST_TIMEOUT_MS:2500}
+      coalesceWindowMs: ${CUSTOM__CDN__PURGE__COALESCE_WINDOW_MS:1200}
+      coalesceMaxTags: ${CUSTOM__CDN__PURGE__COALESCE_MAX_TAGS:2048}
+  storage:
+    enabled: ${CUSTOM_STORAGE_ENABLED:false}
+    endpoint: ${CUSTOM_STORAGE_ENDPOINT:http://localhost:9000}
+    region: ${CUSTOM_STORAGE_REGION:us-east-1}
+    bucket: ${CUSTOM_STORAGE_BUCKET:blog-images}
+    accessKey: ${CUSTOM_STORAGE_ACCESSKEY:}
+    secretKey: ${CUSTOM_STORAGE_SECRETKEY:}
+    pathStyleAccess: ${CUSTOM_STORAGE_PATHSTYLEACCESS:true}
+    keyPrefix: ${CUSTOM_STORAGE_KEYPREFIX:posts}
+    cloudKeyPrefix: ${CUSTOM_STORAGE_CLOUD_KEY_PREFIX:cloud}
+    maxFileSizeBytes: ${CUSTOM_STORAGE_MAXFILESIZEBYTES:99614720}
+    cloudDocumentMaxFileSizeBytes: ${CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES:${CUSTOM_STORAGE_MAXFILESIZEBYTES:99614720}}
+    cloudPhotoMaxFileSizeBytes: ${CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES:52428800}
+    cloudArchiveMaxFileSizeBytes: ${CUSTOM_STORAGE_CLOUD_ARCHIVE_MAXFILESIZEBYTES:${CUSTOM_STORAGE_MAXFILESIZEBYTES:99614720}}
+    cloudVideoMaxFileSizeBytes: ${CUSTOM_STORAGE_CLOUD_VIDEO_MAXFILESIZEBYTES:${CUSTOM_STORAGE_MAXFILESIZEBYTES:99614720}}
+    cloudVideoResumableMaxFileSizeBytes: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_MAXFILESIZEBYTES:5368709120}
+    cloudVideoResumablePartSizeBytes: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES:67108864}
+    cloudVideoResumableExpiresSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS:86400}
+    cloudVideoResumableAbsoluteMaxSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_ABSOLUTEMAXSECONDS:604800}
+    # UPLOADING_PART stale grace: modifiedAt is claim-time only (not refreshed while streaming),
+    # so default matches absolute max (7d) to avoid aborting in-flight large part uploads.
+    cloudVideoResumableStaleUploadingPartGraceSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_STALEUPLOADINGPARTGRACESECONDS:604800}
+    retention:
+      tempUploadSeconds: ${CUSTOM__STORAGE__RETENTION__TEMP_UPLOAD_SECONDS:86400}
+      replacedProfileImageSeconds: ${CUSTOM__STORAGE__RETENTION__REPLACED_PROFILE_IMAGE_SECONDS:259200}
+      deletedPostAttachmentSeconds: ${CUSTOM__STORAGE__RETENTION__DELETED_POST_ATTACHMENT_SECONDS:1209600}
+      cleanupFixedDelayMs: ${CUSTOM__STORAGE__RETENTION__CLEANUP_FIXED_DELAY_MS:3600000}
+      cleanupBatchSize: ${CUSTOM__STORAGE__RETENTION__CLEANUP_BATCH_SIZE:100}
+      cleanupSafetyThreshold: ${CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD:25}
+  post:
+    recommend:
+      enabled: ${CUSTOM__POST__RECOMMEND__ENABLED:true}
+      candidatePoolSize: ${CUSTOM__POST__RECOMMEND__CANDIDATE_POOL_SIZE:240}
+      maxRerankPages: ${CUSTOM__POST__RECOMMEND__MAX_RERANK_PAGES:4}
+      hotTagsLimit: ${CUSTOM__POST__RECOMMEND__HOT_TAGS_LIMIT:24}
+      feature-store:
+        enabled: ${CUSTOM__POST__RECOMMEND__FEATURE_STORE__ENABLED:true}
+        stale-seconds: ${CUSTOM__POST__RECOMMEND__FEATURE_STORE__STALE_SECONDS:900}
+        local-cache-ttl-seconds: ${CUSTOM__POST__RECOMMEND__FEATURE_STORE__LOCAL_CACHE_TTL_SECONDS:120}
+    search:
+      pipeline:
+        enabled: ${CUSTOM__POST__SEARCH__PIPELINE__ENABLED:true}
+        candidatePoolSize: ${CUSTOM__POST__SEARCH__PIPELINE__CANDIDATE_POOL_SIZE:220}
+        maxRerankPages: ${CUSTOM__POST__SEARCH__PIPELINE__MAX_RERANK_PAGES:4}
+        rollback:
+          forceControl: ${CUSTOM__POST__SEARCH__PIPELINE__ROLLBACK__FORCE_CONTROL:false}
+        ab:
+          enabled: ${CUSTOM__POST__SEARCH__PIPELINE__AB__ENABLED:true}
+          variantTrafficPercent: ${CUSTOM__POST__SEARCH__PIPELINE__AB__VARIANT_TRAFFIC_PERCENT:25}
+        control:
+          titleWeight: ${CUSTOM__POST__SEARCH__PIPELINE__CONTROL__TITLE_WEIGHT:300}
+          tagWeight: ${CUSTOM__POST__SEARCH__PIPELINE__CONTROL__TAG_WEIGHT:120}
+          contentWeight: ${CUSTOM__POST__SEARCH__PIPELINE__CONTROL__CONTENT_WEIGHT:40}
+          freshnessWeight: ${CUSTOM__POST__SEARCH__PIPELINE__CONTROL__FRESHNESS_WEIGHT:1.0}
+        variant:
+          titleWeight: ${CUSTOM__POST__SEARCH__PIPELINE__VARIANT__TITLE_WEIGHT:260}
+          tagWeight: ${CUSTOM__POST__SEARCH__PIPELINE__VARIANT__TAG_WEIGHT:180}
+          contentWeight: ${CUSTOM__POST__SEARCH__PIPELINE__VARIANT__CONTENT_WEIGHT:70}
+          freshnessWeight: ${CUSTOM__POST__SEARCH__PIPELINE__VARIANT__FRESHNESS_WEIGHT:1.1}
+        shadow-read:
+          enabled: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__ENABLED:true}
+          compareTopN: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__COMPARE_TOP_N:20}
+          warnDeltaThreshold: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__WARN_DELTA_THRESHOLD:0.45}
+          external:
+            enabled: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__ENABLED:false}
+            endpoint: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__ENDPOINT:}
+            apiKey: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__API_KEY:}
+            connectTimeoutMs: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__CONNECT_TIMEOUT_MS:300}
+            requestTimeoutMs: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__REQUEST_TIMEOUT_MS:800}
+    search-index:
+      async-sync-enabled: ${CUSTOM__POST__SEARCH_INDEX__ASYNC_SYNC_ENABLED:true}
+      max-tags: ${CUSTOM__POST__SEARCH_INDEX__MAX_TAGS:32}
+      sla:
+        maxLagSeconds: ${CUSTOM__POST__SEARCH_INDEX__SLA__MAX_LAG_SECONDS:120}
+    search-engine:
+      mirror:
+        enabled: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__ENABLED:false}
+        endpoint: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__ENDPOINT:}
+        apiKey: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__API_KEY:}
+        connectTimeoutMs: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CONNECT_TIMEOUT_MS:1200}
+        requestTimeoutMs: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__REQUEST_TIMEOUT_MS:2500}
+        maxTags: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__MAX_TAGS:32}
+        circuit:
+          failureThreshold: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CIRCUIT__FAILURE_THRESHOLD:5}
+          openSeconds: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CIRCUIT__OPEN_SECONDS:60}
+    read:
+      cursor-signing-secret: ${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}
+      prewarm:
+        enabled: ${CUSTOM__POST__READ__PREWARM__ENABLED:true}
+        page-size: ${CUSTOM__POST__READ__PREWARM__PAGE_SIZE:30}
+        max-tag-warmups: ${CUSTOM__POST__READ__PREWARM__MAX_TAG_WARMUPS:3}
+      bulkhead:
+        enabled: ${CUSTOM__POST__READ__BULKHEAD__ENABLED:true}
+        acquireTimeoutMs: ${CUSTOM__POST__READ__BULKHEAD__ACQUIRE_TIMEOUT_MS:25}
+        feedMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__FEED_MAX_CONCURRENT:20}
+        exploreMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__EXPLORE_MAX_CONCURRENT:10}
+        searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:8}
+      detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:16}
+      tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:6}
+      detail-content-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_CONTENT_CACHE_MAX_CHARS:120000}
+      detail-snapshot-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_SNAPSHOT_CACHE_MAX_CHARS:180000}
+      tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
+    idempotency:
+      retentionDays: ${CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS:30}
+      cleanup:
+        fixedDelayMs: ${CUSTOM__POST__IDEMPOTENCY__CLEANUP__FIXED_DELAY_MS:3600000}
+        batchSize: ${CUSTOM__POST__IDEMPOTENCY__CLEANUP__BATCH_SIZE:200}
+    hit:
+      viewerWindowSeconds: ${CUSTOM__POST__HIT__VIEWER_WINDOW_SECONDS:86400}
+      memoryMaxEntries: ${CUSTOM__POST__HIT__MEMORY_MAX_ENTRIES:50000}
+      memoryCleanupIntervalSeconds: ${CUSTOM__POST__HIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
+      redisWarnIntervalSeconds: ${CUSTOM__POST__HIT__REDIS_WARN_INTERVAL_SECONDS:300}
+    likes:
+      reconciliation:
+        fixedDelayMs: ${CUSTOM__POST__LIKES__RECONCILIATION__FIXED_DELAY_MS:900000}
+        lookbackHours: ${CUSTOM__POST__LIKES__RECONCILIATION__LOOKBACK_HOURS:24}
+        batchSize: ${CUSTOM__POST__LIKES__RECONCILIATION__BATCH_SIZE:100}
+  pgroonga:
+    required: ${CUSTOM__PGROONGA__REQUIRED:false}
+  observability:
+    request:
+      slowMs: ${CUSTOM__OBSERVABILITY__REQUEST__SLOW_MS:1200}
+  jpa:
+    after-ddl:
+      enabled: ${CUSTOM__JPA__AFTER_DDL__ENABLED:true}
+      failOnError: ${CUSTOM__JPA__AFTER_DDL__FAIL_ON_ERROR:false}

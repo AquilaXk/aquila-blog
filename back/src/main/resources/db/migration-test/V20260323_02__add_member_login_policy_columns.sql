@@ -1,0 +1,8 @@
+ALTER TABLE member
+    ADD COLUMN IF NOT EXISTS remember_login_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE member
+    ADD COLUMN IF NOT EXISTS ip_security_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE member
+    ADD COLUMN IF NOT EXISTS ip_security_fingerprint VARCHAR(96);

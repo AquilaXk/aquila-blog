@@ -43,10 +43,10 @@ permissions:
 
 jobs:
   calculateTag:
-    runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
+    runs-on: ubuntu-latest
     if: >
       (
         github.event_name == 'workflow_run' &&

@@ -1,0 +1,303 @@
+package com.back.boundedContexts.post.application.service
+
+import com.back.standard.dto.post.type1.PostSearchSortType1
+import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.cache.Cache
+import org.springframework.cache.CacheManager
+import org.springframework.stereotype.Component
+
+internal data class PostReadCacheInvalidationRequest(
+    val postId: Long?,
+    val beforeTags: Collection<String>,
+    val afterTags: Collection<String>,
+    val scope: PostReadCacheInvalidationScope,
+    val evictReason: String,
+)
+
+@Component
+class PostReadCacheInvalidator(
+    private val cacheManager: CacheManager,
+    private val meterRegistry: MeterRegistry? = null,
+) {
+    private val hotPageSizes = listOf(30, 24, 16)
+    private val hotSorts =
+        listOf(
+            PostSearchSortType1.CREATED_AT,
+            PostSearchSortType1.HIT_COUNT,
+            PostSearchSortType1.LIKES_COUNT,
+        )
+    private val rankedSorts =
+        listOf(
+            PostSearchSortType1.HIT_COUNT,
+            PostSearchSortType1.LIKES_COUNT,
+        )
+    private val maxTagCacheEvict = 12
+
+    internal fun invalidateRankedSortHotPages(evictReason: String) {
+        invalidateRankedSortHotPages(evictReason, rankedSorts)
+    }
+
+    internal fun invalidateRankedSortHotPages(
+        evictReason: String,
+        sorts: Collection<PostSearchSortType1>,
+    ) {
+        val targetSorts =
+            sorts
+                .asSequence()
+                .filter { it == PostSearchSortType1.HIT_COUNT || it == PostSearchSortType1.LIKES_COUNT }
+                .distinct()
+                .toList()
+        if (targetSorts.isEmpty()) {
+            throw IllegalArgumentException("ranked sort invalidation requires HIT_COUNT and/or LIKES_COUNT")
+        }
+
+        val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
+        val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
+
+        // FEED offset keys are page×size×sort (page up to 200, size 1..30). Hot-size page=1 eviction
+        // leaves ranked page 2+ stale until TTL; clear the whole FEED cache instead of under-invalidating.
+        cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
+        recordCacheEvict(PostQueryCacheNames.FEED, "clear", evictReason)
+
+        // Untagged cursor-first/bootstrap keys remain enumerable by hot page sizes.
+        hotPageSizes.forEach { pageSize ->
+            targetSorts.forEach { sort ->
+                val sortName = sort.name
+                feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
+                recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
+                bootstrapCache?.evict(
+                    PostPublicReadQueryService.buildBootstrapCacheKey(
+                        pageSize = pageSize,
+                        sort = sort,
+                        tag = "",
+                    ),
+                )
+                recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
+            }
+        }
+
+        // Ranked explore/search entries are keyed by real tag/kw tokens. Evicting only tag=_ or kw=_
+        // leaves stale ranked pages; interaction paths often lack a complete tag/kw set, so clear these
+        // cache names instead of silently under-invalidating.
+        clearRankedInteractionExploreAndSearchCaches(evictReason)
+    }
+
+    internal fun invalidateAuthorRepresentation(reason: String) {
+        listOf(
+            PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,
+            PostQueryCacheNames.FEED,
+            PostQueryCacheNames.EXPLORE,
+            PostQueryCacheNames.FEED_CURSOR_FIRST,
+            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
+            PostQueryCacheNames.BOOTSTRAP,
+            PostQueryCacheNames.SEARCH,
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_META,
+            PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+        ).forEach { cacheName ->
+            cacheManager.getCache(cacheName)?.clear()
+            recordCacheEvict(cacheName, "clear", reason)
+        }
+    }
+
+    internal fun invalidate(
+        request: PostReadCacheInvalidationRequest,
+        onPublicTagsEvicted: () -> Unit,
+    ) {
+        if (request.evicts(PostReadCacheInvalidationTarget.PUBLIC_TAGS)) {
+            onPublicTagsEvicted()
+            recordCacheEvict("local-tag-counts", "clear", request.evictReason)
+        }
+        if (request.scope.isEmpty()) {
+            return
+        }
+        val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
+        val exploreCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE)
+        val adminPostsFirstPageCache = cacheManager.getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)
+        val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
+        val exploreCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST)
+        val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
+        val searchCache = cacheManager.getCache(PostQueryCacheNames.SEARCH)
+        val searchNegativeCache = cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
+        val tagsCache = cacheManager.getCache(PostQueryCacheNames.TAGS)
+
+        if (
+            request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES) ||
+            request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE)
+        ) {
+            adminPostsFirstPageCache?.evict("page=1:size=20:sort=${PostSearchSortType1.CREATED_AT.name}")
+            recordCacheEvict(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "key", request.evictReason)
+            evictHotAndSearchFirstPages(
+                sorts = hotSorts,
+                includeHotReadPages = request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES),
+                includeSearchFirstPage = request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE),
+                evictReason = request.evictReason,
+                feedCache = feedCache,
+                exploreCache = exploreCache,
+                feedCursorFirstCache = feedCursorFirstCache,
+                exploreCursorFirstCache = exploreCursorFirstCache,
+                bootstrapCache = bootstrapCache,
+                searchCache = searchCache,
+                searchNegativeCache = searchNegativeCache,
+            )
+        }
+
+        if (request.evicts(PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES)) {
+            evictImpactedTagPages(request, exploreCache, exploreCursorFirstCache, bootstrapCache)
+        }
+
+        if (request.evicts(PostReadCacheInvalidationTarget.PUBLIC_TAGS)) {
+            tagsCache?.evict("public")
+            recordCacheEvict(PostQueryCacheNames.TAGS, "key", request.evictReason)
+        }
+        if (request.evicts(PostReadCacheInvalidationTarget.DETAIL)) {
+            evictDetailCaches(request)
+        }
+    }
+
+    private fun PostReadCacheInvalidationRequest.evicts(target: PostReadCacheInvalidationTarget): Boolean = scope.evicts(target)
+
+    private fun clearRankedInteractionExploreAndSearchCaches(evictReason: String) {
+        listOf(
+            PostQueryCacheNames.EXPLORE,
+            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
+            PostQueryCacheNames.SEARCH,
+            PostQueryCacheNames.SEARCH_NEGATIVE,
+        ).forEach { cacheName ->
+            cacheManager.getCache(cacheName)?.clear()
+            recordCacheEvict(cacheName, "clear", evictReason)
+        }
+    }
+
+    private fun evictHotAndSearchFirstPages(
+        sorts: List<PostSearchSortType1>,
+        includeHotReadPages: Boolean,
+        includeSearchFirstPage: Boolean,
+        evictReason: String,
+        feedCache: Cache?,
+        exploreCache: Cache?,
+        feedCursorFirstCache: Cache?,
+        exploreCursorFirstCache: Cache?,
+        bootstrapCache: Cache?,
+        searchCache: Cache?,
+        searchNegativeCache: Cache?,
+    ) {
+        hotPageSizes.forEach { pageSize ->
+            sorts.forEach { sort ->
+                val sortName = sort.name
+                if (includeHotReadPages) {
+                    feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
+                    recordCacheEvict(PostQueryCacheNames.FEED, "key", evictReason)
+                    exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
+                    recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", evictReason)
+                    feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
+                    recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
+                    exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
+                    recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", evictReason)
+                    bootstrapCache?.evict(
+                        PostPublicReadQueryService.buildBootstrapCacheKey(
+                            pageSize = pageSize,
+                            sort = sort,
+                            tag = "",
+                        ),
+                    )
+                    recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
+                }
+                if (includeSearchFirstPage) {
+                    searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                    recordCacheEvict(PostQueryCacheNames.SEARCH, "key", evictReason)
+                    searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                    recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "key", evictReason)
+                }
+            }
+        }
+    }
+
+    private fun evictImpactedTagPages(
+        request: PostReadCacheInvalidationRequest,
+        exploreCache: Cache?,
+        exploreCursorFirstCache: Cache?,
+        bootstrapCache: Cache?,
+    ) {
+        val impactedTagTokens =
+            buildList(request.beforeTags.size + request.afterTags.size) {
+                addAll(request.beforeTags)
+                addAll(request.afterTags)
+            }.asSequence()
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .map(PostPublicReadQueryService::toCacheKeyToken)
+                .distinct()
+                .take(maxTagCacheEvict)
+                .toList()
+
+        impactedTagTokens.forEach { token ->
+            hotPageSizes.forEach { pageSize ->
+                hotSorts.forEach { sort ->
+                    val sortName = sort.name
+                    exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=$token")
+                    recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", request.evictReason)
+                    exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=$token")
+                    recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", request.evictReason)
+                }
+            }
+        }
+
+        buildList(request.beforeTags.size + request.afterTags.size) {
+            addAll(request.beforeTags)
+            addAll(request.afterTags)
+        }.asSequence()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+            .take(maxTagCacheEvict)
+            .forEach { rawTag ->
+                hotPageSizes.forEach { pageSize ->
+                    hotSorts.forEach { sort ->
+                        bootstrapCache?.evict(
+                            PostPublicReadQueryService.buildBootstrapCacheKey(
+                                pageSize = pageSize,
+                                sort = sort,
+                                tag = rawTag,
+                            ),
+                        )
+                        recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", request.evictReason)
+                    }
+                }
+            }
+    }
+
+    private fun evictDetailCaches(request: PostReadCacheInvalidationRequest) {
+        val detailSnapshotCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+        val detailMetaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
+        val detailContentCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
+        val detailNegativeCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
+        if (request.postId == null) {
+            detailSnapshotCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "clear", request.evictReason)
+            detailMetaCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "clear", request.evictReason)
+            detailContentCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "clear", request.evictReason)
+            detailNegativeCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "clear", request.evictReason)
+        } else {
+            detailSnapshotCache?.evict(request.postId)
+            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "key", request.evictReason)
+            detailMetaCache?.evict(request.postId)
+            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "key", request.evictReason)
+            detailContentCache?.evict(request.postId)
+            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "key", request.evictReason)
+            detailNegativeCache?.evict(request.postId)
+            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "key", request.evictReason)
+        }
+    }
+
+    private fun recordCacheEvict(
+        cacheName: String,
+        scope: String,
+        reason: String,
+    ) {
+        meterRegistry?.counter("post.read.cache.evict", "cache", cacheName, "scope", scope, "reason", reason)?.increment()
+    }
+}

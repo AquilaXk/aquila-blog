@@ -1,0 +1,159 @@
+import { IncomingMessage } from "http"
+import { GetServerSideProps } from "next"
+import type { AuthMember } from "src/hooks/useAuthSession"
+import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
+import { hasServerAuthCookie } from "src/libs/server/authSession"
+import { serverApiFetchJson } from "src/libs/server/backend"
+import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
+import {
+  type AdminDashboardInitialSnapshot,
+  type DashboardSnapshotPayload,
+  type SystemHealthPayload,
+} from "src/routes/Admin/AdminDashboardWorkspaceModel"
+
+type AdminDashboardPageProps = AdminPageProps & {
+  initialSnapshot: AdminDashboardInitialSnapshot
+}
+
+type AdminDashboardBootstrapPayload = {
+  member: AuthMember
+  health: SystemHealthPayload
+  dashboard: DashboardSnapshotPayload
+}
+
+async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
+  try {
+    const value = await serverApiFetchJson<T>(req, path)
+    return value ?? null
+  } catch {
+    return null
+  }
+}
+
+export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = async ({ req, res }) => {
+  const ssrStartedAt = performance.now()
+  const bootstrapResultPromise =
+    hasServerAuthCookie(req)
+      ? timed(() =>
+          readAdminProtectedBootstrap<AdminDashboardBootstrapPayload>(req, "/system/api/v1/adm/bootstrap", "/admin/dashboard")
+        )
+      : null
+
+  const bootstrapResult = bootstrapResultPromise ? await bootstrapResultPromise : null
+  if (bootstrapResult && !bootstrapResult.ok) {
+    throw bootstrapResult.error
+  }
+  if (bootstrapResult?.ok && !bootstrapResult.value.ok && bootstrapResult.value.destination) {
+    return {
+      redirect: {
+        destination: bootstrapResult.value.destination,
+        permanent: false,
+      },
+    }
+  }
+
+  let baseProps: AdminPageProps
+  let authDurationMs = 0
+  let authDescription: string = "bootstrap"
+  let systemHealthResult: {
+    durationMs: number
+    ok: true
+    value: { value: SystemHealthPayload | null; source: string }
+  }
+  let dashboardSnapshotResult: {
+    durationMs: number
+    ok: true
+    value: { value: DashboardSnapshotPayload | null; source: string }
+  }
+
+  if (bootstrapResult?.ok && bootstrapResult.value.ok) {
+    baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)
+    systemHealthResult = {
+      durationMs: bootstrapResult.durationMs,
+      ok: true,
+      value: {
+        value: bootstrapResult.value.value.health,
+        source: "bootstrap",
+      },
+    }
+    dashboardSnapshotResult = {
+      durationMs: bootstrapResult.durationMs,
+      ok: true,
+      value: {
+        value: bootstrapResult.value.value.dashboard,
+        source: "bootstrap",
+      },
+    }
+  } else {
+    const baseResult = await timed(() => getAdminPageProps(req))
+    if (!baseResult.ok) throw baseResult.error
+    if ("redirect" in baseResult.value) return baseResult.value
+    if (!("props" in baseResult.value)) return baseResult.value
+    baseProps = await baseResult.value.props
+    authDurationMs = baseResult.durationMs
+    authDescription = "fallback"
+
+    const fallbackSystemHealthResult = await timed(() => readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health"))
+    if (!fallbackSystemHealthResult.ok) throw fallbackSystemHealthResult.error
+    const fallbackDashboardSnapshotResult = await timed(() =>
+      readJsonIfOk<DashboardSnapshotPayload>(req, "/system/api/v1/adm/dashboard-snapshot")
+    )
+    if (!fallbackDashboardSnapshotResult.ok) throw fallbackDashboardSnapshotResult.error
+    systemHealthResult = {
+      durationMs: fallbackSystemHealthResult.durationMs,
+      ok: true,
+      value: {
+        value: fallbackSystemHealthResult.value,
+        source: fallbackSystemHealthResult.value ? "ok" : "empty",
+      },
+    }
+    dashboardSnapshotResult = {
+      durationMs: fallbackDashboardSnapshotResult.durationMs,
+      ok: true,
+      value: {
+        value: fallbackDashboardSnapshotResult.value,
+        source: fallbackDashboardSnapshotResult.value ? "ok" : "empty",
+      },
+    }
+  }
+
+  const systemHealth = systemHealthResult.value.value
+  const dashboardSnapshot = dashboardSnapshotResult.value.value
+
+  appendSsrDebugTiming(req, res, [
+    {
+      name: "admin-dashboard-auth",
+      durationMs: authDurationMs,
+      description: authDescription,
+    },
+    {
+      name: "admin-dashboard-health",
+      durationMs: systemHealthResult.durationMs,
+      description: systemHealth ? systemHealthResult.value.source : "empty",
+    },
+    {
+      name: "admin-dashboard-snapshot",
+      durationMs: dashboardSnapshotResult.durationMs,
+      description: dashboardSnapshot ? dashboardSnapshotResult.value.source : "empty",
+    },
+    {
+      name: "admin-dashboard-ssr-total",
+      durationMs: performance.now() - ssrStartedAt,
+      description: "ready",
+    },
+  ])
+
+  return {
+    props: {
+      ...baseProps,
+      initialSnapshot: {
+        systemHealth,
+        dashboard: dashboardSnapshot,
+        systemHealthFetchedAt: systemHealth ? new Date().toISOString() : null,
+        dashboardFetchedAt: dashboardSnapshot?.generatedAt ?? (dashboardSnapshot ? new Date().toISOString() : null),
+      },
+    },
+  }
+}
+
+export { default } from "src/routes/Admin/AdminDashboardWorkspacePage"

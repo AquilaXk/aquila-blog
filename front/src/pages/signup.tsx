@@ -1,0 +1,460 @@
+import styled from "@emotion/styled"
+import { GetServerSideProps } from "next"
+import { control } from "src/design-system/tokens"
+import Link from "next/link"
+import { useRouter } from "next/router"
+import { FormEvent, useMemo, useState } from "react"
+import { apiFetch } from "src/apis/backend/client"
+import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
+import { SIGNUP_LEGAL_POLICY_VERSION } from "src/apis/backend/legal"
+import AuthShell from "src/components/auth/AuthShell"
+import AppIcon from "src/components/icons/AppIcon"
+import { formatSignupCooldown, useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
+import { legalPolicyCurrentPaths } from "src/libs/legal/policyLinks"
+import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
+import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
+import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
+
+type RsData<T> = {
+  resultCode: string
+  msg: string
+  data: T
+}
+
+type SignupEmailStartResult = {
+  email: string
+}
+
+const SIGNUP_ENABLED = process.env.NEXT_PUBLIC_SIGNUP_ENABLED === "true"
+
+export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
+  return await getGuestPageProps(req)
+}
+
+const SignupPage = () => {
+  const router = useRouter()
+  const next = useMemo(() => {
+    return normalizeNextPath(router.query.next)
+  }, [router.query.next])
+
+  const [email, setEmail] = useState("")
+  const [sentEmail, setSentEmail] = useState("")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [emailFocused, setEmailFocused] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [privacyAccepted, setPrivacyAccepted] = useState(false)
+  const { remainingSeconds, isCoolingDown, startCooldown } = useSignupMailCooldown(email)
+
+  const emailActive = useMemo(() => emailFocused || email.length > 0, [email, emailFocused])
+  const signupConsentAccepted = termsAccepted && privacyAccepted
+  const feedbackMessage = error ? (
+    <ErrorText>{error}</ErrorText>
+  ) : sentEmail ? (
+    <SuccessText>
+      <strong>{sentEmail}</strong>으로 회원가입 링크를 보냈습니다. 받은편지함에서 메일을 열고 계속 진행해주세요.
+    </SuccessText>
+  ) : null
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const normalizedEmail = normalizeAuthEmail(email)
+
+    if (!normalizedEmail) {
+      setError("이메일을 입력해주세요.")
+      return
+    }
+    if (!isValidAuthEmail(normalizedEmail)) {
+      setError("이메일 형식을 확인해주세요.")
+      return
+    }
+    if (!signupConsentAccepted) {
+      setError("회원가입을 진행하려면 이용약관과 개인정보처리방침에 모두 동의해주세요.")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+
+    try {
+      const response = await apiFetch<RsData<SignupEmailStartResult>>("/member/api/v1/signup/email/start", {
+        method: "POST",
+        body: JSON.stringify({
+          email: normalizedEmail,
+          nextPath: next,
+          termsAccepted,
+          privacyAccepted,
+          legalPolicyVersion: SIGNUP_LEGAL_POLICY_VERSION,
+        }),
+      })
+      setSentEmail(response.data.email)
+      await startCooldown(response.data.email)
+    } catch (signupError) {
+      setError(toAuthErrorMessage("signupStart", signupError, "회원가입 메일 전송에 실패했습니다."))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!SIGNUP_ENABLED) {
+    return (
+      <AuthShell
+        activeTab="signup"
+        title="회원가입 준비 중"
+        subtitle="개인정보 처리 점검이 끝난 뒤 다시 열립니다."
+        eyebrow="Account Setup"
+        heroTitle="회원가입 준비 중"
+        heroDescription="현재 신규 회원가입은 잠시 닫혀 있습니다."
+        footer={
+          <FooterText>
+            이미 계정이 있으면 <Link href={toLoginPath(next)}>로그인</Link>
+            <span className="policyLinks">
+              <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>
+              <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>
+            </span>
+          </FooterText>
+        }
+        loginHref={toLoginPath(next)}
+        signupHref={toSignupPath(next)}
+      >
+        <SuccessText>회원가입은 출시 전 개인정보 처리 점검이 완료될 때까지 사용할 수 없습니다.</SuccessText>
+      </AuthShell>
+    )
+  }
+
+  return (
+    <AuthShell
+      activeTab="signup"
+      title="회원가입"
+      subtitle="계정을 만들어 계속하세요."
+      eyebrow="Account Setup"
+      heroTitle="회원가입"
+      heroDescription="이메일을 입력하고 가입을 진행하세요."
+      footer={
+        <FooterText>
+          이미 계정이 있으면 <Link href={toLoginPath(next)}>로그인</Link>
+          <span className="policyLinks">
+            <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>
+            <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>
+          </span>
+        </FooterText>
+      }
+      loginHref={toLoginPath(next)}
+      signupHref={toSignupPath(next)}
+    >
+      <form onSubmit={onSubmit}>
+        <NaverField data-active={emailActive}>
+          <NaverFieldLabel htmlFor="signup-email" data-active={emailActive ? "true" : "false"}>
+            이메일
+          </NaverFieldLabel>
+          <NaverInput
+            id="signup-email"
+            type="email"
+            inputMode="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            onFocus={() => setEmailFocused(true)}
+            onBlur={() => setEmailFocused(false)}
+            placeholder=""
+            autoComplete="email"
+          />
+          {email.length > 0 && (
+            <GhostIconButton type="button" aria-label="이메일 입력 지우기" onClick={() => setEmail("")}>
+              <AppIcon name="close" />
+            </GhostIconButton>
+          )}
+        </NaverField>
+
+        <FeedbackSlot aria-live="polite" data-filled={feedbackMessage ? "true" : "false"}>
+          {feedbackMessage}
+        </FeedbackSlot>
+
+        <RequiredConsentBox aria-label="회원가입 필수 동의">
+          <p>회원가입을 진행하려면 필수 약관과 개인정보처리방침에 동의해야 합니다.</p>
+          <label>
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(event) => setTermsAccepted(event.target.checked)}
+            />
+            <span>
+              <Link href={legalPolicyCurrentPaths.terms}>이용약관</Link>에 동의합니다.
+            </span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={privacyAccepted}
+              onChange={(event) => setPrivacyAccepted(event.target.checked)}
+            />
+            <span>
+              <Link href={legalPolicyCurrentPaths.privacy}>개인정보처리방침</Link>에 동의합니다.
+            </span>
+          </label>
+        </RequiredConsentBox>
+
+        <PrimaryButton type="submit" disabled={loading || isCoolingDown || !signupConsentAccepted}>
+          {loading
+            ? "메일 보내는 중..."
+            : isCoolingDown
+              ? remainingSeconds > 0
+                ? `다시 보내기 ${formatSignupCooldown(remainingSeconds)}`
+                : "잠시만 기다려주세요"
+              : "인증 메일 보내기"}
+        </PrimaryButton>
+      </form>
+    </AuthShell>
+  )
+}
+
+export default SignupPage
+
+const NaverField = styled.div`
+  position: relative;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
+  min-height: 76px;
+  padding: 1.55rem 0.92rem 0.48rem;
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light" ? "0 1px 0 rgba(15, 23, 42, 0.03)" : "none"};
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.gray7};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light" ? "0 0 0 2px rgba(148, 163, 184, 0.12)" : "0 0 0 2px rgba(148, 163, 184, 0.1)"};
+  }
+`
+
+const NaverFieldLabel = styled.label`
+  position: absolute;
+  left: 0.92rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  transition: top 0.2s ease, transform 0.2s ease, font-size 0.2s ease, color 0.2s ease;
+
+  &[data-active="true"] {
+    top: 0.82rem;
+    transform: translateY(0);
+    font-size: 0.72rem;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+`
+
+const NaverInput = styled.input`
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray12};
+  min-height: 42px;
+  padding: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.3;
+
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.96rem;
+    font-weight: 500;
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  @media (max-width: 820px) {
+    box-sizing: border-box;
+    min-height: ${control.lg}px;
+    padding-inline-end: calc(${control.lg}px + 1rem);
+  }
+`
+
+const GhostIconButton = styled.button`
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  min-width: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.16s ease;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+
+  &:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+  }
+
+  svg {
+    font-size: 0.74rem;
+  }
+
+  @media (max-width: 820px) {
+    min-width: ${control.lg}px;
+    width: ${control.lg}px;
+    height: ${control.lg}px;
+    min-height: ${control.lg}px;
+  }
+`
+
+// 패밀리룩(1219): 그린 필 발행 버튼 → 낮은 라운드 사각 accent 컨트롤(scheme별 글자색)
+const PrimaryButton = styled.button`
+  border: 0;
+  border-radius: 8px;
+  min-height: ${control.lg}px;
+  padding: 0.84rem 1rem;
+  background: ${({ theme }) => theme.publicDesign.accent};
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.accentControlText : theme.colors.gray1)};
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light" ? `0 10px 22px color-mix(in srgb, ${theme.publicDesign.accent} 18%, transparent)` : "none"};
+  transition: filter 0.16s ease, box-shadow 0.16s ease;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  &:disabled {
+    opacity: 0.68;
+    cursor: not-allowed;
+  }
+`
+
+const RequiredConsentBox = styled.div`
+  display: grid;
+  gap: 0.55rem;
+  margin-top: -0.35rem;
+  padding: 0.82rem 0.9rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 12px;
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.82rem;
+  line-height: 1.55;
+
+  p {
+    margin: 0;
+  }
+
+  label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.46rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 650;
+  }
+
+  input {
+    width: 16px;
+    height: 16px;
+    margin-top: 0.16rem;
+    accent-color: ${({ theme }) => theme.publicDesign.accent};
+    flex: 0 0 auto;
+  }
+
+  a {
+    color: ${({ theme }) => theme.colors.accentLink};
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+`
+
+// 패밀리룩(1219): 파스텔 상태 박스 → 상태 dot + 텍스트
+const ErrorText = styled.p`
+  margin: 0;
+  display: flex;
+  gap: 0.5rem;
+  color: ${({ theme }) => theme.colors.statusDangerText};
+  font-size: 0.9rem;
+  line-height: 1.55;
+
+  &::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin-top: 0.5rem;
+    border-radius: 999px;
+    background: currentColor;
+  }
+`
+
+const SuccessText = styled.p`
+  margin: 0;
+  display: flex;
+  gap: 0.5rem;
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.9rem;
+  line-height: 1.65;
+
+  &::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    margin-top: 0.55rem;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.statusSuccessText};
+  }
+
+  strong {
+    word-break: break-all;
+  }
+`
+
+const FeedbackSlot = styled.div`
+  min-height: 4.8rem;
+  display: flex;
+  align-items: stretch;
+
+  &[data-filled="false"] {
+    min-height: 4.2rem;
+  }
+
+  > * {
+    width: 100%;
+  }
+`
+
+const FooterText = styled.div`
+  font-size: 0.9rem;
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+  }
+
+  .policyLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.7rem;
+    margin-top: 0.25rem;
+  }
+
+  @media (max-width: 820px) {
+    a {
+      min-height: ${control.lg}px;
+    }
+  }
+`

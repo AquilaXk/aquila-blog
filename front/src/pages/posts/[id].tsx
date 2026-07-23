@@ -1,0 +1,262 @@
+import { GetStaticPaths, GetStaticProps } from "next"
+import { NextPageWithLayout } from "../../types"
+import styled from "@emotion/styled"
+import CustomError from "src/routes/Error"
+import MetaConfig from "src/components/MetaConfig"
+import PostDetail from "src/routes/Detail/PostDetail"
+import usePostQuery from "src/hooks/usePostQuery"
+import type { AdminProfile } from "src/hooks/useAdminProfile"
+import { TPostComment } from "src/types"
+import {
+  buildCanonicalPostDetailStaticPaths,
+  buildCanonicalPostDetailStaticProps,
+} from "src/libs/server/postDetailPage"
+import type { PublicAdminProfileSource } from "src/libs/adminProfileSource"
+import { buildPostDetailMetadata } from "src/routes/Detail/PostDetail/postDetailMetadataModel"
+import { ErrorState } from "src/design-system/StatePresenters"
+import { resolvePostDetailRenderState } from "src/routes/Detail/postDetailRenderState"
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  return await buildCanonicalPostDetailStaticPaths()
+}
+
+export const getStaticProps: GetStaticProps = async ({ params }) => {
+  const postId = params?.id as string
+  return await buildCanonicalPostDetailStaticProps(postId)
+}
+
+type DetailPageProps = {
+  initialComments: TPostComment[] | null
+  initialAdminProfile: AdminProfile | null
+  initialAdminProfileSource: PublicAdminProfileSource
+}
+
+const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({
+  initialComments,
+}) => {
+  const { post, isNotFound, isError, isPending, refetch } = usePostQuery()
+  const renderState = resolvePostDetailRenderState({
+    isNotFound,
+    isError,
+    isPending,
+    hasPost: Boolean(post),
+  })
+
+  if (renderState === "not_found") return <CustomError />
+
+  if (renderState === "error") {
+    return (
+      <ErrorState
+        label="ERROR"
+        title="글을 불러오지 못했습니다"
+        description="일시적인 오류로 글을 불러오지 못했습니다. 잠시 후 다시 시도해주세요."
+        actions={
+          <button type="button" onClick={() => void refetch()}>
+            다시 시도
+          </button>
+        }
+      />
+    )
+  }
+
+  if (renderState === "loading") {
+    return (
+      <LoadingShell aria-live="polite" aria-busy="true">
+        <div className="hero">
+          <div className="eyebrow" />
+          <div className="title" />
+          <div className="metaRow">
+            <div className="avatar" />
+            <div className="meta" />
+          </div>
+          <div className="summary" />
+        </div>
+        <div className="layout">
+          <div className="bodyCard">
+            <div className="cover" />
+            <div className="line wide" />
+            <div className="line wide" />
+            <div className="line medium" />
+            <div className="line wide" />
+            <div className="line medium" />
+            <div className="line narrow" />
+            <div className="commentShell">
+              <div className="commentHead" />
+              <div className="commentComposer" />
+              <div className="commentRow" />
+              <div className="commentRow" />
+            </div>
+          </div>
+          <div className="rail" aria-hidden="true">
+            <div className="railCard" />
+            <div className="railCard" />
+          </div>
+        </div>
+      </LoadingShell>
+    )
+  }
+
+  if (!post) return <CustomError />
+
+  const meta = buildPostDetailMetadata(post)
+
+  return (
+    <>
+      <MetaConfig {...meta} />
+      <DetailShell data-type={post.type}>
+        <PostDetail initialComments={initialComments} />
+      </DetailShell>
+    </>
+  )
+}
+
+CanonicalPostPage.getLayout = (page) => <>{page}</>
+export default CanonicalPostPage
+
+const DetailShell = styled.div`
+  padding: 2rem 0;
+
+  &[data-type="Paper"] {
+    padding: 40px 0;
+  }
+`
+
+const LoadingShell = styled.section`
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1rem;
+  padding-bottom: 2rem;
+
+  > div {
+    border-radius: 12px;
+    background: ${({ theme }) => theme.colors.gray3};
+    animation: detail-skeleton-pulse 1.2s ease-in-out infinite;
+  }
+
+  .hero {
+    display: grid;
+    gap: 0.85rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  }
+
+  .eyebrow {
+    height: 18px;
+    width: min(22%, 120px);
+  }
+
+  .title {
+    height: 52px;
+    width: min(72%, 560px);
+  }
+
+  .metaRow {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+  }
+
+  .meta {
+    height: 20px;
+    width: min(38%, 240px);
+  }
+
+  .summary {
+    height: 20px;
+    width: min(58%, 420px);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  .rail {
+    display: none;
+    gap: 0.85rem;
+  }
+
+  .railCard {
+    height: 124px;
+    border-radius: 18px;
+  }
+
+  .bodyCard {
+    display: grid;
+    gap: 0.95rem;
+  }
+
+  .cover {
+    height: min(34vh, 280px);
+    width: 100%;
+    border-radius: 20px;
+  }
+
+  .line {
+    height: 18px;
+  }
+
+  .line.wide {
+    width: 100%;
+  }
+
+  .line.medium {
+    width: min(88%, 760px);
+  }
+
+  .line.narrow {
+    width: min(70%, 620px);
+  }
+
+  .commentShell {
+    display: grid;
+    gap: 0.75rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray5};
+  }
+
+  .commentHead {
+    height: 24px;
+    width: min(28%, 180px);
+  }
+
+  .commentComposer {
+    height: 108px;
+    width: 100%;
+  }
+
+  .commentRow {
+    height: 72px;
+    width: 100%;
+  }
+
+  @keyframes detail-skeleton-pulse {
+    0% {
+      opacity: 0.7;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.7;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr) 17rem;
+      align-items: start;
+    }
+
+    .rail {
+      display: grid;
+    }
+  }
+`

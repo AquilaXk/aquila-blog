@@ -1029,7 +1029,7 @@ jobs:
             for attempt in $(seq 1 "${attempts}"); do
               code="$(curl -sS --connect-timeout "${connect_timeout}" -m "${max_time}" -o /dev/null -w "%{http_code}" "https://${api_domain}/actuator/health/readiness" || true)"
               echo "post-deploy public-api health attempt=${attempt}/${attempts} status=${code}"
-              if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+              if [[ "${code}" =~ ^2[0-9][0-9]$ ]]; then
                 return 0
               fi
 

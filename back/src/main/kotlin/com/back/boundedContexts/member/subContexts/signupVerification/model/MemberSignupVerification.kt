@@ -1,0 +1,123 @@
+package com.back.boundedContexts.member.subContexts.signupVerification.model
+
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
+import com.back.global.jpa.domain.AfterDDL
+import com.back.global.jpa.domain.BaseTime
+import jakarta.persistence.Column
+import jakarta.persistence.Entity
+import jakarta.persistence.GeneratedValue
+import jakarta.persistence.GenerationType
+import jakarta.persistence.Id
+import jakarta.persistence.SequenceGenerator
+import java.time.Instant
+
+/**
+ * MemberSignupVerification는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
+ * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.
+ */
+@Entity
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_email_created_at_desc
+    ON member_signup_verification (email, created_at DESC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_consumed_at_id
+    ON member_signup_verification (consumed_at ASC, id ASC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_cancelled_at_id
+    ON member_signup_verification (cancelled_at ASC, id ASC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_email_verification_expires_at_id
+    ON member_signup_verification (email_verification_expires_at ASC, id ASC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_signup_verification_idx_signup_session_expires_at_id
+    ON member_signup_verification (signup_session_expires_at ASC, id ASC)
+    """,
+)
+class MemberSignupVerification(
+    @field:Id
+    @field:SequenceGenerator(
+        name = "member_signup_verification_seq_gen",
+        sequenceName = "member_signup_verification_seq",
+        allocationSize = 20,
+    )
+    @field:GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "member_signup_verification_seq_gen")
+    override val id: Long = 0,
+    @field:Column(nullable = false)
+    val email: String,
+    @field:Column(unique = true, nullable = false, length = 128)
+    var emailVerificationTokenHash: String,
+    @field:Column(nullable = false)
+    var emailVerificationExpiresAt: Instant,
+    @field:Column(unique = true, length = 128)
+    var signupSessionTokenHash: String? = null,
+    @field:Column
+    var signupSessionExpiresAt: Instant? = null,
+    @field:Column
+    var verifiedAt: Instant? = null,
+    @field:Column
+    var consumedAt: Instant? = null,
+    @field:Column
+    var cancelledAt: Instant? = null,
+    @field:Column
+    var termsAcceptedAt: Instant? = null,
+    @field:Column
+    var privacyAcceptedAt: Instant? = null,
+    @field:Column(length = 32)
+    var legalPolicyVersion: String? = null,
+) : BaseTime(id) {
+    fun cancel(now: Instant) {
+        cancelledAt = now
+    }
+
+    fun ensureVerifiable(now: Instant) {
+        if (cancelledAt != null || consumedAt != null) {
+            throw AppException(ErrorCode.GONE, "회원가입 링크가 더 이상 유효하지 않습니다.")
+        }
+
+        if (verifiedAt == null && emailVerificationExpiresAt.isBefore(now)) {
+            throw AppException(ErrorCode.GONE, "회원가입 링크가 만료되었습니다. 다시 시도해주세요.")
+        }
+    }
+
+    fun issueSignupSession(
+        tokenHash: String,
+        expiresAt: Instant,
+        now: Instant,
+    ) {
+        verifiedAt = verifiedAt ?: now
+        signupSessionTokenHash = tokenHash
+        signupSessionExpiresAt = expiresAt
+    }
+
+    fun ensureCompletable(now: Instant) {
+        if (cancelledAt != null || consumedAt != null) {
+            throw AppException(ErrorCode.GONE, "회원가입 세션이 더 이상 유효하지 않습니다.")
+        }
+
+        if (verifiedAt == null || signupSessionTokenHash.isNullOrBlank() || signupSessionExpiresAt == null) {
+            throw AppException(ErrorCode.EMAIL_NOT_VERIFIED, "이메일 인증이 완료되지 않았습니다.")
+        }
+
+        if (signupSessionExpiresAt!!.isBefore(now)) {
+            throw AppException(ErrorCode.GONE, "회원가입 세션이 만료되었습니다. 이메일 인증부터 다시 진행해주세요.")
+        }
+    }
+
+    fun consume(now: Instant) {
+        consumedAt = now
+    }
+}

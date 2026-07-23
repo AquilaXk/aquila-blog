@@ -1,0 +1,173 @@
+package com.back.boundedContexts.member.model.shared
+
+import com.back.boundedContexts.member.domain.shared.MemberPolicy
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileCard
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl
+import com.back.boundedContexts.post.domain.PostMember
+import com.back.global.jpa.domain.AfterDDL
+import com.back.global.jpa.domain.BaseTime
+import jakarta.persistence.*
+import jakarta.persistence.GenerationType.SEQUENCE
+import org.hibernate.annotations.DynamicUpdate
+import org.hibernate.annotations.NaturalId
+import org.hibernate.annotations.SQLRestriction
+import java.time.Instant
+import java.util.UUID
+
+/**
+ * Member는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
+ * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.
+ */
+@Entity
+@DynamicUpdate
+@SQLRestriction("deleted_at IS NULL")
+@Table(
+    uniqueConstraints = [
+        UniqueConstraint(name = "uk_member_login_id", columnNames = ["login_id"]),
+    ],
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_idx_created_at_desc
+    ON member (created_at DESC)
+""",
+)
+@AfterDDL(
+    """
+        CREATE INDEX IF NOT EXISTS member_idx_modified_at_desc
+        ON member (modified_at DESC)
+""",
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS member_idx_pgroonga_login_id_nickname
+    ON member USING pgroonga ((ARRAY["login_id"::text, "nickname"::text])
+    pgroonga_text_array_full_text_search_ops_v2) WITH (tokenizer = 'TokenBigram')
+    """,
+)
+class Member(
+    @field:Id
+    @field:SequenceGenerator(name = "member_seq_gen", sequenceName = "member_seq", allocationSize = 50)
+    @field:GeneratedValue(strategy = SEQUENCE, generator = "member_seq_gen")
+    override val id: Long = 0,
+    @field:NaturalId(mutable = true)
+    @field:Column(name = "login_id", nullable = false)
+    override var username: String,
+    @field:Column(nullable = true)
+    var password: String? = null,
+    @field:Column(nullable = false)
+    var nickname: String,
+    @field:Column(unique = true, nullable = true)
+    var email: String? = null,
+    @field:Column(unique = true, nullable = false)
+    var apiKey: String,
+    @field:Column(name = "is_admin", nullable = false)
+    private var admin: Boolean = false,
+) : BaseTime(id),
+    PostMember,
+    MemberHasProfileImgUrl,
+    MemberHasProfileCard {
+    constructor(
+        id: Long,
+        username: String,
+        password: String?,
+        nickname: String,
+        email: String?,
+        admin: Boolean = false,
+    ) : this(
+        id,
+        username,
+        password,
+        nickname,
+        email,
+        MemberPolicy.genApiKey(),
+        admin,
+    )
+
+    constructor(
+        id: Long,
+        username: String,
+        password: String?,
+        nickname: String,
+    ) : this(
+        id,
+        username,
+        password,
+        nickname,
+        null,
+    )
+
+    internal constructor(id: Long) : this(id, "", null, "", null, "")
+
+    @field:Column
+    var deletedAt: Instant? = null
+
+    @field:Column(nullable = false)
+    var rememberLoginEnabled: Boolean = true
+
+    @field:Column(nullable = false)
+    var ipSecurityEnabled: Boolean = false
+
+    @field:Column(length = 96)
+    var ipSecurityFingerprint: String? = null
+
+    @Transient
+    override var postsCountAttr: MemberAttr? = null
+
+    @Transient
+    override var postCommentsCountAttr: MemberAttr? = null
+
+    fun softDelete(now: Instant = Instant.now()) {
+        deletedAt = now
+        username = "deleted-$id-${UUID.randomUUID()}"
+        email = null
+        password = null
+        nickname = "탈퇴한 사용자"
+        ipSecurityEnabled = false
+        ipSecurityFingerprint = null
+        modifyApiKey(MemberPolicy.genApiKey())
+    }
+
+    override val member: Member
+        get() = this
+
+    override val name: String
+        get() = nickname
+
+    open val isAdmin: Boolean
+        get() = admin
+
+    open fun grantAdmin() {
+        admin = true
+    }
+
+    fun modify(
+        nickname: String,
+        profileImgUrl: String?,
+    ) {
+        this.nickname = nickname
+        profileImgUrl?.let { this.profileImgUrl = it }
+    }
+
+    fun modifyApiKey(apiKey: String) {
+        this.apiKey = apiKey
+    }
+
+    /**
+     * 로그인 시점의 세션 정책(로그인 유지/아이피 보안)을 현재 활성 키 기준으로 저장합니다.
+     */
+    fun applyLoginSecurityPolicy(
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+    ) {
+        this.rememberLoginEnabled = rememberLoginEnabled
+        this.ipSecurityEnabled = ipSecurityEnabled
+        this.ipSecurityFingerprint =
+            if (ipSecurityEnabled) {
+                ipSecurityFingerprint
+            } else {
+                null
+            }
+    }
+}

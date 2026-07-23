@@ -1,0 +1,196 @@
+import { useInfiniteQuery } from "@tanstack/react-query"
+import { toSafeInt } from "@shared/utils"
+import {
+  getExplorePostsCursorPage,
+  getExplorePostsPage,
+  getFeedPostsCursorPage,
+  getFeedPostsPage,
+  getSearchPostsPage,
+} from "src/apis/backend/posts"
+import type { FeedSortMode } from "src/apis/backend/posts/PostApiDtos"
+import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
+import { queryKey } from "src/constants/queryKey"
+import { normalizeKeywordQuery, normalizeOptionalTagQuery } from "src/libs/query/normalize"
+import { TPost } from "src/types"
+import { useMemo } from "react"
+import { resolveExplorePostsQueryFreshness } from "./explorePostsQueryFreshness"
+
+type Params = {
+  kw: string
+  tag?: string
+  pageSize?: number
+  order?: "asc" | "desc"
+  sortMode?: FeedSortMode
+  enabled?: boolean
+}
+
+const EMPTY_POSTS: TPost[] = []
+const OFFSET_INITIAL_PAGE_PARAM = 1
+type ExplorePageParam = number | string | null
+
+const useExplorePostsQuery = ({
+  kw,
+  tag,
+  pageSize = FEED_EXPLORE_PAGE_SIZE,
+  order = "desc",
+  sortMode = "latest",
+  enabled = true,
+}: Params) => {
+  const normalizedKw = normalizeKeywordQuery(kw)
+  const normalizedTag = normalizeOptionalTagQuery(tag)
+  const searchMode = normalizedKw.length > 0 && !normalizedTag
+  const feedMode = normalizedKw.length === 0 && !normalizedTag
+  const normalizedSortMode: FeedSortMode =
+    sortMode === "views" || sortMode === "likes" ? sortMode : "latest"
+  const queryFreshness = resolveExplorePostsQueryFreshness(normalizedSortMode)
+
+  const query = useInfiniteQuery({
+    enabled,
+    queryKey: feedMode
+      ? queryKey.postsFeedInfinite({
+          pageSize,
+          order,
+          sortMode: normalizedSortMode,
+        })
+      : searchMode
+        ? queryKey.postsSearchInfinite({
+            kw: normalizedKw,
+            pageSize,
+            order,
+            sortMode: normalizedSortMode,
+          })
+        : queryKey.postsExploreInfinite({
+            kw: normalizedKw,
+            tag: normalizedTag,
+            pageSize,
+            order,
+            sortMode: normalizedSortMode,
+          }),
+    queryFn: ({ pageParam, signal }: { pageParam: ExplorePageParam; signal?: AbortSignal }) => {
+      const pageNumber = toSafeInt(pageParam, 1)
+
+      if (feedMode) {
+        if (typeof pageParam === "number") {
+          return getFeedPostsPage({
+            order,
+            sortMode: normalizedSortMode,
+            page: pageNumber,
+            pageSize,
+            signal: signal ?? undefined,
+          })
+        }
+        const cursor = typeof pageParam === "string" ? pageParam : undefined
+        return getFeedPostsCursorPage({
+          order,
+          sortMode: normalizedSortMode,
+          pageSize,
+          cursor,
+          signal: signal ?? undefined,
+        })
+      }
+
+      if (searchMode) {
+        return getSearchPostsPage({
+          kw: normalizedKw,
+          order,
+          sortMode: normalizedSortMode,
+          page: pageNumber,
+          pageSize,
+          signal: signal ?? undefined,
+        })
+      }
+      if (normalizedKw.length > 0 || typeof pageParam === "number") {
+        return getExplorePostsPage({
+          kw: normalizedKw,
+          tag: normalizedTag,
+          order,
+          sortMode: normalizedSortMode,
+          page: pageNumber,
+          pageSize,
+          signal: signal ?? undefined,
+        })
+      }
+      const cursor = typeof pageParam === "string" ? pageParam : undefined
+      return getExplorePostsCursorPage({
+        tag: normalizedTag,
+        order,
+        sortMode: normalizedSortMode,
+        pageSize,
+        cursor,
+        signal: signal ?? undefined,
+      })
+    },
+    staleTime: queryFreshness.staleTime,
+    retry: 1,
+    refetchOnMount: queryFreshness.refetchOnMount,
+    refetchOnWindowFocus: queryFreshness.refetchOnWindowFocus,
+    refetchOnReconnect: false,
+    initialPageParam: normalizedKw.length > 0 ? OFFSET_INITIAL_PAGE_PARAM : null,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.paginationMode === "cursor") {
+        if (lastPage.hasNext !== true) return undefined
+        return typeof lastPage.nextCursor === "string" && lastPage.nextCursor.trim()
+          ? lastPage.nextCursor.trim()
+          : undefined
+      }
+      if (lastPage.posts.length === 0) return undefined
+      if (lastPage.pageNumber * lastPage.pageSize >= lastPage.totalCount) return undefined
+      return lastPage.pageNumber + 1
+    },
+  })
+
+  const { pinnedPosts, regularPosts } = useMemo(() => {
+    const pages = query.data?.pages
+    if (!pages || pages.length === 0) {
+      return {
+        pinnedPosts: EMPTY_POSTS,
+        regularPosts: EMPTY_POSTS,
+      }
+    }
+
+    const pinned: TPost[] = []
+    const regular: TPost[] = []
+    const seenPostIds = new Set<string>()
+
+    for (const page of pages) {
+      for (const post of page.posts) {
+        const postId = String(post.id)
+        if (seenPostIds.has(postId)) continue
+        seenPostIds.add(postId)
+
+        if (post.tags?.includes("Pinned")) {
+          pinned.push(post)
+          continue
+        }
+        regular.push(post)
+      }
+    }
+
+    return {
+      pinnedPosts: pinned,
+      regularPosts: regular,
+    }
+  }, [query.data])
+
+  const staleMeta =
+    query.data?.pages.find((page) => page.staleMeta?.stale)?.staleMeta ??
+    query.data?.pages.find((page) => page.staleMeta)?.staleMeta ??
+    null
+
+  return {
+    pinnedPosts,
+    regularPosts,
+    staleMeta,
+    loadedPagesCount: query.data?.pages.length ?? 0,
+    hasNextPage: query.hasNextPage ?? false,
+    isInitialLoading: query.isLoading,
+    isInitialLoadError: query.isError && !(query.data?.pages.length),
+    hasInitialLoadSucceeded: query.isSuccess && query.isFetchedAfterMount,
+    isFetchingNextPage: query.isFetchingNextPage,
+    isFetchNextPageError: query.isFetchNextPageError,
+    fetchNextPage: query.fetchNextPage,
+    refetchInitialPage: query.refetch,
+  }
+}
+
+export default useExplorePostsQuery

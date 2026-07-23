@@ -1,0 +1,51 @@
+import { ApiError, ApiTimeoutError } from "./client"
+
+type AuthAction = "login" | "signupStart" | "signupVerify" | "signupComplete"
+
+const authStatusMessages: Record<AuthAction, Partial<Record<number, string>>> = {
+  login: {
+    400: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    401: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    404: "이메일 또는 비밀번호가 올바르지 않습니다.",
+    429: "로그인 시도가 많습니다. 잠시 후 다시 시도해주세요.",
+    500: "로그인 처리 중 서버 오류가 발생했습니다.",
+  },
+  signupStart: {
+    400: "이메일 형식을 확인해주세요.",
+    409: "이미 가입된 이메일입니다.",
+    429: "인증 메일 요청이 많습니다. 잠시 후 다시 시도해주세요.",
+    500: "회원가입 메일 발송에 실패했습니다.",
+  },
+  signupVerify: {
+    400: "회원가입 링크가 유효하지 않습니다.",
+    404: "회원가입 링크를 찾지 못했습니다.",
+    410: "회원가입 링크가 만료되었습니다. 다시 요청해주세요.",
+    500: "회원가입 링크 확인 중 서버 오류가 발생했습니다.",
+  },
+  signupComplete: {
+    400: "입력값을 다시 확인해주세요.",
+    500: "회원가입 처리 중 서버 오류가 발생했습니다.",
+  },
+}
+
+const signupPolicyChangedMessage =
+  "약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요."
+
+export const toAuthErrorMessage = (action: AuthAction, error: unknown, fallback: string) => {
+  if (error instanceof ApiTimeoutError) {
+    return "응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요."
+  }
+
+  if (error instanceof ApiError) {
+    if (action === "signupComplete" && error.status === 409) {
+      if (error.resultCode === "409-4") return signupPolicyChangedMessage
+      return "이미 처리되었거나 가입 상태가 변경되었습니다. 처음부터 다시 시도해주세요."
+    }
+
+    const mapped = authStatusMessages[action][error.status]
+    if (mapped) return mapped
+    return error.userMessage || fallback
+  }
+
+  return fallback
+}

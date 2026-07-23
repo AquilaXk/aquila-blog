@@ -1,6 +1,5 @@
-FROM node:18-bookworm
+FROM node:20-bookworm
 
-RUN apt update && \
-  apt install npm -y
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 
 WORKDIR /app

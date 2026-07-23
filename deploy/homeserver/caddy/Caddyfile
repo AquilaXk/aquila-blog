@@ -1,0 +1,262 @@
+{
+  email {$CADDY_EMAIL}
+}
+
+# Cloudflare Tunnel → Caddy trusted-edge client IP.
+# Capture CF-Connecting-IP, strip client-controllable hop headers, then re-emit
+# only trusted values upstream (HR-56: no silent trust-all XFF).
+(trusted_edge_client_ip) {
+	header_up CF-Connecting-IP {vars.trusted_client_ip}
+	header_up X-Forwarded-For {vars.trusted_client_ip}
+	header_up X-Real-IP {vars.trusted_client_ip}
+	header_up -True-Client-IP
+}
+
+# Uptime Kuma dashboard/status endpoint (optional).
+# Set MONITOR_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
+# ADMIN_EMBED_ORIGINS: space-separated admin UI origins allowed to iframe this host.
+http://{$MONITOR_DOMAIN:status.localhost} {
+  reverse_proxy uptime_kuma:3001 {
+    # Allow embedding public status page in admin UI (XFO only; keep/replace CSP below).
+    header_down -X-Frame-Options
+  }
+
+  header {
+    # HR-56: do not strip CSP as an embed workaround. Enforce admin-origin frame-ancestors.
+    -X-Frame-Options
+    Content-Security-Policy "frame-ancestors {$ADMIN_EMBED_ORIGINS}"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+}
+
+# Grafana dashboard endpoint (optional).
+# Set GRAFANA_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
+http://{$GRAFANA_DOMAIN:grafana.localhost} {
+  forward_auth {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+    uri /system/api/v1/adm/grafana/auth-proxy
+    copy_headers X-WEBAUTH-USER X-WEBAUTH-NAME
+    header_up Host {host}
+    header_up X-Forwarded-Proto https
+    header_up X-Forwarded-Port 443
+  }
+
+  reverse_proxy grafana:3000 {
+    header_up X-WEBAUTH-USER {http.request.header.X-WEBAUTH-USER}
+    header_up X-WEBAUTH-NAME {http.request.header.X-WEBAUTH-NAME}
+    # Admin UI iframe embed compatibility (XFO only; keep/replace CSP below).
+    header_down -X-Frame-Options
+  }
+
+  header {
+    # HR-56: do not strip CSP as an embed workaround. Enforce admin-origin frame-ancestors.
+    # ADMIN_EMBED_ORIGINS: space-separated admin UI origins allowed to iframe Grafana.
+    -X-Frame-Options
+    Content-Security-Policy "frame-ancestors {$ADMIN_EMBED_ORIGINS}"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+}
+
+# Prometheus UI endpoint (optional).
+# Set PROMETHEUS_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
+http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
+  basic_auth {
+    {$PROMETHEUS_BASIC_AUTH_USER} {$PROMETHEUS_BASIC_AUTH_HASH}
+  }
+
+  reverse_proxy prometheus:9090
+
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+}
+
+# Cloudflare Tunnel origin: HTTP only between cloudflared and Caddy.
+http://{$API_DOMAIN} {
+  log {
+    output stdout
+    format json
+  }
+
+  # Align with Cloudflare free-plan body limit (100 MiB). Oversized bodies get 413 before Spring.
+  request_body {
+    max_size 100MB
+  }
+
+  # Capture trusted client IP before stripping spoofable hop headers.
+  vars {
+    trusted_client_ip {http.request.header.CF-Connecting-IP}
+  }
+  request_header {
+    -X-Forwarded-For
+    -CF-Connecting-IP
+    -True-Client-IP
+    -X-Real-IP
+  }
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+
+  @corsAllowed {
+    header_regexp Origin Origin ^https://(www\.)?aquilaxk\.site$
+  }
+  @corsPreflight {
+    method OPTIONS
+    header_regexp Origin Origin ^https://(www\.)?aquilaxk\.site$
+  }
+  handle @corsPreflight {
+    header {
+      Access-Control-Allow-Origin "{http.request.header.Origin}"
+      Access-Control-Allow-Credentials "true"
+      Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+      Access-Control-Allow-Headers "{http.request.header.Access-Control-Request-Headers}"
+      Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
+    }
+    respond 204
+  }
+  header @corsAllowed {
+    ?Access-Control-Allow-Origin "{http.request.header.Origin}"
+    ?Access-Control-Allow-Credentials "true"
+    # Browser JS can read X-Request-Id from cross-origin API error responses.
+    ?Access-Control-Expose-Headers "X-Request-Id"
+    ?Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
+  }
+
+  @apiRobots path /robots.txt
+  handle @apiRobots {
+    header {
+      Content-Type "text/plain; charset=utf-8"
+      Cache-Control "public, max-age=300"
+    }
+    respond "User-agent: *\nDisallow: /\n" 200
+  }
+
+  @notificationSse path /member/api/v1/notifications/stream
+  log_skip @notificationSse
+
+  @oauthCallbackSensitive path /login/oauth2/code/*
+  log_skip @oauthCallbackSensitive
+
+  @signupVerifySensitive path /member/api/v1/signup/email/verify
+  log_skip @signupVerifySensitive
+
+  @socialSignupSensitive path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete
+  log_skip @socialSignupSensitive
+
+  @accountDeletionSensitive path /member/api/v1/privacy/account
+  log_skip @accountDeletionSensitive
+
+  @cloudExternalContentSensitive path /system/api/v1/adm/cloud/files/*/external-content
+  log_skip @cloudExternalContentSensitive
+
+  @publicSearchSensitive path /post/api/v1/posts/search
+  log_skip @publicSearchSensitive
+
+  handle @notificationSse {
+    header {
+      Cache-Control "no-cache, no-transform"
+    }
+
+    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+      import trusted_edge_client_ip
+      header_up Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      header_down -Strict-Transport-Security
+      header_down -X-Content-Type-Options
+      header_down -X-Frame-Options
+      header_down -Referrer-Policy
+      header_down -Permissions-Policy
+      flush_interval -1
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 10s
+      }
+    }
+  }
+
+  # Prometheus metrics are scraped via internal Docker network only.
+  # Public access via API domain is explicitly denied.
+  @denyPrometheus path /actuator/prometheus
+  respond @denyPrometheus 403
+
+  # read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
+  # Paths must match PublicApiRouteContributor SoT export (tools/guards/public-api-read-caddy-paths.sot).
+  @publicReadFallback {
+    path /post/api/v1/files/* /post/api/v1/images/* /post/api/v1/posts /post/api/v1/posts/* /post/api/v1/posts/*/comments /post/api/v1/posts/*/comments/* /post/api/v1/posts/bootstrap /post/api/v1/posts/explore /post/api/v1/posts/explore/cursor /post/api/v1/posts/feed /post/api/v1/posts/feed/cursor /post/api/v1/posts/related/author /post/api/v1/posts/search /post/api/v1/posts/tags /system/api/v1/adm/cloud/files/*/external-content
+    method GET HEAD OPTIONS
+  }
+  handle @publicReadFallback {
+    reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
+      import trusted_edge_client_ip
+      header_up Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      header_down -Strict-Transport-Security
+      header_down -X-Content-Type-Options
+      header_down -X-Frame-Options
+      header_down -Referrer-Policy
+      header_down -Permissions-Policy
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 12s
+      }
+    }
+  }
+
+  # 점진 분리: admin API는 별도 upstream으로 라우팅 가능(기본 back_blue 유지).
+  @adminApi {
+    path /post/api/v1/adm/* /member/api/v1/adm/* /system/api/v1/adm/*
+  }
+  handle @adminApi {
+    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+      import trusted_edge_client_ip
+      header_up Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      header_down -Strict-Transport-Security
+      header_down -X-Content-Type-Options
+      header_down -X-Frame-Options
+      header_down -Referrer-Policy
+      header_down -Permissions-Policy
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 12s
+      }
+    }
+  }
+
+  # Blue/Green cutover rewrites single active upstream host.
+  handle {
+    encode gzip zstd
+
+    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+      # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
+      # Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
+      # callback URLs, so we pin the upstream scheme/host to the external URL.
+      import trusted_edge_client_ip
+      header_up Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      header_down -Strict-Transport-Security
+      header_down -X-Content-Type-Options
+      header_down -X-Frame-Options
+      header_down -Referrer-Policy
+      header_down -Permissions-Policy
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 12s
+      }
+    }
+  }
+}

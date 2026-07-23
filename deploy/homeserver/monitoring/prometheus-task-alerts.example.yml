@@ -1,0 +1,208 @@
+groups:
+  - name: aquila-task-queue
+    rules:
+      - alert: AquilaTaskQueueBacklogHigh
+        expr: task_queue_ready_pending > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task ready backlog is high"
+          description: "ready_pending={{ $value }} for 10m. Consider API/worker split or worker scale-up."
+
+      - alert: AquilaTaskQueueStaleProcessing
+        expr: task_queue_stale_processing >= 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Stale processing tasks detected"
+          description: "stale_processing={{ $value }} for 5m. Check worker health and stuck handlers."
+
+      - alert: AquilaApiLatencyP95High
+        expr: |
+          (
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri!~"/actuator.*"}[5m]
+                )
+              )
+            )
+            and on() (
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri!~"/actuator.*"}[5m]
+                )
+              ) > bool 0.2
+            )
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency is high"
+          description: "p95 > 1s for 10m. Check DB/Redis/task queue pressure."
+
+      - alert: AquilaBackScrapeDown
+        expr: max(up{job="back",service="aquila-back",component="api"}) < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Back metrics scrape is down"
+          description: "Prometheus cannot scrape any blue/green API backend target for 3m."
+
+      - alert: AquilaBackWorkerScrapeDown
+        expr: max(up{job="back",service="aquila-back",component="worker"}) < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Back worker metrics scrape is down"
+          description: "Prometheus cannot scrape the backend worker target for 3m. Task queue and DLQ alerts may stop evaluating."
+
+      - alert: AquilaBackRuntimeSplitScrapeDown
+        expr: |
+          (
+            max by (component) (up{job="back",service="aquila-back",component=~"read|admin"}) < 1
+          )
+          and on (component)
+          label_replace(
+            max by (service) (docker_container_running{job="docker_runtime_probe",service=~"back_(read|admin)"}) == 1,
+            "component",
+            "$1",
+            "service",
+            "back_(read|admin)"
+          )
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Runtime-split backend metrics scrape is down"
+          description: "Prometheus cannot scrape a running runtime-split {{ $labels.component }} backend target for 3m."
+
+      - alert: AquilaTaskDlqRateHigh
+        expr: sum(rate(task_processor_result_total{status="dlq"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task DLQ rate is above zero"
+          description: "DLQ tasks are accumulating. Check failed handlers and replay policy."
+
+      - alert: AquilaPostSearchIndexLagP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(post_search_index_task_lag_seconds_bucket[10m]))) > 120
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Search index async sync lag p95 is high"
+          description: "post.search_index.task.lag p95 > 120s for 10m."
+
+      - alert: AquilaPostSearchIndexFailureBudgetBurn
+        expr: |
+          (
+            sum(rate(post_search_index_task_result_total{status="failed"}[15m]))
+            /
+            clamp_min(sum(rate(post_search_index_task_result_total[15m])), 0.001)
+          ) > 0.02
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Search index sync failure budget burn"
+          description: "post.search_index.task failed ratio > 2% for 15m."
+
+      - alert: AquilaPostSearchIndexSlaBreachDetected
+        expr: sum(increase(post_search_index_task_sla_breach_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Search index sync SLA breach detected"
+          description: "post.search_index.task.sla_breach increased in the last 15m."
+
+  - name: aquila-notification-sse
+    rules:
+      - alert: AquilaNotificationSseEmitterSaturated
+        expr: max(member_notification_sse_global_emitters{job="back",service="aquila-back"}) > 1500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification SSE emitter count is high"
+          description: "global emitters > 1500 for 10m. Check reconnect storm, tab churn, or drain failures."
+
+      - alert: AquilaNotificationSseReconnectSpike
+        expr: sum(increase(member_notification_sse_reconnect_subscribe_total{job="back",service="aquila-back"}[10m])) > 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification SSE reconnect spike detected"
+          description: "reconnect subscribe count increased sharply in the last 10m. Check QUIC/H3 instability, deploy cutover, or network churn."
+
+      - alert: AquilaNotificationSseSendFailureSpike
+        expr: sum(increase(member_notification_sse_send_failure_total{job="back",service="aquila-back"}[10m])) > 5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Notification SSE send failures are increasing"
+          description: "send failure count increased more than 5 in 10m. Check upstream disconnect storm, replay pressure, and transport stability."
+
+  - name: aquila-cdn-purge
+    rules:
+      - alert: AquilaCdnPurgeP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(cdn_purge_duration_seconds_bucket{status="success"}[10m]))) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CDN purge p95 latency is high"
+          description: "cdn.purge.duration p95 > 0.8s for 10m."
+
+      - alert: AquilaCdnPurgeP99High
+        expr: histogram_quantile(0.99, sum by (le) (rate(cdn_purge_duration_seconds_bucket{status="success"}[10m]))) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CDN purge p99 latency is high"
+          description: "cdn.purge.duration p99 > 1.5s for 10m."
+
+      - alert: AquilaCdnPurgeFailureRateByReasonHigh
+        expr: |
+          (
+            sum by (reason) (rate(cdn_purge_result_total{status=~"failed|non_success"}[10m]))
+            /
+            clamp_min(sum by (reason) (rate(cdn_purge_result_total[10m])), 0.001)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CDN purge failure rate is high by reason"
+          description: "cdn.purge.result failure ratio > 5% for 10m (reason label split)."
+
+  - name: aquila-monitoring-stack
+    rules:
+      - alert: AquilaLokiScrapeDown
+        expr: min(up{job="loki",service="aquila-loki"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki metrics scrape is down"
+          description: "Prometheus cannot scrape Loki for 3m. Check loki container and network."
+
+      - alert: AquilaPromtailScrapeDown
+        expr: min(up{job="promtail",service="aquila-promtail"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Promtail metrics scrape is down"
+          description: "Prometheus cannot scrape Promtail for 3m. Check promtail container and docker log mount."

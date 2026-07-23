@@ -1,0 +1,32 @@
+# 로컬 전용 파일 예시입니다. 이 예시는 resolved current-task file 에 자동/수동 bootstrap 됩니다.
+# 해석 순서: `CURRENT_TASK_FILE_PATH` -> `.codex/tasks/$CODEX_THREAD_ID.local` -> `.codex/current-task.local`
+# 새 스레드에서는 `bash tools/guards/current-task-preflight.sh` 가 없던 file 을 자동 생성합니다.
+# 수동으로 먼저 만들고 싶으면 `bash tools/guards/current-task-init.sh` 를 사용할 수 있습니다.
+# 현재 상태 조회는 `bash tools/guards/current-task-list.sh`, 정합성 진단은 `bash tools/guards/current-task-doctor.sh`,
+# done file 아카이브 정리는 `bash tools/guards/current-task-clean.sh --apply` 를 사용합니다.
+# git 추적 대상이 아니며, 컨텍스트 압축/복구 후 stale 작업 재개를 막기 위한 현재 상태값입니다.
+# 구현 전/압축 복구 직후에는 `bash tools/guards/current-task-preflight.sh` 로 state/scope 를 먼저 검증합니다.
+# scope_mode 기본값은 staged 입니다. 기존 dirty worktree가 많아 시작이 막히면 staged를 유지하고,
+# 정말로 worktree 전체까지 강제하고 싶을 때만 scope_mode=worktree 를 사용하세요.
+# 컨텍스트가 비대해지면(주제 2개 이상 혼재, 원본 로그/이미지 반복, 압축 2회 이상)
+# 새 스레드로 이동하고 `pause_snapshot` 4줄만 다음 스레드에 넘깁니다.
+# 새 스레드 handoff 출력은 `bash tools/guards/current-task-handoff.sh` 를 사용합니다.
+
+status=draft
+plan_ref=
+issue_ref=
+pr_ref=
+task=
+repro=
+done_when=
+forbid=
+scope_mode=staged
+allow=.codex/tasks/*.local
+allow=.codex/current-task.local
+deny=
+confirmed_cause=
+root_hypothesis=
+target_edit=
+next_action=trace
+avoid=
+pause_snapshot=재현 상태:\n원인 가설:\n수정 파일:\n남은 검증:

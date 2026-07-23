@@ -1,0 +1,629 @@
+import type { Theme } from "@emotion/react"
+import styled from "@emotion/styled"
+import {
+  adminAccentSurface,
+  adminCardBorder,
+  adminFocusRing,
+  adminGold,
+  adminMutedSurface,
+  adminMutedText,
+  adminPlainSurface,
+  adminPrimaryText,
+  adminRaisedSurface,
+  adminSecondaryText,
+  adminStrongBorder,
+} from "src/routes/Admin/adminColorTokens"
+
+export const adminElevatedSurface = (theme: Theme) =>
+  adminPlainSurface(theme)
+
+export const adminElevatedBorder = (theme: Theme) =>
+  adminCardBorder(theme)
+
+export const adminElevatedShadow = (_theme: Theme) =>
+  "none"
+
+export const adminInteractiveFocusRing = (theme: Theme) =>
+  adminFocusRing(theme)
+
+export const AdminElevatedCard = styled.section`
+  border-radius: 0;
+  border: 0;
+  border-bottom: 0;
+  background: transparent;
+  box-shadow: ${({ theme }) => adminElevatedShadow(theme)};
+`
+
+export const AdminPlainCard = styled.section`
+  border-radius: 0;
+  border: 0;
+  border-bottom: 0;
+  background: transparent;
+`
+
+export const AdminSubtleCard = styled.section`
+  border-radius: 0;
+  border: 0;
+  border-bottom: 0;
+  background: transparent;
+`
+
+export const AdminRailCard = styled(AdminSubtleCard)`
+  display: grid;
+  gap: 0.78rem;
+  padding: 0.92rem;
+`
+
+export const AdminStickyRail = styled.aside`
+  position: sticky;
+  top: calc(var(--app-header-height, 64px) + 0.8rem);
+  align-self: start;
+  display: grid;
+  gap: 0.82rem;
+`
+
+export const AdminSectionHeading = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 0.8rem;
+
+  @media (max-width: 760px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+`
+
+export const AdminSectionTitleStack = styled.div`
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+
+  h2,
+  h3 {
+    margin: 0;
+    color: ${({ theme }) => adminPrimaryText(theme)};
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => adminMutedText(theme)};
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+`
+
+export const AdminPaneHeader = styled.div`
+  display: grid;
+  gap: 0.22rem;
+  padding-bottom: 0.95rem;
+  border-bottom: 0;
+
+  h2 {
+    margin: 0;
+    font-size: clamp(1.24rem, 2vw, 1.5rem);
+    line-height: 1.2;
+    color: ${({ theme }) => adminPrimaryText(theme)};
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => adminMutedText(theme)};
+    font-size: 0.86rem;
+    line-height: 1.55;
+  }
+`
+
+export const AdminLandingSectionLead = styled.p`
+  margin: 0;
+  color: ${({ theme }) => adminMutedText(theme)};
+  font-size: 0.86rem;
+  line-height: 1.58;
+`
+
+export const AdminWorkspaceHero = styled.section`
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 0 0.56rem;
+  border-bottom: 0;
+`
+
+export const AdminWorkspaceHeroLabel = styled.span`
+  display: inline-flex;
+  width: fit-content;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 0.72rem;
+  border-radius: 4px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
+  color: ${({ theme }) => adminSecondaryText(theme)};
+  font-size: 0.74rem;
+  font-weight: 800;
+`
+
+export const AdminWorkspaceHeroLayout = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+export const AdminWorkspaceHeroCopy = styled.div`
+  display: grid;
+  gap: 0.28rem;
+
+  h1 {
+    margin: 0;
+    font-size: clamp(1.12rem, 1.8vw, 1.36rem);
+    line-height: 1.1;
+    letter-spacing: 0;
+    color: ${({ theme }) => adminPrimaryText(theme)};
+  }
+
+  p {
+    margin: 0;
+    max-width: 36rem;
+    color: ${({ theme }) => adminMutedText(theme)};
+    font-size: 0.88rem;
+    line-height: 1.58;
+  }
+`
+
+export const AdminWorkspaceHeroActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+
+  @media (max-width: 900px) {
+    justify-content: flex-start;
+  }
+`
+
+export const AdminWorkspaceSectionNav = styled(AdminStickyRail)`
+  top: calc(var(--app-header-height, 64px) + 1rem);
+  gap: 0.55rem;
+
+  @media (max-width: 1180px) {
+    position: static;
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+`
+
+export const AdminWorkspaceSectionNavStatus = styled(AdminRailCard)`
+  gap: 0.22rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 8px;
+  border: 0;
+  border-bottom: 0;
+  background: ${({ theme }) => adminMutedSurface(theme)};
+
+  small {
+    color: ${({ theme }) => adminMutedText(theme)};
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+
+  strong {
+    color: ${({ theme }) => adminPrimaryText(theme)};
+    font-size: 0.92rem;
+    font-weight: 780;
+    letter-spacing: -0.02em;
+  }
+
+  &[data-jumping="true"] {
+    border-bottom-color: ${({ theme }) => adminStrongBorder(theme)};
+    background: ${({ theme }) => adminAccentSurface(theme)};
+  }
+
+  @media (max-width: 1180px) {
+    min-width: 12.5rem;
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+`
+
+export const AdminWorkspaceSectionNavButton = styled.button`
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.42rem;
+  min-height: 42px;
+  padding: 0 0.9rem;
+  border-radius: 0;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: ${({ theme }) => adminMutedText(theme)};
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    border-left-color: ${({ theme }) => adminStrongBorder(theme)};
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &[data-active="true"] {
+    color: ${adminGold};
+    border-left-color: ${adminGold};
+    background: ${({ theme }) => adminAccentSurface(theme)};
+  }
+
+  &[data-freshness="fresh"] {
+    border-left-color: ${({ theme }) => theme.colors.statusSuccessBorder};
+  }
+
+  &[data-freshness="aging"] {
+    border-left-color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  &[data-freshness="stale"] {
+    border-left-color: ${({ theme }) => theme.colors.gray7};
+  }
+
+  &[data-freshness]::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
+    width: 3px;
+    border-radius: 2px;
+    background: ${({ theme }) => theme.colors.gray7};
+  }
+
+  &[data-freshness="fresh"]::before {
+    background: ${({ theme }) => theme.colors.statusSuccessBorder};
+  }
+
+  &[data-freshness="aging"]::before {
+    background: ${({ theme }) => theme.colors.orange8};
+  }
+
+  &[data-freshness="stale"]::before {
+    background: ${({ theme }) => theme.colors.gray8};
+  }
+
+  &[data-tone="danger"] {
+    border-left-color: ${({ theme }) => theme.colors.statusDangerBorder};
+    color: ${({ theme }) => theme.colors.statusDangerText};
+  }
+
+  @media (max-width: 1180px) {
+    scroll-snap-align: start;
+  }
+`
+
+export const AdminWorkspaceActionDock = styled.div`
+  display: grid;
+  justify-items: stretch;
+`
+
+export const AdminWorkspaceActionDockInner = styled.div`
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding: 0.62rem 0.7rem;
+  border-radius: 8px;
+  border: 0;
+  border-bottom: 0;
+  background: ${({ theme }) => adminMutedSurface(theme)};
+
+  @media (max-width: 760px) {
+    justify-content: space-between;
+  }
+`
+
+export const AdminInfoList = styled.div`
+  display: grid;
+  gap: 0.6rem;
+`
+
+export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`
+  display: grid;
+  grid-template-columns: ${({ $withIcon = true }) => ($withIcon ? "auto minmax(0, 1fr)" : "minmax(0, 1fr)")};
+  gap: ${({ $withIcon = true }) => ($withIcon ? "0.7rem" : "0.18rem")};
+  align-items: center;
+  padding: 0.78rem 0.82rem;
+  border-radius: 8px;
+  border: 0;
+  border-bottom: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &:hover {
+    background: ${({ theme }) => adminMutedSurface(theme)};
+  }
+
+  .iconWrap {
+    display: ${({ $withIcon = true }) => ($withIcon ? "grid" : "none")};
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 2px;
+    place-items: center;
+    background: transparent;
+    color: ${({ theme }) => adminSecondaryText(theme)};
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .copy strong,
+  > strong {
+    color: ${({ theme }) => adminPrimaryText(theme)};
+    font-size: 0.86rem;
+    font-weight: 780;
+    overflow-wrap: anywhere;
+  }
+
+  .copy span,
+  > span {
+    color: ${({ theme }) => adminMutedText(theme)};
+    font-size: 0.75rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+`
+
+export const AdminInfoStatusList = styled.div`
+  display: grid;
+  gap: 0.55rem;
+`
+
+export const AdminInfoStatusItem = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+  padding: 0.74rem 0.82rem;
+  border-radius: 8px;
+  border: 0;
+  border-bottom: 0;
+  background: ${({ theme }) => adminMutedSurface(theme)};
+
+  &[data-tone="good"] {
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+
+    strong {
+      color: ${({ theme }) => theme.colors.statusSuccessText};
+    }
+  }
+
+  &[data-tone="warn"] {
+    color: ${({ theme }) => theme.colors.orange11};
+
+    strong {
+      color: ${({ theme }) => theme.colors.orange11};
+    }
+  }
+
+  span {
+    color: ${({ theme }) => adminMutedText(theme)};
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => adminPrimaryText(theme)};
+    font-size: 0.82rem;
+    font-weight: 780;
+    text-align: right;
+  }
+`
+
+export const AdminInfoPanelCard = styled.div`
+  display: grid;
+  gap: 0.68rem;
+  padding: 0.92rem 0.98rem;
+  border-radius: 8px;
+  border: 0;
+  border-bottom: 0;
+  background: ${({ theme }) => adminMutedSurface(theme)};
+`
+
+export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: ${({ $size = "md" }) => ($size === "sm" ? "28px" : "32px")};
+  padding: ${({ $size = "md" }) => ($size === "sm" ? "0 0.62rem" : "0 0.72rem")};
+  border-radius: 4px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
+  color: ${({ theme }) => adminSecondaryText(theme)};
+  font-size: ${({ $size = "md" }) => ($size === "sm" ? "0.76rem" : "0.78rem")};
+  font-weight: 800;
+  line-height: 1;
+
+  &[data-tone="neutral"] {
+    border-color: ${({ theme }) => adminCardBorder(theme)};
+    background: ${({ theme }) => adminRaisedSurface(theme)};
+    color: ${({ theme }) => adminMutedText(theme)};
+  }
+
+  /* 패밀리룩(1220): 상태 칩은 파스텔 면 대신 헤어라인 보더 + 상태 텍스트로 표현한다. */
+  &[data-tone="accent"] {
+    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    color: ${adminGold};
+  }
+
+  &[data-tone="success"] {
+    border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+    color: ${({ theme }) => theme.colors.orange11};
+  }
+
+  &[data-tone="danger"] {
+    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+    color: ${({ theme }) => theme.colors.statusDangerText};
+  }
+`
+
+export const AdminInlineActionRow = styled.div`
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.42rem 0.48rem;
+  border-radius: 6px;
+  background: ${({ theme }) => adminMutedSurface(theme)};
+
+  & + & {
+    margin-top: 0.4rem;
+  }
+`
+
+export const AdminTextActionButton = styled.button`
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: ${({ theme }) => adminSecondaryText(theme)};
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+  }
+
+  &[data-tone="primary"] {
+    color: ${adminGold};
+    font-weight: 800;
+  }
+
+  &[data-tone="danger"] {
+    color: ${({ theme }) => theme.colors.red11};
+  }
+`
+
+export const AdminTextActionLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  min-height: 0;
+  border-radius: 2px;
+  color: ${({ theme }) => adminSecondaryText(theme)};
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &[data-tone="primary"] {
+    color: ${adminGold};
+    font-weight: 800;
+  }
+
+  &[data-tone="danger"] {
+    color: ${({ theme }) => theme.colors.red11};
+  }
+`
+
+export const AdminActionCardButton = styled.button`
+  text-align: left;
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.82rem 0.88rem;
+  border-radius: 2px;
+  border: 1px solid ${({ theme }) => adminCardBorder(theme)};
+  background: ${({ theme }) => adminRaisedSurface(theme)};
+  color: ${({ theme }) => adminPrimaryText(theme)};
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => adminStrongBorder(theme)};
+    box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};
+  }
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => adminAccentSurface(theme)};
+  }
+
+  &:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+  }
+
+  span {
+    font-size: 0.88rem;
+    font-weight: 760;
+  }
+
+  small {
+    color: ${({ theme }) => adminMutedText(theme)};
+    line-height: 1.55;
+  }
+`

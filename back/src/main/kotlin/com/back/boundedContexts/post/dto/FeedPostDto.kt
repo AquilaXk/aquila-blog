@@ -40,7 +40,7 @@ data class FeedPostDto(
                 modifiedAt = post.modifiedAt,
                 authorId = post.author.id,
                 authorName = post.author.name,
-                authorUsername = post.author.username,
+                authorUsername = post.author.name,
                 authorProfileImgUrl = post.author.profileImgUrlVersionedOrDefault,
                 title = post.title,
                 thumbnail = preview.thumbnail,

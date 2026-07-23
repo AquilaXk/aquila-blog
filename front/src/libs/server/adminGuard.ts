@@ -14,9 +14,10 @@ const QA_ADMIN_MEMBER: AuthMember = {
   isAdmin: true,
 }
 
-const shouldBypassAdminGuardForQa = () => {
-  if (process.env.ADMIN_GUARD_QA_BYPASS === "true") return true
+export const shouldBypassAdminGuardForQa = () => {
+  // Production must never honor QA bypass flags, even if mis-set in the host env.
   if (process.env.NODE_ENV === "production") return false
+  if (process.env.ADMIN_GUARD_QA_BYPASS === "true") return true
   return process.env.ENABLE_QA_ROUTES === "true"
 }
 

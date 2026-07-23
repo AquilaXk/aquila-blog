@@ -24,14 +24,14 @@ class PostAuthorDtoMappingTest {
     }
 
     @Test
-    @DisplayName("feed DTO는 작성자의 nickname과 username을 별도 필드에 매핑한다")
-    fun mapsFeedAuthorNameAndUsernameSeparately() {
+    @DisplayName("feed DTO는 authorUsername에 login_id 대신 nickname을 마스킹한다")
+    fun mapsFeedAuthorUsernameToNicknameMask() {
         val post = postByAuthor(username = "aquila-login", nickname = "아퀼라")
 
         val dto = FeedPostDto.from(post)
 
         assertThat(dto.authorName).isEqualTo("아퀼라")
-        assertThat(dto.authorUsername).isEqualTo("aquila-login")
+        assertThat(dto.authorUsername).isEqualTo("아퀼라")
     }
 
     @Test
@@ -65,7 +65,7 @@ class PostAuthorDtoMappingTest {
             }
 
         assertThat(dto.authorName).isEqualTo("아퀼라")
-        assertThat(dto.authorUsername).isEqualTo("aquila-login")
+        assertThat(dto.authorUsername).isEqualTo("아퀼라")
         assertThat(dto.thumbnail).isNull()
         assertThat(dto.tags).isEmpty()
         assertThat(dto.category).isEmpty()
@@ -76,14 +76,14 @@ class PostAuthorDtoMappingTest {
     }
 
     @Test
-    @DisplayName("detail DTO는 작성자의 nickname과 username을 별도 필드에 매핑한다")
-    fun mapsDetailAuthorNameAndUsernameSeparately() {
+    @DisplayName("detail DTO는 authorUsername에 login_id 대신 nickname을 마스킹한다")
+    fun mapsDetailAuthorUsernameToNicknameMask() {
         val post = postByAuthor(username = "aquila-login", nickname = "아퀼라")
 
         val dto = PostWithContentDto(post)
 
         assertThat(dto.authorName).isEqualTo("아퀼라")
-        assertThat(dto.authorUsername).isEqualTo("aquila-login")
+        assertThat(dto.authorUsername).isEqualTo("아퀼라")
     }
 
     private fun postByAuthor(

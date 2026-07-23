@@ -119,13 +119,14 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
     override fun decrementPostCommentsCountByPostId(
         postId: Long,
         count: Int,
-    ): Int =
-        (
+    ): Int {
+        val updatedValues =
             entityManager
                 .createNativeQuery(
                     """
                     update post_attr
-                    set int_value = greatest(0, coalesce(int_value, 0) - :count)
+                    set int_value = greatest(0, coalesce(int_value, 0) - :count),
+                        modified_at = now()
                     where subject_id = :postId
                       and name = :name
                     returning int_value
@@ -133,8 +134,10 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
                 ).setParameter("postId", postId)
                 .setParameter("name", COMMENTS_COUNT)
                 .setParameter("count", count)
-                .singleResult as Number
-        ).toInt()
+                .resultList
+                .map { (it as Number).toInt() }
+        return updatedValues.firstOrNull() ?: 0
+    }
 
     private fun findActiveCommentsByIdsInOrder(ids: List<Long>): List<PostComment> {
         if (ids.isEmpty()) return emptyList()

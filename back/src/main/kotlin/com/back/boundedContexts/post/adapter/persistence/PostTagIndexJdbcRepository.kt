@@ -5,6 +5,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.TransactionTemplate
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -14,9 +17,16 @@ import java.util.concurrent.atomic.AtomicReference
 @Component
 class PostTagIndexJdbcRepository(
     private val jdbcTemplate: JdbcTemplate,
+    transactionManager: PlatformTransactionManager,
 ) : PostTagIndexRepositoryPort {
     private val logger = LoggerFactory.getLogger(PostTagIndexJdbcRepository::class.java)
     private val tableAvailable = AtomicReference<Boolean?>(null)
+
+    // REQUIRES_NEW: tag-index 실패가 상위 post write 트랜잭션을 rollback-only로 오염시키지 않게 한다.
+    private val transactionTemplate =
+        TransactionTemplate(transactionManager).apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
 
     override fun replacePostTags(
         postId: Long,
@@ -33,32 +43,29 @@ class PostTagIndexJdbcRepository(
                 .toList()
 
         try {
-            jdbcTemplate.update(
-                """
-                DELETE FROM post_tag_index
-                WHERE post_id = ?
-                """.trimIndent(),
-                postId,
-            )
-        } catch (exception: DataAccessException) {
-            markUnavailable(exception)
-            return
-        }
+            transactionTemplate.executeWithoutResult {
+                jdbcTemplate.update(
+                    """
+                    DELETE FROM post_tag_index
+                    WHERE post_id = ?
+                    """.trimIndent(),
+                    postId,
+                )
 
-        if (normalizedTags.isEmpty()) return
+                if (normalizedTags.isEmpty()) return@executeWithoutResult
 
-        try {
-            jdbcTemplate.batchUpdate(
-                """
-                INSERT INTO post_tag_index (post_id, tag)
-                VALUES (?, ?)
-                ON CONFLICT (post_id, tag) DO NOTHING
-                """.trimIndent(),
-                normalizedTags,
-                normalizedTags.size,
-            ) { preparedStatement, tag ->
-                preparedStatement.setLong(1, postId)
-                preparedStatement.setString(2, tag)
+                jdbcTemplate.batchUpdate(
+                    """
+                    INSERT INTO post_tag_index (post_id, tag)
+                    VALUES (?, ?)
+                    ON CONFLICT (post_id, tag) DO NOTHING
+                    """.trimIndent(),
+                    normalizedTags,
+                    normalizedTags.size,
+                ) { preparedStatement, tag ->
+                    preparedStatement.setLong(1, postId)
+                    preparedStatement.setString(2, tag)
+                }
             }
         } catch (exception: DataAccessException) {
             markUnavailable(exception)

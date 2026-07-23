@@ -99,7 +99,8 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
             .createNativeQuery(
                 """
                 update post_attr
-                set int_value = greatest(0, coalesce(int_value, 0) + :delta)
+                set int_value = greatest(0, coalesce(int_value, 0) + :delta),
+                    modified_at = now()
                 where subject_id = :subjectId
                   and name = :name
                 returning int_value

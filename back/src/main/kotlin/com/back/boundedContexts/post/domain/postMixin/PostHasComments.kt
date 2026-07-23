@@ -35,6 +35,6 @@ interface PostHasComments : PostAware {
     }
 
     fun onCommentDeleted() {
-        commentsCount--
+        commentsCount = maxOf(0, commentsCount - 1)
     }
 }

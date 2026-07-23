@@ -1,0 +1,59 @@
+name: aquila_blog_test
+
+services:
+  db:
+    image: jangka512/pgj:latest
+    ports:
+      - "${TEST_DB_PORT:-15432}:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:-test_db_password_change_me}
+      POSTGRES_DATABASE: postgres
+      POSTGRES_DATABASES: ${DB_BASE_NAME:-blog}_test
+      TZ: Asia/Seoul
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements,auto_explain
+      -c auto_explain.log_min_duration=1000
+      -c fsync=off
+      -c synchronous_commit=off
+      -c full_page_writes=off
+      -c wal_level=minimal
+      -c max_wal_senders=0
+      -c random_page_cost=1.1
+      -c jit=off
+      -c log_min_duration_statement=1000
+      -c log_statement=all
+      -c tcp_keepalives_idle=60
+      -c tcp_keepalives_interval=10
+      -c tcp_keepalives_count=6
+      -c idle_in_transaction_session_timeout=60000
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - test_db_data:/var/lib/postgresql
+
+  redis:
+    image: redis:latest
+    ports:
+      - "${TEST_REDIS_PORT:-16379}:6379"
+    environment:
+      TZ: Asia/Seoul
+    command: >
+      redis-server
+      --maxmemory 50mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${TEST_REDIS_PASSWORD:-test_redis_password_change_me}
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${TEST_REDIS_PASSWORD:-test_redis_password_change_me}", "PING"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  test_db_data:

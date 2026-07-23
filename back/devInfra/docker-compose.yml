@@ -1,0 +1,56 @@
+name: p14141_dev
+services:
+  redis_1:
+    image: redis:latest
+    container_name: redis_1
+    ports:
+      - "6379:6379"
+    environment:
+      TZ: Asia/Seoul
+    command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru --requirepass ${DEV_REDIS_PASSWORD:-dev_redis_password_change_me}
+  db_1:
+    image: jangka512/pgj:latest
+    container_name: db_1
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DEV_DB_PASSWORD:-dev_db_password_change_me}
+      POSTGRES_DATABASE: postgres
+      POSTGRES_DATABASES: ${DB_BASE_NAME:-blog}_dev,${DB_BASE_NAME:-blog}_test
+      TZ: Asia/Seoul
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements,auto_explain
+      -c auto_explain.log_min_duration=1000
+      -c fsync=off
+      -c synchronous_commit=off
+      -c full_page_writes=off
+      -c wal_level=minimal
+      -c max_wal_senders=0
+      -c random_page_cost=1.1
+      -c jit=off
+      -c log_min_duration_statement=1000
+      -c log_statement=all
+      -c tcp_keepalives_idle=60
+      -c tcp_keepalives_interval=10
+      -c tcp_keepalives_count=6
+      -c idle_in_transaction_session_timeout=60000
+    volumes:
+      - db_data:/var/lib/postgresql
+  minio_1:
+    image: minio/minio:latest
+    container_name: minio_1
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: ${DEV_MINIO_ROOT_PASSWORD:-dev_minio_password_change_me}
+      TZ: Asia/Seoul
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+volumes:
+  db_data:
+  minio_data:

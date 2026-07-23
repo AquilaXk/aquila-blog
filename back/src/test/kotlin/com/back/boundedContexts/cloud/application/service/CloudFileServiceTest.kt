@@ -90,6 +90,32 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드는 설정된 클라우드 키 prefix로 S3 object key를 만든다")
+    fun `upload는 설정된 클라우드 키 prefix를 사용한다`() {
+        val prefixedService =
+            CloudFileService(
+                cloudFileRepository = repository,
+                cloudStoragePort = storage,
+                cloudStorageProperties =
+                    CloudStorageProperties(
+                        cloudKeyPrefix = "/admin-cloud/",
+                    ),
+                clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
+            )
+
+        prefixedService.upload(
+            ownerMemberId = 7L,
+            originalFilename = "manual.pdf",
+            contentType = "application/pdf",
+            bytes = "%PDF-1.7".toByteArray(),
+            folderPath = "docs",
+        )
+
+        assertThat(repository.savedFiles.single().objectKey).startsWith("admin-cloud/7/docs/")
+        assertThat(storage.uploaded.single().objectKey).isEqualTo(repository.savedFiles.single().objectKey)
+    }
+
+    @Test
     @DisplayName("업로드 완료 info 로그는 fileId/actorId만 남기고 원본 파일명을 포함하지 않는다")
     fun `upload는 completed info 로그에 파일명을 남기지 않는다`() {
         val secretFilename = "secret-contract-LEAK.pdf"

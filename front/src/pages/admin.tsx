@@ -1,0 +1,405 @@
+import { GetServerSideProps, NextPage } from "next"
+import dynamic from "next/dynamic"
+import { IncomingMessage } from "http"
+import type { AuthMember } from "src/hooks/useAuthSession"
+import { type AdminProfile } from "src/hooks/useAdminProfile"
+import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
+import {
+  fetchServerAdminProfile,
+  hasServerAuthCookie,
+  resolvePublicAdminProfileSnapshot,
+} from "src/libs/server/adminProfile"
+import { serverApiFetchJson } from "src/libs/server/backend"
+import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
+import AdminShell from "src/routes/Admin/AdminShell"
+
+const AdminHubSurface = dynamic(() => import("src/routes/Admin/AdminHubSurface"), {
+  loading: () => <div aria-hidden="true" style={{ minHeight: "32rem" }} />,
+})
+
+type AdminHubPageProps = AdminPageProps & {
+  initialProfileSnapshot: AdminProfile
+  initialOperationalSnapshot: AdminHubOperationalSnapshot
+}
+
+type AdminHubBootstrapPayload = {
+  member: AuthMember
+  profile: AdminProfile
+}
+
+type AdminHubPostListItem = {
+  id: number
+  title: string
+  published: boolean
+  listed: boolean
+  tempDraft?: boolean
+  modifiedAt: string
+  commentsCount?: number
+  hitCount?: number
+}
+
+type AdminHubPageDto<T> = {
+  content: T[]
+  pageable?: {
+    totalElements?: number
+  }
+}
+
+type AdminHubSystemHealthPayload = {
+  status?: string
+  checks?: {
+    db?: string
+    redis?: string
+  }
+}
+
+type AdminHubDashboardSnapshotPayload = {
+  authSecurity: {
+    recentEventCount: number
+    blockedEventCount: number
+  }
+  signupMail: {
+    status: string
+  }
+  storageCleanup: {
+    eligibleForPurgeCount: number
+    blockedBySafetyThreshold: boolean
+  }
+  taskQueue: {
+    readyPendingCount: number
+    processingCount: number
+    failedCount: number
+    staleProcessingCount: number
+  }
+}
+
+type AdminHubOperationalSnapshot = {
+  posts: AdminHubPageDto<AdminHubPostListItem> | null
+  systemHealth: AdminHubSystemHealthPayload | null
+  dashboard: AdminHubDashboardSnapshotPayload | null
+  fetchedAt: string | null
+}
+
+const EMPTY_OPERATIONAL_SNAPSHOT: AdminHubOperationalSnapshot = {
+  posts: null,
+  systemHealth: null,
+  dashboard: null,
+  fetchedAt: null,
+}
+
+async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
+  try {
+    const value = await serverApiFetchJson<T>(req, path)
+    return value ?? null
+  } catch {
+    return null
+  }
+}
+
+const buildAdminHubPostListEndpoint = () => "/post/api/v1/adm/posts?page=1&pageSize=20&kw=&sort=MODIFIED_AT"
+
+const readAdminHubOperationalSnapshot = async (req: IncomingMessage): Promise<AdminHubOperationalSnapshot> => {
+  const [posts, systemHealth, dashboard] = await Promise.all([
+    readJsonIfOk<AdminHubPageDto<AdminHubPostListItem>>(req, buildAdminHubPostListEndpoint()),
+    readJsonIfOk<AdminHubSystemHealthPayload>(req, "/system/api/v1/adm/health"),
+    readJsonIfOk<AdminHubDashboardSnapshotPayload>(req, "/system/api/v1/adm/dashboard-snapshot"),
+  ])
+  return {
+    posts,
+    systemHealth,
+    dashboard,
+    fetchedAt: posts || systemHealth || dashboard ? new Date().toISOString() : null,
+  }
+}
+
+const DASHBOARD_DATA_MISSING_LABEL = "데이터 미수집"
+
+const formatAdminHubDateTime = (value?: string) => {
+  if (!value) return "-"
+  return value.slice(0, 16).replace("T", " ")
+}
+
+const getSystemHealthStatusLabel = (value: string | null | undefined) => {
+  const normalized = value?.trim()
+  if (!normalized || normalized === "UNKNOWN") return "백엔드 확인 필요"
+  if (normalized === "UP") return "서비스 정상"
+  return normalized
+}
+
+const getSystemHealthTone = (value: string | null | undefined) => {
+  const normalized = value?.trim()
+  if (!normalized || normalized === "UNKNOWN") return "neutral" as const
+  return normalized === "UP" ? ("good" as const) : ("warn" as const)
+}
+
+const getDependencyStatusLabel = (value: string | null | undefined) => {
+  const normalized = value?.trim()
+  if (normalized === "UP") return "UP"
+  if (normalized === "DOWN") return "DOWN"
+  if (normalized === "DISABLED") return "DISABLED"
+  return normalized || DASHBOARD_DATA_MISSING_LABEL
+}
+
+const getDependencyStatusTone = (value: string | null | undefined) => {
+  const normalized = value?.trim()
+  if (!normalized) return "neutral" as const
+  if (normalized === "UP") return "good" as const
+  if (normalized === "DISABLED") return "neutral" as const
+  return "warn" as const
+}
+
+export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async ({ req, res }) => {
+  const ssrStartedAt = performance.now()
+  const hasAuthCookie = hasServerAuthCookie(req)
+  const fallbackProfileSnapshot = resolvePublicAdminProfileSnapshot(req)
+  const bootstrapResultPromise =
+    hasAuthCookie
+      ? timed(() =>
+          readAdminProtectedBootstrap<AdminHubBootstrapPayload>(req, "/member/api/v1/adm/members/bootstrap", "/admin")
+        )
+      : null
+
+  const bootstrapResult = bootstrapResultPromise ? await bootstrapResultPromise : null
+  if (bootstrapResult && !bootstrapResult.ok) {
+    throw bootstrapResult.error
+  }
+  if (bootstrapResult?.ok && !bootstrapResult.value.ok && bootstrapResult.value.destination) {
+    return {
+      redirect: {
+        destination: bootstrapResult.value.destination,
+        permanent: false,
+      },
+    }
+  }
+
+  let baseProps: AdminPageProps
+  let authDurationMs = 0
+  let authDescription: string = "bootstrap"
+  let profileDurationMs = 0
+  let profileDescription: string
+  let profileSnapshot: AdminProfile
+  let operationalSnapshot = EMPTY_OPERATIONAL_SNAPSHOT
+  let operationalDurationMs = 0
+  let operationalDescription = hasAuthCookie ? "unavailable" : "no-auth-cookie"
+
+  if (bootstrapResult?.ok && bootstrapResult.value.ok) {
+    baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)
+    profileSnapshot = bootstrapResult.value.value.profile
+    profileDurationMs = bootstrapResult.durationMs
+    profileDescription = "bootstrap"
+  } else {
+    const baseResultPromise = timed(() => getAdminPageProps(req))
+    const adminProfileResultPromise = hasAuthCookie
+      ? timed(() =>
+          fetchServerAdminProfile(req, {
+            timeoutMs: 900,
+          })
+        )
+      : Promise.resolve({
+          ok: true as const,
+          value: fallbackProfileSnapshot.profile,
+          durationMs: 0,
+        })
+    const [baseResult, adminProfileResult] = await Promise.all([baseResultPromise, adminProfileResultPromise])
+    if (!baseResult.ok) throw baseResult.error
+    if ("redirect" in baseResult.value) return baseResult.value
+    if (!("props" in baseResult.value)) return baseResult.value
+    baseProps = await baseResult.value.props
+    authDurationMs = baseResult.durationMs
+    authDescription = "fallback"
+    profileSnapshot =
+      adminProfileResult.ok && adminProfileResult.value
+        ? adminProfileResult.value
+        : fallbackProfileSnapshot.profile
+    profileDurationMs = adminProfileResult.durationMs
+    profileDescription =
+      adminProfileResult.ok && adminProfileResult.value
+        ? hasAuthCookie
+          ? "ok"
+          : fallbackProfileSnapshot.source
+        : fallbackProfileSnapshot.source
+  }
+
+  if (hasAuthCookie) {
+    const operationalResult = await timed(() => readAdminHubOperationalSnapshot(req))
+    if (operationalResult.ok) {
+      operationalSnapshot = operationalResult.value
+      operationalDurationMs = operationalResult.durationMs
+      operationalDescription = operationalSnapshot.fetchedAt ? "ok" : "empty"
+    } else {
+      operationalDurationMs = operationalResult.durationMs
+      operationalDescription = "error"
+    }
+  }
+
+  appendSsrDebugTiming(req, res, [
+    {
+      name: "admin-auth-session",
+      durationMs: authDurationMs,
+      description: authDescription,
+    },
+    {
+      name: "admin-profile",
+      durationMs: profileDurationMs,
+      description: profileDescription,
+    },
+    {
+      name: "admin-hub-operational",
+      durationMs: operationalDurationMs,
+      description: operationalDescription,
+    },
+    {
+      name: "admin-ssr-total",
+      durationMs: performance.now() - ssrStartedAt,
+      description: "ready",
+    },
+  ])
+
+  return {
+    props: {
+      ...baseProps,
+      initialProfileSnapshot: profileSnapshot,
+      initialOperationalSnapshot: operationalSnapshot,
+    },
+  }
+}
+
+const AdminHubPage: NextPage<AdminHubPageProps> = ({
+  initialMember,
+  initialProfileSnapshot,
+  initialOperationalSnapshot,
+}) => {
+  const sessionMember = initialMember
+  const adminProfile = initialProfileSnapshot
+  const displayName = sessionMember?.nickname || sessionMember?.username || adminProfile?.nickname || adminProfile?.username || "관리자"
+  const profileSnapshot = {
+    profileImageDirectUrl: adminProfile?.profileImageDirectUrl || sessionMember?.profileImageDirectUrl || "",
+    profileImageUrl: adminProfile?.profileImageUrl || sessionMember?.profileImageUrl || "",
+    profileRole: adminProfile?.profileRole || sessionMember?.profileRole || "",
+    profileBio: adminProfile?.profileBio || sessionMember?.profileBio || "",
+    homeIntroTitle: adminProfile?.homeIntroTitle || sessionMember?.homeIntroTitle || "",
+    homeIntroDescription:
+      adminProfile?.homeIntroDescription || sessionMember?.homeIntroDescription || "",
+    serviceLinks: adminProfile?.serviceLinks || sessionMember?.serviceLinks || [],
+    contactLinks: adminProfile?.contactLinks || sessionMember?.contactLinks || [],
+    modifiedAt: adminProfile?.modifiedAt || sessionMember?.modifiedAt,
+  }
+  const profileSrc = profileSnapshot.profileImageDirectUrl || profileSnapshot.profileImageUrl || ""
+
+  const profileUpdatedText = profileSnapshot.modifiedAt
+    ? profileSnapshot.modifiedAt.slice(0, 16).replace("T", " ")
+    : "미확인"
+  const profileChecklist = [
+    Boolean(profileSrc),
+    Boolean(profileSnapshot.profileRole?.trim()),
+    Boolean(profileSnapshot.profileBio?.trim()),
+    Boolean(profileSnapshot.homeIntroTitle?.trim()),
+    Boolean(profileSnapshot.homeIntroDescription?.trim()),
+  ]
+  const profileCompletion = Math.round(
+    (profileChecklist.filter(Boolean).length / Math.max(1, profileChecklist.length)) * 100
+  )
+  const linkCount = (profileSnapshot.serviceLinks?.length || 0) + (profileSnapshot.contactLinks?.length || 0)
+  const recentWorkSummary = `최근 업데이트 ${profileUpdatedText} · 프로필 ${profileCompletion}% · 연결 ${linkCount}개`
+  const postRows = initialOperationalSnapshot.posts?.content || []
+  const publishedRows = postRows.filter((post) => post.published && post.tempDraft !== true)
+  const draftRows = postRows.filter((post) => !post.published || post.tempDraft === true)
+  const loadedViewsCount = postRows.reduce((sum, post) => sum + (post.hitCount ?? 0), 0)
+  const loadedCommentsCount = postRows.reduce((sum, post) => sum + (post.commentsCount ?? 0), 0)
+  const recentContentItems = postRows
+    .slice()
+    .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
+    .slice(0, 5)
+    .map((post) => ({
+      href: `/editor/${post.id}`,
+      title: post.title?.trim() || "제목 없는 글",
+      meta: `${formatAdminHubDateTime(post.modifiedAt)} · #${post.id}`,
+      status: post.tempDraft ? "DRAFT" : post.published ? "PUBLISHED" : "PRIVATE",
+      tone: post.published && post.tempDraft !== true ? ("good" as const) : ("neutral" as const),
+    }))
+  const serviceHealthTone = getSystemHealthTone(initialOperationalSnapshot.systemHealth?.status)
+  const metrics = [
+    {
+      label: "PUBLISHED",
+      value: String(publishedRows.length),
+      detail: "loaded rows",
+      tone: publishedRows.length > 0 ? ("good" as const) : ("neutral" as const),
+    },
+    {
+      label: "DRAFTS",
+      value: String(draftRows.length),
+      detail: "loaded rows",
+      tone: draftRows.length > 0 ? ("warn" as const) : ("neutral" as const),
+    },
+    {
+      label: "VIEWS",
+      value: String(loadedViewsCount),
+      detail: "loaded rows",
+      tone: loadedViewsCount > 0 ? ("good" as const) : ("neutral" as const),
+    },
+    {
+      label: "COMMENTS",
+      value: String(loadedCommentsCount),
+      detail: "loaded rows",
+      tone: loadedCommentsCount > 0 ? ("good" as const) : ("neutral" as const),
+    },
+  ]
+  const healthChecks = initialOperationalSnapshot.systemHealth?.checks
+  const serviceStatusItems = [
+    {
+      label: "Public API",
+      value: getSystemHealthStatusLabel(initialOperationalSnapshot.systemHealth?.status),
+      tone: serviceHealthTone,
+    },
+    {
+      label: "PostgreSQL",
+      value: getDependencyStatusLabel(healthChecks?.db),
+      tone: getDependencyStatusTone(healthChecks?.db),
+    },
+    {
+      label: "Redis",
+      value: getDependencyStatusLabel(healthChecks?.redis),
+      tone: getDependencyStatusTone(healthChecks?.redis),
+    },
+  ]
+  const activityItems = [
+    {
+      label: "최근 업데이트",
+      value: profileUpdatedText,
+      tone: "neutral" as const,
+    },
+    {
+      label: "프로필 완성도",
+      value: `${profileCompletion}%`,
+      tone: profileCompletion >= 80 ? ("good" as const) : ("warn" as const),
+    },
+    {
+      label: "연결 채널",
+      value: linkCount > 0 ? `${linkCount}개` : "없음",
+      tone: linkCount > 0 ? ("good" as const) : ("warn" as const),
+    },
+  ]
+  const primaryAction = {
+    href: "/editor/new",
+    cta: "작성",
+    secondaryHref: "/admin/posts",
+  }
+
+  if (!sessionMember) return null
+
+  return (
+    <AdminShell currentSection="hub" member={sessionMember} profileSnapshot={initialProfileSnapshot}>
+      <AdminHubSurface
+        displayName={displayName}
+        recentWorkSummary={recentWorkSummary}
+        primaryAction={primaryAction}
+        metrics={metrics}
+        contentItems={recentContentItems}
+        serviceStatusItems={serviceStatusItems}
+        activityItems={activityItems}
+      />
+    </AdminShell>
+  )
+}
+
+export default AdminHubPage

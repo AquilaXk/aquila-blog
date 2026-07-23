@@ -1,0 +1,517 @@
+package com.back.boundedContexts.member.adapter.web
+
+import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
+import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileAboutProjectBlock
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileAboutSectionBlock
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_ICON_ALLOWED
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_ICON_ALLOWED
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE
+import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeProfileLinkHref
+import com.back.boundedContexts.member.dto.AuthSessionMemberDto
+import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
+import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.boundedContexts.member.model.shared.Member
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalReconsentReport
+import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.input.LegalAcceptanceUseCase
+import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
+import com.back.boundedContexts.post.config.PostImageStorageProperties
+import com.back.global.app.AppConfig
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
+import com.back.global.rsData.RsData
+import com.back.global.security.domain.SecurityUser
+import com.back.global.storage.application.ProfileImageHistoryDto
+import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.domain.UploadedFilePurpose
+import com.back.standard.dto.member.type1.MemberSearchSortType1
+import com.back.standard.dto.page.PageDto
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Positive
+import jakarta.validation.constraints.Size
+import org.springframework.cache.annotation.CacheEvict
+import org.springframework.http.MediaType
+import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.validation.annotation.Validated
+import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RequestPart
+import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.multipart.MultipartFile
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+
+@Validated
+@RestController
+@RequestMapping("/member/api/v1/adm/members")
+class ApiV1AdmMemberController(
+    private val memberUseCase: MemberUseCase,
+    private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
+    private val postImageStorageService: PostImageStoragePort,
+    private val postImageStorageProperties: PostImageStorageProperties,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
+    private val legalAcceptanceUseCase: LegalAcceptanceUseCase,
+) {
+    companion object {
+        private const val PROFILE_IMAGE_MAX_FILE_SIZE_BYTES = 2L * 1024 * 1024
+    }
+
+    data class AdminHubBootstrapResponse(
+        val member: AuthSessionMemberDto,
+        val profile: MemberWithUsernameDto,
+    )
+
+    data class AdminProfileBootstrapResponse(
+        val member: AuthSessionMemberDto,
+        val workspace: MemberProfileWorkspaceResponseDto,
+    )
+
+    data class ProfileImageHistoryResponse(
+        val images: List<ProfileImageHistoryDto>,
+    )
+
+    data class LegalReconsentReportResponse(
+        val report: LegalReconsentReport,
+    )
+
+    private enum class LinkSection(
+        val displayName: String,
+        val defaultIcon: String,
+        val allowedIcons: Set<String>,
+    ) {
+        SERVICE("serviceLinks", PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE, PROFILE_SERVICE_ICON_ALLOWED),
+        CONTACT("contactLinks", PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE, PROFILE_CONTACT_ICON_ALLOWED),
+    }
+
+    data class UpdateProfileImgRequest(
+        @field:NotBlank
+        @field:Size(max = 2000)
+        val profileImgUrl: String,
+    )
+
+    @GetMapping("/legal-reconsent/report")
+    @Transactional(readOnly = true)
+    fun legalReconsentReport(): LegalReconsentReportResponse =
+        LegalReconsentReportResponse(
+            report = legalAcceptanceUseCase.legalReconsentReport(),
+        )
+
+    data class UpdateProfileIdentityRequest(
+        @field:NotBlank
+        @field:Size(min = 2, max = 30)
+        val nickname: String,
+    )
+
+    data class UpdateProfileCardRequest(
+        @field:Size(max = 100)
+        val role: String = "",
+        @field:Size(max = 1000)
+        val bio: String = "",
+        @field:Size(max = 100)
+        val aboutRole: String? = null,
+        @field:Size(max = 2000)
+        val aboutBio: String? = null,
+        @field:Size(max = 12000)
+        val aboutDetails: String? = null,
+        @field:Size(max = 120)
+        val blogTitle: String = "",
+        @field:Size(max = 120)
+        val homeIntroTitle: String = "",
+        @field:Size(max = 500)
+        val homeIntroDescription: String = "",
+        @field:Size(max = 20)
+        val blogDesign: String? = null,
+        @field:Size(max = 20)
+        val legacyBlogScheme: String? = null,
+        @field:Size(max = 30)
+        val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
+        @field:Size(max = 30)
+        val contactLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
+    )
+
+    data class ProfileCardLinkItemRequest(
+        @field:Size(max = 40)
+        val icon: String = "",
+        @field:NotBlank
+        @field:Size(max = 80)
+        val label: String,
+        @field:NotBlank
+        @field:Size(max = 2000)
+        val href: String,
+    )
+
+    data class ProfileWorkspaceSectionRequest(
+        @field:Size(max = 80)
+        val id: String = "",
+        @field:Size(max = 120)
+        val title: String = "",
+        @field:Size(max = 20)
+        val items: List<String> = emptyList(),
+        val dividerBefore: Boolean = false,
+    )
+
+    data class ProfileWorkspaceProjectRequest(
+        @field:Size(max = 80)
+        val id: String = "",
+        @field:Size(max = 120)
+        val name: String = "",
+        @field:Size(max = 500)
+        val summary: String = "",
+        @field:Size(max = 120)
+        val role: String = "",
+        @field:Size(max = 2000)
+        val href: String = "",
+        @field:Size(max = 80)
+        val linkLabel: String = "",
+    )
+
+    data class UpdateProfileWorkspaceDraftRequest(
+        @field:Size(max = 2000)
+        val profileImageUrl: String = "",
+        @field:Size(max = 100)
+        val profileRole: String = "",
+        @field:Size(max = 1000)
+        val profileBio: String = "",
+        @field:Size(max = 200)
+        val aboutHeadline: String = "",
+        @field:Size(max = 100)
+        val aboutRole: String = "",
+        @field:Size(max = 2000)
+        val aboutBio: String = "",
+        @field:Size(max = 20)
+        val aboutSections: List<@Valid ProfileWorkspaceSectionRequest> = emptyList(),
+        @field:Size(max = 120)
+        val aboutProjectSectionTitle: String = "",
+        @field:Size(max = 20)
+        val aboutProjects: List<@Valid ProfileWorkspaceProjectRequest> = emptyList(),
+        @field:Size(max = 120)
+        val blogTitle: String = "",
+        @field:Size(max = 120)
+        val homeIntroTitle: String = "",
+        @field:Size(max = 500)
+        val homeIntroDescription: String = "",
+        @field:Size(max = 20)
+        val blogDesign: String? = null,
+        @field:Size(max = 20)
+        val legacyBlogScheme: String? = null,
+        @field:Size(max = 30)
+        val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
+        @field:Size(max = 30)
+        val contactLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
+    )
+
+    @GetMapping
+    @Transactional(readOnly = true)
+    fun getItems(
+        @RequestParam(defaultValue = "1")
+        @Min(1)
+        page: Int,
+        @RequestParam(defaultValue = "30")
+        @Min(1)
+        @Max(30)
+        pageSize: Int,
+        @RequestParam(defaultValue = "") kw: String,
+        @RequestParam(defaultValue = "CREATED_AT") sort: MemberSearchSortType1,
+    ): PageDto<MemberWithUsernameDto> {
+        val normalizedKw = kw.trim()
+
+        return PageDto(
+            memberUseCase
+                .findPagedByKw(
+                    kw = normalizedKw,
+                    sort = sort,
+                    page = page,
+                    pageSize = pageSize,
+                ).map(::MemberWithUsernameDto),
+        )
+    }
+
+    @GetMapping("/{id}")
+    @Transactional(readOnly = true)
+    fun getItem(
+        @PathVariable
+        @Positive
+        id: Long,
+    ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(id)
+
+    @GetMapping("/bootstrap")
+    @Transactional(readOnly = true)
+    fun bootstrap(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): AdminHubBootstrapResponse =
+        AdminHubBootstrapResponse(
+            member = AuthSessionMemberDto(securityUser),
+            profile = currentMemberProfileQueryUseCase.getPublishedById(securityUser.id),
+        )
+
+    @GetMapping("/profile/bootstrap")
+    @Transactional(readOnly = true)
+    fun profileBootstrap(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): AdminProfileBootstrapResponse =
+        AdminProfileBootstrapResponse(
+            member = AuthSessionMemberDto(securityUser),
+            workspace = currentMemberProfileQueryUseCase.getWorkspaceById(securityUser.id),
+        )
+
+    @GetMapping("/{id}/profileWorkspace")
+    @Transactional(readOnly = true)
+    fun getProfileWorkspace(
+        @PathVariable
+        @Positive
+        id: Long,
+    ): MemberProfileWorkspaceResponseDto = currentMemberProfileQueryUseCase.getWorkspaceById(id)
+
+    /**
+     * ProfileImg 항목을 수정한다.
+     */
+    @PatchMapping("/{id}/profileImgUrl")
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    fun updateProfileImg(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestBody @Valid reqBody: UpdateProfileImgRequest,
+    ): MemberWithUsernameDto {
+        val member = memberUseCase.findById(id).orElseThrow()
+        memberUseCase.modify(member, member.nickname, reqBody.profileImgUrl.trim())
+        return currentMemberProfileQueryUseCase.getById(id)
+    }
+
+    @PostMapping("/{id}/profileImageFile", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    fun uploadProfileImageFile(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestPart("file") file: MultipartFile,
+    ): MemberWithUsernameDto {
+        if (file.isEmpty) {
+            throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일이 비어 있습니다.")
+        }
+        val maxAllowedBytes = minOf(PROFILE_IMAGE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
+        if (file.size > maxAllowedBytes) {
+            val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
+            throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
+        }
+
+        val member = memberUseCase.findById(id).orElseThrow()
+        val uploadRequest =
+            PostImageStoragePort.UploadImageRequest(
+                inputStream = file.inputStream,
+                contentLength = file.size,
+                contentType = file.contentType,
+                originalFilename = file.originalFilename,
+            )
+        val key = postImageStorageService.uploadPostImage(uploadRequest)
+        uploadedFileRetentionService.registerTempUploadWithCompensation(
+            objectKey = key,
+            contentType = file.contentType.orEmpty(),
+            fileSize = file.size,
+            purpose = UploadedFilePurpose.PROFILE_IMAGE,
+        )
+        val encodedKey =
+            URLEncoder
+                .encode(key, StandardCharsets.UTF_8)
+                .replace("+", "%20")
+                .replace("%2F", "/")
+        val imageUrl = "${AppConfig.siteBackUrl}/post/api/v1/images/$encodedKey"
+        memberUseCase.modify(member, member.nickname, imageUrl)
+        return currentMemberProfileQueryUseCase.getById(id)
+    }
+
+    @GetMapping("/{id}/profileImageFiles")
+    @Transactional(readOnly = true)
+    fun listProfileImageFiles(
+        @PathVariable
+        @Positive
+        id: Long,
+    ): ProfileImageHistoryResponse {
+        val member = memberUseCase.findById(id).orElseThrow()
+        return ProfileImageHistoryResponse(
+            images =
+                uploadedFileRetentionService.listProfileImages(
+                    memberId = id,
+                    protectedProfileImgUrls = member.protectedProfileImgUrls(),
+                ),
+        )
+    }
+
+    @DeleteMapping("/{id}/profileImageFiles/{fileId}")
+    @Transactional
+    fun deleteProfileImageFile(
+        @PathVariable
+        @Positive
+        id: Long,
+        @PathVariable
+        @Positive
+        fileId: Long,
+    ): RsData<Void> {
+        val member = memberUseCase.findById(id).orElseThrow()
+        uploadedFileRetentionService.deleteProfileImage(
+            memberId = id,
+            fileId = fileId,
+            protectedProfileImgUrls = member.protectedProfileImgUrls(),
+        )
+        return RsData("200-1", "프로필 이미지가 삭제되었습니다.")
+    }
+
+    private fun Member.protectedProfileImgUrls(): List<String?> =
+        listOf(
+            profileImgUrl,
+            getProfileWorkspacePublishedContent().profileImageUrl,
+        )
+
+    /**
+     * 관리자 표시 이름(nickname)을 수정한다.
+     */
+    @PatchMapping("/{id}/nickname")
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    fun updateProfileIdentity(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestBody @Valid reqBody: UpdateProfileIdentityRequest,
+    ): MemberWithUsernameDto {
+        val member = memberUseCase.findById(id).orElseThrow()
+        memberUseCase.modify(member, reqBody.nickname.trim(), member.profileImgUrl)
+        return currentMemberProfileQueryUseCase.getById(id)
+    }
+
+    /**
+     * ProfileCard 항목을 수정한다.
+     */
+    @PatchMapping("/{id}/profileCard")
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    fun updateProfileCard(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestBody @Valid reqBody: UpdateProfileCardRequest,
+    ): MemberWithUsernameDto {
+        val member = memberUseCase.findById(id).orElseThrow()
+        memberUseCase.modifyProfileCard(
+            member = member,
+            role = reqBody.role.trim(),
+            bio = reqBody.bio.trim(),
+            aboutRole = reqBody.aboutRole?.trim(),
+            aboutBio = reqBody.aboutBio?.trim(),
+            aboutDetails = reqBody.aboutDetails?.trim(),
+            blogTitle = reqBody.blogTitle.trim(),
+            homeIntroTitle = reqBody.homeIntroTitle.trim(),
+            homeIntroDescription = reqBody.homeIntroDescription.trim(),
+            blogDesign = reqBody.blogDesign?.trim() ?: member.blogDesign,
+            legacyBlogScheme = reqBody.legacyBlogScheme?.trim() ?: member.legacyBlogScheme,
+            serviceLinks = reqBody.serviceLinks.normalize(LinkSection.SERVICE),
+            contactLinks = reqBody.contactLinks.normalize(LinkSection.CONTACT),
+        )
+        return currentMemberProfileQueryUseCase.getById(id)
+    }
+
+    @PutMapping("/{id}/profileWorkspace/draft")
+    @Transactional
+    fun saveProfileWorkspaceDraft(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestBody @Valid reqBody: UpdateProfileWorkspaceDraftRequest,
+    ): MemberProfileWorkspaceResponseDto {
+        val member = memberUseCase.findById(id).orElseThrow()
+        memberUseCase.saveProfileWorkspaceDraft(member, reqBody.toDomain(member.blogDesign, member.legacyBlogScheme))
+        return currentMemberProfileQueryUseCase.getWorkspaceById(id)
+    }
+
+    @PostMapping("/{id}/profileWorkspace/publish")
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    fun publishProfileWorkspace(
+        @PathVariable
+        @Positive
+        id: Long,
+    ): MemberProfileWorkspaceResponseDto {
+        val member = memberUseCase.findById(id).orElseThrow()
+        memberUseCase.publishProfileWorkspace(member)
+        return currentMemberProfileQueryUseCase.getWorkspaceById(id)
+    }
+
+    private fun List<ProfileCardLinkItemRequest>.normalize(section: LinkSection): List<MemberProfileLinkItem> =
+        mapIndexed { index, link ->
+            val normalizedIcon = link.icon.trim().ifBlank { section.defaultIcon }
+            if (normalizedIcon !in section.allowedIcons) {
+                throw AppException(
+                    ErrorCode.BAD_REQUEST,
+                    "${section.displayName}[$index].icon 값이 유효하지 않습니다: $normalizedIcon",
+                )
+            }
+
+            MemberProfileLinkItem(
+                icon = normalizedIcon,
+                label = link.label.trim(),
+                href =
+                    normalizeProfileLinkHref(link.href)
+                        ?: throw AppException(
+                            ErrorCode.BAD_REQUEST,
+                            "${section.displayName}[$index].href 값이 유효하지 않습니다.",
+                        ),
+            )
+        }
+
+    private fun UpdateProfileWorkspaceDraftRequest.toDomain(
+        currentBlogDesign: String,
+        currentLegacyBlogScheme: String,
+    ): MemberProfileWorkspaceContent =
+        MemberProfileWorkspaceContent(
+            profileImageUrl = profileImageUrl.trim(),
+            profileRole = profileRole.trim(),
+            profileBio = profileBio.trim(),
+            aboutHeadline = aboutHeadline.trim(),
+            aboutRole = aboutRole.trim(),
+            aboutBio = aboutBio.trim(),
+            aboutSections =
+                aboutSections.map {
+                    MemberProfileAboutSectionBlock(
+                        id = it.id.trim(),
+                        title = it.title.trim(),
+                        items = it.items.map(String::trim),
+                        dividerBefore = it.dividerBefore,
+                    )
+                },
+            aboutProjectSectionTitle = aboutProjectSectionTitle.trim(),
+            aboutProjects =
+                aboutProjects.map {
+                    MemberProfileAboutProjectBlock(
+                        id = it.id.trim(),
+                        name = it.name.trim(),
+                        summary = it.summary.trim(),
+                        role = it.role.trim(),
+                        href = it.href.trim(),
+                        linkLabel = it.linkLabel.trim(),
+                    )
+                },
+            blogTitle = blogTitle.trim(),
+            homeIntroTitle = homeIntroTitle.trim(),
+            homeIntroDescription = homeIntroDescription.trim(),
+            blogDesign = blogDesign?.trim() ?: currentBlogDesign,
+            legacyBlogScheme = legacyBlogScheme?.trim() ?: currentLegacyBlogScheme,
+            serviceLinks = serviceLinks.normalize(LinkSection.SERVICE),
+            contactLinks = contactLinks.normalize(LinkSection.CONTACT),
+        )
+}

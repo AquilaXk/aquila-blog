@@ -1,0 +1,621 @@
+package com.back.global.system.adapter.web
+
+import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
+import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
+import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
+import com.back.global.security.application.AuthSecurityEventDto
+import com.back.global.security.domain.SecurityUser
+import com.back.global.storage.application.UploadedFileCleanupDiagnostics
+import com.back.global.storage.application.UploadedFileReconcileDiagnostics
+import com.back.global.system.application.AdminDashboardAuthSecuritySnapshot
+import com.back.global.system.application.AdminDashboardSignupMailSnapshot
+import com.back.global.system.application.AdminDashboardSnapshot
+import com.back.global.system.application.AdminDashboardStorageCleanupSnapshot
+import com.back.global.system.application.AdminDashboardTaskQueueSnapshot
+import com.back.global.task.application.TaskDlqReplayResult
+import com.back.global.task.application.TaskExecutionSample
+import com.back.global.task.application.TaskProcessingLockDiagnostics
+import com.back.global.task.application.TaskQueueDiagnostics
+import com.back.global.task.application.TaskRetryPolicy
+import com.back.global.task.application.TaskTypeDiagnostics
+import com.back.global.task.domain.TaskStatus
+import com.back.support.BaseAdmSystemControllerWebMvcTest
+import org.hamcrest.Matchers.anyOf
+import org.hamcrest.Matchers.equalTo
+import org.junit.jupiter.api.Test
+import org.mockito.BDDMockito.given
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.context.support.WithMockUser
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
+import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
+import java.time.Instant
+
+@org.junit.jupiter.api.DisplayName("ApiV1AdmSystemController 테스트")
+class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
+    @Test
+    fun `관리자는 시스템 bootstrap을 조회할 수 있다`() {
+        val securityUser =
+            SecurityUser(
+                id = 7L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+        given(adminSystemHealthSnapshotService.getHealthSummary())
+            .willReturn(
+                ApiV1AdmSystemController.HealthResBody(
+                    status = "UP",
+                    serverTime = Instant.parse("2026-04-03T00:00:00Z").toString(),
+                    uptimeMs = 1234,
+                    version = "test",
+                    checks =
+                        ApiV1AdmSystemController.HealthChecks(
+                            db = "UP",
+                            redis = "DISABLED",
+                            signupMail = "READY",
+                        ),
+                ),
+            )
+        given(adminDashboardSnapshotService.getSnapshot()).willReturn(adminDashboardSnapshot())
+
+        mvc
+            .get("/system/api/v1/adm/bootstrap") {
+                with(user(securityUser))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.member.id") { value(7) }
+                jsonPath("$.member.isAdmin") { value(true) }
+                jsonPath("$.member.nickname") { value("관리자") }
+                jsonPath("$.health.status") { value("UP") }
+                jsonPath("$.health.checks.db") { value("UP") }
+                jsonPath("$.dashboard.taskQueue.failedCount") { value(1) }
+                jsonPath("$.dashboard.authSecurity.blockedEventCount") { value(1) }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 시스템 헬스 상태를 조회할 수 있다`() {
+        given(adminSystemHealthSnapshotService.getHealthSummary())
+            .willReturn(
+                ApiV1AdmSystemController.HealthResBody(
+                    status = "UP",
+                    serverTime = Instant.parse("2026-04-03T00:00:00Z").toString(),
+                    uptimeMs = 1234,
+                    version = "test",
+                    checks =
+                        ApiV1AdmSystemController.HealthChecks(
+                            db = "UP",
+                            redis = "DISABLED",
+                            signupMail = "READY",
+                        ),
+                ),
+            )
+
+        mvc.get("/system/api/v1/adm/health").andExpect {
+            status { isOk() }
+            jsonPath("$.status") { value("UP") }
+            jsonPath("$.serverTime") { isString() }
+            jsonPath("$.uptimeMs") { isNumber() }
+            jsonPath("$.version") { isString() }
+            jsonPath("$.checks.db") { value("UP") }
+            jsonPath("$.checks.redis") { value("DISABLED") }
+            jsonPath("$.checks.signupMail") {
+                value(
+                    anyOf(
+                        equalTo("TEST_MODE"),
+                        equalTo("READY"),
+                        equalTo("MISCONFIGURED"),
+                        equalTo("QUEUE_LOCKED"),
+                    ),
+                )
+            }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 fresh 플래그로 시스템 헬스를 즉시 재계산할 수 있다`() {
+        given(adminSystemHealthSnapshotService.getFreshHealthSummary())
+            .willReturn(
+                ApiV1AdmSystemController.HealthResBody(
+                    status = "UP",
+                    serverTime = Instant.parse("2026-04-03T00:00:01Z").toString(),
+                    uptimeMs = 2345,
+                    version = "test",
+                    checks =
+                        ApiV1AdmSystemController.HealthChecks(
+                            db = "UP",
+                            redis = "UP",
+                            signupMail = "READY",
+                        ),
+                ),
+            )
+
+        mvc
+            .get("/system/api/v1/adm/health") {
+                param("fresh", "true")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.checks.redis") { value("UP") }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 회원가입 메일 진단 상태를 조회할 수 있다`() {
+        given(signupMailDiagnosticsService.diagnose(false)).willReturn(readySignupMailDiagnostics())
+
+        mvc.get("/system/api/v1/adm/mail/signup").andExpect {
+            status { isOk() }
+            jsonPath("$.status") {
+                value(
+                    anyOf(
+                        equalTo("TEST_MODE"),
+                        equalTo("READY"),
+                        equalTo("MISCONFIGURED"),
+                        equalTo("QUEUE_LOCKED"),
+                    ),
+                )
+            }
+            jsonPath("$.adapter") { isString() }
+            jsonPath("$.verifyPath") { value("/signup/verify") }
+            jsonPath("$.queueRuntime.processTasksLockKey") { value("job-lock:default:processTasks") }
+            jsonPath("$.queueRuntime.legacyOrphanLikely") { value(false) }
+        }
+    }
+
+    @Test
+    fun `관리자는 grafana auth proxy 헤더를 조회할 수 있다`() {
+        val securityUser =
+            SecurityUser(
+                id = 7L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+
+        mvc
+            .get("/system/api/v1/adm/grafana/auth-proxy") {
+                with(user(securityUser))
+            }.andExpect {
+                status { isNoContent() }
+                header { string("X-WEBAUTH-USER", "admin@example.com") }
+                header { string("X-WEBAUTH-NAME", "관리자") }
+                header { string("Cache-Control", "private, no-store, max-age=0") }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 회원가입 테스트 메일 발송을 요청할 수 있다`() {
+        mvc
+            .post("/system/api/v1/adm/mail/signup/test") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "email": "tester@example.com"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isAccepted() }
+                jsonPath("$.resultCode") { value("202-3") }
+                jsonPath("$.data.email") { value("tester@example.com") }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 task queue 진단 상태를 조회할 수 있다`() {
+        given(taskQueueDiagnosticsService.diagnoseQueue()).willReturn(taskQueueDiagnostics())
+
+        mvc.get("/system/api/v1/adm/tasks").andExpect {
+            status { isOk() }
+            jsonPath("$.pendingCount") { isNumber() }
+            jsonPath("$.readyPendingCount") { isNumber() }
+            jsonPath("$.processingCount") { isNumber() }
+            jsonPath("$.staleProcessingCount") { isNumber() }
+            jsonPath("$.processingTimeoutSeconds") { isNumber() }
+            jsonPath("$.taskTypes") { isArray() }
+            jsonPath("$.taskTypes[0].taskType") { isString() }
+            jsonPath("$.taskTypes[0].label") { isString() }
+            jsonPath("$.taskTypes[0].backlogCount") { isNumber() }
+            jsonPath("$.taskTypes[0].queueLagSeconds") { isNumber() }
+            jsonPath("$.taskTypes[0].retryPolicy.maxRetries") { isNumber() }
+            jsonPath("$.taskTypes[0].retryPolicy.baseDelaySeconds") { isNumber() }
+            jsonPath("$.recentFailures") { isArray() }
+            jsonPath("$.staleProcessingSamples") { isArray() }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 dashboard snapshot을 조회할 수 있다`() {
+        given(adminDashboardSnapshotService.getSnapshot()).willReturn(adminDashboardSnapshot())
+
+        mvc.get("/system/api/v1/adm/dashboard-snapshot").andExpect {
+            status { isOk() }
+            jsonPath("$.generatedAt") { isString() }
+            jsonPath("$.taskQueue.readyPendingCount") { value(2) }
+            jsonPath("$.taskQueue.failedCount") { value(1) }
+            jsonPath("$.signupMail.status") { value("READY") }
+            jsonPath("$.authSecurity.blockedEventCount") { value(1) }
+            jsonPath("$.storageCleanup.eligibleForPurgeCount") { value(1) }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 인증 보안 이벤트 목록을 조회할 수 있다`() {
+        given(authSecurityEventService.getRecent(30))
+            .willReturn(
+                listOf(
+                    AuthSecurityEventDto(
+                        id = 101,
+                        createdAt = Instant.parse("2026-03-23T00:00:00Z"),
+                        eventType = "LOGIN_POLICY_APPLIED",
+                        memberId = 1,
+                        loginIdentifier = "admin@example.com",
+                        rememberLoginEnabled = true,
+                        ipSecurityEnabled = true,
+                        clientIpFingerprint = "fingerprint-***",
+                        requestPath = "/member/api/v1/auth/login",
+                        reason = null,
+                    ),
+                ),
+            )
+
+        mvc.get("/system/api/v1/adm/auth/security-events").andExpect {
+            status { isOk() }
+            jsonPath("$[0].eventType") { value("LOGIN_POLICY_APPLIED") }
+            jsonPath("$[0].memberId") { value(1) }
+            jsonPath("$[0].loginIdentifier") { value("admin@example.com") }
+            jsonPath("$[0].ipSecurityEnabled") { value(true) }
+            jsonPath("$[0].requestPath") { value("/member/api/v1/auth/login") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 SSE 스트림 진단 상태를 조회할 수 있다`() {
+        given(memberNotificationSseService.diagnostics())
+            .willReturn(
+                MemberNotificationSseService.StreamDiagnostics(
+                    memberEmitterCount = 1,
+                    globalEmitterCount = 3,
+                    oldestEmitterAgeSeconds = 48,
+                    maxEmittersPerMember = 3,
+                    maxGlobalEmitters = 2000,
+                    heartbeatSeconds = 20,
+                    replayProbeSeconds = 60,
+                    replayBatchSize = 50,
+                    connectedCount = 11,
+                    reconnectSubscribeCount = 4,
+                    disconnectCount = 8,
+                    replayBatchCount = 6,
+                    replayNotificationCount = 17,
+                    heartbeatSentCount = 31,
+                    sendFailureCount = 2,
+                ),
+            )
+
+        mvc.get("/system/api/v1/adm/notifications/stream").andExpect {
+            status { isOk() }
+            jsonPath("$.memberEmitterCount") { value(1) }
+            jsonPath("$.globalEmitterCount") { value(3) }
+            jsonPath("$.oldestEmitterAgeSeconds") { value(48) }
+            jsonPath("$.heartbeatSeconds") { value(20) }
+            jsonPath("$.replayProbeSeconds") { value(60) }
+            jsonPath("$.replayBatchSize") { value(50) }
+            jsonPath("$.connectedCount") { value(11) }
+            jsonPath("$.reconnectSubscribeCount") { value(4) }
+            jsonPath("$.disconnectCount") { value(8) }
+            jsonPath("$.replayBatchCount") { value(6) }
+            jsonPath("$.replayNotificationCount") { value(17) }
+            jsonPath("$.heartbeatSentCount") { value(31) }
+            jsonPath("$.sendFailureCount") { value(2) }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 FAILED task를 replay할 수 있다`() {
+        given(taskDlqReplayService.replayFailedTasks(null, 50, true))
+            .willReturn(
+                TaskDlqReplayResult(
+                    taskType = null,
+                    requestedLimit = 50,
+                    replayedCount = 2,
+                    resetRetryCount = true,
+                    replayedTaskIds = listOf(101, 102),
+                ),
+            )
+
+        mvc
+            .post("/system/api/v1/adm/tasks/replay-failed") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"taskType":null,"limit":50,"resetRetryCount":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-10") }
+                jsonPath("$.data.replayedCount") { value(2) }
+                jsonPath("$.data.replayedTaskIds[0]") { value(101) }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 업로드 파일 cleanup 진단 상태를 조회할 수 있다`() {
+        given(uploadedFileRetentionService.diagnoseCleanup()).willReturn(uploadedFileCleanupDiagnostics())
+
+        mvc.get("/system/api/v1/adm/storage/cleanup").andExpect {
+            status { isOk() }
+            jsonPath("$.tempCount") { isNumber() }
+            jsonPath("$.pendingDeleteCount") { isNumber() }
+            jsonPath("$.eligibleForPurgeCount") { isNumber() }
+            jsonPath("$.cleanupSafetyThreshold") { isNumber() }
+            jsonPath("$.sampleEligibleObjectKeys") { isArray() }
+            jsonPath("$.reconcile.repairMode") { value("dry-run") }
+            jsonPath("$.reconcile.bucketOnlyObjectCount") { value(1) }
+            jsonPath("$.reconcile.dbOnlyMissingObjectCount") { value(1) }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 검색 런타임 플래그를 조회할 수 있다`() {
+        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(true)
+        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(true)
+        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(false)
+        given(postSearchEngineMirrorService.getCircuitStatus())
+            .willReturn(
+                PostSearchEngineMirrorService.MirrorCircuitStatus(
+                    open = true,
+                    openUntilEpochMs = 1_742_211_200_000,
+                    remainingSeconds = 52,
+                    consecutiveFailures = 5,
+                    failureThreshold = 5,
+                ),
+            )
+
+        mvc.get("/system/api/v1/adm/search/runtime-flags").andExpect {
+            status { isOk() }
+            jsonPath("$.searchPipelineForceControlEnabled") { value(true) }
+            jsonPath("$.searchPipelineRuntimeOverride") { value(true) }
+            jsonPath("$.searchEngineMirrorForceDisabled") { value(false) }
+            jsonPath("$.searchEngineMirrorCircuitOpen") { value(true) }
+            jsonPath("$.searchEngineMirrorCircuitRemainingSeconds") { value(52) }
+            jsonPath("$.searchEngineMirrorConsecutiveFailures") { value(5) }
+            jsonPath("$.searchEngineMirrorFailureThreshold") { value(5) }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 검색 파이프라인 force-control 플래그를 갱신할 수 있다`() {
+        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(true)
+        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(true)
+        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(false)
+        given(postSearchEngineMirrorService.getCircuitStatus())
+            .willReturn(
+                PostSearchEngineMirrorService.MirrorCircuitStatus(
+                    open = false,
+                    openUntilEpochMs = 0,
+                    remainingSeconds = 0,
+                    consecutiveFailures = 0,
+                    failureThreshold = 5,
+                ),
+            )
+
+        mvc
+            .post("/system/api/v1/adm/search/pipeline/force-control") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"forceControl":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-11") }
+                jsonPath("$.data.searchPipelineForceControlEnabled") { value(true) }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 검색엔진 미러 force-disable 플래그를 갱신할 수 있다`() {
+        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(false)
+        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(false)
+        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(true)
+        given(postSearchEngineMirrorService.getCircuitStatus())
+            .willReturn(
+                PostSearchEngineMirrorService.MirrorCircuitStatus(
+                    open = false,
+                    openUntilEpochMs = 0,
+                    remainingSeconds = 0,
+                    consecutiveFailures = 0,
+                    failureThreshold = 5,
+                ),
+            )
+
+        mvc
+            .post("/system/api/v1/adm/search-engine/mirror/force-disable") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"forceDisabled":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-12") }
+                jsonPath("$.data.searchEngineMirrorForceDisabled") { value(true) }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["USER"])
+    fun `일반 사용자는 시스템 헬스 상태를 조회할 수 없다`() {
+        mvc.get("/system/api/v1/adm/health").andExpect {
+            status { isForbidden() }
+            jsonPath("$.resultCode") { value("403-1") }
+            jsonPath("$.msg") { value("권한이 없습니다.") }
+        }
+    }
+
+    @Test
+    fun `비로그인 사용자는 시스템 헬스 상태를 조회할 수 없다`() {
+        mvc.get("/system/api/v1/adm/health").andExpect {
+            status { isUnauthorized() }
+            jsonPath("$.resultCode") { value("401-1") }
+            jsonPath("$.msg") { value("로그인 후 이용해주세요.") }
+        }
+    }
+
+    private fun readySignupMailDiagnostics(): SignupMailDiagnostics =
+        SignupMailDiagnostics(
+            status = "READY",
+            adapter = "SmtpSignupVerificationMailSenderAdapter",
+            host = "smtp.gmail.com",
+            port = 587,
+            mailFrom = "aquilaxk10@gmail.com",
+            usernameConfigured = true,
+            passwordConfigured = true,
+            smtpAuth = true,
+            startTlsEnabled = true,
+            missing = emptyList(),
+            canConnect = true,
+            connectionError = null,
+            checkedAt = Instant.parse("2026-03-13T00:00:00Z"),
+            verifyPath = "/signup/verify",
+            taskQueue = sampleTaskTypeDiagnostics(),
+            queueRuntime =
+                TaskProcessingLockDiagnostics(
+                    currentNodeWorkerEnabled = false,
+                    currentNodeApiMode = "admin",
+                    processTasksLockKey = "job-lock:default:processTasks",
+                    processTasksLockExists = false,
+                    processTasksLockTtlSeconds = null,
+                    legacyOrphanLikely = false,
+                ),
+        )
+
+    private fun taskQueueDiagnostics(): TaskQueueDiagnostics =
+        TaskQueueDiagnostics(
+            pendingCount = 3,
+            readyPendingCount = 2,
+            delayedPendingCount = 1,
+            processingCount = 1,
+            completedCount = 8,
+            failedCount = 1,
+            staleProcessingCount = 0,
+            oldestReadyPendingAt = Instant.parse("2026-03-13T00:00:00Z"),
+            oldestProcessingAt = Instant.parse("2026-03-13T00:01:00Z"),
+            oldestReadyPendingAgeSeconds = 30,
+            oldestProcessingAgeSeconds = 10,
+            processingTimeoutSeconds = 900,
+            taskTypes = listOf(sampleTaskTypeDiagnostics()),
+            recentFailures =
+                listOf(
+                    TaskExecutionSample(
+                        taskId = 1,
+                        taskType = "signupVerificationMail",
+                        label = "회원가입 인증 메일 발송",
+                        aggregateType = "memberSignupVerification",
+                        aggregateId = 7,
+                        status = TaskStatus.FAILED,
+                        retryCount = 2,
+                        maxRetries = 6,
+                        modifiedAt = Instant.parse("2026-03-13T00:02:00Z"),
+                        nextRetryAt = Instant.parse("2026-03-13T00:05:00Z"),
+                        errorMessage = "smtp timeout",
+                    ),
+                ),
+            staleProcessingSamples = emptyList(),
+        )
+
+    private fun sampleTaskTypeDiagnostics(): TaskTypeDiagnostics =
+        TaskTypeDiagnostics(
+            taskType = "signupVerificationMail",
+            label = "회원가입 인증 메일 발송",
+            pendingCount = 2,
+            readyPendingCount = 1,
+            delayedPendingCount = 1,
+            processingCount = 0,
+            backlogCount = 2,
+            queueLagSeconds = 30,
+            failedCount = 1,
+            staleProcessingCount = 0,
+            oldestReadyPendingAt = Instant.parse("2026-03-13T00:00:00Z"),
+            oldestReadyPendingAgeSeconds = 30,
+            latestFailureAt = Instant.parse("2026-03-13T00:02:00Z"),
+            latestFailureMessage = "smtp timeout",
+            retryPolicy =
+                TaskRetryPolicy(
+                    label = "회원가입 인증 메일 발송",
+                    maxRetries = 6,
+                    baseDelaySeconds = 60,
+                    backoffMultiplier = 2.0,
+                    maxDelaySeconds = 3600,
+                ),
+        )
+
+    private fun uploadedFileCleanupDiagnostics(): UploadedFileCleanupDiagnostics =
+        UploadedFileCleanupDiagnostics(
+            tempCount = 2,
+            activeCount = 4,
+            pendingDeleteCount = 1,
+            deletedCount = 8,
+            eligibleForPurgeCount = 1,
+            cleanupSafetyThreshold = 25,
+            blockedBySafetyThreshold = false,
+            oldestEligiblePurgeAfter = Instant.parse("2026-03-13T00:00:00Z"),
+            sampleEligibleObjectKeys = listOf("posts/2026/test.png"),
+            reconcile =
+                UploadedFileReconcileDiagnostics(
+                    objectPrefix = "posts/",
+                    inventoryLimit = 1000,
+                    inventoryObjectCount = 2,
+                    inventoryTruncated = false,
+                    bucketOnlyObjectCount = 1,
+                    sampleBucketOnlyObjectKeys = listOf("posts/2026/orphan.png"),
+                    dbOnlyMissingObjectCount = 1,
+                    sampleDbOnlyObjectKeys = listOf("posts/2026/missing.png"),
+                    longLivedPendingDeleteCount = 1,
+                    sampleLongLivedPendingDeleteObjectKeys = listOf("posts/2026/old-pending.png"),
+                ),
+        )
+
+    private fun adminDashboardSnapshot(): AdminDashboardSnapshot =
+        AdminDashboardSnapshot(
+            generatedAt = Instant.parse("2026-03-13T00:03:00Z"),
+            taskQueue =
+                AdminDashboardTaskQueueSnapshot(
+                    pendingCount = 3,
+                    readyPendingCount = 2,
+                    processingCount = 1,
+                    failedCount = 1,
+                    staleProcessingCount = 0,
+                    oldestReadyPendingAgeSeconds = 30,
+                    latestFailureAt = Instant.parse("2026-03-13T00:02:00Z"),
+                    latestFailureMessage = "smtp timeout",
+                ),
+            signupMail =
+                AdminDashboardSignupMailSnapshot(
+                    status = "READY",
+                    queueLagSeconds = 30,
+                    latestFailureAt = Instant.parse("2026-03-13T00:02:00Z"),
+                    latestFailureMessage = "smtp timeout",
+                ),
+            authSecurity =
+                AdminDashboardAuthSecuritySnapshot(
+                    recentEventCount = 3,
+                    blockedEventCount = 1,
+                    latestEventAt = Instant.parse("2026-03-13T00:03:00Z"),
+                    latestBlockedAt = Instant.parse("2026-03-13T00:01:00Z"),
+                ),
+            storageCleanup =
+                AdminDashboardStorageCleanupSnapshot(
+                    eligibleForPurgeCount = 1,
+                    blockedBySafetyThreshold = false,
+                    oldestEligiblePurgeAfter = Instant.parse("2026-03-13T00:00:00Z"),
+                ),
+        )
+}

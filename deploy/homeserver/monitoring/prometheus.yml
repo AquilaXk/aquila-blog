@@ -1,0 +1,87 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+
+  - job_name: back
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - back-blue:8080
+        labels:
+          service: aquila-back
+          component: api
+          deploy_color: blue
+      - targets:
+          - back-green:8080
+        labels:
+          service: aquila-back
+          component: api
+          deploy_color: green
+      - targets:
+          - back-read:8080
+        labels:
+          service: aquila-back
+          component: read
+          deploy_color: read
+      - targets:
+          - back-admin:8080
+        labels:
+          service: aquila-back
+          component: admin
+          deploy_color: admin
+      - targets:
+          - back-worker:8080
+        labels:
+          service: aquila-back
+          component: worker
+          deploy_color: worker
+
+  - job_name: loki
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["loki:3100"]
+        labels:
+          service: aquila-loki
+
+  - job_name: promtail
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["promtail:9080"]
+        labels:
+          service: aquila-promtail
+
+  - job_name: public_edge_probe
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["public_edge_probe:9915"]
+        labels:
+          service: aquila-public-edge-probe
+
+  - job_name: docker_runtime_probe
+    honor_labels: true
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["docker_runtime_probe:9920"]
+        labels:
+          service: aquila-docker-runtime-probe
+
+  - job_name: postgres_exporter
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["postgres_exporter:9187"]
+        labels:
+          service: aquila-postgres

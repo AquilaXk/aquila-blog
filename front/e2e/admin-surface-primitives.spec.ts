@@ -1,0 +1,589 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+import { expect, test } from "@playwright/test"
+
+const getRelativeLuminance = (hexColor: string) => {
+  const [red, green, blue] = hexColor
+    .replace("#", "")
+    .match(/.{2}/g)!
+    .map((channel) => {
+      const value = Number.parseInt(channel, 16) / 255
+      return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    })
+
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+const getContrastRatio = (foreground: string, background: string) => {
+  const [lighter, darker] = [getRelativeLuminance(foreground), getRelativeLuminance(background)].sort((a, b) => b - a)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+const getStyledComponentBlock = (source: string, componentName: string) => {
+  const marker = `const ${componentName} =`
+  const start = source.indexOf(marker)
+  expect(start, `${componentName} const`).toBeGreaterThanOrEqual(0)
+
+  const templateStart = source.indexOf("`", start)
+  expect(templateStart, `${componentName} template start`).toBeGreaterThanOrEqual(0)
+
+  const templateEnd = source.indexOf("`", templateStart + 1)
+  expect(templateEnd, `${componentName} template end`).toBeGreaterThan(templateStart)
+
+  return source.slice(start, templateEnd + 1)
+}
+
+const expectStyledComponentRadius = (source: string, componentName: string, radius: string) => {
+  expect(getStyledComponentBlock(source, componentName)).toContain(`border-radius: ${radius};`)
+}
+
+test.describe("관리자 표면 공통 계약", () => {
+  test("관리자 표면은 MYBOX형 화이트 우선 시스템 테마 토큰을 공유한다", () => {
+    const colorTokenSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/adminColorTokens.ts"), "utf8")
+    const shellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+    const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
+    const cloudStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspace.styles.ts"), "utf8")
+    const cloudPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspacePage.tsx"), "utf8")
+    const cloudModelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspaceModel.ts"), "utf8")
+    const primitiveSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"),
+      "utf8",
+    )
+    const hubStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.styles.ts"), "utf8")
+
+    expect(colorTokenSource).toContain("export const adminSystemThemeVariables =")
+    expect(colorTokenSource).toContain('theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables')
+    // 패밀리룩 토큰 통합(#1218): 값은 공용 토큰에서 파생, 자체 블루/파스텔 하드코딩 제거.
+    expect(colorTokenSource).toContain("createPublicDesignTokens")
+    expect(colorTokenSource).toContain("--admin-primary: ${d.accent};")
+    expect(colorTokenSource).toContain("--admin-accent-text: ${d.accent};")
+    expect(colorTokenSource).toContain("--admin-control-text: ${controlText};")
+    expect(colorTokenSource).toContain("--admin-text-muted: ${c.gray10};")
+    expect(colorTokenSource).toContain("export const adminAppBackground = ")
+    expect(colorTokenSource).toContain("export const adminTextMuted = ")
+    expect(colorTokenSource).toContain("export const adminSurface = ")
+    expect(colorTokenSource).toContain("export const adminSurfaceAccent = ")
+    expect(colorTokenSource).toContain("export const adminAccentText = ")
+    expect(colorTokenSource).toContain("export const adminGold = adminAccentText")
+    expect(colorTokenSource).toContain("export const adminTeal = ")
+    expect(colorTokenSource).toContain('export const usesDarkAdminSurface = (theme: Theme) => theme.scheme !== "light"')
+    expect(colorTokenSource).not.toContain("#4f74ff")
+    expect(colorTokenSource).not.toContain("#0969da")
+
+    expect(rootLayoutSource).toContain('const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")')
+    expect(rootLayoutSource).toContain('const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"')
+    expect(rootLayoutSource).toContain('const effectiveScheme = "light"')
+    expect(rootLayoutSource).toContain(
+      'const effectiveBlogDesign = isAdminRoute ? adminProfile?.blogDesign || "legacy" : "legacy"'
+    )
+    expect(rootLayoutSource).toContain("{isAdminRoute || isDedicatedEditorRoute ? null : (")
+    expect(rootLayoutSource).not.toContain("publicAppearance.scheme")
+    expect(shellSource).toContain("${({ theme }) => adminSystemThemeVariables(theme)}")
+    expect(shellSource).toContain("grid-template-columns: 14.5rem minmax(0, 1fr);")
+    expect(shellSource).toContain("width: 100%;")
+    expect(shellSource).not.toContain("width: 100vw;")
+    expect(shellSource).toContain("background: ${adminAppBackground};")
+    expect(shellSource).not.toContain("border-radius: 14px;")
+    expect(shellSource).toContain("<TopBar>")
+    expect(shellSource).toContain("<SecondaryTopAction>블로그 보기</SecondaryTopAction>")
+    expect(shellSource).not.toContain('<button type="button" onClick={() => void handleLogout()}>')
+    expect(shellSource).toContain('apiFetch("/member/api/v1/auth/logout", { method: "DELETE" })')
+    expect(shellSource).toContain('<SidebarLogoutAction type="button" aria-label="Logout" onClick={() => void handleLogout()}>')
+    expect(shellSource).toContain('<ResponsiveLogoutAction type="button" aria-label="Logout" onClick={() => void handleLogout()}>')
+    expect(shellSource).toContain('<AppIcon name="log-out" />')
+    expect(shellSource).not.toContain('"/api/backend/member/api/v1/auth/logout"')
+    expect(shellSource).toContain("<PrimaryTopAction>새 글</PrimaryTopAction>")
+    expect(shellSource).toContain('<CompactNav aria-label="관리자 바로가기">')
+    expect(shellSource).toContain("aria-label={item.label}")
+    expect(shellSource).toContain("top: 0;")
+
+    expect(cloudStyleSource).toContain("background: ${surface};")
+    expect(cloudStyleSource).toContain("grid-template-columns: minmax(0, 1fr);")
+    expect(cloudStyleSource).toContain('data-detail-open="true"')
+    expect(cloudStyleSource).toContain('data-detail-mode="inline"')
+    expect(cloudStyleSource).toContain("grid-template-columns: minmax(0, 5.7fr) minmax(20rem, 3fr);")
+    expect(cloudStyleSource).toContain("border-left-color: #58a6ff;")
+    expect(cloudStyleSource).toMatch(/export const SearchInput = styled\.input`[\s\S]*?border-radius: 2px;/)
+    expect(cloudStyleSource).toMatch(/export const DocumentFallbackBox = styled\.div`[\s\S]*?a \{[\s\S]*?border-radius: 2px;/)
+    expect(cloudStyleSource).toMatch(/export const InlineList = styled\.div`[\s\S]*?span \{[\s\S]*?border-radius: 2px;/)
+    expect(cloudStyleSource).toMatch(/export const StatusPill = styled\.span`[\s\S]*?border-radius: 2px;/)
+    expectStyledComponentRadius(cloudStyleSource, "StorageMeter", "2px")
+    expectStyledComponentRadius(cloudStyleSource, "SkeletonRow", "2px")
+    expectStyledComponentRadius(cloudStyleSource, "Timeline", "2px")
+    expectStyledComponentRadius(cloudStyleSource, "ProgressTrack", "2px")
+    expect(cloudPageSource).toContain('<AppIcon name="file" />')
+    expect(cloudPageSource).toContain('<AppIcon name="folder" />')
+    expect(cloudPageSource).toContain('<AppIcon name="clock" />')
+    expect(cloudPageSource).toContain('<AppIcon name="package" />')
+    expect(cloudPageSource).toContain('<AppIcon name="lock" />')
+    expect(cloudPageSource).not.toContain('<span aria-hidden="true">T</span>')
+    expect(cloudPageSource).toContain("resolveCloudEmptyTitle")
+    expect(cloudModelSource).toContain('선택한 조건에 맞는 파일이 없습니다.')
+    expect(cloudModelSource).not.toContain("아직 올린 파일이 없습니다.")
+    expect(cloudPageSource).not.toContain("아직 올린 파일이 없습니다.")
+
+    expect(primitiveSource).toContain("adminPlainSurface(theme)")
+    expect(primitiveSource).not.toContain("linear-gradient")
+    expect(primitiveSource).toContain("background: ${({ theme }) => adminMutedSurface(theme)};")
+    expect(primitiveSource).not.toContain("box-shadow: 0 0 0 1px ${({ theme }) => adminCardBorder(theme)} inset;")
+    expect(primitiveSource).toContain("& + & {")
+    expect(primitiveSource).toContain("margin-top: 0.4rem;")
+    expect(hubStyleSource).not.toContain("transform: translateY")
+  })
+
+  test("관리자 프로필은 대표 제목과 내부 섹션 제목 텍스트를 중복하지 않는다", () => {
+    const profileSectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8",
+    )
+    const profileModelSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceModel.ts"),
+      "utf8",
+    )
+
+    expect(profileSectionSource).toContain("<h1>개인정보와 계정 설정</h1>")
+    expect(profileModelSource).toContain('label: "기본 정보"')
+    expect(profileModelSource).not.toContain('label: "프로필"')
+  })
+
+  test("관리자 클라우드 표면은 V4 작업공간 토큰과 아이콘 계약을 유지한다", () => {
+    const cloudStyleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspace.styles.ts"), "utf8")
+    const cloudPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminCloudWorkspacePage.tsx"), "utf8")
+
+    expect(cloudPageSource).toContain("<UploadZone")
+    expect(cloudPageSource).toContain("onDragOver={handleUploadDragOver}")
+    expect(cloudPageSource).toContain("onDrop={handleUploadDrop}")
+    expect(cloudPageSource).toContain("<span>Storage</span>")
+    expect(cloudPageSource).toContain("<h1>미디어 라이브러리</h1>")
+    expect(cloudPageSource).toContain("글 이미지, 첨부 파일과 업로드 lifecycle을 관리합니다.")
+    expect(cloudPageSource).toContain("사진 50MB · 문서 100MB · 동영상 5GB 이하")
+    expect(cloudPageSource).toContain('aria-label="파일을 끌어놓거나 클릭해 업로드"')
+    expect(cloudPageSource).not.toContain("<h1>내 파일</h1>")
+
+    expect(getStyledComponentBlock(cloudStyleSource, "CloudContent")).toContain("padding: 2rem 2.125rem 4.375rem;")
+    expect(getStyledComponentBlock(cloudStyleSource, "CloudTitleBar")).toContain("align-items: flex-end;")
+    expect(getStyledComponentBlock(cloudStyleSource, "UploadZone")).toContain("border: 1px dashed ${borderStrong};")
+    expect(getStyledComponentBlock(cloudStyleSource, "FileTable")).toContain('tbody tr[data-loading-row="true"]')
+    expect(getStyledComponentBlock(cloudStyleSource, "FileTable")).toContain(
+      "grid-template-columns: repeat(3, minmax(0, 1fr));",
+    )
+    expect(getStyledComponentBlock(cloudStyleSource, "FileTable")).toContain("display: grid;")
+    expect(getStyledComponentBlock(cloudStyleSource, "FileThumbnailFrame")).toContain("border-radius: 0;")
+  })
+
+  test("관리자 공통 프리미티브는 포커스 표시와 모바일 스냅 계약을 가진다", () => {
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"),
+      "utf8",
+    )
+
+    expect(source).toContain("export const adminInteractiveFocusRing = (theme: Theme) =>")
+    expect(source).toContain("scroll-snap-type: x proximity;")
+    expect(source).toContain("scroll-snap-align: start;")
+    expect(source).toContain("box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};")
+    expect(source).toContain("export const AdminWorkspaceSectionNavButton = styled.button`")
+    expect(source).toContain("export const AdminInfoLinkCard = styled.a<{ $withIcon?: boolean }>`")
+    expect(source).toContain('export const AdminStatusPill = styled.span<{ $size?: "sm" | "md" }>`')
+    expect(source).toContain("export const AdminTextActionButton = styled.button`")
+    expect(source).toContain("export const AdminTextActionLink = styled.a`")
+    expect(source).toContain("export const AdminActionCardButton = styled.button`")
+    expect(source).toContain("export const AdminInlineActionRow = styled.div`")
+    expect(source).toContain("background: ${({ theme }) => adminMutedSurface(theme)};")
+    expect(source).toContain("border-bottom: 0;")
+    const actionButtonBlock = source.match(/export const AdminActionCardButton = styled\.button`[\s\S]*?`\n/)?.[0] ?? ""
+    expect(actionButtonBlock).toContain("background: ${({ theme }) => adminRaisedSurface(theme)};")
+    expect(actionButtonBlock).toContain("background: ${({ theme }) => adminAccentSurface(theme)};")
+    expect(actionButtonBlock).not.toContain("background: transparent;")
+    expect(source).toContain("export const AdminWorkspaceHero = styled.section`")
+  })
+
+  test("대시보드는 V4 운영 화면의 metric, guard, log 구조를 먼저 노출한다", () => {
+    const workspaceSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspacePage.tsx"),
+      "utf8",
+    )
+    const viewSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspaceView.tsx"),
+      "utf8",
+    )
+    const layoutStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.layout.ts"),
+      "utf8",
+    )
+    const priorityStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.priority.ts"),
+      "utf8",
+    )
+
+    expect(workspaceSource).toContain('"/system/api/v1/adm/dashboard-snapshot"')
+    expect(workspaceSource).toContain("const chartBars: DashboardChartBar[]")
+    expect(workspaceSource).toContain("const logRows: DashboardLogRow[]")
+    expect(viewSource).toContain("<h2>Public read latency</h2>")
+    expect(viewSource).toContain("<h2>Steady-state guard</h2>")
+    expect(viewSource).toContain("<h2>Live logs</h2>")
+    expect(viewSource).toContain('<StatusRows data-ui="dashboard-guard-rows">')
+    expect(viewSource).not.toContain("<ContextGrid>")
+    expect(viewSource).not.toContain("<AdditionalPanelsSection>")
+    expect(viewSource).not.toContain("<PriorityTable>")
+    expect(layoutStyleSource).toContain("export const OpsGrid = styled.section`")
+    expect(layoutStyleSource).toContain("grid-template-columns: minmax(0, 1fr) 20rem;")
+    expect(layoutStyleSource).toContain("export const ChartBars = styled.div`")
+    expect(layoutStyleSource).toContain("export const LogLines = styled.div`")
+    expect(priorityStyleSource).toContain("export const PrioritySection = styled(AdminPlainCard)`")
+    expect(priorityStyleSource).toContain("export const PrioritySummary = styled.div`")
+    expect(`${layoutStyleSource}\n${priorityStyleSource}`).not.toContain("${AdminInfoPanelCard}")
+    expect(`${layoutStyleSource}\n${priorityStyleSource}`).not.toContain("${AdminInfoLinkCard}")
+  })
+
+  test("글 관리와 운영 도구는 공통 배지와 액션 프리미티브를 재사용한다", () => {
+    const postsListSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.tsx"), "utf8")
+    const postsListStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.styles.ts"),
+      "utf8",
+    )
+    const postsFilterSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceFilterToolbar.tsx"),
+      "utf8",
+    )
+    const postsSectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageSections.tsx"),
+      "utf8",
+    )
+    const toolsPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspacePage.tsx"), "utf8")
+    const toolsExecutionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsExecutionSection.tsx"),
+      "utf8",
+    )
+    const toolsTokenStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.tokens.ts"),
+      "utf8",
+    )
+    const toolsLayoutStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.layout.ts"),
+      "utf8",
+    )
+
+    expect(postsListStyleSource).toContain("export const VisibilityBadge = styled(AdminStatusPill)<{ \"data-tone\": string }>`")
+    expect(postsListSource).toContain("VisibilityBadge,")
+    expect(postsListSource).toContain('<th className="topicCell">Topic</th>')
+    expect(postsListSource).toContain('<th className="viewsCell">{isDeletedScope ? "Actions" : "Views"}</th>')
+    expect(postsListSource).toContain("RowActions,")
+    expect(postsListSource).not.toContain('<th className="actionCell">Actions</th>')
+    expect(postsFilterSource).toContain('aria-label="글 검색"')
+    expect(postsListSource).toContain("getWorkspaceTopicLabel(row)")
+    expectStyledComponentRadius(postsFilterSource, "ScopeTabButton", "2px")
+    expectStyledComponentRadius(postsFilterSource, "SearchField", "2px")
+    expect(postsSectionSource).toContain(
+      ".stateLabel {\n    display: inline-flex;\n    align-items: center;\n    min-height: 24px;\n    padding: 0 0.56rem;\n    border-radius: 2px;",
+    )
+
+    expect(toolsTokenStyleSource).toContain("export const StatusBadge = styled(AdminStatusPill)`")
+    expect(toolsTokenStyleSource).toContain("export const FreshnessBadge = styled(AdminStatusPill)`")
+    expect(toolsLayoutStyleSource).toContain("export const ActionRowButton = styled(AdminActionCardButton)``")
+    expect(toolsPageSource).toContain("const [isMutationExpanded, setIsMutationExpanded] = useState(false)")
+    expect(toolsPageSource).toContain('const [activeSection, setActiveSection] = useState<SectionKey>("diagnostics")')
+    expect(`${toolsPageSource}\n${toolsExecutionSource}`).not.toContain("<WorkspaceIntroCard>")
+    expect(toolsExecutionSource).toContain("<DetailsPanel open={isMutationExpanded}>")
+    expect(`${toolsPageSource}\n${toolsExecutionSource}`).not.toContain('<SectionNav aria-label="운영 섹션">')
+    expect(`${toolsTokenStyleSource}\n${toolsLayoutStyleSource}`).not.toContain("const SectionNav = styled(AdminWorkspaceSectionNav)`")
+    expect(`${toolsTokenStyleSource}\n${toolsLayoutStyleSource}`).not.toContain("const SectionNavButton = styled(AdminWorkspaceSectionNavButton)``")
+  })
+
+  test("큰 관리자 페이지는 스타일 정의를 오케스트레이션 페이지 밖으로 분리한다", () => {
+    const profileSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const profileSectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspaceSections.tsx"),
+      "utf8",
+    )
+    const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const dashboardSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const profileLayoutStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.layout.ts"),
+      "utf8",
+    )
+    const profileSectionStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.sections.ts"),
+      "utf8",
+    )
+    const profileLinkStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.links.ts"),
+      "utf8",
+    )
+    const toolsLayoutStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.layout.ts"),
+      "utf8",
+    )
+    const dashboardLayoutStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.layout.ts"),
+      "utf8",
+    )
+    const dashboardPriorityStyles = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.priority.ts"),
+      "utf8",
+    )
+
+    expect(profileSectionSource).toContain('from "src/routes/Admin/AdminProfileWorkspace.styles"')
+    expect(toolsSource).toContain('from "src/routes/Admin/AdminToolsWorkspace.styles"')
+    expect(dashboardSource).toContain('export { default } from "src/routes/Admin/AdminDashboardWorkspacePage"')
+
+    expect(profileSource).not.toContain("const PreviewRail = styled(")
+    expect(profileSource).not.toContain("const ModalOverlay = styled.div`")
+    expect(profileSource).not.toContain("const LinkRowCard = styled.div`")
+    expect(toolsSource).not.toContain("const ExecutionLayout = styled.div`")
+    expect(toolsSource).not.toContain("const ResultPanel = styled.pre`")
+    expect(toolsSource).not.toContain("const WorkspaceSection = styled.section`")
+    expect(dashboardSource).not.toContain("const PanelGrid = styled.section`")
+    expect(dashboardSource).not.toContain("const PriorityTable = styled.table`")
+    expect(dashboardSource).not.toContain("const ServiceRail = styled.section`")
+
+    expect(profileSectionStyles).toContain("export const PreviewRail = styled(AdminStickyRail)`")
+    expect(`${profileLayoutStyles}\n${profileLinkStyles}`).toContain("export const LinkRowCard = styled.div`")
+    expectStyledComponentRadius(profileSectionStyles, "PreviewToggleButton", "2px")
+    expectStyledComponentRadius(profileSectionStyles, "DockSecondaryButton", "2px")
+    expectStyledComponentRadius(profileSectionStyles, "DockPrimaryButton", "2px")
+    expectStyledComponentRadius(profileSectionStyles, "ModalCloseButton", "2px")
+    expectStyledComponentRadius(profileSectionStyles, "ModalHistoryAction", "2px")
+    expectStyledComponentRadius(profileLayoutStyles, "SectionStateBadge", "2px")
+    expectStyledComponentRadius(profileLayoutStyles, "SegmentedControl", "2px")
+    expectStyledComponentRadius(profileLayoutStyles, "SegmentButton", "2px")
+    expectStyledComponentRadius(profileLinkStyles, "DragHandleButton", "2px")
+    expect(toolsLayoutStyles).toContain("export const ExecutionLayout = styled.div`")
+    expect(toolsLayoutStyles).toContain("export const ResultPanel = styled.pre`")
+    expect(dashboardLayoutStyles).toContain("export const OpsGrid = styled.section`")
+    expect(dashboardLayoutStyles).toContain("export const ChartBars = styled.div`")
+    expect(dashboardLayoutStyles).toContain("export const LogLines = styled.div`")
+    expect(dashboardPriorityStyles).toContain("export const PrioritySection = styled(AdminPlainCard)`")
+
+    expect(profileSource.split("\n").length).toBeLessThan(2600)
+    expect(toolsSource.split("\n").length).toBeLessThan(2100)
+    expect(dashboardSource.split("\n").length).toBeLessThan(1050)
+  })
+
+  test("글 관리 작업공간은 반복 UI 영역을 페이지에서 분리한다", () => {
+    const postsSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageView.tsx"), "utf8")
+    const controllerSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
+    const filterSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceFilterToolbar.tsx"),
+      "utf8",
+    )
+    const listSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceList.tsx"),
+      "utf8",
+    )
+    const feedbackSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceFeedbackLayer.tsx"),
+      "utf8",
+    )
+
+    expect(postsSource).not.toContain('import { AdminPostsWorkspaceRecentWork } from "./AdminPostsWorkspaceRecentWork"')
+    expect(postsSource).toContain('import { AdminPostsWorkspaceFilterToolbar } from "./AdminPostsWorkspaceFilterToolbar"')
+    expect(postsSource).toContain('import { AdminPostsWorkspaceList } from "./AdminPostsWorkspaceList"')
+    expect(postsSource).toContain('import { AdminPostsWorkspaceFeedbackLayer } from "./AdminPostsWorkspaceFeedbackLayer"')
+    expect(postsSource).not.toContain("<AdminPostsWorkspaceRecentWork")
+    expect(postsSource).toContain("<AdminPostsWorkspaceFilterToolbar")
+    expect(postsSource).toContain("<AdminPostsWorkspaceList")
+    expect(postsSource).toContain("<AdminPostsWorkspaceFeedbackLayer")
+    expect(controllerSource).not.toContain("const renderRecentEdited = () =>")
+    expect(postsSource).not.toContain("const RecentPostList = styled.ul`")
+    expect(postsSource).not.toContain("const DesktopListTable = styled.table`")
+    expect(postsSource).not.toContain("const ToastViewport = styled.div`")
+    expect(controllerSource.length).toBeLessThan(76000)
+
+    expect(filterSource).toContain("export const AdminPostsWorkspaceFilterToolbar")
+    expect(listSource).toContain("export const AdminPostsWorkspaceList")
+    expect(feedbackSource).toContain("export const AdminPostsWorkspaceFeedbackLayer")
+  })
+
+  test("나머지 관리자 페이지는 과도한 카드 반경을 쓰지 않는다", () => {
+    const dashboardSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
+    const profileSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/profile.tsx"), "utf8")
+    const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const dashboardStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminDashboardWorkspace.styles.ts"),
+      "utf8",
+    )
+    const profileStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.ts"),
+      "utf8",
+    )
+    const toolsStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.ts"),
+      "utf8",
+    )
+
+    for (const source of [dashboardSource, profileSource, toolsSource, dashboardStyleSource, profileStyleSource, toolsStyleSource]) {
+      expect(source).not.toContain("border-radius: 28px;")
+      expect(source).not.toContain("border-radius: 30px;")
+      expect(source).not.toContain("border-radius: 32px;")
+    }
+  })
+
+  test("운영 도구 작업공간은 상세형 대표 문구와 작업 레일 라벨을 사용한다", () => {
+    const toolsPageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspacePage.tsx"), "utf8")
+    const toolsSectionsSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceSections.tsx"),
+      "utf8",
+    )
+    const toolsOverviewSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsOpsOverview.tsx"),
+      "utf8",
+    )
+    const toolsDiagnosticsSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsDiagnosticsSection.tsx"),
+      "utf8",
+    )
+    const toolsExecutionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsExecutionSection.tsx"),
+      "utf8",
+    )
+    const toolsExecutionRailSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsExecutionRail.tsx"),
+      "utf8",
+    )
+    const toolsResultsSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsResultsPanel.tsx"),
+      "utf8",
+    )
+    const toolsTokenStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.tokens.ts"),
+      "utf8",
+    )
+    const toolsLayoutStyleSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspace.styles.layout.ts"),
+      "utf8",
+    )
+
+    const toolsSurfaceSource = `${toolsPageSource}\n${toolsSectionsSource}\n${toolsOverviewSource}\n${toolsDiagnosticsSource}\n${toolsExecutionSource}`
+
+    expect(toolsSectionsSource).toContain("<AdminToolsOpsOverview")
+    expect(toolsOverviewSource).toContain("<h1>운영 상태와 복구</h1>")
+    expect(toolsOverviewSource).toContain("<h2>Public read latency</h2>")
+    expect(toolsOverviewSource).toContain("<h2>Steady-state guard</h2>")
+    expect(toolsOverviewSource).toContain("<h2>Live logs</h2>")
+    expect(toolsOverviewSource).toContain('data-ui="tools-guard-rows"')
+    expect(toolsTokenStyleSource).toContain("grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));")
+    expect(toolsDiagnosticsSource).toContain("<h2>메일과 큐</h2>")
+    expect(toolsExecutionSource).toContain("<h2>정리와 보안</h2>")
+    expect(toolsResultsSource).toContain("<h2>최근 진단 결과</h2>")
+    expect(toolsSurfaceSource).not.toContain("<h2>진단</h2>")
+    expect(toolsSurfaceSource).not.toContain("<h2>실행</h2>")
+    expect(toolsSurfaceSource).not.toContain("<h2>최근 실행 결과</h2>")
+    expect(toolsSurfaceSource).not.toContain("<h2>실데이터 테스트</h2>")
+    expect(`${toolsTokenStyleSource}\n${toolsLayoutStyleSource}`).toContain("AdminStickyRail,")
+    expect(toolsLayoutStyleSource).toContain("export const ExecutionLayout = styled.div`")
+    expect(toolsLayoutStyleSource).toContain("export const ExecutionRail = styled(AdminStickyRail)`")
+    expect(toolsExecutionRailSource).toContain("<h3>실행 전 체크</h3>")
+    expect(toolsExecutionRailSource).toContain("<h3>위험 액션</h3>")
+    expect(toolsExecutionRailSource).toContain("<h3>런북/장애 문서</h3>")
+    expect(toolsSurfaceSource).not.toContain("메일, 작업 큐, 정리 상태, 보안 이벤트처럼 장애와 직접 연결되는 항목만 우선 다룹니다.")
+    expect(toolsSurfaceSource).not.toContain("운영 변경 없이 현재 상태와 영향 범위를 먼저 다시 확인합니다.")
+    expect(toolsSurfaceSource).not.toContain("<ExecutionGrid>")
+    expect(toolsSurfaceSource).not.toContain("requestIdleCallback")
+    expect(toolsSurfaceSource).not.toContain("isWorkspaceReady")
+    expect(toolsLayoutStyleSource).toContain("&:focus-visible {")
+    expect(toolsLayoutStyleSource).toContain("box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};")
+  })
+
+  test("관리자 상단 바는 현재 화면 맥락과 태블릿 축약 내비게이션만 유지한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
+
+    expect(source).toContain("<CurrentViewChip aria-label=\"현재 화면\">")
+    expect(source).toContain("@media (max-width: 1100px) {")
+    expect(source).toContain("<CompactNav aria-label=\"관리자 바로가기\">")
+    expect(source).not.toContain("프로필 설정")
+    expect(source).not.toContain("운영 도구 바로가기")
+    expect(source).not.toContain("ProfileImage")
+    expect(source).not.toContain('<AppIcon name="camera" />')
+    expectStyledComponentRadius(source, "SearchField", "2px")
+    expectStyledComponentRadius(source, "SearchInput", "2px")
+    expectStyledComponentRadius(source, "CurrentViewChip", "2px")
+  })
+
+  test("관리자 사이드바는 V4 reference rail 순서와 하단 프로필을 유지한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+
+    expect(source).toContain('import ProfileImage from "src/components/ProfileImage"')
+    expect(source).toContain('import BrandLogoMark from "src/components/branding/BrandMark"')
+    expect(source).toContain("profileSnapshot?: AdminShellProfileSnapshot | null")
+    expect(source).toContain('const sidebarIdentityName = (member.nickname || member.username || "관리자").trim()')
+    expect(source).toContain('const brandTitle = (profileSnapshot?.blogTitle || member.blogTitle || CONFIG.blog.title || "AquilaLog").trim()')
+    expect(source).toContain("member.profileImageDirectUrl ||")
+    expect(source.indexOf("member.profileImageDirectUrl ||")).toBeLessThan(
+      source.indexOf("profileSnapshot?.profileImageDirectUrl ||")
+    )
+    expect(source).not.toContain('import { useAdminProfile } from "src/hooks/useAdminProfile"')
+    expect(source).toContain('label: "허브"')
+    expect(source).toContain('label: "운영 대시보드"')
+    expect(source).toContain('label: "글 관리"')
+    expect(source).toContain('label: "새 글 작성"')
+    expect(source).toContain('label: "클라우드"')
+    expect(source).toContain('label: "운영 도구"')
+    expect(source).toContain('label: "설정"')
+    expect(source).toContain("<SidebarProfile>")
+    expect(source).toContain("<SidebarProfileIdentity>")
+    expect(source).toContain("const SidebarLogoutAction = styled.button`")
+    expect(source).toContain('<SidebarLogoutAction type="button" aria-label="Logout" onClick={() => void handleLogout()}>')
+    expect(source).toContain("const ResponsiveLogoutAction = styled.button`")
+    expect(source).toMatch(/const ResponsiveLogoutAction = styled\.button`[\s\S]*?@media \(max-width: 1100px\) \{[\s\S]*?display: inline-flex;/)
+    expect(source).not.toContain("<SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>")
+    expect(source.indexOf("<BrandBlock>")).toBeLessThan(source.indexOf("<SidebarNavSection>"))
+    expect(source.indexOf("<SidebarNavSection>")).toBeLessThan(source.indexOf("<SidebarProfile>"))
+    expect(getStyledComponentBlock(source, "BrandMark")).not.toContain("border: 1px solid")
+    expect(source).not.toContain('<SidebarStatusCard aria-label="현재 화면">')
+    expect(source).not.toContain("SidebarCardTitle")
+  })
+
+  test("관리자 MYBOX 색상 토큰은 brown gold 계열 대신 neutral blue accent를 사용한다", () => {
+    const tokenSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/adminColorTokens.ts"), "utf8")
+    const shellSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
+
+    expect(tokenSource).not.toContain("#b9954f")
+    expect(tokenSource).not.toContain("#9d7d3f")
+    expect(tokenSource).not.toContain("#6f5524")
+    expect(tokenSource).not.toContain("#f7f1e3")
+    expect(tokenSource).not.toContain("#2d291a")
+    // 패밀리룩 토큰 통합(#1218): 자체 블루 하드코딩 대신 공용 accent 토큰에서 파생.
+    expect(tokenSource).toContain("--admin-primary: ${d.accent};")
+    expect(tokenSource).toContain("--admin-primary-hover: ${d.accentHover};")
+    expect(tokenSource).toContain("--admin-accent-text: ${d.accent};")
+    expect(tokenSource).not.toContain("#0969da")
+    expect(tokenSource).not.toContain("#7ab6ff")
+    // 공용 accent 블루의 대비 요건(포인트 컬러는 절제된 블루 1종).
+    expect(getContrastRatio("#0969da", "#eef6ff")).toBeGreaterThanOrEqual(4.5)
+    expect(getContrastRatio("#ffffff", "#0969da")).toBeGreaterThanOrEqual(4.5)
+    expect(getContrastRatio("#7ab6ff", "#181818")).toBeGreaterThanOrEqual(3)
+    expect(getContrastRatio("#101214", "#7ab6ff")).toBeGreaterThanOrEqual(4.5)
+    expect(shellSource).toContain("adminAccentText")
+    expect(shellSource).not.toContain("adminGold")
+  })
+
+  test("관리자 허브는 V4 콘텐츠/서비스/활동 패널을 둔다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.tsx"), "utf8")
+    const sectionSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.sections.tsx"), "utf8")
+    const styleSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminHubSurface.styles.ts"), "utf8")
+
+    expect(sectionSource).toContain('aria-label="관리자 핵심 지표"')
+    expect(sectionSource).toContain('aria-label="최근 콘텐츠"')
+    expect(sectionSource).toContain('aria-label="서비스 상태"')
+    expect(sectionSource).toContain('aria-label="최근 활동"')
+    expect(styleSource).toContain("export const MetricCard = styled.div`")
+    expect(styleSource).toContain("export const Panel = styled.section`")
+    expect(styleSource).toContain("export const ContentRow = styled.a`")
+    expect(styleSource).toContain("export const StatusRow = styled.div`")
+    expect(sectionSource).not.toContain("<h2>체크</h2>")
+    expect(sectionSource).not.toContain("<h2>바로가기</h2>")
+    expect(sectionSource).not.toContain("<h2>상태</h2>")
+    expect(sectionSource).not.toContain("최근에 확인한 상태와 이어서 처리할 작업을 함께 봅니다.")
+    expect(`${source}\n${sectionSource}\n${styleSource}`).not.toContain("StatusDot")
+    expect(styleSource).not.toContain("border-radius: 24px;")
+  })
+
+  test("공통 관리자 랜딩 프리미티브는 전용 리드 문장 스타일을 제공한다", () => {
+    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminSurfacePrimitives.tsx"), "utf8")
+
+    expect(source).toContain("export const AdminLandingSectionLead = styled.p`")
+    expect(source).toContain("font-size: 0.86rem;")
+    expect(source).toContain("line-height: 1.58;")
+    expect(source).toContain("color: ${({ theme }) => adminMutedText(theme)};")
+  })
+})

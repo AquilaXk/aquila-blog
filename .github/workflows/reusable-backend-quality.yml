@@ -1,0 +1,397 @@
+name: Reusable Backend Quality
+
+on:
+  workflow_call:
+    secrets:
+      CI_DB_PASSWORD:
+        required: true
+      CI_REDIS_PASSWORD:
+        required: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    env:
+      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
+    steps:
+      - name: Checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF}"
+          git checkout --force FETCH_HEAD
+
+      - name: Detect backend-related changes
+        id: changes
+        env:
+          GITHUB_READ_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            api_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100"
+            changed_files="${RUNNER_TEMP}/changed-files.txt"
+            : > "${changed_files}"
+
+            while [ -n "${api_url}" ]; do
+              response_headers="${RUNNER_TEMP}/github-response-headers.txt"
+              response_body="${RUNNER_TEMP}/github-response-body.json"
+              curl_args=(
+                -fsSL
+                -D "${response_headers}"
+                -H "Accept: application/vnd.github+json"
+                -H "X-GitHub-Api-Version: 2022-11-28"
+              )
+              if [ -n "${GITHUB_READ_TOKEN:-}" ] && curl "${curl_args[@]}" -H "Authorization: Bearer ${GITHUB_READ_TOKEN}" "${api_url}" > "${response_body}"; then
+                :
+              else
+                if [ -n "${GITHUB_READ_TOKEN:-}" ]; then
+                  echo "::warning title=GitHub API token fallback::Authenticated PR files API failed; retrying without token."
+                fi
+                curl "${curl_args[@]}" "${api_url}" > "${response_body}"
+              fi
+              jq -r '.[] | .filename, (.previous_filename // empty)' "${response_body}" >> "${changed_files}"
+              api_url="$(
+                awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
+              )"
+            done
+          else
+            echo "backend=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          backend=false
+          while IFS= read -r file; do
+            case "${file}" in
+              back/*|deploy/homeserver/*|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/check-r-migration-no-ddl.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|tools/test/check-r-migration-no-ddl.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml)
+                backend=true
+                break
+                ;;
+            esac
+          done < "${RUNNER_TEMP}/changed-files.txt"
+
+          echo "backend=${backend}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check Flyway deploy safety
+        if: github.event_name == 'pull_request'
+        id: flyway_safety
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          report="${RUNNER_TEMP}/flyway-deploy-safety.json"
+          set +e
+          node tools/ci/check-flyway-deploy-safety.mjs \
+            --json \
+            --changed-files "${RUNNER_TEMP}/changed-files.txt" \
+            --output "${report}" \
+            > "${RUNNER_TEMP}/flyway-deploy-safety.stdout"
+          status=$?
+          set -e
+
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          node - "${report}" <<'NODE'
+          const fs = require("node:fs")
+          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              "## Flyway deploy safety",
+              `- checked files: ${report.checkedFiles.length}`,
+              `- blocked: ${report.blocked}`,
+              `- findings: ${report.findings.length}`,
+              "",
+            ].join("\n"),
+          )
+          NODE
+
+      - name: Classify release risk
+        if: github.event_name == 'pull_request'
+        id: release_policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          report="${RUNNER_TEMP}/release-plan.json"
+          node tools/ci/classify-release.mjs \
+            --json \
+            --changed-files "${RUNNER_TEMP}/changed-files.txt" \
+            --migration-safety-json "${RUNNER_TEMP}/flyway-deploy-safety.json" \
+            --github-output "$GITHUB_OUTPUT" \
+            > "${report}"
+          node - "${report}" <<'NODE'
+          const fs = require("node:fs")
+          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              "## Release policy",
+              `- change scope: ${report.changeScope}`,
+              `- risk profile: ${report.riskProfile}`,
+              `- deploy backend: ${report.deployBackend}`,
+              `- verify frontend: ${report.verifyFrontend}`,
+              `- reasons: ${report.reasons.join(", ") || "none"}`,
+              "",
+            ].join("\n"),
+          )
+          NODE
+
+      - name: Enforce blocked release policy
+        if: github.event_name == 'pull_request' && steps.release_policy.outputs.release_risk_profile == 'blocked'
+        run: |
+          echo "Release policy blocked this change. Destructive migrations must be redesigned as expand-only changes." >&2
+          exit 1
+
+      - name: Test release planner guards
+        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs tools/test/comment-jacoco-summary.test.mjs tools/test/demo-seed-prod-gate.test.mjs
+
+      - name: Guard forbidden AI docs and tool metadata
+        run: bash tools/guards/check-forbidden-tracked-files.sh
+
+      - name: Test forbidden tracked file guard
+        run: bash tools/test/check-forbidden-tracked-files.test.sh
+
+      - name: Guard Terraform world-open security groups
+        run: bash tools/guards/check-terraform-no-world-open-sg.sh
+
+      - name: Guard public API Caddy route drift
+        run: bash tools/guards/check-public-api-caddy-drift.sh
+
+      - name: Dependency review
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_READ_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          report="${RUNNER_TEMP}/dependency-review.json"
+          dependency_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}"
+          curl_args=(
+            -fsSL
+            -H "Accept: application/vnd.github+json"
+            -H "X-GitHub-Api-Version: 2022-11-28"
+            -H "Authorization: Bearer ${GITHUB_READ_TOKEN}"
+          )
+          if ! curl "${curl_args[@]}" "${dependency_url}" > "${report}"; then
+            echo "::error title=Dependency review blocked::Dependency Graph compare API failed. Enable Dependency Graph for this repository (#1124)."
+            exit 1
+          fi
+
+          python3 - "${report}" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              dependencies = json.load(handle)
+
+          if not isinstance(dependencies, list):
+              print("Dependency review response is not a list; Dependency Graph may be disabled.", file=sys.stderr)
+              sys.exit(1)
+
+          vulnerable = [
+              item
+              for item in dependencies
+              if item.get("change_type") in {"added", "changed"} and item.get("vulnerabilities")
+          ]
+
+          if vulnerable:
+              for item in vulnerable:
+                  name = item.get("name", "unknown")
+                  version = item.get("version", "unknown")
+                  vulns = ", ".join(
+                      vulnerability.get("advisory_ghsa_id", "unknown")
+                      for vulnerability in item.get("vulnerabilities", [])
+                  )
+                  print(f"vulnerable dependency: {name}@{version} ({vulns})")
+              sys.exit(1)
+
+          print("Dependency review passed: no vulnerable added or changed dependencies.")
+          PY
+
+      - name: Skip backend-heavy checks
+        if: steps.changes.outputs.backend != 'true'
+        run: |
+          echo "No backend-related changes detected."
+          {
+            echo "## Backend CI"
+            echo "- backend-heavy checks skipped"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up JDK 25
+        if: steps.changes.outputs.backend == 'true'
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Validate Flyway migration naming
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(back/src/main/resources/db/migration/*.sql)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No migration files found."
+            exit 1
+          fi
+
+          invalid=0
+          for file in "${files[@]}"; do
+            base="$(basename "$file")"
+            if [[ "$base" =~ ^V[0-9]{8}_[0-9]{2}__[a-z0-9_]+\.sql$ ]] || [[ "$base" =~ ^R__[a-z0-9_]+\.sql$ ]]; then
+              continue
+            fi
+            echo "Invalid migration file name: $base"
+            invalid=1
+          done
+
+          if [ $invalid -ne 0 ]; then
+            echo "Migration naming rule violation detected."
+            exit 1
+          fi
+
+      - name: Guard repeatable migration DDL drift
+        run: bash tools/guards/check-r-migration-no-ddl.sh
+
+      - name: Test repeatable migration DDL guard
+        run: bash tools/test/check-r-migration-no-ddl.test.sh
+
+      - name: Run backend PR fast check
+        if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request'
+        working-directory: back
+        run: ./gradlew ciFastCheck --rerun-tasks
+
+      # main/push(release trunk)는 Testcontainers를 포함한 full check를 required로 실행한다.
+      # PR는 속도용 ciFastCheck만 유지하며, merge 완료 판정은 main gate가 담당한다.
+      - name: Run backend full check
+        if: steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
+        working-directory: back
+        run: ./gradlew check --rerun-tasks
+
+      - name: Set up Node.js for contract drift check
+        if: steps.changes.outputs.backend == 'true'
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: front/yarn.lock
+
+      - name: Install frontend dependencies for contract drift check
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Verify backend OpenAPI contract drift
+        if: steps.changes.outputs.backend == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp back/build/openapi/openapi.json front/contracts/openapi/openapi.json
+          (cd front && yarn contracts:check)
+
+      - name: Comment Jacoco coverage summary
+        if: always() && github.event_name == 'pull_request' && steps.changes.outputs.backend == 'true' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('back/build/reports/jacoco/pr/jacocoPrReport.xml') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_READ_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          summary_file="${RUNNER_TEMP}/jacoco-summary.md"
+          comments_file="${RUNNER_TEMP}/pr-comments.json"
+          changed_files="${RUNNER_TEMP}/changed-files.txt"
+
+          api_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100"
+          : > "${changed_files}"
+          while [ -n "${api_url}" ]; do
+            response_headers="${RUNNER_TEMP}/jacoco-github-response-headers.txt"
+            response_body="${RUNNER_TEMP}/jacoco-github-response-body.json"
+            curl_args=(
+              -fsSL
+              -D "${response_headers}"
+              -H "Accept: application/vnd.github+json"
+              -H "X-GitHub-Api-Version: 2022-11-28"
+            )
+            if [ -n "${GITHUB_READ_TOKEN:-}" ] && curl "${curl_args[@]}" -H "Authorization: Bearer ${GITHUB_READ_TOKEN}" "${api_url}" > "${response_body}"; then
+              :
+            else
+              if [ -n "${GITHUB_READ_TOKEN:-}" ]; then
+                echo "::warning title=GitHub API token fallback::Authenticated PR files API failed; retrying without token."
+              fi
+              curl "${curl_args[@]}" "${api_url}" > "${response_body}"
+            fi
+            jq -r '.[].filename' "${response_body}" >> "${changed_files}"
+            api_url="$(
+              awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
+            )"
+          done
+
+          python3 tools/ci/comment-jacoco-summary.py \
+            back/build/reports/jacoco/pr/jacocoPrReport.xml \
+            back/config/jacoco-coverage-baseline-excludes.txt \
+            --changed-files "${changed_files}" \
+            --full-report back/build/reports/jacoco/pr-full/jacocoPrFullCoverageReport.xml \
+            > "${summary_file}"
+
+          body="$(cat "${summary_file}")"
+          if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate > "${comments_file}"; then
+            comment_id="$(
+              python3 -c 'import json, sys; marker = "<!-- aquila-blog:jacoco-coverage-summary -->"; comments = json.load(open(sys.argv[1], encoding="utf-8")); print(next((item["id"] for item in comments if marker in item.get("body", "")), ""))' "${comments_file}"
+            )"
+
+            if [[ -n "${comment_id}" ]]; then
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --field body="${body}" \
+                || echo "::warning title=Jacoco comment skipped::GitHub comment update failed; summary is available in the step summary."
+            else
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --field body="${body}" \
+                || echo "::warning title=Jacoco comment skipped::GitHub comment creation failed; summary is available in the step summary."
+            fi
+          else
+            echo "::warning title=Jacoco comment skipped::GitHub comment lookup failed; summary is available in the step summary."
+          fi
+
+          cat "${summary_file}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Jacoco PR report
+        if: always() && steps.changes.outputs.backend == 'true' && hashFiles('back/build/reports/jacoco/pr/jacocoPrReport.xml') != ''
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: jacoco-pr-report
+          path: |
+            back/build/reports/jacoco/pr/jacocoPrReport.xml
+            back/build/reports/jacoco/pr/html
+            back/build/reports/jacoco/pr-full/jacocoPrFullCoverageReport.xml
+            back/build/reports/jacoco/pr-full/html
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload backend reports on failure
+        if: failure() && steps.changes.outputs.backend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: backend-ci-reports
+          path: |
+            back/build/reports/tests/test
+            back/build/test-results/test
+            back/build/reports/ktlint
+            back/build/reports/jacoco/pr
+            back/build/reports/jacoco/pr-full
+          retention-days: 3

@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "${REPO_ROOT}"
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+if [[ -z "${staged_files}" ]]; then
+  exit 0
+fi
+
+bash tools/guards/check-forbidden-tracked-files.sh --staged
+bash tools/guards/check-current-task-state.sh
+bash tools/guards/check-current-task-scope.sh --staged
+
+needs_contract_check="false"
+needs_openapi_snapshot_check="false"
+needs_detail_render_guard="false"
+while IFS= read -r file; do
+  case "${file}" in
+    back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*)
+      needs_contract_check="true"
+      needs_openapi_snapshot_check="true"
+      ;;
+    front/contracts/openapi/openapi.json|front/packages/shared-contracts/src/generated/backend-openapi.d.ts)
+      needs_contract_check="true"
+      ;;
+    .github/workflows/ci.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/reusable-frontend-verify.yml)
+      needs_contract_check="true"
+      ;;
+    front/src/pages/posts/\[id\].tsx|front/src/routes/Detail/*|front/src/libs/markdown/*|front/src/libs/postSummary.ts|front/src/libs/server/postDetailPage.ts)
+      needs_detail_render_guard="true"
+      ;;
+  esac
+done <<< "${staged_files}"
+
+if [[ "${needs_contract_check}" != "true" && "${needs_detail_render_guard}" != "true" ]]; then
+  exit 0
+fi
+
+if [[ "${needs_openapi_snapshot_check}" == "true" ]]; then
+  if [[ ! -x "back/gradlew" ]]; then
+    echo "[pre-commit] back/gradlew 실행 파일을 찾지 못해 OpenAPI 산출물 동기화 검사를 실행할 수 없습니다." >&2
+    exit 1
+  fi
+
+  echo "[pre-commit] OpenAPI 산출물 내보내기 실행: OpenApiContractExportTest"
+  back/gradlew -p back test --tests "com.back.global.springDoc.OpenApiContractExportTest" --no-daemon
+
+  backend_openapi="back/build/openapi/openapi.json"
+  frontend_openapi="front/contracts/openapi/openapi.json"
+  snapshot_diff_report="front/test-results/contracts-openapi/openapi-snapshot.diff"
+
+  if [[ ! -f "${backend_openapi}" ]]; then
+    echo "[pre-commit] 백엔드 OpenAPI 산출물을 찾지 못했습니다: ${backend_openapi}" >&2
+    exit 1
+  fi
+
+  if ! cmp -s "${backend_openapi}" "${frontend_openapi}"; then
+    mkdir -p "$(dirname "${snapshot_diff_report}")"
+    diff -u "${frontend_openapi}" "${backend_openapi}" > "${snapshot_diff_report}" || true
+    echo "[pre-commit] OpenAPI snapshot 드리프트를 감지했습니다." >&2
+    echo "[pre-commit] diff report: ${snapshot_diff_report}" >&2
+    echo "[pre-commit] fix: cp back/build/openapi/openapi.json front/contracts/openapi/openapi.json && yarn --cwd front contracts:generate" >&2
+    exit 1
+  fi
+fi
+
+if ! command -v yarn >/dev/null 2>&1; then
+  echo "[pre-commit] yarn 명령을 찾지 못해 필요한 프런트엔드 검사를 실행할 수 없습니다." >&2
+  exit 1
+fi
+
+if [[ "${needs_contract_check}" == "true" ]]; then
+  echo "[pre-commit] OpenAPI 계약 드리프트 검사 실행: yarn contracts:check"
+  (
+    cd front
+    yarn contracts:check
+  )
+fi
+
+if [[ "${needs_detail_render_guard}" == "true" ]]; then
+  echo "[pre-commit] 상세 렌더 회귀 가드 실행: yarn build"
+  (
+    cd front
+    yarn build
+  )
+
+  echo "[pre-commit] 상세 렌더 회귀 가드 실행: node scripts/check-bundle-size.mjs"
+  (
+    cd front
+    node scripts/check-bundle-size.mjs
+  )
+
+  echo "[pre-commit] 상세 렌더 회귀 가드 실행: yarn test:e2e:smoke"
+  (
+    cd front
+    yarn test:e2e:smoke
+  )
+fi

@@ -1,0 +1,50 @@
+spring:
+  config:
+    import: optional:file:.env.test[.properties]
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    locations: classpath:db/migration-test
+  data:
+    redis:
+      password: ${SPRING__DATA__REDIS__PASSWORD:}
+  datasource:
+    password: ${SPRING__DATASOURCE__PASSWORD:}
+  sql:
+    init:
+      mode: never
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: com.back.global.jpa.config.CustomTestPostgreSQLDialect
+        jdbc:
+          batch_size: 0
+          order_inserts: false
+custom:
+  bootstrap:
+    seed-demo-data-enabled: true
+  member:
+    signup:
+      enabled: true
+      legacyDirectJoinEnabled: true
+  admin:
+    username: admin
+    email: admin@test.com
+  task:
+    processor:
+      inlineWhenNotProd: true
+  jwt:
+    secretKey: "${CUSTOM__JWT__SECRET_KEY:abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789}"
+  site:
+    cookieDomain: "${custom.test.cookieDomain}"
+    frontUrl: "${custom.test.frontUrl}"
+    backUrl: "${custom.test.backUrl}"
+    dbHost: "${custom.test.dbHost}"
+    dbPort: "${custom.test.dbPort}"
+    dbName: "${custom.test.dbName}"
+    redisHost: "${custom.test.redisHost}"
+    redisPort: "${custom.test.redisPort}"
+    redisDatabase: "${custom.test.redisDatabase}"

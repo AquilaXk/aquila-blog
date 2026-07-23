@@ -1,0 +1,104 @@
+package com.back.boundedContexts.member.application.service
+
+import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
+import com.back.global.rsData.RsData
+import com.back.standard.dto.member.type1.MemberSearchSortType1
+import com.back.standard.dto.page.PagedResult
+import org.springframework.stereotype.Service
+import java.util.Optional
+
+@Service
+class MemberUseCaseAdapter(
+    private val memberApplicationService: MemberApplicationService,
+) : MemberUseCase {
+    override fun count(): Long = memberApplicationService.count()
+
+    override fun join(
+        username: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+        email: String?,
+    ): Member = memberApplicationService.join(username, password, nickname, profileImgUrl, email)
+
+    override fun joinWithVerifiedEmail(
+        email: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+    ): Member = memberApplicationService.joinWithVerifiedEmail(email, password, nickname, profileImgUrl)
+
+    override fun findByLoginId(loginId: String): Member? = memberApplicationService.findByLoginId(loginId)
+
+    override fun findByEmail(email: String): Member? = memberApplicationService.findByEmail(email)
+
+    override fun findById(id: Long): Optional<Member> = memberApplicationService.findById(id)
+
+    override fun checkPassword(
+        member: Member,
+        rawPassword: String,
+    ) = memberApplicationService.checkPassword(member, rawPassword)
+
+    override fun modify(
+        member: Member,
+        nickname: String,
+        profileImgUrl: String?,
+    ) = memberApplicationService.modify(member, nickname, profileImgUrl)
+
+    override fun modifyProfileCard(
+        member: Member,
+        role: String,
+        bio: String,
+        aboutRole: String?,
+        aboutBio: String?,
+        aboutDetails: String?,
+        blogTitle: String,
+        homeIntroTitle: String,
+        homeIntroDescription: String,
+        blogDesign: String,
+        legacyBlogScheme: String,
+        serviceLinks: List<MemberProfileLinkItem>,
+        contactLinks: List<MemberProfileLinkItem>,
+    ) = memberApplicationService.modifyProfileCard(
+        member = member,
+        command =
+            UpdateProfileCardCommand(
+                role = role,
+                bio = bio,
+                aboutRole = aboutRole,
+                aboutBio = aboutBio,
+                aboutDetails = aboutDetails,
+                blogTitle = blogTitle,
+                homeIntroTitle = homeIntroTitle,
+                homeIntroDescription = homeIntroDescription,
+                blogDesign = blogDesign,
+                legacyBlogScheme = legacyBlogScheme,
+                serviceLinks = serviceLinks,
+                contactLinks = contactLinks,
+            ),
+    )
+
+    override fun saveProfileWorkspaceDraft(
+        member: Member,
+        content: MemberProfileWorkspaceContent,
+    ) = memberApplicationService.saveProfileWorkspaceDraft(member, content)
+
+    override fun publishProfileWorkspace(member: Member) = memberApplicationService.publishProfileWorkspace(member)
+
+    override fun modifyOrJoin(
+        username: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+    ): RsData<Member> = memberApplicationService.modifyOrJoin(username, password, nickname, profileImgUrl)
+
+    override fun findPagedByKw(
+        kw: String,
+        sort: MemberSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<Member> = memberApplicationService.findPagedByKw(kw, sort, page, pageSize)
+}

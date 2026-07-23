@@ -1,0 +1,55 @@
+import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useRouter } from "next/router"
+import { getPostDetailByIdWithMeta } from "src/apis/backend/posts/PostApiDetailRequests"
+import { queryKey } from "src/constants/queryKey"
+import { PostDetail } from "src/types"
+import type { ApiFetchMeta } from "src/apis/backend/client"
+
+const extractCanonicalPostIdFromAsPath = (asPath: string): string => {
+  const pathname = asPath.split(/[?#]/, 1)[0] || ""
+  const canonicalMatch = pathname.match(/^\/posts\/(\d+)(?:\/)?$/)
+  return canonicalMatch ? canonicalMatch[1] : ""
+}
+
+const usePostQuery = () => {
+  const router = useRouter()
+  const routeId =
+    typeof router.query.id === "string"
+      ? router.query.id
+      : extractCanonicalPostIdFromAsPath(router.asPath || "")
+  const hasRouteId = routeId.length > 0
+  const [staleMetaByRouteId, setStaleMetaByRouteId] = useState(
+    () => new Map<string, ApiFetchMeta | null>(),
+  )
+
+  const query = useQuery<PostDetail | null>({
+    queryKey: queryKey.post(routeId),
+    queryFn: async () => {
+      const requestedRouteId = routeId
+      const result = await getPostDetailByIdWithMeta(requestedRouteId)
+      setStaleMetaByRouteId((prev) => {
+        const next = new Map(prev)
+        next.set(requestedRouteId, result.meta)
+        return next
+      })
+      return result.data
+    },
+    enabled: hasRouteId,
+    retry: 1,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  })
+
+  return {
+    post: query.data ?? undefined,
+    staleMeta: hasRouteId ? (staleMetaByRouteId.get(routeId) ?? null) : null,
+    isLoading: !hasRouteId || query.isLoading || (query.isFetching && query.data === undefined),
+    isNotFound: hasRouteId && query.status === "success" && query.data === null,
+    isError: query.isError,
+    isPending: !hasRouteId || query.isPending,
+    refetch: query.refetch,
+  }
+}
+
+export default usePostQuery

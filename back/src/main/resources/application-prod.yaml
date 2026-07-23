@@ -1,0 +1,125 @@
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+spring:
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    validate-on-migrate: true
+    locations: classpath:db/migration
+    lock-retry-count: ${PROD___SPRING__FLYWAY__LOCK_RETRY_COUNT:300}
+    # Flyway는 dedicated migration credential만 사용한다. postgres/superuser fallback 금지 (#1131).
+    user: "${PROD___SPRING__FLYWAY__USER}"
+    password: "${PROD___SPRING__FLYWAY__PASSWORD}"
+  data:
+    redis:
+      password: "${PROD___SPRING__DATA__REDIS__PASSWORD}"
+  datasource:
+    username: "${PROD___SPRING__DATASOURCE__USERNAME}"
+    password: "${PROD___SPRING__DATASOURCE__PASSWORD}"
+    hikari:
+      # 홈서버 환경에서 worker + API 동시 부하 시 커넥션 대기(수초~수십초)를 줄인다.
+      maximum-pool-size: ${PROD___SPRING__DATASOURCE__HIKARI__MAXIMUM_POOL_SIZE:20}
+      minimum-idle: ${PROD___SPRING__DATASOURCE__HIKARI__MINIMUM_IDLE:4}
+      connection-timeout: ${PROD___SPRING__DATASOURCE__HIKARI__CONNECTION_TIMEOUT_MS:5000}
+      validation-timeout: ${PROD___SPRING__DATASOURCE__HIKARI__VALIDATION_TIMEOUT_MS:2000}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+        highlight_sql: false
+        use_sql_comments: false
+        session:
+          events:
+            log:
+              LOG_QUERIES_SLOWER_THAN_MS: ${CUSTOM__JPA__SLOW_QUERY_LOG_MS:800}
+      jakarta.persistence.query.timeout: ${PROD___SPRING__JPA__QUERY_TIMEOUT_MS:5000}
+    show-sql: false
+  sql:
+    init:
+      # 운영 스키마 변경은 Flyway(classpath:db/migration)로만 수행한다.
+      # 런타임 SQL init(DDL) 강제 실행은 권한/잠금 이슈로 부팅 실패를 유발할 수 있어 비활성화한다.
+      mode: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info,prometheus}"
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+logging:
+  level:
+    com.back: INFO
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.orm.jdbc.extract: WARN
+    org.hibernate.orm.jdbc.batch: WARN
+    org.springframework.transaction.interceptor: INFO
+custom:
+  cache:
+    ttl-overrides:
+      # 공개 읽기 API는 쓰기 시 즉시 무효화하므로 운영 기본 TTL을 높여 DB 압력을 낮춘다.
+      member-session-active-v1: ${CUSTOM__CACHE__MEMBER_SESSION_ACTIVE_TTL_SECONDS:30}
+      system-admin-health-summary-v1: ${CUSTOM__CACHE__SYSTEM_ADMIN_HEALTH_SUMMARY_TTL_SECONDS:10}
+      post-admin-posts-first-page-v1: ${CUSTOM__CACHE__POST_ADMIN_POSTS_FIRST_PAGE_TTL_SECONDS:20}
+      post-bootstrap-v1: ${CUSTOM__CACHE__POST_BOOTSTRAP_TTL_SECONDS:60}
+      post-feed-v4: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:60}
+      post-feed-cursor-first-v1: ${CUSTOM__CACHE__POST_FEED_CURSOR_FIRST_TTL_SECONDS:60}
+      post-explore-v4: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:120}
+      post-explore-cursor-first-v1: ${CUSTOM__CACHE__POST_EXPLORE_CURSOR_FIRST_TTL_SECONDS:120}
+      post-search-v1: ${CUSTOM__CACHE__POST_SEARCH_TTL_SECONDS:90}
+      post-search-negative-v1: ${CUSTOM__CACHE__POST_SEARCH_NEGATIVE_TTL_SECONDS:20}
+      post-tags-v4: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:300}
+      post-detail-public-snapshot-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_SNAPSHOT_TTL_SECONDS:90}
+      post-detail-public-meta-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_META_TTL_SECONDS:90}
+      post-detail-public-content-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_CONTENT_TTL_SECONDS:45}
+      post-detail-public-negative-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_NEGATIVE_TTL_SECONDS:20}
+  db:
+    sequence-guard-on-startup: ${CUSTOM__DB__SEQUENCE_GUARD_ON_STARTUP:true}
+  observability:
+    request:
+      slowMs: ${CUSTOM__OBSERVABILITY__REQUEST__SLOW_MS:900}
+  member:
+    notification:
+      sse:
+        heartbeatSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__HEARTBEAT_SECONDS:30}
+        replayProbeSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_PROBE_SECONDS:60}
+  post:
+    read:
+      cursor-signing-secret: ${PROD___CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}}
+      detail-content-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_CONTENT_CACHE_MAX_CHARS:120000}
+      detail-snapshot-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_SNAPSHOT_CACHE_MAX_CHARS:180000}
+      bulkhead:
+        enabled: ${CUSTOM__POST__READ__BULKHEAD__ENABLED:true}
+        acquireTimeoutMs: ${CUSTOM__POST__READ__BULKHEAD__ACQUIRE_TIMEOUT_MS:25}
+        feedMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__FEED_MAX_CONCURRENT:24}
+        exploreMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__EXPLORE_MAX_CONCURRENT:12}
+        searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:10}
+        detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:24}
+        tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:8}
+      tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
+  task:
+    processor:
+      # API/worker 단일 프로세스 기본 운영에서 DB 경쟁을 완화한다.
+      batchSize: ${CUSTOM__TASK__PROCESSOR__BATCH_SIZE:20}
+      maxConcurrent: ${CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT:2}
+  pgroonga:
+    required: true
+  jpa:
+    after-ddl:
+      enabled: false
+      failOnError: true
+  site:
+    cookieDomain: "${custom.prod.cookieDomain}"
+    frontUrl: "${custom.prod.frontUrl}"
+    backUrl: "${custom.prod.backUrl}"
+    dbHost: "${custom.prod.dbHost}"
+    dbName: "${custom.prod.dbName}"
+    redisHost: "${custom.prod.redisHost}"
+    redisDatabase: "${custom.prod.redisDatabase}"

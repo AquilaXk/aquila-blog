@@ -1,0 +1,334 @@
+name: Reusable Frontend Verify
+
+on:
+  workflow_call:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-ci:
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_BUDGET_MARGIN_PERCENT: "5"
+      CLS_BUDGET: "0.12"
+    steps:
+      - name: Checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF}"
+          git checkout --force FETCH_HEAD
+
+      - name: Fetch PR base ref for design color guard
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+
+      - name: Detect frontend-related changes
+        id: changes
+        env:
+          GITHUB_READ_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            api_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100"
+            changed_files="${RUNNER_TEMP}/changed-files.txt"
+            : > "${changed_files}"
+
+            while [ -n "${api_url}" ]; do
+              response_headers="${RUNNER_TEMP}/github-response-headers.txt"
+              response_body="${RUNNER_TEMP}/github-response-body.json"
+              curl_args=(
+                -fsSL
+                -D "${response_headers}"
+                -H "Accept: application/vnd.github+json"
+                -H "X-GitHub-Api-Version: 2022-11-28"
+              )
+              if [ -n "${GITHUB_READ_TOKEN:-}" ] && curl "${curl_args[@]}" -H "Authorization: Bearer ${GITHUB_READ_TOKEN}" "${api_url}" > "${response_body}"; then
+                :
+              else
+                if [ -n "${GITHUB_READ_TOKEN:-}" ]; then
+                  echo "::warning title=GitHub API token fallback::Authenticated PR files API failed; retrying without token."
+                fi
+                curl "${curl_args[@]}" "${api_url}" > "${response_body}"
+              fi
+              jq -r '.[] | .filename, (.previous_filename // empty)' "${response_body}" >> "${changed_files}"
+              api_url="$(
+                awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
+              )"
+            done
+          else
+            echo "frontend=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          frontend=false
+          while IFS= read -r file; do
+            case "${file}" in
+              front/*|legal/policies/*|.github/workflows/frontend-ci.yml|.github/workflows/ci.yml|.github/workflows/reusable-frontend-verify.yml)
+                frontend=true
+                break
+                ;;
+            esac
+          done < "${RUNNER_TEMP}/changed-files.txt"
+
+          echo "frontend=${frontend}" >> "${GITHUB_OUTPUT}"
+
+      - name: Classify release risk
+        if: github.event_name == 'pull_request'
+        id: release_policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          report="${RUNNER_TEMP}/release-plan.json"
+          node tools/ci/classify-release.mjs \
+            --json \
+            --changed-files "${RUNNER_TEMP}/changed-files.txt" \
+            --github-output "$GITHUB_OUTPUT" \
+            > "${report}"
+          node - "${report}" <<'NODE'
+          const fs = require("node:fs")
+          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              "## Release policy",
+              `- change scope: ${report.changeScope}`,
+              `- risk profile: ${report.riskProfile}`,
+              `- deploy backend: ${report.deployBackend}`,
+              `- verify frontend: ${report.verifyFrontend}`,
+              `- reasons: ${report.reasons.join(", ") || "none"}`,
+              "",
+            ].join("\n"),
+          )
+          NODE
+
+      - name: Skip frontend-heavy checks
+        if: steps.changes.outputs.frontend != 'true'
+        run: |
+          echo "No frontend-related changes detected."
+          {
+            echo "## Frontend CI"
+            echo "- frontend-heavy checks skipped"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Node.js
+        if: steps.changes.outputs.frontend == 'true'
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: front/yarn.lock
+
+      - name: Install dependencies
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Lint frontend
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn lint
+
+      - name: Build frontend
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn build
+
+      - name: Verify OpenAPI contract-generated types
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn contracts:check
+
+      - name: Run frontend unit tests
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn test:unit
+
+      - name: Upload frontend unit test report
+        if: always() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-unit-test-report
+          path: |
+            front/playwright-report-unit
+            front/test-results/unit
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Upload OpenAPI contract drift report
+        if: failure() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-openapi-contract-report
+          path: front/test-results/contracts-openapi
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Check frontend bundle size budget (warn on PR / strict on main-release)
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        env:
+          BUNDLE_BUDGET_ENFORCEMENT: ${{ github.event_name == 'pull_request' && 'warn' || ((startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/heads/release')) && 'strict' || 'warn') }}
+          BUNDLE_BUDGET_MARGIN_PERCENT: ${{ env.BUNDLE_BUDGET_MARGIN_PERCENT }}
+          BUNDLE_REPORT_DIR: test-results/bundle-size
+        run: yarn check:bundle-size
+
+      - name: Upload bundle budget report
+        if: always() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-bundle-budget-report
+          path: front/test-results/bundle-size
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Check Storybook regression gate
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        env:
+          STORYBOOK_GATE_ENFORCEMENT: strict
+          STORYBOOK_GATE_REPORT_DIR: test-results/storybook
+        run: yarn storybook:gate
+
+      - name: Upload Storybook gate report
+        if: always() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-storybook-gate-report
+          path: front/test-results/storybook
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Upload Storybook static build
+        if: success() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-storybook-static
+          path: front/storybook-static
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Disable Microsoft apt sources for Playwright deps
+        if: steps.changes.outputs.frontend == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            [ -e "${source}" ] || continue
+            if grep -q 'packages.microsoft.com' "${source}"; then
+              sudo mv "${source}" "${source}.disabled"
+            fi
+          done
+
+      - name: Install Playwright browser
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke e2e
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        env:
+          NEXT_PUBLIC_SIGNUP_ENABLED: "true"
+        run: yarn test:e2e:smoke
+
+      - name: Run release UI QA e2e
+        if: steps.changes.outputs.frontend == 'true' && github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/heads/release'))
+        working-directory: front
+        env:
+          NEXT_PUBLIC_SIGNUP_ENABLED: "true"
+        run: yarn test:e2e:release-ui-qa
+
+      - name: Upload release UI QA report
+        if: always() && steps.changes.outputs.frontend == 'true' && github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/heads/release'))
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-release-ui-qa-report
+          path: |
+            front/playwright-report
+            front/test-results
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Run legal privacy e2e
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        env:
+          NEXT_PUBLIC_SIGNUP_ENABLED: "true"
+          NEXT_PUBLIC_RUM_SAMPLE_RATE: "1"
+          NODE_ENV: production
+          VERCEL_ENV: production
+        run: yarn playwright test e2e/legal-policy-pages.spec.ts e2e/privacy-tracking-consent.spec.ts e2e/browser-storage-registry.spec.ts --project=chromium --workers=1
+
+      - name: Run editor authoring e2e
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn test:e2e:authoring
+
+      - name: Run CLS perf e2e
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        env:
+          PLAYWRIGHT_JSON_REPORT_PATH: test-results/perf/playwright-perf.json
+          PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH: test-results/perf/runtime-guard-metrics.ndjson
+        run: |
+          mkdir -p test-results/perf
+          : > test-results/perf/runtime-guard-metrics.ndjson
+          yarn test:e2e:perf
+
+      - name: Summarize perf e2e report
+        if: always() && steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: |
+          node scripts/summarize-playwright-json.mjs \
+            --input test-results/perf/playwright-perf.json \
+            --output test-results/perf/perf-summary.md \
+            --append-step-summary
+
+      - name: Compare runtime guard metrics
+        if: always() && steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: |
+          node scripts/compare-runtime-guard-metrics.mjs \
+            --metrics test-results/perf/runtime-guard-metrics.ndjson \
+            --baseline ../deploy/homeserver/monitoring/grafana/dashboards/blog-runtime-guard-baseline.json \
+            --output test-results/perf/runtime-guard-summary.md \
+            --json-output test-results/perf/runtime-guard-summary.json \
+            --append-step-summary
+
+      - name: Run accessibility e2e
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn test:e2e:a11y
+
+      - name: Upload perf e2e report
+        if: always() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-perf-e2e-report
+          path: front/test-results/perf
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Upload frontend reports on failure
+        if: failure() && steps.changes.outputs.frontend == 'true'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-verify-playwright-report
+          path: |
+            front/playwright-report
+            front/test-results
+          retention-days: 1

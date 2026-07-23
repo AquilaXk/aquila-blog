@@ -1,0 +1,639 @@
+name: blog_home
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-no-new-privileges: &no-new-privileges
+  - no-new-privileges:true
+
+x-cap-drop-all: &cap-drop-all
+  - ALL
+
+services:
+  # Sole host docker.sock holder for autoheal restart API (CONTAINERS+POST only).
+  docker_socket_proxy:
+    image: ${DOCKER_SOCKET_PROXY_IMAGE:?DOCKER_SOCKET_PROXY_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      CONTAINERS: "1"
+      POST: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      - observe
+
+  autoheal:
+    image: ${AUTOHEAL_IMAGE:?AUTOHEAL_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: ${AUTOHEAL_INTERVAL_SECONDS:-15}
+      AUTOHEAL_START_PERIOD: ${AUTOHEAL_START_PERIOD_SECONDS:-300}
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 30
+      # willfarrell/autoheal >= latest: tcp:// maps to http:// (1.2.0 incorrectly used https://)
+      DOCKER_SOCK: tcp://docker_socket_proxy:2375
+    depends_on:
+      - docker_socket_proxy
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      - observe
+
+  cloudflared:
+    image: ${CLOUDFLARED_IMAGE}
+    restart: unless-stopped
+    logging: *default-logging
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
+    depends_on:
+      - caddy
+    networks:
+      - edge
+
+  caddy:
+    image: ${CADDY_IMAGE:?CADDY_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    ports:
+      # Public ingress must terminate at Cloudflare Tunnel. Keep host binds on
+      # loopback only so direct internet traffic cannot bypass Cloudflare WAF/rate limits.
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    env_file:
+      - ./.env.caddy.prod
+    networks:
+      - edge
+      - app
+      - observe
+
+  uptime_kuma:
+    image: ${UPTIME_KUMA_IMAGE:?UPTIME_KUMA_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - uptime_kuma_data:/app/data
+    networks:
+      - observe
+
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:?PROMETHEUS_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - alertmanager
+      - back_blue
+      - back_green
+      - back_worker
+      - postgres_exporter
+    networks:
+      - observe
+      - app
+
+  alertmanager:
+    image: ${ALERTMANAGER_IMAGE:?ALERTMANAGER_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        {
+          printf '%s\n' '{{ define "aquila.status_ko" -}}'
+          printf '%s\n' '{{- if eq . "firing" -}}장애 발생{{- else if eq . "resolved" -}}복구{{- else -}}{{ . }}{{- end -}}'
+          printf '%s\n' '{{- end }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ define "aquila.severity_ko" -}}'
+          printf '%s\n' '{{- if eq . "critical" -}}긴급{{- else if eq . "warning" -}}주의{{- else if . -}}{{ . }}{{- else -}}미분류{{- end -}}'
+          printf '%s\n' '{{- end }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ define "aquila.email.subject" -}}'
+          printf '%s\n' '{{- $$title := or (index .CommonAnnotations "title_ko") (index .CommonAnnotations "summary") .CommonLabels.alertname -}}'
+          printf '%s\n' '{{- $$severity := or .CommonLabels.severity "unknown" -}}'
+          printf '%s\n' '[Aquila 운영][{{ template "aquila.status_ko" .Status }}][{{ template "aquila.severity_ko" $$severity }}] {{ $$title }}'
+          printf '%s\n' '{{- end }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ define "aquila.email.text" -}}'
+          printf '%s\n' '{{ range .Alerts }}'
+          printf '%s\n' 'Aquila 운영 알림'
+          printf '%s\n' ''
+          printf '%s\n' '상태: {{ template "aquila.status_ko" .Status }}'
+          printf '%s\n' '심각도: {{ template "aquila.severity_ko" .Labels.severity }}'
+          printf '%s\n' '대상: {{ or .Labels.service .Labels.job .Labels.instance }}'
+          printf '%s\n' '알림: {{ or (index .Annotations "title_ko") (index .Annotations "summary") .Labels.alertname }}'
+          printf '%s\n' ''
+          printf '%s\n' '영향'
+          printf '%s\n' '{{ or (index .Annotations "impact_ko") (index .Annotations "description") "영향 설명이 없습니다." }}'
+          printf '%s\n' ''
+          printf '%s\n' '확인할 것'
+          printf '%s\n' '{{ or (index .Annotations "action_ko") "Grafana와 관련 서비스 상태를 확인하세요." }}'
+          printf '%s\n' ''
+          printf '%s\n' '시작 시각'
+          printf '%s\n' '{{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05 -0700" }}'
+          printf '%s\n' ''
+          if [ -n "$$ALERTMANAGER_GRAFANA_ROOT_URL" ]; then
+            printf '%s\n' 'Grafana에서 보기'
+            printf '%s\n' "$$ALERTMANAGER_GRAFANA_ROOT_URL"
+            printf '%s\n' ''
+          fi
+          printf '%s\n' '내부 알림명: {{ .Labels.alertname }}'
+          printf '%s\n' 'job: {{ .Labels.job }}'
+          printf '%s\n' 'service: {{ .Labels.service }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ end }}'
+          printf '%s\n' '{{- end }}'
+          printf '%s\n' ''
+          printf '%s\n' '{{ define "aquila.email.html" -}}'
+          printf '%s\n' '<h2>Aquila 운영 알림</h2>'
+          printf '%s\n' '{{ range .Alerts }}'
+          printf '%s\n' '<table role="presentation" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid #d0d7de;width:100%;max-width:720px">'
+          printf '%s\n' '  <tr><th align="left">상태</th><td>{{ template "aquila.status_ko" .Status }}</td></tr>'
+          printf '%s\n' '  <tr><th align="left">심각도</th><td>{{ template "aquila.severity_ko" .Labels.severity }}</td></tr>'
+          printf '%s\n' '  <tr><th align="left">대상</th><td>{{ or .Labels.service .Labels.job .Labels.instance }}</td></tr>'
+          printf '%s\n' '  <tr><th align="left">알림</th><td>{{ or (index .Annotations "title_ko") (index .Annotations "summary") .Labels.alertname }}</td></tr>'
+          printf '%s\n' '</table>'
+          printf '%s\n' '<h3>영향</h3>'
+          printf '%s\n' '<p>{{ or (index .Annotations "impact_ko") (index .Annotations "description") "영향 설명이 없습니다." }}</p>'
+          printf '%s\n' '<h3>확인할 것</h3>'
+          printf '%s\n' '<p>{{ or (index .Annotations "action_ko") "Grafana와 관련 서비스 상태를 확인하세요." }}</p>'
+          printf '%s\n' '<h3>시작 시각</h3>'
+          printf '%s\n' '<p>{{ .StartsAt | tz "Asia/Seoul" | date "2006-01-02 15:04:05 -0700" }}</p>'
+          if [ -n "$$ALERTMANAGER_GRAFANA_ROOT_URL" ]; then
+            printf '<p><a href="%s">Grafana에서 보기</a></p>\n' "$$ALERTMANAGER_GRAFANA_ROOT_URL"
+          fi
+          printf '%s\n' '<hr>'
+          printf '%s\n' '<p><small>내부 알림명: {{ .Labels.alertname }}<br>job: {{ .Labels.job }}<br>service: {{ .Labels.service }}</small></p>'
+          printf '%s\n' '{{ end }}'
+          printf '%s\n' '{{- end }}'
+        } > /tmp/alertmanager-email.tmpl
+        {
+          printf '%s\n' 'global:'
+          printf '  smtp_smarthost: %s\n' "$$ALERTMANAGER_SMTP_SMARTHOST"
+          printf '  smtp_from: %s\n' "$$ALERTMANAGER_SMTP_FROM"
+          printf '  smtp_auth_username: %s\n' "$$ALERTMANAGER_SMTP_AUTH_USERNAME"
+          printf '%s\n' '  smtp_auth_password: |-'
+          printf '    %s\n' "$$ALERTMANAGER_SMTP_AUTH_PASSWORD"
+          printf '  smtp_require_tls: %s\n' "$$ALERTMANAGER_SMTP_REQUIRE_TLS"
+          printf '%s\n' ''
+          printf '%s\n' 'templates:'
+          printf '%s\n' '  - /tmp/alertmanager-email.tmpl'
+          printf '%s\n' ''
+          printf '%s\n' 'route:'
+          printf '%s\n' '  receiver: drop'
+          printf '%s\n' '  group_by: ["alertname", "severity"]'
+          printf '%s\n' '  group_wait: 30s'
+          printf '%s\n' '  group_interval: 5m'
+          printf '%s\n' '  repeat_interval: 4h'
+          printf '%s\n' '  routes:'
+          printf '%s\n' '    - receiver: drop'
+          printf '%s\n' '      matchers:'
+          printf '%s\n' '        - alertname=~"Aquila(PublicEdgeProbeScrapeDown|DockerRuntimeProbeScrapeDown|BackWorkerScrapeDown)"'
+          printf '%s\n' '    - receiver: operations-email'
+          printf '%s\n' '      matchers:'
+          printf '%s\n' '        - severity=~"critical|warning"'
+          printf '%s\n' ''
+          printf '%s\n' 'receivers:'
+          printf '%s\n' '  - name: drop'
+          printf '%s\n' '  - name: operations-email'
+          printf '%s\n' '    email_configs:'
+          printf '      - to: %s\n' "$$OPERATIONS_ALERT_EMAIL_TO"
+          printf '%s\n' '        send_resolved: true'
+          printf '%s\n' '        headers:'
+          printf '%s\n' '          Subject: "{{ template \"aquila.email.subject\" . }}"'
+          printf '%s\n' '        text: "{{ template \"aquila.email.text\" . }}"'
+          printf '%s\n' '        html: "{{ template \"aquila.email.html\" . }}"'
+        } > /tmp/alertmanager.yml
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    environment:
+      ALERTMANAGER_SMTP_SMARTHOST: ${SPRING__MAIL__HOST:?SPRING__MAIL__HOST is required}:${SPRING__MAIL__PORT:?SPRING__MAIL__PORT is required}
+      ALERTMANAGER_SMTP_FROM: ${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:?CUSTOM__MEMBER__SIGNUP__MAIL_FROM is required}
+      ALERTMANAGER_SMTP_AUTH_USERNAME: ${ALERTMANAGER_SMTP_AUTH_USERNAME:-}
+      ALERTMANAGER_SMTP_AUTH_PASSWORD: ${ALERTMANAGER_SMTP_AUTH_PASSWORD:-}
+      ALERTMANAGER_SMTP_REQUIRE_TLS: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:-true}
+      ALERTMANAGER_GRAFANA_ROOT_URL: ${GRAFANA_ROOT_URL:-}
+      OPERATIONS_ALERT_EMAIL_TO: ${OPERATIONS_ALERT_EMAIL_TO:?OPERATIONS_ALERT_EMAIL_TO is required}
+    volumes:
+      - alertmanager_data:/alertmanager
+    networks:
+      - observe
+
+  postgres_exporter:
+    image: ${POSTGRES_EXPORTER_IMAGE:?POSTGRES_EXPORTER_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      DATA_SOURCE_URI: db_1:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: ${PROD___POSTGRES_EXPORTER__USERNAME:-postgres_exporter}
+      DATA_SOURCE_PASS: ${PROD___POSTGRES_EXPORTER__PASSWORD:?PROD___POSTGRES_EXPORTER__PASSWORD is required}
+    depends_on:
+      - db_1
+    networks:
+      - observe
+      - data
+
+  grafana:
+    image: ${GRAFANA_IMAGE:?GRAFANA_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: "X-WEBAUTH-USER"
+      GF_AUTH_PROXY_HEADER_PROPERTY: "username"
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_SECURITY_COOKIE_SAMESITE: "none"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: "Viewer"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.localhost}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - observe
+
+  loki:
+    image: ${LOKI_IMAGE:?LOKI_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - "-config.file=/etc/loki/loki-config.yml"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    networks:
+      - observe
+
+  promtail:
+    image: ${PROMTAIL_IMAGE:?PROMTAIL_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - "-config.file=/etc/promtail/promtail-config.yml"
+    volumes:
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_positions:/var/lib/promtail
+    depends_on:
+      - loki
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      - observe
+
+  public_edge_probe:
+    image: ${NODE_RUNTIME_IMAGE:?NODE_RUNTIME_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    working_dir: /app
+    command:
+      - "node"
+      - "/app/public-edge-probe.mjs"
+      - "--serve-port"
+      - "9915"
+      - "--refresh-ms"
+      - "${PUBLIC_EDGE_PROBE_REFRESH_MS:-300000}"
+      - "--requests"
+      - "${PUBLIC_EDGE_PROBE_REQUESTS:-2}"
+      - "--latest-posts"
+      - "${PUBLIC_EDGE_PROBE_LATEST_POSTS:-3}"
+      - "--timeout-ms"
+      - "${PUBLIC_EDGE_PROBE_TIMEOUT_MS:-15000}"
+      - "--base-url"
+      - "${PUBLIC_EDGE_PROBE_BASE_URL:-https://www.aquilaxk.site}"
+      - "--state-path"
+      - "/data/public-edge-probe-state.json"
+    volumes:
+      - ./monitoring/public-edge-probe.mjs:/app/public-edge-probe.mjs:ro
+      - public_edge_probe_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:9915/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - observe
+
+  docker_runtime_probe:
+    image: ${NODE_RUNTIME_IMAGE:?NODE_RUNTIME_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    working_dir: /app
+    command:
+      - "node"
+      - "/app/docker-runtime-probe.mjs"
+      - "--serve-port"
+      - "9920"
+      - "--project"
+      - "blog_home"
+      - "--services"
+      - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1"
+      - "--readiness-targets"
+      - "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back-worker:8080"
+      - "--disk-paths"
+      - "minio=/host-storage/minio"
+    volumes:
+      - ./monitoring/docker-runtime-probe.mjs:/app/docker-runtime-probe.mjs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # MinIO data root (same host path as minio_1). Used for filesystem free-space gauges.
+      - ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}:/host-storage:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:9920/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      - observe
+      - app
+
+  back_blue:
+    image: ${BACK_BLUE_IMAGE:?BACK_BLUE_IMAGE is required (sha-pinned; latest forbidden)}
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: ${BACK_MEM_LIMIT:-512m}
+    mem_reservation: ${BACK_MEM_RESERVATION:-256m}
+    labels:
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      # Restart 판단은 liveness 기준으로만 수행한다.
+      # readiness(db 포함)는 트래픽 수용 판단용이며, autoheal 재기동 신호로 쓰면 재시작 루프가 발생할 수 있다.
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    env_file:
+      - ./.env.back.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "false"
+      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE_BLUE:-${CUSTOM__RUNTIME__API_MODE:-all}}
+      DEPLOY_COLOR: blue
+    depends_on:
+      - db_1
+      - redis_1
+      - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      app:
+        aliases:
+          - back-blue
+      data: {}
+
+  back_green:
+    image: ${BACK_GREEN_IMAGE:?BACK_GREEN_IMAGE is required (sha-pinned; latest forbidden)}
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: ${BACK_MEM_LIMIT:-512m}
+    mem_reservation: ${BACK_MEM_RESERVATION:-256m}
+    labels:
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    env_file:
+      - ./.env.back.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "false"
+      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE_GREEN:-${CUSTOM__RUNTIME__API_MODE:-all}}
+      DEPLOY_COLOR: green
+    depends_on:
+      - db_1
+      - redis_1
+      - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      app:
+        aliases:
+          - back-green
+      data: {}
+
+  back_read:
+    profiles: ["runtime-split"]
+    image: ${BACK_READ_IMAGE:?BACK_READ_IMAGE is required (sha-pinned; latest forbidden)}
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: ${BACK_READ_MEM_LIMIT:-640m}
+    mem_reservation: ${BACK_READ_MEM_RESERVATION:-320m}
+    labels:
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    env_file:
+      - ./.env.back.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "false"
+      CUSTOM__RUNTIME__API_MODE: read
+      DEPLOY_COLOR: read
+    depends_on:
+      - db_1
+      - redis_1
+      - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      app:
+        aliases:
+          - back-read
+      data: {}
+
+  back_admin:
+    profiles: ["runtime-split"]
+    image: ${BACK_ADMIN_IMAGE:?BACK_ADMIN_IMAGE is required (sha-pinned; latest forbidden)}
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: ${BACK_ADMIN_MEM_LIMIT:-512m}
+    mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-256m}
+    labels:
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    env_file:
+      - ./.env.back.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "false"
+      CUSTOM__RUNTIME__API_MODE: admin
+      DEPLOY_COLOR: admin
+    depends_on:
+      - db_1
+      - redis_1
+      - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      app:
+        aliases:
+          - back-admin
+      data: {}
+
+  back_worker:
+    image: ${BACK_WORKER_IMAGE:?BACK_WORKER_IMAGE is required (sha-pinned; latest forbidden)}
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: ${BACK_WORKER_MEM_LIMIT:-768m}
+    mem_reservation: ${BACK_WORKER_MEM_RESERVATION:-768m}
+    labels:
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    env_file:
+      - ./.env.back.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_FLYWAY_ENABLED: "false"
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "true"
+      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE_WORKER:-none}
+      DEPLOY_COLOR: worker
+    depends_on:
+      - db_1
+      - redis_1
+      - minio_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      app:
+        aliases:
+          - back-worker
+      data: {}
+
+  db_1:
+    image: ${DB_IMAGE}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PROD___POSTGRES__PASSWORD:-${PROD___SPRING__DATASOURCE__PASSWORD}}
+      POSTGRES_DATABASE: postgres
+      POSTGRES_DATABASES: ${DB_BASE_NAME:-blog}_prod
+      TZ: Asia/Seoul
+    volumes:
+      - db_data:/var/lib/postgresql
+    networks:
+      - data
+
+  redis_1:
+    image: ${REDIS_IMAGE:?REDIS_IMAGE is required (sha256 digest required)}
+    restart: unless-stopped
+    logging: *default-logging
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${PROD___SPRING__DATA__REDIS__PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - data
+
+  minio_1:
+    image: ${MINIO_IMAGE}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Incomplete multipart cleanup must outlive app session absolute max (#1229: 7d).
+      # Defaults would be 24h and can delete parts of active long uploads.
+      MINIO_API_STALE_UPLOADS_EXPIRY: 8d
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 6h
+      TZ: Asia/Seoul
+    command: server /data --console-address ":9001"
+    volumes:
+      - type: bind
+        source: ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}/minio
+        target: /data
+        bind:
+          create_host_path: false
+    networks:
+      data:
+        aliases:
+          - minio
+
+volumes:
+  db_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+  uptime_kuma_data:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:
+  loki_data:
+  promtail_positions:
+  public_edge_probe_data:
+
+
+
+networks:
+  edge:
+    name: blog_home_edge
+  app:
+    name: blog_home_app
+  data:
+    name: blog_home_data
+  observe:
+    name: blog_home_observe

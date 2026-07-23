@@ -1,0 +1,166 @@
+import Feed from "src/routes/Feed"
+import { CONFIG } from "../../site.config"
+import { NextPageWithLayout } from "../types"
+import { getPostsBootstrap } from "../apis/backend/posts"
+import { apiFetch } from "src/apis/backend/client"
+import MetaConfig from "src/components/MetaConfig"
+import { createQueryClient } from "src/libs/react-query"
+import { queryKey } from "src/constants/queryKey"
+import { GetStaticProps } from "next"
+import { dehydrate } from "@tanstack/react-query"
+import { AdminProfile } from "src/hooks/useAdminProfile"
+import {
+  resolveStaticAdminProfileSeed,
+} from "src/libs/server/adminProfile"
+import type { StaticAdminProfileSeedSource } from "src/libs/adminProfileSource"
+import type { TPost } from "src/types"
+import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
+import { setAdminProfileCache } from "src/hooks/useAdminProfile"
+
+const HOME_ISR_REVALIDATE_SECONDS = 60
+const HOME_DEGRADED_REVALIDATE_SECONDS = 30
+const IS_QA_STATIC_SHELL_MODE = process.env.ENABLE_QA_ROUTES === "true"
+type HomeBootstrapStatus = "ready" | "degraded" | "shell"
+
+const fetchPublicAdminProfile = async (): Promise<AdminProfile> =>
+  await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
+
+export const getStaticProps: GetStaticProps = async () => {
+  const queryClient = createQueryClient()
+  const currentTag = ""
+  const adminProfileSeed = await resolveStaticAdminProfileSeed(fetchPublicAdminProfile)
+  const initialAdminProfile = adminProfileSeed.profile
+  const initialAdminProfileSource = adminProfileSeed.source
+  const bootstrapSnapshot = await (async () => {
+    if (IS_QA_STATIC_SHELL_MODE) {
+      return {
+        posts: [] as TPost[],
+        tagCounts: {} as Record<string, number>,
+        totalCount: null as number | null,
+        initialPageTotalCount: 0,
+        hasNext: false,
+        nextCursor: null as string | null,
+        postsLoaded: false,
+        tagsLoaded: false,
+        status: "shell" as HomeBootstrapStatus,
+      }
+    }
+
+    try {
+      const bootstrapResult = await getPostsBootstrap({
+        tag: currentTag,
+        pageSize: FEED_EXPLORE_PAGE_SIZE,
+      })
+      const hasNext = bootstrapResult.hasNext
+      const resolvedTotalCount = hasNext ? null : bootstrapResult.posts.length
+
+      return {
+        posts: bootstrapResult.posts,
+        tagCounts: bootstrapResult.tagCounts,
+        totalCount: resolvedTotalCount,
+        initialPageTotalCount: resolvedTotalCount ?? bootstrapResult.posts.length,
+        hasNext,
+        nextCursor: bootstrapResult.nextCursor ?? null,
+        postsLoaded: true,
+        tagsLoaded: true,
+        status: "ready" as HomeBootstrapStatus,
+      }
+    } catch {
+      return {
+        posts: [] as TPost[],
+        tagCounts: {} as Record<string, number>,
+        totalCount: null as number | null,
+        initialPageTotalCount: 0,
+        hasNext: false,
+        nextCursor: null as string | null,
+        postsLoaded: false,
+        tagsLoaded: false,
+        status: "degraded" as HomeBootstrapStatus,
+      }
+    }
+  })()
+  const { posts, tagCounts, totalCount, initialPageTotalCount, hasNext, nextCursor, postsLoaded, tagsLoaded, status } =
+    bootstrapSnapshot
+
+  setAdminProfileCache(queryClient, initialAdminProfile)
+  if (tagsLoaded) {
+    queryClient.setQueryData(queryKey.tags(), tagCounts)
+  }
+  if (postsLoaded && typeof totalCount === "number") {
+    queryClient.setQueryData(queryKey.postsTotalCount(), totalCount)
+  }
+  if (postsLoaded) {
+    queryClient.setQueryData(
+      currentTag
+        ? queryKey.postsExploreInfinite({
+            kw: "",
+            tag: currentTag || undefined,
+            pageSize: FEED_EXPLORE_PAGE_SIZE,
+            order: "desc",
+            sortMode: "latest",
+          })
+        : queryKey.postsFeedInfinite({
+            pageSize: FEED_EXPLORE_PAGE_SIZE,
+            order: "desc",
+            sortMode: "latest",
+          }),
+      {
+        pages: [
+          {
+            posts,
+            totalCount: initialPageTotalCount,
+            pageNumber: 1,
+            pageSize: FEED_EXPLORE_PAGE_SIZE,
+            hasNext,
+            nextCursor,
+            paginationMode: "cursor",
+          },
+        ],
+        pageParams: [null],
+      }
+    )
+  }
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+      initialAdminProfile,
+      initialAdminProfileSource,
+      initialHomeBootstrapStatus: status,
+    },
+    revalidate:
+      IS_QA_STATIC_SHELL_MODE || !postsLoaded || initialAdminProfileSource === "static-fallback"
+        ? HOME_DEGRADED_REVALIDATE_SECONDS
+        : HOME_ISR_REVALIDATE_SECONDS,
+  }
+}
+
+type FeedPageProps = {
+  initialAdminProfile: AdminProfile | null
+  initialAdminProfileSource: StaticAdminProfileSeedSource
+  initialHomeBootstrapStatus: HomeBootstrapStatus
+}
+
+const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile, initialHomeBootstrapStatus }) => {
+  const feedTitle =
+    initialAdminProfile?.blogTitle ||
+    CONFIG.blog.title ||
+    "AquilaLog"
+  const feedDescription = initialAdminProfile?.homeIntroDescription || CONFIG.blog.homeIntroDescription || CONFIG.blog.description
+
+  const meta = {
+    title: feedTitle,
+    description: feedDescription,
+    type: "website",
+    url: CONFIG.link,
+  }
+
+  return (
+    <>
+      <MetaConfig {...meta} />
+      <Feed initialAdminProfile={initialAdminProfile} initialHomeBootstrapStatus={initialHomeBootstrapStatus} />
+    </>
+  )
+}
+
+export default FeedPage

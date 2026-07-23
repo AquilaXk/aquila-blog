@@ -1,0 +1,18 @@
+# Copy this file to terraform.tfvars and fill your values.
+# cp terraform.tfvars.example terraform.tfvars
+
+region            = "ap-northeast-2"
+prefix            = "blog"
+availability_zone = "ap-northeast-2a"
+
+vpc_cidr           = "10.0.0.0/16"
+public_subnet_cidr = "10.0.1.0/24"
+
+# Cost-effective default for blog
+instance_type    = "t4g.small"
+root_volume_size = 30
+
+key_name = "blog-key"
+
+# Paste your SSH public key content (single line)
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... your_email@example.com"

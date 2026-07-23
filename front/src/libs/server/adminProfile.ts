@@ -1,0 +1,195 @@
+import { IncomingMessage } from "http"
+import { CONFIG } from "site.config"
+import { AdminProfile } from "src/hooks/useAdminProfile"
+import {
+  DEFAULT_ABOUT_HEADLINE,
+  DEFAULT_ABOUT_PROJECT_SECTION_TITLE,
+  DEFAULT_ABOUT_PROJECTS,
+  normalizeBlogDesign,
+  normalizeLegacyBlogScheme,
+} from "src/libs/profileWorkspace"
+import type { PublicAdminProfileSource, StaticAdminProfileSeedSource } from "src/libs/adminProfileSource"
+import { serverApiFetchJson } from "./backend"
+
+type FetchServerAdminProfileOptions = {
+  timeoutMs?: number
+}
+
+type StaticAdminProfileSeed = {
+  profile: AdminProfile
+  source: StaticAdminProfileSeedSource
+}
+
+type FetchStaticAdminProfile = () => Promise<AdminProfile>
+
+const ADMIN_PROFILE_SNAPSHOT_COOKIE = "admin_profile_snapshot_v1"
+const ADMIN_PROFILE_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
+const PUBLISHED_PROFILE_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=300"
+const TRANSIENT_PROFILE_CACHE_CONTROL = "private, no-store"
+
+export const resolvePublicAdminProfileCacheControl = ({
+  debugSsr,
+  hasAuthCookie,
+  source,
+}: {
+  debugSsr: boolean
+  hasAuthCookie: boolean
+  source: PublicAdminProfileSource
+}) => {
+  if (debugSsr || hasAuthCookie || source !== "published") return TRANSIENT_PROFILE_CACHE_CONTROL
+  return PUBLISHED_PROFILE_CACHE_CONTROL
+}
+
+const readCookieValue = (req: IncomingMessage, key: string) => {
+  const rawCookie = req.headers.cookie || ""
+  if (!rawCookie) return null
+
+  const pairs = rawCookie.split(";")
+  for (const pair of pairs) {
+    const [cookieKey, ...valueParts] = pair.trim().split("=")
+    if (cookieKey !== key) continue
+    const value = valueParts.join("=")
+    return value ? decodeURIComponent(value) : null
+  }
+
+  return null
+}
+
+export const fetchServerAdminProfile = async (
+  req: IncomingMessage,
+  options: FetchServerAdminProfileOptions = {}
+): Promise<AdminProfile | null> => {
+  try {
+    return await serverApiFetchJson<AdminProfile>(req, "/member/api/v1/members/adminProfile", {
+      timeoutMs: options.timeoutMs,
+    })
+  } catch {
+    return null
+  }
+}
+
+export const hasServerAuthCookie = (req: IncomingMessage) => {
+  const rawCookie = req.headers.cookie || ""
+  if (!rawCookie) return false
+
+  return rawCookie.includes("apiKey=") || rawCookie.includes("accessToken=")
+}
+
+export const buildStaticAdminProfileSnapshot = (): AdminProfile => ({
+  username: CONFIG.profile.name,
+  name: CONFIG.profile.name,
+  nickname: CONFIG.profile.name,
+  profileImageUrl: CONFIG.profile.image,
+  profileImageDirectUrl: CONFIG.profile.image,
+  profileRole: CONFIG.profile.role,
+  profileBio: CONFIG.profile.bio,
+  aboutHeadline: DEFAULT_ABOUT_HEADLINE,
+  aboutRole: CONFIG.profile.role,
+  aboutBio: CONFIG.profile.bio,
+  aboutProjectSectionTitle: DEFAULT_ABOUT_PROJECT_SECTION_TITLE,
+  aboutProjects: DEFAULT_ABOUT_PROJECTS,
+  blogTitle: CONFIG.blog.title,
+  homeIntroTitle: CONFIG.blog.homeIntroTitle,
+  homeIntroDescription: CONFIG.blog.homeIntroDescription,
+  blogDesign: "legacy",
+  legacyBlogScheme: "dark",
+})
+
+export const resolveStaticAdminProfileSeed = async (
+  fetchProfile: FetchStaticAdminProfile
+): Promise<StaticAdminProfileSeed> => {
+  try {
+    return {
+      profile: buildPersistedAdminProfileSnapshot(await fetchProfile()),
+      source: "published",
+    }
+  } catch {
+    return {
+      profile: buildStaticAdminProfileSnapshot(),
+      source: "static-fallback",
+    }
+  }
+}
+
+export const buildPersistedAdminProfileSnapshot = (profile: AdminProfile): AdminProfile => ({
+  username: profile.username,
+  name: profile.name,
+  nickname: profile.nickname,
+  modifiedAt: profile.modifiedAt,
+  profileImageUrl: profile.profileImageUrl,
+  profileImageDirectUrl: profile.profileImageDirectUrl,
+  profileRole: profile.profileRole,
+  profileBio: profile.profileBio,
+  aboutHeadline: profile.aboutHeadline,
+  aboutRole: profile.aboutRole,
+  aboutBio: profile.aboutBio,
+  aboutDetails: profile.aboutDetails,
+  aboutSections: profile.aboutSections || [],
+  aboutProjectSectionTitle: profile.aboutProjectSectionTitle,
+  aboutProjects: profile.aboutProjects || [],
+  blogTitle: profile.blogTitle,
+  homeIntroTitle: profile.homeIntroTitle,
+  homeIntroDescription: profile.homeIntroDescription,
+  blogDesign: normalizeBlogDesign(profile.blogDesign),
+  legacyBlogScheme: normalizeLegacyBlogScheme(profile.legacyBlogScheme),
+  serviceLinks: profile.serviceLinks || [],
+  contactLinks: profile.contactLinks || [],
+})
+
+export const readAdminProfileSnapshotFromCookie = (req: IncomingMessage): AdminProfile | null => {
+  const raw = readCookieValue(req, ADMIN_PROFILE_SNAPSHOT_COOKIE)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<AdminProfile>
+    if (!parsed || typeof parsed !== "object" || typeof parsed.username !== "string") return null
+
+    if (typeof parsed.modifiedAt === "string") {
+      const modifiedAtMs = new Date(parsed.modifiedAt).getTime()
+      if (!Number.isFinite(modifiedAtMs)) return null
+      if (Date.now() - modifiedAtMs > ADMIN_PROFILE_SNAPSHOT_MAX_STALE_MS) return null
+    }
+
+    return buildPersistedAdminProfileSnapshot({
+      username: parsed.username,
+      name: parsed.name || parsed.nickname || parsed.username,
+      nickname: parsed.nickname || parsed.name || parsed.username,
+      modifiedAt: parsed.modifiedAt,
+      profileImageUrl: parsed.profileImageUrl || CONFIG.profile.image,
+      profileImageDirectUrl: parsed.profileImageDirectUrl,
+      profileRole: parsed.profileRole,
+      profileBio: parsed.profileBio,
+      aboutHeadline: parsed.aboutHeadline,
+      aboutRole: parsed.aboutRole,
+      aboutBio: parsed.aboutBio,
+      aboutDetails: parsed.aboutDetails,
+      aboutSections: Array.isArray(parsed.aboutSections) ? parsed.aboutSections : [],
+      aboutProjectSectionTitle: parsed.aboutProjectSectionTitle,
+      aboutProjects: Array.isArray(parsed.aboutProjects) ? parsed.aboutProjects : [],
+      blogTitle: parsed.blogTitle,
+      homeIntroTitle: parsed.homeIntroTitle,
+      homeIntroDescription: parsed.homeIntroDescription,
+      blogDesign: normalizeBlogDesign(parsed.blogDesign),
+      legacyBlogScheme: normalizeLegacyBlogScheme(parsed.legacyBlogScheme),
+      serviceLinks: Array.isArray(parsed.serviceLinks) ? parsed.serviceLinks : [],
+      contactLinks: Array.isArray(parsed.contactLinks) ? parsed.contactLinks : [],
+    })
+  } catch {
+    return null
+  }
+}
+
+export const resolvePublicAdminProfileSnapshot = (req: IncomingMessage) => {
+  const cookieSnapshot = readAdminProfileSnapshotFromCookie(req)
+  if (cookieSnapshot) {
+    return {
+      profile: cookieSnapshot,
+      source: "cookie-snapshot" as const,
+    }
+  }
+
+  return {
+    profile: buildStaticAdminProfileSnapshot(),
+    source: "static-fallback" as const,
+  }
+}

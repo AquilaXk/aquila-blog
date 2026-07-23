@@ -1,0 +1,1705 @@
+name: Deploy to Home Server
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_backend_deploy:
+        description: "Build and deploy the backend image even when changed-file detection would skip it."
+        required: false
+        default: true
+        type: boolean
+      force_front_live_verify:
+        description: "Run live frontend verification after deploy target calculation."
+        required: false
+        default: true
+        type: boolean
+      force_editor_live_canary:
+        description: "Run the seeded /editor/507 live canary during frontend live verification."
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: homeserver-deploy-main
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  calculateTag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: >
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main'
+      )
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_name: ${{ steps.meta.outputs.image_name }}
+      image_ref: ${{ steps.meta.outputs.image_ref }}
+      deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
+      backend_deploy: ${{ steps.meta.outputs.backend_deploy }}
+      front_live_verify: ${{ steps.meta.outputs.front_live_verify }}
+      editor_live_canary: ${{ steps.meta.outputs.editor_live_canary }}
+      expected_front_commit_sha: ${{ steps.meta.outputs.expected_front_commit_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Calculate deploy targets and image tags
+        id: meta
+        env:
+          DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
+          FORCE_FRONT_LIVE_VERIFY_INPUT: ${{ github.event.inputs.force_front_live_verify || 'false' }}
+          FORCE_EDITOR_LIVE_CANARY_INPUT: ${{ github.event.inputs.force_editor_live_canary || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OWNER_LC="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          REPO_NAME="$(basename "${GITHUB_REPOSITORY}")"
+          DEPLOY_SHA="${DEPLOY_SHA_INPUT:-}"
+          if [ -z "${DEPLOY_SHA}" ]; then
+            echo "deploy sha is empty" >&2
+            exit 1
+          fi
+
+          IMAGE_NAME="ghcr.io/${OWNER_LC}/${REPO_NAME}-back"
+          IMAGE_TAG="sha-${DEPLOY_SHA}"
+          IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
+          BACKEND_DEPLOY="false"
+          FRONT_LIVE_VERIFY="false"
+          EDITOR_LIVE_CANARY="false"
+          EXPECTED_FRONT_COMMIT_SHA=""
+          FRONT_BUILD_SHA_SUPERSEDED="false"
+          CHANGE_SOURCE="first-parent-diff"
+          BACKEND_DEPLOY_PATHS_PATTERN='^(back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
+          FRONT_LIVE_VERIFY_PATHS_PATTERN='^(front/|legal/policies/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/frontend-ci\.yml|\.github/workflows/reusable-frontend-verify\.yml)'
+          FRONT_BUILD_SHA_PATHS_PATTERN='^front/(src/|public/|packages/|scripts/(check-refactor-boundaries\.mjs|check-design-colors\.mjs|with-test-lock\.mjs|patch-lodash-template\.cjs)|site\.config\.js|next-sitemap\.config\.js|next\.config\.js|vercel\.json|tsconfig\.json|package\.json|yarn\.lock|Dockerfile|index\.d\.ts|next-env\.d\.ts)|^legal/policies/'
+          EDITOR_LIVE_CANARY_PATHS_PATTERN='^(front/src/pages/editor/|front/src/routes/Admin/(Editor|WriterEditor|Markdown|markdown|editor)|front/src/components/editor/|front/src/components/markdown-editor/|front/e2e/editor-|front/e2e/helpers/authoringPlaywright\.ts)'
+          CHANGED_FILES=""
+          if [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]; then
+            REMOTE_MAIN_SHA="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+            if [ -z "${REMOTE_MAIN_SHA}" ]; then
+              echo "origin/main sha lookup failed" >&2
+              exit 1
+            fi
+            git fetch --no-tags --prune origin "+refs/heads/main:refs/remotes/origin/main"
+            FETCHED_MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
+            if [ "${FETCHED_MAIN_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+              echo "origin/main sha changed during stale check: remote=${REMOTE_MAIN_SHA} fetched=${FETCHED_MAIN_SHA}" >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}"; then
+              echo "deploy sha is not reachable from origin/main: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+              exit 1
+            fi
+            if [ "${DEPLOY_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+              STALE_CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}" 2>/dev/null || true)"
+              if echo "${STALE_CHANGED_FILES}" | grep -Eq "${STALE_DEPLOY_BLOCK_PATHS_PATTERN}"; then
+                echo "stale workflow_run blocked by backend-impacting newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+                echo "${STALE_CHANGED_FILES}" >&2
+                exit 1
+              fi
+              if echo "${STALE_CHANGED_FILES}" | grep -Eq "${FRONT_BUILD_SHA_PATHS_PATTERN}"; then
+                FRONT_BUILD_SHA_SUPERSEDED="true"
+                CHANGE_SOURCE="${CHANGE_SOURCE}+front-build-superseded"
+              fi
+              echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+              CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
+            fi
+          fi
+          CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
+          if [ -z "${CHANGED_FILES}" ]; then
+            CHANGE_SOURCE="merge-diff-tree"
+            CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r -m "${DEPLOY_SHA}" || true)"
+          fi
+          if [ -z "${CHANGED_FILES}" ]; then
+            BACKEND_DEPLOY="true"
+            FRONT_LIVE_VERIFY="true"
+            EDITOR_LIVE_CANARY="false"
+            CHANGE_SOURCE="fail-open:no-changed-files"
+          else
+            if echo "${CHANGED_FILES}" | grep -Eq "${BACKEND_DEPLOY_PATHS_PATTERN}"; then
+              BACKEND_DEPLOY="true"
+              FRONT_LIVE_VERIFY="true"
+            fi
+            if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_LIVE_VERIFY_PATHS_PATTERN}"; then
+              FRONT_LIVE_VERIFY="true"
+            fi
+            if [ "${FRONT_BUILD_SHA_SUPERSEDED}" != "true" ] && echo "${CHANGED_FILES}" | grep -Eq "${FRONT_BUILD_SHA_PATHS_PATTERN}"; then
+              # Vercel can keep the previous frontend build for workflow/backend-only commits.
+              EXPECTED_FRONT_COMMIT_SHA="${DEPLOY_SHA}"
+            fi
+            if echo "${CHANGED_FILES}" | grep -Eq "${EDITOR_LIVE_CANARY_PATHS_PATTERN}"; then
+              EDITOR_LIVE_CANARY="true"
+            fi
+          fi
+
+          if [ "${FORCE_BACKEND_DEPLOY_INPUT}" = "true" ]; then
+            BACKEND_DEPLOY="true"
+            FRONT_LIVE_VERIFY="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-backend"
+          elif [ "${FORCE_FRONT_LIVE_VERIFY_INPUT}" = "true" ]; then
+            FRONT_LIVE_VERIFY="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-front-live-verify"
+          fi
+          if [ "${FORCE_EDITOR_LIVE_CANARY_INPUT}" = "true" ]; then
+            FRONT_LIVE_VERIFY="true"
+            EDITOR_LIVE_CANARY="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-editor-live-canary"
+          fi
+
+          echo "deploy_target_source=${CHANGE_SOURCE}"
+
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+          echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
+          echo "backend_deploy=${BACKEND_DEPLOY}" >> "$GITHUB_OUTPUT"
+          echo "front_live_verify=${FRONT_LIVE_VERIFY}" >> "$GITHUB_OUTPUT"
+          echo "editor_live_canary=${EDITOR_LIVE_CANARY}" >> "$GITHUB_OUTPUT"
+          echo "expected_front_commit_sha=${EXPECTED_FRONT_COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Deploy Boundary"
+            echo "- backend deploy: homeserver blue/green"
+            echo "- frontend runtime: Vercel (external platform)"
+            echo "- frontend step: \`frontLiveE2E\` verifies the current live URL after main deploy"
+            echo "- backend_deploy: ${BACKEND_DEPLOY}"
+            echo "- front_live_verify: ${FRONT_LIVE_VERIFY}"
+            if [ "${BACKEND_DEPLOY}" = "true" ]; then
+              echo "- backend result: backend deploy pipeline continues"
+            else
+              echo "- backend result: homeserver deploy skipped because backend/deploy paths did not change"
+            fi
+            if [ "${FRONT_LIVE_VERIFY}" = "true" ]; then
+              echo "- frontend result: live frontend verification will run"
+              if [ -n "${EXPECTED_FRONT_COMMIT_SHA}" ]; then
+                echo "- frontend build sha: ${EXPECTED_FRONT_COMMIT_SHA}"
+              else
+                echo "- frontend build sha: not asserted for non-frontend or superseded deploy"
+              fi
+              echo "- editor live canary: ${EDITOR_LIVE_CANARY}"
+            else
+              echo "- frontend result: live frontend verification skipped because frontend/backend deploy paths did not change"
+            fi
+            echo "- decision source: ${CHANGE_SOURCE}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  buildAndPush:
+    runs-on: ubuntu-latest
+    needs: calculateTag
+    if: needs.calculateTag.outputs.backend_deploy == 'true'
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      back_image_ref: ${{ steps.backend_image.outputs.back_image_ref }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        id: build_backend_image
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+        with:
+          context: ./back
+          file: ./back/Dockerfile
+          push: true
+          tags: ${{ needs.calculateTag.outputs.image_ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Export backend digest image ref
+        id: backend_image
+        env:
+          IMAGE_NAME: ${{ needs.calculateTag.outputs.image_name }}
+          BACKEND_IMAGE_DIGEST: ${{ steps.build_backend_image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKEND_IMAGE_DIGEST}" ]; then
+            echo "backend image digest is empty" >&2
+            exit 1
+          fi
+          echo "back_image_ref=${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "backend image ref: ${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+
+  blueGreenDeploy:
+    runs-on: ubuntu-latest
+    needs:
+      - calculateTag
+      - buildAndPush
+    if: >
+      needs.calculateTag.outputs.backend_deploy == 'true' &&
+      needs.buildAndPush.result == 'success'
+    timeout-minutes: 75
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Verify required secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+        shell: bash
+        run: |
+          required=(
+            TS_OAUTH_CLIENT_ID
+            TS_OAUTH_SECRET
+            HOME_SSH_USER
+            HOME_APP_DIR
+            HOME_HOST
+            HOME_SSH_KEY
+            HOME_KNOWN_HOSTS
+            HOME_GHCR_USERNAME
+            HOME_GHCR_TOKEN
+            HOME_SERVER_ENV
+          )
+
+          for key in "${required[@]}"; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "$key missing"
+              exit 1
+            fi
+            echo "$key present"
+          done
+
+      - name: Validate HOME_SERVER_ENV contract
+        env:
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || 'false' }}
+          HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
+          HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
+          HOME_NEXT_PUBLIC_SIGNUP_ENABLED: ${{ secrets.NEXT_PUBLIC_SIGNUP_ENABLED || vars.NEXT_PUBLIC_SIGNUP_ENABLED || 'false' }}
+          HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE: ${{ secrets.NEXT_PUBLIC_RUM_SAMPLE_RATE || vars.NEXT_PUBLIC_RUM_SAMPLE_RATE || '0' }}
+          HOME_RESTORE_PRIVACY_GATE_SCRIPT: ${{ secrets.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT || vars.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT || '/opt/aquila-blog/restore-privacy-gate.sh' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          home_server_env_file="${RUNNER_TEMP}/home-server.env"
+          {
+            printf '%s\n' "${HOME_SERVER_ENV}"
+            printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
+            printf 'CUSTOM__AI__SUMMARY__ENABLED=%s\n' "${HOME_AI_SUMMARY_ENABLED:-false}"
+            printf 'CUSTOM__MEMBER__SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
+            printf 'CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
+            printf 'NEXT_PUBLIC_SIGNUP_ENABLED=%s\n' "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}"
+            printf 'NEXT_PUBLIC_RUM_SAMPLE_RATE=%s\n' "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}"
+          } > "${home_server_env_file}"
+          node tools/env/validate-env.mjs --target home-server-source --file "${home_server_env_file}"
+
+      - name: Resolve Tailscale OAuth tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolved_tags="${{ vars.TS_OAUTH_TAGS || secrets.TS_OAUTH_TAGS || 'tag:ci' }}"
+          echo "Using Tailscale OAuth tags: ${resolved_tags}"
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: ${{ vars.TS_OAUTH_TAGS || secrets.TS_OAUTH_TAGS || 'tag:ci' }}
+
+      - name: Diagnose Tailscale Route to Home SSH
+        env:
+          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
+          HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT || '22' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${HOME_HOST}" ]; then
+            echo "HOME host secret is empty. Set HOME_TAILSCALE_HOST (or HOME_TS_HOST/HOME_SSH_HOST/HOME_HOST)." >&2
+            exit 1
+          fi
+
+          echo "diagnose target: ${HOME_HOST}:${HOME_SSH_PORT}"
+          tailscale status
+
+          echo "tailscale ping test"
+          if ! tailscale ping -c 3 "${HOME_HOST}"; then
+            echo "tailscale ping did not establish direct path (DERP-only or transient). Continue and rely on TCP SSH connectivity test."
+          fi
+
+          echo "tcp connectivity test"
+          if command -v nc >/dev/null 2>&1; then
+            timeout 10 nc -zv "${HOME_HOST}" "${HOME_SSH_PORT}"
+          else
+            timeout 10 bash -lc "cat < /dev/null > /dev/tcp/${HOME_HOST}/${HOME_SSH_PORT}"
+            echo "tcp open: ${HOME_HOST}:${HOME_SSH_PORT}"
+          fi
+
+      - name: Configure SSH key
+        env:
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH_DIR="${RUNNER_TEMP}/ssh"
+          rm -rf "$SSH_DIR"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
+
+          printf '%s\n' "${HOME_SSH_KEY}" > "$SSH_DIR/home_key"
+          chmod 600 "$SSH_DIR/home_key"
+          printf '%s\n' "${HOME_KNOWN_HOSTS}" > "$SSH_DIR/known_hosts"
+          if [ ! -s "$SSH_DIR/known_hosts" ]; then
+            echo "HOME_KNOWN_HOSTS is required for production deploy" >&2
+            exit 1
+          fi
+          chmod 600 "$SSH_DIR/known_hosts"
+          echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
+
+      - name: Deploy over SSH (pull image + blue/green switch)
+        env:
+          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_BACK_IMAGE: ${{ needs.buildAndPush.outputs.back_image_ref }}
+          HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+          HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || 'false' }}
+          HOME_AI_SUMMARY_GEMINI_API_KEY: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || vars.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || '' }}
+          HOME_AI_SUMMARY_GEMINI_MODEL: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__MODEL || vars.CUSTOM__AI__SUMMARY__GEMINI__MODEL || '' }}
+          HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
+          HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
+          HOME_NEXT_PUBLIC_SIGNUP_ENABLED: ${{ secrets.NEXT_PUBLIC_SIGNUP_ENABLED || vars.NEXT_PUBLIC_SIGNUP_ENABLED || 'false' }}
+          HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE: ${{ secrets.NEXT_PUBLIC_RUM_SAMPLE_RATE || vars.NEXT_PUBLIC_RUM_SAMPLE_RATE || '0' }}
+          HOME_RESTORE_PRIVACY_GATE_SCRIPT: ${{ secrets.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT || vars.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT || '/opt/aquila-blog/restore-privacy-gate.sh' }}
+        run: |
+          set -euo pipefail
+          PORT="${HOME_SSH_PORT:-22}"
+          HOME_APP_DIR_B64="$(printf '%s' "${HOME_APP_DIR}" | base64 | tr -d '\n')"
+          LOCAL_ENV_FILE="${RUNNER_TEMP}/home-server.env"
+          LOCAL_REMOTE_VARS_FILE="${RUNNER_TEMP}/home-remote-vars.env"
+          printf '%s\n' "${HOME_SERVER_ENV}" > "${LOCAL_ENV_FILE}"
+          chmod 600 "${LOCAL_ENV_FILE}"
+          {
+            printf 'HOME_BACK_IMAGE=%q\n' "${HOME_BACK_IMAGE}"
+            printf 'HOME_DEPLOY_SHA=%q\n' "${HOME_DEPLOY_SHA}"
+            printf 'HOME_GHCR_USERNAME=%q\n' "${HOME_GHCR_USERNAME}"
+            printf 'HOME_GHCR_TOKEN=%q\n' "${HOME_GHCR_TOKEN}"
+            printf 'HOME_AI_SUMMARY_ENABLED=%q\n' "${HOME_AI_SUMMARY_ENABLED:-}"
+            printf 'HOME_AI_SUMMARY_GEMINI_API_KEY=%q\n' "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}"
+            printf 'HOME_AI_SUMMARY_GEMINI_MODEL=%q\n' "${HOME_AI_SUMMARY_GEMINI_MODEL:-}"
+            printf 'HOME_MEMBER_SIGNUP_ENABLED=%q\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
+            printf 'HOME_MEMBER_OAUTH_SIGNUP_ENABLED=%q\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
+            printf 'HOME_NEXT_PUBLIC_SIGNUP_ENABLED=%q\n' "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}"
+            printf 'HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE=%q\n' "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}"
+            printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT:-/opt/aquila-blog/restore-privacy-gate.sh}"
+          } > "${LOCAL_REMOTE_VARS_FILE}"
+          chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
+
+          REMOTE_TMP_DIR="$(ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" "umask 077 && mktemp -d /tmp/aquila-deploy.XXXXXX")"
+          case "${REMOTE_TMP_DIR}" in
+            /tmp/aquila-deploy.*) ;;
+            *)
+              echo "unexpected remote tmp dir: ${REMOTE_TMP_DIR}" >&2
+              exit 1
+              ;;
+          esac
+          cleanup_remote_tmp_from_runner() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ]; then
+              ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" "rm -rf -- ${REMOTE_TMP_DIR}" || true
+            fi
+          }
+          trap cleanup_remote_tmp_from_runner EXIT
+
+          scp -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$PORT" \
+            "${LOCAL_ENV_FILE}" "${LOCAL_REMOTE_VARS_FILE}" \
+            "$HOME_SSH_USER@$HOME_HOST:${REMOTE_TMP_DIR}/"
+
+          ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
+            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          decode_b64() {
+            if printf '' | base64 --decode >/dev/null 2>&1; then
+              printf '%s' "$1" | base64 --decode
+            else
+              printf '%s' "$1" | base64 -d
+            fi
+          }
+
+          HOME_APP_DIR="$(decode_b64 "${HOME_APP_DIR_B64:-}")"
+          REMOTE_ENV_FILE="${REMOTE_TMP_DIR}/home-server.env"
+          REMOTE_VARS_FILE="${REMOTE_TMP_DIR}/home-remote-vars.env"
+
+          DEPLOY_COMPLETED="false"
+          ROLLBACK_IN_PROGRESS="false"
+          ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
+          PRE_DEPLOY_ENV_CAPTURED="false"
+          PRE_DEPLOY_ENV_CONTENT=""
+          BACKUP_DIR=""
+
+          rollback_from_backup_if_needed() {
+            return 0
+          }
+
+          cleanup_remote_tmp() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ] && [ -d "${REMOTE_TMP_DIR}" ]; then
+              rm -rf "${REMOTE_TMP_DIR}" || true
+            fi
+          }
+
+          on_exit() {
+            local status="$?"
+            cleanup_remote_tmp
+            if [ "${status}" -ne 0 ]; then
+              rollback_from_backup_if_needed "unexpected_exit_status_${status}"
+            fi
+          }
+
+          trap on_exit EXIT
+
+          HOME_SERVER_ENV="$(cat "${REMOTE_ENV_FILE}")"
+          # shellcheck disable=SC1090
+          . "${REMOTE_VARS_FILE}"
+          export HOME_SERVER_ENV
+
+          upsert_env_key() {
+            local key="$1"
+            local value="$2"
+            local file="$3"
+            [ -z "${value}" ] && return 0
+
+            if grep -qE "^${key}=" "${file}"; then
+              grep -vE "^${key}=" "${file}" > "${file}.tmp"
+              printf '%s=%s\n' "${key}" "${value}" >> "${file}.tmp"
+              mv "${file}.tmp" "${file}"
+            else
+              printf '%s=%s\n' "${key}" "${value}" >> "${file}"
+            fi
+          }
+
+          remove_env_key() {
+            local key="$1"
+            local file="$2"
+
+            if grep -qE "^${key}=" "${file}"; then
+              grep -vE "^${key}=" "${file}" > "${file}.tmp"
+              mv "${file}.tmp" "${file}"
+            fi
+          }
+
+          restart_external_backup_legacy_minio_if_needed() {
+            local marker="deploy/homeserver/.external-minio-migration-stopped"
+            local migrated_minio_dir=""
+            local cid
+            local line
+            if [ ! -f "${marker}" ]; then
+              return 0
+            fi
+            while IFS= read -r line; do
+              [ -n "${line}" ] || continue
+              case "${line}" in
+                minio_dir=*)
+                  migrated_minio_dir="${line#minio_dir=}"
+                  continue
+                  ;;
+                cid=*)
+                  cid="${line#cid=}"
+                  ;;
+                *)
+                  cid="${line}"
+                  ;;
+              esac
+              echo "restarting legacy minio container before rollback: ${cid}" >&2
+              docker start "${cid}" >/dev/null 2>&1 || true
+            done < "${marker}"
+            case "${migrated_minio_dir}" in
+              "")
+                ;;
+              /mnt/aquila-blog-data/minio)
+                echo "keeping migrated MinIO copy for manual reconciliation after rollback: ${migrated_minio_dir}" >&2
+                ;;
+              *)
+                echo "keeping unexpected migrated MinIO path from marker: ${migrated_minio_dir}" >&2
+                ;;
+            esac
+            rm -f "${marker}"
+          }
+
+          cd "${HOME_APP_DIR}"
+
+          if [ -z "${HOME_DEPLOY_SHA:-}" ]; then
+            echo "HOME_DEPLOY_SHA is empty. abort deploy." >&2
+            exit 1
+          fi
+
+          umask 077
+          if [ ! -f deploy/homeserver/create_deploy_backup.sh ]; then
+            echo "deploy backup script missing before checkout: deploy/homeserver/create_deploy_backup.sh" >&2
+            exit 1
+          fi
+          chmod +x deploy/homeserver/create_deploy_backup.sh
+          BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
+          echo "backup created (pre-checkout): ${BACKUP_DIR}"
+
+          git fetch origin main --prune
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "${HOME_DEPLOY_SHA}" --depth 1 || true
+          fi
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            echo "deploy sha not found in remote repository: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${HOME_DEPLOY_SHA}" "origin/main"; then
+            echo "deploy sha is not reachable from origin/main: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+          git checkout --force "${HOME_DEPLOY_SHA}"
+
+          mkdir -p deploy/homeserver
+
+          chmod +x \
+            deploy/homeserver/create_deploy_backup.sh \
+            deploy/homeserver/create_external_backup.sh \
+            deploy/homeserver/prune_external_backups.sh \
+            deploy/homeserver/blue_green_deploy.sh \
+            deploy/homeserver/pgroonga_precheck.sh \
+            deploy/homeserver/post_precheck_env_guard.sh \
+            deploy/homeserver/rollback_last_deploy.sh \
+            deploy/homeserver/steady_state_guard.sh \
+            deploy/homeserver/install_steady_state_guard_cron.sh
+
+          restore_backup_files_minimally() {
+            local backup_dir="$1"
+            if [ -z "${backup_dir:-}" ] || [ ! -d "${backup_dir}" ]; then
+              return 1
+            fi
+
+            for file in docker-compose.prod.yml .active_backend; do
+              if [ -f "${backup_dir}/${file}" ]; then
+                cp "${backup_dir}/${file}" "deploy/homeserver/${file}"
+              fi
+            done
+
+            if [ -d "${backup_dir}/caddy" ]; then
+              rm -rf deploy/homeserver/caddy
+              cp -R "${backup_dir}/caddy" deploy/homeserver/caddy
+            elif [ -f "${backup_dir}/Caddyfile" ]; then
+              mkdir -p deploy/homeserver/caddy
+              cp "${backup_dir}/Caddyfile" deploy/homeserver/caddy/Caddyfile
+            fi
+          }
+
+          run_backup_rollback() {
+            local reason="${1:-unexpected_exit}"
+            if [ -z "${BACKUP_DIR:-}" ] || [ ! -d "${BACKUP_DIR}" ]; then
+              return 0
+            fi
+
+            echo "rollback from backup: ${BACKUP_DIR} (reason=${reason})" >&2
+            if [ "${PRE_DEPLOY_ENV_CAPTURED}" = "true" ]; then
+              printf '%s\n' "${PRE_DEPLOY_ENV_CONTENT}" > deploy/homeserver/.env.prod
+              echo "pre-deploy env restored from shell memory before rollback" >&2
+            fi
+
+            if ! restore_backup_files_minimally "${BACKUP_DIR}"; then
+              echo "minimal backup restore failed before rollback script: ${BACKUP_DIR}" >&2
+            fi
+
+            local rollback_status=0
+            if ! env -u BACK_IMAGE RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}"; then
+              echo "rollback script failed after minimal backup restore: ${BACKUP_DIR} (reason=${reason})" >&2
+              rollback_status=1
+            fi
+            if [ "${rollback_status}" -eq 0 ]; then
+              restart_external_backup_legacy_minio_if_needed
+            fi
+            return "${rollback_status}"
+          }
+
+          rollback_from_backup_if_needed() {
+            local reason="${1:-unexpected_exit}"
+            if [ "${DEPLOY_COMPLETED}" = "true" ] || [ "${ROLLBACK_IN_PROGRESS}" = "true" ]; then
+              return 0
+            fi
+            if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
+              ROLLBACK_IN_PROGRESS="true"
+              run_backup_rollback "${reason}"
+            fi
+          }
+
+          ./deploy/homeserver/prune_external_backups.sh --dry-run
+          ./deploy/homeserver/prune_external_backups.sh
+          EXTERNAL_BACKUP_DIR="$(./deploy/homeserver/create_external_backup.sh)"
+          echo "external backup created (pre-env-mutation): ${EXTERNAL_BACKUP_DIR}"
+          ./deploy/homeserver/prune_external_backups.sh --dry-run
+          ./deploy/homeserver/prune_external_backups.sh
+
+          if [ -f deploy/homeserver/.env.prod ]; then
+            PRE_DEPLOY_ENV_CONTENT="$(cat deploy/homeserver/.env.prod)"
+            PRE_DEPLOY_ENV_CAPTURED="true"
+          fi
+
+          if [ -n "${HOME_SERVER_ENV:-}" ]; then
+            printf '%s\n' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod
+          elif [ ! -f deploy/homeserver/.env.prod ]; then
+            cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
+            echo "deploy/homeserver/.env.prod created from example. Fill required values." >&2
+            exit 1
+          fi
+
+          upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-}" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__API_KEY" "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__MODEL" "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" "deploy/homeserver/.env.prod"
+          upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "${HOME_RESTORE_PRIVACY_GATE_SCRIPT:-/opt/aquila-blog/restore-privacy-gate.sh}" "deploy/homeserver/.env.prod"
+
+          require_privacy_freeze_value() {
+            local key="$1"
+            local actual="$2"
+            local expected="$3"
+            if [ "${actual:-${expected}}" != "${expected}" ]; then
+              echo "privacy freeze flag must stay ${expected}: ${key}=${actual}" >&2
+              exit 1
+            fi
+          }
+
+          require_privacy_freeze_value "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "false"
+          require_privacy_freeze_value "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "false"
+          require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-false}" "false"
+          require_privacy_freeze_value "NEXT_PUBLIC_SIGNUP_ENABLED" "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}" "false"
+          require_privacy_freeze_value "NEXT_PUBLIC_RUM_SAMPLE_RATE" "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}" "0"
+          upsert_env_key "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
+          upsert_env_key "NEXT_PUBLIC_SIGNUP_ENABLED" "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
+          upsert_env_key "NEXT_PUBLIC_RUM_SAMPLE_RATE" "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}" "deploy/homeserver/.env.prod"
+
+          # prod에서 sql.init 경로가 켜지면 부팅 실패(DO $$ 분리/DDL 충돌)로 이어질 수 있다.
+          # HOME_SERVER_ENV 드리프트가 있어도 배포 직전에 안전값으로 강제한다.
+          remove_env_key "SPRING_SQL_INIT_SCHEMA_LOCATIONS" "deploy/homeserver/.env.prod"
+          remove_env_key "SPRING_SQL_INIT_DATA_LOCATIONS" "deploy/homeserver/.env.prod"
+          remove_env_key "SPRING_SQL_INIT_CONTINUE_ON_ERROR" "deploy/homeserver/.env.prod"
+          upsert_env_key "SPRING_SQL_INIT_MODE" "never" "deploy/homeserver/.env.prod"
+
+          # Live auth cookies must cover both www.aquilaxk.site and api.aquilaxk.site.
+          # HOME_SERVER_ENV can lag behind custom-domain changes, so pin the deployed
+          # prod site scope immediately before rollout.
+          upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "aquilaxk.site" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM_PROD_FRONTURL" "https://www.aquilaxk.site" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM_PROD_BACKURL" "https://api.aquilaxk.site" "deploy/homeserver/.env.prod"
+
+          if [ -z "${HOME_BACK_IMAGE:-}" ]; then
+            echo "HOME_BACK_IMAGE is empty. abort deploy to avoid stale image rollout." >&2
+            exit 1
+          fi
+          STAGED_BACK_IMAGE="${HOME_BACK_IMAGE}"
+          echo "staged deploy image in shell env only: ${STAGED_BACK_IMAGE}"
+
+          extract_env_value() {
+            local key="$1"
+            awk -F= -v k="$key" '
+              $1==k {
+                value=substr($0, index($0, "=")+1)
+                gsub(/\r/, "", value)
+                gsub(/^"/, "", value)
+                gsub(/"$/, "", value)
+                gsub(/^'\''/, "", value)
+                gsub(/'\''$/, "", value)
+                print value
+              }
+            ' deploy/homeserver/.env.prod | tail -n 1
+          }
+
+          resolve_local_repo_digest() {
+            local image_ref="$1"
+            docker image inspect --format '{{index .RepoDigests 0}}' "${image_ref}" 2>/dev/null | head -n 1 | tr -d '\r'
+          }
+
+          ensure_image_key_from_local_digest() {
+            local key="$1"
+            local fallback_image="$2"
+            local value
+            value="$(extract_env_value "${key}")"
+            if [ -n "${value}" ]; then
+              return 0
+            fi
+
+            local digest
+            digest="$(resolve_local_repo_digest "${fallback_image}" || true)"
+            if [ -n "${digest}" ]; then
+              upsert_env_key "${key}" "${digest}" "deploy/homeserver/.env.prod"
+              echo "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
+              return 0
+            fi
+
+            echo "required image env key is missing and local digest lookup failed: ${key} (fallback=${fallback_image})" >&2
+            return 1
+          }
+
+          require_nonempty_env_key() {
+            local key="$1"
+            local value
+            value="$(extract_env_value "${key}")"
+            if [ -z "${value}" ]; then
+              echo "required env key is missing or empty: ${key}" >&2
+              exit 1
+            fi
+          }
+
+          require_pinned_image_key() {
+            local key="$1"
+            local value
+            value="$(extract_env_value "${key}")"
+            require_pinned_image_value "${key}" "${value}"
+          }
+
+          require_digest_image_key() {
+            local key="$1"
+            local value
+            value="$(extract_env_value "${key}")"
+            require_digest_image_value "${key}" "${value}"
+          }
+
+          require_pinned_image_value() {
+            local key="$1"
+            local value="$2"
+            if [ -z "${value}" ]; then
+              echo "required image env key is missing: ${key}" >&2
+              exit 1
+            fi
+            if [[ "${value}" == *":latest" ]]; then
+              echo "latest tag is not allowed for ${key}: ${value}" >&2
+              exit 1
+            fi
+            if [[ "${value}" != *@sha256:* && "${value}" != *:* ]]; then
+              echo "image must have tag or digest for ${key}: ${value}" >&2
+              exit 1
+            fi
+          }
+
+          require_digest_image_value() {
+            local key="$1"
+            local value="$2"
+            if [ -z "${value}" ]; then
+              echo "required image value is missing: ${key}" >&2
+              exit 1
+            fi
+            if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
+              echo "latest tag is not allowed for ${key}: ${value}" >&2
+              exit 1
+            fi
+            if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
+              echo "image must be pinned by sha256 digest for ${key}: ${value}" >&2
+              exit 1
+            fi
+          }
+
+          require_nonempty_env_key "CF_TUNNEL_TOKEN"
+          require_digest_image_value "BACK_IMAGE" "${STAGED_BACK_IMAGE}"
+          ensure_image_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
+          ensure_image_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:latest"
+          ensure_image_key_from_local_digest "DOCKER_SOCKET_PROXY_IMAGE" "tecnativa/docker-socket-proxy:0.3.0"
+          ensure_image_key_from_local_digest "CADDY_IMAGE" "caddy:2.8-alpine"
+          ensure_image_key_from_local_digest "UPTIME_KUMA_IMAGE" "louislam/uptime-kuma:1"
+          ensure_image_key_from_local_digest "PROMETHEUS_IMAGE" "prom/prometheus:v2.54.1"
+          ensure_image_key_from_local_digest "ALERTMANAGER_IMAGE" "prom/alertmanager:v0.27.0"
+          ensure_image_key_from_local_digest "POSTGRES_EXPORTER_IMAGE" "quay.io/prometheuscommunity/postgres-exporter:v0.15.0"
+          ensure_image_key_from_local_digest "GRAFANA_IMAGE" "grafana/grafana:11.2.2"
+          ensure_image_key_from_local_digest "LOKI_IMAGE" "grafana/loki:3.0.0"
+          ensure_image_key_from_local_digest "PROMTAIL_IMAGE" "grafana/promtail:3.0.0"
+          ensure_image_key_from_local_digest "NODE_RUNTIME_IMAGE" "node:20-alpine"
+          ensure_image_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
+          ensure_image_key_from_local_digest "REDIS_IMAGE" "redis:7-alpine"
+          ensure_image_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
+          require_digest_image_key "CLOUDFLARED_IMAGE"
+          require_digest_image_key "AUTOHEAL_IMAGE"
+          require_digest_image_key "DOCKER_SOCKET_PROXY_IMAGE"
+          require_digest_image_key "CADDY_IMAGE"
+          require_digest_image_key "UPTIME_KUMA_IMAGE"
+          require_digest_image_key "PROMETHEUS_IMAGE"
+          require_digest_image_key "ALERTMANAGER_IMAGE"
+          require_digest_image_key "POSTGRES_EXPORTER_IMAGE"
+          require_digest_image_key "GRAFANA_IMAGE"
+          require_digest_image_key "LOKI_IMAGE"
+          require_digest_image_key "PROMTAIL_IMAGE"
+          require_digest_image_key "NODE_RUNTIME_IMAGE"
+          require_digest_image_key "DB_IMAGE"
+          require_digest_image_key "REDIS_IMAGE"
+          require_digest_image_key "MINIO_IMAGE"
+
+          if ! BACK_IMAGE="${STAGED_BACK_IMAGE}" ./deploy/homeserver/pgroonga_precheck.sh; then
+            exit 1
+          fi
+
+          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" ./deploy/homeserver/post_precheck_env_guard.sh; then
+            exit 1
+          fi
+
+          if [ -z "${HOME_GHCR_USERNAME:-}" ] || [ -z "${HOME_GHCR_TOKEN:-}" ]; then
+            echo "HOME_GHCR_USERNAME and HOME_GHCR_TOKEN are required for private GHCR deploy" >&2
+            exit 1
+          fi
+          echo "${HOME_GHCR_TOKEN}" | docker login ghcr.io -u "${HOME_GHCR_USERNAME}" --password-stdin
+
+          RUNTIME_SPLIT_ENABLED_VALUE="$(extract_env_value "RUNTIME_SPLIT_ENABLED")"
+          RUNTIME_SPLIT_STAGE_VALUE="$(extract_env_value "RUNTIME_SPLIT_STAGE")"
+          if [ -z "${RUNTIME_SPLIT_ENABLED_VALUE}" ]; then
+            RUNTIME_SPLIT_ENABLED_VALUE="false"
+          fi
+          if [ -z "${RUNTIME_SPLIT_STAGE_VALUE}" ]; then
+            RUNTIME_SPLIT_STAGE_VALUE="A"
+          fi
+          ROLLBACK_RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}"
+          echo "runtime split from HOME_SERVER_ENV: enabled=${RUNTIME_SPLIT_ENABLED_VALUE} stage=${RUNTIME_SPLIT_STAGE_VALUE}"
+
+          ensure_monitoring_bind_mount_permissions() {
+            find deploy/homeserver/monitoring -type d -exec chmod 0755 {} + 2>/dev/null || true
+            find deploy/homeserver/monitoring -type f -exec chmod 0644 {} + 2>/dev/null || true
+          }
+
+          emit_post_deploy_diagnostics() {
+            backend_container_id_any_state() {
+              local backend="$1"
+              docker ps -aq \
+                --filter "label=com.docker.compose.project=blog_home" \
+                --filter "label=com.docker.compose.service=${backend}" | head -n 1
+            }
+
+            echo "[post-deploy-diagnostic] compose ps"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps || true
+            echo "[post-deploy-diagnostic] compose ps -a back_blue/back_green"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps -a back_blue back_green || true
+            echo "[post-deploy-diagnostic] caddy logs"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 caddy || true
+            echo "[post-deploy-diagnostic] cloudflared logs"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 cloudflared || true
+            for backend in back_blue back_green; do
+              echo "[post-deploy-diagnostic] backend=${backend}"
+              cid="$(backend_container_id_any_state "${backend}")"
+              if [ -n "${cid}" ]; then
+                docker inspect --format "${backend} image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${cid}" || true
+              else
+                echo "${backend} container=none"
+              fi
+              docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=160 "${backend}" || true
+            done
+          }
+
+          rollback_and_exit() {
+            local reason="$1"
+            ROLLBACK_IN_PROGRESS="true"
+            echo "deploy verification failed: ${reason}" >&2
+            emit_post_deploy_diagnostics
+            if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
+              ROLLBACK_RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}"
+              run_backup_rollback "${reason}"
+            fi
+            exit 1
+          }
+
+          ensure_monitoring_bind_mount_permissions
+
+          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
+            rollback_and_exit "blue_green_deploy_failed"
+          fi
+
+          API_DOMAIN="$(awk -F= '$1=="API_DOMAIN"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod)"
+          if [ -z "${API_DOMAIN}" ]; then
+            rollback_and_exit "missing_api_domain"
+          fi
+
+          ACTIVE_BACKEND="$(cat deploy/homeserver/.active_backend 2>/dev/null || true)"
+          if [ "${ACTIVE_BACKEND}" != "back_blue" ] && [ "${ACTIVE_BACKEND}" != "back_green" ]; then
+            rollback_and_exit "invalid_active_backend"
+          fi
+
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps --status running --services | grep -qx "${ACTIVE_BACKEND}"; then
+            rollback_and_exit "active_backend_not_running"
+          fi
+
+          ACTIVE_BACKEND_CONTAINER_ID="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps -q "${ACTIVE_BACKEND}" | head -n 1)"
+          ACTIVE_BACKEND_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${ACTIVE_BACKEND_CONTAINER_ID}" 2>/dev/null | tr -d '\r')"
+          case "${ACTIVE_BACKEND}" in
+            back_blue) ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE" ;;
+            back_green) ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE" ;;
+            *)
+              rollback_and_exit "invalid_active_backend_image_key"
+              ;;
+          esac
+          EXPECTED_BACK_IMAGE="$(extract_env_value "${ACTIVE_BACKEND_IMAGE_KEY}")"
+          echo "post-deploy image verify: active_backend=${ACTIVE_BACKEND}, expected_image=${EXPECTED_BACK_IMAGE}, active_image=${ACTIVE_BACKEND_IMAGE:-none}"
+          if [ -z "${ACTIVE_BACKEND_CONTAINER_ID}" ] || [ -z "${ACTIVE_BACKEND_IMAGE}" ] || [ "${ACTIVE_BACKEND_IMAGE}" != "${EXPECTED_BACK_IMAGE}" ]; then
+            rollback_and_exit "active_backend_image_mismatch"
+          fi
+
+          if [ "${ACTIVE_BACKEND}" = "back_blue" ]; then
+            EXPECTED_UPSTREAM="back_blue"
+            INACTIVE_BACKEND="back_green"
+          else
+            EXPECTED_UPSTREAM="back_green"
+            INACTIVE_BACKEND="back_blue"
+          fi
+
+          MOUNTED_UPSTREAM="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back[_-](blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /etc/caddy/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1)"
+          MOUNTED_UPSTREAM="${MOUNTED_UPSTREAM//-/_}"
+          HAS_LEGACY_BACK_ACTIVE="false"
+          if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile"; then
+            HAS_LEGACY_BACK_ACTIVE="true"
+          fi
+
+          echo "post-deploy upstream verify: active_backend=${ACTIVE_BACKEND}, expected=${EXPECTED_UPSTREAM}, mounted=${MOUNTED_UPSTREAM:-none}, legacy_back_active=${HAS_LEGACY_BACK_ACTIVE}"
+          if [ -z "${MOUNTED_UPSTREAM}" ] || [ "${MOUNTED_UPSTREAM}" != "${EXPECTED_UPSTREAM}" ] || [ "${HAS_LEGACY_BACK_ACTIVE}" = "true" ]; then
+            rollback_and_exit "caddy_upstream_mismatch"
+          fi
+
+          if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps --status running --services | grep -qx "${INACTIVE_BACKEND}"; then
+            rollback_and_exit "inactive_backend_still_running"
+          fi
+
+          HTTP_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health/readiness" -H "Host: ${API_DOMAIN}" || true)"
+          echo "post-deploy caddy health status=${HTTP_CODE}"
+          if ! echo "${HTTP_CODE}" | grep -Eq '^200$'; then
+            rollback_and_exit "caddy_route_healthcheck_failed"
+          fi
+
+          wait_public_api_health() {
+            local api_domain="$1"
+            local attempts="${DEPLOY_PUBLIC_API_ATTEMPTS:-12}"
+            local connect_timeout="${DEPLOY_PUBLIC_API_CONNECT_TIMEOUT_SECONDS:-5}"
+            local max_time="${DEPLOY_PUBLIC_API_MAX_TIME_SECONDS:-15}"
+            local sleep_seconds="${DEPLOY_PUBLIC_API_SLEEP_SECONDS:-5}"
+            local restarted=0
+            local code
+
+            for attempt in $(seq 1 "${attempts}"); do
+              code="$(curl -sS --connect-timeout "${connect_timeout}" -m "${max_time}" -o /dev/null -w "%{http_code}" "https://${api_domain}/actuator/health/readiness" || true)"
+              echo "post-deploy public-api health attempt=${attempt}/${attempts} status=${code}"
+              if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+                return 0
+              fi
+
+              if [ "${code}" = "000" ] && [ "${restarted}" -eq 0 ] && [ "${attempt}" -ge 3 ]; then
+                echo "public-api timeout detected; restarting cloudflared once"
+                docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml restart cloudflared || true
+                restarted=1
+                sleep 8
+              fi
+
+              sleep "${sleep_seconds}"
+            done
+
+            echo "post-deploy public-api healthcheck failed for https://${api_domain}/actuator/health/readiness" >&2
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 cloudflared >&2 || true
+            return 1
+          }
+
+          if ! wait_public_api_health "${API_DOMAIN}"; then
+            rollback_and_exit "public_api_healthcheck_failed"
+          fi
+
+          header_value_from_file() {
+            local headers_file="$1"
+            local header_name="$2"
+            awk -v header_name="${header_name}" '
+              BEGIN { target = tolower(header_name) }
+              {
+                line = $0
+                sub(/\r$/, "", line)
+                separator = index(line, ":")
+                if (separator == 0) {
+                  next
+                }
+                name = tolower(substr(line, 1, separator - 1))
+                if (name == target) {
+                  value = substr(line, separator + 1)
+                  sub(/^[[:space:]]+/, "", value)
+                  print value
+                  exit
+                }
+              }
+            ' "${headers_file}"
+          }
+
+          assert_header_contains() {
+            local label="$1"
+            local headers_file="$2"
+            local header_name="$3"
+            local expected_fragment="$4"
+            local value
+            value="$(header_value_from_file "${headers_file}" "${header_name}")"
+            if [ -z "${value}" ] || [[ "${value,,}" != *"${expected_fragment,,}"* ]]; then
+              echo "[security-header-smoke] FAIL ${label}: missing ${header_name} containing '${expected_fragment}'" >&2
+              return 1
+            fi
+          }
+
+          assert_live_security_headers() {
+            local label="$1"
+            local url="$2"
+            local status_pattern="$3"
+            local cache_policy="${4:-default}"
+            local headers_file
+            local code
+            headers_file="$(mktemp)"
+
+            code="$(
+              curl -sS \
+                --connect-timeout "${DEPLOY_SECURITY_HEADER_CONNECT_TIMEOUT_SECONDS:-5}" \
+                -m "${DEPLOY_SECURITY_HEADER_MAX_TIME_SECONDS:-15}" \
+                -D "${headers_file}" \
+                -o /dev/null \
+                -w "%{http_code}" \
+                "${url}" || true
+            )"
+            echo "[security-header-smoke] ${label} status=${code} url=${url}"
+            if ! [[ "${code}" =~ ${status_pattern} ]]; then
+              echo "[security-header-smoke] FAIL ${label}: unexpected status=${code} url=${url}" >&2
+              rm -f "${headers_file}"
+              return 1
+            fi
+
+            assert_header_contains "${label}" "${headers_file}" "strict-transport-security" "max-age=31536000" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "x-content-type-options" "nosniff" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "x-frame-options" "deny" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "referrer-policy" "strict-origin-when-cross-origin" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "permissions-policy" "camera=()" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            if [ "${cache_policy}" = "no-store" ]; then
+              assert_header_contains "${label}" "${headers_file}" "cache-control" "no-store" || {
+                rm -f "${headers_file}"
+                return 1
+              }
+            fi
+
+            rm -f "${headers_file}"
+          }
+
+          if ! assert_live_security_headers \
+            "public-feed" \
+            "https://${API_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT" \
+            '^200$'; then
+            rollback_and_exit "public_feed_security_header_smoke_failed"
+          fi
+
+          if ! assert_live_security_headers \
+            "protected-auth-me" \
+            "https://${API_DOMAIN}/member/api/v1/auth/me" \
+            '^401$' \
+            "no-store"; then
+            rollback_and_exit "protected_auth_security_header_smoke_failed"
+          fi
+
+          run_canary_ratio_check() {
+            local label="$1"
+            local url="$2"
+            local attempts="${DEPLOY_CANARY_ATTEMPTS:-10}"
+            local min_success_percent="${DEPLOY_CANARY_MIN_SUCCESS_PERCENT:-90}"
+            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-5}"
+            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-12}"
+
+            local success=0
+            local code
+            for attempt in $(seq 1 "${attempts}"); do
+              code="$(
+                curl -sS \
+                  --connect-timeout "${connect_timeout}" \
+                  -m "${max_time}" \
+                  -o /dev/null \
+                  -w "%{http_code}" \
+                  "${url}" || true
+              )"
+              echo "[post-deploy-canary] ${label} attempt=${attempt}/${attempts} status=${code}"
+              if [ "${code}" = "200" ]; then
+                success=$((success + 1))
+              fi
+            done
+
+            local success_percent
+            success_percent="$(awk -v s="${success}" -v a="${attempts}" 'BEGIN { printf "%.1f", (a == 0 ? 0 : (s * 100.0) / a) }')"
+            local required_success
+            required_success=$(( (attempts * min_success_percent + 99) / 100 ))
+
+            echo "[post-deploy-canary] ${label} success=${success}/${attempts} (${success_percent}%), threshold=${min_success_percent}%"
+            [ "${success}" -ge "${required_success}" ]
+          }
+
+          extract_canary_post_id() {
+            local feed_url="$1"
+            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-5}"
+            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-12}"
+            local body
+            body="$(
+              curl -sS \
+                --connect-timeout "${connect_timeout}" \
+                -m "${max_time}" \
+                "${feed_url}" || true
+            )"
+            [ -z "${body}" ] && return 1
+
+            local post_id=""
+            if command -v python3 >/dev/null 2>&1; then
+              post_id="$(
+                printf '%s' "${body}" | python3 -c 'import json,sys; payload=json.load(sys.stdin); data=payload.get("data") or {}; content=data.get("content") or []; value=content[0].get("id") if content and isinstance(content[0], dict) else None; print(value if isinstance(value, int) else "")' 2>/dev/null || true
+              )"
+            fi
+
+            if [ -z "${post_id}" ]; then
+              post_id="$(printf '%s' "${body}" | grep -oE '"id":[0-9]+' | head -n 1 | cut -d: -f2 || true)"
+            fi
+
+            [ -n "${post_id}" ] && printf '%s' "${post_id}"
+          }
+
+          FEED_URL="https://${API_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=30&sort=CREATED_AT"
+          EXPLORE_URL="https://${API_DOMAIN}/post/api/v1/posts/explore?kw=&tag=&sort=CREATED_AT&page=1&pageSize=30"
+
+          if ! run_canary_ratio_check "feed" "${FEED_URL}"; then
+            rollback_and_exit "post_public_read_canary_feed_failed"
+          fi
+
+          if ! run_canary_ratio_check "explore" "${EXPLORE_URL}"; then
+            rollback_and_exit "post_public_read_canary_explore_failed"
+          fi
+
+          DETAIL_POST_ID="$(extract_canary_post_id "${FEED_URL}" || true)"
+          if [ -z "${DETAIL_POST_ID}" ]; then
+            rollback_and_exit "post_public_read_canary_missing_post_id"
+          fi
+          DETAIL_URL="https://${API_DOMAIN}/post/api/v1/posts/${DETAIL_POST_ID}"
+
+          if ! run_canary_ratio_check "detail(${DETAIL_POST_ID})" "${DETAIL_URL}"; then
+            rollback_and_exit "post_public_read_canary_detail_failed"
+          fi
+
+          rm -f deploy/homeserver/.external-minio-migration-stopped
+          DEPLOY_COMPLETED="true"
+          cleanup_remote_tmp
+          trap - EXIT
+          REMOTE
+          REMOTE_TMP_DIR=""
+          trap - EXIT
+
+  frontLiveE2E:
+    name: Frontend Live E2E Verification
+    runs-on: ubuntu-latest
+    needs:
+      - calculateTag
+      - blueGreenDeploy
+    if: >
+      always() &&
+      needs.calculateTag.result == 'success' &&
+      needs.calculateTag.outputs.front_live_verify == 'true' &&
+      (
+        needs.calculateTag.outputs.backend_deploy != 'true' ||
+        needs.blueGreenDeploy.result == 'success'
+      )
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      statuses: read
+    env:
+      PLAYWRIGHT_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_LIVE_FRONTURL || vars.CUSTOM_LIVE_FRONTURL || secrets.CUSTOM_PROD_FRONTURL || vars.CUSTOM_PROD_FRONTURL || secrets.HOME_FRONT_BASE_URL || vars.HOME_FRONT_BASE_URL || '' }}
+      E2E_API_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_LIVE_BACKURL || vars.CUSTOM_LIVE_BACKURL || secrets.CUSTOM_PROD_BACKURL || vars.CUSTOM_PROD_BACKURL || '' }}
+      PLAYWRIGHT_USE_WEBSERVER: "false"
+      HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+      E2E_LIVE_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
+      E2E_LIVE_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
+      E2E_LIVE_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || '' }}
+      E2E_ADMIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME || '' }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || '' }}
+      E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ needs.calculateTag.outputs.expected_front_commit_sha }}
+      E2E_LIVE_EDITOR_507_CANARY: ${{ needs.calculateTag.outputs.editor_live_canary }}
+      GITHUB_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Resolve live e2e base URL
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          extract_from_home_server_env() {
+            local key="$1"
+            printf '%s\n' "${HOME_SERVER_ENV:-}" | tr -d '\r' | awk -v key="$key" '
+              /^[[:space:]]*#/ { next }
+              /^[[:space:]]*$/ { next }
+              {
+                line = $0
+                sub(/^[[:space:]]+/, "", line)
+                sub(/^[Ee][Xx][Pp][Oo][Rr][Tt][[:space:]]+/, "", line)
+                if (index(line, key "=") == 1) {
+                  value = substr(line, length(key) + 2)
+                  sub(/^[[:space:]]+/, "", value)
+                  sub(/[[:space:]]+$/, "", value)
+                  if ((value ~ /^".*"$/) || (value ~ /^'\''.*'\''$/)) {
+                    value = substr(value, 2, length(value) - 2)
+                  }
+                  print value
+                  exit
+                }
+              }
+            '
+          }
+
+          extract_admin_from_home_server_env() {
+            local key="$1"
+            printf '%s\n' "${HOME_SERVER_ENV:-}" | tr -d '\r' | awk -v key="$key" '
+              /^[[:space:]]*#/ { next }
+              /^[[:space:]]*$/ { next }
+              {
+                line = $0
+                sub(/^[[:space:]]+/, "", line)
+                sub(/^[Ee][Xx][Pp][Oo][Rr][Tt][[:space:]]+/, "", line)
+                if (index(line, key "=") == 1) {
+                  value = substr(line, length(key) + 2)
+                  sub(/^[[:space:]]+/, "", value)
+                  sub(/[[:space:]]+$/, "", value)
+                  if ((value ~ /^".*"$/) || (value ~ /^'\''.*'\''$/)) {
+                    value = substr(value, 2, length(value) - 2)
+                  }
+                  print value
+                  exit
+                }
+              }
+            '
+          }
+
+          base_url="${PLAYWRIGHT_BASE_URL_OVERRIDE:-}"
+          if [ -z "${base_url}" ]; then
+            base_url="$(extract_from_home_server_env "CUSTOM_LIVE_FRONTURL")"
+          fi
+          if [ -z "${base_url}" ]; then
+            base_url="$(extract_from_home_server_env "CUSTOM_PROD_FRONTURL")"
+          fi
+          if [ -z "${base_url}" ]; then
+            base_url="$(extract_from_home_server_env "HOME_FRONT_BASE_URL")"
+          fi
+          if [ -z "${base_url}" ]; then
+            base_url="https://www.aquilaxk.site"
+          fi
+          if [ -z "${base_url}" ]; then
+            echo "Missing live frontend URL. Set CUSTOM_LIVE_FRONTURL or HOME_FRONT_BASE_URL in repository secrets/vars." >&2
+            exit 1
+          fi
+
+          case "${base_url}" in
+            http://*|https://*) ;;
+            *)
+              echo "Invalid PLAYWRIGHT_BASE_URL: ${base_url}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "PLAYWRIGHT_BASE_URL=${base_url}" >> "$GITHUB_ENV"
+          echo "Resolved live e2e base host: $(echo "${base_url}" | sed -E 's#https?://([^/]+).*#\1#')"
+
+          base_scheme="$(echo "${base_url}" | sed -E 's#(https?)://.*#\1#')"
+          api_base_url="${E2E_API_BASE_URL_OVERRIDE:-}"
+          if [ -z "${api_base_url}" ]; then
+            api_base_url="$(extract_from_home_server_env "CUSTOM_LIVE_BACKURL")"
+          fi
+          if [ -z "${api_base_url}" ]; then
+            api_base_url="$(extract_from_home_server_env "CUSTOM_PROD_BACKURL")"
+          fi
+          if [ -z "${api_base_url}" ]; then
+            api_base_url="$(extract_from_home_server_env "custom.prod.backUrl")"
+          fi
+          if [ -z "${api_base_url}" ]; then
+            api_base_url="$(extract_from_home_server_env "custom.site.backUrl")"
+          fi
+          if [ -z "${api_base_url}" ]; then
+            api_domain_from_env="$(extract_from_home_server_env "API_DOMAIN")"
+            if [ -n "${api_domain_from_env}" ]; then
+              api_base_url="${base_scheme}://${api_domain_from_env}"
+            fi
+          fi
+          if [ -z "${api_base_url}" ]; then
+            resolved_front_host="$(echo "${base_url}" | sed -E 's#https?://([^/]+).*#\1#')"
+            if [[ "${resolved_front_host}" == www.* ]]; then
+              api_base_url="${base_scheme}://api.${resolved_front_host#www.}"
+            else
+              api_base_url="${base_scheme}://api.${resolved_front_host}"
+            fi
+          fi
+
+          case "${api_base_url}" in
+            http://*|https://*) ;;
+            *)
+              echo "Invalid E2E_API_BASE_URL: ${api_base_url}" >&2
+              exit 1
+              ;;
+          esac
+          echo "E2E_API_BASE_URL=${api_base_url}" >> "$GITHUB_ENV"
+          echo "Resolved live e2e api base: ${api_base_url}"
+
+          # 라이브 E2E 전용 계정을 우선 사용하고, 없으면 운영 관리자 계정으로 fallback 한다.
+          resolved_admin_email="${E2E_LIVE_ADMIN_EMAIL:-}"
+          resolved_admin_username="${E2E_LIVE_ADMIN_USERNAME:-}"
+          resolved_admin_password="${E2E_LIVE_ADMIN_PASSWORD:-}"
+
+          if [ -z "${resolved_admin_email}" ]; then
+            resolved_admin_email="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__EMAIL")"
+          fi
+          if [ -z "${resolved_admin_username}" ]; then
+            resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__USERNAME")"
+          fi
+          if [ -z "${resolved_admin_password}" ]; then
+            resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__PASSWORD")"
+          fi
+
+          if [ -z "${resolved_admin_email}" ]; then
+            resolved_admin_email="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__EMAIL")"
+          fi
+          if [ -z "${resolved_admin_username}" ]; then
+            resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__USERNAME")"
+          fi
+          if [ -z "${resolved_admin_password}" ]; then
+            resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__PASSWORD")"
+          fi
+
+          if [ -z "${resolved_admin_email}" ]; then
+            resolved_admin_email="${E2E_ADMIN_EMAIL:-}"
+          fi
+          if [ -z "${resolved_admin_username}" ]; then
+            resolved_admin_username="${E2E_ADMIN_USERNAME:-}"
+          fi
+          if [ -z "${resolved_admin_password}" ]; then
+            resolved_admin_password="${E2E_ADMIN_PASSWORD:-}"
+          fi
+
+          if [ -n "${resolved_admin_email}" ]; then
+            echo "E2E_ADMIN_EMAIL=${resolved_admin_email}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${resolved_admin_username}" ]; then
+            echo "E2E_ADMIN_USERNAME=${resolved_admin_username}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${resolved_admin_password}" ]; then
+            echo "E2E_ADMIN_PASSWORD=${resolved_admin_password}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Verify live e2e secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "${E2E_ADMIN_EMAIL:-}" ] || [ -n "${E2E_ADMIN_USERNAME:-}" ] || (echo "E2E_ADMIN_EMAIL or E2E_ADMIN_USERNAME is required" && exit 1)
+          [ -n "${E2E_ADMIN_PASSWORD}" ] || (echo "E2E_ADMIN_PASSWORD is required" && exit 1)
+
+      - name: Live e2e preflight checks (fail-fast)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          front_base="${PLAYWRIGHT_BASE_URL}"
+          api_base="${E2E_API_BASE_URL:-}"
+          api_host="$(echo "${api_base}" | sed -E 's#https?://([^/]+).*#\1#')"
+
+          echo "preflight front=${front_base} api=${api_base}"
+
+          PREFLIGHT_ATTEMPTS="${E2E_PREFLIGHT_ATTEMPTS:-5}"
+          PREFLIGHT_CONNECT_TIMEOUT_SECONDS="${E2E_PREFLIGHT_CONNECT_TIMEOUT_SECONDS:-5}"
+          PREFLIGHT_MAX_TIME_SECONDS="${E2E_PREFLIGHT_MAX_TIME_SECONDS:-15}"
+          PREFLIGHT_SLEEP_SECONDS="${E2E_PREFLIGHT_SLEEP_SECONDS:-3}"
+          PREFLIGHT_CURL_RETRY="${E2E_PREFLIGHT_CURL_RETRY:-2}"
+          PREFLIGHT_FORCE_IPV4="${E2E_PREFLIGHT_FORCE_IPV4:-true}"
+          FRONT_BUILD_METADATA_ATTEMPTS="${E2E_FRONT_BUILD_METADATA_ATTEMPTS:-20}"
+          FRONT_BUILD_METADATA_SLEEP_SECONDS="${E2E_FRONT_BUILD_METADATA_SLEEP_SECONDS:-6}"
+
+          curl_args=(
+            -sS
+            --connect-timeout "${PREFLIGHT_CONNECT_TIMEOUT_SECONDS}"
+            -m "${PREFLIGHT_MAX_TIME_SECONDS}"
+            --retry "${PREFLIGHT_CURL_RETRY}"
+            --retry-all-errors
+            --retry-delay 1
+          )
+          if [ "${PREFLIGHT_FORCE_IPV4}" = "true" ]; then
+            curl_args+=(-4)
+          fi
+
+          probe_url() {
+            local label="$1"
+            local url="$2"
+            local status_pattern="$3"
+            local attempt="$4"
+            local code
+            code="$(
+              curl "${curl_args[@]}" \
+                -o /dev/null \
+                -w '%{http_code}' \
+                "${url}" || true
+            )"
+            echo "[preflight] ${label} attempt=${attempt} status=${code}"
+            [[ "${code}" =~ ${status_pattern} ]]
+          }
+
+          probe_login() {
+            local attempt="$1"
+            local code
+            local login_payload
+            if [ -n "${E2E_ADMIN_EMAIL:-}" ]; then
+              login_payload="{\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+            else
+              login_payload="{\"username\":\"${E2E_ADMIN_USERNAME}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+            fi
+            code="$(
+              curl "${curl_args[@]}" \
+                -X POST \
+                -H 'Content-Type: application/json' \
+                -o /dev/null \
+                -w '%{http_code}' \
+                --data "${login_payload}" \
+                "${api_base}/member/api/v1/auth/login" || true
+            )"
+            echo "[preflight] api-login attempt=${attempt} status=${code}"
+            [[ "${code}" =~ ^2[0-9][0-9]$ ]]
+          }
+
+          front_ok=0
+          for attempt in $(seq 1 "${PREFLIGHT_ATTEMPTS}"); do
+            if probe_url "front-login" "${front_base}/login" '^[1-4][0-9][0-9]$' "${attempt}"; then
+              front_ok=1
+              break
+            fi
+            sleep "${PREFLIGHT_SLEEP_SECONDS}"
+          done
+          if [ "${front_ok}" -ne 1 ]; then
+            echo "preflight failed for front-login: ${front_base}/login" >&2
+            exit 1
+          fi
+
+          if [ -n "${E2E_EXPECTED_FRONT_COMMIT_SHA:-}" ]; then
+            if command -v jq >/dev/null 2>&1; then
+              vercel_status_json="$(
+                curl "${curl_args[@]}" \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${E2E_EXPECTED_FRONT_COMMIT_SHA}/status" || true
+              )"
+              vercel_status_line="$(
+                printf '%s' "${vercel_status_json}" |
+                  jq -r '.statuses[]? | select(.context == "Vercel") | [.state, .description, .target_url] | @tsv' |
+                  head -n 1
+              )"
+              if [ -n "${vercel_status_line}" ]; then
+                IFS=$'\t' read -r vercel_state vercel_description vercel_target_url <<< "${vercel_status_line}"
+                echo "[preflight] vercel-status state=${vercel_state:-missing} description=${vercel_description:-missing}"
+                if [ "${vercel_state}" = "failure" ] && [[ "${vercel_description}" == *"Deployment rate limited"* ]]; then
+                  echo "::error title=Vercel production deployment rate limited::${vercel_description} (${vercel_target_url})" >&2
+                  echo "preflight failed: Vercel production deployment is rate limited; retry the Vercel deployment before rerunning live frontend verification" >&2
+                  exit 1
+                fi
+              else
+                echo "[preflight] vercel-status missing for ${E2E_EXPECTED_FRONT_COMMIT_SHA}; continuing with live metadata polling"
+              fi
+            else
+              echo "[preflight] jq not available; skipping Vercel status preflight"
+            fi
+
+            front_build_ok=0
+            for attempt in $(seq 1 "${FRONT_BUILD_METADATA_ATTEMPTS}"); do
+              front_html="$(
+                curl "${curl_args[@]}" \
+                  -L \
+                  "${front_base}/login?next=%2Fadmin&frontBuildCheck=${E2E_EXPECTED_FRONT_COMMIT_SHA}" || true
+              )"
+              front_build_sha="$(
+                printf '%s' "${front_html}" |
+                  sed -nE 's/.*<meta name="aquila-build-sha" content="([^"]*)".*/\1/p' |
+                  head -n 1
+              )"
+              echo "[preflight] front-build-sha attempt=${attempt} expected=${E2E_EXPECTED_FRONT_COMMIT_SHA} actual=${front_build_sha:-missing}"
+              if [ "${front_build_sha}" = "${E2E_EXPECTED_FRONT_COMMIT_SHA}" ]; then
+                front_build_ok=1
+                break
+              fi
+              sleep "${FRONT_BUILD_METADATA_SLEEP_SECONDS}"
+            done
+            if [ "${front_build_ok}" -ne 1 ]; then
+              echo "preflight failed: live frontend build metadata does not match deploy sha" >&2
+              exit 1
+            fi
+          fi
+
+          api_ok=0
+          for attempt in $(seq 1 "${PREFLIGHT_ATTEMPTS}"); do
+            readiness_ok=0
+            auth_ok=0
+
+            if probe_url "api-readiness" "${api_base}/actuator/health/readiness" '^2[0-9][0-9]$' "${attempt}"; then
+              readiness_ok=1
+            fi
+            if [ "${readiness_ok}" -ne 1 ]; then
+              if probe_url "api-auth-me" "${api_base}/member/api/v1/auth/me" '^[1-4][0-9][0-9]$' "${attempt}"; then
+                auth_ok=1
+              fi
+            fi
+            if [ "${readiness_ok}" -ne 1 ] && [ "${auth_ok}" -ne 1 ]; then
+              if probe_login "${attempt}"; then
+                auth_ok=1
+              fi
+            fi
+
+            if [ "${readiness_ok}" -eq 1 ] || [ "${auth_ok}" -eq 1 ]; then
+              api_ok=1
+              break
+            fi
+
+            sleep "$((PREFLIGHT_SLEEP_SECONDS * attempt))"
+          done
+
+          if [ "${api_ok}" -ne 1 ]; then
+            echo "preflight failed for api routes: ${api_base}" >&2
+            echo "[preflight-diagnostic] api dns lookup"
+            getent hosts "${api_host}" || true
+            echo "[preflight-diagnostic] curl headers /actuator/health/readiness"
+            curl "${curl_args[@]}" -D - -o /dev/null "${api_base}/actuator/health/readiness" || true
+            echo "[preflight-diagnostic] curl headers /member/api/v1/auth/me"
+            curl "${curl_args[@]}" -D - -o /dev/null "${api_base}/member/api/v1/auth/me" || true
+            echo "[preflight-diagnostic] curl headers /member/api/v1/auth/login"
+            if [ -n "${E2E_ADMIN_EMAIL:-}" ]; then
+              login_payload="{\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+            else
+              login_payload="{\"username\":\"${E2E_ADMIN_USERNAME}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+            fi
+            curl "${curl_args[@]}" -X POST -H 'Content-Type: application/json' -D - -o /dev/null --data "${login_payload}" "${api_base}/member/api/v1/auth/login" || true
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: front/yarn.lock
+
+      - name: Install dependencies
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Disable Microsoft apt sources for Playwright deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            [ -e "${source}" ] || continue
+            if grep -q 'packages.microsoft.com' "${source}"; then
+              sudo mv "${source}" "${source}.disabled"
+            fi
+          done
+
+      - name: Install Playwright browser
+        working-directory: front
+        run: npx playwright install --with-deps chromium
+
+      - name: Run live environment e2e
+        working-directory: front
+        env:
+          PLAYWRIGHT_LIVE_FAIL_FAST: "true"
+          PLAYWRIGHT_LIVE_MULTI_BROWSER: "false"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          heartbeat() {
+            while true; do
+              echo "[live-e2e] still running at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+              sleep 30
+            done
+          }
+
+          heartbeat &
+          hb_pid=$!
+          cleanup() {
+            kill "${hb_pid}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          npx playwright test e2e/live.spec.ts e2e/editor-live-visual.spec.ts \
+            --workers=1 \
+            --reporter=line \
+            --max-failures=1
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-live-e2e-playwright-report
+          path: |
+            front/playwright-report
+            front/test-results
+          retention-days: 1

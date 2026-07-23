@@ -1,0 +1,93 @@
+import fs from "fs"
+import path from "path"
+import { spawnSync } from "child_process"
+import { fileURLToPath } from "url"
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+const buildIdPath = path.join(projectRoot, ".next", "BUILD_ID")
+const buildSignaturePath = path.join(projectRoot, ".next", "playwright-build-signature.json")
+const baseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
+const resolvedPort = (() => {
+  try {
+    const url = new URL(baseUrl)
+    return url.port || (url.protocol === "https:" ? "443" : "80")
+  } catch {
+    return "3000"
+  }
+})()
+
+const watchedEntries = [
+  "src",
+  "public",
+  "package.json",
+  "next.config.js",
+  "site.config.js",
+]
+
+const buildSignature = {
+  enableQaRoutes: process.env.ENABLE_QA_ROUTES === "true",
+  nextPublicRumSampleRate: process.env.NEXT_PUBLIC_RUM_SAMPLE_RATE || "",
+  vercelEnv: process.env.VERCEL_ENV || "",
+}
+
+const getLatestMtimeMs = (targetPath) => {
+  if (!fs.existsSync(targetPath)) return 0
+
+  const stat = fs.statSync(targetPath)
+  if (!stat.isDirectory()) return stat.mtimeMs
+
+  let latest = stat.mtimeMs
+  const entries = fs.readdirSync(targetPath, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (entry.name === ".next" || entry.name === "node_modules" || entry.name === "test-results") continue
+    latest = Math.max(latest, getLatestMtimeMs(path.join(targetPath, entry.name)))
+  }
+
+  return latest
+}
+
+const resolveNeedsBuild = () => {
+  if (!fs.existsSync(buildIdPath)) return true
+
+  if (!fs.existsSync(buildSignaturePath)) return true
+
+  try {
+    const savedSignature = JSON.parse(fs.readFileSync(buildSignaturePath, "utf8"))
+    if (JSON.stringify(savedSignature) !== JSON.stringify(buildSignature)) {
+      return true
+    }
+  } catch {
+    return true
+  }
+
+  const buildMtimeMs = fs.statSync(buildIdPath).mtimeMs
+  const latestSourceMtimeMs = watchedEntries.reduce((maxMtime, entry) => {
+    return Math.max(maxMtime, getLatestMtimeMs(path.join(projectRoot, entry)))
+  }, 0)
+
+  return latestSourceMtimeMs > buildMtimeMs
+}
+
+if (resolveNeedsBuild()) {
+  const buildResult = spawnSync("yarn", ["build"], {
+    cwd: projectRoot,
+    stdio: "inherit",
+    env: process.env,
+  })
+
+  if (buildResult.status !== 0) {
+    process.exit(buildResult.status ?? 1)
+  }
+
+  fs.mkdirSync(path.dirname(buildSignaturePath), { recursive: true })
+  fs.writeFileSync(buildSignaturePath, JSON.stringify(buildSignature))
+}
+
+const startResult = spawnSync("yarn", ["start", "-H", "127.0.0.1", "-p", resolvedPort], {
+  cwd: projectRoot,
+  stdio: "inherit",
+  env: process.env,
+})
+
+process.exit(startResult.status ?? 0)

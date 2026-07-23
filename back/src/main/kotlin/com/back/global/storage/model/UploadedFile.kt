@@ -1,0 +1,161 @@
+package com.back.global.storage.model
+
+import com.back.global.jpa.domain.AfterDDL
+import com.back.global.jpa.domain.BaseTime
+import jakarta.persistence.Column
+import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
+import jakarta.persistence.GeneratedValue
+import jakarta.persistence.GenerationType.SEQUENCE
+import jakarta.persistence.Id
+import jakarta.persistence.SequenceGenerator
+import org.hibernate.annotations.DynamicUpdate
+import java.time.Instant
+
+/**
+ * UploadedFileStatus는 글로벌 모듈 도메인 상태와 규칙을 표현하는 모델입니다.
+ * 불변조건을 유지하며 상태 전이를 메서드 단위로 캡슐화합니다.
+ */
+enum class UploadedFileStatus {
+    TEMP,
+    ACTIVE,
+    PENDING_DELETE,
+    DELETED,
+}
+
+/**
+ * UploadedFilePurpose는 글로벌 모듈 도메인 상태와 규칙을 표현하는 모델입니다.
+ * 불변조건을 유지하며 상태 전이를 메서드 단위로 캡슐화합니다.
+ */
+enum class UploadedFilePurpose {
+    POST_IMAGE,
+    POST_FILE,
+    PROFILE_IMAGE,
+}
+
+/**
+ * UploadedFileOwnerType는 글로벌 모듈 도메인 상태와 규칙을 표현하는 모델입니다.
+ * 불변조건을 유지하며 상태 전이를 메서드 단위로 캡슐화합니다.
+ */
+enum class UploadedFileOwnerType {
+    POST,
+    MEMBER_PROFILE,
+}
+
+/**
+ * UploadedFileRetentionReason는 글로벌 모듈 도메인 상태와 규칙을 표현하는 모델입니다.
+ * 불변조건을 유지하며 상태 전이를 메서드 단위로 캡슐화합니다.
+ */
+enum class UploadedFileRetentionReason {
+    TEMP_UPLOAD,
+    REPLACED_PROFILE_IMAGE,
+    DETACHED_POST_ATTACHMENT,
+    DELETED_POST_ATTACHMENT,
+}
+
+/**
+ * UploadedFile는 글로벌 모듈 도메인 상태와 규칙을 표현하는 모델입니다.
+ * 불변조건을 유지하며 상태 전이를 메서드 단위로 캡슐화합니다.
+ */
+@Entity
+@DynamicUpdate
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS uploaded_file_idx_status_purge_after
+    ON uploaded_file (status, purge_after ASC)
+    """,
+)
+class UploadedFile(
+    @field:Id
+    @field:SequenceGenerator(name = "uploaded_file_seq_gen", sequenceName = "uploaded_file_seq", allocationSize = 1)
+    @field:GeneratedValue(strategy = SEQUENCE, generator = "uploaded_file_seq_gen")
+    override val id: Long = 0,
+    @field:Column(nullable = false, unique = true, length = 1000)
+    val objectKey: String,
+    @field:Column(nullable = false, length = 120)
+    var bucket: String,
+    @field:Column(nullable = false, length = 120)
+    var contentType: String,
+    @field:Column(nullable = false)
+    var fileSize: Long,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(nullable = false, length = 40)
+    var purpose: UploadedFilePurpose = UploadedFilePurpose.POST_IMAGE,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(nullable = false, length = 40)
+    var status: UploadedFileStatus = UploadedFileStatus.TEMP,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(length = 40)
+    var ownerType: UploadedFileOwnerType? = null,
+    @field:Column
+    var ownerId: Long? = null,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(length = 40)
+    var retentionReason: UploadedFileRetentionReason? = UploadedFileRetentionReason.TEMP_UPLOAD,
+    @field:Column
+    var purgeAfter: Instant? = null,
+    @field:Column
+    var deletedAt: Instant? = null,
+) : BaseTime(id) {
+    fun markTemporary(
+        purpose: UploadedFilePurpose,
+        purgeAfter: Instant,
+    ) {
+        this.purpose = purpose
+        status = UploadedFileStatus.TEMP
+        ownerType = null
+        ownerId = null
+        retentionReason = UploadedFileRetentionReason.TEMP_UPLOAD
+        this.purgeAfter = purgeAfter
+        deletedAt = null
+    }
+
+    fun attachToPost(
+        postId: Long,
+        purpose: UploadedFilePurpose = UploadedFilePurpose.POST_IMAGE,
+    ) {
+        this.purpose = purpose
+        status = UploadedFileStatus.ACTIVE
+        ownerType = UploadedFileOwnerType.POST
+        ownerId = postId
+        retentionReason = null
+        purgeAfter = null
+        deletedAt = null
+    }
+
+    fun attachToMemberProfile(memberId: Long) {
+        purpose = UploadedFilePurpose.PROFILE_IMAGE
+        status = UploadedFileStatus.ACTIVE
+        ownerType = UploadedFileOwnerType.MEMBER_PROFILE
+        ownerId = memberId
+        retentionReason = null
+        purgeAfter = null
+        deletedAt = null
+    }
+
+    fun scheduleDeletion(
+        reason: UploadedFileRetentionReason,
+        purgeAfter: Instant,
+    ) {
+        status = UploadedFileStatus.PENDING_DELETE
+        retentionReason = reason
+        this.purgeAfter = purgeAfter
+    }
+
+    fun restoreActive() {
+        status = UploadedFileStatus.ACTIVE
+        retentionReason = null
+        purgeAfter = null
+        deletedAt = null
+    }
+
+    fun markDeleted() {
+        status = UploadedFileStatus.DELETED
+        retentionReason = null
+        purgeAfter = null
+        deletedAt = Instant.now()
+        ownerType = null
+        ownerId = null
+    }
+}

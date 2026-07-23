@@ -1,0 +1,872 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "((histogram_quantile(0.95, sum(rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m])) by (le))) and on() (sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m])) > bool 0.02)) or on() vector(0)",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP p95 응답 시간",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.03
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "(((sum(clamp_min(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",status=~\"5..\",uri!~\"/actuator.*\"}[5m]), 0)) / clamp_min(sum(clamp_min(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m]), 0)), 0.1))) and on() (sum(clamp_min(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m]), 0)) > bool 0.02)) or on() vector(0)",
+          "legendFormat": "5xx ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP 5xx 비율",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(clamp_min(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\",result=\"hit\"}[5m]), 0)) or on() vector(0)",
+          "legendFormat": "cache hit",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(clamp_min(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\",result=\"miss\"}[5m]), 0)) or on() vector(0)",
+          "legendFormat": "cache miss",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(clamp_min(rate(post_read_cache_evict_total{job=\"back\",service=\"aquila-back\"}[5m]), 0)) or on() vector(0)",
+          "legendFormat": "cache evict",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Post read cache throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "((clamp_max((sum(clamp_min(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\",result=\"hit\"}[5m]), 0)) / clamp_min(sum(clamp_min(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\"}[5m]), 0)), 0.1)), 1)) and on() (sum(clamp_min(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\"}[5m]), 0)) > bool 0.02)) or on() vector(0)",
+          "legendFormat": "cache hit rate",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Post read cache hit rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(task_queue_ready_pending{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "ready_pending",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "max(task_queue_processing{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "processing",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "max(task_queue_failed{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "failed",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "editorMode": "code",
+          "expr": "max(task_queue_stale_processing{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "stale_processing",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "작업 큐 적체",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(up{job=\"back\",service=\"aquila-back\",component=\"api\"}) or on() vector(0)",
+          "legendFormat": "api color up",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Back API scrape health (any color up)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1200
+              },
+              {
+                "color": "red",
+                "value": 1500
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(member_notification_sse_global_emitters{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "global_emitters",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Notification SSE emitters",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(increase(member_notification_sse_reconnect_subscribe_total{job=\"back\",service=\"aquila-back\"}[10m])) or on() vector(0)",
+          "legendFormat": "reconnect/10m",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(increase(member_notification_sse_send_failure_total{job=\"back\",service=\"aquila-back\"}[10m])) or on() vector(0)",
+          "legendFormat": "send_failure/10m",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(increase(member_notification_sse_replay_notification_total{job=\"back\",service=\"aquila-back\"}[10m])) or on() vector(0)",
+          "legendFormat": "replay_notification/10m",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Notification SSE recovery",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 9,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(increase({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m])) or on() vector(0)",
+          "legendFormat": "http_requests/5m",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "총 HTTP 요청 수",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.75
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "(sum(jvm_memory_used_bytes{job=\"back\",service=\"aquila-back\",area=\"heap\"}) / clamp_min(sum(jvm_memory_max_bytes{job=\"back\",service=\"aquila-back\",area=\"heap\"}), 1)) or on() vector(0)",
+          "legendFormat": "heap_used_ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "JVM Heap 사용량",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 15
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(hikaricp_connections_active{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "active",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Hikari 활성 커넥션",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.25
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "count(aquila_public_edge_probe_request_ttfb_seconds{request_index=\"1\",cache_state=~\"MISS|STALE\"}) / clamp_min(count(aquila_public_edge_probe_request_ttfb_seconds{request_index=\"1\"}), 1)",
+          "legendFormat": "cold ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Public edge cold ratio",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max by (route, cache_state) (aquila_public_edge_probe_request_ttfb_seconds{request_index=\"1\"})",
+          "legendFormat": "{{route}} {{cache_state}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Public edge first-request TTFB",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "aquila",
+    "ops"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Aquila Blog Overview",
+  "uid": "blog-overview",
+  "version": 3,
+  "weekStart": ""
+}

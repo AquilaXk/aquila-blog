@@ -1,0 +1,338 @@
+package com.back.boundedContexts.member.application.service
+
+import com.back.boundedContexts.member.application.event.MemberPublicProfileChangedEvent
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
+import com.back.global.rsData.RsData
+import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.standard.dto.member.type1.MemberSearchSortType1
+import com.back.standard.dto.page.PagedResult
+import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.util.Locale
+import java.util.Optional
+
+@Service
+class MemberApplicationService(
+    private val memberRepository: MemberRepositoryPort,
+    private val memberProfileHydrator: MemberProfileHydrator,
+    private val memberProfilePersistenceService: MemberProfilePersistenceService,
+    private val passwordEncoder: PasswordEncoder,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
+    private val applicationEventPublisher: ApplicationEventPublisher,
+) {
+    private val logger = LoggerFactory.getLogger(MemberApplicationService::class.java)
+
+    companion object {
+        private const val USERNAME_MAX_LENGTH = 30
+        private const val AUTO_USERNAME_BASE_MAX_LENGTH = 24
+        private const val AUTO_USERNAME_MAX_RETRY = 100
+        private const val FALLBACK_AUTO_USERNAME_PREFIX = "user"
+        private val INVALID_USERNAME_CHAR_REGEX = Regex("[^a-z0-9._-]")
+        private val DUPLICATED_DOT_REGEX = Regex("\\.{2,}")
+    }
+
+    @Transactional(readOnly = true)
+    fun count(): Long = memberRepository.count()
+
+    @Transactional
+    fun join(
+        username: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+        email: String? = null,
+    ): Member {
+        val normalizedEmail = normalizeEmailOrNull(email)
+
+        memberRepository.findByLoginId(username)?.let {
+            throw AppException(ErrorCode.MEMBER_DUPLICATE, "이미 존재하는 회원 아이디입니다.")
+        }
+        normalizedEmail?.let {
+            if (memberRepository.existsByEmail(it)) {
+                throw AppException(ErrorCode.RESOURCE_CONFLICT, "이미 사용 중인 이메일입니다.")
+            }
+        }
+
+        val encodedPassword =
+            if (!password.isNullOrBlank()) {
+                passwordEncoder.encode(password)
+            } else {
+                null
+            }
+
+        val member =
+            try {
+                memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname, normalizedEmail))
+            } catch (exception: DataIntegrityViolationException) {
+                if (memberRepository.findByLoginId(username) != null) {
+                    throw AppException(ErrorCode.MEMBER_DUPLICATE, "이미 존재하는 회원 아이디입니다.")
+                }
+                normalizedEmail?.let {
+                    if (memberRepository.existsByEmail(it)) {
+                        throw AppException(ErrorCode.RESOURCE_CONFLICT, "이미 사용 중인 이메일입니다.")
+                    }
+                }
+                throw AppException(ErrorCode.MEMBER_SIGNUP_RACE, "동시에 처리된 회원가입 요청입니다. 다시 시도해주세요.")
+            }
+        memberProfileHydrator.hydrate(member)
+        profileImgUrl?.let {
+            member.profileImgUrl = it
+            memberProfilePersistenceService.saveProfileImage(member)
+            uploadedFileRetentionService.syncProfileImage(member.id, null, member.profileImgUrl)
+        }
+        logger.info("member_signup_completed memberId={} actorId={}", member.id, member.id)
+
+        return member
+    }
+
+    /**
+     * 이메일 인증 기반 회원가입에서 내부 username을 자동 생성해 가입을 완료합니다.
+     * 기존 username 필드를 유지하되, 사용자 입력 대신 이메일 기반 규칙으로 생성해 식별자 체계를 통일합니다.
+     */
+    @Transactional
+    fun joinWithVerifiedEmail(
+        email: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+    ): Member {
+        val normalizedEmail =
+            normalizeEmailOrNull(email)
+                ?: throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "이메일을 입력해주세요.")
+
+        val usernameBase = buildAutoUsernameBase(normalizedEmail)
+
+        repeat(AUTO_USERNAME_MAX_RETRY) { attempt ->
+            val candidateUsername = buildAutoUsernameCandidate(usernameBase, attempt)
+
+            try {
+                return join(
+                    username = candidateUsername,
+                    password = password,
+                    nickname = nickname,
+                    profileImgUrl = profileImgUrl,
+                    email = normalizedEmail,
+                )
+            } catch (exception: AppException) {
+                if (exception.errorCode != ErrorCode.MEMBER_DUPLICATE) {
+                    throw exception
+                }
+            }
+        }
+
+        throw AppException(ErrorCode.MEMBER_USERNAME_GENERATE_FAILED, "회원가입 사용자 식별자 생성에 실패했습니다.")
+    }
+
+    @Transactional(readOnly = true)
+    fun findByLoginId(loginId: String): Member? =
+        memberRepository
+            .findByLoginId(loginId)
+            ?.let(memberProfileHydrator::hydrate)
+
+    @Transactional(readOnly = true)
+    fun findByEmail(email: String): Member? =
+        normalizeEmailOrNull(email)
+            ?.let(memberRepository::findByEmail)
+            ?.let(memberProfileHydrator::hydrate)
+
+    @Transactional(readOnly = true)
+    fun findById(id: Long): Optional<Member> =
+        memberRepository
+            .findById(id)
+            .map { member ->
+                memberProfileHydrator.hydrate(member)
+            }
+
+    @Transactional(readOnly = true)
+    fun checkPassword(
+        member: Member,
+        rawPassword: String,
+    ) {
+        val hashed = member.password
+        if (!passwordEncoder.matches(rawPassword, hashed)) {
+            throw AppException(ErrorCode.UNAUTHORIZED, "비밀번호가 일치하지 않습니다.")
+        }
+    }
+
+    @Transactional
+    fun modify(
+        member: Member,
+        nickname: String,
+        profileImgUrl: String?,
+    ) {
+        memberProfileHydrator.hydrate(member)
+        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
+        val previousNickname = member.nickname
+        val previousProfileImgUrl = member.profileImgUrl
+        val publishedProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl
+        member.modify(nickname, profileImgUrl)
+        if (profileImgUrl != null) {
+            memberProfilePersistenceService.saveProfileImage(member)
+            memberProfilePersistenceService.syncDraftWorkspaceFromLegacy(member)
+            uploadedFileRetentionService.syncProfileImage(
+                member.id,
+                previousProfileImgUrl.takeUnless { it == publishedProfileImgUrl },
+                member.profileImgUrl,
+            )
+        }
+        if (previousNickname != member.nickname || previousProfileImgUrl != member.profileImgUrl) {
+            applicationEventPublisher.publishEvent(
+                MemberPublicProfileChangedEvent(
+                    memberId = member.id,
+                    previousNickname = previousNickname,
+                    currentNickname = member.nickname,
+                    previousProfileImgUrl = previousProfileImgUrl,
+                    currentProfileImgUrl = member.profileImgUrl,
+                ),
+            )
+        }
+    }
+
+    @Transactional
+    fun modifyProfileCard(
+        member: Member,
+        command: UpdateProfileCardCommand,
+    ) {
+        memberProfileHydrator.hydrate(member)
+        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
+        memberProfilePersistenceService.updateProfileCard(member, command)
+    }
+
+    @Transactional
+    fun saveProfileWorkspaceDraft(
+        member: Member,
+        content: MemberProfileWorkspaceContent,
+    ) {
+        memberProfileHydrator.hydrate(member)
+        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
+        val imageSyncRequest = memberProfilePersistenceService.saveWorkspaceDraft(member, content)
+        if (imageSyncRequest != null) {
+            uploadedFileRetentionService.syncProfileImage(
+                member.id,
+                imageSyncRequest.previousProfileImgUrl,
+                imageSyncRequest.currentProfileImgUrl,
+            )
+        }
+    }
+
+    @Transactional
+    fun publishProfileWorkspace(member: Member) {
+        memberProfileHydrator.hydrate(member)
+        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
+        val imageSyncRequest = memberProfilePersistenceService.publishWorkspace(member)
+        if (imageSyncRequest != null) {
+            uploadedFileRetentionService.syncProfileImage(
+                member.id,
+                imageSyncRequest.previousProfileImgUrl,
+                imageSyncRequest.currentProfileImgUrl,
+            )
+        }
+    }
+
+    @Transactional
+    fun modifyOrJoin(
+        username: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+    ): RsData<Member> =
+        findByLoginId(username)
+            ?.let {
+                modify(it, nickname, profileImgUrl)
+                RsData("200-1", "회원 정보가 수정되었습니다.", it)
+            }
+            ?: run {
+                val joinedMember = join(username, password, nickname, profileImgUrl)
+                RsData("201-1", "회원가입이 완료되었습니다.", joinedMember)
+            }
+
+    @Transactional(readOnly = true)
+    fun findPagedByKw(
+        kw: String,
+        sort: MemberSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<Member> {
+        val safeZeroBasedPage = normalizeZeroBasedPage(page)
+        val safePageSize = normalizePageSize(pageSize)
+        val query =
+            MemberRepositoryPort.PagedQuery(
+                kw = kw,
+                zeroBasedPage = safeZeroBasedPage,
+                pageSize = safePageSize,
+                sortProperty = sort.property,
+                sortAscending = sort.isAsc,
+            )
+        val memberPage = memberRepository.findQPagedByKw(query)
+        memberProfileHydrator.hydrateAll(memberPage.content)
+
+        return PagedResult(
+            memberPage.content,
+            safeZeroBasedPage + 1,
+            safePageSize,
+            memberPage.totalElements,
+        )
+    }
+
+    private fun normalizeZeroBasedPage(page: Int): Int {
+        if (page < 1) {
+            throw AppException(ErrorCode.BAD_REQUEST, "page는 1 이상이어야 합니다.")
+        }
+
+        // page >= 1 일 때만 변환하여 underflow 가능성을 제거한다.
+        return if (page == 1) 0 else page - 1
+    }
+
+    private fun normalizePageSize(pageSize: Int): Int {
+        if (pageSize !in 1..30) {
+            throw AppException(ErrorCode.BAD_REQUEST, "pageSize는 1~30 범위여야 합니다.")
+        }
+
+        return pageSize
+    }
+
+    private fun normalizeEmailOrNull(email: String?): String? =
+        email
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf(String::isNotBlank)
+
+    private fun buildAutoUsernameBase(normalizedEmail: String): String {
+        val localPart = normalizedEmail.substringBefore("@", missingDelimiterValue = normalizedEmail)
+        val sanitized =
+            localPart
+                .lowercase(Locale.ROOT)
+                .replace(INVALID_USERNAME_CHAR_REGEX, "-")
+                .replace(DUPLICATED_DOT_REGEX, ".")
+                .trim('-', '_', '.')
+
+        val normalizedBase =
+            sanitized
+                .ifBlank { FALLBACK_AUTO_USERNAME_PREFIX }
+                .take(AUTO_USERNAME_BASE_MAX_LENGTH)
+                .ifBlank { FALLBACK_AUTO_USERNAME_PREFIX }
+
+        return if (normalizedBase.length >= 2) normalizedBase else "$normalizedBase$FALLBACK_AUTO_USERNAME_PREFIX"
+    }
+
+    private fun buildAutoUsernameCandidate(
+        base: String,
+        attempt: Int,
+    ): String {
+        if (attempt == 0) {
+            return base.take(USERNAME_MAX_LENGTH)
+        }
+
+        val suffix = "-$attempt"
+        val maxBaseLength = (USERNAME_MAX_LENGTH - suffix.length).coerceAtLeast(2)
+        return "${base.take(maxBaseLength)}$suffix"
+    }
+}

@@ -1,0 +1,657 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 1.5
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "((histogram_quantile(0.95, sum by (le) (rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])))) and on() (sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])) > bool 0.03)) or on() vector(0)",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Feed p95 latency",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "((histogram_quantile(0.99, sum by (le) (rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])))) and on() (sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])) > bool 0.03)) or on() vector(0)",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Feed p99 latency",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.03
+              },
+              {
+                "color": "red",
+                "value": 0.06
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "((sum(rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\",le=\"+Inf\"}[5m])) - sum(rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\",le=~\"5|5\\\\.0\"}[5m]))) / clamp_min(sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])), 0.001)) or on() vector(0)",
+          "legendFormat": ">5s outlier ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Feed >5s outlier ratio",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.02
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "(sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\",status=~\"5..\"}[5m])) / clamp_min(sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])), 0.001)) or on() vector(0)",
+          "legendFormat": "origin 5xx ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Feed origin 5xx ratio",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.35
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 6
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=\"hit\"}[5m])) / clamp_min(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=~\"hit|miss\"}[5m])), 0.001)) or on() vector(0)",
+          "legendFormat": "cache hit ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Feed cache hit ratio",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 18,
+        "x": 6,
+        "y": 6
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=\"/post/api/v1/posts/feed\"}[5m])) or on() vector(0)",
+          "legendFormat": "feed",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=\"/post/api/v1/posts/feed/cursor\"}[5m])) or on() vector(0)",
+          "legendFormat": "feed/cursor",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Feed request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "((histogram_quantile(0.95, sum by (le) (rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])))) and on() (sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])) > bool 0.03)) or on() vector(0)",
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "((histogram_quantile(0.99, sum by (le) (rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])))) and on() (sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])) > bool 0.03)) or on() vector(0)",
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Feed latency trend",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=\"hit\"}[5m])) or on() vector(0)",
+          "legendFormat": "cache hit",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=\"miss\"}[5m])) or on() vector(0)",
+          "legendFormat": "cache miss",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Feed cache throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "(sum(rate(post_read_cache_payload_bytes_sum{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v4|post-feed-cursor-first-v1\"}[5m])) / clamp_min(sum(rate(post_read_cache_payload_bytes_count{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v4|post-feed-cursor-first-v1\"}[5m])), 0.001)) or on() vector(0)",
+          "legendFormat": "avg payload bytes",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "max(post_read_cache_payload_max_bytes{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v4|post-feed-cursor-first-v1\"}) or on() vector(0)",
+          "legendFormat": "max payload bytes",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Feed cache payload size",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "((sum(rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\",le=\"+Inf\"}[5m])) - sum(rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\",le=~\"5|5\\\\.0\"}[5m]))) / clamp_min(sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])), 0.001)) or on() vector(0)",
+          "legendFormat": ">5s outlier ratio",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "(sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\",status=~\"5..\"}[5m])) / clamp_min(sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri=~\"/post/api/v1/posts/feed|/post/api/v1/posts/feed/cursor\"}[5m])), 0.001)) or on() vector(0)",
+          "legendFormat": "origin 5xx ratio",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=\"miss\"}[5m])) / clamp_min(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=~\"hit|miss\"}[5m])), 0.001)) or on() vector(0)",
+          "legendFormat": "cache miss ratio",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Feed quality ratio trend",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "aquila",
+    "ops",
+    "feed-performance"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Aquila Feed Performance",
+  "uid": "blog-feed-performance",
+  "version": 1,
+  "weekStart": ""
+}

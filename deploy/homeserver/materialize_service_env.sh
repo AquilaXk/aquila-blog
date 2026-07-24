@@ -80,4 +80,5 @@ write_filtered_env() {
 write_filtered_env "${CADDY_OUT}" "caddy"
 write_filtered_env "${BACK_OUT}" "back"
 
-echo "materialize_service_env: wrote $(basename "${CADDY_OUT}") and $(basename "${BACK_OUT}")"
+# Status must stay on stderr: compose wrappers capture stdout from `compose exec`.
+echo "materialize_service_env: wrote $(basename "${CADDY_OUT}") and $(basename "${BACK_OUT}")" >&2

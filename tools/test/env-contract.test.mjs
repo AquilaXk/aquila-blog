@@ -1603,6 +1603,10 @@ test("homeserver compose splits service env files, networks, and exporter pg_mon
   assert.match(exporterSql, /exporter user must not be postgres/)
   assert.match(materializeScript, /PROD___POSTGRES__PASSWORD/)
   assert.match(materializeScript, /is_back_key|PROD___SPRING__/)
+  assert.match(
+    materializeScript,
+    /echo "materialize_service_env: wrote \$\(basename "\$\{CADDY_OUT\}"\) and \$\(basename "\$\{BACK_OUT\}"\)" >&2/,
+  )
   assert.match(gitignore, /deploy\/homeserver\/\.env\.back\.prod/)
   assert.match(gitignore, /deploy\/homeserver\/\.env\.caddy\.prod/)
 
@@ -1622,6 +1626,21 @@ test("homeserver compose splits service env files, networks, and exporter pg_mon
   assert.equal(flywayPassword?.required, true)
   assert.equal(flywayUser?.required, true)
   assert.deepEqual(flywayUser?.forbiddenValues, ["postgres"])
+})
+
+test("pgroonga precheck keeps boolean query parsing resistant to stdout pollution", () => {
+  const precheckScript = readFileSync(
+    path.join(repoRoot, "deploy/homeserver/pgroonga_precheck.sh"),
+    "utf8",
+  )
+
+  assert.match(precheckScript, /run_pgroonga_query\(\) \{/)
+  assert.match(
+    precheckScript,
+    /awk '\/\^\[\[:space:\]\]\*\[tf\]\[\[:space:\]\]\*\$\/ \{ gsub\(\/\[\[:space:\]\]\/, ""\); value=\$0 \} END \{ print value \}'/,
+  )
+  assert.match(precheckScript, /\[\[ "\$\{PGROONGA_EXT_OK\}" != "t" \]\]/)
+  assert.match(precheckScript, /\[\[ "\$\{PGROONGA_OP_OK\}" != "t" \]\]/)
 })
 
 test("blue-green deploy pauses autoheal while staging a candidate backend", () => {

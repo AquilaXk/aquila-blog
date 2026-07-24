@@ -112,8 +112,26 @@ jobs:
           path: |
             back/build/reports/dependency-check-report.*
             back/build/reports/dependency-check/
-          # Cancelled/timeout mid-scan may leave no report; do not fail the upload step itself (#1385).
+          # Cancelled/timeout mid-scan may leave no report; upload itself stays non-blocking (#1385).
           if-no-files-found: warn
+
+      # Fail-closed when analyze succeeded but produced no reports (upload warn must not greenwash).
+      - name: Require dependency-check reports after successful scan
+        if: github.event_name != 'pull_request' && steps.backend_dependency_scan.outcome == 'success'
+        working-directory: back
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          reports=(
+            build/reports/dependency-check-report.*
+            build/reports/dependency-check/*
+          )
+          if ((${#reports[@]} == 0)); then
+            echo "::error title=Missing dependency-check reports::dependencyCheckAnalyze succeeded but no reports were found (#1385)."
+            exit 1
+          fi
+          echo "dependency-check reports present: ${#reports[@]}"
 
   codeql:
     runs-on: ubuntu-latest

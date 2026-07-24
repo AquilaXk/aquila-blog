@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.sync.RequestBody
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest
@@ -464,6 +465,7 @@ class CloudStorageAdapter(
 
         return S3Client
             .builder()
+            .httpClientBuilder(UrlConnectionHttpClient.builder())
             .endpointOverride(URI.create(endpoint))
             .region(Region.of(properties.region))
             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))

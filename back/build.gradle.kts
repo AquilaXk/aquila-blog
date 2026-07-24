@@ -20,6 +20,11 @@ group = "com"
 version = "0.0.1-SNAPSHOT"
 description = "back"
 
+// Pin above Spring Boot 4.1.0 BOM for NVD High CVEs blocking Deploy (#1387).
+extra["tomcat.version"] = "11.0.24"
+extra["netty.version"] = "4.2.16.Final"
+extra["postgresql.version"] = "42.7.13"
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
@@ -77,7 +82,12 @@ dependencies {
 
     // Database
     runtimeOnly("org.postgresql:postgresql")
-    implementation("software.amazon.awssdk:s3:2.33.13")
+    // Sync S3Client needs an explicit HTTP client after excluding apache-client (#1387 / PR #1388).
+    // apache-client pulls httpcore 4.4 High CPE hits; UrlConnection is used in buildClient().
+    implementation("software.amazon.awssdk:s3:2.33.13") {
+        exclude(group = "software.amazon.awssdk", module = "apache-client")
+    }
+    implementation("software.amazon.awssdk:url-connection-client:2.33.13")
     implementation("org.jsoup:jsoup:1.21.2")
 
     // Test
@@ -118,6 +128,8 @@ dependencyCheck {
     failOnError = true
     nvd.maxRetryCount = 20
     nvd.delay = 4000
+    // OWASP-only suppressions (YAML vulnerability-exceptions.yml does not apply here) (#1387).
+    suppressionFiles.add("config/dependency-check-suppressions.xml")
     providers.environmentVariable("NVD_API_KEY").orNull?.takeIf(String::isNotBlank)?.let { apiKey ->
         nvd.apiKey = apiKey
     }

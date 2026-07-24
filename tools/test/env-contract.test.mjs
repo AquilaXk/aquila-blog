@@ -1415,6 +1415,24 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(workflow, /printf '%s\\n' "\$\{PRE_DEPLOY_ENV_CONTENT\}" > deploy\/homeserver\/\.env\.prod/)
   assert(workflow.indexOf("PRE_DEPLOY_ENV_CONTENT=\"$(cat deploy/homeserver/.env.prod)\"") < workflow.indexOf("printf '%s\\n' \"${HOME_SERVER_ENV}\" > deploy/homeserver/.env.prod"))
   assert(workflow.indexOf("printf '%s\\n' \"${PRE_DEPLOY_ENV_CONTENT}\" > deploy/homeserver/.env.prod") < workflow.indexOf("./deploy/homeserver/rollback_last_deploy.sh"))
+  assert.match(workflow, /preserve_pre_deploy_runtime_image_env_keys\(\) \{/)
+  assert.match(workflow, /resolve_repo_digest_with_pull_fallback\(\) \{/)
+  assert.match(workflow, /preserved \$\{key\} from pre-deploy env after HOME_SERVER_ENV overwrite/)
+  assert.match(workflow, /local digest missing for \$\{image_ref\}; pulling fallback image before deploy compose evaluation/)
+  assert(
+    workflow.indexOf("printf '%s\\n' \"${HOME_SERVER_ENV}\" > deploy/homeserver/.env.prod") <
+      workflow.indexOf("preserve_pre_deploy_runtime_image_env_keys"),
+    "pre-deploy image digests must be preserved after HOME_SERVER_ENV overwrite",
+  )
+  assert(
+    workflow.indexOf("preserve_pre_deploy_runtime_image_env_keys") <
+      workflow.indexOf('ensure_image_key_from_local_digest "AUTOHEAL_IMAGE"'),
+    "image digest preserve must run before AUTOHEAL_IMAGE autofill",
+  )
+  assert.match(
+    workflow,
+    /if ! digest="\$\(resolve_repo_digest_with_pull_fallback "\$\{fallback_image\}"\)"; then/,
+  )
   assert.match(steadyStateGuard, /image_key="BACK_GREEN_IMAGE"/)
   assert.doesNotMatch(statusScript, /env_value "BACK_IMAGE"/)
   assert.doesNotMatch(steadyStateGuard, /env_value "BACK_IMAGE"/)

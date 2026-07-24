@@ -851,9 +851,10 @@ jobs:
           STAGED_BACK_IMAGE="${HOME_BACK_IMAGE}"
           echo "staged deploy image in shell env only: ${STAGED_BACK_IMAGE}"
 
-          extract_env_value() {
+          extract_env_value_from_text() {
             local key="$1"
-            awk -F= -v k="$key" '
+            local text="$2"
+            printf '%s\n' "${text}" | awk -F= -v k="$key" '
               $1==k {
                 value=substr($0, index($0, "=")+1)
                 gsub(/\r/, "", value)
@@ -863,12 +864,70 @@ jobs:
                 gsub(/'\''$/, "", value)
                 print value
               }
-            ' deploy/homeserver/.env.prod | tail -n 1
+            ' | tail -n 1
+          }
+
+          extract_env_value() {
+            local key="$1"
+            extract_env_value_from_text "${key}" "$(cat deploy/homeserver/.env.prod)"
+          }
+
+          preserve_pre_deploy_runtime_image_env_keys() {
+            if [ "${PRE_DEPLOY_ENV_CAPTURED}" != "true" ]; then
+              return 0
+            fi
+
+            local key previous
+            for key in \
+              AUTOHEAL_IMAGE \
+              DOCKER_SOCKET_PROXY_IMAGE \
+              CLOUDFLARED_IMAGE \
+              CADDY_IMAGE \
+              UPTIME_KUMA_IMAGE \
+              PROMETHEUS_IMAGE \
+              ALERTMANAGER_IMAGE \
+              POSTGRES_EXPORTER_IMAGE \
+              GRAFANA_IMAGE \
+              LOKI_IMAGE \
+              PROMTAIL_IMAGE \
+              NODE_RUNTIME_IMAGE \
+              DB_IMAGE \
+              REDIS_IMAGE \
+              MINIO_IMAGE
+            do
+              if [ -n "$(extract_env_value "${key}")" ]; then
+                continue
+              fi
+              previous="$(extract_env_value_from_text "${key}" "${PRE_DEPLOY_ENV_CONTENT}")"
+              if [ -n "${previous}" ]; then
+                upsert_env_key "${key}" "${previous}" "deploy/homeserver/.env.prod"
+                echo "preserved ${key} from pre-deploy env after HOME_SERVER_ENV overwrite"
+              fi
+            done
           }
 
           resolve_local_repo_digest() {
             local image_ref="$1"
             docker image inspect --format '{{index .RepoDigests 0}}' "${image_ref}" 2>/dev/null | head -n 1 | tr -d '\r'
+          }
+
+          resolve_repo_digest_with_pull_fallback() {
+            local image_ref="$1"
+            local digest
+            digest="$(resolve_local_repo_digest "${image_ref}" || true)"
+            if [ -n "${digest}" ]; then
+              printf '%s' "${digest}"
+              return 0
+            fi
+
+            echo "local digest missing for ${image_ref}; pulling fallback image before deploy compose evaluation"
+            docker pull "${image_ref}" >/dev/null || return 1
+            digest="$(resolve_local_repo_digest "${image_ref}" || true)"
+            if [ -z "${digest}" ]; then
+              echo "fallback image pull did not provide repo digest: ${image_ref}" >&2
+              return 1
+            fi
+            printf '%s' "${digest}"
           }
 
           ensure_image_key_from_local_digest() {
@@ -881,16 +940,17 @@ jobs:
             fi
 
             local digest
-            digest="$(resolve_local_repo_digest "${fallback_image}" || true)"
-            if [ -n "${digest}" ]; then
-              upsert_env_key "${key}" "${digest}" "deploy/homeserver/.env.prod"
-              echo "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
-              return 0
+            if ! digest="$(resolve_repo_digest_with_pull_fallback "${fallback_image}")"; then
+              echo "required image env key is missing and digest lookup failed: ${key} (fallback=${fallback_image})" >&2
+              return 1
             fi
 
-            echo "required image env key is missing and local digest lookup failed: ${key} (fallback=${fallback_image})" >&2
-            return 1
+            upsert_env_key "${key}" "${digest}" "deploy/homeserver/.env.prod"
+            echo "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
+            return 0
           }
+
+          preserve_pre_deploy_runtime_image_env_keys
 
           require_nonempty_env_key() {
             local key="$1"

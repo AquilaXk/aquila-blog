@@ -14,11 +14,28 @@ const QA_ADMIN_MEMBER: AuthMember = {
   isAdmin: true,
 }
 
+/** Playwright webServer sets this when backend is intentionally unreachable. */
+const PLAYWRIGHT_BACKEND_ISOLATION_URL = "http://127.0.0.1:1"
+
+const isPlaywrightBackendIsolationMode = () => {
+  const raw = process.env.BACKEND_INTERNAL_URL?.trim()
+  if (!raw) return false
+  return raw.replace(/\/+$/, "") === PLAYWRIGHT_BACKEND_ISOLATION_URL
+}
+
 export const shouldBypassAdminGuardForQa = () => {
-  // Production must never honor QA bypass flags, even if mis-set in the host env.
-  if (process.env.NODE_ENV === "production") return false
-  if (process.env.ADMIN_GUARD_QA_BYPASS === "true") return true
-  return process.env.ENABLE_QA_ROUTES === "true"
+  const qaFlag =
+    process.env.ADMIN_GUARD_QA_BYPASS === "true" || process.env.ENABLE_QA_ROUTES === "true"
+  if (!qaFlag) return false
+
+  // Real production must never honor QA flags alone (#1382).
+  // Playwright `next start` still uses NODE_ENV=production, so allow only with the
+  // backend isolation sentinel that the e2e harness sets.
+  if (process.env.NODE_ENV === "production") {
+    return isPlaywrightBackendIsolationMode()
+  }
+
+  return true
 }
 
 export const guardAdminRequest = async (req: IncomingMessage): Promise<AdminGuardResult> => {

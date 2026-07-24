@@ -13,6 +13,7 @@
     <notes><![CDATA[
       False positive: CVE-2022-31691 is Spring Tools for Eclipse/IDE, not runtime spring-boot-devtools.
       Tracked: https://github.com/AquilaXk/aquila-blog/issues/1387
+      (OWASP CPE maps spring-boot-devtools to vmware:spring_tools.)
     ]]></notes>
     <packageUrl regex="true">^pkg:maven/org\.springframework\.boot/spring-boot-devtools@.*$</packageUrl>
     <cve>CVE-2022-31691</cve>
@@ -25,7 +26,8 @@
   <suppress until="2026-10-31">
     <notes><![CDATA[
       Temporary: Kotlin 2.2.21 has no GA fix for CVE-2026-53914 (2.4.20-Beta only).
-      Revisit when Kotlin 2.4.20+ GA is available. Issue #1387.
+      Revisit when Kotlin 2.4.20+ GA is available.
+      Tracked: https://github.com/AquilaXk/aquila-blog/issues/1387
     ]]></notes>
     <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/.*@2\.2\.21$</packageUrl>
     <cve>CVE-2026-53914</cve>

@@ -82,10 +82,12 @@ dependencies {
 
     // Database
     runtimeOnly("org.postgresql:postgresql")
-    // Prefer netty-nio HTTP client; apache-client pulls httpcore 4.4 CPE false-positives (#1387).
+    // Sync S3Client needs an explicit HTTP client after excluding apache-client (#1387 / PR #1388).
+    // apache-client pulls httpcore 4.4 High CPE hits; UrlConnection is used in buildClient().
     implementation("software.amazon.awssdk:s3:2.33.13") {
         exclude(group = "software.amazon.awssdk", module = "apache-client")
     }
+    implementation("software.amazon.awssdk:url-connection-client:2.33.13")
     implementation("org.jsoup:jsoup:1.21.2")
 
     // Test

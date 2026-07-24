@@ -45,8 +45,8 @@ jobs:
   # main push / weekly schedule / workflow_dispatch: OWASP+NVD full scan (#1124 fail-closed).
   backend-dependency-check:
     runs-on: ubuntu-latest
-    # Cold NVD sync can exceed 45m; warm cache runs are much shorter (#1124).
-    timeout-minutes: 120
+    # Cold NVD sync + Gradle nvd retries can exceed 2h; keep fail-closed (#1124, #1385).
+    timeout-minutes: 240
     permissions:
       contents: read
     steps:
@@ -100,19 +100,9 @@ jobs:
             exit 1
           fi
           echo "ran=true" >> "${GITHUB_OUTPUT}"
-          # Keep fail-closed: only retry transient NVD/update failures; never skip the scan (#1383).
-          attempts=3
-          for attempt in $(seq 1 "${attempts}"); do
-            if ./gradlew --no-daemon dependencyCheckAnalyze; then
-              exit 0
-            fi
-            if [[ "${attempt}" -lt "${attempts}" ]]; then
-              echo "::warning title=NVD dependency-check retry::attempt ${attempt}/${attempts} failed; retrying in 60s"
-              sleep 60
-            fi
-          done
-          echo "::error title=Backend dependency scan failed::dependencyCheckAnalyze failed after ${attempts} attempts (fail-closed)."
-          exit 1
+          # Keep fail-closed. Do not wrap with a multi-hour shell retry loop: cold NVD sync
+          # already approaches the job timeout, and Gradle nvd.maxRetryCount covers transient 503s (#1383/#1385).
+          ./gradlew --no-daemon dependencyCheckAnalyze
 
       - name: Upload backend dependency check reports
         if: always() && github.event_name != 'pull_request' && steps.backend_dependency_scan.outputs.ran == 'true'
@@ -122,7 +112,26 @@ jobs:
           path: |
             back/build/reports/dependency-check-report.*
             back/build/reports/dependency-check/
-          if-no-files-found: error
+          # Cancelled/timeout mid-scan may leave no report; upload itself stays non-blocking (#1385).
+          if-no-files-found: warn
+
+      # Fail-closed when analyze succeeded but produced no reports (upload warn must not greenwash).
+      - name: Require dependency-check reports after successful scan
+        if: github.event_name != 'pull_request' && steps.backend_dependency_scan.outcome == 'success'
+        working-directory: back
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          reports=(
+            build/reports/dependency-check-report.*
+            build/reports/dependency-check/*
+          )
+          if ((${#reports[@]} == 0)); then
+            echo "::error title=Missing dependency-check reports::dependencyCheckAnalyze succeeded but no reports were found (#1385)."
+            exit 1
+          fi
+          echo "dependency-check reports present: ${#reports[@]}"
 
   codeql:
     runs-on: ubuntu-latest

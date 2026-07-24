@@ -11,8 +11,9 @@ PR → `main` merge-blocking vulnerability gates live in `.github/workflows/secu
 | `push` to `main` | Full NVD scan, fail-closed if `NVD_API_KEY` missing |
 | weekly `schedule` / `workflow_dispatch` | Full NVD scan, fail-closed if `NVD_API_KEY` missing |
 
-NVD API outage on main/schedule remains fail-closed (no silent skip). `#1383` adds limited retries only:
-Gradle `nvd.maxRetryCount=20` / `nvd.delay=4000`, plus up to 3 workflow attempts with 60s backoff.
+NVD API outage on main/schedule remains fail-closed (no silent skip). `#1383`/`#1385` keep limited retries in
+Gradle only (`nvd.maxRetryCount=20` / `nvd.delay=4000`). Do not wrap the scan in a multi-hour shell retry loop —
+cold NVD sync can already approach the job budget. `backend-dependency-check` timeout is 240 minutes.
 Do not treat PR green as “NVD clean”; trunk/schedule evidence is the full-scan gate.
 
 ### PR-facing Security jobs (typical required-check names)
@@ -61,8 +62,8 @@ Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets
 `NVD_API_KEY` must exist in repo Actions secrets. Missing secret fails full `backend-dependency-check` on `main` push, weekly schedule, and `workflow_dispatch` (by design). PR path does not consume the secret (#1344).
 
 Full `backend-dependency-check` caches `~/.gradle/dependency-check-data` with a stable
-`owasp-nvd-<os>-<ref>-v2` key (shared across runs on the same ref) and allows up to 120 minutes
-so the first cold NVD sync is not cancelled by the old 45-minute job timeout.
+`owasp-nvd-<os>-<ref>-v2` key (shared across runs on the same ref) and allows up to 240 minutes
+so cold NVD sync is not cancelled by the previous 120-minute job timeout (#1385).
 
 ### Local template / owner env
 

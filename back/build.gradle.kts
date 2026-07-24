@@ -124,8 +124,13 @@ allOpen {
 dependencyCheck {
     formats = listOf("HTML", "JSON", "SARIF")
     failBuildOnCVSS = 7.0f
-    // Keep fail-closed on update/analysis errors; raise NVD retry for transient 503s (#1383).
+    // Keep fail-closed on update/analysis errors (#1383).
     failOnError = true
+    // Prefer ODC Builder datafeed over NVD REST crawl — API full updates hang CI for hours (#1389).
+    // See https://github.com/dependency-check/DependencyCheck/issues/8618
+    nvd.datafeedUrl =
+        "https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/nvdcve-{0}.json.gz"
+    // Retained for any residual API paths / local tooling; datafeed is primary update source.
     nvd.maxRetryCount = 20
     nvd.delay = 4000
     // OWASP-only suppressions (YAML vulnerability-exceptions.yml does not apply here) (#1387).

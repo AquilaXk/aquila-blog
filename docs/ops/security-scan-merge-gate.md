@@ -11,10 +11,15 @@ PR → `main` merge-blocking vulnerability gates live in `.github/workflows/secu
 | `push` to `main` | Full NVD scan, fail-closed if `NVD_API_KEY` missing |
 | weekly `schedule` / `workflow_dispatch` | Full NVD scan, fail-closed if `NVD_API_KEY` missing |
 
-NVD API outage on main/schedule remains fail-closed (no silent skip). `#1383`/`#1385` keep limited retries in
-Gradle only (`nvd.maxRetryCount=20` / `nvd.delay=4000`). Do not wrap the scan in a multi-hour shell retry loop —
-cold NVD sync can already approach the job budget. `backend-dependency-check` timeout is 240 minutes.
+NVD update outage on main/schedule remains fail-closed (no silent skip). `#1389` configures Gradle
+`nvd.datafeedUrl` to the ODC Builder cache
+(`https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/nvdcve-{0}.json.gz`) so CI does not
+crawl the NVD REST API for ~370k records (that path hung Deploy for hours after `#1388`).
+`#1383`/`#1385` keep limited API retries (`nvd.maxRetryCount=20` / `nvd.delay=4000`) for residual API use.
+Do not wrap the scan in a multi-hour shell retry loop. `backend-dependency-check` timeout is 240 minutes.
 Do not treat PR green as “NVD clean”; trunk/schedule evidence is the full-scan gate.
+`NVD_API_KEY` remains required on the workflow path (fail-closed secret contract); datafeed is the primary
+DB refresh source under that gate.
 
 ### PR-facing Security jobs (typical required-check names)
 

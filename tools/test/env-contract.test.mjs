@@ -675,6 +675,8 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   assert.match(externalBackupScript, /stage_home_server_env_key "OPERATIONS_ALERT_EMAIL_TO"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_USERNAME"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_PASSWORD"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "PROD___POSTGRES_EXPORTER__PASSWORD"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "PROD___POSTGRES_EXPORTER__USERNAME"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_BLUE"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_GREEN"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_WORKER"/)

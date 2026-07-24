@@ -232,6 +232,8 @@ stage_home_server_env_compose_values() {
   stage_home_server_env_key "MINIO_ROOT_USER"
   stage_home_server_env_key "OPERATIONS_ALERT_EMAIL_TO"
   stage_home_server_env_key "PROD___POSTGRES__PASSWORD"
+  stage_home_server_env_key "PROD___POSTGRES_EXPORTER__PASSWORD"
+  stage_home_server_env_key "PROD___POSTGRES_EXPORTER__USERNAME"
   stage_home_server_env_key "PROD___SPRING__DATASOURCE__PASSWORD"
   stage_home_server_env_key "PROD___SPRING__DATA__REDIS__PASSWORD"
   stage_home_server_env_key "PROMETHEUS_RETENTION_TIME"

@@ -20,6 +20,11 @@ group = "com"
 version = "0.0.1-SNAPSHOT"
 description = "back"
 
+// Pin above Spring Boot 4.1.0 BOM for NVD High CVEs blocking Deploy (#1387).
+extra["tomcat.version"] = "11.0.24"
+extra["netty.version"] = "4.2.16.Final"
+extra["postgresql.version"] = "42.7.13"
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
@@ -77,7 +82,10 @@ dependencies {
 
     // Database
     runtimeOnly("org.postgresql:postgresql")
-    implementation("software.amazon.awssdk:s3:2.33.13")
+    // Prefer netty-nio HTTP client; apache-client pulls httpcore 4.4 CPE false-positives (#1387).
+    implementation("software.amazon.awssdk:s3:2.33.13") {
+        exclude(group = "software.amazon.awssdk", module = "apache-client")
+    }
     implementation("org.jsoup:jsoup:1.21.2")
 
     // Test

@@ -1,7 +1,10 @@
 package com.back.infrastructure
 
 import org.flywaydb.core.Flyway
+import org.junit.jupiter.api.MethodOrderer
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestMethodOrder
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
@@ -11,6 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @Testcontainers(disabledWithoutDocker = true)
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class FlywayTestcontainersIntegrationTest {
     companion object {
         @Container
@@ -34,6 +38,7 @@ class FlywayTestcontainersIntegrationTest {
             .load()
 
     @Test
+    @Order(1)
     fun `fresh postgres container applies flyway baseline and creates core tables`() {
         val result = flyway().migrate()
         assertTrue(result.migrationsExecuted >= 1)
@@ -47,6 +52,7 @@ class FlywayTestcontainersIntegrationTest {
     }
 
     @Test
+    @Order(2)
     fun `flyway migration is idempotent and pgroonga extension remains enabled`() {
         flyway().migrate()
         val second = flyway().migrate()

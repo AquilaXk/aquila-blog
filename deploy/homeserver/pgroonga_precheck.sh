@@ -110,7 +110,11 @@ run_pgroonga_query() {
     return 1
   fi
 
-  normalized_output="$(tr -d '\r' < "${stdout_file}" | xargs || true)"
+  # Accept only boolean tokens. Ignore any accidental stdout pollution from helpers.
+  normalized_output="$(
+    tr -d '\r' < "${stdout_file}" \
+      | awk '/^[[:space:]]*[tf][[:space:]]*$/ { gsub(/[[:space:]]/, ""); value=$0 } END { print value }'
+  )"
   rm -f "${stdout_file}" "${stderr_file}"
   printf -v "${out_var}" '%s' "${normalized_output}"
   return 0

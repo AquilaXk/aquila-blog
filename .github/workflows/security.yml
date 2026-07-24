@@ -81,7 +81,8 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.gradle/dependency-check-data
-          key: owasp-nvd-${{ runner.os }}-${{ github.run_id }}
+          # Stable key so main/schedule share a warm NVD DB; do not key by run_id (#1383).
+          key: owasp-nvd-${{ runner.os }}-${{ github.ref_name }}-v2
           restore-keys: |
             owasp-nvd-${{ runner.os }}-
 
@@ -99,7 +100,19 @@ jobs:
             exit 1
           fi
           echo "ran=true" >> "${GITHUB_OUTPUT}"
-          ./gradlew --no-daemon dependencyCheckAnalyze
+          # Keep fail-closed: only retry transient NVD/update failures; never skip the scan (#1383).
+          attempts=3
+          for attempt in $(seq 1 "${attempts}"); do
+            if ./gradlew --no-daemon dependencyCheckAnalyze; then
+              exit 0
+            fi
+            if [[ "${attempt}" -lt "${attempts}" ]]; then
+              echo "::warning title=NVD dependency-check retry::attempt ${attempt}/${attempts} failed; retrying in 60s"
+              sleep 60
+            fi
+          done
+          echo "::error title=Backend dependency scan failed::dependencyCheckAnalyze failed after ${attempts} attempts (fail-closed)."
+          exit 1
 
       - name: Upload backend dependency check reports
         if: always() && github.event_name != 'pull_request' && steps.backend_dependency_scan.outputs.ran == 'true'

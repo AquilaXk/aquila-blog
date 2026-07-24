@@ -114,7 +114,10 @@ allOpen {
 dependencyCheck {
     formats = listOf("HTML", "JSON", "SARIF")
     failBuildOnCVSS = 7.0f
+    // Keep fail-closed on update/analysis errors; raise NVD retry for transient 503s (#1383).
     failOnError = true
+    nvd.maxRetryCount = 20
+    nvd.delay = 4000
     providers.environmentVariable("NVD_API_KEY").orNull?.takeIf(String::isNotBlank)?.let { apiKey ->
         nvd.apiKey = apiKey
     }

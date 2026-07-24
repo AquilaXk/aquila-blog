@@ -58,7 +58,9 @@ Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets
 - Applied to Trivy image findings, OSV High/Critical, and yarn audit High/Critical (`tools/guards/check-yarn-audit-high.mjs`)
 - **Does not apply** to OWASP `dependencyCheckAnalyze` (`failBuildOnCVSS`). Backend NVD suppressions use
   `back/config/dependency-check-suppressions.xml` wired via `dependencyCheck.suppressionFiles` in
-  `back/build.gradle.kts` (#1387). Prefer upgrades; suppress only CPE false-positives or temporary no-GA cases with `until` + issue link.
+  `back/build.gradle.kts` (#1387, #1391). Prefer upgrades; suppress only CPE false-positives
+  (e.g. Netty 4.2.16.Final already vendor-fixed while NVD CPE includes that version) or temporary
+  no-GA cases with `until` + issue link.
 
 ## Frontend audit notes
 

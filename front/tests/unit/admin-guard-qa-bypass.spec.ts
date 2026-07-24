@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { shouldBypassAdminGuardForQa } from "../../src/libs/server/adminGuard"
 
-const ENV_KEYS = ["NODE_ENV", "ADMIN_GUARD_QA_BYPASS", "ENABLE_QA_ROUTES"] as const
+const ENV_KEYS = ["NODE_ENV", "ADMIN_GUARD_QA_BYPASS", "ENABLE_QA_ROUTES", "BACKEND_INTERNAL_URL"] as const
 
 const withEnv = (overrides: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>, run: () => void) => {
   const previous = new Map<string, string | undefined>()
@@ -30,15 +30,30 @@ const withEnv = (overrides: Partial<Record<(typeof ENV_KEYS)[number], string | u
   }
 }
 
-test("production blocks ADMIN_GUARD_QA_BYPASS even when set", () => {
+test("production blocks QA flags without Playwright backend isolation sentinel", () => {
   withEnv(
     {
       NODE_ENV: "production",
       ADMIN_GUARD_QA_BYPASS: "true",
       ENABLE_QA_ROUTES: "true",
+      BACKEND_INTERNAL_URL: undefined,
     },
     () => {
       expect(shouldBypassAdminGuardForQa()).toBe(false)
+    },
+  )
+})
+
+test("production allows QA bypass only with Playwright backend isolation sentinel", () => {
+  withEnv(
+    {
+      NODE_ENV: "production",
+      ADMIN_GUARD_QA_BYPASS: "true",
+      ENABLE_QA_ROUTES: "true",
+      BACKEND_INTERNAL_URL: "http://127.0.0.1:1",
+    },
+    () => {
+      expect(shouldBypassAdminGuardForQa()).toBe(true)
     },
   )
 })
@@ -49,6 +64,7 @@ test("non-production allows ADMIN_GUARD_QA_BYPASS for Playwright/QA", () => {
       NODE_ENV: "test",
       ADMIN_GUARD_QA_BYPASS: "true",
       ENABLE_QA_ROUTES: undefined,
+      BACKEND_INTERNAL_URL: undefined,
     },
     () => {
       expect(shouldBypassAdminGuardForQa()).toBe(true)
@@ -62,6 +78,7 @@ test("non-production allows ENABLE_QA_ROUTES without ADMIN_GUARD_QA_BYPASS", () 
       NODE_ENV: "development",
       ADMIN_GUARD_QA_BYPASS: undefined,
       ENABLE_QA_ROUTES: "true",
+      BACKEND_INTERNAL_URL: undefined,
     },
     () => {
       expect(shouldBypassAdminGuardForQa()).toBe(true)

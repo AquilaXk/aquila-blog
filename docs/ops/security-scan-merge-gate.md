@@ -51,6 +51,9 @@ Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets
 - Required fields per entry: `package`, `cve`, `issue` (`#N` or GitHub issue URL), `owner` (`@handle`), `expiry` (`YYYY-MM-DD`), `reason`
 - Expired or schema-invalid entries fail CI
 - Applied to Trivy image findings, OSV High/Critical, and yarn audit High/Critical (`tools/guards/check-yarn-audit-high.mjs`)
+- **Does not apply** to OWASP `dependencyCheckAnalyze` (`failBuildOnCVSS`). Backend NVD suppressions use
+  `back/config/dependency-check-suppressions.xml` wired via `dependencyCheck.suppressionFiles` in
+  `back/build.gradle.kts` (#1387). Prefer upgrades; suppress only CPE false-positives or temporary no-GA cases with `until` + issue link.
 
 ## Frontend audit notes
 

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OWASP Dependency-Check suppressions for backend NVD gate (#1387).
+  YAML allowlist (.github/security/vulnerability-exceptions.yml) does NOT apply to this scan.
+  Prefer version upgrades; suppress only CPE false-positives or temporary no-GA cases.
+-->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+  <!--
+    CVE-2022-31691 targets Spring Tools IDE / Spring Boot Tools, not spring-boot-devtools.
+    CPE maps org.springframework.boot:spring-boot-devtools -> vmware:spring_tools (false positive).
+  -->
+  <suppress until="2026-12-31">
+    <notes><![CDATA[
+      False positive: CVE-2022-31691 is Spring Tools for Eclipse/IDE, not runtime spring-boot-devtools.
+      Tracked: https://github.com/AquilaXk/aquila-blog/issues/1387
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.springframework\.boot/spring-boot-devtools@.*$</packageUrl>
+    <cve>CVE-2022-31691</cve>
+  </suppress>
+
+  <!--
+    CVE-2026-53914 fixed in Kotlin >= 2.4.20; only Beta is on Maven Central as of 2026-07-24.
+    Temporary until JetBrains ships GA; do not ship Beta as default runtime without QA.
+  -->
+  <suppress until="2026-10-31">
+    <notes><![CDATA[
+      Temporary: Kotlin 2.2.21 has no GA fix for CVE-2026-53914 (2.4.20-Beta only).
+      Revisit when Kotlin 2.4.20+ GA is available. Issue #1387.
+    ]]></notes>
+    <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/.*@2\.2\.21$</packageUrl>
+    <cve>CVE-2026-53914</cve>
+  </suppress>
+</suppressions>

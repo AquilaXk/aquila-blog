@@ -126,6 +126,8 @@ dependencyCheck {
     failOnError = true
     nvd.maxRetryCount = 20
     nvd.delay = 4000
+    // OWASP-only suppressions (YAML vulnerability-exceptions.yml does not apply here) (#1387).
+    suppressionFiles.add("config/dependency-check-suppressions.xml")
     providers.environmentVariable("NVD_API_KEY").orNull?.takeIf(String::isNotBlank)?.let { apiKey ->
         nvd.apiKey = apiKey
     }

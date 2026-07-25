@@ -1357,22 +1357,18 @@ provision_postgres_exporter_role() {
 }
 
 provision_db_runtime_role() {
-  local runtime_user runtime_password flyway_user db_name
+  local runtime_user runtime_password flyway_user flyway_password db_name sql_file psql_err
   runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
   runtime_password="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__PASSWORD")")"
   flyway_user="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__USER")")"
+  flyway_password="$(trim_quotes "$(env_value "PROD___SPRING__FLYWAY__PASSWORD")")"
   db_name="$(resolve_prod_db_name)"
+  sql_file="${SCRIPT_DIR}/sql/provision_db_runtime_role.sql"
 
-  if [[ -z "${runtime_user}" || -z "${runtime_password}" ]]; then
+  validate_db_runtime_role_env || return 1
+
+  if [[ -z "${runtime_password}" ]]; then
     echo "runtime datasource credential is incomplete" >&2
-    return 1
-  fi
-  if [[ -z "${flyway_user}" ]]; then
-    echo "flyway user must be set (PROD___SPRING__FLYWAY__USER); postgres/superuser fallback is forbidden" >&2
-    return 1
-  fi
-  if [[ "${flyway_user}" == "postgres" ]]; then
-    echo "flyway user must not be postgres superuser (PROD___SPRING__FLYWAY__USER)" >&2
     return 1
   fi
 
@@ -1384,41 +1380,26 @@ provision_db_runtime_role() {
     echo "flyway user must match postgres identifier pattern: ${flyway_user}" >&2
     return 1
   fi
+  if [[ ! -f "${sql_file}" ]]; then
+    echo "missing runtime role SQL: ${sql_file}" >&2
+    return 1
+  fi
 
-  if compose exec -T db_1 psql -U postgres -d "${db_name}" -v ON_ERROR_STOP=1 \
+  # Capture stderr for Deploy logs; keep success path quiet. Never echo password values.
+  if psql_err="$(compose exec -T db_1 psql -U postgres -d "${db_name}" -v ON_ERROR_STOP=1 \
     -v runtime_user="${runtime_user}" \
     -v runtime_password="${runtime_password}" \
-    -v migration_user="${flyway_user}" >/dev/null 2>&1 <<'SQL'; then
-SELECT set_config('app.runtime_user', :'runtime_user', false);
-SELECT set_config('app.runtime_password', :'runtime_password', false);
-SELECT set_config('app.migration_user', :'migration_user', false);
-
-DO $$
-DECLARE
-  runtime_user text := current_setting('app.runtime_user');
-  runtime_password text := current_setting('app.runtime_password');
-  migration_user text := current_setting('app.migration_user');
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = runtime_user) THEN
-    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', runtime_user, runtime_password);
-  ELSE
-    EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', runtime_user, runtime_password);
-  END IF;
-
-  EXECUTE format('ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', runtime_user);
-  EXECUTE format('GRANT CONNECT, TEMP ON DATABASE %I TO %I', current_database(), runtime_user);
-  EXECUTE format('GRANT USAGE ON SCHEMA public TO %I', runtime_user);
-  EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', runtime_user);
-  EXECUTE format('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO %I', runtime_user);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', migration_user, runtime_user);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO %I', migration_user, runtime_user);
-END $$;
-SQL
+    -v migration_user="${flyway_user}" \
+    -v migration_password="${flyway_password}" \
+    -f - < "${sql_file}" 2>&1 >/dev/null)"; then
     echo "runtime role provisioned in ${db_name}: runtime=${runtime_user}, migration=${flyway_user}"
     return 0
   fi
 
   echo "runtime role provision failed in ${db_name}" >&2
+  if [[ -n "${psql_err}" ]]; then
+    printf '%s\n' "${psql_err}" >&2
+  fi
   return 1
 }
 

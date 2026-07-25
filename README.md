@@ -104,7 +104,21 @@ Spring Boot + Kotlin API
 ```bash
 git clone https://github.com/AquilaXk/aquila-blog.git
 cd aquila-blog
+
+# Enable the tracked git hooks
+git config core.hooksPath .githooks
+
+# Expected output: .githooks
+git config --get core.hooksPath
 ```
+
+`.githooks/`에는 아래 훅이 들어 있으며, 위 설정을 해야 적용됩니다.
+
+- `commit-msg`: 커밋 제목이 `<type>(<scope>): 한글+English 요약` 형식인지 검사합니다.
+- `pre-commit`: 스테이징된 파일에 저장소 가드를 실행하고, 변경 경로에 따라 OpenAPI 계약 드리프트·상세 렌더 회귀 검사를 추가로 수행합니다 (상세 렌더 경로는 `yarn build`·E2E smoke 포함).
+- `pre-push`: 브랜치 이름이 `type/short-description` 형식인지 확인하고 `main`·`develop` 직접 push 를 차단합니다.
+
+(worktree 사용 시) 절대 경로로 지정하면 linked worktree에서도 메인 checkout에 있는 훅 스크립트(현재 브랜치와 다른 버전일 수 있음)가 실행되므로 상대 경로를 사용합니다.
 
 ### 2. Start Local Infrastructure
 

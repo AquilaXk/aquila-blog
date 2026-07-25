@@ -61,8 +61,10 @@ mkdir -p "${BACKUP_DIR}"
 # failed run is not the last successful deploy. Prefer the baseline recorded by
 # record_deploy_baseline.sh and fall back to the working tree only when no baseline
 # exists yet, which must stay visible in the deploy log.
+# The gate checks caddy/Caddyfile rather than the caddy directory: an empty caddy/ would
+# pass a directory test and produce a backup that restores no reverse-proxy config at all.
 restore_source="worktree"
-if [[ -f "${BASELINE_DIR}/docker-compose.prod.yml" && -d "${BASELINE_DIR}/caddy" ]]; then
+if [[ -f "${BASELINE_DIR}/docker-compose.prod.yml" && -f "${BASELINE_DIR}/caddy/Caddyfile" ]]; then
   restore_source="baseline"
 else
   echo "deploy backup: no successful-deploy baseline at ${BASELINE_DIR}; falling back to server working tree files" >&2

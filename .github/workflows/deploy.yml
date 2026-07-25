@@ -698,6 +698,12 @@ jobs:
           chmod +x deploy/homeserver/create_deploy_backup.sh
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created (pre-checkout): ${BACKUP_DIR}"
+          # The script's own fallback notice goes to stderr and its stdout is the backup
+          # path, so the annotation is raised here instead: a run that keeps falling back
+          # would silently pin rollback to the drifting working tree.
+          if grep -qx 'restore_source=worktree' "${BACKUP_DIR}/metadata.env" 2>/dev/null; then
+            echo "::warning title=Rollback restore point fell back to the working tree::no successful-deploy baseline was found at deploy/homeserver/.deploy-baseline; a rollback would restore the server working tree instead of the last verified deploy"
+          fi
 
           git fetch origin main --prune
           if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
@@ -1419,7 +1425,9 @@ jobs:
           if DEPLOY_BASELINE_DIR="$(./deploy/homeserver/record_deploy_baseline.sh)"; then
             echo "deploy baseline recorded: ${DEPLOY_BASELINE_DIR}"
           else
-            echo "warning: failed to record successful-deploy baseline; the next rollback will restore an older baseline or the server working tree" >&2
+            # On stdout, not stderr, so the runner parses it as a workflow annotation:
+            # a silently repeated failure leaves rollback pinned to an ever-older point.
+            echo "::warning title=Deploy baseline not recorded::failed to record successful-deploy baseline; the next rollback will restore an older baseline or the server working tree"
           fi
 
           cleanup_remote_tmp

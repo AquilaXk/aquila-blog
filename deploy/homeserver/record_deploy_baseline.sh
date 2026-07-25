@@ -14,19 +14,32 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASELINE_DIR="${SCRIPT_DIR}/.deploy-baseline"
 STAGING_DIR="${SCRIPT_DIR}/.deploy-baseline.staging.$$"
+PREV_DIR="${SCRIPT_DIR}/.deploy-baseline.prev.$$"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
-cleanup_staging() {
+cleanup_publish_scratch() {
   rm -rf "${STAGING_DIR}" 2>/dev/null || true
+  # If the publish rename was interrupted between the two moves, the set-aside directory is
+  # the only surviving restore point: put it back instead of deleting it.
+  if [[ -e "${PREV_DIR}" ]]; then
+    if [[ -e "${BASELINE_DIR}" ]]; then
+      rm -rf "${PREV_DIR}" 2>/dev/null || true
+    else
+      mv "${PREV_DIR}" "${BASELINE_DIR}" 2>/dev/null || true
+    fi
+  fi
 }
-trap cleanup_staging EXIT
+trap cleanup_publish_scratch EXIT
 
 if [[ ! -f "${SCRIPT_DIR}/docker-compose.prod.yml" ]]; then
   echo "deploy baseline not recorded: compose file missing (${SCRIPT_DIR}/docker-compose.prod.yml)" >&2
   exit 1
 fi
 
-rm -rf "${STAGING_DIR}"
+# Sweep scratch directories a killed run left behind, after the gate above so a run that
+# cannot produce a baseline never removes what an earlier run set aside.
+rm -rf "${SCRIPT_DIR}"/.deploy-baseline.staging.* "${SCRIPT_DIR}"/.deploy-baseline.prev.*
+
 mkdir -p "${STAGING_DIR}"
 
 cp "${SCRIPT_DIR}/docker-compose.prod.yml" "${STAGING_DIR}/docker-compose.prod.yml"
@@ -51,7 +64,20 @@ fi
 
 # Publish only once the snapshot is complete: an interrupted copy must never leave a
 # half-written baseline that a later rollback would treat as the last successful deploy.
-rm -rf "${BASELINE_DIR}"
+# create_deploy_backup.sh accepts a baseline only when both files are present, so refuse to
+# publish a snapshot that would fail that gate and silently demote rollback to the worktree.
+if [[ ! -f "${STAGING_DIR}/docker-compose.prod.yml" || ! -f "${STAGING_DIR}/caddy/Caddyfile" ]]; then
+  echo "deploy baseline not recorded: staged snapshot is incomplete (${STAGING_DIR})" >&2
+  exit 1
+fi
+
+# Rename the old baseline aside rather than deleting it first: between the two moves a
+# restore point always exists on disk, so a crash mid-publish cannot leave the server with
+# no baseline at all.
+if [[ -e "${BASELINE_DIR}" ]]; then
+  mv "${BASELINE_DIR}" "${PREV_DIR}"
+fi
 mv "${STAGING_DIR}" "${BASELINE_DIR}"
+rm -rf "${PREV_DIR}"
 
 echo "${BASELINE_DIR}"

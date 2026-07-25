@@ -375,6 +375,53 @@ emit_backend_diagnostics() {
   echo "----- end ${backend} diagnostics -----"
 }
 
+# compose up only reports command exit status, so a container that keeps dying
+# right after start (bad image entrypoint, bad env) still looks like success.
+# Infra/monitoring containers are not on the request path, so warn + dump
+# diagnostics instead of failing the backend rollout.
+warn_crashlooping_services() {
+  local settle_seconds="${INFRA_CRASHLOOP_SETTLE_SECONDS:-5}"
+  local unstable=0
+  local service cid status restarting exit_code restart_count
+
+  if [[ "$#" -eq 0 ]]; then
+    return 0
+  fi
+
+  sleep "${settle_seconds}"
+
+  for service in "$@"; do
+    cid="$(backend_container_id_any_state "${service}")"
+    if [[ -z "${cid}" ]]; then
+      continue
+    fi
+
+    status="$(docker inspect --format '{{.State.Status}}' "${cid}" 2>/dev/null || echo "unknown")"
+    restarting="$(docker inspect --format '{{.State.Restarting}}' "${cid}" 2>/dev/null || echo "unknown")"
+    exit_code="$(docker inspect --format '{{.State.ExitCode}}' "${cid}" 2>/dev/null || echo "0")"
+    restart_count="$(docker inspect --format '{{.RestartCount}}' "${cid}" 2>/dev/null || echo "0")"
+
+    if [[ "${restarting}" != "true" && "${status}" != "restarting" && "${status}" != "dead" ]]; then
+      if [[ "${status}" != "exited" || "${exit_code}" == "0" ]]; then
+        continue
+      fi
+    fi
+
+    unstable=$((unstable + 1))
+    echo "WARN ${service} is not stable after boot: status=${status} restarting=${restarting} exit=${exit_code} restarts=${restart_count}" >&2
+    run_diagnostic_command docker inspect --format "${service} image={{.Config.Image}} status={{.State.Status}} restarting={{.State.Restarting}} restart={{.RestartCount}} exit={{.State.ExitCode}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${cid}" >&2 || true
+    run_compose_diagnostic logs --no-color --tail=40 "${service}" >&2 || true
+  done
+
+  if [[ "${unstable}" -gt 0 ]]; then
+    echo "WARN ${unstable} infra/monitoring container(s) unstable after boot; backend deploy continues" >&2
+    return 0
+  fi
+
+  echo "infra/monitoring containers stable after boot: $*"
+  return 0
+}
+
 cloudflared_registration_log_exists() {
   local logs="$1"
   if echo "${logs}" | grep -Eqi 'Registered tunnel connection|Connection .* registered'; then
@@ -2463,9 +2510,15 @@ compose_up_with_retry "${edge_services_to_boot[@]}"
 ensure_monitoring_bind_mount_permissions
 # force-recreate --no-deps so json-file max-size/max-file logging applies without
 # recreating backend/DB dependencies (logging opts bind at container create).
-compose_up_force_recreate_no_deps_with_retry \
-  alertmanager loki promtail prometheus grafana \
+monitoring_services_to_boot=(
+  alertmanager loki promtail prometheus grafana
   public_edge_probe docker_runtime_probe postgres_exporter
+)
+compose_up_force_recreate_no_deps_with_retry "${monitoring_services_to_boot[@]}"
+warn_crashlooping_services \
+  "${services_to_boot[@]}" \
+  "${edge_services_to_boot[@]}" \
+  "${monitoring_services_to_boot[@]}"
 reset_grafana_admin_password
 ensure_caddy_mount_sync
 if [[ "${active_backend_was_running}" == "true" ]]; then

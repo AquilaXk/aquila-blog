@@ -437,7 +437,7 @@ test("homeserver monitoring runtime files stay readable by container users", () 
   assert.match(steadyStateGuard, /find "\$\{SCRIPT_DIR\}\/monitoring" -type f -exec chmod 0644/)
   assert.match(
     deployScript,
-    /compose_up_force_recreate_no_deps_with_retry[\s\S]*?alertmanager loki promtail prometheus grafana[\s\S]*?public_edge_probe docker_runtime_probe postgres_exporter/,
+    /monitoring_services_to_boot=\(\n\s+alertmanager loki promtail prometheus grafana\n\s+public_edge_probe docker_runtime_probe postgres_exporter\n\)\ncompose_up_force_recreate_no_deps_with_retry "\$\{monitoring_services_to_boot\[@\]\}"/,
   )
   assert.match(deployScript, /compose up -d --force-recreate --no-deps/)
   assert.match(deployScript, /grafana cli admin reset-admin-password "\$\{grafana_password\}"/)
@@ -2025,4 +2025,105 @@ test("ddos defense monitoring covers rate limit, docker runtime, redis, and memo
   assert.match(taskAlerts, /docker_container_restart_count\{[^}]*service="cloudflared"/)
   assert.match(taskAlerts, /docker_container_memory_usage_bytes\{[^}]*service=~"back_.+"/)
   assert.match(taskAlerts, /redis.*latency|lettuce.*duration|redis_commands_duration_seconds/i)
+})
+
+const extractDeployRemoteFunctions = (functionNames) => {
+  const lines = readFileSync(workflowPath, "utf8").split("\n")
+  const indent = " ".repeat(10)
+  return functionNames
+    .map((name) => {
+      const start = lines.indexOf(`${indent}${name}() {`)
+      assert.notEqual(start, -1, `${name} not found in deploy workflow remote script`)
+      const end = lines.findIndex((line, index) => index > start && line === `${indent}}`)
+      assert.notEqual(end, -1, `${name} block is not closed in deploy workflow remote script`)
+      return lines
+        .slice(start, end + 1)
+        .map((line) => (line.startsWith(indent) ? line.slice(indent.length) : line))
+        .join("\n")
+    })
+    .join("\n\n")
+}
+
+test("HOME_SERVER_ENV image digest는 pre-deploy 보존값보다 우선한다", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+  const staleDigest = "willfarrell/autoheal@sha256:31f580ef0279eaced5b38d631b08c474d70d8403c1c2fdd6ddcf2e879d5f3f7c"
+  const freshDigest = "willfarrell/autoheal@sha256:201d007d40e3dc395b1176052ea8fe1cf5c4cf69c6d5aeeda6fcdeb256f2400d"
+
+  assert.match(workflow, /HOME_SERVER_ENV overrides \$\{key\} from pre-deploy env: \$\{previous\} -> \$\{current\}/)
+  assert.match(workflow, /preserved \$\{key\} from pre-deploy env after HOME_SERVER_ENV overwrite/)
+  assert.match(workflow, /require_digest_image_key "AUTOHEAL_IMAGE"/)
+
+  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-preserve-priority-"))
+  try {
+    const functions = extractDeployRemoteFunctions([
+      "upsert_env_key",
+      "extract_env_value_from_text",
+      "extract_env_value",
+      "preserve_pre_deploy_runtime_image_env_keys",
+    ])
+    const scriptPath = path.join(workDir, "preserve.sh")
+    writeFileSync(
+      scriptPath,
+      [
+        "set -euo pipefail",
+        `cd ${JSON.stringify(workDir)}`,
+        "mkdir -p deploy/homeserver",
+        'PRE_DEPLOY_ENV_CAPTURED="true"',
+        `PRE_DEPLOY_ENV_CONTENT="FOO=bar\nAUTOHEAL_IMAGE=${staleDigest}"`,
+        functions,
+        `printf 'FOO=bar\\nAUTOHEAL_IMAGE=%s\\n' ${JSON.stringify(freshDigest)} > deploy/homeserver/.env.prod`,
+        "preserve_pre_deploy_runtime_image_env_keys",
+        'echo "secret-wins=$(extract_env_value AUTOHEAL_IMAGE)"',
+        "printf 'FOO=bar\\n' > deploy/homeserver/.env.prod",
+        "preserve_pre_deploy_runtime_image_env_keys",
+        'echo "preserve-fallback=$(extract_env_value AUTOHEAL_IMAGE)"',
+        "",
+      ].join("\n"),
+    )
+
+    const output = execFileSync("bash", [scriptPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+
+    assert.match(output, new RegExp(`^secret-wins=${freshDigest}$`, "m"))
+    assert.match(output, new RegExp(`^preserve-fallback=${staleDigest}$`, "m"))
+    assert.match(output, new RegExp(`HOME_SERVER_ENV overrides AUTOHEAL_IMAGE from pre-deploy env: ${staleDigest} -> ${freshDigest}`))
+    assert.match(output, /preserved AUTOHEAL_IMAGE from pre-deploy env after HOME_SERVER_ENV overwrite/)
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("blue-green deploy는 인프라/모니터링 부팅 후 crashloop 컨테이너를 진단한다", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const guardBody = deployScript.slice(
+    deployScript.indexOf("warn_crashlooping_services() {"),
+    deployScript.indexOf("cloudflared_registration_log_exists() {"),
+  )
+
+  assert(guardBody.length > 0, "warn_crashlooping_services must exist in blue_green_deploy.sh")
+  assert.match(guardBody, /settle_seconds="\$\{INFRA_CRASHLOOP_SETTLE_SECONDS:-5\}"/)
+  assert.match(guardBody, /cid="\$\(backend_container_id_any_state "\$\{service\}"\)"/)
+  assert.match(guardBody, /docker inspect --format '\{\{\.State\.Restarting\}\}'/)
+  assert.match(guardBody, /docker inspect --format '\{\{\.State\.ExitCode\}\}'/)
+  assert.match(guardBody, /WARN \$\{service\} is not stable after boot: status=\$\{status\} restarting=\$\{restarting\} exit=\$\{exit_code\} restarts=\$\{restart_count\}/)
+  assert.match(guardBody, /run_compose_diagnostic logs --no-color --tail=40 "\$\{service\}" >&2/)
+  assert.match(guardBody, /backend deploy continues/)
+  assert.doesNotMatch(guardBody, /\bexit 1\b/)
+
+  const monitoringBootIndex = deployScript.indexOf('compose_up_force_recreate_no_deps_with_retry "${monitoring_services_to_boot[@]}"')
+  const guardCallIndex = deployScript.indexOf("\nwarn_crashlooping_services \\\n")
+  const autohealPauseIndex = deployScript.indexOf("\npause_autoheal_for_blue_green\n")
+
+  assert(monitoringBootIndex > -1, "monitoring boot must use a shared service list")
+  assert(guardCallIndex > -1, "crashloop guard must run after infra/monitoring boot")
+  assert(autohealPauseIndex > -1, "autoheal pause step must stay in the rollout")
+  assert(monitoringBootIndex < guardCallIndex, "crashloop guard must run after monitoring containers are booted")
+  assert(guardCallIndex < autohealPauseIndex, "crashloop guard must run before autoheal is paused for cutover")
+
+  const guardCall = deployScript.slice(guardCallIndex, autohealPauseIndex)
+  for (const serviceList of ["services_to_boot", "edge_services_to_boot", "monitoring_services_to_boot"]) {
+    assert(guardCall.includes(`"\${${serviceList}[@]}"`), `crashloop guard must cover ${serviceList}`)
+  }
 })

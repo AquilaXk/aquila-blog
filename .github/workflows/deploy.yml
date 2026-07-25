@@ -877,7 +877,7 @@ jobs:
               return 0
             fi
 
-            local key previous
+            local key previous current
             for key in \
               AUTOHEAL_IMAGE \
               DOCKER_SOCKET_PROXY_IMAGE \
@@ -895,10 +895,17 @@ jobs:
               REDIS_IMAGE \
               MINIO_IMAGE
             do
-              if [ -n "$(extract_env_value "${key}")" ]; then
+              previous="$(extract_env_value_from_text "${key}" "${PRE_DEPLOY_ENV_CONTENT}")"
+              current="$(extract_env_value "${key}")"
+              # HOME_SERVER_ENV wins whenever the secret pins the key. That is the only
+              # operator lever to replace a stale digest already written on the server,
+              # so preserve must never restore the pre-deploy value over it (#1407).
+              if [ -n "${current}" ]; then
+                if [ -n "${previous}" ] && [ "${current}" != "${previous}" ]; then
+                  echo "HOME_SERVER_ENV overrides ${key} from pre-deploy env: ${previous} -> ${current}"
+                fi
                 continue
               fi
-              previous="$(extract_env_value_from_text "${key}" "${PRE_DEPLOY_ENV_CONTENT}")"
               if [ -n "${previous}" ]; then
                 upsert_env_key "${key}" "${previous}" "deploy/homeserver/.env.prod"
                 echo "preserved ${key} from pre-deploy env after HOME_SERVER_ENV overwrite"

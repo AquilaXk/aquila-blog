@@ -76,7 +76,7 @@ jobs:
           backend=false
           while IFS= read -r file; do
             case "${file}" in
-              back/*|deploy/homeserver/*|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/check-r-migration-no-ddl.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|tools/test/check-r-migration-no-ddl.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml)
+              back/*|deploy/homeserver/*|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/check-r-migration-no-ddl.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|tools/test/check-r-migration-no-ddl.test.sh|tools/test/commit-msg-hook.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml|.githooks/*)
                 backend=true
                 break
                 ;;
@@ -163,6 +163,9 @@ jobs:
 
       - name: Test forbidden tracked file guard
         run: bash tools/test/check-forbidden-tracked-files.test.sh
+
+      - name: Test commit-msg hook rules
+        run: bash tools/test/commit-msg-hook.test.sh
 
       - name: Guard Terraform world-open security groups
         run: bash tools/guards/check-terraform-no-world-open-sg.sh

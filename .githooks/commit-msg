@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bash 3.2 resolves regex ranges such as [가-힣] by locale collation order, so the
+# Hangul check below matches nothing under a UTF-8 collation. Pin LC_ALL (not only
+# LC_COLLATE) because an exported LC_ALL would otherwise override the pin.
+export LC_ALL=C
+
+msg_file="${1:?commit message file is required}"
+
+# Optional developer-local helper: strips editor/agent attribution trailers so those
+# tools do not show up as GitHub contributors. It lives outside the repository, so run
+# it only when the current machine actually has it and skip silently otherwise (CI,
+# fresh clones, other developers).
+strip_attribution="${HOME:-}/.cursor/hooks/strip-cursor-attribution.sh"
+if [[ -n "${HOME:-}" && -f "${strip_attribution}" && -x "${strip_attribution}" ]]; then
+  bash "${strip_attribution}" "$msg_file"
+fi
+
+subject="$(head -n 1 "$msg_file" | tr -d '\r')"
+
+# Allow Git auto-generated/system commit titles.
+if [[ "$subject" =~ ^Merge\  ]] || [[ "$subject" =~ ^Revert\  ]] || [[ "$subject" =~ ^fixup!\  ]] || [[ "$subject" =~ ^squash!\  ]]; then
+  exit 0
+fi
+
+# Recommended practical format (Conventional Commit + ko/en mixed summary):
+# - <type>(<scope>): <summary>
+# - type/scope are english, summary includes both Korean and English.
+#
+# Example:
+#   feat(auth): 로그인 세션 안정화 (refresh token rotation)
+#   fix(feed): 좋아요 optimistic update race condition 수정
+if ! [[ "$subject" =~ ^(feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix)(\([a-z0-9][a-z0-9._/-]*\))?!?:\ .+$ ]]; then
+  cat >&2 <<'EOF'
+[commit-msg] 커밋 메시지 규칙 위반
+형식: <type>(<scope>): <한글+English 혼합 요약>
+예시1: feat(auth): 로그인 세션 안정화 (refresh token rotation)
+예시2: fix(feed): 좋아요 optimistic update race condition 수정
+허용 타입: feat, fix, refactor, chore, docs, style, test, perf, build, ci, revert, hotfix
+EOF
+  exit 1
+fi
+
+# Enforce mixed-language summary in practice.
+summary="${subject#*: }"
+
+# 1) Summary must include at least one Hangul char.
+if ! [[ "$summary" =~ [가-힣ㄱ-ㅎㅏ-ㅣ] ]]; then
+  cat >&2 <<'EOF'
+[commit-msg] 제목에는 한글이 최소 1자 이상 포함되어야 합니다.
+예시: fix(feed): 좋아요 optimistic update race condition 수정
+EOF
+  exit 1
+fi
+
+# 2) Summary must include at least one English letter.
+if ! [[ "$summary" =~ [A-Za-z] ]]; then
+  cat >&2 <<'EOF'
+[commit-msg] 제목에는 영문 키워드가 최소 1자 이상 포함되어야 합니다.
+예시: feat(auth): 로그인 세션 안정화 (refresh token rotation)
+EOF
+  exit 1
+fi

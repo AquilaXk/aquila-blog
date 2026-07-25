@@ -164,6 +164,9 @@ jobs:
       - name: Test forbidden tracked file guard
         run: bash tools/test/check-forbidden-tracked-files.test.sh
 
+      - name: Test commit-msg hook rules
+        run: bash tools/test/commit-msg-hook.test.sh
+
       - name: Guard Terraform world-open security groups
         run: bash tools/guards/check-terraform-no-world-open-sg.sh
 

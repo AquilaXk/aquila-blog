@@ -24,7 +24,8 @@ const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
 const extractCaddySiteBlock = (caddyfile, siteMarker) => {
   const start = caddyfile.indexOf(siteMarker)
   if (start === -1) return ""
-  const openBrace = caddyfile.indexOf("{", start)
+  // Address lines may embed `{env}` placeholders; open the site block after the marker.
+  const openBrace = caddyfile.indexOf("{", start + siteMarker.length)
   if (openBrace === -1) return ""
   let depth = 0
   for (let i = openBrace; i < caddyfile.length; i += 1) {

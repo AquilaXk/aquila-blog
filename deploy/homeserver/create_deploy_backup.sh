@@ -9,6 +9,7 @@ umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
+BASELINE_DIR="${SCRIPT_DIR}/.deploy-baseline"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
@@ -53,19 +54,42 @@ container_image_for_service() {
 
 mkdir -p "${BACKUP_DIR}"
 
-if [[ -d "${SCRIPT_DIR}/caddy" ]]; then
-  cp -R "${SCRIPT_DIR}/caddy" "${BACKUP_DIR}/caddy"
-elif [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
-  # legacy fallback for older layout
-  mkdir -p "${BACKUP_DIR}/caddy"
-  cp "${SCRIPT_DIR}/Caddyfile" "${BACKUP_DIR}/caddy/Caddyfile"
+# The restorable file set must describe the last deploy that passed every post-deploy
+# check, not whatever the previous run happened to leave behind: a failed deploy rolls
+# back and rewrites caddy/Caddyfile in place (rollback_last_deploy.sh normalizes the
+# upstream token and re-points it at the surviving backend), so the working tree after a
+# failed run is not the last successful deploy. Prefer the baseline recorded by
+# record_deploy_baseline.sh and fall back to the working tree only when no baseline
+# exists yet, which must stay visible in the deploy log.
+restore_source="worktree"
+if [[ -f "${BASELINE_DIR}/docker-compose.prod.yml" && -d "${BASELINE_DIR}/caddy" ]]; then
+  restore_source="baseline"
+else
+  echo "deploy backup: no successful-deploy baseline at ${BASELINE_DIR}; falling back to server working tree files" >&2
 fi
 
-for file in docker-compose.prod.yml .active_backend; do
-  if [[ -f "${SCRIPT_DIR}/${file}" ]]; then
-    cp "${SCRIPT_DIR}/${file}" "${BACKUP_DIR}/${file}"
+if [[ "${restore_source}" == "baseline" ]]; then
+  cp "${BASELINE_DIR}/docker-compose.prod.yml" "${BACKUP_DIR}/docker-compose.prod.yml"
+  cp -R "${BASELINE_DIR}/caddy" "${BACKUP_DIR}/caddy"
+else
+  if [[ -d "${SCRIPT_DIR}/caddy" ]]; then
+    cp -R "${SCRIPT_DIR}/caddy" "${BACKUP_DIR}/caddy"
+  elif [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
+    # legacy fallback for older layout
+    mkdir -p "${BACKUP_DIR}/caddy"
+    cp "${SCRIPT_DIR}/Caddyfile" "${BACKUP_DIR}/caddy/Caddyfile"
   fi
-done
+
+  if [[ -f "${SCRIPT_DIR}/docker-compose.prod.yml" ]]; then
+    cp "${SCRIPT_DIR}/docker-compose.prod.yml" "${BACKUP_DIR}/docker-compose.prod.yml"
+  fi
+fi
+
+# .active_backend is live runtime state (which colour currently serves traffic), not
+# deployed configuration, so it always comes from the server working tree.
+if [[ -f "${STATE_FILE}" ]]; then
+  cp "${STATE_FILE}" "${BACKUP_DIR}/.active_backend"
+fi
 
 active_backend=""
 active_backend_image=""
@@ -89,9 +113,17 @@ compose_image_keys=(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE C
 
 {
   echo "created_at=${TIMESTAMP}"
-  echo "manifest_version=2"
+  echo "manifest_version=3"
   echo "secret_files_copied=false"
   echo "git_head=$(git -C "${SCRIPT_DIR}/../.." rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  # git_head is the commit currently checked out on the server, which after a failed
+  # deploy is the commit that failed. restore_source/baseline_* describe the commit the
+  # restorable files actually came from.
+  echo "restore_source=${restore_source}"
+  if [[ "${restore_source}" == "baseline" ]]; then
+    echo "baseline_deploy_sha=$(read_key_from_file "deploy_sha" "${BASELINE_DIR}/metadata.env")"
+    echo "baseline_created_at=$(read_key_from_file "created_at" "${BASELINE_DIR}/metadata.env")"
+  fi
   if [[ -f "${RELEASE_STATE_FILE}" ]]; then
     echo "release_state_present=true"
   fi

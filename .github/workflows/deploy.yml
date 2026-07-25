@@ -723,6 +723,7 @@ jobs:
             deploy/homeserver/pgroonga_precheck.sh \
             deploy/homeserver/post_precheck_env_guard.sh \
             deploy/homeserver/rollback_last_deploy.sh \
+            deploy/homeserver/record_deploy_baseline.sh \
             deploy/homeserver/steady_state_guard.sh \
             deploy/homeserver/install_steady_state_guard_cron.sh
 
@@ -1410,6 +1411,17 @@ jobs:
 
           rm -f deploy/homeserver/.external-minio-migration-stopped
           DEPLOY_COMPLETED="true"
+
+          # Pin the rollback restore point to this verified deploy. Recorded after
+          # DEPLOY_COMPLETED so a snapshot failure can never trigger a rollback of a
+          # healthy deploy; the fallback (previous baseline, or the working tree) is
+          # logged instead of silently taken.
+          if DEPLOY_BASELINE_DIR="$(./deploy/homeserver/record_deploy_baseline.sh)"; then
+            echo "deploy baseline recorded: ${DEPLOY_BASELINE_DIR}"
+          else
+            echo "warning: failed to record successful-deploy baseline; the next rollback will restore an older baseline or the server working tree" >&2
+          fi
+
           cleanup_remote_tmp
           trap - EXIT
           REMOTE

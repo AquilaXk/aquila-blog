@@ -1544,6 +1544,51 @@ test("secret-bearing homeserver backups use private file permissions", () => {
   assert.match(gitignore, /deploy\/homeserver\/\*\.enc/)
 })
 
+test("rollback healthcheck probes the network the restored compose actually attaches the backend to", () => {
+  const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
+
+  assert.match(rollbackScript, /DATA_NETWORK_NAME="blog_home_data"/)
+  assert.match(rollbackScript, /DEFAULT_NETWORK_NAME="blog_home_default"/)
+  assert.match(rollbackScript, /compose_container_id_any_state\(\) \{/)
+  assert.match(rollbackScript, /container_attached_networks\(\) \{/)
+  assert.match(rollbackScript, /resolve_backend_probe_network\(\) \{/)
+  assert.match(rollbackScript, /if \[\[ " \$\{networks\} " == \*" \$\{APP_NETWORK_NAME\} "\* \]\]; then/)
+  assert.match(rollbackScript, /rollback backend probe network drift: \$\{backend\} is not attached to \$\{APP_NETWORK_NAME\}/)
+  assert.match(rollbackScript, /local network="\$\{2:-\$\{APP_NETWORK_NAME\}\}"/)
+  assert.match(rollbackScript, /docker run --rm --network "\$\{network\}" curlimages\/curl/)
+  assert.doesNotMatch(rollbackScript, /docker run --rm --network "\$\{APP_NETWORK_NAME\}" curlimages\/curl/)
+  assert.match(rollbackScript, /probe_network="\$\(resolve_backend_probe_network "\$\{backend\}"\)"/)
+  assert.match(rollbackScript, /code="\$\(probe_backend_http_code "\$\{backend\}" "\$\{probe_network\}"\)"/)
+  assert(
+    rollbackScript.indexOf('probe_network="$(resolve_backend_probe_network "${backend}")"') <
+      rollbackScript.indexOf('code="$(probe_backend_http_code "${backend}" "${probe_network}")"'),
+    "probe network must be resolved before the rollback healthcheck loop runs",
+  )
+})
+
+test("rollback backend healthcheck failure emits network and dependency diagnostics", () => {
+  const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
+
+  assert.match(rollbackScript, /emit_rollback_backend_diagnostics\(\) \{/)
+  assert.match(rollbackScript, /emit_rollback_backend_diagnostics "\$\{backend\}" "\$\{probe_network\}" >&2 \|\| true/)
+  assert.match(rollbackScript, /rollback probe network used=\$\{probe_network\} expected=\$\{APP_NETWORK_NAME\}/)
+  assert.match(rollbackScript, /compose ps -a \|\| true/)
+  assert.match(rollbackScript, /compose_container_id_any_state db_1/)
+  assert.match(rollbackScript, /echo "db_1 networks=\$\(container_attached_networks "\$\{container_id\}"\)"/)
+  assert.match(
+    rollbackScript,
+    /for network in "\$\{EDGE_NETWORK_NAME\}" "\$\{APP_NETWORK_NAME\}" "\$\{DATA_NETWORK_NAME\}" "\$\{OBSERVE_NETWORK_NAME\}" "\$\{DEFAULT_NETWORK_NAME\}"/,
+  )
+  assert.match(rollbackScript, /docker network inspect -f '\{\{range \.Containers\}\}\{\{\.Name\}\} \{\{end\}\}'/)
+  assert.match(rollbackScript, /compose logs --no-color --tail=120 "\$\{backend\}" \|\| true/)
+  assert.doesNotMatch(rollbackScript, /compose logs --no-color --tail=120 "\$\{backend\}" >&2 \|\| true/)
+  assert(
+    rollbackScript.indexOf("rollback backend healthcheck failed: ${backend}") <
+      rollbackScript.indexOf('emit_rollback_backend_diagnostics "${backend}" "${probe_network}" >&2'),
+    "diagnostics must be emitted after the rollback healthcheck failure message",
+  )
+})
+
 test("prod datasource uses a non-superuser runtime role contract", () => {
   const compose = readFileSync(composePath, "utf8")
   const applicationProd = readFileSync(applicationProdPath, "utf8")

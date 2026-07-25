@@ -14,7 +14,9 @@ CADDY_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 EDGE_NETWORK_NAME="blog_home_edge"
 APP_NETWORK_NAME="blog_home_app"
+DATA_NETWORK_NAME="blog_home_data"
 OBSERVE_NETWORK_NAME="blog_home_observe"
+DEFAULT_NETWORK_NAME="blog_home_default"
 NETWORK_NAME="${EDGE_NETWORK_NAME}"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
@@ -227,14 +229,17 @@ trim_quotes() {
   echo "${value}"
 }
 
+compose_container_id_any_state() {
+  local service="$1"
+  docker ps -aq \
+    --filter "label=com.docker.compose.project=blog_home" \
+    --filter "label=com.docker.compose.service=${service}" 2>/dev/null | head -n 1 || true
+}
+
 container_image_for_service_any_state() {
   local service="$1"
   local container_id
-  container_id="$(
-    docker ps -aq \
-      --filter "label=com.docker.compose.project=blog_home" \
-      --filter "label=com.docker.compose.service=${service}" 2>/dev/null | head -n 1 || true
-  )"
+  container_id="$(compose_container_id_any_state "${service}")"
   if [[ -z "${container_id}" ]]; then
     return 0
   fi
@@ -577,11 +582,80 @@ stop_backend_if_running() {
   echo "rollback inactive backend already stopped: ${backend}"
 }
 
+container_attached_networks() {
+  local container_id="$1"
+  if [[ -z "${container_id}" ]]; then
+    return 0
+  fi
+  docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' "${container_id}" 2>/dev/null | tr -d '\r' | head -n 1 || true
+}
+
+# Rollback restores the backup compose file, which may describe a different network
+# topology than the running deployment: a backup taken before the edge/app/data/observe
+# split has no networks section at all, so every recreated service lands on
+# ${DEFAULT_NETWORK_NAME}. Probing a hardcoded network then reports status 000 for a
+# perfectly healthy backend, so resolve the probe network from the container compose
+# actually created.
+resolve_backend_probe_network() {
+  local backend="$1"
+  local networks fallback
+  networks="$(container_attached_networks "$(compose_container_id_any_state "${backend}")")"
+  if [[ " ${networks} " == *" ${APP_NETWORK_NAME} "* ]]; then
+    echo "${APP_NETWORK_NAME}"
+    return 0
+  fi
+  fallback="$(awk '{print $1}' <<< "${networks}")"
+  if [[ -z "${fallback}" ]]; then
+    echo "${APP_NETWORK_NAME}"
+    return 0
+  fi
+  echo "rollback backend probe network drift: ${backend} is not attached to ${APP_NETWORK_NAME}; probing via ${fallback}" >&2
+  echo "${fallback}"
+}
+
+emit_rollback_backend_diagnostics() {
+  local backend="$1"
+  local probe_network="${2:-${APP_NETWORK_NAME}}"
+  local container_id network
+
+  echo "----- rollback ${backend} diagnostics -----"
+  echo "rollback probe network used=${probe_network} expected=${APP_NETWORK_NAME}"
+  compose ps -a || true
+
+  container_id="$(compose_container_id_any_state "${backend}")"
+  if [[ -n "${container_id}" ]]; then
+    docker inspect --format "${backend} image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${container_id}" || true
+    echo "${backend} networks=$(container_attached_networks "${container_id}")"
+  else
+    echo "${backend} container=none"
+  fi
+
+  container_id="$(compose_container_id_any_state db_1)"
+  if [[ -n "${container_id}" ]]; then
+    docker inspect --format "db_1 status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} exit={{.State.ExitCode}} started={{.State.StartedAt}}" "${container_id}" || true
+    echo "db_1 networks=$(container_attached_networks "${container_id}")"
+  else
+    echo "db_1 container=none"
+  fi
+
+  for network in "${EDGE_NETWORK_NAME}" "${APP_NETWORK_NAME}" "${DATA_NETWORK_NAME}" "${OBSERVE_NETWORK_NAME}" "${DEFAULT_NETWORK_NAME}"; do
+    if docker network inspect "${network}" >/dev/null 2>&1; then
+      echo "network ${network} containers=$(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "${network}" 2>/dev/null | tr -d '\r')"
+    else
+      echo "network ${network} absent"
+    fi
+  done
+
+  compose logs --no-color --tail=120 "${backend}" || true
+  echo "----- end rollback ${backend} diagnostics -----"
+}
+
 probe_backend_http_code() {
   local backend="$1"
+  local network="${2:-${APP_NETWORK_NAME}}"
   local host
   host="$(backend_http_host "${backend}")"
-  docker run --rm --network "${APP_NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --network "${network}" curlimages/curl:8.7.1 \
     --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
     -s -o /dev/null -w "%{http_code}" \
@@ -591,10 +665,13 @@ probe_backend_http_code() {
 
 wait_backend_ready() {
   local backend="$1"
+  local probe_network
+  probe_network="$(resolve_backend_probe_network "${backend}")"
+  echo "rollback backend probe network: ${backend} via ${probe_network}"
   local attempt=1
   while [[ "${attempt}" -le "${HEALTHCHECK_RETRIES}" ]]; do
     local code
-    code="$(probe_backend_http_code "${backend}")"
+    code="$(probe_backend_http_code "${backend}" "${probe_network}")"
     if [[ "${code}" == "200" ]]; then
       echo "rollback backend ready: ${backend} (status=${code})"
       return 0
@@ -604,7 +681,7 @@ wait_backend_ready() {
     attempt=$((attempt + 1))
   done
   echo "rollback backend healthcheck failed: ${backend}" >&2
-  compose logs --no-color --tail=120 "${backend}" >&2 || true
+  emit_rollback_backend_diagnostics "${backend}" "${probe_network}" >&2 || true
   return 1
 }
 

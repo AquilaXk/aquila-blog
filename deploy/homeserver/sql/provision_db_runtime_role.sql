@@ -14,6 +14,7 @@ DECLARE
   runtime_password text := current_setting('app.runtime_password');
   migration_user text := current_setting('app.migration_user');
   migration_password text := current_setting('app.migration_password');
+  obj record;
 BEGIN
   IF runtime_user = 'postgres' OR migration_user = 'postgres' THEN
     RAISE EXCEPTION 'runtime/migration user must not be postgres';
@@ -40,6 +41,25 @@ BEGIN
   EXECUTE format('ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', migration_user);
   EXECUTE format('GRANT CONNECT, TEMP ON DATABASE %I TO %I', current_database(), migration_user);
   EXECUTE format('GRANT USAGE, CREATE ON SCHEMA public TO %I', migration_user);
+  -- Existing DB cutover: Flyway needs DML/DDL on current public objects (not only CREATE).
+  EXECUTE format('GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO %I', migration_user);
+  EXECUTE format('GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %I', migration_user);
+
+  -- Transfer postgres-owned public relations so Flyway can ALTER/INDEX without superuser.
+  FOR obj IN
+    SELECT c.relname AS relname, c.relkind AS relkind
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
+      AND pg_get_userbyid(c.relowner) = 'postgres'
+  LOOP
+    IF obj.relkind = 'S' THEN
+      EXECUTE format('ALTER SEQUENCE public.%I OWNER TO %I', obj.relname, migration_user);
+    ELSE
+      EXECUTE format('ALTER TABLE public.%I OWNER TO %I', obj.relname, migration_user);
+    END IF;
+  END LOOP;
 
   EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', migration_user, runtime_user);
   EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO %I', migration_user, runtime_user);

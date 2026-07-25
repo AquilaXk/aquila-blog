@@ -1365,20 +1365,10 @@ provision_db_runtime_role() {
   db_name="$(resolve_prod_db_name)"
   sql_file="${SCRIPT_DIR}/sql/provision_db_runtime_role.sql"
 
-  if [[ -z "${runtime_user}" || -z "${runtime_password}" ]]; then
+  validate_db_runtime_role_env || return 1
+
+  if [[ -z "${runtime_password}" ]]; then
     echo "runtime datasource credential is incomplete" >&2
-    return 1
-  fi
-  if [[ -z "${flyway_user}" ]]; then
-    echo "flyway user must be set (PROD___SPRING__FLYWAY__USER); postgres/superuser fallback is forbidden" >&2
-    return 1
-  fi
-  if [[ "${flyway_user}" == "postgres" ]]; then
-    echo "flyway user must not be postgres superuser (PROD___SPRING__FLYWAY__USER)" >&2
-    return 1
-  fi
-  if [[ -z "${flyway_password}" ]]; then
-    echo "flyway password must be set (PROD___SPRING__FLYWAY__PASSWORD); postgres password fallback is forbidden" >&2
     return 1
   fi
 

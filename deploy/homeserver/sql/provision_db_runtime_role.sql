@@ -3,6 +3,10 @@
 --   runtime_user, runtime_password, migration_user, migration_password
 -- Connect as postgres superuser to the production app DB.
 
+-- Keep plaintext passwords out of the server statement log regardless of host config.
+SET log_statement = 'none';
+SET log_min_duration_statement = -1;
+
 SELECT set_config('app.runtime_user', :'runtime_user', false);
 SELECT set_config('app.runtime_password', :'runtime_password', false);
 SELECT set_config('app.migration_user', :'migration_user', false);

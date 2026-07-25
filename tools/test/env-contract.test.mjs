@@ -1555,10 +1555,13 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   const contract = JSON.parse(readFileSync(contractPath, "utf8"))
   const envExample = readFileSync(envExamplePath, "utf8")
   const doctorScript = readFileSync(path.join(repoRoot, "deploy/homeserver/doctor.sh"), "utf8")
-  const provisionFn = deployScript.slice(
-    deployScript.indexOf("provision_db_runtime_role()"),
-    deployScript.indexOf("\nensure_db_runtime_guards()"),
+  const provisionFnStart = deployScript.indexOf("provision_db_runtime_role()")
+  const provisionFnEnd = deployScript.indexOf("\nensure_db_runtime_guards()")
+  assert(
+    provisionFnStart !== -1 && provisionFnEnd > provisionFnStart,
+    "provision_db_runtime_role()/ensure_db_runtime_guards() boundary markers not found",
   )
+  const provisionFn = deployScript.slice(provisionFnStart, provisionFnEnd)
 
   assert.match(applicationProd, /username:\s*"\$\{PROD___SPRING__DATASOURCE__USERNAME\}"/)
   assert.match(applicationProd, /baseline-on-migrate:\s*false/)
@@ -1577,9 +1580,17 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   assert.match(provisionFn, /PROD___SPRING__FLYWAY__PASSWORD/)
   assert.match(provisionFn, /migration_password="\$\{flyway_password\}"/)
   assert.match(provisionFn, /sql\/provision_db_runtime_role\.sql/)
+  assert.match(provisionFn, /validate_db_runtime_role_env \|\| return 1/)
   assert.match(provisionFn, /psql_err=/)
   assert.match(provisionFn, /2>&1\s*>\/dev\/null/)
   assert.doesNotMatch(provisionFn, /psql[\s\S]*>\/dev\/null 2>&1/)
+  assert.match(runtimeRoleSql, /SET log_statement = 'none';/)
+  assert.match(runtimeRoleSql, /SET log_min_duration_statement = -1;/)
+  assert(
+    runtimeRoleSql.indexOf("SET log_statement = 'none';") <
+      runtimeRoleSql.indexOf("app.runtime_password"),
+    "statement logging must be disabled before binding password values",
+  )
   assert.match(runtimeRoleSql, /set_config\('app\.runtime_user',\s*:'runtime_user',\s*false\)/)
   assert.match(runtimeRoleSql, /set_config\('app\.migration_password',\s*:'migration_password',\s*false\)/)
   assert.match(runtimeRoleSql, /runtime_user text := current_setting\('app\.runtime_user'\)/)

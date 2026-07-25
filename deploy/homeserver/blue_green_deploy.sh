@@ -375,6 +375,94 @@ emit_backend_diagnostics() {
   echo "----- end ${backend} diagnostics -----"
 }
 
+# docker reports RFC3339 with a nanosecond fraction; GNU date parses that as-is
+# while BSD date needs the fraction stripped. Prints an empty string when the
+# timestamp is missing or unparsable so callers can skip the derived signal.
+docker_timestamp_epoch() {
+  local value="${1:-}"
+  local trimmed="${value%%.*}"
+  trimmed="${trimmed%Z}"
+  if [[ -z "${trimmed}" || "${trimmed}" == "0001-01-01T00:00:00" ]]; then
+    echo ""
+    return 0
+  fi
+  date -u -d "${trimmed}Z" +%s 2>/dev/null \
+    || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "${trimmed}Z" +%s 2>/dev/null \
+    || true
+}
+
+# compose up only reports command exit status, so a container that keeps dying
+# right after start (bad image entrypoint, bad env) still looks like success.
+# Infra/monitoring containers are not on the request path, so warn + dump
+# diagnostics instead of failing the backend rollout. Every command below is
+# failure tolerant on purpose: this gate is diagnostic only and must never abort
+# the deploy under `set -euo pipefail`.
+warn_crashlooping_services() {
+  local settle_seconds="${INFRA_CRASHLOOP_SETTLE_SECONDS:-5}"
+  local recent_start_seconds="${INFRA_CRASHLOOP_RECENT_START_SECONDS:-120}"
+  local unstable=0
+  local now_epoch service cid status restarting exit_code restart_count
+  local started_at started_epoch started_age reason
+
+  if [[ "$#" -eq 0 ]]; then
+    return 0
+  fi
+
+  sleep "${settle_seconds}" || true
+  now_epoch="$(date -u +%s 2>/dev/null || echo "0")"
+
+  for service in "$@"; do
+    cid="$(backend_container_id_any_state "${service}" || true)"
+    if [[ -z "${cid}" ]]; then
+      continue
+    fi
+
+    status="$(docker inspect --format '{{.State.Status}}' "${cid}" 2>/dev/null || echo "unknown")"
+    restarting="$(docker inspect --format '{{.State.Restarting}}' "${cid}" 2>/dev/null || echo "unknown")"
+    exit_code="$(docker inspect --format '{{.State.ExitCode}}' "${cid}" 2>/dev/null || echo "0")"
+    restart_count="$(docker inspect --format '{{.RestartCount}}' "${cid}" 2>/dev/null || echo "0")"
+    started_at="$(docker inspect --format '{{.State.StartedAt}}' "${cid}" 2>/dev/null || echo "")"
+
+    reason=""
+    if [[ "${restarting}" == "true" || "${status}" == "restarting" || "${status}" == "dead" ]]; then
+      reason="state"
+    elif [[ "${status}" == "exited" && "${exit_code}" != "0" ]]; then
+      reason="exit"
+    else
+      # A container that dies instantly (autoheal exiting 127 on a tcp DOCKER_SOCK)
+      # spends most of its restart backoff in "restarting", but a single sample can
+      # land on the short-lived "running" window and look healthy. Pair a non-zero
+      # RestartCount with a StartedAt from the current boot window to catch that
+      # sample too; containers that restarted long ago (db_1 after a host reboot)
+      # keep an old StartedAt and stay quiet.
+      started_epoch="$(docker_timestamp_epoch "${started_at}")"
+      if [[ "${restart_count}" =~ ^[0-9]+$ && "${restart_count}" -gt 0 && -n "${started_epoch}" && "${now_epoch}" -gt 0 ]]; then
+        started_age=$((now_epoch - started_epoch))
+        if [[ "${started_age}" -ge 0 && "${started_age}" -lt "${recent_start_seconds}" ]]; then
+          reason="restart-churn"
+        fi
+      fi
+    fi
+
+    if [[ -z "${reason}" ]]; then
+      continue
+    fi
+
+    unstable=$((unstable + 1))
+    echo "WARN ${service} is not stable after boot: status=${status} restarting=${restarting} exit=${exit_code} restarts=${restart_count} reason=${reason}" >&2
+    run_diagnostic_command docker inspect --format "${service} image={{.Config.Image}} status={{.State.Status}} restarting={{.State.Restarting}} restart={{.RestartCount}} exit={{.State.ExitCode}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${cid}" >&2 || true
+    run_compose_diagnostic logs --no-color --tail=40 "${service}" >&2 || true
+  done
+
+  if [[ "${unstable}" -gt 0 ]]; then
+    echo "WARN ${unstable} infra/monitoring container(s) unstable after boot; backend deploy continues" >&2
+    return 0
+  fi
+
+  echo "infra/monitoring containers stable after boot: $*"
+  return 0
+}
+
 cloudflared_registration_log_exists() {
   local logs="$1"
   if echo "${logs}" | grep -Eqi 'Registered tunnel connection|Connection .* registered'; then
@@ -2463,9 +2551,19 @@ compose_up_with_retry "${edge_services_to_boot[@]}"
 ensure_monitoring_bind_mount_permissions
 # force-recreate --no-deps so json-file max-size/max-file logging applies without
 # recreating backend/DB dependencies (logging opts bind at container create).
-compose_up_force_recreate_no_deps_with_retry \
-  alertmanager loki promtail prometheus grafana \
+monitoring_services_to_boot=(
+  alertmanager loki promtail prometheus grafana
   public_edge_probe docker_runtime_probe postgres_exporter
+)
+compose_up_force_recreate_no_deps_with_retry "${monitoring_services_to_boot[@]}"
+# docker_socket_proxy only boots implicitly through autoheal's depends_on, and a
+# proxy crash loop leaves autoheal "running" but unable to heal anything, so it is
+# gated explicitly. `|| true` keeps the diagnostic-only gate from aborting deploy.
+warn_crashlooping_services \
+  "${services_to_boot[@]}" \
+  "${edge_services_to_boot[@]}" \
+  "${monitoring_services_to_boot[@]}" \
+  docker_socket_proxy || true
 reset_grafana_admin_password
 ensure_caddy_mount_sync
 if [[ "${active_backend_was_running}" == "true" ]]; then

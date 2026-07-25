@@ -249,7 +249,7 @@ groups:
           description: "Prometheus cannot scrape docker_runtime_probe for 3m. Check probe container health and docker socket access."
 
       - alert: AquilaContainerRestarted
-        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1|cloudflared"}[15m]) > 0
+        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1|cloudflared|autoheal|docker_socket_proxy"}[15m]) > 0
         for: 1m
         labels:
           severity: warning

@@ -156,3 +156,26 @@ test("operations alert rules cover launch-blocking failure domains", () => {
   assert.match(taskAlerts, /backup.*failed|external.*backup/i)
   assert.match(taskAlerts, /rollback/i)
 })
+
+test("autoheal and its docker socket proxy stay under continuous restart observation", () => {
+  const compose = read(composePath)
+  const taskAlerts = read(taskAlertsPath)
+
+  const probeBlock = compose.slice(compose.indexOf("\n  docker_runtime_probe:"))
+  const probeServicesOption = probeBlock.match(/-\s*"--services"\s*\n\s*-\s*"([^"]+)"/)
+  assert(probeServicesOption, "docker_runtime_probe must pass an explicit --services list")
+  const probedServices = probeServicesOption[1].split(",").map((value) => value.trim())
+
+  const restartAlert = taskAlerts.match(/alert: AquilaContainerRestarted\n\s*expr: ([^\n]+)/)
+  assert(restartAlert, "AquilaContainerRestarted rule is missing")
+  const alertedServices = restartAlert[1].match(/service=~"([^"]+)"/)
+  assert(alertedServices, "AquilaContainerRestarted must select services by regex")
+  const alertedAlternatives = alertedServices[1].split("|").map((value) => value.trim())
+
+  // A crash-looping autoheal (or its socket proxy) is invisible between deploys
+  // unless the probe exports its restart count and the alert selects it (#1407).
+  for (const service of ["autoheal", "docker_socket_proxy"]) {
+    assert(probedServices.includes(service), `${service} must be exported by docker_runtime_probe`)
+    assert(alertedAlternatives.includes(service), `${service} must be covered by AquilaContainerRestarted`)
+  }
+})

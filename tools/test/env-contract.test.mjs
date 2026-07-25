@@ -1586,10 +1586,21 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   assert.doesNotMatch(provisionFn, /psql[\s\S]*>\/dev\/null 2>&1/)
   assert.match(runtimeRoleSql, /SET log_statement = 'none';/)
   assert.match(runtimeRoleSql, /SET log_min_duration_statement = -1;/)
+  assert.match(runtimeRoleSql, /\\set VERBOSITY terse/)
   assert(
     runtimeRoleSql.indexOf("SET log_statement = 'none';") <
-      runtimeRoleSql.indexOf("app.runtime_password"),
-    "statement logging must be disabled before binding password values",
+      runtimeRoleSql.indexOf("app.runtime_password") &&
+      runtimeRoleSql.indexOf("\\set VERBOSITY terse") <
+        runtimeRoleSql.indexOf("app.runtime_password"),
+    "statement logging and verbose errors must be disabled before binding password values",
+  )
+  assert.match(
+    runtimeRoleSql,
+    /EXCEPTION WHEN OTHERS THEN\n\s+RAISE EXCEPTION 'runtime role password bootstrap failed for %: %', runtime_user, SQLERRM;/,
+  )
+  assert.match(
+    runtimeRoleSql,
+    /EXCEPTION WHEN OTHERS THEN\n\s+RAISE EXCEPTION 'migration role password bootstrap failed for %: %', migration_user, SQLERRM;/,
   )
   assert.match(runtimeRoleSql, /set_config\('app\.runtime_user',\s*:'runtime_user',\s*false\)/)
   assert.match(runtimeRoleSql, /set_config\('app\.migration_password',\s*:'migration_password',\s*false\)/)

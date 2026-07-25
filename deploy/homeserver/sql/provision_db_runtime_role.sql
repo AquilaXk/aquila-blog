@@ -7,6 +7,9 @@
 SET log_statement = 'none';
 SET log_min_duration_statement = -1;
 
+-- Terse errors drop the CONTEXT/"SQL statement" lines that would echo PASSWORD literals to stderr.
+\set VERBOSITY terse
+
 SELECT set_config('app.runtime_user', :'runtime_user', false);
 SELECT set_config('app.runtime_password', :'runtime_password', false);
 SELECT set_config('app.migration_user', :'migration_user', false);
@@ -24,11 +27,16 @@ BEGIN
     RAISE EXCEPTION 'runtime/migration user must not be postgres';
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = runtime_user) THEN
-    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', runtime_user, runtime_password);
-  ELSE
-    EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', runtime_user, runtime_password);
-  END IF;
+  -- Re-raise without the failing statement so PASSWORD literals never reach the client.
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = runtime_user) THEN
+      EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', runtime_user, runtime_password);
+    ELSE
+      EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', runtime_user, runtime_password);
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'runtime role password bootstrap failed for %: %', runtime_user, SQLERRM;
+  END;
 
   EXECUTE format('ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', runtime_user);
   EXECUTE format('GRANT CONNECT, TEMP ON DATABASE %I TO %I', current_database(), runtime_user);
@@ -36,11 +44,15 @@ BEGIN
   EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', runtime_user);
   EXECUTE format('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO %I', runtime_user);
 
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = migration_user) THEN
-    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', migration_user, migration_password);
-  ELSE
-    EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', migration_user, migration_password);
-  END IF;
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = migration_user) THEN
+      EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', migration_user, migration_password);
+    ELSE
+      EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', migration_user, migration_password);
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'migration role password bootstrap failed for %: %', migration_user, SQLERRM;
+  END;
 
   EXECUTE format('ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', migration_user);
   EXECUTE format('GRANT CONNECT, TEMP ON DATABASE %I TO %I', current_database(), migration_user);

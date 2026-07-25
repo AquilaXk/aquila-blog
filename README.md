@@ -104,7 +104,12 @@ Spring Boot + Kotlin API
 ```bash
 git clone https://github.com/AquilaXk/aquila-blog.git
 cd aquila-blog
+
+# Enable the tracked git hooks
+git config core.hooksPath .githooks
 ```
+
+`.githooks/`에는 커밋 메시지 규칙과 사전 검사 훅이 들어 있으며, 위 설정을 해야 적용됩니다. 절대 경로로 지정하면 linked worktree에서 메인 checkout의 훅이 실행되므로 상대 경로를 사용합니다.
 
 ### 2. Start Local Infrastructure
 

@@ -294,6 +294,18 @@ test("Caddy routes tokenized cloud external content through public read upstream
   assert(readProxyIndex < adminMatcherIndex, "public read proxy must be declared before admin API matcher")
 })
 
+test("Caddy request_header hop deletions use single-line syntax", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const apiBlock = caddyfile.slice(caddyfile.indexOf("http://{$API_DOMAIN}"))
+
+  // request_header does not support block form; `{` after the directive fails caddy adapt.
+  assert.doesNotMatch(caddyfile, /request_header\s*\{/)
+  assert.match(apiBlock, /^\s*request_header -X-Forwarded-For\s*$/m)
+  assert.match(apiBlock, /^\s*request_header -CF-Connecting-IP\s*$/m)
+  assert.match(apiBlock, /^\s*request_header -True-Client-IP\s*$/m)
+  assert.match(apiBlock, /^\s*request_header -X-Real-IP\s*$/m)
+})
+
 test("Caddy access logs skip sensitive query routes before proxying", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const apiBlockIndex = caddyfile.indexOf("http://{$API_DOMAIN}")

@@ -89,15 +89,14 @@ http://{$API_DOMAIN} {
   }
 
   # Capture trusted client IP before stripping spoofable hop headers.
+  # request_header supports single-line ops only (no block form; unlike `header`).
   vars {
     trusted_client_ip {http.request.header.CF-Connecting-IP}
   }
-  request_header {
-    -X-Forwarded-For
-    -CF-Connecting-IP
-    -True-Client-IP
-    -X-Real-IP
-  }
+  request_header -X-Forwarded-For
+  request_header -CF-Connecting-IP
+  request_header -True-Client-IP
+  request_header -X-Real-IP
 
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

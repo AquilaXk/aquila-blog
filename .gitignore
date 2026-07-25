@@ -9,6 +9,7 @@ deploy/homeserver/.env.prod
 deploy/homeserver/.env.back.prod
 deploy/homeserver/.env.caddy.prod
 deploy/homeserver/.deploy-backups/
+deploy/homeserver/.deploy-baseline*
 deploy/homeserver/*.backup
 deploy/homeserver/*.enc
 

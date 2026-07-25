@@ -698,6 +698,12 @@ jobs:
           chmod +x deploy/homeserver/create_deploy_backup.sh
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created (pre-checkout): ${BACKUP_DIR}"
+          # The script's own fallback notice goes to stderr and its stdout is the backup
+          # path, so the annotation is raised here instead: a run that keeps falling back
+          # would silently pin rollback to the drifting working tree.
+          if grep -qx 'restore_source=worktree' "${BACKUP_DIR}/metadata.env" 2>/dev/null; then
+            echo "::warning title=Rollback restore point fell back to the working tree::no successful-deploy baseline was found at deploy/homeserver/.deploy-baseline; a rollback would restore the server working tree instead of the last verified deploy"
+          fi
 
           git fetch origin main --prune
           if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
@@ -723,6 +729,7 @@ jobs:
             deploy/homeserver/pgroonga_precheck.sh \
             deploy/homeserver/post_precheck_env_guard.sh \
             deploy/homeserver/rollback_last_deploy.sh \
+            deploy/homeserver/record_deploy_baseline.sh \
             deploy/homeserver/steady_state_guard.sh \
             deploy/homeserver/install_steady_state_guard_cron.sh
 
@@ -1410,6 +1417,19 @@ jobs:
 
           rm -f deploy/homeserver/.external-minio-migration-stopped
           DEPLOY_COMPLETED="true"
+
+          # Pin the rollback restore point to this verified deploy. Recorded after
+          # DEPLOY_COMPLETED so a snapshot failure can never trigger a rollback of a
+          # healthy deploy; the fallback (previous baseline, or the working tree) is
+          # logged instead of silently taken.
+          if DEPLOY_BASELINE_DIR="$(./deploy/homeserver/record_deploy_baseline.sh)"; then
+            echo "deploy baseline recorded: ${DEPLOY_BASELINE_DIR}"
+          else
+            # On stdout, not stderr, so the runner parses it as a workflow annotation:
+            # a silently repeated failure leaves rollback pinned to an ever-older point.
+            echo "::warning title=Deploy baseline not recorded::failed to record successful-deploy baseline; the next rollback will restore an older baseline or the server working tree"
+          fi
+
           cleanup_remote_tmp
           trap - EXIT
           REMOTE

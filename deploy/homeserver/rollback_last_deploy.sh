@@ -549,6 +549,17 @@ latest_backup() {
   ls -1dt "${BACKUP_ROOT}"/* 2>/dev/null | head -n 1
 }
 
+# Make the restore point auditable: a backup sourced from the successful-deploy baseline
+# names the commit it restores, while a worktree-sourced backup is only as good as what
+# the previous run left behind.
+log_backup_restore_provenance() {
+  local restore_source deploy_sha created_at
+  restore_source="$(trim_quotes "$(backup_metadata_value "restore_source")")"
+  deploy_sha="$(trim_quotes "$(backup_metadata_value "baseline_deploy_sha")")"
+  created_at="$(trim_quotes "$(backup_metadata_value "baseline_created_at")")"
+  echo "rollback restore point: source=${restore_source:-worktree} baseline_deploy_sha=${deploy_sha:-unknown} baseline_created_at=${created_at:-unknown}"
+}
+
 backend_http_host() {
   local backend="$1"
   if [[ "${backend}" == "back_blue" ]]; then
@@ -738,6 +749,7 @@ fi
 trap 'release_deploy_lock' EXIT INT TERM
 
 echo "rollback from backup: ${BACKUP_DIR}"
+log_backup_restore_provenance
 
 for file in docker-compose.prod.yml .active_backend; do
   if [[ -f "${BACKUP_DIR}/${file}" ]]; then

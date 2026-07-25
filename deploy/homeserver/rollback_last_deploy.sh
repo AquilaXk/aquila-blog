@@ -660,7 +660,7 @@ probe_backend_http_code() {
     --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
     -s -o /dev/null -w "%{http_code}" \
     -H "Host: localhost" \
-    "http://${host}:8080${HEALTHCHECK_PATH}" || true
+    "http://${host}:8080${HEALTHCHECK_PATH}" || true # NOSONAR internal docker-network readiness probe; TLS terminates at the edge layer
 }
 
 wait_backend_ready() {

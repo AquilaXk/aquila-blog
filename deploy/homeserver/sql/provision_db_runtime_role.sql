@@ -62,6 +62,8 @@ BEGIN
   EXECUTE format('GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %I', migration_user);
 
   -- Transfer postgres-owned public relations so Flyway can ALTER/INDEX without superuser.
+  -- Serial/identity-linked sequences reject a direct ALTER SEQUENCE ... OWNER TO; they inherit
+  -- the new owner from ALTER TABLE on their owning table, so skipping them keeps the loop complete.
   FOR obj IN
     SELECT c.relname AS relname, c.relkind AS relkind
     FROM pg_class c
@@ -69,6 +71,13 @@ BEGIN
     WHERE n.nspname = 'public'
       AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
       AND pg_get_userbyid(c.relowner) = 'postgres'
+      AND NOT (c.relkind = 'S' AND EXISTS (
+        SELECT 1 FROM pg_depend d
+        WHERE d.classid = 'pg_class'::regclass
+          AND d.objid = c.oid
+          AND d.refclassid = 'pg_class'::regclass
+          AND d.deptype IN ('a', 'i')
+      ))
   LOOP
     IF obj.relkind = 'S' THEN
       EXECUTE format('ALTER SEQUENCE public.%I OWNER TO %I', obj.relname, migration_user);

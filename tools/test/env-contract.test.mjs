@@ -1614,6 +1614,12 @@ test("prod datasource uses a non-superuser runtime role contract", () => {
   assert.match(runtimeRoleSql, /GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO %I',\s*migration_user/)
   assert.match(runtimeRoleSql, /GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO %I',\s*migration_user/)
   assert.match(runtimeRoleSql, /ALTER TABLE public\.%I OWNER TO %I',\s*obj\.relname,\s*migration_user/)
+  assert.match(runtimeRoleSql, /ALTER SEQUENCE public\.%I OWNER TO %I',\s*obj\.relname,\s*migration_user/)
+  assert.match(
+    runtimeRoleSql,
+    /AND NOT \(c\.relkind = 'S' AND EXISTS \(\s*\n\s*SELECT 1 FROM pg_depend d\s*\n\s*WHERE d\.classid = 'pg_class'::regclass\s*\n\s*AND d\.objid = c\.oid\s*\n\s*AND d\.refclassid = 'pg_class'::regclass\s*\n\s*AND d\.deptype IN \('a', 'i'\)\s*\n\s*\)\)/,
+    "owner transfer loop must skip serial/identity-linked sequences (ALTER SEQUENCE OWNER is rejected for them)",
+  )
   assert.match(runtimeRoleSql, /ALTER ROLE %I WITH NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS/)
   assert.match(runtimeRoleSql, /GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public/)
   assert.match(runtimeRoleSql, /GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public/)

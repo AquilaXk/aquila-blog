@@ -20,6 +20,24 @@ const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
+
+const extractCaddySiteBlock = (caddyfile, siteMarker) => {
+  const start = caddyfile.indexOf(siteMarker)
+  if (start === -1) return ""
+  const openBrace = caddyfile.indexOf("{", start)
+  if (openBrace === -1) return ""
+  let depth = 0
+  for (let i = openBrace; i < caddyfile.length; i += 1) {
+    const ch = caddyfile[i]
+    if (ch === "{") depth += 1
+    else if (ch === "}") {
+      depth -= 1
+      if (depth === 0) return caddyfile.slice(start, i + 1)
+    }
+  }
+  return ""
+}
+
 const forbiddenSecretBackupCopyPattern =
   /for file in[^\n]*[\s/]\.env\.prod(?:\.compose)?(?:[\s"';]|$)|\b(?:cp|install)\b[^\n]*[\s/]\.env\.prod(?:\.compose)?(?:[\s"';]|$)/
 
@@ -296,10 +314,11 @@ test("Caddy routes tokenized cloud external content through public read upstream
 
 test("Caddy request_header hop deletions use single-line syntax", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
-  const apiBlock = caddyfile.slice(caddyfile.indexOf("http://{$API_DOMAIN}"))
+  const apiBlock = extractCaddySiteBlock(caddyfile, "http://{$API_DOMAIN}")
 
+  assert.notEqual(apiBlock, "", "API domain site block must be extractable")
   // request_header does not support block form; `{` after the directive fails caddy adapt.
-  assert.doesNotMatch(caddyfile, /request_header\s*\{/)
+  assert.doesNotMatch(apiBlock, /request_header\s*\{/)
   assert.match(apiBlock, /^\s*request_header -X-Forwarded-For\s*$/m)
   assert.match(apiBlock, /^\s*request_header -CF-Connecting-IP\s*$/m)
   assert.match(apiBlock, /^\s*request_header -True-Client-IP\s*$/m)

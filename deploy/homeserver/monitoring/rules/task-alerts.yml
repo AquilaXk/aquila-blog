@@ -249,7 +249,7 @@ groups:
           description: "Prometheus cannot scrape docker_runtime_probe for 3m. Check probe container health and docker socket access."
 
       - alert: AquilaContainerRestarted
-        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1|cloudflared|autoheal|docker_socket_proxy"}[15m]) > 0
+        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1|cloudflared|autoheal|docker_socket_proxy|postgres_exporter"}[15m]) > 0
         for: 1m
         labels:
           severity: warning
@@ -417,6 +417,15 @@ groups:
         annotations:
           summary: "PostgreSQL connection pool saturation is high"
           description: "PostgreSQL active database backends exceeded 85% of max_connections for 10m. Check slow queries and pool sizing."
+
+      - alert: AquilaPostgresExporterScrapeDown
+        expr: min(up{job="postgres_exporter"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL exporter scrape is down"
+          description: "Prometheus cannot scrape postgres_exporter for 3m. Every pg_* series is gone, so AquilaPostgresDiskUsageHigh and AquilaPostgresConnectionSaturationHigh cannot fire at all while this lasts. Check the exporter container (a rejected command-line flag exits 1 in a restart loop), the pinned image, and the pg_monitor role credentials."
 
       - alert: AquilaPostgresCheckpointMetricsMissing
         expr: absent(pg_stat_checkpointer_num_timed_total{job="postgres_exporter"})

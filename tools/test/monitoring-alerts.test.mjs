@@ -205,6 +205,23 @@ test("postgres_exporter keeps collecting PG17+ checkpoint metrics and cannot reg
   // so the absence of the series is itself the signal that has to page (#1419).
   assert.match(taskAlerts, /alert: AquilaPostgresCheckpointMetricsMissing\b/)
   assert.match(taskAlerts, /absent\(pg_stat_checkpointer_num_timed_total\{job="postgres_exporter"\}\)/)
+
+  // If the exporter itself dies, AquilaPostgresDiskUsageHigh and
+  // AquilaPostgresConnectionSaturationHigh evaluate against an empty vector and can never
+  // fire. That blind spot needs its own signal, plus restart coverage (#1426).
+  assert.match(taskAlerts, /alert: AquilaPostgresExporterScrapeDown\b/)
+  assert.match(taskAlerts, /min\(up\{job="postgres_exporter"\}\) < 1/)
+
+  const restartAlert = taskAlerts.match(/alert: AquilaContainerRestarted\n\s*expr: ([^\n]+)/)
+  assert(restartAlert, "AquilaContainerRestarted rule is missing")
+  assert.match(restartAlert[1], /postgres_exporter/)
+
+  const probeServices = compose.match(/-\s*"--services"\s*\n\s*-\s*"([^"]+)"/)
+  assert(probeServices, "docker_runtime_probe must pass an explicit --services list")
+  assert(
+    probeServices[1].split(",").map((value) => value.trim()).includes("postgres_exporter"),
+    "postgres_exporter must be exported by docker_runtime_probe for AquilaContainerRestarted to see it",
+  )
 })
 
 test("autoheal and its docker socket proxy stay under continuous restart observation", () => {

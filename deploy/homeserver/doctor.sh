@@ -437,7 +437,7 @@ print_grafana_embed_status() {
     echo "WARN: grafana embed response missing frame-ancestors CSP; admin origin allowlist required"
   elif [[ -z "${frame_ancestors}" ]]; then
     echo "WARN: grafana embed frame-ancestors allowlist is empty; ADMIN_EMBED_ORIGINS is unset or empty"
-  elif [[ "${csp}" != *"aquilaxk.site"* && "${csp}" != *"*"* ]]; then
+  elif [[ "${frame_ancestors}" != *"aquilaxk.site"* && "${frame_ancestors}" != *"*"* ]]; then
     echo "WARN: grafana embed frame-ancestors may omit admin origin allowlist: ${csp}"
   else
     echo "INFO: grafana embed CSP keeps frame-ancestors admin origin allowlist"

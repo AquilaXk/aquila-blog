@@ -386,4 +386,15 @@ if [[ "${wrong_allowlist_output}" != *"may omit admin origin allowlist"* ]]; the
   fail "expected a frame-ancestors allowlist without the admin origin to stay reported as a wrong value"
 fi
 
+# 허용목록 판정은 frame-ancestors 소스 목록만 봐야 한다. 헤더 전체를 보면 default-src 같은 다른
+# 지시어의 와일드카드가 관리자 origin이 허용된 것처럼 보이게 만들어 차단 상태를 정상으로 보고한다.
+grafana_embed_headers="$(printf '%s\r\n' 'HTTP/1.1 200 OK' "Content-Security-Policy: default-src 'self' *; frame-ancestors https://evil.example.com" '')"
+other_directive_wildcard_output="$(print_grafana_embed_status "https://grafana.example.com/d/blog-overview/main")"
+if [[ "${other_directive_wildcard_output}" != *"may omit admin origin allowlist"* ]]; then
+  fail "expected a wildcard in another CSP directive not to pass the frame-ancestors allowlist check, got: ${other_directive_wildcard_output}"
+fi
+if [[ "${other_directive_wildcard_output}" == *"keeps frame-ancestors admin origin allowlist"* ]]; then
+  fail "expected a frame-ancestors allowlist without the admin origin not to be reported as healthy, got: ${other_directive_wildcard_output}"
+fi
+
 echo "[test] homeserver doctor checkup rules passed"

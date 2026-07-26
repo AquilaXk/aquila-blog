@@ -58,7 +58,7 @@ jobs:
           {
             echo "## Backend dependency check (PR path)"
             echo "- Full OWASP/NVD \`dependencyCheckAnalyze\` is deferred to \`main\` push, weekly schedule, and \`workflow_dispatch\` (#1344)."
-            echo "- PR still runs dependency-review, yarn audit, OSV, Trivy, and exception schema gates."
+            echo "- PR still runs dependency-review, OSV, Trivy, and exception schema gates."
           } >> "${GITHUB_STEP_SUMMARY}"
           echo "PR path: full NVD dependency-check deferred (#1344)."
 
@@ -364,7 +364,8 @@ jobs:
           IMAGE: ${{ steps.images.outputs.back_image }}
         run: |
           set -euo pipefail
-          # OS packages only: app/library vulns are gated by NVD/yarn/OSV (#1124).
+          # OS packages only: app/library vulns are gated by backend NVD and the
+          # frontend-lockfile-audit job (OSV/Trivy) (#1124, #1422).
           trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --pkg-types os \
             --format json --output "${RUNNER_TEMP}/trivy-back.json" "${IMAGE}"
           node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-back.json"

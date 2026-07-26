@@ -49,6 +49,13 @@ trim_quotes() {
   printf '%s' "${value}"
 }
 
+normalize_bool() {
+  case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
+    1 | true | yes | on) printf 'true' ;;
+    *) printf 'false' ;;
+  esac
+}
+
 cloudflared_registration_log_exists() {
   local logs="$1"
   if echo "${logs}" | grep -Eqi 'Registered tunnel connection|Connection .* registered'; then
@@ -140,19 +147,33 @@ ACTIVE_BACKEND="$(cat "${STATE_FILE}" 2>/dev/null || true)"
 API_DOMAIN="$(trim_quotes "$(env_value "API_DOMAIN")")"
 ADMIN_API_UPSTREAM="$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
 READ_API_UPSTREAM="$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
+# Resolved exactly like caddy_upstream_probe.sh: an inherited value wins over the env file,
+# so this check and the probe it runs alongside cannot disagree about the mode.
+RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED:-$(trim_quotes "$(env_value "RUNTIME_SPLIT_ENABLED")")}")"
 
 if [[ "${ACTIVE_BACKEND}" != "back_blue" && "${ACTIVE_BACKEND}" != "back_green" ]]; then
   remember_failure "invalid_active_backend=${ACTIVE_BACKEND:-none}"
 fi
 
 if [[ "${ACTIVE_BACKEND}" == "back_blue" ]]; then
-  EXPECTED_UPSTREAM="back_blue"
   INACTIVE_BACKEND="back_green"
   ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE"
 else
-  EXPECTED_UPSTREAM="back_green"
   INACTIVE_BACKEND="back_blue"
   ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE"
+fi
+
+# runtime-split serves the edge from back_read/back_admin through Caddyfile env
+# placeholders, so a literal blue/green comparison reports a healthy split edge as a
+# permanent upstream mismatch (#1418). Resolve both sides through the shared probe.
+caddy_upstream_probe() {
+  ENV_FILE="${ENV_FILE}" COMPOSE_FILE="${COMPOSE_FILE}" CADDY_CONTAINER_FILE="${CADDY_CONTAINER_FILE}" \
+    bash "${SCRIPT_DIR}/caddy_upstream_probe.sh" "$@"
+}
+
+EXPECTED_UPSTREAM=""
+if ! EXPECTED_UPSTREAM="$(caddy_upstream_probe expected "${ACTIVE_BACKEND}")"; then
+  remember_failure "caddy_upstream_expectation_unresolved active_backend=${ACTIVE_BACKEND:-none}"
 fi
 EXPECTED_BACK_IMAGE="$(trim_quotes "$(env_value "${ACTIVE_BACKEND_IMAGE_KEY}")")"
 
@@ -160,15 +181,23 @@ RUNNING_SERVICES="$(compose ps --status running --services 2>/dev/null || true)"
 ACTIVE_BACKEND_CONTAINER_ID="$(compose ps -q "${ACTIVE_BACKEND}" 2>/dev/null | head -n 1 || true)"
 ACTIVE_BACKEND_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${ACTIVE_BACKEND_CONTAINER_ID}" 2>/dev/null | tr -d '\r' || true)"
 
-MOUNTED_UPSTREAM="$(
-  compose exec -T caddy sh -lc \
-    "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back[_-](blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" \
-    2>/dev/null | tr -d '\r' | head -n 1 || true
-)"
-MOUNTED_UPSTREAM="${MOUNTED_UPSTREAM//-/_}"
+MOUNTED_UPSTREAM="$(caddy_upstream_probe mounted || true)"
 HAS_LEGACY_BACK_ACTIVE="false"
 if compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}" >/dev/null 2>&1; then
   HAS_LEGACY_BACK_ACTIVE="true"
+fi
+
+# Out-of-band detector for a runtime-split edge that serves literal colour upstreams. The
+# mounted_upstream comparison above resolves one token, so a drift that spares the first
+# reverse_proxy line (a read-only or forward_auth route pinned to a colour) passes it while
+# read/admin isolation is off for those routes. blue_green_deploy.sh warns about the same
+# state and rollback_last_deploy.sh cannot fail on it without stretching an outage
+# (#1409), so this is where a degraded split edge turns into a FAIL an operator can see.
+HAS_SPLIT_LITERAL_UPSTREAM="false"
+if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+  if compose exec -T caddy sh -lc "grep -Eq '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080([[:space:]]|\$)' ${CADDY_CONTAINER_FILE}" >/dev/null 2>&1; then
+    HAS_SPLIT_LITERAL_UPSTREAM="true"
+  fi
 fi
 
 INTERNAL_HTTP_CODE="$(
@@ -230,6 +259,7 @@ log "mounted_upstream=${MOUNTED_UPSTREAM:-none}"
 log "inactive_backend=${INACTIVE_BACKEND}"
 log "admin_api_upstream=${ADMIN_API_UPSTREAM:-none}"
 log "read_api_upstream=${READ_API_UPSTREAM:-none}"
+log "runtime_split_enabled=${RUNTIME_SPLIT_ENABLED} split_literal_upstream=${HAS_SPLIT_LITERAL_UPSTREAM}"
 log "internal_readiness=${INTERNAL_HTTP_CODE:-none}"
 log "public_readiness=${PUBLIC_HTTP_CODE:-none}"
 log "internal_notification_snapshot=${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
@@ -261,6 +291,10 @@ fi
 
 if [[ -z "${MOUNTED_UPSTREAM}" || "${MOUNTED_UPSTREAM}" != "${EXPECTED_UPSTREAM}" || "${HAS_LEGACY_BACK_ACTIVE}" == "true" ]]; then
   remember_failure "caddy_upstream_mismatch expected=${EXPECTED_UPSTREAM} mounted=${MOUNTED_UPSTREAM:-none} legacy_back_active=${HAS_LEGACY_BACK_ACTIVE}"
+fi
+
+if [[ "${HAS_SPLIT_LITERAL_UPSTREAM}" == "true" ]]; then
+  remember_failure "caddy_split_literal_upstream runtime_split_enabled=${RUNTIME_SPLIT_ENABLED} read_api_upstream=${READ_API_UPSTREAM:-none} admin_api_upstream=${ADMIN_API_UPSTREAM:-none}"
 fi
 
 if echo "${RUNNING_SERVICES}" | grep -qx "${INACTIVE_BACKEND}"; then

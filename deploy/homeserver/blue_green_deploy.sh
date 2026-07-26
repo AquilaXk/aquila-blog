@@ -1708,15 +1708,70 @@ ensure_caddy_mount_sync() {
   return 1
 }
 
+# Any reverse_proxy/forward_auth line that targets a literal colour host instead of a
+# {$READ_API_UPSTREAM}/{$ADMIN_API_UPSTREAM} placeholder. Under runtime-split such a line
+# wins over the env value and takes its routes out of the split. This sees every upstream
+# line, so it also catches a partial drift that the single-token route verification misses.
+caddy_file_has_literal_colour_upstream() {
+  grep -Eq '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080([[:space:]]|$)' "${CADDY_FILE}"
+}
+
+# State the outcome a literal drift actually produces, because the two possible outcomes
+# differ and neither is what the plain "kept on placeholders" line would suggest.
+# verify_caddy_route() compares a single token (the first reverse_proxy upstream), so a
+# drift that reaches that token makes this cutover fail and roll back, while a drift that
+# spares it lets the cutover report success with those routes outside the split.
+#
+# The file is not repaired here. The literal -> placeholder direction is not recoverable
+# from the file alone (both upstream keys collapse to the same literal), and rebuilding it
+# from route context would copy the Caddyfile's routing policy into this script, where a
+# newly added read route would silently be wired to the admin runtime. Restoring the repo
+# Caddyfile is deploy.yml's `git checkout --force`, which runs before this script.
+report_caddy_split_literal_drift() {
+  local backend="$1"
+  local expected_host current_host
+
+  echo "WARN caddy upstream has literal colour hosts under runtime-split; env routing (read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM")) is not in effect for those routes" >&2
+  grep -nE '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080' "${CADDY_FILE}" >&2 || true
+
+  if ! expected_host="$(expected_caddy_upstream_host "${backend}")"; then
+    echo "WARN this cutover fails at caddy route verify: the runtime-split upstream expectation cannot be resolved" >&2
+    return 0
+  fi
+
+  current_host="$(current_caddy_upstream_host)"
+  if [[ "${current_host}" != "${expected_host}" ]]; then
+    echo "WARN this cutover cannot succeed: caddy route verify compares current=${current_host:-none} against expected=${expected_host}, so it fails after 20 tries and the deploy rolls back to the previous backend" >&2
+    return 0
+  fi
+
+  echo "WARN this cutover still passes caddy route verify (current=${current_host}): it reports success while the upstream lines above stay outside runtime-split read/admin isolation until the placeholder Caddyfile is restored" >&2
+}
+
 set_caddy_upstream_backend() {
   local backend="$1"
   local active_host
   active_host="$(backend_http_host "${backend}")"
 
-  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
-    upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
-    upsert_env_key "READ_API_UPSTREAM" "${active_host}"
+  # runtime-split: edge upstreams belong to configure_runtime_split_env()
+  # (READ_API_UPSTREAM=back_read, ADMIN_API_UPSTREAM=back_admin). Baking the active
+  # colour into the Caddyfile makes the literal win over the env placeholder and
+  # collapses read/admin isolation into a single blue/green container (#1418), so the
+  # whole rewrite stays out of split mode. Caddy runs without --watch, so the reload
+  # is still required: deploy.yml restores the repo Caddyfile with `git checkout
+  # --force` and the running config would otherwise keep the previous upstreams.
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    reload_caddy
+    if caddy_file_has_literal_colour_upstream; then
+      report_caddy_split_literal_drift "${backend}"
+      return 0
+    fi
+    echo "caddy upstream kept on runtime-split placeholders: read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM") (cutover colour=${active_host})"
+    return 0
   fi
+
+  upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
+  upsert_env_key "READ_API_UPSTREAM" "${active_host}"
 
   # Keep content rewrite in-place; avoids stale config when external tools swap files.
   local rewritten
@@ -1728,6 +1783,26 @@ set_caddy_upstream_backend() {
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
   echo "caddy upstream switched to active=${active_host}:8080"
+}
+
+# Upstream host the edge must serve after a cutover. In runtime-split mode the edge
+# never points at a colour, so the expectation comes from ADMIN_API_UPSTREAM: that is
+# the key behind the first `reverse_proxy` token current_caddy_upstream_host() reads
+# and behind the default handle that HEALTHCHECK_PATH resolves through.
+expected_caddy_upstream_host() {
+  local backend="$1"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    backend_http_host "${backend}"
+    return
+  fi
+
+  local upstream
+  upstream="$(normalize_backend_name "$(host_env_value "ADMIN_API_UPSTREAM")")"
+  if [[ -z "${upstream}" ]]; then
+    echo "runtime-split enabled but ADMIN_API_UPSTREAM is missing in ${ENV_FILE}" >&2
+    return 1
+  fi
+  echo "${upstream}"
 }
 
 persist_single_runtime_caddy_upstreams() {
@@ -2206,7 +2281,9 @@ verify_caddy_route() {
   local expected_backend="$1"
   local api_domain="$2"
   local expected_host
-  expected_host="$(backend_http_host "${expected_backend}")"
+  if ! expected_host="$(expected_caddy_upstream_host "${expected_backend}")"; then
+    return 1
+  fi
 
   local attempt=1
   while [[ "${attempt}" -le 20 ]]; do
@@ -2371,15 +2448,33 @@ rollback_caddy_route_only() {
 
   switch_caddy_upstream "${previous_backend}"
 
+  # runtime-split에서 edge 트래픽의 실제 목적지는 back_read/back_admin이다. 즉
+  # verify_caddy_route()가 프로브하는 컨테이너가 곧 helper 복구 대상이므로, 후보 이미지가 원인인
+  # 실패에서는 복구 전 verify가 통과할 수 없다. verify를 먼저 두면 rollback이 복구 앞에서
+  # 중단되고 프로덕션이 깨진 이미지에 고착된다(#1418, #1409와 동일 클래스). 그래서 split에서는
+  # 복구를 먼저 하고 verify를 그 결과에 대한 사후 검증으로 돌린다. 복구는 Caddy 라우트 상태에
+  # 의존하지 않고(활성 색 이미지 값 + 자체 healthcheck만 본다) 활성 색은 위에서 이미
+  # running/DNS/health로 확인했으므로 앞으로 옮겨도 전제가 깨지지 않는다. 단일 런타임 helper는
+  # back_worker뿐이고 edge 경로가 아니므로 기존 순서(verify -> 복구)를 유지한다.
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
+      echo "burn-in rollback failed: helper recovery failed before route verify" >&2
+      compose stop "${candidate_backend}" || true
+      return 1
+    fi
+  fi
+
   if ! verify_caddy_route "${previous_backend}" "${api_domain}"; then
     echo "burn-in rollback failed: caddy route verify failed" >&2
     return 1
   fi
 
-  if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
-    echo "burn-in rollback failed: helper recovery failed after route rollback" >&2
-    compose stop "${candidate_backend}" || true
-    return 1
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
+      echo "burn-in rollback failed: helper recovery failed after route rollback" >&2
+      compose stop "${candidate_backend}" || true
+      return 1
+    fi
   fi
 
   echo "${previous_backend}" > "${STATE_FILE}"
@@ -2475,14 +2570,25 @@ rollback_to_backend() {
 
   switch_caddy_upstream "${rollback_backend}"
 
+  # split에서 helper 복구가 route verify 앞에 오는 이유는 rollback_caddy_route_only() 주석 참조:
+  # verify의 프로브 대상(back_admin)이 곧 복구 대상이라 복구 전에는 통과할 수 없다.
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    if ! restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"; then
+      echo "rollback failed: helper recovery failed before route verify" >&2
+      return 1
+    fi
+  fi
+
   if ! verify_caddy_route "${rollback_backend}" "${api_domain}"; then
     echo "rollback failed: caddy route verify failed" >&2
     return 1
   fi
 
-  if ! restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"; then
-    echo "rollback failed: helper recovery failed after route rollback" >&2
-    return 1
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    if ! restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"; then
+      echo "rollback failed: helper recovery failed after route rollback" >&2
+      return 1
+    fi
   fi
 
   echo "${rollback_backend}" > "${STATE_FILE}"

@@ -168,10 +168,12 @@ health_of() {
   docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${container_id}" 2>/dev/null || echo "unknown"
 }
 
+# runtime-split serves the edge from back_read/back_admin through Caddyfile env
+# placeholders. A literal blue/green awk returns empty there, which made the failover below
+# a silent no-op (#1418), so the upstream is resolved through the shared probe.
 active_upstream() {
-  local upstream
-  upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back[_-](blue|green):8080$/ {split($2, a, ":"); print a[1]; exit}' "${CADDY_HOST_FILE}" 2>/dev/null || true)"
-  echo "${upstream//-/_}"
+  ENV_FILE="${ENV_FILE}" COMPOSE_FILE="${COMPOSE_FILE}" CADDY_FILE="${CADDY_HOST_FILE}" \
+    bash "${SCRIPT_DIR}/caddy_upstream_probe.sh" host 2>/dev/null || true
 }
 
 switch_upstream() {
@@ -181,6 +183,14 @@ switch_upstream() {
 
   if [[ -z "${current}" || "${current}" == "${target}" ]]; then
     echo "[switch] no change (current=${current:-none}, target=${target})"
+    return
+  fi
+
+  # Colour failover only applies when the edge is pinned to a blue/green host. Under
+  # runtime-split the edge points at back_read/back_admin, so rewriting a colour here would
+  # match nothing and report a switch that never happened.
+  if [[ "${current}" != "back_blue" && "${current}" != "back_green" ]]; then
+    echo "[switch] skipped: edge upstream is ${current}, not a blue/green colour (runtime-split serves back_read/back_admin; recover those services instead)"
     return
   fi
 

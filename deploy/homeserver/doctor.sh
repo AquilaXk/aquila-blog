@@ -33,9 +33,11 @@ print_env_key_status() {
   fi
 }
 
+# 키가 없는 것은 optional 조회의 정상 경로다. pipefail이 grep no-match(exit 1)를 파이프라인
+# 종료 코드로 승격시키면 호출부 대입에서 set -e가 점검 전체를 중단시키므로 여기서 끊는다.
 env_value() {
   local key="$1"
-  grep -E "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -n 1 | cut -d '=' -f2-
+  grep -E "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -n 1 | cut -d '=' -f2- || return 0
 }
 
 trim_quotes() {
@@ -453,9 +455,11 @@ print_robots_status() {
     -o "${public_body}" \
     "https://${api_domain}/robots.txt" >/dev/null 2>&1 || true
 
+  # 헤더 파일이 없으면 awk가 exit 2로 끝나고 pipefail이 이를 대입 실패로 만들어 점검이 중단된다.
+  # 응답을 못 받은 상태는 아래 none 처리와 WARN이 이미 담당한다.
   local origin_code public_code
-  origin_code="$(awk 'NR==1 {print $2}' "${origin_headers}" 2>/dev/null | tr -d '\r')"
-  public_code="$(awk 'NR==1 {print $2}' "${public_headers}" 2>/dev/null | tr -d '\r')"
+  origin_code="$(awk 'NR==1 {print $2}' "${origin_headers}" 2>/dev/null | tr -d '\r' || true)"
+  public_code="$(awk 'NR==1 {print $2}' "${public_headers}" 2>/dev/null | tr -d '\r' || true)"
   [[ -n "${origin_code}" ]] || origin_code="none"
   [[ -n "${public_code}" ]] || public_code="none"
 
@@ -709,12 +713,12 @@ internal_snapshot_code="$(
     -s -o /dev/null -w "%{http_code}" \
     --connect-timeout 3 \
     --max-time 8 \
-    -H "Host: ${API_DOMAIN}" \
+    -H "Host: ${api_domain}" \
     "http://caddy:80/member/api/v1/notifications/snapshot" || true
 )"
 public_snapshot_code="$(
   curl -sS --connect-timeout 5 -m 15 -o /dev/null -w "%{http_code}" \
-    "https://${API_DOMAIN}/member/api/v1/notifications/snapshot" || true
+    "https://${api_domain}/member/api/v1/notifications/snapshot" || true
 )"
 echo "internal_snapshot=${internal_snapshot_code:-none}"
 echo "public_snapshot=${public_snapshot_code:-none}"

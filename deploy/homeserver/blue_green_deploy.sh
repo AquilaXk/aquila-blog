@@ -2417,15 +2417,33 @@ rollback_caddy_route_only() {
 
   switch_caddy_upstream "${previous_backend}"
 
+  # runtime-split에서 edge 트래픽의 실제 목적지는 back_read/back_admin이다. 즉
+  # verify_caddy_route()가 프로브하는 컨테이너가 곧 helper 복구 대상이므로, 후보 이미지가 원인인
+  # 실패에서는 복구 전 verify가 통과할 수 없다. verify를 먼저 두면 rollback이 복구 앞에서
+  # 중단되고 프로덕션이 깨진 이미지에 고착된다(#1418, #1409와 동일 클래스). 그래서 split에서는
+  # 복구를 먼저 하고 verify를 그 결과에 대한 사후 검증으로 돌린다. 복구는 Caddy 라우트 상태에
+  # 의존하지 않고(활성 색 이미지 값 + 자체 healthcheck만 본다) 활성 색은 위에서 이미
+  # running/DNS/health로 확인했으므로 앞으로 옮겨도 전제가 깨지지 않는다. 단일 런타임 helper는
+  # back_worker뿐이고 edge 경로가 아니므로 기존 순서(verify -> 복구)를 유지한다.
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
+      echo "burn-in rollback failed: helper recovery failed before route verify" >&2
+      compose stop "${candidate_backend}" || true
+      return 1
+    fi
+  fi
+
   if ! verify_caddy_route "${previous_backend}" "${api_domain}"; then
     echo "burn-in rollback failed: caddy route verify failed" >&2
     return 1
   fi
 
-  if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
-    echo "burn-in rollback failed: helper recovery failed after route rollback" >&2
-    compose stop "${candidate_backend}" || true
-    return 1
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
+      echo "burn-in rollback failed: helper recovery failed after route rollback" >&2
+      compose stop "${candidate_backend}" || true
+      return 1
+    fi
   fi
 
   echo "${previous_backend}" > "${STATE_FILE}"
@@ -2521,14 +2539,25 @@ rollback_to_backend() {
 
   switch_caddy_upstream "${rollback_backend}"
 
+  # split에서 helper 복구가 route verify 앞에 오는 이유는 rollback_caddy_route_only() 주석 참조:
+  # verify의 프로브 대상(back_admin)이 곧 복구 대상이라 복구 전에는 통과할 수 없다.
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    if ! restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"; then
+      echo "rollback failed: helper recovery failed before route verify" >&2
+      return 1
+    fi
+  fi
+
   if ! verify_caddy_route "${rollback_backend}" "${api_domain}"; then
     echo "rollback failed: caddy route verify failed" >&2
     return 1
   fi
 
-  if ! restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"; then
-    echo "rollback failed: helper recovery failed after route rollback" >&2
-    return 1
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    if ! restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"; then
+      echo "rollback failed: helper recovery failed after route rollback" >&2
+      return 1
+    fi
   fi
 
   echo "${rollback_backend}" > "${STATE_FILE}"

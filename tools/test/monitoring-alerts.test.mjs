@@ -157,6 +157,46 @@ test("operations alert rules cover launch-blocking failure domains", () => {
   assert.match(taskAlerts, /rollback/i)
 })
 
+test("postgres_exporter keeps collecting PG17+ checkpoint metrics and cannot regress silently", () => {
+  const compose = read(composePath)
+  const taskAlerts = read(taskAlertsPath)
+  const deployScript = read(path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh"))
+  const backupScript = read(path.join(repoRoot, "deploy/homeserver/create_external_backup.sh"))
+
+  const exporterStart = compose.indexOf("\n  postgres_exporter:")
+  assert(exporterStart >= 0, "postgres_exporter service is missing from the compose file")
+  const exporterBlock = compose.slice(exporterStart, compose.indexOf("\n  grafana:"))
+
+  // PostgreSQL 17 moved checkpoint counters from pg_stat_bgwriter to pg_stat_checkpointer.
+  // The exporter ships that collector as defaultDisabled, so without an explicit opt-in the
+  // production PG18 database exposes no checkpoint metrics at all (#1419).
+  assert.match(exporterBlock, /--collector\.stat_checkpointer/)
+
+  // Every tracked fallback pin must stay on a build that understands the PG17+ schema.
+  // v0.17.0 is the first release carrying the pg_stat_checkpointer fix. These three drifted
+  // apart before, so they are checked together rather than one representative file.
+  for (const [name, source] of [
+    ["blue_green_deploy.sh", deployScript],
+    ["create_external_backup.sh", backupScript],
+    ["deploy.yml", read(workflowPath)],
+  ]) {
+    const pin = source.match(
+      /ensure_image_(?:env_)?key_from_local_digest "POSTGRES_EXPORTER_IMAGE" "[^"]*postgres-exporter:v(\d+)\.(\d+)\.(\d+)"/,
+    )
+    assert(pin, `${name} must pin a versioned postgres-exporter fallback image`)
+    const [major, minor] = [Number(pin[1]), Number(pin[2])]
+    assert(
+      major > 0 || minor >= 17,
+      `${name} postgres-exporter fallback must be >= v0.17.0 for PG17+ pg_stat_checkpointer, got v${pin[1]}.${pin[2]}.${pin[3]}`,
+    )
+  }
+
+  // A collector that silently stops producing series leaves no alert and no dashboard gap,
+  // so the absence of the series is itself the signal that has to page (#1419).
+  assert.match(taskAlerts, /alert: AquilaPostgresCheckpointMetricsMissing\b/)
+  assert.match(taskAlerts, /absent\(pg_stat_checkpointer_num_timed_total\{job="postgres_exporter"\}\)/)
+})
+
 test("autoheal and its docker socket proxy stay under continuous restart observation", () => {
   const compose = read(composePath)
   const taskAlerts = read(taskAlertsPath)

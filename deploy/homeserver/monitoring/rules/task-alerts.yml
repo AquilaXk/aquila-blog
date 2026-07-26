@@ -418,6 +418,15 @@ groups:
           summary: "PostgreSQL connection pool saturation is high"
           description: "PostgreSQL active database backends exceeded 85% of max_connections for 10m. Check slow queries and pool sizing."
 
+      - alert: AquilaPostgresCheckpointMetricsMissing
+        expr: absent(pg_stat_checkpointer_num_timed_total{job="postgres_exporter"})
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL checkpoint metrics are not being collected"
+          description: "postgres_exporter has exposed no pg_stat_checkpointer series for 15m. A collector that silently stops leaves checkpoint and bgwriter observability blank (#1419). Check that POSTGRES_EXPORTER_IMAGE is v0.17.0 or newer, that --collector.stat_checkpointer is still set, and that the exporter is scrapeable."
+
       - alert: AquilaRedisUnavailable
         expr: docker_container_running{job="docker_runtime_probe",service="redis_1"} < 1
         for: 3m

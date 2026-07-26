@@ -240,6 +240,12 @@ services:
     image: ${POSTGRES_EXPORTER_IMAGE:?POSTGRES_EXPORTER_IMAGE is required (sha256 digest required)}
     restart: unless-stopped
     logging: *default-logging
+    # PostgreSQL 17 moved checkpoint counters out of pg_stat_bgwriter into
+    # pg_stat_checkpointer. The exporter ships that collector as defaultDisabled
+    # (it only exists on PG17+), so without this flag the production PG18 database
+    # exposes no checkpoint metrics at all (#1419).
+    command:
+      - "--collector.stat_checkpointer"
     environment:
       DATA_SOURCE_URI: db_1:5432/postgres?sslmode=disable
       DATA_SOURCE_USER: ${PROD___POSTGRES_EXPORTER__USERNAME:-postgres_exporter}

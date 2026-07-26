@@ -355,7 +355,9 @@ for script in "${deploy_script}" "${rollback_script}"; do
   if cmp -s "${caddy_source}" "${single_caddy}"; then
     fail "${label}: single-runtime cutover must pin the active colour into the Caddyfile"
   fi
-  if grep -q '{$ADMIN_API_UPSTREAM:' "${single_caddy}" || grep -q '{$READ_API_UPSTREAM:' "${single_caddy}"; then
+  # -F 고정: placeholder 토큰의 `{`는 BRE에서 동작이 정의되지 않은 문자다. 실제로 ugrep 같은
+  # drop-in grep에서는 매칭이 안 되고, 그러면 이 검사가 조용히 절대 발화하지 않는다.
+  if grep -qF '{$ADMIN_API_UPSTREAM:' "${single_caddy}" || grep -qF '{$READ_API_UPSTREAM:' "${single_caddy}"; then
     fail "${label}: single-runtime cutover must replace every upstream placeholder"
   fi
   literal_count="$(count_matches "${single_caddy}" 'back_green:8080')"
@@ -936,7 +938,7 @@ if [ "${verify_line}" -ge "${recovery_line}" ]; then
   cat "${harness_stdout}" >&2
   fail "single-runtime rollback must keep helper recovery after route verify"
 fi
-if grep -q '{$ADMIN_API_UPSTREAM:' "${single_rollback_caddy}"; then
+if grep -qF '{$ADMIN_API_UPSTREAM:' "${single_rollback_caddy}"; then
   fail "single-runtime rollback must pin the rollback colour into the Caddyfile"
 fi
 

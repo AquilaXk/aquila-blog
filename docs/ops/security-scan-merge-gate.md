@@ -7,7 +7,7 @@ PR → `main` merge-blocking vulnerability gates live in `.github/workflows/secu
 
 | Event | `backend-dependency-check` |
 | --- | --- |
-| `pull_request` | Full OWASP/NVD `dependencyCheckAnalyze` **does not run**. Job succeeds immediately so required-check name drift does not block PRs. PR still relies on dependency-review, yarn audit, OSV, Trivy, and exception schema. |
+| `pull_request` | Full OWASP/NVD `dependencyCheckAnalyze` **does not run**. Job succeeds immediately so required-check name drift does not block PRs. PR still relies on dependency-review, OSV, Trivy, and exception schema. |
 | `push` to `main` | Full NVD scan, fail-closed if `NVD_API_KEY` missing |
 | weekly `schedule` / `workflow_dispatch` | Full NVD scan, fail-closed if `NVD_API_KEY` missing |
 
@@ -40,13 +40,13 @@ DB refresh source under that gate.
 | GitHub Dependency graph | repository Security setting | PR dependency review compare API |
 | `GITHUB_TOKEN` | Actions default | GHCR read (if needed) and API auth for dependency review |
 
-Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets.
+Frontend OSV and Trivy (lockfile + runtime image) use public vulnerability DBs; no extra secrets.
 
 ## Container image gate
 
 - Backend: final `FROM` in `back/Dockerfile` (GHCR deploy base)
 - Frontend homeserver: `node:20-alpine` (`NODE_RUNTIME_IMAGE` default) — not `front/Dockerfile`
-- Trivy scope: `--pkg-types os` + `--ignore-unfixed` High/Critical (app/library vulns are covered by NVD/yarn/OSV)
+- Trivy scope: `--pkg-types os` + `--ignore-unfixed` High/Critical (app/library vulns are covered by backend NVD and the frontend lockfile gate below)
 - Temporary OS exceptions live in `.github/security/vulnerability-exceptions.yml`
 
 ## Exception allowlist
@@ -55,17 +55,30 @@ Frontend OSV/yarn audit and Trivy use public vulnerability DBs; no extra secrets
 - Validator: `node tools/guards/check-vulnerability-exceptions.mjs`
 - Required fields per entry: `package`, `cve`, `issue` (`#N` or GitHub issue URL), `owner` (`@handle`), `expiry` (`YYYY-MM-DD`), `reason`
 - Expired or schema-invalid entries fail CI
-- Applied to Trivy image findings, OSV High/Critical, and yarn audit High/Critical (`tools/guards/check-yarn-audit-high.mjs`)
+- Applied to Trivy High/Critical (runtime images and `front/yarn.lock`) and OSV High/Critical
 - **Does not apply** to OWASP `dependencyCheckAnalyze` (`failBuildOnCVSS`). Backend NVD suppressions use
   `back/config/dependency-check-suppressions.xml` wired via `dependencyCheck.suppressionFiles` in
   `back/build.gradle.kts` (#1387, #1391). Prefer upgrades; suppress only CPE false-positives
   (e.g. Netty 4.2.16.Final already vendor-fixed while NVD CPE includes that version) or temporary
   no-GA cases with `until` + issue link.
 
-## Frontend audit notes
+## Frontend lockfile gate (`frontend-lockfile-audit`, #1422)
 
-- Do **not** pass yarn classic `--groups dependencies,devDependencies` — it can audit 0 packages and exit 0 (false pass).
-- Yarn gate parses `yarn audit --json`, fails if `totalDependencies <= 0`, then fails on High/Critical after allowlist.
+- Two independent DBs read `front/yarn.lock`: osv-scanner `v2.4.0`, then Trivy `0.72.0`
+  (`trivy fs --scanners vuln --severity HIGH,CRITICAL`). Both verdicts come from
+  `check-vulnerability-exceptions.mjs` (`--filter-osv` / `--filter-trivy`), never from the scanner exit code.
+- OSV runs first so an install/DB failure in a later scanner cannot silence it. In #1422 a broken
+  first step hid every scanner behind it, leaving the frontend with zero dependency scanning while
+  also blocking all merges.
+- No `yarn install` in this job: both scanners parse the lockfile, so `node_modules` and the
+  `postinstall` script are never needed.
+- `yarn audit` is **not** a gate anymore and must not be reintroduced. The npm registry returns audit
+  responses gzipped without `Content-Encoding`, so yarn classic and npm both fail to parse them, and
+  yarn classic is unmaintained. (Historic trap: yarn classic `--groups dependencies,devDependencies`
+  could audit 0 packages and still exit 0.)
+- Exit-code contract: `osv-scanner` returns 1 when it finds vulnerabilities (report is still parsed),
+  `trivy fs` returns 0 on findings unless `--exit-code` is passed. Any other non-zero status is a tool
+  failure and fails the job fail-closed.
 
 ## Required repository secret
 

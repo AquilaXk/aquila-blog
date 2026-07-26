@@ -235,20 +235,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # Both scanners read front/yarn.lock only, so no yarn install / node_modules and no
+      # postinstall script execution inside the security job (#1422).
       - name: Set up Node.js 20
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "20"
-          cache: "yarn"
-          cache-dependency-path: front/yarn.lock
 
-      - name: Install frontend dependencies
-        working-directory: front
-        run: yarn install --frozen-lockfile
-
-      - name: Yarn audit High/Critical fail
-        run: node tools/guards/check-yarn-audit-high.mjs --cwd front
-
+      # OSV runs first on purpose: a later scanner failing must not silence the signal that
+      # works. The broken yarn audit step used to sit here and blocked OSV entirely (#1422).
       - name: Install OSV Scanner
         env:
           OSV_SCANNER_VERSION: "v2.4.0"
@@ -274,6 +269,39 @@ jobs:
           fi
           test -s "${RUNNER_TEMP}/osv-front.json"
           node tools/guards/check-vulnerability-exceptions.mjs --filter-osv "${RUNNER_TEMP}/osv-front.json"
+
+      # Second independent DB for front/yarn.lock (replaces the yarn audit gate from #1342).
+      # The npm registry serves audit responses gzipped without Content-Encoding, so yarn/npm
+      # audit cannot parse them and yarn classic is unmaintained; a local lockfile DB removes
+      # the remote-endpoint single point of failure (#1422).
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.72.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/trivy.tgz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Trivy scan frontend yarn.lock
+        run: |
+          set -euo pipefail
+          set +e
+          trivy fs --scanners vuln --severity HIGH,CRITICAL \
+            --format json --output "${RUNNER_TEMP}/trivy-front-lockfile.json" front/yarn.lock
+          trivy_status=$?
+          set -e
+          # Unlike osv-scanner, trivy exits 0 on findings unless --exit-code is set, so any
+          # non-zero status is a tool/DB failure and must fail the gate (do not add --exit-code:
+          # the allowlist verdict belongs to check-vulnerability-exceptions.mjs).
+          if [ "${trivy_status}" -ne 0 ]; then
+            echo "trivy fs failed with status ${trivy_status}" >&2
+            exit "${trivy_status}"
+          fi
+          test -s "${RUNNER_TEMP}/trivy-front-lockfile.json"
+          node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-front-lockfile.json"
 
   container-image-scan:
     runs-on: ubuntu-latest

@@ -1708,6 +1708,14 @@ ensure_caddy_mount_sync() {
   return 1
 }
 
+# Any reverse_proxy/forward_auth line that targets a literal colour host instead of a
+# {$READ_API_UPSTREAM}/{$ADMIN_API_UPSTREAM} placeholder. Under runtime-split such a line
+# wins over the env value and takes its routes out of the split. This sees every upstream
+# line, so it also catches a partial drift that the single-token route verification misses.
+caddy_file_has_literal_colour_upstream() {
+  grep -Eq '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080([[:space:]]|$)' "${CADDY_FILE}"
+}
+
 set_caddy_upstream_backend() {
   local backend="$1"
   local active_host
@@ -1722,6 +1730,11 @@ set_caddy_upstream_backend() {
   # --force` and the running config would otherwise keep the previous upstreams.
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     reload_caddy
+    if caddy_file_has_literal_colour_upstream; then
+      echo "WARN caddy upstream has literal colour hosts under runtime-split; env routing (read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM")) is not in effect for those routes" >&2
+      grep -nE '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080' "${CADDY_FILE}" >&2 || true
+      return 0
+    fi
     echo "caddy upstream kept on runtime-split placeholders: read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM") (cutover colour=${active_host})"
     return 0
   fi

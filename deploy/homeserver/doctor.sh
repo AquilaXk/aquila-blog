@@ -608,10 +608,12 @@ else
 fi
 
 print_section "Env Domain Consistency"
-front_url="$(env_value "CUSTOM_PROD_FRONTURL")"
-back_url="$(env_value "CUSTOM_PROD_BACKURL")"
-cookie_domain="$(env_value "CUSTOM_PROD_COOKIEDOMAIN")"
-api_domain="$(env_value "API_DOMAIN")"
+# .env.prod는 값에 따옴표를 붙여 적을 수 있다. 여기서 벗기지 않으면 host 추출과 아래 snapshot
+# 점검의 Host 헤더/URL이 따옴표째 조립돼 라우트가 정상인데도 상시 실패로 보고된다.
+front_url="$(trim_quotes "$(env_value "CUSTOM_PROD_FRONTURL")")"
+back_url="$(trim_quotes "$(env_value "CUSTOM_PROD_BACKURL")")"
+cookie_domain="$(trim_quotes "$(env_value "CUSTOM_PROD_COOKIEDOMAIN")")"
+api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
 
 front_host="$(extract_host "${front_url}")"
 back_host="$(extract_host "${back_url}")"

@@ -403,13 +403,14 @@ print_grafana_embed_status() {
     return 0
   fi
 
-  local headers status location xfo csp internal_health
+  local headers status location xfo csp frame_ancestors internal_health
   internal_health="$(inspect_grafana_internal_health)"
   headers="$(inspect_grafana_embed_headers "${url}")"
   status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
   location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
   xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
   csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
+  frame_ancestors="$(printf '%s' "${csp}" | sed -E 's/.*frame-ancestors//; s/;.*$//' | tr -d '[:space:]')"
 
   echo "grafana public embed url: ${url}"
   echo "grafana internal health: ${internal_health:-none}"
@@ -434,6 +435,8 @@ print_grafana_embed_status() {
   fi
   if [[ -z "${csp}" || "${csp}" != *"frame-ancestors"* ]]; then
     echo "WARN: grafana embed response missing frame-ancestors CSP; admin origin allowlist required"
+  elif [[ -z "${frame_ancestors}" ]]; then
+    echo "WARN: grafana embed frame-ancestors allowlist is empty; ADMIN_EMBED_ORIGINS is unset or empty"
   elif [[ "${csp}" != *"aquilaxk.site"* && "${csp}" != *"*"* ]]; then
     echo "WARN: grafana embed frame-ancestors may omit admin origin allowlist: ${csp}"
   else
@@ -570,6 +573,7 @@ fi
 
 print_section "Env Required Keys"
 print_env_key_status "API_DOMAIN"
+print_env_key_status "ADMIN_EMBED_ORIGINS"
 print_env_key_status "CF_TUNNEL_TOKEN"
 print_env_key_status "CLOUDFLARED_IMAGE"
 print_env_key_status "DB_IMAGE"

@@ -56,6 +56,12 @@ Frontend OSV and Trivy (lockfile + runtime image) use public vulnerability DBs; 
 - Required fields per entry: `package`, `cve`, `issue` (`#N` or GitHub issue URL), `owner` (`@handle`), `expiry` (`YYYY-MM-DD`), `reason`
 - Expired or schema-invalid entries fail CI
 - Applied to Trivy High/Critical (runtime images and `front/yarn.lock`) and OSV High/Critical
+- **Match the ID each scanner actually reports.** OSV matching also checks the advisory's `aliases`,
+  but Trivy matching is an exact comparison against the report's `VulnerabilityID`. When the two
+  scanners name the same advisory differently, one entry will not cover both — add one entry per ID.
+  Example: brace-expansion DoS is `GHSA-mh99-v99m-4gvg` (aliases `CVE-2026-14257`) in OSV and
+  `CVE-2026-14257` in Trivy, so the `CVE-2026-14257` entry happens to cover both; a GHSA-only
+  allowlist entry would suppress it in OSV while Trivy kept blocking it.
 - **Does not apply** to OWASP `dependencyCheckAnalyze` (`failBuildOnCVSS`). Backend NVD suppressions use
   `back/config/dependency-check-suppressions.xml` wired via `dependencyCheck.suppressionFiles` in
   `back/build.gradle.kts` (#1387, #1391). Prefer upgrades; suppress only CPE false-positives
@@ -65,17 +71,25 @@ Frontend OSV and Trivy (lockfile + runtime image) use public vulnerability DBs; 
 ## Frontend lockfile gate (`frontend-lockfile-audit`, #1422)
 
 - Two independent DBs read `front/yarn.lock`: osv-scanner `v2.4.0`, then Trivy `0.72.0`
-  (`trivy fs --scanners vuln --severity HIGH,CRITICAL`). Both verdicts come from
+  (`trivy fs --scanners vuln --severity HIGH,CRITICAL --list-all-pkgs`). Both verdicts come from
   `check-vulnerability-exceptions.mjs` (`--filter-osv` / `--filter-trivy`), never from the scanner exit code.
-- OSV runs first so an install/DB failure in a later scanner cannot silence it. In #1422 a broken
-  first step hid every scanner behind it, leaving the frontend with zero dependency scanning while
-  also blocking all merges.
+- **Neither scanner can silence the other.** OSV runs first, and the two Trivy steps carry
+  `if: ${{ !cancelled() }}` so they still run when OSV fails — a step without an `if` inherits an
+  implicit `success()` and would be skipped. The job still fails on the failed step, so this collects
+  both signals without weakening the gate. In #1422 a broken first step hid every scanner behind it,
+  leaving the frontend with zero dependency scanning while also blocking all merges.
+- **An empty scan is not a pass.** A structurally valid report with no results parses to zero findings
+  and would clear the allowlist filter. `--list-all-pkgs` makes Trivy list every package it parsed, and
+  the step fails when that count is 0. osv-scanner needs no equivalent assertion: a lockfile that yields
+  0 packages exits 128 (`No package sources found`), which the tool-failure branch already rejects —
+  its JSON lists only vulnerable packages, so it carries no total to assert. Re-measure that on any
+  `OSV_SCANNER_VERSION` bump.
 - No `yarn install` in this job: both scanners parse the lockfile, so `node_modules` and the
   `postinstall` script are never needed.
 - `yarn audit` is **not** a gate anymore and must not be reintroduced. The npm registry returns audit
   responses gzipped without `Content-Encoding`, so yarn classic and npm both fail to parse them, and
   yarn classic is unmaintained. (Historic trap: yarn classic `--groups dependencies,devDependencies`
-  could audit 0 packages and still exit 0.)
+  could audit 0 packages and still exit 0 — the same empty-scan false pass the package count now blocks.)
 - Exit-code contract: `osv-scanner` returns 1 when it finds vulnerabilities (report is still parsed),
   `trivy fs` returns 0 on findings unless `--exit-code` is passed. Any other non-zero status is a tool
   failure and fails the job fail-closed.

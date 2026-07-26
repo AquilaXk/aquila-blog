@@ -242,8 +242,10 @@ jobs:
         with:
           node-version: "20"
 
-      # OSV runs first on purpose: a later scanner failing must not silence the signal that
-      # works. The broken yarn audit step used to sit here and blocked OSV entirely (#1422).
+      # OSV runs first (the broken yarn audit step used to sit here and blocked it entirely),
+      # and the Trivy steps below carry `if: !cancelled()` so neither scanner can silence the
+      # other in either direction. A failed step still fails the job, so the gate stays
+      # fail-closed: both signals are always collected, never traded off (#1422).
       - name: Install OSV Scanner
         env:
           OSV_SCANNER_VERSION: "v2.4.0"
@@ -262,7 +264,11 @@ jobs:
           osv-scanner --lockfile=front/yarn.lock --format json --output-file="${RUNNER_TEMP}/osv-front.json"
           osv_status=$?
           set -e
-          # 0 = clean, 1 = vulns found (still parse), other = tool failure
+          # 0 = clean, 1 = vulns found (still parse), other = tool failure.
+          # A lockfile that parses to 0 packages exits 128 ("No package sources found") on the
+          # pinned v2.4.0, so this branch already rejects the empty-scan false pass. The OSV JSON
+          # only lists vulnerable packages, so it carries no total to assert instead — re-measure
+          # this when bumping OSV_SCANNER_VERSION (#1422).
           if [ "${osv_status}" -gt 1 ]; then
             echo "osv-scanner failed with status ${osv_status}" >&2
             exit "${osv_status}"
@@ -275,6 +281,9 @@ jobs:
       # audit cannot parse them and yarn classic is unmaintained; a local lockfile DB removes
       # the remote-endpoint single point of failure (#1422).
       - name: Install Trivy
+        # Run even if OSV above failed: an osv-scanner download/tool failure must not drop the
+        # second lockfile signal. The job still fails on the OSV step (#1422).
+        if: ${{ !cancelled() }}
         env:
           TRIVY_VERSION: "0.72.0"
         run: |
@@ -286,10 +295,11 @@ jobs:
           trivy --version
 
       - name: Trivy scan frontend yarn.lock
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           set +e
-          trivy fs --scanners vuln --severity HIGH,CRITICAL \
+          trivy fs --scanners vuln --severity HIGH,CRITICAL --list-all-pkgs \
             --format json --output "${RUNNER_TEMP}/trivy-front-lockfile.json" front/yarn.lock
           trivy_status=$?
           set -e
@@ -301,6 +311,20 @@ jobs:
             exit "${trivy_status}"
           fi
           test -s "${RUNNER_TEMP}/trivy-front-lockfile.json"
+          # A structurally valid but empty report parses to zero findings and would pass the
+          # allowlist filter. --list-all-pkgs lists every package trivy parsed, so 0 means the
+          # lockfile was never actually scanned: refuse to pass (#1422).
+          scanned_packages="$(node -e '
+            const fs = require("node:fs")
+            const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+            const total = (report.Results || []).reduce((sum, r) => sum + (r.Packages || []).length, 0)
+            process.stdout.write(String(total))
+          ' "${RUNNER_TEMP}/trivy-front-lockfile.json")"
+          if ! [[ "${scanned_packages}" =~ ^[0-9]+$ ]] || [ "${scanned_packages}" -lt 1 ]; then
+            echo "::error title=Frontend lockfile scan produced no packages::trivy parsed '${scanned_packages}' packages from front/yarn.lock; refusing to pass (#1422)." >&2
+            exit 1
+          fi
+          echo "trivy parsed ${scanned_packages} package(s) from front/yarn.lock"
           node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-front-lockfile.json"
 
   container-image-scan:

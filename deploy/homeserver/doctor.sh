@@ -85,8 +85,13 @@ notification_sse_probe_output() {
       exit 11
     fi
 
+    # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
+    # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
     access_token="$(
-      grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+      tr -d "\r" < "${login_headers}" \
+        | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
+        | tail -n 1 \
+        | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
     )"
     if [[ -z "${access_token}" ]]; then
       echo "login_access_token=missing"
@@ -156,8 +161,13 @@ print_notification_sse_status() {
         echo "HTTP_STATUS:000"
         exit 0
       fi
+      # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
+      # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
       access_token="$(
-        grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+        tr -d "\r" < "${login_headers}" \
+          | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
+          | tail -n 1 \
+          | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
       )"
       if [[ -z "${access_token}" ]]; then
         echo "HTTP_STATUS:000"
@@ -328,8 +338,13 @@ inspect_grafana_origin_auth_proxy_headers() {
       printf "HTTP/1.1 000 login_failed\r\n"
       exit 0
     fi
+    # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
+    # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
     access_token="$(
-      grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+      tr -d "\r" < "${login_headers}" \
+        | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
+        | tail -n 1 \
+        | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
     )"
     if [[ -z "${access_token}" ]]; then
       printf "HTTP/1.1 000 missing_access_token\r\n"

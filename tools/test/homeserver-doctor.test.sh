@@ -212,6 +212,86 @@ if [ "${guard_fixture_refs}" != "NEVER_ASSIGNED_VALUE" ]; then
   fail "expected the unassigned uppercase reference guard to flag exactly NEVER_ASSIGNED_VALUE, got '${guard_fixture_refs}'"
 fi
 
+# .env.prod는 값에 따옴표를 붙여 적을 수 있다. host 추출과 URL 조립에 쓰는 값을 trim_quotes 없이
+# 읽으면 Host 헤더가 -H 'Host: "api..."'가 되고 public URL도 https://"api..."/...로 조립돼, 라우트는
+# 정상인데 점검만 상시 실패로 보고한다. 실패가 || true에 삼켜져 000/none으로만 보이므로 눈에
+# 띄지도 않는다. Env AI Summary Sanity 값들은 표시와 공백검사에만 쓰여 따옴표가 결과를 바꾸지
+# 않으므로 대상이 아니다.
+host_url_env_keys="${workdir}/host-url-env-keys.txt"
+{
+  printf '%s\n' 'API_DOMAIN'
+  printf '%s\n' 'CUSTOM_PROD_BACKURL'
+  printf '%s\n' 'CUSTOM_PROD_COOKIEDOMAIN'
+  printf '%s\n' 'CUSTOM_PROD_FRONTURL'
+  printf '%s\n' 'GRAFANA_DOMAIN'
+  printf '%s\n' 'NEXT_PUBLIC_GRAFANA_EMBED_URL'
+  printf '%s\n' 'NEXT_PUBLIC_MONITORING_EMBED_URL'
+} | sort -u > "${host_url_env_keys}"
+
+# kind=trimmed면 trim_quotes로 감싼 조회의 키를, kind=raw면 감싸지 않은 조회의 키를 낸다.
+# 감싼 조회를 먼저 줄에서 지우기 때문에 같은 줄에 두 형태가 섞여 있어도 구분된다.
+env_value_keys() {
+  local script="$1"
+  local kind="$2"
+  awk -v kind="${kind}" '
+    {
+      line = $0
+      while (match(line, /trim_quotes "\$\(env_value "[A-Z_][A-Z0-9_]*"\)"/)) {
+        chunk = substr(line, RSTART, RLENGTH)
+        line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
+        if (kind == "trimmed") {
+          match(chunk, /"[A-Z_][A-Z0-9_]*"\)/)
+          print substr(chunk, RSTART + 1, RLENGTH - 3)
+        }
+      }
+      while (match(line, /env_value "[A-Z_][A-Z0-9_]*"/)) {
+        chunk = substr(line, RSTART, RLENGTH)
+        line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
+        if (kind == "raw") {
+          match(chunk, /"[A-Z_][A-Z0-9_]*"/)
+          print substr(chunk, RSTART + 1, RLENGTH - 2)
+        }
+      }
+    }
+  ' "${script}" | sort -u
+}
+
+doctor_trimmed_env_keys="${workdir}/doctor-env-trimmed-keys.txt"
+doctor_raw_env_keys="${workdir}/doctor-env-raw-keys.txt"
+env_value_keys "${doctor}" trimmed > "${doctor_trimmed_env_keys}"
+env_value_keys "${doctor}" raw > "${doctor_raw_env_keys}"
+
+untrimmed_host_url_keys="$(comm -12 "${host_url_env_keys}" "${doctor_raw_env_keys}")"
+if [ -n "${untrimmed_host_url_keys}" ]; then
+  fail "doctor.sh reads these host/URL env keys without trim_quotes, so a quoted .env value breaks the Host header and the public URL there: ${untrimmed_host_url_keys}"
+fi
+# 키가 조회 자체를 잃으면 위 검사가 조용히 공허해지므로 여전히 읽고 있는지도 같이 못박는다.
+unread_host_url_keys="$(comm -23 "${host_url_env_keys}" "${doctor_trimmed_env_keys}")"
+if [ -n "${unread_host_url_keys}" ]; then
+  fail "expected doctor.sh to keep reading these host/URL env keys through trim_quotes: ${unread_host_url_keys}"
+fi
+# 목록에 없는 키라도 같은 키를 어떤 곳은 감싸고 어떤 곳은 raw로 읽으면 그 한 곳만 조용히 깨진다.
+mixed_env_keys="$(comm -12 "${doctor_trimmed_env_keys}" "${doctor_raw_env_keys}")"
+if [ -n "${mixed_env_keys}" ]; then
+  fail "doctor.sh reads these env keys through trim_quotes in some places and raw in others: ${mixed_env_keys}"
+fi
+
+# guard가 공허하지 않은지 확인한다. 감싸지 않은 host/URL 키만 잡고, 감싼 키와 표시 전용 키는
+# 잡지 않아야 한다.
+trim_quotes_guard_fixture="${workdir}/env-value-trim-quotes.sh"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' 'wrapped="$(trim_quotes "$(env_value "API_DOMAIN")")"'
+  printf '%s\n' 'unwrapped="$(env_value "CUSTOM_PROD_FRONTURL")"'
+  printf '%s\n' 'display_only="$(env_value "CUSTOM__AI__SUMMARY__GEMINI__MODEL")"'
+} > "${trim_quotes_guard_fixture}"
+trim_quotes_fixture_raw_keys="${workdir}/fixture-env-raw-keys.txt"
+env_value_keys "${trim_quotes_guard_fixture}" raw > "${trim_quotes_fixture_raw_keys}"
+trim_quotes_fixture_flagged="$(comm -12 "${host_url_env_keys}" "${trim_quotes_fixture_raw_keys}")"
+if [ "${trim_quotes_fixture_flagged}" != "CUSTOM_PROD_FRONTURL" ]; then
+  fail "expected the trim_quotes guard to flag exactly CUSTOM_PROD_FRONTURL, got '${trim_quotes_fixture_flagged}'"
+fi
+
 # print_robots_status는 origin/public 응답을 못 받아 헤더 파일이 없을 때도 계속 진행해야 한다.
 # 헤더 파일이 없으면 awk가 exit 2로 끝나고, pipefail이 이를 대입 실패로 승격시키면 robots 섹션
 # 이후 점검이 통째로 중단된다. 응답 부재는 아래 none 처리와 WARN이 이미 담당한다.

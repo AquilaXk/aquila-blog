@@ -1713,10 +1713,21 @@ set_caddy_upstream_backend() {
   local active_host
   active_host="$(backend_http_host "${backend}")"
 
-  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
-    upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
-    upsert_env_key "READ_API_UPSTREAM" "${active_host}"
+  # runtime-split: edge upstreams belong to configure_runtime_split_env()
+  # (READ_API_UPSTREAM=back_read, ADMIN_API_UPSTREAM=back_admin). Baking the active
+  # colour into the Caddyfile makes the literal win over the env placeholder and
+  # collapses read/admin isolation into a single blue/green container (#1418), so the
+  # whole rewrite stays out of split mode. Caddy runs without --watch, so the reload
+  # is still required: deploy.yml restores the repo Caddyfile with `git checkout
+  # --force` and the running config would otherwise keep the previous upstreams.
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    reload_caddy
+    echo "caddy upstream kept on runtime-split placeholders: read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM") (cutover colour=${active_host})"
+    return 0
   fi
+
+  upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
+  upsert_env_key "READ_API_UPSTREAM" "${active_host}"
 
   # Keep content rewrite in-place; avoids stale config when external tools swap files.
   local rewritten
@@ -1728,6 +1739,26 @@ set_caddy_upstream_backend() {
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
   echo "caddy upstream switched to active=${active_host}:8080"
+}
+
+# Upstream host the edge must serve after a cutover. In runtime-split mode the edge
+# never points at a colour, so the expectation comes from ADMIN_API_UPSTREAM: that is
+# the key behind the first `reverse_proxy` token current_caddy_upstream_host() reads
+# and behind the default handle that HEALTHCHECK_PATH resolves through.
+expected_caddy_upstream_host() {
+  local backend="$1"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    backend_http_host "${backend}"
+    return
+  fi
+
+  local upstream
+  upstream="$(normalize_backend_name "$(host_env_value "ADMIN_API_UPSTREAM")")"
+  if [[ -z "${upstream}" ]]; then
+    echo "runtime-split enabled but ADMIN_API_UPSTREAM is missing in ${ENV_FILE}" >&2
+    return 1
+  fi
+  echo "${upstream}"
 }
 
 persist_single_runtime_caddy_upstreams() {
@@ -2206,7 +2237,9 @@ verify_caddy_route() {
   local expected_backend="$1"
   local api_domain="$2"
   local expected_host
-  expected_host="$(backend_http_host "${expected_backend}")"
+  if ! expected_host="$(expected_caddy_upstream_host "${expected_backend}")"; then
+    return 1
+  fi
 
   local attempt=1
   while [[ "${attempt}" -le 20 ]]; do

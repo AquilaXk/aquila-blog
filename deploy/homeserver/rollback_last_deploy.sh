@@ -700,10 +700,19 @@ set_caddy_upstream_backend() {
   local backend="$1"
   local active_host
   active_host="$(backend_http_host "${backend}")"
-  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
-    upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
-    upsert_env_key "READ_API_UPSTREAM" "${active_host}"
+
+  # runtime-split: edge upstreams belong to READ_API_UPSTREAM/ADMIN_API_UPSTREAM, not to
+  # the blue/green colour. Baking the colour into the Caddyfile makes the literal win
+  # over the env placeholder and collapses read/admin isolation (#1418). The reload
+  # stays so the restored config reaches the running caddy process.
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    reload_caddy
+    echo "rollback caddy upstream kept on runtime-split placeholders: read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM") (rollback colour=${active_host})"
+    return 0
   fi
+
+  upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
+  upsert_env_key "READ_API_UPSTREAM" "${active_host}"
   local rewritten
   rewritten="$(sed -E \
     -e 's/\{\$ADMIN_API_UPSTREAM:back[-_](blue|green|read|admin)\}:8080/'"${active_host}"':8080/g' \

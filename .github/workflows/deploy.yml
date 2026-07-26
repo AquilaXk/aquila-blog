@@ -1163,15 +1163,19 @@ jobs:
           fi
 
           if [ "${ACTIVE_BACKEND}" = "back_blue" ]; then
-            EXPECTED_UPSTREAM="back_blue"
             INACTIVE_BACKEND="back_green"
           else
-            EXPECTED_UPSTREAM="back_green"
             INACTIVE_BACKEND="back_blue"
           fi
 
-          MOUNTED_UPSTREAM="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back[_-](blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /etc/caddy/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1)"
-          MOUNTED_UPSTREAM="${MOUNTED_UPSTREAM//-/_}"
+          # runtime-split routes the edge at back_read/back_admin through Caddyfile env
+          # placeholders, so a literal blue/green awk reads an empty upstream on a healthy
+          # split edge and rolls the deploy back for drift that does not exist (#1418).
+          # Both sides of the comparison go through the shared placeholder-aware probe.
+          if ! EXPECTED_UPSTREAM="$(RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" bash ./deploy/homeserver/caddy_upstream_probe.sh expected "${ACTIVE_BACKEND}")"; then
+            rollback_and_exit "caddy_upstream_expectation_unresolved"
+          fi
+          MOUNTED_UPSTREAM="$(RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" bash ./deploy/homeserver/caddy_upstream_probe.sh mounted || true)"
           HAS_LEGACY_BACK_ACTIVE="false"
           if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile"; then
             HAS_LEGACY_BACK_ACTIVE="true"

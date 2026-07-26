@@ -146,13 +146,24 @@ if [[ "${ACTIVE_BACKEND}" != "back_blue" && "${ACTIVE_BACKEND}" != "back_green" 
 fi
 
 if [[ "${ACTIVE_BACKEND}" == "back_blue" ]]; then
-  EXPECTED_UPSTREAM="back_blue"
   INACTIVE_BACKEND="back_green"
   ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE"
 else
-  EXPECTED_UPSTREAM="back_green"
   INACTIVE_BACKEND="back_blue"
   ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE"
+fi
+
+# runtime-split serves the edge from back_read/back_admin through Caddyfile env
+# placeholders, so a literal blue/green comparison reports a healthy split edge as a
+# permanent upstream mismatch (#1418). Resolve both sides through the shared probe.
+caddy_upstream_probe() {
+  ENV_FILE="${ENV_FILE}" COMPOSE_FILE="${COMPOSE_FILE}" CADDY_CONTAINER_FILE="${CADDY_CONTAINER_FILE}" \
+    bash "${SCRIPT_DIR}/caddy_upstream_probe.sh" "$@"
+}
+
+EXPECTED_UPSTREAM=""
+if ! EXPECTED_UPSTREAM="$(caddy_upstream_probe expected "${ACTIVE_BACKEND}")"; then
+  remember_failure "caddy_upstream_expectation_unresolved active_backend=${ACTIVE_BACKEND:-none}"
 fi
 EXPECTED_BACK_IMAGE="$(trim_quotes "$(env_value "${ACTIVE_BACKEND_IMAGE_KEY}")")"
 
@@ -160,12 +171,7 @@ RUNNING_SERVICES="$(compose ps --status running --services 2>/dev/null || true)"
 ACTIVE_BACKEND_CONTAINER_ID="$(compose ps -q "${ACTIVE_BACKEND}" 2>/dev/null | head -n 1 || true)"
 ACTIVE_BACKEND_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${ACTIVE_BACKEND_CONTAINER_ID}" 2>/dev/null | tr -d '\r' || true)"
 
-MOUNTED_UPSTREAM="$(
-  compose exec -T caddy sh -lc \
-    "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back[_-](blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" \
-    2>/dev/null | tr -d '\r' | head -n 1 || true
-)"
-MOUNTED_UPSTREAM="${MOUNTED_UPSTREAM//-/_}"
+MOUNTED_UPSTREAM="$(caddy_upstream_probe mounted || true)"
 HAS_LEGACY_BACK_ACTIVE="false"
 if compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}" >/dev/null 2>&1; then
   HAS_LEGACY_BACK_ACTIVE="true"

@@ -157,7 +157,15 @@ test("operations alert rules cover launch-blocking failure domains", () => {
   assert.match(taskAlerts, /rollback/i)
 })
 
-test("postgres_exporter keeps collecting PG17+ checkpoint metrics and cannot regress silently", () => {
+// Scope note: everything below is a *repo-side* contract over tracked files. None of it
+// observes the image actually running in production -- POSTGRES_EXPORTER_IMAGE comes from
+// the HOME_SERVER_ENV secret, and deploy.yml's preserve_pre_deploy_runtime_image_env_keys
+// restores the server's existing value whenever the secret does not pin the key, so the
+// fallback tags asserted here are only reached on a first-ever deploy. If the owner never
+// updates the secret, production stays on v0.15.0 and this test still passes. The runtime
+// safety net is AquilaPostgresExporterScrapeDown and AquilaPostgresCheckpointMetricsMissing,
+// not this file (#1426).
+test("postgres_exporter image pins, compose flags, and blind-spot alerts stay consistent", () => {
   const compose = read(composePath)
   const taskAlerts = read(taskAlertsPath)
   const deployScript = read(path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh"))
@@ -182,9 +190,10 @@ test("postgres_exporter keeps collecting PG17+ checkpoint metrics and cannot reg
   // exporter free of collector flags until a follow-up confirms v0.20.1 is live (#1426).
   assert.doesNotMatch(exporterDirectives, /--collector\./)
 
-  // Every tracked fallback pin must stay on a build that understands the PG17+ schema.
-  // v0.17.0 is the first release carrying the pg_stat_checkpointer fix. These three drifted
-  // apart before, so they are checked together rather than one representative file.
+  // Drift guard only: keeps the three tracked fallback pins from diverging or rolling back
+  // below v0.17.0, the first release carrying the pg_stat_checkpointer fix. These three did
+  // drift apart before, which is why they are checked together rather than one
+  // representative file. This says nothing about the deployed image -- see the scope note.
   for (const [name, source] of [
     ["blue_green_deploy.sh", deployScript],
     ["create_external_backup.sh", backupScript],

@@ -164,13 +164,23 @@ test("postgres_exporter keeps collecting PG17+ checkpoint metrics and cannot reg
   const backupScript = read(path.join(repoRoot, "deploy/homeserver/create_external_backup.sh"))
 
   const exporterStart = compose.indexOf("\n  postgres_exporter:")
+  const grafanaStart = compose.indexOf("\n  grafana:")
   assert(exporterStart >= 0, "postgres_exporter service is missing from the compose file")
-  const exporterBlock = compose.slice(exporterStart, compose.indexOf("\n  grafana:"))
+  // slice() would silently widen to the whole file if the end marker moved (negative index).
+  assert(grafanaStart > exporterStart, "grafana must still follow postgres_exporter in the compose file")
+  const exporterBlock = compose.slice(exporterStart, grafanaStart)
+  // Comments in this block legitimately name the flag to explain why it is absent.
+  const exporterDirectives = exporterBlock
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .join("\n")
 
-  // PostgreSQL 17 moved checkpoint counters from pg_stat_bgwriter to pg_stat_checkpointer.
-  // The exporter ships that collector as defaultDisabled, so without an explicit opt-in the
-  // production PG18 database exposes no checkpoint metrics at all (#1419).
-  assert.match(exporterBlock, /--collector\.stat_checkpointer/)
+  // --collector.stat_checkpointer does not exist before exporter v0.17.0, and the deployed
+  // image comes from a secret the repo cannot read. Passing the flag while the server still
+  // runs v0.15.0 makes the exporter exit 1 in a restart loop, which drops every pg_* series
+  // and silently disables AquilaPostgresDiskUsageHigh / ConnectionSaturationHigh. Keep the
+  // exporter free of collector flags until a follow-up confirms v0.20.1 is live (#1426).
+  assert.doesNotMatch(exporterDirectives, /--collector\./)
 
   // Every tracked fallback pin must stay on a build that understands the PG17+ schema.
   // v0.17.0 is the first release carrying the pg_stat_checkpointer fix. These three drifted

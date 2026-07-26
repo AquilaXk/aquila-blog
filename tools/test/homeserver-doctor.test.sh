@@ -215,16 +215,21 @@ fi
 # print_robots_status는 origin/public 응답을 못 받아 헤더 파일이 없을 때도 계속 진행해야 한다.
 # 헤더 파일이 없으면 awk가 exit 2로 끝나고, pipefail이 이를 대입 실패로 승격시키면 robots 섹션
 # 이후 점검이 통째로 중단된다. 응답 부재는 아래 none 처리와 WARN이 이미 담당한다.
+# 마커를 변수로 빼는 이유: `$(`가 든 리터럴을 명령 치환 안의 작은따옴표에 직접 적으면 bash 3.2가
+# 괄호를 잘못 세어 실행 시점에 bad substitution으로 죽는다. 그때 이 파일은 성공 마커도 없이
+# exit 0으로 끝나 검증이 통째로 공허해진다.
+robots_code_marker='_code="$(awk '
 robots_code_lines="$(
-  awk '
-    index($0, "_code=\"$(awk ") > 0 {
+  awk -v marker="${robots_code_marker}" '
+    index($0, marker) > 0 {
       line = $0
       sub(/^[[:space:]]+/, "", line)
       print line
     }
   ' "${doctor}"
 )"
-if [ "$(printf '%s\n' "${robots_code_lines}" | grep -cF '_code="$(awk ' || true)" -ne 2 ]; then
+robots_code_line_count="$(printf '%s\n' "${robots_code_lines}" | grep -cF "${robots_code_marker}" || true)"
+if [ "${robots_code_line_count}" -ne 2 ]; then
   fail "expected print_robots_status to read both robots status codes with awk, found: ${robots_code_lines}"
 fi
 

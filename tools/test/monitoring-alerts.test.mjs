@@ -157,6 +157,82 @@ test("operations alert rules cover launch-blocking failure domains", () => {
   assert.match(taskAlerts, /rollback/i)
 })
 
+// Scope note: everything below is a *repo-side* contract over tracked files. None of it
+// observes the image actually running in production -- POSTGRES_EXPORTER_IMAGE comes from
+// the HOME_SERVER_ENV secret, and deploy.yml's preserve_pre_deploy_runtime_image_env_keys
+// restores the server's existing value whenever the secret does not pin the key, so the
+// fallback tags asserted here are only reached on a first-ever deploy. If the owner never
+// updates the secret, production stays on v0.15.0 and this test still passes. The runtime
+// safety net is AquilaPostgresExporterScrapeDown and AquilaPostgresCheckpointMetricsMissing,
+// not this file (#1426).
+test("postgres_exporter image pins, compose flags, and blind-spot alerts stay consistent", () => {
+  const compose = read(composePath)
+  const taskAlerts = read(taskAlertsPath)
+  const deployScript = read(path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh"))
+  const backupScript = read(path.join(repoRoot, "deploy/homeserver/create_external_backup.sh"))
+
+  const exporterStart = compose.indexOf("\n  postgres_exporter:")
+  const grafanaStart = compose.indexOf("\n  grafana:")
+  assert(exporterStart >= 0, "postgres_exporter service is missing from the compose file")
+  // slice() would silently widen to the whole file if the end marker moved (negative index).
+  assert(grafanaStart > exporterStart, "grafana must still follow postgres_exporter in the compose file")
+  const exporterBlock = compose.slice(exporterStart, grafanaStart)
+  // Comments in this block legitimately name the flag to explain why it is absent.
+  const exporterDirectives = exporterBlock
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .join("\n")
+
+  // --collector.stat_checkpointer does not exist before exporter v0.17.0, and the deployed
+  // image comes from a secret the repo cannot read. Passing the flag while the server still
+  // runs v0.15.0 makes the exporter exit 1 in a restart loop, which drops every pg_* series
+  // and silently disables AquilaPostgresDiskUsageHigh / ConnectionSaturationHigh. Keep the
+  // exporter free of collector flags until a follow-up confirms v0.20.1 is live (#1426).
+  assert.doesNotMatch(exporterDirectives, /--collector\./)
+
+  // Drift guard only: keeps the three tracked fallback pins from diverging or rolling back
+  // below v0.17.0, the first release carrying the pg_stat_checkpointer fix. These three did
+  // drift apart before, which is why they are checked together rather than one
+  // representative file. This says nothing about the deployed image -- see the scope note.
+  for (const [name, source] of [
+    ["blue_green_deploy.sh", deployScript],
+    ["create_external_backup.sh", backupScript],
+    ["deploy.yml", read(workflowPath)],
+  ]) {
+    const pin = source.match(
+      /ensure_image_(?:env_)?key_from_local_digest "POSTGRES_EXPORTER_IMAGE" "[^"]*postgres-exporter:v(\d+)\.(\d+)\.(\d+)"/,
+    )
+    assert(pin, `${name} must pin a versioned postgres-exporter fallback image`)
+    const [major, minor] = [Number(pin[1]), Number(pin[2])]
+    assert(
+      major > 0 || minor >= 17,
+      `${name} postgres-exporter fallback must be >= v0.17.0 for PG17+ pg_stat_checkpointer, got v${pin[1]}.${pin[2]}.${pin[3]}`,
+    )
+  }
+
+  // A collector that silently stops producing series leaves no alert and no dashboard gap,
+  // so the absence of the series is itself the signal that has to page (#1419).
+  assert.match(taskAlerts, /alert: AquilaPostgresCheckpointMetricsMissing\b/)
+  assert.match(taskAlerts, /absent\(pg_stat_checkpointer_num_timed_total\{job="postgres_exporter"\}\)/)
+
+  // If the exporter itself dies, AquilaPostgresDiskUsageHigh and
+  // AquilaPostgresConnectionSaturationHigh evaluate against an empty vector and can never
+  // fire. That blind spot needs its own signal, plus restart coverage (#1426).
+  assert.match(taskAlerts, /alert: AquilaPostgresExporterScrapeDown\b/)
+  assert.match(taskAlerts, /min\(up\{job="postgres_exporter"\}\) < 1/)
+
+  const restartAlert = taskAlerts.match(/alert: AquilaContainerRestarted\n\s*expr: ([^\n]+)/)
+  assert(restartAlert, "AquilaContainerRestarted rule is missing")
+  assert.match(restartAlert[1], /postgres_exporter/)
+
+  const probeServices = compose.match(/-\s*"--services"\s*\n\s*-\s*"([^"]+)"/)
+  assert(probeServices, "docker_runtime_probe must pass an explicit --services list")
+  assert(
+    probeServices[1].split(",").map((value) => value.trim()).includes("postgres_exporter"),
+    "postgres_exporter must be exported by docker_runtime_probe for AquilaContainerRestarted to see it",
+  )
+})
+
 test("autoheal and its docker socket proxy stay under continuous restart observation", () => {
   const compose = read(composePath)
   const taskAlerts = read(taskAlertsPath)

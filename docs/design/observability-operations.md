@@ -182,6 +182,8 @@ cloud-media 검증·패널 매핑은 [`docs/ops/cloud-media-metrics-verify.md`](
 | AquilaPostgresDiskUsageHigh | DB size >90% of 100GiB budget (10m) | `pg_database_size_bytes` | 디스크·VACUUM/보관 정책 |
 | AquilaPostgresUnavailable | db_1 not running (3m) | docker probe `db_1` | DB 컨테이너 복구·연결 문자열 |
 | AquilaPostgresConnectionSaturationHigh | backends >85% max_connections (10m) | Hikari/pg backends 패널 | slow query·pool 크기 |
+| AquilaPostgresExporterScrapeDown | postgres_exporter scrape down (3m) | `up{job="postgres_exporter"}` | exporter 컨테이너 로그·이미지 핀·pg_monitor 자격증명. **이게 뜨면 위 PostgreSQL alert 2개는 no-data라 발화 불가**이므로 먼저 복구한다 (거부된 CLI 플래그는 exit 1 재시작 루프가 된다) |
+| AquilaPostgresCheckpointMetricsMissing | `pg_stat_checkpointer` 시리즈 부재 (15m) | `absent(pg_stat_checkpointer_num_timed_total)` | PG17+는 체크포인트 통계가 `pg_stat_checkpointer`로 분리됐다. `POSTGRES_EXPORTER_IMAGE`가 v0.17.0 이상인지, `--collector.stat_checkpointer`(defaultDisabled)가 켜져 있는지 확인 |
 | AquilaRedisUnavailable | redis_1 not running (3m) | docker probe `redis_1` | Redis 복구 (로그인/캐시/RL) |
 | AquilaMinioUnavailable | minio_1 not running (3m) | docker probe `minio_1` | MinIO 복구 (업로드/오브젝트) |
 | AquilaNotificationSseEmitterSaturated | SSE emitters >1500 (10m) | Overview「Notification SSE emitters」 | reconnect storm·탭 churn·drain |

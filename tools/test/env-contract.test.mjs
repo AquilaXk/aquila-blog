@@ -641,7 +641,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
     ["UPTIME_KUMA_IMAGE", "louislam/uptime-kuma:1"],
     ["PROMETHEUS_IMAGE", "prom/prometheus:v2.54.1"],
     ["ALERTMANAGER_IMAGE", "prom/alertmanager:v0.27.0"],
-    ["POSTGRES_EXPORTER_IMAGE", "quay.io/prometheuscommunity/postgres-exporter:v0.15.0"],
+    ["POSTGRES_EXPORTER_IMAGE", "quay.io/prometheuscommunity/postgres-exporter:v0.20.1"],
     ["GRAFANA_IMAGE", "grafana/grafana:11.2.2"],
     ["LOKI_IMAGE", "grafana/loki:3.0.0"],
     ["PROMTAIL_IMAGE", "grafana/promtail:3.0.0"],

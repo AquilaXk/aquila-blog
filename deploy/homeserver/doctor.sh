@@ -33,9 +33,11 @@ print_env_key_status() {
   fi
 }
 
+# 키가 없는 것은 optional 조회의 정상 경로다. pipefail이 grep no-match(exit 1)를 파이프라인
+# 종료 코드로 승격시키면 호출부 대입에서 set -e가 점검 전체를 중단시키므로 여기서 끊는다.
 env_value() {
   local key="$1"
-  grep -E "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -n 1 | cut -d '=' -f2-
+  grep -E "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -n 1 | cut -d '=' -f2- || return 0
 }
 
 trim_quotes() {
@@ -83,8 +85,13 @@ notification_sse_probe_output() {
       exit 11
     fi
 
+    # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
+    # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
     access_token="$(
-      grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+      tr -d "\r" < "${login_headers}" \
+        | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
+        | tail -n 1 \
+        | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
     )"
     if [[ -z "${access_token}" ]]; then
       echo "login_access_token=missing"
@@ -154,8 +161,13 @@ print_notification_sse_status() {
         echo "HTTP_STATUS:000"
         exit 0
       fi
+      # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
+      # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
       access_token="$(
-        grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+        tr -d "\r" < "${login_headers}" \
+          | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
+          | tail -n 1 \
+          | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
       )"
       if [[ -z "${access_token}" ]]; then
         echo "HTTP_STATUS:000"
@@ -326,8 +338,13 @@ inspect_grafana_origin_auth_proxy_headers() {
       printf "HTTP/1.1 000 login_failed\r\n"
       exit 0
     fi
+    # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
+    # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
     access_token="$(
-      grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+      tr -d "\r" < "${login_headers}" \
+        | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
+        | tail -n 1 \
+        | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
     )"
     if [[ -z "${access_token}" ]]; then
       printf "HTTP/1.1 000 missing_access_token\r\n"
@@ -386,13 +403,14 @@ print_grafana_embed_status() {
     return 0
   fi
 
-  local headers status location xfo csp internal_health
+  local headers status location xfo csp frame_ancestors internal_health
   internal_health="$(inspect_grafana_internal_health)"
   headers="$(inspect_grafana_embed_headers "${url}")"
   status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
   location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
   xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
   csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
+  frame_ancestors="$(printf '%s' "${csp}" | sed -E 's/.*frame-ancestors//; s/;.*$//' | tr -d '[:space:]')"
 
   echo "grafana public embed url: ${url}"
   echo "grafana internal health: ${internal_health:-none}"
@@ -417,7 +435,9 @@ print_grafana_embed_status() {
   fi
   if [[ -z "${csp}" || "${csp}" != *"frame-ancestors"* ]]; then
     echo "WARN: grafana embed response missing frame-ancestors CSP; admin origin allowlist required"
-  elif [[ "${csp}" != *"aquilaxk.site"* && "${csp}" != *"*"* ]]; then
+  elif [[ -z "${frame_ancestors}" ]]; then
+    echo "WARN: grafana embed frame-ancestors allowlist is empty; ADMIN_EMBED_ORIGINS is unset or empty"
+  elif [[ "${frame_ancestors}" != *"aquilaxk.site"* && "${frame_ancestors}" != *"*"* ]]; then
     echo "WARN: grafana embed frame-ancestors may omit admin origin allowlist: ${csp}"
   else
     echo "INFO: grafana embed CSP keeps frame-ancestors admin origin allowlist"
@@ -453,9 +473,11 @@ print_robots_status() {
     -o "${public_body}" \
     "https://${api_domain}/robots.txt" >/dev/null 2>&1 || true
 
+  # 헤더 파일이 없으면 awk가 exit 2로 끝나고 pipefail이 이를 대입 실패로 만들어 점검이 중단된다.
+  # 응답을 못 받은 상태는 아래 none 처리와 WARN이 이미 담당한다.
   local origin_code public_code
-  origin_code="$(awk 'NR==1 {print $2}' "${origin_headers}" 2>/dev/null | tr -d '\r')"
-  public_code="$(awk 'NR==1 {print $2}' "${public_headers}" 2>/dev/null | tr -d '\r')"
+  origin_code="$(awk 'NR==1 {print $2}' "${origin_headers}" 2>/dev/null | tr -d '\r' || true)"
+  public_code="$(awk 'NR==1 {print $2}' "${public_headers}" 2>/dev/null | tr -d '\r' || true)"
   [[ -n "${origin_code}" ]] || origin_code="none"
   [[ -n "${public_code}" ]] || public_code="none"
 
@@ -551,6 +573,7 @@ fi
 
 print_section "Env Required Keys"
 print_env_key_status "API_DOMAIN"
+print_env_key_status "ADMIN_EMBED_ORIGINS"
 print_env_key_status "CF_TUNNEL_TOKEN"
 print_env_key_status "CLOUDFLARED_IMAGE"
 print_env_key_status "DB_IMAGE"
@@ -585,10 +608,12 @@ else
 fi
 
 print_section "Env Domain Consistency"
-front_url="$(env_value "CUSTOM_PROD_FRONTURL")"
-back_url="$(env_value "CUSTOM_PROD_BACKURL")"
-cookie_domain="$(env_value "CUSTOM_PROD_COOKIEDOMAIN")"
-api_domain="$(env_value "API_DOMAIN")"
+# .env.prod는 값에 따옴표를 붙여 적을 수 있다. 여기서 벗기지 않으면 host 추출과 아래 snapshot
+# 점검의 Host 헤더/URL이 따옴표째 조립돼 라우트가 정상인데도 상시 실패로 보고된다.
+front_url="$(trim_quotes "$(env_value "CUSTOM_PROD_FRONTURL")")"
+back_url="$(trim_quotes "$(env_value "CUSTOM_PROD_BACKURL")")"
+cookie_domain="$(trim_quotes "$(env_value "CUSTOM_PROD_COOKIEDOMAIN")")"
+api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
 
 front_host="$(extract_host "${front_url}")"
 back_host="$(extract_host "${back_url}")"
@@ -709,12 +734,12 @@ internal_snapshot_code="$(
     -s -o /dev/null -w "%{http_code}" \
     --connect-timeout 3 \
     --max-time 8 \
-    -H "Host: ${API_DOMAIN}" \
+    -H "Host: ${api_domain}" \
     "http://caddy:80/member/api/v1/notifications/snapshot" || true
 )"
 public_snapshot_code="$(
   curl -sS --connect-timeout 5 -m 15 -o /dev/null -w "%{http_code}" \
-    "https://${API_DOMAIN}/member/api/v1/notifications/snapshot" || true
+    "https://${api_domain}/member/api/v1/notifications/snapshot" || true
 )"
 echo "internal_snapshot=${internal_snapshot_code:-none}"
 echo "public_snapshot=${public_snapshot_code:-none}"

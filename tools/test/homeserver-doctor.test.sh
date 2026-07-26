@@ -155,6 +155,118 @@ if ! grep -qF 'print_env_key_status "ADMIN_EMBED_ORIGINS"' "${doctor}"; then
   fail "expected ADMIN_EMBED_ORIGINS to be checked in the required env key section"
 fi
 
+# doctor.sh는 set -u로 돌기 때문에 파일 어디에서도 대입되지 않는 대문자 변수를 참조하면 그 줄에서
+# 점검 전체가 죽는다. Notification Snapshot Route가 미대입 ${API_DOMAIN}을 참조해 실제로 중단됐고,
+# 그 abort가 프로덕션 드리프트를 가리고 있었다. 같은 실수 클래스를 정적으로 잡는다.
+# ${VAR:-default}처럼 기본값이 붙은 형태는 set -u 대상이 아니므로 참조 수집에서 제외한다.
+shell_provided_upper_names='BASH|BASH_ARGV0|BASH_COMMAND|BASH_REMATCH|BASH_SOURCE|BASH_VERSION'
+shell_provided_upper_names="${shell_provided_upper_names}|EUID|FUNCNAME|GROUPS|HOME|HOSTNAME|IFS"
+shell_provided_upper_names="${shell_provided_upper_names}|LANG|LC_ALL|LINENO|OLDPWD|OPTARG|OPTIND"
+shell_provided_upper_names="${shell_provided_upper_names}|OSTYPE|PATH|PIPESTATUS|PPID|PS1|PS2|PS3|PS4"
+shell_provided_upper_names="${shell_provided_upper_names}|PWD|RANDOM|REPLY|SECONDS|SHELL|SHLVL"
+shell_provided_upper_names="${shell_provided_upper_names}|TERM|TMPDIR|TZ|UID|USER"
+
+unassigned_upper_var_refs() {
+  local script="$1"
+  local refs="${workdir}/upper-var-refs.txt"
+  local assigned="${workdir}/upper-var-assigned.txt"
+
+  grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' "${script}" | tr -d '${}' | sort -u > "${refs}" || true
+  awk '
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      sub(/^(export|local|readonly)[[:space:]]+/, "", line)
+      sub(/^declare[[:space:]]+-[a-zA-Z]+[[:space:]]+/, "", line)
+      if (match(line, /^[A-Z_][A-Z0-9_]*=/)) {
+        print substr(line, 1, RLENGTH - 1)
+      } else if (match(line, /^for[[:space:]]+[A-Z_][A-Z0-9_]*[[:space:]]+in[[:space:]]/)) {
+        split(line, parts, /[[:space:]]+/)
+        print parts[2]
+      }
+    }
+  ' "${script}" | sort -u > "${assigned}"
+
+  comm -23 "${refs}" "${assigned}" | grep -Ev "^(${shell_provided_upper_names})$" || true
+}
+
+doctor_unassigned_refs="$(unassigned_upper_var_refs "${doctor}")"
+if [ -n "${doctor_unassigned_refs}" ]; then
+  fail "doctor.sh references uppercase variables that are never assigned in the file, so set -u aborts the whole checkup there: ${doctor_unassigned_refs}"
+fi
+
+# guard가 공허하지 않은지 확인한다. 미대입 참조 하나만 잡고 대입된 이름/기본값 형태/셸 제공
+# 변수는 잡지 않아야 한다.
+guard_fixture="${workdir}/unassigned-upper-ref.sh"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' 'set -euo pipefail'
+  printf '%s\n' 'ASSIGNED_VALUE="ok"'
+  printf '%s\n' 'echo "${ASSIGNED_VALUE}"'
+  printf '%s\n' 'echo "${NEVER_ASSIGNED_VALUE}"'
+  printf '%s\n' 'echo "${ALSO_NEVER_ASSIGNED:-default}"'
+  printf '%s\n' 'echo "${HOME}"'
+} > "${guard_fixture}"
+guard_fixture_refs="$(unassigned_upper_var_refs "${guard_fixture}")"
+if [ "${guard_fixture_refs}" != "NEVER_ASSIGNED_VALUE" ]; then
+  fail "expected the unassigned uppercase reference guard to flag exactly NEVER_ASSIGNED_VALUE, got '${guard_fixture_refs}'"
+fi
+
+# print_robots_status는 origin/public 응답을 못 받아 헤더 파일이 없을 때도 계속 진행해야 한다.
+# 헤더 파일이 없으면 awk가 exit 2로 끝나고, pipefail이 이를 대입 실패로 승격시키면 robots 섹션
+# 이후 점검이 통째로 중단된다. 응답 부재는 아래 none 처리와 WARN이 이미 담당한다.
+robots_code_lines="$(
+  awk '
+    index($0, "_code=\"$(awk ") > 0 {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      print line
+    }
+  ' "${doctor}"
+)"
+if [ "$(printf '%s\n' "${robots_code_lines}" | grep -cF '_code="$(awk ' || true)" -ne 2 ]; then
+  fail "expected print_robots_status to read both robots status codes with awk, found: ${robots_code_lines}"
+fi
+
+run_robots_status_code_extraction() {
+  local headers_dir="$1"
+  set +e
+  robots_code_output="$(
+    # abort 여부는 doctor.sh와 같은 셸 옵션에서만 드러난다. errexit/pipefail이 꺼져 있으면
+    # 실패한 대입이 그냥 빈 값으로 넘어가 회귀를 놓친다.
+    set -euo pipefail
+    # shellcheck disable=SC2034  # 원본에서 떼어 온 추출 조각이 eval 시점에 읽는다
+    origin_headers="${headers_dir}/robots-origin.headers"
+    # shellcheck disable=SC2034  # 원본에서 떼어 온 추출 조각이 eval 시점에 읽는다
+    public_headers="${headers_dir}/robots-public.headers"
+    eval "${robots_code_lines}"
+    # shellcheck disable=SC2154  # origin_code/public_code는 위 eval이 대입한다
+    printf 'origin=[%s] public=[%s]' "${origin_code}" "${public_code}"
+  )"
+  robots_code_status=$?
+  set -e
+}
+
+robots_headers_dir="${workdir}/robots-headers"
+mkdir -p "${robots_headers_dir}"
+printf '%s\r\n' 'HTTP/1.1 200 OK' 'Content-Type: text/plain' '' > "${robots_headers_dir}/robots-origin.headers"
+printf '%s\r\n' 'HTTP/1.1 403 Forbidden' 'Content-Type: text/plain' '' > "${robots_headers_dir}/robots-public.headers"
+run_robots_status_code_extraction "${robots_headers_dir}"
+if [ "${robots_code_status}" -ne 0 ]; then
+  fail "expected present robots header files to read cleanly (exit ${robots_code_status}): ${robots_code_output}"
+fi
+if [ "${robots_code_output}" != "origin=[200] public=[403]" ]; then
+  fail "expected the robots status codes to come from the response headers, got '${robots_code_output}'"
+fi
+
+run_robots_status_code_extraction "${workdir}/robots-headers-missing"
+if [ "${robots_code_status}" -ne 0 ]; then
+  fail "expected absent robots header files to keep the checkup running instead of aborting it (exit ${robots_code_status})"
+fi
+if [ "${robots_code_output}" != "origin=[] public=[]" ]; then
+  fail "expected absent robots header files to read as empty status codes, got '${robots_code_output}'"
+fi
+
 headers_expired_first="${workdir}/headers-expired-first.txt"
 headers_expired_last="${workdir}/headers-expired-last.txt"
 headers_two_tokens="${workdir}/headers-two-tokens.txt"

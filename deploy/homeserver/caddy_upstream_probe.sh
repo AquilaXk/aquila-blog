@@ -70,6 +70,10 @@ runtime_split_enabled() {
 }
 
 host_upstream_token() {
+  # A missing Caddyfile is an unresolvable observation, not a probe error: awk would exit
+  # non-zero and set -e would abort instead of printing the empty line the host/mounted
+  # contract promises. recover.sh only hides that behind `|| true`.
+  [[ -f "${CADDY_FILE}" ]] || return 0
   awk '$1 == "reverse_proxy" && $2 ~ /^(back[-_](blue|green|read|admin):8080|\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\}:8080)$/ {print $2; exit}' "${CADDY_FILE}"
 }
 

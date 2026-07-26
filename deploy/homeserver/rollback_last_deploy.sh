@@ -713,11 +713,18 @@ set_caddy_upstream_backend() {
   # the blue/green colour. Baking the colour into the Caddyfile makes the literal win
   # over the env placeholder and collapses read/admin isolation (#1418). The reload
   # stays so the restored config reaches the running caddy process.
+  #
+  # A restored backup can already carry literals, and this script has no
+  # verify_caddy_route() that would notice. The file is not repaired either: the
+  # literal -> placeholder direction is not recoverable from the file alone, and the git
+  # HEAD available here is the failed deploy's commit, not the backup's restore point.
+  # So the drift is reported here and again on the completion line.
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     reload_caddy
     if caddy_file_has_literal_colour_upstream; then
       echo "WARN rollback restored a Caddyfile with literal colour upstreams; runtime-split env routing (read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM")) is not in effect for those routes" >&2
       grep -nE '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080' "${CADDY_FILE}" >&2 || true
+      echo "WARN this rollback has no route verify that could catch the drift; the edge stays degraded until the placeholder Caddyfile is restored, and check_deploy_status.sh reports caddy_split_literal_upstream until then" >&2
       return 0
     fi
     echo "rollback caddy upstream kept on runtime-split placeholders: read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM") (rollback colour=${active_host})"
@@ -848,6 +855,20 @@ set_caddy_upstream_backend "${target_backend}"
 ensure_caddy_mount_sync
 stop_backend_if_running "${inactive_backend}"
 ensure_steady_state_guard || true
-echo "rollback completed: active=${target_backend}, inactive stopped=${inactive_backend}"
+
+# Report the edge the rollback actually left behind. The completion line is the only thing
+# an operator reads on a long rollback log, so it must not say plain success while
+# runtime-split isolation is off.
+#
+# The exit code deliberately stays 0. deploy.yml's run_backup_rollback() skips
+# restart_external_backup_legacy_minio_if_needed() when this script exits non-zero, so
+# failing here after the service is already back would leave minio stopped and stretch the
+# outage instead of shortening it (#1409 class). The degraded state is detected out of band
+# by check_deploy_status.sh, which fails on caddy_split_literal_upstream.
+if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]] && caddy_file_has_literal_colour_upstream; then
+  echo "WARN rollback completed with a degraded edge: active=${target_backend}, inactive stopped=${inactive_backend}; the restored Caddyfile pins literal colour upstreams, so runtime-split read/admin isolation is off for the lines logged above until the placeholder Caddyfile is restored and a deploy reloads it" >&2
+else
+  echo "rollback completed: active=${target_backend}, inactive stopped=${inactive_backend}"
+fi
 
 compose ps

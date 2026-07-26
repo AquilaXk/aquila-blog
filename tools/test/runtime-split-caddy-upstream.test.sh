@@ -7,9 +7,10 @@ cd "${repo_root}"
 deploy_script="deploy/homeserver/blue_green_deploy.sh"
 rollback_script="deploy/homeserver/rollback_last_deploy.sh"
 probe_script="deploy/homeserver/caddy_upstream_probe.sh"
+status_script="deploy/homeserver/check_deploy_status.sh"
 caddy_source="deploy/homeserver/caddy/Caddyfile"
 
-for required in "${deploy_script}" "${rollback_script}" "${probe_script}" "${caddy_source}"; do
+for required in "${deploy_script}" "${rollback_script}" "${probe_script}" "${status_script}" "${caddy_source}"; do
   if [ ! -f "${required}" ]; then
     echo "[test] ${required} is missing from the repository checkout" >&2
     exit 1
@@ -210,6 +211,50 @@ fi
 
 placeholder_count="$(( $(count_matches "${caddy_source}" '{$ADMIN_API_UPSTREAM:') + $(count_matches "${caddy_source}" '{$READ_API_UPSTREAM:') ))"
 
+# 첫 reverse_proxy upstream placeholder의 기본값. 값을 테스트에 적어 두면 기본값이 바뀔 때
+# (계약 위반이 아닌데도) 이 단언이 깨지고 실패 메시지가 원인을 알려주지 못한다.
+first_placeholder_default="$(
+  awk '$1 == "reverse_proxy" && $2 ~ /^\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\}:8080$/ {print $2; exit}' \
+    "${caddy_source}" \
+    | sed -E 's/^\{\$[A-Z_]+:(back[-_][a-z]+)\}:8080$/\1/' \
+    | tr '-' '_'
+)"
+if ! printf '%s' "${first_placeholder_default}" | grep -Eq '^back_(blue|green|read|admin)$'; then
+  fail "cannot derive the first upstream placeholder default from ${caddy_source}, got: ${first_placeholder_default:-empty}"
+fi
+
+# ---------------------------------------------------------------------------
+# upstream 토큰 awk 패턴은 세 파일에서 동일해야 한다
+#
+# 토큰 해석은 probe와 두 배포 스크립트에 각각 구현돼 있다. 한쪽 패턴만 고치면 cutover의 판정과
+# 후검증 게이트의 판정이 갈린다. 구현 통합은 배포 크리티컬 스크립트를 외부 파일 source에
+# 의존하게 만들므로, 대신 패턴 문자열의 동일성을 기계적으로 고정한다.
+# ---------------------------------------------------------------------------
+
+upstream_token_pattern_of() {
+  local script="$1"
+  local patterns
+  patterns="$(grep -hoE '\$1 == "reverse_proxy" && \$2 ~ /[^/]+/' "${script}" | sort -u)"
+  if [ -z "${patterns}" ]; then
+    fail "cannot find the upstream token awk pattern in ${script}; the pattern drift guard would pass vacuously"
+  fi
+  if [ "$(printf '%s\n' "${patterns}" | wc -l | tr -d '[:space:]')" -ne 1 ]; then
+    printf '%s\n' "${patterns}" >&2
+    fail "${script} carries more than one upstream token awk pattern"
+  fi
+  printf '%s' "${patterns}"
+}
+
+deploy_token_pattern="$(upstream_token_pattern_of "${deploy_script}")"
+rollback_token_pattern="$(upstream_token_pattern_of "${rollback_script}")"
+probe_token_pattern="$(upstream_token_pattern_of "${probe_script}")"
+if [ "${rollback_token_pattern}" != "${deploy_token_pattern}" ] || [ "${probe_token_pattern}" != "${deploy_token_pattern}" ]; then
+  printf '[test] %s: %s\n' "${deploy_script}" "${deploy_token_pattern}" >&2
+  printf '[test] %s: %s\n' "${rollback_script}" "${rollback_token_pattern}" >&2
+  printf '[test] %s: %s\n' "${probe_script}" "${probe_token_pattern}" >&2
+  fail "upstream token awk pattern drifted between the probe and the deploy scripts"
+fi
+
 # 부분 드리프트 fixture가 실제로 forward_auth 한 줄만 바꾸는지 확인한다. Caddyfile 구조가 바뀌어
 # 이 sed가 아무것도 못 바꾸면 아래 경고 경로 검사가 공허해진다.
 partial_probe="${workdir}/partial-probe-caddyfile"
@@ -240,6 +285,7 @@ run_set_caddy_upstream_backend() {
     printf 'RUNTIME_SPLIT_ENABLED=%q\n' "${split}"
     printf 'RELOAD_MARKER=%q\n' "${reload_marker}"
     printf '%s\n' 'reload_caddy() { printf "reload\n" >> "${RELOAD_MARKER}"; }'
+    printf '%s\n' 'mounted_env_value() { return 1; }'
     extract_function "${script}" env_value
     extract_function "${script}" trim_quotes
     extract_function "${script}" upsert_env_key
@@ -247,6 +293,14 @@ run_set_caddy_upstream_backend() {
     extract_function "${script}" host_env_value
     extract_function "${script}" backend_http_host
     extract_function "${script}" caddy_file_has_literal_colour_upstream
+    # 드리프트 결과 보고는 cutover 스크립트에만 있다. rollback에는 verify_caddy_route가 없어서
+    # 기대값을 계산할 대상 자체가 없다.
+    if [ "${script}" = "${deploy_script}" ]; then
+      extract_function "${script}" resolve_caddy_upstream_token
+      extract_function "${script}" current_caddy_upstream_host
+      extract_function "${script}" expected_caddy_upstream_host
+      extract_function "${script}" report_caddy_split_literal_drift
+    fi
     extract_function "${script}" set_caddy_upstream_backend
     printf '%s\n' 'set_caddy_upstream_backend "$1"'
   } > "${harness}"
@@ -335,6 +389,55 @@ for script in "${deploy_script}" "${rollback_script}"; do
   fi
   if grep -q 'kept on runtime-split placeholders' "${harness_stdout}"; then
     fail "${label}: runtime-split cutover must not report a healthy placeholder edge while literals are present"
+  fi
+
+  # 부분 드리프트는 route 검증이 읽는 토큰을 비켜 가므로 이 배포는 그대로 성공 보고된다. 경고가
+  # "실패한다"로 뭉개지면 운영자는 배포가 죽을 것으로 오판하고, 반대로 아무 말도 없으면 열화가
+  # 성공으로 보고된다. 둘 다 부정직하므로 실제로 해당하는 결과만 나와야 한다.
+  if [ "${script}" = "${deploy_script}" ]; then
+    if ! grep -q 'still passes caddy route verify' "${harness_stderr}"; then
+      cat "${harness_stderr}" >&2
+      fail "${label}: cutover must state that a drift the route verify cannot see is reported as success"
+    fi
+    if grep -q 'cannot succeed' "${harness_stderr}"; then
+      cat "${harness_stderr}" >&2
+      fail "${label}: cutover must not claim a drift the route verify cannot see fails the deploy"
+    fi
+  else
+    if ! grep -q 'no route verify that could catch the drift' "${harness_stderr}"; then
+      cat "${harness_stderr}" >&2
+      fail "${label}: rollback must state that it has no route verify to catch the drift"
+    fi
+  fi
+
+  # 전체 드리프트: 첫 reverse_proxy 토큰까지 리터럴이면 route 검증이 반드시 어긋난다. "경고만 하고
+  # 계속"이 아니라 "이 배포는 실패하고 rollback으로 간다"가 참이므로 로그가 그렇게 말해야 한다.
+  if [ "${script}" = "${deploy_script}" ]; then
+    full_drift_cutover_caddy="${workdir}/split-full-drift-caddyfile"
+    full_drift_cutover_env="${workdir}/split-full-drift-env"
+    full_drift_cutover_reload="${workdir}/split-full-drift-reload"
+    write_full_drift_caddyfile "${full_drift_cutover_caddy}"
+    write_split_env "${full_drift_cutover_env}"
+    rm -f "${full_drift_cutover_reload}"
+
+    run_set_caddy_upstream_backend "${script}" "true" "back_green" \
+      "${full_drift_cutover_caddy}" "${full_drift_cutover_env}" "${full_drift_cutover_reload}"
+    if [ "${harness_status}" -ne 0 ]; then
+      cat "${harness_stderr}" >&2
+      fail "${label}: runtime-split cutover on a fully drifted Caddyfile exited ${harness_status}"
+    fi
+    if ! grep -q 'cannot succeed' "${harness_stderr}"; then
+      cat "${harness_stderr}" >&2
+      fail "${label}: cutover must state that a drift reaching the verified upstream token fails this deploy"
+    fi
+    if ! grep -q 'current=back_green' "${harness_stderr}" || ! grep -q 'expected=back_admin' "${harness_stderr}"; then
+      cat "${harness_stderr}" >&2
+      fail "${label}: cutover must log the measured upstream mismatch, not a generic warning"
+    fi
+    if grep -q 'still passes caddy route verify' "${harness_stderr}"; then
+      cat "${harness_stderr}" >&2
+      fail "${label}: cutover must not claim route verify passes on a fully drifted Caddyfile"
+    fi
   fi
 
   # 단일 런타임: 기존 동작 그대로 활성 색 리터럴로 치환하고 env 키도 갱신한다.
@@ -560,7 +663,13 @@ run_probe "${full_drift_caddy}" "${expect_env}" host
 expect_probe_output "back_green" "host on a colour-pinned Caddyfile"
 
 run_probe "${expect_caddy}" "${split_env_no_admin}" host
-expect_probe_output "back_blue" "host with an unset upstream key (placeholder default)"
+expect_probe_output "${first_placeholder_default}" \
+  "host with an unset upstream key (placeholder default derived from ${caddy_source})"
+
+# host/mounted 계약(probe 주석 18-20행): 해석 실패는 빈 줄이다. Caddyfile이 없을 때 awk가 죽으면
+# set -e로 probe가 비정상 종료하고, recover.sh의 `|| true`가 그 위반을 가린다.
+run_probe "${workdir}/absent-caddyfile" "${expect_env}" host
+expect_probe_output "" "host with an absent Caddyfile"
 
 run_probe "${expect_caddy}" "${expect_env}" expected back_green
 expect_probe_output "back_admin" "expected under runtime-split"
@@ -713,6 +822,93 @@ if [ "$(count_matches "${legacy_single_caddy}" 'back_blue:8080')" -ne "${placeho
 fi
 
 # ---------------------------------------------------------------------------
+# rollback 완료 라인은 남은 열화를 숨기지 않아야 한다
+#
+# 이 스크립트에는 verify_caddy_route가 없고 종료 코드는 0으로 유지된다: non-zero면 deploy.yml의
+# run_backup_rollback()이 남은 복구 단계를 건너뛰어 서비스가 이미 돌아온 뒤에도 장애가 길어진다
+# (#1409 클래스). 그래서 완료 라인이 열화 상태의 유일한 즉시 신호이며, 그 라인이 평소와 같은
+# 성공 문구를 내면 운영자가 성공으로 오판한다.
+# ---------------------------------------------------------------------------
+
+extract_rollback_completion_block() {
+  local block
+  block="$(
+    awk '
+      index($0, "if [[ \"${RUNTIME_SPLIT_ENABLED}\" == \"true\" ]] && caddy_file_has_literal_colour_upstream; then") == 1 { capture = 1 }
+      capture { print }
+      capture && $0 == "fi" { exit }
+    ' "${rollback_script}"
+  )"
+  if [ -z "${block}" ] || ! printf '%s' "${block}" | grep -q 'rollback completed'; then
+    fail "cannot extract the rollback completion block from ${rollback_script}"
+  fi
+  printf '%s\n' "${block}"
+}
+
+run_rollback_completion() {
+  local split="$1"
+  local caddy_file="$2"
+  local harness="${workdir}/rollback-completion-harness.sh"
+
+  {
+    printf '%s\n' 'set -euo pipefail'
+    printf 'CADDY_FILE=%q\n' "${caddy_file}"
+    printf 'RUNTIME_SPLIT_ENABLED=%q\n' "${split}"
+    printf '%s\n' 'target_backend=back_blue'
+    printf '%s\n' 'inactive_backend=back_green'
+    extract_function "${rollback_script}" caddy_file_has_literal_colour_upstream
+    extract_rollback_completion_block
+  } > "${harness}"
+
+  run_harness "${harness}"
+}
+
+assert_rollback_completion_exit_zero() {
+  if [ "${harness_status}" -ne 0 ]; then
+    cat "${harness_stdout}" "${harness_stderr}" >&2
+    fail "$1: the rollback completion line must not change the exit code (#1409: a non-zero rollback makes deploy.yml skip the remaining recovery steps)"
+  fi
+}
+
+completion_placeholder_caddy="${workdir}/completion-placeholder-caddyfile"
+cp "${caddy_source}" "${completion_placeholder_caddy}"
+run_rollback_completion "true" "${completion_placeholder_caddy}"
+assert_rollback_completion_exit_zero "runtime-split rollback on a placeholder Caddyfile"
+if ! grep -q 'rollback completed: active=back_blue' "${harness_stdout}"; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "runtime-split rollback on a placeholder Caddyfile must report a plain completion"
+fi
+if grep -q 'degraded' "${harness_stderr}"; then
+  cat "${harness_stderr}" >&2
+  fail "runtime-split rollback must not report a degraded edge when the Caddyfile is placeholder-only"
+fi
+
+for completion_fixture in write_partial_drift_caddyfile write_full_drift_caddyfile; do
+  completion_drift_caddy="${workdir}/completion-drift-caddyfile"
+  "${completion_fixture}" "${completion_drift_caddy}"
+  run_rollback_completion "true" "${completion_drift_caddy}"
+  assert_rollback_completion_exit_zero "runtime-split rollback with ${completion_fixture}"
+  if ! grep -q 'rollback completed with a degraded edge' "${harness_stderr}"; then
+    cat "${harness_stdout}" "${harness_stderr}" >&2
+    fail "runtime-split rollback (${completion_fixture}) must report the degraded edge it left behind"
+  fi
+  if grep -q 'rollback completed' "${harness_stdout}"; then
+    cat "${harness_stdout}" >&2
+    fail "runtime-split rollback (${completion_fixture}) must not also print a plain success completion"
+  fi
+done
+
+# 단일 런타임에서는 색 리터럴이 정상이므로 완료 라인이 열화로 바뀌면 안 된다.
+completion_single_caddy="${workdir}/completion-single-caddyfile"
+write_full_drift_caddyfile "${completion_single_caddy}"
+run_rollback_completion "false" "${completion_single_caddy}"
+assert_rollback_completion_exit_zero "single-runtime rollback on a colour-pinned Caddyfile"
+if ! grep -q 'rollback completed: active=back_blue' "${harness_stdout}"; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "single-runtime rollback must keep reporting a plain completion for a colour-pinned Caddyfile"
+fi
+
+# ---------------------------------------------------------------------------
 # split rollback은 route verify 앞에서 helper를 복구해야 한다
 #
 # runtime-split에서 edge 트래픽의 목적지는 back_read/back_admin이다. verify_caddy_route()가
@@ -837,6 +1033,7 @@ ROLLBACK_STUBS
     extract_function "${deploy_script}" expected_caddy_upstream_host
     extract_function "${deploy_script}" is_healthy_http_code
     extract_function "${deploy_script}" caddy_file_has_literal_colour_upstream
+    extract_function "${deploy_script}" report_caddy_split_literal_drift
     extract_function "${deploy_script}" set_caddy_upstream_backend
     extract_function "${deploy_script}" switch_caddy_upstream
     extract_function "${deploy_script}" verify_caddy_route
@@ -940,6 +1137,88 @@ if [ "${verify_line}" -ge "${recovery_line}" ]; then
 fi
 if grep -qF '{$ADMIN_API_UPSTREAM:' "${single_rollback_caddy}"; then
   fail "single-runtime rollback must pin the rollback colour into the Caddyfile"
+fi
+
+# ---------------------------------------------------------------------------
+# check_deploy_status.sh의 split 리터럴 감지
+#
+# rollback은 리터럴 잔존을 종료 코드로 신고할 수 없다(#1409: non-zero면 deploy.yml이 남은 복구
+# 단계를 건너뛴다). 그래서 이 감지가 열화 상태의 out-of-band 신호이며, 감지 표현식이 부분
+# 드리프트까지 잡는지 실측해야 신호가 공허하지 않다. mounted_upstream 비교는 토큰 하나만 보므로
+# forward_auth/read 한 줄 드리프트는 그 비교를 통과한다.
+# ---------------------------------------------------------------------------
+
+extract_split_literal_detector_block() {
+  local block
+  block="$(
+    awk '
+      index($0, "HAS_SPLIT_LITERAL_UPSTREAM=\"false\"") == 1 { capture = 1 }
+      capture { print }
+      capture && $0 == "fi" { exit }
+    ' "${status_script}"
+  )"
+  # 감지 표현식 자체는 아래 fixture 실행으로 판정한다. 여기서는 블록이 값을 세우는 구조인지만
+  # 본다 — 표현식 내용을 여기서 grep하면 표현식 회귀가 실행 검사 대신 추출 실패로 나타난다.
+  if [ -z "${block}" ] || ! printf '%s' "${block}" | grep -q 'HAS_SPLIT_LITERAL_UPSTREAM="true"'; then
+    fail "cannot extract the runtime-split literal upstream detector from ${status_script}"
+  fi
+  printf '%s\n' "${block}"
+}
+
+run_split_literal_detector() {
+  local split="$1"
+  local caddy_file="$2"
+  local harness="${workdir}/split-literal-detector-harness.sh"
+
+  {
+    printf '%s\n' 'set -euo pipefail'
+    printf 'RUNTIME_SPLIT_ENABLED=%q\n' "${split}"
+    printf 'CADDY_CONTAINER_FILE=%q\n' "${caddy_file}"
+    # `compose exec -T caddy sh -lc "<cmd>"` 의 마지막 인자를 로컬 sh로 실행한다. 검증 대상은
+    # 컨테이너 배선이 아니라 grep 표현식이 어떤 파일 상태를 잡는지다.
+    printf '%s\n' 'compose() { sh -c "${!#}"; }'
+    extract_split_literal_detector_block
+    printf '%s\n' 'printf "%s\n" "${HAS_SPLIT_LITERAL_UPSTREAM}"'
+  } > "${harness}"
+
+  run_harness "${harness}"
+}
+
+expect_split_literal_detector() {
+  local expected="$1"
+  local context="$2"
+  local actual
+  actual="$(cat "${harness_stdout}")"
+  if [ "${harness_status}" -ne 0 ]; then
+    cat "${harness_stderr}" >&2
+    fail "split literal detector ${context} exited ${harness_status}"
+  fi
+  if [ "${actual}" != "${expected}" ]; then
+    cat "${harness_stderr}" >&2
+    fail "split literal detector ${context} must report ${expected}, got: ${actual:-empty}"
+  fi
+}
+
+detector_caddy="${workdir}/detector-caddyfile"
+
+cp "${caddy_source}" "${detector_caddy}"
+run_split_literal_detector "true" "${detector_caddy}"
+expect_split_literal_detector "false" "on a placeholder Caddyfile under runtime-split"
+
+write_partial_drift_caddyfile "${detector_caddy}"
+run_split_literal_detector "true" "${detector_caddy}"
+expect_split_literal_detector "true" "on a partially drifted Caddyfile under runtime-split"
+
+write_full_drift_caddyfile "${detector_caddy}"
+run_split_literal_detector "true" "${detector_caddy}"
+expect_split_literal_detector "true" "on a fully drifted Caddyfile under runtime-split"
+
+run_split_literal_detector "false" "${detector_caddy}"
+expect_split_literal_detector "false" "on a colour-pinned Caddyfile in single-runtime mode"
+
+# 감지가 FAIL로 이어지는 배선. 감지만 하고 remember_failure를 안 부르면 exit code가 안 바뀐다.
+if ! grep -q 'remember_failure "caddy_split_literal_upstream' "${status_script}"; then
+  fail "${status_script} must turn a detected runtime-split literal upstream into a FAIL"
 fi
 
 echo "[test] runtime-split caddy upstream contract ok"

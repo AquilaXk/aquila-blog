@@ -1716,6 +1716,38 @@ caddy_file_has_literal_colour_upstream() {
   grep -Eq '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080([[:space:]]|$)' "${CADDY_FILE}"
 }
 
+# State the outcome a literal drift actually produces, because the two possible outcomes
+# differ and neither is what the plain "kept on placeholders" line would suggest.
+# verify_caddy_route() compares a single token (the first reverse_proxy upstream), so a
+# drift that reaches that token makes this cutover fail and roll back, while a drift that
+# spares it lets the cutover report success with those routes outside the split.
+#
+# The file is not repaired here. The literal -> placeholder direction is not recoverable
+# from the file alone (both upstream keys collapse to the same literal), and rebuilding it
+# from route context would copy the Caddyfile's routing policy into this script, where a
+# newly added read route would silently be wired to the admin runtime. Restoring the repo
+# Caddyfile is deploy.yml's `git checkout --force`, which runs before this script.
+report_caddy_split_literal_drift() {
+  local backend="$1"
+  local expected_host current_host
+
+  echo "WARN caddy upstream has literal colour hosts under runtime-split; env routing (read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM")) is not in effect for those routes" >&2
+  grep -nE '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080' "${CADDY_FILE}" >&2 || true
+
+  if ! expected_host="$(expected_caddy_upstream_host "${backend}")"; then
+    echo "WARN this cutover fails at caddy route verify: the runtime-split upstream expectation cannot be resolved" >&2
+    return 0
+  fi
+
+  current_host="$(current_caddy_upstream_host)"
+  if [[ "${current_host}" != "${expected_host}" ]]; then
+    echo "WARN this cutover cannot succeed: caddy route verify compares current=${current_host:-none} against expected=${expected_host}, so it fails after 20 tries and the deploy rolls back to the previous backend" >&2
+    return 0
+  fi
+
+  echo "WARN this cutover still passes caddy route verify (current=${current_host}): it reports success while the upstream lines above stay outside runtime-split read/admin isolation until the placeholder Caddyfile is restored" >&2
+}
+
 set_caddy_upstream_backend() {
   local backend="$1"
   local active_host
@@ -1731,8 +1763,7 @@ set_caddy_upstream_backend() {
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     reload_caddy
     if caddy_file_has_literal_colour_upstream; then
-      echo "WARN caddy upstream has literal colour hosts under runtime-split; env routing (read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM")) is not in effect for those routes" >&2
-      grep -nE '^[[:space:]]*(reverse_proxy|forward_auth)[[:space:]]+back[-_](blue|green|active):8080' "${CADDY_FILE}" >&2 || true
+      report_caddy_split_literal_drift "${backend}"
       return 0
     fi
     echo "caddy upstream kept on runtime-split placeholders: read=$(host_env_value "READ_API_UPSTREAM"), admin=$(host_env_value "ADMIN_API_UPSTREAM") (cutover colour=${active_host})"

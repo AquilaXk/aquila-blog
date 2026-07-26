@@ -156,6 +156,9 @@ if ! grep -qF 'print_env_key_status "ADMIN_EMBED_ORIGINS"' "${doctor}"; then
 fi
 
 headers_expired_first="${workdir}/headers-expired-first.txt"
+headers_expired_last="${workdir}/headers-expired-last.txt"
+headers_two_tokens="${workdir}/headers-two-tokens.txt"
+headers_lowercase_name="${workdir}/headers-lowercase-name.txt"
 headers_without_token="${workdir}/headers-without-token.txt"
 # AuthCookieService.issueCookie()는 host-only 잔여 쿠키를 지우는 빈 값 쿠키를 실제 발급 쿠키보다
 # 먼저 내보낸다. 첫 매치를 집으면 항상 빈 토큰을 읽는다.
@@ -167,6 +170,30 @@ printf '%s\r\n' \
   'Set-Cookie: accessToken=header.payload.signature; Path=/; Domain=.example.com; HttpOnly; Secure' \
   'Set-Cookie: refreshToken=refresh.token.value; Path=/; HttpOnly' \
   '' > "${headers_expired_first}"
+# 만료용 빈 쿠키가 마지막에 오는 순서. 값 있는 쿠키만 남기는 grep 필터가 없으면 마지막 줄을 집는
+# 순간 빈 토큰이 되므로, 이 fixture가 `accessToken=[^;]` 필터를 단독으로 고정한다.
+printf '%s\r\n' \
+  'HTTP/1.1 200 OK' \
+  'Content-Type: application/json' \
+  'Set-Cookie: accessToken=header.payload.signature; Path=/; Domain=.example.com; HttpOnly; Secure' \
+  'Set-Cookie: refreshToken=refresh.token.value; Path=/; HttpOnly' \
+  'Set-Cookie: accessToken=; Max-Age=0; Path=/; HttpOnly' \
+  '' > "${headers_expired_last}"
+# 값 있는 accessToken이 둘인 응답. 마지막 쿠키가 최종 발급본이므로 첫 매치를 집으면 폐기된 토큰을
+# 쓰게 된다. 이 fixture가 `tail -n 1` 선택을 단독으로 고정한다.
+printf '%s\r\n' \
+  'HTTP/1.1 200 OK' \
+  'Content-Type: application/json' \
+  'Set-Cookie: accessToken=first.payload.signature; Path=/; HttpOnly' \
+  'Set-Cookie: accessToken=second.payload.signature; Path=/; HttpOnly' \
+  '' > "${headers_two_tokens}"
+# HTTP 헤더 이름은 대소문자를 구분하지 않는다. 프록시가 소문자로 정규화해 내려도 선택이 동작해야 한다.
+printf '%s\r\n' \
+  'HTTP/1.1 200 OK' \
+  'content-type: application/json' \
+  'set-cookie: accessToken=; Max-Age=0; Path=/; HttpOnly' \
+  'set-cookie: accessToken=lowercase.payload.signature; Path=/; HttpOnly' \
+  '' > "${headers_lowercase_name}"
 printf '%s\r\n' \
   'HTTP/1.1 200 OK' \
   'Content-Type: application/json' \
@@ -185,6 +212,24 @@ selected_token="$(select_access_token "${headers_expired_first}")"
 if [ "${selected_token}" != "header.payload.signature" ]; then
   fail "expected the probe to skip the empty accessToken cookie and read the issued one, got '${selected_token}'"
 fi
+selected_token="$(select_access_token "${headers_expired_last}")"
+if [ "${selected_token}" != "header.payload.signature" ]; then
+  fail "expected the probe to skip a trailing empty accessToken cookie and read the issued one, got '${selected_token}'"
+fi
+selected_token="$(select_access_token "${headers_two_tokens}")"
+if [ "${selected_token}" != "second.payload.signature" ]; then
+  fail "expected the probe to read the last issued accessToken cookie, got '${selected_token}'"
+fi
+selected_token="$(select_access_token "${headers_lowercase_name}")"
+if [ "${selected_token}" != "lowercase.payload.signature" ]; then
+  fail "expected the probe to read a lowercased set-cookie header name, got '${selected_token}'"
+fi
+
+run_probe_snippet "${headers_expired_last}"
+if [ "${probe_status}" -ne 0 ]; then
+  fail "expected a trailing empty accessToken cookie not to be reported as a missing token (exit ${probe_status}): ${probe_output}"
+fi
+
 if [ -n "$(select_access_token "${headers_without_token}")" ]; then
   fail "expected a response without any accessToken cookie to read as an empty token"
 fi

@@ -112,6 +112,10 @@ require_pattern "${DRILL_SCRIPT}" 'created_at_utc' "restore drill must prefer UT
 require_pattern "${DRILL_SCRIPT}" 'read_key_from_file AQUILA_BACKUP_ROOT' "restore drill must read backup root from deploy env"
 require_pattern "${DRILL_SCRIPT}" 'first == "".*END.*first' "restore drill must select MinIO sample without head-induced SIGPIPE"
 require_pattern "${DRILL_SCRIPT}" 'docker rm -f -v' "restore drill must remove anonymous PostgreSQL volumes"
+require_pattern_count "${DRILL_SCRIPT}" '[[:space:]]--network none' "2" "restore and cleanup MinIO containers must disable networking"
+require_pattern "${DRILL_SCRIPT}" '[[:space:]]--pull never' "restore drill cleanup must not pull an unverified image"
+require_pattern "${DRILL_SCRIPT}" '[[:space:]]--user 0:0' "restore drill cleanup must remove container-owned MinIO metadata"
+require_pattern "${DRILL_SCRIPT}" '/cleanup/restored-minio' "restore drill cleanup must stay inside the validated restored MinIO tree"
 reject_pattern "${DRILL_SCRIPT}" 'HOME_SERVER_ENV' "restore drill must not require raw production secret blobs"
 reject_pattern "${DRILL_SCRIPT}" 'postgres:16-alpine' "restore drill must not default to vanilla PostgreSQL"
 
@@ -270,6 +274,18 @@ case "${1:-}" in
     exit 1
     ;;
   run)
+    if [[ "$*" == *"/cleanup/restored-minio"* ]]; then
+      [[ "$*" == "run --rm "* ]] || { echo "cleanup helper must be ephemeral" >&2; exit 1; }
+      [[ "$*" == *"--network none"* ]] || { echo "cleanup helper must disable networking" >&2; exit 1; }
+      [[ "$*" == *"--pull never"* ]] || { echo "cleanup helper must not pull images" >&2; exit 1; }
+      [[ "$*" == *"--user 0:0"* ]] || { echo "cleanup helper must run as root" >&2; exit 1; }
+      [[ "$*" == *"/aquila-restore-drill-decrypted."*":/cleanup"* ]] || { echo "cleanup helper must mount only the validated decrypt workspace" >&2; exit 1; }
+      [[ "$*" == *"--entrypoint sh"* ]] || { echo "cleanup helper must use the fixed shell entrypoint" >&2; exit 1; }
+      if [[ "${FAKE_CLEANUP_HELPER_FAIL:-0}" == "1" ]]; then
+        echo "forced cleanup helper failure" >&2
+        exit 97
+      fi
+    fi
     if [[ "$*" == *"minio/minio@sha256:"* ]]; then
       exec "${REAL_DOCKER}" "$@"
     fi
@@ -434,6 +450,30 @@ require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^restored_deleted_ob
 require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^minio_checksum=pass$' "privacy gate must verify MinIO checksum evidence"
 require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_replay=latest-state-compared$' "privacy gate evidence must name the verification mode"
 grep -q 'post-img/posts/2026/with space/sample.txt' "${ARTIFACT_DIR}/minio-checksums.sha256"
+
+CLEANUP_FAILURE_BASE="${WORK_DIR}/cleanup-failure-decrypted"
+if PATH="${FAKE_BIN_DIR}:${PATH}" \
+  REAL_DOCKER="${REAL_DOCKER}" \
+  REAL_DF="${REAL_DF}" \
+  MINIO_LIVE_CONTAINER="${MINIO_LIVE_CONTAINER}" \
+  FAKE_CLEANUP_HELPER_FAIL=1 \
+  FAKE_FAST_SLEEP=1 \
+  FAKE_EXPECT_CURRENT_DB=custom_restore_prod \
+  AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+  AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
+  AQUILA_RESTORE_DRILL_DECRYPT_DIR="${CLEANUP_FAILURE_BASE}" \
+  AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${WORK_DIR}/cleanup-failure-artifacts" \
+  AQUILA_RESTORE_DRILL_TIMESTAMP="20260106-030405" \
+  AQUILA_RESTORE_DRILL_NOW_EPOCH="1767668645" \
+    "${DRILL_SCRIPT}" > "${WORK_DIR}/cleanup-helper-failure.txt" 2>&1; then
+  echo "restore drill unexpectedly passed after cleanup helper failure" >&2
+  exit 1
+fi
+require_pattern "${WORK_DIR}/cleanup-helper-failure.txt" 'forced cleanup helper failure' "cleanup helper failure fixture must execute"
+if [[ -n "$(find "${CLEANUP_FAILURE_BASE}" -type f \( -name dump.sql -o -name minio-data.tar.gz \) -print -quit)" ]]; then
+  echo "host cleanup did not remove decrypted backup files after helper failure" >&2
+  exit 1
+fi
 
 if PATH="${UNSAFE_ARCHIVE_BIN_DIR}:${FAKE_BIN_DIR}:${PATH}" \
   REAL_TAR="${REAL_TAR}" \

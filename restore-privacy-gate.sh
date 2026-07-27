@@ -27,6 +27,24 @@ psql_scalar() {
   printf '%s' "${value}"
 }
 
+missing_latest_tombstone_count() {
+  local value
+  value="$({
+    printf '%s\n' \
+      'CREATE TEMP TABLE latest_tombstones (member_id bigint PRIMARY KEY) ON COMMIT PRESERVE ROWS;' \
+      '\copy latest_tombstones (member_id) FROM STDIN'
+    cat "${LATEST_MEMBER_TOMBSTONE_FILE}"
+    printf '%s\n' \
+      '\.' \
+      'SELECT COUNT(*) FROM latest_tombstones l LEFT JOIN public.member_account_deletion mad ON mad.member_id = l.member_id WHERE mad.member_id IS NULL;'
+  } | docker exec -i "${POSTGRES_CONTAINER}" \
+    psql -U postgres -d "${POSTGRES_DB}" -qAt -v ON_ERROR_STOP=1 \
+    | tr -d '\r' \
+    | tail -n 1)" || fail "latest member tombstone comparison failed"
+  [[ -n "${value}" ]] || fail "latest member tombstone comparison returned no value"
+  printf '%s' "${value}"
+}
+
 require_env BACKUP_SET_ID
 require_env BACKUP_CLASS
 require_env POSTGRES_CONTAINER
@@ -34,8 +52,8 @@ require_env POSTGRES_DB
 require_env MINIO_CHECKSUM_FILE
 require_env MINIO_SAMPLE_OBJECT
 require_env LATEST_MEMBER_TOMBSTONE_FILE
-require_env CURRENT_MINIO_OBJECT_HASH_FILE
-require_env RESTORED_MINIO_OBJECT_HASH_FILE
+require_env CURRENT_MINIO_OBJECT_KEY_FILE
+require_env RESTORED_MINIO_OBJECT_KEY_FILE
 
 [[ "${BACKUP_SET_ID}" =~ ^[0-9]{8}-[0-9]{6}$ ]] || fail "unsafe BACKUP_SET_ID"
 case "${BACKUP_CLASS}" in
@@ -57,23 +75,21 @@ read -r minio_checksum minio_object < "${MINIO_CHECKSUM_FILE}" \
 [[ "${minio_object}" == "${MINIO_SAMPLE_OBJECT}" ]] || fail "MinIO checksum object does not match selected sample"
 
 [[ -f "${LATEST_MEMBER_TOMBSTONE_FILE}" ]] || fail "latest member tombstone evidence is missing"
-[[ -f "${CURRENT_MINIO_OBJECT_HASH_FILE}" ]] || fail "current MinIO object hash evidence is missing"
-[[ -s "${RESTORED_MINIO_OBJECT_HASH_FILE}" ]] || fail "restored MinIO object hash evidence is missing or empty"
+[[ -f "${CURRENT_MINIO_OBJECT_KEY_FILE}" ]] || fail "current MinIO object key evidence is missing"
+[[ -s "${RESTORED_MINIO_OBJECT_KEY_FILE}" ]] || fail "restored MinIO object key evidence is missing or empty"
 
-for hash_file in "${CURRENT_MINIO_OBJECT_HASH_FILE}" "${RESTORED_MINIO_OBJECT_HASH_FILE}"; do
-  if [[ -s "${hash_file}" ]] && grep -Eqv '^[0-9a-f]{64}$' "${hash_file}"; then
-    fail "MinIO object hash evidence contains an invalid hash"
+for key_file in "${CURRENT_MINIO_OBJECT_KEY_FILE}" "${RESTORED_MINIO_OBJECT_KEY_FILE}"; do
+  if grep -Eq '^$' "${key_file}"; then
+    fail "MinIO object key evidence contains an empty key"
   fi
-  sort -c -u "${hash_file}" >/dev/null 2>&1 || fail "MinIO object hash evidence must be sorted and unique"
+  sort -c -u "${key_file}" >/dev/null 2>&1 || fail "MinIO object key evidence must be sorted and unique"
 done
 
-restored_deleted_object_violations="$(comm -23 "${RESTORED_MINIO_OBJECT_HASH_FILE}" "${CURRENT_MINIO_OBJECT_HASH_FILE}" | wc -l | tr -d ' ')"
+restored_deleted_object_violations="$(comm -23 "${RESTORED_MINIO_OBJECT_KEY_FILE}" "${CURRENT_MINIO_OBJECT_KEY_FILE}" | wc -l | tr -d ' ')"
 
 latest_tombstone_count=0
-latest_tombstone_values=""
 while IFS= read -r member_id || [[ -n "${member_id}" ]]; do
   [[ "${member_id}" =~ ^[1-9][0-9]*$ ]] || fail "latest member tombstone evidence contains an invalid identifier"
-  latest_tombstone_values+="${latest_tombstone_values:+,}(${member_id})"
   latest_tombstone_count=$((latest_tombstone_count + 1))
 done < "${LATEST_MEMBER_TOMBSTONE_FILE}"
 sort -n -c -u "${LATEST_MEMBER_TOMBSTONE_FILE}" >/dev/null 2>&1 \
@@ -94,13 +110,7 @@ schema_status="$(psql_scalar "
 tombstone_count="$(psql_scalar "SELECT COUNT(*) FROM public.member_account_deletion;")"
 missing_latest_tombstone_violations="0"
 if [[ "${latest_tombstone_count}" -gt 0 ]]; then
-  missing_latest_tombstone_violations="$(psql_scalar "
-    WITH latest(member_id) AS (VALUES ${latest_tombstone_values})
-    SELECT COUNT(*)
-    FROM latest l
-    LEFT JOIN public.member_account_deletion mad ON mad.member_id = l.member_id
-    WHERE mad.member_id IS NULL;
-  ")"
+  missing_latest_tombstone_violations="$(missing_latest_tombstone_count)"
 fi
 member_anonymization_violations="$(psql_scalar "
   SELECT COUNT(*)

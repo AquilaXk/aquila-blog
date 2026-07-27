@@ -367,20 +367,26 @@ write_summary() {
 }
 
 cleanup() {
+  local cleanup_status=0
   docker rm -f -v "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
   docker rm -f -v "${MINIO_CONTAINER}" >/dev/null 2>&1 || true
   if [[ -n "${DECRYPT_DIR}" && -n "${DECRYPT_BASE_DIR}" && "${DECRYPT_DIR}" == "${DECRYPT_BASE_DIR%/}"/aquila-restore-drill-decrypted.* && -d "${DECRYPT_DIR}" ]]; then
     if [[ -d "${DECRYPT_DIR}/restored-minio" ]]; then
-      docker run --rm \
+      if ! docker run --rm \
         --network none \
         --pull never \
         --user 0:0 \
         -v "${DECRYPT_DIR}:/cleanup" \
         --entrypoint sh \
-        "${MINIO_IMAGE}" -c 'rm -rf -- /cleanup/restored-minio' >/dev/null
+        "${MINIO_IMAGE}" -c 'rm -rf -- /cleanup/restored-minio' >/dev/null; then
+        cleanup_status=1
+      fi
     fi
-    rm -rf -- "${DECRYPT_DIR}"
+    if ! rm -rf -- "${DECRYPT_DIR}"; then
+      cleanup_status=1
+    fi
   fi
+  return "${cleanup_status}"
 }
 
 wait_for_minio() {

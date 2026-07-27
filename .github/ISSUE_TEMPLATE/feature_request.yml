@@ -56,14 +56,29 @@ body:
       placeholder: 예) 공개 페이지 캐시 정책과 admin 권한 검증 영향을 함께 확인해야 함
 
   - type: textarea
-    id: todo
+    id: execution_contract
     attributes:
-      label: Todo
-      description: 구현 순서를 `...했는가?` 형태의 체크리스트로 적어 주세요.
+      label: Execution Contract
+      description: Worker가 구현 결정을 추측하지 않도록 root에서 확정한 계약을 적어 주세요.
       placeholder: |
-        - [ ] 요구사항과 제외 범위를 충분히 정리했는가?
-        - [ ] API/화면 설계를 확정했는가?
-        - [ ] 구현 후 필요한 검증을 마쳤는가?
-        - [ ] 문서와 운영 영향까지 반영했는가?
+        - Confirmed decisions / interfaces:
+        - Allow:
+        - Deny / Non-goals:
+        - Completion criteria / edge cases:
+        - Unresolved implementation decisions: 없음
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification_delivery
+    attributes:
+      label: Verification & Delivery
+      description: 실행할 검증, 남길 증거, skip 조건, 기능 단위 commit을 적어 주세요.
+      placeholder: |
+        - Exact commands:
+        - Expected / observed evidence:
+        - Skipped checks and rerun conditions: 없음
+        - Commit slices:
+          1. feat(scope): 작업 요약
     validations:
       required: true

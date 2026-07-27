@@ -86,6 +86,9 @@ require_pattern "${DRILL_SCRIPT}" 'sha256sum' "restore drill must produce or com
 require_pattern "${DRILL_SCRIPT}" 'minio-data\.tar\.gz\.enc' "restore drill must inspect encrypted MinIO backup tarball"
 require_pattern "${DRILL_SCRIPT}" 'restore-privacy-gate\.txt' "restore drill must write privacy gate evidence"
 require_pattern "${DRILL_SCRIPT}" '\^status=pass\$' "restore drill must require a passing privacy gate status"
+require_pattern "${DRILL_SCRIPT}" 'LATEST_MEMBER_TOMBSTONE_FILE' "restore drill must prepare latest member tombstone evidence"
+require_pattern "${DRILL_SCRIPT}" 'CURRENT_MINIO_OBJECT_HASH_FILE' "restore drill must prepare current MinIO path hashes"
+require_pattern "${DRILL_SCRIPT}" 'RESTORED_MINIO_OBJECT_HASH_FILE' "restore drill must prepare restored MinIO path hashes"
 require_pattern "${DRILL_SCRIPT}" 'restore-drill-summary\.md' "restore drill must write a human-readable summary artifact"
 require_pattern "${DRILL_SCRIPT}" 'restore-drill-result\.env' "restore drill must write a machine-readable result artifact"
 require_pattern "${DRILL_SCRIPT}" 'RPO' "restore drill must record RPO"
@@ -135,7 +138,8 @@ ARTIFACT_DIR="${WORK_DIR}/artifacts"
 DEPLOY_DIR="${WORK_DIR}/deploy"
 KEY_FILE="${WORK_DIR}/backup-encryption.key"
 ROTATED_KEY_FILE="${WORK_DIR}/rotated-backup-encryption.key"
-mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}/post-img/posts/2026/01" "${FAKE_BIN_DIR}" "${DEPLOY_DIR}"
+mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}/post-img/posts/2026/01" "${WORK_DIR}/storage/minio/post-img/posts/2026/01" "${FAKE_BIN_DIR}" "${DEPLOY_DIR}"
+cp "${ROOT_DIR}/deploy/homeserver/docker-compose.prod.yml" "${DEPLOY_DIR}/docker-compose.prod.yml"
 printf 'test-backup-key\n' > "${KEY_FILE}"
 printf 'rotated-backup-key\n' > "${ROTATED_KEY_FILE}"
 chmod 600 "${KEY_FILE}"
@@ -163,6 +167,8 @@ encryption_key_file=${KEY_FILE}
 EOF
 printf 'fixture-object\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/sample.txt"
 printf 'fixture-object-2\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/zzz.txt"
+cp "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/sample.txt" "${WORK_DIR}/storage/minio/post-img/posts/2026/01/sample.txt"
+cp "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/zzz.txt" "${WORK_DIR}/storage/minio/post-img/posts/2026/01/zzz.txt"
 tar -C "${MINIO_SOURCE_DIR}" -czf - . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${KEY_FILE}" -out "${MINIO_BACKUP_DIR}/minio-data.tar.gz.enc"
 
 cat > "${FAKE_BIN_DIR}/docker" <<'SH'
@@ -170,6 +176,14 @@ cat > "${FAKE_BIN_DIR}/docker" <<'SH'
 set -euo pipefail
 
 case "${1:-}" in
+  compose)
+    if [[ "$*" == *"exec -T db_1 psql"* && "$*" == *"SELECT member_id"* ]]; then
+      echo "7"
+      exit 0
+    fi
+    echo "unexpected docker compose command: $*" >&2
+    exit 1
+    ;;
   run)
     echo "fake-postgres-container"
     ;;
@@ -207,6 +221,9 @@ case "${1:-}" in
           shift
         done
         case "${sql}" in
+          *"WITH latest(member_id)"*)
+            echo "${FAKE_PRIVACY_MISSING_LATEST_TOMBSTONES:-0}"
+            ;;
           *to_regclass*)
             echo "ready"
             ;;
@@ -276,8 +293,11 @@ require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_count=1$'
 require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^member_anonymization_violations=0$' "privacy gate must verify member anonymization"
 require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^active_session_violations=0$' "privacy gate must verify session revocation"
 require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^undeleted_post_violations=0$' "privacy gate must verify deleted-member posts"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^latest_tombstone_count=1$' "privacy gate must record latest tombstone evidence"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^missing_latest_tombstone_violations=0$' "privacy gate must reject revived members"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^restored_deleted_object_violations=0$' "privacy gate must reject revived objects"
 require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^minio_checksum=pass$' "privacy gate must verify MinIO checksum evidence"
-require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_replay=consistent-snapshot$' "privacy gate evidence must name the verification mode"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_replay=latest-state-compared$' "privacy gate evidence must name the verification mode"
 grep -q 'post-img/posts/2026/01/sample.txt' "${ARTIFACT_DIR}/minio-checksums.sha256"
 
 docker run --detach \
@@ -310,6 +330,9 @@ run_privacy_gate() {
   POSTGRES_DB="postgres" \
   MINIO_CHECKSUM_FILE="${ARTIFACT_DIR}/minio-checksums.sha256" \
   MINIO_SAMPLE_OBJECT="post-img/posts/2026/01/sample.txt" \
+  LATEST_MEMBER_TOMBSTONE_FILE="${WORK_DIR}/latest-member-tombstones.txt" \
+  CURRENT_MINIO_OBJECT_HASH_FILE="${WORK_DIR}/current-minio-object-hashes.txt" \
+  RESTORED_MINIO_OBJECT_HASH_FILE="${WORK_DIR}/restored-minio-object-hashes.txt" \
     "${PRIVACY_GATE_SCRIPT}"
 }
 
@@ -344,8 +367,20 @@ privacy_psql "
   INSERT INTO postgres.member_account_deletion SELECT * FROM public.member_account_deletion;
 "
 
+printf '7\n' > "${WORK_DIR}/latest-member-tombstones.txt"
+printf '%064d\n' 1 > "${WORK_DIR}/current-minio-object-hashes.txt"
+printf '%064d\n' 1 > "${WORK_DIR}/restored-minio-object-hashes.txt"
+
 run_privacy_gate > "${WORK_DIR}/privacy-gate-pass.txt"
 require_pattern "${WORK_DIR}/privacy-gate-pass.txt" '^status=pass$' "real PostgreSQL privacy fixture must pass"
+
+printf '8\n' > "${WORK_DIR}/latest-member-tombstones.txt"
+expect_privacy_failure "missing-latest-tombstone"
+printf '7\n' > "${WORK_DIR}/latest-member-tombstones.txt"
+
+: > "${WORK_DIR}/current-minio-object-hashes.txt"
+expect_privacy_failure "restored-deleted-object"
+printf '%064d\n' 1 > "${WORK_DIR}/current-minio-object-hashes.txt"
 
 privacy_psql "UPDATE public.member SET nickname = NULL, login_id = NULL WHERE id = 7;"
 expect_privacy_failure "null-anonymization"

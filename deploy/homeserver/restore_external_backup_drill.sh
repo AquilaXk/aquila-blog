@@ -36,6 +36,9 @@ RESTORE_PRIVACY_GATE_SCRIPT="${AQUILA_RESTORE_PRIVACY_GATE_SCRIPT:-}"
 RESTORE_PRIVACY_GATE_STATUS="fail"
 DECRYPT_BASE_DIR=""
 DECRYPT_DIR=""
+LATEST_MEMBER_TOMBSTONE_FILE=""
+CURRENT_MINIO_OBJECT_HASH_FILE=""
+RESTORED_MINIO_OBJECT_HASH_FILE=""
 
 log() {
   printf '[restore-drill] %s\n' "$*" >&2
@@ -375,6 +378,69 @@ checksum_minio_sample() {
   tar -xOzf "${MINIO_ARCHIVE_FILE}" "${tar_path}" | sha256sum | awk '{print $1}'
 }
 
+hash_minio_object_paths() {
+  local object_path
+  while IFS= read -r object_path; do
+    [[ -n "${object_path}" ]] || continue
+    printf '%s' "${object_path}" | sha256sum | awk '{print $1}'
+  done | sort -u
+}
+
+write_restored_minio_object_hashes() {
+  tar -tzf "${MINIO_ARCHIVE_FILE}" \
+    | sed 's#^\./##' \
+    | grep -Ev '(^$|/$|(^|/)format\.json$|(^|/)\.minio\.sys/)' \
+    | hash_minio_object_paths \
+    > "${RESTORED_MINIO_OBJECT_HASH_FILE}"
+  [[ -s "${RESTORED_MINIO_OBJECT_HASH_FILE}" ]] || fail "restored MinIO object hash evidence is empty"
+}
+
+write_current_minio_object_hashes() {
+  local minio_dir="${EXTERNAL_STORAGE_ROOT}/minio"
+  [[ -d "${minio_dir}" ]] || fail "missing current MinIO data directory: ${minio_dir}"
+  (
+    cd "${minio_dir}"
+    find . -type f -print \
+      | sed 's#^\./##' \
+      | grep -Ev '(^$|(^|/)format\.json$|(^|/)\.minio\.sys/)'
+  ) | hash_minio_object_paths > "${CURRENT_MINIO_OBJECT_HASH_FILE}"
+}
+
+write_latest_member_tombstones() {
+  local compose_env_file="${DEPLOY_DIR}/.env.prod.compose"
+  local compose_file="${DEPLOY_DIR}/docker-compose.prod.yml"
+  local db_base_name current_db_name
+
+  [[ -f "${compose_env_file}" ]] || compose_env_file="${DEPLOY_DIR}/.env.prod"
+  [[ -f "${compose_env_file}" ]] || fail "current deploy env is required for privacy evidence"
+  [[ -f "${compose_file}" ]] || fail "current compose file is required for privacy evidence"
+
+  db_base_name="$(read_key_from_file DB_BASE_NAME "${compose_env_file}")"
+  db_base_name="${db_base_name:-blog}"
+  current_db_name="$(read_key_from_file CUSTOM_PROD_DBNAME "${compose_env_file}")"
+  current_db_name="${current_db_name:-${db_base_name}_prod}"
+  [[ "${current_db_name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail "unsafe current PostgreSQL database name"
+
+  docker compose --env-file "${compose_env_file}" -f "${compose_file}" exec -T db_1 \
+    psql -U postgres -d "${current_db_name}" -At -v ON_ERROR_STOP=1 \
+    -c "SELECT member_id FROM public.member_account_deletion ORDER BY member_id;" \
+    | tr -d '\r' \
+    | sort -n -u \
+    > "${LATEST_MEMBER_TOMBSTONE_FILE}"
+  if grep -Eqv '^[0-9]+$' "${LATEST_MEMBER_TOMBSTONE_FILE}"; then
+    fail "latest member tombstone evidence contains an invalid identifier"
+  fi
+}
+
+prepare_latest_privacy_evidence() {
+  LATEST_MEMBER_TOMBSTONE_FILE="${DECRYPT_DIR}/latest-member-tombstones.txt"
+  CURRENT_MINIO_OBJECT_HASH_FILE="${DECRYPT_DIR}/current-minio-object-hashes.txt"
+  RESTORED_MINIO_OBJECT_HASH_FILE="${DECRYPT_DIR}/restored-minio-object-hashes.txt"
+  write_latest_member_tombstones
+  write_current_minio_object_hashes
+  write_restored_minio_object_hashes
+}
+
 run_restore_privacy_gate() {
   BACKUP_SET_ID="${BACKUP_SET_ID}" \
     BACKUP_CLASS="${BACKUP_CLASS}" \
@@ -382,6 +448,9 @@ run_restore_privacy_gate() {
     POSTGRES_DB="${POSTGRES_DB}" \
     MINIO_CHECKSUM_FILE="${CHECKSUM_FILE}" \
     MINIO_SAMPLE_OBJECT="${minio_sample_object}" \
+    LATEST_MEMBER_TOMBSTONE_FILE="${LATEST_MEMBER_TOMBSTONE_FILE}" \
+    CURRENT_MINIO_OBJECT_HASH_FILE="${CURRENT_MINIO_OBJECT_HASH_FILE}" \
+    RESTORED_MINIO_OBJECT_HASH_FILE="${RESTORED_MINIO_OBJECT_HASH_FILE}" \
     RESTORE_PRIVACY_GATE_FILE="${RESTORE_PRIVACY_GATE_FILE}" \
     "${RESTORE_PRIVACY_GATE_SCRIPT}" > "${RESTORE_PRIVACY_GATE_FILE}"
   [[ -s "${RESTORE_PRIVACY_GATE_FILE}" ]] || fail "restore privacy gate produced no evidence: ${RESTORE_PRIVACY_GATE_FILE}"
@@ -417,6 +486,7 @@ POSTGRES_DUMP_FILE="${DECRYPT_DIR}/dump.sql"
 MINIO_ARCHIVE_FILE="${DECRYPT_DIR}/minio-data.tar.gz"
 decrypt_file_to_path "${POSTGRES_ENCRYPTED_DUMP_FILE}" "${POSTGRES_DUMP_FILE}"
 decrypt_file_to_path "${MINIO_ENCRYPTED_ARCHIVE_FILE}" "${MINIO_ARCHIVE_FILE}"
+prepare_latest_privacy_evidence
 
 start_epoch="${AQUILA_RESTORE_DRILL_NOW_EPOCH:-$(date -u +%s)}"
 backup_epoch="$(parse_backup_epoch "${BACKUP_SET_ID}")"

@@ -33,6 +33,9 @@ require_env POSTGRES_CONTAINER
 require_env POSTGRES_DB
 require_env MINIO_CHECKSUM_FILE
 require_env MINIO_SAMPLE_OBJECT
+require_env LATEST_MEMBER_TOMBSTONE_FILE
+require_env CURRENT_MINIO_OBJECT_HASH_FILE
+require_env RESTORED_MINIO_OBJECT_HASH_FILE
 
 [[ "${BACKUP_SET_ID}" =~ ^[0-9]{8}-[0-9]{6}$ ]] || fail "unsafe BACKUP_SET_ID"
 case "${BACKUP_CLASS}" in
@@ -53,6 +56,29 @@ read -r minio_checksum minio_object < "${MINIO_CHECKSUM_FILE}" \
 [[ "${minio_checksum}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid MinIO SHA-256 evidence"
 [[ "${minio_object}" == "${MINIO_SAMPLE_OBJECT}" ]] || fail "MinIO checksum object does not match selected sample"
 
+[[ -f "${LATEST_MEMBER_TOMBSTONE_FILE}" ]] || fail "latest member tombstone evidence is missing"
+[[ -f "${CURRENT_MINIO_OBJECT_HASH_FILE}" ]] || fail "current MinIO object hash evidence is missing"
+[[ -s "${RESTORED_MINIO_OBJECT_HASH_FILE}" ]] || fail "restored MinIO object hash evidence is missing or empty"
+
+for hash_file in "${CURRENT_MINIO_OBJECT_HASH_FILE}" "${RESTORED_MINIO_OBJECT_HASH_FILE}"; do
+  if [[ -s "${hash_file}" ]] && grep -Eqv '^[0-9a-f]{64}$' "${hash_file}"; then
+    fail "MinIO object hash evidence contains an invalid hash"
+  fi
+  sort -c -u "${hash_file}" >/dev/null 2>&1 || fail "MinIO object hash evidence must be sorted and unique"
+done
+
+restored_deleted_object_violations="$(comm -23 "${RESTORED_MINIO_OBJECT_HASH_FILE}" "${CURRENT_MINIO_OBJECT_HASH_FILE}" | wc -l | tr -d ' ')"
+
+latest_tombstone_count=0
+latest_tombstone_values=""
+while IFS= read -r member_id || [[ -n "${member_id}" ]]; do
+  [[ "${member_id}" =~ ^[1-9][0-9]*$ ]] || fail "latest member tombstone evidence contains an invalid identifier"
+  latest_tombstone_values+="${latest_tombstone_values:+,}(${member_id})"
+  latest_tombstone_count=$((latest_tombstone_count + 1))
+done < "${LATEST_MEMBER_TOMBSTONE_FILE}"
+sort -n -c -u "${LATEST_MEMBER_TOMBSTONE_FILE}" >/dev/null 2>&1 \
+  || fail "latest member tombstone evidence must be sorted and unique"
+
 schema_status="$(psql_scalar "
   SELECT CASE
     WHEN to_regclass('public.member_account_deletion') IS NOT NULL
@@ -66,6 +92,16 @@ schema_status="$(psql_scalar "
 [[ "${schema_status}" == "ready" ]] || fail "required privacy schema is missing from restored backup"
 
 tombstone_count="$(psql_scalar "SELECT COUNT(*) FROM public.member_account_deletion;")"
+missing_latest_tombstone_violations="0"
+if [[ "${latest_tombstone_count}" -gt 0 ]]; then
+  missing_latest_tombstone_violations="$(psql_scalar "
+    WITH latest(member_id) AS (VALUES ${latest_tombstone_values})
+    SELECT COUNT(*)
+    FROM latest l
+    LEFT JOIN public.member_account_deletion mad ON mad.member_id = l.member_id
+    WHERE mad.member_id IS NULL;
+  ")"
+fi
 member_anonymization_violations="$(psql_scalar "
   SELECT COUNT(*)
   FROM public.member_account_deletion mad
@@ -92,26 +128,36 @@ undeleted_post_violations="$(psql_scalar "
 
 for count in \
   "${tombstone_count}" \
+  "${latest_tombstone_count}" \
+  "${missing_latest_tombstone_violations}" \
   "${member_anonymization_violations}" \
   "${active_session_violations}" \
-  "${undeleted_post_violations}"; do
+  "${undeleted_post_violations}" \
+  "${restored_deleted_object_violations}"; do
   [[ "${count}" =~ ^[0-9]+$ ]] || fail "privacy invariant query returned a non-numeric count"
 done
 
 [[ "${member_anonymization_violations}" == "0" ]] \
   || fail "deleted-member anonymization violations=${member_anonymization_violations}"
+[[ "${missing_latest_tombstone_violations}" == "0" ]] \
+  || fail "missing latest member tombstone violations=${missing_latest_tombstone_violations}"
 [[ "${active_session_violations}" == "0" ]] \
   || fail "active deleted-member session violations=${active_session_violations}"
 [[ "${undeleted_post_violations}" == "0" ]] \
   || fail "undeleted deleted-member post violations=${undeleted_post_violations}"
+[[ "${restored_deleted_object_violations}" == "0" ]] \
+  || fail "restored deleted MinIO object violations=${restored_deleted_object_violations}"
 
 printf 'status=pass\n'
 printf 'backup_set_id=%s\n' "${BACKUP_SET_ID}"
 printf 'backup_class=%s\n' "${BACKUP_CLASS}"
-printf 'tombstone_replay=consistent-snapshot\n'
+printf 'tombstone_replay=latest-state-compared\n'
 printf 'tombstone_count=%s\n' "${tombstone_count}"
+printf 'latest_tombstone_count=%s\n' "${latest_tombstone_count}"
+printf 'missing_latest_tombstone_violations=%s\n' "${missing_latest_tombstone_violations}"
 printf 'member_anonymization_violations=%s\n' "${member_anonymization_violations}"
 printf 'active_session_violations=%s\n' "${active_session_violations}"
 printf 'undeleted_post_violations=%s\n' "${undeleted_post_violations}"
+printf 'restored_deleted_object_violations=%s\n' "${restored_deleted_object_violations}"
 printf 'minio_checksum=pass\n'
 printf 'traffic_open=blocked_until_gate_pass\n'

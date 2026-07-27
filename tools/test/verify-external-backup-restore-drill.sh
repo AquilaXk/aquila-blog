@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+BACKUP_SCRIPT="${ROOT_DIR}/deploy/homeserver/create_external_backup.sh"
 DRILL_SCRIPT="${ROOT_DIR}/deploy/homeserver/restore_external_backup_drill.sh"
 PRIVACY_GATE_SCRIPT="${ROOT_DIR}/restore-privacy-gate.sh"
 WORKFLOW="${ROOT_DIR}/.github/workflows/backup-restore-drill.yml"
@@ -62,6 +63,9 @@ require_pattern_count() {
     exit 1
   fi
 }
+
+require_file "${BACKUP_SCRIPT}" "external backup script"
+require_pattern "${BACKUP_SCRIPT}" 'pg_dump --no-owner --no-acl' "PostgreSQL backup must omit production role ownership and ACLs"
 
 require_file "${DRILL_SCRIPT}" "restore drill script"
 require_executable "${DRILL_SCRIPT}" "restore drill script"

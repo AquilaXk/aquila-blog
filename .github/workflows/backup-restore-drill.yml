@@ -40,6 +40,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  HOME_TAILSCALE_HOST: ${{ vars.HOME_TAILSCALE_HOST }}
 
 jobs:
   restore-drill:
@@ -58,7 +59,6 @@ jobs:
           TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
           HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
-          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
           HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
           HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
         shell: bash
@@ -69,7 +69,7 @@ jobs:
             TS_OAUTH_SECRET
             HOME_SSH_USER
             HOME_APP_DIR
-            HOME_HOST
+            HOME_TAILSCALE_HOST
             HOME_SSH_KEY
             HOME_KNOWN_HOSTS
           )
@@ -82,6 +82,11 @@ jobs:
             fi
             echo "${key} present"
           done
+
+          if [[ ! "${HOME_TAILSCALE_HOST}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.[a-z0-9]([a-z0-9-]*[a-z0-9])?\.ts\.net$ ]]; then
+            echo "HOME_TAILSCALE_HOST must be a full MagicDNS FQDN ending in .ts.net." >&2
+            exit 1
+          fi
 
       - name: Connect to Tailscale
         uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
@@ -113,7 +118,6 @@ jobs:
 
       - name: Run restore drill on home server
         env:
-          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
           HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
           HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
@@ -150,7 +154,7 @@ jobs:
             exit 1
           fi
 
-          REMOTE_TMP_DIR="$(ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_HOST}" "umask 077 && mktemp -d /tmp/aquila-restore-drill.XXXXXX")"
+          REMOTE_TMP_DIR="$(ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_TAILSCALE_HOST}" "umask 077 && mktemp -d /tmp/aquila-restore-drill.XXXXXX")"
           case "${REMOTE_TMP_DIR}" in
             /tmp/aquila-restore-drill.*) ;;
             *)
@@ -160,15 +164,15 @@ jobs:
           esac
 
           cleanup_remote_tmp() {
-            ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_HOST}" "rm -rf -- ${REMOTE_TMP_DIR}" || true
+            ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_TAILSCALE_HOST}" "rm -rf -- ${REMOTE_TMP_DIR}" || true
           }
           trap cleanup_remote_tmp EXIT
 
           scp -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -P "${PORT}" \
             deploy/homeserver/restore_external_backup_drill.sh \
-            "${HOME_SSH_USER}@${HOME_HOST}:${REMOTE_TMP_DIR}/"
+            "${HOME_SSH_USER}@${HOME_TAILSCALE_HOST}:${REMOTE_TMP_DIR}/"
 
-          ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_HOST}" \
+          ssh -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "${PORT}" "${HOME_SSH_USER}@${HOME_TAILSCALE_HOST}" \
             "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' BACKUP_SET_ID='${BACKUP_SET_ID}' BACKUP_CLASS='${BACKUP_CLASS}' RPO_TARGET_MINUTES='${RPO_TARGET_MINUTES}' RTO_TARGET_MINUTES='${RTO_TARGET_MINUTES}' bash -s" <<'REMOTE'
           set -euo pipefail
 
@@ -192,7 +196,7 @@ jobs:
           REMOTE
 
           scp -r -i "${SSH_DIR}/home_key" -o UserKnownHostsFile="${SSH_DIR}/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -P "${PORT}" \
-            "${HOME_SSH_USER}@${HOME_HOST}:${REMOTE_TMP_DIR}/artifacts/." \
+            "${HOME_SSH_USER}@${HOME_TAILSCALE_HOST}:${REMOTE_TMP_DIR}/artifacts/." \
             "${LOCAL_ARTIFACT_DIR}/"
 
           {

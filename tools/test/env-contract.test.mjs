@@ -1898,8 +1898,11 @@ test("runtime-split memory tuner allocates the 4096MiB RSS budget and rejects lo
       [
         "AUTO_MEMORY_TUNER_ENABLED=true",
         "RUNTIME_SPLIT_ENABLED=true",
-        "AUTO_MEMORY_TUNER_MAX_BUDGET_MB=2816",
+        "AUTO_MEMORY_TUNER_MAX_BUDGET_MB=4095",
+        "AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB=2048",
         "AUTO_MEMORY_TUNER_MIN_BUDGET_MB=1280",
+        "read_host_mem_total_mb() { echo 8192; }",
+        "upsert_env_key() { :; }",
         allocatorHelpers,
         memoryTuner,
         "apply_auto_memory_tuner",
@@ -1908,7 +1911,14 @@ test("runtime-split memory tuner allocates the 4096MiB RSS budget and rejects lo
     )
     assert.throws(
       () => execFileSync("bash", [invalidBudgetScript], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
-      /Command failed/,
+      (error) => {
+        assert.equal(error.status, 1)
+        assert.equal(
+          error.stderr.trim(),
+          "auto-memory-tuner guard: invalid max budget (max_budget_mb=4095 < mode_min_budget_mb=4096)",
+        )
+        return true
+      },
     )
   } finally {
     rmSync(workDir, { recursive: true, force: true })

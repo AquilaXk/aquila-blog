@@ -121,7 +121,7 @@ print_notification_sse_status() {
 
   local probe_output
   probe_output="$(notification_sse_probe_output "${api_domain}")"
-  if [[ "${probe_output}" == *"event: connected"* && "${probe_output}" == *"event: heartbeat"* ]]; then
+  if grep -qx 'event:[[:space:]]*connected' <<< "${probe_output}" && grep -qx 'event:[[:space:]]*heartbeat' <<< "${probe_output}"; then
     echo "notification sse probe: OK (connected+heartbeat)"
   else
     echo "notification sse probe: FAIL"

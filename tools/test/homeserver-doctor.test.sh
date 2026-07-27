@@ -115,6 +115,8 @@ printf '%s\n' 'API_DOMAIN=api.example.com' > "${env_minimal}"
 
 eval "$(extract_function env_value)"
 eval "$(extract_function print_env_key_status)"
+eval "$(extract_function trim_quotes)"
+eval "$(extract_function print_notification_sse_status)"
 
 # shellcheck disable=SC2034  # 원본에서 떼어 온 env_value/print_env_key_status가 읽는 입력이다
 ENV_FILE="${env_full}"
@@ -147,6 +149,29 @@ fi
 ENV_FILE="${env_minimal}"
 if [ "$(print_env_key_status "ADMIN_EMBED_ORIGINS")" != "ADMIN_EMBED_ORIGINS=MISSING" ]; then
   fail "expected an absent ADMIN_EMBED_ORIGINS to report MISSING"
+fi
+
+notification_sse_probe_output() {
+  printf '%s\n' "${notification_sse_fixture}"
+}
+
+# SSE의 field value 앞 공백은 선택 사항이다. 실제 서버는 event:connected 형식을 사용하므로
+# 두 필수 이벤트를 받았으면 max-time 종료 진단이 섞여 있어도 정상으로 판정해야 한다.
+notification_sse_fixture="$(printf '%s\n' \
+  'curl: (28) Operation timed out after 35002 milliseconds with 218 bytes received' \
+  'id:connected-1' \
+  'event:connected' \
+  'data:{"connectedAt":"2026-07-26T10:47:40Z"}' \
+  '' \
+  'id:heartbeat-1' \
+  'event:heartbeat' \
+  'data:{"heartbeatAt":"2026-07-26T10:48:10Z"}')"
+notification_sse_output="$(print_notification_sse_status)"
+if [[ "${notification_sse_output}" != *"notification sse probe: OK (connected+heartbeat)"* ]]; then
+  fail "expected event fields without an optional space to pass the SSE probe, got: ${notification_sse_output}"
+fi
+if [[ "${notification_sse_output}" == *"notification sse probe: FAIL"* ]]; then
+  fail "expected a max-time termination after both SSE events not to be reported as a probe failure"
 fi
 
 # ADMIN_EMBED_ORIGINS가 비면 Caddy가 frame-ancestors 허용목록 없이 CSP를 내려 관리자 UI의

@@ -870,21 +870,20 @@ scaled_limit_mb() {
 
 allocate_runtime_split_memory_limits() {
   local budget_mb="$1"
-  local blue_min=640
-  local read_min=512
-  local admin_min=512
-  local worker_min=512
+  local blue_min=704
+  local read_min=832
+  local admin_min=896
+  local worker_min=896
   local blue
   local read
   local admin
   local worker
   local total
 
-  # 2816 is the original runtime-split scaling reference; the active cap is AUTO_MEMORY_TUNER_MAX_BUDGET_MB.
-  blue="$(scaled_limit_mb 512 "${budget_mb}" 2816 "${blue_min}")"
-  read="$(scaled_limit_mb 640 "${budget_mb}" 2816 "${read_min}")"
-  admin="$(scaled_limit_mb 512 "${budget_mb}" 2816 "${admin_min}")"
-  worker="$(scaled_limit_mb 768 "${budget_mb}" 2816 "${worker_min}")"
+  blue="$(scaled_limit_mb 704 "${budget_mb}" 4096 "${blue_min}")"
+  read="$(scaled_limit_mb 832 "${budget_mb}" 4096 "${read_min}")"
+  admin="$(scaled_limit_mb 896 "${budget_mb}" 4096 "${admin_min}")"
+  worker="$(scaled_limit_mb 896 "${budget_mb}" 4096 "${worker_min}")"
 
   total=$(( (blue * 2) + read + admin + worker ))
   while (( total > budget_mb )); do
@@ -975,12 +974,12 @@ apply_auto_memory_tuner() {
   local mode_min_budget_mb=1280
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     mode="runtime-split"
-    mode_min_budget_mb=3200
+    mode_min_budget_mb=4096
   fi
 
   if (( AUTO_MEMORY_TUNER_MAX_BUDGET_MB < mode_min_budget_mb )); then
-    echo "auto-memory-tuner guard: skip (max_budget_mb=${AUTO_MEMORY_TUNER_MAX_BUDGET_MB} < mode_min_budget_mb=${mode_min_budget_mb})" >&2
-    return 0
+    echo "auto-memory-tuner guard: invalid max budget (max_budget_mb=${AUTO_MEMORY_TUNER_MAX_BUDGET_MB} < mode_min_budget_mb=${mode_min_budget_mb})" >&2
+    return 1
   fi
 
   local host_total_mb

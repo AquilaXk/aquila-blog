@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
@@ -176,19 +177,14 @@ test("postgres_exporter image pins, compose flags, and blind-spot alerts stay co
   assert(exporterStart >= 0, "postgres_exporter service is missing from the compose file")
   // slice() would silently widen to the whole file if the end marker moved (negative index).
   assert(grafanaStart > exporterStart, "grafana must still follow postgres_exporter in the compose file")
-  const exporterBlock = compose.slice(exporterStart, grafanaStart)
-  // Comments in this block legitimately name the flag to explain why it is absent.
-  const exporterDirectives = exporterBlock
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("#"))
-    .join("\n")
-
-  // --collector.stat_checkpointer does not exist before exporter v0.17.0, and the deployed
-  // image comes from a secret the repo cannot read. Passing the flag while the server still
-  // runs v0.15.0 makes the exporter exit 1 in a restart loop, which drops every pg_* series
-  // and silently disables AquilaPostgresDiskUsageHigh / ConnectionSaturationHigh. Keep the
-  // exporter free of collector flags until a follow-up confirms v0.20.1 is live (#1426).
-  assert.doesNotMatch(exporterDirectives, /--collector\./)
+  const resolvedCompose = JSON.parse(
+    execFileSync(
+      "docker",
+      ["compose", "-f", composePath, "config", "--no-interpolate", "--format", "json"],
+      { encoding: "utf8" },
+    ),
+  )
+  assert.deepEqual(resolvedCompose.services.postgres_exporter.command, ["--collector.stat_checkpointer"])
 
   // Drift guard only: keeps the three tracked fallback pins from diverging or rolling back
   // below v0.17.0, the first release carrying the pg_stat_checkpointer fix. These three did

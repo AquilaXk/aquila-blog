@@ -159,6 +159,7 @@ const baseHomeServerEnv = [
   "MONITOR_DOMAIN=status.aquilaxk.site",
   "GRAFANA_DOMAIN=grafana.aquilaxk.site",
   "PROMETHEUS_DOMAIN=prometheus.aquilaxk.site",
+  "ADMIN_EMBED_ORIGINS=https://www.aquilaxk.site https://aquilaxk.site",
   "CADDY_EMAIL=ops@aquilaxk.site",
   "CF_TUNNEL_TOKEN=cloudflare-tunnel-token-value",
   "CLOUDFLARED_IMAGE=cloudflare/cloudflared@sha256:4444444444444444444444444444444444444444444444444444444444444444",
@@ -259,6 +260,21 @@ test("home-server-source contract accepts a complete deployment env without BACK
   })
 
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+})
+
+test("home-server-source requires admin embed origins before SSH deployment", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: baseHomeServerEnv.replace(/^ADMIN_EMBED_ORIGINS=.*(?:\n|$)/m, ""),
+  })
+
+  assert.equal(result.ok, false)
+  assert(
+    result.errors.some((error) => error.key === "ADMIN_EMBED_ORIGINS" && error.message === "is required"),
+    result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
 })
 
 test("home-server-source contract rejects enabled AI summary before SSH deployment", async () => {

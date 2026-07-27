@@ -115,6 +115,8 @@ printf '%s\n' 'API_DOMAIN=api.example.com' > "${env_minimal}"
 
 eval "$(extract_function env_value)"
 eval "$(extract_function print_env_key_status)"
+eval "$(extract_function trim_quotes)"
+eval "$(extract_function print_notification_sse_status)"
 
 # shellcheck disable=SC2034  # 원본에서 떼어 온 env_value/print_env_key_status가 읽는 입력이다
 ENV_FILE="${env_full}"
@@ -147,6 +149,58 @@ fi
 ENV_FILE="${env_minimal}"
 if [ "$(print_env_key_status "ADMIN_EMBED_ORIGINS")" != "ADMIN_EMBED_ORIGINS=MISSING" ]; then
   fail "expected an absent ADMIN_EMBED_ORIGINS to report MISSING"
+fi
+
+notification_sse_probe_output() {
+  printf '%s\n' "${notification_sse_fixture}"
+}
+
+# SSE의 field value 앞 공백은 선택 사항이다. 실제 서버는 event:connected 형식을 사용하므로
+# 두 필수 이벤트를 받았으면 max-time 종료 진단이 섞여 있어도 정상으로 판정해야 한다.
+notification_sse_fixture="$(printf '%s\n' \
+  'curl: (28) Operation timed out after 35002 milliseconds with 218 bytes received' \
+  'id:connected-1' \
+  'event:connected' \
+  'data:{"connectedAt":"2026-07-26T10:47:40Z"}' \
+  '' \
+  'id:heartbeat-1' \
+  'event:heartbeat' \
+  'data:{"heartbeatAt":"2026-07-26T10:48:10Z"}')"
+notification_sse_output="$(print_notification_sse_status)"
+if [[ "${notification_sse_output}" != *"notification sse probe: OK (connected+heartbeat)"* ]]; then
+  fail "expected event fields without an optional space to pass the SSE probe, got: ${notification_sse_output}"
+fi
+if [[ "${notification_sse_output}" == *"notification sse probe: FAIL"* ]]; then
+  fail "expected a max-time termination after both SSE events not to be reported as a probe failure"
+fi
+
+# Mount Sync는 runtime-split placeholder 해석을 caddy_upstream_probe.sh 한 곳에 맡겨야 한다.
+# 여기서는 doctor의 실제 대입문을 실행해 host/mounted 결과가 공허한 <none>으로 돌아가지 않는지 본다.
+mount_probe_assignments="$(awk '
+  /^host_upstream=/ { print }
+  /^mounted_upstream=/ { print }
+' "${doctor}")"
+if [ "$(printf '%s\n' "${mount_probe_assignments}" | grep -c '_upstream=' || true)" -ne 2 ]; then
+  fail "expected to extract both Caddy Mount Sync upstream assignments"
+fi
+caddy_probe_fixture_dir="${workdir}/caddy-probe"
+mkdir -p "${caddy_probe_fixture_dir}/caddy"
+printf '%s\n' 'reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080' > "${caddy_probe_fixture_dir}/caddy/Caddyfile"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' 'set -euo pipefail'
+  printf '%s\n' 'case "${1:-}" in host | mounted) printf "back_admin\\n" ;; *) exit 2 ;; esac'
+} > "${caddy_probe_fixture_dir}/caddy_upstream_probe.sh"
+chmod +x "${caddy_probe_fixture_dir}/caddy_upstream_probe.sh"
+SCRIPT_DIR="${caddy_probe_fixture_dir}"
+CADDY_HOST_FILE="${caddy_probe_fixture_dir}/caddy/Caddyfile"
+CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
+compose() {
+  return 0
+}
+eval "${mount_probe_assignments}"
+if [ "${host_upstream}" != "back_admin" ] || [ "${mounted_upstream}" != "back_admin" ]; then
+  fail "expected placeholder-aware Caddy Mount Sync probes to stay non-empty, got host=${host_upstream:-<none>} mounted=${mounted_upstream:-<none>}"
 fi
 
 # ADMIN_EMBED_ORIGINS가 비면 Caddy가 frame-ancestors 허용목록 없이 CSP를 내려 관리자 UI의

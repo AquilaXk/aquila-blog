@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DRILL_SCRIPT="${ROOT_DIR}/deploy/homeserver/restore_external_backup_drill.sh"
+PRIVACY_GATE_SCRIPT="${ROOT_DIR}/restore-privacy-gate.sh"
 WORKFLOW="${ROOT_DIR}/.github/workflows/backup-restore-drill.yml"
 LAUNCH_GATE_DOC="${ROOT_DIR}/docs/design/launch-gate-operations.md"
 
@@ -64,6 +65,8 @@ require_pattern_count() {
 
 require_file "${DRILL_SCRIPT}" "restore drill script"
 require_executable "${DRILL_SCRIPT}" "restore drill script"
+require_file "${PRIVACY_GATE_SCRIPT}" "tracked restore privacy gate"
+require_executable "${PRIVACY_GATE_SCRIPT}" "tracked restore privacy gate"
 require_pattern "${DRILL_SCRIPT}" '^umask 077$' "restore drill must protect generated artifacts"
 require_pattern "${DRILL_SCRIPT}" 'psql .*POSTGRES_DUMP_FILE|pg_restore .*POSTGRES_DUMP_FILE' "restore drill must restore the PostgreSQL dump"
 require_pattern "${DRILL_SCRIPT}" 'backup-encryption\.key' "restore drill must default to the separated backup encryption key file"
@@ -112,7 +115,15 @@ require_pattern "${LAUNCH_GATE_DOC}" 'RPO/RTO' "launch gate must document restor
 TMP_BASE="${TMPDIR:-/tmp}"
 TMP_BASE="${TMP_BASE%/}"
 WORK_DIR="$(mktemp -d "${TMP_BASE}/aquila-restore-drill-test.XXXXXX")"
-trap 'rm -rf "${WORK_DIR}"' EXIT
+PRIVACY_DB_CONTAINER="aquila-restore-drill-test-${RANDOM}-$$"
+PRIVACY_DB_IMAGE="jangka512/pgj@sha256:a8bfcb8e5c64805429cd1406d0840ba1c13f70830e73d9f5e4a63cd7c1b62da7"
+
+cleanup() {
+  docker rm -f -v "${PRIVACY_DB_CONTAINER}" >/dev/null 2>&1 || true
+  rm -rf "${WORK_DIR}"
+}
+
+trap cleanup EXIT
 
 BACKUP_ROOT="${WORK_DIR}/storage/backups"
 BACKUP_SET_ID="20260101-010203"
@@ -124,7 +135,6 @@ ARTIFACT_DIR="${WORK_DIR}/artifacts"
 DEPLOY_DIR="${WORK_DIR}/deploy"
 KEY_FILE="${WORK_DIR}/backup-encryption.key"
 ROTATED_KEY_FILE="${WORK_DIR}/rotated-backup-encryption.key"
-PRIVACY_GATE_SCRIPT="${WORK_DIR}/restore-privacy-gate.sh"
 mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}/post-img/posts/2026/01" "${FAKE_BIN_DIR}" "${DEPLOY_DIR}"
 printf 'test-backup-key\n' > "${KEY_FILE}"
 printf 'rotated-backup-key\n' > "${ROTATED_KEY_FILE}"
@@ -154,19 +164,6 @@ EOF
 printf 'fixture-object\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/sample.txt"
 printf 'fixture-object-2\n' > "${MINIO_SOURCE_DIR}/post-img/posts/2026/01/zzz.txt"
 tar -C "${MINIO_SOURCE_DIR}" -czf - . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${KEY_FILE}" -out "${MINIO_BACKUP_DIR}/minio-data.tar.gz.enc"
-
-cat > "${PRIVACY_GATE_SCRIPT}" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-[[ "${BACKUP_SET_ID}" == "20260101-010203" ]]
-[[ "${BACKUP_CLASS}" == "daily" ]]
-[[ -n "${POSTGRES_CONTAINER}" ]]
-[[ -s "${MINIO_CHECKSUM_FILE}" ]]
-printf 'status=pass\n'
-printf 'tombstone_replay=operator-gate-fixture\n'
-printf 'traffic_open=blocked_until_gate_pass\n'
-SH
-chmod +x "${PRIVACY_GATE_SCRIPT}"
 
 cat > "${FAKE_BIN_DIR}/docker" <<'SH'
 #!/usr/bin/env bash
@@ -210,6 +207,21 @@ case "${1:-}" in
           shift
         done
         case "${sql}" in
+          *to_regclass*)
+            echo "ready"
+            ;;
+          *"JOIN public.member m"*)
+            echo "${FAKE_PRIVACY_MEMBER_VIOLATIONS:-0}"
+            ;;
+          *"JOIN public.member_session ms"*)
+            echo "${FAKE_PRIVACY_ACTIVE_SESSIONS:-0}"
+            ;;
+          *"JOIN public.post p"*)
+            echo "${FAKE_PRIVACY_UNDELETED_POSTS:-0}"
+            ;;
+          *"FROM public.member_account_deletion;"*)
+            echo "1"
+            ;;
           *flyway_schema_history*)
             echo "32"
             ;;
@@ -259,7 +271,95 @@ require_pattern "${ARTIFACT_DIR}/restore-drill-result.env" '^RESTORE_PRIVACY_GAT
 require_pattern "${ARTIFACT_DIR}/restore-drill-result.env" 'post-img/posts/2026/01/sample.txt' "result.env must include sampled object key"
 require_pattern "${ARTIFACT_DIR}/restore-drill-summary.md" 'Backup Restore Drill Summary' "summary must be generated"
 require_pattern "${ARTIFACT_DIR}/restore-drill-summary.md" 'Restore privacy gate: `pass`' "summary must include privacy gate status"
-require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_replay=operator-gate-fixture$' "privacy gate evidence must include tombstone replay marker"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^status=pass$' "privacy gate evidence must pass"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_count=1$' "privacy gate evidence must record tombstone count"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^member_anonymization_violations=0$' "privacy gate must verify member anonymization"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^active_session_violations=0$' "privacy gate must verify session revocation"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^undeleted_post_violations=0$' "privacy gate must verify deleted-member posts"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^minio_checksum=pass$' "privacy gate must verify MinIO checksum evidence"
+require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_replay=consistent-snapshot$' "privacy gate evidence must name the verification mode"
 grep -q 'post-img/posts/2026/01/sample.txt' "${ARTIFACT_DIR}/minio-checksums.sha256"
+
+docker run --detach \
+  --name "${PRIVACY_DB_CONTAINER}" \
+  --env POSTGRES_HOST_AUTH_METHOD=trust \
+  "${PRIVACY_DB_IMAGE}" >/dev/null
+
+privacy_db_ready=false
+for _ in {1..30}; do
+  if docker exec "${PRIVACY_DB_CONTAINER}" pg_isready -U postgres -d postgres >/dev/null 2>&1; then
+    privacy_db_ready=true
+    break
+  fi
+  sleep 1
+done
+[[ "${privacy_db_ready}" == "true" ]] || {
+  echo "privacy fixture PostgreSQL did not become ready" >&2
+  exit 1
+}
+
+privacy_psql() {
+  docker exec "${PRIVACY_DB_CONTAINER}" \
+    psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "$1" >/dev/null
+}
+
+run_privacy_gate() {
+  BACKUP_SET_ID="${BACKUP_SET_ID}" \
+  BACKUP_CLASS="daily" \
+  POSTGRES_CONTAINER="${PRIVACY_DB_CONTAINER}" \
+  POSTGRES_DB="postgres" \
+  MINIO_CHECKSUM_FILE="${ARTIFACT_DIR}/minio-checksums.sha256" \
+  MINIO_SAMPLE_OBJECT="post-img/posts/2026/01/sample.txt" \
+    "${PRIVACY_GATE_SCRIPT}"
+}
+
+expect_privacy_failure() {
+  local scenario="$1"
+  if run_privacy_gate > "${WORK_DIR}/privacy-gate-${scenario}.txt" 2>&1; then
+    echo "privacy gate unexpectedly passed: ${scenario}" >&2
+    exit 1
+  fi
+}
+
+privacy_psql "
+  CREATE SCHEMA postgres;
+  CREATE TABLE public.member (
+    id bigint PRIMARY KEY,
+    deleted_at timestamptz,
+    email text,
+    password text,
+    nickname text,
+    login_id text
+  );
+  CREATE TABLE public.member_account_deletion (member_id bigint PRIMARY KEY);
+  CREATE TABLE public.member_session (member_id bigint, revoked_at timestamptz);
+  CREATE TABLE public.post (author_id bigint, deleted_at timestamptz);
+  CREATE TABLE postgres.member (LIKE public.member INCLUDING ALL);
+  CREATE TABLE postgres.member_account_deletion (LIKE public.member_account_deletion INCLUDING ALL);
+  CREATE TABLE postgres.member_session (LIKE public.member_session INCLUDING ALL);
+  CREATE TABLE postgres.post (LIKE public.post INCLUDING ALL);
+  INSERT INTO public.member VALUES (7, now(), NULL, NULL, '탈퇴한 사용자', 'deleted-7-fixture');
+  INSERT INTO public.member_account_deletion VALUES (7);
+  INSERT INTO postgres.member SELECT * FROM public.member;
+  INSERT INTO postgres.member_account_deletion SELECT * FROM public.member_account_deletion;
+"
+
+run_privacy_gate > "${WORK_DIR}/privacy-gate-pass.txt"
+require_pattern "${WORK_DIR}/privacy-gate-pass.txt" '^status=pass$' "real PostgreSQL privacy fixture must pass"
+
+privacy_psql "UPDATE public.member SET nickname = NULL, login_id = NULL WHERE id = 7;"
+expect_privacy_failure "null-anonymization"
+
+privacy_psql "
+  UPDATE public.member SET nickname = '탈퇴한 사용자', login_id = 'deleted-7-fixture' WHERE id = 7;
+  INSERT INTO public.member_session VALUES (7, NULL);
+"
+expect_privacy_failure "active-session"
+
+privacy_psql "
+  TRUNCATE public.member_session;
+  INSERT INTO public.post VALUES (7, NULL);
+"
+expect_privacy_failure "undeleted-post"
 
 echo "[external-backup-restore-drill] ok"

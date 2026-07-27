@@ -722,6 +722,7 @@ jobs:
           mkdir -p deploy/homeserver
 
           chmod +x \
+            restore-privacy-gate.sh \
             deploy/homeserver/create_deploy_backup.sh \
             deploy/homeserver/create_external_backup.sh \
             deploy/homeserver/prune_external_backups.sh \

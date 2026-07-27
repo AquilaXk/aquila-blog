@@ -1866,20 +1866,53 @@ test("blue-green deploy waits longer for candidate Flyway startup only", () => {
   )
 })
 
-test("runtime-split memory tuner keeps backend color startup headroom", () => {
+test("runtime-split memory tuner allocates the 4096MiB RSS budget and rejects lower explicit caps", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
-  const splitAllocator = deployScript.slice(
-    deployScript.indexOf("allocate_runtime_split_memory_limits()"),
+  const allocatorHelpers = deployScript.slice(
+    deployScript.indexOf("round_to_step_mb()"),
     deployScript.indexOf("allocate_single_runtime_memory_limits()"),
   )
-
-  assert.match(
-    deployScript,
-    /AUTO_MEMORY_TUNER_MAX_BUDGET_MB="\$\{AUTO_MEMORY_TUNER_MAX_BUDGET_MB:-4096\}"/,
+  const memoryTuner = deployScript.slice(
+    deployScript.indexOf("apply_auto_memory_tuner()"),
+    deployScript.indexOf("resolve_local_repo_digest()"),
   )
-  assert.match(splitAllocator, /local blue_min=640/)
-  assert.match(deployScript, /mode_min_budget_mb=3200/)
-  assert(!splitAllocator.includes("local blue_min=384"))
+  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-runtime-split-memory-"))
+
+  try {
+    const allocationScript = path.join(workDir, "allocation.sh")
+    writeFileSync(
+      allocationScript,
+      [
+        allocatorHelpers,
+        "allocate_runtime_split_memory_limits 4096",
+        'printf "%s %s %s %s %s %s %s %s\\n" "${AUTO_TUNED_BACK_MEM_LIMIT_MB}" "${AUTO_TUNED_BACK_READ_MEM_LIMIT_MB}" "${AUTO_TUNED_BACK_ADMIN_MEM_LIMIT_MB}" "${AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB}" "${AUTO_TUNED_BACK_MEM_RESERVATION_MB}" "${AUTO_TUNED_BACK_READ_MEM_RESERVATION_MB}" "${AUTO_TUNED_BACK_ADMIN_MEM_RESERVATION_MB}" "${AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB}"',
+        "",
+      ].join("\n"),
+    )
+    const allocationOutput = execFileSync("bash", [allocationScript], { encoding: "utf8" })
+    assert.equal(allocationOutput.trim(), "704 832 896 896 320 384 448 640")
+
+    const invalidBudgetScript = path.join(workDir, "invalid-budget.sh")
+    writeFileSync(
+      invalidBudgetScript,
+      [
+        "AUTO_MEMORY_TUNER_ENABLED=true",
+        "RUNTIME_SPLIT_ENABLED=true",
+        "AUTO_MEMORY_TUNER_MAX_BUDGET_MB=2816",
+        "AUTO_MEMORY_TUNER_MIN_BUDGET_MB=1280",
+        allocatorHelpers,
+        memoryTuner,
+        "apply_auto_memory_tuner",
+        "",
+      ].join("\n"),
+    )
+    assert.throws(
+      () => execFileSync("bash", [invalidBudgetScript], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
+      /Command failed/,
+    )
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
 })
 
 test("runtime-split helper backends do not compete with candidate Flyway migration", () => {

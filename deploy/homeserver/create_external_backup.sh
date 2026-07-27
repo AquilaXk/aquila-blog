@@ -639,7 +639,7 @@ backup_postgres() {
   fi
 
   prepare_postgres_backup_compose_if_needed
-  compose exec -T db_1 pg_dump -U postgres -d "${POSTGRES_DB_NAME}" \
+  compose exec -T db_1 pg_dump --no-owner --no-acl -U postgres -d "${POSTGRES_DB_NAME}" \
     | encrypt_stream_to_file "${target_dir}/dump.sql.enc"
   write_metadata "${class}" "${target_dir}"
 }

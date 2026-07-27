@@ -174,6 +174,10 @@ AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=${PRIVACY_GATE_SCRIPT}
 DB_IMAGE=jangka512/pgj@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 MINIO_IMAGE=${MINIO_FIXTURE_IMAGE}
 AQUILA_BACKUP_MIN_FREE_PERCENT=0
+CUSTOM_PROD_DBNAME=custom_restore_prod
+EOF
+cat > "${DEPLOY_DIR}/.env.prod.compose" <<'EOF'
+DB_BASE_NAME=compose_blog
 EOF
 
 cat > "${WORK_DIR}/dump.sql" <<'SQL'
@@ -234,6 +238,10 @@ set -euo pipefail
 case "${1:-}" in
   compose)
     if [[ "$*" == *"exec -T db_1 psql"* && "$*" == *"SELECT member_id"* ]]; then
+      if [[ -n "${FAKE_EXPECT_CURRENT_DB:-}" && "$*" != *"-d ${FAKE_EXPECT_CURRENT_DB}"* ]]; then
+        echo "expected current database ${FAKE_EXPECT_CURRENT_DB}: $*" >&2
+        exit 1
+      fi
       echo "7"
       if [[ -n "${FAKE_PRIVACY_TOMBSTONE_COUNTER_FILE:-}" ]]; then
         count=0
@@ -391,6 +399,7 @@ MINIO_LIVE_CONTAINER="${MINIO_LIVE_CONTAINER}" \
 FAKE_MINIO_LARGE_INVENTORY=1 \
 FAKE_MINIO_NO_CURL=1 \
 FAKE_FAST_SLEEP=1 \
+FAKE_EXPECT_CURRENT_DB=custom_restore_prod \
 AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
 AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
 AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${ARTIFACT_DIR}" \
@@ -502,7 +511,7 @@ run_privacy_gate() {
   POSTGRES_CONTAINER="${PRIVACY_DB_CONTAINER}" \
   POSTGRES_DB="postgres" \
   MINIO_CHECKSUM_FILE="${ARTIFACT_DIR}/minio-checksums.sha256" \
-  MINIO_SAMPLE_OBJECT="post-img/posts/2026/with space/sample.txt" \
+  MINIO_SAMPLE_OBJECT="${PRIVACY_SAMPLE_OBJECT:-post-img/posts/2026/with space/sample.txt}" \
   LATEST_MEMBER_TOMBSTONE_FILE="${WORK_DIR}/latest-member-tombstones.txt" \
   CURRENT_MINIO_OBJECT_KEY_FILE="${WORK_DIR}/current-minio-object-keys.txt" \
   RESTORED_MINIO_OBJECT_KEY_FILE="${WORK_DIR}/restored-minio-object-keys.txt" \
@@ -546,6 +555,16 @@ printf '%s\n' 'post-img/posts/2026/with space/sample.txt' > "${WORK_DIR}/restore
 
 run_privacy_gate > "${WORK_DIR}/privacy-gate-pass.txt"
 require_pattern "${WORK_DIR}/privacy-gate-pass.txt" '^status=pass$' "real PostgreSQL privacy fixture must pass"
+
+cp "${ARTIFACT_DIR}/minio-checksums.sha256" "${WORK_DIR}/minio-checksums.original.sha256"
+TRAILING_SPACE_SAMPLE_OBJECT='post-img/posts/2026/trailing-space.txt '
+printf '%064d  %s\n' 0 "${TRAILING_SPACE_SAMPLE_OBJECT}" > "${ARTIFACT_DIR}/minio-checksums.sha256"
+if ! PRIVACY_SAMPLE_OBJECT="${TRAILING_SPACE_SAMPLE_OBJECT}" run_privacy_gate > "${WORK_DIR}/privacy-gate-trailing-space-key.txt" 2>&1; then
+  echo "privacy gate rejected a checksum key with a trailing space" >&2
+  cat "${WORK_DIR}/privacy-gate-trailing-space-key.txt" >&2
+  exit 1
+fi
+cp "${WORK_DIR}/minio-checksums.original.sha256" "${ARTIFACT_DIR}/minio-checksums.sha256"
 
 printf '8\n' > "${WORK_DIR}/latest-member-tombstones.txt"
 expect_privacy_failure "missing-latest-tombstone"

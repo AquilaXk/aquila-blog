@@ -493,6 +493,9 @@ write_latest_member_tombstones() {
   db_base_name="$(read_key_from_file DB_BASE_NAME "${compose_env_file}")"
   db_base_name="${db_base_name:-blog}"
   current_db_name="$(read_key_from_file CUSTOM_PROD_DBNAME "${compose_env_file}")"
+  if [[ -z "${current_db_name}" && "${compose_env_file}" != "${DEPLOY_DIR}/.env.prod" ]]; then
+    current_db_name="$(read_key_from_file CUSTOM_PROD_DBNAME "${DEPLOY_DIR}/.env.prod")"
+  fi
   current_db_name="${current_db_name:-${db_base_name}_prod}"
   [[ "${current_db_name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail "unsafe current PostgreSQL database name"
 

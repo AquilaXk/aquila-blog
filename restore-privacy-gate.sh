@@ -69,8 +69,11 @@ esac
   || fail "unsafe MINIO_SAMPLE_OBJECT"
 [[ -s "${MINIO_CHECKSUM_FILE}" ]] || fail "MINIO_CHECKSUM_FILE is missing or empty"
 
-read -r minio_checksum minio_object < "${MINIO_CHECKSUM_FILE}" \
+IFS= read -r minio_checksum_line < "${MINIO_CHECKSUM_FILE}" \
   || fail "could not read MINIO_CHECKSUM_FILE"
+[[ "${minio_checksum_line:64:2}" == "  " ]] || fail "invalid MinIO checksum evidence delimiter"
+minio_checksum="${minio_checksum_line:0:64}"
+minio_object="${minio_checksum_line:66}"
 [[ "${minio_checksum}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid MinIO SHA-256 evidence"
 [[ "${minio_object}" == "${MINIO_SAMPLE_OBJECT}" ]] || fail "MinIO checksum object does not match selected sample"
 

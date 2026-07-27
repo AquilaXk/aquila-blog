@@ -1206,6 +1206,13 @@ test("deploy workflow validates live API security headers after homeserver rollo
   )
 })
 
+test("deploy workflow probes Caddy through its edge network", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.match(workflow, /docker run --rm --network blog_home_edge curlimages\/curl:8\.7\.1/)
+  assert.doesNotMatch(workflow, /docker run --rm --network blog_home_default curlimages\/curl:8\.7\.1/)
+})
+
 test("blue green deploy keeps grafana route checks out of backend rollback decisions", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const burnInBody = deployScript.slice(

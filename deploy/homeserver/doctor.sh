@@ -702,8 +702,8 @@ echo "ADMIN_API_UPSTREAM=$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
 echo "READ_API_UPSTREAM=$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
 
 print_section "Caddy Mount Sync"
-host_upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back[-_](blue|green):8080$/ {split($2, a, ":"); gsub("-", "_", a[1]); print a[1]; exit}' "${CADDY_HOST_FILE}" || true)"
-mounted_upstream="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back[-_](blue|green):8080$/ {split(\$2, a, \":\"); gsub(\"-\", \"_\", a[1]); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1 || true)"
+host_upstream="$(bash "${SCRIPT_DIR}/caddy_upstream_probe.sh" host 2>/dev/null || true)"
+mounted_upstream="$(bash "${SCRIPT_DIR}/caddy_upstream_probe.sh" mounted 2>/dev/null || true)"
 legacy_back_active="false"
 if compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}" >/dev/null 2>&1; then
   legacy_back_active="true"

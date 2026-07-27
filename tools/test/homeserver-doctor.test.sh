@@ -174,6 +174,35 @@ if [[ "${notification_sse_output}" == *"notification sse probe: FAIL"* ]]; then
   fail "expected a max-time termination after both SSE events not to be reported as a probe failure"
 fi
 
+# Mount Sync는 runtime-split placeholder 해석을 caddy_upstream_probe.sh 한 곳에 맡겨야 한다.
+# 여기서는 doctor의 실제 대입문을 실행해 host/mounted 결과가 공허한 <none>으로 돌아가지 않는지 본다.
+mount_probe_assignments="$(awk '
+  /^host_upstream=/ { print }
+  /^mounted_upstream=/ { print }
+' "${doctor}")"
+if [ "$(printf '%s\n' "${mount_probe_assignments}" | grep -c '_upstream=' || true)" -ne 2 ]; then
+  fail "expected to extract both Caddy Mount Sync upstream assignments"
+fi
+caddy_probe_fixture_dir="${workdir}/caddy-probe"
+mkdir -p "${caddy_probe_fixture_dir}/caddy"
+printf '%s\n' 'reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080' > "${caddy_probe_fixture_dir}/caddy/Caddyfile"
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' 'set -euo pipefail'
+  printf '%s\n' 'case "${1:-}" in host | mounted) printf "back_admin\\n" ;; *) exit 2 ;; esac'
+} > "${caddy_probe_fixture_dir}/caddy_upstream_probe.sh"
+chmod +x "${caddy_probe_fixture_dir}/caddy_upstream_probe.sh"
+SCRIPT_DIR="${caddy_probe_fixture_dir}"
+CADDY_HOST_FILE="${caddy_probe_fixture_dir}/caddy/Caddyfile"
+CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
+compose() {
+  return 0
+}
+eval "${mount_probe_assignments}"
+if [ "${host_upstream}" != "back_admin" ] || [ "${mounted_upstream}" != "back_admin" ]; then
+  fail "expected placeholder-aware Caddy Mount Sync probes to stay non-empty, got host=${host_upstream:-<none>} mounted=${mounted_upstream:-<none>}"
+fi
+
 # ADMIN_EMBED_ORIGINS가 비면 Caddy가 frame-ancestors 허용목록 없이 CSP를 내려 관리자 UI의
 # grafana/uptime-kuma iframe이 전부 차단되므로, 필수 키 점검이 이 키를 반드시 다뤄야 한다.
 if ! grep -qF 'print_env_key_status "ADMIN_EMBED_ORIGINS"' "${doctor}"; then

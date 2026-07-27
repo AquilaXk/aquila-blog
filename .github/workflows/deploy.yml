@@ -1190,7 +1190,7 @@ jobs:
             rollback_and_exit "inactive_backend_still_running"
           fi
 
-          HTTP_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health/readiness" -H "Host: ${API_DOMAIN}" || true)"
+          HTTP_CODE="$(docker run --rm --network blog_home_edge curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health/readiness" -H "Host: ${API_DOMAIN}" || true)"
           echo "post-deploy caddy health status=${HTTP_CODE}"
           if ! echo "${HTTP_CODE}" | grep -Eq '^200$'; then
             rollback_and_exit "caddy_route_healthcheck_failed"

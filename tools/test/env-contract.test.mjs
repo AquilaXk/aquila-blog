@@ -8,6 +8,7 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
+const backupRestoreWorkflowPath = path.join(repoRoot, ".github/workflows/backup-restore-drill.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const caddyfilePath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
 const envExamplePath = path.join(repoRoot, "deploy/homeserver/.env.prod.example")
@@ -1516,6 +1517,28 @@ test("deploy workflow requires pinned known_hosts and private GHCR credentials",
   assert.doesNotMatch(workflow, /ssh-keyscan/)
   assert.doesNotMatch(workflow, /Collecting known_hosts/)
   assert.doesNotMatch(workflow, /if \[ -n "\$\{HOME_GHCR_USERNAME:-\}" \] && \[ -n "\$\{HOME_GHCR_TOKEN:-\}" \]/)
+})
+
+test("deploy workflows use a single MagicDNS repository variable", () => {
+  const deployWorkflow = readFileSync(workflowPath, "utf8")
+  const backupRestoreWorkflow = readFileSync(backupRestoreWorkflowPath, "utf8")
+
+  for (const workflow of [deployWorkflow, backupRestoreWorkflow]) {
+
+    assert.match(workflow, /HOME_TAILSCALE_HOST: \$\{\{ vars\.HOME_TAILSCALE_HOST \}\}/)
+    assert.match(workflow, /HOME_TAILSCALE_HOST must be a full MagicDNS FQDN ending in \.ts\.net/)
+    assert.match(workflow, /\^\[a-z0-9\].*\\\.ts\\\.net\$/)
+    assert.doesNotMatch(workflow, /\bHOME_HOST\b/)
+    assert.doesNotMatch(workflow, /\bHOME_TS_HOST\b/)
+    assert.doesNotMatch(workflow, /\bHOME_SSH_HOST\b/)
+    assert.doesNotMatch(workflow, /secrets\.HOME_TAILSCALE_HOST/)
+  }
+
+  assert.doesNotMatch(deployWorkflow, /bash -lc "cat < \/dev\/null > \/dev\/tcp\//)
+  assert.match(
+    deployWorkflow,
+    /bash -c 'cat < \/dev\/null > "\/dev\/tcp\/\$1\/\$2"' bash "\$\{HOME_TAILSCALE_HOST\}" "\$\{HOME_SSH_PORT\}"/,
+  )
 })
 
 test("deploy workflow transfers secret env through temporary files instead of ssh command line", () => {

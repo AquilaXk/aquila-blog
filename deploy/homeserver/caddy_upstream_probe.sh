@@ -21,6 +21,9 @@
 
 set -euo pipefail
 
+# Prevent child commands from consuming the parent ssh heredoc stdin.
+exec </dev/null
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-${SCRIPT_DIR}/docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-${SCRIPT_DIR}/.env.prod}"

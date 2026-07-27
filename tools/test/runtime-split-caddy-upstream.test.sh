@@ -698,6 +698,9 @@ cat > "${docker_stub_dir}/docker" <<'DOCKER_STUB'
 #!/usr/bin/env bash
 # `docker compose ... exec -T caddy <cmd...>` 만 처리한다.
 set -uo pipefail
+if [ "${STUB_CONSUME_STDIN:-false}" = "true" ]; then
+  cat >/dev/null
+fi
 args=("$@")
 idx=0
 while [ "${idx}" -lt "${#args[@]}" ]; do
@@ -754,6 +757,29 @@ expect_probe_output "back_admin" "mounted on a placeholder Caddyfile"
 
 run_probe_mounted "${full_drift_caddy}" "${expect_env}" "${mounted_env}"
 expect_probe_output "back_green" "mounted on a colour-pinned Caddyfile"
+
+# production deploy는 remote `bash -s` payload 안에서 mounted probe를 호출한다. compose exec가
+# inherited stdin을 읽어도 probe 뒤 payload와 sentinel은 caller에 남아 있어야 한다.
+stdin_probe_status=0
+stdin_probe_output="$(
+  printf '%s\n' 'sentinel' | env -u RUNTIME_SPLIT_ENABLED LC_ALL=C LANG=C \
+    PATH="${docker_stub_dir}:${PATH}" \
+    STUB_CONSUME_STDIN=true \
+    STUB_MOUNTED_CADDY="${expect_caddy}" STUB_MOUNTED_ENV="${mounted_env}" \
+    CADDY_FILE="${expect_caddy}" ENV_FILE="${split_env_no_admin}" \
+    PROBE_SCRIPT="${probe_script}" \
+    bash -c '
+      bash "${PROBE_SCRIPT}" mounted
+      IFS= read -r remaining || exit 98
+      printf "remaining=%s\n" "${remaining}"
+    '
+)" || stdin_probe_status=$?
+if [ "${stdin_probe_status}" -ne 0 ]; then
+  fail "caddy_upstream_probe.sh mounted consumed caller stdin (status ${stdin_probe_status})"
+fi
+if [ "${stdin_probe_output}" != $'back_admin\nremaining=sentinel' ]; then
+  fail "caddy_upstream_probe.sh mounted must preserve upstream output and caller stdin, got: ${stdin_probe_output:-empty}"
+fi
 
 # ---------------------------------------------------------------------------
 # rollback legacy 정규화는 runtime-split에서 실행되지 않아야 한다

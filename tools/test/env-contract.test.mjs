@@ -1135,14 +1135,15 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
 
   assert.match(workflow, /Validate HOME_SERVER_ENV contract/)
   assert.match(workflow, /tools\/env\/validate-env\.mjs --target home-server-source/)
-  assert.match(workflow, /HOME_RESTORE_PRIVACY_GATE_SCRIPT: \$\{\{ secrets\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT \|\| vars\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT \|\| '\/opt\/aquila-blog\/restore-privacy-gate\.sh' \}\}/)
   assert.equal(
-    workflow.match(/HOME_RESTORE_PRIVACY_GATE_SCRIPT: \$\{\{ secrets\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT \|\| vars\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT \|\| '\/opt\/aquila-blog\/restore-privacy-gate\.sh' \}\}/g)?.length,
+    workflow.match(/HOME_RESTORE_PRIVACY_GATE_SCRIPT="\$\{HOME_APP_DIR%\/\}\/restore-privacy-gate\.sh"/g)?.length,
     2,
   )
+  assert.doesNotMatch(workflow, /secrets\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT/)
+  assert.doesNotMatch(workflow, /vars\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT/)
   assert.match(workflow, /printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
-  assert.match(workflow, /printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT:-\/opt\/aquila-blog\/restore-privacy-gate\.sh\}"/)
-  assert.match(workflow, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT:-\/opt\/aquila-blog\/restore-privacy-gate\.sh\}" "deploy\/homeserver\/\.env\.prod"/)
+  assert.match(workflow, /printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
+  assert.match(workflow, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}" "deploy\/homeserver\/\.env\.prod"/)
   assert.match(workflow, /HOME_AI_SUMMARY_ENABLED: \$\{\{ secrets\.CUSTOM__AI__SUMMARY__ENABLED \|\| vars\.CUSTOM__AI__SUMMARY__ENABLED \|\| 'false' \}\}/)
   assert.match(workflow, /printf 'CUSTOM__AI__SUMMARY__ENABLED=%s\\n' "\$\{HOME_AI_SUMMARY_ENABLED:-false\}"/)
   assert.match(workflow, /upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "\$\{HOME_AI_SUMMARY_ENABLED:-\}" "deploy\/homeserver\/\.env\.prod"/)

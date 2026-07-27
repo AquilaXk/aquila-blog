@@ -23,10 +23,14 @@ else
   DEPLOY_DIR="${SCRIPT_DIR}"
 fi
 POSTGRES_CONTAINER="aquila-restore-drill-${TIMESTAMP}"
+MINIO_CONTAINER="aquila-restore-drill-minio-${TIMESTAMP}"
 POSTGRES_DB="${AQUILA_RESTORE_DRILL_DB:-restore_drill}"
 POSTGRES_PASSWORD="${AQUILA_RESTORE_DRILL_POSTGRES_PASSWORD:-restore_drill_${TIMESTAMP}}"
+MINIO_ROOT_USER="restore-drill"
+MINIO_ROOT_PASSWORD="restore_drill_${TIMESTAMP}"
 RPO_TARGET_MINUTES="${AQUILA_RESTORE_DRILL_RPO_TARGET_MINUTES:-1440}"
 RTO_TARGET_MINUTES="${AQUILA_RESTORE_DRILL_RTO_TARGET_MINUTES:-120}"
+MIN_FREE_PERCENT=""
 SUMMARY_FILE="${ARTIFACT_DIR}/restore-drill-summary.md"
 RESULT_FILE="${ARTIFACT_DIR}/restore-drill-result.env"
 CHECKSUM_FILE="${ARTIFACT_DIR}/minio-checksums.sha256"
@@ -36,6 +40,11 @@ RESTORE_PRIVACY_GATE_SCRIPT="${AQUILA_RESTORE_PRIVACY_GATE_SCRIPT:-}"
 RESTORE_PRIVACY_GATE_STATUS="fail"
 DECRYPT_BASE_DIR=""
 DECRYPT_DIR=""
+LATEST_MEMBER_TOMBSTONE_FILE=""
+CURRENT_MINIO_OBJECT_KEY_FILE=""
+RESTORED_MINIO_OBJECT_KEY_FILE=""
+LATEST_MEMBER_TOMBSTONE_AFTER_FILE=""
+CURRENT_MINIO_OBJECT_KEY_AFTER_FILE=""
 
 log() {
   printf '[restore-drill] %s\n' "$*" >&2
@@ -93,6 +102,20 @@ resolve_postgres_image() {
   printf '%s' "${image}"
 }
 
+resolve_minio_image() {
+  local image="${AQUILA_RESTORE_DRILL_MINIO_IMAGE:-${MINIO_IMAGE:-}}"
+  if [[ -z "${image}" ]]; then
+    image="$(read_key_from_file MINIO_IMAGE "${DEPLOY_DIR}/.env.prod.compose")"
+  fi
+  if [[ -z "${image}" ]]; then
+    image="$(read_key_from_file MINIO_IMAGE "${DEPLOY_DIR}/.env.prod")"
+  fi
+
+  [[ "${image}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] \
+    || fail "MINIO_IMAGE must use an immutable sha256 digest for restore drill"
+  printf '%s' "${image}"
+}
+
 resolve_storage_paths() {
   local external_root="${AQUILA_EXTERNAL_STORAGE_ROOT:-}"
   local backup_root="${AQUILA_BACKUP_ROOT:-}"
@@ -112,6 +135,21 @@ resolve_storage_paths() {
     backup_root="$(read_key_from_file AQUILA_BACKUP_ROOT "${DEPLOY_DIR}/.env.prod")"
   fi
   BACKUP_ROOT="${backup_root:-${EXTERNAL_STORAGE_ROOT}/backups}"
+}
+
+resolve_min_free_percent() {
+  local value="${AQUILA_BACKUP_MIN_FREE_PERCENT:-}"
+  if [[ -z "${value}" ]]; then
+    value="$(read_key_from_file AQUILA_BACKUP_MIN_FREE_PERCENT "${DEPLOY_DIR}/.env.prod.compose")"
+  fi
+  if [[ -z "${value}" ]]; then
+    value="$(read_key_from_file AQUILA_BACKUP_MIN_FREE_PERCENT "${DEPLOY_DIR}/.env.prod")"
+  fi
+  value="${value:-15}"
+  if [[ ! "${value}" =~ ^[0-9]+$ ]] || (( value > 99 )); then
+    fail "AQUILA_BACKUP_MIN_FREE_PERCENT must be an integer between 0 and 99"
+  fi
+  printf '%s' "${value}"
 }
 
 latest_backup_set_id() {
@@ -330,9 +368,21 @@ write_summary() {
 
 cleanup() {
   docker rm -f -v "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
+  docker rm -f -v "${MINIO_CONTAINER}" >/dev/null 2>&1 || true
   if [[ -n "${DECRYPT_DIR}" && -n "${DECRYPT_BASE_DIR}" && "${DECRYPT_DIR}" == "${DECRYPT_BASE_DIR%/}"/aquila-restore-drill-decrypted.* && -d "${DECRYPT_DIR}" ]]; then
     rm -rf -- "${DECRYPT_DIR}"
   fi
+}
+
+wait_for_minio() {
+  local attempt
+  for attempt in $(seq 1 60); do
+    if docker exec "${MINIO_CONTAINER}" mc ready local >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  fail "temporary MinIO did not become ready"
 }
 
 wait_for_postgres() {
@@ -359,20 +409,179 @@ psql_scalar() {
 }
 
 select_minio_sample_object() {
-  tar -tzf "${MINIO_ARCHIVE_FILE}" \
-    | sed 's#^\./##' \
-    | grep -Ev '(^$|/$|(^|/)format\.json$|(^|/)\.minio\.sys/)' \
+  docker exec "${MINIO_CONTAINER}" mc --json ls --recursive restored \
+    | extract_minio_json_keys \
     | sort \
-    | awk 'NR == 1 { first = $0 } END { if (first != "") print first }'
+    | awk 'index($0, "\\") == 0 && first == "" { first = $0 } END { if (first != "") print first }'
 }
 
 checksum_minio_sample() {
   local object_key="$1"
-  local tar_path="${object_key}"
-  if ! tar -tzf "${MINIO_ARCHIVE_FILE}" "${tar_path}" >/dev/null 2>&1; then
-    tar_path="./${object_key}"
+  docker exec "${MINIO_CONTAINER}" mc cat "restored/${object_key}" | sha256sum | awk '{print $1}'
+}
+
+extract_minio_json_keys() {
+  awk '
+    function extract_key(line, marker, start, i, c, escaped, value) {
+      marker = "\"key\":"
+      start = index(line, marker)
+      if (start == 0) return ""
+      i = start + length(marker)
+      while (substr(line, i, 1) ~ /[[:space:]]/) i++
+      if (substr(line, i, 1) != "\"") return ""
+      i++
+      escaped = 0
+      value = ""
+      for (; i <= length(line); i++) {
+        c = substr(line, i, 1)
+        if (escaped) {
+          value = value c
+          escaped = 0
+        } else if (c == "\\") {
+          value = value c
+          escaped = 1
+        } else if (c == "\"") {
+          return value
+        } else {
+          value = value c
+        }
+      }
+      return ""
+    }
+    {
+      key = extract_key($0)
+      if (key == "") exit 2
+      print key
+    }
+  '
+}
+
+write_restored_minio_object_keys() {
+  docker exec "${MINIO_CONTAINER}" mc --json ls --recursive restored \
+    | extract_minio_json_keys \
+    | sort -u \
+    > "${RESTORED_MINIO_OBJECT_KEY_FILE}"
+  [[ -s "${RESTORED_MINIO_OBJECT_KEY_FILE}" ]] || fail "restored MinIO object key evidence is empty"
+}
+
+write_current_minio_object_keys() {
+  local output_file="$1"
+  local compose_env_file="${DEPLOY_DIR}/.env.prod.compose"
+  local compose_file="${DEPLOY_DIR}/docker-compose.prod.yml"
+
+  [[ -f "${compose_env_file}" ]] || compose_env_file="${DEPLOY_DIR}/.env.prod"
+  [[ -f "${compose_env_file}" ]] || fail "current deploy env is required for MinIO privacy evidence"
+  [[ -f "${compose_file}" ]] || fail "current compose file is required for MinIO privacy evidence"
+
+  docker compose --env-file "${compose_env_file}" -f "${compose_file}" exec -T minio_1 \
+    sh -c 'config_dir="$(mktemp -d /tmp/aquila-restore-mc.XXXXXX)" || exit 1; trap '\''rm -rf -- "${config_dir}"'\'' EXIT; MC_CONFIG_DIR="${config_dir}" mc alias set current http://127.0.0.1:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}" >/dev/null && MC_CONFIG_DIR="${config_dir}" mc --json ls --recursive current' \
+    | extract_minio_json_keys \
+    | sort -u \
+    > "${output_file}"
+}
+
+write_latest_member_tombstones() {
+  local output_file="$1"
+  local compose_env_file="${DEPLOY_DIR}/.env.prod.compose"
+  local compose_file="${DEPLOY_DIR}/docker-compose.prod.yml"
+  local db_base_name current_db_name
+
+  [[ -f "${compose_env_file}" ]] || compose_env_file="${DEPLOY_DIR}/.env.prod"
+  [[ -f "${compose_env_file}" ]] || fail "current deploy env is required for privacy evidence"
+  [[ -f "${compose_file}" ]] || fail "current compose file is required for privacy evidence"
+
+  db_base_name="$(read_key_from_file DB_BASE_NAME "${compose_env_file}")"
+  db_base_name="${db_base_name:-blog}"
+  current_db_name="$(read_key_from_file CUSTOM_PROD_DBNAME "${compose_env_file}")"
+  if [[ -z "${current_db_name}" && "${compose_env_file}" != "${DEPLOY_DIR}/.env.prod" ]]; then
+    current_db_name="$(read_key_from_file CUSTOM_PROD_DBNAME "${DEPLOY_DIR}/.env.prod")"
   fi
-  tar -xOzf "${MINIO_ARCHIVE_FILE}" "${tar_path}" | sha256sum | awk '{print $1}'
+  current_db_name="${current_db_name:-${db_base_name}_prod}"
+  [[ "${current_db_name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail "unsafe current PostgreSQL database name"
+
+  docker compose --env-file "${compose_env_file}" -f "${compose_file}" exec -T db_1 \
+    psql -U postgres -d "${current_db_name}" -At -v ON_ERROR_STOP=1 \
+    -c "SELECT member_id FROM public.member_account_deletion ORDER BY member_id;" \
+    | tr -d '\r' \
+    | sort -n -u \
+    > "${output_file}"
+  if grep -Eqv '^[0-9]+$' "${output_file}"; then
+    fail "latest member tombstone evidence contains an invalid identifier"
+  fi
+}
+
+prepare_latest_privacy_evidence() {
+  LATEST_MEMBER_TOMBSTONE_FILE="${DECRYPT_DIR}/latest-member-tombstones.txt"
+  CURRENT_MINIO_OBJECT_KEY_FILE="${DECRYPT_DIR}/current-minio-object-keys.txt"
+  RESTORED_MINIO_OBJECT_KEY_FILE="${DECRYPT_DIR}/restored-minio-object-keys.txt"
+  write_latest_member_tombstones "${LATEST_MEMBER_TOMBSTONE_FILE}"
+  write_current_minio_object_keys "${CURRENT_MINIO_OBJECT_KEY_FILE}"
+  write_restored_minio_object_keys
+}
+
+assert_latest_privacy_evidence_stable() {
+  local deleted_during_gate
+  LATEST_MEMBER_TOMBSTONE_AFTER_FILE="${DECRYPT_DIR}/latest-member-tombstones-after.txt"
+  CURRENT_MINIO_OBJECT_KEY_AFTER_FILE="${DECRYPT_DIR}/current-minio-object-keys-after.txt"
+  write_latest_member_tombstones "${LATEST_MEMBER_TOMBSTONE_AFTER_FILE}"
+  write_current_minio_object_keys "${CURRENT_MINIO_OBJECT_KEY_AFTER_FILE}"
+
+  cmp -s "${LATEST_MEMBER_TOMBSTONE_FILE}" "${LATEST_MEMBER_TOMBSTONE_AFTER_FILE}" \
+    || fail "latest member tombstone evidence changed during privacy gate"
+  deleted_during_gate="$(comm -23 "${CURRENT_MINIO_OBJECT_KEY_FILE}" "${CURRENT_MINIO_OBJECT_KEY_AFTER_FILE}" | wc -l | tr -d ' ')"
+  [[ "${deleted_during_gate}" == "0" ]] || fail "current MinIO object deletion occurred during privacy gate"
+}
+
+validate_minio_archive_for_extract() {
+  if tar -tzf "${MINIO_ARCHIVE_FILE}" \
+    | sed 's#^\./##' \
+    | grep -E '(^/|(^|/)\.\.(/|$))' >/dev/null; then
+    fail "MinIO backup archive contains an unsafe path"
+  fi
+  tar -tvzf "${MINIO_ARCHIVE_FILE}" \
+    | awk 'substr($1, 1, 1) !~ /^[d-]$/ { invalid = 1 } END { exit invalid }' \
+    || fail "MinIO backup archive contains a non-file entry"
+}
+
+assert_minio_extraction_capacity() {
+  local archive_uncompressed_bytes
+  local filesystem_total_bytes
+  local filesystem_available_bytes
+  local projected_available_bytes
+  local projected_free_percent
+
+  archive_uncompressed_bytes="$(tar -xOzf "${MINIO_ARCHIVE_FILE}" | wc -c | tr -d ' ')" \
+    || fail "could not calculate MinIO archive uncompressed size"
+  read -r filesystem_total_bytes filesystem_available_bytes < <(
+    df -Pk "${DECRYPT_DIR}" | awk 'NR == 2 { printf "%.0f %.0f\n", $2 * 1024, $4 * 1024 }'
+  )
+  [[ "${archive_uncompressed_bytes}" =~ ^[0-9]+$ && "${filesystem_total_bytes}" =~ ^[1-9][0-9]*$ && "${filesystem_available_bytes}" =~ ^[0-9]+$ ]] \
+    || fail "could not determine MinIO extraction capacity"
+
+  projected_available_bytes=$((filesystem_available_bytes - archive_uncompressed_bytes))
+  (( projected_available_bytes > 0 )) \
+    || fail "insufficient free space for MinIO archive extraction"
+  projected_free_percent=$((projected_available_bytes * 100 / filesystem_total_bytes))
+  (( projected_free_percent >= MIN_FREE_PERCENT )) \
+    || fail "MinIO archive extraction would violate backup free-space reserve"
+}
+
+start_restored_minio() {
+  local restored_minio_dir="${DECRYPT_DIR}/restored-minio"
+  validate_minio_archive_for_extract
+  assert_minio_extraction_capacity
+  mkdir -p "${restored_minio_dir}"
+  tar -xzf "${MINIO_ARCHIVE_FILE}" -C "${restored_minio_dir}"
+  docker run -d \
+    --name "${MINIO_CONTAINER}" \
+    --network none \
+    -e "MINIO_ROOT_USER=${MINIO_ROOT_USER}" \
+    -e "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}" \
+    -v "${restored_minio_dir}:/data" \
+    "${MINIO_IMAGE}" server /data >/dev/null
+  wait_for_minio
+  docker exec "${MINIO_CONTAINER}" sh -c \
+    'mc alias set restored http://127.0.0.1:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}" >/dev/null'
 }
 
 run_restore_privacy_gate() {
@@ -382,6 +591,9 @@ run_restore_privacy_gate() {
     POSTGRES_DB="${POSTGRES_DB}" \
     MINIO_CHECKSUM_FILE="${CHECKSUM_FILE}" \
     MINIO_SAMPLE_OBJECT="${minio_sample_object}" \
+    LATEST_MEMBER_TOMBSTONE_FILE="${LATEST_MEMBER_TOMBSTONE_FILE}" \
+    CURRENT_MINIO_OBJECT_KEY_FILE="${CURRENT_MINIO_OBJECT_KEY_FILE}" \
+    RESTORED_MINIO_OBJECT_KEY_FILE="${RESTORED_MINIO_OBJECT_KEY_FILE}" \
     RESTORE_PRIVACY_GATE_FILE="${RESTORE_PRIVACY_GATE_FILE}" \
     "${RESTORE_PRIVACY_GATE_SCRIPT}" > "${RESTORE_PRIVACY_GATE_FILE}"
   [[ -s "${RESTORE_PRIVACY_GATE_FILE}" ]] || fail "restore privacy gate produced no evidence: ${RESTORE_PRIVACY_GATE_FILE}"
@@ -395,8 +607,10 @@ require_command tar
 require_command sha256sum
 require_command openssl
 resolve_storage_paths
+MIN_FREE_PERCENT="$(resolve_min_free_percent)"
 resolve_restore_privacy_contract
 POSTGRES_IMAGE="$(resolve_postgres_image)"
+MINIO_IMAGE="$(resolve_minio_image)"
 
 if [[ -z "${BACKUP_SET_ID}" ]]; then
   BACKUP_SET_ID="$(latest_backup_set_id)"
@@ -441,11 +655,14 @@ post_count="$(psql_scalar "SELECT COUNT(*) FROM post;")"
 latest_public_post_id="$(psql_scalar "SELECT id FROM post WHERE listed = true ORDER BY created_at DESC, id DESC LIMIT 1;")"
 [[ -n "${latest_public_post_id}" ]] || fail "latest public post query returned no rows"
 
+start_restored_minio
 minio_sample_object="$(select_minio_sample_object)"
 [[ -n "${minio_sample_object}" ]] || fail "MinIO backup archive has no checksumable object sample"
 minio_sample_sha256="$(checksum_minio_sample "${minio_sample_object}")"
 printf '%s  %s\n' "${minio_sample_sha256}" "${minio_sample_object}" > "${CHECKSUM_FILE}"
+prepare_latest_privacy_evidence
 run_restore_privacy_gate
+assert_latest_privacy_evidence_stable
 
 end_epoch="$(date -u +%s)"
 rto_seconds=$((end_epoch - start_epoch))

@@ -9,6 +9,7 @@ on:
       - "front/**"
       - "legal/policies/**"
       - "deploy/**"
+      - "restore-privacy-gate.sh"
       - "AGENTS.md"
       - "CLAUDE.md"
       - "GEMINI.md"

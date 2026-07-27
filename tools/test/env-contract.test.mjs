@@ -8,6 +8,7 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
+const ciWorkflowPath = path.join(repoRoot, ".github/workflows/ci.yml")
 const backupRestoreWorkflowPath = path.join(repoRoot, ".github/workflows/backup-restore-drill.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const caddyfilePath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
@@ -1291,6 +1292,7 @@ test("Vercel frontend project skips builds when frontend inputs did not change",
 
 test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경만 차단한다", () => {
   const workflow = readFileSync(workflowPath, "utf8")
+  const ciWorkflow = readFileSync(ciWorkflowPath, "utf8")
 
   assert.match(workflow, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
   assert.match(workflow, /DEPLOY_SHA_INPUT: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
@@ -1301,8 +1303,11 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /STALE_CHANGED_FILES="\$\(git diff --name-only "\$\{DEPLOY_SHA\}" "\$\{REMOTE_MAIN_SHA\}"/)
   assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*deploy\/env\//)
   assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*tools\/env\//)
+  assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*restore-privacy-gate/)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy\/env\//)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools\/env\//)
+  assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*restore-privacy-gate/)
+  assert.match(ciWorkflow, /- "restore-privacy-gate\.sh"/)
   assert.match(workflow, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
   assert.doesNotMatch(workflow, /git fetch --depth=1 origin main/)
   assert.doesNotMatch(workflow, /git rev-parse origin\/main/)

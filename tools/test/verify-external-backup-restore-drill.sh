@@ -135,6 +135,7 @@ MINIO_SOURCE_CONTAINER="aquila-restore-minio-source-${RANDOM}-$$"
 MINIO_LIVE_CONTAINER="aquila-restore-minio-live-${RANDOM}-$$"
 REAL_DOCKER="$(command -v docker)"
 REAL_DF="$(command -v df)"
+REAL_TAR="$(command -v tar)"
 
 cleanup() {
   docker rm -f -v "${PRIVACY_DB_CONTAINER}" >/dev/null 2>&1 || true
@@ -154,11 +155,12 @@ POSTGRES_BACKUP_DIR="${BACKUP_ROOT}/postgres/daily/${BACKUP_SET_ID}"
 MINIO_BACKUP_DIR="${BACKUP_ROOT}/minio/daily/${BACKUP_SET_ID}"
 MINIO_SOURCE_DIR="${WORK_DIR}/minio-source"
 FAKE_BIN_DIR="${WORK_DIR}/bin"
+UNSAFE_ARCHIVE_BIN_DIR="${WORK_DIR}/unsafe-archive-bin"
 ARTIFACT_DIR="${WORK_DIR}/artifacts"
 DEPLOY_DIR="${WORK_DIR}/deploy"
 KEY_FILE="${WORK_DIR}/backup-encryption.key"
 ROTATED_KEY_FILE="${WORK_DIR}/rotated-backup-encryption.key"
-mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}" "${WORK_DIR}/storage/minio" "${FAKE_BIN_DIR}" "${DEPLOY_DIR}"
+mkdir -p "${POSTGRES_BACKUP_DIR}" "${MINIO_BACKUP_DIR}" "${MINIO_SOURCE_DIR}" "${WORK_DIR}/storage/minio" "${FAKE_BIN_DIR}" "${UNSAFE_ARCHIVE_BIN_DIR}" "${DEPLOY_DIR}"
 cp "${ROOT_DIR}/deploy/homeserver/docker-compose.prod.yml" "${DEPLOY_DIR}/docker-compose.prod.yml"
 printf 'test-backup-key\n' > "${KEY_FILE}"
 printf 'rotated-backup-key\n' > "${ROTATED_KEY_FILE}"
@@ -360,6 +362,15 @@ fi
 exec "${REAL_DF}" "$@"
 SH
 chmod +x "${FAKE_BIN_DIR}/df"
+cat > "${UNSAFE_ARCHIVE_BIN_DIR}/tar" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${FAKE_UNSAFE_ARCHIVE:-0}" == "1" && "${1:-}" == "-tzf" ]]; then
+  exec awk 'BEGIN { print "../escape"; for (i = 1; i <= 200000; i++) print "safe/path-" i }'
+fi
+exec "${REAL_TAR}" "$@"
+SH
+chmod +x "${UNSAFE_ARCHIVE_BIN_DIR}/tar"
 
 PATH="${FAKE_BIN_DIR}:${PATH}" \
 REAL_DOCKER="${REAL_DOCKER}" \
@@ -396,6 +407,23 @@ require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^restored_deleted_ob
 require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^minio_checksum=pass$' "privacy gate must verify MinIO checksum evidence"
 require_pattern "${ARTIFACT_DIR}/restore-privacy-gate.txt" '^tombstone_replay=latest-state-compared$' "privacy gate evidence must name the verification mode"
 grep -q 'post-img/posts/2026/with space/sample.txt' "${ARTIFACT_DIR}/minio-checksums.sha256"
+
+if PATH="${UNSAFE_ARCHIVE_BIN_DIR}:${FAKE_BIN_DIR}:${PATH}" \
+  REAL_TAR="${REAL_TAR}" \
+  REAL_DOCKER="${REAL_DOCKER}" \
+  REAL_DF="${REAL_DF}" \
+  MINIO_LIVE_CONTAINER="${MINIO_LIVE_CONTAINER}" \
+  FAKE_UNSAFE_ARCHIVE=1 \
+  AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+  AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
+  AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${WORK_DIR}/unsafe-archive-artifacts" \
+  AQUILA_RESTORE_DRILL_TIMESTAMP="20260105-030405" \
+  AQUILA_RESTORE_DRILL_NOW_EPOCH="1767582245" \
+    "${DRILL_SCRIPT}" > "${WORK_DIR}/unsafe-archive.txt" 2>&1; then
+  echo "restore drill unexpectedly passed with an unsafe path in a large archive listing" >&2
+  exit 1
+fi
+require_pattern "${WORK_DIR}/unsafe-archive.txt" 'MinIO backup archive contains an unsafe path' "restore drill must reject unsafe paths without a pipefail SIGPIPE bypass"
 
 if PATH="${FAKE_BIN_DIR}:${PATH}" \
   REAL_DOCKER="${REAL_DOCKER}" \

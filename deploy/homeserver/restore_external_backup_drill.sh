@@ -532,7 +532,7 @@ assert_latest_privacy_evidence_stable() {
 validate_minio_archive_for_extract() {
   if tar -tzf "${MINIO_ARCHIVE_FILE}" \
     | sed 's#^\./##' \
-    | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+    | grep -E '(^/|(^|/)\.\.(/|$))' >/dev/null; then
     fail "MinIO backup archive contains an unsafe path"
   fi
   tar -tvzf "${MINIO_ARCHIVE_FILE}" \

@@ -44,6 +44,8 @@ body:
       label: Bottleneck / Hypothesis
       description: 병목 원인 추정이나 먼저 확인해야 할 포인트를 설명해 주세요.
       placeholder: 예) 초기 hydration 후 DOM 변형, 검색 쿼리 candidate pool 과다, 이미지 레이아웃 시프트
+    validations:
+      required: true
 
   - type: textarea
     id: validation
@@ -58,14 +60,29 @@ body:
       required: true
 
   - type: textarea
-    id: todo
+    id: execution_contract
     attributes:
-      label: Todo
-      description: 작업 순서를 `...했는가?` 형태의 체크리스트로 적어 주세요.
+      label: Execution Contract
+      description: Worker가 구현 결정을 추측하지 않도록 root에서 확정한 계약을 적어 주세요.
       placeholder: |
-        - [ ] 병목을 같은 조건에서 재현했는가?
-        - [ ] 계측/프로파일링으로 원인을 좁혔는가?
-        - [ ] 개선 후 성능을 다시 측정했는가?
-        - [ ] 롤백 기준과 운영 영향까지 정리했는가?
+        - Confirmed decisions / interfaces:
+        - Allow:
+        - Deny / Non-goals:
+        - Completion criteria / edge cases:
+        - Unresolved implementation decisions: 없음
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification_delivery
+    attributes:
+      label: Verification & Delivery
+      description: 실행할 검증, 남길 증거, skip 조건, 기능 단위 commit을 적어 주세요.
+      placeholder: |
+        - Exact commands:
+        - Expected / observed evidence:
+        - Skipped checks and rerun conditions: 없음
+        - Commit slices:
+          1. perf(scope): 작업 요약
     validations:
       required: true

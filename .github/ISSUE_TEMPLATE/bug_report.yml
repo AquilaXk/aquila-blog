@@ -66,14 +66,29 @@ body:
       required: true
 
   - type: textarea
-    id: todo
+    id: execution_contract
     attributes:
-      label: Todo
-      description: 해결까지 필요한 작업을 `...했는가?` 형태의 체크리스트로 적어 주세요.
+      label: Execution Contract
+      description: Worker가 구현 결정을 추측하지 않도록 root에서 확정한 계약을 적어 주세요.
       placeholder: |
-        - [ ] 같은 조건에서 문제를 재현했는가?
-        - [ ] 원인을 충분히 좁혔는가?
-        - [ ] 수정 후 회귀 테스트를 수행했는가?
-        - [ ] 운영 영향과 롤백 포인트를 확인했는가?
+        - Confirmed decisions / interfaces:
+        - Allow:
+        - Deny / Non-goals:
+        - Completion criteria / edge cases:
+        - Unresolved implementation decisions: 없음
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification_delivery
+    attributes:
+      label: Verification & Delivery
+      description: 실행할 검증, 남길 증거, skip 조건, 기능 단위 commit을 적어 주세요.
+      placeholder: |
+        - Exact commands:
+        - Expected / observed evidence:
+        - Skipped checks and rerun conditions: 없음
+        - Commit slices:
+          1. fix(scope): 작업 요약
     validations:
       required: true

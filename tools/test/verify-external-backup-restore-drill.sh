@@ -112,6 +112,10 @@ require_pattern "${DRILL_SCRIPT}" 'created_at_utc' "restore drill must prefer UT
 require_pattern "${DRILL_SCRIPT}" 'read_key_from_file AQUILA_BACKUP_ROOT' "restore drill must read backup root from deploy env"
 require_pattern "${DRILL_SCRIPT}" 'first == "".*END.*first' "restore drill must select MinIO sample without head-induced SIGPIPE"
 require_pattern "${DRILL_SCRIPT}" 'docker rm -f -v' "restore drill must remove anonymous PostgreSQL volumes"
+require_pattern_count "${DRILL_SCRIPT}" '[[:space:]]--network none' "2" "restore and cleanup MinIO containers must disable networking"
+require_pattern "${DRILL_SCRIPT}" '[[:space:]]--pull never' "restore drill cleanup must not pull an unverified image"
+require_pattern "${DRILL_SCRIPT}" '[[:space:]]--user 0:0' "restore drill cleanup must remove container-owned MinIO metadata"
+require_pattern "${DRILL_SCRIPT}" '/cleanup/restored-minio' "restore drill cleanup must stay inside the validated restored MinIO tree"
 reject_pattern "${DRILL_SCRIPT}" 'HOME_SERVER_ENV' "restore drill must not require raw production secret blobs"
 reject_pattern "${DRILL_SCRIPT}" 'postgres:16-alpine' "restore drill must not default to vanilla PostgreSQL"
 

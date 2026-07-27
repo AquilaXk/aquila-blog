@@ -573,7 +573,7 @@ jobs:
             "$HOME_SSH_USER@$HOME_HOST:${REMOTE_TMP_DIR}/"
 
           ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
-            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' bash -s" <<'REMOTE'
+            "umask 077 && cat > '${REMOTE_TMP_DIR}/deploy.sh' && HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' bash '${REMOTE_TMP_DIR}/deploy.sh' </dev/null" <<'REMOTE'
           set -euo pipefail
 
           decode_b64() {

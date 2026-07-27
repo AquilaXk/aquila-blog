@@ -286,6 +286,9 @@ case "${1:-}" in
 
     container="$1"
     shift
+    if [[ "${container}" == aquila-restore-drill-minio-* && "${1:-}" == "curl" && "${FAKE_MINIO_NO_CURL:-0}" == "1" ]]; then
+      exit 127
+    fi
     if [[ "${container}" == aquila-restore-drill-minio-* ]]; then
       exec "${REAL_DOCKER}" exec "${container}" "$@"
     fi
@@ -362,6 +365,15 @@ fi
 exec "${REAL_DF}" "$@"
 SH
 chmod +x "${FAKE_BIN_DIR}/df"
+cat > "${FAKE_BIN_DIR}/sleep" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${FAKE_FAST_SLEEP:-0}" == "1" ]]; then
+  exec /bin/sleep 0.01
+fi
+exec /bin/sleep "$@"
+SH
+chmod +x "${FAKE_BIN_DIR}/sleep"
 cat > "${UNSAFE_ARCHIVE_BIN_DIR}/tar" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -377,6 +389,8 @@ REAL_DOCKER="${REAL_DOCKER}" \
 REAL_DF="${REAL_DF}" \
 MINIO_LIVE_CONTAINER="${MINIO_LIVE_CONTAINER}" \
 FAKE_MINIO_LARGE_INVENTORY=1 \
+FAKE_MINIO_NO_CURL=1 \
+FAKE_FAST_SLEEP=1 \
 AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
 AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
 AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${ARTIFACT_DIR}" \

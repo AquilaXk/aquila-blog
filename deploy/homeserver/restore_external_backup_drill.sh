@@ -377,7 +377,7 @@ cleanup() {
 wait_for_minio() {
   local attempt
   for attempt in $(seq 1 60); do
-    if docker exec "${MINIO_CONTAINER}" curl -fsS http://127.0.0.1:9000/minio/health/ready >/dev/null 2>&1; then
+    if docker exec "${MINIO_CONTAINER}" mc ready local >/dev/null 2>&1; then
       return 0
     fi
     sleep 1

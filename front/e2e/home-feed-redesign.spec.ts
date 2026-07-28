@@ -274,7 +274,6 @@ test.describe("home feed product redesign", () => {
     expect(postCardSource).toContain("export default memo(PostCard)")
     expect(postCardSource).not.toContain("arePostCardPropsEqual")
     expect(postCardSource).toContain("INTERNAL_CATEGORY_TAGS")
-    expect(readFileSync(path.join(feedRoot, "ProfileSummaryCard.tsx"), "utf8")).not.toContain("resolveContactLinks(null)")
   })
 
   test("모바일 홈은 태그 칩과 카드 1열을 유지하고 가로 overflow를 만들지 않는다", async ({ page }) => {

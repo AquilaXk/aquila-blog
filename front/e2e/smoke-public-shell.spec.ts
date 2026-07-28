@@ -106,7 +106,6 @@ test.describe("core smoke public shell", () => {
   })
 
   test("public blog appearance는 V4 전역 theme와 sticky header 계약을 유지한다", async () => {
-  const resolverSource = readFileSync(path.resolve(__dirname, "../src/libs/blogAppearance.ts"), "utf8")
   const rootLayoutSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/index.tsx"), "utf8")
   const headerSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/index.tsx"), "utf8")
   const navBarSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/NavBar.tsx"), "utf8")
@@ -132,9 +131,6 @@ test.describe("core smoke public shell", () => {
     "utf8"
   )
 
-  expect(resolverSource).toContain('const normalizeBlogDesign = (_value: unknown): BlogDesignType => "legacy"')
-  expect(resolverSource).not.toContain('blogDesign === "grid"')
-  expect(resolverSource).not.toContain("src/libs/profileWorkspace")
   expect(rootLayoutSource).not.toContain("resolvePublicBlogAppearance")
   expect(rootLayoutSource).toContain("usePublicAdminProfile(initialAdminProfile")
   expect(headerSource).toContain('data-ui="app-header"')

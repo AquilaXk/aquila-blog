@@ -148,10 +148,10 @@ export const EditorStudioComposeMetadataSection = styled.div `
   margin-inline: auto;
   display: grid;
   gap: 1rem;
-  border: 1px solid ${({ theme }) => ("transparent")};
-  border-radius: ${({ theme }) => ("0")};
-  background: ${({ theme }) => ("transparent")};
-  padding: ${({ theme }) => ("0")};
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 `;
 export const ComposeSummaryField = styled.div `
   display: grid;

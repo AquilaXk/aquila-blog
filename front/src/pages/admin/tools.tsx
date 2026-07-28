@@ -1,104 +1,15 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { GetServerSideProps, NextPage } from "next"
 import { IncomingMessage } from "http"
-import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { setCookie } from "cookies-next"
-import { apiFetch } from "src/apis/backend/client"
+import { GetServerSideProps } from "next"
 import type { AuthMember } from "src/hooks/useAuthSession"
-import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetchJson } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
-import AdminShell from "src/routes/Admin/AdminShell"
 import {
-  ACTION_META,
-  CHECK_REQUIRED_STATUS_LABEL,
-  CONNECTION_UNAVAILABLE_STATUS_LABEL,
-  DATA_EMPTY_STATUS_LABEL,
-  HEALTH_CACHE_MS,
-  RESULTS_FILTER_STORAGE_KEY,
-  SECTION_IDS,
-  SYSTEM_HEALTH_QUERY_KEY,
-  buildExecutionSummary,
-  formatAge,
-  formatInstant,
-  formatRetryPolicy,
-  getDiagnosticFallbackStatusLabel,
-  getFreshnessMeta,
-  getStatusTone,
-  getSystemHealthSummary,
-  isOperationalStatusMissing,
-  isExecutionResultFilter,
-  normalizeOperationalStatusLabel,
-  type DiagnosticTab,
-  type ExecutionEntry,
-  type ExecutionResultFilter,
-  type InlineNoticeTone,
-  type JsonValue,
-  type SectionKey,
   type SystemHealthPayload,
   type TaskRetryPolicy,
 } from "src/routes/Admin/AdminToolsWorkspaceModel"
-import {
-  Main,
-  OpsOverview,
-  OverviewHeader,
-  OverviewMeta,
-  MetaCaption,
-  OverviewContent,
-  FeaturedStatusCard,
-  CardEyebrow,
-  CardMainLine,
-  CardDetail,
-  StatusCardGrid,
-  StatusCardButton,
-  SectionTitleBlock,
-  CalmMessage,
-  WorkspaceShell,
-  WorkspaceColumn,
-  WorkspaceSection,
-  SectionHeading,
-  StatusBadge,
-  FreshnessBadge,
-  SubSectionHeading,
-  DetailsPanel,
-  DetailsSummary,
-  DiagnosticsTabs,
-  DiagnosticsTabButton,
-  DiagnosticPanel,
-  DiagnosticHeader,
-  ActionRow,
-  QuietButton,
-  MetricGrid,
-  MetricCard,
-  InlineNotice,
-  SubtleMetaGrid,
-  SubtleMetaItem,
-  CompactList,
-  CompactListItem,
-  CompactCodeList,
-  ExecutionLayout,
-  ExecutionMain,
-  ActionToneBadge,
-  ActionList,
-  ActionRowButton,
-  FieldGrid,
-  FieldBox,
-  FieldLabel,
-  Input,
-  TextArea,
-  DangerPanel,
-  SandboxSection,
-  SandboxHeader,
-  DangerActionRow,
-  ConfirmDeleteRow,
-  DangerButton,
-} from "src/routes/Admin/AdminToolsWorkspace.styles"
-import AdminToolsExecutionRail from "src/routes/Admin/AdminToolsExecutionRail"
-import AdminToolsResultsPanel from "src/routes/Admin/AdminToolsResultsPanel"
 
 type SignupMailDiagnostics = {
   status: string
@@ -193,12 +104,6 @@ type AuthSecurityEvent = {
   reason: string | null
 }
 
-type ApiRsData<T> = {
-  resultCode: string
-  msg: string
-  data: T
-}
-
 type AdminToolsInitialSnapshot = {
   systemHealth: SystemHealthPayload | null
   systemHealthFetchedAt: string | null
@@ -226,25 +131,7 @@ type AdminToolsPageProps = AdminPageProps & {
   initialSnapshot: AdminToolsInitialSnapshot
 }
 
-type PageDto<T> = {
-  content?: T[]
-}
-
-const EMPTY_INITIAL_SNAPSHOT: AdminToolsInitialSnapshot = {
-  systemHealth: null,
-  systemHealthFetchedAt: null,
-  mailDiagnostics: null,
-  taskQueueDiagnostics: null,
-  taskQueueCheckedAt: null,
-  cleanupDiagnostics: null,
-  cleanupCheckedAt: null,
-  authSecurityEvents: [],
-  authSecurityCheckedAt: null,
-  seedPostId: "",
-}
-
 const ADMIN_TOOLS_MAIL_SNAPSHOT_COOKIE = "admin_tools_mail_snapshot_v1"
-const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_AGE_SECONDS = 60 * 30
 const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
 const ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY = "admin-tools:system-health"
 const ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS = 10_000
@@ -263,42 +150,6 @@ const readCookieValue = (req: IncomingMessage, key: string) => {
 
   return null
 }
-
-const buildMailSnapshot = (diagnostics: SignupMailDiagnostics): SignupMailDiagnostics => ({
-  status: diagnostics.status,
-  adapter: diagnostics.adapter,
-  host: diagnostics.host,
-  port: diagnostics.port,
-  mailFrom: diagnostics.mailFrom,
-  usernameConfigured: diagnostics.usernameConfigured,
-  passwordConfigured: diagnostics.passwordConfigured,
-  smtpAuth: diagnostics.smtpAuth,
-  startTlsEnabled: diagnostics.startTlsEnabled,
-  missing: diagnostics.missing,
-  canConnect: diagnostics.canConnect,
-  checkedAt: diagnostics.checkedAt,
-  verifyPath: diagnostics.verifyPath,
-  connectionError: diagnostics.connectionError ?? null,
-  taskQueue: diagnostics.taskQueue
-    ? {
-        taskType: diagnostics.taskQueue.taskType,
-        pendingCount: diagnostics.taskQueue.pendingCount,
-        readyPendingCount: diagnostics.taskQueue.readyPendingCount,
-        delayedPendingCount: diagnostics.taskQueue.delayedPendingCount,
-        processingCount: diagnostics.taskQueue.processingCount,
-        backlogCount: diagnostics.taskQueue.backlogCount,
-        queueLagSeconds: diagnostics.taskQueue.queueLagSeconds,
-        failedCount: diagnostics.taskQueue.failedCount,
-        staleProcessingCount: diagnostics.taskQueue.staleProcessingCount,
-        label: diagnostics.taskQueue.label,
-        oldestReadyPendingAt: diagnostics.taskQueue.oldestReadyPendingAt,
-        oldestReadyPendingAgeSeconds: diagnostics.taskQueue.oldestReadyPendingAgeSeconds,
-        latestFailureAt: diagnostics.taskQueue.latestFailureAt,
-        latestFailureMessage: diagnostics.taskQueue.latestFailureMessage,
-        retryPolicy: diagnostics.taskQueue.retryPolicy,
-      }
-    : null,
-})
 
 const readMailSnapshotFromCookie = (req: IncomingMessage): SignupMailDiagnostics | null => {
   const raw = readCookieValue(req, ADMIN_TOOLS_MAIL_SNAPSHOT_COOKIE)
@@ -393,16 +244,6 @@ const readMailSnapshotFromCookie = (req: IncomingMessage): SignupMailDiagnostics
   } catch {
     return null
   }
-}
-
-const persistMailSnapshotCookie = (diagnostics: SignupMailDiagnostics) => {
-  const snapshot = buildMailSnapshot(diagnostics)
-  setCookie(ADMIN_TOOLS_MAIL_SNAPSHOT_COOKIE, JSON.stringify(snapshot), {
-    path: "/admin/tools",
-    sameSite: "lax",
-    maxAge: ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_AGE_SECONDS,
-    secure: typeof window !== "undefined" && window.location.protocol === "https:",
-  })
 }
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {

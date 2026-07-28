@@ -47,7 +47,7 @@ type UseEditorStudioProfileCommandsParams = {
   setMe: (member: any) => void
   setResult: Dispatch<SetStateAction<string>>
   pretty: (value: unknown) => string
-  uploadWithConflictRetry: <T>(requestUpload: () => Promise<Response>) => Promise<Response>
+  uploadWithConflictRetry: (requestUpload: () => Promise<Response>) => Promise<Response>
 }
 
 export const useEditorStudioProfileCommands = ({

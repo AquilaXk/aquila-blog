@@ -296,6 +296,10 @@ test.describe("관리자 표면 공통 계약", () => {
       "utf8",
     )
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const toolsSectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceSections.tsx"),
+      "utf8",
+    )
     const dashboardSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
     const profileLayoutStyles = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.layout.ts"),
@@ -323,7 +327,7 @@ test.describe("관리자 표면 공통 계약", () => {
     )
 
     expect(profileSectionSource).toContain('from "src/routes/Admin/AdminProfileWorkspace.styles"')
-    expect(toolsSource).toContain('from "src/routes/Admin/AdminToolsWorkspace.styles"')
+    expect(toolsSectionSource).toContain('from "src/routes/Admin/AdminToolsWorkspace.styles"')
     expect(dashboardSource).toContain('export { default } from "src/routes/Admin/AdminDashboardWorkspacePage"')
 
     expect(profileSource).not.toContain("const PreviewRail = styled(")

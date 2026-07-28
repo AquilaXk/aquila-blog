@@ -2,8 +2,6 @@ import AppIcon from "src/components/icons/AppIcon"
 import { Button, PrimaryButton, RowActionButton, RowActionMenu } from "./EditorStudioPostListActionStyles"
 import {
   DeletedBadge,
-  EditorStudioPostListInlineStatus,
-  EditorStudioPostListPanelShell,
   InlineActions,
   ListEmpty,
   ListHeader,
@@ -340,4 +338,3 @@ const PostRowActions = ({ row, listScope, isLoadedRow, isLoading, commands }: Po
   )
 
 export { EditorStudioPostListInlineStatus, EditorStudioPostListPanelShell } from "./EditorStudioPostListPanelStyles"
-

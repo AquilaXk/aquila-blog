@@ -3,7 +3,6 @@ import {
   adminAccentText,
   adminAppBackground,
   adminBorder,
-  adminBorderStrong,
   adminControlText,
   adminGoldTintFocus,
   adminSurface,

@@ -42,11 +42,6 @@ export type AdminProfileWorkspacePageProps = {
   initialWorkspace: ProfileWorkspaceResponse | null
 }
 
-type AdminProfileBootstrapPayload = {
-  member: AuthMember
-  workspace: ProfileWorkspaceResponse
-}
-
 export const useAdminProfileWorkspacePageModel = ({
   initialMember,
   initialWorkspace,

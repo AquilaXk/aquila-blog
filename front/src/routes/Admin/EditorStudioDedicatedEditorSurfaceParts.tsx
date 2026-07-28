@@ -153,7 +153,7 @@ const Button = styled.button `
   border-radius: 6px;
   padding: 0.62rem 0.92rem;
   min-height: 44px;
-  background: ${({ theme }) => ("transparent")};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray10};
   cursor: pointer;
   font-size: 0.84rem;
@@ -251,7 +251,7 @@ export const EditorStudioDedicatedMetaSection = styled.section<{
   gap: 0;
   border: 0;
   border-bottom: 1px solid ${({ theme }) => theme.publicDesign.border};
-  border-radius: ${({ theme }) => ("0")};
+  border-radius: 0;
   background: ${({ theme }) => theme.publicDesign.readableSurface};
   padding: 22px 28px 17px;
 
@@ -447,10 +447,10 @@ export const EditorStudioDedicatedCanvasSection = styled.section `
   gap: 0;
   overflow: hidden;
   border: 0;
-  border-radius: ${({ theme }) => ("0")};
-  background: ${({ theme }) => ("transparent")};
+  border-radius: 0;
+  background: transparent;
   padding: 0;
-  box-shadow: ${({ theme }) => ("none")};
+  box-shadow: none;
 
   @media (max-width: 820px) {
     width: 100vw;

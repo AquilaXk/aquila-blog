@@ -141,8 +141,6 @@ const pickPreferredImageUrl = (...candidates: Array<string | undefined>) => {
   return ""
 }
 
-const isAbortError = (error: unknown): boolean => error instanceof Error && error.name === "AbortError"
-
 export const mapPostDto = (post: ApiPostDto): TPost => {
   const normalizedTags = normalizeStringArray(post.tags)
   const normalizedCategories = normalizeCategoryArray(post.category)

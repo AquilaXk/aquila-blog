@@ -16,7 +16,6 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     setOpen,
     isMobileViewport,
     items,
-    unreadCount,
     isSnapshotFallback,
     hasUnread,
     unreadBadge,

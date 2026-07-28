@@ -59,7 +59,6 @@
     "@tanstack/react-query": "^5.64.2",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
-    "axios": "1.18.1",
     "cookies-next": "^2.1.2",
     "dompurify": "3.4.2",
     "katex": "0.16.44",
@@ -134,7 +133,6 @@
     "openapi-typescript": "^7.4.4",
     "postcss": "8.5.22",
     "prettier": "^2.7.1",
-    "prismjs": "1.30.0",
     "storybook": "^8.6.14",
     "typescript": "^5.6.3",
     "webpack": "^5.97.1"

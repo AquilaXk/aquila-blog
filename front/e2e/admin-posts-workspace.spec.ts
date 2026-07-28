@@ -32,8 +32,9 @@ test.describe("admin posts workspace link contract", () => {
     expect(listSource).toContain('<th className="dateCell">Updated</th>')
     expect(listSource).toContain('<th className="viewsCell">{isDeletedScope ? "Actions" : "Views"}</th>')
     expect(listSource).toContain("const openEditorForRow = (row: AdminPostListItem) => onOpenWriteRoute({ postId: String(row.id) })")
-    expect(listSource).toContain("{...primaryProps}")
-    expect(listSource).toContain("onClick={() => openEditorForRow(row)}")
+    const titleButtonSource = listSource.match(/<TitleButton[\s\S]*?<\/TitleButton>/)?.[0] ?? ""
+    expect(titleButtonSource).toContain("{...primaryProps}")
+    expect(titleButtonSource).toContain("onClick={() => openEditorForRow(row)}")
     expect(listSource).not.toContain('role={isDeletedScope ? undefined : "button"}')
     expect(listSource).toContain("onRestorePost(row)")
     expect(listSource).toContain("onHardDeletePost(row)")

@@ -39,7 +39,7 @@ const resolveServerTimeoutMs = (path: string, init: ServerApiFetchInit): number 
   return FALLBACK_TIMEOUT_MS
 }
 
-export const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
+export const resolveServerApiBaseUrl = (_req: IncomingMessage): string => {
   const internal = process.env.BACKEND_INTERNAL_URL
   if (internal) return internal.replace(/\/+$/, "")
 

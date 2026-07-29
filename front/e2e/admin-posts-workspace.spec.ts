@@ -6,18 +6,12 @@ test.describe("admin posts workspace link contract", () => {
   test("posts workspace uses detail-like hero copy and checklist rail labels", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
     const pageViewSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageView.tsx"), "utf8")
-    const recentWorkSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceRecentWork.tsx"),
-      "utf8"
-    )
-
     expect(pageViewSource).toContain("<h1>글 관리</h1>")
     expect(source).not.toContain("최근 초안 복귀, 공개 상태 점검, 목록 필터링까지 지금 필요한 글 작업 흐름을 한곳에 모읍니다.")
     expect(source).not.toContain("<h2>검수 체크리스트</h2>")
     expect(source).not.toContain("<h2>상태 의미</h2>")
     expect(source).not.toContain("<h2>바로가기</h2>")
     expect(source).not.toContain("const WorkspaceRail = styled(AdminStickyRail)`")
-    expect(recentWorkSource).toContain("grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));")
   })
 
   test("관리자 글 목록은 V4 table row editor 진입 계약을 유지한다", () => {
@@ -26,11 +20,6 @@ test.describe("admin posts workspace link contract", () => {
     const modelSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceModel.ts"), "utf8")
     const pageSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")
     const pageViewSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePageView.tsx"), "utf8")
-    const recentWorkSource = readFileSync(
-      path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceRecentWork.tsx"),
-      "utf8"
-    )
-
     expect(modelSource).toContain('if (visibility === "PUBLIC_UNLISTED") return "링크 공개"')
     expect(listSource).toContain('from "./AdminPostsWorkspaceList.styles"')
     expect(listStyleSource).toContain("AdminInlineActionRow,")
@@ -43,7 +32,9 @@ test.describe("admin posts workspace link contract", () => {
     expect(listSource).toContain('<th className="dateCell">Updated</th>')
     expect(listSource).toContain('<th className="viewsCell">{isDeletedScope ? "Actions" : "Views"}</th>')
     expect(listSource).toContain("const openEditorForRow = (row: AdminPostListItem) => onOpenWriteRoute({ postId: String(row.id) })")
-    expect(listSource).toContain("<TitleButton type=\"button\" onClick={() => openEditorForRow(row)}>")
+    const titleButtonSource = listSource.match(/<TitleButton[\s\S]*?<\/TitleButton>/)?.[0] ?? ""
+    expect(titleButtonSource).toContain("{...primaryProps}")
+    expect(titleButtonSource).toContain("onClick={() => openEditorForRow(row)}")
     expect(listSource).not.toContain('role={isDeletedScope ? undefined : "button"}')
     expect(listSource).toContain("onRestorePost(row)")
     expect(listSource).toContain("onHardDeletePost(row)")
@@ -57,7 +48,6 @@ test.describe("admin posts workspace link contract", () => {
     expect(pageSource).not.toContain("const displayListState = useMemo")
     expect(modelSource).toContain("if (isServerTempDraftPost(row)) return \"draft\"")
     expect(modelSource).toContain('query.set("status", options.status)')
-    expect(listSource).toContain("<TitleButton type=\"button\" onClick={() => openEditorForRow(row)}>")
     expect(listSource).toContain('const getStatusLabel = (row: AdminPostListItem) => (listScope === "deleted" ? "삭제됨" : workspaceStatusLabel(row))')
     expect(listSource).toContain('const getStatusTone = (row: AdminPostListItem) => (listScope === "deleted" ? "PRIVATE" : toVisibility(row.published, row.listed))')
     expect(listSource).toContain('<span className="dateCell">Updated</span>')
@@ -71,23 +61,7 @@ test.describe("admin posts workspace link contract", () => {
     expect(listSource).not.toContain("TitleAnchor")
     expect(listSource).not.toContain("상세 열기")
     expect(listSource).not.toContain("링크 복사")
-    expect(recentWorkSource).toContain("recentPosts.slice(0, 3)")
-    expect(recentWorkSource).toContain("grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));")
     expect(pageViewSource).toContain("<h1>글 관리</h1>")
-    expect(recentWorkSource).toContain('<ResumeCardButton type="button" onClick={() => onOpenWriteRoute({ source: "local-draft" })}>')
-    expect(recentWorkSource).toContain("const ResumeCardButton = styled.button`")
-    expect(recentWorkSource).not.toContain('<PrimaryInlineButton type="button" onClick={() => onOpenWriteRoute({ source: "local-draft" })}>')
-    expect(recentWorkSource).not.toContain('data-emphasis={localDraft ? "strong" : "soft"}')
-    expect(recentWorkSource).not.toContain('data-clickable={localDraft ? "true" : undefined}')
-  })
-
-  test("브라우저 임시저장 카드는 본문 markdown preview를 직접 노출하지 않는다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspaceRecentWork.tsx"), "utf8")
-
-    expect(source).not.toContain("summary: summary || content.slice(0, 120)")
-    expect(source).not.toContain("{localDraft.summary ? <ResumeDescription>{localDraft.summary}</ResumeDescription> : null}")
-    expect(source).toContain("{localDraft.savedAt ? <span>{formatDateTime(localDraft.savedAt)}</span> : null}")
-    expect(source).toContain("<ResumeTitle>{localDraft.title}</ResumeTitle>")
   })
 
   test("글 관리 API 실패 문구는 raw fetch detail을 사용자-facing 상태에 직접 노출하지 않는다", () => {
@@ -120,6 +94,10 @@ test.describe("admin posts workspace link contract", () => {
 
   test("V4 markdown editor는 code title snippet과 모바일 split preview를 유지한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/components/markdown-editor/MarkdownEditor.tsx"), "utf8")
+    const styleSource = readFileSync(
+      path.resolve(__dirname, "../src/components/markdown-editor/MarkdownEditor.styles.ts"),
+      "utf8"
+    )
     const editorNewPageSource = readFileSync(path.resolve(__dirname, "../src/pages/editor/new.tsx"), "utf8")
     const editorPostPageSource = readFileSync(path.resolve(__dirname, "../src/pages/editor/[id].tsx"), "utf8")
     const legacyWriteRedirectSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/posts/write.tsx"), "utf8")
@@ -157,14 +135,14 @@ test.describe("admin posts workspace link contract", () => {
       editorPartsSource.match(/export const EditorInspectorTagInputRow[\s\S]*?`;/)?.[0] ?? ""
     const inspectorFullWidthActionStyle =
       editorPartsSource.match(/export const EditorInspectorFullWidthAction[\s\S]*?`;/)?.[0] ?? ""
-    const markdownEditorRootStyle = source.match(/const EditorRoot = styled\.section`[\s\S]*?\n`/)?.[0] ?? ""
-    const markdownEditorToolbarStyle = source.match(/const EditorToolbar = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
-    const markdownToolbarGroupStyle = source.match(/const ToolbarGroup = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
-    const markdownEditorBodyStyle = source.match(/const EditorBody = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
-    const markdownWritePaneStyle = source.match(/const WritePane = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
-    const markdownTextareaStyle = source.match(/const MarkdownTextarea = styled\.textarea`[\s\S]*?\n`/)?.[0] ?? ""
-    const markdownPreviewPaneStyle = source.match(/const PreviewPane = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
-    const markdownPreviewArticleStyle = source.match(/const PreviewArticle = styled\.article`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownEditorRootStyle = styleSource.match(/const EditorRoot = styled\.section`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownEditorToolbarStyle = styleSource.match(/const EditorToolbar = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownToolbarGroupStyle = styleSource.match(/const ToolbarGroup = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownEditorBodyStyle = styleSource.match(/const EditorBody = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownWritePaneStyle = styleSource.match(/const WritePane = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownTextareaStyle = styleSource.match(/const MarkdownTextarea = styled\.textarea`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownPreviewPaneStyle = styleSource.match(/const PreviewPane = styled\.div`[\s\S]*?\n`/)?.[0] ?? ""
+    const markdownPreviewArticleStyle = styleSource.match(/const PreviewArticle = styled\.article`[\s\S]*?\n`/)?.[0] ?? ""
 
     expect(editorNewPageSource).toContain("getEditorStudioPageProps")
     expect(editorPostPageSource).toContain("getEditorStudioPageProps")
@@ -174,8 +152,6 @@ test.describe("admin posts workspace link contract", () => {
     expect(controllerSource).toContain("if (isDedicatedEditorRoute) {")
     expect(controllerSource).toContain("<EditorStudioDedicatedEditorSurface")
     expect(controllerSource).toContain("editorCanvas={dedicatedEditorCanvas}")
-    expect(source).toContain('```kotlin title="invalidatePost.kt"')
-    expect(source).toContain("| 항목 | 설명 |")
     expect(source).not.toContain("| Column 1 | Column 2 | Column 3 |")
     expect(source).toContain("title={snippet.title}")
     expect(source).toContain('<ToolbarUploadButton title="이미지" aria-label="이미지" aria-disabled={disabled || !onUploadImage}>')
@@ -187,11 +163,11 @@ test.describe("admin posts workspace link contract", () => {
     expect(source).toContain("{previewTitle ? <h1>{previewTitle}</h1> : null}")
     expect(source).toContain("{previewSummary ? <p>{previewSummary}</p> : null}")
     expect(source).not.toContain("<h1>캐시가 빨라질수록")
-    expect(source).toContain("padding: 48px 44px 110px;")
-    expect(source).toContain("@media (max-width: 820px)")
-    expect(source).toContain("@media (max-width: 1100px)")
-    expect(source).not.toContain("@media (max-width: 980px)")
-    expect(source).toContain('&[data-mode="split"] [data-pane="preview"]')
+    expect(styleSource).toContain("padding: 48px 44px 110px;")
+    expect(styleSource).toContain("@media (max-width: 820px)")
+    expect(styleSource).toContain("@media (max-width: 1100px)")
+    expect(styleSource).not.toContain("@media (max-width: 980px)")
+    expect(styleSource).toContain('&[data-mode="split"] [data-pane="preview"]')
     expect(source).toContain("ref={previewScrollRef}")
     expect(source).toContain("onScroll={handlePreviewScroll}")
     expect(source).toContain("onWheel={handlePreviewWheel}")

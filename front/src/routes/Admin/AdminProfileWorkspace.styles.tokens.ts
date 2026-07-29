@@ -1,17 +1,6 @@
 import styled from "@emotion/styled"
 import { control } from "src/design-system/tokens"
 import {
-  AdminInfoPanelCard,
-  AdminPaneHeader,
-  AdminRailCard,
-  AdminStickyRail,
-  AdminSubtleCard,
-  AdminWorkspaceActionDock,
-  AdminWorkspaceHero,
-  AdminWorkspaceSectionNav,
-  AdminWorkspaceSectionNavButton,
-} from "src/routes/Admin/AdminSurfacePrimitives"
-import {
   adminBorder,
   adminBorderStrong,
   adminControlText,

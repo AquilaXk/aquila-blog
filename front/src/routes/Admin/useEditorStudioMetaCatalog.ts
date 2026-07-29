@@ -10,11 +10,6 @@ type NoticeState = {
   text: string
 }
 
-type RsData<T> = {
-  data: T
-  msg: string
-}
-
 type TagUsageDto = {
   tag: string
   count: number
@@ -35,7 +30,6 @@ type UseEditorStudioMetaCatalogParams = {
 
 export const useEditorStudioMetaCatalog = ({
   customTagCatalog,
-  postTags,
   setCustomTagCatalog,
   setKnownTags,
   setMetaCatalogLoading,

@@ -23,9 +23,6 @@ const HTML_CODE_CONTAINER_OPEN_REGEX = /<(div|section|figure)\b([^>]*)>/gi
 
 const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}[\w-]*[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/
 const HAS_MERMAID_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}\s*mermaid\b[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/i
-const STANDALONE_MARKDOWN_IMAGE_REGEX =
-  /^!\[([^\]]*)\]\((.+?)(?:\s+"([^"]*)")?\)(?:\s*\{([^}]*)\})?\s*$/
-
 const containsTokenByCharCodes = (text: string, token: number[]) => {
   if (!text || token.length === 0 || text.length < token.length) return false
 

@@ -26,8 +26,6 @@ const LegalPolicyPage = ({
   policy,
   kind,
   currentHref,
-  versionHref,
-  historyHref,
   downloadText,
   downloadFilename,
   downloadHashBasis,

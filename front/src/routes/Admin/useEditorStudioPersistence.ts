@@ -20,7 +20,6 @@ type NoticeTone = "idle" | "loading" | "success" | "error"
 type PublishNotice = { tone: NoticeTone; text: string }
 type PublishTarget = "page" | "modal"
 type EditorMode = "create" | "edit"
-type PublishActionType = "create" | "modify" | "temp"
 type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
 
 type RsData<T> = {
@@ -137,7 +136,7 @@ type UseEditorStudioPersistenceParams = {
   generateIdempotencyKey: () => string
   removeLocalDraft: (source: { kind: "create" } | { kind: "post"; postId: string }) => void
   signalLocalDraftBaselineReady: (signal?: LocalDraftBaselineReadySignal) => void
-  uploadWithConflictRetry: <T>(requestUpload: () => Promise<Response>) => Promise<Response>
+  uploadWithConflictRetry: (requestUpload: () => Promise<Response>) => Promise<Response>
   normalizeSafeImageUrl: (raw: string) => string
   extractImageFileFromClipboard: (clipboardData: DataTransfer | null) => File | null
 }

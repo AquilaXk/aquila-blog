@@ -16,11 +16,11 @@ const meta: Meta<typeof AuthShell> = {
       <form>
         <div style={{ display: "grid", gap: "0.45rem" }}>
           <label htmlFor="storybook-email">이메일</label>
-          <input id="storybook-email" defaultValue="aquilaxk10@gmail.com" />
+          <input id="storybook-email" defaultValue="example@example.com" />
         </div>
         <div style={{ display: "grid", gap: "0.45rem" }}>
           <label htmlFor="storybook-password">비밀번호</label>
-          <input id="storybook-password" type="password" defaultValue="134679258sS#" />
+          <input id="storybook-password" type="password" defaultValue="storybook-test-only" />
         </div>
         <button type="button">로그인</button>
       </form>

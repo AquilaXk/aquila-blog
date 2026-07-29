@@ -201,7 +201,7 @@ export const StyledWrapper = styled.div`
 
     &[data-read="false"] {
       border-color: ${({ theme }) => theme.colors.blue7};
-      background: ${({ theme }) => "rgba(24, 67, 135, 0.22)"};
+      background: ${({ theme }) => theme.colors.accentSurfaceStrong};
     }
   }
 

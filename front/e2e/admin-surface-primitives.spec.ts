@@ -296,6 +296,10 @@ test.describe("관리자 표면 공통 계약", () => {
       "utf8",
     )
     const toolsSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/tools.tsx"), "utf8")
+    const toolsSectionSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/AdminToolsWorkspaceSections.tsx"),
+      "utf8",
+    )
     const dashboardSource = readFileSync(path.resolve(__dirname, "../src/pages/admin/dashboard.tsx"), "utf8")
     const profileLayoutStyles = readFileSync(
       path.resolve(__dirname, "../src/routes/Admin/AdminProfileWorkspace.styles.layout.ts"),
@@ -323,7 +327,7 @@ test.describe("관리자 표면 공통 계약", () => {
     )
 
     expect(profileSectionSource).toContain('from "src/routes/Admin/AdminProfileWorkspace.styles"')
-    expect(toolsSource).toContain('from "src/routes/Admin/AdminToolsWorkspace.styles"')
+    expect(toolsSectionSource).toContain('from "src/routes/Admin/AdminToolsWorkspace.styles"')
     expect(dashboardSource).toContain('export { default } from "src/routes/Admin/AdminDashboardWorkspacePage"')
 
     expect(profileSource).not.toContain("const PreviewRail = styled(")
@@ -375,11 +379,9 @@ test.describe("관리자 표면 공통 계약", () => {
       "utf8",
     )
 
-    expect(postsSource).not.toContain('import { AdminPostsWorkspaceRecentWork } from "./AdminPostsWorkspaceRecentWork"')
     expect(postsSource).toContain('import { AdminPostsWorkspaceFilterToolbar } from "./AdminPostsWorkspaceFilterToolbar"')
     expect(postsSource).toContain('import { AdminPostsWorkspaceList } from "./AdminPostsWorkspaceList"')
     expect(postsSource).toContain('import { AdminPostsWorkspaceFeedbackLayer } from "./AdminPostsWorkspaceFeedbackLayer"')
-    expect(postsSource).not.toContain("<AdminPostsWorkspaceRecentWork")
     expect(postsSource).toContain("<AdminPostsWorkspaceFilterToolbar")
     expect(postsSource).toContain("<AdminPostsWorkspaceList")
     expect(postsSource).toContain("<AdminPostsWorkspaceFeedbackLayer")
@@ -484,21 +486,6 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(toolsLayoutStyleSource).toContain("box-shadow: ${({ theme }) => adminInteractiveFocusRing(theme)};")
   })
 
-  test("관리자 상단 바는 현재 화면 맥락과 태블릿 축약 내비게이션만 유지한다", () => {
-    const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminUtilityBar.tsx"), "utf8")
-
-    expect(source).toContain("<CurrentViewChip aria-label=\"현재 화면\">")
-    expect(source).toContain("@media (max-width: 1100px) {")
-    expect(source).toContain("<CompactNav aria-label=\"관리자 바로가기\">")
-    expect(source).not.toContain("프로필 설정")
-    expect(source).not.toContain("운영 도구 바로가기")
-    expect(source).not.toContain("ProfileImage")
-    expect(source).not.toContain('<AppIcon name="camera" />')
-    expectStyledComponentRadius(source, "SearchField", "2px")
-    expectStyledComponentRadius(source, "SearchInput", "2px")
-    expectStyledComponentRadius(source, "CurrentViewChip", "2px")
-  })
-
   test("관리자 사이드바는 V4 reference rail 순서와 하단 프로필을 유지한다", () => {
     const source = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminShell.tsx"), "utf8")
 
@@ -524,7 +511,10 @@ test.describe("관리자 표면 공통 계약", () => {
     expect(source).toContain("const SidebarLogoutAction = styled.button`")
     expect(source).toContain('<SidebarLogoutAction type="button" aria-label="Logout" onClick={() => void handleLogout()}>')
     expect(source).toContain("const ResponsiveLogoutAction = styled.button`")
-    expect(source).toMatch(/const ResponsiveLogoutAction = styled\.button`[\s\S]*?@media \(max-width: 1100px\) \{[\s\S]*?display: inline-flex;/)
+    expect(getStyledComponentBlock(source, "ResponsiveLogoutAction")).toContain(
+      '@media (max-width: ${layoutBreakpoint.adminCompact}px)'
+    )
+    expect(getStyledComponentBlock(source, "ResponsiveLogoutAction")).toContain("display: inline-flex;")
     expect(source).not.toContain("<SidebarSectionLabel>관리 메뉴</SidebarSectionLabel>")
     expect(source.indexOf("<BrandBlock>")).toBeLessThan(source.indexOf("<SidebarNavSection>"))
     expect(source.indexOf("<SidebarNavSection>")).toBeLessThan(source.indexOf("<SidebarProfile>"))

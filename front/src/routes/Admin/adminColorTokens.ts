@@ -108,31 +108,31 @@ export const adminActionGroupLightSurface = `var(--admin-action-group-surface, c
 
 export const usesDarkAdminSurface = (theme: Theme) => theme.scheme !== "light"
 
-export const adminPrimaryText = (theme: Theme) =>
+export const adminPrimaryText = (_theme: Theme) =>
   adminTextPrimary
 
-export const adminSecondaryText = (theme: Theme) =>
+export const adminSecondaryText = (_theme: Theme) =>
   adminTextSecondary
 
-export const adminMutedText = (theme: Theme) =>
+export const adminMutedText = (_theme: Theme) =>
   adminTextMuted
 
-export const adminCardBorder = (theme: Theme) =>
+export const adminCardBorder = (_theme: Theme) =>
   adminBorder
 
-export const adminStrongBorder = (theme: Theme) =>
+export const adminStrongBorder = (_theme: Theme) =>
   adminBorderStrong
 
-export const adminPlainSurface = (theme: Theme) =>
+export const adminPlainSurface = (_theme: Theme) =>
   adminSurface
 
-export const adminRaisedSurface = (theme: Theme) =>
+export const adminRaisedSurface = (_theme: Theme) =>
   adminSurfaceRaised
 
-export const adminMutedSurface = (theme: Theme) =>
+export const adminMutedSurface = (_theme: Theme) =>
   adminSurfaceMuted
 
-export const adminAccentSurface = (theme: Theme) =>
+export const adminAccentSurface = (_theme: Theme) =>
   adminSurfaceAccent
 
 export const adminWarningBadgeBorder = () => adminBorderStrong

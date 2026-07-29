@@ -129,11 +129,11 @@ export const EditorStudioContentWorkspace = ({ shouldShowGlobalNotice, globalNot
   </Section>);
 const Section = styled.section `
   border: 1px solid ${({ theme }) => (theme.colors.gray5)};
-  border-radius: ${({ theme }) => ("14px")};
+  border-radius: 14px;
   padding: 0.96rem;
   margin-bottom: 1.05rem;
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: ${({ theme }) => ("none")};
+  box-shadow: none;
 
   h2 {
     margin: 0;
@@ -217,7 +217,7 @@ const ContentStudioLeft = styled.div `
   gap: 0.95rem;
   min-width: 0;
   border: 1px solid ${({ theme }) => (theme.colors.gray5)};
-  border-radius: ${({ theme }) => ("12px")};
+  border-radius: 12px;
   background: ${({ theme }) => (theme.colors.gray1)};
   padding: 0.9rem;
   box-shadow: none;

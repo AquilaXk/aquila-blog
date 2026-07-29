@@ -68,7 +68,7 @@ type UseEditorStudioPersistenceUploadsParams = {
   setPreviewThumbnailSourceUrl: StudioSetState<string>
   setPublishStatus: (notice: PublishNotice) => void
   setThumbnailImageFileName: StudioSetState<string>
-  uploadWithConflictRetry: <T>(requestUpload: () => Promise<Response>) => Promise<Response>
+  uploadWithConflictRetry: (requestUpload: () => Promise<Response>) => Promise<Response>
 }
 
 export const useEditorStudioPersistenceUploads = ({

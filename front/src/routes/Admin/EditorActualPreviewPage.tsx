@@ -150,11 +150,11 @@ const PreviewArticle = styled.article `
   display: grid;
   gap: 1.15rem;
   min-width: 0;
-  border: 1px solid ${({ theme }) => ("transparent")};
-  border-radius: ${({ theme }) => ("0")};
-  background: ${({ theme }) => ("transparent")};
-  padding: ${({ theme }) => ("0")};
-  box-shadow: ${({ theme }) => ("none")};
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
 `;
 const PreviewBody = styled.section `
   min-width: 0;
@@ -164,10 +164,10 @@ const PreviewEmptyState = styled.div `
   margin: 4rem auto 0;
   display: grid;
   gap: 0.5rem;
-  border: 1px solid ${({ theme }) => ("transparent")};
-  border-radius: ${({ theme }) => ("0")};
-  background: ${({ theme }) => ("transparent")};
-  padding: ${({ theme }) => ("0")};
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};

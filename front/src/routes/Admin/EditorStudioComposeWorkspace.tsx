@@ -137,7 +137,7 @@ const ComposeSurfaceSection = styled.section `
   padding: 1.1rem 1.1rem 1.3rem;
   margin-bottom: 1.2rem;
   background: ${({ theme }) => theme.publicDesign.operationSurface};
-  box-shadow: ${({ theme }) => ("none")};
+  box-shadow: none;
 
   h2 {
     margin: 0;
@@ -207,7 +207,7 @@ const Button = styled.button `
   border-radius: 6px;
   padding: 0.62rem 0.92rem;
   min-height: 44px;
-  background: ${({ theme }) => ("transparent")};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray10};
   cursor: pointer;
   font-size: 0.84rem;

@@ -74,7 +74,6 @@ export const EditorStudioWorkspaceControllerRootView = ({ props }: EditorStudioW
     handleListPageChange,
     handleListPageSizeChange,
     handleListSortChange,
-    handleLogout,
     handleLoadOrCreateTempPost,
     handleModifyComment,
     handlePreviewThumbPointerDown,

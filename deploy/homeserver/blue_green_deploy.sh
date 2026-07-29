@@ -41,7 +41,7 @@ BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS="${BLUE_GREEN_BURN_IN_PROBE_INTERVAL_S
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
 RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE:-A}"
 AUTO_MEMORY_TUNER_ENABLED="${AUTO_MEMORY_TUNER_ENABLED:-true}"
-AUTO_MEMORY_TUNER_MAX_BUDGET_MB="${AUTO_MEMORY_TUNER_MAX_BUDGET_MB:-4096}"
+AUTO_MEMORY_TUNER_MAX_BUDGET_MB="${AUTO_MEMORY_TUNER_MAX_BUDGET_MB:-4160}"
 AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB:-2048}"
 AUTO_MEMORY_TUNER_MIN_BUDGET_MB="${AUTO_MEMORY_TUNER_MIN_BUDGET_MB:-1280}"
 LAST_COMPOSE_UP_SERVICES=""
@@ -124,7 +124,7 @@ BLUE_GREEN_BURN_IN_STANDARD_SECONDS="$(normalize_non_negative_int "${BLUE_GREEN_
 BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS="$(normalize_non_negative_int "${BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS}" "600")"
 BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS="$(normalize_positive_int "${BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS}" "15")"
 AUTO_MEMORY_TUNER_ENABLED="$(normalize_bool "${AUTO_MEMORY_TUNER_ENABLED}")"
-AUTO_MEMORY_TUNER_MAX_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MAX_BUDGET_MB}" "4096")"
+AUTO_MEMORY_TUNER_MAX_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MAX_BUDGET_MB}" "4160")"
 AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB}" "2048")"
 AUTO_MEMORY_TUNER_MIN_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MIN_BUDGET_MB}" "1280")"
 
@@ -873,7 +873,7 @@ allocate_runtime_split_memory_limits() {
   local blue_min=704
   local read_min=832
   local admin_min=896
-  local worker_min=896
+  local worker_min=1024
   local blue
   local read
   local admin
@@ -974,7 +974,7 @@ apply_auto_memory_tuner() {
   local mode_min_budget_mb=1280
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     mode="runtime-split"
-    mode_min_budget_mb=4096
+    mode_min_budget_mb=4160
   fi
 
   if (( AUTO_MEMORY_TUNER_MAX_BUDGET_MB < mode_min_budget_mb )); then

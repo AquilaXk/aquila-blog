@@ -1905,8 +1905,19 @@ test("blue-green deploy waits longer for candidate Flyway startup only", () => {
   )
 })
 
-test("runtime-split memory tuner allocates the 4096MiB RSS budget and rejects lower explicit caps", () => {
+test("runtime-split memory tuner allocates the 4160MiB RSS budget and rejects lower explicit caps", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
+  const normalizePositiveInt = deployScript.slice(
+    deployScript.indexOf("normalize_positive_int()"),
+    deployScript.indexOf("normalize_non_negative_int()"),
+  )
+  const memoryDefault = deployScript.slice(
+    deployScript.indexOf("AUTO_MEMORY_TUNER_DEFAULT_MAX_BUDGET_MB=4096"),
+    deployScript.indexOf(
+      "AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB=",
+      deployScript.indexOf("AUTO_MEMORY_TUNER_DEFAULT_MAX_BUDGET_MB=4096"),
+    ),
+  )
   const allocatorHelpers = deployScript.slice(
     deployScript.indexOf("round_to_step_mb()"),
     deployScript.indexOf("allocate_single_runtime_memory_limits()"),
@@ -1918,18 +1929,59 @@ test("runtime-split memory tuner allocates the 4096MiB RSS budget and rejects lo
   const workDir = mkdtempSync(path.join(tmpdir(), "aquila-runtime-split-memory-"))
 
   try {
+    for (const [runtimeSplitEnabled, expectedBudget] of [
+      ["false", "4096"],
+      ["true", "4160"],
+    ]) {
+      const defaultScript = path.join(workDir, `default-${runtimeSplitEnabled}.sh`)
+      writeFileSync(
+        defaultScript,
+        [
+          `RUNTIME_SPLIT_ENABLED=${runtimeSplitEnabled}`,
+          'AUTO_MEMORY_TUNER_MAX_BUDGET_MB=""',
+          normalizePositiveInt,
+          memoryDefault,
+          'printf "%s\\n" "${AUTO_MEMORY_TUNER_MAX_BUDGET_MB}"',
+          "",
+        ].join("\n"),
+      )
+      assert.equal(execFileSync("bash", [defaultScript], { encoding: "utf8" }).trim(), expectedBudget)
+    }
+
     const allocationScript = path.join(workDir, "allocation.sh")
     writeFileSync(
       allocationScript,
       [
         allocatorHelpers,
-        "allocate_runtime_split_memory_limits 4096",
+        "allocate_runtime_split_memory_limits 4160",
         'printf "%s %s %s %s %s %s %s %s\\n" "${AUTO_TUNED_BACK_MEM_LIMIT_MB}" "${AUTO_TUNED_BACK_READ_MEM_LIMIT_MB}" "${AUTO_TUNED_BACK_ADMIN_MEM_LIMIT_MB}" "${AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB}" "${AUTO_TUNED_BACK_MEM_RESERVATION_MB}" "${AUTO_TUNED_BACK_READ_MEM_RESERVATION_MB}" "${AUTO_TUNED_BACK_ADMIN_MEM_RESERVATION_MB}" "${AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB}"',
         "",
       ].join("\n"),
     )
     const allocationOutput = execFileSync("bash", [allocationScript], { encoding: "utf8" })
-    assert.equal(allocationOutput.trim(), "704 832 896 896 320 384 448 640")
+    assert.equal(allocationOutput.trim(), "704 832 896 1024 320 384 448 768")
+
+    const applyScript = path.join(workDir, "apply.sh")
+    writeFileSync(
+      applyScript,
+      [
+        "AUTO_MEMORY_TUNER_ENABLED=true",
+        "RUNTIME_SPLIT_ENABLED=true",
+        "RUNTIME_SPLIT_STAGE=A",
+        "AUTO_MEMORY_TUNER_MAX_BUDGET_MB=4160",
+        "AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB=2048",
+        "AUTO_MEMORY_TUNER_MIN_BUDGET_MB=1280",
+        "read_host_mem_total_mb() { echo 8192; }",
+        'upsert_env_key() { printf "%s=%s\\n" "$1" "$2"; }',
+        allocatorHelpers,
+        memoryTuner,
+        "apply_auto_memory_tuner",
+        "",
+      ].join("\n"),
+    )
+    const applyOutput = execFileSync("bash", [applyScript], { encoding: "utf8" })
+    assert.match(applyOutput, /^BACK_WORKER_MEM_LIMIT=1024m$/m)
+    assert.match(applyOutput, /^BACK_WORKER_MEM_RESERVATION=768m$/m)
 
     const invalidBudgetScript = path.join(workDir, "invalid-budget.sh")
     writeFileSync(
@@ -1937,7 +1989,7 @@ test("runtime-split memory tuner allocates the 4096MiB RSS budget and rejects lo
       [
         "AUTO_MEMORY_TUNER_ENABLED=true",
         "RUNTIME_SPLIT_ENABLED=true",
-        "AUTO_MEMORY_TUNER_MAX_BUDGET_MB=4095",
+        "AUTO_MEMORY_TUNER_MAX_BUDGET_MB=4159",
         "AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB=2048",
         "AUTO_MEMORY_TUNER_MIN_BUDGET_MB=1280",
         "read_host_mem_total_mb() { echo 8192; }",
@@ -1954,7 +2006,7 @@ test("runtime-split memory tuner allocates the 4096MiB RSS budget and rejects lo
         assert.equal(error.status, 1)
         assert.equal(
           error.stderr.trim(),
-          "auto-memory-tuner guard: invalid max budget (max_budget_mb=4095 < mode_min_budget_mb=4096)",
+          "auto-memory-tuner guard: invalid max budget (max_budget_mb=4159 < mode_min_budget_mb=4160)",
         )
         return true
       },

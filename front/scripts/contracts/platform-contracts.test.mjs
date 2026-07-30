@@ -35,6 +35,7 @@ async function fixture() {
     },
   }, null, 2)}\n`)
   git(root, ["init", "--initial-branch=main"])
+  git(root, ["remote", "add", "origin", "https://github.com/AquilaXk/aquila-blog.git"])
   git(root, ["config", "user.email", "test@example.com"])
   git(root, ["config", "user.name", "Test"])
   git(root, ["add", "contracts/public-api"])
@@ -91,6 +92,17 @@ test("rejects an unauthorized source identity before changing the output", async
   await assert.rejects(importPlatformContracts({ source, output, sourceRepository: "other/repository", sourceCommit }), /source repository or commit is invalid/)
   await assert.rejects(importPlatformContracts({ source, output, sourceRepository, sourceCommit: "invalid" }), /source repository or commit is invalid/)
   assert.equal(await fs.readFile(path.join(output, "sentinel"), "utf8"), "keep")
+})
+
+test("rejects a source Git repository whose origin does not match the lock identity", async (t) => {
+  const { root, source, output, sourceCommit } = await fixture()
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+  git(root, ["remote", "set-url", "origin", "https://github.com/example/aquila-blog.git"])
+
+  await assert.rejects(
+    importPlatformContracts({ source, output, sourceRepository, sourceCommit }),
+    /source Git origin does not match source repository/,
+  )
 })
 
 test("rejects malformed canonical manifest identity before changing the output", async (t) => {

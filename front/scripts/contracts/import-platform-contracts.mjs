@@ -47,7 +47,22 @@ function validateSourceIdentity(sourceRepository, sourceCommit) {
   }
 }
 
-function validateSourceCommit(source, sourceCommit, files) {
+function gitHubRepository(remote) {
+  const scp = /^git@github\.com:(.+?)(?:\.git)?$/.exec(remote)
+  if (scp) {
+    return scp[1]
+  }
+  try {
+    const url = new URL(remote)
+    return url.hostname.toLowerCase() === "github.com"
+      ? url.pathname.replace(/^\//, "").replace(/\.git$/, "")
+      : null
+  } catch {
+    return null
+  }
+}
+
+function validateSourceCommit(source, sourceRepository, sourceCommit, files) {
   let repositoryRoot
   try {
     repositoryRoot = execFileSync("git", ["-C", source, "rev-parse", "--show-toplevel"], {
@@ -56,6 +71,19 @@ function validateSourceCommit(source, sourceCommit, files) {
     }).trim()
   } catch {
     fail("source directory is not inside a Git repository")
+  }
+
+  let origin
+  try {
+    origin = execFileSync("git", ["-C", repositoryRoot, "remote", "get-url", "origin"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim()
+  } catch {
+    fail("source Git origin is missing")
+  }
+  if (gitHubRepository(origin) !== sourceRepository) {
+    fail("source Git origin does not match source repository")
   }
 
   const sourceDirectory = path.relative(realpathSync(repositoryRoot), realpathSync(source))
@@ -173,7 +201,7 @@ export async function importPlatformContracts({ source, output, sourceRepository
   const artifacts = await readSourceArtifacts(source, manifest)
   validateOpenApi(artifacts.openapi.bytes)
   validateErrorCodeArtifact(artifacts.errorCodes.bytes)
-  validateSourceCommit(source, sourceCommit, [
+  validateSourceCommit(source, sourceRepository, sourceCommit, [
     ["manifest.json", manifestBytes],
     ...SOURCE_ARTIFACTS.map(([name, file]) => [file, artifacts[name].bytes]),
   ])

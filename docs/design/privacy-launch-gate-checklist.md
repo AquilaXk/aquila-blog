@@ -48,7 +48,7 @@ Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운
 | Issue | 상태 | 분류 | 대상 | Evidence requirement | Launch 판정 |
 | --- | --- | --- | --- | --- | --- |
 | #994 | Closed | 필수 출시 전 완료 | 데이터맵, 법적 근거 registry | `legal/data-map/*.yaml`와 공개 정책 참조 | 완료 |
-| #995 | Closed | 필수 출시 전 완료 | 정책 버전관리와 공개 페이지 | `legal/policies/*.yaml`, `/privacy`, `/terms`, `/cookies` | 완료 |
+| #995 | Closed | 필수 출시 전 완료 | 정책 버전관리와 공개 페이지 | `front/legal/policies/*.yaml`, `/privacy`, `/terms`, `/cookies` | 완료 |
 | #996 | Closed | 필수 출시 전 완료 | 이메일 가입 동의와 증빙 저장 | backend acceptance version/hash, signup flow evidence | 완료 |
 | #997 | Closed | 필수 출시 전 완료 | Kakao OAuth 신규 가입 pending 동의 | OAuth 신규 가입 동의 flow evidence | 완료 |
 | #998 | Open | 필수 출시 전 완료 | 회원가입 token/email URL 노출 제거 | token hash 저장, URL/log redaction 테스트 | 차단 |
@@ -76,7 +76,7 @@ Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운
 | Gate | Pass 조건 | Block 조건 |
 | --- | --- | --- |
 | 후속 issue 상태 | 위 matrix의 `필수 출시 전 완료` 항목이 모두 closed이고 evidence가 PR 또는 연결 문서에 있다. | 필수 항목이 open이거나 evidence link가 없다. |
-| 공개 정책 원본 | `legal/policies/*.yaml`의 공개 시행 문서가 `status: effective`이고 `reviewRequired`가 0개다. | effective 정책에 내부 검토 문구, 미확정 수탁자/국외이전/보유기간 문구, `출시 gate`, `추후 확정`, `구현 후 제공` 같은 표현이 남아 있다. |
+| 공개 정책 원본 | `front/legal/policies/*.yaml`의 공개 시행 문서가 `status: effective`이고 `reviewRequired`가 0개다. | effective 정책에 내부 검토 문구, 미확정 수탁자/국외이전/보유기간 문구, `출시 gate`, `추후 확정`, `구현 후 제공` 같은 표현이 남아 있다. |
 | 정책-코드 대조 | 개인정보처리방침, 이용약관, 쿠키 정책이 data map, processor registry, retention matrix, backend legal metadata와 일치한다. | 정책 본문과 실제 수집/저장/전송/보유 동작이 다르다. |
 | Signup/OAuth consent | email signup과 Kakao OAuth 신규 가입 모두 현재 정책 version/hash와 필수 동의를 저장한다. | 기존 동의 버전이 계속 acceptance로 인정되거나 신규 가입자가 정책을 보지 않고 가입된다. |
 | Optional tracking | analytics/RUM/cookie tracking이 opt-in 또는 명시적 설정에 따라 비활성화 가능하다. | 비필수 tracking이 동의 전 실행되거나 opt-out 뒤에도 계속 전송된다. |

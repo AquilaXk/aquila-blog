@@ -24,6 +24,7 @@ is_allowed_markdown() {
     front/.github/CONTRIBUTING.md|\
     front/.github/PULL_REQUEST_TEMPLATE.md|\
     front/README.md|\
+    front/docs/design/*.md|\
     infra/README.md|\
     perf/k6/README.md|\
     perf/k6/cloud-launch-criteria.md|\

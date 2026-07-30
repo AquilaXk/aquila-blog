@@ -62,6 +62,11 @@ if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_bl
   exit 1
 fi
 
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' front/docs/design/contract.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged front/docs/design/contract.md to be allowed" >&2
+  exit 1
+fi
+
 if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/legal/privacy-incident-runbook.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
   echo "[test] expected staged docs/legal/privacy-incident-runbook.md to be allowed" >&2
   exit 1

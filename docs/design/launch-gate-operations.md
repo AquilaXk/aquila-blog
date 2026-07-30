@@ -38,7 +38,7 @@
 | Backup/restore drill | backup metadata, restore drill issue/PR/run, RPO/RTO artifact | restore drill evidence 연결, RPO/RTO 목표 대비 결과 기록, PostgreSQL/MinIO checksum 검증 | backup/restore evidence 없음, RPO/RTO 결과 누락 |
 | Alert receiver | Prometheus/Grafana alert rule과 수신 채널 evidence | alert rule과 수신 채널이 존재하고 테스트 evidence 연결 | 운영 alert 수신 경로 없음 |
 | Live E2E account cleanup | live E2E run artifact 또는 cleanup log | 테스트 계정/데이터 cleanup 결과 확인 | live E2E가 계정/데이터를 남김 |
-| Mobile/keyboard/200% zoom QA | `docs/design/release-ui-qa-matrix.md` run table과 artifact | matrix pass run 연결 | 핵심 viewport 또는 keyboard/zoom failure |
+| Mobile/keyboard/200% zoom QA | `front/docs/design/release-ui-qa-matrix.md` run table과 artifact | matrix pass run 연결 | 핵심 viewport 또는 keyboard/zoom failure |
 | Privacy/terms/contact | public URL 또는 PR evidence | privacy, terms, contact 접근 가능 | 법적/연락처 페이지 미공개 |
 | Privacy launch gate | `docs/design/privacy-launch-gate-checklist.md`의 matrix와 evidence | 개인정보 필수 출시 전 완료 항목 closed, 공개 정책 gate pass, 법무/운영 owner evidence 존재 | 개인정보 launch-blocking issue open, policy-code drift, 법무/운영 owner evidence 없음 |
 | Soft-launch feature freeze | #1127 Locked decision, `deploy/env/env.contract.json`, deploy privacy freeze step, live UI smoke | Soft-launch 범위 문서와 5개 freeze 키가 false/0으로 일치하고 signup/OAuth signup/RUM/AI SUMMARY가 공개되지 않음 | freeze 키 drift, Soft-launch 범위 밖 기능 enable, TAG 키로 SUMMARY를 오인 |
@@ -57,7 +57,7 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 
 ## Current Baseline Links
 
-- Release UI QA matrix: `docs/design/release-ui-qa-matrix.md`
+- Release UI QA matrix: `front/docs/design/release-ui-qa-matrix.md`
 - Privacy launch gate checklist: `docs/design/privacy-launch-gate-checklist.md`
 - CI workflow: `.github/workflows/ci.yml`
 - Security workflow: `.github/workflows/security.yml`

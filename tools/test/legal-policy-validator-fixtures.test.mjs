@@ -7,7 +7,7 @@ import test from "node:test"
 
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const validatorPath = path.join(repoRoot, "tools/legal/validate-legal-policies.mjs")
-const sourcePoliciesDir = path.join(repoRoot, "legal/policies")
+const sourcePoliciesDir = path.join(repoRoot, "front/legal/policies")
 const sourceFrontendMetadataPath = path.join(repoRoot, "front/src/apis/backend/legal.ts")
 const sourceBackendMetadataPath = path.join(
   repoRoot,

@@ -57,7 +57,7 @@ const metricsPath = path.resolve(
 const baselinePath = resolveFromFrontRoot(
   readArg(
     "baseline",
-    process.env.RUNTIME_GUARD_BASELINE_PATH || "../deploy/homeserver/monitoring/grafana/dashboards/blog-runtime-guard-baseline.json"
+    process.env.RUNTIME_GUARD_BASELINE_PATH || "quality/performance/runtime-guard-baseline.json"
   )
 )
 const outputPath = resolveFromFrontRoot(readArg("output", "test-results/perf/runtime-guard-summary.md"))

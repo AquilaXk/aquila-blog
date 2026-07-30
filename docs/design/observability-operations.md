@@ -219,7 +219,6 @@ cloud-media 검증·패널 매핑은 [`docs/ops/cloud-media-metrics-verify.md`](
 | Blog Cloud Media | `blog-cloud-media.json` |
 | Aquila Feed Performance | `blog-feed-performance.json` |
 | Aquila Public Edge Probe | `blog-public-edge.json` |
-| Blog Runtime Guard Baseline | `blog-runtime-guard-baseline.json` |
 
 ---
 

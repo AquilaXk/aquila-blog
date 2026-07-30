@@ -10,7 +10,7 @@ import {
 } from "./policyLinks"
 import type { LegalPolicyDocument, LegalPolicyKind, LegalPolicyPageProps, LegalPolicySummary } from "./policyTypes"
 
-const policyDir = path.resolve(process.cwd(), "..", "legal", "policies")
+const policyDir = path.resolve(process.cwd(), "legal", "policies")
 
 const publicPolicyVersionsByKind: Record<LegalPolicyKind, string[]> = {
   privacy: ["1.0.0", "1.0.1", "1.0.2", ACTIVE_LEGAL_POLICY_VERSIONS.privacy],

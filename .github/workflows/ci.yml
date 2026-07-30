@@ -7,7 +7,6 @@ on:
     paths:
       - "back/**"
       - "front/**"
-      - "legal/policies/**"
       - "deploy/**"
       - "restore-privacy-gate.sh"
       - "AGENTS.md"

@@ -1288,7 +1288,7 @@ test("Vercel frontend project skips builds when frontend inputs did not change",
   const config = JSON.parse(readFileSync(vercelConfigPath, "utf8"))
 
   assert.equal(config.$schema, "https://openapi.vercel.sh/vercel.json")
-  assert.equal(config.ignoreCommand, "git diff --quiet HEAD^ HEAD ./ ../legal/policies")
+  assert.equal(config.ignoreCommand, "node scripts/vercel/should-ignore-build.mjs")
 })
 
 test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경만 차단한다", () => {

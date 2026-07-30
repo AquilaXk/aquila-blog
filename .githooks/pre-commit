@@ -21,10 +21,13 @@ while IFS= read -r file; do
     .githooks/pre-commit|back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*|back/src/test/kotlin/com/back/global/contracts/*|contracts/public-api/**|tools/contracts/**)
       needs_platform_contract_check="true"
       ;;
-    front/contracts/openapi/openapi.json|front/packages/shared-contracts/src/generated/backend-openapi.d.ts)
+    front/contracts/platform/**|front/packages/shared-contracts/src/generated/backend-openapi.d.ts|front/scripts/contracts/**|front/scripts/openapi/check-contract-drift.mjs)
       needs_frontend_contract_check="true"
       ;;
-    .github/workflows/ci.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/reusable-frontend-verify.yml)
+    .github/workflows/ci.yml|.github/workflows/reusable-backend-quality.yml)
+      needs_platform_contract_check="true"
+      ;;
+    .github/workflows/reusable-frontend-verify.yml)
       needs_frontend_contract_check="true"
       ;;
     front/src/pages/posts/\[id\].tsx|front/src/routes/Detail/*|front/src/libs/markdown/*|front/src/libs/postSummary.ts|front/src/libs/server/postDetailPage.ts)

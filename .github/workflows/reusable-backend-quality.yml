@@ -76,7 +76,7 @@ jobs:
           backend=false
           while IFS= read -r file; do
             case "${file}" in
-              back/*|deploy/homeserver/*|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/check-r-migration-no-ddl.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|tools/test/check-r-migration-no-ddl.test.sh|tools/test/commit-msg-hook.test.sh|tools/test/homeserver-doctor.test.sh|tools/test/runtime-split-caddy-upstream.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml|.githooks/*)
+              back/*|deploy/homeserver/*|contracts/public-api/*|tools/contracts/*|tools/test/public-contract-manifest.test.mjs|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/check-r-migration-no-ddl.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|tools/test/check-r-migration-no-ddl.test.sh|tools/test/commit-msg-hook.test.sh|tools/test/homeserver-doctor.test.sh|tools/test/runtime-split-caddy-upstream.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml|.githooks/*)
                 backend=true
                 break
                 ;;
@@ -295,26 +295,17 @@ jobs:
         working-directory: back
         run: ./gradlew check --rerun-tasks
 
-      - name: Set up Node.js for contract drift check
+      - name: Set up Node.js for canonical public contract check
         if: steps.changes.outputs.backend == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "20"
-          cache: "yarn"
-          cache-dependency-path: front/yarn.lock
-
-      - name: Install frontend dependencies for contract drift check
-        if: steps.changes.outputs.backend == 'true'
-        working-directory: front
-        run: yarn install --frozen-lockfile
-
-      - name: Verify backend OpenAPI contract drift
+      - name: Verify canonical public contract bundle
         if: steps.changes.outputs.backend == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          cp back/build/openapi/openapi.json front/contracts/openapi/openapi.json
-          (cd front && yarn contracts:check)
+          node tools/contracts/check-public-contracts.mjs
 
       - name: Comment Jacoco coverage summary
         if: always() && github.event_name == 'pull_request' && steps.changes.outputs.backend == 'true' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('back/build/reports/jacoco/pr/jacocoPrReport.xml') != ''

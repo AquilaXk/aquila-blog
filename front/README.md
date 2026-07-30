@@ -69,13 +69,22 @@ Node.js 20.x와 Yarn 1.22.22를 기준으로 실행합니다. `package.json`의 
 
 ## OpenAPI 계약 동기화
 
-프론트는 백엔드 OpenAPI 스냅샷을 타입으로 변환해 계약 드리프트를 검증합니다.
+프론트는 검증된 Platform 계약 스냅샷을 타입으로 변환해 계약 드리프트를 검증합니다. 스냅샷은 `contracts/platform/manifest.lock.json`에 고정된 Platform repository와 40자리 source commit, artifact SHA-256을 포함합니다. 일반 검증은 network/live backend를 사용하지 않습니다.
 
 ```bash
 cd front
-yarn contracts:fetch
 yarn contracts:generate
 yarn contracts:check
+```
+
+Platform canonical bundle을 새 snapshot으로 반영할 때만 importer를 사용합니다.
+
+```bash
+node scripts/contracts/import-platform-contracts.mjs \
+  --source ../contracts/public-api \
+  --output contracts/platform \
+  --source-repository AquilaXk/aquila-blog \
+  --source-commit <40-hex-commit>
 ```
 
 ## 검증 명령

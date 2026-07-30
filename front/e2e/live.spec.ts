@@ -23,6 +23,7 @@ import {
 const hasLiveCredentials = Boolean((adminEmail || adminLegacyLoginId) && adminPassword)
 const hasUiLoginCredentials = Boolean(adminEmail && adminPassword)
 const expectedFrontendCommitSha = process.env.E2E_EXPECTED_FRONT_COMMIT_SHA?.trim() || ""
+const explicitLiveApiBaseUrl = process.env.E2E_API_BASE_URL?.trim() || ""
 const adminLandingHeadingPattern = /^좋은 아침이에요,/
 const adminDashboardHeadingPattern = /^운영 상태와 복구$/
 const adminCloudHeadingPattern = /^미디어 라이브러리$/
@@ -523,9 +524,74 @@ test.describe("live public RSS feed", () => {
   })
 })
 
+test.describe("live public release gate", () => {
+  test.skip(!explicitLiveApiBaseUrl, "E2E_API_BASE_URL is required")
+  test.setTimeout(90_000)
+
+  test("deployment URL serves feed, search, detail, legal, CSP, and HTTPS API readiness", async ({ page }) => {
+    const homeResponse = await page.goto("/")
+    expect(homeResponse?.ok()).toBe(true)
+    expect(homeResponse?.headers()["content-security-policy"]).toContain("default-src")
+
+    const firstPost = page.locator("a[data-ui='feed-post-card']").first()
+    await expect(firstPost).toBeVisible()
+    const detailPath = await firstPost.getAttribute("href")
+    const title = (await firstPost.locator("h2").textContent())?.trim() || ""
+    expect(detailPath).toMatch(/^\/posts\/[^/?#]+$/)
+    expect(title).not.toBe("")
+
+    const searchResponse = page.waitForResponse((response) =>
+      response.url().includes("/post/api/v1/posts/search") && response.ok()
+    )
+    await page.getByLabel("Search posts by keyword").fill(title)
+    await searchResponse
+    await expect(page.locator(`a[href='${detailPath}']`).first()).toBeVisible()
+
+    const detailResponse = await page.goto(detailPath || "/")
+    expect(detailResponse?.ok()).toBe(true)
+    await expect(page.getByRole("heading", { name: title }).first()).toBeVisible()
+
+    for (const legalPath of ["/terms", "/privacy", "/cookies", "/legal/history"]) {
+      const legalResponse = await page.goto(legalPath, { waitUntil: "domcontentloaded" })
+      expect(legalResponse?.ok(), legalPath).toBe(true)
+    }
+
+    expect(explicitLiveApiBaseUrl).toMatch(/^https:\/\//)
+    const readinessUrl = new URL("/actuator/health/readiness", explicitLiveApiBaseUrl).toString()
+    const readiness = await page.request.get(readinessUrl)
+    expect(readiness.status()).toBe(200)
+  })
+})
+
 test.describe("live production e2e", () => {
   test.skip(!hasLiveCredentials, "E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD is required")
   test.setTimeout(120_000)
+
+  test("image upload endpoint accepts the production Web CORS preflight", async ({ page }) => {
+    const webOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL || "").origin
+    const apiBaseUrl = resolveApiBaseUrl(webOrigin)
+    expect(apiBaseUrl).toMatch(/^https:\/\//)
+    const response = await page.request.fetch(
+      new URL("/post/api/v1/posts/images", apiBaseUrl).toString(),
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: webOrigin,
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "content-type,x-aquila-csrf",
+        },
+      }
+    )
+
+    expect([200, 204]).toContain(response.status())
+    expect(response.headers()["access-control-allow-origin"]).toBe(webOrigin)
+    expect(response.headers()["access-control-allow-methods"]).toContain("POST")
+    expect(response.headers()["access-control-allow-credentials"]).toBe("true")
+    const allowedHeaders = (response.headers()["access-control-allow-headers"] || "")
+      .split(",")
+      .map((header) => header.trim().toLowerCase())
+    expect(allowedHeaders).toContain("x-aquila-csrf")
+  })
 
   test("비로그인 사용자는 /admin 접근 시 로그인 페이지로 이동한다", async ({ page }) => {
     await page.goto("/admin")

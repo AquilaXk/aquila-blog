@@ -53,7 +53,7 @@ reject_pattern 'PLAYWRIGHT_' "Platform deploy must not parse Playwright environm
 reject_pattern 'E2E_LIVE_ADMIN_' "Platform deploy must not parse frontend live admin credentials"
 reject_pattern 'cache-dependency-path:[[:space:]]*front/yarn\.lock' "Platform deploy must not cache frontend Yarn dependencies"
 reject_pattern 'working-directory:[[:space:]]*front' "Platform deploy must not run commands from the frontend directory"
-reject_pattern 'yarn install --frozen-lockfile' "Platform deploy must not install frontend Yarn dependencies"
+reject_pattern '(^|[^[:alnum:]_])[Yy][Aa][Rr][Nn]([^[:alnum:]_]|$)' "Platform deploy must not use Yarn"
 reject_pattern 'playwright' "Platform deploy must not install or run Playwright"
 require_pattern 'DEPLOY_SHA_INPUT:[[:space:]]*\$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}' "workflow_run deploy target must stay tied to the CI-validated sha"
 require_pattern 'REMOTE_MAIN_SHA="\$\(git ls-remote --exit-code origin refs/heads/main \| awk '\''\{print \$1\}'\''\)"' "stale detection must read the current remote main sha"

@@ -47,24 +47,25 @@ test("Vercel ignore command builds the first commit", (t) => {
   for (const extracted of [false, true]) {
     const { fixture, root } = createGitFixture({ extracted })
     t.after(() => fs.rmSync(root, { force: true, recursive: true }))
-    assert.notEqual(runIgnoreCommand(fixture).status, 0, `extracted=${extracted}`)
+    assert.equal(runIgnoreCommand(fixture).status, 1, `extracted=${extracted}`)
   }
 })
 
 test("Vercel ignore command builds Web runtime, contract, legal, and config changes", (t) => {
   for (const extracted of [false, true]) {
     for (const file of [
-    "front/src/page.tsx",
-    "front/contracts/platform/openapi.json",
-    "front/config/env.contract.json",
-    "front/legal/policies/privacy.yaml",
-    "front/vercel.json",
+      "front/src/page.tsx",
+      "front/contracts/platform/openapi.json",
+      "front/config/env.contract.json",
+      "front/legal/policies/privacy.yaml",
+      "front/quality/performance/runtime-guard-baseline.json",
+      "front/vercel.json",
     ]) {
       const webFixture = createGitFixture({ extracted })
       const relativeFile = extracted ? file.slice("front/".length) : file
       t.after(() => fs.rmSync(webFixture.root, { force: true, recursive: true }))
       commit(webFixture.root, relativeFile, "changed\n")
-      assert.notEqual(runIgnoreCommand(webFixture.fixture).status, 0, `${file} extracted=${extracted}`)
+      assert.equal(runIgnoreCommand(webFixture.fixture).status, 1, `${file} extracted=${extracted}`)
     }
   }
 })

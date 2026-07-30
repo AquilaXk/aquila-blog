@@ -12,6 +12,9 @@ fi
 
 is_allowed_markdown() {
   case "$1" in
+    front/docs/design/*/*)
+      return 1
+      ;;
     README.md|\
     .github/pull_request_template.md|\
     SECURITY.md|\

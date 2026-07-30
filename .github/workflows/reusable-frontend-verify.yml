@@ -142,6 +142,11 @@ jobs:
         working-directory: front
         run: node --test scripts/repo-boundary/web-build-inputs.test.mjs
 
+      - name: Verify Web environment contract
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: node --test scripts/env/env-contract.test.mjs
+
       - name: Lint frontend
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front

@@ -50,6 +50,7 @@ export const validateEnvText = ({ contract, target, text }) => {
       continue
     }
     if (key.placeholderForbidden !== false && placeholder.test(value)) errors.push(safeError(key.name, "must not contain placeholder value"))
+    if (key.minLength && value.length < key.minLength) errors.push(safeError(key.name, `must be at least ${key.minLength} characters`))
     if (key.allowedValues && !key.allowedValues.includes(value)) errors.push(safeError(key.name, `must be one of: ${key.allowedValues.join(", ")}`))
     const kindError = validateKind(key.kind, value)
     if (kindError) errors.push(safeError(key.name, kindError))
@@ -70,6 +71,7 @@ const parseArgs = (argv) => {
     else if (arg === "--file") args.file = argv[++index]
     else if (arg === "--contract") args.contract = argv[++index]
     else if (arg === "--source-env-var") args.sourceEnvVar = argv[++index]
+    else if (arg === "--process-env") args.processEnv = true
     else throw new Error("Unknown argument")
   }
   return args
@@ -77,8 +79,10 @@ const parseArgs = (argv) => {
 
 const main = () => {
   const args = parseArgs(process.argv.slice(2))
-  if (!args.target || (!args.file && !args.sourceEnvVar)) throw new Error("--target and one input source are required")
-  const text = args.sourceEnvVar ? process.env[args.sourceEnvVar] || "" : readFileSync(args.file, "utf8")
+  if (!args.target || (!args.file && !args.sourceEnvVar && !args.processEnv)) throw new Error("--target and one input source are required")
+  const text = args.processEnv
+    ? Object.entries(process.env).map(([key, value]) => `${key}=${value || ""}`).join("\n")
+    : args.sourceEnvVar ? process.env[args.sourceEnvVar] || "" : readFileSync(args.file, "utf8")
   const result = validateEnvText({ contract: loadContract(args.contract), target: args.target, text })
   if (!result.ok) {
     for (const error of result.errors) console.error(JSON.stringify(error))

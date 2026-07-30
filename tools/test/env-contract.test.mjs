@@ -903,8 +903,6 @@ test("external storage upload limits reject non-positive values", async () => {
     .replace("CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_MAXFILESIZEBYTES=5368709120", "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_MAXFILESIZEBYTES=0")
     .replace("CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=67108864", "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES=0")
     .replace("CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=86400", "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS=0")
-    .replace("BACKEND_PROXY_MAX_BODY_BYTES=104857600", "BACKEND_PROXY_MAX_BODY_BYTES=0")
-    .replace("BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=268435456", "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=0")
 
   const result = validateEnvText({
     contract: loadContract(contractPath),
@@ -921,8 +919,6 @@ test("external storage upload limits reject non-positive values", async () => {
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_MAXFILESIZEBYTES"))
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES"))
   assert(result.errors.some((error) => error.key === "CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS"))
-  assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_BODY_BYTES"))
-  assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES"))
 })
 
 test("대용량 동영상 resumable 설정은 part 크기와 세션 만료 경계를 검증한다", async () => {
@@ -1102,32 +1098,31 @@ test("validator reports key-level failures without leaking secret values", async
   assert(!JSON.stringify(result).includes("change_me_admin_password"))
 })
 
-test("renderer derives local env files and preserves existing generated secrets", async () => {
-  const { loadContract } = await import("../env/validate-env.mjs")
-  const { renderTargetEnv } = await import("../env/render-local-env.mjs")
-  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-env-contract-"))
+test("Platform contract keeps runtime keys but removes Web rendering and Web-owned keys", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const sourceKeys = new Set(targetKeyNames(contract, "home-server-source"))
 
-  try {
-    const existingFront = "TOKEN_FOR_REVALIDATE=preserved-token\n"
-    const rendered = renderTargetEnv({
-      contract: loadContract(contractPath),
-      target: "front-local",
-      sourceText: baseHomeServerEnv,
-      existingText: existingFront,
-    })
-
-    assert.match(rendered, /^NEXT_PUBLIC_BACKEND_URL=https:\/\/api\.aquilaxk\.site$/m)
-    assert.match(rendered, /^BACKEND_PROXY_MAX_BODY_BYTES=104857600$/m)
-    assert.match(rendered, /^BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=268435456$/m)
-    assert.match(rendered, /^PLAYWRIGHT_BASE_URL=https:\/\/www\.aquilaxk\.site$/m)
-    assert.match(rendered, /^TOKEN_FOR_REVALIDATE=preserved-token$/m)
-
-    const outFile = path.join(workDir, ".env.local")
-    writeFileSync(outFile, rendered)
-    assert(readFileSync(outFile, "utf8").includes("E2E_API_BASE_URL=https://api.aquilaxk.site"))
-  } finally {
-    rmSync(workDir, { force: true, recursive: true })
+  assert.equal(Object.hasOwn(contract.targets, "front-local"), false)
+  for (const key of [
+    "NEXT_PUBLIC_SIGNUP_ENABLED",
+    "NEXT_PUBLIC_RUM_SAMPLE_RATE",
+    "BACKEND_PROXY_MAX_BODY_BYTES",
+    "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES",
+    "PLAYWRIGHT_BASE_URL",
+    "E2E_API_BASE_URL",
+    "E2E_LIVE_ADMIN_EMAIL",
+    "E2E_LIVE_ADMIN_USERNAME",
+    "E2E_LIVE_ADMIN_PASSWORD",
+  ]) {
+    assert.equal(sourceKeys.has(key), false, `${key} must belong to Web only`)
   }
+  for (const key of ["CUSTOM_PROD_FRONTURL", "CUSTOM_PROD_BACKURL", "CUSTOM_PROD_COOKIEDOMAIN", "CUSTOM__REVALIDATE__URL", "CUSTOM__REVALIDATE__TOKEN", "CUSTOM__MEMBER__SIGNUP__ENABLED"]) {
+    assert.equal(sourceKeys.has(key), true, `${key} must remain Platform-owned`)
+  }
+
+  const result = validateEnvText({ contract, target: "home-server-source", text: baseHomeServerEnv })
+  assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
 })
 
 test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
@@ -1148,7 +1143,18 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /printf 'CUSTOM__AI__SUMMARY__ENABLED=%s\\n' "\$\{HOME_AI_SUMMARY_ENABLED:-false\}"/)
   assert.match(workflow, /upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "\$\{HOME_AI_SUMMARY_ENABLED:-\}" "deploy\/homeserver\/\.env\.prod"/)
   assert.match(workflow, /require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED" "\$\{HOME_AI_SUMMARY_ENABLED:-false\}" "false"/)
+  assert.doesNotMatch(workflow, /HOME_NEXT_PUBLIC_/)
+  assert.doesNotMatch(workflow, /NEXT_PUBLIC_SIGNUP_ENABLED/)
+  assert.doesNotMatch(workflow, /NEXT_PUBLIC_RUM_SAMPLE_RATE/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
+  assert.match(workflow, /Validate live e2e Web contract/)
+  assert.match(workflow, /front\/scripts\/env\/validate-env\.mjs --target live-e2e/)
+  const liveE2EWorkflow = workflow.slice(workflow.indexOf("frontLiveE2E:"))
+  assert.doesNotMatch(liveE2EWorkflow, /HOME_SERVER_ENV|CUSTOM__ADMIN__/)
+  assert.match(liveE2EWorkflow, /E2E_ADMIN_EMAIL: \$\{\{ secrets\.E2E_LIVE_ADMIN_EMAIL \|\| '' \}\}/)
+  assert.match(liveE2EWorkflow, /E2E_ADMIN_USERNAME: \$\{\{ secrets\.E2E_LIVE_ADMIN_USERNAME \|\| '' \}\}/)
+  assert.match(liveE2EWorkflow, /E2E_ADMIN_PASSWORD: \$\{\{ secrets\.E2E_LIVE_ADMIN_PASSWORD \|\| '' \}\}/)
+  assert.doesNotMatch(liveE2EWorkflow, /secrets\.E2E_ADMIN_|vars\.E2E_ADMIN_/)
   assert(
     workflow.indexOf('upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED"') <
       workflow.indexOf('require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED"'),

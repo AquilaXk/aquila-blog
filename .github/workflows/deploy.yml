@@ -433,8 +433,6 @@ jobs:
           HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || 'false' }}
           HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
           HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
-          HOME_NEXT_PUBLIC_SIGNUP_ENABLED: ${{ secrets.NEXT_PUBLIC_SIGNUP_ENABLED || vars.NEXT_PUBLIC_SIGNUP_ENABLED || 'false' }}
-          HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE: ${{ secrets.NEXT_PUBLIC_RUM_SAMPLE_RATE || vars.NEXT_PUBLIC_RUM_SAMPLE_RATE || '0' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -446,8 +444,6 @@ jobs:
             printf 'CUSTOM__AI__SUMMARY__ENABLED=%s\n' "${HOME_AI_SUMMARY_ENABLED:-false}"
             printf 'CUSTOM__MEMBER__SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
             printf 'CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
-            printf 'NEXT_PUBLIC_SIGNUP_ENABLED=%s\n' "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}"
-            printf 'NEXT_PUBLIC_RUM_SAMPLE_RATE=%s\n' "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}"
           } > "${home_server_env_file}"
           node tools/env/validate-env.mjs --target home-server-source --file "${home_server_env_file}"
 
@@ -527,8 +523,6 @@ jobs:
           HOME_AI_SUMMARY_GEMINI_MODEL: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__MODEL || vars.CUSTOM__AI__SUMMARY__GEMINI__MODEL || '' }}
           HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
           HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
-          HOME_NEXT_PUBLIC_SIGNUP_ENABLED: ${{ secrets.NEXT_PUBLIC_SIGNUP_ENABLED || vars.NEXT_PUBLIC_SIGNUP_ENABLED || 'false' }}
-          HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE: ${{ secrets.NEXT_PUBLIC_RUM_SAMPLE_RATE || vars.NEXT_PUBLIC_RUM_SAMPLE_RATE || '0' }}
         run: |
           set -euo pipefail
           PORT="${HOME_SSH_PORT:-22}"
@@ -548,8 +542,6 @@ jobs:
             printf 'HOME_AI_SUMMARY_GEMINI_MODEL=%q\n' "${HOME_AI_SUMMARY_GEMINI_MODEL:-}"
             printf 'HOME_MEMBER_SIGNUP_ENABLED=%q\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
             printf 'HOME_MEMBER_OAUTH_SIGNUP_ENABLED=%q\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
-            printf 'HOME_NEXT_PUBLIC_SIGNUP_ENABLED=%q\n' "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}"
-            printf 'HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE=%q\n' "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}"
             printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
           } > "${LOCAL_REMOTE_VARS_FILE}"
           chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
@@ -832,12 +824,8 @@ jobs:
           require_privacy_freeze_value "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "false"
           require_privacy_freeze_value "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "false"
           require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-false}" "false"
-          require_privacy_freeze_value "NEXT_PUBLIC_SIGNUP_ENABLED" "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}" "false"
-          require_privacy_freeze_value "NEXT_PUBLIC_RUM_SAMPLE_RATE" "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}" "0"
           upsert_env_key "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
-          upsert_env_key "NEXT_PUBLIC_SIGNUP_ENABLED" "${HOME_NEXT_PUBLIC_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
-          upsert_env_key "NEXT_PUBLIC_RUM_SAMPLE_RATE" "${HOME_NEXT_PUBLIC_RUM_SAMPLE_RATE:-0}" "deploy/homeserver/.env.prod"
 
           # prod에서 sql.init 경로가 켜지면 부팅 실패(DO $$ 분리/DDL 충돌)로 이어질 수 있다.
           # HOME_SERVER_ENV 드리프트가 있어도 배포 직전에 안전값으로 강제한다.
@@ -1461,16 +1449,15 @@ jobs:
       contents: read
       statuses: read
     env:
-      PLAYWRIGHT_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_LIVE_FRONTURL || vars.CUSTOM_LIVE_FRONTURL || secrets.CUSTOM_PROD_FRONTURL || vars.CUSTOM_PROD_FRONTURL || secrets.HOME_FRONT_BASE_URL || vars.HOME_FRONT_BASE_URL || '' }}
-      E2E_API_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_LIVE_BACKURL || vars.CUSTOM_LIVE_BACKURL || secrets.CUSTOM_PROD_BACKURL || vars.CUSTOM_PROD_BACKURL || '' }}
+      PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL || vars.PLAYWRIGHT_BASE_URL || '' }}
+      E2E_API_BASE_URL: ${{ secrets.E2E_API_BASE_URL || vars.E2E_API_BASE_URL || '' }}
       PLAYWRIGHT_USE_WEBSERVER: "false"
-      HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
       E2E_LIVE_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
       E2E_LIVE_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
       E2E_LIVE_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
-      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || '' }}
-      E2E_ADMIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME || '' }}
-      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || '' }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
+      E2E_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
       E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ needs.calculateTag.outputs.expected_front_commit_sha }}
       E2E_LIVE_EDITOR_507_CANARY: ${{ needs.calculateTag.outputs.editor_live_canary }}
       GITHUB_TOKEN: ${{ github.token }}
@@ -1481,176 +1468,18 @@ jobs:
         with:
           ref: ${{ needs.calculateTag.outputs.deploy_sha }}
 
-      - name: Resolve live e2e base URL
+      - name: Validate live e2e Web contract
         shell: bash
         run: |
           set -euo pipefail
-
-          extract_from_home_server_env() {
-            local key="$1"
-            printf '%s\n' "${HOME_SERVER_ENV:-}" | tr -d '\r' | awk -v key="$key" '
-              /^[[:space:]]*#/ { next }
-              /^[[:space:]]*$/ { next }
-              {
-                line = $0
-                sub(/^[[:space:]]+/, "", line)
-                sub(/^[Ee][Xx][Pp][Oo][Rr][Tt][[:space:]]+/, "", line)
-                if (index(line, key "=") == 1) {
-                  value = substr(line, length(key) + 2)
-                  sub(/^[[:space:]]+/, "", value)
-                  sub(/[[:space:]]+$/, "", value)
-                  if ((value ~ /^".*"$/) || (value ~ /^'\''.*'\''$/)) {
-                    value = substr(value, 2, length(value) - 2)
-                  }
-                  print value
-                  exit
-                }
-              }
-            '
-          }
-
-          extract_admin_from_home_server_env() {
-            local key="$1"
-            printf '%s\n' "${HOME_SERVER_ENV:-}" | tr -d '\r' | awk -v key="$key" '
-              /^[[:space:]]*#/ { next }
-              /^[[:space:]]*$/ { next }
-              {
-                line = $0
-                sub(/^[[:space:]]+/, "", line)
-                sub(/^[Ee][Xx][Pp][Oo][Rr][Tt][[:space:]]+/, "", line)
-                if (index(line, key "=") == 1) {
-                  value = substr(line, length(key) + 2)
-                  sub(/^[[:space:]]+/, "", value)
-                  sub(/[[:space:]]+$/, "", value)
-                  if ((value ~ /^".*"$/) || (value ~ /^'\''.*'\''$/)) {
-                    value = substr(value, 2, length(value) - 2)
-                  }
-                  print value
-                  exit
-                }
-              }
-            '
-          }
-
-          base_url="${PLAYWRIGHT_BASE_URL_OVERRIDE:-}"
-          if [ -z "${base_url}" ]; then
-            base_url="$(extract_from_home_server_env "CUSTOM_LIVE_FRONTURL")"
-          fi
-          if [ -z "${base_url}" ]; then
-            base_url="$(extract_from_home_server_env "CUSTOM_PROD_FRONTURL")"
-          fi
-          if [ -z "${base_url}" ]; then
-            base_url="$(extract_from_home_server_env "HOME_FRONT_BASE_URL")"
-          fi
-          if [ -z "${base_url}" ]; then
-            base_url="https://www.aquilaxk.site"
-          fi
-          if [ -z "${base_url}" ]; then
-            echo "Missing live frontend URL. Set CUSTOM_LIVE_FRONTURL or HOME_FRONT_BASE_URL in repository secrets/vars." >&2
-            exit 1
-          fi
-
-          case "${base_url}" in
-            http://*|https://*) ;;
-            *)
-              echo "Invalid PLAYWRIGHT_BASE_URL: ${base_url}" >&2
-              exit 1
-              ;;
-          esac
-
-          echo "PLAYWRIGHT_BASE_URL=${base_url}" >> "$GITHUB_ENV"
-          echo "Resolved live e2e base host: $(echo "${base_url}" | sed -E 's#https?://([^/]+).*#\1#')"
-
-          base_scheme="$(echo "${base_url}" | sed -E 's#(https?)://.*#\1#')"
-          api_base_url="${E2E_API_BASE_URL_OVERRIDE:-}"
-          if [ -z "${api_base_url}" ]; then
-            api_base_url="$(extract_from_home_server_env "CUSTOM_LIVE_BACKURL")"
-          fi
-          if [ -z "${api_base_url}" ]; then
-            api_base_url="$(extract_from_home_server_env "CUSTOM_PROD_BACKURL")"
-          fi
-          if [ -z "${api_base_url}" ]; then
-            api_base_url="$(extract_from_home_server_env "custom.prod.backUrl")"
-          fi
-          if [ -z "${api_base_url}" ]; then
-            api_base_url="$(extract_from_home_server_env "custom.site.backUrl")"
-          fi
-          if [ -z "${api_base_url}" ]; then
-            api_domain_from_env="$(extract_from_home_server_env "API_DOMAIN")"
-            if [ -n "${api_domain_from_env}" ]; then
-              api_base_url="${base_scheme}://${api_domain_from_env}"
-            fi
-          fi
-          if [ -z "${api_base_url}" ]; then
-            resolved_front_host="$(echo "${base_url}" | sed -E 's#https?://([^/]+).*#\1#')"
-            if [[ "${resolved_front_host}" == www.* ]]; then
-              api_base_url="${base_scheme}://api.${resolved_front_host#www.}"
-            else
-              api_base_url="${base_scheme}://api.${resolved_front_host}"
-            fi
-          fi
-
-          case "${api_base_url}" in
-            http://*|https://*) ;;
-            *)
-              echo "Invalid E2E_API_BASE_URL: ${api_base_url}" >&2
-              exit 1
-              ;;
-          esac
-          echo "E2E_API_BASE_URL=${api_base_url}" >> "$GITHUB_ENV"
-          echo "Resolved live e2e api base: ${api_base_url}"
-
-          # 라이브 E2E 전용 계정을 우선 사용하고, 없으면 운영 관리자 계정으로 fallback 한다.
-          resolved_admin_email="${E2E_LIVE_ADMIN_EMAIL:-}"
-          resolved_admin_username="${E2E_LIVE_ADMIN_USERNAME:-}"
-          resolved_admin_password="${E2E_LIVE_ADMIN_PASSWORD:-}"
-
-          if [ -z "${resolved_admin_email}" ]; then
-            resolved_admin_email="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__EMAIL")"
-          fi
-          if [ -z "${resolved_admin_username}" ]; then
-            resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__USERNAME")"
-          fi
-          if [ -z "${resolved_admin_password}" ]; then
-            resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__PASSWORD")"
-          fi
-
-          if [ -z "${resolved_admin_email}" ]; then
-            resolved_admin_email="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__EMAIL")"
-          fi
-          if [ -z "${resolved_admin_username}" ]; then
-            resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__USERNAME")"
-          fi
-          if [ -z "${resolved_admin_password}" ]; then
-            resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__PASSWORD")"
-          fi
-
-          if [ -z "${resolved_admin_email}" ]; then
-            resolved_admin_email="${E2E_ADMIN_EMAIL:-}"
-          fi
-          if [ -z "${resolved_admin_username}" ]; then
-            resolved_admin_username="${E2E_ADMIN_USERNAME:-}"
-          fi
-          if [ -z "${resolved_admin_password}" ]; then
-            resolved_admin_password="${E2E_ADMIN_PASSWORD:-}"
-          fi
-
-          if [ -n "${resolved_admin_email}" ]; then
-            echo "E2E_ADMIN_EMAIL=${resolved_admin_email}" >> "$GITHUB_ENV"
-          fi
-          if [ -n "${resolved_admin_username}" ]; then
-            echo "E2E_ADMIN_USERNAME=${resolved_admin_username}" >> "$GITHUB_ENV"
-          fi
-          if [ -n "${resolved_admin_password}" ]; then
-            echo "E2E_ADMIN_PASSWORD=${resolved_admin_password}" >> "$GITHUB_ENV"
-          fi
-
-      - name: Verify live e2e secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          [ -n "${E2E_ADMIN_EMAIL:-}" ] || [ -n "${E2E_ADMIN_USERNAME:-}" ] || (echo "E2E_ADMIN_EMAIL or E2E_ADMIN_USERNAME is required" && exit 1)
-          [ -n "${E2E_ADMIN_PASSWORD}" ] || (echo "E2E_ADMIN_PASSWORD is required" && exit 1)
+          node front/scripts/env/validate-env.mjs --target live-e2e --source-env-var WEB_LIVE_E2E_ENV
+        env:
+          WEB_LIVE_E2E_ENV: |
+            PLAYWRIGHT_BASE_URL=${{ secrets.PLAYWRIGHT_BASE_URL || vars.PLAYWRIGHT_BASE_URL || '' }}
+            E2E_API_BASE_URL=${{ secrets.E2E_API_BASE_URL || vars.E2E_API_BASE_URL || '' }}
+            E2E_LIVE_ADMIN_EMAIL=${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
+            E2E_LIVE_ADMIN_USERNAME=${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
+            E2E_LIVE_ADMIN_PASSWORD=${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
 
       - name: Live e2e preflight checks (fail-fast)
         shell: bash
@@ -1704,10 +1533,10 @@ jobs:
             local attempt="$1"
             local code
             local login_payload
-            if [ -n "${E2E_ADMIN_EMAIL:-}" ]; then
-              login_payload="{\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+            if [ -n "${E2E_LIVE_ADMIN_EMAIL:-}" ]; then
+              login_payload="{\"email\":\"${E2E_LIVE_ADMIN_EMAIL}\",\"password\":\"${E2E_LIVE_ADMIN_PASSWORD}\"}"
             else
-              login_payload="{\"username\":\"${E2E_ADMIN_USERNAME}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+              login_payload="{\"username\":\"${E2E_LIVE_ADMIN_USERNAME}\",\"password\":\"${E2E_LIVE_ADMIN_PASSWORD}\"}"
             fi
             code="$(
               curl "${curl_args[@]}" \
@@ -1825,10 +1654,10 @@ jobs:
             echo "[preflight-diagnostic] curl headers /member/api/v1/auth/me"
             curl "${curl_args[@]}" -D - -o /dev/null "${api_base}/member/api/v1/auth/me" || true
             echo "[preflight-diagnostic] curl headers /member/api/v1/auth/login"
-            if [ -n "${E2E_ADMIN_EMAIL:-}" ]; then
-              login_payload="{\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+            if [ -n "${E2E_LIVE_ADMIN_EMAIL:-}" ]; then
+              login_payload="{\"email\":\"${E2E_LIVE_ADMIN_EMAIL}\",\"password\":\"${E2E_LIVE_ADMIN_PASSWORD}\"}"
             else
-              login_payload="{\"username\":\"${E2E_ADMIN_USERNAME}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+              login_payload="{\"username\":\"${E2E_LIVE_ADMIN_USERNAME}\",\"password\":\"${E2E_LIVE_ADMIN_PASSWORD}\"}"
             fi
             curl "${curl_args[@]}" -X POST -H 'Content-Type: application/json' -D - -o /dev/null --data "${login_payload}" "${api_base}/member/api/v1/auth/login" || true
             exit 1

@@ -113,11 +113,11 @@ test("live-e2e rejects placeholder credentials", async () => {
   assert(result.errors.some((error) => error.key === "E2E_LIVE_ADMIN_PASSWORD" && error.message.includes("placeholder")))
 })
 
-test("prebuild validates production only for Vercel production and CI runs the Web contract suite", () => {
+test("prebuild validates production only for Vercel production deployment and CI runs the Web contract suite", () => {
   const packageJson = JSON.parse(readFileSync(path.join(frontRoot, "package.json"), "utf8"))
   const frontendWorkflow = readFileSync(path.join(repoRoot, ".github/workflows/reusable-frontend-verify.yml"), "utf8")
 
-  assert.match(packageJson.scripts.prebuild, /VERCEL_ENV:-.*production/)
+  assert.match(packageJson.scripts.prebuild, /VERCEL:-.*1.*VERCEL_ENV:-.*production/)
   assert.match(packageJson.scripts.prebuild, /scripts\/env\/validate-env\.mjs --target production --process-env/)
   assert.match(frontendWorkflow, /node --test scripts\/env\/env-contract\.test\.mjs/)
 })

@@ -19,6 +19,7 @@ const output = values["--output"]
 const sourceRepository = values["--source-repository"]
 const sourceCommit = values["--source-commit"]
 if (!source || !output || !sourceRepository || !sourceCommit) fail("--source, --output, --source-repository, and --source-commit are required")
+if (path.resolve(source) === path.resolve(output)) fail("source and output must be different paths")
 if (!/^[a-f0-9]{40}$/.test(sourceCommit)) fail("sourceCommit must be 40 lowercase hex")
 if (sourceRepository !== "AquilaXk/aquila-blog-web" && !(allowMonorepo && sourceRepository === "AquilaXk/aquila-blog")) fail("sourceRepository must be AquilaXk/aquila-blog-web")
 const bytes = fs.readFileSync(source)

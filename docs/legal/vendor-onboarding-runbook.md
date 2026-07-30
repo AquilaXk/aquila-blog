@@ -53,6 +53,7 @@
 
 ## Validation
 
-- `node tools/contracts/check-web-policy-lock.mjs`를 실행해 Platform acceptance metadata가 pinned Web policy identity와 일치하는지 확인한다.
+- `node tools/contracts/check-web-policy-lock.mjs`로 pinned Web policy lock의 source identity와 manifest hash integrity를 확인한다.
+- `./back/gradlew -p back test --tests '*WebLegalPolicyManifestContractTest'`로 terms/privacy acceptance metadata와 signup max SemVer를 확인한다.
 - processor id가 `legal/data-map/processing-activities.yaml`와 `legal/vendors/processors.yaml`에 일관되게 존재하는지 확인한다.
 - optional integration은 disabled 환경에서 외부 요청이 발생하지 않는지 테스트한다.

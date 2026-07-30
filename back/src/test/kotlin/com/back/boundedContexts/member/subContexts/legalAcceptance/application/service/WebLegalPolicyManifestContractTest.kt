@@ -3,6 +3,8 @@ package com.back.boundedContexts.member.subContexts.legalAcceptance.application.
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import tools.jackson.databind.JsonNode
+import tools.jackson.databind.ObjectMapper
 import java.nio.file.Path
 import kotlin.io.path.readText
 
@@ -10,11 +12,11 @@ class WebLegalPolicyManifestContractTest {
     @Test
     @DisplayName("pinned Web policy lock matches backend acceptance metadata while cookies are excluded")
     fun pinnedWebPolicyLockMatchesBackendMetadataAndExcludesCookies() {
-        val lock = Path.of("../contracts/web/legal-policy-manifest.lock.json").readText()
+        val lock = ObjectMapper().readTree(Path.of("../contracts/web/legal-policy-manifest.lock.json").readText())
         val active = ActiveLegalDocumentMetadata.current()
-        val terms = metadata(lock, "terms")
-        val privacy = metadata(lock, "privacy")
-        val cookies = metadata(lock, "cookies")
+        val terms = metadata(lock.path("active"), "terms")
+        val privacy = metadata(lock.path("active"), "privacy")
+        val cookies = metadata(lock.path("active"), "cookies")
 
         assertThat(active.terms).isEqualTo(terms)
         assertThat(active.privacy).isEqualTo(privacy)
@@ -25,19 +27,29 @@ class WebLegalPolicyManifestContractTest {
     }
 
     private fun metadata(
-        lock: String,
+        active: JsonNode,
         name: String,
     ): LegalDocumentMetadata {
-        val body =
-            requireNotNull(Regex("\"$name\"\\s*:\\s*\\{([^}]*)}", RegexOption.DOT_MATCHES_ALL).find(lock)) {
-                "missing $name lock metadata"
-            }.groupValues[1]
+        require(
+            active.isObject &&
+                active.size() == 3 &&
+                active.get("terms") != null &&
+                active.get("privacy") != null &&
+                active.get("cookies") != null,
+        ) {
+            "active must contain only terms, privacy, and cookies"
+        }
+        val body = active.path(name)
+        require(body.isObject && body.size() == 2 && body.get("version") != null && body.get("contentSha256") != null) {
+            "$name must contain only version and contentSha256"
+        }
+        val version = body.path("version").asText()
+        val contentSha256 = body.path("contentSha256").asText()
+        require(Regex("\\d+\\.\\d+\\.\\d+").matches(version)) { "invalid $name version" }
+        require(Regex("[a-f0-9]{64}").matches(contentSha256)) { "invalid $name contentSha256" }
         return LegalDocumentMetadata(
-            version = requireNotNull(Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(body)) { "missing $name version" }.groupValues[1],
-            contentSha256 =
-                requireNotNull(
-                    Regex("\"contentSha256\"\\s*:\\s*\"([^\"]+)\"").find(body),
-                ) { "missing $name contentSha256" }.groupValues[1],
+            version = version,
+            contentSha256 = contentSha256,
         )
     }
 
@@ -50,11 +62,18 @@ class WebLegalPolicyManifestContractTest {
         left: String,
         right: String,
     ): Int {
-        val leftParts = left.split(".").map(String::toInt)
-        val rightParts = right.split(".").map(String::toInt)
+        require(
+            Regex("\\d+\\.\\d+\\.\\d+").matches(left) && Regex("\\d+\\.\\d+\\.\\d+").matches(right),
+        ) { "versions must be strict semver" }
+        val leftParts = left.split(".")
+        val rightParts = right.split(".")
         for (index in 0 until 3) {
-            val difference = leftParts[index] - rightParts[index]
-            if (difference != 0) return difference
+            val leftPart = leftParts[index].trimStart('0').ifEmpty { "0" }
+            val rightPart = rightParts[index].trimStart('0').ifEmpty { "0" }
+            val lengthDifference = leftPart.length.compareTo(rightPart.length)
+            if (lengthDifference != 0) return lengthDifference
+            val lexicalDifference = leftPart.compareTo(rightPart)
+            if (lexicalDifference != 0) return lexicalDifference
         }
         return 0
     }

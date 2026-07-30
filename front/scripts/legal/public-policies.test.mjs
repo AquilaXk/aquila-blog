@@ -88,6 +88,12 @@ test("check mode rejects stale canonical manifest bytes without rewriting them",
   assert.equal(fs.readFileSync(output, "utf8"), "{}\n")
 })
 
+test("exporter rejects output without a value with a controlled usage error", () => {
+  const result = spawnSync(process.execPath, [exporter, "--output"], { cwd: repoRoot, encoding: "utf8" })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /expected optional --check and --output <path>/)
+})
+
 test("rejects effective reviewRequired and frontend acceptance hash drift", () => {
   const directory = copyPolicies()
   const policyPath = path.join(directory, "privacy.ko-KR.v1.0.3.yaml")

@@ -74,3 +74,10 @@ test("importer and checker reject malformed arguments", () => {
   assert.notEqual(run(importer, ["--source", source(directory), "--source", source(directory), "--source-repository", "AquilaXk/aquila-blog-web", "--source-commit", webSha, "--output", path.join(directory, "lock.json")]).status, 0)
   assert.notEqual(run(checker, ["--lock"]).status, 0)
 })
+
+test("importer rejects source and output resolving to the same file", () => {
+  const directory = fixture()
+  const manifest = source(directory)
+  const result = run(importer, ["--source", manifest, "--source-repository", "AquilaXk/aquila-blog-web", "--source-commit", webSha, "--output", path.join(directory, ".", "manifest.json")])
+  assert.notEqual(result.status, 0)
+})

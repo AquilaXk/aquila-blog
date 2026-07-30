@@ -10,7 +10,7 @@ let check = false
 let outputSet = false
 for (let index = 0; index < args.length; index += 1) {
   if (args[index] === "--check" && !check) check = true
-  else if (args[index] === "--output" && !outputSet && !args[index + 1]?.startsWith("--")) { outputSet = true; output = path.resolve(args[++index]) }
+  else if (args[index] === "--output" && !outputSet && args[index + 1] && !args[index + 1].startsWith("--")) { outputSet = true; output = path.resolve(args[++index]) }
   else { console.error("[legal-policies] expected optional --check and --output <path>"); process.exit(1) }
 }
 const expected = (manifest) => `${JSON.stringify(manifest, null, 2)}\n`

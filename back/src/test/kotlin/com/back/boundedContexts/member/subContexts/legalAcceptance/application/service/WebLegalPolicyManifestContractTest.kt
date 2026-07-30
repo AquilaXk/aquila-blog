@@ -24,17 +24,32 @@ class WebLegalPolicyManifestContractTest {
         assertThat(ActiveLegalDocumentMetadata::class.java.declaredFields.map { it.name }).doesNotContain("cookies")
     }
 
-    private fun metadata(lock: String, name: String): LegalDocumentMetadata {
-        val body = requireNotNull(Regex("\"$name\"\\s*:\\s*\\{([^}]*)}", RegexOption.DOT_MATCHES_ALL).find(lock)) { "missing $name lock metadata" }.groupValues[1]
+    private fun metadata(
+        lock: String,
+        name: String,
+    ): LegalDocumentMetadata {
+        val body =
+            requireNotNull(Regex("\"$name\"\\s*:\\s*\\{([^}]*)}", RegexOption.DOT_MATCHES_ALL).find(lock)) {
+                "missing $name lock metadata"
+            }.groupValues[1]
         return LegalDocumentMetadata(
             version = requireNotNull(Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(body)) { "missing $name version" }.groupValues[1],
-            contentSha256 = requireNotNull(Regex("\"contentSha256\"\\s*:\\s*\"([^\"]+)\"").find(body)) { "missing $name contentSha256" }.groupValues[1],
+            contentSha256 =
+                requireNotNull(
+                    Regex("\"contentSha256\"\\s*:\\s*\"([^\"]+)\"").find(body),
+                ) { "missing $name contentSha256" }.groupValues[1],
         )
     }
 
-    private fun maxSemver(left: String, right: String): String = if (compareSemver(left, right) >= 0) left else right
+    private fun maxSemver(
+        left: String,
+        right: String,
+    ): String = if (compareSemver(left, right) >= 0) left else right
 
-    private fun compareSemver(left: String, right: String): Int {
+    private fun compareSemver(
+        left: String,
+        right: String,
+    ): Int {
         val leftParts = left.split(".").map(String::toInt)
         val rightParts = right.split(".").map(String::toInt)
         for (index in 0 until 3) {

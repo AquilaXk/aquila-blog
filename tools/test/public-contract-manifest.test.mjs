@@ -95,15 +95,17 @@ test("sync rejects missing or malformed OpenAPI and invalid ErrorCode input", ()
 test("checker rejects untracked and changed canonical contract artifacts", () => {
   const root = createFixture()
   try {
-    execFileSync("git", ["init", "--quiet"], { cwd: root })
-    execFileSync("git", ["config", "user.email", "contract@example.test"], { cwd: root })
-    execFileSync("git", ["config", "user.name", "Contract Test"], { cwd: root })
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=", "init", "--quiet"], { cwd: root })
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=", "config", "user.email", "contract@example.test"], { cwd: root })
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=", "config", "user.name", "Contract Test"], { cwd: root })
     assert.notEqual(run(checkScript, root).status, 0)
-    execFileSync("git", ["add", "contracts/public-api"], { cwd: root })
-    execFileSync("git", ["commit", "--quiet", "-m", "contract"], { cwd: root })
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=", "add", "contracts/public-api"], { cwd: root })
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=", "commit", "--quiet", "-m", "contract"], { cwd: root })
     assert.equal(run(checkScript, root).status, 0)
 
     writeJson(path.join(root, "back/build/openapi/openapi.json"), { openapi: "3.1.1" })
+    assert.notEqual(run(checkScript, root).status, 0)
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=", "add", "contracts/public-api"], { cwd: root })
     assert.notEqual(run(checkScript, root).status, 0)
   } finally {
     fs.rmSync(root, { recursive: true, force: true })

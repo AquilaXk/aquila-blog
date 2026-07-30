@@ -37,7 +37,7 @@ if (trackedResult.status !== 0) {
   process.exit(trackedResult.status ?? 1)
 }
 
-const diffResult = spawnSync("git", ["diff", "--exit-code", "--", "contracts/public-api"], {
+const diffResult = spawnSync("git", ["diff", "--exit-code", "HEAD", "--", "contracts/public-api"], {
   cwd: root,
   stdio: "inherit",
 })

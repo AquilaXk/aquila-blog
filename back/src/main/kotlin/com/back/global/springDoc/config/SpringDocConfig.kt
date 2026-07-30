@@ -1,13 +1,20 @@
 package com.back.global.springDoc.config
 
 import io.swagger.v3.oas.annotations.OpenAPIDefinition
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeType
 import io.swagger.v3.oas.annotations.info.Info
+import io.swagger.v3.oas.annotations.security.SecurityScheme
+import io.swagger.v3.oas.annotations.servers.Server
 import org.springdoc.core.models.GroupedOpenApi
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 @Configuration
-@OpenAPIDefinition(info = Info(title = "API 서버", version = "beta", description = "API 서버 문서입니다."))
+@OpenAPIDefinition(
+    info = Info(title = "API 서버", version = "beta", description = "API 서버 문서입니다."),
+    servers = [Server(url = "https://api.aquilaxk.site")],
+)
+@SecurityScheme(name = "bearerAuth", type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "JWT")
 class SpringDocConfig {
     @Bean
     fun groupApiV1(): GroupedOpenApi =

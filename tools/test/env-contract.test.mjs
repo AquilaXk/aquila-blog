@@ -139,8 +139,6 @@ const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha }) => {
       GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
       DEPLOY_SHA_INPUT: deploySha,
       FORCE_BACKEND_DEPLOY_INPUT: "false",
-      FORCE_FRONT_LIVE_VERIFY_INPUT: "false",
-      FORCE_EDITOR_LIVE_CANARY_INPUT: "false",
       GITHUB_OUTPUT: outputFile,
       GITHUB_STEP_SUMMARY: summaryFile,
     },
@@ -1147,14 +1145,6 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_SIGNUP_ENABLED/)
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_RUM_SAMPLE_RATE/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
-  assert.match(workflow, /Validate live e2e Web contract/)
-  assert.match(workflow, /front\/scripts\/env\/validate-env\.mjs --target live-e2e/)
-  const liveE2EWorkflow = workflow.slice(workflow.indexOf("frontLiveE2E:"))
-  assert.doesNotMatch(liveE2EWorkflow, /HOME_SERVER_ENV|CUSTOM__ADMIN__/)
-  assert.match(liveE2EWorkflow, /E2E_ADMIN_EMAIL: \$\{\{ secrets\.E2E_LIVE_ADMIN_EMAIL \|\| '' \}\}/)
-  assert.match(liveE2EWorkflow, /E2E_ADMIN_USERNAME: \$\{\{ secrets\.E2E_LIVE_ADMIN_USERNAME \|\| '' \}\}/)
-  assert.match(liveE2EWorkflow, /E2E_ADMIN_PASSWORD: \$\{\{ secrets\.E2E_LIVE_ADMIN_PASSWORD \|\| '' \}\}/)
-  assert.doesNotMatch(liveE2EWorkflow, /secrets\.E2E_ADMIN_|vars\.E2E_ADMIN_/)
   assert(
     workflow.indexOf('upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED"') <
       workflow.indexOf('require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED"'),
@@ -1245,51 +1235,6 @@ test("required secret check does not inject multi-line HOME_SERVER_ENV into shel
   assert.match(workflow, /value="\$\{!key:-\}"/)
 })
 
-test("deploy workflow는 editor live canary를 editor 변경 또는 명시적 force로 제한한다", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
-
-  assert.match(workflow, /editor_live_canary: \$\{\{ steps\.meta\.outputs\.editor_live_canary \}\}/)
-  assert.match(workflow, /EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front\/src\/components\/markdown-editor\//)
-  assert.match(workflow, /EDITOR_LIVE_CANARY_PATHS_PATTERN=.*front\/src\/pages\/editor\//)
-  assert.match(workflow, /force_editor_live_canary:\s*\n/)
-  assert.match(workflow, /E2E_LIVE_EDITOR_507_CANARY: \$\{\{ needs\.calculateTag\.outputs\.editor_live_canary \}\}/)
-  assert.doesNotMatch(workflow, /E2E_LIVE_EDITOR_507_CANARY:\s*['"]?true['"]?/)
-})
-
-test("deploy workflow는 frontend 변경에서만 live frontend SHA를 현재 commit으로 기대한다", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
-
-  assert.match(workflow, /expected_front_commit_sha: \$\{\{ steps\.meta\.outputs\.expected_front_commit_sha \}\}/)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*\^front\/\(src\//)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*packages\//)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*contracts\//)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*config\//)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*scripts\//)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*site\\\.config\\\.js/)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*vercel\\\.json/)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*tsconfig\\\.json/)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*next-sitemap\\\.config\\\.js/)
-  assert.doesNotMatch(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN='?\^front\/'?\n/)
-  assert.match(workflow, /EXPECTED_FRONT_COMMIT_SHA="\$\{DEPLOY_SHA\}"/)
-  assert.match(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA: \$\{\{ needs\.calculateTag\.outputs\.expected_front_commit_sha \}\}/)
-  assert.doesNotMatch(workflow, /E2E_EXPECTED_FRONT_COMMIT_SHA:\s*\$\{\{ needs\.calculateTag\.outputs\.deploy_sha \}\}/)
-})
-
-test("deploy workflow는 Vercel rate limit 상태를 live SHA polling 전에 fail-fast 한다", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
-
-  assert.match(workflow, /statuses:\s*read/)
-  assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/)
-  assert.match(workflow, /api\.github\.com\/repos\/\$\{GITHUB_REPOSITORY\}\/commits\/\$\{E2E_EXPECTED_FRONT_COMMIT_SHA\}\/status/)
-  assert.match(workflow, /select\(\.context == "Vercel"\)/)
-  assert.match(workflow, /Deployment rate limited/)
-  assert.match(workflow, /Vercel production deployment is rate limited/)
-  assert(
-    workflow.indexOf("Vercel production deployment is rate limited") <
-      workflow.indexOf("front-build-sha attempt="),
-  )
-})
-
 test("Vercel frontend project skips builds when frontend inputs did not change", () => {
   const config = JSON.parse(readFileSync(vercelConfigPath, "utf8"))
 
@@ -1322,7 +1267,6 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=/)
   assert.doesNotMatch(workflow, /stale workflow_run payload: deploy_sha=/)
   assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
-  assert.match(workflow, /if \[ "\$\{FRONT_BUILD_SHA_SUPERSEDED\}" != "true" \] && echo "\$\{CHANGED_FILES\}" \| grep -Eq "\$\{FRONT_BUILD_SHA_PATHS_PATTERN\}"/)
 })
 
 test("deploy calculateTag는 docs-only 후속 main 변경이면 기존 backend deploy를 계속 허용한다", () => {
@@ -1894,10 +1838,8 @@ test("blue-green deploy waits longer for candidate Flyway startup only", () => {
   const candidateHealthBlock = deployScript.slice(candidateStart, candidateEnd)
 
   const deployJobStart = workflow.indexOf("  blueGreenDeploy:")
-  const deployJobEnd = workflow.indexOf("  frontLiveE2E:")
   assert.notEqual(deployJobStart, -1, "blueGreenDeploy job marker must exist")
-  assert.notEqual(deployJobEnd, -1, "frontLiveE2E job marker must exist")
-  const blueGreenDeployJob = workflow.slice(deployJobStart, deployJobEnd)
+  const blueGreenDeployJob = workflow.slice(deployJobStart)
 
   assert.match(deployScript, /CANDIDATE_HEALTHCHECK_RETRIES="\$\{CANDIDATE_HEALTHCHECK_RETRIES:-450\}"/)
   assert.match(deployScript, /CANDIDATE_HEALTHCHECK_RETRIES="\$\(normalize_positive_int "\$\{CANDIDATE_HEALTHCHECK_RETRIES\}" "450"\)"/)

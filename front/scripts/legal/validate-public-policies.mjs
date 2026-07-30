@@ -296,11 +296,13 @@ export const buildCanonicalManifest = (active) => ({
 
 export const validatePublicPolicies = ({ policiesDir: configuredPoliciesDir = policiesDir, frontendMetadataPath = frontendLegalMetadataPath } = {}) => {
   const reporter = createReporter()
+  const originalFail = fail
   fail = reporter.fail
   const originalPoliciesDir = policiesDir
   const originalMetadataPath = frontendLegalMetadataPath
   policiesDir = configuredPoliciesDir
   frontendLegalMetadataPath = frontendMetadataPath
+  try {
   const latestEffectivePolicies = new Map()
   const policyFiles = getPolicyFiles()
   for (const fileName of policyFiles) {
@@ -319,10 +321,13 @@ export const validatePublicPolicies = ({ policiesDir: configuredPoliciesDir = po
   if (cookies) assertTextIncludes(`cookies.ko-KR.v${cookies.version}.yaml`, cookies, ["필수 쿠키", "Analytics", "RUM", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
   for (const fileName of policyFiles) { const raw = readRawPolicy(fileName); if (raw?.includes("illusiveman7@gmail.com")) fail(`${fileName} contains stale contact email`) }
   assertActiveMetadataMatchesPolicies("frontend active legal metadata", readFrontendActiveMetadata(), terms, privacy)
-  policiesDir = originalPoliciesDir
-  frontendLegalMetadataPath = originalMetadataPath
   const active = terms && privacy && cookies ? { terms, privacy, cookies } : null
   return { ok: reporter.errors.length === 0, errors: reporter.errors, active, manifest: active ? buildCanonicalManifest(active) : null }
+  } finally {
+    policiesDir = originalPoliciesDir
+    frontendLegalMetadataPath = originalMetadataPath
+    fail = originalFail
+  }
 }
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {

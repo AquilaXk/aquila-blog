@@ -4,9 +4,9 @@ import fs from "node:fs"
 import path from "node:path"
 
 const args = process.argv.slice(2)
-const supplied = args.indexOf("--lock")
-const lockPath = supplied >= 0 ? args[supplied + 1] : path.resolve(import.meta.dirname, "../../contracts/web/legal-policy-manifest.lock.json")
 const fail = (message) => { console.error(`[web-policy-lock] ${message}`); process.exit(1) }
+if (args.length !== 0 && (args.length !== 2 || args[0] !== "--lock" || !args[1] || args[1].startsWith("--"))) fail("expected optional --lock <path>")
+const lockPath = args.length === 2 ? args[1] : path.resolve(import.meta.dirname, "../../contracts/web/legal-policy-manifest.lock.json")
 const bytes = fs.readFileSync(lockPath)
 let lock
 try { lock = JSON.parse(bytes) } catch { fail("lock is not JSON") }

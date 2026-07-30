@@ -76,7 +76,7 @@ Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운
 | Gate | Pass 조건 | Block 조건 |
 | --- | --- | --- |
 | 후속 issue 상태 | 위 matrix의 `필수 출시 전 완료` 항목이 모두 closed이고 evidence가 PR 또는 연결 문서에 있다. | 필수 항목이 open이거나 evidence link가 없다. |
-| 공개 정책 원본 | `front/legal/policies/*.yaml`의 공개 시행 문서가 `status: effective`이고 `reviewRequired`가 0개다. | effective 정책에 내부 검토 문구, 미확정 수탁자/국외이전/보유기간 문구, `출시 gate`, `추후 확정`, `구현 후 제공` 같은 표현이 남아 있다. |
+| 공개 정책 원본 | `AquilaXk/aquila-blog-web:legal/policies/*.yaml`의 공개 시행 문서가 `status: effective`이고 `reviewRequired`가 0개다. | effective 정책에 내부 검토 문구, 미확정 수탁자/국외이전/보유기간 문구, `출시 gate`, `추후 확정`, `구현 후 제공` 같은 표현이 남아 있다. |
 | 정책-코드 대조 | 개인정보처리방침, 이용약관, 쿠키 정책이 data map, processor registry, retention matrix, backend legal metadata와 일치한다. | 정책 본문과 실제 수집/저장/전송/보유 동작이 다르다. |
 | Signup/OAuth consent | email signup과 Kakao OAuth 신규 가입 모두 현재 정책 version/hash와 필수 동의를 저장한다. | 기존 동의 버전이 계속 acceptance로 인정되거나 신규 가입자가 정책을 보지 않고 가입된다. |
 | Optional tracking | analytics/RUM/cookie tracking이 opt-in 또는 명시적 설정에 따라 비활성화 가능하다. | 비필수 tracking이 동의 전 실행되거나 opt-out 뒤에도 계속 전송된다. |
@@ -102,7 +102,7 @@ Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운
 1. Web에서 `yarn legal:check`로 policy schema, hash, active metadata, internal phrase 금지를 확인하고 canonical manifest를 생성한다.
 2. `legal/data-map/processing-activities.yaml`, `legal/data-map/retention-matrix.yaml`, `legal/vendors/processors.yaml`를 공개 정책의 수집 항목, 보유기간, processor 항목과 대조한다.
 3. Platform에서는 `node tools/contracts/check-web-policy-lock.mjs`와 `WebLegalPolicyManifestContractTest`로 pinned lock의 terms/privacy version/hash와 backend metadata를 확인한다. cookies는 lock integrity만 확인하며 signup acceptance metadata에는 포함하지 않는다.
-4. `front/src/libs/legal/serverPolicySource.ts`와 `/privacy`, `/terms`, `/cookies`, `/legal/history`가 current URL, 이전 버전 URL, hash/download evidence를 노출하는지 확인한다.
+4. `AquilaXk/aquila-blog-web:src/libs/legal/serverPolicySource.ts`와 `/privacy`, `/terms`, `/cookies`, `/legal/history`가 current URL, 이전 버전 URL, hash/download evidence를 노출하는지 확인한다.
 5. signup, Kakao OAuth, analytics/RUM, Gemini, logs, backup, deletion/export 관련 issue의 PR evidence를 matrix에 연결한다.
 
 ## Post-Launch Monitoring

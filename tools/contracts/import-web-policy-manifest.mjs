@@ -4,13 +4,20 @@ import fs from "node:fs"
 import path from "node:path"
 
 const args = process.argv.slice(2)
-const option = (name) => args[args.indexOf(name) + 1]
 const fail = (message) => { console.error(`[web-policy-lock] ${message}`); process.exit(1) }
-const source = option("--source")
-const output = option("--output")
-const sourceRepository = option("--source-repository")
-const sourceCommit = option("--source-commit")
-const allowMonorepo = args.includes("--allow-monorepo-source")
+const values = {}
+let allowMonorepo = false
+const known = new Set(["--source", "--output", "--source-repository", "--source-commit"])
+for (let index = 0; index < args.length; index += 1) {
+  const argument = args[index]
+  if (argument === "--allow-monorepo-source" && !allowMonorepo) { allowMonorepo = true; continue }
+  if (!known.has(argument) || values[argument] || !args[index + 1] || args[index + 1].startsWith("--")) fail("invalid arguments")
+  values[argument] = args[++index]
+}
+const source = values["--source"]
+const output = values["--output"]
+const sourceRepository = values["--source-repository"]
+const sourceCommit = values["--source-commit"]
 if (!source || !output || !sourceRepository || !sourceCommit) fail("--source, --output, --source-repository, and --source-commit are required")
 if (!/^[a-f0-9]{40}$/.test(sourceCommit)) fail("sourceCommit must be 40 lowercase hex")
 if (sourceRepository !== "AquilaXk/aquila-blog-web" && !(allowMonorepo && sourceRepository === "AquilaXk/aquila-blog")) fail("sourceRepository must be AquilaXk/aquila-blog-web")

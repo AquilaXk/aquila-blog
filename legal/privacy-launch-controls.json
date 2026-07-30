@@ -7,7 +7,7 @@
       "contracts/web/legal-policy-manifest.lock.json",
       "tools/contracts/check-web-policy-lock.mjs",
       "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt",
-      "front/src/pages/_document.tsx"
+      "AquilaXk/aquila-blog-web:src/pages/_document.tsx"
     ]
   },
   "controls": [
@@ -27,7 +27,7 @@
       "target": "정책 버전관리와 공개 페이지",
       "evidenceRequirement": "Web canonical policy manifest와 pinned Platform lock, `/privacy`, `/terms`, `/cookies`",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "front/src/routes/LegalPolicy/LegalPolicyPage.tsx"]
+      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "AquilaXk/aquila-blog-web:src/routes/LegalPolicy/LegalPolicyPage.tsx"]
     },
     {
       "issue": 996,
@@ -36,7 +36,7 @@
       "target": "이메일 가입 동의와 증빙 저장",
       "evidenceRequirement": "backend acceptance version/hash, signup flow evidence",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/e2e/legal-policy-pages.spec.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance"]
+      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance"]
     },
     {
       "issue": 997,
@@ -45,7 +45,7 @@
       "target": "Kakao OAuth 신규 가입 pending 동의",
       "evidenceRequirement": "OAuth 신규 가입 동의 flow evidence",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/e2e/legal-policy-pages.spec.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance"]
+      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance"]
     },
     {
       "issue": 998,
@@ -63,7 +63,7 @@
       "target": "권리 요청, export, 계정 탈퇴",
       "evidenceRequirement": "privacy request/export/delete 테스트",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/e2e/privacy-tracking-consent.spec.ts", "docs/legal/data-subject-request-runbook.md"]
+      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts", "docs/legal/data-subject-request-runbook.md"]
     },
     {
       "issue": 1000,
@@ -90,7 +90,7 @@
       "target": "analytics/cookie consent manager와 opt-out",
       "evidenceRequirement": "`/settings/privacy` consent UI, `privacy.optionalTrackingConsent.v1` structured storage, tracking pre-consent/withdrawal e2e",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/e2e/privacy-tracking-consent.spec.ts", "front/e2e/browser-storage-registry.spec.ts"]
+      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts", "AquilaXk/aquila-blog-web:e2e/browser-storage-registry.spec.ts"]
     },
     {
       "issue": 1003,
@@ -166,7 +166,7 @@
       "target": "effective 정책의 내부 검토 문구 제거",
       "evidenceRequirement": "`reviewRequired=0`, internal phrase validator, page e2e",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "front/e2e/legal-policy-pages.spec.ts"]
+      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts"]
     },
     {
       "issue": 1026,
@@ -175,7 +175,7 @@
       "target": "법적 정책 탐색성과 원문 검증 UX",
       "evidenceRequirement": "policy URL, TOC, hash/download 검증, live page evidence",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/src/routes/LegalPolicy/LegalPolicyPage.tsx", "front/e2e/legal-policy-pages.spec.ts"]
+      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:src/routes/LegalPolicy/LegalPolicyPage.tsx", "AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts"]
     },
     {
       "issue": 1027,
@@ -184,7 +184,7 @@
       "target": "cookie/sessionStorage/localStorage inventory",
       "evidenceRequirement": "browser storage registry, retention mapping evidence",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/e2e/browser-storage-registry.spec.ts", "legal/data-map/retention-matrix.yaml"]
+      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/browser-storage-registry.spec.ts", "legal/data-map/retention-matrix.yaml"]
     },
     {
       "issue": 1028,
@@ -193,7 +193,7 @@
       "target": "정책·동의·추적 회귀 검증 세트",
       "evidenceRequirement": "legal policy and tracking regression test output",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/e2e/legal-policy-pages.spec.ts", "front/e2e/privacy-tracking-consent.spec.ts"]
+      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts", "AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts"]
     },
     {
       "issue": 1127,

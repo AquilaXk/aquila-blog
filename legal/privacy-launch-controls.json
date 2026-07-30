@@ -1,10 +1,11 @@
 {
   "version": 1,
   "releaseLinkage": {
-    "policyEffectiveDateSource": "front/legal/policies/privacy.ko-KR.v1.0.3.yaml",
+    "policyEffectiveDateSource": "contracts/web/legal-policy-manifest.lock.json",
     "deployShaSource": "AQUILA_BUILD_SHA",
     "evidenceArtifacts": [
-      "front/src/apis/backend/legal.ts",
+      "contracts/web/legal-policy-manifest.lock.json",
+      "tools/contracts/check-web-policy-lock.mjs",
       "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt",
       "front/src/pages/_document.tsx"
     ]
@@ -24,9 +25,9 @@
       "status": "Closed",
       "category": "필수 출시 전 완료",
       "target": "정책 버전관리와 공개 페이지",
-      "evidenceRequirement": "`front/legal/policies/*.yaml`, `/privacy`, `/terms`, `/cookies`",
+      "evidenceRequirement": "Web canonical policy manifest와 pinned Platform lock, `/privacy`, `/terms`, `/cookies`",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/legal/policies/privacy.ko-KR.v1.0.3.yaml", "front/src/routes/LegalPolicy/LegalPolicyPage.tsx"]
+      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "front/src/routes/LegalPolicy/LegalPolicyPage.tsx"]
     },
     {
       "issue": 996,
@@ -154,9 +155,9 @@
       "status": "Closed",
       "category": "필수 출시 전 완료",
       "target": "공개 정책과 legal acceptance version/hash 단일화",
-      "evidenceRequirement": "`ActiveLegalDocumentMetadata`와 public policy hash evidence",
+      "evidenceRequirement": "pinned Web policy lock과 `ActiveLegalDocumentMetadata` terms/privacy hash evidence",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["front/src/apis/backend/legal.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt"]
+      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "back/src/test/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/WebLegalPolicyManifestContractTest.kt"]
     },
     {
       "issue": 1025,
@@ -165,7 +166,7 @@
       "target": "effective 정책의 내부 검토 문구 제거",
       "evidenceRequirement": "`reviewRequired=0`, internal phrase validator, page e2e",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["tools/legal/validate-legal-policies.mjs", "front/e2e/legal-policy-pages.spec.ts"]
+      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "front/e2e/legal-policy-pages.spec.ts"]
     },
     {
       "issue": 1026,

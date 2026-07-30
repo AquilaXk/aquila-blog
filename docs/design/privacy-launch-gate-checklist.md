@@ -30,7 +30,7 @@ Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운
 | --- | --- | --- | --- |
 | Soft-launch feature freeze | `pass` | #1127 Locked decision. signup/OAuth signup/RUM/AI SUMMARY 5-key는 deploy·env.contract에서 false/0 강제. 기존 회원 로그인·쓰기는 이 gate 예외(별도 issue) | enable 요청·비관리자 쓰기 동결은 별도 issue로만 처리한다. |
 | Production launch | `block` | #998, #1000, #1001, #1003, #1004, #1006, #1008이 open | 각 issue 완료 후 이 문서의 matrix와 evidence를 갱신한다. |
-| Public policy gate | `pass` | #1024, #1025, #1026, #1027, #1028 closed. `status: effective` 정책은 `reviewRequired=0`과 내부 검토 문구 미노출을 검증 대상으로 둔다. | `node tools/legal/validate-legal-policies.mjs`를 PR마다 실행한다. |
+| Public policy gate | `pass` | #1024, #1025, #1026, #1027, #1028 closed. Web은 `status: effective` 정책의 public-ready를 검증하고 Platform은 pinned policy lock만 acceptance evidence로 사용한다. | Web `yarn legal:check`, Platform `node tools/contracts/check-web-policy-lock.mjs`를 PR마다 실행한다. |
 | Legal sign-off | `block` | 실제 사업자 요건, processor 계약, 국외이전, 최종 정책 문구는 전문가 확인 전이다. | 출시 승인 전 법무/운영 owner가 evidence와 결정을 남긴다. |
 | Operations readiness | `block` | 보유기간 자동 파기와 백업 암호화/복구 privacy guard가 open issue다. | #1000, #1004 완료 후 재판정한다. |
 
@@ -48,7 +48,7 @@ Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운
 | Issue | 상태 | 분류 | 대상 | Evidence requirement | Launch 판정 |
 | --- | --- | --- | --- | --- | --- |
 | #994 | Closed | 필수 출시 전 완료 | 데이터맵, 법적 근거 registry | `legal/data-map/*.yaml`와 공개 정책 참조 | 완료 |
-| #995 | Closed | 필수 출시 전 완료 | 정책 버전관리와 공개 페이지 | `front/legal/policies/*.yaml`, `/privacy`, `/terms`, `/cookies` | 완료 |
+| #995 | Closed | 필수 출시 전 완료 | 정책 버전관리와 공개 페이지 | Web canonical policy manifest와 pinned Platform lock, `/privacy`, `/terms`, `/cookies` | 완료 |
 | #996 | Closed | 필수 출시 전 완료 | 이메일 가입 동의와 증빙 저장 | backend acceptance version/hash, signup flow evidence | 완료 |
 | #997 | Closed | 필수 출시 전 완료 | Kakao OAuth 신규 가입 pending 동의 | OAuth 신규 가입 동의 flow evidence | 완료 |
 | #998 | Open | 필수 출시 전 완료 | 회원가입 token/email URL 노출 제거 | token hash 저장, URL/log redaction 테스트 | 차단 |
@@ -63,7 +63,7 @@ Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운
 | #1007 | Closed | 필수 출시 전 완료 | 신규 개인정보 수집 feature flag 동결 | `back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, `yarn --cwd front build` 2회 exit 0, privacy data-map/env contract validator exit 0 | 완료 |
 | #1127 | Closed | 필수 출시 전 완료 | Soft-launch 출시 범위와 privacy freeze 키 계약 고정 | Soft-launch 제품 목표=admin publish+anonymous public read; gate=5-key signup/OAuth signup/RUM/`CUSTOM__AI__SUMMARY__ENABLED` false/0; 기존 회원 로그인·쓰기는 예외; live smoke | 완료 |
 | #1008 | Open | 필수 출시 전 완료 | 기존 사용자 재동의와 legacy 고지 migration | legacy account migration, re-consent prompt, audit log evidence | 차단 |
-| #1024 | Closed | 필수 출시 전 완료 | 공개 정책과 legal acceptance version/hash 단일화 | `ActiveLegalDocumentMetadata`와 public policy hash evidence | 완료 |
+| #1024 | Closed | 필수 출시 전 완료 | 공개 정책과 legal acceptance version/hash 단일화 | pinned Web policy lock과 `ActiveLegalDocumentMetadata` terms/privacy hash evidence | 완료 |
 | #1025 | Closed | 필수 출시 전 완료 | effective 정책의 내부 검토 문구 제거 | `reviewRequired=0`, internal phrase validator, page e2e | 완료 |
 | #1026 | Closed | 출시 후 보완 가능 | 법적 정책 탐색성과 원문 검증 UX | policy URL, TOC, hash/download 검증, live page evidence | 완료 |
 | #1027 | Closed | 필수 출시 전 완료 | cookie/sessionStorage/localStorage inventory | browser storage registry, retention mapping evidence | 완료 |
@@ -99,9 +99,9 @@ Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운
 
 ## Policy-Code Comparison Procedure
 
-1. `node tools/legal/validate-legal-policies.mjs`로 policy schema, hash, active metadata, internal phrase 금지를 확인한다.
+1. Web에서 `yarn legal:check`로 policy schema, hash, active metadata, internal phrase 금지를 확인하고 canonical manifest를 생성한다.
 2. `legal/data-map/processing-activities.yaml`, `legal/data-map/retention-matrix.yaml`, `legal/vendors/processors.yaml`를 공개 정책의 수집 항목, 보유기간, processor 항목과 대조한다.
-3. `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt`의 version/hash가 공개 정책과 같은지 확인한다.
+3. Platform에서는 `node tools/contracts/check-web-policy-lock.mjs`와 `WebLegalPolicyManifestContractTest`로 pinned lock의 terms/privacy version/hash와 backend metadata를 확인한다. cookies는 lock integrity만 확인하며 signup acceptance metadata에는 포함하지 않는다.
 4. `front/src/libs/legal/serverPolicySource.ts`와 `/privacy`, `/terms`, `/cookies`, `/legal/history`가 current URL, 이전 버전 URL, hash/download evidence를 노출하는지 확인한다.
 5. signup, Kakao OAuth, analytics/RUM, Gemini, logs, backup, deletion/export 관련 issue의 PR evidence를 matrix에 연결한다.
 

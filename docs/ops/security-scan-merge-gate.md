@@ -3,6 +3,17 @@
 PR → `main` merge-blocking vulnerability gates live in `.github/workflows/security.yml` and
 `.github/workflows/reusable-backend-quality.yml` (dependency review).
 
+## Repository split transition
+
+Until the extracted Web repository security and Sonar workflows are green, the root workflows keep
+the existing JavaScript/TypeScript CodeQL, frontend lockfile/runtime/SBOM, Sonar, and CodeRabbit
+coverage. Files under `front/.github/workflows/` are future Web-root configuration and do not execute
+inside this monorepo. Task 16 removes the transitional Web jobs only after cutover evidence exists.
+
+After Task 16, this repository owns backend/runtime scanning. `AquilaXk/aquila-blog-web` owns Web
+CodeQL, lockfile scanning, browser/CSP checks, and Sonar. Its native `osv-scanner.toml` and
+`.trivyignore.yaml` preserve only Web dependency exceptions with explicit expiry dates.
+
 ## Backend NVD path split (#1344)
 
 | Event | `backend-dependency-check` |

@@ -12,6 +12,7 @@ on:
       - "back/**"
       - "front/**"
       - "sonar-project.properties"
+      - ".sonarcloud.properties"
       - ".github/workflows/sonarcloud.yml"
   push:
     branches:
@@ -20,6 +21,7 @@ on:
       - "back/**"
       - "front/**"
       - "sonar-project.properties"
+      - ".sonarcloud.properties"
       - ".github/workflows/sonarcloud.yml"
 
 permissions:

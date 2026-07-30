@@ -4,13 +4,13 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { load as loadYaml } from "js-yaml"
 
 const frontRoot = path.resolve(import.meta.dirname, "../..")
 const policySource = fs.readFileSync(path.join(frontRoot, "src/libs/legal/serverPolicySource.ts"), "utf8")
 const runtimeGuardSource = fs.readFileSync(path.join(frontRoot, "scripts/compare-runtime-guard-metrics.mjs"), "utf8")
 const legalPolicyE2eSource = fs.readFileSync(path.join(frontRoot, "e2e/legal-policy-pages.spec.ts"), "utf8")
 const boundarySource = fs.readFileSync(path.join(frontRoot, "scripts/repo-boundary/check-web-boundary.mjs"), "utf8")
-const webCiSource = fs.readFileSync(path.join(frontRoot, ".github/workflows/ci.yml"), "utf8")
 const ignoreScript = path.join(frontRoot, "scripts/vercel/should-ignore-build.mjs")
 
 const git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8" })
@@ -103,10 +103,32 @@ syncBuiltinESMExports()
 })
 
 test("Web CI fetches history before build-time diff guards run", () => {
-  const checkouts = webCiSource.match(/uses: actions\/checkout@/g) ?? []
-  const fullHistory = webCiSource.match(/fetch-depth: 0/g) ?? []
+  const workflows = [
+    [".github/workflows/ci.yml", ["lint-build-contract-unit", "storybook-bundle", "playwright-smoke", "accessibility"]],
+    [".github/workflows/security.yml", ["codeql-javascript-typescript", "browser-csp"]],
+  ]
 
-  assert.equal(fullHistory.length, checkouts.length)
+  for (const [file, jobNames] of workflows) {
+    const workflow = loadYaml(fs.readFileSync(path.join(frontRoot, file), "utf8"))
+    for (const jobName of jobNames) {
+      const checkout = workflow.jobs[jobName].steps.find((step) => step.uses?.startsWith("actions/checkout@"))
+      assert.equal(checkout.with["fetch-depth"], 0, `${file}:${jobName}`)
+    }
+  }
+})
+
+test("Web Security verifies scanner release assets before execution", () => {
+  const workflow = loadYaml(fs.readFileSync(path.join(frontRoot, ".github/workflows/security.yml"), "utf8"))
+  const steps = workflow.jobs["lockfile-audit"].steps
+  const osvInstall = steps.find((step) => step.name === "Install OSV Scanner")
+  const trivyInstall = steps.find((step) => step.name === "Install Trivy")
+
+  assert.equal(osvInstall.env.OSV_SCANNER_SHA256, "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0")
+  assert.match(osvInstall.run, /"\$\{OSV_SCANNER_SHA256\}" \/tmp\/osv-scanner \| sha256sum --check -/)
+  assert.ok(osvInstall.run.indexOf("sha256sum --check") < osvInstall.run.indexOf("chmod +x"))
+  assert.equal(trivyInstall.env.TRIVY_SHA256, "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea")
+  assert.match(trivyInstall.run, /"\$\{TRIVY_SHA256\}" \/tmp\/trivy\.tgz \| sha256sum --check -/)
+  assert.ok(trivyInstall.run.indexOf("sha256sum --check") < trivyInstall.run.indexOf("tar -xzf"))
 })
 
 test("Web CI keeps the Storybook bundle gate strict", () => {

@@ -147,6 +147,11 @@ jobs:
         working-directory: front
         run: node --test scripts/env/env-contract.test.mjs
 
+      - name: Verify pinned Platform contract-generated types
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn contracts:check
+
       - name: Lint frontend
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front
@@ -156,11 +161,6 @@ jobs:
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front
         run: yarn build
-
-      - name: Verify OpenAPI contract-generated types
-        if: steps.changes.outputs.frontend == 'true'
-        working-directory: front
-        run: yarn contracts:check
 
       - name: Run frontend unit tests
         if: steps.changes.outputs.frontend == 'true'

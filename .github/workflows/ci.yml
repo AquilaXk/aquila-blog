@@ -7,6 +7,9 @@ on:
     paths:
       - "back/**"
       - "front/**"
+      - "contracts/public-api/**"
+      - "tools/contracts/**"
+      - "tools/test/public-contract-manifest.test.mjs"
       - "deploy/**"
       - "restore-privacy-gate.sh"
       - "AGENTS.md"

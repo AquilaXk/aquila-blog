@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto"
+import { execFileSync } from "node:child_process"
+import { realpathSync } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -32,7 +34,8 @@ function sha256(value) {
 
 async function readJson(filePath, label) {
   try {
-    return JSON.parse(await fs.readFile(filePath, "utf8"))
+    const bytes = await fs.readFile(filePath)
+    return { bytes, value: JSON.parse(bytes.toString("utf8")) }
   } catch (error) {
     fail(`${label} is malformed or missing: ${error.message}`)
   }
@@ -41,6 +44,39 @@ async function readJson(filePath, label) {
 function validateSourceIdentity(sourceRepository, sourceCommit) {
   if (sourceRepository !== SOURCE_REPOSITORY || !COMMIT.test(sourceCommit)) {
     fail("source repository or commit is invalid")
+  }
+}
+
+function validateSourceCommit(source, sourceCommit, files) {
+  let repositoryRoot
+  try {
+    repositoryRoot = execFileSync("git", ["-C", source, "rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim()
+  } catch {
+    fail("source directory is not inside a Git repository")
+  }
+
+  const sourceDirectory = path.relative(realpathSync(repositoryRoot), realpathSync(source))
+  if (path.isAbsolute(sourceDirectory) || sourceDirectory === ".." || sourceDirectory.startsWith(`..${path.sep}`)) {
+    fail("source directory is outside its Git repository")
+  }
+
+  for (const [file, bytes] of files) {
+    const gitPath = [sourceDirectory.split(path.sep).join("/"), file].filter(Boolean).join("/")
+    let committed
+    try {
+      committed = execFileSync("git", ["-C", repositoryRoot, "show", `${sourceCommit}:${gitPath}`], {
+        encoding: null,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+    } catch {
+      fail(`source commit does not contain canonical contract: ${file}`)
+    }
+    if (!committed.equals(bytes)) {
+      fail(`source contract bytes do not match source commit: ${file}`)
+    }
   }
 }
 
@@ -131,12 +167,16 @@ function createLock(manifest, artifacts, sourceRepository, sourceCommit) {
 
 export async function importPlatformContracts({ source, output, sourceRepository, sourceCommit }) {
   validateSourceIdentity(sourceRepository, sourceCommit)
-  const manifest = await readJson(path.join(source, "manifest.json"), "source manifest")
+  const { bytes: manifestBytes, value: manifest } = await readJson(path.join(source, "manifest.json"), "source manifest")
   validateManifest(manifest)
 
   const artifacts = await readSourceArtifacts(source, manifest)
   validateOpenApi(artifacts.openapi.bytes)
   validateErrorCodeArtifact(artifacts.errorCodes.bytes)
+  validateSourceCommit(source, sourceCommit, [
+    ["manifest.json", manifestBytes],
+    ...SOURCE_ARTIFACTS.map(([name, file]) => [file, artifacts[name].bytes]),
+  ])
 
   const lock = createLock(manifest, artifacts, sourceRepository, sourceCommit)
   validateLock(lock)

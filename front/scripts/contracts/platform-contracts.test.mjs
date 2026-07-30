@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -9,12 +10,16 @@ import { importPlatformContracts } from "./import-platform-contracts.mjs"
 import { verifyPlatformContracts } from "./verify-platform-contracts.mjs"
 
 const sourceRepository = "AquilaXk/aquila-blog"
-const sourceCommit = "3bfa099cfb642b5f5bc7e8330b2e7cf35d270eea"
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
+const git = (cwd, args) => execFileSync(
+  "git",
+  ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-C", cwd, ...args],
+  { encoding: "utf8" },
+)
 
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "platform-contracts-"))
-  const source = path.join(root, "source")
+  const source = path.join(root, "contracts", "public-api")
   const output = path.join(root, "output")
   await fs.mkdir(source, { recursive: true })
   const openapi = Buffer.from('{"openapi":"3.0.1","paths":{}}\n')
@@ -29,11 +34,17 @@ async function fixture() {
       errorCodes: { path: "error-codes.json", sha256: sha256(errorCodes) },
     },
   }, null, 2)}\n`)
-  return { root, source, output }
+  git(root, ["init", "--initial-branch=main"])
+  git(root, ["config", "user.email", "test@example.com"])
+  git(root, ["config", "user.name", "Test"])
+  git(root, ["add", "contracts/public-api"])
+  git(root, ["commit", "-m", "public contract"])
+  const sourceCommit = git(root, ["rev-parse", "HEAD"]).trim()
+  return { root, source, output, sourceCommit }
 }
 
 test("imports verified canonical bytes and creates a pinned lock", async (t) => {
-  const { root, source, output } = await fixture()
+  const { root, source, output, sourceCommit } = await fixture()
   t.after(() => fs.rm(root, { recursive: true, force: true }))
 
   await importPlatformContracts({ source, output, sourceRepository, sourceCommit })
@@ -52,7 +63,7 @@ test("imports verified canonical bytes and creates a pinned lock", async (t) => 
 })
 
 test("rejects a duplicate error code before changing the output", async (t) => {
-  const { root, source, output } = await fixture()
+  const { root, source, output, sourceCommit } = await fixture()
   t.after(() => fs.rm(root, { recursive: true, force: true }))
   await fs.mkdir(output, { recursive: true })
   await fs.writeFile(path.join(output, "sentinel"), "keep")
@@ -72,7 +83,7 @@ test("rejects a duplicate error code before changing the output", async (t) => {
 })
 
 test("rejects an unauthorized source identity before changing the output", async (t) => {
-  const { root, source, output } = await fixture()
+  const { root, source, output, sourceCommit } = await fixture()
   t.after(() => fs.rm(root, { recursive: true, force: true }))
   await fs.mkdir(output, { recursive: true })
   await fs.writeFile(path.join(output, "sentinel"), "keep")
@@ -83,7 +94,7 @@ test("rejects an unauthorized source identity before changing the output", async
 })
 
 test("rejects malformed canonical manifest identity before changing the output", async (t) => {
-  const { root, source, output } = await fixture()
+  const { root, source, output, sourceCommit } = await fixture()
   t.after(() => fs.rm(root, { recursive: true, force: true }))
   const manifestPath = path.join(source, "manifest.json")
 
@@ -113,7 +124,7 @@ test("rejects malformed canonical manifest identity before changing the output",
 })
 
 test("rejects a declared source artifact hash mismatch before changing the output", async (t) => {
-  const { root, source, output } = await fixture()
+  const { root, source, output, sourceCommit } = await fixture()
   t.after(() => fs.rm(root, { recursive: true, force: true }))
   await fs.mkdir(output, { recursive: true })
   await fs.writeFile(path.join(output, "sentinel"), "keep")
@@ -127,7 +138,7 @@ test("rejects a declared source artifact hash mismatch before changing the outpu
 })
 
 test("rejects a local artifact whose bytes no longer match the lock", async (t) => {
-  const { root, source, output } = await fixture()
+  const { root, source, output, sourceCommit } = await fixture()
   t.after(() => fs.rm(root, { recursive: true, force: true }))
   await importPlatformContracts({ source, output, sourceRepository, sourceCommit })
   await fs.appendFile(path.join(output, "openapi.json"), " ")
@@ -136,7 +147,7 @@ test("rejects a local artifact whose bytes no longer match the lock", async (t) 
 })
 
 test("rejects duplicate local error codes whose bytes match the lock", async (t) => {
-  const { root, source, output } = await fixture()
+  const { root, source, output, sourceCommit } = await fixture()
   t.after(() => fs.rm(root, { recursive: true, force: true }))
   await importPlatformContracts({ source, output, sourceRepository, sourceCommit })
   const duplicate = '[{"code":"DUP","httpStatus":400,"defaultUserMessage":"a","kind":"USER"},{"code":"DUP","httpStatus":400,"defaultUserMessage":"b","kind":"USER"}]\n'
@@ -147,4 +158,30 @@ test("rejects duplicate local error codes whose bytes match the lock", async (t)
   await fs.writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`)
 
   await assert.rejects(verifyPlatformContracts({ directory: output }), /Duplicate ErrorCode code: DUP/)
+})
+
+test("rejects a well-formed source commit that does not exist", async (t) => {
+  const { root, source, output } = await fixture()
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+
+  await assert.rejects(
+    importPlatformContracts({ source, output, sourceRepository, sourceCommit: "0".repeat(40) }),
+    /source commit does not contain canonical contract/,
+  )
+})
+
+test("rejects canonical source bytes changed after the pinned commit", async (t) => {
+  const { root, source, output, sourceCommit } = await fixture()
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+  const openapi = Buffer.from('{"openapi":"3.1.0","paths":{}}\n')
+  await fs.writeFile(path.join(source, "openapi.json"), openapi)
+  const manifestPath = path.join(source, "manifest.json")
+  const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"))
+  manifest.artifacts.openapi.sha256 = sha256(openapi)
+  await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+
+  await assert.rejects(
+    importPlatformContracts({ source, output, sourceRepository, sourceCommit }),
+    /source contract bytes do not match source commit/,
+  )
 })

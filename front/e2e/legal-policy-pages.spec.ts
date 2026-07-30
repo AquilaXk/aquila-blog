@@ -29,7 +29,7 @@ const internalPolicyTokens = [
 const readPolicyFixture = (kind: "privacy" | "terms" | "cookies"): LegalPolicyFixture =>
   parseYaml(
     readFileSync(
-      path.join(process.cwd(), "..", "legal", "policies", `${kind}.ko-KR.v${currentLegalVersions[kind]}.yaml`),
+      path.join(process.cwd(), "legal", "policies", `${kind}.ko-KR.v${currentLegalVersions[kind]}.yaml`),
       "utf8",
     ),
   ) as LegalPolicyFixture

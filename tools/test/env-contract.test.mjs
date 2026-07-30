@@ -1256,9 +1256,9 @@ test("deploy workflow는 frontend 변경에서만 live frontend SHA를 현재 co
   assert.match(workflow, /expected_front_commit_sha: \$\{\{ steps\.meta\.outputs\.expected_front_commit_sha \}\}/)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*\^front\/\(src\//)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*packages\//)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*scripts\/\(check-refactor-boundaries\\\.mjs/)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*with-test-lock\\\.mjs/)
-  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*patch-lodash-template\\\.cjs/)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*contracts\//)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*config\//)
+  assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*scripts\//)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*site\\\.config\\\.js/)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*vercel\\\.json/)
   assert.match(workflow, /FRONT_BUILD_SHA_PATHS_PATTERN=.*tsconfig\\\.json/)
@@ -1288,7 +1288,7 @@ test("Vercel frontend project skips builds when frontend inputs did not change",
   const config = JSON.parse(readFileSync(vercelConfigPath, "utf8"))
 
   assert.equal(config.$schema, "https://openapi.vercel.sh/vercel.json")
-  assert.equal(config.ignoreCommand, "git diff --quiet HEAD^ HEAD ./ ../legal/policies")
+  assert.equal(config.ignoreCommand, "node scripts/vercel/should-ignore-build.mjs")
 })
 
 test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경만 차단한다", () => {

@@ -99,4 +99,4 @@ yarn test:e2e:live
 ## 문서
 
 - 문서 허브: [../docs/README.md](../docs/README.md)
-- UI 릴리즈 QA: [../docs/design/release-ui-qa-matrix.md](../docs/design/release-ui-qa-matrix.md)
+- UI 릴리즈 QA: [docs/design/release-ui-qa-matrix.md](docs/design/release-ui-qa-matrix.md)

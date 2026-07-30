@@ -76,7 +76,7 @@ jobs:
           frontend=false
           while IFS= read -r file; do
             case "${file}" in
-              front/*|legal/policies/*|.github/workflows/frontend-ci.yml|.github/workflows/ci.yml|.github/workflows/reusable-frontend-verify.yml)
+              front/*|.github/workflows/frontend-ci.yml|.github/workflows/ci.yml|.github/workflows/reusable-frontend-verify.yml)
                 frontend=true
                 break
                 ;;
@@ -136,6 +136,11 @@ jobs:
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front
         run: yarn install --frozen-lockfile
+
+      - name: Verify Web repository boundary
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: node --test scripts/repo-boundary/web-build-inputs.test.mjs
 
       - name: Lint frontend
         if: steps.changes.outputs.frontend == 'true'
@@ -304,7 +309,7 @@ jobs:
         run: |
           node scripts/compare-runtime-guard-metrics.mjs \
             --metrics test-results/perf/runtime-guard-metrics.ndjson \
-            --baseline ../deploy/homeserver/monitoring/grafana/dashboards/blog-runtime-guard-baseline.json \
+            --baseline quality/performance/runtime-guard-baseline.json \
             --output test-results/perf/runtime-guard-summary.md \
             --json-output test-results/perf/runtime-guard-summary.json \
             --append-step-summary

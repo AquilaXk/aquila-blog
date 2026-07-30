@@ -10,7 +10,7 @@ const resolvePath = (envName, fallback) => {
   return path.isAbsolute(configured) ? configured : path.join(root, configured)
 }
 
-const policiesDir = resolvePath("LEGAL_POLICIES_DIR", path.join(root, "legal/policies"))
+const policiesDir = resolvePath("LEGAL_POLICIES_DIR", path.join(root, "front/legal/policies"))
 const frontendLegalMetadataPath = resolvePath(
   "LEGAL_FRONTEND_METADATA_PATH",
   path.join(root, "front/src/apis/backend/legal.ts"),

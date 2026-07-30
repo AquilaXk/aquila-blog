@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
-staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+staged_files="$(git diff --cached --name-only --diff-filter=ACMRD)"
 if [[ -z "${staged_files}" ]]; then
   exit 0
 fi
@@ -18,7 +18,7 @@ needs_frontend_contract_check="false"
 needs_detail_render_guard="false"
 while IFS= read -r file; do
   case "${file}" in
-    back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*)
+    .githooks/pre-commit|back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*|back/src/test/kotlin/com/back/global/contracts/*|contracts/public-api/**|tools/contracts/**)
       needs_platform_contract_check="true"
       ;;
     front/contracts/openapi/openapi.json|front/packages/shared-contracts/src/generated/backend-openapi.d.ts)
@@ -49,6 +49,10 @@ if [[ "${needs_platform_contract_check}" == "true" ]]; then
     --tests "com.back.global.contracts.ErrorCodeContractExportTest" \
     --no-daemon
   node tools/contracts/sync-public-contracts.mjs
+  git ls-files --error-unmatch -- \
+    contracts/public-api/openapi.json \
+    contracts/public-api/error-codes.json \
+    contracts/public-api/manifest.json >/dev/null
   git diff --exit-code -- contracts/public-api
 fi
 

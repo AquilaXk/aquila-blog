@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import crypto from "node:crypto"
+import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -9,6 +10,8 @@ import { buildCanonicalManifest, validatePublicPolicies } from "./validate-publi
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..")
 const policySource = path.join(repoRoot, "front/legal/policies")
+const exporter = path.join(repoRoot, "front/scripts/legal/export-policy-manifest.mjs")
+const manifestOutput = path.join(repoRoot, "front/contracts/export/legal-policy-manifest.json")
 
 const copyPolicies = () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "aquila-public-policies-"))
@@ -74,4 +77,18 @@ test("canonical manifest contains policy identity only, while frontend acceptanc
   assert.equal("repository" in manifest, false)
   assert.equal("commit" in manifest, false)
   assert.equal(JSON.stringify(manifest).includes("cookies"), true)
+  const acceptanceSource = fs.readFileSync(path.join(repoRoot, "front/src/apis/backend/legal.ts"), "utf8")
+  assert.doesNotMatch(acceptanceSource, /^\s*cookies:/m)
+})
+
+test("check mode rejects stale canonical manifest bytes without rewriting them", () => {
+  const original = fs.readFileSync(manifestOutput)
+  try {
+    fs.writeFileSync(manifestOutput, `${original.toString("utf8").trimEnd()}\n\n`)
+    const result = spawnSync(process.execPath, [exporter, "--check"], { cwd: repoRoot, encoding: "utf8" })
+    assert.notEqual(result.status, 0)
+    assert.equal(fs.readFileSync(manifestOutput, "utf8"), `${original.toString("utf8").trimEnd()}\n\n`)
+  } finally {
+    fs.writeFileSync(manifestOutput, original)
+  }
 })

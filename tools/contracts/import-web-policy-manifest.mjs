@@ -19,10 +19,11 @@ let manifest
 try { manifest = JSON.parse(bytes) } catch { fail("source is not JSON") }
 const canonical = `${JSON.stringify(manifest, null, 2)}\n`
 if (bytes.toString("utf8") !== canonical) fail("source bytes are not canonical manifest JSON")
-if (manifest?.version !== 1 || manifest?.contract !== "aquila-public-legal-policies" || !manifest.active) fail("invalid canonical manifest shape")
+const exactKeys = (value, keys) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
+if (!exactKeys(manifest, ["version", "contract", "active"]) || manifest.version !== 1 || manifest.contract !== "aquila-public-legal-policies" || !exactKeys(manifest.active, ["terms", "privacy", "cookies"])) fail("invalid canonical manifest shape")
 for (const name of ["terms", "privacy", "cookies"]) {
   const item = manifest.active[name]
-  if (!item || !/^\d+\.\d+\.\d+$/.test(item.version) || !/^[a-f0-9]{64}$/.test(item.contentSha256)) fail(`invalid ${name} identity`)
+  if (!exactKeys(item, ["version", "contentSha256"]) || !/^\d+\.\d+\.\d+$/.test(item.version) || !/^[a-f0-9]{64}$/.test(item.contentSha256)) fail(`invalid ${name} identity`)
 }
 const lock = { ...manifest, sourceRepository, sourceCommit, manifestSha256: crypto.createHash("sha256").update(bytes).digest("hex") }
 fs.mkdirSync(path.dirname(output), { recursive: true })

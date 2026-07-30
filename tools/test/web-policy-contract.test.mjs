@@ -28,6 +28,19 @@ test("import rejects non-40-lowercase source commits", () => {
   assert.notEqual(result.status, 0)
 })
 
+test("import rejects unauthorized repositories, extra manifest fields, and noncanonical source bytes", () => {
+  const directory = fixture()
+  const manifest = JSON.parse(fs.readFileSync(source, "utf8"))
+  manifest.unexpected = true
+  const extra = path.join(directory, "extra.json")
+  fs.writeFileSync(extra, `${JSON.stringify(manifest, null, 2)}\n`)
+  assert.notEqual(run(importer, ["--source", extra, "--source-repository", "AquilaXk/other", "--source-commit", webSha, "--output", path.join(directory, "lock.json")]).status, 0)
+  assert.notEqual(run(importer, ["--source", extra, "--source-repository", "AquilaXk/aquila-blog-web", "--source-commit", webSha, "--output", path.join(directory, "lock.json")]).status, 0)
+  const noncanonical = path.join(directory, "noncanonical.json")
+  fs.writeFileSync(noncanonical, `${JSON.stringify(JSON.parse(fs.readFileSync(source, "utf8")))}\n`)
+  assert.notEqual(run(importer, ["--source", noncanonical, "--source-repository", "AquilaXk/aquila-blog-web", "--source-commit", webSha, "--output", path.join(directory, "lock.json")]).status, 0)
+})
+
 test("checker rejects noncanonical manifest bytes and manifest hash drift", () => {
   const directory = fixture()
   const output = path.join(directory, "lock.json")
@@ -37,4 +50,14 @@ test("checker rejects noncanonical manifest bytes and manifest hash drift", () =
   fs.writeFileSync(output, `${JSON.stringify(lock, null, 2)}\n`)
   const result = run(checker, ["--lock", output])
   assert.notEqual(result.status, 0)
+})
+
+test("checker rejects extra lock fields", () => {
+  const directory = fixture()
+  const output = path.join(directory, "lock.json")
+  assert.equal(run(importer, ["--source", source, "--source-repository", "AquilaXk/aquila-blog", "--source-commit", webSha, "--allow-monorepo-source", "--output", output]).status, 0)
+  const lock = JSON.parse(fs.readFileSync(output, "utf8"))
+  lock.unexpected = true
+  fs.writeFileSync(output, `${JSON.stringify(lock, null, 2)}\n`)
+  assert.notEqual(run(checker, ["--lock", output]).status, 0)
 })

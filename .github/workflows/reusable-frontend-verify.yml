@@ -137,6 +137,11 @@ jobs:
         working-directory: front
         run: yarn install --frozen-lockfile
 
+      - name: Verify Web repository boundary
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: node --test scripts/repo-boundary/web-build-inputs.test.mjs
+
       - name: Lint frontend
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front

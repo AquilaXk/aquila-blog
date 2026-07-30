@@ -21,6 +21,22 @@ if (syncResult.status !== 0) {
   process.exit(syncResult.status ?? 1)
 }
 
+const trackedResult = spawnSync(
+  "git",
+  [
+    "ls-files",
+    "--error-unmatch",
+    "--",
+    "contracts/public-api/openapi.json",
+    "contracts/public-api/error-codes.json",
+    "contracts/public-api/manifest.json",
+  ],
+  { cwd: root, stdio: "inherit" },
+)
+if (trackedResult.status !== 0) {
+  process.exit(trackedResult.status ?? 1)
+}
+
 const diffResult = spawnSync("git", ["diff", "--exit-code", "--", "contracts/public-api"], {
   cwd: root,
   stdio: "inherit",

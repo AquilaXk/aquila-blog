@@ -92,13 +92,13 @@ test("sync rejects missing or malformed OpenAPI and invalid ErrorCode input", ()
   }
 })
 
-test("checker synchronizes then rejects an uncommitted contract update", () => {
+test("checker rejects untracked and changed canonical contract artifacts", () => {
   const root = createFixture()
   try {
     execFileSync("git", ["init", "--quiet"], { cwd: root })
     execFileSync("git", ["config", "user.email", "contract@example.test"], { cwd: root })
     execFileSync("git", ["config", "user.name", "Contract Test"], { cwd: root })
-    assert.equal(run(checkScript, root).status, 0)
+    assert.notEqual(run(checkScript, root).status, 0)
     execFileSync("git", ["add", "contracts/public-api"], { cwd: root })
     execFileSync("git", ["commit", "--quiet", "-m", "contract"], { cwd: root })
     assert.equal(run(checkScript, root).status, 0)

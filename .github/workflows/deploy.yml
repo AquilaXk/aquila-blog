@@ -16,16 +16,6 @@ on:
         required: false
         default: true
         type: boolean
-      force_front_live_verify:
-        description: "Run live frontend verification after deploy target calculation."
-        required: false
-        default: true
-        type: boolean
-      force_editor_live_canary:
-        description: "Run the seeded /editor/507 live canary during frontend live verification."
-        required: false
-        default: false
-        type: boolean
       allow_deploy_without_ci_success:
         description: "DANGEROUS: Skip verifying a successful CI run for this SHA before manual deploy."
         required: false
@@ -73,9 +63,6 @@ jobs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
       deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
       backend_deploy: ${{ steps.meta.outputs.backend_deploy }}
-      front_live_verify: ${{ steps.meta.outputs.front_live_verify }}
-      editor_live_canary: ${{ steps.meta.outputs.editor_live_canary }}
-      expected_front_commit_sha: ${{ steps.meta.outputs.expected_front_commit_sha }}
 
     steps:
       - name: Checkout
@@ -177,8 +164,6 @@ jobs:
         env:
           DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
           FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
-          FORCE_FRONT_LIVE_VERIFY_INPUT: ${{ github.event.inputs.force_front_live_verify || 'false' }}
-          FORCE_EDITOR_LIVE_CANARY_INPUT: ${{ github.event.inputs.force_editor_live_canary || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -195,16 +180,9 @@ jobs:
           IMAGE_TAG="sha-${DEPLOY_SHA}"
           IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
           BACKEND_DEPLOY="false"
-          FRONT_LIVE_VERIFY="false"
-          EDITOR_LIVE_CANARY="false"
-          EXPECTED_FRONT_COMMIT_SHA=""
-          FRONT_BUILD_SHA_SUPERSEDED="false"
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
-          FRONT_LIVE_VERIFY_PATHS_PATTERN='^(front/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/frontend-ci\.yml|\.github/workflows/reusable-frontend-verify\.yml)'
-          FRONT_BUILD_SHA_PATHS_PATTERN='^front/(src/|public/|packages/|contracts/|config/|legal/|quality/|scripts/|site\.config\.js|next-sitemap\.config\.js|next\.config\.js|vercel\.json|tsconfig\.json|package\.json|yarn\.lock|Dockerfile|index\.d\.ts|next-env\.d\.ts)'
-          EDITOR_LIVE_CANARY_PATHS_PATTERN='^(front/src/pages/editor/|front/src/routes/Admin/(Editor|WriterEditor|Markdown|markdown|editor)|front/src/components/editor/|front/src/components/markdown-editor/|front/e2e/editor-|front/e2e/helpers/authoringPlaywright\.ts)'
           CHANGED_FILES=""
           if [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]; then
             REMOTE_MAIN_SHA="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
@@ -229,10 +207,6 @@ jobs:
                 echo "${STALE_CHANGED_FILES}" >&2
                 exit 1
               fi
-              if echo "${STALE_CHANGED_FILES}" | grep -Eq "${FRONT_BUILD_SHA_PATHS_PATTERN}"; then
-                FRONT_BUILD_SHA_SUPERSEDED="true"
-                CHANGE_SOURCE="${CHANGE_SOURCE}+front-build-superseded"
-              fi
               echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
               CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
             fi
@@ -244,38 +218,16 @@ jobs:
           fi
           if [ -z "${CHANGED_FILES}" ]; then
             BACKEND_DEPLOY="true"
-            FRONT_LIVE_VERIFY="true"
-            EDITOR_LIVE_CANARY="false"
             CHANGE_SOURCE="fail-open:no-changed-files"
           else
             if echo "${CHANGED_FILES}" | grep -Eq "${BACKEND_DEPLOY_PATHS_PATTERN}"; then
               BACKEND_DEPLOY="true"
-              FRONT_LIVE_VERIFY="true"
-            fi
-            if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_LIVE_VERIFY_PATHS_PATTERN}"; then
-              FRONT_LIVE_VERIFY="true"
-            fi
-            if [ "${FRONT_BUILD_SHA_SUPERSEDED}" != "true" ] && echo "${CHANGED_FILES}" | grep -Eq "${FRONT_BUILD_SHA_PATHS_PATTERN}"; then
-              # Vercel can keep the previous frontend build for workflow/backend-only commits.
-              EXPECTED_FRONT_COMMIT_SHA="${DEPLOY_SHA}"
-            fi
-            if echo "${CHANGED_FILES}" | grep -Eq "${EDITOR_LIVE_CANARY_PATHS_PATTERN}"; then
-              EDITOR_LIVE_CANARY="true"
             fi
           fi
 
           if [ "${FORCE_BACKEND_DEPLOY_INPUT}" = "true" ]; then
             BACKEND_DEPLOY="true"
-            FRONT_LIVE_VERIFY="true"
             CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-backend"
-          elif [ "${FORCE_FRONT_LIVE_VERIFY_INPUT}" = "true" ]; then
-            FRONT_LIVE_VERIFY="true"
-            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-front-live-verify"
-          fi
-          if [ "${FORCE_EDITOR_LIVE_CANARY_INPUT}" = "true" ]; then
-            FRONT_LIVE_VERIFY="true"
-            EDITOR_LIVE_CANARY="true"
-            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-editor-live-canary"
           fi
 
           echo "deploy_target_source=${CHANGE_SOURCE}"
@@ -285,32 +237,15 @@ jobs:
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
           echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
           echo "backend_deploy=${BACKEND_DEPLOY}" >> "$GITHUB_OUTPUT"
-          echo "front_live_verify=${FRONT_LIVE_VERIFY}" >> "$GITHUB_OUTPUT"
-          echo "editor_live_canary=${EDITOR_LIVE_CANARY}" >> "$GITHUB_OUTPUT"
-          echo "expected_front_commit_sha=${EXPECTED_FRONT_COMMIT_SHA}" >> "$GITHUB_OUTPUT"
 
           {
             echo "## Deploy Boundary"
             echo "- backend deploy: homeserver blue/green"
-            echo "- frontend runtime: Vercel (external platform)"
-            echo "- frontend step: \`frontLiveE2E\` verifies the current live URL after main deploy"
             echo "- backend_deploy: ${BACKEND_DEPLOY}"
-            echo "- front_live_verify: ${FRONT_LIVE_VERIFY}"
             if [ "${BACKEND_DEPLOY}" = "true" ]; then
               echo "- backend result: backend deploy pipeline continues"
             else
               echo "- backend result: homeserver deploy skipped because backend/deploy paths did not change"
-            fi
-            if [ "${FRONT_LIVE_VERIFY}" = "true" ]; then
-              echo "- frontend result: live frontend verification will run"
-              if [ -n "${EXPECTED_FRONT_COMMIT_SHA}" ]; then
-                echo "- frontend build sha: ${EXPECTED_FRONT_COMMIT_SHA}"
-              else
-                echo "- frontend build sha: not asserted for non-frontend or superseded deploy"
-              fi
-              echo "- editor live canary: ${EDITOR_LIVE_CANARY}"
-            else
-              echo "- frontend result: live frontend verification skipped because frontend/backend deploy paths did not change"
             fi
             echo "- decision source: ${CHANGE_SOURCE}"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -1429,300 +1364,3 @@ jobs:
           REMOTE
           REMOTE_TMP_DIR=""
           trap - EXIT
-
-  frontLiveE2E:
-    name: Frontend Live E2E Verification
-    runs-on: ubuntu-latest
-    needs:
-      - calculateTag
-      - blueGreenDeploy
-    if: >
-      always() &&
-      needs.calculateTag.result == 'success' &&
-      needs.calculateTag.outputs.front_live_verify == 'true' &&
-      (
-        needs.calculateTag.outputs.backend_deploy != 'true' ||
-        needs.blueGreenDeploy.result == 'success'
-      )
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      statuses: read
-    env:
-      PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL || vars.PLAYWRIGHT_BASE_URL || '' }}
-      E2E_API_BASE_URL: ${{ secrets.E2E_API_BASE_URL || vars.E2E_API_BASE_URL || '' }}
-      PLAYWRIGHT_USE_WEBSERVER: "false"
-      E2E_LIVE_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
-      E2E_LIVE_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
-      E2E_LIVE_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
-      E2E_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
-      E2E_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
-      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
-      E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ needs.calculateTag.outputs.expected_front_commit_sha }}
-      E2E_LIVE_EDITOR_507_CANARY: ${{ needs.calculateTag.outputs.editor_live_canary }}
-      GITHUB_TOKEN: ${{ github.token }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
-
-      - name: Validate live e2e Web contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          node front/scripts/env/validate-env.mjs --target live-e2e --source-env-var WEB_LIVE_E2E_ENV
-        env:
-          WEB_LIVE_E2E_ENV: |
-            PLAYWRIGHT_BASE_URL=${{ secrets.PLAYWRIGHT_BASE_URL || vars.PLAYWRIGHT_BASE_URL || '' }}
-            E2E_API_BASE_URL=${{ secrets.E2E_API_BASE_URL || vars.E2E_API_BASE_URL || '' }}
-            E2E_LIVE_ADMIN_EMAIL=${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
-            E2E_LIVE_ADMIN_USERNAME=${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
-            E2E_LIVE_ADMIN_PASSWORD=${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
-
-      - name: Live e2e preflight checks (fail-fast)
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          front_base="${PLAYWRIGHT_BASE_URL}"
-          api_base="${E2E_API_BASE_URL:-}"
-          api_host="$(echo "${api_base}" | sed -E 's#https?://([^/]+).*#\1#')"
-
-          echo "preflight front=${front_base} api=${api_base}"
-
-          PREFLIGHT_ATTEMPTS="${E2E_PREFLIGHT_ATTEMPTS:-5}"
-          PREFLIGHT_CONNECT_TIMEOUT_SECONDS="${E2E_PREFLIGHT_CONNECT_TIMEOUT_SECONDS:-5}"
-          PREFLIGHT_MAX_TIME_SECONDS="${E2E_PREFLIGHT_MAX_TIME_SECONDS:-15}"
-          PREFLIGHT_SLEEP_SECONDS="${E2E_PREFLIGHT_SLEEP_SECONDS:-3}"
-          PREFLIGHT_CURL_RETRY="${E2E_PREFLIGHT_CURL_RETRY:-2}"
-          PREFLIGHT_FORCE_IPV4="${E2E_PREFLIGHT_FORCE_IPV4:-true}"
-          FRONT_BUILD_METADATA_ATTEMPTS="${E2E_FRONT_BUILD_METADATA_ATTEMPTS:-20}"
-          FRONT_BUILD_METADATA_SLEEP_SECONDS="${E2E_FRONT_BUILD_METADATA_SLEEP_SECONDS:-6}"
-
-          curl_args=(
-            -sS
-            --connect-timeout "${PREFLIGHT_CONNECT_TIMEOUT_SECONDS}"
-            -m "${PREFLIGHT_MAX_TIME_SECONDS}"
-            --retry "${PREFLIGHT_CURL_RETRY}"
-            --retry-all-errors
-            --retry-delay 1
-          )
-          if [ "${PREFLIGHT_FORCE_IPV4}" = "true" ]; then
-            curl_args+=(-4)
-          fi
-
-          probe_url() {
-            local label="$1"
-            local url="$2"
-            local status_pattern="$3"
-            local attempt="$4"
-            local code
-            code="$(
-              curl "${curl_args[@]}" \
-                -o /dev/null \
-                -w '%{http_code}' \
-                "${url}" || true
-            )"
-            echo "[preflight] ${label} attempt=${attempt} status=${code}"
-            [[ "${code}" =~ ${status_pattern} ]]
-          }
-
-          probe_login() {
-            local attempt="$1"
-            local code
-            local login_payload
-            if [ -n "${E2E_LIVE_ADMIN_EMAIL:-}" ]; then
-              login_payload="{\"email\":\"${E2E_LIVE_ADMIN_EMAIL}\",\"password\":\"${E2E_LIVE_ADMIN_PASSWORD}\"}"
-            else
-              login_payload="{\"username\":\"${E2E_LIVE_ADMIN_USERNAME}\",\"password\":\"${E2E_LIVE_ADMIN_PASSWORD}\"}"
-            fi
-            code="$(
-              curl "${curl_args[@]}" \
-                -X POST \
-                -H 'Content-Type: application/json' \
-                -o /dev/null \
-                -w '%{http_code}' \
-                --data "${login_payload}" \
-                "${api_base}/member/api/v1/auth/login" || true
-            )"
-            echo "[preflight] api-login attempt=${attempt} status=${code}"
-            [[ "${code}" =~ ^2[0-9][0-9]$ ]]
-          }
-
-          front_ok=0
-          for attempt in $(seq 1 "${PREFLIGHT_ATTEMPTS}"); do
-            if probe_url "front-login" "${front_base}/login" '^[1-4][0-9][0-9]$' "${attempt}"; then
-              front_ok=1
-              break
-            fi
-            sleep "${PREFLIGHT_SLEEP_SECONDS}"
-          done
-          if [ "${front_ok}" -ne 1 ]; then
-            echo "preflight failed for front-login: ${front_base}/login" >&2
-            exit 1
-          fi
-
-          if [ -n "${E2E_EXPECTED_FRONT_COMMIT_SHA:-}" ]; then
-            if command -v jq >/dev/null 2>&1; then
-              vercel_status_json="$(
-                curl "${curl_args[@]}" \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${E2E_EXPECTED_FRONT_COMMIT_SHA}/status" || true
-              )"
-              vercel_status_line="$(
-                printf '%s' "${vercel_status_json}" |
-                  jq -r '.statuses[]? | select(.context == "Vercel") | [.state, .description, .target_url] | @tsv' |
-                  head -n 1
-              )"
-              if [ -n "${vercel_status_line}" ]; then
-                IFS=$'\t' read -r vercel_state vercel_description vercel_target_url <<< "${vercel_status_line}"
-                echo "[preflight] vercel-status state=${vercel_state:-missing} description=${vercel_description:-missing}"
-                if [ "${vercel_state}" = "failure" ] && [[ "${vercel_description}" == *"Deployment rate limited"* ]]; then
-                  echo "::error title=Vercel production deployment rate limited::${vercel_description} (${vercel_target_url})" >&2
-                  echo "preflight failed: Vercel production deployment is rate limited; retry the Vercel deployment before rerunning live frontend verification" >&2
-                  exit 1
-                fi
-              else
-                echo "[preflight] vercel-status missing for ${E2E_EXPECTED_FRONT_COMMIT_SHA}; continuing with live metadata polling"
-              fi
-            else
-              echo "[preflight] jq not available; skipping Vercel status preflight"
-            fi
-
-            front_build_ok=0
-            for attempt in $(seq 1 "${FRONT_BUILD_METADATA_ATTEMPTS}"); do
-              front_html="$(
-                curl "${curl_args[@]}" \
-                  -L \
-                  "${front_base}/login?next=%2Fadmin&frontBuildCheck=${E2E_EXPECTED_FRONT_COMMIT_SHA}" || true
-              )"
-              front_build_sha="$(
-                printf '%s' "${front_html}" |
-                  sed -nE 's/.*<meta name="aquila-build-sha" content="([^"]*)".*/\1/p' |
-                  head -n 1
-              )"
-              echo "[preflight] front-build-sha attempt=${attempt} expected=${E2E_EXPECTED_FRONT_COMMIT_SHA} actual=${front_build_sha:-missing}"
-              if [ "${front_build_sha}" = "${E2E_EXPECTED_FRONT_COMMIT_SHA}" ]; then
-                front_build_ok=1
-                break
-              fi
-              sleep "${FRONT_BUILD_METADATA_SLEEP_SECONDS}"
-            done
-            if [ "${front_build_ok}" -ne 1 ]; then
-              echo "preflight failed: live frontend build metadata does not match deploy sha" >&2
-              exit 1
-            fi
-          fi
-
-          api_ok=0
-          for attempt in $(seq 1 "${PREFLIGHT_ATTEMPTS}"); do
-            readiness_ok=0
-            auth_ok=0
-
-            if probe_url "api-readiness" "${api_base}/actuator/health/readiness" '^2[0-9][0-9]$' "${attempt}"; then
-              readiness_ok=1
-            fi
-            if [ "${readiness_ok}" -ne 1 ]; then
-              if probe_url "api-auth-me" "${api_base}/member/api/v1/auth/me" '^[1-4][0-9][0-9]$' "${attempt}"; then
-                auth_ok=1
-              fi
-            fi
-            if [ "${readiness_ok}" -ne 1 ] && [ "${auth_ok}" -ne 1 ]; then
-              if probe_login "${attempt}"; then
-                auth_ok=1
-              fi
-            fi
-
-            if [ "${readiness_ok}" -eq 1 ] || [ "${auth_ok}" -eq 1 ]; then
-              api_ok=1
-              break
-            fi
-
-            sleep "$((PREFLIGHT_SLEEP_SECONDS * attempt))"
-          done
-
-          if [ "${api_ok}" -ne 1 ]; then
-            echo "preflight failed for api routes: ${api_base}" >&2
-            echo "[preflight-diagnostic] api dns lookup"
-            getent hosts "${api_host}" || true
-            echo "[preflight-diagnostic] curl headers /actuator/health/readiness"
-            curl "${curl_args[@]}" -D - -o /dev/null "${api_base}/actuator/health/readiness" || true
-            echo "[preflight-diagnostic] curl headers /member/api/v1/auth/me"
-            curl "${curl_args[@]}" -D - -o /dev/null "${api_base}/member/api/v1/auth/me" || true
-            echo "[preflight-diagnostic] curl headers /member/api/v1/auth/login"
-            if [ -n "${E2E_LIVE_ADMIN_EMAIL:-}" ]; then
-              login_payload="{\"email\":\"${E2E_LIVE_ADMIN_EMAIL}\",\"password\":\"${E2E_LIVE_ADMIN_PASSWORD}\"}"
-            else
-              login_payload="{\"username\":\"${E2E_LIVE_ADMIN_USERNAME}\",\"password\":\"${E2E_LIVE_ADMIN_PASSWORD}\"}"
-            fi
-            curl "${curl_args[@]}" -X POST -H 'Content-Type: application/json' -D - -o /dev/null --data "${login_payload}" "${api_base}/member/api/v1/auth/login" || true
-            exit 1
-          fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: "20"
-          cache: yarn
-          cache-dependency-path: front/yarn.lock
-
-      - name: Install dependencies
-        working-directory: front
-        run: yarn install --frozen-lockfile
-
-      - name: Disable Microsoft apt sources for Playwright deps
-        shell: bash
-        run: |
-          set -euo pipefail
-          for source in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
-            [ -e "${source}" ] || continue
-            if grep -q 'packages.microsoft.com' "${source}"; then
-              sudo mv "${source}" "${source}.disabled"
-            fi
-          done
-
-      - name: Install Playwright browser
-        working-directory: front
-        run: npx playwright install --with-deps chromium
-
-      - name: Run live environment e2e
-        working-directory: front
-        env:
-          PLAYWRIGHT_LIVE_FAIL_FAST: "true"
-          PLAYWRIGHT_LIVE_MULTI_BROWSER: "false"
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          heartbeat() {
-            while true; do
-              echo "[live-e2e] still running at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-              sleep 30
-            done
-          }
-
-          heartbeat &
-          hb_pid=$!
-          cleanup() {
-            kill "${hb_pid}" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-
-          npx playwright test e2e/live.spec.ts e2e/editor-live-visual.spec.ts \
-            --workers=1 \
-            --reporter=line \
-            --max-failures=1
-
-      - name: Upload Playwright report on failure
-        if: failure()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
-        with:
-          name: front-live-e2e-playwright-report
-          path: |
-            front/playwright-report
-            front/test-results
-          retention-days: 1

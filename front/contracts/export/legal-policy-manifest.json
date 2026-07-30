@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "contract": "aquila-public-legal-policies",
+  "active": {
+    "terms": {
+      "version": "1.0.2",
+      "contentSha256": "825642074982313f39c5d9bfbeffb20b12fc1a072addce8770b332652a75ad9b"
+    },
+    "privacy": {
+      "version": "1.0.3",
+      "contentSha256": "b1a9d7f800214aeab69e0185c2a4721dc394afd3c47a581a3190888a17d95827"
+    },
+    "cookies": {
+      "version": "1.0.3",
+      "contentSha256": "cc8be651603df0480886d6c258e16dd7228cbfe78fa2bf16ee07ae80359e0f99"
+    }
+  }
+}

@@ -3,24 +3,17 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 
-const root = process.cwd()
+const root = path.resolve(import.meta.dirname, "../..")
 const resolvePath = (envName, fallback) => {
   const configured = process.env[envName]
   if (!configured) return fallback
   return path.isAbsolute(configured) ? configured : path.join(root, configured)
 }
 
-const policiesDir = resolvePath("LEGAL_POLICIES_DIR", path.join(root, "front/legal/policies"))
-const frontendLegalMetadataPath = resolvePath(
+let policiesDir = resolvePath("LEGAL_POLICIES_DIR", path.join(root, "legal/policies"))
+let frontendLegalMetadataPath = resolvePath(
   "LEGAL_FRONTEND_METADATA_PATH",
-  path.join(root, "front/src/apis/backend/legal.ts"),
-)
-const backendLegalMetadataPath = resolvePath(
-  "LEGAL_BACKEND_METADATA_PATH",
-  path.join(
-    root,
-    "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt",
-  ),
+  path.join(root, "src/apis/backend/legal.ts"),
 )
 const requiredFields = [
   "documentType",
@@ -108,12 +101,11 @@ const forbiddenPublicPolicyTokens = [
   "consent manager",
 ]
 
-let failed = false
-
-const fail = (message) => {
-  failed = true
-  console.error(`[legal-policies] ${message}`)
+const createReporter = () => {
+  const errors = []
+  return { errors, fail: (message) => errors.push(message) }
 }
+let fail = () => {}
 
 const getPolicyFiles = () => {
   if (!fs.existsSync(policiesDir)) {
@@ -194,41 +186,6 @@ const readFrontendActiveMetadata = () => {
   }
 }
 
-const readBackendActiveMetadata = () => {
-  if (!fs.existsSync(backendLegalMetadataPath)) {
-    fail(`missing backend legal metadata ${backendLegalMetadataPath}`)
-    return null
-  }
-
-  const source = fs.readFileSync(backendLegalMetadataPath, "utf8")
-  return {
-    signupPolicyVersion: extractQuotedValue(
-      source,
-      /signupPolicyVersion\s*=\s*"([^"]+)"/,
-      "backend signupPolicyVersion",
-    ),
-    terms: {
-      version: extractQuotedValue(source, /terms\s*=\s*[\s\S]*?version\s*=\s*"([^"]+)"/, "backend terms version"),
-      contentSha256: extractQuotedValue(
-        source,
-        /terms\s*=\s*[\s\S]*?contentSha256\s*=\s*"([^"]+)"/,
-        "backend terms contentSha256",
-      ),
-    },
-    privacy: {
-      version: extractQuotedValue(
-        source,
-        /privacy\s*=\s*[\s\S]*?version\s*=\s*"([^"]+)"/,
-        "backend privacy version",
-      ),
-      contentSha256: extractQuotedValue(
-        source,
-        /privacy\s*=\s*[\s\S]*?contentSha256\s*=\s*"([^"]+)"/,
-        "backend privacy contentSha256",
-      ),
-    },
-  }
-}
 
 const assertRequiredShape = (fileName, policy) => {
   for (const field of requiredFields) {
@@ -327,48 +284,54 @@ const assertActiveMetadataMatchesPolicies = (sourceName, metadata, termsPolicy, 
   }
 }
 
-const policies = new Map()
-const latestEffectivePolicies = new Map()
-const policyFiles = getPolicyFiles()
-for (const fileName of policyFiles) {
-  const policy = readPolicy(fileName)
-  if (!policy) continue
-  assertRequiredShape(fileName, policy)
-  assertPublicTextIsPublicReady(fileName, policy)
-  policies.set(policy.documentType, policy)
-  setLatestEffectivePolicy(latestEffectivePolicies, policy)
+export const buildCanonicalManifest = (active) => ({
+  version: 1,
+  contract: "aquila-public-legal-policies",
+  active: {
+    terms: { version: active.terms.version, contentSha256: active.terms.contentSha256 },
+    privacy: { version: active.privacy.version, contentSha256: active.privacy.contentSha256 },
+    cookies: { version: active.cookies.version, contentSha256: active.cookies.contentSha256 },
+  },
+})
+
+export const validatePublicPolicies = ({ policiesDir: configuredPoliciesDir = policiesDir, frontendMetadataPath = frontendLegalMetadataPath } = {}) => {
+  const reporter = createReporter()
+  const originalFail = fail
+  fail = reporter.fail
+  const originalPoliciesDir = policiesDir
+  const originalMetadataPath = frontendLegalMetadataPath
+  policiesDir = configuredPoliciesDir
+  frontendLegalMetadataPath = frontendMetadataPath
+  try {
+  const latestEffectivePolicies = new Map()
+  const policyFiles = getPolicyFiles()
+  for (const fileName of policyFiles) {
+    const policy = readPolicy(fileName)
+    if (!policy) continue
+    assertRequiredShape(fileName, policy)
+    assertPublicTextIsPublicReady(fileName, policy)
+    setLatestEffectivePolicy(latestEffectivePolicies, policy)
+  }
+  for (const type of ["PRIVACY_POLICY", "TERMS_OF_SERVICE", "COOKIE_POLICY"]) if (!latestEffectivePolicies.has(type)) fail(`missing effective ${type}`)
+  const privacy = latestEffectivePolicies.get("PRIVACY_POLICY")
+  const terms = latestEffectivePolicies.get("TERMS_OF_SERVICE")
+  const cookies = latestEffectivePolicies.get("COOKIE_POLICY")
+  if (privacy) { assertSectionTitles(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, requiredPrivacySections); assertTextIncludes(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, requiredVendors); assertTextIncludes(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, ["apiKey", "refresh token", "NEXT_PUBLIC_RUM_SAMPLE_RATE"]) }
+  if (terms) { assertSectionTitles(`terms.ko-KR.v${terms.version}.yaml`, terms, requiredTermsSections); assertTextIncludes(`terms.ko-KR.v${terms.version}.yaml`, terms, ["고의 또는 중대한 과실", "부당하게 불리한 전속 관할"]) }
+  if (cookies) assertTextIncludes(`cookies.ko-KR.v${cookies.version}.yaml`, cookies, ["필수 쿠키", "Analytics", "RUM", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
+  for (const fileName of policyFiles) { const raw = readRawPolicy(fileName); if (raw?.includes("illusiveman7@gmail.com")) fail(`${fileName} contains stale contact email`) }
+  assertActiveMetadataMatchesPolicies("frontend active legal metadata", readFrontendActiveMetadata(), terms, privacy)
+  const active = terms && privacy && cookies ? { terms, privacy, cookies } : null
+  return { ok: reporter.errors.length === 0, errors: reporter.errors, active, manifest: active ? buildCanonicalManifest(active) : null }
+  } finally {
+    policiesDir = originalPoliciesDir
+    frontendLegalMetadataPath = originalMetadataPath
+    fail = originalFail
+  }
 }
 
-if (!latestEffectivePolicies.has("PRIVACY_POLICY")) fail("missing effective PRIVACY_POLICY")
-if (!latestEffectivePolicies.has("TERMS_OF_SERVICE")) fail("missing effective TERMS_OF_SERVICE")
-if (!latestEffectivePolicies.has("COOKIE_POLICY")) fail("missing effective COOKIE_POLICY")
-
-const privacy = latestEffectivePolicies.get("PRIVACY_POLICY")
-if (privacy) {
-  assertSectionTitles(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, requiredPrivacySections)
-  assertTextIncludes(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, requiredVendors)
-  assertTextIncludes(`privacy.ko-KR.v${privacy.version}.yaml`, privacy, ["apiKey", "refresh token", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  const result = validatePublicPolicies()
+  if (!result.ok) { for (const error of result.errors) console.error(`[legal-policies] ${error}`); process.exit(1) }
+  console.log("[legal-policies] ok")
 }
-
-const terms = latestEffectivePolicies.get("TERMS_OF_SERVICE")
-if (terms) {
-  assertSectionTitles(`terms.ko-KR.v${terms.version}.yaml`, terms, requiredTermsSections)
-  assertTextIncludes(`terms.ko-KR.v${terms.version}.yaml`, terms, ["고의 또는 중대한 과실", "부당하게 불리한 전속 관할"])
-}
-
-assertActiveMetadataMatchesPolicies("frontend active legal metadata", readFrontendActiveMetadata(), terms, privacy)
-assertActiveMetadataMatchesPolicies("backend active legal metadata", readBackendActiveMetadata(), terms, privacy)
-
-const cookies = latestEffectivePolicies.get("COOKIE_POLICY")
-if (cookies) {
-  assertTextIncludes(`cookies.ko-KR.v${cookies.version}.yaml`, cookies, ["필수 쿠키", "Analytics", "RUM", "NEXT_PUBLIC_RUM_SAMPLE_RATE"])
-}
-
-for (const fileName of policyFiles) {
-  const raw = readRawPolicy(fileName)
-  if (!raw) continue
-  if (raw.includes("illusiveman7@gmail.com")) fail(`${fileName} contains stale contact email`)
-}
-
-if (failed) process.exit(1)
-console.log(`[legal-policies] ok: ${policyFiles.length} policies`)

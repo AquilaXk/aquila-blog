@@ -22,7 +22,7 @@
 1. 변경 유형을 `minor_notice`, `material_reconsent`, `legal_correction`, `processor_update` 중 하나로 분류한다.
 2. 새 policy YAML을 작성하고 version, publishedAt, effectiveAt, contentSha256를 확정한다.
 3. material change이면 재동의 필요 여부와 대상 계정을 기록한다.
-4. `ActiveLegalDocumentMetadata.kt`, `front/src/apis/backend/legal.ts`, `front/src/libs/legal/serverPolicySource.ts`가 같은 version/hash를 가리키는지 확인한다.
+4. Web에서 `yarn legal:check`를 실행한다. Platform에서는 lock checker로 integrity를 확인하고 `WebLegalPolicyManifestContractTest`로 pinned lock과 `ActiveLegalDocumentMetadata.kt`의 terms/privacy version/hash 및 signup max SemVer를 확인한다.
 5. 공개 페이지 `/privacy`, `/terms`, `/cookies`, `/legal/history`에서 current link와 이전 version link를 확인한다.
 6. `status: effective` 정책에는 `reviewRequired`, `출시 gate`, `추후 확정`, `구현 후 제공` 같은 내부 문구를 남기지 않는다.
 7. 배포 후 live URL에서 정책 제목, 시행일, hash/download, 문의 링크를 확인한다.
@@ -40,8 +40,8 @@
 ## Evidence
 
 - policy diff, version/hash table, publishedAt/effectiveAt.
-- validator output: `node tools/legal/validate-legal-policies.mjs`.
-- backend/frontend active metadata check.
+- Web validator output: `yarn legal:check`.
+- Platform lock checker integrity output과 `WebLegalPolicyManifestContractTest` backend acceptance metadata output.
 - e2e 또는 live screenshot path for `/privacy`, `/terms`, `/cookies`, `/legal/history`.
 - re-consent decision note와 legal review status.
 
@@ -54,6 +54,6 @@
 
 ## Validation
 
-- `node tools/legal/validate-legal-policies.mjs`
+- Web: `yarn legal:check`; Platform: `node tools/contracts/check-web-policy-lock.mjs` 및 `./back/gradlew -p back test --tests '*WebLegalPolicyManifestContractTest'`
 - `yarn --cwd front playwright:preflight`
 - 정책 페이지 e2e 또는 live URL 확인 결과를 PR evidence table에 남긴다.

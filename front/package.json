@@ -24,6 +24,8 @@
     "contracts:update": "yarn contracts:fetch && yarn contracts:generate",
     "contracts:verify-live": "yarn contracts:fetch && yarn contracts:check",
     "contracts:check": "node scripts/openapi/check-contract-drift.mjs",
+    "legal:check": "node scripts/legal/validate-public-policies.mjs && node scripts/legal/export-policy-manifest.mjs --check && node --test scripts/legal/public-policies.test.mjs",
+    "legal:export": "node scripts/legal/export-policy-manifest.mjs",
     "test:e2e": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test",
     "test:e2e:smoke": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test e2e/smoke*.spec.ts e2e/mobile-layout*.spec.ts --workers=2",
     "test:e2e:authoring": "yarn playwright:preflight && env -u NO_COLOR PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 yarn playwright test e2e/editor-authoring-markdown-editor.spec.ts --workers=1",

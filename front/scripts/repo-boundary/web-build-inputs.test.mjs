@@ -6,7 +6,6 @@ import path from "node:path"
 import test from "node:test"
 
 const frontRoot = path.resolve(import.meta.dirname, "../..")
-const repoRoot = path.resolve(frontRoot, "..")
 const policySource = fs.readFileSync(path.join(frontRoot, "src/libs/legal/serverPolicySource.ts"), "utf8")
 const runtimeGuardSource = fs.readFileSync(path.join(frontRoot, "scripts/compare-runtime-guard-metrics.mjs"), "utf8")
 const ignoreScript = path.join(frontRoot, "scripts/vercel/should-ignore-build.mjs")

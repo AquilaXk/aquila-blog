@@ -8,6 +8,7 @@ import test from "node:test"
 const frontRoot = path.resolve(import.meta.dirname, "../..")
 const policySource = fs.readFileSync(path.join(frontRoot, "src/libs/legal/serverPolicySource.ts"), "utf8")
 const runtimeGuardSource = fs.readFileSync(path.join(frontRoot, "scripts/compare-runtime-guard-metrics.mjs"), "utf8")
+const legalPolicyE2eSource = fs.readFileSync(path.join(frontRoot, "e2e/legal-policy-pages.spec.ts"), "utf8")
 const ignoreScript = path.join(frontRoot, "scripts/vercel/should-ignore-build.mjs")
 
 const git = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8" })
@@ -41,6 +42,7 @@ test("Web build inputs stay inside the future Web root", () => {
   assert.equal(fs.existsSync(path.join(frontRoot, "quality/performance/runtime-guard-baseline.json")), true)
   assert.doesNotMatch(policySource, /\.\.[/\\](legal|back|deploy|infra|perf)/)
   assert.doesNotMatch(runtimeGuardSource, /\.\.[/\\](legal|back|deploy|infra|perf)/)
+  assert.doesNotMatch(legalPolicyE2eSource, /process\.cwd\(\),\s*"\.\.",\s*"legal"/)
 })
 
 test("Vercel ignore command builds the first commit", (t) => {

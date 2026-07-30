@@ -23,17 +23,29 @@ const isDocsFile = (file) =>
   file.startsWith("docs/") ||
   ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "CURSOR.md", "COPILOT.md", "README.md"].includes(file)
 
-const isFrontendFile = (file) => file.startsWith("front/")
-
 const isBackendFile = (file) =>
+  file === "restore-privacy-gate.sh" ||
   file.startsWith("back/") ||
-  file.startsWith("deploy/homeserver/")
+  file.startsWith("deploy/")
+
+const isPlatformFile = (file) =>
+  isBackendFile(file) ||
+  file.startsWith("perf/") ||
+  file.startsWith("infra/") ||
+  file.startsWith("legal/data-map/") ||
+  file.startsWith("legal/vendors/") ||
+  file === "legal/privacy-launch-controls.json" ||
+  file.startsWith("contracts/public-api/") ||
+  file.startsWith("contracts/web/") ||
+  file.startsWith("tools/") ||
+  file.startsWith(".github/workflows/") ||
+  file.startsWith(".githooks/") ||
+  [".coderabbit.yaml", ".github/dependabot.yml", "sonar-project.properties"].includes(file)
 
 const isPipelineFile = (file) =>
   file.startsWith(".github/workflows/") ||
   file.startsWith("tools/ci/") ||
-  file === "back/Dockerfile" ||
-  file === "front/Dockerfile"
+  file === "back/Dockerfile"
 
 const isMigrationFile = (file) => /^back\/src\/main\/resources\/db\/migration\/.+\.sql$/.test(file)
 
@@ -55,18 +67,16 @@ const loadMigrationSafety = (path) => {
 const classifyScope = (files) => {
   if (files.length > 0 && files.every(isDocsFile)) return "docs-only"
 
-  const hasBackend = files.some(isBackendFile)
-  const hasFrontend = files.some(isFrontendFile)
-  const hasPipeline = files.some(isPipelineFile)
+  const platformFiles = files.filter(isPlatformFile)
+  if (platformFiles.length === 0) return "non-platform"
 
-  if (hasBackend && !hasFrontend && !hasPipeline) return "backend-only"
-  if (hasFrontend && !hasBackend && !hasPipeline) return "frontend-only"
-  return "mixed"
+  return platformFiles.every(isBackendFile) ? "backend-only" : "platform"
 }
 
 const classify = ({ files, migrationSafety }) => {
   const reasons = []
   const changeScope = classifyScope(files)
+  const platformFiles = files.filter(isPlatformFile)
 
   if (changeScope === "docs-only") {
     return {
@@ -75,24 +85,21 @@ const classify = ({ files, migrationSafety }) => {
       changeScope,
       riskProfile: "standard",
       deployBackend: false,
-      verifyFrontend: false,
       reasons: ["docs-only"],
     }
   }
-  if (files.some(isBackendFile)) reasons.push("backend")
-  if (files.some(isFrontendFile)) reasons.push("frontend")
-  if (files.some(isPipelineFile)) reasons.push("pipeline")
-  if (files.some(isMigrationFile)) reasons.push("migration")
-  if (files.some(isBackendFile) && files.some(isFrontendFile)) reasons.push("backend-and-frontend")
+  if (platformFiles.some(isBackendFile)) reasons.push("backend")
+  if (platformFiles.some(isPipelineFile)) reasons.push("pipeline")
+  if (platformFiles.some(isMigrationFile)) reasons.push("migration")
 
   for (const { reason, pattern } of extendedRules) {
-    if (files.some((file) => pattern.test(file)) && !reasons.includes(reason)) {
+    if (platformFiles.some((file) => pattern.test(file)) && !reasons.includes(reason)) {
       reasons.push(reason)
     }
   }
 
   let riskProfile = reasons.some((reason) =>
-    ["security-or-auth", "storage", "task-or-worker", "deploy", "workflow", "dockerfile", "migration", "backend-and-frontend", "pipeline"].includes(reason),
+    ["security-or-auth", "storage", "task-or-worker", "deploy", "workflow", "dockerfile", "migration", "pipeline"].includes(reason),
   )
     ? "extended"
     : "standard"
@@ -109,8 +116,7 @@ const classify = ({ files, migrationSafety }) => {
     changedFiles: files,
     changeScope,
     riskProfile,
-    deployBackend: changeScope === "backend-only" || changeScope === "mixed",
-    verifyFrontend: changeScope === "frontend-only" || changeScope === "mixed",
+    deployBackend: platformFiles.some(isBackendFile),
     reasons,
   }
 }
@@ -123,7 +129,6 @@ const writeGithubOutput = (path, result) => {
       `release_change_scope=${result.changeScope}`,
       `release_risk_profile=${result.riskProfile}`,
       `release_deploy_backend=${result.deployBackend}`,
-      `release_verify_frontend=${result.verifyFrontend}`,
       "",
     ].join("\n"),
   )

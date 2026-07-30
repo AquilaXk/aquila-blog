@@ -28,6 +28,37 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
 
         val openApiNode = objectMapper.readTree(responseBody)
         assertThat(openApiNode.path("openapi").asText()).isNotBlank()
+        assertThat(
+            openApiNode
+                .path("servers")
+                .first()
+                .path("url")
+                .asText(),
+        ).isEqualTo("https://api.aquilaxk.site")
+        assertThat(
+            openApiNode
+                .path("components")
+                .path("securitySchemes")
+                .path("bearerAuth")
+                .path("type")
+                .asText(),
+        ).isEqualTo("http")
+        assertThat(
+            openApiNode
+                .path("components")
+                .path("securitySchemes")
+                .path("bearerAuth")
+                .path("scheme")
+                .asText(),
+        ).isEqualTo("bearer")
+        assertThat(
+            openApiNode
+                .path("components")
+                .path("securitySchemes")
+                .path("bearerAuth")
+                .path("bearerFormat")
+                .asText(),
+        ).isEqualTo("JWT")
 
         val outputPath = Path.of("build/openapi/openapi.json")
         Files.createDirectories(outputPath.parent)

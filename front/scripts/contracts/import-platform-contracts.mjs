@@ -16,6 +16,21 @@ const SOURCE_ARTIFACTS = [
   ["openapi", "openapi.json"],
   ["errorCodes", "error-codes.json"],
 ]
+const INHERITED_GIT_ENV_KEYS = [
+  "GIT_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_WORK_TREE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+]
+
+// Git exports GIT_DIR and friends to hooks in a linked worktree, so a git call that
+// targets another directory would silently operate on the inherited repository instead.
+export function gitEnvWithoutInheritedRepository() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !INHERITED_GIT_ENV_KEYS.includes(key)),
+  )
+}
 
 function fail(message) {
   throw new Error(`[platform-contracts] ${message}`)
@@ -63,10 +78,13 @@ function gitHubRepository(remote) {
 }
 
 function validateSourceCommit(source, sourceRepository, sourceCommit, files) {
+  const env = gitEnvWithoutInheritedRepository()
+
   let repositoryRoot
   try {
     repositoryRoot = execFileSync("git", ["-C", source, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
+      env,
       stdio: ["ignore", "pipe", "ignore"],
     }).trim()
   } catch {
@@ -77,6 +95,7 @@ function validateSourceCommit(source, sourceRepository, sourceCommit, files) {
   try {
     origin = execFileSync("git", ["-C", repositoryRoot, "remote", "get-url", "origin"], {
       encoding: "utf8",
+      env,
       stdio: ["ignore", "pipe", "ignore"],
     }).trim()
   } catch {
@@ -97,6 +116,7 @@ function validateSourceCommit(source, sourceRepository, sourceCommit, files) {
     try {
       committed = execFileSync("git", ["-C", repositoryRoot, "show", `${sourceCommit}:${gitPath}`], {
         encoding: null,
+        env,
         stdio: ["ignore", "pipe", "ignore"],
       })
     } catch {

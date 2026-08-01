@@ -6,7 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { importPlatformContracts } from "./import-platform-contracts.mjs"
+import { gitEnvWithoutInheritedRepository, importPlatformContracts } from "./import-platform-contracts.mjs"
 import { verifyPlatformContracts } from "./verify-platform-contracts.mjs"
 
 const sourceRepository = "AquilaXk/aquila-blog"
@@ -14,7 +14,7 @@ const sha256 = (value) => createHash("sha256").update(value).digest("hex")
 const git = (cwd, args) => execFileSync(
   "git",
   ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-C", cwd, ...args],
-  { encoding: "utf8" },
+  { encoding: "utf8", env: gitEnvWithoutInheritedRepository() },
 )
 
 async function fixture() {

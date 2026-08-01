@@ -130,14 +130,18 @@ assert_contains "${platform_script}" 'config --quiet'
 assert_not_contains "${platform_script}" 'sed -i'
 assert_not_contains "${platform_script}" 'git clone'
 
-# The Compose fixture generator follows the canonical digest-image list rather
-# than hard-coding whichever monitoring variables happen to exist today.
-assert_contains "${materializer_script}" 'home-server-source'
+# The Compose fixture generator follows the inherited canonical runtime target
+# rather than hard-coding whichever monitoring or backend variables exist today.
+assert_contains "${materializer_script}" 'RUNTIME_TARGET = "home-server-runtime"'
+assert_contains "${materializer_script}" 'collectTargetKeys'
+assert_contains "${materializer_script}" 'target.extends'
 assert_contains "${materializer_script}" 'key?.kind !== "digest-image"'
 assert_contains "${materializer_script}" 'registry.invalid/aquila-standalone'
+assert_contains "${materializer_script}" 'deploy env contract inheritance cycle'
 assert_contains "${materializer_script}" 'source and output must differ'
 assert_not_contains "${materializer_script}" 'ALERTMANAGER_IMAGE'
 assert_not_contains "${materializer_script}" 'POSTGRES_EXPORTER_IMAGE'
+assert_not_contains "${materializer_script}" 'BACK_BLUE_IMAGE'
 
 # The workflow publishes exactly the two temporary required check names and
 # their evidence artifacts from the same checked-out SHA.

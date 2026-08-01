@@ -5,7 +5,7 @@ import com.back.global.app.AppConfig
 
 const val PROFILE_IMG_URL = "profileImgUrl"
 private const val PROFILE_IMG_URL_DEFAULT_VALUE = ""
-private const val DEFAULT_SITE_FRONT_URL = "https://www.aquilaxk.site"
+private const val DEFAULT_SITE_FRONT_URL = "https://blog.aquilaxk.site"
 private const val DEFAULT_PROFILE_IMAGE_PATH = "/images/default-profile.svg"
 
 fun defaultProfileImageUrl(): String {

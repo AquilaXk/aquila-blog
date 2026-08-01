@@ -39,8 +39,8 @@ class ApiV1OAuthSignupControllerTest {
     @Test
     fun `complete는 legal acceptance payload와 nickname으로 social signup을 완료한다`() {
         AppConfig(
-            siteBackUrl = "https://api.aquilaxk.site",
-            siteFrontUrl = "https://www.aquilaxk.site",
+            siteBackUrl = "https://api.blog.aquilaxk.site",
+            siteFrontUrl = "https://blog.aquilaxk.site",
         )
         val useCase = RecordingOAuthSignupUseCase()
         val controller = ApiV1OAuthSignupController(useCase)

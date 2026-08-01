@@ -91,16 +91,33 @@ class ApiRuntimeBoundaryFilterTest {
     fun `blocked runtime boundary response includes cors headers`() {
         val filter = createFilter("read")
         val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/comments")
-        request.addHeader("Origin", "https://www.aquilaxk.site")
+        request.addHeader("Origin", "https://blog.aquilaxk.site")
         val response = MockHttpServletResponse()
 
         filter.doFilter(request, response, MockFilterChain())
 
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
-        assertThat(response.getHeader("Access-Control-Allow-Origin")).isEqualTo("https://www.aquilaxk.site")
+        assertThat(response.getHeader("Access-Control-Allow-Origin")).isEqualTo("https://blog.aquilaxk.site")
         assertThat(response.getHeader("Access-Control-Allow-Credentials")).isEqualTo("true")
         assertThat(response.getHeader("Retry-After")).isEqualTo("1")
         assertThat(response.contentAsString).contains("503-1")
+    }
+
+    @Test
+    @DisplayName("런타임 경계 503 응답은 apex·www origin에 CORS 헤더를 붙이지 않는다")
+    fun `blocked runtime boundary response omits cors headers for apex and www origins`() {
+        for (origin in listOf("https://aquilaxk.site", "https://www.aquilaxk.site", "https://www.blog.aquilaxk.site")) {
+            val filter = createFilter("read")
+            val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/comments")
+            request.addHeader("Origin", origin)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+            assertThat(response.getHeader("Access-Control-Allow-Origin")).isNull()
+            assertThat(response.getHeader("Access-Control-Allow-Credentials")).isNull()
+        }
     }
 
     @Test
@@ -108,7 +125,7 @@ class ApiRuntimeBoundaryFilterTest {
     fun `admin mode allows comments options preflight`() {
         val filter = createFilter("admin")
         val request = MockHttpServletRequest("OPTIONS", "/post/api/v1/posts/466/comments")
-        request.addHeader("Origin", "https://www.aquilaxk.site")
+        request.addHeader("Origin", "https://blog.aquilaxk.site")
         request.addHeader("Access-Control-Request-Method", "POST")
         val response = MockHttpServletResponse()
 
@@ -233,8 +250,7 @@ class ApiRuntimeBoundaryFilterTest {
     private fun createApiCorsPolicy(): ApiCorsPolicy =
         ApiCorsPolicy(
             environment = MockEnvironment().withProperty("spring.profiles.active", "prod"),
-            siteFrontUrl = "https://www.aquilaxk.site",
-            siteBackUrl = "https://api.aquilaxk.site",
-            siteCookieDomain = "aquilaxk.site",
+            siteFrontUrl = "https://blog.aquilaxk.site",
+            siteBackUrl = "https://api.blog.aquilaxk.site",
         )
 }

@@ -21,14 +21,32 @@ class ApiMutationCsrfGuardFilterTest {
         val filter = createFilter()
         val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
         request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
-        request.addHeader(HttpHeaders.ORIGIN, "https://www.aquilaxk.site")
+        request.addHeader(HttpHeaders.ORIGIN, "https://blog.aquilaxk.site")
         val response = MockHttpServletResponse()
 
         filter.doFilter(request, response, MockFilterChain())
 
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_FORBIDDEN)
         assertThat(response.contentAsString).contains("\"resultCode\":\"403-3\"")
-        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo("https://www.aquilaxk.site")
+        assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo("https://blog.aquilaxk.site")
+    }
+
+    @Test
+    @DisplayName("허용되지 않은 apex·www origin의 쿠키 인증 mutation은 차단되고 CORS 헤더도 붙지 않는다")
+    fun `csrf guard does not echo cors headers for apex or www origins`() {
+        for (origin in listOf("https://aquilaxk.site", "https://www.aquilaxk.site", "https://www.blog.aquilaxk.site")) {
+            val filter = createFilter()
+            val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
+            request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
+            request.addHeader(HttpHeaders.ORIGIN, origin)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_FORBIDDEN)
+            assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isNull()
+            assertThat(response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)).isNull()
+        }
     }
 
     @Test
@@ -116,9 +134,8 @@ class ApiMutationCsrfGuardFilterTest {
             apiCorsPolicy =
                 ApiCorsPolicy(
                     environment = MockEnvironment().withProperty("spring.profiles.active", "dev"),
-                    siteFrontUrl = "https://www.aquilaxk.site",
-                    siteBackUrl = "https://api.aquilaxk.site",
-                    siteCookieDomain = "aquilaxk.site",
+                    siteFrontUrl = "https://blog.aquilaxk.site",
+                    siteBackUrl = "https://api.blog.aquilaxk.site",
                 ),
             errorResponseWriter = ErrorResponseWriterTestSupport.createWriter(),
         )

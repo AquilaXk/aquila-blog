@@ -160,8 +160,11 @@ custom:
     redisPort: ${CUSTOM__TEST__REDIS_PORT:16379}
     redisDatabase: 1
   prod:
+    # 쿠키 도메인은 front 호스트 그 자체다. back은 그 하위(api.<cookieDomain>)에 둔다.
+    # front/back의 공통 접미사가 곧 쿠키 스코프이므로(AuthCookieDomainPolicy),
+    # front를 cookieDomain의 형제(www.<cookieDomain>)로 두면 쿠키가 한 단계 위로 새어 나간다.
     cookieDomain: blog.oa.gg
-    frontUrl: "https://www.${custom.prod.cookieDomain}"
+    frontUrl: "https://${custom.prod.cookieDomain}"
     backUrl: "https://api.${custom.prod.cookieDomain}"
     dbHost: pg_1
     dbPort: 5432

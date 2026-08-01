@@ -60,9 +60,8 @@ class ApiRuntimeBoundaryMatrixTest {
     private fun createApiCorsPolicy(): ApiCorsPolicy =
         ApiCorsPolicy(
             environment = MockEnvironment().withProperty("spring.profiles.active", "prod"),
-            siteFrontUrl = "https://www.aquilaxk.site",
-            siteBackUrl = "https://api.aquilaxk.site",
-            siteCookieDomain = "aquilaxk.site",
+            siteFrontUrl = "https://blog.aquilaxk.site",
+            siteBackUrl = "https://api.blog.aquilaxk.site",
         )
 
     companion object {

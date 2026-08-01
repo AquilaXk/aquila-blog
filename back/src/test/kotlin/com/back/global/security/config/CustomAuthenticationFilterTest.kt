@@ -274,7 +274,7 @@ class CustomAuthenticationFilterTest {
     fun `protected api unexpected auth error returns 401`() {
         val fixture = CustomAuthenticationFilterFixture()
         val request = MockHttpServletRequest("GET", "/member/api/v1/notifications/snapshot")
-        request.addHeader(HttpHeaders.ORIGIN, "https://www.aquilaxk.site")
+        request.addHeader(HttpHeaders.ORIGIN, "https://blog.aquilaxk.site")
 
         fixture.givenProtectedRequest(request)
         fixture.givenEmptyAuthorizationHeader()
@@ -625,8 +625,8 @@ class CustomAuthenticationFilterTest {
 
     private fun configureProductionUrls() {
         AppConfig(
-            siteBackUrl = "https://api.aquilaxk.site",
-            siteFrontUrl = "https://www.aquilaxk.site",
+            siteBackUrl = "https://api.blog.aquilaxk.site",
+            siteFrontUrl = "https://blog.aquilaxk.site",
         )
     }
 

@@ -106,16 +106,15 @@ class ErrorFilterResponseShapeTest {
 
     private fun writeCsrf(
         errorCode: ErrorCode,
-        origin: String = "https://www.aquilaxk.site",
+        origin: String = "https://blog.aquilaxk.site",
     ): MockHttpServletResponse {
         val filter =
             ApiMutationCsrfGuardFilter(
                 apiCorsPolicy =
                     ApiCorsPolicy(
                         environment = MockEnvironment().withProperty("spring.profiles.active", "dev"),
-                        siteFrontUrl = "https://www.aquilaxk.site",
-                        siteBackUrl = "https://api.aquilaxk.site",
-                        siteCookieDomain = "aquilaxk.site",
+                        siteFrontUrl = "https://blog.aquilaxk.site",
+                        siteBackUrl = "https://api.blog.aquilaxk.site",
                     ),
                 errorResponseWriter = ErrorResponseWriterTestSupport.createWriter(),
             )

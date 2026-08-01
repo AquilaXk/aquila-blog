@@ -11,8 +11,8 @@ class MemberSecurityExtensionsTest {
     @Test
     fun `관리자 회원은 ROLE_ADMIN 권한을 가진다`() {
         AppConfig(
-            siteBackUrl = "https://api.aquilaxk.site",
-            siteFrontUrl = "https://www.aquilaxk.site",
+            siteBackUrl = "https://api.blog.aquilaxk.site",
+            siteFrontUrl = "https://blog.aquilaxk.site",
         )
 
         val admin =
@@ -32,8 +32,8 @@ class MemberSecurityExtensionsTest {
     @Test
     fun `일반 회원은 관리자 권한을 가지지 않는다`() {
         AppConfig(
-            siteBackUrl = "https://api.aquilaxk.site",
-            siteFrontUrl = "https://www.aquilaxk.site",
+            siteBackUrl = "https://api.blog.aquilaxk.site",
+            siteFrontUrl = "https://blog.aquilaxk.site",
         )
 
         val user1 =

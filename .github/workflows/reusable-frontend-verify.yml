@@ -141,7 +141,7 @@ jobs:
 
       - name: Upload frontend unit test report
         if: always() && steps.changes.outputs.frontend == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: front-unit-test-report
           path: |
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload OpenAPI contract drift report
         if: failure() && steps.changes.outputs.frontend == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: front-openapi-contract-report
           path: front/test-results/contracts-openapi
@@ -170,7 +170,7 @@ jobs:
 
       - name: Upload bundle budget report
         if: always() && steps.changes.outputs.frontend == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: front-bundle-budget-report
           path: front/test-results/bundle-size
@@ -187,7 +187,7 @@ jobs:
 
       - name: Upload Storybook gate report
         if: always() && steps.changes.outputs.frontend == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: front-storybook-gate-report
           path: front/test-results/storybook
@@ -196,7 +196,7 @@ jobs:
 
       - name: Upload Storybook static build
         if: success() && steps.changes.outputs.frontend == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: front-storybook-static
           path: front/storybook-static
@@ -236,7 +236,7 @@ jobs:
 
       - name: Upload release UI QA report
         if: always() && steps.changes.outputs.frontend == 'true' && github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/heads/release'))
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: front-release-ui-qa-report
           path: |
@@ -298,7 +298,7 @@ jobs:
 
       - name: Upload perf e2e report
         if: always() && steps.changes.outputs.frontend == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: front-perf-e2e-report
           path: front/test-results/perf
@@ -307,7 +307,7 @@ jobs:
 
       - name: Upload frontend reports on failure
         if: failure() && steps.changes.outputs.frontend == 'true'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: front-verify-playwright-report
           path: |

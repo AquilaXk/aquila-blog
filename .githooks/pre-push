@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# bash resolves regex ranges such as [a-z0-9] through locale collation, so under a
+# single-byte locale like en_US.ISO8859-1 those ranges also match uppercase and the branch
+# rules below stop blocking anything they were written to block. Pin LC_ALL (not only
+# LC_COLLATE) because an exported LC_ALL would otherwise override the pin. Same reasoning as
+# .githooks/commit-msg, which pins the locale for its Hangul range.
+export LC_ALL=C
+
 protected_branches_regex='^(main|develop)$'
 work_branch_regex='^(feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix)/[a-z0-9]+(-[a-z0-9]+)*$'
 # Dependabot pushes through the GitHub API and never runs this hook, so its branch names

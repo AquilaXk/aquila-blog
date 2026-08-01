@@ -200,25 +200,41 @@ export const validateEnvText = ({ contract, target, text }) => {
       // 이 crossCheck가 통째로 무력화된다.
       const topology = apiHost && Object.hasOwn(topologies, apiHost) ? topologies[apiHost] : undefined
 
+      // 1) 표 자체를 검증한다. 값 대조만 하면 표가 틀렸을 때 아무도 못 잡는다 -
+      //    deploy.yml도 같은 표를 읽으므로 잘못된 값을 그대로 따라 핀한다.
+      //    선택된 항목만 보면 전환 순간까지 오염을 못 잡으므로 표 전체를 본다.
+      //    불변식을 위반하는 것이 알려진 전환 전 조합은 legacyUnsafeTopology 하나로만 격리한다.
+      const invariants = check.invariants || {}
+      const forbiddenCookieDomains = invariants.forbiddenCookieDomains || []
+      const legacyKey = invariants.legacyUnsafeTopology
+      for (const [name, entry] of Object.entries(topologies)) {
+        if (name === legacyKey) {
+          if (entry.structurallyUnsafe !== true) {
+            errors.push(safeError(check.apiHostKey, `topology ${name} is the declared legacy exception and must be labelled structurallyUnsafe`))
+          }
+          continue
+        }
+        if (entry.structurallyUnsafe === true) {
+          errors.push(safeError(check.apiHostKey, `topology ${name} claims an undeclared legacy exception`))
+          continue
+        }
+        if (entry.cookieDomain !== entry.frontHost) {
+          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: cookieDomain must equal frontHost`))
+        }
+        if (entry.webHost && entry.webHost !== entry.cookieDomain) {
+          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: webHost must equal cookieDomain`))
+        }
+        if (!isStrictSubdomainOf(entry.backHost, entry.cookieDomain)) {
+          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: backHost must be a subdomain of cookieDomain`))
+        }
+        if (forbiddenCookieDomains.includes(entry.cookieDomain)) {
+          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: cookieDomain is owned by another service`))
+        }
+      }
+
       if (apiHost && !topology) {
         errors.push(safeError(check.apiHostKey, "has no declared prod site topology"))
       } else if (topology) {
-        // 1) 표 자체를 검증한다. 값 대조만 하면 표가 틀렸을 때 아무도 못 잡는다 -
-        //    deploy.yml도 같은 표를 읽으므로 잘못된 값을 그대로 따라 핀한다.
-        //    전환 전 조합은 이 불변식을 위반하는 것이 알려진 상태라 표에 명시적으로 표기한다.
-        if (topology.structurallyUnsafe !== true) {
-          const forbidden = check.invariants?.forbiddenCookieDomains || []
-          if (topology.cookieDomain !== topology.frontHost) {
-            errors.push(safeError(check.apiHostKey, `declared topology is unsafe: cookieDomain must equal frontHost`))
-          }
-          if (!isStrictSubdomainOf(topology.backHost, topology.cookieDomain)) {
-            errors.push(safeError(check.apiHostKey, `declared topology is unsafe: backHost must be a subdomain of cookieDomain`))
-          }
-          if (forbidden.includes(topology.cookieDomain)) {
-            errors.push(safeError(check.apiHostKey, `declared topology is unsafe: cookieDomain is owned by another service`))
-          }
-        }
-
         // 2) secret 값이 선택된 topology와 일치하는가. 비교는 host 기준이다.
         //
         // pinnedByDeploy 키는 오너가 유지보수하는 값이 아니다. deploy.yml이 같은 표에서 파생해

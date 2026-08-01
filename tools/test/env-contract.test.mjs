@@ -1109,11 +1109,13 @@ test("site topology is keyed on API_DOMAIN alone so a single secret value select
   assert.deepEqual(topologies["api.blog.aquilaxk.site"], {
     cookieDomain: "blog.aquilaxk.site",
     frontHost: "blog.aquilaxk.site",
+    webHost: "blog.aquilaxk.site",
     backHost: "api.blog.aquilaxk.site",
     publicEdgeProbeBaseUrl: "https://blog.aquilaxk.site",
     adminEmbedOrigins: "https://blog.aquilaxk.site",
     revalidateUrl: "https://blog.aquilaxk.site/api/revalidate",
   })
+  assert.equal(topologies["api.aquilaxk.site"].webHost, "www.aquilaxk.site")
   assert.equal(topologies["api.aquilaxk.site"].cookieDomain, "aquilaxk.site")
   assert.equal(topologies["api.aquilaxk.site"].frontHost, "www.aquilaxk.site")
   assert.equal(topologies["api.aquilaxk.site"].backHost, "api.aquilaxk.site")
@@ -1140,6 +1142,76 @@ test("declared topology itself is checked against the cookie scope invariants, n
 
   assert.equal(result.ok, false, "a topology that violates the cookie scope invariant must not be usable")
   assert(result.errors.some((error) => error.key === "API_DOMAIN" && error.message.includes("unsafe")))
+})
+
+const poisonTopology = (contract, name, patch) => {
+  const copy = JSON.parse(JSON.stringify(contract))
+  const scope = copy.targets["home-server-source"].crossChecks.find((check) => check.type === "cookieDomainScope")
+  Object.assign(scope.topologies[name], patch)
+  return copy
+}
+
+test("structural invariants are enforced for every declared topology, not only the selected one", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  // API_DOMAIN이 전환 전 값이어도, 표의 blog 항목이 오염되면 그 사실이 드러나야 한다.
+  // 선택된 항목만 보면 전환 순간까지 오염을 못 잡는다.
+  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+    cookieDomain: "aquilaxk.site",
+  })
+  const text = withEnvKeys(baseHomeServerEnv, [
+    ...PRE_TRANSITION_DOMAIN_ENV,
+    ["ADMIN_EMBED_ORIGINS", "https://www.aquilaxk.site"],
+    ["CUSTOM__REVALIDATE__URL", "https://www.aquilaxk.site/api/revalidate"],
+  ])
+
+  const result = validateEnvText({ contract: poisoned, target: "home-server-source", text })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.message.includes("api.blog.aquilaxk.site")))
+})
+
+test("only the single declared legacy topology may skip the structural invariants", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  // 두 번째 예외가 생기면 불변식을 우회하는 문이 열린다.
+  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+    cookieDomain: "aquilaxk.site",
+    structurallyUnsafe: true,
+  })
+
+  const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.message.includes("undeclared legacy exception")))
+})
+
+test("the declared legacy topology must carry its label", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const scope = contract.targets["home-server-source"].crossChecks.find((check) => check.type === "cookieDomainScope")
+  assert.equal(scope.invariants.legacyUnsafeTopology, "api.aquilaxk.site")
+
+  const unlabelled = JSON.parse(JSON.stringify(contract))
+  const unlabelledScope = unlabelled.targets["home-server-source"].crossChecks.find(
+    (check) => check.type === "cookieDomainScope",
+  )
+  delete unlabelledScope.topologies["api.aquilaxk.site"].structurallyUnsafe
+
+  const result = validateEnvText({ contract: unlabelled, target: "home-server-source", text: baseHomeServerEnv })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.message.includes("must be labelled")))
+})
+
+test("a topology whose web host differs from the cookie domain is rejected", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+    webHost: "www.blog.aquilaxk.site",
+  })
+
+  const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.message.includes("webHost")))
 })
 
 test("a topology whose API host is not under the cookie domain is rejected", async () => {

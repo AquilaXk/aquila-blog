@@ -121,12 +121,14 @@ class PostReadCacheInvalidator(
         val searchNegativeCache = cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
         val tagsCache = cacheManager.getCache(PostQueryCacheNames.TAGS)
 
+        if (request.evicts(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE)) {
+            adminPostsFirstPageCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "clear", request.evictReason)
+        }
         if (
             request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES) ||
             request.evicts(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE)
         ) {
-            adminPostsFirstPageCache?.evict("page=1:size=20:sort=${PostSearchSortType1.CREATED_AT.name}")
-            recordCacheEvict(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "key", request.evictReason)
             evictHotAndSearchFirstPages(
                 sorts = hotSorts,
                 includeHotReadPages = request.evicts(PostReadCacheInvalidationTarget.HOT_READ_PAGES),

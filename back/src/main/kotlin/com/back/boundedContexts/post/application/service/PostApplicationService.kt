@@ -17,6 +17,8 @@ import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
+import com.back.boundedContexts.post.model.PostSummaryMode
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.HtmlContentSanitizer
@@ -69,6 +71,8 @@ class PostApplicationService(
         listed: Boolean = false,
         idempotencyKey: String? = null,
         contentHtml: String? = null,
+        summary: String? = null,
+        summaryMode: PostSummaryMode? = null,
     ): Post {
         val persistenceAuthor = author.toPersistenceMember()
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
@@ -83,6 +87,8 @@ class PostApplicationService(
                     published = published,
                     listed = listed,
                     contentHtml = contentHtml,
+                    summary = summary,
+                    summaryMode = summaryMode,
                 )
             val createdTags = postTagIndexService.extractNormalizedTags(created.content)
             val isPublic = isPubliclyListed(created)
@@ -142,6 +148,8 @@ class PostApplicationService(
                 published = published,
                 listed = listed,
                 contentHtml = contentHtml,
+                summary = summary,
+                summaryMode = summaryMode,
             )
 
         requestSlot.postId = createdPost.id
@@ -211,6 +219,8 @@ class PostApplicationService(
         listed: Boolean? = null,
         expectedVersion: Long,
         contentHtml: String? = null,
+        summary: String? = null,
+        summaryMode: PostSummaryMode? = null,
     ) {
         postHydrationService.hydratePostAttrs(post)
         val currentVersion = post.version ?: 0L
@@ -222,6 +232,10 @@ class PostApplicationService(
         val previousTitle = post.title
         val previousContent = post.content
         val previousContentHtml = post.contentHtml
+        val previousSummaryText = post.summaryText
+        val previousSummarySource = post.summarySource
+        val previousSummaryVersion = post.summaryAlgorithmVersion
+        val previousSummaryGeneratedAt = post.summaryGeneratedAt
         val wasPublic = isPubliclyListed(post)
         val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
         try {
@@ -232,6 +246,18 @@ class PostApplicationService(
                     HtmlContentSanitizer.sanitizeRichHtmlOrNull(contentHtml)
                 }
             post.modify(title, content, published, listed, sanitizedContentHtml)
+            post.applyResolvedSummary(
+                resolveModifiedSummary(
+                    title = title,
+                    content = content,
+                    submittedSummary = summary,
+                    requestedMode = summaryMode,
+                    existingText = previousSummaryText,
+                    existingSource = previousSummarySource,
+                    existingVersion = previousSummaryVersion,
+                    existingGeneratedAt = previousSummaryGeneratedAt,
+                ),
+            )
             postRepository.flush()
             postTagIndexService.syncMetaTagIndexAttr(post)
             if (wasTempDraft) {
@@ -253,6 +279,7 @@ class PostApplicationService(
         val contentChanged = previousContent != post.content
         val contentHtmlChanged = previousContentHtml != post.contentHtml
         val titleChanged = previousTitle != post.title
+        val summaryChanged = previousSummaryText != post.summaryText || previousSummarySource != post.summarySource
         val tagChanged = previousTags != afterTags
         val affectsPublicRead = wasPublic || isPublic
         publishPostWriteAfterCommitEvent(
@@ -271,10 +298,11 @@ class PostApplicationService(
                                 titleChanged = titleChanged,
                                 contentChanged = contentChanged || contentHtmlChanged,
                                 tagChanged = tagChanged,
+                                summaryChanged = summaryChanged,
                             ),
                         )
                     } else {
-                        PostReadCacheInvalidationScope.None
+                        PostReadCacheInvalidationScope.AdminPostListOnly
                     },
                 evictReason = "modify",
                 recommendationAction = recommendationActionFor(isPublic),
@@ -298,7 +326,10 @@ class PostApplicationService(
         published: Boolean,
         listed: Boolean,
         contentHtml: String?,
+        summary: String?,
+        summaryMode: PostSummaryMode?,
     ): Post {
+        val resolvedSummary = resolveCreatedSummary(title, content, summary, summaryMode)
         val post =
             Post(
                 0,
@@ -309,11 +340,93 @@ class PostApplicationService(
                 published,
                 listed,
                 HtmlContentSanitizer.sanitizeRichHtmlOrNull(contentHtml),
-            )
+            ).also { it.applyResolvedSummary(resolvedSummary) }
         val savedPost = postRepository.saveAndFlush(post)
         postTagIndexService.syncMetaTagIndexAttr(savedPost)
         postCounterService.incrementMemberPostsCount(persistenceAuthor)
         return savedPost
+    }
+
+    private fun resolveCreatedSummary(
+        title: String,
+        content: String,
+        submittedSummary: String?,
+        requestedMode: PostSummaryMode?,
+    ): PostSummaryResolver.ResolvedPostSummary {
+        val mode = requestedMode ?: if (submittedSummary.isNullOrBlank()) PostSummaryMode.AUTO else PostSummaryMode.MANUAL
+        requireManualSummary(mode, submittedSummary)
+        return PostSummaryResolver.resolveForCreate(
+            title = title,
+            content = content,
+            submittedSummary = submittedSummary.takeIf { mode == PostSummaryMode.MANUAL },
+        )
+    }
+
+    private fun resolveModifiedSummary(
+        title: String,
+        content: String,
+        submittedSummary: String?,
+        requestedMode: PostSummaryMode?,
+        existingText: String?,
+        existingSource: PostSummarySource,
+        existingVersion: String?,
+        existingGeneratedAt: java.time.Instant?,
+    ): PostSummaryResolver.ResolvedPostSummary {
+        val mode =
+            requestedMode
+                ?: when {
+                    submittedSummary == null -> null
+                    submittedSummary.isBlank() -> PostSummaryMode.AUTO
+                    else -> PostSummaryMode.MANUAL
+                }
+        requireManualSummary(mode, submittedSummary)
+
+        if (mode == PostSummaryMode.AUTO) {
+            return PostSummaryResolver.resolveAutomatic(title, content)
+        }
+        if (mode == PostSummaryMode.MANUAL) {
+            return PostSummaryResolver.resolveForCreate(title, content, submittedSummary)
+        }
+        if (existingSource == PostSummarySource.MIGRATED && !existingText.isNullOrBlank()) {
+            return PostSummaryResolver
+                .resolveForModify(
+                    title = title,
+                    content = content,
+                    submittedSummary = null,
+                    existingText = existingText,
+                    existingSource = PostSummarySource.MANUAL,
+                ).copy(
+                    source = PostSummarySource.MIGRATED,
+                    algorithmVersion = existingVersion ?: "legacy-frontmatter-v1",
+                    generatedAt = existingGeneratedAt,
+                )
+        }
+        return PostSummaryResolver.resolveForModify(
+            title = title,
+            content = content,
+            submittedSummary = null,
+            existingText = existingText,
+            existingSource = existingSource,
+        )
+    }
+
+    private fun requireManualSummary(
+        mode: PostSummaryMode?,
+        summary: String?,
+    ) {
+        if (mode == PostSummaryMode.MANUAL && summary.isNullOrBlank()) {
+            throw AppException(ErrorCode.BAD_REQUEST, "MANUAL 요약은 비워둘 수 없습니다.")
+        }
+    }
+
+    private fun Post.applyResolvedSummary(resolved: PostSummaryResolver.ResolvedPostSummary) {
+        updateCanonicalSummary(
+            text = resolved.text,
+            source = resolved.source,
+            contentHash = resolved.contentHash,
+            algorithmVersion = resolved.algorithmVersion,
+            generatedAt = resolved.generatedAt,
+        )
     }
 
     private fun createIdempotencyRequestSlot(
@@ -935,12 +1048,14 @@ class PostApplicationService(
         titleChanged: Boolean,
         contentChanged: Boolean,
         tagChanged: Boolean,
+        summaryChanged: Boolean,
     ): Set<PostPublicChangeImpact> =
         buildSet {
             if (listingVisibilityChanged) add(PostPublicChangeImpact.LISTING_VISIBILITY)
             if (titleChanged) add(PostPublicChangeImpact.TITLE)
             if (contentChanged) add(PostPublicChangeImpact.CONTENT)
             if (tagChanged) add(PostPublicChangeImpact.TAG)
+            if (summaryChanged) add(PostPublicChangeImpact.SUMMARY)
         }
 
     private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed

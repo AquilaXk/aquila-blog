@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.model.PostSummarySource
 import java.time.Instant
 
 data class PostWithContentDto(
@@ -25,6 +26,8 @@ data class PostWithContentDto(
     var actorHasLiked: Boolean = false,
     var actorCanModify: Boolean = false,
     var actorCanDelete: Boolean = false,
+    val summary: String = "",
+    val summarySource: PostSummarySource = PostSummarySource.NONE,
 ) {
     constructor(post: Post) : this(
         post.id,
@@ -45,5 +48,7 @@ data class PostWithContentDto(
         post.likesCount,
         post.commentsCount,
         post.hitCount,
+        summary = post.summaryText.orEmpty(),
+        summarySource = post.summarySource,
     )
 }

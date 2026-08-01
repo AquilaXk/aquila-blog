@@ -8,19 +8,40 @@ import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class PostUseCaseAdapter(
     private val postApplicationService: PostApplicationService,
     private val postLikeConflictResolver: PostLikeConflictResolver,
+    private val postSummaryBackfillService: PostSummaryBackfillService,
 ) : PostUseCase {
     override fun count(): Long = postApplicationService.count()
 
     override fun randomSecureTip(): String = postApplicationService.randomSecureTip()
 
+    override fun previewSummary(
+        title: String,
+        content: String,
+    ): PostUseCase.SummaryPreviewResult =
+        PostSummaryResolver.resolveAutomatic(title, content).let {
+            PostUseCase.SummaryPreviewResult(it.text, it.source, it.contentHash, it.algorithmVersion)
+        }
+
+    override fun backfillSummaries(
+        afterId: Long,
+        limit: Int,
+        dryRun: Boolean,
+    ): PostUseCase.SummaryBackfillResult =
+        postSummaryBackfillService.backfillBatch(afterId, limit, dryRun).let {
+            PostUseCase.SummaryBackfillResult(it.scanned, it.updated, it.skipped, it.nextAfterId, it.hasMore, it.dryRun)
+        }
+
+    @Transactional
     override fun write(
         author: Member,
         title: String,
@@ -29,7 +50,20 @@ class PostUseCaseAdapter(
         listed: Boolean,
         idempotencyKey: String?,
         contentHtml: String?,
-    ): Post = postApplicationService.write(author, title, content, published, listed, idempotencyKey, contentHtml)
+        summary: String?,
+        summaryMode: PostSummaryMode?,
+    ): Post =
+        postApplicationService.write(
+            author,
+            title,
+            content,
+            published,
+            listed,
+            idempotencyKey,
+            contentHtml,
+            summary,
+            summaryMode,
+        )
 
     override fun findById(id: Long): Post? = postApplicationService.findById(id)
 
@@ -40,6 +74,7 @@ class PostUseCaseAdapter(
 
     override fun findLatest(): Post? = postApplicationService.findLatest()
 
+    @Transactional
     override fun modify(
         actor: Member,
         post: Post,
@@ -49,7 +84,22 @@ class PostUseCaseAdapter(
         listed: Boolean?,
         expectedVersion: Long,
         contentHtml: String?,
-    ) = postApplicationService.modify(actor, post, title, content, published, listed, expectedVersion, contentHtml)
+        summary: String?,
+        summaryMode: PostSummaryMode?,
+    ) {
+        postApplicationService.modify(
+            actor,
+            post,
+            title,
+            content,
+            published,
+            listed,
+            expectedVersion,
+            contentHtml,
+            summary,
+            summaryMode,
+        )
+    }
 
     override fun delete(
         post: Post,

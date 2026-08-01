@@ -38,6 +38,144 @@ const longMarkdownDraft = [
   "> quote at the bottom",
 ].join("\n")
 
+const scrollSyncImagePath = "/e2e-scroll-sync-shot.png"
+const scrollSyncSectionCount = 64
+const scrollSyncCheckpoints = [1, 16, 32, 48, 64]
+const scrollSyncAlignmentTolerancePx = 48
+
+/**
+ * heading·문단·코드 펜스·인용·표·이미지·Mermaid가 섞이고 마지막에 heading 없는 tail 문단이 이어지는
+ * fixture. 모든 줄은 split pane에서 줄바꿈되지 않도록 짧게 유지해 source heading 위치를
+ * `paddingTop + lineIndex * lineHeight`로 정확히 계산할 수 있게 한다.
+ */
+const buildScrollSyncMarkdown = (sectionCount = scrollSyncSectionCount) => {
+  const sections = Array.from({ length: sectionCount }, (_, index) => {
+    const section = index + 1
+    const blocks = [
+      `## Section ${section}`,
+      "",
+      `paragraph body for section ${section}`,
+      "",
+      "```ts",
+      `const section${section} = ${section}`,
+      "```",
+      "",
+      `> quoted note for section ${section}`,
+      "",
+      "| col a | col b |",
+      "| --- | --- |",
+      `| v ${section} | r ${section} |`,
+      "",
+    ]
+    if (section % 16 === 3) blocks.push(`![shot ${section}](${scrollSyncImagePath})`, "")
+    if (section % 16 === 5) {
+      blocks.push("```mermaid", "graph TD;", `  A${section} --> B${section};`, "```", "")
+    }
+    return blocks.join("\n")
+  })
+  const tail = Array.from({ length: 40 }, (_, index) => `tail paragraph ${index + 1}`).join("\n\n")
+
+  return `${sections.join("\n")}\n\n${tail}\n`
+}
+
+const routeScrollSyncImage = async (page: Page) => {
+  await page.route(`**${scrollSyncImagePath}`, async (route) => {
+    await route.fulfill({ contentType: "image/png", body: onePixelPng })
+  })
+}
+
+const readSectionAlignmentError = (page: Page, section: number, headingPrefix = "Section") =>
+  page.evaluate(({ targetSection, prefix }) => {
+    const writePane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-write-pane']")
+    const textarea = writePane?.querySelector<HTMLTextAreaElement>("textarea")
+    const preview = document.querySelector<HTMLElement>("[data-testid='markdown-editor-preview-pane']")
+    if (!writePane || !textarea || !preview) throw new Error("split pane elements not found")
+
+    const marker = `## ${prefix} ${targetSection}\n`
+    const markerIndex = textarea.value.indexOf(marker)
+    if (markerIndex < 0) throw new Error(`${marker.trim()} source marker not found`)
+
+    const style = window.getComputedStyle(textarea)
+    const lineHeight = Number.parseFloat(style.lineHeight)
+    const paddingTop = Number.parseFloat(style.paddingTop)
+    const lineIndex = textarea.value.slice(0, markerIndex).split("\n").length - 1
+    const writeHeadingTop =
+      textarea.getBoundingClientRect().top -
+      writePane.getBoundingClientRect().top +
+      paddingTop +
+      lineIndex * lineHeight -
+      textarea.scrollTop
+
+    const previewHeading = Array.from(preview.querySelectorAll<HTMLElement>(".aq-markdown h2")).find(
+      (candidate) => candidate.textContent?.trim() === `${prefix} ${targetSection}`
+    )
+    if (!previewHeading) throw new Error(`${prefix} ${targetSection} preview heading not found`)
+    const previewHeadingTop =
+      previewHeading.getBoundingClientRect().top - preview.getBoundingClientRect().top
+
+    return Math.abs(writeHeadingTop - previewHeadingTop)
+  }, { targetSection: section, prefix: headingPrefix })
+
+const scrollWriteToSection = (page: Page, section: number, headingPrefix = "Section") =>
+  page.evaluate(({ targetSection, prefix }) => {
+    const textarea = document.querySelector<HTMLTextAreaElement>(
+      "[data-testid='markdown-editor-write-pane'] textarea"
+    )
+    if (!textarea) throw new Error("write textarea not found")
+
+    const marker = `## ${prefix} ${targetSection}\n`
+    const markerIndex = textarea.value.indexOf(marker)
+    if (markerIndex < 0) throw new Error(`${marker.trim()} source marker not found`)
+
+    const style = window.getComputedStyle(textarea)
+    const lineHeight = Number.parseFloat(style.lineHeight)
+    const paddingTop = Number.parseFloat(style.paddingTop)
+    const lineIndex = textarea.value.slice(0, markerIndex).split("\n").length - 1
+    const maxScrollTop = Math.max(0, textarea.scrollHeight - textarea.clientHeight)
+    textarea.scrollTop = Math.max(
+      0,
+      Math.min(paddingTop + lineIndex * lineHeight - textarea.clientHeight * 0.25, maxScrollTop)
+    )
+    textarea.dispatchEvent(new Event("scroll", { bubbles: true }))
+  }, { targetSection: section, prefix: headingPrefix })
+
+const scrollPreviewToSection = (page: Page, section: number, headingPrefix = "Section") =>
+  page.evaluate(({ targetSection, prefix }) => {
+    const preview = document.querySelector<HTMLElement>("[data-testid='markdown-editor-preview-pane']")
+    if (!preview) throw new Error("preview pane not found")
+
+    const heading = Array.from(preview.querySelectorAll<HTMLElement>(".aq-markdown h2")).find(
+      (candidate) => candidate.textContent?.trim() === `${prefix} ${targetSection}`
+    )
+    if (!heading) throw new Error(`${prefix} ${targetSection} preview heading not found`)
+
+    const headingTop =
+      heading.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
+    const maxScrollTop = Math.max(0, preview.scrollHeight - preview.clientHeight)
+    preview.scrollTop = Math.max(0, Math.min(headingTop - preview.clientHeight * 0.25, maxScrollTop))
+    preview.dispatchEvent(new Event("scroll", { bubbles: true }))
+  }, { targetSection: section, prefix: headingPrefix })
+
+const expectBidirectionalHeadingAlignment = async (page: Page, checkpoints = scrollSyncCheckpoints) => {
+  for (const section of checkpoints) {
+    await scrollWriteToSection(page, section)
+    await expect
+      .poll(() => readSectionAlignmentError(page, section), {
+        message: `write Section ${section} should align with the same preview heading`,
+      })
+      .toBeLessThanOrEqual(scrollSyncAlignmentTolerancePx)
+  }
+
+  for (const section of [...checkpoints].reverse()) {
+    await scrollPreviewToSection(page, section)
+    await expect
+      .poll(() => readSectionAlignmentError(page, section), {
+        message: `preview Section ${section} should align with the same source heading`,
+      })
+      .toBeLessThanOrEqual(scrollSyncAlignmentTolerancePx)
+  }
+}
+
 const fulfillJson = async (route: Route, data: unknown) => {
   await route.fulfill({
     contentType: "application/json",
@@ -88,6 +226,25 @@ const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft
     },
     { storageKey: localDraftStorageKey, content: markdown, title }
   )
+}
+
+const routeEditorPost = async (page: Page, postId: number, markdown: string) => {
+  const post = {
+    id: postId,
+    title: "Markdown 수정 테스트",
+    content: markdown,
+    published: false,
+    listed: false,
+    tempDraft: false,
+    version: 1,
+  }
+
+  await page.route(`**/post/api/v1/adm/posts/${postId}`, async (route) => {
+    await fulfillJson(route, post)
+  })
+  await page.route(`**/post/api/v1/posts/${postId}`, async (route) => {
+    await fulfillJson(route, { content: markdown, contentHtml: null })
+  })
 }
 
 test.describe("Markdown editor replacement", () => {
@@ -272,14 +429,17 @@ test.describe("Markdown editor replacement", () => {
     await expect(preview.getByText("quote at the bottom")).toBeVisible()
   })
 
-  test("split preview reserves the V4 public preview header before body content", async ({ page }) => {
+  test("split preview aligns the Markdown body and keeps the public header for Preview mode", async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 })
     await routeAuthenticatedEditor(page, "ㄷㄷㄷ")
 
     await page.goto("/editor/new?source=local-draft")
 
-    await expect(page.getByTestId("markdown-editor-write-pane").locator("textarea")).toBeVisible()
-    await expect(page.getByTestId("markdown-editor-preview-pane").getByText("ㄷㄷㄷ")).toBeVisible()
+    const writePane = page.getByTestId("markdown-editor-write-pane")
+    const previewPane = page.getByTestId("markdown-editor-preview-pane")
+    await expect(writePane.locator("textarea")).toBeVisible()
+    await expect(previewPane.getByText("ㄷㄷㄷ")).toBeVisible()
+    await expect(previewPane.getByText("Public preview", { exact: true })).toBeHidden()
 
     const startPointContract = await page.evaluate(() => {
       const writePane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-write-pane']")
@@ -305,7 +465,45 @@ test.describe("Markdown editor replacement", () => {
     })
 
     expect(Math.abs(startPointContract.writeStartLeft - startPointContract.previewStartLeft)).toBeLessThanOrEqual(12)
-    expect(startPointContract.previewStartTop).toBeGreaterThan(startPointContract.writeStartTop + 160)
+    expect(Math.abs(startPointContract.writeStartTop - startPointContract.previewStartTop)).toBeLessThanOrEqual(12)
+
+    await page.getByRole("tab", { name: "Preview" }).click()
+    await expect(page.getByTestId("markdown-editor-write-pane")).toHaveCount(0)
+    await expect(previewPane.getByText("Public preview", { exact: true })).toBeVisible()
+    await expect(previewPane.getByRole("heading", { name: "Markdown 작성 테스트", exact: true })).toBeVisible()
+    await expect(previewPane.getByText("Markdown split editor test", { exact: true })).toBeVisible()
+    await expect
+      .poll(() => previewPane.evaluate((element) => element.scrollTop), {
+        message: "Preview-only mode should restore the public header origin",
+      })
+      .toBeLessThanOrEqual(1)
+  })
+
+  test("preview mode keeps the public reading padding of the full public preview", async ({ page }) => {
+    await routeAuthenticatedEditor(page)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    await page.getByRole("tab", { name: "Preview" }).click()
+    await expect(page.getByTestId("markdown-editor-write-pane")).toHaveCount(0)
+
+    const previewOnlyContract = await page
+      .getByTestId("markdown-editor-preview-pane")
+      .locator("article")
+      .evaluate((article) => {
+        const style = window.getComputedStyle(article)
+        return {
+          paddingTop: style.paddingTop,
+          paddingRight: style.paddingRight,
+          paddingBottom: style.paddingBottom,
+          paddingLeft: style.paddingLeft,
+        }
+      })
+
+    expect(previewOnlyContract.paddingTop).toBe("48px")
+    expect(previewOnlyContract.paddingRight).toBe("44px")
+    expect(previewOnlyContract.paddingBottom).toBe("110px")
+    expect(previewOnlyContract.paddingLeft).toBe("44px")
   })
 
   test("dedicated editor exposes V4 full-screen chrome around the editor", async ({ page }) => {
@@ -649,8 +847,8 @@ test.describe("Markdown editor replacement", () => {
     })
 
     expect(previewContract.articleBackground).not.toBe("rgb(13, 17, 23)")
-    expect(previewContract.paddingLeft).toBe("44px")
-    expect(previewContract.paddingRight).toBe("44px")
+    expect(previewContract.paddingLeft).toBe("32px")
+    expect(previewContract.paddingRight).toBe("32px")
     expect(previewContract.marginTop).toBe("0px")
     expect(previewContract.maxWidth).toBe("760px")
     expect(previewContract.fontSize).toBe("17px")
@@ -689,61 +887,313 @@ test.describe("Markdown editor replacement", () => {
     expect(previewContract.renderedWidth).toBeLessThanOrEqual(728)
   })
 
-  test("split panes keep write and preview scroll positions synchronized", async ({ page }) => {
-    const longMarkdown = Array.from({ length: 64 }, (_, index) => [
-      `## Section ${index + 1}`,
-      "",
-      `긴 글 작성 위치와 미리보기 위치가 함께 움직여야 합니다. paragraph ${index + 1}`,
-      "",
-      "| Column 1 | Column 2 |",
-      "| --- | --- |",
-      `| Value ${index + 1} | Result ${index + 1} |`,
-      "",
-    ].join("\n")).join("\n")
+  test("split panes keep matching headings aligned in both scroll directions", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await routeScrollSyncImage(page)
+    await routeAuthenticatedEditor(page, buildScrollSyncMarkdown())
 
-    await routeAuthenticatedEditor(page, longMarkdown)
+    await page.goto("/editor/new?source=local-draft")
+
+    await expect(page.getByTestId("markdown-editor-write-pane").locator("textarea")).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
+    await expect(
+      page.getByTestId("markdown-editor-preview-pane").getByRole("heading", { name: "Section 64", exact: true })
+    ).toBeAttached()
+
+    await expectBidirectionalHeadingAlignment(page)
+  })
+
+  test("split panes keep matching headings aligned on the 1440x900 desktop layout", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await routeScrollSyncImage(page)
+    await routeAuthenticatedEditor(page, buildScrollSyncMarkdown())
+
+    await page.goto("/editor/new?source=local-draft")
+
+    await expect(page.getByTestId("markdown-editor-write-pane").locator("textarea")).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
+
+    await expectBidirectionalHeadingAlignment(page)
+  })
+
+  test("1024px stacked split keeps the write and preview body baseline aligned", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 900 })
+    await routeAuthenticatedEditor(page, "ㄷㄷㄷ")
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const writePane = page.getByTestId("markdown-editor-write-pane")
+    const previewPane = page.getByTestId("markdown-editor-preview-pane")
+    await expect(writePane.locator("textarea")).toBeVisible()
+    await expect(previewPane.getByText("ㄷㄷㄷ")).toBeVisible()
+    await expect(previewPane.getByText("Public preview", { exact: true })).toBeHidden()
+
+    const readStackedContract = () =>
+      page.evaluate(() => {
+        const writePane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-write-pane']")
+        const previewPane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-preview-pane']")
+        const textarea = writePane?.querySelector<HTMLTextAreaElement>("textarea")
+        const firstPreviewBlock = previewPane?.querySelector<HTMLElement>(".aq-markdown > :first-child")
+        if (!writePane || !previewPane || !textarea || !firstPreviewBlock) {
+          throw new Error("markdown split pane elements not found")
+        }
+
+        const writePaneRect = writePane.getBoundingClientRect()
+        const previewPaneRect = previewPane.getBoundingClientRect()
+        const textareaRect = textarea.getBoundingClientRect()
+        const textareaStyle = window.getComputedStyle(textarea)
+        const firstPreviewBlockRect = firstPreviewBlock.getBoundingClientRect()
+
+        return {
+          stacked: previewPaneRect.top >= writePaneRect.bottom - 1,
+          writeStartLeft: textareaRect.left + Number.parseFloat(textareaStyle.paddingLeft) - writePaneRect.left,
+          writeStartTop: textareaRect.top + Number.parseFloat(textareaStyle.paddingTop) - writePaneRect.top,
+          previewStartLeft: firstPreviewBlockRect.left - previewPaneRect.left,
+          previewStartTop: firstPreviewBlockRect.top - previewPaneRect.top,
+        }
+      })
+
+    await expect
+      .poll(async () => {
+        const contract = await readStackedContract()
+        return Math.abs(contract.writeStartTop - contract.previewStartTop)
+      }, { message: "stacked split preview body should start with the Markdown source body" })
+      .toBeLessThanOrEqual(12)
+
+    const stackedContract = await readStackedContract()
+    expect(stackedContract.stacked).toBe(true)
+    // 가로 시작점은 preview의 760px readable width 정책(#792)에 따라 stacked 레이아웃에서 가운데 정렬된다.
+    // 이 이슈의 계약은 세로 본문 기준선이므로 pane 안에 본문이 들어오는지만 확인한다.
+    expect(stackedContract.previewStartLeft).toBeGreaterThanOrEqual(stackedContract.writeStartLeft)
+  })
+
+  test("/editor/[id] split keeps matching headings aligned in both scroll directions", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await routeScrollSyncImage(page)
+    await routeAuthenticatedEditor(page)
+    await routeEditorPost(page, 770, buildScrollSyncMarkdown())
+
+    await page.goto("/editor/770")
+
+    await expect(page.getByTestId("markdown-editor-write-pane").locator("textarea")).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
+    await expect(
+      page.getByTestId("markdown-editor-preview-pane").getByRole("heading", { name: "Section 64", exact: true })
+    ).toBeAttached()
+
+    await expectBidirectionalHeadingAlignment(page)
+  })
+
+  test("split scroll sync survives same-length heading edits", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await routeAuthenticatedEditor(page, buildScrollSyncMarkdown(32))
 
     await page.goto("/editor/new?source=local-draft")
 
     const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
-    const previewPane = page.getByTestId("markdown-editor-preview-pane")
-    const previewScroll = previewPane
     await expect(textarea).toBeVisible()
-    await expect(previewPane).toBeVisible()
-    await expect(previewScroll).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
 
-    const textareaScroll = await textarea.evaluate((element) => {
-      element.scrollTop = element.scrollHeight
-      element.dispatchEvent(new Event("scroll", { bubbles: true }))
+    await scrollWriteToSection(page, 24)
+    await expect
+      .poll(() => readSectionAlignmentError(page, 24), {
+        message: "preview should align the same heading before the rename",
+      })
+      .toBeLessThanOrEqual(scrollSyncAlignmentTolerancePx)
+
+    // 길이가 같은 heading으로 바꾸면 preview의 문자 수·heading 수·렌더 높이가 그대로라
+    // content revision 없이는 preview anchor cache가 옛 key를 계속 사용한다.
+    await textarea.evaluate((element: HTMLTextAreaElement) => {
+      const nextValue = element.value.replace(/## Section /g, "## Sectiom ")
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
+      if (!setValue) throw new Error("textarea value setter not found")
+      setValue.call(element, nextValue)
+      element.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    await expect(
+      page.getByTestId("markdown-editor-preview-pane").getByRole("heading", { name: "Sectiom 24", exact: true })
+    ).toBeAttached()
+
+    await scrollWriteToSection(page, 24, "Sectiom")
+    await expect
+      .poll(() => readSectionAlignmentError(page, 24, "Sectiom"), {
+        message: "preview anchors should be rebuilt after a same-length heading edit",
+      })
+      .toBeLessThanOrEqual(scrollSyncAlignmentTolerancePx)
+  })
+
+  test("split scroll sync measures wrapped source lines with the textarea content width", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const wrappedBody = "wrapmeasure".repeat(82)
+    const wrappedMarkdown = Array.from({ length: 24 }, (_, index) => [
+      `## Section ${index + 1}`,
+      "",
+      wrappedBody,
+      "",
+    ].join("\n")).join("\n")
+
+    await routeAuthenticatedEditor(page, wrappedMarkdown)
+
+    await page.goto("/editor/new?source=local-draft")
+
+    const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
+    await expect(textarea).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
+
+    const wrapMetrics = await textarea.evaluate((element: HTMLTextAreaElement) => {
+      const style = window.getComputedStyle(element)
+      const probe = document.createElement("span")
+      Object.assign(probe.style, {
+        position: "fixed",
+        left: "-100000px",
+        top: "0",
+        whiteSpace: "pre",
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        fontStyle: style.fontStyle,
+        letterSpacing: style.letterSpacing,
+      })
+      probe.textContent = "w".repeat(200)
+      document.body.append(probe)
+      const characterWidth = probe.getBoundingClientRect().width / 200
+      probe.remove()
+
+      const contentWidth =
+        element.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight)
+      const charactersPerLine = Math.floor(contentWidth / characterWidth)
+      const lineHeight = Number.parseFloat(style.lineHeight)
+      const visualLines = element.value
+        .split("\n")
+        .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0)
+
       return {
-        top: element.scrollTop,
-        max: element.scrollHeight - element.clientHeight,
+        longestLineLength: element.value.split("\n").reduce((longest, line) => Math.max(longest, line.length), 0),
+        charactersPerLine,
+        lineHeight,
+        predictedScrollHeight:
+          Number.parseFloat(style.paddingTop) + visualLines * lineHeight + Number.parseFloat(style.paddingBottom),
+        actualScrollHeight: element.scrollHeight,
       }
     })
-    expect(textareaScroll.max).toBeGreaterThan(0)
 
+    // fixture가 실제로 줄바꿈되는지, 그리고 ground truth 계산이 브라우저 레이아웃과 맞는지 먼저 고정한다.
+    expect(wrapMetrics.charactersPerLine).toBeLessThan(wrapMetrics.longestLineLength)
+    expect(Math.abs(wrapMetrics.predictedScrollHeight - wrapMetrics.actualScrollHeight)).toBeLessThanOrEqual(
+      wrapMetrics.lineHeight
+    )
+
+    const readWrappedAlignmentError = (section: number) =>
+      page.evaluate(({ targetSection, charactersPerLine }) => {
+        const writePane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-write-pane']")
+        const textareaElement = writePane?.querySelector<HTMLTextAreaElement>("textarea")
+        const preview = document.querySelector<HTMLElement>("[data-testid='markdown-editor-preview-pane']")
+        if (!writePane || !textareaElement || !preview) throw new Error("split pane elements not found")
+
+        const marker = `## Section ${targetSection}\n`
+        const markerIndex = textareaElement.value.indexOf(marker)
+        if (markerIndex < 0) throw new Error(`${marker.trim()} source marker not found`)
+
+        const style = window.getComputedStyle(textareaElement)
+        const lineHeight = Number.parseFloat(style.lineHeight)
+        const visualLineIndex = textareaElement.value
+          .slice(0, markerIndex)
+          .split("\n")
+          .slice(0, -1)
+          .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0)
+        const writeHeadingTop =
+          textareaElement.getBoundingClientRect().top -
+          writePane.getBoundingClientRect().top +
+          Number.parseFloat(style.paddingTop) +
+          visualLineIndex * lineHeight -
+          textareaElement.scrollTop
+
+        const previewHeading = Array.from(preview.querySelectorAll<HTMLElement>(".aq-markdown h2")).find(
+          (candidate) => candidate.textContent?.trim() === `Section ${targetSection}`
+        )
+        if (!previewHeading) throw new Error(`Section ${targetSection} preview heading not found`)
+
+        return Math.abs(
+          writeHeadingTop - (previewHeading.getBoundingClientRect().top - preview.getBoundingClientRect().top)
+        )
+      }, { targetSection: section, charactersPerLine: wrapMetrics.charactersPerLine })
+
+    const scrollWriteToWrappedSection = (section: number) =>
+      page.evaluate(({ targetSection, charactersPerLine }) => {
+        const element = document.querySelector<HTMLTextAreaElement>(
+          "[data-testid='markdown-editor-write-pane'] textarea"
+        )
+        if (!element) throw new Error("write textarea not found")
+
+        const marker = `## Section ${targetSection}\n`
+        const markerIndex = element.value.indexOf(marker)
+        if (markerIndex < 0) throw new Error(`${marker.trim()} source marker not found`)
+
+        const style = window.getComputedStyle(element)
+        const lineHeight = Number.parseFloat(style.lineHeight)
+        const visualLineIndex = element.value
+          .slice(0, markerIndex)
+          .split("\n")
+          .slice(0, -1)
+          .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / charactersPerLine)), 0)
+        const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
+        element.scrollTop = Math.max(
+          0,
+          Math.min(
+            Number.parseFloat(style.paddingTop) + visualLineIndex * lineHeight - element.clientHeight * 0.25,
+            maxScrollTop
+          )
+        )
+        element.dispatchEvent(new Event("scroll", { bubbles: true }))
+      }, { targetSection: section, charactersPerLine: wrapMetrics.charactersPerLine })
+
+    for (const section of [8, 16, 24]) {
+      await scrollWriteToWrappedSection(section)
+      await expect
+        .poll(() => readWrappedAlignmentError(section), {
+          message: `wrapped Section ${section} should align with the same preview heading`,
+        })
+        .toBeLessThanOrEqual(scrollSyncAlignmentTolerancePx)
+    }
+  })
+
+  test("split scroll sync realigns after asynchronous preview layout changes", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await routeAuthenticatedEditor(page, buildScrollSyncMarkdown(48))
+
+    await page.goto("/editor/new?source=local-draft")
+
+    await expect(page.getByTestId("markdown-editor-write-pane").locator("textarea")).toBeVisible()
+    await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
+
+    await scrollWriteToSection(page, 32)
     await expect
-      .poll(async () => previewScroll.evaluate((element) => element.scrollTop), {
-        message: "preview pane should follow write pane scrolling",
+      .poll(() => readSectionAlignmentError(page, 32), {
+        message: "preview should align the same heading before the async layout change",
       })
-      .toBeGreaterThan(0)
+      .toBeLessThanOrEqual(scrollSyncAlignmentTolerancePx)
 
-    const previewAtBottom = await previewScroll.evaluate((element) => ({
-      top: element.scrollTop,
-      max: element.scrollHeight - element.clientHeight,
-    }))
-    expect(previewAtBottom.max).toBeGreaterThan(0)
-
-    await previewScroll.evaluate((element) => {
-      element.scrollTop = 0
-      element.dispatchEvent(new Event("scroll", { bubbles: true }))
+    // 이미지 load·Mermaid 렌더처럼 스크롤 없이 preview 높이만 바뀌는 상황을 재현한다.
+    await page.addStyleTag({
+      content: "[data-testid='markdown-editor-preview-pane'] .aq-markdown h2 { margin-top: 140px; }",
     })
 
     await expect
-      .poll(async () => textarea.evaluate((element) => element.scrollTop), {
-        message: "write pane should follow preview pane scrolling",
+      .poll(() => readSectionAlignmentError(page, 32), {
+        message: "preview should realign after a layout change without any scroll event",
       })
-      .toBeLessThan(textareaScroll.top)
+      .toBeLessThanOrEqual(scrollSyncAlignmentTolerancePx)
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+
+    await expect
+      .poll(() => readSectionAlignmentError(page, 32), {
+        message: "preview should realign after a viewport resize without any scroll event",
+      })
+      .toBeLessThanOrEqual(scrollSyncAlignmentTolerancePx)
   })
 
   test("분할 미리보기 wheel은 내부 스크롤 가능 구간에서 미리보기를 먼저 스크롤한다", async ({ page }) => {
@@ -1059,9 +1509,13 @@ test.describe("Markdown editor replacement", () => {
     await expect(page.getByText("첨부 파일은 10MB 이하여야 합니다.")).toHaveCount(0)
     await expect(page.getByText(/첨부 파일 업로드 실패:/)).toHaveCount(0)
 
-    const editorText = await textarea.inputValue()
+    // uploadCalled는 요청 도착 시점이라 응답 반영 전에 true가 된다. 삽입 결과는 폴링으로 기다린다.
     const fileMarkdown = "[report.pdf](https://cdn.example.test/post-files/report.pdf)"
-    expect(editorText).toContain(fileMarkdown)
+    await expect
+      .poll(() => textarea.inputValue(), { message: "uploaded file markdown should be inserted at the caret" })
+      .toContain(fileMarkdown)
+
+    const editorText = await textarea.inputValue()
     expect(editorText.indexOf(fileMarkdown)).toBeLessThan(editorText.indexOf("omega"))
     await expect(page.getByTestId("markdown-editor-preview-pane").getByRole("link", { name: "report.pdf" })).toHaveAttribute(
       "href",

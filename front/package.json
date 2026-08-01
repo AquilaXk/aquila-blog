@@ -39,6 +39,7 @@
     "check:bundle-size": "node scripts/with-test-lock.mjs --resource front-verify --label bundle-size -- node scripts/check-bundle-size.mjs",
     "check:design-colors": "node --test scripts/check-design-colors.test.mjs && node scripts/check-design-colors.mjs",
     "check:refactor-boundaries": "node scripts/check-refactor-boundaries.mjs",
+    "check:runtime-image-payload": "node --test scripts/check-runtime-image-payload.test.mjs && node scripts/check-runtime-image-payload.mjs",
     "check:runtime-guard": "node scripts/compare-runtime-guard-metrics.mjs",
     "postbuild": "echo \"skip next-sitemap (handled by pages/sitemap.xml.tsx)\"",
     "lint": "next lint"

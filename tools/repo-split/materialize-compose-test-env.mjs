@@ -2,6 +2,8 @@
 import { chmodSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
+const RUNTIME_TARGET = "home-server-runtime"
+
 function usage() {
   return [
     "Usage: node tools/repo-split/materialize-compose-test-env.mjs \\",
@@ -36,26 +38,39 @@ function parseArgs(argv) {
   }
 }
 
+function collectTargetKeys(contract, targetName, visiting = new Set()) {
+  const target = contract.targets?.[targetName]
+  if (!target || !Array.isArray(target.keys)) {
+    throw new Error(`${targetName} deploy env contract is missing`)
+  }
+  if (visiting.has(targetName)) {
+    throw new Error(`deploy env contract inheritance cycle at ${targetName}`)
+  }
+
+  const nextVisiting = new Set(visiting)
+  nextVisiting.add(targetName)
+  const inherited = target.extends
+    ? collectTargetKeys(contract, target.extends, nextVisiting)
+    : []
+  return [...inherited, ...target.keys]
+}
+
 function materialize({ contract: contractPath, output, source }) {
   if (source === output) throw new Error("source and output must differ")
 
   const contract = JSON.parse(readFileSync(contractPath, "utf8"))
-  const target = contract.targets?.["home-server-source"]
-  if (!target || !Array.isArray(target.keys)) {
-    throw new Error("home-server-source deploy env contract is missing")
-  }
-
   const digest = "0".repeat(64)
-  const overrides = new Map([
-    ["BACK_IMAGE", "ghcr.io/aquilaxk/aquila-blog-back:sha-0000000"],
-  ])
-  for (const key of target.keys) {
+  const overrides = new Map()
+  for (const key of collectTargetKeys(contract, RUNTIME_TARGET)) {
     if (key?.kind !== "digest-image") continue
     if (typeof key.name !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(key.name)) {
       throw new Error("digest-image contract keys must use uppercase environment variable names")
     }
     const slug = key.name.toLowerCase().replaceAll("_", "-")
     overrides.set(key.name, `registry.invalid/aquila-standalone/${slug}@sha256:${digest}`)
+  }
+  if (overrides.size === 0) {
+    throw new Error(`${RUNTIME_TARGET} must define at least one digest-image key`)
   }
 
   const retained = readFileSync(source, "utf8")

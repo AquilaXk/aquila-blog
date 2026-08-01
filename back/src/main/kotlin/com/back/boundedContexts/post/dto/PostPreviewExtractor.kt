@@ -41,7 +41,10 @@ object PostPreviewExtractor {
 
     fun extract(content: String): Preview = buildPreview(content)
 
-    fun extractThumbnail(content: String): String? = extract(content).thumbnail
+    fun extractThumbnail(content: String): String? {
+        val metadata = parsePreviewMetadata(content)
+        return metadata.thumbnail ?: markdownImageRegex.find(metadata.body)?.groupValues?.getOrNull(1)
+    }
 
     fun makeSummary(content: String): String = extract(content).summary
 

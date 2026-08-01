@@ -34,25 +34,42 @@ class PostReadCacheInvalidationScopeTest {
             PostReadCacheInvalidationScope.PublicPostModified(
                 setOf(PostPublicChangeImpact.TAG),
             )
+        val summaryChange =
+            PostReadCacheInvalidationScope.PublicPostModified(
+                setOf(PostPublicChangeImpact.SUMMARY),
+            )
         val visibilityChange =
             PostReadCacheInvalidationScope.PublicPostModified(
                 setOf(PostPublicChangeImpact.LISTING_VISIBILITY),
             )
 
         assertThat(evictedTargets(noVisibleChange))
-            .containsExactly(PostReadCacheInvalidationTarget.HOT_READ_PAGES)
+            .containsExactlyInAnyOrder(
+                PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE,
+                PostReadCacheInvalidationTarget.HOT_READ_PAGES,
+            )
         assertThat(evictedTargets(titleChange))
             .containsExactlyInAnyOrder(
+                PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE,
                 PostReadCacheInvalidationTarget.HOT_READ_PAGES,
                 PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE,
                 PostReadCacheInvalidationTarget.DETAIL,
             )
         assertThat(evictedTargets(tagChange))
             .containsExactlyInAnyOrder(
+                PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE,
                 PostReadCacheInvalidationTarget.HOT_READ_PAGES,
                 PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE,
                 PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES,
                 PostReadCacheInvalidationTarget.PUBLIC_TAGS,
+            )
+        assertThat(evictedTargets(summaryChange))
+            .containsExactlyInAnyOrder(
+                PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE,
+                PostReadCacheInvalidationTarget.HOT_READ_PAGES,
+                PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE,
+                PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES,
+                PostReadCacheInvalidationTarget.DETAIL,
             )
         assertThat(evictedTargets(visibilityChange))
             .containsExactlyInAnyOrderElementsOf(PostReadCacheInvalidationTarget.entries)
@@ -64,6 +81,8 @@ class PostReadCacheInvalidationScopeTest {
         assertThat(evictedTargets(PostReadCacheInvalidationScope.None)).isEmpty()
         assertThat(evictedTargets(PostReadCacheInvalidationScope.DetailOnly))
             .containsExactly(PostReadCacheInvalidationTarget.DETAIL)
+        assertThat(evictedTargets(PostReadCacheInvalidationScope.AdminPostListOnly))
+            .containsExactly(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE)
     }
 
     private fun evictedTargets(scope: PostReadCacheInvalidationScope): List<PostReadCacheInvalidationTarget> =

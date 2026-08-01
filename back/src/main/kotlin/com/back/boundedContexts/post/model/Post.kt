@@ -86,6 +86,17 @@ class Post(
     @field:Basic(fetch = FetchType.LAZY)
     @field:Column(name = "content_html", columnDefinition = "TEXT")
     var contentHtml: String? = null,
+    @field:Column(name = "summary_text", columnDefinition = "TEXT")
+    var summaryText: String? = null,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "summary_source", nullable = false, length = 32)
+    var summarySource: PostSummarySource = PostSummarySource.NONE,
+    @field:Column(name = "summary_content_hash", length = 64)
+    var summaryContentHash: String? = null,
+    @field:Column(name = "summary_algorithm_version", length = 32)
+    var summaryAlgorithmVersion: String? = null,
+    @field:Column(name = "summary_generated_at")
+    var summaryGeneratedAt: Instant? = null,
 ) : BaseTime(id),
     PostHasHit,
     PostHasLikes,
@@ -122,5 +133,19 @@ class Post(
         published?.let { this.published = it }
         listed?.let { this.listed = it }
         if (!this.published) this.listed = false
+    }
+
+    fun updateCanonicalSummary(
+        text: String,
+        source: PostSummarySource,
+        contentHash: String,
+        algorithmVersion: String,
+        generatedAt: Instant?,
+    ) {
+        summaryText = text.takeIf { it.isNotBlank() }
+        summarySource = source
+        summaryContentHash = contentHash
+        summaryAlgorithmVersion = algorithmVersion
+        summaryGeneratedAt = generatedAt
     }
 }

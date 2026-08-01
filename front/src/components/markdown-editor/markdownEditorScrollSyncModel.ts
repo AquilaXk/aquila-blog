@@ -16,14 +16,40 @@ export type MarkdownHeading = {
 }
 
 const FENCE_OPEN_PATTERN = /^\s{0,3}(`{3,}|~{3,})/
-const ATX_HEADING_PATTERN = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/
+// CommonMark ATX closing sequence는 앞에 공백이 있어야 하므로 `## C#`의 `#`는 본문으로 남긴다.
+const ATX_HEADING_PATTERN = /^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$/
+
+/**
+ * `<`부터 대응하는 `>`(없으면 문자열 끝)까지 통째로 제거한다.
+ * 정규식 한 번으로 태그를 지우면 닫히지 않은 `<script` 같은 조각이 남을 수 있어
+ * 결과에 `<`가 하나도 남지 않도록 직접 순회한다.
+ */
+const stripInlineHtml = (value: string) => {
+  let result = ""
+  let index = 0
+
+  while (index < value.length) {
+    const character = value[index]
+    if (character !== "<") {
+      result += character
+      index += 1
+      continue
+    }
+
+    const closingIndex = value.indexOf(">", index + 1)
+    index = closingIndex === -1 ? value.length : closingIndex + 1
+  }
+
+  return result
+}
 
 const normalizeHeadingText = (value: string) =>
-  value
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/<[^>]+>/g, "")
+  stripInlineHtml(
+    value
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+  )
     .replace(/(\*\*|__|~~)(.*?)\1/g, "$2")
     .replace(/(^|[^*_])([*_])([^*_]+)\2(?=$|[^*_])/g, "$1$3")
     .replace(/\\([\\`*_[\]{}()#+.!>|~-])/g, "$1")
@@ -107,17 +133,36 @@ export const mapScrollFocusBetweenAnchors = ({
     }))
     .sort((left, right) => left.source - right.source)
 
-  const pairs = [
-    { source: normalizedSourceRange.start, target: normalizedTargetRange.start },
-    ...matched.filter(
+  // range 경계와 정확히 겹치는 anchor(예: 첫 heading이 preview 본문 시작과 같은 위치)도 버리지 않고,
+  // 단조 증가가 깨지는 anchor만 직전 항목에 흡수시킨다.
+  const pairs: Array<{ source: number; target: number }> = []
+  const appendPair = (pair: { source: number; target: number }) => {
+    const previous = pairs[pairs.length - 1]
+    if (!previous) {
+      pairs.push(pair)
+      return
+    }
+    if (pair.source <= previous.source || pair.target < previous.target) {
+      pairs[pairs.length - 1] = {
+        source: Math.max(previous.source, pair.source),
+        target: Math.max(previous.target, pair.target),
+      }
+      return
+    }
+    pairs.push(pair)
+  }
+
+  appendPair({ source: normalizedSourceRange.start, target: normalizedTargetRange.start })
+  matched
+    .filter(
       (pair) =>
-        pair.source > normalizedSourceRange.start &&
-        pair.source < normalizedSourceRange.end &&
-        pair.target > normalizedTargetRange.start &&
-        pair.target < normalizedTargetRange.end
-    ),
-    { source: normalizedSourceRange.end, target: normalizedTargetRange.end },
-  ]
+        pair.source >= normalizedSourceRange.start &&
+        pair.source <= normalizedSourceRange.end &&
+        pair.target >= normalizedTargetRange.start &&
+        pair.target <= normalizedTargetRange.end
+    )
+    .forEach(appendPair)
+  appendPair({ source: normalizedSourceRange.end, target: normalizedTargetRange.end })
 
   const focus = clamp(sourceFocus, normalizedSourceRange.start, normalizedSourceRange.end)
   let lower = pairs[0]

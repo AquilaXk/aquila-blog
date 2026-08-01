@@ -24,6 +24,28 @@ test("collectMarkdownHeadings ignores fenced code and gives duplicate headings s
   ])
 })
 
+test("collectMarkdownHeadings keeps trailing hash that is part of the heading text", () => {
+  const headings = collectMarkdownHeadings([
+    "## C#",
+    "",
+    "## F#",
+    "",
+    "## Heading ###",
+  ].join("\n"))
+
+  expect(headings.map(({ key, text }) => ({ key, text }))).toEqual([
+    { key: "2:C#:0", text: "C#" },
+    { key: "2:F#:0", text: "F#" },
+    { key: "2:Heading:0", text: "Heading" },
+  ])
+})
+
+test("collectMarkdownHeadings strips inline html without leaving an injectable tag prefix", () => {
+  const headings = collectMarkdownHeadings("## Alpha<x<script")
+
+  expect(headings.map(({ text }) => text)).toEqual(["Alpha"])
+})
+
 test("mapScrollFocusBetweenAnchors interpolates inside the matching heading interval", () => {
   const mapped = mapScrollFocusBetweenAnchors({
     sourceFocus: 500,
@@ -40,6 +62,24 @@ test("mapScrollFocusBetweenAnchors interpolates inside the matching heading inte
   })
 
   expect(mapped).toBe(900)
+})
+
+test("mapScrollFocusBetweenAnchors keeps the first anchor that lands on the target range start", () => {
+  const mapped = mapScrollFocusBetweenAnchors({
+    sourceFocus: 60,
+    sourceAnchors: [
+      { key: "2:A:0", position: 60 },
+      { key: "2:B:0", position: 400 },
+    ],
+    targetAnchors: [
+      { key: "2:A:0", position: 0 },
+      { key: "2:B:0", position: 800 },
+    ],
+    sourceRange: { start: 0, end: 1000 },
+    targetRange: { start: 0, end: 1600 },
+  })
+
+  expect(mapped).toBe(0)
 })
 
 test("mapScrollFocusBetweenAnchors falls back to body progress without headings", () => {

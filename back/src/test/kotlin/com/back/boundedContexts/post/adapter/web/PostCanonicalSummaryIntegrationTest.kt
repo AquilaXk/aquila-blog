@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.application.service.PostReadCacheInvalidationTarget
 import com.back.boundedContexts.post.application.service.PostSummaryResolver
 import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
@@ -8,16 +9,22 @@ import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
 import jakarta.persistence.EntityManager
 import org.assertj.core.api.Assertions.assertThat
+import org.hibernate.Session
+import org.junit.jupiter.api.RepeatedTest
+import org.junit.jupiter.api.RepetitionInfo
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous
+import org.springframework.test.web.servlet.ResultActionsDsl
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
 import tools.jackson.databind.ObjectMapper
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.Instant
 
@@ -34,6 +41,9 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var entityManager: EntityManager
+
+    @Autowired
+    private lateinit var redisConnectionFactory: RedisConnectionFactory
 
     @Test
     @WithUserDetails("admin@test.com")
@@ -167,6 +177,19 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
     @Test
     @WithUserDetails("admin@test.com")
     fun `idempotent backfill populates legacy summary without changing modified at`() {
+        runIdempotentBackfillScenario(trial = 0)
+    }
+
+    // TEMPORARY (issue #1533 진단): CI에서만 5~10% 재현되는 flaky의 결정적 증거를 얻기 위한 반복 실행.
+    // 원인 확정 후 제거한다.
+    @RepeatedTest(20)
+    @WithUserDetails("admin@test.com")
+    fun `flake1533 diagnostic repeated idempotent backfill`(repetitionInfo: RepetitionInfo) {
+        runIdempotentBackfillScenario(trial = repetitionInfo.currentRepetition)
+    }
+
+    @Suppress("LongMethod")
+    private fun runIdempotentBackfillScenario(trial: Int) {
         val created =
             mvc
                 .post("/post/api/v1/posts") {
@@ -201,8 +224,12 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
             postId,
         )
         entityManager.clear()
+        diagnose(trial, "01-after-reset", postId)
 
-        mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }.andExpect {
+        val firstGet = mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }
+        diagnoseResponse(trial, "02-get1", firstGet)
+        diagnose(trial, "03-after-get1", postId)
+        firstGet.andExpect {
             status { isOk() }
             jsonPath("$.summary") { value("") }
         }
@@ -230,6 +257,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 jsonPath("$.skipped") { value(0) }
                 jsonPath("$.nextAfterId") { value(postId) }
             }
+        diagnose(trial, "04-after-backfill", postId)
 
         val row =
             jdbcTemplate.queryForMap(
@@ -247,10 +275,21 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         assertThat(row["version"]).isNull()
 
         entityManager.flush()
-        taskFacade.fire(backfillTaskPayload(postId))
+        diagnose(trial, "05-after-flush", postId)
+        val payload = backfillTaskPayload(postId)
+        println(
+            "[flake1533] trial=$trial step=06-payload postId=${payload.postId} reason=${payload.evictReason} " +
+                "targets=${payload.cacheInvalidationTargets.map { it.name }.sorted()}",
+        )
+        taskFacade.fire(payload)
+        diagnose(trial, "07-after-fire", postId)
         entityManager.clear()
+        diagnose(trial, "08-after-clear", postId)
 
-        mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }.andExpect {
+        val secondGet = mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }
+        diagnoseResponse(trial, "09-get2", secondGet)
+        diagnose(trial, "10-after-get2", postId)
+        secondGet.andExpect {
             status { isOk() }
             jsonPath("$.summary") { value("이전 frontmatter 요약") }
             jsonPath("$.summarySource") { value("MIGRATED") }
@@ -439,6 +478,75 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
             }
     }
 
+    // TEMPORARY (issue #1533 진단): 단계별 DB row / Redis 상세 캐시 키 / 영속성 컨텍스트 상태를 stdout에 남긴다.
+    // assertion 성공 여부와 무관하게 항상 출력해야 CI artifact(system-out)에서 읽을 수 있다. 원인 확정 후 제거한다.
+    private fun diagnose(
+        trial: Int,
+        step: String,
+        postId: Long,
+    ) {
+        println(
+            "[flake1533] trial=$trial step=$step postId=$postId " +
+                "row=${diagnosePostRow(postId)} redis=${diagnoseDetailCacheKeys(postId)} pc=${diagnosePersistenceContext()}",
+        )
+    }
+
+    private fun diagnoseResponse(
+        trial: Int,
+        step: String,
+        actions: ResultActionsDsl,
+    ) {
+        val response = actions.andReturn().response
+        println(
+            "[flake1533] trial=$trial step=$step status=${response.status} etag=${response.getHeader("ETag")} " +
+                "body=${response.contentAsString.replace('\n', ' ').take(800)}",
+        )
+    }
+
+    private fun diagnosePostRow(postId: Long): String =
+        runCatching {
+            jdbcTemplate
+                .queryForList(
+                    """
+                    SELECT summary_text, summary_source, summary_algorithm_version, modified_at, version
+                    FROM post
+                    WHERE id = ?
+                    """.trimIndent(),
+                    postId,
+                ).firstOrNull()
+                ?.toString() ?: "absent"
+        }.getOrElse { "error(${it::class.simpleName}: ${it.message})" }
+
+    private fun diagnoseDetailCacheKeys(postId: Long): String =
+        runCatching {
+            redisConnectionFactory.connection.use { connection ->
+                val perKey =
+                    DETAIL_CACHE_NAMES.joinToString(",") { cacheName ->
+                        val key = "$cacheName::$postId".toByteArray(StandardCharsets.UTF_8)
+                        "$cacheName(exists=${connection.keyCommands().exists(key)},pttl=${connection.keyCommands().pTtl(key)})"
+                    }
+                val scanned =
+                    connection
+                        .keyCommands()
+                        .keys("post-detail-public-*".toByteArray(StandardCharsets.UTF_8))
+                        ?.map { String(it, StandardCharsets.UTF_8) }
+                        ?.sorted()
+                        .orEmpty()
+                "[$perKey] all=$scanned"
+            }
+        }.getOrElse { "error(${it::class.simpleName}: ${it.message})" }
+
+    private fun diagnosePersistenceContext(): String =
+        runCatching {
+            val statistics = entityManager.unwrap(Session::class.java).statistics
+            val postKeys =
+                statistics.entityKeys
+                    .map { entityKey -> entityKey.toString() }
+                    .filter { entityKey -> entityKey.contains("Post") }
+                    .sorted()
+            "joined=${entityManager.isJoinedToTransaction} entities=${statistics.entityCount} postKeys=$postKeys"
+        }.getOrElse { "error(${it::class.simpleName}: ${it.message})" }
+
     private fun backfillTaskPayload(postId: Long): PostWriteSideEffectPayload {
         val payloadJson =
             jdbcTemplate.queryForObject(
@@ -456,5 +564,16 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 postId,
             )
         return objectMapper.readValue(payloadJson, PostWriteSideEffectPayload::class.java)
+    }
+
+    private companion object {
+        // TEMPORARY (issue #1533 진단)
+        private val DETAIL_CACHE_NAMES =
+            listOf(
+                PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+                PostQueryCacheNames.DETAIL_PUBLIC_META,
+                PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+                PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
+            )
     }
 }

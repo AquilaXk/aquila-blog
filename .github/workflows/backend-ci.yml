@@ -11,7 +11,24 @@ permissions:
   pull-requests: write
 
 jobs:
+  dependabot-credential-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF}"
+          git checkout --force FETCH_HEAD
+
+      - name: Verify Dependabot test credential fallback
+        run: node --test tools/test/backend-ci-dependabot-credentials.test.mjs
+
   backend-ci:
+    needs: dependabot-credential-contract
     uses: ./.github/workflows/reusable-backend-quality.yml
     secrets:
       CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}

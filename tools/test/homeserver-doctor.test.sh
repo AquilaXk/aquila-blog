@@ -536,4 +536,80 @@ if [[ "${other_directive_wildcard_output}" == *"keeps frame-ancestors admin orig
   fail "expected a frame-ancestors allowlist without the admin origin not to be reported as healthy, got: ${other_directive_wildcard_output}"
 fi
 
+# Env Domain Consistency는 인증 쿠키가 상위 도메인으로 새는 오설정을 잡아야 한다.
+# 마지막 두 레이블만 비교하던 site_key()는 apex(aquilaxk.site)와 blog.aquilaxk.site를 같은
+# 값으로 축약해 바로 그 오설정을 WARN 없이 통과시켰다. 다시 들어오면 실패해야 한다.
+if grep -q '^site_key()' "${doctor}"; then
+  fail "doctor.sh still reduces hosts to the last two labels (site_key), which cannot tell an apex cookie domain apart from a subdomain one"
+fi
+
+eval "$(extract_function is_strict_subdomain_of)"
+if ! declare -F is_strict_subdomain_of >/dev/null; then
+  fail "expected doctor.sh to define is_strict_subdomain_of for the cookie scope check"
+fi
+
+if ! is_strict_subdomain_of "api.blog.aquilaxk.site" "blog.aquilaxk.site"; then
+  fail "expected api.blog.aquilaxk.site to be reported as strictly under blog.aquilaxk.site"
+fi
+for not_under in \
+  "api.aquilaxk.site blog.aquilaxk.site" \
+  "blog.aquilaxk.site blog.aquilaxk.site" \
+  "blog.aquilaxk.site.evil.example blog.aquilaxk.site" \
+  "www.aquilaxk.site blog.aquilaxk.site"; do
+  # shellcheck disable=SC2086  # 두 인자로 나눠 전달하려는 의도적 word splitting
+  if is_strict_subdomain_of ${not_under}; then
+    fail "expected '${not_under}' not to pass the strict subdomain check"
+  fi
+done
+
+# 실제 점검 블록도 apex 쿠키 도메인을 WARN으로 보고해야 한다.
+env_domain_consistency_block="$(
+  awk '
+    /^print_section "Env Domain Consistency"$/ { capture = 1; next }
+    /^print_section "Grafana Embed Route"$/ { capture = 0 }
+    capture { print }
+  ' "${doctor}"
+)"
+if [ -z "${env_domain_consistency_block}" ]; then
+  fail "could not extract the Env Domain Consistency block from doctor.sh"
+fi
+
+run_env_domain_consistency() {
+  local cookie="$1" front="$2" back="$3" api="$4"
+  (
+    set -uo pipefail
+    trim_quotes() { printf '%s' "$1"; }
+    env_value() {
+      case "$1" in
+        CUSTOM_PROD_COOKIEDOMAIN) printf '%s' "${cookie}" ;;
+        CUSTOM_PROD_FRONTURL) printf '%s' "${front}" ;;
+        CUSTOM_PROD_BACKURL) printf '%s' "${back}" ;;
+        API_DOMAIN) printf '%s' "${api}" ;;
+        *) printf '' ;;
+      esac
+    }
+    eval "$(extract_function extract_host)"
+    eval "$(extract_function is_strict_subdomain_of)"
+    eval "${env_domain_consistency_block}"
+  )
+}
+
+healthy_domain_output="$(run_env_domain_consistency \
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.blog.aquilaxk.site" "api.blog.aquilaxk.site")"
+if [[ "${healthy_domain_output}" == *"WARN:"* ]]; then
+  fail "expected the blog domain contract to produce no domain WARN, got: ${healthy_domain_output}"
+fi
+
+apex_cookie_output="$(run_env_domain_consistency \
+  "aquilaxk.site" "https://blog.aquilaxk.site" "https://api.blog.aquilaxk.site" "api.blog.aquilaxk.site")"
+if [[ "${apex_cookie_output}" != *"COOKIEDOMAIN must equal FRONTURL host"* ]]; then
+  fail "expected an apex cookie domain to be reported as wider than the front host, got: ${apex_cookie_output}"
+fi
+
+sibling_api_output="$(run_env_domain_consistency \
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.aquilaxk.site" "api.aquilaxk.site")"
+if [[ "${sibling_api_output}" != *"BACKURL host must sit strictly under COOKIEDOMAIN"* ]]; then
+  fail "expected a sibling API host to be reported as outside the cookie domain subtree, got: ${sibling_api_output}"
+fi
+
 echo "[test] homeserver doctor checkup rules passed"

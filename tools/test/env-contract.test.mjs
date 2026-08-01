@@ -155,11 +155,11 @@ const targetKeyNames = (contract, targetName) => {
 }
 
 const baseHomeServerEnv = [
-  "API_DOMAIN=api.aquilaxk.site",
+  "API_DOMAIN=api.blog.aquilaxk.site",
   "MONITOR_DOMAIN=status.aquilaxk.site",
   "GRAFANA_DOMAIN=grafana.aquilaxk.site",
   "PROMETHEUS_DOMAIN=prometheus.aquilaxk.site",
-  "ADMIN_EMBED_ORIGINS=https://www.aquilaxk.site https://aquilaxk.site",
+  "ADMIN_EMBED_ORIGINS=https://blog.aquilaxk.site",
   "CADDY_EMAIL=ops@aquilaxk.site",
   "CF_TUNNEL_TOKEN=cloudflare-tunnel-token-value",
   "CLOUDFLARED_IMAGE=cloudflare/cloudflared@sha256:4444444444444444444444444444444444444444444444444444444444444444",
@@ -206,12 +206,12 @@ const baseHomeServerEnv = [
   "CUSTOM__ADMIN__USERNAME=관리자",
   "CUSTOM__ADMIN__EMAIL=admin@aquilaxk.site",
   "CUSTOM__ADMIN__PASSWORD=valid-admin-password",
-  "CUSTOM_PROD_COOKIEDOMAIN=aquilaxk.site",
-  "CUSTOM_PROD_FRONTURL=https://www.aquilaxk.site",
-  "CUSTOM_PROD_BACKURL=https://api.aquilaxk.site",
+  "CUSTOM_PROD_COOKIEDOMAIN=blog.aquilaxk.site",
+  "CUSTOM_PROD_FRONTURL=https://blog.aquilaxk.site",
+  "CUSTOM_PROD_BACKURL=https://api.blog.aquilaxk.site",
   "CUSTOM_PROD_DBNAME=blog_prod",
   "CUSTOM_PROD_REDISDATABASE=0",
-  "CUSTOM__REVALIDATE__URL=https://www.aquilaxk.site/api/revalidate",
+  "CUSTOM__REVALIDATE__URL=https://blog.aquilaxk.site/api/revalidate",
   "CUSTOM__REVALIDATE__TOKEN=valid-revalidate-token",
   "CUSTOM__AI__SUMMARY__ENABLED=false",
   "CUSTOM__AI__SUMMARY__GEMINI__MODEL=gemini-2.5-flash",
@@ -328,6 +328,27 @@ test("Caddy routes tokenized cloud external content through public read upstream
   assert(logSkipIndex < publicReadMatcherIndex, "cloud external-content log_skip must be declared before routing")
   assert(externalContentIndex < readProxyIndex, "cloud external-content route must be matched before read proxy handling")
   assert(readProxyIndex < adminMatcherIndex, "public read proxy must be declared before admin API matcher")
+})
+
+test("Caddy edge CORS allows the public web origin only", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const apiBlock = extractCaddySiteBlock(caddyfile, "http://{$API_DOMAIN}")
+
+  assert.notEqual(apiBlock, "", "API domain site block must be extractable")
+
+  const originMatchers = [...apiBlock.matchAll(/header_regexp Origin Origin (\S+)/g)].map((match) => match[1])
+  assert.equal(originMatchers.length, 2, "both @corsAllowed and @corsPreflight must match the Origin header")
+
+  for (const pattern of originMatchers) {
+    const originPattern = new RegExp(pattern)
+    // 전환 후 실제 front origin이 매치돼야 edge CORS가 살아 있다.
+    assert(originPattern.test("https://blog.aquilaxk.site"), `edge CORS must allow the public web origin: ${pattern}`)
+    // apex와 www는 타 서비스 소유다. 매치되면 우리 API가 그쪽에 열린다.
+    assert(!originPattern.test("https://aquilaxk.site"), `edge CORS must not allow the apex origin: ${pattern}`)
+    assert(!originPattern.test("https://www.aquilaxk.site"), `edge CORS must not allow the www origin: ${pattern}`)
+    assert(!originPattern.test("https://www.blog.aquilaxk.site"), `edge CORS must not allow a www.blog origin: ${pattern}`)
+    assert(!originPattern.test("https://blog.aquilaxk.site.evil.example"), `edge CORS must anchor the origin: ${pattern}`)
+  }
 })
 
 test("Caddy request_header hop deletions use single-line syntax", () => {
@@ -1064,6 +1085,81 @@ test("external backup root must stay strictly inside the default or configured s
   assert(privacyGateInsideDefaultBackupRootResult.errors.some((error) => error.key === "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT"))
 })
 
+const PRE_TRANSITION_DOMAIN_ENV = [
+  ["API_DOMAIN", "api.aquilaxk.site"],
+  ["CUSTOM_PROD_COOKIEDOMAIN", "aquilaxk.site"],
+  ["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"],
+  ["CUSTOM_PROD_BACKURL", "https://api.aquilaxk.site"],
+]
+
+const withEnvKeys = (text, pairs) =>
+  pairs.reduce(
+    (accumulated, [key, value]) => accumulated.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${value}`),
+    text,
+  )
+
+test("cookie scope check rejects a cookie domain wider than the front host", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_COOKIEDOMAIN", "aquilaxk.site"]])
+
+  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_COOKIEDOMAIN"))
+})
+
+test("cookie scope check rejects a public API host outside the cookie domain subtree", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = withEnvKeys(baseHomeServerEnv, [
+    ["API_DOMAIN", "api.aquilaxk.site"],
+    ["CUSTOM_PROD_BACKURL", "https://api.aquilaxk.site"],
+  ])
+
+  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_BACKURL"))
+})
+
+test("cookie scope check rejects a cookie domain owned by another service", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = withEnvKeys(baseHomeServerEnv, [
+    ["CUSTOM_PROD_COOKIEDOMAIN", "www.aquilaxk.site"],
+    ["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"],
+  ])
+
+  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_COOKIEDOMAIN"))
+})
+
+test("pre-transition domain set stays valid but is reported as a warning", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = withEnvKeys(baseHomeServerEnv, [
+    ...PRE_TRANSITION_DOMAIN_ENV,
+    ["CUSTOM__REVALIDATE__URL", "https://www.aquilaxk.site/api/revalidate"],
+  ])
+
+  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+
+  assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
+  assert(result.warnings.some((warning) => warning.key === "CUSTOM_PROD_COOKIEDOMAIN"))
+})
+
+test("partially migrated domain set fails closed instead of mixing both topologies", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  // API_DOMAIN/BACKURL만 옮기고 front·cookie를 그대로 둔 상태.
+  const text = withEnvKeys(baseHomeServerEnv, [
+    ["CUSTOM_PROD_COOKIEDOMAIN", "aquilaxk.site"],
+    ["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"],
+  ])
+
+  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+
+  assert.equal(result.ok, false)
+})
+
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv.replace(/^PROD___SPRING__DATASOURCE__USERNAME=.*\n/m, "")
@@ -1082,7 +1178,7 @@ test("validator reports key-level failures without leaking secret values", async
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv
     .replace("CUSTOM__ADMIN__PASSWORD=valid-admin-password", "CUSTOM__ADMIN__PASSWORD=change_me_admin_password")
-    .replace("CUSTOM_PROD_BACKURL=https://api.aquilaxk.site", "CUSTOM_PROD_BACKURL=https://wrong.aquilaxk.site")
+    .replace("CUSTOM_PROD_BACKURL=https://api.blog.aquilaxk.site", "CUSTOM_PROD_BACKURL=https://wrong.blog.aquilaxk.site")
 
   const result = validateEnvText({
     contract: loadContract(contractPath),
@@ -1166,12 +1262,33 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
 })
 
-test("deploy workflow pins production site cookie scope to the live custom domain before rollout", () => {
+test("deploy workflow derives the pinned prod site scope from API_DOMAIN instead of hard-coding it", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 
-  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "aquilaxk\.site" "deploy\/homeserver\/\.env\.prod"/)
-  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_FRONTURL" "https:\/\/www\.aquilaxk\.site" "deploy\/homeserver\/\.env\.prod"/)
-  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_BACKURL" "https:\/\/api\.aquilaxk\.site" "deploy\/homeserver\/\.env\.prod"/)
+  // 하드 핀 문자열이 남아 있으면 API_DOMAIN secret과 갈라진다.
+  assert.doesNotMatch(workflow, /upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "aquilaxk\.site"/)
+  assert.doesNotMatch(workflow, /upsert_env_key "CUSTOM_PROD_FRONTURL" "https:\/\/www\.aquilaxk\.site"/)
+  assert.doesNotMatch(workflow, /upsert_env_key "CUSTOM_PROD_BACKURL" "https:\/\/api\.aquilaxk\.site"/)
+
+  // 전환 스위치는 HOME_SERVER_ENV의 API_DOMAIN 하나뿐이다.
+  assert.match(workflow, /PROD_SITE_API_DOMAIN=/)
+  assert.match(workflow, /api\.blog\.aquilaxk\.site\)/)
+  assert.match(workflow, /PROD_SITE_COOKIE_DOMAIN="blog\.aquilaxk\.site"/)
+  assert.match(workflow, /PROD_SITE_FRONT_URL="https:\/\/blog\.aquilaxk\.site"/)
+  assert.match(workflow, /PROD_SITE_BACK_URL="https:\/\/api\.blog\.aquilaxk\.site"/)
+
+  // 전환 전 상태(구 API 도메인)도 값이 갈라지지 않게 한 덩어리로 유지된다.
+  assert.match(workflow, /api\.aquilaxk\.site\)/)
+  assert.match(workflow, /PROD_SITE_COOKIE_DOMAIN="aquilaxk\.site"/)
+  assert.match(workflow, /PROD_SITE_FRONT_URL="https:\/\/www\.aquilaxk\.site"/)
+  assert.match(workflow, /PROD_SITE_BACK_URL="https:\/\/api\.aquilaxk\.site"/)
+
+  // 알려지지 않은 API_DOMAIN은 fail-closed다.
+  assert.match(workflow, /unsupported API_DOMAIN for the prod site contract/)
+
+  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "\$\{PROD_SITE_COOKIE_DOMAIN\}" "deploy\/homeserver\/\.env\.prod"/)
+  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_FRONTURL" "\$\{PROD_SITE_FRONT_URL\}" "deploy\/homeserver\/\.env\.prod"/)
+  assert.match(workflow, /upsert_env_key "CUSTOM_PROD_BACKURL" "\$\{PROD_SITE_BACK_URL\}" "deploy\/homeserver\/\.env\.prod"/)
   assert(
     workflow.indexOf('upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN"') <
       workflow.indexOf('require_nonempty_env_key "CF_TUNNEL_TOKEN"'),

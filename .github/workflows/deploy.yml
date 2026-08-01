@@ -769,12 +769,39 @@ jobs:
           remove_env_key "SPRING_SQL_INIT_CONTINUE_ON_ERROR" "deploy/homeserver/.env.prod"
           upsert_env_key "SPRING_SQL_INIT_MODE" "never" "deploy/homeserver/.env.prod"
 
-          # Live auth cookies must cover both www.aquilaxk.site and api.aquilaxk.site.
-          # HOME_SERVER_ENV can lag behind custom-domain changes, so pin the deployed
-          # prod site scope immediately before rollout.
-          upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "aquilaxk.site" "deploy/homeserver/.env.prod"
-          upsert_env_key "CUSTOM_PROD_FRONTURL" "https://www.aquilaxk.site" "deploy/homeserver/.env.prod"
-          upsert_env_key "CUSTOM_PROD_BACKURL" "https://api.aquilaxk.site" "deploy/homeserver/.env.prod"
+          # Live auth cookies are scoped to the front/back shared suffix (AuthCookieDomainPolicy).
+          # The public web host is blog.aquilaxk.site and the public API host is api.blog.aquilaxk.site,
+          # so the cookie Domain stays inside the blog subtree. The apex and www hosts belong to a
+          # different service and must never receive this blog's session cookies.
+          #
+          # The three values must move together, so they are derived from a single switch:
+          # API_DOMAIN in HOME_SERVER_ENV. Repository changes alone never flip the live domain -
+          # the owner flips it by updating the secret, and this block follows in the same deploy.
+          # \042 = double quote, \047 = single quote. .env.prod values may be quoted.
+          PROD_SITE_API_DOMAIN="$(awk -F= '$1=="API_DOMAIN"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod | tail -n 1 | tr -d '\042\047\r')"
+          case "${PROD_SITE_API_DOMAIN}" in
+            api.blog.aquilaxk.site)
+              PROD_SITE_COOKIE_DOMAIN="blog.aquilaxk.site"
+              PROD_SITE_FRONT_URL="https://blog.aquilaxk.site"
+              PROD_SITE_BACK_URL="https://api.blog.aquilaxk.site"
+              ;;
+            api.aquilaxk.site)
+              # Pre-transition state: HOME_SERVER_ENV still carries the old API host, so the old
+              # site scope is kept intact. Remove this branch once the secret is updated (#1540).
+              PROD_SITE_COOKIE_DOMAIN="aquilaxk.site"
+              PROD_SITE_FRONT_URL="https://www.aquilaxk.site"
+              PROD_SITE_BACK_URL="https://api.aquilaxk.site"
+              echo "WARNING: API_DOMAIN is still the pre-transition host (${PROD_SITE_API_DOMAIN}). Update HOME_SERVER_ENV to api.blog.aquilaxk.site to activate the blog domain contract." >&2
+              ;;
+            *)
+              echo "unsupported API_DOMAIN for the prod site contract: '${PROD_SITE_API_DOMAIN}'" >&2
+              exit 1
+              ;;
+          esac
+
+          upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "${PROD_SITE_COOKIE_DOMAIN}" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM_PROD_FRONTURL" "${PROD_SITE_FRONT_URL}" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM_PROD_BACKURL" "${PROD_SITE_BACK_URL}" "deploy/homeserver/.env.prod"
 
           if [ -z "${HOME_BACK_IMAGE:-}" ]; then
             echo "HOME_BACK_IMAGE is empty. abort deploy to avoid stale image rollout." >&2

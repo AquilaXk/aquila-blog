@@ -106,12 +106,15 @@ http://{$API_DOMAIN} {
     Permissions-Policy "camera=(), microphone=(), geolocation=()"
   }
 
+  # Edge CORS allowlist is the public web origin only. The apex and www hosts belong to a
+  # different service, so `(www\.)?aquilaxk\.site` must never come back here (#1540).
+  # Deriving this from an env key belongs to the web vhost work (#1538).
   @corsAllowed {
-    header_regexp Origin Origin ^https://(www\.)?aquilaxk\.site$
+    header_regexp Origin Origin ^https://blog\.aquilaxk\.site$
   }
   @corsPreflight {
     method OPTIONS
-    header_regexp Origin Origin ^https://(www\.)?aquilaxk\.site$
+    header_regexp Origin Origin ^https://blog\.aquilaxk\.site$
   }
   handle @corsPreflight {
     header {

@@ -174,11 +174,32 @@ export const validateEnvText = ({ contract, target, text }) => {
       }
     }
 
-    if (check.type === "cookieDomainCovers") {
+    if (check.type === "cookieDomainScope") {
+      // 인증 쿠키 Domain은 front/back 호스트의 공통 접미사로 계산된다(AuthCookieDomainPolicy).
+      // 따라서 쿠키 도메인은 front 호스트 그 자체여야 하고, 공개 API는 그 하위에 있어야 한다.
+      // front가 쿠키 도메인의 형제(www.<cookieDomain>)이거나 API가 형제 subtree에 있으면
+      // 공통 접미사가 한 단계 위로 올라가 우리 소유가 아닌 호스트로 세션 쿠키가 전송된다.
       const cookieDomain = valueOf(env, check.domainKey)
-      const urlHost = hostOf(valueOf(env, check.urlKey))
-      if (cookieDomain && urlHost && urlHost !== cookieDomain && !urlHost.endsWith(`.${cookieDomain}`)) {
-        errors.push(safeError(check.domainKey, `must cover ${check.urlKey} host`))
+      const frontHost = hostOf(valueOf(env, check.frontUrlKey))
+      const backHost = hostOf(valueOf(env, check.backUrlKey))
+      const transitional = check.transitionalAllow
+      const transitionalValues = transitional?.values || {}
+      const isTransitional =
+        Object.keys(transitionalValues).length > 0 &&
+        Object.entries(transitionalValues).every(([key, expected]) => valueOf(env, key) === expected)
+
+      if (isTransitional) {
+        warnings.push(safeError(check.domainKey, transitional.reason || "transitional domain set is still configured"))
+      } else if (cookieDomain && frontHost && backHost) {
+        if (check.forbiddenDomains?.includes(cookieDomain)) {
+          errors.push(safeError(check.domainKey, "must not be a domain owned by another service"))
+        }
+        if (frontHost !== cookieDomain) {
+          errors.push(safeError(check.domainKey, `must equal ${check.frontUrlKey} host`))
+        }
+        if (backHost === cookieDomain || !backHost.endsWith(`.${cookieDomain}`)) {
+          errors.push(safeError(check.backUrlKey, `host must be a subdomain of ${check.domainKey}`))
+        }
       }
     }
 
@@ -229,6 +250,10 @@ const main = () => {
     target: args.target,
     text,
   })
+
+  for (const warning of result.warnings || []) {
+    console.error(`[env-contract] WARN ${warning.key}: ${warning.message}`)
+  }
 
   if (!result.ok) {
     console.error(`[env-contract] ${result.target} validation failed`)

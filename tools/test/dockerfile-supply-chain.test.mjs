@@ -75,3 +75,19 @@ test("front runtime image drops root before serving", () => {
   assert.notEqual(users.length, 0)
   assert.equal(["root", "0"].includes(users.at(-1)), false)
 })
+
+// Docker creates a mount point that the image does not contain as root:root, and copies the
+// image directory's ownership onto a fresh named volume only when that directory exists. The
+// compose `.next/cache` volume therefore silently becomes unwritable for the non-root runtime
+// unless the runtime stage pre-creates it: the container still starts, the healthcheck still
+// passes, and only ISR writes and image optimization fail.
+test("front runtime image owns the .next/cache mount point the compose volume attaches to", () => {
+  const dockerfile = readFileSync(frontRuntimeDockerfilePath, "utf8")
+  const runtimeStage = runtimeStageOf(dockerfile)
+  const cacheMountSetupIndex = runtimeStage.search(/mkdir -p \.next\/cache/)
+  const dropRootIndex = runtimeStage.search(/^USER\s+\S+/im)
+
+  assert.notEqual(cacheMountSetupIndex, -1, "runtime stage must create .next/cache")
+  assert.match(runtimeStage, /chown app:app \.next\/cache/)
+  assert(cacheMountSetupIndex < dropRootIndex, "the mount point must be created while still root")
+})

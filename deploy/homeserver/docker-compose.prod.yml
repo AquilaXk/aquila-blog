@@ -563,6 +563,73 @@ services:
           - back-worker
       data: {}
 
+  # 홈서버 프론트 런타임 (#1538). GHCR 이미지 안의 standalone `node server.js`만 실행하고
+  # 홈서버에서 yarn install/build를 돌리지 않는다. 여기서는 서비스 정의와 Caddy 라우팅 대상까지만
+  # 두고, blue/green 전환과 FRONT_*_IMAGE 주입은 #1539 소관이다.
+  #
+  # profiles가 필요한 이유: FRONT_*_IMAGE는 아직 어떤 배포 경로도 채우지 않는다. 프로필이 꺼져
+  # 있으면 키가 비어도 `docker compose config`가 통과하고(실측), 프로필을 켠 채 키가 비면 compose가
+  # "neither an image nor a build context"로 fail-closed 한다. back_*처럼 `:?`를 쓰면 프로필과
+  # 무관하게 보간 단계에서 죽어 기존 배포·백업·doctor의 compose 평가를 전부 깨뜨린다.
+  # 활성화는 HOME_SERVER_ENV의 COMPOSE_PROFILES에 front를 추가하는 것으로 한다.
+  front_blue:
+    profiles: ["front"]
+    image: ${FRONT_BLUE_IMAGE}
+    restart: unless-stopped
+    logging: *default-logging
+    # 실측 근거(2026-08-02): 홈서버 `free -m` total=15919MB available=11695MB.
+    # front 이미지 단독 기동 실측 RSS idle 87MiB → SSR 40회 후 107MiB, cgroup memory.peak 128MiB.
+    # 이미지 최적화(sharp) 버스트를 감안해 실측 peak의 약 6배를 상한으로 둔다. blue/green 동시
+    # 기동에서도 1.5GB로, 백엔드 예산(AUTO_MEMORY_TUNER_MAX_BUDGET_MB=4160MB) 밖 여유 안이다.
+    mem_limit: ${FRONT_MEM_LIMIT:-768m}
+    mem_reservation: ${FRONT_MEM_RESERVATION:-384m}
+    labels:
+      autoheal: "${FRONT_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      # liveness 등급으로만 판단한다. /robots.txt는 Next 서버가 응답해야 200이면서 backend에
+      # 의존하지 않는다. backend를 태우는 SSR 경로를 autoheal 신호로 쓰면 backend 장애가 front
+      # 재시작 루프로 번진다(back_* healthcheck가 readiness 대신 liveness를 쓰는 것과 같은 이유).
+      # wget은 front/Dockerfile.runtime의 runtime stage 계약이다.
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:3000/robots.txt || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    volumes:
+      # ISR 결과와 최적화 이미지 캐시. 없으면 컨테이너 교체마다 전 페이지가 cold가 되어 backend에
+      # 재생성이 몰린다. blue/green은 서로 다른 빌드 산출물이라 캐시를 공유하면 상대 빌드의 asset
+      # 해시를 담은 ISR HTML이 남을 수 있어 색깔별로 분리한다.
+      - front_blue_next_cache:/app/.next/cache
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    # front는 DB/Redis/MinIO에 직접 접근하지 않으므로 data에는 붙지 않는다.
+    networks:
+      - edge
+      - app
+
+  front_green:
+    profiles: ["front"]
+    image: ${FRONT_GREEN_IMAGE}
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: ${FRONT_MEM_LIMIT:-768m}
+    mem_reservation: ${FRONT_MEM_RESERVATION:-384m}
+    labels:
+      autoheal: "${FRONT_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:3000/robots.txt || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - front_green_next_cache:/app/.next/cache
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    networks:
+      - edge
+      - app
+
   db_1:
     image: ${DB_IMAGE}
     restart: unless-stopped
@@ -627,6 +694,8 @@ volumes:
   loki_data:
   promtail_positions:
   public_edge_probe_data:
+  front_blue_next_cache:
+  front_green_next_cache:
 
 
 

@@ -51,6 +51,18 @@ run_step() {
   "$@" 2>&1 | tee -a "${log_file}"
 }
 
+write_evidence_checksums() {
+  (
+    cd "${artifact_dir}"
+    sha256sum "$@" > SHA256SUMS
+    if grep -Eq '^[0-9a-f]{64}  /' SHA256SUMS; then
+      echo "verify-web-standalone: checksum manifest contains an absolute path" >&2
+      exit 1
+    fi
+    sha256sum -c --strict SHA256SUMS
+  )
+}
+
 printf '%s\n' "${source_sha}" > "${artifact_dir}/source-sha.txt"
 printf 'gate=Web Standalone\nsource_ref=%s\nsource_sha=%s\n' \
   "${source_ref}" "${source_sha}" > "${artifact_dir}/summary.txt"
@@ -120,10 +132,9 @@ fi
   run_step "Run Web accessibility E2E" env NEXT_PUBLIC_SIGNUP_ENABLED=true yarn test:e2e:a11y
 )
 
-sha256sum \
-  "${artifact_dir}/archive-manifest.txt" \
-  "${artifact_dir}/workflow-presence.txt" \
-  "${artifact_dir}/web-standalone.log" \
-  > "${artifact_dir}/SHA256SUMS"
+write_evidence_checksums \
+  archive-manifest.txt \
+  workflow-presence.txt \
+  web-standalone.log
 
 echo "verify-web-standalone: PASS source_sha=${source_sha}"

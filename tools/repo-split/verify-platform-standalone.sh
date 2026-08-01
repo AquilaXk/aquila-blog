@@ -51,6 +51,18 @@ run_step() {
   "$@" 2>&1 | tee -a "${log_file}"
 }
 
+write_evidence_checksums() {
+  (
+    cd "${artifact_dir}"
+    sha256sum "$@" > SHA256SUMS
+    if grep -Eq '^[0-9a-f]{64}  /' SHA256SUMS; then
+      echo "verify-platform-standalone: checksum manifest contains an absolute path" >&2
+      exit 1
+    fi
+    sha256sum -c --strict SHA256SUMS
+  )
+}
+
 printf '%s\n' "${source_sha}" > "${artifact_dir}/source-sha.txt"
 printf 'gate=Platform Standalone\nsource_ref=%s\nsource_sha=%s\n' \
   "${source_ref}" "${source_sha}" > "${artifact_dir}/summary.txt"
@@ -119,9 +131,8 @@ fi
       config --quiet
 )
 
-sha256sum \
-  "${artifact_dir}/archive-manifest.txt" \
-  "${artifact_dir}/platform-standalone.log" \
-  > "${artifact_dir}/SHA256SUMS"
+write_evidence_checksums \
+  archive-manifest.txt \
+  platform-standalone.log
 
 echo "verify-platform-standalone: PASS source_sha=${source_sha}"

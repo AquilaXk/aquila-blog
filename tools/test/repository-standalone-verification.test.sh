@@ -113,6 +113,23 @@ assert_not_contains "${platform_script}" 'STANDALONE_TEST_MODE'
 assert_contains "${web_script}" 'artifact_dir="$(cd "${artifact_dir}" && pwd -P)"'
 assert_contains "${platform_script}" 'artifact_dir="$(cd "${artifact_dir}" && pwd -P)"'
 
+# Downloaded evidence must be independently verifiable without recreating the
+# ephemeral GitHub runner path. Both gates write relative names and fail closed
+# if an absolute path is ever reintroduced into SHA256SUMS.
+for script in "${web_script}" "${platform_script}"; do
+  assert_contains "${script}" 'write_evidence_checksums()'
+  assert_contains "${script}" 'sha256sum "$@" > SHA256SUMS'
+  assert_contains "${script}" "grep -Eq '^[0-9a-f]{64}  /' SHA256SUMS"
+  assert_contains "${script}" 'sha256sum -c --strict SHA256SUMS'
+done
+assert_contains "${web_script}" 'write_evidence_checksums \'
+assert_contains "${web_script}" '  archive-manifest.txt \'
+assert_contains "${web_script}" '  workflow-presence.txt \'
+assert_contains "${web_script}" '  web-standalone.log'
+assert_contains "${platform_script}" 'write_evidence_checksums \'
+assert_contains "${platform_script}" '  archive-manifest.txt \'
+assert_contains "${platform_script}" '  platform-standalone.log'
+
 # Web archive and all required standalone checks.
 assert_contains "${web_script}" 'archive --format=tar "${source_sha}" front'
 assert_contains "${web_script}" 'git init --quiet'

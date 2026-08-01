@@ -573,6 +573,14 @@ fi
 
 print_section "Env Required Keys"
 print_env_key_status "API_DOMAIN"
+# front (#1538): WEB_DOMAIN이 비면 web vhost가 web.localhost 기본값에 머물러 공개 도메인이
+# 404가 되고, BACKEND_INTERNAL_URL이 비면 컨테이너는 healthy인 채 모든 SSR이 500이 된다.
+# 둘 다 컨테이너 밖에서는 보이지 않으므로 여기서 노출한다.
+print_env_key_status "WEB_DOMAIN"
+print_env_key_status "FRONT_BLUE_IMAGE"
+print_env_key_status "FRONT_GREEN_IMAGE"
+print_env_key_status "BACKEND_INTERNAL_URL"
+print_env_key_status "COMPOSE_PROFILES"
 print_env_key_status "ADMIN_EMBED_ORIGINS"
 print_env_key_status "CF_TUNNEL_TOKEN"
 print_env_key_status "CLOUDFLARED_IMAGE"
@@ -702,6 +710,9 @@ print_section "Caddy Upstream"
 grep -nE 'reverse_proxy (\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\}:8080|back[-_](blue|green|read|admin|active):8080)' "${CADDY_HOST_FILE}" || true
 echo "ADMIN_API_UPSTREAM=$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
 echo "READ_API_UPSTREAM=$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
+# 위 grep은 :8080 backend upstream만 매치한다. front는 :3000이라 별도로 출력한다.
+grep -nE 'reverse_proxy \{\$WEB_UPSTREAM:front_(blue|green)\}:3000' "${CADDY_HOST_FILE}" || true
+echo "WEB_UPSTREAM=$(trim_quotes "$(env_value "WEB_UPSTREAM")")"
 
 print_section "Caddy Mount Sync"
 host_upstream="$(bash "${SCRIPT_DIR}/caddy_upstream_probe.sh" host 2>/dev/null || true)"

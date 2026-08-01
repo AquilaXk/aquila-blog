@@ -80,7 +80,8 @@ test("front runtime image drops root before serving", () => {
 // image directory's ownership onto a fresh named volume only when that directory exists. The
 // compose `.next/cache` volume therefore silently becomes unwritable for the non-root runtime
 // unless the runtime stage pre-creates it: the container still starts, the healthcheck still
-// passes, and only ISR writes and image optimization fail.
+// passes, `/_next/image` still answers 200, and the optimized-image cache is simply never
+// written. (Pages Router ISR output lives in .next/server/pages, not here.)
 test("front runtime image owns the .next/cache mount point the compose volume attaches to", () => {
   const dockerfile = readFileSync(frontRuntimeDockerfilePath, "utf8")
   const runtimeStage = runtimeStageOf(dockerfile)

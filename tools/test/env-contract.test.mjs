@@ -1337,10 +1337,14 @@ test("ADMIN_EMBED_ORIGINS warning names the origins that lose embed rights", asy
   const warning = result.warnings.find((entry) => entry.key === "ADMIN_EMBED_ORIGINS")
 
   assert(warning, "the removal must be announced before the deploy applies it")
-  // 일반론이면 오너가 무엇이 사라지는지 모른다. 제거 대상 origin을 찍어야 한다.
-  assert(warning.message.includes("https://www.aquilaxk.site"), warning.message)
-  assert(warning.message.includes("https://aquilaxk.site"), warning.message)
-  assert(warning.message.includes("https://blog.aquilaxk.site"), warning.message)
+  // 일반론이면 오너가 무엇이 사라지는지 모른다. 교체 값과 제거 대상 origin을 그대로 찍어야 한다.
+  // 부분 문자열이 아니라 완전 일치로 본다 - 부분 일치는 origin 목록 검사로 오해되기도 하고,
+  // 실제로 무엇이 출력되는지도 못 박지 못한다.
+  assert.equal(
+    warning.message,
+    'the deploy will replace this with "https://blog.aquilaxk.site", ' +
+      "removing iframe embed rights from: https://www.aquilaxk.site https://aquilaxk.site",
+  )
 })
 
 test("a topology may not grant admin embed rights outside its own web host", async () => {

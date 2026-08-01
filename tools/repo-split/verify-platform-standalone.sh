@@ -5,10 +5,9 @@ usage() {
   cat <<'USAGE'
 Usage: bash tools/repo-split/verify-platform-standalone.sh [source-ref]
 
-Creates a temporary Platform archive, removes front/**, and runs the contracts,
-privacy, backend, and production Compose gates that must survive the split.
-Heavy execution is restricted to GitHub Actions; the static harness uses
-STANDALONE_TEST_MODE.
+Creates a temporary Platform archive, removes front/**, and runs the backend,
+contracts, privacy, and production Compose gates that must survive the split.
+Heavy execution is restricted to GitHub Actions.
 USAGE
 }
 
@@ -17,7 +16,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-if [[ "${GITHUB_ACTIONS:-}" != "true" && "${STANDALONE_TEST_MODE:-}" != "true" ]]; then
+if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
   echo "verify-platform-standalone: heavy standalone verification is GitHub Actions-only" >&2
   exit 2
 fi
@@ -90,12 +89,16 @@ fi
 
   run_step "Report Platform repository boundary" \
     node tools/repo-boundary/check-platform-boundary.mjs --report-only
+
+  # The full backend gate emits the canonical OpenAPI and ErrorCode build
+  # artifacts consumed by check-public-contracts.mjs. Running it first proves
+  # both generation and drift from one immutable Platform snapshot.
+  run_step "Run backend required check and generate public contract inputs" \
+    bash -lc 'cd back && ./gradlew check --rerun-tasks'
   run_step "Verify canonical public contract" \
     node tools/contracts/check-public-contracts.mjs
   run_step "Run privacy drift gate" \
     node tools/privacy/ci-privacy-gate.mjs
-  run_step "Run backend required check" \
-    bash -lc 'cd back && ./gradlew check --rerun-tasks'
 
   cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
   # Replace documentation-only digest placeholders with syntactically valid,

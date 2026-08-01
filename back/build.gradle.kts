@@ -73,7 +73,7 @@ dependencies {
     kapt("io.github.openfeign.querydsl:querydsl-apt:7.1:jpa")
 
     // SpringDoc
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
     implementation("org.webjars:swagger-ui:5.32.11") // DOMPurify 3.4.12; fixes CVE-2026-65898 (#1451).
     implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 

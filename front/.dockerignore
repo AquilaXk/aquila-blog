@@ -1,0 +1,45 @@
+# Build context excludes for Dockerfile.runtime.
+#
+# Kept on purpose (do not add here):
+# - packages/**   : @shared/{contracts,ui-tokens,utils} are `file:packages/...` dependencies and
+#                   next.config.js aliases packages/shared-ui-tokens/src/index.js by absolute path.
+# - scripts/**    : postinstall (patch-lodash-template.cjs) and prebuild guards run during `yarn build`.
+# - e2e/**        : scripts/check-refactor-boundaries.mjs calls walk("e2e") unguarded; an absent
+#                   directory throws ENOENT and fails prebuild.
+# - config/, contracts/, legal/, quality/, public/, src/ : build inputs.
+
+# Host toolchain output — must never shadow the image's own install/build.
+node_modules
+**/node_modules
+.next
+out
+build
+
+# Version control and CI metadata (design-colors guard degrades gracefully without git).
+.git
+.gitignore
+.gitattributes
+.github
+.githooks
+
+# Secrets and local environment. Runtime env is injected by the container, not baked in.
+.env
+.env.*
+.vercel
+
+# Test, story and report artifacts.
+coverage
+test-results
+playwright-report
+playwright-report-unit
+storybook-static
+.storybook-home
+
+# Docker inputs themselves — editing them must not invalidate the source copy layer.
+Dockerfile
+Dockerfile.runtime
+.dockerignore
+Makefile
+
+*.log
+.DS_Store

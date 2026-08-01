@@ -1,0 +1,91 @@
+# syntax=docker/dockerfile:1.7
+#
+# Homeserver runtime image for the Next.js app (#1536).
+# Build context is `front/`. `front/Dockerfile` stays the local dev container base
+# used by `front/Makefile` (`make setup` / `make dev`) and is not this image.
+#
+# Node 20 line is fixed by package.json `engines.node` (">=20 <21").
+# Same base tag family as NODE_RUNTIME_IMAGE (node:20-alpine), which the
+# container-image-scan job already scans for OS vulnerabilities.
+#
+# Digest pin source:
+# docker buildx imagetools inspect node:20-alpine
+
+# =========================
+# 1️⃣ Dependency Stage
+# =========================
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS deps
+
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+
+WORKDIR /app
+
+# `file:packages/...` dependencies resolve at install time, so they must land before yarn runs.
+COPY package.json yarn.lock ./
+COPY packages packages
+# postinstall: scripts/patch-lodash-template.cjs. Installing with --ignore-scripts would skip it.
+COPY scripts/patch-lodash-template.cjs scripts/patch-lodash-template.cjs
+
+# Playwright is a devDependency; its browser download is useless for a build-only stage.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn,sharing=locked \
+    yarn install --frozen-lockfile
+
+# =========================
+# 2️⃣ Build Stage
+# =========================
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS builder
+
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build-arg surface for the values Next.js inlines into the client bundle.
+# Names come from config/env.contract.json target `production-build`; the non-public keys of that
+# target (BACKEND_INTERNAL_URL, TOKEN_FOR_REVALIDATE, BACKEND_PROXY_MAX_*) are runtime-only and are
+# deliberately not build args. Defaults stay empty — the injection contract is #1540.
+ARG NEXT_PUBLIC_BACKEND_URL=""
+ARG NEXT_PUBLIC_SITE_URL=""
+ARG NEXT_PUBLIC_SIGNUP_ENABLED=""
+ARG NEXT_PUBLIC_RUM_SAMPLE_RATE=""
+ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+ENV NEXT_PUBLIC_SIGNUP_ENABLED=${NEXT_PUBLIC_SIGNUP_ENABLED}
+ENV NEXT_PUBLIC_RUM_SAMPLE_RATE=${NEXT_PUBLIC_RUM_SAMPLE_RATE}
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# `output: "standalone"` emits .next/standalone/server.js with only the traced dependencies.
+RUN yarn build
+
+# =========================
+# 3️⃣ Runtime Stage
+# =========================
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+
+# wget backs the compose healthcheck; busybox applet is not a stable contract to depend on.
+RUN apk add --no-cache wget \
+ && addgroup --system --gid 10001 app \
+ && adduser --system --uid 10001 --ingroup app --home /app --shell /sbin/nologin app
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# standalone traces server deps only; public/ and .next/static/ are never included in it.
+COPY --from=builder --chown=app:app /app/.next/standalone ./
+COPY --from=builder --chown=app:app /app/.next/static ./.next/static
+COPY --from=builder --chown=app:app /app/public ./public
+
+USER app
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

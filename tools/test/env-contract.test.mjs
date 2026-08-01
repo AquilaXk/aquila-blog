@@ -2787,10 +2787,6 @@ test("Caddy web vhost는 env 파생 호스트로 front upstream을 프록시한�
 
 test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과 교차 검증된다", () => {
   const contract = JSON.parse(readFileSync(contractPath, "utf8"))
-  const materializeScript = readFileSync(
-    path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"),
-    "utf8",
-  )
   const caddyEnvExample = readFileSync(
     path.join(repoRoot, "deploy/homeserver/.env.caddy.prod.example"),
     "utf8",

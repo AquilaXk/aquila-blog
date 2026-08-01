@@ -14,7 +14,7 @@ const basePost: TPost = {
   createdTime: "2026-03-17T08:11:00.000Z",
   modifiedTime: "2026-03-17T08:11:00.000Z",
   fullWidth: false,
-  thumbnail: "https://www.aquilaxk.site/avatar.png",
+  thumbnail: "https://blog.aquilaxk.site/avatar.png",
   likesCount: 12,
   commentsCount: 3,
   hitCount: 920,
@@ -22,7 +22,7 @@ const basePost: TPost = {
     {
       id: "1",
       name: "aquila",
-      profile_photo: "https://www.aquilaxk.site/avatar.png",
+      profile_photo: "https://blog.aquilaxk.site/avatar.png",
     },
   ],
 }

@@ -37,7 +37,7 @@ export const resolveLiveTarget = ({ eventType, deploymentUrl, environment, sourc
       }
     : {
         phase,
-        webUrl: "https://www.aquilaxk.site",
+        webUrl: "https://blog.aquilaxk.site",
         checkName: "Vercel - aquila-blog-web: production-promoted",
         requiresCredentials: true,
         sourceCommit: commit,

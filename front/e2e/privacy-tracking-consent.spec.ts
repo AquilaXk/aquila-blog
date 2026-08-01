@@ -131,5 +131,5 @@ test("RUM attribution URL sanitizer drops non-http resource payloads", () => {
   expect(sanitizeRumUrlPath("/posts/123?draftToken=secret#comments")).toBe("/posts/123")
   expect(sanitizeRumUrlPath("data:image/svg+xml,<svg><text>secret</text></svg>")).toBeUndefined()
   expect(sanitizeRumUrlPath("mailto:user@example.com")).toBeUndefined()
-  expect(sanitizeRumUrlPath("blob:https://www.aquilaxk.site/opaque-id")).toBeUndefined()
+  expect(sanitizeRumUrlPath("blob:https://blog.aquilaxk.site/opaque-id")).toBeUndefined()
 })

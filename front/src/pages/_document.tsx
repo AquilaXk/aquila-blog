@@ -17,10 +17,11 @@ import {
   HEADER_AUTH_SHELL_BOOTSTRAP_SCRIPT,
 } from "src/libs/security/documentInlineScripts"
 
+// 홈서버 컨테이너에는 VERCEL_GIT_COMMIT_SHA가 없다.
+// 런타임 주입(AQUILA_BUILD_SHA) → 빌드 시점 인라인(NEXT_PUBLIC_AQUILA_BUILD_SHA) → CI(GITHUB_SHA) 순으로 읽는다.
 const AQUILA_BUILD_SHA =
   process.env.AQUILA_BUILD_SHA ||
   process.env.NEXT_PUBLIC_AQUILA_BUILD_SHA ||
-  process.env.VERCEL_GIT_COMMIT_SHA ||
   process.env.GITHUB_SHA ||
   "unknown"
 

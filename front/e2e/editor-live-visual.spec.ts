@@ -27,7 +27,7 @@ const editorUrlPattern = /\/editor(\/|$|\?)/
 const expectedFrontendCommitSha = process.env.E2E_EXPECTED_FRONT_COMMIT_SHA?.trim() || ""
 const liveEditor507CanaryEnabled = process.env.E2E_LIVE_EDITOR_507_CANARY === "true"
 const liveEditor507SeededHosts = new Set(
-  (process.env.E2E_LIVE_EDITOR_507_HOSTS || "www.aquilaxk.site")
+  (process.env.E2E_LIVE_EDITOR_507_HOSTS || "blog.aquilaxk.site")
     .split(",")
     .map((host) => host.trim().toLowerCase())
     .filter(Boolean)

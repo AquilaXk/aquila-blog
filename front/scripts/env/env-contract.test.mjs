@@ -176,14 +176,40 @@ test("live-e2e rejects placeholder credentials", async () => {
   assert(result.errors.some((error) => error.key === "E2E_LIVE_ADMIN_PASSWORD" && error.message.includes("placeholder")))
 })
 
-test("prebuild validates the Vercel build contract only for production deployment and Web CI runs the contract suite", () => {
+test("prebuild validates the production build contract behind a host-neutral marker and Web CI runs the contract suite", () => {
   const packageJson = JSON.parse(readFileSync(path.join(frontRoot, "package.json"), "utf8"))
   const webWorkflow = readFileSync(path.join(frontRoot, ".github/workflows/ci.yml"), "utf8")
 
-  assert.match(packageJson.scripts.prebuild, /VERCEL:-.*1.*VERCEL_ENV:-.*production/)
+  // VERCEL/VERCEL_ENV는 홈서버 컨테이너 빌드에 존재하지 않아 검증이 통째로 skip됐다.
+  assert.doesNotMatch(packageJson.scripts.prebuild, /VERCEL/)
+  assert.match(packageJson.scripts.prebuild, /AQUILA_PROD_BUILD:-.*1/)
   assert.match(packageJson.scripts.prebuild, /scripts\/env\/validate-env\.mjs --target production-build --process-env/)
   assert.doesNotMatch(packageJson.scripts.prebuild, /--target production --process-env/)
   assert.match(webWorkflow, /node --test scripts\/env\/env-contract\.test\.mjs/)
+})
+
+test("BACKEND_INTERNAL_URL accepts container-internal http but still rejects plaintext public hosts", async () => {
+  const { loadContract, validateEnvText } = await import("./validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  for (const internalUrl of ["http://back_blue:8080", "http://127.0.0.1:1", "http://localhost:3000", "https://api.blog.aquilaxk.site"]) {
+    const result = validateEnvText({
+      contract,
+      target: "production",
+      text: productionEnv.replace("BACKEND_INTERNAL_URL=https://api.example.test", `BACKEND_INTERNAL_URL=${internalUrl}`),
+    })
+    assert.equal(result.ok, true, `${internalUrl}: ${result.errors.map((error) => `${error.key}: ${error.message}`).join("\n")}`)
+  }
+
+  for (const rejected of ["http://api.blog.aquilaxk.site", "http://api.example.test", "ftp://back_blue", "back_blue:8080"]) {
+    const result = validateEnvText({
+      contract,
+      target: "production",
+      text: productionEnv.replace("BACKEND_INTERNAL_URL=https://api.example.test", `BACKEND_INTERNAL_URL=${rejected}`),
+    })
+    assert.equal(result.ok, false, `${rejected} must not pass BACKEND_INTERNAL_URL validation`)
+    assert(result.errors.some((error) => error.key === "BACKEND_INTERNAL_URL"))
+  }
 })
 
 test("CLI failure exposes only key and message, never secret input", () => {

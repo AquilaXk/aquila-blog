@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload Web standalone evidence
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: web-standalone-${{ github.sha }}
           path: ${{ runner.temp }}/web-standalone
@@ -136,7 +136,7 @@ jobs:
           node-version: "20"
 
       - name: Set up JDK 25
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
         with:
           distribution: temurin
           java-version: "25"
@@ -154,7 +154,7 @@ jobs:
 
       - name: Upload Platform standalone evidence
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: platform-standalone-${{ github.sha }}
           path: ${{ runner.temp }}/platform-standalone

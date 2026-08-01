@@ -11,6 +11,7 @@ on:
       - "tools/contracts/**"
       - "tools/test/public-contract-manifest.test.mjs"
       - "tools/test/sync-public-contract-workflow.test.mjs"
+      - "tools/test/setup-node-pin-parity.test.mjs"
       - "deploy/**"
       - "restore-privacy-gate.sh"
       - "AGENTS.md"
@@ -41,6 +42,7 @@ on:
       - "tools/contracts/**"
       - "tools/test/public-contract-manifest.test.mjs"
       - "tools/test/sync-public-contract-workflow.test.mjs"
+      - "tools/test/setup-node-pin-parity.test.mjs"
       - "deploy/**"
       - "restore-privacy-gate.sh"
       - "AGENTS.md"
@@ -96,7 +98,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js 20
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "20"
           cache: yarn
@@ -133,7 +135,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js 20
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "20"
 
@@ -149,6 +151,9 @@ jobs:
 
       - name: Verify public contract sync workflow contract
         run: node --test tools/test/sync-public-contract-workflow.test.mjs
+
+      - name: Verify setup-node pin parity contract
+        run: node --test tools/test/setup-node-pin-parity.test.mjs
 
       - name: Run Platform archive standalone gate
         env:

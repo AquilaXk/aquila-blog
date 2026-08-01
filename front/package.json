@@ -44,7 +44,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@babel/runtime": "7.26.10",
+    "@babel/runtime": "8.0.0",
     "@emotion/cache": "11.14.0",
     "@emotion/react": "11.14.0",
     "@emotion/server": "11.11.0",
@@ -80,7 +80,7 @@
   },
   "resolutions": {
     "@babel/plugin-transform-modules-systemjs": "7.29.4",
-    "@babel/runtime": "7.26.10",
+    "@babel/runtime": "8.0.0",
     "@emotion/utils": "1.4.2",
     "@eslint/eslintrc/minimatch": "3.1.5",
     "@humanwhocodes/config-array/minimatch": "3.1.5",

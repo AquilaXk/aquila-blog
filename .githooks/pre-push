@@ -15,6 +15,13 @@ work_branch_regex='^(feat|fix|refactor|chore|docs|style|test|perf|build|ci|rever
 # hook, and dependabot/<ecosystem>/<path>/<dependency>-<version> keeps the dots and slashes
 # that the work branch rule forbids. Allow that one namespace with an explicit shape instead
 # of loosening the work branch rule.
+#
+# Accepted trade-off: the namespace is reachable by people too. This hook runs on the client
+# and cannot tell who is pushing, so someone can name a branch dependabot/<ecosystem>/<x> and
+# skip the work branch rule entirely. Closing that would mean refusing the pushes this rule
+# exists to allow, so issue #1528 took the opening over an unusable gate. `main` and
+# `develop` stay blocked either way, and server-side branch protection is the control that
+# does not depend on the pusher running a hook at all.
 bot_branch_regex='^dependabot/[a-z0-9_]+(/[A-Za-z0-9][A-Za-z0-9._-]*)+$'
 zero_sha='0000000000000000000000000000000000000000'
 

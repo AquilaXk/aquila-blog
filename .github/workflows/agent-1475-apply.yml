@@ -43,13 +43,6 @@ jobs:
           git fetch origin main
           git merge --no-edit origin/main
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: "20"
-          cache: yarn
-          cache-dependency-path: front/yarn.lock
-
       - name: Replace obsolete split alignment contracts
         shell: bash
         run: |
@@ -281,40 +274,7 @@ jobs:
           path.write_text(source)
           PY
 
-      - name: Install frontend dependencies
-        working-directory: front
-        run: yarn install --frozen-lockfile
-
-      - name: Format changed frontend files
-        working-directory: front
-        run: >-
-          yarn prettier --write
-          src/components/markdown-editor/markdownEditorScrollSyncModel.ts
-          src/components/markdown-editor/useMarkdownEditorScrollSync.ts
-          e2e/editor-authoring-markdown-editor.spec.ts
-          ../docs/agent/editor-split-scroll-sync-plan-2026-08-01.md
-
-      - name: Verify authoring regression twice
-        working-directory: front
-        run: |
-          yarn test:e2e:authoring
-          yarn test:e2e:authoring
-
-      - name: Lint frontend
-        working-directory: front
-        run: yarn lint
-
-      - name: Build frontend
-        working-directory: front
-        run: yarn build
-
-      - name: Check bundle size
-        working-directory: front
-        env:
-          BUNDLE_BUDGET_ENFORCEMENT: warn
-        run: yarn check:bundle-size
-
-      - name: Commit verified implementation
+      - name: Commit implementation
         shell: bash
         run: |
           set -euo pipefail

@@ -3,6 +3,12 @@ set -euo pipefail
 
 protected_branches_regex='^(main|develop)$'
 work_branch_regex='^(feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix)/[a-z0-9]+(-[a-z0-9]+)*$'
+# Dependabot pushes through the GitHub API and never runs this hook, so its branch names
+# were never negotiable here. A human adding a correction commit to such a PR does run the
+# hook, and dependabot/<ecosystem>/<path>/<dependency>-<version> keeps the dots and slashes
+# that the work branch rule forbids. Allow that one namespace with an explicit shape instead
+# of loosening the work branch rule.
+bot_branch_regex='^dependabot/[a-z0-9_]+(/[A-Za-z0-9][A-Za-z0-9._-]*)+$'
 zero_sha='0000000000000000000000000000000000000000'
 
 branch_name_from_ref() {
@@ -21,6 +27,10 @@ validate_branch() {
 
   if [[ "${branch}" =~ ${protected_branches_regex} ]]; then
     return 1
+  fi
+
+  if [[ "${branch}" =~ ${bot_branch_regex} ]]; then
+    return 0
   fi
 
   if [[ "${branch}" =~ ${work_branch_regex} ]]; then
@@ -55,6 +65,7 @@ if [[ "${#violations[@]}" -gt 0 ]]; then
     echo "[pre-push] main/develop 직접 push 는 금지됩니다."
     echo "[pre-push] 허용 브랜치 형식: type/short-description"
     echo "[pre-push] 허용 type: feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix"
+    echo "[pre-push] 허용 bot 브랜치: dependabot/<ecosystem>/<path>/<dependency>-<version>"
     echo "[pre-push] 차단된 ref:"
     for violation in "${violations[@]}"; do
       echo "  - ${violation}"

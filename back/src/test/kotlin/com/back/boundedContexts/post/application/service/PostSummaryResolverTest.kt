@@ -192,6 +192,20 @@ summary: "이전 frontmatter 요약"
     }
 
     @Test
+    fun `manual summary longer than the limit keeps the ellipsis inside 150 graphemes`() {
+        val resolved =
+            PostSummaryResolver.resolveForCreate(
+                title = "제목",
+                content = "본문",
+                submittedSummary = "가".repeat(200),
+                now = fixedNow,
+            )
+
+        assertThat(graphemeCount(resolved.text)).isEqualTo(PostSummaryResolver.MAX_GRAPHEMES)
+        assertThat(resolved.text).endsWith("…")
+    }
+
+    @Test
     fun `unclosed link parenthesis is cleaned in linear time`() {
         val content = "[문서](" + "a".repeat(40) + " 닫는 괄호가 없는 링크 문장입니다."
 
@@ -203,6 +217,102 @@ summary: "이전 frontmatter 요약"
 
         assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
         assertThat(resolved.text).isEqualTo(content)
+    }
+
+    @Test
+    fun `placeholder wording is never adopted as a summary`() {
+        val content =
+            """
+            > **요약:** 요약을 생성할 수 없습니다.
+
+            ![only image](https://example.com/image.png)
+            """.trimIndent()
+
+        val resolved = PostSummaryResolver.resolveForCreate("제목", content, null, fixedNow)
+
+        assertThat(resolved.source).isEqualTo(PostSummarySource.NONE)
+        assertThat(resolved.text).isEmpty()
+        assertThat(resolved.algorithmVersion).isEqualTo(PostSummaryResolver.ALGORITHM_VERSION)
+    }
+
+    @Test
+    fun `single quoted legacy frontmatter summary is unescaped during backfill`() {
+        val content =
+            """---
+summary: 'It''s 캐시 정책 요약입니다.'
+---
+본문입니다."""
+
+        val resolved = PostSummaryResolver.resolveForBackfill("캐시", content, fixedNow)
+
+        assertThat(resolved.source).isEqualTo(PostSummarySource.MIGRATED)
+        assertThat(resolved.text).isEqualTo("It's 캐시 정책 요약입니다.")
+    }
+
+    @Test
+    fun `escaped backslash and line break in legacy frontmatter summary are decoded`() {
+        val content =
+            """---
+summary: "경로 C:\\temp 안내\n다음 문장입니다."
+---
+본문입니다."""
+
+        val resolved = PostSummaryResolver.resolveForBackfill("경로", content, fixedNow)
+
+        assertThat(resolved.source).isEqualTo(PostSummarySource.MIGRATED)
+        assertThat(resolved.text).isEqualTo("""경로 C:\temp 안내 다음 문장입니다.""")
+    }
+
+    @Test
+    fun `display math block is excluded from summary candidates`() {
+        val mathFence = "${'$'}${'$'}"
+        val content =
+            """
+            |$mathFence
+            |E = mc^2
+            |$mathFence
+            |
+            |수식 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.
+            """.trimMargin()
+
+        val resolved = PostSummaryResolver.resolveForCreate("수식", content, null, fixedNow)
+
+        assertThat(resolved.text).isEqualTo("수식 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.")
+        assertThat(resolved.text).doesNotContain("mc^2")
+    }
+
+    @Test
+    fun `multi line html block is excluded until its closing tag`() {
+        val content =
+            """
+            <div class="callout">
+            HTML 블록 안의 문장입니다.
+            </div>
+
+            HTML 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.
+            """.trimIndent()
+
+        val resolved = PostSummaryResolver.resolveForCreate("HTML", content, null, fixedNow)
+
+        assertThat(resolved.text).isEqualTo("HTML 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.")
+        assertThat(resolved.text).doesNotContain("HTML 블록 안의")
+    }
+
+    @Test
+    fun `indented code block is excluded from summary candidates`() {
+        val content =
+            """
+            |# 인덴트
+            |
+            |    val indented = "인덴트 코드 블록의 내용입니다."
+            |
+            |인덴트 코드 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.
+            """.trimMargin()
+
+        val resolved = PostSummaryResolver.resolveForCreate("인덴트", content, null, fixedNow)
+
+        assertThat(resolved.text).isEqualTo("인덴트 코드 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.")
+        assertThat(resolved.text).doesNotContain("indented")
     }
 
     private fun graphemeCount(value: String): Int {

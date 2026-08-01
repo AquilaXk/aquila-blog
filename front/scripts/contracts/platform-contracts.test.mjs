@@ -1,23 +1,29 @@
 import assert from "node:assert/strict"
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { importPlatformContracts } from "./import-platform-contracts.mjs"
+import {
+  gitEnvWithoutInheritedRepository,
+  inheritedGitEnvKeys,
+  importPlatformContracts,
+} from "./import-platform-contracts.mjs"
 import { verifyPlatformContracts } from "./verify-platform-contracts.mjs"
 
 const sourceRepository = "AquilaXk/aquila-blog"
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
-const git = (cwd, args) => execFileSync(
+// env defaults to process.env but stays a parameter, so the inherited-environment test can
+// hand a polluted environment to one call instead of mutating the environment of the run.
+const git = (cwd, args, env = process.env) => execFileSync(
   "git",
   ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-C", cwd, ...args],
-  { encoding: "utf8" },
+  { encoding: "utf8", env: gitEnvWithoutInheritedRepository(env) },
 )
 
-async function fixture() {
+async function fixture(env = process.env) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "platform-contracts-"))
   const source = path.join(root, "contracts", "public-api")
   const output = path.join(root, "output")
@@ -34,14 +40,63 @@ async function fixture() {
       errorCodes: { path: "error-codes.json", sha256: sha256(errorCodes) },
     },
   }, null, 2)}\n`)
+  git(root, ["init", "--initial-branch=main"], env)
+  git(root, ["remote", "add", "origin", "https://github.com/AquilaXk/aquila-blog.git"], env)
+  git(root, ["config", "user.email", "test@example.com"], env)
+  git(root, ["config", "user.name", "Test"], env)
+  git(root, ["add", "contracts/public-api"], env)
+  git(root, ["commit", "-m", "public contract"], env)
+  const sourceCommit = git(root, ["rev-parse", "HEAD"], env).trim()
+  return { root, source, output, sourceCommit }
+}
+
+async function decoyRepository() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "platform-contracts-decoy-"))
+  await fs.writeFile(path.join(root, "decoy.txt"), "decoy\n")
   git(root, ["init", "--initial-branch=main"])
-  git(root, ["remote", "add", "origin", "https://github.com/AquilaXk/aquila-blog.git"])
+  git(root, ["remote", "add", "origin", "https://github.com/example/decoy.git"])
   git(root, ["config", "user.email", "test@example.com"])
   git(root, ["config", "user.name", "Test"])
-  git(root, ["add", "contracts/public-api"])
-  git(root, ["commit", "-m", "public contract"])
-  const sourceCommit = git(root, ["rev-parse", "HEAD"]).trim()
-  return { root, source, output, sourceCommit }
+  git(root, ["add", "decoy.txt"])
+  git(root, ["commit", "-m", "decoy"])
+
+  // A leaked GIT_OBJECT_DIRECTORY or GIT_COMMON_DIR leaves the remote, HEAD and the work
+  // tree alone and only writes the temporary repository's objects in here, so the object
+  // store has to be part of what "untouched" means for this repository.
+  const state = () => ({
+    origin: git(root, ["remote", "get-url", "origin"]),
+    head: git(root, ["rev-parse", "HEAD"]),
+    refs: git(root, ["show-ref"]),
+    status: git(root, ["status", "--porcelain"]),
+    objects: git(root, ["count-objects", "-v"]),
+  })
+  return { root, state }
+}
+
+const importModule = new URL("./import-platform-contracts.mjs", import.meta.url).href
+const verifyModule = new URL("./verify-platform-contracts.mjs", import.meta.url).href
+
+// A hook runs these scripts in a separate process that already carries the inherited
+// environment, so reproduce that rather than mutating the environment of this test run.
+async function importInChildProcess({ source, output, sourceCommit }, env) {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "platform-contracts-runner-"))
+  const runner = path.join(directory, "run-import.mjs")
+  await fs.writeFile(runner, [
+    `import { importPlatformContracts } from ${JSON.stringify(importModule)}`,
+    `import { verifyPlatformContracts } from ${JSON.stringify(verifyModule)}`,
+    "const [source, output, sourceRepository, sourceCommit] = process.argv.slice(2)",
+    "await importPlatformContracts({ source, output, sourceRepository, sourceCommit })",
+    "await verifyPlatformContracts({ directory: output })",
+    "",
+  ].join("\n"))
+
+  const result = spawnSync(
+    process.execPath,
+    [runner, source, output, sourceRepository, sourceCommit],
+    { encoding: "utf8", env },
+  )
+  await fs.rm(directory, { recursive: true, force: true })
+  return result
 }
 
 test("imports verified canonical bytes and creates a pinned lock", async (t) => {
@@ -195,5 +250,40 @@ test("rejects canonical source bytes changed after the pinned commit", async (t)
   await assert.rejects(
     importPlatformContracts({ source, output, sourceRepository, sourceCommit }),
     /source contract bytes do not match source commit/,
+  )
+})
+
+test("ignores the repository environment Git exports to hooks in a linked worktree", async (t) => {
+  const decoy = await decoyRepository()
+  t.after(() => fs.rm(decoy.root, { recursive: true, force: true }))
+  const untouched = decoy.state()
+  const gitDirectory = path.join(decoy.root, ".git")
+  const inherited = {
+    ...process.env,
+    GIT_DIR: gitDirectory,
+    GIT_INDEX_FILE: path.join(gitDirectory, "index"),
+    GIT_WORK_TREE: decoy.root,
+    GIT_COMMON_DIR: gitDirectory,
+    GIT_OBJECT_DIRECTORY: path.join(gitDirectory, "objects"),
+  }
+
+  const { root, source, output, sourceCommit } = await fixture(inherited)
+  t.after(() => fs.rm(root, { recursive: true, force: true }))
+  const imported = await importInChildProcess({ source, output, sourceCommit }, inherited)
+
+  assert.equal(imported.status, 0, imported.stderr)
+  assert.deepEqual(decoy.state(), untouched)
+})
+
+test("strips every repository-scoped variable git reports, and nothing else", () => {
+  const keys = inheritedGitEnvKeys()
+
+  assert.ok(keys.includes("GIT_DIR"), "git must report GIT_DIR as repository-scoped")
+  assert.deepEqual(
+    gitEnvWithoutInheritedRepository({
+      ...Object.fromEntries(keys.map((key) => [key, "leaked"])),
+      PATH: "/usr/bin",
+    }),
+    { PATH: "/usr/bin" },
   )
 })

@@ -4,6 +4,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 
+import { gitEnvWithoutInheritedRepository } from "../contracts/import-platform-contracts.mjs"
+
 const GENERATED_FILE = "packages/shared-contracts/src/generated/backend-openapi.d.ts"
 const REPORT_DIR = "test-results/contracts-openapi"
 const DIFF_REPORT = path.join(REPORT_DIR, "openapi-contract.diff")
@@ -29,7 +31,11 @@ const main = async () => {
     fail("OpenAPI 타입 생성에 실패했습니다.")
   }
 
-  const quietResult = run("git", ["diff", "--quiet", "--", GENERATED_FILE])
+  // An inherited GIT_DIR makes git treat the current directory as the worktree top, so a
+  // pathspec relative to front/ would match nothing and drift would be reported as clean.
+  const gitEnv = gitEnvWithoutInheritedRepository()
+
+  const quietResult = run("git", ["diff", "--quiet", "--", GENERATED_FILE], { env: gitEnv })
   if (quietResult.status === 0) {
     console.log("[contracts:check] generated types are up-to-date")
     return
@@ -38,7 +44,7 @@ const main = async () => {
     fail(`git diff --quiet 실행 실패(status=${quietResult.status ?? "unknown"})`)
   }
 
-  const diffResult = run("git", ["diff", "--", GENERATED_FILE])
+  const diffResult = run("git", ["diff", "--", GENERATED_FILE], { env: gitEnv })
   const diffText = diffResult.stdout || ""
 
   await fs.mkdir(path.resolve(REPORT_DIR), { recursive: true })

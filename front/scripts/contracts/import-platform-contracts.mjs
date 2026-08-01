@@ -16,6 +16,31 @@ const SOURCE_ARTIFACTS = [
   ["openapi", "openapi.json"],
   ["errorCodes", "error-codes.json"],
 ]
+let inheritedGitEnvKeysCache
+
+// git rev-parse --local-env-vars lists every environment variable that binds git to one
+// specific repository, and .githooks/pre-commit already unsets exactly this set. Asking git
+// keeps the two in step instead of freezing a copy that silently falls behind. It needs no
+// repository of its own, so it answers even when the inherited GIT_DIR points nowhere.
+export function inheritedGitEnvKeys() {
+  if (!inheritedGitEnvKeysCache) {
+    inheritedGitEnvKeysCache = execFileSync("git", ["rev-parse", "--local-env-vars"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .split("\n")
+      .map((name) => name.trim())
+      .filter(Boolean)
+  }
+  return inheritedGitEnvKeysCache
+}
+
+// Git exports GIT_DIR and friends to hooks in a linked worktree, so a git call that
+// targets another directory would silently operate on the inherited repository instead.
+export function gitEnvWithoutInheritedRepository(env = process.env) {
+  const inherited = new Set(inheritedGitEnvKeys())
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !inherited.has(key)))
+}
 
 function fail(message) {
   throw new Error(`[platform-contracts] ${message}`)
@@ -63,10 +88,13 @@ function gitHubRepository(remote) {
 }
 
 function validateSourceCommit(source, sourceRepository, sourceCommit, files) {
+  const env = gitEnvWithoutInheritedRepository()
+
   let repositoryRoot
   try {
     repositoryRoot = execFileSync("git", ["-C", source, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
+      env,
       stdio: ["ignore", "pipe", "ignore"],
     }).trim()
   } catch {
@@ -77,6 +105,7 @@ function validateSourceCommit(source, sourceRepository, sourceCommit, files) {
   try {
     origin = execFileSync("git", ["-C", repositoryRoot, "remote", "get-url", "origin"], {
       encoding: "utf8",
+      env,
       stdio: ["ignore", "pipe", "ignore"],
     }).trim()
   } catch {
@@ -97,6 +126,7 @@ function validateSourceCommit(source, sourceRepository, sourceCommit, files) {
     try {
       committed = execFileSync("git", ["-C", repositoryRoot, "show", `${sourceCommit}:${gitPath}`], {
         encoding: null,
+        env,
         stdio: ["ignore", "pipe", "ignore"],
       })
     } catch {

@@ -20,8 +20,8 @@ jobs:
   backend-ci:
     runs-on: ubuntu-latest
     env:
-      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
-      TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
+      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD || 'test_db_password_change_me' }}
+      TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD || 'test_redis_password_change_me' }}
     steps:
       - name: Checkout
         shell: bash

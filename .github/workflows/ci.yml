@@ -72,8 +72,8 @@ jobs:
       pull-requests: write
     uses: ./.github/workflows/reusable-backend-quality.yml
     secrets:
-      CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
-      CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
+      CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD || 'test_db_password_change_me' }}
+      CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD || 'test_redis_password_change_me' }}
 
   frontend-ci:
     permissions:
@@ -148,8 +148,8 @@ jobs:
       - name: Run Platform archive standalone gate
         env:
           STANDALONE_ARTIFACT_DIR: ${{ runner.temp }}/platform-standalone
-          TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
-          TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
+          TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD || 'test_db_password_change_me' }}
+          TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD || 'test_redis_password_change_me' }}
         run: bash tools/repo-split/verify-platform-standalone.sh "${GITHUB_SHA}"
 
       - name: Upload Platform standalone evidence

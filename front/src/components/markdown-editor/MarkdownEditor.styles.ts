@@ -133,6 +133,14 @@ export const EditorBody = styled.div`
     max-width: 820px;
   }
 
+  &[data-mode="split"] [data-testid="markdown-editor-preview-scroll"] {
+    padding: 30px 32px 110px;
+  }
+
+  &[data-mode="split"] [data-testid="markdown-editor-preview-scroll"] > header {
+    display: none;
+  }
+
   @media (max-width: 1100px) {
     grid-template-columns: minmax(0, 1fr);
 
@@ -144,6 +152,12 @@ export const EditorBody = styled.div`
 
     &[data-mode="split"] [data-pane="preview"] {
       height: auto;
+    }
+  }
+
+  @media (max-width: 820px) {
+    &[data-mode="split"] [data-testid="markdown-editor-preview-scroll"] {
+      padding: 22px 18px 90px;
     }
   }
 `

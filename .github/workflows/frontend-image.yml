@@ -223,17 +223,19 @@ jobs:
           fi
 
           # 레지스트리 전송량(압축 layer 합). attestation이 붙으면 최상위가 index라 자식 manifest를 한 번 더 본다.
+          # 이 값은 보고용이라 조회·파싱 실패가 push된 digest를 무효로 만들면 안 된다. jq 실패는
+          # 삼키고 아래에서 unknown으로 표시한다. fail-closed 대상은 비압축 크기 쪽이다.
           registry_bytes=""
           raw="$(docker buildx imagetools inspect --raw "${FRONT_IMAGE_REF}" 2>/dev/null || true)"
           if [ -n "${raw}" ]; then
             if printf '%s' "${raw}" | jq -e 'has("layers")' >/dev/null 2>&1; then
-              registry_bytes="$(printf '%s' "${raw}" | jq -r '[.layers[].size] | add // empty')"
+              registry_bytes="$(printf '%s' "${raw}" | jq -r '[.layers[].size] | add // empty' 2>/dev/null || true)"
             else
-              child="$(printf '%s' "${raw}" | jq -r '[.manifests[]? | select((.platform.os // "unknown") != "unknown") | .digest] | first // empty')"
+              child="$(printf '%s' "${raw}" | jq -r '[.manifests[]? | select((.platform.os // "unknown") != "unknown") | .digest] | first // empty' 2>/dev/null || true)"
               if [ -n "${child}" ]; then
                 child_raw="$(docker buildx imagetools inspect --raw "${FRONT_IMAGE_NAME}@${child}" 2>/dev/null || true)"
                 if [ -n "${child_raw}" ]; then
-                  registry_bytes="$(printf '%s' "${child_raw}" | jq -r '[.layers[]?.size] | add // empty')"
+                  registry_bytes="$(printf '%s' "${child_raw}" | jq -r '[.layers[]?.size] | add // empty' 2>/dev/null || true)"
                 fi
               fi
             fi

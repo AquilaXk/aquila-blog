@@ -77,7 +77,16 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
 }
 
 # Cloudflare Tunnel origin: HTTP only between cloudflared and Caddy.
-http://{$API_DOMAIN} {
+#
+# Two site addresses, not one. A single address means the old and the new public API host can
+# never be live at the same time, so every cutover order breaks the public site for a while:
+# flip the web DNS first and the API host does not exist yet (404 on every API call); flip the
+# API host first and whatever still serves the old web origin loses its backend.
+#
+# LEGACY_API_DOMAIN is transition-only and unset outside the cutover window. Its `.localhost`
+# default is required: an empty value collapses the address to `http://`, which Caddy adapts
+# into a host-matcher-less :80 catch-all.
+http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost} {
   log {
     output stdout
     format json

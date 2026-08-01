@@ -134,7 +134,17 @@ export const validateEnvText = ({ contract, target, text }) => {
     const required = isRequired(definition, env)
 
     if (!value) {
-      if (required) errors.push(safeError(definition.name, "is required"))
+      // 키가 아예 없는 것과, 있는데 빈 것은 다르다. Caddy의 {$VAR:default}는 unset일 때만
+      // 기본값을 쓰므로, 빈 값은 기본값도 못 받고 주소를 통째로 무너뜨린다.
+      if (definition.rejectEmptyValue && env.has(definition.name)) {
+        errors.push(safeError(definition.name, "must be removed entirely, not left empty"))
+      } else if (required) {
+        errors.push(safeError(definition.name, "is required"))
+      } else if (definition.warnWhenAbsent) {
+        // required: false인데 소비하는 코드 경로가 살아 있으면, 빈 값은 "기능 꺼짐"이 아니라
+        // "조용히 아무것도 안 함"이 된다. 그 침묵을 여기서 깬다.
+        warnings.push(safeError(definition.name, definition.warnWhenAbsent))
+      }
       continue
     }
 
@@ -152,6 +162,12 @@ export const validateEnvText = ({ contract, target, text }) => {
 
     if (definition.forbiddenValues?.includes(value)) {
       errors.push(safeError(definition.name, "must not use forbidden value"))
+    }
+
+    // 전환 창 전용 키처럼, 설정돼 있다는 사실 자체가 임시 상태를 뜻하는 값이 있다.
+    // 조용히 영구 잔존하면 그 임시 상태가 영구가 된다.
+    if (definition.warnWhenPresent) {
+      warnings.push(safeError(definition.name, definition.warnWhenPresent))
     }
 
     if (definition.forbiddenSha256?.includes(sha256(value))) {
@@ -227,6 +243,12 @@ export const validateEnvText = ({ contract, target, text }) => {
         if (!isStrictSubdomainOf(entry.backHost, entry.cookieDomain)) {
           errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: backHost must be a subdomain of cookieDomain`))
         }
+        // admin embed allowlist는 Caddy의 frame-ancestors로 들어간다. 표가 web 호스트 밖의
+        // origin을 선언하면 그 origin이 관리 화면을 iframe으로 감쌀 권한을 갖는다.
+        const declaredEmbedOrigins = String(entry.adminEmbedOrigins || "").split(/\s+/).filter(Boolean)
+        if (declaredEmbedOrigins.some((origin) => normalizeHost(hostOf(origin)) !== normalizeHost(entry.webHost || entry.frontHost))) {
+          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: adminEmbedOrigins must stay on its own web host`))
+        }
         if (forbiddenCookieDomains.includes(entry.cookieDomain)) {
           errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: cookieDomain is owned by another service`))
         }
@@ -275,10 +297,12 @@ export const validateEnvText = ({ contract, target, text }) => {
           const origins = rawOrigins.split(/\s+/).filter(Boolean)
           const outside = origins.filter((origin) => normalizeHost(hostOf(origin)) !== normalizeHost(topology.frontHost))
           if (rawOrigins && (origins.length === 0 || outside.length > 0)) {
+            // 어떤 origin이 embed 권한을 잃는지 이름을 대야 오너가 배포 전에 판단할 수 있다.
+            const removed = outside.length > 0 ? outside.join(" ") : rawOrigins
             warnings.push(
               safeError(
                 check.adminEmbedOriginsKey,
-                `grants embed rights outside the web host declared for ${check.apiHostKey}=${apiHost}; the deploy will replace it`,
+                `the deploy will replace this with "${topology.adminEmbedOrigins}", removing iframe embed rights from: ${removed}`,
               ),
             )
           }

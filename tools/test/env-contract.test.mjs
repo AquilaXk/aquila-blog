@@ -27,9 +27,13 @@ const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
 const extractCaddySiteBlock = (caddyfile, siteMarker) => {
   const start = caddyfile.indexOf(siteMarker)
   if (start === -1) return ""
-  // Address lines may embed `{env}` placeholders; open the site block after the marker.
-  const openBrace = caddyfile.indexOf("{", start + siteMarker.length)
-  if (openBrace === -1) return ""
+  // Address lines may embed `{env}` placeholders and may list several addresses, so the block
+  // opener is the LAST brace on the address line - not the first one after the marker, which
+  // would be a `{$VAR}` placeholder of a second address.
+  const lineEnd = caddyfile.indexOf("\n", start)
+  const addressLine = caddyfile.slice(start, lineEnd === -1 ? caddyfile.length : lineEnd)
+  const openBrace = start + addressLine.lastIndexOf("{")
+  if (addressLine.lastIndexOf("{") === -1) return ""
   let depth = 0
   for (let i = openBrace; i < caddyfile.length; i += 1) {
     const ch = caddyfile[i]
@@ -328,6 +332,75 @@ test("Caddy routes tokenized cloud external content through public read upstream
   assert(logSkipIndex < publicReadMatcherIndex, "cloud external-content log_skip must be declared before routing")
   assert(externalContentIndex < readProxyIndex, "cloud external-content route must be matched before read proxy handling")
   assert(readProxyIndex < adminMatcherIndex, "public read proxy must be declared before admin API matcher")
+})
+
+test("API vhost keeps the legacy API host reachable during the domain cutover", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const addressLine = caddyfile.split("\n").find((line) => line.startsWith("http://{$API_DOMAIN}"))
+
+  assert(addressLine, "API vhost address line must exist")
+  // 단일 site address면 구·신 API 호스트가 동시에 살 수 없어, 어느 순서로 전환해도
+  // 공개 사이트가 죽는 창이 생긴다.
+  assert.match(addressLine, /^http:\/\/\{\$API_DOMAIN\}, http:\/\/\{\$LEGACY_API_DOMAIN:[^}]+\} \{$/, addressLine)
+  // 기본값이 비면 주소가 `http://`가 되어 host matcher 없는 :80 catch-all이 된다.
+  assert.match(addressLine, /\{\$LEGACY_API_DOMAIN:[a-z0-9-]+\.localhost\}/, addressLine)
+})
+
+test("LEGACY_API_DOMAIN is declared as an optional transition-only key and reaches Caddy", async () => {
+  const { loadContract } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const definition = contract.targets["home-server-source"].keys.find((key) => key.name === "LEGACY_API_DOMAIN")
+
+  assert(definition, "LEGACY_API_DOMAIN must be declared")
+  assert.equal(definition.required, false)
+  assert.equal(definition.kind, "hostname")
+
+  // Caddy service env에 실리지 않으면 vhost 주소가 기본값(.localhost)으로 남아 무의미해진다.
+  const materialize = readFileSync(path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"), "utf8")
+  assert.match(materialize, /LEGACY_API_DOMAIN/)
+})
+
+test("LEGACY_API_DOMAIN warns while set and is rejected for another service host", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  const open = validateEnvText({
+    contract,
+    target: "home-server-source",
+    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=api.aquilaxk.site`,
+  })
+  assert.equal(open.ok, true, open.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
+  // 조용히 영구 잔존하면 apex 소유가 바뀐 뒤에도 구 호스트가 백엔드를 계속 노출한다.
+  assert(open.warnings.some((warning) => warning.key === "LEGACY_API_DOMAIN"))
+
+  for (const forbidden of ["aquilaxk.site", "www.aquilaxk.site"]) {
+    const result = validateEnvText({
+      contract,
+      target: "home-server-source",
+      text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=${forbidden}`,
+    })
+    assert.equal(result.ok, false, `${forbidden} must not become an API vhost address`)
+    assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
+  }
+
+  const closed = validateEnvText({ contract, target: "home-server-source", text: baseHomeServerEnv })
+  assert.equal(closed.warnings.some((warning) => warning.key === "LEGACY_API_DOMAIN"), false)
+})
+
+test("LEGACY_API_DOMAIN must be removed, not blanked, because an empty value deletes the API vhost", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  // 실측: `caddy adapt`에서 LEGACY_API_DOMAIN= (present but empty)이면 두 번째 주소가
+  // `http://`가 되어 site 전체가 host matcher 없는 :80 catch-all이 되고, API vhost의
+  // api.blog.aquilaxk.site host matcher가 출력에서 통째로 사라진다.
+  // 창을 닫을 때 줄을 지우지 않고 비우는 것이 가장 자연스러운 실수라 여기서 막는다.
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=`,
+  })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
 })
 
 test("Caddy edge CORS allows the public web origin only", () => {
@@ -1251,6 +1324,46 @@ test("front-derived keys pinned by the deploy announce their replacement instead
     assert.equal(result.ok, true, `${key} must not block the deploy: ${result.errors.map((e) => e.key).join(",")}`)
     assert(result.warnings.some((warning) => warning.key === key), `${key} drift must be announced`)
   }
+})
+
+test("ADMIN_EMBED_ORIGINS warning names the origins that lose embed rights", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  // 오너 정본 .env.prod의 현재 값이다. apex와 www 둘 다 embed 권한을 갖고 있다.
+  const text = withEnvKeys(baseHomeServerEnv, [
+    ["ADMIN_EMBED_ORIGINS", "https://www.aquilaxk.site https://aquilaxk.site"],
+  ])
+
+  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+  const warning = result.warnings.find((entry) => entry.key === "ADMIN_EMBED_ORIGINS")
+
+  assert(warning, "the removal must be announced before the deploy applies it")
+  // 일반론이면 오너가 무엇이 사라지는지 모른다. 제거 대상 origin을 찍어야 한다.
+  assert(warning.message.includes("https://www.aquilaxk.site"), warning.message)
+  assert(warning.message.includes("https://aquilaxk.site"), warning.message)
+  assert(warning.message.includes("https://blog.aquilaxk.site"), warning.message)
+})
+
+test("a topology may not grant admin embed rights outside its own web host", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+    adminEmbedOrigins: "https://blog.aquilaxk.site https://aquilaxk.site",
+  })
+
+  const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.message.includes("adminEmbedOrigins")))
+})
+
+test("an absent revalidate URL is announced because the backend call path is live", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = baseHomeServerEnv.replace(/^CUSTOM__REVALIDATE__URL=.*$\n?/m, "")
+
+  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+
+  // required: false지만 비어 있으면 RevalidateService가 조용히 drop한다.
+  assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
+  assert(result.warnings.some((warning) => warning.key === "CUSTOM__REVALIDATE__URL"))
 })
 
 test("ADMIN_EMBED_ORIGINS drift to another service host is announced", async () => {

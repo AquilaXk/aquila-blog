@@ -2,7 +2,7 @@ import org.gradle.api.tasks.compile.JavaCompile
 
 plugins {
     kotlin("jvm") version "2.2.21"
-    kotlin("plugin.spring") version "2.2.21"
+    kotlin("plugin.spring") version "2.4.10"
     jacoco
     id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"

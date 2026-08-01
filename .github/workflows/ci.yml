@@ -12,6 +12,7 @@ on:
       - "tools/test/public-contract-manifest.test.mjs"
       - "tools/test/sync-public-contract-workflow.test.mjs"
       - "tools/test/setup-node-pin-parity.test.mjs"
+      - "tools/test/frontend-image-workflow.test.mjs"
       - "deploy/**"
       - "restore-privacy-gate.sh"
       - "AGENTS.md"
@@ -43,6 +44,7 @@ on:
       - "tools/test/public-contract-manifest.test.mjs"
       - "tools/test/sync-public-contract-workflow.test.mjs"
       - "tools/test/setup-node-pin-parity.test.mjs"
+      - "tools/test/frontend-image-workflow.test.mjs"
       - "deploy/**"
       - "restore-privacy-gate.sh"
       - "AGENTS.md"
@@ -154,6 +156,9 @@ jobs:
 
       - name: Verify setup-node pin parity contract
         run: node --test tools/test/setup-node-pin-parity.test.mjs
+
+      - name: Verify front image workflow contract
+        run: node --test tools/test/frontend-image-workflow.test.mjs
 
       - name: Run Platform archive standalone gate
         env:

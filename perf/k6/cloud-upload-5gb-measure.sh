@@ -3,7 +3,7 @@
 # k6 cloud-upload-parts-load.js는 part API 지연/동시 세션만 측정한다.
 #
 # Required env:
-#   BASE_URL          API origin (default: https://api.aquilaxk.site)
+#   BASE_URL          API origin (default: https://api.blog.aquilaxk.site)
 #   CLOUD_AUTH_COOKIE or CLOUD_AUTH_HEADER or CLOUD_AUTH_COOKIE_FILE
 # Optional:
 #   TARGET_GIB        total upload size in GiB (default: 5)
@@ -15,14 +15,14 @@
 #                           (for accessToken TTL ~20m during multi-hour/5GiB runs)
 #
 # Example:
-#   BASE_URL="https://api.aquilaxk.site" \
+#   BASE_URL="https://api.blog.aquilaxk.site" \
 #   CLOUD_AUTH_COOKIE="accessToken=..." \
 #   ./perf/k6/cloud-upload-5gb-measure.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE_URL="${BASE_URL:-https://api.aquilaxk.site}"
+BASE_URL="${BASE_URL:-https://api.blog.aquilaxk.site}"
 BASE_URL="${BASE_URL%/}"
 CLOUD_API="${BASE_URL}/system/api/v1/adm/cloud"
 TARGET_GIB="${TARGET_GIB:-5}"

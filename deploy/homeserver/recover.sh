@@ -6,9 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
-API_READINESS_URL="https://api.aquilaxk.site/actuator/health/readiness"
-WWW_URL="https://www.aquilaxk.site/"
-API_ROOT_URL="https://api.aquilaxk.site/"
+API_READINESS_URL="https://api.blog.aquilaxk.site/actuator/health/readiness"
+WEB_URL="https://blog.aquilaxk.site/"
+API_ROOT_URL="https://api.blog.aquilaxk.site/"
 
 compose() {
   bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
@@ -292,7 +292,7 @@ main() {
     stop_inactive_backend "${active}"
   fi
 
-  curl -sS -m 10 -o /dev/null -w "www %{http_code} %{time_total}\n" "${WWW_URL}" || true
+  curl -sS -m 10 -o /dev/null -w "web %{http_code} %{time_total}\n" "${WEB_URL}" || true
   curl -sS -m 10 -o /dev/null -w "api_root %{http_code} %{time_total}\n" "${API_ROOT_URL}" || true
   curl -sS -m 10 -i "${API_READINESS_URL}" | sed -n "1,25p" || true
   compose ps

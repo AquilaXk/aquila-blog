@@ -13,7 +13,7 @@
  *   rate limit 방어 동작 자체는 별도 짧은 시나리오로 분리한다.
  *
  * 실행 예:
- *   BASE_URL="https://api.aquilaxk.site" \
+ *   BASE_URL="https://api.blog.aquilaxk.site" \
  *   CLOUD_FILE_ID="103" \
  *   CLOUD_PLAYBACK_TOKEN="<token>" \
  *   CLOUD_FILE_BYTE_SIZE="8388608" \
@@ -24,7 +24,7 @@ import http from "k6/http";
 import { check, sleep } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
 
-const BASE_URL = (__ENV.BASE_URL || "https://api.aquilaxk.site").replace(/\/$/, "");
+const BASE_URL = (__ENV.BASE_URL || "https://api.blog.aquilaxk.site").replace(/\/$/, "");
 const FILE_ID = (__ENV.CLOUD_FILE_ID || "").trim();
 const PLAYBACK_TOKEN = (__ENV.CLOUD_PLAYBACK_TOKEN || "").trim();
 const FILE_BYTE_SIZE = Number(__ENV.CLOUD_FILE_BYTE_SIZE || "0");

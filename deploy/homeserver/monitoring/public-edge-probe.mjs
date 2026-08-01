@@ -8,7 +8,7 @@ import process from "node:process"
 import { performance } from "node:perf_hooks"
 import { pathToFileURL } from "node:url"
 
-const DEFAULT_BASE_URL = "https://www.aquilaxk.site"
+const DEFAULT_BASE_URL = "https://blog.aquilaxk.site"
 const DEFAULT_TIMEOUT_MS = 15_000
 const DEFAULT_REQUESTS_PER_ROUTE = 2
 const DEFAULT_LATEST_POSTS = 3

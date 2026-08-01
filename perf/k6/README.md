@@ -6,7 +6,7 @@
 k6 run perf/k6/post-read-load.js
 ```
 
-- 기본 대상: `https://api.aquilaxk.site`
+- 기본 대상: `https://api.blog.aquilaxk.site`
 - 시나리오 구성:
   - `home_feed`: 메인 피드/태그 조회
   - `detail_reader`: 글 상세 조회
@@ -30,14 +30,14 @@ BASE_URL="https://staging-api.example.com" k6 run perf/k6/post-read-load.js
 k6 run perf/k6/post-read-chaos-smoke.js
 ```
 
-- 기본 대상: `https://api.aquilaxk.site`
+- 기본 대상: `https://api.blog.aquilaxk.site`
 - 핵심 검증:
   - `feed/explore/detail` 2xx/3xx 성공률
   - 경로별 p95(`feed/explore<2.5s`, `detail<1.8s`)
 - 선택 장애 주입:
 
 ```bash
-BASE_URL="https://api.aquilaxk.site" \
+BASE_URL="https://api.blog.aquilaxk.site" \
 CHAOS_FAILURE_PATH="/post/api/v1/posts/feed?page=99999&pageSize=1000" \
 k6 run perf/k6/post-read-chaos-smoke.js
 ```
@@ -66,7 +66,7 @@ k6 run perf/k6/post-read-chaos-smoke.js
 옵션 예시:
 
 ```bash
-BASE_URL="https://api.aquilaxk.site" \
+BASE_URL="https://api.blog.aquilaxk.site" \
 DETAIL_ID="503" \
 CHAOS_FAILURE_PATHS="/post/api/v1/posts/999999999,/post/api/v1/posts/feed?page=99999&pageSize=1000" \
 ./perf/k6/run-chaos-suite.sh
@@ -140,7 +140,7 @@ sum(rate(http_server_requests_seconds_count{uri=~"/post/api/v1/posts/(feed|explo
 사전 준비: admin API로 외부 재생 token 발급 (TTL 6h). 자격은 **커밋하지 않고** `__ENV`로 주입.
 
 ```bash
-BASE_URL="https://api.aquilaxk.site" \
+BASE_URL="https://api.blog.aquilaxk.site" \
 CLOUD_FILE_ID="103" \
 CLOUD_PLAYBACK_TOKEN="<token-from-admin-api>" \
 CLOUD_FILE_BYTE_SIZE="8388608" \
@@ -168,7 +168,7 @@ k6 run --summary-export "perf/k6/results/cloud-playback-$(date +%Y%m%d-%H%M%S).j
 Admin 인증: `CLOUD_AUTH_COOKIE="accessToken=..."` 또는 `CLOUD_AUTH_HEADER="Bearer ..."`
 
 ```bash
-BASE_URL="https://api.aquilaxk.site" \
+BASE_URL="https://api.blog.aquilaxk.site" \
 CLOUD_AUTH_COOKIE="accessToken=..." \
 PART_SIZE_BYTES="1048576" \
 PARTS_PER_SESSION="3" \
@@ -184,7 +184,7 @@ k6 run perf/k6/cloud-upload-parts-load.js
 
 ```bash
 chmod +x perf/k6/cloud-upload-5gb-measure.sh
-BASE_URL="https://api.aquilaxk.site" \
+BASE_URL="https://api.blog.aquilaxk.site" \
 CLOUD_AUTH_COOKIE="accessToken=..." \
 TARGET_GIB="5" \
 ./perf/k6/cloud-upload-5gb-measure.sh
@@ -199,12 +199,12 @@ TARGET_GIB="5" \
 
 ```bash
 # 터미널 A — baseline 또는 부하 중 read API
-BASE_URL="https://api.aquilaxk.site" \
+BASE_URL="https://api.blog.aquilaxk.site" \
 k6 run --summary-export "perf/k6/results/read-under-cloud-$(date +%Y%m%d-%H%M%S).json" \
   perf/k6/post-read-load.js
 
 # 터미널 B — cloud 재생 또는 업로드 부하
-BASE_URL="https://api.aquilaxk.site" \
+BASE_URL="https://api.blog.aquilaxk.site" \
 CLOUD_FILE_ID="103" CLOUD_PLAYBACK_TOKEN="..." CLOUD_FILE_BYTE_SIZE="8388608" \
 k6 run perf/k6/cloud-playback-load.js
 ```

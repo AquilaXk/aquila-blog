@@ -1,7 +1,7 @@
 # 전체 페이지 패밀리룩 출시 기준 100% 계획서
 
 작성일: 2026-07-02
-검토 방식: 라이브 사이트(https://www.aquilaxk.site) 데스크톱 1440px / 모바일 390px 실측 스크린샷, 관리자·에디터는 `front/test-results/aquilalog-v4-*-evidence` (2026-06-24 기준) 스크린샷과 코드 리뷰 병행
+검토 방식: 라이브 사이트(https://blog.aquilaxk.site) 데스크톱 1440px / 모바일 390px 실측 스크린샷, 관리자·에디터는 `front/test-results/aquilalog-v4-*-evidence` (2026-06-24 기준) 스크린샷과 코드 리뷰 병행
 
 ## 1. 목적과 출시 기준
 

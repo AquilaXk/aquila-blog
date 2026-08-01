@@ -331,7 +331,7 @@ services:
       - "--timeout-ms"
       - "${PUBLIC_EDGE_PROBE_TIMEOUT_MS:-15000}"
       - "--base-url"
-      - "${PUBLIC_EDGE_PROBE_BASE_URL:-https://www.aquilaxk.site}"
+      - "${PUBLIC_EDGE_PROBE_BASE_URL:-https://blog.aquilaxk.site}"
       - "--state-path"
       - "/data/public-edge-probe-state.json"
     volumes:

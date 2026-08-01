@@ -2,7 +2,7 @@ import http from "k6/http"
 import { check, sleep } from "k6"
 import { Counter, Rate, Trend } from "k6/metrics"
 
-const BASE_URL = __ENV.BASE_URL || "https://api.aquilaxk.site"
+const BASE_URL = __ENV.BASE_URL || "https://api.blog.aquilaxk.site"
 const DETAIL_ID = (__ENV.DETAIL_ID || "503").trim()
 const CHAOS_FAILURE_PATH = (__ENV.CHAOS_FAILURE_PATH || "").trim()
 

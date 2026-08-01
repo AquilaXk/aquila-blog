@@ -84,7 +84,12 @@ write_filtered_env() {
       fi
       key="${line%%=*}"
       if [[ "${mode}" == "caddy" ]]; then
-        if is_caddy_key "${key}"; then
+        # Caddy's `{$VAR:default}` falls back to the default only when the variable is *unset*.
+        # A key that is present but empty renders an empty site address (`http://`), which caddy
+        # adapt turns into a route with no host matcher — a port-80 catch-all that answers every
+        # hostname the other vhosts do not claim. Emptying a line instead of deleting it would
+        # therefore silently redirect edge traffic, so empty values never reach the caddy env.
+        if is_caddy_key "${key}" && [[ -n "${line#*=}" ]]; then
           printf '%s\n' "${line}"
         fi
       elif [[ "${mode}" == "back" ]]; then

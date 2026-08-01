@@ -2831,6 +2831,7 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
         "API_DOMAIN=api.blog.example.com",
         "WEB_DOMAIN=blog.example.com",
         "WEB_UPSTREAM=front_green",
+        "MONITOR_DOMAIN=",
         "BACKEND_INTERNAL_URL=http://back-blue:8080",
         "CUSTOM__REVALIDATE__TOKEN=revalidate_secret_value",
         "BACKEND_PROXY_MAX_BODY_BYTES=1048576",
@@ -2856,6 +2857,12 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
 
       assert.match(caddyEnv, /^WEB_DOMAIN=blog\.example\.com$/m)
       assert.match(caddyEnv, /^WEB_UPSTREAM=front_green$/m)
+      // 값이 빈 키는 caddy env로 내보내지 않는다. Caddy의 `{$VAR:default}`는 변수가 **unset**일
+      // 때만 기본값을 쓰고, 존재하되 비어 있으면 빈 문자열을 그대로 쓴다. 그러면 site address가
+      // `http://`가 되어 host matcher 없는 :80 catch-all 라우트가 되고, 다른 vhost가 잡지 않는
+      // 모든 호스트를 그 vhost가 삼킨다 (caddy adapt로 실측). 줄을 지우지 않고 비우는 실수가
+      // edge 라우팅을 통째로 바꾸는 경로라 여기서 끊는다.
+      assert.doesNotMatch(caddyEnv, /^MONITOR_DOMAIN=$/m)
       // front 런타임 키가 빠지면 컨테이너는 healthy를 보고하면서 모든 SSR 경로가 500이 된다.
       assert.match(frontEnv, /^BACKEND_INTERNAL_URL=http:\/\/back-blue:8080$/m)
       // front의 TOKEN_FOR_REVALIDATE와 backend의 CUSTOM__REVALIDATE__TOKEN은 같은 공유 비밀이다.

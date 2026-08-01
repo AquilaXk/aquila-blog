@@ -8,9 +8,11 @@ import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class PostUseCaseAdapter(
@@ -21,6 +23,7 @@ class PostUseCaseAdapter(
 
     override fun randomSecureTip(): String = postApplicationService.randomSecureTip()
 
+    @Transactional
     override fun write(
         author: Member,
         title: String,
@@ -29,7 +32,14 @@ class PostUseCaseAdapter(
         listed: Boolean,
         idempotencyKey: String?,
         contentHtml: String?,
-    ): Post = postApplicationService.write(author, title, content, published, listed, idempotencyKey, contentHtml)
+        summary: String?,
+    ): Post {
+        val post = postApplicationService.write(author, title, content, published, listed, idempotencyKey, contentHtml)
+        if (post.summaryAlgorithmVersion == null) {
+            post.applyResolvedSummary(PostSummaryResolver.resolveForCreate(title, content, summary))
+        }
+        return post
+    }
 
     override fun findById(id: Long): Post? = postApplicationService.findById(id)
 
@@ -40,6 +50,7 @@ class PostUseCaseAdapter(
 
     override fun findLatest(): Post? = postApplicationService.findLatest()
 
+    @Transactional
     override fun modify(
         actor: Member,
         post: Post,
@@ -49,7 +60,44 @@ class PostUseCaseAdapter(
         listed: Boolean?,
         expectedVersion: Long,
         contentHtml: String?,
-    ) = postApplicationService.modify(actor, post, title, content, published, listed, expectedVersion, contentHtml)
+        summary: String?,
+    ) {
+        val existingText = post.summaryText
+        val existingSource = post.summarySource
+        val existingVersion = post.summaryAlgorithmVersion
+        val existingGeneratedAt = post.summaryGeneratedAt
+
+        postApplicationService.modify(actor, post, title, content, published, listed, expectedVersion, contentHtml)
+
+        val resolved =
+            if (
+                summary == null &&
+                existingSource == PostSummarySource.MIGRATED &&
+                !existingText.isNullOrBlank()
+            ) {
+                PostSummaryResolver
+                    .resolveForModify(
+                        title = title,
+                        content = content,
+                        submittedSummary = null,
+                        existingText = existingText,
+                        existingSource = PostSummarySource.MANUAL,
+                    ).copy(
+                        source = PostSummarySource.MIGRATED,
+                        algorithmVersion = existingVersion ?: "legacy-frontmatter-v1",
+                        generatedAt = existingGeneratedAt,
+                    )
+            } else {
+                PostSummaryResolver.resolveForModify(
+                    title = title,
+                    content = content,
+                    submittedSummary = summary,
+                    existingText = existingText,
+                    existingSource = existingSource,
+                )
+            }
+        post.applyResolvedSummary(resolved)
+    }
 
     override fun delete(
         post: Post,
@@ -198,4 +246,14 @@ class PostUseCaseAdapter(
     override fun getOrCreateTemp(author: Member): Pair<Post, Boolean> = postApplicationService.getOrCreateTemp(author)
 
     override fun isTempDraft(post: Post): Boolean = postApplicationService.isTempDraft(post)
+
+    private fun Post.applyResolvedSummary(resolved: PostSummaryResolver.ResolvedPostSummary) {
+        updateCanonicalSummary(
+            text = resolved.text,
+            source = resolved.source,
+            contentHash = resolved.contentHash,
+            algorithmVersion = resolved.algorithmVersion,
+            generatedAt = resolved.generatedAt,
+        )
+    }
 }

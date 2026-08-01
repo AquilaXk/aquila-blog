@@ -51,6 +51,13 @@
    `CUSTOM_PROD_FRONTURL`·`CUSTOM_PROD_COOKIEDOMAIN`을 동시에 바꾼다. 이 배포 시점부터 Caddy
    `{$API_DOMAIN}` vhost가 새 호스트로 바뀌므로 **구 `api.aquilaxk.site`는 Caddy vhost 미매치가
    된다.** 구 API hostname은 rollback 경로가 아니다 — rollback은 env 되돌리기다.
+
+   **선행 조건: edge CORS allowlist에 `https://blog.aquilaxk.site`가 먼저 들어가 있어야 한다.**
+   `Caddyfile`의 `@corsAllowed`·`@corsPreflight`는 `^https://(www\.)?aquilaxk\.site$`로
+   `blog.aquilaxk.site`와 매치되지 않는다. 그 정규식 교체는 #1540(PR #1555) 소관이며, 이 PR은
+   해당 라인을 건드리지 않았다. 정규식이 배포되지 않은 채로 4단계를 하면 브라우저의
+   `blog.aquilaxk.site` → `api.blog.aquilaxk.site` 요청이 `Access-Control-Allow-Origin`을 받지
+   못하고, 5단계의 CORS 확인도 실패한다. 같은 배포에 포함시키는 것이 가장 안전하다.
 5. **확인.** 아래 "개통 확인"의 명령이 전부 green이어야 한다.
 6. **(5)가 green인 뒤에** `www.aquilaxk.site`와 `api.aquilaxk.site`의 Tunnel public hostname과 DNS
    레코드를 제거한다 (오너, 콘솔). (5) 전에 6을 하면 도메인 rollback 경로가 사라진다.

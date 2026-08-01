@@ -3,6 +3,10 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 import type { Page, Route } from "./helpers/authoringPlaywright"
 import { expect, test } from "./helpers/authoringPlaywright"
+import {
+  extractMarkdownHeadingLineIndexes,
+  interpolateScrollTopByAnchors,
+} from "src/components/markdown-editor/markdownEditorScrollSyncModel"
 
 const sourcePath = (...segments: string[]) => resolve(__dirname, "../src", ...segments)
 const frontPath = (...segments: string[]) => resolve(__dirname, "..", ...segments)
@@ -91,6 +95,34 @@ const routeAuthenticatedEditor = async (page: Page, markdown = longMarkdownDraft
 }
 
 test.describe("Markdown editor replacement", () => {
+  test("scroll sync model ignores fenced headings", () => {
+    const markdown = [
+      "## First",
+      "",
+      "```md",
+      "## Not a heading",
+      "```",
+      "",
+      "### Second",
+    ].join("\n")
+
+    expect(extractMarkdownHeadingLineIndexes(markdown)).toEqual([0, 6])
+  })
+
+  test("scroll sync model interpolates inside the nearest heading interval", () => {
+    expect(
+      interpolateScrollTopByAnchors({
+        sourceScrollTop: 350,
+        anchorPairs: [
+          { sourceScrollTop: 0, targetScrollTop: 180 },
+          { sourceScrollTop: 200, targetScrollTop: 420 },
+          { sourceScrollTop: 500, targetScrollTop: 900 },
+          { sourceScrollTop: 1000, targetScrollTop: 1500 },
+        ],
+      })
+    ).toBe(660)
+  })
+
   test("legacy block editor implementation and route files are removed from the frontend tree", () => {
     const forbiddenPaths = [
       sourcePath("components", "editor"),
@@ -272,7 +304,7 @@ test.describe("Markdown editor replacement", () => {
     await expect(preview.getByText("quote at the bottom")).toBeVisible()
   })
 
-  test("split preview reserves the V4 public preview header before body content", async ({ page }) => {
+  test("split preview aligns body content and Preview mode restores the public header", async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 })
     await routeAuthenticatedEditor(page, "ㄷㄷㄷ")
 
@@ -281,31 +313,48 @@ test.describe("Markdown editor replacement", () => {
     await expect(page.getByTestId("markdown-editor-write-pane").locator("textarea")).toBeVisible()
     await expect(page.getByTestId("markdown-editor-preview-pane").getByText("ㄷㄷㄷ")).toBeVisible()
 
-    const startPointContract = await page.evaluate(() => {
-      const writePane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-write-pane']")
-      const previewPane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-preview-pane']")
-      const textarea = writePane?.querySelector<HTMLTextAreaElement>("textarea")
-      const firstPreviewBlock = previewPane?.querySelector<HTMLElement>(".aq-markdown > :first-child")
-      if (!writePane || !previewPane || !textarea || !firstPreviewBlock) {
-        throw new Error("markdown split pane elements not found")
-      }
+    const readStartPointContract = () =>
+      page.evaluate(() => {
+        const writePane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-write-pane']")
+        const previewPane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-preview-pane']")
+        const textarea = writePane?.querySelector<HTMLTextAreaElement>("textarea")
+        const firstPreviewBlock = previewPane?.querySelector<HTMLElement>(".aq-markdown > :first-child")
+        if (!writePane || !previewPane || !textarea || !firstPreviewBlock) {
+          throw new Error("markdown split pane elements not found")
+        }
 
-      const writePaneRect = writePane.getBoundingClientRect()
-      const previewPaneRect = previewPane.getBoundingClientRect()
-      const textareaRect = textarea.getBoundingClientRect()
-      const textareaStyle = window.getComputedStyle(textarea)
-      const firstPreviewBlockRect = firstPreviewBlock.getBoundingClientRect()
+        const writePaneRect = writePane.getBoundingClientRect()
+        const previewPaneRect = previewPane.getBoundingClientRect()
+        const textareaRect = textarea.getBoundingClientRect()
+        const textareaStyle = window.getComputedStyle(textarea)
+        const firstPreviewBlockRect = firstPreviewBlock.getBoundingClientRect()
 
-      return {
-        writeStartLeft: textareaRect.left + Number.parseFloat(textareaStyle.paddingLeft) - writePaneRect.left,
-        writeStartTop: textareaRect.top + Number.parseFloat(textareaStyle.paddingTop) - writePaneRect.top,
-        previewStartLeft: firstPreviewBlockRect.left - previewPaneRect.left,
-        previewStartTop: firstPreviewBlockRect.top - previewPaneRect.top,
-      }
-    })
+        return {
+          writeStartLeft: textareaRect.left + Number.parseFloat(textareaStyle.paddingLeft) - writePaneRect.left,
+          writeStartTop: textareaRect.top + Number.parseFloat(textareaStyle.paddingTop) - writePaneRect.top,
+          previewStartLeft: firstPreviewBlockRect.left - previewPaneRect.left,
+          previewStartTop: firstPreviewBlockRect.top - previewPaneRect.top,
+        }
+      })
 
+    await expect
+      .poll(async () => {
+        const contract = await readStartPointContract()
+        return Math.abs(contract.previewStartTop - contract.writeStartTop)
+      }, { message: "split preview body should start with the Markdown source body" })
+      .toBeLessThanOrEqual(12)
+
+    const startPointContract = await readStartPointContract()
     expect(Math.abs(startPointContract.writeStartLeft - startPointContract.previewStartLeft)).toBeLessThanOrEqual(12)
-    expect(startPointContract.previewStartTop).toBeGreaterThan(startPointContract.writeStartTop + 160)
+
+    await page.getByRole("tab", { name: "Preview" }).click()
+    const previewPane = page.getByTestId("markdown-editor-preview-pane")
+    await expect(previewPane.getByText("Public preview")).toBeVisible()
+    await expect
+      .poll(() => previewPane.evaluate((element) => element.scrollTop), {
+        message: "Preview-only mode should restore the public header origin",
+      })
+      .toBeLessThanOrEqual(1)
   })
 
   test("dedicated editor exposes V4 full-screen chrome around the editor", async ({ page }) => {
@@ -689,61 +738,105 @@ test.describe("Markdown editor replacement", () => {
     expect(previewContract.renderedWidth).toBeLessThanOrEqual(728)
   })
 
-  test("split panes keep write and preview scroll positions synchronized", async ({ page }) => {
-    const longMarkdown = Array.from({ length: 64 }, (_, index) => [
+  test("split panes synchronize the same heading identity in both directions", async ({ page }) => {
+    const sectionMarkdown = Array.from({ length: 64 }, (_, index) => [
       `## Section ${index + 1}`,
       "",
-      `긴 글 작성 위치와 미리보기 위치가 함께 움직여야 합니다. paragraph ${index + 1}`,
+      `paragraph-${index + 1}`,
       "",
-      "| Column 1 | Column 2 |",
-      "| --- | --- |",
-      `| Value ${index + 1} | Result ${index + 1} |`,
+      "```ts",
+      `const section${index + 1} = ${index + 1}`,
+      "```",
+      "",
+      index % 4 === 0 ? "> quoted line" : "plain line",
       "",
     ].join("\n")).join("\n")
+    const tailMarkdown = Array.from({ length: 40 }, (_, index) => `tail paragraph ${index + 1}`).join("\n\n")
+    const longMarkdown = `${sectionMarkdown}\n\n${tailMarkdown}`
 
     await routeAuthenticatedEditor(page, longMarkdown)
-
     await page.goto("/editor/new?source=local-draft")
 
     const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
     const previewPane = page.getByTestId("markdown-editor-preview-pane")
-    const previewScroll = previewPane
     await expect(textarea).toBeVisible()
     await expect(previewPane).toBeVisible()
-    await expect(previewScroll).toBeVisible()
 
-    const textareaScroll = await textarea.evaluate((element) => {
-      element.scrollTop = element.scrollHeight
-      element.dispatchEvent(new Event("scroll", { bubbles: true }))
-      return {
-        top: element.scrollTop,
-        max: element.scrollHeight - element.clientHeight,
-      }
-    })
-    expect(textareaScroll.max).toBeGreaterThan(0)
+    const readHeadingAlignmentError = (section: number) =>
+      page.evaluate((targetSection) => {
+        const textareaElement = document.querySelector<HTMLTextAreaElement>(
+          "[data-testid='markdown-editor-write-pane'] textarea"
+        )
+        const previewElement = document.querySelector<HTMLElement>(
+          "[data-testid='markdown-editor-preview-pane']"
+        )
+        if (!textareaElement || !previewElement) throw new Error("split pane elements not found")
 
-    await expect
-      .poll(async () => previewScroll.evaluate((element) => element.scrollTop), {
-        message: "preview pane should follow write pane scrolling",
-      })
-      .toBeGreaterThan(0)
+        const marker = `## Section ${targetSection}`
+        const markerIndex = textareaElement.value.indexOf(marker)
+        if (markerIndex < 0) throw new Error(`${marker} source marker not found`)
+        const lineIndex = textareaElement.value.slice(0, markerIndex).split(/\r?\n/).length - 1
+        const textareaStyle = window.getComputedStyle(textareaElement)
+        const lineHeight = Number.parseFloat(textareaStyle.lineHeight)
+        const paddingTop = Number.parseFloat(textareaStyle.paddingTop)
+        const sourceHeadingTop = paddingTop + lineIndex * lineHeight - textareaElement.scrollTop
+        const previewHeading = Array.from(previewElement.querySelectorAll<HTMLElement>("h2")).find(
+          (heading) => heading.textContent?.trim() === `Section ${targetSection}`
+        )
+        if (!previewHeading) throw new Error(`Section ${targetSection} preview heading not found`)
+        const previewHeadingTop =
+          previewHeading.getBoundingClientRect().top - previewElement.getBoundingClientRect().top
 
-    const previewAtBottom = await previewScroll.evaluate((element) => ({
-      top: element.scrollTop,
-      max: element.scrollHeight - element.clientHeight,
-    }))
-    expect(previewAtBottom.max).toBeGreaterThan(0)
+        return Math.abs(sourceHeadingTop - previewHeadingTop)
+      }, section)
 
-    await previewScroll.evaluate((element) => {
-      element.scrollTop = 0
-      element.dispatchEvent(new Event("scroll", { bubbles: true }))
-    })
+    const scrollWriteToSection = (section: number) =>
+      textarea.evaluate((element, targetSection) => {
+        const marker = `## Section ${targetSection}`
+        const markerIndex = element.value.indexOf(marker)
+        if (markerIndex < 0) throw new Error(`${marker} source marker not found`)
+        const lineIndex = element.value.slice(0, markerIndex).split(/\r?\n/).length - 1
+        const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight)
+        const maxScrollTop = element.scrollHeight - element.clientHeight
+        element.scrollTop = Math.max(0, Math.min(lineIndex * lineHeight, maxScrollTop))
+        element.dispatchEvent(new Event("scroll", { bubbles: true }))
+      }, section)
 
-    await expect
-      .poll(async () => textarea.evaluate((element) => element.scrollTop), {
-        message: "write pane should follow preview pane scrolling",
-      })
-      .toBeLessThan(textareaScroll.top)
+    const scrollPreviewToSection = (section: number) =>
+      previewPane.evaluate((element, targetSection) => {
+        const heading = Array.from(element.querySelectorAll<HTMLElement>("h2")).find(
+          (candidate) => candidate.textContent?.trim() === `Section ${targetSection}`
+        )
+        const textareaElement = document.querySelector<HTMLTextAreaElement>(
+          "[data-testid='markdown-editor-write-pane'] textarea"
+        )
+        if (!heading || !textareaElement) throw new Error(`Section ${targetSection} sync elements not found`)
+        const paddingTop = Number.parseFloat(window.getComputedStyle(textareaElement).paddingTop)
+        const elementRect = element.getBoundingClientRect()
+        const headingScrollTop = heading.getBoundingClientRect().top - elementRect.top + element.scrollTop
+        const maxScrollTop = element.scrollHeight - element.clientHeight
+        element.scrollTop = Math.max(0, Math.min(headingScrollTop - paddingTop, maxScrollTop))
+        element.dispatchEvent(new Event("scroll", { bubbles: true }))
+      }, section)
+
+    const checkpoints = [1, 16, 32, 48, 64]
+    for (const section of checkpoints) {
+      await scrollWriteToSection(section)
+      await expect
+        .poll(() => readHeadingAlignmentError(section), {
+          message: `write Section ${section} should align with the same preview heading`,
+        })
+        .toBeLessThanOrEqual(48)
+    }
+
+    for (const section of [...checkpoints].reverse()) {
+      await scrollPreviewToSection(section)
+      await expect
+        .poll(() => readHeadingAlignmentError(section), {
+          message: `preview Section ${section} should align with the same source heading`,
+        })
+        .toBeLessThanOrEqual(48)
+    }
   })
 
   test("분할 미리보기 wheel은 내부 스크롤 가능 구간에서 미리보기를 먼저 스크롤한다", async ({ page }) => {

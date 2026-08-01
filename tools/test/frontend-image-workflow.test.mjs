@@ -48,6 +48,24 @@ function stepIndex(job, name) {
   return index
 }
 
+const REGISTRY_HOST = "ghcr.io"
+const DERIVED_IMAGE = `${REGISTRY_HOST}/\${OWNER_LC}/\${REPO_NAME}-front`
+
+// 이미지 레퍼런스의 host 는 첫 `/` 앞 세그먼트 하나뿐이다. 부분 문자열이나 prefix 로 확인하면
+// `evil.example.com/ghcr.io/x`(중첩), `ghcr.io.evil.com/x`(유사 도메인), `ghcr.io@evil.com/x`
+// (userinfo) 가 전부 통과한다. 세그먼트를 앵커해 정확히 비교해야 계약이 성립한다.
+const HOST_SEGMENT = /^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?$/i
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i
+
+function registryHostOf(imageReference) {
+  // 이미지 레퍼런스는 scheme 을 갖지 않는다. scheme 이 붙어 있으면 레지스트리 참조가 아니다.
+  if (URL_SCHEME.test(imageReference)) {
+    return null
+  }
+  const host = imageReference.split("/", 1)[0]
+  return HOST_SEGMENT.test(host) ? host : null
+}
+
 test("front image build triggers on front changes and never on pull_request", () => {
   const { source } = workflow()
 
@@ -84,29 +102,53 @@ test("image name and tag are derived from the repository, matching the backend r
 
   assert.match(meta.run, /OWNER_LC="\$\(echo "\$\{GITHUB_REPOSITORY_OWNER\}" \| tr '\[:upper:\]' '\[:lower:\]'\)"/)
   assert.match(meta.run, /REPO_NAME="\$\(basename "\$\{GITHUB_REPOSITORY\}"\)"/)
-  assert.match(meta.run, /IMAGE_NAME="ghcr\.io\/\$\{OWNER_LC\}\/\$\{REPO_NAME\}-front"/)
   assert.match(meta.run, /IMAGE_TAG="sha-\$\{BUILD_SHA\}"/)
   assert.match(meta.run, /front build sha is empty/)
 
-  // 레지스트리 참조는 전수로 확인한다. 부정 매칭 하나보다 "registry로 시작하는 토큰이 전부
-  // 파생형과 정확히 일치하는가"가 더 강하고, hardcoded owner·잘못된 suffix·참조 부재를 모두 잡는다.
-  // 호스트명을 문자열 리터럴로 두면 CodeQL이 URL sanitization 검사로 오인하므로
-  // dockerfile-supply-chain.test.mjs 와 같은 방식으로 조립한다.
-  const registryPrefix = `${["ghcr", "io"].join(".")}/`
-  const derivedImage = `${registryPrefix}\${OWNER_LC}/\${REPO_NAME}-front`
-  const registryReferences = source.split(/\s|"|'/).filter((token) => token.startsWith(registryPrefix))
+  // 이미지 레퍼런스는 하나만 조립해야 한다. 두 번째 대입이 생기면 아래 host 검사를 우회한다.
+  const imageNameAssignments = [...meta.run.matchAll(/^\s*IMAGE_NAME="([^"]*)"$/gm)]
+  assert.equal(imageNameAssignments.length, 1, "meta step must assign IMAGE_NAME exactly once")
 
-  assert.ok(registryReferences.length > 0, "front image must target the GitHub container registry")
-  for (const reference of registryReferences) {
-    assert.equal(
-      reference,
-      derivedImage,
-      "registry owner and repository must be derived from the repository, not hardcoded",
-    )
-  }
+  const imageReference = imageNameAssignments[0][1]
+  assert.equal(
+    registryHostOf(imageReference),
+    REGISTRY_HOST,
+    "image reference must be hosted on the intended registry",
+  )
+  assert.equal(
+    imageReference,
+    DERIVED_IMAGE,
+    "registry owner and repository must be derived from the repository, not hardcoded",
+  )
+
+  // 로그인 대상 레지스트리도 같은 host 여야 push 대상과 자격 증명이 어긋나지 않는다.
+  assert.equal(stepByName(buildJob(document), "Login to GHCR").with.registry, REGISTRY_HOST)
 
   assert.doesNotMatch(source, /IMAGE_LATEST/, "front image must not publish a mutable latest ref")
   assert.doesNotMatch(source, /:latest/, "front image must not publish a mutable latest ref")
+})
+
+// 회귀 고정: host 를 부분 문자열로 확인하던 이전 구현은 아래 네 형태를 전부 통과시켰다.
+// 계약의 목적이 "레퍼런스가 의도한 레지스트리를 가리키는가"이므로 부분 일치는 목적을 달성하지 못한다.
+test("registry host parsing rejects nested, lookalike and userinfo hosts", () => {
+  assert.equal(registryHostOf(DERIVED_IMAGE), REGISTRY_HOST)
+  assert.equal(registryHostOf(`${REGISTRY_HOST}/owner/repo-front`), REGISTRY_HOST)
+
+  for (const impostor of [
+    `https://evil.example.com/${REGISTRY_HOST}/x`,
+    `http://${REGISTRY_HOST}/x`,
+    `evil.example.com/${REGISTRY_HOST}/x`,
+    `${REGISTRY_HOST}.evil.com/x`,
+    `${REGISTRY_HOST}@evil.com/x`,
+    `${REGISTRY_HOST}:5000/x`,
+    `evil${REGISTRY_HOST}/x`,
+  ]) {
+    assert.notEqual(
+      registryHostOf(impostor),
+      REGISTRY_HOST,
+      `registry host check must reject ${impostor}`,
+    )
+  }
 })
 
 test("build pushes the homeserver runtime Dockerfile from the front context", () => {

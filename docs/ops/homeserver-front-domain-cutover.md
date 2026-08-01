@@ -31,16 +31,30 @@
    `redirect-uri`가 `${custom.site.backUrl}` 파생이라 env를 바꾸는 순간 애플리케이션은 새 URI를
    보낸다. 등록 확인 전에는 3번을 시작하지 않는다.
 2. **홈서버 env에 front 키를 넣고 front를 기동한다.** `HOME_SERVER_ENV`에 다음을 추가한다.
-   - `WEB_DOMAIN=blog.aquilaxk.site`
    - `FRONT_BLUE_IMAGE=ghcr.io/aquilaxk/aquila-blog-front@sha256:...` (digest 전용)
    - `FRONT_GREEN_IMAGE=` **같은 digest** — 두 색깔이 모두 정의돼 있어 프로필을 켜면 두 키가
      모두 필요하다. compose는 image가 빈 서비스를 거부한다. 두 값이 갈라지는 것은 cutover
      시점이며, `BACK_BLUE_IMAGE`/`BACK_GREEN_IMAGE`가 이미 같은 방식으로 동작한다.
+   - `BACKEND_INTERNAL_URL=http://back-blue:8080` — **없으면 front가 모든 SSR 경로에서 500이다.**
+     `front/src/libs/server/backend.ts`가 production에서 이 값 없이는 throw하고, 이미지가
+     `NODE_ENV=production`을 박고 있다. compose 내부 주소만 쓰고 공개 인터넷을 왕복하지 않는다.
    - `COMPOSE_PROFILES`에 `front` 추가 (기존 값이 `runtime-split`이면 `runtime-split,front`)
 
-   이 시점에는 아직 Tunnel public hostname이 없으므로 공개 트래픽은 오지 않는다. 홈서버에서
-   `docker compose ps`와 `docker inspect --format '{{.State.Health.Status}}' <front 컨테이너>`로
-   `healthy`를 먼저 확인한다.
+   **`WEB_DOMAIN`은 여기서 넣지 않는다.** 이 값은 4단계에서 `CUSTOM_PROD_FRONTURL`과 **함께**
+   들어가야 한다. env 계약의 `urlHostEquals(CUSTOM_PROD_FRONTURL, WEB_DOMAIN)`은 두 값이 모두
+   있고 서로 다르면 error이고, 이 검증은 `deploy.yml`의 `Validate HOME_SERVER_ENV contract`
+   단계에서 돈다 — 먼저 넣으면 1·3단계를 끝낼 때까지 **백엔드 핫픽스를 포함한 모든 배포가
+   잠긴다.** 이 단계에서 front vhost는 `web.localhost` 기본값이라 공개 트래픽을 받지 않는다.
+
+   기동 검증 (Tunnel hostname이 아직 없어 공개 트래픽은 오지 않는다):
+   ```bash
+   docker compose ps
+   docker inspect --format '{{.State.Health.Status}}' <front 컨테이너>   # healthy
+   # healthy는 정적 서빙만 증명한다. SSR이 실제로 도는지는 여기서 직접 본다.
+   docker compose exec -T front_blue wget -qS -O /dev/null http://127.0.0.1:3000/ 2>&1 | head -3
+   docker compose exec -T front_blue printenv BACKEND_INTERNAL_URL
+   ```
+   `/`가 200이 아니거나 `BACKEND_INTERNAL_URL`이 비어 있으면 **3단계로 넘어가지 않는다.**
 3. **DNS 레코드와 Tunnel public hostname을 둘 다 만든다 (오너, 콘솔).**
    - `blog.aquilaxk.site` → `http://caddy:80`
    - `api.blog.aquilaxk.site` → `http://caddy:80`
@@ -48,7 +62,11 @@
    구 hostname(`www.aquilaxk.site`, `api.aquilaxk.site`)은 이 단계에서 **그대로 둔다.** 네 호스트가
    동시에 살아 있는 상태가 정상이다.
 4. **#1540의 env 전환을 한 배포로 함께 적용한다.** `API_DOMAIN`·`CUSTOM_PROD_BACKURL`·
-   `CUSTOM_PROD_FRONTURL`·`CUSTOM_PROD_COOKIEDOMAIN`을 동시에 바꾼다. 이 배포 시점부터 Caddy
+   `CUSTOM_PROD_FRONTURL`·`CUSTOM_PROD_COOKIEDOMAIN`, 그리고 **`WEB_DOMAIN=blog.aquilaxk.site`를
+   같은 배포에서 함께** 넣는다. 셋을 동시에 넣어야 `urlHostEquals(CUSTOM_PROD_FRONTURL,
+   WEB_DOMAIN)`이 처음부터 만족되고, `API_DOMAIN`이 새 topology로 가는 순간 `WEB_DOMAIN`이
+   `requiredWhen`으로 필수가 되므로 빠뜨리면 배포가 멈춘다(공개 도메인만 404가 되는 대신).
+   이 배포 시점부터 Caddy
    `{$API_DOMAIN}` vhost가 새 호스트로 바뀌므로 **구 `api.aquilaxk.site`는 Caddy vhost 미매치가
    된다.** 구 API hostname은 rollback 경로가 아니다 — rollback은 env 되돌리기다.
 
@@ -71,6 +89,13 @@ curl -sSI https://blog.aquilaxk.site/ \
 
 # 정적 자산 장기 캐시
 curl -sSI "https://blog.aquilaxk.site/_next/static/<실제 asset 경로>" | grep -i cache-control
+
+# SEO 진입점이 새 도메인을 가리키는지. front/public/robots.txt는 tracked 정적 파일이고
+# package.json의 postbuild가 next-sitemap을 스킵하므로 빌드가 이 값을 갱신하지 않는다.
+# 현재 이 파일은 Host/Sitemap을 vercel.app으로 광고한다 — 전환 전에 정정돼야 하고,
+# #1542로 Vercel이 내려가면 그 sitemap URL은 404가 된다.
+curl -sS https://blog.aquilaxk.site/robots.txt
+curl -sS -o /dev/null -w "sitemap=%{http_code}\n" https://blog.aquilaxk.site/sitemap.xml
 
 # api.blog 개통
 curl -sS https://api.blog.aquilaxk.site/actuator/health/readiness

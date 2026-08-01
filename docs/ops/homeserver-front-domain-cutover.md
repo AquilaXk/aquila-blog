@@ -33,6 +33,9 @@
 2. **홈서버 env에 front 키를 넣고 front를 기동한다.** `HOME_SERVER_ENV`에 다음을 추가한다.
    - `WEB_DOMAIN=blog.aquilaxk.site`
    - `FRONT_BLUE_IMAGE=ghcr.io/aquilaxk/aquila-blog-front@sha256:...` (digest 전용)
+   - `FRONT_GREEN_IMAGE=` **같은 digest** — 두 색깔이 모두 정의돼 있어 프로필을 켜면 두 키가
+     모두 필요하다. compose는 image가 빈 서비스를 거부한다. 두 값이 갈라지는 것은 cutover
+     시점이며, `BACK_BLUE_IMAGE`/`BACK_GREEN_IMAGE`가 이미 같은 방식으로 동작한다.
    - `COMPOSE_PROFILES`에 `front` 추가 (기존 값이 `runtime-split`이면 `runtime-split,front`)
 
    이 시점에는 아직 Tunnel public hostname이 없으므로 공개 트래픽은 오지 않는다. 홈서버에서

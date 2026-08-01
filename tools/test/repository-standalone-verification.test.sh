@@ -42,10 +42,42 @@ assert_before() {
     || fail "${file#"${repo_root}/"} must place '${first}' before '${second}'"
 }
 
+assert_actions_only() {
+  local script="$1"
+  local status=0
+  GITHUB_ACTIONS=false bash "${script}" >/dev/null 2>&1 || status=$?
+  [[ "${status}" -eq 2 ]] \
+    || fail "${script#"${repo_root}/"} must fail closed with exit 2 outside GitHub Actions (got ${status})"
+}
+
 for file in "${web_script}" "${platform_script}" "${workflow}"; do
   assert_file "${file}"
 done
-bash -n "${web_script}" "${platform_script}"
+for script in "${web_script}" "${platform_script}"; do
+  bash -n "${script}" || fail "bash syntax error: ${script#"${repo_root}/"}"
+  assert_actions_only "${script}"
+done
+
+# Parse the workflow structurally rather than trusting indentation-sensitive
+# string matches. Ruby/Psych is present on GitHub-hosted Ubuntu and macOS.
+command -v ruby >/dev/null 2>&1 || fail "ruby is required to parse workflow YAML"
+ruby -e '
+  require "yaml"
+  document = YAML.load_file(ARGV.fetch(0))
+  jobs = document.fetch("jobs")
+  expected = {
+    "web-standalone" => ["Web Standalone", "Run Web archive standalone gate", "Upload Web standalone evidence"],
+    "platform-standalone" => ["Platform Standalone", "Run Platform archive standalone gate", "Upload Platform standalone evidence"],
+  }
+  expected.each do |job_id, (name, gate_step, upload_step)|
+    job = jobs.fetch(job_id)
+    raise "#{job_id} name mismatch" unless job.fetch("name") == name
+    raise "#{job_id} must be contents: read" unless job.dig("permissions", "contents") == "read"
+    step_names = job.fetch("steps").map { |step| step["name"] }
+    raise "#{job_id} gate step missing" unless step_names.include?(gate_step)
+    raise "#{job_id} evidence step missing" unless step_names.include?(upload_step)
+  end
+' "${workflow}" || fail "ci.yml is invalid YAML or the standalone job structure drifted"
 
 # Heavy gates must fail closed outside Actions. No local or test-only bypass may
 # unlock Yarn, Gradle, Playwright, or Docker execution.
@@ -53,6 +85,10 @@ assert_contains "${web_script}" 'GITHUB_ACTIONS:-}'
 assert_contains "${platform_script}" 'GITHUB_ACTIONS:-}'
 assert_not_contains "${web_script}" 'STANDALONE_TEST_MODE'
 assert_not_contains "${platform_script}" 'STANDALONE_TEST_MODE'
+
+# Evidence paths must remain valid after the scripts enter extracted roots.
+assert_contains "${web_script}" 'artifact_dir="$(cd "${artifact_dir}" && pwd -P)"'
+assert_contains "${platform_script}" 'artifact_dir="$(cd "${artifact_dir}" && pwd -P)"'
 
 # Web archive and all required standalone checks.
 assert_contains "${web_script}" 'archive --format=tar "${source_sha}" front'
@@ -85,6 +121,7 @@ assert_contains "${platform_script}" './gradlew check --rerun-tasks'
 assert_before "${platform_script}" './gradlew check --rerun-tasks' 'tools/contracts/check-public-contracts.mjs'
 assert_contains "${platform_script}" 'docker-compose.prod.yml'
 assert_contains "${platform_script}" 'config --quiet'
+assert_not_contains "${platform_script}" 'sed -i'
 assert_not_contains "${platform_script}" 'git clone'
 
 # The workflow publishes exactly the two temporary required check names and
@@ -98,5 +135,10 @@ assert_contains "${workflow}" 'web-standalone-${{ github.sha }}'
 assert_contains "${workflow}" 'platform-standalone-${{ github.sha }}'
 assert_contains "${workflow}" 'persist-credentials: false'
 assert_contains "${workflow}" 'fetch-depth: 0'
+
+# Secrets are intentionally scoped to the one Platform execution step rather
+# than checkout/setup/static validation.
+assert_contains "${workflow}" 'TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}'
+assert_contains "${workflow}" 'TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}'
 
 echo "repository-standalone-verification: PASS"

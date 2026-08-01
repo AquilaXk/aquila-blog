@@ -38,6 +38,10 @@ env:
 jobs:
   sync:
     name: Platform public contract sync
+    # Web repository와 sync App이 준비되기 전까지 automatic run이 대상 저장소를 조회하면
+    # main push마다 실패한다. kill switch가 켜질 때까지 automatic run은 no-op으로 건너뛰고,
+    # manual run은 kill switch와 무관하게 test-only 검증을 수행한다.
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.REPO_SPLIT_SYNC_ENABLED == 'true' }}
     permissions:
       contents: read
       pull-requests: read
@@ -54,7 +58,7 @@ jobs:
           EVENT_SHA: ${{ github.sha }}
           REQUESTED_SOURCE_REF: ${{ inputs.source_ref }}
           REQUESTED_MODE: ${{ inputs.mode }}
-          SYNC_ENABLED: ${{ vars.PLATFORM_CONTRACT_SYNC_ENABLED }}
+          SYNC_ENABLED: ${{ vars.REPO_SPLIT_SYNC_ENABLED }}
         run: |
           set -euo pipefail
 
@@ -77,14 +81,11 @@ jobs:
 
           write_enabled=false
           if [[ "${mode}" == "sync" ]]; then
-            if [[ "${SYNC_ENABLED}" == "true" ]]; then
-              write_enabled=true
-            elif [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
-              echo "manual sync requires PLATFORM_CONTRACT_SYNC_ENABLED=true" >&2
+            if [[ "${SYNC_ENABLED}" != "true" ]]; then
+              echo "sync mode requires REPO_SPLIT_SYNC_ENABLED=true" >&2
               exit 1
-            else
-              echo "::notice::Platform contract sync kill switch is disabled; validation will run without push or PR"
             fi
+            write_enabled=true
           fi
 
           printf 'source_ref=%s\n' "${source_ref}" >> "${GITHUB_OUTPUT}"
@@ -92,7 +93,7 @@ jobs:
           printf 'write_enabled=%s\n' "${write_enabled}" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout immutable Platform source
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.0
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ steps.context.outputs.source_ref }}
           path: platform
@@ -115,7 +116,7 @@ jobs:
           echo "Platform source: ${source_sha}" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Checkout Web main without persisted credentials
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.0
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: AquilaXk/aquila-blog-web
           ref: main
@@ -139,7 +140,7 @@ jobs:
             merge --no-edit origin/main
 
       - name: Set up Node.js 20
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "20"
           cache: yarn

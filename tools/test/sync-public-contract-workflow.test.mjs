@@ -95,8 +95,28 @@ test("test-only path checks out latest Web main, imports, generates, and tests w
     )
   }
 
-  assert.match(source, /PLATFORM_CONTRACT_SYNC_ENABLED/)
-  assert.match(source, /manual sync requires PLATFORM_CONTRACT_SYNC_ENABLED=true/)
+  assert.match(source, /sync mode requires REPO_SPLIT_SYNC_ENABLED=true/)
+})
+
+// kill switch 이름은 Task 14가 양쪽 repository에 실제로 설정하는 variable과 같아야 한다.
+// 다른 이름을 읽으면 switch를 켜도 workflow는 영원히 read-only로 남아 조용히 무동작한다.
+test("kill switch reads the repository-split variable that operations actually set", () => {
+  const { document, source } = workflow()
+  const contextStep = stepByName(document.jobs.sync, "Resolve sync context")
+
+  assert.equal(contextStep.env.SYNC_ENABLED, "${{ vars.REPO_SPLIT_SYNC_ENABLED }}")
+  assert.doesNotMatch(source, /PLATFORM_CONTRACT_SYNC_ENABLED/)
+})
+
+// 대상 Web repository는 Task 11 전까지 존재하지 않는다. automatic run이 kill switch와
+// 무관하게 실행되면 Platform main push마다 checkout 단계에서 실패한다.
+test("automatic runs stay skipped until the kill switch is on, while manual runs still validate", () => {
+  const { document } = workflow()
+  const jobCondition = String(document.jobs.sync.if)
+
+  assert.match(jobCondition, /github\.event_name == 'workflow_dispatch'/)
+  assert.match(jobCondition, /vars\.REPO_SPLIT_SYNC_ENABLED == 'true'/)
+  assert.match(jobCondition, /\|\|/)
 })
 
 test("sync writes require the kill switch, changed bytes, and a Web-only App token", () => {

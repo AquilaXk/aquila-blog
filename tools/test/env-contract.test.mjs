@@ -1098,40 +1098,61 @@ const withEnvKeys = (text, pairs) =>
     text,
   )
 
-test("cookie scope check rejects a cookie domain wider than the front host", async () => {
-  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_COOKIEDOMAIN", "aquilaxk.site"]])
+const siteTopologies = (contract) =>
+  contract.targets["home-server-source"].crossChecks.find((check) => check.type === "cookieDomainScope").topologies
 
-  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+test("site topology is keyed on API_DOMAIN alone so a single secret value selects the whole trio", async () => {
+  const { loadContract } = await import("../env/validate-env.mjs")
+  const topologies = siteTopologies(loadContract(contractPath))
 
-  assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_COOKIEDOMAIN"))
+  assert.deepEqual(Object.keys(topologies).sort(), ["api.aquilaxk.site", "api.blog.aquilaxk.site"])
+  assert.deepEqual(topologies["api.blog.aquilaxk.site"], {
+    cookieDomain: "blog.aquilaxk.site",
+    frontHost: "blog.aquilaxk.site",
+    backHost: "api.blog.aquilaxk.site",
+    publicEdgeProbeBaseUrl: "https://blog.aquilaxk.site",
+  })
+  assert.equal(topologies["api.aquilaxk.site"].cookieDomain, "aquilaxk.site")
+  assert.equal(topologies["api.aquilaxk.site"].frontHost, "www.aquilaxk.site")
+  assert.equal(topologies["api.aquilaxk.site"].backHost, "api.aquilaxk.site")
+  assert.equal(topologies["api.aquilaxk.site"].publicEdgeProbeBaseUrl, "https://www.aquilaxk.site")
+  assert(typeof topologies["api.aquilaxk.site"].warn === "string")
 })
 
-test("cookie scope check rejects a public API host outside the cookie domain subtree", async () => {
+test("cookie scope check compares hosts, so URL spelling drift in the secret does not block deploys", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  // HOME_SERVER_ENV의 CUSTOM_PROD_*는 실 운영값과 표기가 다를 수 있다. 그래서 하드 핀이 있었다.
+  // 후행 슬래시와 대소문자는 같은 host를 가리키므로 통과해야 한다.
   const text = withEnvKeys(baseHomeServerEnv, [
-    ["API_DOMAIN", "api.aquilaxk.site"],
-    ["CUSTOM_PROD_BACKURL", "https://api.aquilaxk.site"],
+    ["CUSTOM_PROD_FRONTURL", "https://BLOG.aquilaxk.site/"],
+    ["CUSTOM_PROD_BACKURL", "https://api.blog.aquilaxk.site/"],
+    ["CUSTOM_PROD_COOKIEDOMAIN", "Blog.aquilaxk.site"],
   ])
 
   const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
 
-  assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_BACKURL"))
+  assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
 })
 
-test("cookie scope check rejects a cookie domain owned by another service", async () => {
+test("cookie scope check rejects a cookie domain that is not the one declared for API_DOMAIN", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const text = withEnvKeys(baseHomeServerEnv, [
-    ["CUSTOM_PROD_COOKIEDOMAIN", "www.aquilaxk.site"],
-    ["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"],
-  ])
+  for (const wrongCookieDomain of ["aquilaxk.site", "www.aquilaxk.site", "www.blog.aquilaxk.site"]) {
+    const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_COOKIEDOMAIN", wrongCookieDomain]])
+    const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+
+    assert.equal(result.ok, false, `${wrongCookieDomain} must not be accepted`)
+    assert(result.errors.some((error) => error.key === "CUSTOM_PROD_COOKIEDOMAIN"))
+  }
+})
+
+test("cookie scope check rejects a front host that is not the one declared for API_DOMAIN", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"]])
 
   const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
 
   assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_COOKIEDOMAIN"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_FRONTURL"))
 })
 
 test("pre-transition domain set stays valid but is reported as a warning", async () => {
@@ -1144,7 +1165,7 @@ test("pre-transition domain set stays valid but is reported as a warning", async
   const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
 
   assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
-  assert(result.warnings.some((warning) => warning.key === "CUSTOM_PROD_COOKIEDOMAIN"))
+  assert(result.warnings.some((warning) => warning.key === "API_DOMAIN"))
 })
 
 test("partially migrated domain set fails closed instead of mixing both topologies", async () => {
@@ -1158,6 +1179,43 @@ test("partially migrated domain set fails closed instead of mixing both topologi
   const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
 
   assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_COOKIEDOMAIN"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_FRONTURL"))
+})
+
+test("API_DOMAIN outside the declared topologies fails on the runner before the remote script runs", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const text = withEnvKeys(baseHomeServerEnv, [
+    ["API_DOMAIN", "api.other.example"],
+    ["CUSTOM_PROD_BACKURL", "https://api.other.example"],
+  ])
+
+  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "API_DOMAIN"))
+})
+
+test("deploy workflow derives every prod site value from the same topology table as the env contract", async () => {
+  const { loadContract } = await import("../env/validate-env.mjs")
+  const topologies = siteTopologies(loadContract(contractPath))
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  // 두 층(러너 검증 / 원격 핀)이 서로 다른 표를 들고 있으면 "단일 레버"가 성립하지 않는다.
+  for (const [apiDomain, topology] of Object.entries(topologies)) {
+    const branch = workflow.slice(
+      workflow.indexOf(`            ${apiDomain})`),
+      workflow.indexOf(";;", workflow.indexOf(`            ${apiDomain})`)),
+    )
+    assert.notEqual(branch, "", `deploy.yml must branch on API_DOMAIN=${apiDomain}`)
+    assert(branch.includes(`PROD_SITE_COOKIE_DOMAIN="${topology.cookieDomain}"`), `${apiDomain} cookie domain`)
+    assert(branch.includes(`PROD_SITE_FRONT_URL="https://${topology.frontHost}"`), `${apiDomain} front url`)
+    assert(branch.includes(`PROD_SITE_BACK_URL="https://${topology.backHost}"`), `${apiDomain} back url`)
+    assert(
+      branch.includes(`PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="${topology.publicEdgeProbeBaseUrl}"`),
+      `${apiDomain} public edge probe base url`,
+    )
+  }
 })
 
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
@@ -1272,16 +1330,6 @@ test("deploy workflow derives the pinned prod site scope from API_DOMAIN instead
 
   // 전환 스위치는 HOME_SERVER_ENV의 API_DOMAIN 하나뿐이다.
   assert.match(workflow, /PROD_SITE_API_DOMAIN=/)
-  assert.match(workflow, /api\.blog\.aquilaxk\.site\)/)
-  assert.match(workflow, /PROD_SITE_COOKIE_DOMAIN="blog\.aquilaxk\.site"/)
-  assert.match(workflow, /PROD_SITE_FRONT_URL="https:\/\/blog\.aquilaxk\.site"/)
-  assert.match(workflow, /PROD_SITE_BACK_URL="https:\/\/api\.blog\.aquilaxk\.site"/)
-
-  // 전환 전 상태(구 API 도메인)도 값이 갈라지지 않게 한 덩어리로 유지된다.
-  assert.match(workflow, /api\.aquilaxk\.site\)/)
-  assert.match(workflow, /PROD_SITE_COOKIE_DOMAIN="aquilaxk\.site"/)
-  assert.match(workflow, /PROD_SITE_FRONT_URL="https:\/\/www\.aquilaxk\.site"/)
-  assert.match(workflow, /PROD_SITE_BACK_URL="https:\/\/api\.aquilaxk\.site"/)
 
   // 알려지지 않은 API_DOMAIN은 fail-closed다.
   assert.match(workflow, /unsupported API_DOMAIN for the prod site contract/)
@@ -1289,6 +1337,11 @@ test("deploy workflow derives the pinned prod site scope from API_DOMAIN instead
   assert.match(workflow, /upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "\$\{PROD_SITE_COOKIE_DOMAIN\}" "deploy\/homeserver\/\.env\.prod"/)
   assert.match(workflow, /upsert_env_key "CUSTOM_PROD_FRONTURL" "\$\{PROD_SITE_FRONT_URL\}" "deploy\/homeserver\/\.env\.prod"/)
   assert.match(workflow, /upsert_env_key "CUSTOM_PROD_BACKURL" "\$\{PROD_SITE_BACK_URL\}" "deploy\/homeserver\/\.env\.prod"/)
+  // 공개 edge probe도 같은 스위치를 따라야 전환 창 동안 실서비스 호스트를 계속 감시한다.
+  assert.match(
+    workflow,
+    /upsert_env_key "PUBLIC_EDGE_PROBE_BASE_URL" "\$\{PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL\}" "deploy\/homeserver\/\.env\.prod"/,
+  )
   assert(
     workflow.indexOf('upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN"') <
       workflow.indexOf('require_nonempty_env_key "CF_TUNNEL_TOKEN"'),

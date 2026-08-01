@@ -6,9 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
-API_READINESS_URL="https://api.blog.aquilaxk.site/actuator/health/readiness"
-WEB_URL="https://blog.aquilaxk.site/"
-API_ROOT_URL="https://api.blog.aquilaxk.site/"
 
 compose() {
   bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
@@ -21,10 +18,24 @@ env_value() {
     $1 == key {
       value = substr($0, index($0, "=") + 1)
       gsub(/\r/, "", value)
+      gsub(/^["'\'']|["'\'']$/, "", value)
       print value
     }
   ' "${ENV_FILE}" | tail -n 1
 }
+
+# 복구 대상 URL을 리터럴로 박아 두면, 도메인 전환 창에 장애 대응으로 이 스크립트를 돌렸을 때
+# 아직 존재하지 않는 호스트를 찌른다. curl에 `|| true`가 붙어 있어 그 실패는 `web 000`으로만
+# 보이고 조용히 지나간다. 배포가 핀한 .env.prod가 그 시점의 실제 운영 호스트다.
+PROD_FRONT_URL="$(env_value "CUSTOM_PROD_FRONTURL")"
+PROD_BACK_URL="$(env_value "CUSTOM_PROD_BACKURL")"
+if [[ -z "${PROD_FRONT_URL}" || -z "${PROD_BACK_URL}" ]]; then
+  echo "recover: CUSTOM_PROD_FRONTURL/CUSTOM_PROD_BACKURL missing from ${ENV_FILE}" >&2
+  exit 1
+fi
+WEB_URL="${PROD_FRONT_URL%/}/"
+API_ROOT_URL="${PROD_BACK_URL%/}/"
+API_READINESS_URL="${PROD_BACK_URL%/}/actuator/health/readiness"
 
 upsert_env_key() {
   local key="$1"

@@ -612,4 +612,12 @@ if [[ "${sibling_api_output}" != *"BACKURL host must sit strictly under COOKIEDO
   fail "expected a sibling API host to be reported as outside the cookie domain subtree, got: ${sibling_api_output}"
 fi
 
+# 쿠키 도메인이 통째로 빠진 .env.prod가 가장 위험한 상태다. 그때 front/back 교차 사이트 점검이
+# 함께 사라지면 아무 WARN도 안 나온다. 커버리지가 cookie_domain에 종속되면 안 된다.
+missing_cookie_output="$(run_env_domain_consistency \
+  "" "https://blog.aquilaxk.site" "https://api.aquilaxk.site" "api.aquilaxk.site")"
+if [[ "${missing_cookie_output}" != *"BACKURL host must sit strictly under FRONTURL host"* ]]; then
+  fail "expected the front/back cross-site check to survive an empty COOKIEDOMAIN, got: ${missing_cookie_output}"
+fi
+
 echo "[test] homeserver doctor checkup rules passed"

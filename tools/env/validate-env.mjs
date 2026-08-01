@@ -77,6 +77,9 @@ const hostOf = (value) => {
   }
 }
 
+// DNS 호스트 비교용 정규화. 대소문자와 FQDN 후행 점은 같은 호스트를 가리킨다.
+const normalizeHost = (value) => String(value || "").trim().toLowerCase().replace(/\.$/, "")
+
 const validateKind = (definition, value) => {
   switch (definition.kind) {
     case undefined:
@@ -167,8 +170,8 @@ export const validateEnvText = ({ contract, target, text }) => {
 
   for (const check of resolved.crossChecks || []) {
     if (check.type === "urlHostEquals") {
-      const urlHost = hostOf(valueOf(env, check.urlKey))
-      const expectedHost = valueOf(env, check.hostKey)
+      const urlHost = normalizeHost(hostOf(valueOf(env, check.urlKey)))
+      const expectedHost = normalizeHost(valueOf(env, check.hostKey))
       if (urlHost && expectedHost && urlHost !== expectedHost) {
         errors.push(safeError(check.urlKey, `${check.hostKey} must match ${check.urlKey} host`))
       }
@@ -176,30 +179,30 @@ export const validateEnvText = ({ contract, target, text }) => {
 
     if (check.type === "cookieDomainScope") {
       // 인증 쿠키 Domain은 front/back 호스트의 공통 접미사로 계산된다(AuthCookieDomainPolicy).
-      // 따라서 쿠키 도메인은 front 호스트 그 자체여야 하고, 공개 API는 그 하위에 있어야 한다.
-      // front가 쿠키 도메인의 형제(www.<cookieDomain>)이거나 API가 형제 subtree에 있으면
+      // 그래서 쿠키 도메인·web 호스트·API 호스트는 한 덩어리로만 의미가 있고, 따로 움직이면
       // 공통 접미사가 한 단계 위로 올라가 우리 소유가 아닌 호스트로 세션 쿠키가 전송된다.
-      const cookieDomain = valueOf(env, check.domainKey)
-      const frontHost = hostOf(valueOf(env, check.frontUrlKey))
-      const backHost = hostOf(valueOf(env, check.backUrlKey))
-      const transitional = check.transitionalAllow
-      const transitionalValues = transitional?.values || {}
-      const isTransitional =
-        Object.keys(transitionalValues).length > 0 &&
-        Object.entries(transitionalValues).every(([key, expected]) => valueOf(env, key) === expected)
+      //
+      // 스위치는 API_DOMAIN 하나다. deploy.yml이 배포 직전에 같은 표로 나머지를 덮어쓰므로
+      // 여기서도 같은 표를 쓴다. 비교는 raw 문자열이 아니라 host 기준이다 — HOME_SERVER_ENV의
+      // CUSTOM_PROD_*는 후행 슬래시·대소문자 정도가 실 운영값과 다를 수 있고, 그것 때문에
+      // 배포가 막히면 안 된다(하드 핀이 원래 존재했던 이유다).
+      const apiHost = normalizeHost(valueOf(env, check.apiHostKey))
+      const topology = apiHost ? check.topologies?.[apiHost] : undefined
 
-      if (isTransitional) {
-        warnings.push(safeError(check.domainKey, transitional.reason || "transitional domain set is still configured"))
-      } else if (cookieDomain && frontHost && backHost) {
-        if (check.forbiddenDomains?.includes(cookieDomain)) {
-          errors.push(safeError(check.domainKey, "must not be a domain owned by another service"))
+      if (apiHost && !topology) {
+        errors.push(safeError(check.apiHostKey, "has no declared prod site topology"))
+      } else if (topology) {
+        const comparisons = [
+          [check.domainKey, normalizeHost(valueOf(env, check.domainKey)), topology.cookieDomain, "must be the cookie domain declared for"],
+          [check.frontUrlKey, normalizeHost(hostOf(valueOf(env, check.frontUrlKey))), topology.frontHost, "host must be the web host declared for"],
+          [check.backUrlKey, normalizeHost(hostOf(valueOf(env, check.backUrlKey))), topology.backHost, "host must be the API host declared for"],
+        ]
+        for (const [key, actual, expected, message] of comparisons) {
+          if (actual && expected && actual !== expected) {
+            errors.push(safeError(key, `${message} ${check.apiHostKey}=${apiHost}`))
+          }
         }
-        if (frontHost !== cookieDomain) {
-          errors.push(safeError(check.domainKey, `must equal ${check.frontUrlKey} host`))
-        }
-        if (backHost === cookieDomain || !backHost.endsWith(`.${cookieDomain}`)) {
-          errors.push(safeError(check.backUrlKey, `host must be a subdomain of ${check.domainKey}`))
-        }
+        if (topology.warn) warnings.push(safeError(check.apiHostKey, topology.warn))
       }
     }
 

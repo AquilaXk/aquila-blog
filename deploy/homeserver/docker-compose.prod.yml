@@ -331,6 +331,9 @@ services:
       - "--timeout-ms"
       - "${PUBLIC_EDGE_PROBE_TIMEOUT_MS:-15000}"
       - "--base-url"
+      # 실제 값은 deploy.yml이 API_DOMAIN에서 파생해 .env.prod에 핀한다. 이 기본값은
+      # 그 핀이 아직 없는 .env.prod에서만 쓰이며, 도메인 전환 창에 이 기본값이 쓰이면
+      # 아직 없는 호스트를 감시하게 되므로 배포 경로에서는 항상 덮어써야 한다.
       - "${PUBLIC_EDGE_PROBE_BASE_URL:-https://blog.aquilaxk.site}"
       - "--state-path"
       - "/data/public-edge-probe-state.json"

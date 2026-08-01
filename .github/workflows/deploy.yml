@@ -774,16 +774,34 @@ jobs:
           # so the cookie Domain stays inside the blog subtree. The apex and www hosts belong to a
           # different service and must never receive this blog's session cookies.
           #
-          # The three values must move together, so they are derived from a single switch:
-          # API_DOMAIN in HOME_SERVER_ENV. Repository changes alone never flip the live domain -
-          # the owner flips it by updating the secret, and this block follows in the same deploy.
-          # \042 = double quote, \047 = single quote. .env.prod values may be quoted.
-          PROD_SITE_API_DOMAIN="$(awk -F= '$1=="API_DOMAIN"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod | tail -n 1 | tr -d '\042\047\r')"
+          # The values must move together, so they are derived from a single switch: API_DOMAIN in
+          # HOME_SERVER_ENV. Repository changes alone never flip the live domain - the owner flips it
+          # by updating the secret, and this block follows in the same deploy. The same table lives in
+          # deploy/env/env.contract.json (cookieDomainScope.topologies) and a test pins them together.
+          #
+          # An undeclared API_DOMAIN is already rejected on the runner by the contract's allowedValues,
+          # before this remote script has touched anything. The abort below is the second line only.
+          #
+          # Key parsing must not be narrower than tools/env/validate-env.mjs parseEnvText, otherwise a
+          # value the contract accepts (leading spaces, `export ` prefix) would fail only at deploy.
+          PROD_SITE_API_DOMAIN="$(
+            awk '
+              match($0, /^[[:space:]]*(export[[:space:]]+)?API_DOMAIN[[:space:]]*=/) {
+                value = substr($0, RSTART + RLENGTH)
+                gsub(/\r/, "", value)
+                sub(/^[[:space:]]+/, "", value)
+                sub(/[[:space:]]+$/, "", value)
+                if (value ~ /^".*"$/ || value ~ /^'\''.*'\''$/) value = substr(value, 2, length(value) - 2)
+                print value
+              }
+            ' deploy/homeserver/.env.prod | tail -n 1
+          )"
           case "${PROD_SITE_API_DOMAIN}" in
             api.blog.aquilaxk.site)
               PROD_SITE_COOKIE_DOMAIN="blog.aquilaxk.site"
               PROD_SITE_FRONT_URL="https://blog.aquilaxk.site"
               PROD_SITE_BACK_URL="https://api.blog.aquilaxk.site"
+              PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://blog.aquilaxk.site"
               ;;
             api.aquilaxk.site)
               # Pre-transition state: HOME_SERVER_ENV still carries the old API host, so the old
@@ -791,6 +809,7 @@ jobs:
               PROD_SITE_COOKIE_DOMAIN="aquilaxk.site"
               PROD_SITE_FRONT_URL="https://www.aquilaxk.site"
               PROD_SITE_BACK_URL="https://api.aquilaxk.site"
+              PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://www.aquilaxk.site"
               echo "WARNING: API_DOMAIN is still the pre-transition host (${PROD_SITE_API_DOMAIN}). Update HOME_SERVER_ENV to api.blog.aquilaxk.site to activate the blog domain contract." >&2
               ;;
             *)
@@ -802,6 +821,10 @@ jobs:
           upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "${PROD_SITE_COOKIE_DOMAIN}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM_PROD_FRONTURL" "${PROD_SITE_FRONT_URL}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM_PROD_BACKURL" "${PROD_SITE_BACK_URL}" "deploy/homeserver/.env.prod"
+          # The public edge probe must keep watching the host that is actually serving traffic.
+          # Pinning it to the post-transition host while DNS still points elsewhere (#1538) would
+          # fire PublicEdgeRouteDown for the whole transition window and monitor nothing real.
+          upsert_env_key "PUBLIC_EDGE_PROBE_BASE_URL" "${PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL}" "deploy/homeserver/.env.prod"
 
           if [ -z "${HOME_BACK_IMAGE:-}" ]; then
             echo "HOME_BACK_IMAGE is empty. abort deploy to avoid stale image rollout." >&2

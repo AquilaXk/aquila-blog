@@ -624,6 +624,13 @@ echo "API_DOMAIN:                ${api_domain:-<empty>}"
 # 쿠키 스코프는 front 호스트 그 자체여야 하고, 공개 API는 그 하위에 있어야 한다.
 # front가 쿠키 도메인의 형제이거나 API가 형제 subtree에 있으면 공통 접미사가 한 단계 위로
 # 올라가, 우리 소유가 아닌 상위 호스트로 세션 쿠키가 전송된다.
+#
+# front/back 관계 점검은 cookie_domain이 비어 있어도 사라지면 안 된다. 쿠키 도메인이 통째로
+# 빠진 .env.prod가 가장 위험한 상태인데, 그때 점검이 함께 사라지면 아무 WARN도 안 나온다.
+if [[ -n "${front_host}" && -n "${back_host}" ]] && ! is_strict_subdomain_of "${back_host}" "${front_host}"; then
+  echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - the shared suffix widens the auth cookie scope above ${front_host} (expected during the #1540 transition window)"
+fi
+
 if [[ -n "${cookie_domain}" && -n "${front_host}" && "${cookie_domain}" != "${front_host}" ]]; then
   echo "WARN: COOKIEDOMAIN must equal FRONTURL host (${cookie_domain} vs ${front_host}) - auth cookies would reach hosts above ${front_host}"
 fi

@@ -54,4 +54,28 @@ class PostPreviewExtractorTest {
         assertThat(summary).isNotEqualTo("요약을 생성할 수 없습니다.")
         assertThat(summary).contains("Stateless는 서버가 요청 사이 사용자 상태를 저장하지 않고")
     }
+
+    @Test
+    fun `same hash and length contents never share a summary`() {
+        val first = "FB"
+        val second = "Ea"
+
+        assertThat(first).hasSameSizeAs(second)
+        assertThat(first.hashCode()).isEqualTo(second.hashCode())
+
+        assertThat(PostPreviewExtractor.makeSummary(first)).isEqualTo(first)
+        assertThat(PostPreviewExtractor.makeSummary(second)).isEqualTo(second)
+    }
+
+    @Test
+    fun `same hash and length contents never share a thumbnail`() {
+        val first = "![cover](https://example.com/FB.png)"
+        val second = "![cover](https://example.com/Ea.png)"
+
+        assertThat(first).hasSameSizeAs(second)
+        assertThat(first.hashCode()).isEqualTo(second.hashCode())
+
+        assertThat(PostPreviewExtractor.extractThumbnail(first)).isEqualTo("https://example.com/FB.png")
+        assertThat(PostPreviewExtractor.extractThumbnail(second)).isEqualTo("https://example.com/Ea.png")
+    }
 }

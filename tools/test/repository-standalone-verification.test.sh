@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 web_script="${repo_root}/tools/repo-split/verify-web-standalone.sh"
 platform_script="${repo_root}/tools/repo-split/verify-platform-standalone.sh"
+materializer_script="${repo_root}/tools/repo-split/materialize-compose-test-env.mjs"
+materializer_test="${repo_root}/tools/test/materialize-compose-test-env.test.mjs"
 workflow="${repo_root}/.github/workflows/ci.yml"
 
 fail() {
@@ -50,13 +52,15 @@ assert_actions_only() {
     || fail "${script#"${repo_root}/"} must fail closed with exit 2 outside GitHub Actions (got ${status})"
 }
 
-for file in "${web_script}" "${platform_script}" "${workflow}"; do
+for file in "${web_script}" "${platform_script}" "${materializer_script}" "${materializer_test}" "${workflow}"; do
   assert_file "${file}"
 done
 for script in "${web_script}" "${platform_script}"; do
   bash -n "${script}" || fail "bash syntax error: ${script#"${repo_root}/"}"
   assert_actions_only "${script}"
 done
+node --check "${materializer_script}" || fail "Node syntax error: ${materializer_script#"${repo_root}/"}"
+node --test "${materializer_test}" || fail "Compose test env materializer regression failed"
 
 # Parse the workflow structurally rather than trusting indentation-sensitive
 # string matches. Ruby/Psych is present on GitHub-hosted Ubuntu and macOS.
@@ -119,10 +123,21 @@ assert_contains "${platform_script}" 'tools/contracts/check-public-contracts.mjs
 assert_contains "${platform_script}" 'tools/privacy/ci-privacy-gate.mjs'
 assert_contains "${platform_script}" './gradlew check --rerun-tasks'
 assert_before "${platform_script}" './gradlew check --rerun-tasks' 'tools/contracts/check-public-contracts.mjs'
+assert_contains "${platform_script}" 'materialize-compose-test-env.mjs'
+assert_contains "${platform_script}" '--contract deploy/env/env.contract.json'
 assert_contains "${platform_script}" 'docker-compose.prod.yml'
 assert_contains "${platform_script}" 'config --quiet'
 assert_not_contains "${platform_script}" 'sed -i'
 assert_not_contains "${platform_script}" 'git clone'
+
+# The Compose fixture generator follows the canonical digest-image list rather
+# than hard-coding whichever monitoring variables happen to exist today.
+assert_contains "${materializer_script}" 'home-server-source'
+assert_contains "${materializer_script}" 'key?.kind !== "digest-image"'
+assert_contains "${materializer_script}" 'registry.invalid/aquila-standalone'
+assert_contains "${materializer_script}" 'source and output must differ'
+assert_not_contains "${materializer_script}" 'ALERTMANAGER_IMAGE'
+assert_not_contains "${materializer_script}" 'POSTGRES_EXPORTER_IMAGE'
 
 # The workflow publishes exactly the two temporary required check names and
 # their evidence artifacts from the same checked-out SHA.

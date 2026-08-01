@@ -25,6 +25,8 @@ repo_root="$(git rev-parse --show-toplevel)"
 source_ref="${1:-${STANDALONE_SOURCE_REF:-HEAD}}"
 source_sha="$(git -C "${repo_root}" rev-parse "${source_ref}^{commit}")"
 artifact_dir="${STANDALONE_ARTIFACT_DIR:-${RUNNER_TEMP:-${repo_root}/.tmp}/web-standalone}"
+mkdir -p "${artifact_dir}"
+artifact_dir="$(cd "${artifact_dir}" && pwd -P)"
 work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/aquila-web-standalone.XXXXXX")"
 web_root="${work_dir}/archive/front"
 log_file="${artifact_dir}/web-standalone.log"
@@ -34,7 +36,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${web_root}" "${artifact_dir}"
+mkdir -p "${web_root}"
 : > "${log_file}"
 
 run_step() {

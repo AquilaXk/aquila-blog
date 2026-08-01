@@ -63,6 +63,10 @@ test("test-only path checks out, imports, generates, and tests without write cre
   assert.equal(webCheckout.with.repository, "AquilaXk/aquila-blog-web")
   assert.equal(webCheckout.with.ref, "main")
 
+  const sourceStep = stepByName(job, "Resolve immutable Platform commit")
+  assert.equal(sourceStep.env.SOURCE_REF, "${{ steps.context.outputs.source_ref }}")
+  assert.doesNotMatch(sourceStep.run, /\$\{\{\s*steps\.context\.outputs\.source_ref/)
+
   const importStep = stepByName(job, "Import immutable Platform contract")
   assert.match(importStep.run, /import-platform-contracts\.mjs/)
   assert.match(importStep.run, /--source \.\.\/platform\/contracts\/public-api/)
@@ -76,6 +80,14 @@ test("test-only path checks out, imports, generates, and tests without write cre
   const readOnlyStep = stepByName(job, "Assert read-only mode cannot publish")
   assert.match(String(readOnlyStep.if), /write_enabled != 'true'/)
   assert.doesNotMatch(readOnlyStep.run, /git push|gh pr (?:create|edit)/)
+
+  for (const step of job.steps.filter((candidate) => candidate.run)) {
+    assert.doesNotMatch(
+      step.run,
+      /\$\{\{\s*(?:inputs\.source_ref|steps\.context\.outputs\.source_ref)/,
+      `${step.name} must receive workflow-dispatch input through env`,
+    )
+  }
 
   assert.match(source, /PLATFORM_CONTRACT_SYNC_ENABLED/)
   assert.match(source, /manual sync requires PLATFORM_CONTRACT_SYNC_ENABLED=true/)
@@ -125,7 +137,9 @@ test("publisher updates one stable branch and reuses one open PR", () => {
   const editIndex = pullRequest.run.indexOf("gh pr edit")
   assert.ok(listIndex >= 0 && createIndex > listIndex && editIndex > listIndex)
   assert.match(pullRequest.run, /--head "\$\{SYNC_BRANCH\}"/)
-  assert.match(pullRequest.run, /source commit: `\$\{SOURCE_SHA\}`/)
-  assert.match(pullRequest.run, /source ref: `\$\{SOURCE_REF\}`/)
+  assert.match(pullRequest.run, /source commit: `%s`/)
+  assert.match(pullRequest.run, /source ref: `%s`/)
+  assert.match(pullRequest.run, /"\$\{SOURCE_SHA\}"/)
+  assert.match(pullRequest.run, /"\$\{SOURCE_REF\}"/)
   assert.equal(pullRequest.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}")
 })

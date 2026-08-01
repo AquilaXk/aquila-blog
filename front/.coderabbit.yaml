@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: ko-KR
+tone_instructions: "간결하고 직접적으로 작성하되, 차단급 문제와 개선 제안을 명확히 구분한다."
+enable_free_tier: true
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  commit_status: true
+  fail_commit_status: false
+  in_progress_fortune: false
+  poem: false
+  enable_prompt_for_ai_agents: false
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/.next/**"
+    - "!**/dist/**"
+    - "!**/coverage/**"
+    - "!**/test-results/**"
+    - "!**/playwright-report/**"
+    - "!public/pdf.worker.min.mjs"
+    - "!contracts/platform/**"
+    - "!packages/shared-contracts/src/generated/**"
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    ignore_usernames:
+      - "dependabot[bot]"
+  path_instructions:
+    - path: "src/**"
+      instructions: |
+        React/Next.js 변경은 사용자 회귀, hydration, bundle size, 접근성, 모바일 레이아웃, editor/content rendering을 우선 검토한다.
+    - path: "e2e/**"
+      instructions: |
+        Playwright 변경은 실제 실패를 탐지하는지, secret/cookie artifact 노출이 없는지, flaky 대기가 없는지 검토한다.
+    - path: ".github/**"
+      instructions: |
+        GitHub Actions 변경은 최소 권한, secret 노출, required check drift, Vercel deployment check 충돌을 우선 검토한다.

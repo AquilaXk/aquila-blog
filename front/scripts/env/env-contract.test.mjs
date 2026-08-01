@@ -96,6 +96,23 @@ test("live-e2e requires HTTPS endpoints, a password, and exactly one identity", 
   assert(invalid.errors.some((error) => error.key === "E2E_LIVE_ADMIN_EMAIL" && error.message.includes("exactly one")))
 })
 
+test("live-ready requires only HTTPS Web and API targets", async () => {
+  const { loadContract, validateEnvText } = await import("./validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const valid = [
+    "PLAYWRIGHT_BASE_URL=https://aquila-blog-web.vercel.app",
+    "E2E_API_BASE_URL=https://api.example.test",
+  ].join("\n")
+
+  assert.equal(validateEnvText({ contract, target: "live-ready", text: valid }).ok, true)
+  for (const text of [
+    valid.replace("E2E_API_BASE_URL=https://api.example.test", ""),
+    valid.replace("E2E_API_BASE_URL=https://api.example.test", "E2E_API_BASE_URL=http://api.example.test"),
+  ]) {
+    assert.equal(validateEnvText({ contract, target: "live-ready", text }).ok, false)
+  }
+})
+
 test("live-e2e rejects placeholder credentials", async () => {
   const { loadContract, validateEnvText } = await import("./validate-env.mjs")
   const result = validateEnvText({

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+hook_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+web_root="$(cd -- "${hook_dir}/.." && pwd)"
+cd "${repo_root}"
+commit_index_file="${GIT_INDEX_FILE-}"
+unset $(git rev-parse --local-env-vars)
+if [[ -n "${commit_index_file}" ]]; then
+  export GIT_INDEX_FILE="${commit_index_file}"
+fi
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMRD)"
+if [[ -z "${staged_files}" ]]; then
+  exit 0
+fi
+
+node "${web_root}/scripts/repo-boundary/check-web-boundary.mjs" --staged
+
+if grep -Eq '^(front/)?(package\.json|yarn\.lock|contracts/platform/|packages/shared-contracts/src/generated/|scripts/contracts/|scripts/openapi/)' <<< "${staged_files}"; then
+  (cd "${web_root}" && yarn contracts:check)
+fi
+
+if grep -Eq '^(front/)?(legal/policies/|contracts/export/legal-policy-manifest\.json|scripts/legal/)' <<< "${staged_files}"; then
+  (cd "${web_root}" && yarn legal:check)
+fi

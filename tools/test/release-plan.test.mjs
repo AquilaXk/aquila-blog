@@ -9,6 +9,7 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 const scriptPath = path.join(repoRoot, "tools/ci/classify-release.mjs")
 const backendWorkflowPath = path.join(repoRoot, ".github/workflows/reusable-backend-quality.yml")
 const frontendWorkflowPath = path.join(repoRoot, ".github/workflows/reusable-frontend-verify.yml")
+const webWorkflowPath = path.join(repoRoot, "front/.github/workflows/ci.yml")
 
 const runClassifier = (files, args = []) => {
   const result = spawnSync(process.execPath, [scriptPath, "--json", ...args], {
@@ -30,33 +31,34 @@ test("docs-only changes stay standard and skip deploy verifications", () => {
   assert.equal(result.json.changeScope, "docs-only")
   assert.equal(result.json.riskProfile, "standard")
   assert.equal(result.json.deployBackend, false)
-  assert.equal(result.json.verifyFrontend, false)
+  assert.equal("verifyFrontend" in result.json, false)
   assert.deepEqual(result.json.reasons, ["docs-only"])
 })
 
-test("backend-only and frontend-only changes keep independent standard routing", () => {
+test("Platform classifier ignores Web-owned paths", () => {
   const backend = runClassifier(["back/src/main/kotlin/com/back/PostController.kt"])
   const frontend = runClassifier(["front/src/pages/index.tsx"])
-  const legalPolicy = runClassifier(["front/legal/policies/privacy.ko-KR.v1.0.1.yaml"])
 
   assert.equal(backend.status, 0, backend.stderr)
   assert.equal(backend.json.changeScope, "backend-only")
   assert.equal(backend.json.riskProfile, "standard")
   assert.equal(backend.json.deployBackend, true)
-  assert.equal(backend.json.verifyFrontend, false)
+  assert.equal("verifyFrontend" in backend.json, false)
 
   assert.equal(frontend.status, 0, frontend.stderr)
-  assert.equal(frontend.json.changeScope, "frontend-only")
+  assert.equal(frontend.json.changeScope, "non-platform")
   assert.equal(frontend.json.riskProfile, "standard")
   assert.equal(frontend.json.deployBackend, false)
-  assert.equal(frontend.json.verifyFrontend, true)
+  assert.equal("verifyFrontend" in frontend.json, false)
+  assert.deepEqual(frontend.json.reasons, [])
+})
 
-  assert.equal(legalPolicy.status, 0, legalPolicy.stderr)
-  assert.equal(legalPolicy.json.changeScope, "frontend-only")
-  assert.equal(legalPolicy.json.riskProfile, "standard")
-  assert.equal(legalPolicy.json.deployBackend, false)
-  assert.equal(legalPolicy.json.verifyFrontend, true)
-  assert(legalPolicy.json.reasons.includes("frontend"))
+test("privacy restore gate remains backend deploy-owned", () => {
+  const result = runClassifier(["restore-privacy-gate.sh"])
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.json.changeScope, "backend-only")
+  assert.equal(result.json.deployBackend, true)
 })
 
 test("security deploy storage task migration workflow and dockerfile changes are extended", () => {
@@ -85,23 +87,23 @@ test("authoring paths do not count as auth risk", () => {
   const result = runClassifier(["front/e2e/editor-authoring-flow.spec.ts"])
 
   assert.equal(result.status, 0, result.stderr)
-  assert.equal(result.json.changeScope, "frontend-only")
+  assert.equal(result.json.changeScope, "non-platform")
   assert.equal(result.json.riskProfile, "standard")
   assert(!result.json.reasons.includes("security-or-auth"))
 })
 
-test("backend and frontend together are mixed extended", () => {
+test("Web paths do not change a backend release classification", () => {
   const result = runClassifier([
     "back/src/main/kotlin/com/back/PostController.kt",
     "front/src/pages/index.tsx",
   ])
 
   assert.equal(result.status, 0, result.stderr)
-  assert.equal(result.json.changeScope, "mixed")
-  assert.equal(result.json.riskProfile, "extended")
+  assert.equal(result.json.changeScope, "backend-only")
+  assert.equal(result.json.riskProfile, "standard")
   assert.equal(result.json.deployBackend, true)
-  assert.equal(result.json.verifyFrontend, true)
-  assert(result.json.reasons.includes("backend-and-frontend"))
+  assert.equal("verifyFrontend" in result.json, false)
+  assert(!result.json.reasons.includes("frontend"))
 })
 
 test("destructive migration safety result blocks release", () => {
@@ -135,6 +137,7 @@ test("destructive migration safety result blocks release", () => {
 test("reusable workflows run release planner policy checks", () => {
   const backendWorkflow = readFileSync(backendWorkflowPath, "utf8")
   const frontendWorkflow = readFileSync(frontendWorkflowPath, "utf8")
+  const webWorkflow = readFileSync(webWorkflowPath, "utf8")
 
   assert.match(backendWorkflow, /Check Flyway deploy safety/)
   assert.match(backendWorkflow, /previous_filename/)
@@ -146,9 +149,14 @@ test("reusable workflows run release planner policy checks", () => {
   assert(backendWorkflow.indexOf("Classify release risk") < backendWorkflow.indexOf("Skip backend-heavy checks"))
   assert.match(backendWorkflow, /node --test tools\/test\/release-plan\.test\.mjs tools\/test\/flyway-deploy-safety\.test\.mjs/)
 
-  assert.match(frontendWorkflow, /Classify release risk/)
   assert.match(frontendWorkflow, /previous_filename/)
   assert.match(frontendWorkflow, /front\/\*/)
-  assert.match(frontendWorkflow, /tools\/ci\/classify-release\.mjs/)
-  assert(frontendWorkflow.indexOf("Classify release risk") < frontendWorkflow.indexOf("Skip frontend-heavy checks"))
+  assert.doesNotMatch(frontendWorkflow, /tools\/ci\/classify-release\.mjs/)
+  assert.doesNotMatch(frontendWorkflow, /Classify release risk/)
+
+  for (const job of ["lint-build-contract-unit", "storybook-bundle", "playwright-smoke", "accessibility"]) {
+    assert.match(webWorkflow, new RegExp(`^  ${job}:`, "m"))
+  }
+  assert.doesNotMatch(webWorkflow, /working-directory:\s*front/)
+  assert.doesNotMatch(webWorkflow, /(?:cache-dependency-path|path):\s*front\//)
 })

@@ -1,0 +1,6 @@
+vulnerabilities:
+  - id: CVE-2026-14257
+    paths:
+      - yarn.lock
+    expired_at: 2026-08-08
+    statement: "#1124: no patched brace-expansion 1.x/2.x release; global 5.0.8 resolution breaks minimatch 3/5"

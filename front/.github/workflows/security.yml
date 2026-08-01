@@ -1,0 +1,116 @@
+name: Web Security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  codeql-javascript-typescript:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: github/codeql-action/init@256d634097be96e792d6764f9edaefc4320557b1 # v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended,security-and-quality
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
+      - name: Analyze trusted context
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]')
+        uses: github/codeql-action/analyze@256d634097be96e792d6764f9edaefc4320557b1 # v4
+      - name: Analyze without upload for fork or Dependabot PR
+        if: github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.actor == 'dependabot[bot]')
+        uses: github/codeql-action/analyze@256d634097be96e792d6764f9edaefc4320557b1 # v4
+        with:
+          upload: never
+
+  lockfile-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+      - name: Install OSV Scanner
+        env:
+          OSV_SCANNER_VERSION: "v2.4.0"
+          OSV_SCANNER_SHA256: "15314940c10d26af9c6649f150b8a47c1262e8fc7e17b1d1029b0e479e8ed8a0"
+        run: |
+          curl -fsSL -o /tmp/osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          printf '%s  %s\n' "${OSV_SCANNER_SHA256}" /tmp/osv-scanner | sha256sum --check -
+          chmod +x /tmp/osv-scanner
+          sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
+      - name: Scan yarn.lock with OSV
+        run: osv-scanner scan -L yarn.lock --config osv-scanner.toml
+      - name: Install Trivy
+        if: ${{ !cancelled() }}
+        env:
+          TRIVY_VERSION: "0.72.0"
+          TRIVY_SHA256: "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea"
+        run: |
+          curl -fsSL -o /tmp/trivy.tgz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          printf '%s  %s\n' "${TRIVY_SHA256}" /tmp/trivy.tgz | sha256sum --check -
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+      - name: Scan yarn.lock with Trivy
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          set +e
+          trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --list-all-pkgs \
+            --ignorefile .trivyignore.yaml --format json \
+            --output "${RUNNER_TEMP}/trivy-web-lockfile.json" yarn.lock
+          trivy_status=$?
+          set -e
+          test -s "${RUNNER_TEMP}/trivy-web-lockfile.json"
+          scanned_packages="$(node -e '
+            const fs = require("node:fs")
+            const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+            const total = (report.Results || []).reduce((sum, result) => sum + (result.Packages || []).length, 0)
+            process.stdout.write(String(total))
+          ' "${RUNNER_TEMP}/trivy-web-lockfile.json")"
+          if ! [[ "${scanned_packages}" =~ ^[0-9]+$ ]] || [ "${scanned_packages}" -lt 1 ]; then
+            echo "Trivy parsed no packages from yarn.lock" >&2
+            exit 1
+          fi
+          exit "${trivy_status}"
+
+  browser-csp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: yarn.lock
+      - run: yarn install --frozen-lockfile
+      - run: npx playwright install --with-deps chromium
+      - run: yarn playwright test e2e/security-csp-header.spec.ts --project=chromium --workers=1

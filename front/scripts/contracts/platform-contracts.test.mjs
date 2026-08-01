@@ -44,6 +44,27 @@ async function fixture() {
   return { root, source, output, sourceCommit }
 }
 
+const inheritedGitEnvKeys = [
+  "GIT_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_WORK_TREE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+]
+
+async function decoyRepository() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "platform-contracts-decoy-"))
+  const origin = "https://github.com/example/decoy.git"
+  await fs.writeFile(path.join(root, "decoy.txt"), "decoy\n")
+  git(root, ["init", "--initial-branch=main"])
+  git(root, ["remote", "add", "origin", origin])
+  git(root, ["config", "user.email", "test@example.com"])
+  git(root, ["config", "user.name", "Test"])
+  git(root, ["add", "decoy.txt"])
+  git(root, ["commit", "-m", "decoy"])
+  return { root, origin, head: git(root, ["rev-parse", "HEAD"]).trim() }
+}
+
 test("imports verified canonical bytes and creates a pinned lock", async (t) => {
   const { root, source, output, sourceCommit } = await fixture()
   t.after(() => fs.rm(root, { recursive: true, force: true }))
@@ -196,4 +217,38 @@ test("rejects canonical source bytes changed after the pinned commit", async (t)
     importPlatformContracts({ source, output, sourceRepository, sourceCommit }),
     /source contract bytes do not match source commit/,
   )
+})
+
+test("ignores the repository environment Git exports to hooks in a linked worktree", async (t) => {
+  const decoy = await decoyRepository()
+  t.after(() => fs.rm(decoy.root, { recursive: true, force: true }))
+  const gitDirectory = path.join(decoy.root, ".git")
+  const inherited = {
+    GIT_DIR: gitDirectory,
+    GIT_INDEX_FILE: path.join(gitDirectory, "index"),
+    GIT_WORK_TREE: decoy.root,
+    GIT_COMMON_DIR: gitDirectory,
+    GIT_OBJECT_DIRECTORY: path.join(gitDirectory, "objects"),
+  }
+  const restored = inheritedGitEnvKeys.map((key) => [key, process.env[key]])
+  Object.assign(process.env, inherited)
+
+  try {
+    const { root, source, output, sourceCommit } = await fixture()
+    t.after(() => fs.rm(root, { recursive: true, force: true }))
+    await importPlatformContracts({ source, output, sourceRepository, sourceCommit })
+    await verifyPlatformContracts({ directory: output })
+  } finally {
+    for (const [key, value] of restored) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  }
+
+  assert.equal(git(decoy.root, ["remote", "get-url", "origin"]).trim(), decoy.origin)
+  assert.equal(git(decoy.root, ["rev-parse", "HEAD"]).trim(), decoy.head)
+  assert.equal(git(decoy.root, ["status", "--porcelain"]), "")
 })

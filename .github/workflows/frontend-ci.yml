@@ -6,75 +6,8 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  format-issue-1475-test-contract:
-    if: github.head_ref == 'agent/editor-split-scroll-sync-1475' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout feature branch
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-
-      - name: Align inserted Playwright test indentation
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("front/e2e/editor-authoring-markdown-editor.spec.ts")
-          source = path.read_text()
-
-          def indent_block(start_marker: str, end_marker: str) -> None:
-            global source
-            start_token = "\n" + start_marker
-            start = source.find(start_token)
-            if start < 0:
-              return
-            start += 1
-            end = source.find(end_marker, start)
-            if end < 0:
-              raise SystemExit(f"format end marker missing: {end_marker}")
-            block = source[start:end]
-            indented = "".join(
-              ("  " + line if line.strip() else line)
-              for line in block.splitlines(keepends=True)
-            )
-            source = source[:start] + indented + source[end:]
-
-          indent_block(
-            'test("scroll sync model ignores fenced headings"',
-            '  test("legacy block editor implementation and route files are removed from the frontend tree"',
-          )
-          indent_block(
-            'test("split preview aligns body content and Preview mode restores the public header"',
-            '  test("dedicated editor exposes V4 full-screen chrome around the editor"',
-          )
-          indent_block(
-            'test("split panes synchronize the same heading identity in both directions"',
-            '  test("분할 미리보기 wheel은 내부 스크롤 가능 구간에서 미리보기를 먼저 스크롤한다"',
-          )
-
-          path.write_text(source)
-          PY
-
-      - name: Commit formatted regression contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add front/e2e/editor-authoring-markdown-editor.spec.ts
-          git diff --cached --check
-          git commit -m "style(test): Split 동기화 회귀 계약 정렬"
-          git push origin HEAD:${{ github.head_ref }}
-
   frontend-ci:
-    needs: format-issue-1475-test-contract
-    if: needs.format-issue-1475-test-contract.result == 'skipped'
     uses: ./.github/workflows/reusable-frontend-verify.yml

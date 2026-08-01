@@ -303,11 +303,15 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
             )
         }
         taskFacade.fire(payload)
+        // TEMPORARY (issue #1533 진단): invalidation이 두 번째 GET 이전에 실제로 적용됐는지 그 시점에 실측한다.
+        // 계측 없는 대조군에서도 항상 수집하되 출력은 실패했을 때만 한다.
+        val redisAfterFire = diagnoseDetailCacheKeys(postId)
         if (instrumented) {
             diagnose(trial, "07-after-fire", postId)
         }
         entityManager.clear()
         if (instrumented) diagnose(trial, "08-after-clear", postId)
+        val redisBeforeSecondGet = diagnoseDetailCacheKeys(postId)
 
         val secondGet = mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }
         if (instrumented) {
@@ -321,8 +325,16 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 jsonPath("$.summarySource") { value("MIGRATED") }
             }
         } catch (failure: AssertionError) {
+            println("[flake1533][FAILURE] trial=$trial redisAfterFire=$redisAfterFire")
+            println("[flake1533][FAILURE] trial=$trial redisBeforeSecondGet=$redisBeforeSecondGet")
             dumpFailureEvidence(trial, postId, payload, firstGet, secondGet)
             throw failure
+        }
+
+        if (instrumented) {
+            // 세 번째 GET은 반드시 snapshot cache hit이다. 같은 환경에서 "cache hit"의 Server-Timing
+            // origin;dur 기준선을 남겨, 실패 run의 두 번째 GET이 재계산이었는지 cache hit이었는지 대조한다.
+            diagnoseResponse(trial, "11-get3-cachehit", mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) })
         }
     }
 
@@ -564,6 +576,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         val response = actions.andReturn().response
         println(
             "[flake1533] trial=$trial step=$step status=${response.status} etag=${response.getHeader("ETag")} " +
+                "serverTiming=${response.getHeader("Server-Timing")} " +
                 "body=${response.contentAsString.replace('\n', ' ').take(800)}",
         )
     }

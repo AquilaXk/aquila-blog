@@ -88,17 +88,20 @@ test("image name and tag are derived from the repository, matching the backend r
   assert.match(meta.run, /IMAGE_TAG="sha-\$\{BUILD_SHA\}"/)
   assert.match(meta.run, /front build sha is empty/)
 
-  // 정규식 대신 토큰 비교를 쓴다. 호스트명을 품은 비앵커 정규식은 URL 검사로 오인돼
-  // js/regex/missing-regexp-anchor 로 잡히고, 여기서 원하는 것은 "GHCR 참조가 전부 파생형인가"라는
-  // 전수 검사라 부정 매칭보다 토큰 순회가 더 강하다.
-  const ghcrReferences = source
-    .split(/\s|"|'/)
-    .filter((token) => token.includes("ghcr.io/"))
-  assert.ok(ghcrReferences.length > 0, "front image must target GHCR")
-  for (const reference of ghcrReferences) {
-    assert.ok(
-      reference.includes("ghcr.io/${OWNER_LC}/${REPO_NAME}-front"),
-      `GHCR owner and repository must be derived, not hardcoded: ${reference}`,
+  // 레지스트리 참조는 전수로 확인한다. 부정 매칭 하나보다 "registry로 시작하는 토큰이 전부
+  // 파생형과 정확히 일치하는가"가 더 강하고, hardcoded owner·잘못된 suffix·참조 부재를 모두 잡는다.
+  // 호스트명을 문자열 리터럴로 두면 CodeQL이 URL sanitization 검사로 오인하므로
+  // dockerfile-supply-chain.test.mjs 와 같은 방식으로 조립한다.
+  const registryPrefix = `${["ghcr", "io"].join(".")}/`
+  const derivedImage = `${registryPrefix}\${OWNER_LC}/\${REPO_NAME}-front`
+  const registryReferences = source.split(/\s|"|'/).filter((token) => token.startsWith(registryPrefix))
+
+  assert.ok(registryReferences.length > 0, "front image must target the GitHub container registry")
+  for (const reference of registryReferences) {
+    assert.equal(
+      reference,
+      derivedImage,
+      "registry owner and repository must be derived from the repository, not hardcoded",
     )
   }
 

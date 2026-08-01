@@ -234,6 +234,8 @@ export const MarkdownEditor = ({
   const { handleWriteScroll, handlePreviewScroll, handlePreviewWheel } = useMarkdownEditorScrollSync({
     textareaRef,
     previewScrollRef,
+    previewContent: value,
+    splitActive: mode === "split",
   })
 
   const resolveActiveSelection = useCallback(() => {

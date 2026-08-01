@@ -15,6 +15,52 @@ export type MarkdownHeading = {
   offset: number
 }
 
+export type SourceMirrorMetrics = {
+  clientWidth: number
+  paddingTop: string
+  paddingRight: string
+  paddingBottom: string
+  paddingLeft: string
+  fontFamily: string
+  fontSize: string
+  fontWeight: string
+  fontStyle: string
+  lineHeight: string
+  letterSpacing: string
+  overflowWrap: string
+  wordBreak: string
+  tabSize: string
+}
+
+/**
+ * textarea의 줄바꿈 위치를 그대로 재현하는 hidden mirror의 스타일.
+ * `getBoundingClientRect().width`는 scrollbar를 포함한 border-box 폭이라 non-overlay scrollbar
+ * 환경에서 mirror가 더 넓어진다. scrollbar를 제외한 `clientWidth`를 border-box 폭으로 쓴다.
+ */
+export const createSourceMirrorStyle = (metrics: SourceMirrorMetrics) => ({
+  position: "fixed",
+  inset: "0 auto auto -100000px",
+  visibility: "hidden",
+  pointerEvents: "none",
+  width: `${metrics.clientWidth}px`,
+  boxSizing: "border-box",
+  borderWidth: "0",
+  paddingTop: metrics.paddingTop,
+  paddingRight: metrics.paddingRight,
+  paddingBottom: metrics.paddingBottom,
+  paddingLeft: metrics.paddingLeft,
+  fontFamily: metrics.fontFamily,
+  fontSize: metrics.fontSize,
+  fontWeight: metrics.fontWeight,
+  fontStyle: metrics.fontStyle,
+  lineHeight: metrics.lineHeight,
+  letterSpacing: metrics.letterSpacing,
+  whiteSpace: "pre-wrap",
+  overflowWrap: metrics.overflowWrap,
+  wordBreak: metrics.wordBreak,
+  tabSize: metrics.tabSize,
+})
+
 const FENCE_OPEN_PATTERN = /^\s{0,3}(`{3,}|~{3,})/
 // CommonMark ATX closing sequence는 앞에 공백이 있어야 하므로 `## C#`의 `#`는 본문으로 남긴다.
 const ATX_HEADING_PATTERN = /^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$/

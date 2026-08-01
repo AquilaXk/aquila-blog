@@ -8,7 +8,10 @@ const backendDockerfilePath = path.join(repoRoot, "back/Dockerfile")
 const frontRuntimeDockerfilePath = path.join(repoRoot, "front/Dockerfile.runtime")
 const uncheckedJdkDownloadHost = ["download", "java", "net"].join(".")
 
-const runtimeStageOf = (dockerfile) => dockerfile.split(/^FROM /m).at(-1)
+// Dockerfile keywords are case-insensitive. A case-sensitive split would treat a lowercase final
+// `from` as ordinary text and hand back an earlier stage, so a runtime stage missing USER or the
+// healthcheck client could still pass on the previous stage's lines.
+const runtimeStageOf = (dockerfile) => dockerfile.split(/^FROM\s+/im).at(-1)
 
 test("backend Dockerfile pins every external build stage image by digest", () => {
   const dockerfile = readFileSync(backendDockerfilePath, "utf8")
@@ -47,6 +50,21 @@ test("front runtime image contains the compose healthcheck client", () => {
   const runtimeStage = runtimeStageOf(dockerfile)
 
   assert.match(runtimeStage, /apk add --no-cache wget\b/)
+})
+
+test("runtime stage extraction is not fooled by a lowercase final FROM", () => {
+  const dockerfile = [
+    "FROM base@sha256:aaa AS builder",
+    "RUN apk add --no-cache wget",
+    "USER app",
+    "from base@sha256:bbb",
+    'CMD ["node", "server.js"]',
+  ].join("\n")
+
+  const runtimeStage = runtimeStageOf(dockerfile)
+
+  assert.doesNotMatch(runtimeStage, /apk add --no-cache wget\b/)
+  assert.deepEqual([...runtimeStage.matchAll(/^USER\s+(\S+)/gim)], [])
 })
 
 test("front runtime image drops root before serving", () => {

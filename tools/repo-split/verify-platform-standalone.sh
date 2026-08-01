@@ -102,47 +102,14 @@ fi
   run_step "Run privacy drift gate" \
     node tools/privacy/ci-privacy-gate.mjs
 
-  cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
-  # Compose validation must not depend on production registries or stale image
-  # examples. Derive every digest-pinned image key from the canonical deploy env
-  # contract, replace existing examples, and add newly required keys. The
-  # synthetic registry is never contacted by `docker compose config`.
-  node - deploy/homeserver/.env.prod <<'NODE'
-const fs = require("node:fs")
-
-const envPath = process.argv[2]
-const contract = JSON.parse(fs.readFileSync("deploy/env/env.contract.json", "utf8"))
-const target = contract.targets?.["home-server-source"]
-if (!target || !Array.isArray(target.keys)) {
-  throw new Error("home-server-source deploy env contract is missing")
-}
-
-const digest = "0".repeat(64)
-const overrides = new Map([
-  ["BACK_IMAGE", "ghcr.io/aquilaxk/aquila-blog-back:sha-0000000"],
-])
-for (const key of target.keys) {
-  if (key?.kind !== "digest-image" || typeof key.name !== "string") continue
-  const slug = key.name.toLowerCase().replaceAll("_", "-")
-  overrides.set(key.name, `registry.invalid/aquila-standalone/${slug}@sha256:${digest}`)
-}
-
-const retained = fs
-  .readFileSync(envPath, "utf8")
-  .split(/\r?\n/)
-  .filter((line) => {
-    const match = /^([A-Z][A-Z0-9_]*)=/.exec(line)
-    return !match || !overrides.has(match[1])
-  })
-
-const syntheticLines = [...overrides.entries()]
-  .sort(([left], [right]) => left.localeCompare(right))
-  .map(([key, value]) => `${key}=${value}`)
-fs.writeFileSync(
-  envPath,
-  `${retained.join("\n").replace(/\n*$/, "")}\n\n# Standalone Compose validation images\n${syntheticLines.join("\n")}\n`,
-)
-NODE
+  # Compose syntax validation uses the example as a non-secret base, while the
+  # helper derives every digest image from the canonical deploy env contract.
+  # The synthetic registry is never contacted by `docker compose config`.
+  run_step "Materialize standalone Compose test environment" \
+    node tools/repo-split/materialize-compose-test-env.mjs \
+      --source deploy/homeserver/.env.prod.example \
+      --output deploy/homeserver/.env.prod \
+      --contract deploy/env/env.contract.json
   run_step "Materialize per-service Compose env" \
     bash deploy/homeserver/materialize_service_env.sh deploy/homeserver/.env.prod
   run_step "Validate production Compose configuration" \

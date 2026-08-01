@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.cache.RedisCacheConfiguration
 import org.springframework.data.redis.cache.RedisCacheManager
+import org.springframework.data.redis.cache.RedisCacheWriter
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer
 import org.springframework.data.redis.serializer.RedisSerializationContext
@@ -119,8 +120,15 @@ class RedisCacheConfig(
                 defaultConfig.entryTtl(Duration.ofSeconds(seconds))
             }
 
+        // Spring Data Redis 4.x부터 RedisCacheWriter의 put/evict/clear 기본 동작이 비동기(fire-and-forget)다.
+        // 이 저장소의 무효화 경로는 동기 적용을 전제로 한다: PostReadCacheInvalidator가 evict 직후의 read를
+        // 최신으로 보고, PostWriteSideEffectHandler는 evict 예외를 잡아 task를 재시도한다. 비동기 기본값에서는
+        // 쓰기 직후 read가 stale 스냅샷을 돌려주고(read-your-write 위반), evict가 실패해도 예외가 오지 않아
+        // task가 성공으로 완료된다. immediateWrites로 동기 적용을 복구한다. (issue #1533)
+        val cacheWriter = RedisCacheWriter.create(redisConnectionFactory) { configurer -> configurer.immediateWrites() }
+
         return RedisCacheManager
-            .builder(redisConnectionFactory)
+            .builder(cacheWriter)
             .cacheDefaults(defaultConfig)
             .withInitialCacheConfigurations(perCacheConfigs)
             .build()

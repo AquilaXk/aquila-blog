@@ -303,15 +303,17 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
             )
         }
         taskFacade.fire(payload)
-        // TEMPORARY (issue #1533 진단): invalidation이 두 번째 GET 이전에 실제로 적용됐는지 그 시점에 실측한다.
-        // 계측 없는 대조군에서도 항상 수집하되 출력은 실패했을 때만 한다.
-        val redisAfterFire = diagnoseDetailCacheKeys(postId)
+        // TEMPORARY (issue #1533 진단): invalidation 직후 snapshot 키가 아직 남아 있는지를 EXISTS 한 번으로 실측한다.
+        // 실패 여부와 무관하게 anomaly가 관측되면 항상 출력해야, 계측 지연이 race를 가려도 증거가 남는다.
+        val snapshotStillPresentAfterFire = detailSnapshotKeyExists(postId)
+        if (snapshotStillPresentAfterFire) {
+            println("[flake1533][LATE-EVICTION] trial=$trial postId=$postId snapshotKeyPresentImmediatelyAfterInvalidation=true")
+        }
         if (instrumented) {
             diagnose(trial, "07-after-fire", postId)
         }
         entityManager.clear()
         if (instrumented) diagnose(trial, "08-after-clear", postId)
-        val redisBeforeSecondGet = diagnoseDetailCacheKeys(postId)
 
         val secondGet = mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }
         if (instrumented) {
@@ -325,8 +327,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 jsonPath("$.summarySource") { value("MIGRATED") }
             }
         } catch (failure: AssertionError) {
-            println("[flake1533][FAILURE] trial=$trial redisAfterFire=$redisAfterFire")
-            println("[flake1533][FAILURE] trial=$trial redisBeforeSecondGet=$redisBeforeSecondGet")
+            println("[flake1533][FAILURE] trial=$trial snapshotStillPresentAfterFire=$snapshotStillPresentAfterFire")
             dumpFailureEvidence(trial, postId, payload, firstGet, secondGet)
             throw failure
         }
@@ -594,6 +595,15 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 ).firstOrNull()
                 ?.toString() ?: "absent"
         }.getOrElse { "error(${it::class.simpleName}: ${it.message})" }
+
+    private fun detailSnapshotKeyExists(postId: Long): Boolean =
+        runCatching {
+            redisConnectionFactory.connection.use { connection ->
+                connection
+                    .keyCommands()
+                    .exists("${PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT}::$postId".toByteArray(StandardCharsets.UTF_8)) == true
+            }
+        }.getOrDefault(false)
 
     private fun diagnoseDetailCacheKeys(postId: Long): String =
         runCatching {

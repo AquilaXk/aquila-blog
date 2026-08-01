@@ -21,9 +21,12 @@ object PostSummaryResolver {
             "핵심 내용을 정리 중입니다.",
             "미리보기를 불러오지 못했습니다.",
         )
+
+    // 링크/이미지 URL 반복은 문자 단위 대안만 둔다. `[^()]+`처럼 중첩 반복을 쓰면 닫는 괄호가 없는
+    // 긴 본문에서 백트래킹이 지수적으로 늘어난다.
     private val markdownImageRegex =
-        Regex("!\\[[^]]*]\\((?:[^()\\s]+|\\([^)]*\\))+(?:\\s+\"[^\"]*\")?\\)")
-    private val markdownLinkRegex = Regex("\\[([^]]+)]\\((?:[^()]+|\\([^)]*\\))+\\)")
+        Regex("!\\[[^]]*]\\((?:[^()\\s]|\\([^)]*\\))+(?:\\s+\"[^\"]*\")?\\)")
+    private val markdownLinkRegex = Regex("\\[([^]]+)]\\((?:[^()]|\\([^)]*\\))+\\)")
     private val referenceLinkRegex = Regex("\\[([^]]+)]\\[[^]]*]")
     private val inlineCodeRegex = Regex("`+([^`]+?)`+")
     private val htmlTagRegex = Regex("<[^>]+>")

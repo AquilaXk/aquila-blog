@@ -2,8 +2,11 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.post.model.PostSummarySource
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.function.ThrowingSupplier
 import java.text.BreakIterator
+import java.time.Duration
 import java.time.Instant
 import java.util.Locale
 
@@ -186,6 +189,20 @@ summary: "이전 frontmatter 요약"
 
         assertThat(resolved.text).isEqualTo("도입 핵심 문장입니다.")
         assertThat(resolved.text).doesNotContain("println")
+    }
+
+    @Test
+    fun `unclosed link parenthesis is cleaned in linear time`() {
+        val content = "[문서](" + "a".repeat(40) + " 닫는 괄호가 없는 링크 문장입니다."
+
+        val resolved =
+            assertTimeoutPreemptively(
+                Duration.ofSeconds(2),
+                ThrowingSupplier { PostSummaryResolver.resolveForCreate("링크", content, null, fixedNow) },
+            )
+
+        assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
+        assertThat(resolved.text).isEqualTo(content)
     }
 
     private fun graphemeCount(value: String): Int {

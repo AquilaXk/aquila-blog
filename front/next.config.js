@@ -4,6 +4,19 @@ const { buildContentSecurityPolicy } = require("./src/libs/security/contentSecur
 /** Prefer package source over yarn `file:` node_modules copy (Vercel cache drift). */
 const sharedUiTokensEntry = path.resolve(__dirname, "packages/shared-ui-tokens/src/index.js")
 
+/**
+ * yarn 1 filters optional dependencies by `os`/`cpu` but not by libc, so both the glibc and the
+ * musl `@img/sharp-*` builds land in node_modules while sharp only ever opens the one matching the
+ * host libc. Build host and serve host share a libc here (Dockerfile.runtime builds and runs on
+ * node:20-alpine; Vercel builds and runs on glibc), so the mismatched flavour is dead weight.
+ * `glibcVersionRuntime` is the same probe sharp itself uses through detect-libc.
+ */
+const nodeReportHeader =
+  /** @type {{ header?: { glibcVersionRuntime?: string } }} */ (
+    process.report?.getReport?.() ?? {}
+  ).header
+const foreignLibcTag = nodeReportHeader?.glibcVersionRuntime ? "linuxmusl" : "linux"
+
 const buildSecurityHeaders = () => {
   // Phase B enforce: hash-based script-src (no script unsafe-inline).
   // Phase A evidence: keep Report-Only with the same nonce/hash policy for browser/header dumps.
@@ -48,6 +61,32 @@ const buildSecurityHeaders = () => {
 module.exports = {
   /** Homeserver container runs `.next/standalone/server.js`; traced deps only, no source tree. */
   output: "standalone",
+  /**
+   * The standalone tracer copies build-only toolchain into the runtime `node_modules`.
+   * `next-server` 키는 next-server 기본 트레이스에만 매칭된다 — Next는 이 키를
+   * `picomatch(glob)("next-server")` 로 판정한다 (next/dist/build/collect-build-traces.js).
+   * 페이지 트레이스는 라우트 경로로 매칭되므로 여기 항목은 SSR 페이지 의존성을 건드리지 않는다.
+   * (mermaid·katex·prismjs·shiki는 실제 페이지 트레이스에 들어 있어 대상이 아니다.)
+   *
+   * 제외 근거 (모두 next-server 트레이스 경유로만 유입된다):
+   * - typescript: `next/dist/server/config.js` 는 `transpileConfig()` 를
+   *   `configFileName === "next.config.ts"` 일 때만 호출한다. 이 프로젝트 설정은 next.config.js 다.
+   * - webpack: `next/dist/compiled/webpack/webpack.js` 의 `init()` 이 최상위 `webpack` 을 require 하는
+   *   분기는 `process.env.NEXT_PRIVATE_LOCAL_WEBPACK` (Next 자체 개발용) 이 설정된 경우뿐이고,
+   *   운영 컨테이너는 항상 번들된 `./bundle5` 분기를 탄다. terser·esbuild·ajv 등 webpack 하위
+   *   트리도 트레이스 순회가 끊기면서 함께 빠진다.
+   * - libc가 어긋나는 `@img/sharp-*` 빌드: sharp 는 호스트 libc에 맞는 하나만 연다.
+   *   `sharp-linux-*` 글롭은 `-` 덕분에 `sharp-linuxmusl-*` 과 겹치지 않는다.
+   *   sharp 본체와 `@img/colour` 는 그대로 둔다.
+   */
+  outputFileTracingExcludes: {
+    "next-server": [
+      "**/node_modules/typescript/**/*",
+      "**/node_modules/webpack/**/*",
+      `**/node_modules/@img/sharp-libvips-${foreignLibcTag}-*/**/*`,
+      `**/node_modules/@img/sharp-${foreignLibcTag}-*/**/*`,
+    ],
+  },
   images: {
     remotePatterns: [
       {

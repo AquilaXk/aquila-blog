@@ -1,0 +1,282 @@
+name: Sync Platform public contract to Web
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "contracts/public-api/**"
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Platform commit, branch, or pull request SHA to import
+        required: true
+        default: main
+        type: string
+      mode:
+        description: Validate only or publish the compatibility pull request
+        required: true
+        default: test-only
+        type: choice
+        options:
+          - test-only
+          - sync
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: platform-public-contract-sync
+  cancel-in-progress: false
+
+env:
+  PLATFORM_REPOSITORY: AquilaXk/aquila-blog
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+  SYNC_BRANCH: chore/platform-contract-sync
+
+jobs:
+  sync:
+    name: Platform public contract sync
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Resolve sync context
+        id: context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          REQUESTED_SOURCE_REF: ${{ inputs.source_ref }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+          SYNC_ENABLED: ${{ vars.PLATFORM_CONTRACT_SYNC_ENABLED }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            source_ref="${REQUESTED_SOURCE_REF}"
+            mode="${REQUESTED_MODE}"
+          else
+            source_ref="${EVENT_SHA}"
+            mode="sync"
+          fi
+
+          if [[ -z "${source_ref}" || "${source_ref}" == *$'\n'* || "${source_ref}" == *$'\r'* ]]; then
+            echo "source_ref must be one non-empty line" >&2
+            exit 1
+          fi
+          if [[ "${mode}" != "test-only" && "${mode}" != "sync" ]]; then
+            echo "unsupported sync mode: ${mode}" >&2
+            exit 1
+          fi
+
+          write_enabled=false
+          if [[ "${mode}" == "sync" ]]; then
+            if [[ "${SYNC_ENABLED}" == "true" ]]; then
+              write_enabled=true
+            elif [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+              echo "manual sync requires PLATFORM_CONTRACT_SYNC_ENABLED=true" >&2
+              exit 1
+            else
+              echo "::notice::Platform contract sync kill switch is disabled; validation will run without push or PR"
+            fi
+          fi
+
+          printf 'source_ref=%s\n' "${source_ref}" >> "${GITHUB_OUTPUT}"
+          printf 'mode=%s\n' "${mode}" >> "${GITHUB_OUTPUT}"
+          printf 'write_enabled=%s\n' "${write_enabled}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout immutable Platform source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.0
+        with:
+          ref: ${{ steps.context.outputs.source_ref }}
+          path: platform
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve immutable Platform commit
+        id: source
+        run: |
+          set -euo pipefail
+          source_sha="$(git -C platform rev-parse HEAD)"
+          if [[ ! "${source_sha}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "resolved Platform source is not a full commit SHA" >&2
+            exit 1
+          fi
+          printf 'source_sha=%s\n' "${source_sha}" >> "${GITHUB_OUTPUT}"
+          printf 'source_ref=%s\n' "${{ steps.context.outputs.source_ref }}" >> "${GITHUB_OUTPUT}"
+          echo "Platform source: ${source_sha}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Checkout Web main without persisted credentials
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.0
+        with:
+          repository: AquilaXk/aquila-blog-web
+          ref: main
+          path: web
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare stable Web sync branch
+        run: |
+          set -euo pipefail
+          if git -C web ls-remote --exit-code --heads origin "refs/heads/${SYNC_BRANCH}" >/dev/null 2>&1; then
+            git -C web fetch --no-tags origin "refs/heads/${SYNC_BRANCH}:refs/remotes/origin/${SYNC_BRANCH}"
+            git -C web checkout -B "${SYNC_BRANCH}" "origin/${SYNC_BRANCH}"
+          else
+            git -C web checkout -B "${SYNC_BRANCH}" origin/main
+          fi
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Install frozen Web dependencies
+        working-directory: web
+        run: yarn install --frozen-lockfile
+
+      - name: Import immutable Platform contract
+        working-directory: web
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/contracts/import-platform-contracts.mjs \
+            --source ../platform/contracts/public-api \
+            --output contracts/platform \
+            --source-repository "${PLATFORM_REPOSITORY}" \
+            --source-commit "${SOURCE_SHA}"
+
+      - name: Generate and verify Web contract artifacts
+        working-directory: web
+        run: |
+          set -euo pipefail
+          yarn contracts:generate
+          yarn contracts:check
+          git diff --check
+
+      - name: Detect generated contract changes
+        id: changes
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git -C web status --porcelain --untracked-files=all -- contracts/platform packages/shared-contracts/src/generated/backend-openapi.d.ts)" ]]; then
+            changed=true
+          else
+            changed=false
+          fi
+          printf 'changed=%s\n' "${changed}" >> "${GITHUB_OUTPUT}"
+          echo "Generated contract changes: ${changed}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Assert read-only mode cannot publish
+        if: ${{ steps.context.outputs.write_enabled != 'true' }}
+        env:
+          MODE: ${{ steps.context.outputs.mode }}
+        run: |
+          set -euo pipefail
+          echo "::notice::${MODE} completed without creating a write token, pushing a branch, or opening a pull request"
+
+      - name: Create repository sync token
+        id: app-token
+        if: ${{ steps.context.outputs.write_enabled == 'true' && steps.changes.outputs.changed == 'true' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.REPO_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}
+          owner: AquilaXk
+          repositories: |
+            aquila-blog
+            aquila-blog-web
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Resolve repository sync App identity
+        id: app-user
+        if: ${{ steps.context.outputs.write_enabled == 'true' && steps.changes.outputs.changed == 'true' }}
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          app_user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          printf 'name=%s[bot]\n' "${APP_SLUG}" >> "${GITHUB_OUTPUT}"
+          printf 'email=%s+%s[bot]@users.noreply.github.com\n' "${app_user_id}" "${APP_SLUG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Commit latest Platform snapshot
+        id: commit
+        if: ${{ steps.context.outputs.write_enabled == 'true' && steps.changes.outputs.changed == 'true' }}
+        env:
+          APP_EMAIL: ${{ steps.app-user.outputs.email }}
+          APP_NAME: ${{ steps.app-user.outputs.name }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git -C web config user.name "${APP_NAME}"
+          git -C web config user.email "${APP_EMAIL}"
+          git -C web add contracts/platform packages/shared-contracts/src/generated/backend-openapi.d.ts
+          if git -C web diff --cached --quiet; then
+            echo "committed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          git -C web commit -m "chore(contracts): sync Platform ${SOURCE_SHA:0:12}"
+          echo "committed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Push stable Web sync branch
+        if: ${{ steps.context.outputs.write_enabled == 'true' && steps.changes.outputs.changed == 'true' && steps.commit.outputs.committed == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          git -C web push origin "HEAD:refs/heads/${SYNC_BRANCH}"
+
+      - name: Create or update the single Web compatibility PR
+        if: ${{ steps.context.outputs.write_enabled == 'true' && steps.changes.outputs.changed == 'true' && steps.commit.outputs.committed == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_REF: ${{ steps.source.outputs.source_ref }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          body_file="${RUNNER_TEMP}/platform-contract-sync-pr.md"
+          cat > "${body_file}" <<EOF
+          ## Platform public contract compatibility snapshot
+
+          - source repository: \`${PLATFORM_REPOSITORY}\`
+          - source ref: \`${SOURCE_REF}\`
+          - source commit: \`${SOURCE_SHA}\`
+          - source URL: https://github.com/${PLATFORM_REPOSITORY}/commit/${SOURCE_SHA}
+
+          This pull request is updated in place from the stable \`${SYNC_BRANCH}\` branch. For a breaking Platform pull request, merge and deploy this Web compatibility change first, then record the Web production URL on the Platform pull request.
+          EOF
+
+          existing_pr="$(gh pr list \
+            --repo "${WEB_REPOSITORY}" \
+            --state open \
+            --head "${SYNC_BRANCH}" \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [[ -n "${existing_pr}" ]]; then
+            gh pr edit "${existing_pr}" \
+              --repo "${WEB_REPOSITORY}" \
+              --title "chore(contracts): sync Platform public contract" \
+              --body-file "${body_file}"
+            pr_number="${existing_pr}"
+          else
+            pr_url="$(gh pr create \
+              --repo "${WEB_REPOSITORY}" \
+              --base main \
+              --head "${SYNC_BRANCH}" \
+              --title "chore(contracts): sync Platform public contract" \
+              --body-file "${body_file}")"
+            pr_number="${pr_url##*/}"
+          fi
+
+          echo "Web compatibility PR: https://github.com/${WEB_REPOSITORY}/pull/${pr_number}" >> "${GITHUB_STEP_SUMMARY}"

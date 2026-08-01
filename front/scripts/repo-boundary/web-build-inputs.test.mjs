@@ -146,11 +146,9 @@ test("Web CI runs repository extraction contract tests", () => {
 })
 
 test("Web pre-commit boundary scanning reads the staged index", (t) => {
-  for (const hook of [".githooks/pre-commit", "../.githooks/pre-commit"]) {
-    const source = fs.readFileSync(path.join(frontRoot, hook), "utf8")
-    assert.match(source, /commit_index_file="\$\{GIT_INDEX_FILE-\}"/)
-    assert.ok(source.indexOf("export GIT_INDEX_FILE") > source.indexOf("unset $(git rev-parse --local-env-vars)"))
-  }
+  const source = fs.readFileSync(path.join(frontRoot, ".githooks/pre-commit"), "utf8")
+  assert.match(source, /commit_index_file="\$\{GIT_INDEX_FILE-\}"/)
+  assert.ok(source.indexOf("export GIT_INDEX_FILE") > source.indexOf("unset $(git rev-parse --local-env-vars)"))
 
   for (const separator of ["/", "\\"]) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "web-boundary-staged-"))

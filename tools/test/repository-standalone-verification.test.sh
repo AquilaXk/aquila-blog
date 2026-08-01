@@ -92,9 +92,12 @@ ruby -e '
     next unless job_id == "platform-standalone"
 
     raise "platform-standalone must not expose secrets at job scope" if job.key?("env")
+    # 기대값은 ci.yml의 GitHub 표현식 원문이며, fallback 규칙은 #1523에서 도입했다.
+    # 이 ruby 프로그램은 bash single quote 안에 있으므로 fallback 리터럴의
+    # 작은따옴표는 backslash quote quote 형태로 escape 해야 한다.
     expected_secrets = {
-      "TEST_DB_PASSWORD" => "${{ secrets.CI_DB_PASSWORD }}",
-      "TEST_REDIS_PASSWORD" => "${{ secrets.CI_REDIS_PASSWORD }}",
+      "TEST_DB_PASSWORD" => "${{ secrets.CI_DB_PASSWORD || '\''test_db_password_change_me'\'' }}",
+      "TEST_REDIS_PASSWORD" => "${{ secrets.CI_REDIS_PASSWORD || '\''test_redis_password_change_me'\'' }}",
     }
     expected_secrets.each do |key, value|
       raise "platform-standalone gate secret mismatch: #{key}" unless gate.dig("env", key) == value

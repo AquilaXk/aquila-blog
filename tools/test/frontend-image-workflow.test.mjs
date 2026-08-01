@@ -88,7 +88,20 @@ test("image name and tag are derived from the repository, matching the backend r
   assert.match(meta.run, /IMAGE_TAG="sha-\$\{BUILD_SHA\}"/)
   assert.match(meta.run, /front build sha is empty/)
 
-  assert.doesNotMatch(source, /ghcr\.io\/[a-z0-9][a-z0-9-]*\//i, "GHCR owner must not be hardcoded")
+  // 정규식 대신 토큰 비교를 쓴다. 호스트명을 품은 비앵커 정규식은 URL 검사로 오인돼
+  // js/regex/missing-regexp-anchor 로 잡히고, 여기서 원하는 것은 "GHCR 참조가 전부 파생형인가"라는
+  // 전수 검사라 부정 매칭보다 토큰 순회가 더 강하다.
+  const ghcrReferences = source
+    .split(/\s|"|'/)
+    .filter((token) => token.includes("ghcr.io/"))
+  assert.ok(ghcrReferences.length > 0, "front image must target GHCR")
+  for (const reference of ghcrReferences) {
+    assert.ok(
+      reference.includes("ghcr.io/${OWNER_LC}/${REPO_NAME}-front"),
+      `GHCR owner and repository must be derived, not hardcoded: ${reference}`,
+    )
+  }
+
   assert.doesNotMatch(source, /IMAGE_LATEST/, "front image must not publish a mutable latest ref")
   assert.doesNotMatch(source, /:latest/, "front image must not publish a mutable latest ref")
 })

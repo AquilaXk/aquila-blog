@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "CVE-2026-14257"
+ignoreUntil = 2026-08-08
+reason = "#1124: no patched brace-expansion 1.x/2.x release; global 5.0.8 resolution breaks minimatch 3/5"

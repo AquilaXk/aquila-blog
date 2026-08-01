@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file="${1:?commit message file is required}"
+comment_string="$(git config --get core.commentString || true)"
+comment_char="$(git config --get core.commentChar || true)"
+if [[ "${comment_string:-${comment_char}}" == "auto" ]]; then
+  echo "[commit-msg] deprecated core.commentString/core.commentChar=auto는 지원하지 않습니다." >&2
+  exit 1
+fi
+cleaned_message="$(git stripspace --strip-comments < "${msg_file}")"
+subject="${cleaned_message%%$'\n'*}"
+node - "${subject}" <<'NODE'
+const subject = process.argv[2]
+
+if (/^(Merge|Revert|fixup!|squash!|amend!) /.test(subject)) process.exit(0)
+
+const match = /^(feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix)(\([a-z0-9][a-z0-9._/-]*\))?!?: (.+)$/.exec(subject)
+if (!match || !/[가-힣ㄱ-ㅎㅏ-ㅣ]/u.test(match[3]) || !/[A-Za-z]/.test(match[3])) {
+  console.error("[commit-msg] 형식: <type>(<scope>): <한글+English 혼합 요약>")
+  process.exit(1)
+}
+NODE

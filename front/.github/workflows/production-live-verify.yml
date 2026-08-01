@@ -1,0 +1,124 @@
+name: Vercel Production Web E2E
+
+on:
+  repository_dispatch:
+    types:
+      - vercel.deployment.ready
+      - vercel.deployment.promoted
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        required: true
+        type: string
+      environment:
+        required: true
+        default: production
+        type: string
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: web-production-live-${{ github.event.client_payload.id || inputs.deployment_url }}-${{ github.event.action || 'manual' }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  production-live-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Vercel deployment commit
+        if: github.event_name == 'repository_dispatch'
+        uses: vercel/repository-dispatch/actions/checkout@30f760c6640485cd92f8c785ef361382555fb712 # v1
+
+      - name: Checkout manual verification commit
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Report Vercel deployment status
+        if: github.event_name == 'repository_dispatch'
+        uses: vercel/repository-dispatch/actions/status@30f760c6640485cd92f8c785ef361382555fb712 # v1
+        with:
+          name: "${{ github.event.action == 'vercel.deployment.promoted' && 'Vercel - aquila-blog-web: production-promoted' || 'Vercel - aquila-blog-web: production-ready' }}"
+
+      - name: Resolve immutable live target
+        id: targets
+        env:
+          LIVE_EVENT_TYPE: ${{ github.event_name == 'repository_dispatch' && github.event.action || 'workflow_dispatch' }}
+          LIVE_DEPLOYMENT_URL: ${{ github.event.client_payload.url || inputs.deployment_url }}
+          LIVE_ENVIRONMENT: ${{ github.event.client_payload.environment || inputs.environment }}
+          LIVE_SOURCE_COMMIT: ${{ github.event.client_payload.git.sha || '' }}
+        run: |
+          node scripts/live/resolve-live-targets.mjs \
+            --event-type "${LIVE_EVENT_TYPE}" \
+            --deployment-url "${LIVE_DEPLOYMENT_URL}" \
+            --environment "${LIVE_ENVIRONMENT}" \
+            --source-commit "${LIVE_SOURCE_COMMIT}" \
+            --github-output "${GITHUB_OUTPUT}"
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - run: yarn install --frozen-lockfile
+      - run: npx playwright install --with-deps chromium
+
+      - name: Verify Web environment contract
+        run: node --test scripts/env/env-contract.test.mjs
+
+      - name: Validate ready live targets
+        if: steps.targets.outputs.phase == 'ready'
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.targets.outputs.web_url }}
+          E2E_API_BASE_URL: ${{ vars.E2E_API_BASE_URL }}
+        run: node scripts/env/validate-env.mjs --target live-ready --process-env
+
+      - name: Verify immutable deployment before promotion
+        if: steps.targets.outputs.phase == 'ready'
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.targets.outputs.web_url }}
+          PLAYWRIGHT_USE_WEBSERVER: "false"
+          E2E_API_BASE_URL: ${{ vars.E2E_API_BASE_URL }}
+          E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ steps.targets.outputs.source_commit }}
+        run: yarn playwright test e2e/live.spec.ts --project=chromium --workers=1
+
+      - name: Validate promoted live credentials
+        if: steps.targets.outputs.phase == 'promoted'
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.targets.outputs.web_url }}
+          E2E_API_BASE_URL: ${{ vars.E2E_API_BASE_URL }}
+          E2E_LIVE_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL }}
+          E2E_LIVE_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME }}
+          E2E_LIVE_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD }}
+        run: node scripts/env/validate-env.mjs --target live-e2e --process-env
+
+      - name: Verify promoted custom domain
+        if: steps.targets.outputs.phase == 'promoted'
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.targets.outputs.web_url }}
+          PLAYWRIGHT_USE_WEBSERVER: "false"
+          E2E_API_BASE_URL: ${{ vars.E2E_API_BASE_URL }}
+          E2E_EXPECTED_FRONT_COMMIT_SHA: ${{ steps.targets.outputs.source_commit }}
+          E2E_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL }}
+          E2E_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME }}
+          E2E_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD }}
+        run: yarn playwright test e2e/live.spec.ts e2e/editor-live-visual.spec.ts --project=chromium --workers=1
+
+      - name: Upload screenshot-only failure evidence
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: web-production-live-screenshots-${{ github.run_id }}
+          path: test-results/**/*.png
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Record promoted rollback contract
+        if: failure() && steps.targets.outputs.phase == 'promoted'
+        run: |
+          echo "- Rollback runbook: https://github.com/AquilaXk/aquila-blog-web/blob/main/docs/operations/web-rollback.md" >> "${GITHUB_STEP_SUMMARY}"

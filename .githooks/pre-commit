@@ -3,6 +3,11 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
+commit_index_file="${GIT_INDEX_FILE-}"
+unset $(git rev-parse --local-env-vars)
+if [[ -n "${commit_index_file}" ]]; then
+  export GIT_INDEX_FILE="${commit_index_file}"
+fi
 
 staged_files="$(git diff --cached --name-only --diff-filter=ACMRD)"
 if [[ -z "${staged_files}" ]]; then
@@ -12,6 +17,7 @@ fi
 bash tools/guards/check-forbidden-tracked-files.sh --staged
 bash tools/guards/check-current-task-state.sh
 bash tools/guards/check-current-task-scope.sh --staged
+node tools/repo-boundary/check-platform-boundary.mjs --report-only
 
 needs_platform_contract_check="false"
 needs_frontend_contract_check="false"

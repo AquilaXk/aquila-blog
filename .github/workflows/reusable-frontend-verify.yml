@@ -177,6 +177,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
+      - name: Check homeserver runtime image payload budget
+        if: steps.changes.outputs.frontend == 'true'
+        working-directory: front
+        run: yarn check:runtime-image-payload
+
       - name: Check Storybook regression gate
         if: steps.changes.outputs.frontend == 'true'
         working-directory: front

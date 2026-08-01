@@ -80,6 +80,14 @@ const hostOf = (value) => {
 // DNS 호스트 비교용 정규화. 대소문자와 FQDN 후행 점은 같은 호스트를 가리킨다.
 const normalizeHost = (value) => String(value || "").trim().toLowerCase().replace(/\.$/, "")
 
+// 진성 하위 도메인만 참이다. 동일 호스트와 접미사 위조(blog.example.evil)는 거짓이다.
+const isStrictSubdomainOf = (candidate, parent) => {
+  const child = normalizeHost(candidate)
+  const root = normalizeHost(parent)
+  if (!child || !root || child === root) return false
+  return child.endsWith(`.${root}`)
+}
+
 const validateKind = (definition, value) => {
   switch (definition.kind) {
     case undefined:
@@ -187,21 +195,79 @@ export const validateEnvText = ({ contract, target, text }) => {
       // CUSTOM_PROD_*는 후행 슬래시·대소문자 정도가 실 운영값과 다를 수 있고, 그것 때문에
       // 배포가 막히면 안 된다(하드 핀이 원래 존재했던 이유다).
       const apiHost = normalizeHost(valueOf(env, check.apiHostKey))
-      const topology = apiHost ? check.topologies?.[apiHost] : undefined
+      const topologies = check.topologies || {}
+      // Object.hasOwn: `constructor`·`__proto__` 같은 prototype 키가 topology로 해석되면
+      // 이 crossCheck가 통째로 무력화된다.
+      const topology = apiHost && Object.hasOwn(topologies, apiHost) ? topologies[apiHost] : undefined
 
       if (apiHost && !topology) {
         errors.push(safeError(check.apiHostKey, "has no declared prod site topology"))
       } else if (topology) {
-        const comparisons = [
-          [check.domainKey, normalizeHost(valueOf(env, check.domainKey)), topology.cookieDomain, "must be the cookie domain declared for"],
-          [check.frontUrlKey, normalizeHost(hostOf(valueOf(env, check.frontUrlKey))), topology.frontHost, "host must be the web host declared for"],
-          [check.backUrlKey, normalizeHost(hostOf(valueOf(env, check.backUrlKey))), topology.backHost, "host must be the API host declared for"],
-        ]
-        for (const [key, actual, expected, message] of comparisons) {
-          if (actual && expected && actual !== expected) {
-            errors.push(safeError(key, `${message} ${check.apiHostKey}=${apiHost}`))
+        // 1) 표 자체를 검증한다. 값 대조만 하면 표가 틀렸을 때 아무도 못 잡는다 -
+        //    deploy.yml도 같은 표를 읽으므로 잘못된 값을 그대로 따라 핀한다.
+        //    전환 전 조합은 이 불변식을 위반하는 것이 알려진 상태라 표에 명시적으로 표기한다.
+        if (topology.structurallyUnsafe !== true) {
+          const forbidden = check.invariants?.forbiddenCookieDomains || []
+          if (topology.cookieDomain !== topology.frontHost) {
+            errors.push(safeError(check.apiHostKey, `declared topology is unsafe: cookieDomain must equal frontHost`))
+          }
+          if (!isStrictSubdomainOf(topology.backHost, topology.cookieDomain)) {
+            errors.push(safeError(check.apiHostKey, `declared topology is unsafe: backHost must be a subdomain of cookieDomain`))
+          }
+          if (forbidden.includes(topology.cookieDomain)) {
+            errors.push(safeError(check.apiHostKey, `declared topology is unsafe: cookieDomain is owned by another service`))
           }
         }
+
+        // 2) secret 값이 선택된 topology와 일치하는가. 비교는 host 기준이다.
+        //
+        // pinnedByDeploy 키는 오너가 유지보수하는 값이 아니다. deploy.yml이 같은 표에서 파생해
+        // 덮어쓰므로 error로 올리면 "곧 교체될 값" 때문에 배포가 막힌다. 대신 교체 예정을
+        // 알린다 - M3가 지적한 "무고지 변경"은 침묵이 문제였지 교체 자체가 아니다.
+        // CUSTOM_PROD_* 셋은 오너가 API_DOMAIN과 한 세트로 갱신하는 값이라 error를 유지한다.
+        const comparisons = [
+          { key: check.domainKey, actual: valueOf(env, check.domainKey), expected: topology.cookieDomain, label: "must be the cookie domain declared for" },
+          { key: check.frontUrlKey, actual: hostOf(valueOf(env, check.frontUrlKey)), expected: topology.frontHost, label: "host must be the web host declared for" },
+          { key: check.backUrlKey, actual: hostOf(valueOf(env, check.backUrlKey)), expected: topology.backHost, label: "host must be the API host declared for" },
+          { key: check.publicEdgeProbeUrlKey, actual: hostOf(valueOf(env, check.publicEdgeProbeUrlKey)), expected: hostOf(topology.publicEdgeProbeBaseUrl), pinnedByDeploy: true },
+          { key: check.revalidateUrlKey, actual: hostOf(valueOf(env, check.revalidateUrlKey)), expected: hostOf(topology.revalidateUrl), pinnedByDeploy: true },
+        ]
+        for (const { key, actual, expected, label, pinnedByDeploy } of comparisons) {
+          if (!key || !expected) continue
+          const rawValue = valueOf(env, key)
+          const normalizedActual = normalizeHost(actual)
+          if (!normalizedActual) {
+            // 빈 값을 조용히 건너뛰면 fail-open이다. 값이 있는데 host가 안 나오는 경우만 잡는다.
+            if (rawValue && !pinnedByDeploy) {
+              errors.push(safeError(key, `must resolve to a host to be checked against ${check.apiHostKey}=${apiHost}`))
+            }
+            continue
+          }
+          if (normalizedActual === normalizeHost(expected)) continue
+          if (pinnedByDeploy) {
+            warnings.push(safeError(key, `will be replaced by the deploy to match ${check.apiHostKey}=${apiHost}`))
+          } else {
+            errors.push(safeError(key, `${label} ${check.apiHostKey}=${apiHost}`))
+          }
+        }
+
+        // 3) admin embed origin allowlist는 목록이다. 하나라도 front 호스트 밖이면
+        //    Caddy의 frame-ancestors가 타 서비스 origin에 embed 권한을 계속 준다.
+        //    이 키도 deploy.yml이 덮어쓰므로 교체 예정을 알린다.
+        if (check.adminEmbedOriginsKey) {
+          const rawOrigins = valueOf(env, check.adminEmbedOriginsKey)
+          const origins = rawOrigins.split(/\s+/).filter(Boolean)
+          const outside = origins.filter((origin) => normalizeHost(hostOf(origin)) !== normalizeHost(topology.frontHost))
+          if (rawOrigins && (origins.length === 0 || outside.length > 0)) {
+            warnings.push(
+              safeError(
+                check.adminEmbedOriginsKey,
+                `grants embed rights outside the web host declared for ${check.apiHostKey}=${apiHost}; the deploy will replace it`,
+              ),
+            )
+          }
+        }
+
         if (topology.warn) warnings.push(safeError(check.apiHostKey, topology.warn))
       }
     }

@@ -628,7 +628,13 @@ echo "API_DOMAIN:                ${api_domain:-<empty>}"
 # front/back 관계 점검은 cookie_domain이 비어 있어도 사라지면 안 된다. 쿠키 도메인이 통째로
 # 빠진 .env.prod가 가장 위험한 상태인데, 그때 점검이 함께 사라지면 아무 WARN도 안 나온다.
 if [[ -n "${front_host}" && -n "${back_host}" ]] && ! is_strict_subdomain_of "${back_host}" "${front_host}"; then
-  echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - the shared suffix widens the auth cookie scope above ${front_host} (expected during the #1540 transition window)"
+  # 전환 창에는 이 WARN이 예상된 상태지만, 그 판정을 문구에 상수로 박으면 전환이 끝난 뒤
+  # 진짜 위험한 조합에서도 "예상된 것"이라고 말하게 된다. 상태는 API_DOMAIN으로 구분한다.
+  if [[ "${api_domain}" == "api.aquilaxk.site" ]]; then
+    echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - expected while API_DOMAIN is still the pre-transition host (#1540)"
+  else
+    echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - the shared suffix widens the auth cookie scope above ${front_host}"
+  fi
 fi
 
 if [[ -n "${cookie_domain}" && -n "${front_host}" && "${cookie_domain}" != "${front_host}" ]]; then

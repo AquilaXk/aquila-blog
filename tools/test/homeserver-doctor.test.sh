@@ -620,4 +620,14 @@ if [[ "${missing_cookie_output}" != *"BACKURL host must sit strictly under FRONT
   fail "expected the front/back cross-site check to survive an empty COOKIEDOMAIN, got: ${missing_cookie_output}"
 fi
 
+# 전환 창 판정을 문구에 상수로 박으면, 전환이 끝난 뒤 진짜 위험한 조합도 "예상된 것"이 된다.
+post_transition_output="$(run_env_domain_consistency \
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.other.example" "api.other.example")"
+if [[ "${post_transition_output}" == *"expected while API_DOMAIN is still the pre-transition host"* ]]; then
+  fail "expected a post-transition cross-site combination not to be excused as the transition window, got: ${post_transition_output}"
+fi
+if [[ "${post_transition_output}" != *"widens the auth cookie scope"* ]]; then
+  fail "expected a post-transition cross-site combination to be reported as widening the cookie scope, got: ${post_transition_output}"
+fi
+
 echo "[test] homeserver doctor checkup rules passed"

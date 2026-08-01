@@ -14,10 +14,14 @@ compose() {
 
 env_value() {
   local key="$1"
-  awk -F= -v key="${key}" '
-    $1 == key {
-      value = substr($0, index($0, "=") + 1)
+  # 선행 공백과 `export ` 접두를 인식하지 못하면, 계약이 받아들이는 표기를 이 스크립트만
+  # 못 읽는다. deploy.yml의 read_prod_env_value와 같은 범위를 유지한다.
+  awk -v key="${key}" '
+    match($0, "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=") {
+      value = substr($0, RSTART + RLENGTH)
       gsub(/\r/, "", value)
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
       gsub(/^["'\'']|["'\'']$/, "", value)
       print value
     }
@@ -27,15 +31,25 @@ env_value() {
 # 복구 대상 URL을 리터럴로 박아 두면, 도메인 전환 창에 장애 대응으로 이 스크립트를 돌렸을 때
 # 아직 존재하지 않는 호스트를 찌른다. curl에 `|| true`가 붙어 있어 그 실패는 `web 000`으로만
 # 보이고 조용히 지나간다. 배포가 핀한 .env.prod가 그 시점의 실제 운영 호스트다.
+#
+# 값이 없다고 여기서 죽으면 안 된다. .env.prod가 부분 복원된 상태가 바로 이 스크립트가 가장
+# 필요한 순간인데, 보고용 URL 하나 때문에 컨테이너 복구를 한 줄도 못 하게 된다.
 PROD_FRONT_URL="$(env_value "CUSTOM_PROD_FRONTURL")"
 PROD_BACK_URL="$(env_value "CUSTOM_PROD_BACKURL")"
-if [[ -z "${PROD_FRONT_URL}" || -z "${PROD_BACK_URL}" ]]; then
-  echo "recover: CUSTOM_PROD_FRONTURL/CUSTOM_PROD_BACKURL missing from ${ENV_FILE}" >&2
-  exit 1
+WEB_URL=""
+API_ROOT_URL=""
+API_READINESS_URL=""
+if [[ -n "${PROD_FRONT_URL}" ]]; then
+  WEB_URL="${PROD_FRONT_URL%/}/"
+else
+  echo "recover: CUSTOM_PROD_FRONTURL missing from ${ENV_FILE}; skipping the public web probe" >&2
 fi
-WEB_URL="${PROD_FRONT_URL%/}/"
-API_ROOT_URL="${PROD_BACK_URL%/}/"
-API_READINESS_URL="${PROD_BACK_URL%/}/actuator/health/readiness"
+if [[ -n "${PROD_BACK_URL}" ]]; then
+  API_ROOT_URL="${PROD_BACK_URL%/}/"
+  API_READINESS_URL="${PROD_BACK_URL%/}/actuator/health/readiness"
+else
+  echo "recover: CUSTOM_PROD_BACKURL missing from ${ENV_FILE}; skipping the public API probes" >&2
+fi
 
 upsert_env_key() {
   local key="$1"
@@ -303,9 +317,13 @@ main() {
     stop_inactive_backend "${active}"
   fi
 
-  curl -sS -m 10 -o /dev/null -w "web %{http_code} %{time_total}\n" "${WEB_URL}" || true
-  curl -sS -m 10 -o /dev/null -w "api_root %{http_code} %{time_total}\n" "${API_ROOT_URL}" || true
-  curl -sS -m 10 -i "${API_READINESS_URL}" | sed -n "1,25p" || true
+  if [[ -n "${WEB_URL}" ]]; then
+    curl -sS -m 10 -o /dev/null -w "web %{http_code} %{time_total}\n" "${WEB_URL}" || true
+  fi
+  if [[ -n "${API_ROOT_URL}" ]]; then
+    curl -sS -m 10 -o /dev/null -w "api_root %{http_code} %{time_total}\n" "${API_ROOT_URL}" || true
+    curl -sS -m 10 -i "${API_READINESS_URL}" | sed -n "1,25p" || true
+  fi
   compose ps
 }
 

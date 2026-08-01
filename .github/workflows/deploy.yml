@@ -784,9 +784,9 @@ jobs:
           #
           # Key parsing must not be narrower than tools/env/validate-env.mjs parseEnvText, otherwise a
           # value the contract accepts (leading spaces, `export ` prefix) would fail only at deploy.
-          PROD_SITE_API_DOMAIN="$(
-            awk '
-              match($0, /^[[:space:]]*(export[[:space:]]+)?API_DOMAIN[[:space:]]*=/) {
+          read_prod_env_value() {
+            awk -v key="$1" '
+              match($0, "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=") {
                 value = substr($0, RSTART + RLENGTH)
                 gsub(/\r/, "", value)
                 sub(/^[[:space:]]+/, "", value)
@@ -795,13 +795,17 @@ jobs:
                 print value
               }
             ' deploy/homeserver/.env.prod | tail -n 1
-          )"
+          }
+
+          PROD_SITE_API_DOMAIN="$(read_prod_env_value API_DOMAIN)"
           case "${PROD_SITE_API_DOMAIN}" in
             api.blog.aquilaxk.site)
               PROD_SITE_COOKIE_DOMAIN="blog.aquilaxk.site"
               PROD_SITE_FRONT_URL="https://blog.aquilaxk.site"
               PROD_SITE_BACK_URL="https://api.blog.aquilaxk.site"
               PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://blog.aquilaxk.site"
+              PROD_SITE_ADMIN_EMBED_ORIGINS="https://blog.aquilaxk.site"
+              PROD_SITE_REVALIDATE_URL="https://blog.aquilaxk.site/api/revalidate"
               ;;
             api.aquilaxk.site)
               # Pre-transition state: HOME_SERVER_ENV still carries the old API host, so the old
@@ -810,6 +814,8 @@ jobs:
               PROD_SITE_FRONT_URL="https://www.aquilaxk.site"
               PROD_SITE_BACK_URL="https://api.aquilaxk.site"
               PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://www.aquilaxk.site"
+              PROD_SITE_ADMIN_EMBED_ORIGINS="https://www.aquilaxk.site"
+              PROD_SITE_REVALIDATE_URL="https://www.aquilaxk.site/api/revalidate"
               echo "WARNING: API_DOMAIN is still the pre-transition host (${PROD_SITE_API_DOMAIN}). Update HOME_SERVER_ENV to api.blog.aquilaxk.site to activate the blog domain contract." >&2
               ;;
             *)
@@ -825,6 +831,16 @@ jobs:
           # Pinning it to the post-transition host while DNS still points elsewhere (#1538) would
           # fire PublicEdgeRouteDown for the whole transition window and monitor nothing real.
           upsert_env_key "PUBLIC_EDGE_PROBE_BASE_URL" "${PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL}" "deploy/homeserver/.env.prod"
+          # Caddy feeds this into `Content-Security-Policy: frame-ancestors`. Left on the old host it
+          # both blocks the new admin UI's iframes and keeps granting embed rights to the other
+          # service on the apex/www hosts.
+          upsert_env_key "ADMIN_EMBED_ORIGINS" "${PROD_SITE_ADMIN_EMBED_ORIGINS}" "deploy/homeserver/.env.prod"
+          # backend -> front ISR revalidation. Optional by contract: an empty value means the feature
+          # is off, so only the host is corrected and a disabled setup is never switched on here.
+          EXISTING_REVALIDATE_URL="$(read_prod_env_value CUSTOM__REVALIDATE__URL)"
+          if [ -n "${EXISTING_REVALIDATE_URL}" ]; then
+            upsert_env_key "CUSTOM__REVALIDATE__URL" "${PROD_SITE_REVALIDATE_URL}" "deploy/homeserver/.env.prod"
+          fi
 
           if [ -z "${HOME_BACK_IMAGE:-}" ]; then
             echo "HOME_BACK_IMAGE is empty. abort deploy to avoid stale image rollout." >&2

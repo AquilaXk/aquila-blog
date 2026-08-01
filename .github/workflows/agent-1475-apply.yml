@@ -1,0 +1,316 @@
+name: Apply issue 1475 editor sync patch
+
+on:
+  push:
+    branches:
+      - agent/editor-split-scroll-sync-1475
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: agent-1475-apply-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: agent/editor-split-scroll-sync-1475
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: front/yarn.lock
+
+      - name: Replace obsolete split alignment contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("front/e2e/editor-authoring-markdown-editor.spec.ts")
+          source = path.read_text()
+
+          import_marker = 'import { expect, test } from "./helpers/authoringPlaywright"\n'
+          model_import = '''import {
+            extractMarkdownHeadingLineIndexes,
+            interpolateScrollTopByAnchors,
+          } from "src/components/markdown-editor/markdownEditorScrollSyncModel"\n'''
+          if model_import not in source:
+            if source.count(import_marker) != 1:
+              raise SystemExit("authoring helper import marker drifted")
+            source = source.replace(import_marker, import_marker + model_import, 1)
+
+          describe_marker = 'test.describe("Markdown editor replacement", () => {\n'
+          model_tests = '''  test("scroll sync model ignores fenced headings", () => {
+            const markdown = [
+              "## First",
+              "",
+              "```md",
+              "## Not a heading",
+              "```",
+              "",
+              "### Second",
+            ].join("\\n")
+
+            expect(extractMarkdownHeadingLineIndexes(markdown)).toEqual([0, 6])
+          })
+
+          test("scroll sync model interpolates inside the nearest heading interval", () => {
+            expect(
+              interpolateScrollTopByAnchors({
+                sourceScrollTop: 350,
+                anchorPairs: [
+                  { sourceScrollTop: 0, targetScrollTop: 180 },
+                  { sourceScrollTop: 200, targetScrollTop: 420 },
+                  { sourceScrollTop: 500, targetScrollTop: 900 },
+                  { sourceScrollTop: 1000, targetScrollTop: 1500 },
+                ],
+              })
+            ).toBe(660)
+          })
+
+'''
+          if 'test("scroll sync model ignores fenced headings"' not in source:
+            if source.count(describe_marker) != 1:
+              raise SystemExit("editor describe marker drifted")
+            source = source.replace(describe_marker, describe_marker + model_tests, 1)
+
+          start_pattern = re.compile(
+            r'  test\("split preview reserves the V4 public preview header before body content", async \(\{ page \}\) => \{.*?\n  \}\)\n\n  test\("dedicated editor exposes',
+            re.S,
+          )
+          start_replacement = '''  test("split preview aligns body content and Preview mode restores the public header", async ({ page }) => {
+            await page.setViewportSize({ width: 1920, height: 1080 })
+            await routeAuthenticatedEditor(page, "ㄷㄷㄷ")
+
+            await page.goto("/editor/new?source=local-draft")
+
+            await expect(page.getByTestId("markdown-editor-write-pane").locator("textarea")).toBeVisible()
+            await expect(page.getByTestId("markdown-editor-preview-pane").getByText("ㄷㄷㄷ")).toBeVisible()
+
+            const readStartPointContract = () =>
+              page.evaluate(() => {
+                const writePane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-write-pane']")
+                const previewPane = document.querySelector<HTMLElement>("[data-testid='markdown-editor-preview-pane']")
+                const textarea = writePane?.querySelector<HTMLTextAreaElement>("textarea")
+                const firstPreviewBlock = previewPane?.querySelector<HTMLElement>(".aq-markdown > :first-child")
+                if (!writePane || !previewPane || !textarea || !firstPreviewBlock) {
+                  throw new Error("markdown split pane elements not found")
+                }
+
+                const writePaneRect = writePane.getBoundingClientRect()
+                const previewPaneRect = previewPane.getBoundingClientRect()
+                const textareaRect = textarea.getBoundingClientRect()
+                const textareaStyle = window.getComputedStyle(textarea)
+                const firstPreviewBlockRect = firstPreviewBlock.getBoundingClientRect()
+
+                return {
+                  writeStartLeft: textareaRect.left + Number.parseFloat(textareaStyle.paddingLeft) - writePaneRect.left,
+                  writeStartTop: textareaRect.top + Number.parseFloat(textareaStyle.paddingTop) - writePaneRect.top,
+                  previewStartLeft: firstPreviewBlockRect.left - previewPaneRect.left,
+                  previewStartTop: firstPreviewBlockRect.top - previewPaneRect.top,
+                }
+              })
+
+            await expect
+              .poll(async () => {
+                const contract = await readStartPointContract()
+                return Math.abs(contract.previewStartTop - contract.writeStartTop)
+              }, { message: "split preview body should start with the Markdown source body" })
+              .toBeLessThanOrEqual(12)
+
+            const startPointContract = await readStartPointContract()
+            expect(Math.abs(startPointContract.writeStartLeft - startPointContract.previewStartLeft)).toBeLessThanOrEqual(12)
+
+            await page.getByRole("tab", { name: "Preview" }).click()
+            const previewPane = page.getByTestId("markdown-editor-preview-pane")
+            await expect(previewPane.getByText("Public preview")).toBeVisible()
+            await expect
+              .poll(() => previewPane.evaluate((element) => element.scrollTop), {
+                message: "Preview-only mode should restore the public header origin",
+              })
+              .toBeLessThanOrEqual(1)
+          })
+
+          test("dedicated editor exposes'''
+          source, start_count = start_pattern.subn(start_replacement, source, count=1)
+          if start_count != 1:
+            raise SystemExit(f"split start contract replacement count: {start_count}")
+
+          scroll_pattern = re.compile(
+            r'  test\("split panes keep write and preview scroll positions synchronized", async \(\{ page \}\) => \{.*?\n  \}\)\n\n  test\("분할 미리보기 wheel은 내부',
+            re.S,
+          )
+          scroll_replacement = '''  test("split panes synchronize the same heading identity in both directions", async ({ page }) => {
+            const sectionMarkdown = Array.from({ length: 64 }, (_, index) => [
+              `## Section ${index + 1}`,
+              "",
+              `paragraph-${index + 1}`,
+              "",
+              "```ts",
+              `const section${index + 1} = ${index + 1}`,
+              "```",
+              "",
+              index % 4 === 0 ? "> quoted line" : "plain line",
+              "",
+            ].join("\\n")).join("\\n")
+            const tailMarkdown = Array.from({ length: 40 }, (_, index) => `tail paragraph ${index + 1}`).join("\\n\\n")
+            const longMarkdown = `${sectionMarkdown}\\n\\n${tailMarkdown}`
+
+            await routeAuthenticatedEditor(page, longMarkdown)
+            await page.goto("/editor/new?source=local-draft")
+
+            const textarea = page.getByTestId("markdown-editor-write-pane").locator("textarea")
+            const previewPane = page.getByTestId("markdown-editor-preview-pane")
+            await expect(textarea).toBeVisible()
+            await expect(previewPane).toBeVisible()
+
+            const readHeadingAlignmentError = (section: number) =>
+              page.evaluate((targetSection) => {
+                const textareaElement = document.querySelector<HTMLTextAreaElement>(
+                  "[data-testid='markdown-editor-write-pane'] textarea"
+                )
+                const previewElement = document.querySelector<HTMLElement>(
+                  "[data-testid='markdown-editor-preview-pane']"
+                )
+                if (!textareaElement || !previewElement) throw new Error("split pane elements not found")
+
+                const marker = `## Section ${targetSection}`
+                const markerIndex = textareaElement.value.indexOf(marker)
+                if (markerIndex < 0) throw new Error(`${marker} source marker not found`)
+                const lineIndex = textareaElement.value.slice(0, markerIndex).split(/\\r?\\n/).length - 1
+                const textareaStyle = window.getComputedStyle(textareaElement)
+                const lineHeight = Number.parseFloat(textareaStyle.lineHeight)
+                const paddingTop = Number.parseFloat(textareaStyle.paddingTop)
+                const sourceHeadingTop = paddingTop + lineIndex * lineHeight - textareaElement.scrollTop
+                const previewHeading = Array.from(previewElement.querySelectorAll<HTMLElement>("h2")).find(
+                  (heading) => heading.textContent?.trim() === `Section ${targetSection}`
+                )
+                if (!previewHeading) throw new Error(`Section ${targetSection} preview heading not found`)
+                const previewHeadingTop =
+                  previewHeading.getBoundingClientRect().top - previewElement.getBoundingClientRect().top
+
+                return Math.abs(sourceHeadingTop - previewHeadingTop)
+              }, section)
+
+            const scrollWriteToSection = (section: number) =>
+              textarea.evaluate((element, targetSection) => {
+                const marker = `## Section ${targetSection}`
+                const markerIndex = element.value.indexOf(marker)
+                if (markerIndex < 0) throw new Error(`${marker} source marker not found`)
+                const lineIndex = element.value.slice(0, markerIndex).split(/\\r?\\n/).length - 1
+                const lineHeight = Number.parseFloat(window.getComputedStyle(element).lineHeight)
+                const maxScrollTop = element.scrollHeight - element.clientHeight
+                element.scrollTop = Math.max(0, Math.min(lineIndex * lineHeight, maxScrollTop))
+                element.dispatchEvent(new Event("scroll", { bubbles: true }))
+              }, section)
+
+            const scrollPreviewToSection = (section: number) =>
+              previewPane.evaluate((element, targetSection) => {
+                const heading = Array.from(element.querySelectorAll<HTMLElement>("h2")).find(
+                  (candidate) => candidate.textContent?.trim() === `Section ${targetSection}`
+                )
+                const textareaElement = document.querySelector<HTMLTextAreaElement>(
+                  "[data-testid='markdown-editor-write-pane'] textarea"
+                )
+                if (!heading || !textareaElement) throw new Error(`Section ${targetSection} sync elements not found`)
+                const paddingTop = Number.parseFloat(window.getComputedStyle(textareaElement).paddingTop)
+                const elementRect = element.getBoundingClientRect()
+                const headingScrollTop = heading.getBoundingClientRect().top - elementRect.top + element.scrollTop
+                const maxScrollTop = element.scrollHeight - element.clientHeight
+                element.scrollTop = Math.max(0, Math.min(headingScrollTop - paddingTop, maxScrollTop))
+                element.dispatchEvent(new Event("scroll", { bubbles: true }))
+              }, section)
+
+            const checkpoints = [1, 16, 32, 48, 64]
+            for (const section of checkpoints) {
+              await scrollWriteToSection(section)
+              await expect
+                .poll(() => readHeadingAlignmentError(section), {
+                  message: `write Section ${section} should align with the same preview heading`,
+                })
+                .toBeLessThanOrEqual(48)
+            }
+
+            for (const section of [...checkpoints].reverse()) {
+              await scrollPreviewToSection(section)
+              await expect
+                .poll(() => readHeadingAlignmentError(section), {
+                  message: `preview Section ${section} should align with the same source heading`,
+                })
+                .toBeLessThanOrEqual(48)
+            }
+          })
+
+          test("분할 미리보기 wheel은 내부'''
+          source, scroll_count = scroll_pattern.subn(scroll_replacement, source, count=1)
+          if scroll_count != 1:
+            raise SystemExit(f"heading sync contract replacement count: {scroll_count}")
+
+          path.write_text(source)
+          PY
+
+      - name: Install frontend dependencies
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Format changed frontend files
+        working-directory: front
+        run: >-
+          yarn prettier --write
+          src/components/markdown-editor/markdownEditorScrollSyncModel.ts
+          src/components/markdown-editor/useMarkdownEditorScrollSync.ts
+          e2e/editor-authoring-markdown-editor.spec.ts
+          ../docs/agent/editor-split-scroll-sync-plan-2026-08-01.md
+
+      - name: Verify authoring regression twice
+        working-directory: front
+        run: |
+          yarn test:e2e:authoring
+          yarn test:e2e:authoring
+
+      - name: Lint frontend
+        working-directory: front
+        run: yarn lint
+
+      - name: Build frontend
+        working-directory: front
+        run: yarn build
+
+      - name: Check bundle size
+        working-directory: front
+        env:
+          BUNDLE_BUDGET_ENFORCEMENT: warn
+        run: yarn check:bundle-size
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/agent-1475-apply.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            front/src/components/markdown-editor/markdownEditorScrollSyncModel.ts \
+            front/src/components/markdown-editor/useMarkdownEditorScrollSync.ts \
+            front/e2e/editor-authoring-markdown-editor.spec.ts \
+            docs/agent/editor-split-scroll-sync-plan-2026-08-01.md \
+            .github/workflows/agent-1475-apply.yml
+          git diff --cached --check
+          git commit -m "fix(editor): Split 본문 스크롤 동기화 복구"
+          git push origin HEAD:agent/editor-split-scroll-sync-1475

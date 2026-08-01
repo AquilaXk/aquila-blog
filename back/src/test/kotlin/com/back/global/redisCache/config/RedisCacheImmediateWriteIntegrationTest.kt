@@ -1,11 +1,10 @@
 package com.back.global.redisCache.config
 
-import com.back.support.BaseIntegrationTest
+import com.back.support.BaseSeededIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.cache.CacheManager
 
 /**
@@ -14,9 +13,8 @@ import org.springframework.cache.CacheManager
  * (read-your-write), evict 실패는 예외로 드러나 task가 재시도돼야 한다. 비동기 기본값에서는 두 전제가
  * 모두 조용히 깨진다. RedisCacheConfig가 immediateWrites를 유지하는지 이 계약으로 고정한다. (issue #1533)
  */
-@SpringBootTest
 @DisplayName("Redis cache 즉시 쓰기 계약 테스트")
-class RedisCacheImmediateWriteIntegrationTest : BaseIntegrationTest() {
+class RedisCacheImmediateWriteIntegrationTest : BaseSeededIntegrationTest() {
     @Autowired
     private lateinit var cacheManager: CacheManager
 

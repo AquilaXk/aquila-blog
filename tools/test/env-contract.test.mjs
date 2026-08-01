@@ -2679,3 +2679,128 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
     rmSync(failedRecording.workDir, { force: true, recursive: true })
   }
 })
+
+// ---------------------------------------------------------------------------
+// #1538 홈서버 front 컨테이너와 Caddy web vhost
+// ---------------------------------------------------------------------------
+
+const extractComposeService = (compose, serviceName) => {
+  const start = compose.indexOf(`\n  ${serviceName}:\n`)
+  if (start === -1) return ""
+  const rest = compose.slice(start + 1)
+  const end = rest.search(/\n {2}[A-Za-z_]/)
+  return end === -1 ? rest : rest.slice(0, end)
+}
+
+const frontColours = ["blue", "green"]
+
+test("front 서비스는 compose 프로필 뒤에서 env 기반 digest 이미지로만 기동한다", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const contract = JSON.parse(readFileSync(contractPath, "utf8"))
+  const contractKeys = new Set(targetKeyNames(contract, "home-server-runtime"))
+  const digestImageKeys = new Set(
+    Object.values(contract.targets)
+      .flatMap((target) => target.keys || [])
+      .filter((key) => key.kind === "digest-image")
+      .map((key) => key.name),
+  )
+
+  for (const colour of frontColours) {
+    const service = extractComposeService(compose, `front_${colour}`)
+    const imageKey = `FRONT_${colour.toUpperCase()}_IMAGE`
+
+    assert.notEqual(service, "", `front_${colour} service must exist`)
+    // FRONT_*_IMAGE는 아직 어떤 배포 경로도 주입하지 않는다(#1539 소관). 프로필로 감싸지 않으면
+    // 키가 빈 상태에서도 서비스가 기동 대상이 되고, `:?` 형태를 쓰면 프로필과 무관하게 보간이
+    // 죽어 기존 배포·백업·doctor의 `docker compose config`가 전부 깨진다.
+    assert.match(service, /^\s+profiles: \["front"\]$/m)
+    assert.match(service, new RegExp(`^\\s+image: \\$\\{${imageKey}\\}$`, "m"))
+    assert(contractKeys.has(imageKey), `${imageKey} must be covered by the home-server-runtime contract`)
+    assert(digestImageKeys.has(imageKey), `${imageKey} must be a digest-image key`)
+  }
+})
+
+test("front 컨테이너는 backend 비의존 liveness healthcheck와 색깔별 .next/cache 볼륨을 갖는다", () => {
+  const compose = readFileSync(composePath, "utf8")
+
+  for (const colour of frontColours) {
+    const service = extractComposeService(compose, `front_${colour}`)
+
+    assert.notEqual(service, "", `front_${colour} service must exist`)
+    // 포트만 보는 체크는 "성공으로 보고되는 열화"를 만든다. robots.txt는 Next 서버가 응답해야만
+    // 200이면서 backend에 의존하지 않아 autoheal 재시작 신호로 안전하다.
+    assert.match(
+      service,
+      /test: \["CMD-SHELL", "wget -q -T 3 -O \/dev\/null http:\/\/127\.0\.0\.1:3000\/robots\.txt \|\| exit 1"\]/,
+    )
+    assert.match(service, /^\s+mem_limit: \$\{FRONT_MEM_LIMIT:-\d+m\}$/m)
+    assert.match(service, /^\s+mem_reservation: \$\{FRONT_MEM_RESERVATION:-\d+m\}$/m)
+    assert.match(service, /^\s+autoheal: "\$\{FRONT_AUTOHEAL_ENABLED:-true\}"$/m)
+    // blue/green은 서로 다른 빌드 산출물이다. 캐시를 공유하면 상대 빌드의 asset 해시를 담은
+    // ISR 결과가 남는다.
+    assert.match(service, new RegExp(`- front_${colour}_next_cache:/app/\\.next/cache$`, "m"))
+    assert.match(compose, new RegExp(`^  front_${colour}_next_cache:$`, "m"))
+    // front는 DB/Redis/MinIO에 직접 접근하지 않는다.
+    assert.match(service, /networks:\n\s+- edge\n\s+- app\n/)
+    assert.doesNotMatch(service, /^\s+- data$/m)
+  }
+
+  const otherColourCacheReuse = extractComposeService(compose, "front_blue").includes("front_green_next_cache")
+  assert.equal(otherColourCacheReuse, false, "front colours must not share one .next/cache volume")
+})
+
+test("Caddy web vhost는 env 파생 호스트로 front upstream을 프록시한다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+
+  assert.notEqual(webBlock, "", "web domain site block must be extractable")
+  // 호스트명 하드코딩은 #1540의 단일 스위치를 깬다. 값이 비었을 때 `http://`만 남으면 Caddy는
+  // 전 호스트를 삼키는 catch-all이 되므로, 다른 선택적 vhost와 같은 .localhost 기본값을 둔다.
+  assert.match(caddyfile, /^http:\/\/\{\$WEB_DOMAIN:[a-z.-]+\} \{$/m)
+  assert.doesNotMatch(webBlock, /aquilaxk\.site/)
+  assert.match(webBlock, /reverse_proxy \{\$WEB_UPSTREAM:front_blue\}:3000 \{/)
+  assert.match(webBlock, /import trusted_edge_client_ip/)
+  assert.match(webBlock, /^\s*request_header -X-Forwarded-For\s*$/m)
+  assert.match(webBlock, /^\s*request_header -CF-Connecting-IP\s*$/m)
+  assert.match(webBlock, /^\s*request_header -True-Client-IP\s*$/m)
+  assert.match(webBlock, /^\s*request_header -X-Real-IP\s*$/m)
+  // /_next/static/*는 콘텐츠 해시 자산이다. `?` 접두사로 Next가 이미 보낸 값을 덮어쓰지 않는다.
+  assert.match(webBlock, /@nextImmutable path \/_next\/static\/\*/)
+  assert.match(webBlock, /\?Cache-Control "public, max-age=31536000, immutable"/)
+  // next.config.js가 내보내는 보안 헤더 7종을 edge가 벗기거나 약화시키면 안 된다.
+  assert.doesNotMatch(webBlock, /header_down -/)
+  assert.doesNotMatch(webBlock, /Content-Security-Policy/)
+  // www 폐기는 redirect 없이 한다 (Epic #1535 Locked Decision 6).
+  assert.doesNotMatch(caddyfile, /^\s*redir\b/m)
+})
+
+test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과 교차 검증된다", () => {
+  const contract = JSON.parse(readFileSync(contractPath, "utf8"))
+  const materializeScript = readFileSync(
+    path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"),
+    "utf8",
+  )
+  const caddyEnvExample = readFileSync(
+    path.join(repoRoot, "deploy/homeserver/.env.caddy.prod.example"),
+    "utf8",
+  )
+  const sourceKeys = contract.targets["home-server-source"].keys
+  const webDomain = sourceKeys.find((key) => key.name === "WEB_DOMAIN")
+
+  assert.ok(webDomain, "WEB_DOMAIN must be declared in the home-server-source contract")
+  assert.equal(webDomain.kind, "hostname")
+  // .env.caddy.prod는 allowlist로 걸러진다. 목록에 빠지면 vhost가 .localhost 기본값으로 조용히
+  // 내려앉아 공개 도메인이 404가 된다.
+  assert.match(materializeScript, /WEB_DOMAIN/)
+  assert.match(materializeScript, /WEB_UPSTREAM/)
+  assert.match(caddyEnvExample, /^WEB_DOMAIN=/m)
+  assert(
+    (contract.targets["home-server-source"].crossChecks || []).some(
+      (check) =>
+        check.type === "urlHostEquals" &&
+        check.urlKey === "CUSTOM_PROD_FRONTURL" &&
+        check.hostKey === "WEB_DOMAIN",
+    ),
+    "WEB_DOMAIN must be cross-checked against CUSTOM_PROD_FRONTURL host",
+  )
+})

@@ -684,7 +684,9 @@ print_section "Compose PS"
 compose ps || true
 
 print_section "Container Health"
-for svc in back_blue back_green back_read back_admin back_worker caddy cloudflared autoheal loki promtail prometheus grafana; do
+# front_blue/front_green report MISSING until the front profile is enabled (#1538). That is the
+# intended read-only signal: the front tier is visible in the checkup before it is deployed.
+for svc in back_blue back_green back_read back_admin back_worker front_blue front_green caddy cloudflared autoheal loki promtail prometheus grafana; do
   cid="$(compose ps -q "${svc}" 2>/dev/null | head -n 1 || true)"
   if [[ -z "${cid}" ]]; then
     echo "${svc}: MISSING"

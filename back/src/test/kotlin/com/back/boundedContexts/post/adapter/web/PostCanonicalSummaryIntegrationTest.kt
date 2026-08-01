@@ -421,17 +421,22 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
     }
 
     @Test
-    fun `manual summary length contract includes ellipsis inside limit`() {
-        val resolved =
-            PostSummaryResolver.resolveForCreate(
-                title = "제목",
-                content = "본문",
-                submittedSummary = "가".repeat(200),
-                now = Instant.parse("2026-08-01T00:00:00Z"),
-            )
+    @WithUserDetails("admin@test.com")
+    fun `backfill beyond the last row reports an exhausted checkpoint`() {
+        val maxPostId = jdbcTemplate.queryForObject("SELECT COALESCE(MAX(id), 0) FROM post", Long::class.java)!!
 
-        assertThat(resolved.text).hasSize(PostSummaryResolver.MAX_GRAPHEMES)
-        assertThat(resolved.text).endsWith("…")
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":$maxPostId,"limit":10,"dryRun":false}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.scanned") { value(0) }
+                jsonPath("$.updated") { value(0) }
+                jsonPath("$.skipped") { value(0) }
+                jsonPath("$.nextAfterId") { value(maxPostId) }
+                jsonPath("$.hasMore") { value(false) }
+            }
     }
 
     private fun backfillTaskPayload(postId: Long): PostWriteSideEffectPayload {

@@ -35,6 +35,11 @@ type ProgrammaticScroll = {
   scrollTop: number
 }
 
+type PreviewContentInlineStyle = {
+  element: HTMLElement
+  minHeight: string
+}
+
 const PROGRAMMATIC_SCROLL_TOLERANCE_PX = 2
 const PROGRAMMATIC_SCROLL_TIMEOUT_MS = 96
 
@@ -119,6 +124,7 @@ export const useMarkdownEditorScrollSync = ({
   const layoutCacheRef = useRef<ScrollSyncLayout | null>(null)
   const programmaticScrollRef = useRef<ProgrammaticScroll | null>(null)
   const programmaticScrollTimerRef = useRef<number | null>(null)
+  const previewContentInlineStyleRef = useRef<PreviewContentInlineStyle | null>(null)
   const wasSplitRef = useRef(false)
   const lastScrollOwnerRef = useRef<"write" | "preview">("write")
 
@@ -158,6 +164,30 @@ export const useMarkdownEditorScrollSync = ({
     [clearProgrammaticScroll]
   )
 
+  const restorePreviewContentMinHeight = useCallback(() => {
+    const inlineStyle = previewContentInlineStyleRef.current
+    if (!inlineStyle) return
+
+    inlineStyle.element.style.minHeight = inlineStyle.minHeight
+    previewContentInlineStyleRef.current = null
+  }, [])
+
+  const ensurePreviewContentMinHeight = useCallback(
+    (element: HTMLElement, minHeight: number) => {
+      const inlineStyle = previewContentInlineStyleRef.current
+      if (!inlineStyle || inlineStyle.element !== element) {
+        restorePreviewContentMinHeight()
+        previewContentInlineStyleRef.current = {
+          element,
+          minHeight: element.style.minHeight,
+        }
+      }
+
+      element.style.minHeight = `${Math.max(0, Math.ceil(minHeight))}px`
+    },
+    [restorePreviewContentMinHeight]
+  )
+
   const resolveScrollSyncLayout = useCallback(() => {
     const textarea = textareaRef.current
     const preview = previewScrollRef.current
@@ -176,6 +206,17 @@ export const useMarkdownEditorScrollSync = ({
     const previewHeadingElements = Array.from(
       previewRoot.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")
     )
+    const textareaStyle = window.getComputedStyle(textarea)
+    const textareaPaddingTop = parsePixelValue(textareaStyle.paddingTop)
+    const previewContent = preview.querySelector<HTMLElement>(
+      "[data-testid='markdown-editor-preview-scroll']"
+    )
+    if (previewContent) {
+      ensurePreviewContentMinHeight(
+        previewContent,
+        preview.clientHeight + Math.max(0, previewBodyStart - textareaPaddingTop) + 1
+      )
+    }
     const cachedLayout = layoutCacheRef.current
 
     if (
@@ -191,8 +232,6 @@ export const useMarkdownEditorScrollSync = ({
       return cachedLayout
     }
 
-    const textareaStyle = window.getComputedStyle(textarea)
-    const textareaPaddingTop = parsePixelValue(textareaStyle.paddingTop)
     const textareaMaxScrollTop = Math.max(0, textarea.scrollHeight - textarea.clientHeight)
     const previewMaxScrollTop = Math.max(0, preview.scrollHeight - preview.clientHeight)
     const previewBodyStartScrollTop = Math.max(
@@ -214,10 +253,7 @@ export const useMarkdownEditorScrollSync = ({
       const previewHeadingScrollTop = Math.max(
         previewBodyStartScrollTop,
         Math.min(
-          previewHeading.getBoundingClientRect().top -
-            previewRect.top +
-            preview.scrollTop -
-            textareaPaddingTop,
+          previewHeading.getBoundingClientRect().top - previewRect.top + preview.scrollTop - textareaPaddingTop,
           previewMaxScrollTop
         )
       )
@@ -251,7 +287,7 @@ export const useMarkdownEditorScrollSync = ({
     }
     layoutCacheRef.current = nextLayout
     return nextLayout
-  }, [previewScrollRef, textareaRef])
+  }, [ensurePreviewContentMinHeight, previewScrollRef, textareaRef])
 
   const syncFromWrite = useCallback(
     (textarea: HTMLTextAreaElement) => {
@@ -315,9 +351,10 @@ export const useMarkdownEditorScrollSync = ({
     if (isSplit && !wasSplitRef.current && textarea) {
       layoutCacheRef.current = null
       syncFromWrite(textarea)
-    } else if (!isSplit && wasSplitRef.current && preview) {
+    } else if (!isSplit && wasSplitRef.current) {
       layoutCacheRef.current = null
-      setProgrammaticScrollTop(preview, 0)
+      restorePreviewContentMinHeight()
+      if (preview) setProgrammaticScrollTop(preview, 0)
     }
 
     wasSplitRef.current = isSplit
@@ -354,8 +391,9 @@ export const useMarkdownEditorScrollSync = ({
   useEffect(
     () => () => {
       clearProgrammaticScroll()
+      restorePreviewContentMinHeight()
     },
-    [clearProgrammaticScroll]
+    [clearProgrammaticScroll, restorePreviewContentMinHeight]
   )
 
   const handlePreviewWheel = useCallback((event: ReactWheelEvent<HTMLElement>) => {

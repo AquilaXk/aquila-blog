@@ -27,6 +27,7 @@ on:
       - "tools/guards/public-api-read-caddy-paths.sot"
       - "infra/**"
       - "tools/test/check-forbidden-tracked-files.test.sh"
+      - "tools/test/materialize-compose-test-env.test.mjs"
       - "tools/test/repository-standalone-verification.test.sh"
       - ".github/workflows/**"
   push:
@@ -55,6 +56,7 @@ on:
       - "tools/guards/public-api-read-caddy-paths.sot"
       - "infra/**"
       - "tools/test/check-forbidden-tracked-files.test.sh"
+      - "tools/test/materialize-compose-test-env.test.mjs"
       - "tools/test/repository-standalone-verification.test.sh"
       - ".github/workflows/**"
 

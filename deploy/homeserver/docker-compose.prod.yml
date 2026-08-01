@@ -577,7 +577,8 @@ services:
     image: ${FRONT_BLUE_IMAGE}
     restart: unless-stopped
     logging: *default-logging
-    # 실측 근거(2026-08-02): 홈서버 `free -m` total=15919MB available=11695MB.
+    # 실측 근거(2026-08-02 KST, 컨테이너 TZ와 같은 Asia/Seoul 기준): 홈서버 `free -m`
+    # total=15919MB available=11695MB.
     # front 이미지 단독 기동 실측 RSS idle 87MiB → SSR 40회 후 107MiB, cgroup memory.peak 128MiB.
     # 이미지 최적화(sharp) 버스트를 감안해 실측 peak의 약 6배를 상한으로 둔다. blue/green 동시
     # 기동에서도 1.5GB로, 백엔드 예산(AUTO_MEMORY_TUNER_MAX_BUDGET_MB=4160MB) 밖 여유 안이다.

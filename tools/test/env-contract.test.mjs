@@ -2786,9 +2786,14 @@ test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과
   )
   const sourceKeys = contract.targets["home-server-source"].keys
   const webDomain = sourceKeys.find((key) => key.name === "WEB_DOMAIN")
+  const webUpstream = sourceKeys.find((key) => key.name === "WEB_UPSTREAM")
 
   assert.ok(webDomain, "WEB_DOMAIN must be declared in the home-server-source contract")
   assert.equal(webDomain.kind, "hostname")
+  // WEB_UPSTREAM은 Caddyfile의 reverse_proxy 대상으로 그대로 보간된다. 자유 문자열로 두면 오타
+  // 하나가 공개 web 트래픽을 Caddy가 닿을 수 있는 다른 서비스로 보낸다.
+  assert.ok(webUpstream, "WEB_UPSTREAM must be declared in the home-server-source contract")
+  assert.deepEqual(webUpstream.allowedValues, ["front_blue", "front_green"])
   // .env.caddy.prod는 allowlist로 걸러진다. 목록에 빠지면 vhost가 .localhost 기본값으로 조용히
   // 내려앉아 공개 도메인이 404가 된다.
   assert.match(materializeScript, /WEB_DOMAIN/)

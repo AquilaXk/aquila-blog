@@ -93,7 +93,7 @@ jobs:
           printf 'write_enabled=%s\n' "${write_enabled}" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout immutable Platform source
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.context.outputs.source_ref }}
           path: platform
@@ -116,7 +116,7 @@ jobs:
           echo "Platform source: ${source_sha}" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Checkout Web main without persisted credentials
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: AquilaXk/aquila-blog-web
           ref: main

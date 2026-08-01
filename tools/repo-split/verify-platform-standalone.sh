@@ -25,6 +25,8 @@ repo_root="$(git rev-parse --show-toplevel)"
 source_ref="${1:-${STANDALONE_SOURCE_REF:-HEAD}}"
 source_sha="$(git -C "${repo_root}" rev-parse "${source_ref}^{commit}")"
 artifact_dir="${STANDALONE_ARTIFACT_DIR:-${RUNNER_TEMP:-${repo_root}/.tmp}/platform-standalone}"
+mkdir -p "${artifact_dir}"
+artifact_dir="$(cd "${artifact_dir}" && pwd -P)"
 work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/aquila-platform-standalone.XXXXXX")"
 platform_root="${work_dir}/archive"
 log_file="${artifact_dir}/platform-standalone.log"
@@ -34,7 +36,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${platform_root}" "${artifact_dir}"
+mkdir -p "${platform_root}"
 : > "${log_file}"
 
 run_step() {
@@ -94,7 +96,7 @@ fi
   # artifacts consumed by check-public-contracts.mjs. Running it first proves
   # both generation and drift from one immutable Platform snapshot.
   run_step "Run backend required check and generate public contract inputs" \
-    bash -lc 'cd back && ./gradlew check --rerun-tasks'
+    bash -c 'cd back && ./gradlew check --rerun-tasks'
   run_step "Verify canonical public contract" \
     node tools/contracts/check-public-contracts.mjs
   run_step "Run privacy drift gate" \
@@ -103,10 +105,11 @@ fi
   cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
   # Replace documentation-only digest placeholders with syntactically valid,
   # non-routable test digests. No image is pulled by `docker compose config`.
-  sed -i \
+  sed \
     -e 's/sha-<commit7>/sha-0000000/g' \
     -e 's/sha256:<digest>/sha256:0000000000000000000000000000000000000000000000000000000000000000/g' \
-    deploy/homeserver/.env.prod
+    deploy/homeserver/.env.prod > deploy/homeserver/.env.prod.tmp
+  mv deploy/homeserver/.env.prod.tmp deploy/homeserver/.env.prod
   run_step "Materialize per-service Compose env" \
     bash deploy/homeserver/materialize_service_env.sh deploy/homeserver/.env.prod
   run_step "Validate production Compose configuration" \

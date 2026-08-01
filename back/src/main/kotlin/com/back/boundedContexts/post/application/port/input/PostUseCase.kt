@@ -23,6 +23,7 @@ interface PostUseCase {
         listed: Boolean = false,
         idempotencyKey: String? = null,
         contentHtml: String? = null,
+        summary: String? = null,
     ): Post
 
     fun findById(id: Long): Post?
@@ -42,6 +43,7 @@ interface PostUseCase {
         listed: Boolean? = null,
         expectedVersion: Long,
         contentHtml: String? = null,
+        summary: String? = null,
     )
 
     fun delete(

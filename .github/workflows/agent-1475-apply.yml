@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - agent/editor-split-scroll-sync-1475
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
@@ -13,7 +20,7 @@ env:
 
 concurrency:
   group: agent-1475-apply-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   apply-and-verify:

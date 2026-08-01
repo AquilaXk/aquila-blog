@@ -1,5 +1,6 @@
 package com.back.global.redisCache.config
 
+import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.support.BaseSeededIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
@@ -26,7 +27,9 @@ class RedisCacheImmediateWriteIntegrationTest : BaseSeededIntegrationTest() {
 
         repeat(REPEATS) {
             cache.put(key, "value")
-            assertThat(cache.get(key)?.get()).isEqualTo("value")
+            assertThat(cache.get(key)?.get())
+                .describedAs("put은 반환 직후 조회에 보여야 한다 (RedisCacheWriter immediateWrites)")
+                .isEqualTo("value")
 
             cache.evict(key)
 
@@ -44,7 +47,9 @@ class RedisCacheImmediateWriteIntegrationTest : BaseSeededIntegrationTest() {
 
         repeat(REPEATS) {
             cache.put(key, "value")
-            assertThat(cache.get(key)?.get()).isEqualTo("value")
+            assertThat(cache.get(key)?.get())
+                .describedAs("put은 반환 직후 조회에 보여야 한다 (RedisCacheWriter immediateWrites)")
+                .isEqualTo("value")
 
             cache.clear()
 
@@ -55,8 +60,11 @@ class RedisCacheImmediateWriteIntegrationTest : BaseSeededIntegrationTest() {
     }
 
     private companion object {
-        // 실제 read 경로가 쓰는 캐시 이름으로 검증해야 per-cache 설정까지 함께 고정된다.
-        private const val CACHE_NAME = "post-detail-public-snapshot-v1"
+        // 리터럴 대신 상수를 참조한다. RedisCacheManagerBuilder.allowRuntimeCacheCreation 기본값이 true라
+        // (spring-data-redis 4.1.0 RedisCacheManager.java:448), 캐시 이름이 bump되면 리터럴로는
+        // getCache가 default config로 새 캐시를 만들어 이 계약이 실제 read 경로에서 조용히 분리된다.
+        // 검증 범위는 write 가시성뿐이다 — TTL이나 per-cache config는 여기서 확인하지 않는다.
+        private const val CACHE_NAME = PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT
 
         // 비동기 쓰기는 단발 실행에서 우연히 통과할 수 있으므로 반복해 race 창을 넓힌다.
         private const val REPEATS = 50

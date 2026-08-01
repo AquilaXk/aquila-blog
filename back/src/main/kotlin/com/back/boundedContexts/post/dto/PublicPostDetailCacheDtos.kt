@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.dto
 
+import com.back.boundedContexts.post.model.PostSummarySource
 import java.time.Instant
 
 /**
@@ -22,6 +23,8 @@ data class PublicPostDetailMetaCacheDto(
     var likesCount: Int = 0,
     var commentsCount: Int = 0,
     var hitCount: Int = 0,
+    var summary: String = "",
+    var summarySource: PostSummarySource = PostSummarySource.NONE,
 ) {
     fun merge(content: PublicPostDetailContentCacheDto): PostWithContentDto =
         PostWithContentDto(
@@ -42,6 +45,8 @@ data class PublicPostDetailMetaCacheDto(
             likesCount = likesCount,
             commentsCount = commentsCount,
             hitCount = hitCount,
+            summary = summary,
+            summarySource = summarySource,
         )
 
     companion object {
@@ -62,6 +67,8 @@ data class PublicPostDetailMetaCacheDto(
                 likesCount = detail.likesCount,
                 commentsCount = detail.commentsCount,
                 hitCount = detail.hitCount,
+                summary = detail.summary,
+                summarySource = detail.summarySource,
             )
     }
 }
@@ -97,6 +104,8 @@ data class PublicPostDetailSnapshotCacheDto(
     var likesCount: Int = 0,
     var commentsCount: Int = 0,
     var hitCount: Int = 0,
+    var summary: String = "",
+    var summarySource: PostSummarySource = PostSummarySource.NONE,
 ) {
     fun toPostWithContentDto(): PostWithContentDto =
         PostWithContentDto(
@@ -117,6 +126,8 @@ data class PublicPostDetailSnapshotCacheDto(
             likesCount = likesCount,
             commentsCount = commentsCount,
             hitCount = hitCount,
+            summary = summary,
+            summarySource = summarySource,
         )
 
     companion object {
@@ -139,6 +150,8 @@ data class PublicPostDetailSnapshotCacheDto(
                 likesCount = detail.likesCount,
                 commentsCount = detail.commentsCount,
                 hitCount = detail.hitCount,
+                summary = detail.summary,
+                summarySource = detail.summarySource,
             )
     }
 }

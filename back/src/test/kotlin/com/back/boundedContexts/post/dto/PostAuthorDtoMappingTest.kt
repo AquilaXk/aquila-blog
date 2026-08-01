@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -32,6 +33,7 @@ class PostAuthorDtoMappingTest {
 
         assertThat(dto.authorName).isEqualTo("아퀼라")
         assertThat(dto.authorUsername).isEqualTo("아퀼라")
+        assertThat(dto.summary).isEqualTo("저장된 canonical 요약")
     }
 
     @Test
@@ -66,6 +68,7 @@ class PostAuthorDtoMappingTest {
 
         assertThat(dto.authorName).isEqualTo("아퀼라")
         assertThat(dto.authorUsername).isEqualTo("아퀼라")
+        assertThat(dto.summary).isEqualTo("저장된 canonical 요약")
         assertThat(dto.thumbnail).isNull()
         assertThat(dto.tags).isEmpty()
         assertThat(dto.category).isEmpty()
@@ -84,6 +87,33 @@ class PostAuthorDtoMappingTest {
 
         assertThat(dto.authorName).isEqualTo("아퀼라")
         assertThat(dto.authorUsername).isEqualTo("아퀼라")
+        assertThat(dto.summary).isEqualTo("저장된 canonical 요약")
+    }
+
+    @Test
+    @DisplayName("action log DTO는 canonical summary 원문을 제거한다")
+    fun removesCanonicalSummaryFromEventLogDto() {
+        val eventLogDto =
+            PostDto(
+                id = 1L,
+                createdAt = Instant.EPOCH,
+                modifiedAt = Instant.EPOCH,
+                authorId = 2L,
+                authorName = "작성자",
+                authorUsername = "author",
+                authorProfileImgUrl = "",
+                title = "제목 원문",
+                summary = "요약 원문",
+                version = 0L,
+                published = true,
+                listed = true,
+                likesCount = 0,
+                commentsCount = 0,
+                hitCount = 0,
+            ).forEventLog()
+
+        assertThat(eventLogDto.title).isEmpty()
+        assertThat(eventLogDto.summary).isEmpty()
     }
 
     private fun postByAuthor(
@@ -108,6 +138,8 @@ class PostAuthorDtoMappingTest {
             content = "본문",
             published = true,
             listed = true,
+            summaryText = "저장된 canonical 요약",
+            summarySource = PostSummarySource.EXTRACTED,
         ).apply {
             createdAt = Instant.parse("2026-01-02T00:00:00Z")
             modifiedAt = Instant.parse("2026-01-02T00:01:00Z")

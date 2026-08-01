@@ -14,6 +14,7 @@ import com.back.boundedContexts.post.event.PostLikedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
+import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.application.TaskFacade
 import com.back.global.task.model.Task
@@ -578,6 +579,41 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // then
         assertThat(cacheLookupNames()).contains(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
         assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostModifiedEvent::class.java)
+    }
+
+    @Test
+    @DisplayName("비공개 글 summary 수정은 관리자 목록 캐시만 무효화한다")
+    fun modifyPrivateSummaryEvictsAdminPostListOnly() {
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "private summary source",
+                    content = "private summary content",
+                    published = false,
+                    listed = false,
+                )
+            }!!
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.modify(
+                actor = admin,
+                post = latestPost,
+                title = latestPost.title,
+                content = latestPost.content,
+                published = false,
+                listed = false,
+                expectedVersion = latestPost.version ?: 0L,
+                summary = "private manual summary",
+                summaryMode = PostSummaryMode.MANUAL,
+            )
+        }
+
+        assertThat(singlePostWriteSideEffectPayloadSince(previousTaskIds).cacheInvalidationTargets)
+            .containsExactly(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE)
     }
 
     private fun clearSideEffectMocks() {

@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.fasterxml.jackson.annotation.JsonCreator
 import java.time.Instant
 
@@ -27,12 +28,13 @@ data class PostDto
         var actorHasLiked: Boolean = false,
         val tags: List<String> = emptyList(),
         val category: List<String> = emptyList(),
+        val summarySource: PostSummarySource = PostSummarySource.NONE,
     ) {
-        constructor(post: Post) : this(post, PostPreviewExtractor.extract(post.content))
+        constructor(post: Post) : this(post, PostPreviewExtractor.extractThumbnail(post.content))
 
         private constructor(
             post: Post,
-            preview: PostPreviewExtractor.Preview,
+            thumbnail: String?,
             meta: PostMetaExtractor.PostMeta,
         ) : this(
             post.id,
@@ -43,8 +45,8 @@ data class PostDto
             post.author.name,
             post.author.profileImgUrlVersionedOrDefault,
             post.title,
-            preview.thumbnail,
-            preview.summary,
+            thumbnail,
+            post.summaryText.orEmpty(),
             post.version ?: 0L,
             post.published,
             post.listed,
@@ -54,12 +56,13 @@ data class PostDto
             post.hitCount,
             tags = meta.tags,
             category = meta.categories,
+            summarySource = post.summarySource,
         )
 
         private constructor(
             post: Post,
-            preview: PostPreviewExtractor.Preview,
-        ) : this(post, preview, PostMetaExtractor.extract(post.content))
+            thumbnail: String?,
+        ) : this(post, thumbnail, PostMetaExtractor.extract(post.content))
 
-        fun forEventLog() = copy(title = "")
+        fun forEventLog() = copy(title = "", summary = "")
     }

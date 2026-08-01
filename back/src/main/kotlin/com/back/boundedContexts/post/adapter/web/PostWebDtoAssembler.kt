@@ -45,5 +45,7 @@ class PostWebDtoAssembler(
             version = post.version ?: 0L,
             published = post.published,
             listed = post.listed,
+            summary = post.summaryText.orEmpty(),
+            summarySource = post.summarySource,
         )
 }

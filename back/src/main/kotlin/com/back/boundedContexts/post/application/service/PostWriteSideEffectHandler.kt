@@ -110,6 +110,8 @@ class PostWriteSideEffectHandler(
                 ) {
                     postRecommendFeatureStoreService.evict(command.postId)
                 }?.let(failures::add)
+
+            PostRecommendationSideEffect.NONE -> Unit
         }
 
         return failures

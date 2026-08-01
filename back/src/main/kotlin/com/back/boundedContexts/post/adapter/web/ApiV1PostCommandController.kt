@@ -47,6 +47,8 @@ class ApiV1PostCommandController(
                 reqBody.listed ?: false,
                 idempotencyKey,
                 reqBody.contentHtml,
+                reqBody.summary,
+                reqBody.summaryMode,
             )
         return RsData("201-1", "${post.id}번 글이 작성되었습니다.", PostDto(post))
     }
@@ -68,6 +70,8 @@ class ApiV1PostCommandController(
             reqBody.listed,
             reqBody.version,
             reqBody.contentHtml,
+            reqBody.summary,
+            reqBody.summaryMode,
         )
         return RsData("200-1", "${post.id}번 글이 수정되었습니다.", postWebDtoAssembler.makePostWriteResultDto(post))
     }

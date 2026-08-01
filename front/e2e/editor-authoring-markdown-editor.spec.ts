@@ -1003,7 +1003,7 @@ test.describe("Markdown editor replacement", () => {
 
     // 길이가 같은 heading으로 바꾸면 preview의 문자 수·heading 수·렌더 높이가 그대로라
     // content revision 없이는 preview anchor cache가 옛 key를 계속 사용한다.
-    await textarea.evaluate((element) => {
+    await textarea.evaluate((element: HTMLTextAreaElement) => {
       const nextValue = element.value.replace(/## Section /g, "## Sectiom ")
       const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
       if (!setValue) throw new Error("textarea value setter not found")
@@ -1043,7 +1043,7 @@ test.describe("Markdown editor replacement", () => {
     await expect(textarea).toBeVisible()
     await expect(page.getByTestId("markdown-editor-preview-pane")).toBeVisible()
 
-    const wrapMetrics = await textarea.evaluate((element) => {
+    const wrapMetrics = await textarea.evaluate((element: HTMLTextAreaElement) => {
       const style = window.getComputedStyle(element)
       const probe = document.createElement("span")
       Object.assign(probe.style, {

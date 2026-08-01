@@ -51,6 +51,14 @@ function stepIndex(job, name) {
 const REGISTRY_HOST = "ghcr.io"
 const DERIVED_IMAGE = `${REGISTRY_HOST}/\${OWNER_LC}/\${REPO_NAME}-front`
 
+// shell 대입과 GITHUB_OUTPUT 대입을 앵커해 뽑는다. 값이 아니라 조립식을 고정해야
+// "IMAGE_NAME 은 맞는데 실제 push 대상은 다른 레지스트리"인 상태를 잡을 수 있다.
+const shellAssignmentsIn = (source, name) =>
+  [...source.matchAll(new RegExp(`^\\s*${name}="([^"]*)"$`, "gm"))].map((match) => match[1])
+
+const shellOutputsIn = (source, name) =>
+  [...source.matchAll(new RegExp(`^\\s*echo "${name}=([^"]*)"$`, "gm"))].map((match) => match[1])
+
 // 이미지 레퍼런스의 host 는 첫 `/` 앞 세그먼트 하나뿐이다. 부분 문자열이나 prefix 로 확인하면
 // `evil.example.com/ghcr.io/x`(중첩), `ghcr.io.evil.com/x`(유사 도메인), `ghcr.io@evil.com/x`
 // (userinfo) 가 전부 통과한다. 세그먼트를 앵커해 정확히 비교해야 계약이 성립한다.
@@ -106,10 +114,10 @@ test("image name and tag are derived from the repository, matching the backend r
   assert.match(meta.run, /front build sha is empty/)
 
   // 이미지 레퍼런스는 하나만 조립해야 한다. 두 번째 대입이 생기면 아래 host 검사를 우회한다.
-  const imageNameAssignments = [...meta.run.matchAll(/^\s*IMAGE_NAME="([^"]*)"$/gm)]
+  const imageNameAssignments = shellAssignmentsIn(meta.run, "IMAGE_NAME")
   assert.equal(imageNameAssignments.length, 1, "meta step must assign IMAGE_NAME exactly once")
 
-  const imageReference = imageNameAssignments[0][1]
+  const imageReference = imageNameAssignments[0]
   assert.equal(
     registryHostOf(imageReference),
     REGISTRY_HOST,
@@ -119,6 +127,25 @@ test("image name and tag are derived from the repository, matching the backend r
     imageReference,
     DERIVED_IMAGE,
     "registry owner and repository must be derived from the repository, not hardcoded",
+  )
+
+  // 실제 push 인자는 build.with.tags = steps.meta.outputs.image_ref 다. IMAGE_NAME 만 고정하면
+  // IMAGE_REF 조립이나 output 대입을 바꿔 다른 레지스트리로 push 해도 계약이 통과한다.
+  assert.deepEqual(
+    shellAssignmentsIn(meta.run, "IMAGE_REF"),
+    ["${IMAGE_NAME}:${IMAGE_TAG}"],
+    "push target must be composed from the derived image name and the sha tag",
+  )
+  assert.deepEqual(
+    shellOutputsIn(meta.run, "image_ref"),
+    ["${IMAGE_REF}"],
+    "image_ref output must publish the composed push target",
+  )
+  // image_name output 은 digest ref(`${IMAGE_NAME}@${DIGEST}`)의 host 출처라 같은 우회 경로다.
+  assert.deepEqual(
+    shellOutputsIn(meta.run, "image_name"),
+    ["${IMAGE_NAME}"],
+    "image_name output must publish the derived image name",
   )
 
   // 로그인 대상 레지스트리도 같은 host 여야 push 대상과 자격 증명이 어긋나지 않는다.
@@ -149,6 +176,45 @@ test("registry host parsing rejects nested, lookalike and userinfo hosts", () =>
       `registry host check must reject ${impostor}`,
     )
   }
+})
+
+// 회귀 고정: host 계약이 IMAGE_NAME 만 보던 동안에는 IMAGE_REF 를 다른 레지스트리로 바꿔도
+// 전체 테스트가 green 이었다. 검사 대상이 실제 push 대상과 어긋나면 계약은 성립하지 않는다.
+test("push target composition is pinned, not only the image name", () => {
+  const derived = [
+    '          IMAGE_NAME="ghcr.io/${OWNER_LC}/${REPO_NAME}-front"',
+    '          IMAGE_TAG="sha-${BUILD_SHA}"',
+    '          IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"',
+    '            echo "image_name=${IMAGE_NAME}"',
+    '            echo "image_ref=${IMAGE_REF}"',
+  ].join("\n")
+
+  assert.deepEqual(shellAssignmentsIn(derived, "IMAGE_REF"), ["${IMAGE_NAME}:${IMAGE_TAG}"])
+  assert.deepEqual(shellOutputsIn(derived, "image_ref"), ["${IMAGE_REF}"])
+  assert.deepEqual(shellOutputsIn(derived, "image_name"), ["${IMAGE_NAME}"])
+
+  // IMAGE_NAME 은 그대로 두고 조립만 바꾸는 경로.
+  const hijackedComposition = derived.replace(
+    'IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"',
+    'IMAGE_REF="evil.example.com/x:${IMAGE_TAG}"',
+  )
+  assert.deepEqual(shellAssignmentsIn(hijackedComposition, "IMAGE_NAME"), [DERIVED_IMAGE])
+  assert.notDeepEqual(shellAssignmentsIn(hijackedComposition, "IMAGE_REF"), ["${IMAGE_NAME}:${IMAGE_TAG}"])
+  assert.equal(registryHostOf(shellAssignmentsIn(hijackedComposition, "IMAGE_REF")[0]), "evil.example.com")
+
+  // output 대입만 바꿔치기하는 경로.
+  const reroutedOutput = derived.replace(
+    'echo "image_ref=${IMAGE_REF}"',
+    'echo "image_ref=evil.example.com/x:${IMAGE_TAG}"',
+  )
+  assert.notDeepEqual(shellOutputsIn(reroutedOutput, "image_ref"), ["${IMAGE_REF}"])
+
+  // digest ref 의 host 출처인 image_name output 을 바꿔치기하는 경로.
+  const reroutedDigestSource = derived.replace(
+    'echo "image_name=${IMAGE_NAME}"',
+    'echo "image_name=evil.example.com/x"',
+  )
+  assert.notDeepEqual(shellOutputsIn(reroutedDigestSource, "image_name"), ["${IMAGE_NAME}"])
 })
 
 test("build pushes the homeserver runtime Dockerfile from the front context", () => {
@@ -223,6 +289,18 @@ test("the image scan proves it reached the runtime stage package database", () =
   // wget 은 dockerfile-supply-chain.test.mjs 가 runtime stage 계약으로 고정한 패키지다. 스캔 결과에
   // 그것이 없으면 스캔이 runtime stage 를 실제로 읽지 못했다는 뜻이다.
   assert.match(scan.run, /wget/)
+
+  // 그 계약 테스트는 아직 CI 에 배선돼 있지 않다(#1549). marker 가 깨졌을 때 표시되는 원인이
+  // 실제 원인(wget 의도적 제거)을 가리지 않도록, 실패 메시지가 두 갈래와 계약 테스트를 지목해야 한다.
+  // 주석이 아니라 실패 경로 안을 봐야 한다. step 전체를 대상으로 하면 위쪽 설명 주석이 대신
+  // 매칭돼, 정작 운영자에게 닿는 메시지에서 안내가 사라져도 통과한다.
+  const markerFailureAnchor = "Front image scan missed the runtime stage"
+  const markerFailureIndex = scan.run.indexOf(markerFailureAnchor)
+  assert.notEqual(markerFailureIndex, -1, "scan must annotate the runtime stage marker failure")
+
+  const markerFailureBlock = scan.run.slice(markerFailureIndex)
+  assert.match(markerFailureBlock, /front\/Dockerfile\.runtime/)
+  assert.match(markerFailureBlock, /dockerfile-supply-chain\.test\.mjs/)
 })
 
 test("image size is measured and reported on every build", () => {

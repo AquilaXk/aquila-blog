@@ -198,7 +198,16 @@ jobs:
             exit 1
           fi
           if [ "${runtime_marker}" != "present" ]; then
-            echo "::error title=Front image scan missed the runtime stage::wget is a runtime stage contract but was absent from the scanned package list; refusing to pass (#1537)." >&2
+            # 이 marker 는 하드코딩돼 있고, 그것을 보증하는 계약 테스트는 아직 CI 에 배선돼 있지 않다(#1549).
+            # 그래서 "스캔이 runtime stage 를 못 읽었다"와 "wget 이 의도적으로 제거됐다"가 여기서는
+            # 같은 실패로 보인다. 표시되는 원인이 실제 원인을 가리지 않도록 두 갈래를 모두 적는다.
+            echo "::error title=Front image scan missed the runtime stage::wget was absent from the scanned package list of ${IMAGE}; refusing to pass (#1537)." >&2
+            echo "Two different causes produce this same failure:" >&2
+            echo "  1) the scan did not reach the runtime stage apk database, or" >&2
+            echo "  2) wget was intentionally removed from front/Dockerfile.runtime." >&2
+            echo "If (2), update this marker together with the runtime stage contract asserted by" >&2
+            echo "tools/test/dockerfile-supply-chain.test.mjs ('front runtime image contains the compose healthcheck client')" >&2
+            echo "and the compose healthcheck that depends on wget." >&2
             exit 1
           fi
           echo "trivy parsed ${scanned_packages} OS package(s) from ${IMAGE} (runtime stage marker: wget ${runtime_marker})"

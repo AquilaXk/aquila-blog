@@ -16,20 +16,30 @@ const SOURCE_ARTIFACTS = [
   ["openapi", "openapi.json"],
   ["errorCodes", "error-codes.json"],
 ]
-const INHERITED_GIT_ENV_KEYS = [
-  "GIT_DIR",
-  "GIT_INDEX_FILE",
-  "GIT_WORK_TREE",
-  "GIT_COMMON_DIR",
-  "GIT_OBJECT_DIRECTORY",
-]
+let inheritedGitEnvKeysCache
+
+// git rev-parse --local-env-vars lists every environment variable that binds git to one
+// specific repository, and .githooks/pre-commit already unsets exactly this set. Asking git
+// keeps the two in step instead of freezing a copy that silently falls behind. It needs no
+// repository of its own, so it answers even when the inherited GIT_DIR points nowhere.
+export function inheritedGitEnvKeys() {
+  if (!inheritedGitEnvKeysCache) {
+    inheritedGitEnvKeysCache = execFileSync("git", ["rev-parse", "--local-env-vars"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .split("\n")
+      .map((name) => name.trim())
+      .filter(Boolean)
+  }
+  return inheritedGitEnvKeysCache
+}
 
 // Git exports GIT_DIR and friends to hooks in a linked worktree, so a git call that
 // targets another directory would silently operate on the inherited repository instead.
-export function gitEnvWithoutInheritedRepository() {
-  return Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !INHERITED_GIT_ENV_KEYS.includes(key)),
-  )
+export function gitEnvWithoutInheritedRepository(env = process.env) {
+  const inherited = new Set(inheritedGitEnvKeys())
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !inherited.has(key)))
 }
 
 function fail(message) {

@@ -1751,7 +1751,7 @@ test("homeserver compose splits service env files, networks, and exporter pg_mon
   assert.match(materializeScript, /is_back_key|PROD___SPRING__/)
   assert.match(
     materializeScript,
-    /echo "materialize_service_env: wrote \$\(basename "\$\{CADDY_OUT\}"\) and \$\(basename "\$\{BACK_OUT\}"\)" >&2/,
+    /echo "materialize_service_env: wrote \$\(basename "\$\{CADDY_OUT\}"\), \$\(basename "\$\{BACK_OUT\}"\) and \$\(basename "\$\{FRONT_OUT\}"\)" >&2/,
   )
   assert.match(gitignore, /deploy\/homeserver\/\.env\.back\.prod/)
   assert.match(gitignore, /deploy\/homeserver\/\.env\.caddy\.prod/)
@@ -2684,12 +2684,20 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
 // #1538 홈서버 front 컨테이너와 Caddy web vhost
 // ---------------------------------------------------------------------------
 
+// 서비스 블록은 "다음 2-space 키" 대신 들여쓰기로 끊는다. 정규식으로 자르면 블록 안에 2-space
+// 줄(주석 등)이 하나만 들어와도 조기 절단되고, 그러면 `assert.doesNotMatch`가 잘린 뒷부분을 보지
+// 못한 채 거짓 통과한다.
 const extractComposeService = (compose, serviceName) => {
-  const start = compose.indexOf(`\n  ${serviceName}:\n`)
+  const lines = compose.split("\n")
+  const start = lines.findIndex((line) => line === `  ${serviceName}:`)
   if (start === -1) return ""
-  const rest = compose.slice(start + 1)
-  const end = rest.search(/\n {2}[A-Za-z_]/)
-  return end === -1 ? rest : rest.slice(0, end)
+
+  const body = [lines[start]]
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() !== "" && !line.startsWith("    ")) break
+    body.push(line)
+  }
+  return `${body.join("\n")}\n`
 }
 
 const frontColours = ["blue", "green"]
@@ -2740,8 +2748,11 @@ test("front 컨테이너는 backend 비의존 liveness healthcheck와 색깔별 
     // ISR 결과가 남는다.
     assert.match(service, new RegExp(`- front_${colour}_next_cache:/app/\\.next/cache$`, "m"))
     assert.match(compose, new RegExp(`^  front_${colour}_next_cache:$`, "m"))
-    // front는 DB/Redis/MinIO에 직접 접근하지 않는다.
-    assert.match(service, /networks:\n\s+- edge\n\s+- app\n/)
+    // 서버 전용 env가 없으면 컨테이너는 healthy를 보고하면서 모든 SSR 경로가 500이 된다.
+    assert.match(service, /env_file:\n(\s+#.*\n)*\s+- \.\/\.env\.front\.prod\n/)
+    // caddy가 app에도 붙어 있어 edge 없이 프록시된다. DB/Redis/MinIO에도 접근하지 않는다.
+    assert.match(service, /networks:\n\s+- app\n/)
+    assert.doesNotMatch(service, /^\s+- edge$/m)
     assert.doesNotMatch(service, /^\s+- data$/m)
   }
 
@@ -2794,10 +2805,6 @@ test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과
   // 하나가 공개 web 트래픽을 Caddy가 닿을 수 있는 다른 서비스로 보낸다.
   assert.ok(webUpstream, "WEB_UPSTREAM must be declared in the home-server-source contract")
   assert.deepEqual(webUpstream.allowedValues, ["front_blue", "front_green"])
-  // .env.caddy.prod는 allowlist로 걸러진다. 목록에 빠지면 vhost가 .localhost 기본값으로 조용히
-  // 내려앉아 공개 도메인이 404가 된다.
-  assert.match(materializeScript, /WEB_DOMAIN/)
-  assert.match(materializeScript, /WEB_UPSTREAM/)
   assert.match(caddyEnvExample, /^WEB_DOMAIN=/m)
   assert(
     (contract.targets["home-server-source"].crossChecks || []).some(
@@ -2807,5 +2814,120 @@ test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과
         check.hostKey === "WEB_DOMAIN",
     ),
     "WEB_DOMAIN must be cross-checked against CUSTOM_PROD_FRONTURL host",
+  )
+  // WEB_DOMAIN을 잊은 채 CUSTOM_PROD_FRONTURL만 옮기면 crossCheck는 한쪽이 비어 스킵되고
+  // 공개 도메인만 404가 된다. 새 topology에서는 필수로 좁힌다.
+  assert.deepEqual(webDomain.requiredWhen, { key: "API_DOMAIN", equals: "api.blog.aquilaxk.site" })
+  // 두 값이 같으면 Caddy site address가 중복돼 caddy가 기동하지 못하고 edge 전체가 내려간다.
+  assert.equal(webDomain.mustDifferFrom, "API_DOMAIN")
+})
+
+// 주석에만 키 이름이 있어도 통과하던 검사를 실제 산출물 검사로 바꾼다. materialize를 돌려
+// 어떤 키가 어느 서비스 env로 갔는지 본다.
+test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분배한다", () => {
+  const workDir = mkdtempSync(path.join(tmpdir(), "materialize-front-"))
+  try {
+    const scriptDir = path.join(repoRoot, "deploy/homeserver")
+    const sourceEnv = path.join(workDir, "source.env")
+    writeFileSync(
+      sourceEnv,
+      [
+        "API_DOMAIN=api.blog.example.com",
+        "WEB_DOMAIN=blog.example.com",
+        "WEB_UPSTREAM=front_green",
+        "BACKEND_INTERNAL_URL=http://back-blue:8080",
+        "CUSTOM__REVALIDATE__TOKEN=revalidate_secret_value",
+        "BACKEND_PROXY_MAX_BODY_BYTES=1048576",
+        "CUSTOM_PROD_DBNAME=blog_prod",
+        "",
+      ].join("\n"),
+    )
+
+    const outputs = {
+      caddy: path.join(scriptDir, ".env.caddy.prod"),
+      back: path.join(scriptDir, ".env.back.prod"),
+      front: path.join(scriptDir, ".env.front.prod"),
+    }
+    const preexisting = Object.fromEntries(
+      Object.entries(outputs).map(([name, file]) => [name, existsSync(file) ? readFileSync(file, "utf8") : null]),
+    )
+
+    try {
+      execFileSync("bash", [path.join(scriptDir, "materialize_service_env.sh"), sourceEnv], { stdio: "pipe" })
+      const caddyEnv = readFileSync(outputs.caddy, "utf8")
+      const backEnv = readFileSync(outputs.back, "utf8")
+      const frontEnv = readFileSync(outputs.front, "utf8")
+
+      assert.match(caddyEnv, /^WEB_DOMAIN=blog\.example\.com$/m)
+      assert.match(caddyEnv, /^WEB_UPSTREAM=front_green$/m)
+      // front 런타임 키가 빠지면 컨테이너는 healthy를 보고하면서 모든 SSR 경로가 500이 된다.
+      assert.match(frontEnv, /^BACKEND_INTERNAL_URL=http:\/\/back-blue:8080$/m)
+      // front의 TOKEN_FOR_REVALIDATE와 backend의 CUSTOM__REVALIDATE__TOKEN은 같은 공유 비밀이다.
+      // 별도 키로 두면 어긋나도 아무도 실패하지 않고 revalidate만 401이 된다.
+      assert.match(frontEnv, /^TOKEN_FOR_REVALIDATE=revalidate_secret_value$/m)
+      assert.doesNotMatch(frontEnv, /^CUSTOM__REVALIDATE__TOKEN=/m)
+      // BACKEND_PROXY_*는 front 전용이다 (`git grep BACKEND_PROXY -- back/`는 0건).
+      assert.match(frontEnv, /^BACKEND_PROXY_MAX_BODY_BYTES=1048576$/m)
+      assert.doesNotMatch(backEnv, /^BACKEND_PROXY_/m)
+      // 서비스별 env는 서로의 비밀을 담지 않는다 (blast radius / HR-56).
+      assert.doesNotMatch(frontEnv, /^CUSTOM_PROD_DBNAME=/m)
+      assert.doesNotMatch(caddyEnv, /^BACKEND_INTERNAL_URL=/m)
+    } finally {
+      for (const [name, file] of Object.entries(outputs)) {
+        if (preexisting[name] === null) rmSync(file, { force: true })
+        else writeFileSync(file, preexisting[name])
+      }
+    }
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+// COMPOSE_PROFILES는 셸과 .env.prod 양쪽에 있을 수 있는데 compose()가 항상 명시 지정하므로,
+// 셸만 읽으면 .env.prod가 켠 프로필이 조용히 사라진다. 그리고 프로필이 켜져도 boot 목록에
+// 없으면 `compose up`이 그 서비스를 만들지 않는다. 두 겹 다 고정한다.
+test("배포·롤백 스크립트는 env 파일의 COMPOSE_PROFILES를 병합하고 front를 기동한다", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
+
+  for (const [name, script] of [["blue_green_deploy.sh", deployScript], ["rollback_last_deploy.sh", rollbackScript]]) {
+    assert.match(script, /compose_profiles_from_env_file\(\) \{/, `${name} must read COMPOSE_PROFILES from the env file`)
+    assert.match(script, /env_value "COMPOSE_PROFILES"/, `${name} must resolve COMPOSE_PROFILES from .env.prod`)
+  }
+
+  assert.match(deployScript, /compose_profile_enabled "front"/)
+  assert.match(deployScript, /front_services_to_boot=\(front_blue front_green\)/)
+})
+
+// .env.prod.example은 deploy.yml이 HOME_SERVER_ENV 부재 시 .env.prod로 복사하는 파일이고
+// verify-platform-standalone.sh의 입력이기도 한데, 계약으로 검증하는 곳이 없었다. 그래서 키가
+// 서로 어긋난 예시가 조용히 남을 수 있었다 — 특히 도메인 세 값은 crossCheck 대상이다.
+test(".env.prod.example은 자기 자신이 env 계약을 통과한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const example = readFileSync(envExamplePath, "utf8")
+
+  // 예시 파일은 placeholder(change_me / example.com / <digest>)로 채워져 있는 것이 정상이라
+  // 값 자체를 보는 규칙은 끈다. 이 게이트가 지키는 것은 키 사이의 정합성이다 —
+  // crossChecks(도메인 3종·백업 경로)와 mustDifferFrom. 그것만 남긴다.
+  const contract = loadContract(contractPath)
+  const relaxed = JSON.parse(JSON.stringify(contract))
+  for (const target of Object.values(relaxed.targets)) {
+    for (const key of target.keys || []) {
+      key.placeholderForbidden = false
+      delete key.kind
+      delete key.minLength
+      delete key.allowedValues
+      delete key.forbiddenValues
+      delete key.forbiddenSha256
+    }
+  }
+
+  const result = validateEnvText({ contract: relaxed, target: "home-server-source", text: example })
+  const relevant = result.errors.filter((error) => !error.message.includes("is required"))
+
+  assert.deepEqual(
+    relevant.map((error) => `${error.key}: ${error.message}`),
+    [],
+    ".env.prod.example must stay internally consistent with the env contract",
   )
 })

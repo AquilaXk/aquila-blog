@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ENV="${1:-${SCRIPT_DIR}/.env.prod}"
 BACK_OUT="${SCRIPT_DIR}/.env.back.prod"
 CADDY_OUT="${SCRIPT_DIR}/.env.caddy.prod"
+FRONT_OUT="${SCRIPT_DIR}/.env.front.prod"
 
 if [[ ! -f "${SOURCE_ENV}" ]]; then
   echo "materialize_service_env: missing source env file=${SOURCE_ENV}" >&2
@@ -29,13 +30,34 @@ is_caddy_key() {
   esac
 }
 
+# Next.js server-side keys. These are read through process.env at request time
+# (front/src/libs/server/backend.ts, front/src/pages/api/**), so they are NOT inlined by the
+# build the way NEXT_PUBLIC_* is — without this file the front container starts, serves
+# public/robots.txt, reports healthy, and returns 500 on every SSR route.
+# NEXT_PUBLIC_* deliberately stays out: it is baked at image build time (#1540 owns the
+# build args), so shipping it here would be an env key that silently does nothing.
+# TOKEN_FOR_REVALIDATE is not listed here on purpose: it is derived below from the one
+# Platform-owned key that holds the same shared secret, so there is a single source of truth.
+is_front_key() {
+  case "$1" in
+    BACKEND_INTERNAL_URL|BACKEND_PROXY_*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 is_back_key() {
   local key="$1"
   case "${key}" in
     PROD___POSTGRES__PASSWORD|PROD___POSTGRES_EXPORTER__USERNAME|PROD___POSTGRES_EXPORTER__PASSWORD)
       return 1
       ;;
-    PROD___SPRING__*|PROD___CUSTOM__*|CUSTOM__*|CUSTOM_*|SPRING__*|MANAGEMENT_*|BACKEND_PROXY_*)
+    # BACKEND_PROXY_* is front-only (front/src/pages/api/backend/[...path].ts); `git grep
+    # BACKEND_PROXY -- back/` is empty. It used to land here, where nothing reads it.
+    PROD___SPRING__*|PROD___CUSTOM__*|CUSTOM__*|CUSTOM_*|SPRING__*|MANAGEMENT_*)
       return 0
       ;;
     *)
@@ -69,6 +91,10 @@ write_filtered_env() {
         if is_back_key "${key}"; then
           printf '%s\n' "${line}"
         fi
+      elif [[ "${mode}" == "front" ]]; then
+        if is_front_key "${key}"; then
+          printf '%s\n' "${line}"
+        fi
       fi
     done < "${SOURCE_ENV}"
   } > "${tmp}"
@@ -79,6 +105,26 @@ write_filtered_env() {
 
 write_filtered_env "${CADDY_OUT}" "caddy"
 write_filtered_env "${BACK_OUT}" "back"
+write_filtered_env "${FRONT_OUT}" "front"
+
+# front가 읽는 TOKEN_FOR_REVALIDATE와 backend가 보내는 CUSTOM__REVALIDATE__TOKEN은 같은 공유
+# 비밀이다(RevalidateService.kt:53이 x-revalidate-token 헤더로 보내고, revalidate.ts:18이 그 값과
+# 비교한다). 별도 키로 두면 두 값이 어긋나도 아무도 실패하지 않고 revalidate만 401이 된다.
+# BACKEND_PROXY_MAX_*는 Web 소유 키라 Platform env 계약에 넣지 않는다(#1453 경계). .env.prod에
+# 존재하면 위 front 필터가 전달하고, 없으면 앱 기본값이 쓰인다.
+append_front_derived_key() {
+  local key="$1"
+  local source_key="$2"
+  local value
+
+  value="$(awk -F= -v k="${source_key}" '$1 == k { print substr($0, index($0, "=") + 1); exit }' "${SOURCE_ENV}")"
+  if [[ -z "${value}" ]]; then
+    return 0
+  fi
+  printf '%s=%s\n' "${key}" "${value}" >> "${FRONT_OUT}"
+}
+
+append_front_derived_key "TOKEN_FOR_REVALIDATE" "CUSTOM__REVALIDATE__TOKEN"
 
 # Status must stay on stderr: compose wrappers capture stdout from `compose exec`.
-echo "materialize_service_env: wrote $(basename "${CADDY_OUT}") and $(basename "${BACK_OUT}")" >&2
+echo "materialize_service_env: wrote $(basename "${CADDY_OUT}"), $(basename "${BACK_OUT}") and $(basename "${FRONT_OUT}")" >&2

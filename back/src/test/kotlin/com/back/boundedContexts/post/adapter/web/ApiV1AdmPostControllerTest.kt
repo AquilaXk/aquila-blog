@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.security.domain.SecurityUser
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
@@ -40,6 +41,66 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 jsonPath("$.scanned") { value(3) }
                 jsonPath("$.dryRun") { value(true) }
             }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `백필 요청 본문이 비면 안전한 기본 checkpoint와 dry-run으로 실행한다`() {
+        given(postUseCase.backfillSummaries(0, 100, true))
+            .willReturn(PostUseCase.SummaryBackfillResult(0, 0, 0, 0, false, true))
+
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = "{}"
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.dryRun") { value(true) }
+                jsonPath("$.nextAfterId") { value(0) }
+            }
+
+        then(postUseCase).should().backfillSummaries(0, 100, true)
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 canonical summary preview를 실행할 수 있다`() {
+        given(postUseCase.previewSummary("캐시 정책", "첫 번째 핵심 문장입니다. 두 번째 문장입니다."))
+            .willReturn(
+                PostUseCase.SummaryPreviewResult(
+                    summary = "첫 번째 핵심 문장입니다. 두 번째 문장입니다.",
+                    source = PostSummarySource.EXTRACTED,
+                    contentHash = "a".repeat(64),
+                    algorithmVersion = "deterministic-v1",
+                ),
+            )
+
+        mvc
+            .post("/post/api/v1/adm/posts/preview-summary") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"title":"캐시 정책","content":"첫 번째 핵심 문장입니다. 두 번째 문장입니다."}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.summary") { value("첫 번째 핵심 문장입니다. 두 번째 문장입니다.") }
+                jsonPath("$.source") { value("EXTRACTED") }
+                jsonPath("$.contentHash") { value("a".repeat(64)) }
+                jsonPath("$.algorithmVersion") { value("deterministic-v1") }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["USER"])
+    fun `일반 사용자는 canonical summary preview를 실행할 수 없다`() {
+        mvc
+            .post("/post/api/v1/adm/posts/preview-summary") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"title":"캐시 정책","content":"본문입니다."}"""
+            }.andExpect {
+                status { isForbidden() }
+                jsonPath("$.resultCode") { value("403-1") }
+            }
+
+        then(postUseCase).should(never()).previewSummary("캐시 정책", "본문입니다.")
     }
 
     @Test

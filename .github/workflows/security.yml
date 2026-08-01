@@ -379,7 +379,10 @@ jobs:
           # Backend: final FROM of back/Dockerfile (GHCR build/deploy base).
           back_image="$(grep -E '^FROM[[:space:]]+' back/Dockerfile | tail -n1 | awk '{print $2}')"
           # Frontend homeserver runtime default (see deploy/homeserver/blue_green_deploy.sh NODE_RUNTIME_IMAGE).
-          # Do not use front/Dockerfile (legacy stub; not the deploy image).
+          # front/Dockerfile is the local dev container base (front/Makefile), not a deploy image.
+          # front/Dockerfile.runtime is the app image and pins the same node:20-alpine base, but the scan
+          # below reads the bare base tag: packages its runtime stage adds (wget) are NOT covered here.
+          # Scanning the built app image itself is wired with the GHCR build (#1537).
           # Pin floating tag to digest so Trivy scans a fixed image (same tag family as deploy).
           front_tag="node:20-alpine"
           docker pull "${front_tag}"

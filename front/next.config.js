@@ -46,6 +46,8 @@ const buildSecurityHeaders = () => {
  */
 
 module.exports = {
+  /** Homeserver container runs `.next/standalone/server.js`; traced deps only, no source tree. */
+  output: "standalone",
   images: {
     remotePatterns: [
       {

@@ -49,7 +49,7 @@ test("sync workflow has the stable trigger and serialized branch contract", () =
   assert.equal(document.env.WEB_REPOSITORY, "AquilaXk/aquila-blog-web")
 })
 
-test("test-only path checks out, imports, generates, and tests without write credentials", () => {
+test("test-only path checks out latest Web main, imports, generates, and tests without write credentials", () => {
   const { document, source } = workflow()
   const job = document.jobs.sync
   assert.deepEqual(job.permissions, { contents: "read", "pull-requests": "read" })
@@ -62,6 +62,12 @@ test("test-only path checks out, imports, generates, and tests without write cre
   }
   assert.equal(webCheckout.with.repository, "AquilaXk/aquila-blog-web")
   assert.equal(webCheckout.with.ref, "main")
+  assert.equal(webCheckout.with["fetch-depth"], 0)
+
+  const prepareStep = stepByName(job, "Prepare stable Web sync branch against latest main")
+  assert.match(prepareStep.run, /refs\/heads\/\$\{SYNC_BRANCH\}/)
+  assert.match(prepareStep.run, /merge --no-edit origin\/main/)
+  assert.match(prepareStep.run, /commit\.gpgsign=false/)
 
   const sourceStep = stepByName(job, "Resolve immutable Platform commit")
   assert.equal(sourceStep.env.SOURCE_REF, "${{ steps.context.outputs.source_ref }}")
@@ -93,7 +99,7 @@ test("test-only path checks out, imports, generates, and tests without write cre
   assert.match(source, /manual sync requires PLATFORM_CONTRACT_SYNC_ENABLED=true/)
 })
 
-test("sync writes require the kill switch, changed bytes, and a scoped App token", () => {
+test("sync writes require the kill switch, changed bytes, and a Web-only App token", () => {
   const { document, source } = workflow()
   const job = document.jobs.sync
   const token = stepByName(job, "Create repository sync token")
@@ -104,7 +110,7 @@ test("sync writes require the kill switch, changed bytes, and a scoped App token
   assert.equal(token.with["client-id"], "${{ vars.REPO_SYNC_APP_CLIENT_ID }}")
   assert.equal(token.with["private-key"], "${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}")
   assert.equal(token.with.owner, "AquilaXk")
-  assert.equal(token.with.repositories, "aquila-blog\naquila-blog-web\n")
+  assert.equal(token.with.repositories, "aquila-blog-web\n")
   assert.equal(token.with["permission-contents"], "write")
   assert.equal(token.with["permission-pull-requests"], "write")
   assert.doesNotMatch(source, /skip-token-revoke/)
@@ -122,7 +128,7 @@ test("sync writes require the kill switch, changed bytes, and a scoped App token
   }
 })
 
-test("publisher updates one stable branch and reuses one open PR", () => {
+test("publisher updates one stable branch with a normal push and reuses one open PR", () => {
   const { document } = workflow()
   const job = document.jobs.sync
   const push = stepByName(job, "Push stable Web sync branch")
@@ -130,6 +136,7 @@ test("publisher updates one stable branch and reuses one open PR", () => {
 
   assert.match(push.run, /gh auth setup-git/)
   assert.match(push.run, /git -C web push origin "HEAD:refs\/heads\/\$\{SYNC_BRANCH\}"/)
+  assert.doesNotMatch(push.run, /--force(?:-with-lease)?/)
   assert.equal(push.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}")
 
   const listIndex = pullRequest.run.indexOf("gh pr list")

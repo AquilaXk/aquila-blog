@@ -1509,9 +1509,13 @@ test.describe("Markdown editor replacement", () => {
     await expect(page.getByText("첨부 파일은 10MB 이하여야 합니다.")).toHaveCount(0)
     await expect(page.getByText(/첨부 파일 업로드 실패:/)).toHaveCount(0)
 
-    const editorText = await textarea.inputValue()
+    // uploadCalled는 요청 도착 시점이라 응답 반영 전에 true가 된다. 삽입 결과는 폴링으로 기다린다.
     const fileMarkdown = "[report.pdf](https://cdn.example.test/post-files/report.pdf)"
-    expect(editorText).toContain(fileMarkdown)
+    await expect
+      .poll(() => textarea.inputValue(), { message: "uploaded file markdown should be inserted at the caret" })
+      .toContain(fileMarkdown)
+
+    const editorText = await textarea.inputValue()
     expect(editorText.indexOf(fileMarkdown)).toBeLessThan(editorText.indexOf("omega"))
     await expect(page.getByTestId("markdown-editor-preview-pane").getByRole("link", { name: "report.pdf" })).toHaveAttribute(
       "href",

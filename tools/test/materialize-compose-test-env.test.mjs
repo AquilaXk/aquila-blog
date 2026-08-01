@@ -16,7 +16,7 @@ function occurrenceCount(text, prefix) {
   return text.split(/\r?\n/).filter((line) => line.startsWith(prefix)).length
 }
 
-test("materializer replaces stale examples and adds every digest-image key deterministically", (t) => {
+test("materializer resolves runtime inheritance, replaces stale examples, and adds every digest image", (t) => {
   const root = mkdtempSync(path.join(os.tmpdir(), "compose-test-env-"))
   t.after(() => rmSync(root, { force: true, recursive: true }))
   const source = path.join(root, "source.env")
@@ -27,7 +27,7 @@ test("materializer replaces stale examples and adds every digest-image key deter
     source,
     [
       "OTHER=value",
-      "BACK_IMAGE=ghcr.io/example/back:sha-<commit7>",
+      "BACK_BLUE_IMAGE=ghcr.io/example/back:sha-<commit7>",
       "CADDY_IMAGE=caddy@sha256:<digest>",
       "ALERTMANAGER_IMAGE=prom/alertmanager@sha256:<digest>",
       "",
@@ -45,6 +45,13 @@ test("materializer replaces stale examples and adds every digest-image key deter
             { name: "IGNORED_VALUE" },
           ],
         },
+        "home-server-runtime": {
+          extends: "home-server-source",
+          keys: [
+            { name: "BACK_BLUE_IMAGE", kind: "digest-image" },
+            { name: "BACK_GREEN_IMAGE", kind: "digest-image" },
+          ],
+        },
       },
     })}\n`,
   )
@@ -55,14 +62,22 @@ test("materializer replaces stale examples and adds every digest-image key deter
   const digest = "0".repeat(64)
 
   assert.match(generated, /^OTHER=value$/m)
-  assert.equal(occurrenceCount(generated, "BACK_IMAGE="), 1)
-  assert.equal(occurrenceCount(generated, "ALERTMANAGER_IMAGE="), 1)
-  assert.equal(occurrenceCount(generated, "CADDY_IMAGE="), 1)
-  assert.equal(occurrenceCount(generated, "POSTGRES_EXPORTER_IMAGE="), 1)
-  assert.match(generated, /^BACK_IMAGE=ghcr\.io\/aquilaxk\/aquila-blog-back:sha-0000000$/m)
+  for (const key of [
+    "ALERTMANAGER_IMAGE",
+    "BACK_BLUE_IMAGE",
+    "BACK_GREEN_IMAGE",
+    "CADDY_IMAGE",
+    "POSTGRES_EXPORTER_IMAGE",
+  ]) {
+    assert.equal(occurrenceCount(generated, `${key}=`), 1, key)
+  }
   assert.match(
     generated,
     new RegExp(`^ALERTMANAGER_IMAGE=registry\\.invalid/aquila-standalone/alertmanager-image@sha256:${digest}$`, "m"),
+  )
+  assert.match(
+    generated,
+    new RegExp(`^BACK_BLUE_IMAGE=registry\\.invalid/aquila-standalone/back-blue-image@sha256:${digest}$`, "m"),
   )
   assert.match(
     generated,
@@ -74,19 +89,28 @@ test("materializer replaces stale examples and adds every digest-image key deter
   assert.deepEqual(syntheticBlock, [...syntheticBlock].sort())
 })
 
-test("materializer fails closed for malformed contracts and same input/output", (t) => {
+test("materializer fails closed for missing targets, inheritance cycles, and same input/output", (t) => {
   const root = mkdtempSync(path.join(os.tmpdir(), "compose-test-env-invalid-"))
   t.after(() => rmSync(root, { force: true, recursive: true }))
   const source = path.join(root, "source.env")
+  const output = path.join(root, "output.env")
   const contract = path.join(root, "contract.json")
   writeFileSync(source, "OTHER=value\n")
+
   writeFileSync(contract, '{"targets":{}}\n')
+  const missing = run(["--source", source, "--output", output, "--contract", contract])
+  assert.equal(missing.status, 1)
+  assert.match(missing.stderr, /home-server-runtime deploy env contract is missing/)
 
-  const malformed = run(["--source", source, "--output", path.join(root, "output.env"), "--contract", contract])
-  assert.equal(malformed.status, 1)
-  assert.match(malformed.stderr, /home-server-source deploy env contract is missing/)
+  writeFileSync(
+    contract,
+    '{"targets":{"home-server-source":{"extends":"home-server-runtime","keys":[]},"home-server-runtime":{"extends":"home-server-source","keys":[]}}}\n',
+  )
+  const cycle = run(["--source", source, "--output", output, "--contract", contract])
+  assert.equal(cycle.status, 1)
+  assert.match(cycle.stderr, /deploy env contract inheritance cycle/)
 
-  writeFileSync(contract, '{"targets":{"home-server-source":{"keys":[]}}}\n')
+  writeFileSync(contract, '{"targets":{"home-server-runtime":{"keys":[]}}}\n')
   const samePath = run(["--source", source, "--output", source, "--contract", contract])
   assert.equal(samePath.status, 1)
   assert.match(samePath.stderr, /source and output must differ/)

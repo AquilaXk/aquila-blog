@@ -20,6 +20,11 @@ const productionEnv = [
   "NEXT_PUBLIC_RUM_SAMPLE_RATE=0",
 ].join("\n")
 
+const productionBuildEnv = [
+  "NEXT_PUBLIC_BACKEND_URL=https://api.example.test",
+  "BACKEND_INTERNAL_URL=https://api.example.test",
+].join("\n")
+
 test("production rejects missing secret, non-HTTPS URLs, and non-positive proxy limits", async () => {
   const { loadContract, validateEnvText } = await import("./validate-env.mjs")
   const contract = loadContract(contractPath)
@@ -41,6 +46,48 @@ test("production rejects missing secret, non-HTTPS URLs, and non-positive proxy 
   assert(result.errors.some((error) => error.key === "BACKEND_PROXY_MAX_BODY_BYTES" && error.message.includes("positive decimal")))
   assert(result.errors.some((error) => error.key === "NEXT_PUBLIC_SIGNUP_ENABLED" && error.message.includes("false")))
   assert(result.errors.some((error) => error.key === "NEXT_PUBLIC_RUM_SAMPLE_RATE" && error.message.includes("0")))
+})
+
+test("Vercel production build accepts runtime defaults while strict production remains fail-closed", async () => {
+  const { loadContract, validateEnvText } = await import("./validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  const buildResult = validateEnvText({ contract, target: "production-build", text: productionBuildEnv })
+  assert.equal(buildResult.ok, true, buildResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
+
+  const strictResult = validateEnvText({ contract, target: "production", text: productionBuildEnv })
+  assert.equal(strictResult.ok, false)
+  assert(strictResult.errors.some((error) => error.key === "TOKEN_FOR_REVALIDATE" && error.message === "is required"))
+})
+
+test("Vercel production build validates optional values when they are supplied", async () => {
+  const { loadContract, validateEnvText } = await import("./validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const result = validateEnvText({
+    contract,
+    target: "production-build",
+    text: [
+      productionBuildEnv,
+      "NEXT_PUBLIC_SITE_URL=http://www.example.test",
+      "TOKEN_FOR_REVALIDATE=short-token",
+      "BACKEND_PROXY_MAX_BODY_BYTES=0",
+      "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=0",
+      "NEXT_PUBLIC_SIGNUP_ENABLED=true",
+      "NEXT_PUBLIC_RUM_SAMPLE_RATE=1",
+    ].join("\n"),
+  })
+
+  assert.equal(result.ok, false)
+  for (const key of [
+    "NEXT_PUBLIC_SITE_URL",
+    "TOKEN_FOR_REVALIDATE",
+    "BACKEND_PROXY_MAX_BODY_BYTES",
+    "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES",
+    "NEXT_PUBLIC_SIGNUP_ENABLED",
+    "NEXT_PUBLIC_RUM_SAMPLE_RATE",
+  ]) {
+    assert(result.errors.some((error) => error.key === key), key)
+  }
 })
 
 test("production rejects short and placeholder revalidation tokens", async () => {
@@ -130,12 +177,13 @@ test("live-e2e rejects placeholder credentials", async () => {
   assert(result.errors.some((error) => error.key === "E2E_LIVE_ADMIN_PASSWORD" && error.message.includes("placeholder")))
 })
 
-test("prebuild validates production only for Vercel production deployment and CI runs the Web contract suite", () => {
+test("prebuild validates the Vercel build contract only for production deployment and CI runs the Web contract suite", () => {
   const packageJson = JSON.parse(readFileSync(path.join(frontRoot, "package.json"), "utf8"))
   const frontendWorkflow = readFileSync(path.join(repoRoot, ".github/workflows/reusable-frontend-verify.yml"), "utf8")
 
   assert.match(packageJson.scripts.prebuild, /VERCEL:-.*1.*VERCEL_ENV:-.*production/)
-  assert.match(packageJson.scripts.prebuild, /scripts\/env\/validate-env\.mjs --target production --process-env/)
+  assert.match(packageJson.scripts.prebuild, /scripts\/env\/validate-env\.mjs --target production-build --process-env/)
+  assert.doesNotMatch(packageJson.scripts.prebuild, /--target production --process-env/)
   assert.match(frontendWorkflow, /node --test scripts\/env\/env-contract\.test\.mjs/)
 })
 

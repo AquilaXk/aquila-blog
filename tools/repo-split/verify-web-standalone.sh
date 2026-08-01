@@ -7,7 +7,7 @@ Usage: bash tools/repo-split/verify-web-standalone.sh [source-ref]
 
 Creates a temporary archive containing only front/** and runs the future Web
 repository's blocking quality gates inside that extracted root. Heavy execution
-is restricted to GitHub Actions; the static harness uses STANDALONE_TEST_MODE.
+is restricted to GitHub Actions.
 USAGE
 }
 
@@ -16,7 +16,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-if [[ "${GITHUB_ACTIONS:-}" != "true" && "${STANDALONE_TEST_MODE:-}" != "true" ]]; then
+if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
   echo "verify-web-standalone: heavy standalone verification is GitHub Actions-only" >&2
   exit 2
 fi

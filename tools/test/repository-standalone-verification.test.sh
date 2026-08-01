@@ -77,9 +77,28 @@ ruby -e '
     job = jobs.fetch(job_id)
     raise "#{job_id} name mismatch" unless job.fetch("name") == name
     raise "#{job_id} must be contents: read" unless job.dig("permissions", "contents") == "read"
-    step_names = job.fetch("steps").map { |step| step["name"] }
-    raise "#{job_id} gate step missing" unless step_names.include?(gate_step)
-    raise "#{job_id} evidence step missing" unless step_names.include?(upload_step)
+
+    steps = job.fetch("steps")
+    checkout = steps.find { |step| step["name"] == "Checkout exact source SHA with history" }
+    raise "#{job_id} checkout step missing" unless checkout
+    raise "#{job_id} checkout must fetch full history" unless checkout.dig("with", "fetch-depth") == 0
+    raise "#{job_id} checkout must not persist credentials" unless checkout.dig("with", "persist-credentials") == false
+
+    gate = steps.find { |step| step["name"] == gate_step }
+    upload = steps.find { |step| step["name"] == upload_step }
+    raise "#{job_id} gate step missing" unless gate
+    raise "#{job_id} evidence step missing" unless upload
+
+    next unless job_id == "platform-standalone"
+
+    raise "platform-standalone must not expose secrets at job scope" if job.key?("env")
+    expected_secrets = {
+      "TEST_DB_PASSWORD" => "${{ secrets.CI_DB_PASSWORD }}",
+      "TEST_REDIS_PASSWORD" => "${{ secrets.CI_REDIS_PASSWORD }}",
+    }
+    expected_secrets.each do |key, value|
+      raise "platform-standalone gate secret mismatch: #{key}" unless gate.dig("env", key) == value
+    end
   end
 ' "${workflow}" || fail "ci.yml is invalid YAML or the standalone job structure drifted"
 
@@ -154,10 +173,5 @@ assert_contains "${workflow}" 'web-standalone-${{ github.sha }}'
 assert_contains "${workflow}" 'platform-standalone-${{ github.sha }}'
 assert_contains "${workflow}" 'persist-credentials: false'
 assert_contains "${workflow}" 'fetch-depth: 0'
-
-# Secrets are intentionally scoped to the one Platform execution step rather
-# than checkout/setup/static validation.
-assert_contains "${workflow}" 'TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}'
-assert_contains "${workflow}" 'TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}'
 
 echo "repository-standalone-verification: PASS"

@@ -12,7 +12,7 @@ fail() {
 [[ -f "${workflow}" ]] || fail "missing workflow: .github/workflows/standalone-evidence-replay.yml"
 command -v ruby >/dev/null 2>&1 || fail "ruby is required to parse workflow YAML"
 
-ruby -e '
+ruby - "${workflow}" <<'RUBY'
   require "yaml"
   document = YAML.load_file(ARGV.fetch(0))
   trigger = document["on"] || document[true]
@@ -117,6 +117,6 @@ ruby -e '
   ].each do |entry|
     raise "recorder script missing #{entry}" unless script.include?(entry)
   end
-' "${workflow}" || fail "workflow contract drifted"
+RUBY
 
 echo "standalone-evidence-replay-workflow: PASS"

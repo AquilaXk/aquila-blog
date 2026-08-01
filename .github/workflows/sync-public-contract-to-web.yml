@@ -123,7 +123,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Prepare stable Web sync branch
+      - name: Prepare stable Web sync branch against latest main
         run: |
           set -euo pipefail
           if git -C web ls-remote --exit-code --heads origin "refs/heads/${SYNC_BRANCH}" >/dev/null 2>&1; then
@@ -132,6 +132,11 @@ jobs:
           else
             git -C web checkout -B "${SYNC_BRANCH}" origin/main
           fi
+          git -C web \
+            -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            -c commit.gpgsign=false \
+            merge --no-edit origin/main
 
       - name: Set up Node.js 20
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -193,7 +198,6 @@ jobs:
           private-key: ${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}
           owner: AquilaXk
           repositories: |
-            aquila-blog
             aquila-blog-web
           permission-contents: write
           permission-pull-requests: write
@@ -221,6 +225,7 @@ jobs:
           set -euo pipefail
           git -C web config user.name "${APP_NAME}"
           git -C web config user.email "${APP_EMAIL}"
+          git -C web config commit.gpgsign false
           git -C web add contracts/platform packages/shared-contracts/src/generated/backend-openapi.d.ts
           if git -C web diff --cached --quiet; then
             echo "committed=false" >> "${GITHUB_OUTPUT}"

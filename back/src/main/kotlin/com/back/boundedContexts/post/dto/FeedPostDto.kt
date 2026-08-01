@@ -23,8 +23,6 @@ data class FeedPostDto(
     val hitCount: Int,
 ) {
     companion object {
-        private const val UNAVAILABLE_SUMMARY = "미리보기를 불러오지 못했습니다."
-
         fun from(
             post: Post,
             reportFailure: FeedPostDtoMappingFailureReporter = { _, _, _ -> },
@@ -32,7 +30,7 @@ data class FeedPostDto(
             val postId = post.id
             val content = post.content
             val meta = extractMeta(postId, content, reportFailure)
-            val preview = extractPreview(postId, content, reportFailure)
+            val thumbnail = extractThumbnail(postId, content, reportFailure)
 
             return FeedPostDto(
                 id = postId,
@@ -43,8 +41,8 @@ data class FeedPostDto(
                 authorUsername = post.author.name,
                 authorProfileImgUrl = post.author.profileImgUrlVersionedOrDefault,
                 title = post.title,
-                thumbnail = preview.thumbnail,
-                summary = preview.summary,
+                thumbnail = thumbnail,
+                summary = post.summaryText.orEmpty(),
                 tags = meta.tags,
                 category = meta.categories,
                 published = post.published,
@@ -70,19 +68,16 @@ data class FeedPostDto(
                 )
             }
 
-        private fun extractPreview(
+        private fun extractThumbnail(
             postId: Long,
             content: String,
             reportFailure: FeedPostDtoMappingFailureReporter,
-        ): PostPreviewExtractor.Preview =
+        ): String? =
             runCatching {
-                PostPreviewExtractor.extract(content)
+                PostPreviewExtractor.extractThumbnail(content)
             }.getOrElse { exception ->
                 reportFailure(postId, FeedPostDtoMappingFailureType.PREVIEW, exception)
-                PostPreviewExtractor.Preview(
-                    thumbnail = null,
-                    summary = UNAVAILABLE_SUMMARY,
-                )
+                null
             }
     }
 }

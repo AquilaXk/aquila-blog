@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.never
 import org.mockito.BDDMockito.then
+import org.springframework.http.MediaType
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
@@ -23,6 +25,35 @@ import java.time.Instant
 
 @org.junit.jupiter.api.DisplayName("ApiV1AdmPostController 테스트")
 class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 canonical summary backfill을 실행할 수 있다`() {
+        given(postUseCase.backfillSummaries(10, 20, true))
+            .willReturn(PostUseCase.SummaryBackfillResult(3, 0, 0, 10, true, true))
+
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":10,"limit":20,"dryRun":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.scanned") { value(3) }
+                jsonPath("$.dryRun") { value(true) }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["USER"])
+    fun `일반 사용자는 canonical summary backfill을 실행할 수 없다`() {
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":0,"limit":20,"dryRun":true}"""
+            }.andExpect {
+                status { isForbidden() }
+            }
+    }
+
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 글 통계를 조회할 수 있다`() {

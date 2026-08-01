@@ -84,11 +84,24 @@ object PostSummaryResolver {
         title: String,
         content: String,
         now: Instant = Instant.now(),
+    ): ResolvedPostSummary = resolveAutomatic(title, content, now, includeLegacyFrontmatter = false)
+
+    fun resolveForBackfill(
+        title: String,
+        content: String,
+        now: Instant = Instant.now(),
+    ): ResolvedPostSummary = resolveAutomatic(title, content, now, includeLegacyFrontmatter = true)
+
+    private fun resolveAutomatic(
+        title: String,
+        content: String,
+        now: Instant,
+        includeLegacyFrontmatter: Boolean,
     ): ResolvedPostSummary {
         val normalizedContent = normalizeLineEndings(content)
         val hash = sha256(normalizedContent)
         val split = splitFrontmatter(normalizedContent)
-        val legacy = extractLegacySummary(split.metadataLines)
+        val legacy = extractLegacySummary(split.metadataLines).takeIf { includeLegacyFrontmatter }.orEmpty()
         if (legacy.isNotBlank()) {
             return derived(legacy, PostSummarySource.MIGRATED, hash, MIGRATED_VERSION, now)
         }
@@ -329,8 +342,7 @@ object PostSummaryResolver {
         return paragraphs
     }
 
-    private fun looksLikeTableRow(value: String): Boolean =
-        value.count { it == '|' } >= 2 && (value.startsWith('|') || value.endsWith('|'))
+    private fun looksLikeTableRow(value: String): Boolean = value.count { it == '|' } >= 2 && (value.startsWith('|') || value.endsWith('|'))
 
     private fun cleanInlineMarkdown(value: String): String =
         normalizeText(

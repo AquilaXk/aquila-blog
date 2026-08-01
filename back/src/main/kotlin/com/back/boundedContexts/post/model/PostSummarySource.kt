@@ -7,3 +7,8 @@ enum class PostSummarySource {
     MIGRATED,
     NONE,
 }
+
+enum class PostSummaryMode {
+    AUTO,
+    MANUAL,
+}

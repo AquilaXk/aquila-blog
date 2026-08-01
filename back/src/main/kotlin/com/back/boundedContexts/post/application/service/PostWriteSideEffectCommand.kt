@@ -49,9 +49,11 @@ internal data class PostWriteSideEffectCommand(
 enum class PostRecommendationSideEffect {
     REFRESH,
     EVICT,
+    NONE,
 }
 
 enum class PostReadCacheInvalidationTarget {
+    ADMIN_POSTS_FIRST_PAGE,
     HOT_READ_PAGES,
     SEARCH_FIRST_PAGE,
     IMPACTED_TAG_PAGES,
@@ -64,6 +66,7 @@ internal enum class PostPublicChangeImpact {
     TITLE,
     CONTENT,
     TAG,
+    SUMMARY,
 }
 
 internal sealed class PostReadCacheInvalidationScope(
@@ -80,6 +83,8 @@ internal sealed class PostReadCacheInvalidationScope(
     data object PublicPostHardDeleted : PostReadCacheInvalidationScope(ALL_PUBLIC_READ_TARGETS)
 
     data object DetailOnly : PostReadCacheInvalidationScope(setOf(PostReadCacheInvalidationTarget.DETAIL))
+
+    data object AdminPostListOnly : PostReadCacheInvalidationScope(setOf(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE))
 
     class PublicPostModified(
         impacts: Set<PostPublicChangeImpact>,
@@ -109,13 +114,15 @@ internal sealed class PostReadCacheInvalidationScope(
 
         private fun targetsForModifiedPublicPost(impacts: Set<PostPublicChangeImpact>): Set<PostReadCacheInvalidationTarget> =
             buildSet {
+                add(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE)
                 add(PostReadCacheInvalidationTarget.HOT_READ_PAGES)
                 if (
                     impacts.any {
                         it == PostPublicChangeImpact.LISTING_VISIBILITY ||
                             it == PostPublicChangeImpact.TITLE ||
                             it == PostPublicChangeImpact.CONTENT ||
-                            it == PostPublicChangeImpact.TAG
+                            it == PostPublicChangeImpact.TAG ||
+                            it == PostPublicChangeImpact.SUMMARY
                     }
                 ) {
                     add(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE)
@@ -123,17 +130,26 @@ internal sealed class PostReadCacheInvalidationScope(
                 if (
                     impacts.any {
                         it == PostPublicChangeImpact.LISTING_VISIBILITY ||
-                            it == PostPublicChangeImpact.TAG
+                            it == PostPublicChangeImpact.TAG ||
+                            it == PostPublicChangeImpact.SUMMARY
                     }
                 ) {
                     add(PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES)
+                }
+                if (
+                    impacts.any {
+                        it == PostPublicChangeImpact.LISTING_VISIBILITY ||
+                            it == PostPublicChangeImpact.TAG
+                    }
+                ) {
                     add(PostReadCacheInvalidationTarget.PUBLIC_TAGS)
                 }
                 if (
                     impacts.any {
                         it == PostPublicChangeImpact.LISTING_VISIBILITY ||
                             it == PostPublicChangeImpact.TITLE ||
-                            it == PostPublicChangeImpact.CONTENT
+                            it == PostPublicChangeImpact.CONTENT ||
+                            it == PostPublicChangeImpact.SUMMARY
                     }
                 ) {
                     add(PostReadCacheInvalidationTarget.DETAIL)

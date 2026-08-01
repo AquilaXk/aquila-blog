@@ -14,7 +14,7 @@ Execution: #1495 → #1496 → #1497 → #1498
 3. 실패 원인을 해결하는 최소 production 변경만 추가한다.
 4. focused test 후 repository required checks를 실행한다.
 5. PR 전체 diff, CodeRabbit, unresolved thread, CI 상태를 검토한다.
-6. CodeRabbit quota/limit이면 `## Manual Code Review` 코멘트로 대체하고 이를 명확히 표시한다.
+6. CodeRabbit이 실제 review를 남기지 못하면 저장소 review gate의 격리된 Codex Review fallback을 사용한다.
 7. blocking finding이 없을 때만 squash merge한다.
 8. 다음 브랜치는 병합된 최신 `main`에서 시작한다.
 
@@ -58,7 +58,7 @@ summaryGeneratedAt
 
 우선순위:
 
-1. non-blank manual summary
+1. `summaryMode=MANUAL`의 non-blank manual summary
 2. leading `> **요약:**` / `> Summary:` block
 3. 첫 의미 문단의 완전한 1~2문장
 4. 의미 있는 자연어가 없으면 NONE
@@ -74,12 +74,59 @@ summaryGeneratedAt
 
 변경:
 
-- Post entity와 versioned Flyway migration
-- create/update request에 nullable summary
+- Post entity와 prod/test profile versioned Flyway migration
+- create/update request에 `summaryMode=AUTO | MANUAL`과 nullable summary
 - write/modify 시 canonical resolve/persist
 - PostDto/FeedPostDto/detail cache가 stored summary 사용
-- legacy frontmatter summary idempotent backfill
+- legacy frontmatter summary explicit batch backfill
 - OpenAPI/public contract snapshot 갱신
+
+확정 API 의미:
+
+- create의 mode 누락은 legacy 호환을 위해 non-blank summary면 `MANUAL`, 그 외 `AUTO`로 해석한다.
+- 신규 create/modify/preview의 `AUTO`는 legacy frontmatter `summary:`를 정본으로 채택하지 않는다. legacy frontmatter 해석은 explicit backfill에만 한정한다.
+- modify의 mode 누락은 기존 mode를 보존하고, legacy `summary=""`는 `AUTO` 재계산으로 해석한다. 이 호환은 #1497 Web 전환 완료 후 제거한다.
+- `MANUAL + blank`는 400이고 `AUTO`는 기존 manual/migrated 값을 명시적으로 해제하고 재계산한다.
+- 동일 `Idempotency-Key` 재시도는 최초 생성 결과를 반환하며 다른 summary payload로 기존 post를 바꾸지 않는다.
+
+Backfill 안전성:
+
+- startup runner를 두지 않고 인증된 explicit admin task에서만 실행한다.
+- dry-run, 최대 batch size, 마지막 처리 id checkpoint를 입력으로 받고 다음 checkpoint를 응답한다.
+- update는 id/nullable version/content/visibility/deleted 상태/canonical 미설정 조건을 함께 확인하며 concurrent edit나 restore는 skip한다.
+- `modified_at`과 post version은 변경하지 않고 summary/content 원문은 log·event·metric label에 남기지 않는다.
+- summary 변경과 공개 글 backfill 반영 후 공개 feed/search/tag/detail cache와 CDN tag를 무효화한다. 비공개·삭제 글은 raw tag를 task에 넣지 않고 관리자 목록 cache만 무효화한다.
+
+Backfill/rollback 절차:
+
+1. `afterId=0`, bounded `limit`, `dryRun=true`로 대상 수만 확인한다.
+2. 같은 `afterId`/`limit`에 `dryRun=false`를 보내고 응답의 `nextAfterId`로 다음 batch를 재개한다.
+3. `skipped > 0`이면 반환된 checkpoint부터 재시도하며 concurrent edit가 끝나기 전에는 건너뛰지 않는다.
+4. 배포 rollback은 application을 이전 버전으로 되돌리고 expand-only 컬럼은 보존한다. versioned migration을 되감거나 컬럼을 즉시 drop하지 않는다.
+5. backfill 결과를 되돌려야 하면 application rollback 후 canonical 컬럼을 그대로 두고 후속 migration에서만 정리한다.
+
+완료 조건:
+
+- canonical fields가 write transaction 안에서 event 생성 전에 확정된다.
+- preview 응답은 `contentHash`, `algorithmVersion`을 포함한다.
+- read DTO/cache는 저장 canonical summary만 사용하고 본문을 다시 파싱하지 않는다.
+- 관리자 preview/backfill endpoint는 WebMvc slice에서 constructor wiring과 ADMIN 경계를 검증한다.
+- 관리자 controller는 기존 `PostUseCase` 입력 포트를 통해 preview/backfill을 호출하고 application service 구현체를 직접 참조하지 않는다.
+- migration rollback과 backfill dry-run/resume evidence를 PR에 남긴다.
+
+Commit plan:
+
+1. `7edba71f6` canonical provenance 계약 테스트
+2. `c613ebd2b` summary source 모델
+3. `7f8fde641` deterministic resolver
+4. `f2ff11ed4` write persistence 회귀 테스트
+5. `dcc4fe60f` canonical fields migration
+6. `4ce65bf0b` Post canonical state
+7. `297604519` legacy backfill 초안
+8. `28b77f81b` write port contract
+9. `a79affa69` write-time resolve/persist
+10. `c4ab72159` API DTO 초안
+11. 강화된 API mode·explicit backfill·read/preview 계약과 CI compile 보정
 
 검증:
 

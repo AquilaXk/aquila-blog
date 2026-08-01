@@ -34,11 +34,24 @@ class PostSummaryResolverTest {
                 "---\r\n" +
                 "본문입니다."
 
-        val resolved = PostSummaryResolver.resolveForCreate("JWT", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveForBackfill("JWT", content, fixedNow)
 
         assertThat(resolved.source).isEqualTo(PostSummarySource.MIGRATED)
         assertThat(resolved.text).isEqualTo("Cache-Control과 \"aud\" 클레임을 설명합니다.")
         assertThat(resolved.algorithmVersion).isEqualTo("legacy-frontmatter-v1")
+    }
+
+    @Test
+    fun `new automatic writes ignore legacy frontmatter summary`() {
+        val content = """---
+summary: "이전 frontmatter 요약"
+---
+신규 본문의 핵심 문장입니다."""
+
+        val resolved = PostSummaryResolver.resolveForCreate("신규 글", content, null, fixedNow)
+
+        assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
+        assertThat(resolved.text).isEqualTo("신규 본문의 핵심 문장입니다.")
     }
 
     @Test
@@ -150,7 +163,7 @@ class PostSummaryResolverTest {
 
     @Test
     fun `ellipsis is included inside the 150 grapheme limit without splitting zwj emoji`() {
-        val content = "👩‍💻".repeat(80) + " 긴 기술 설명 문장입니다."
+        val content = "👩‍💻".repeat(160) + " 긴 기술 설명 문장입니다."
 
         val resolved = PostSummaryResolver.resolveForCreate("제목", content, null, fixedNow)
 

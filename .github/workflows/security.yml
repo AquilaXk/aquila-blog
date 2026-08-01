@@ -78,7 +78,7 @@ jobs:
 
       - name: Cache OWASP dependency-check NVD data
         if: github.event_name != 'pull_request'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.gradle/dependency-check-data
           # Stable key so main/schedule share a warm NVD DB; do not key by run_id (#1383).

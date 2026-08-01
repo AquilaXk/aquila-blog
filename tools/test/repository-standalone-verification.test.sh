@@ -30,17 +30,29 @@ assert_not_contains() {
   fi
 }
 
+assert_before() {
+  local file="$1"
+  local first="$2"
+  local second="$3"
+  local first_line
+  local second_line
+  first_line="$(grep -Fn -- "${first}" "${file}" | head -n 1 | cut -d: -f1)"
+  second_line="$(grep -Fn -- "${second}" "${file}" | head -n 1 | cut -d: -f1)"
+  [[ -n "${first_line}" && -n "${second_line}" && "${first_line}" -lt "${second_line}" ]] \
+    || fail "${file#"${repo_root}/"} must place '${first}' before '${second}'"
+}
+
 for file in "${web_script}" "${platform_script}" "${workflow}"; do
   assert_file "${file}"
 done
 bash -n "${web_script}" "${platform_script}"
 
-# Heavy gates must fail closed outside Actions; the static harness is the only
-# supported local path and never executes Yarn, Gradle, Playwright, or Docker.
+# Heavy gates must fail closed outside Actions. No local or test-only bypass may
+# unlock Yarn, Gradle, Playwright, or Docker execution.
 assert_contains "${web_script}" 'GITHUB_ACTIONS:-}'
-assert_contains "${web_script}" 'STANDALONE_TEST_MODE:-}'
 assert_contains "${platform_script}" 'GITHUB_ACTIONS:-}'
-assert_contains "${platform_script}" 'STANDALONE_TEST_MODE:-}'
+assert_not_contains "${web_script}" 'STANDALONE_TEST_MODE'
+assert_not_contains "${platform_script}" 'STANDALONE_TEST_MODE'
 
 # Web archive and all required standalone checks.
 assert_contains "${web_script}" 'archive --format=tar "${source_sha}" front'
@@ -70,6 +82,7 @@ assert_contains "${platform_script}" 'check-platform-boundary.mjs --report-only'
 assert_contains "${platform_script}" 'tools/contracts/check-public-contracts.mjs'
 assert_contains "${platform_script}" 'tools/privacy/ci-privacy-gate.mjs'
 assert_contains "${platform_script}" './gradlew check --rerun-tasks'
+assert_before "${platform_script}" './gradlew check --rerun-tasks' 'tools/contracts/check-public-contracts.mjs'
 assert_contains "${platform_script}" 'docker-compose.prod.yml'
 assert_contains "${platform_script}" 'config --quiet'
 assert_not_contains "${platform_script}" 'git clone'

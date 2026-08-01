@@ -64,7 +64,6 @@ permissions:
 
 jobs:
   backend-ci:
-    if: github.event_name == 'push'
     permissions:
       contents: read
       issues: write
@@ -75,11 +74,14 @@ jobs:
       CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
 
   frontend-ci:
-    if: github.event_name == 'push'
+    permissions:
+      contents: read
     uses: ./.github/workflows/reusable-frontend-verify.yml
 
   web-standalone:
     name: Web Standalone
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -115,11 +117,10 @@ jobs:
 
   platform-standalone:
     name: Platform Standalone
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 150
-    env:
-      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
-      TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
     steps:
       - name: Checkout exact source SHA with history
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -145,6 +146,8 @@ jobs:
       - name: Run Platform archive standalone gate
         env:
           STANDALONE_ARTIFACT_DIR: ${{ runner.temp }}/platform-standalone
+          TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
         run: bash tools/repo-split/verify-platform-standalone.sh "${GITHUB_SHA}"
 
       - name: Upload Platform standalone evidence

@@ -81,7 +81,6 @@ required_workflows=(
   ".github/workflows/ci.yml"
   ".github/workflows/security.yml"
   ".github/workflows/sonarcloud.yml"
-  ".github/workflows/production-live-verify.yml"
 )
 : > "${artifact_dir}/workflow-presence.txt"
 for workflow in "${required_workflows[@]}"; do
@@ -119,7 +118,7 @@ fi
   run_step "Verify Web repository boundary" node scripts/repo-boundary/check-web-boundary.mjs
   run_step "Verify Web Node contracts" node --test \
     scripts/env/env-contract.test.mjs \
-    scripts/live/resolve-live-targets.test.mjs \
+    scripts/live/live-spec-contract.test.mjs \
     scripts/repo-boundary/web-build-inputs.test.mjs
   run_step "Verify pinned Platform contract" yarn contracts:check
   run_step "Verify legal policy export" yarn legal:check

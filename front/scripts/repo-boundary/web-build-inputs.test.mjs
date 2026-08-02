@@ -117,7 +117,7 @@ test("Web CI keeps the Storybook bundle gate strict", () => {
 test("Web CI runs repository extraction contract tests", () => {
   const workflow = fs.readFileSync(path.join(frontRoot, ".github/workflows/ci.yml"), "utf8")
 
-  assert.match(workflow, /node --test scripts\/live\/resolve-live-targets\.test\.mjs/)
+  assert.match(workflow, /node --test scripts\/live\/live-spec-contract\.test\.mjs/)
   assert.match(workflow, /node --test scripts\/repo-boundary\/web-build-inputs\.test\.mjs/)
 })
 

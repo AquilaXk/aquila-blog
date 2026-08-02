@@ -146,7 +146,7 @@ test("live-ready requires only HTTPS Web and API targets", async () => {
   const { loadContract, validateEnvText } = await import("./validate-env.mjs")
   const contract = loadContract(contractPath)
   const valid = [
-    "PLAYWRIGHT_BASE_URL=https://aquila-blog-web.vercel.app",
+    "PLAYWRIGHT_BASE_URL=https://blog.aquilaxk.site",
     "E2E_API_BASE_URL=https://api.example.test",
   ].join("\n")
 

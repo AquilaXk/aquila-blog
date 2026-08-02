@@ -518,6 +518,10 @@ curl -sS -o /dev/null -w "company_sitemap=%{http_code}\n" https://www.aquilaxk.s
 # `-L`은 최종 응답을 보기 위한 것이다 - 리다이렉트가 블로그 피드로 이어지면 그것도 차단이 아니다.
 # alternate 링크는 두 호스트 모두에서 확인한다(한쪽만 보면 다른 호스트의 누출을 놓친다).
 # no-match가 정상이므로 `grep`은 `if` 안에서 판정한다 - 그 exit 1은 실패가 아니다.
+#
+# 판정은 검사마다 종료 코드로 남기지 않는다. 검사 중간에 `(exit N)`을 두면 뒤따르는 명령이 그
+# 상태를 덮어써(맨 아래 blog 무회귀 curl의 0이 블록의 결과가 된다) 앞선 실패가 블록 전체의 성공으로
+# 보고된다. 실패를 변수에 누적하고 마지막에 한 번만 종료 코드로 되돌린다.
 rss_isolation=0
 for surface in https://www.aquilaxk.site https://easysubway.aquilaxk.site; do
   feed_code="$(curl -sSL -o /dev/null -w '%{http_code}' "${surface}/feed")"
@@ -529,8 +533,6 @@ for surface in https://www.aquilaxk.site https://easysubway.aquilaxk.site; do
   fi
 done
 [ "${rss_isolation}" -eq 0 ] && echo "rss isolation ok" || echo "rss isolation FAILED"
-# 판정 결과를 블록의 종료 코드로 남긴다. `(exit N)`은 셸을 죽이지 않고 마지막 상태만 N으로 만든다.
-(exit "${rss_isolation}")
 
 # 표면 호스트에는 백엔드 표면이 없다. 실제로 닫아야 하는 것은 Next의 백엔드 프록시 라우트
 # (`front/src/pages/api/backend/[...path].ts`)이고, 그것을 닫는 것은 Caddyfile
@@ -549,11 +551,18 @@ for surface in https://www.aquilaxk.site https://easysubway.aquilaxk.site; do
   done
 done
 [ "${backend_isolation}" -eq 0 ] && echo "backend isolation ok" || echo "backend isolation FAILED"
-(exit "${backend_isolation}")
 
 # 블로그 표면 무회귀: robots/sitemap이 그대로 블로그 값이어야 한다.
 curl -sS https://blog.aquilaxk.site/robots.txt
 curl -sS -o /dev/null -w "blog_sitemap=%{http_code}\n" https://blog.aquilaxk.site/sitemap.xml
+
+# 블록 전체의 판정. 앞선 검사 중 하나라도 실패했으면 여기서 nonzero로 끝난다 - 위 curl들이
+# 상태를 덮어써도 결과가 뒤집히지 않는다. `(exit N)`은 셸을 죽이지 않고 마지막 상태만 N으로 만든다.
+surface_gate=0
+[ "${rss_isolation}" -eq 0 ] || surface_gate=1
+[ "${backend_isolation}" -eq 0 ] || surface_gate=1
+[ "${surface_gate}" -eq 0 ] && echo "surface gate ok" || echo "surface gate FAILED"
+(exit "${surface_gate}")
 ```
 
 ## 렌더 게이트 (#1541)

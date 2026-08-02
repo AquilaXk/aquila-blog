@@ -7,18 +7,22 @@ The final topology is exactly two repositories.
 | Repository | Role | Ownership |
 | --- | --- | --- |
 | `AquilaXk/aquila-blog` | Platform | API, data, home-server operations, and Platform contracts |
-| `AquilaXk/aquila-blog-web` | Web | Web source, Web contracts, and Vercel deployment |
+| `AquilaXk/aquila-blog-web` | Web | Web source, Web contracts, and (after the split) the Web container image build |
 
 No API, Ops, Worker, Shared, Contracts, domain, or other repository is created.
 `AquilaXk/aquila-blog` remains the Platform repository; its existing history is not
 rewritten.
 
+The table states the target ownership. Today the Web container image is still built by
+Platform (`.github/workflows/frontend-image.yml`); moving that workflow to Web is part
+of the split execution, not a state this document already describes.
+
 ## Stable runtime ownership
 
-The Web URL remains `https://www.aquilaxk.site` and the API URL remains
-`https://api.aquilaxk.site`. Platform retains DB, Redis, MinIO, cookie, OAuth
-callback, and backend runtime ownership. The GHCR image family remains unchanged,
-including `ghcr.io/aquilaxk/aquila-blog-back`.
+The Web URL is `https://blog.aquilaxk.site`, and the public API is served from that
+same host by path rather than from a separate API host (#1575). Platform retains DB,
+Redis, MinIO, cookie, OAuth callback, and backend runtime ownership. The GHCR image
+family remains unchanged, including `ghcr.io/aquilaxk/aquila-blog-back`.
 
 This split does not include a DB migration, data movement, cookie-domain change, or
 OAuth callback change.

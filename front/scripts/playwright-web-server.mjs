@@ -24,10 +24,12 @@ const watchedEntries = [
   "site.config.js",
 ]
 
+// NEXT_PUBLIC_SITE_URL은 site.config.js의 isProd 판정 입력이라 번들 내용을 바꾼다. signature에서
+// 빠지면 production 모드를 재현하려는 e2e가 그렇지 않은 .next를 그대로 재사용한다.
 const buildSignature = {
   enableQaRoutes: process.env.ENABLE_QA_ROUTES === "true",
   nextPublicRumSampleRate: process.env.NEXT_PUBLIC_RUM_SAMPLE_RATE || "",
-  vercelEnv: process.env.VERCEL_ENV || "",
+  nextPublicSiteUrl: process.env.NEXT_PUBLIC_SITE_URL || "",
 }
 
 const getLatestMtimeMs = (targetPath) => {

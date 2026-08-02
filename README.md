@@ -50,10 +50,10 @@ Aquila Blog는 공개 블로그, 관리자 글쓰기 작업실, 백엔드 API, �
 User / Admin
     |
     v
-Vercel / Next.js
+Cloudflare Tunnel
     |
     v
-Home Server / Caddy + Cloudflare Tunnel
+Home Server / Caddy + Next.js container
     |
     v
 Spring Boot + Kotlin API
@@ -72,7 +72,7 @@ Spring Boot + Kotlin API
 | Editor / Rendering | Tiptap, react-markdown, Mermaid, Shiki, KaTeX |
 | Backend | Spring Boot, Kotlin, Spring Security, JPA, QueryDSL, Flyway |
 | Data / Storage | PostgreSQL, Redis, MinIO |
-| Infra / Deploy | Vercel, Home Server, Caddy, Cloudflare Tunnel, Docker Compose |
+| Infra / Deploy | Home Server, Caddy, Cloudflare Tunnel, Docker Compose, GHCR |
 | Observability | Prometheus, Grafana, Loki, Promtail, Micrometer |
 | Quality | JUnit5, Testcontainers, ArchUnit, Playwright, Storybook, k6 |
 

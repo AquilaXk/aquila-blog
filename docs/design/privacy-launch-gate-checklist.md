@@ -17,7 +17,7 @@ Follow-up matrix의 source of truth는 `legal/privacy-launch-controls.json`이�
 | `CUSTOM__AI__SUMMARY__ENABLED` | `false` | AI 요약(실키는 **SUMMARY**, TAG 아님) |
 
 Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues + `.github/workflows/deploy.yml` `require_privacy_freeze_value` → homeserver `.env.prod` / Next 번들.
-Vercel 프로젝트 env는 Soft-launch 운영 경로가 아니다. 프론트 운영 배포는 homeserver compose이며, Vercel 빌드 env drift는 이 gate 범위 밖(별도 issue)이다.
+프론트 운영 배포 경로는 homeserver compose 하나뿐이다. `NEXT_PUBLIC_*` freeze 값은 front 이미지 빌드 인자로 구워지므로, 이 gate가 보는 `.env.prod`와 Next 번들 외에 별도 호스팅 provider env 경로는 없다.
 
 명시적 예외(이 gate 범위 밖):
 

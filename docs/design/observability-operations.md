@@ -194,7 +194,7 @@ cloud-media 검증·패널 매핑은 [`docs/ops/cloud-media-metrics-verify.md`](
 | AquilaPublicEdgeFirstRequestTtfbHigh | first TTFB >800ms (10m) | Public Edge「Max First Request TTFB」 | cold cache·SSR·배포 직후 |
 | AquilaLokiScrapeDown | Loki scrape down (3m) | `up{job="loki"}` + doctor Monitoring Stack | loki 컨테이너·네트워크·`steady_state_guard` |
 | AquilaPromtailScrapeDown | Promtail scrape down (3m) | `up{job="promtail"}` | promtail·docker log mount |
-| AquilaPublicEdgeProbeRouteDown | edge route probe fail (5m) | Public Edge route panels | Cloudflare / Vercel / origin |
+| AquilaPublicEdgeProbeRouteDown | edge route probe fail (5m) | Public Edge route panels | Cloudflare Tunnel / Caddy / origin |
 | AquilaExternalBackupFailed | backup failure counter↑ (30m) | deploy workflow / backup 메트릭 | 배포 로그·backup 스토리지 |
 | AquilaDeployRollbackDetected | rollback counter↑ (30m) | deploy workflow | 실패 gate·rollback 사유 |
 | AquilaAppException5xxSpike | `app_exception_total{status="500"}` rate >0.2 (5m). **500만** — 의도된 `503-*` USER 응답은 제외 (`error-alerts.yml`) | Logs Overview「App Exception Top-N」 + §1.4 (`status="500"`) | code/source별 분해 → Loki `resultCode` → requestId |

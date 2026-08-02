@@ -38,4 +38,4 @@ reviews:
         Playwright 변경은 실제 실패를 탐지하는지, secret/cookie artifact 노출이 없는지, flaky 대기가 없는지 검토한다.
     - path: ".github/**"
       instructions: |
-        GitHub Actions 변경은 최소 권한, secret 노출, required check drift, Vercel deployment check 충돌을 우선 검토한다.
+        GitHub Actions 변경은 최소 권한, secret 노출, required check drift, 배포 조건 누락을 우선 검토한다.

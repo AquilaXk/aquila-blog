@@ -25,7 +25,6 @@ build
 # Secrets and local environment. Runtime env is injected by the container, not baked in.
 .env
 .env.*
-.vercel
 
 # Test, story and report artifacts.
 coverage

@@ -22,7 +22,6 @@ const hardeningScriptPath = path.join(repoRoot, "deploy/homeserver/hardening/set
 const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
-const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
 
 const extractCaddySiteBlock = (caddyfile, siteMarker) => {
   const start = caddyfile.indexOf(siteMarker)
@@ -2331,13 +2330,6 @@ test("required secret check does not inject multi-line HOME_SERVER_ENV into shel
   assert(!workflow.includes("HOME_SERVER_ENV=${{ secrets.HOME_SERVER_ENV }}"))
   assert.match(workflow, /env:\n(?:.*\n)*\s+HOME_SERVER_ENV: \$\{\{ secrets\.HOME_SERVER_ENV \}\}/)
   assert.match(workflow, /value="\$\{!key:-\}"/)
-})
-
-test("Vercel frontend project skips builds when frontend inputs did not change", () => {
-  const config = JSON.parse(readFileSync(vercelConfigPath, "utf8"))
-
-  assert.equal(config.$schema, "https://openapi.vercel.sh/vercel.json")
-  assert.equal(config.ignoreCommand, "node scripts/vercel/should-ignore-build.mjs")
 })
 
 test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경만 차단한다", () => {

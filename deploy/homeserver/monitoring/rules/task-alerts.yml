@@ -565,19 +565,34 @@ groups:
       # The cache-state source is the Next.js `x-nextjs-cache` header emitted by the home-server
       # front (#1541). Nothing else reports whether ISR is actually caching, so if the header stops
       # arriving the cold-ratio panel and AquilaPublicEdgeColdRatioHigh keep evaluating a value that
-      # can never change again - a dead gauge that still looks green. `absent()` is part of the
-      # expression on purpose: if the home route drops out of the probe's route set the series
-      # disappears entirely, and `min()` over nothing produces no alert at all.
+      # can never change again - a dead gauge that still looks green.
+      #
+      # `absent()` is part of the expression on purpose: if the home route drops out of the probe's
+      # route set the series disappears entirely, and `min()` over nothing produces no alert at all.
+      #
+      # The `max_over_time` term is an activation gate, not decoration. Before the domain cutover
+      # deploy.yml deliberately pins PUBLIC_EDGE_PROBE_BASE_URL to the host the previous platform
+      # still serves (same reasoning as the comment next to that upsert), and that host emits
+      # `x-vercel-cache`, never `x-nextjs-cache`. Without the gate this alert would fire for the
+      # entire transition window while nothing is wrong on the home server.
+      #
+      # Known limit: after 24h of uninterrupted non-observation the gate goes false and the alert
+      # resolves. The non-decaying checks are the `Cache State Header Observed` panel and
+      # front-render-gate's `isr-cache-state-header`, which runs on every front deploy.
       - alert: AquilaPublicEdgeCacheStateUnobserved
         expr: |
-          min(aquila_public_edge_probe_cache_state_observed{route="/"}) < 1
-          or absent(aquila_public_edge_probe_cache_state_observed{route="/"})
+          (
+            min(aquila_public_edge_probe_cache_state_observed{route="/"}) < 1
+            or absent(aquila_public_edge_probe_cache_state_observed{route="/"})
+          )
+          and on()
+          (max(max_over_time(aquila_public_edge_probe_cache_state_observed{route="/"}[24h])) > 0)
         for: 30m
         labels:
           severity: warning
         annotations:
           summary: "Public edge cache state is no longer observable"
-          description: "The home route stopped reporting the Next.js ISR cache-state header for 30m. Cache observability is dead until this is fixed. Check the front container, the Caddy web vhost header handling, and the probe route set."
+          description: "The home route reported the Next.js ISR cache-state header within the last 24h but has stopped for 30m. Cache observability is dead until this is fixed. Check the front container, the Caddy web vhost header handling, and the probe route set."
 
       - alert: AquilaExternalBackupFailed
         expr: increase(aquila_external_backup_failed_total[30m]) > 0

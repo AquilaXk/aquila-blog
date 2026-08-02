@@ -31,7 +31,11 @@ const alertExpr = (alertsText, alertName) => {
 
   const exprEnd = body.indexOf("\n        for:")
   assert.notEqual(exprEnd, -1, `${alertName} expr block is not terminated by a for: line`)
-  return { text: body.slice(0, exprEnd), start: ruleStart + exprStart, end: ruleStart + exprStart + exprEnd }
+  return {
+    text: body.slice(0, exprEnd),
+    start: ruleStart + exprStart,
+    end: ruleStart + exprStart + "expr: |".length + exprEnd,
+  }
 }
 
 const collapseWhitespace = (text) => text.replace(/\s+/g, " ").trim()
@@ -388,7 +392,9 @@ test(
     const expr = alertExpr(alerts, CACHE_STATE_ALERT)
     const shipped = expr.text
 
-    const withoutParentheses = shipped.replace(/^\s*\(\n/, "\n").replace(/\n\s*\)\n(\s*)and on\(\)/, "\n$1and on()")
+    const withoutParentheses = shipped
+      .replace(/^(\n[ \t]*)\(\n[ \t]*/, "$1")
+      .replace(/\n[ \t]*\)\n([ \t]*)and on\(\)/, "\n$1and on()")
     const withOrJoin = shipped.replace("and on()", "or on()")
 
     assert.notEqual(withoutParentheses, shipped, "parenthesis mutation did not change the expr")
@@ -421,6 +427,13 @@ test(
             "        exp_alerts: []",
             "",
           ].join("\n"),
+        )
+
+        const syntax = spawnSync("promtool", ["check", "rules", rulesPath], { encoding: "utf8" })
+        assert.equal(
+          syntax.status,
+          0,
+          `mutation "${name}" must remain syntactically valid:\n${syntax.stdout}\n${syntax.stderr}`,
         )
 
         const result = runPromtoolTest(testPath)

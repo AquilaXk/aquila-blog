@@ -16,6 +16,35 @@ import type { NextPageWithLayout } from "../../types"
 const NEWS_ITEM_COUNT = 3
 const CACHE_CONTROL = "public, max-age=0, s-maxage=300, stale-while-revalidate=600"
 
+/**
+ * 소식은 선택 섹션이다. 그런데 이 fetch의 서버측 정책 타임아웃은 8초(+전이 실패 재시도 1회)라서,
+ * 백엔드가 응답을 늦추면 회사 랜딩의 비캐시 응답 전체가 그만큼 늦어진다. 없어도 되는 섹션 하나가
+ * 페이지의 TTFB를 정하는 셈이다. 그래서 페이지가 스스로 짧은 deadline을 걸고, 넘기면 섹션이
+ * 사라진 채로(빈 목록) 렌더한다.
+ */
+const NEWS_DEADLINE_MS = 1_500
+
+/**
+ * deadline을 넘겨도 진행 중인 fetch를 취소하지는 않는다. getPostsBootstrap에 signal을 넘기면
+ * 서버측 SSR 스냅샷 캐시와 동일 요청 합치기가 함께 꺼져(그 경로는 signal이 없을 때만 쓴다)
+ * 요청마다 백엔드를 새로 때린다. 그대로 두면 늦게 도착한 응답이 스냅샷을 채워 다음 요청이 그
+ * 값을 즉시 쓴다. 남는 promise가 reject를 던지지 않는 것은 loadCompanyNews가 자기 실패를
+ * 이미 빈 목록으로 흡수하기 때문이다.
+ */
+const withDeadline = async <T,>(work: Promise<T>, deadlineMs: number, onDeadline: T): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(onDeadline), deadlineMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 type CompanyPageProps = {
   canonicalUrl: string
   news: CompanyNewsItem[]
@@ -50,7 +79,7 @@ export const getServerSideProps: GetServerSideProps<CompanyPageProps> = async ({
   return {
     props: {
       canonicalUrl: resolvePublicSurfaceUrl("company", req.headers.host),
-      news: await loadCompanyNews(),
+      news: await withDeadline(loadCompanyNews(), NEWS_DEADLINE_MS, []),
     },
   }
 }

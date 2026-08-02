@@ -539,6 +539,22 @@ is_strict_subdomain_of() {
   [[ "${candidate}" == *".${parent}" ]]
 }
 
+# 공개 API가 web 호스트 밖으로 나가지 않는 조합은 둘이다: 같은 호스트(same-origin, #1575) 또는
+# 진성 하위. 동등을 여기서 허용하되 빈 값은 계속 거짓이다 - 빈 값을 참으로 두면 .env.prod에서
+# 호스트가 통째로 빠졌을 때 점검이 조용히 사라진다.
+is_same_or_strict_subdomain_of() {
+  local candidate="$1"
+  local parent="$2"
+
+  if [[ -z "${candidate}" || -z "${parent}" ]]; then
+    return 1
+  fi
+  if [[ "${candidate}" == "${parent}" ]]; then
+    return 0
+  fi
+  [[ "${candidate}" == *".${parent}" ]]
+}
+
 print_section "Basic Info"
 echo "Host: $(hostname)"
 echo "Time: $(date -Is)"
@@ -621,19 +637,20 @@ echo "CUSTOM_PROD_BACKURL host:  ${back_host:-<empty>}"
 echo "CUSTOM_PROD_COOKIEDOMAIN:  ${cookie_domain:-<empty>}"
 echo "API_DOMAIN:                ${api_domain:-<empty>}"
 
-# 쿠키 스코프는 front 호스트 그 자체여야 하고, 공개 API는 그 하위에 있어야 한다.
-# front가 쿠키 도메인의 형제이거나 API가 형제 subtree에 있으면 공통 접미사가 한 단계 위로
-# 올라가, 우리 소유가 아닌 상위 호스트로 세션 쿠키가 전송된다.
+# 쿠키 스코프는 front 호스트 그 자체여야 하고, 공개 API는 그 호스트 자신이거나(same-origin,
+# #1575의 목표 위상) 그 하위여야 한다. front가 쿠키 도메인의 형제이거나 API가 형제 subtree에
+# 있으면 공통 접미사가 한 단계 위로 올라가, 우리 소유가 아닌 상위 호스트로 세션 쿠키가 전송된다.
 #
 # front/back 관계 점검은 cookie_domain이 비어 있어도 사라지면 안 된다. 쿠키 도메인이 통째로
 # 빠진 .env.prod가 가장 위험한 상태인데, 그때 점검이 함께 사라지면 아무 WARN도 안 나온다.
-if [[ -n "${front_host}" && -n "${back_host}" ]] && ! is_strict_subdomain_of "${back_host}" "${front_host}"; then
+if [[ -n "${front_host}" && -n "${back_host}" ]] \
+  && ! is_same_or_strict_subdomain_of "${back_host}" "${front_host}"; then
   # 전환 창에는 이 WARN이 예상된 상태지만, 그 판정을 문구에 상수로 박으면 전환이 끝난 뒤
   # 진짜 위험한 조합에서도 "예상된 것"이라고 말하게 된다. 상태는 API_DOMAIN으로 구분한다.
-  if [[ "${api_domain}" == "api.aquilaxk.site" ]]; then
-    echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - expected while API_DOMAIN is still the pre-transition host (#1540)"
+  if [[ "${api_domain}" == "api.aquilaxk.site" && "${back_host}" == "api.aquilaxk.site" ]]; then
+    echo "WARN: BACKURL host must be the FRONTURL host or sit strictly under it (${back_host} vs ${front_host}) - expected while CUSTOM_PROD_BACKURL is still the pre-transition API origin (#1575)"
   else
-    echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - the shared suffix widens the auth cookie scope above ${front_host}"
+    echo "WARN: BACKURL host must be the FRONTURL host or sit strictly under it (${back_host} vs ${front_host}) - the shared suffix widens the auth cookie scope above ${front_host}"
   fi
 fi
 
@@ -641,12 +658,22 @@ if [[ -n "${cookie_domain}" && -n "${front_host}" && "${cookie_domain}" != "${fr
   echo "WARN: COOKIEDOMAIN must equal FRONTURL host (${cookie_domain} vs ${front_host}) - auth cookies would reach hosts above ${front_host}"
 fi
 
-if [[ -n "${cookie_domain}" && -n "${back_host}" ]] && ! is_strict_subdomain_of "${back_host}" "${cookie_domain}"; then
-  echo "WARN: BACKURL host must sit strictly under COOKIEDOMAIN (${back_host} vs ${cookie_domain})"
+if [[ -n "${cookie_domain}" && -n "${back_host}" ]] \
+  && ! is_same_or_strict_subdomain_of "${back_host}" "${cookie_domain}"; then
+  echo "WARN: BACKURL host must be the COOKIEDOMAIN host or sit strictly under it (${back_host} vs ${cookie_domain})"
 fi
 
-if [[ -n "${api_domain}" && -n "${back_host}" && "${api_domain}" != "${back_host}" ]]; then
-  echo "WARN: API_DOMAIN does not match BACKURL host (${api_domain} vs ${back_host})"
+# API_DOMAIN은 #1575 이후 공개 API 호스트가 아니라 host 기반 API vhost 주소다. BACKURL과 같은
+# 값일 이유가 없어졌고, 대신 web 호스트와 겹치면 Caddy site address가 중복돼 edge 전체가 뜨지
+# 못한다. 이전 "API_DOMAIN != BACKURL host" WARN을 그대로 두면 정상 위상에서 상시 경고가 된다.
+#
+# 비교 대상은 FRONTURL host가 아니라 WEB_DOMAIN이다. 실제로 Caddy site address로 보간되는 값이
+# WEB_DOMAIN이고, 계약이 둘을 묶긴 하지만 doctor는 손으로 편집된 .env.prod를 보는 도구다 -
+# FRONTURL만 보면 정확히 WEB_DOMAIN == API_DOMAIN인 조합(=edge가 못 뜨는 조합)을 놓친다.
+web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+echo "WEB_DOMAIN:                ${web_domain:-<empty>}"
+if [[ -n "${api_domain}" && -n "${web_domain}" && "${api_domain}" == "${web_domain}" ]]; then
+  echo "WARN: API_DOMAIN duplicates WEB_DOMAIN (${api_domain}) - two Caddy site blocks would share one address and the edge would fail to start"
 fi
 
 print_section "Grafana Embed Route"

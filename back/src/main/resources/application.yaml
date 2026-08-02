@@ -160,12 +160,16 @@ custom:
     redisPort: ${CUSTOM__TEST__REDIS_PORT:16379}
     redisDatabase: 1
   prod:
-    # 쿠키 도메인은 front 호스트 그 자체다. back은 그 하위(api.<cookieDomain>)에 둔다.
+    # 쿠키 도메인은 front 호스트 그 자체이고, 공개 API도 같은 호스트의 경로다(#1575 same-origin).
     # front/back의 공통 접미사가 곧 쿠키 스코프이므로(AuthCookieDomainPolicy),
-    # front를 cookieDomain의 형제(www.<cookieDomain>)로 두면 쿠키가 한 단계 위로 새어 나간다.
-    cookieDomain: blog.oa.gg
+    # front를 cookieDomain의 형제(www.<cookieDomain>)로 두거나 back을 형제 subtree
+    # (api.<apex>)에 두면 쿠키가 한 단계 위로 새어 나간다.
+    # 이 값이 실제로 쓰이는 것은 CUSTOM_PROD_COOKIEDOMAIN 바인딩이 없을 때뿐이다. 그때
+    # site.frontUrl/backUrl이 전부 이 호스트에서 파생되므로, 공개 호스트와 다른 값이면 쿠키
+    # Domain과 OAuth redirect-uri가 조용히 엉뚱한 호스트를 가리킨다. 기본값도 공개 호스트로 둔다.
+    cookieDomain: blog.aquilaxk.site
     frontUrl: "https://${custom.prod.cookieDomain}"
-    backUrl: "https://api.${custom.prod.cookieDomain}"
+    backUrl: "https://${custom.prod.cookieDomain}"
     dbHost: pg_1
     dbPort: 5432
     dbName: "${custom.dbBaseName}_prod"

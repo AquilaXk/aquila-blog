@@ -849,17 +849,25 @@ jobs:
           upsert_env_key "SPRING_SQL_INIT_MODE" "never" "deploy/homeserver/.env.prod"
 
           # Live auth cookies are scoped to the front/back shared suffix (AuthCookieDomainPolicy).
-          # The public web host is blog.aquilaxk.site and the public API host is api.blog.aquilaxk.site,
-          # so the cookie Domain stays inside the blog subtree. The apex and www hosts belong to a
-          # different service and must never receive this blog's session cookies.
+          # Since #1575 the public web host and the public API origin are the same host
+          # (blog.aquilaxk.site, API served by path), so that shared suffix IS the web host and the
+          # apex and www hosts - which belong to a different service - can never receive this blog's
+          # session cookies.
           #
-          # The values must move together, so they are derived from a single switch: API_DOMAIN in
-          # HOME_SERVER_ENV. Repository changes alone never flip the live domain - the owner flips it
-          # by updating the secret, and this block follows in the same deploy. The same table lives in
-          # deploy/env/env.contract.json (cookieDomainScope.topologies) and a test pins them together.
+          # The values must move together, so they are derived from a single switch:
+          # CUSTOM_PROD_BACKURL in HOME_SERVER_ENV, compared by HOST. It replaced API_DOMAIN as the
+          # switch in #1575: API_DOMAIN is now only the Caddy host-based API vhost address and must
+          # differ from WEB_DOMAIN, so it can no longer name the public API. Repository changes alone
+          # never flip the live domain - the owner flips it by updating the secret, and this block
+          # follows in the same deploy. The same table lives in deploy/env/env.contract.json
+          # (cookieDomainScope.topologies) and a test pins them together.
           #
-          # An undeclared API_DOMAIN is already rejected on the runner by the contract's allowedValues,
-          # before this remote script has touched anything. The abort below is the second line only.
+          # Comparing by host, not by raw URL: a trailing slash or an uppercase label would otherwise
+          # drop into the abort branch and block a deploy the env contract just accepted.
+          #
+          # An undeclared host is already rejected on the runner by the contract's cookieDomainScope
+          # ("has no declared prod site topology"), before this remote script has touched anything.
+          # The abort below is the second line only.
           #
           # Key parsing must not be narrower than tools/env/validate-env.mjs parseEnvText, otherwise a
           # value the contract accepts (leading spaces, `export ` prefix) would fail only at deploy.
@@ -876,41 +884,55 @@ jobs:
             ' deploy/homeserver/.env.prod | tail -n 1
           }
 
-          PROD_SITE_API_DOMAIN="$(read_prod_env_value API_DOMAIN)"
-          case "${PROD_SITE_API_DOMAIN}" in
-            api.blog.aquilaxk.site)
+          # Must parse the host the same way tools/env/validate-env.mjs does (new URL().hostname),
+          # or a value the contract accepts dies only at deploy time. Order matters: strip the path
+          # first (a path may contain '@'), then userinfo, then the port - userinfo can itself
+          # contain ':' (user:pass@host), so stripping the port first would truncate inside it.
+          PROD_SITE_BACK_URL_RAW="$(read_prod_env_value CUSTOM_PROD_BACKURL)"
+          PROD_SITE_BACK_HOST="${PROD_SITE_BACK_URL_RAW#*://}"
+          PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST%%/*}"
+          PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST##*@}"
+          PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST%%:*}"
+          PROD_SITE_BACK_HOST="$(printf '%s' "${PROD_SITE_BACK_HOST}" | tr '[:upper:]' '[:lower:]')"
+          case "${PROD_SITE_BACK_HOST}" in
+            blog.aquilaxk.site)
+              # Same-origin topology (#1575): the public API is served from the web host by path,
+              # so the front/back shared suffix is the web host itself.
               PROD_SITE_COOKIE_DOMAIN="blog.aquilaxk.site"
               PROD_SITE_FRONT_URL="https://blog.aquilaxk.site"
               PROD_SITE_WEB_DOMAIN="blog.aquilaxk.site"
-              PROD_SITE_BACK_URL="https://api.blog.aquilaxk.site"
+              PROD_SITE_BACK_URL="https://blog.aquilaxk.site"
               PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://blog.aquilaxk.site"
               PROD_SITE_ADMIN_EMBED_ORIGINS="https://blog.aquilaxk.site"
               PROD_SITE_REVALIDATE_URL="https://blog.aquilaxk.site/api/revalidate"
               ;;
             api.aquilaxk.site)
-              # Pre-transition state: HOME_SERVER_ENV still carries the old API host, so the old
-              # site scope is kept intact. Remove this branch once the secret is updated (#1540).
+              # Pre-transition state: HOME_SERVER_ENV still carries the old API origin, so the old
+              # site scope is kept intact. Remove this branch once the secret is updated (#1575).
               PROD_SITE_COOKIE_DOMAIN="aquilaxk.site"
               PROD_SITE_FRONT_URL="https://www.aquilaxk.site"
               # Deliberately empty before the cutover. Pinning it would create a Caddy web vhost
               # for the host we are abandoning (and that another service takes over), and the
               # front tier is not verified yet at that point - the runbook step 2 guarantees the
-              # web vhost stays on its unreachable default until step 4.
+              # web vhost stays on its unreachable default until the cutover deploy.
               PROD_SITE_WEB_DOMAIN=""
               PROD_SITE_BACK_URL="https://api.aquilaxk.site"
               PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://www.aquilaxk.site"
               PROD_SITE_ADMIN_EMBED_ORIGINS="https://www.aquilaxk.site"
               PROD_SITE_REVALIDATE_URL="https://www.aquilaxk.site/api/revalidate"
-              echo "WARNING: API_DOMAIN is still the pre-transition host (${PROD_SITE_API_DOMAIN}). Update HOME_SERVER_ENV to api.blog.aquilaxk.site to activate the blog domain contract." >&2
+              echo "WARNING: CUSTOM_PROD_BACKURL is still the pre-transition API origin (${PROD_SITE_BACK_HOST}). Update HOME_SERVER_ENV to https://blog.aquilaxk.site to activate the same-origin blog domain contract." >&2
               ;;
             *)
-              echo "unsupported API_DOMAIN for the prod site contract: '${PROD_SITE_API_DOMAIN}'" >&2
+              echo "unsupported CUSTOM_PROD_BACKURL host for the prod site contract: '${PROD_SITE_BACK_HOST}'" >&2
               exit 1
               ;;
           esac
 
           upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "${PROD_SITE_COOKIE_DOMAIN}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM_PROD_FRONTURL" "${PROD_SITE_FRONT_URL}" "deploy/homeserver/.env.prod"
+          # The switch key writes itself back in canonical form. The case above matched on the host
+          # alone, so a trailing slash or an uppercase label reaches the containers normalised
+          # instead of flowing into custom.site.backUrl (and from there into the OAuth redirect-uri).
           upsert_env_key "CUSTOM_PROD_BACKURL" "${PROD_SITE_BACK_URL}" "deploy/homeserver/.env.prod"
           # Caddy web vhost address (#1538). Left behind it would 404 the public site after the
           # cutover while urlHostEquals(CUSTOM_PROD_FRONTURL, WEB_DOMAIN) blocks the deploy.
@@ -1315,6 +1337,28 @@ jobs:
 
           if ! wait_public_api_health "${API_DOMAIN}"; then
             rollback_and_exit "public_api_healthcheck_failed"
+          fi
+
+          # Same-origin public API surface gate (#1575). Every check above targets API_DOMAIN, the
+          # host the transition is leaving. Without this, dropping a prefix from the web vhost's
+          # @backendApi matcher would leave CD fully green while every public API call 404s from
+          # Next.js - the failure would only surface in a browser.
+          #
+          # Probed through the edge network with a Host header, not over public HTTPS: WEB_DOMAIN is
+          # pinned by this deploy but its DNS/Tunnel hostname is a later manual step, so a public
+          # HTTPS probe would fail the very deploy that introduces the host. This form checks the
+          # Caddy routing itself, which is what can regress here, and works before and after DNS.
+          WEB_DOMAIN_VALUE="$(read_prod_env_value WEB_DOMAIN)"
+          if [ -n "${WEB_DOMAIN_VALUE}" ]; then
+            for web_api_probe_path in "/actuator/health/readiness" "/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT"; do
+              WEB_API_CODE="$(docker run --rm --network blog_home_edge curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80${web_api_probe_path}" -H "Host: ${WEB_DOMAIN_VALUE}" || true)"
+              echo "post-deploy web-host api route: host=${WEB_DOMAIN_VALUE} path=${web_api_probe_path} status=${WEB_API_CODE}"
+              if ! echo "${WEB_API_CODE}" | grep -Eq '^2[0-9][0-9]$'; then
+                rollback_and_exit "web_host_api_route_failed"
+              fi
+            done
+          else
+            echo "WEB_DOMAIN is unset: skipping the same-origin public API route gate (pre-cutover)"
           fi
 
           header_value_from_file() {

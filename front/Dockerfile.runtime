@@ -51,7 +51,11 @@ COPY . .
 # Defaults are the production values (#1540). They are defaults, not a pin: a caller can still
 # override them with --build-arg. Leaving them empty is what made site.config.js `isProd` false and
 # the canonical/OG URLs wrong in every image, with no error anywhere.
-ARG NEXT_PUBLIC_BACKEND_URL="https://api.blog.aquilaxk.site"
+# Same-origin with NEXT_PUBLIC_SITE_URL since #1575: the public API is served from the web host by
+# path, so browser calls are not cross-origin at all. A separate API host here would need an edge
+# CORS allowlist again - and api.blog.aquilaxk.site specifically cannot exist, because a two-label
+# subdomain is outside Cloudflare Universal SSL (TLS alert 40, measured).
+ARG NEXT_PUBLIC_BACKEND_URL="https://blog.aquilaxk.site"
 ARG NEXT_PUBLIC_SITE_URL="https://blog.aquilaxk.site"
 # soft-launch gate가 얼려 둔 값이다. config/env.contract.json이 다른 값을 거부한다.
 ARG NEXT_PUBLIC_SIGNUP_ENABLED="false"

@@ -190,6 +190,24 @@ groups:
           summary: "Back API readiness path is unavailable"
           description: "No blue/green API backend readiness endpoint has returned 200 for 3m."
 
+      # front readiness는 front -> backend 서버 사이드 프록시 경로를 재는 것이라, 여기가 0이면
+      # 컨테이너가 healthy여도 로그인·목록·상세가 전부 죽은 상태다(#1539 실측).
+      #
+      # 두 번째 항이 필요한 이유: front 프로필을 끄는 것은 문서화된 rollback 경로다
+      # (docs/ops/homeserver-front-domain-cutover.md). 컨테이너가 아예 없는 상태에서도 readiness는
+      # 0이므로, 조건 없이 걸면 의도한 rollback이 critical 알람을 계속 울린다.
+      - alert: AquilaFrontReadinessDown
+        expr: |
+          max(aquila_backend_readiness_up{component="front"}) < 1
+          and
+          max(docker_container_running{job="docker_runtime_probe",service=~"front_(blue|green)"}) == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Front backend-proxy readiness path is unavailable"
+          description: "A front container is running but no blue/green front readiness probe has returned 200 for 5m. Check BACKEND_INTERNAL_URL, the Caddy internal site address, and backend health."
+
       - alert: AquilaBackWorkerScrapeDown
         expr: max(up{job="back",service="aquila-back",component="worker"}) < 1
         for: 3m
@@ -249,7 +267,7 @@ groups:
           description: "Prometheus cannot scrape docker_runtime_probe for 3m. Check probe container health and docker socket access."
 
       - alert: AquilaContainerRestarted
-        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1|cloudflared|autoheal|docker_socket_proxy|postgres_exporter"}[15m]) > 0
+        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|front_.+|db_1|redis_1|minio_1|cloudflared|autoheal|docker_socket_proxy|postgres_exporter"}[15m]) > 0
         for: 1m
         labels:
           severity: warning

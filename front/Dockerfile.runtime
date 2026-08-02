@@ -84,6 +84,14 @@ COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static
 COPY --from=builder --chown=app:app /app/public ./public
 
+# `.next/cache` is a compose named volume (deploy/homeserver/docker-compose.prod.yml, #1538).
+# `next build` does not emit it, and Docker creates a missing mount point as root:root, so the
+# non-root runtime cannot write the optimized-image cache into it. Measured: with the volume
+# mounted and this line absent, `/_next/image` still answers 200 and the cache directory stays
+# empty — the degradation is invisible from outside. Docker copies this directory's ownership
+# onto a fresh volume, so it must exist and belong to the runtime user before the mount.
+RUN mkdir -p .next/cache && chown app:app .next/cache
+
 USER app
 
 EXPOSE 3000

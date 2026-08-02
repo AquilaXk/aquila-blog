@@ -132,24 +132,43 @@ AUTO_MEMORY_TUNER_MAX_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_M
 AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB}" "2048")"
 AUTO_MEMORY_TUNER_MIN_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MIN_BUDGET_MB}" "1280")"
 
+# env_value/trim_quotes는 이 파일 뒤쪽에 정의돼 있다. 호출은 compose() 실행 시점이라 순서 문제는
+# 없고, ENV_FILE이 아직 없는 단계에서 부를 수 있으므로 존재 여부를 먼저 본다.
+compose_profiles_from_env_file() {
+  [[ -f "${ENV_FILE}" ]] || return 0
+  trim_quotes "$(env_value "COMPOSE_PROFILES")"
+}
+
+# COMPOSE_PROFILES는 셸과 .env.prod 양쪽에 존재할 수 있는데, compose()가 해석 결과를 항상 명시
+# 지정하므로 셸만 읽으면 .env.prod가 켠 프로필이 조용히 사라진다. RUNTIME_SPLIT_ENABLED=true인
+# 배포 경로에서는 항상 "runtime-split" 하나만 반환돼 front 프로필이 통째로 유실됐다.
+# 두 출처와 runtime-split 파생을 합집합으로 병합한다.
 resolve_compose_profiles() {
-  local profiles="${COMPOSE_PROFILES:-}"
-  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
-    echo "${profiles}"
-    return
+  local raw="${COMPOSE_PROFILES:-},$(compose_profiles_from_env_file)"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    raw="${raw},runtime-split"
   fi
 
-  if [[ -z "${profiles}" ]]; then
-    echo "runtime-split"
-    return
-  fi
+  local profile out=""
+  local IFS=','
+  for profile in ${raw}; do
+    profile="${profile//[[:space:]]/}"
+    [[ -n "${profile}" ]] || continue
+    [[ ",${out}," == *",${profile},"* ]] && continue
+    if [[ -z "${out}" ]]; then
+      out="${profile}"
+    else
+      out="${out},${profile}"
+    fi
+  done
+  echo "${out}"
+}
 
-  if [[ ",${profiles}," == *",runtime-split,"* ]]; then
-    echo "${profiles}"
-    return
-  fi
-
-  echo "${profiles},runtime-split"
+compose_profile_enabled() {
+  local wanted="$1"
+  local profiles
+  profiles="$(resolve_compose_profiles)"
+  [[ ",${profiles}," == *",${wanted},"* ]]
 }
 
 materialize_service_env_files() {
@@ -588,9 +607,20 @@ check_cloudflared_runtime() {
   echo "cloudflared runtime check ok: status=${status}, restart_count=${restart_count}, registration=${has_registration_log}"
 }
 
+# CRLF로 저장된 .env.prod에서는 값 끝에 \r이 남는다. trim_quotes가 그 뒤에 돌면 마지막 문자가
+# \r이라 닫는 따옴표를 못 떼고 `front"` 같은 값이 나온다. COMPOSE_PROFILES면 프로필이 조용히
+# 비활성화되고, 비밀번호·키면 인증이 깨진다. 읽는 지점에서 없앤다
+# (rollback_last_deploy.sh의 env_value와 deploy.yml의 extract_env_value_from_text가 쓰는 방식).
 env_value() {
   local key="$1"
-  awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
+  awk -F= -v key="${key}" '
+    $1 == key {
+      value = substr($0, index($0, "=") + 1)
+      gsub(/\r/, "", value)
+      print value
+      exit
+    }
+  ' "${ENV_FILE}"
 }
 
 trim_quotes() {
@@ -2657,6 +2687,13 @@ else
 fi
 edge_services_to_boot=(caddy cloudflared)
 compose_up_with_retry "${edge_services_to_boot[@]}"
+# 프로필만 켜고 boot 목록에 없으면 `compose up`이 front 컨테이너를 아예 만들지 않는다.
+# 프로필이 꺼져 있을 때 이름을 넘기면 compose가 "no such service"로 실패하므로 조건부로 넣는다.
+front_services_to_boot=()
+if compose_profile_enabled "front"; then
+  front_services_to_boot=(front_blue front_green)
+  compose_up_with_retry "${front_services_to_boot[@]}"
+fi
 ensure_monitoring_bind_mount_permissions
 # force-recreate --no-deps so json-file max-size/max-file logging applies without
 # recreating backend/DB dependencies (logging opts bind at container create).
@@ -2671,6 +2708,7 @@ compose_up_force_recreate_no_deps_with_retry "${monitoring_services_to_boot[@]}"
 warn_crashlooping_services \
   "${services_to_boot[@]}" \
   "${edge_services_to_boot[@]}" \
+  ${front_services_to_boot[@]+"${front_services_to_boot[@]}"} \
   "${monitoring_services_to_boot[@]}" \
   docker_socket_proxy || true
 reset_grafana_admin_password

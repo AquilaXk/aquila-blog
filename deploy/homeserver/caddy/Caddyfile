@@ -259,3 +259,56 @@ http://{$API_DOMAIN} {
     }
   }
 }
+
+# Public web host (#1538). Value is WEB_DOMAIN=blog.aquilaxk.site (Epic #1535 Locked Decision 5).
+# www.aquilaxk.site is retired without a redirect (Locked Decision 6), so this vhost carries the
+# one address and no `redir` exists anywhere in this file.
+#
+# The .localhost default is not cosmetic: an unset WEB_DOMAIN leaves the address as bare
+# `http://`, which caddy adapt turns into a route with no host matcher — a port-80 catch-all that
+# answers every hostname the other vhosts do not claim (verified with `caddy adapt`). An
+# unreachable localhost vhost is the fail-closed shape, matching MONITOR/GRAFANA/PROMETHEUS.
+http://{$WEB_DOMAIN:web.localhost} {
+  log {
+    output stdout
+    format json
+  }
+
+  # Capture trusted client IP before stripping spoofable hop headers.
+  # front API routes (rum/vitals, rum/client-errors) must see a client IP they can trust.
+  # request_header supports single-line ops only (no block form; unlike `header`).
+  vars {
+    trusted_client_ip {http.request.header.CF-Connecting-IP}
+  }
+  request_header -X-Forwarded-For
+  request_header -CF-Connecting-IP
+  request_header -True-Client-IP
+  request_header -X-Real-IP
+
+  # /_next/static/* is content-hashed and immutable. Next.js already emits this exact
+  # Cache-Control, so the `?` prefix asserts a floor without overwriting the app's value.
+  # front/next.config.js owns the security headers; this vhost must not strip or weaken them,
+  # which is why there is no site-level `header` block and no `header_down` here (HR-56).
+  @nextImmutable path /_next/static/*
+  header @nextImmutable {
+    ?Cache-Control "public, max-age=31536000, immutable"
+  }
+
+  # Blue/Green cutover rewrites the single active upstream host (#1539 owns the switch).
+  handle {
+    encode gzip zstd
+
+    reverse_proxy {$WEB_UPSTREAM:front_blue}:3000 {
+      # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to Caddy is
+      # plain HTTP. Next.js builds absolute URLs from forwarded headers, so pin them here.
+      import trusted_edge_client_ip
+      header_up Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 15s
+      }
+    }
+  }
+}

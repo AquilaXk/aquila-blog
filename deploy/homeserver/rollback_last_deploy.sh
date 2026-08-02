@@ -37,24 +37,33 @@ normalize_bool() {
 
 RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED}")"
 
+# env_value/trim_quotes는 이 파일 뒤쪽에 정의돼 있다. 호출은 compose() 실행 시점이다.
+compose_profiles_from_env_file() {
+  [[ -f "${ENV_FILE}" ]] || return 0
+  trim_quotes "$(env_value "COMPOSE_PROFILES")"
+}
+
+# blue_green_deploy.sh와 같은 해석을 써야 한다. 롤백이 배포보다 좁은 프로필로 compose를 부르면
+# 배포가 띄운 서비스를 롤백이 보지 못한다.
 resolve_compose_profiles() {
-  local profiles="${COMPOSE_PROFILES:-}"
-  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
-    echo "${profiles}"
-    return
+  local raw="${COMPOSE_PROFILES:-},$(compose_profiles_from_env_file)"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    raw="${raw},runtime-split"
   fi
 
-  if [[ -z "${profiles}" ]]; then
-    echo "runtime-split"
-    return
-  fi
-
-  if [[ ",${profiles}," == *",runtime-split,"* ]]; then
-    echo "${profiles}"
-    return
-  fi
-
-  echo "${profiles},runtime-split"
+  local profile out=""
+  local IFS=','
+  for profile in ${raw}; do
+    profile="${profile//[[:space:]]/}"
+    [[ -n "${profile}" ]] || continue
+    [[ ",${out}," == *",${profile},"* ]] && continue
+    if [[ -z "${out}" ]]; then
+      out="${profile}"
+    else
+      out="${out},${profile}"
+    fi
+  done
+  echo "${out}"
 }
 
 compose() {

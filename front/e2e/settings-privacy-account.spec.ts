@@ -291,6 +291,9 @@ test("settings privacy reconsent gate submits three consents and returns to next
   await fulfillPrivacyExport(page)
   await page.route("**/member/api/v1/auth/legal-reconsent", async (route) => {
     reconsentBody = route.request().postDataJSON()
+    // 저장에 성공하면 서버 세션도 CURRENT가 된다. 복귀 경로가 세션을 재조회해도 게이트로
+    // 되돌아가지 않도록 목을 실제 상태 전이와 같게 갱신한다.
+    await fulfillLegalSession(page, legalReconsentCurrent)
     await route.fulfill({
       status: 200,
       contentType: "application/json",

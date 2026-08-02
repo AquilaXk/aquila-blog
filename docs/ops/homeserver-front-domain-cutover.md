@@ -32,9 +32,11 @@
    보낸다. 등록 확인 전에는 3번을 시작하지 않는다.
 2. **홈서버 env에 front 키를 넣고 front를 기동한다.** `HOME_SERVER_ENV`에 다음을 추가한다.
    - `FRONT_BLUE_IMAGE=ghcr.io/aquilaxk/aquila-blog-front@sha256:...` (digest 전용)
-   - `FRONT_GREEN_IMAGE=` **같은 digest** — 두 색깔이 모두 정의돼 있어 프로필을 켜면 두 키가
-     모두 필요하다. compose는 image가 빈 서비스를 거부한다. 두 값이 갈라지는 것은 cutover
-     시점이며, `BACK_BLUE_IMAGE`/`BACK_GREEN_IMAGE`가 이미 같은 방식으로 동작한다.
+   - `FRONT_GREEN_IMAGE=ghcr.io/aquilaxk/aquila-blog-front@sha256:...` — **`FRONT_BLUE_IMAGE`와
+     같은 digest를 그대로 적는다.** 두 색깔이 모두 정의돼 있어 프로필을 켜면 두 키가 모두 필요하고,
+     compose는 image가 빈 서비스를 `neither an image nor a build context`로 거부한다. 값을 비워
+     두면 안 된다. 두 digest가 갈라지는 것은 cutover 시점(#1539가 새 색깔에만 새 digest를 넣는다)
+     이며, `BACK_BLUE_IMAGE`/`BACK_GREEN_IMAGE`가 이미 같은 방식으로 동작한다.
    - `BACKEND_INTERNAL_URL=http://back-blue:8080` — **없으면 front가 모든 SSR 경로에서 500이다.**
      `front/src/libs/server/backend.ts`가 production에서 이 값 없이는 throw하고, 이미지가
      `NODE_ENV=production`을 박고 있다. compose 내부 주소만 쓰고 공개 인터넷을 왕복하지 않는다.

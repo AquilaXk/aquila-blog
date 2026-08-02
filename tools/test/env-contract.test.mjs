@@ -2900,6 +2900,15 @@ test("배포·롤백 스크립트는 env 파일의 COMPOSE_PROFILES를 병합하
 
   assert.match(deployScript, /compose_profile_enabled "front"/)
   assert.match(deployScript, /front_services_to_boot=\(front_blue front_green\)/)
+
+  // CRLF로 저장된 .env.prod에서는 값 끝에 \r이 남는다. trim_quotes가 그 뒤에 돌면 마지막 문자가
+  // \r이라 닫는 따옴표를 못 떼고 `front"`가 되어 프로필이 조용히 꺼진다. 같은 리더가 DB 비밀번호와
+  // 스토리지 키도 읽으므로 값 손상 범위가 프로필에 그치지 않는다. 읽는 지점에서 없앤다.
+  for (const [name, script] of [["blue_green_deploy.sh", deployScript], ["rollback_last_deploy.sh", rollbackScript]]) {
+    const envValueBody = script.slice(script.indexOf("env_value() {"), script.indexOf("trim_quotes() {"))
+    assert.notEqual(envValueBody, "", `${name} must define env_value before trim_quotes`)
+    assert.match(envValueBody, /gsub\(\/\\r\/, "", value\)/, `${name} env_value must strip CR`)
+  }
 })
 
 // .env.prod.example은 deploy.yml이 HOME_SERVER_ENV 부재 시 .env.prod로 복사하는 파일이고

@@ -607,9 +607,20 @@ check_cloudflared_runtime() {
   echo "cloudflared runtime check ok: status=${status}, restart_count=${restart_count}, registration=${has_registration_log}"
 }
 
+# CRLF로 저장된 .env.prod에서는 값 끝에 \r이 남는다. trim_quotes가 그 뒤에 돌면 마지막 문자가
+# \r이라 닫는 따옴표를 못 떼고 `front"` 같은 값이 나온다. COMPOSE_PROFILES면 프로필이 조용히
+# 비활성화되고, 비밀번호·키면 인증이 깨진다. 읽는 지점에서 없앤다
+# (rollback_last_deploy.sh의 env_value와 deploy.yml의 extract_env_value_from_text가 쓰는 방식).
 env_value() {
   local key="$1"
-  awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
+  awk -F= -v key="${key}" '
+    $1 == key {
+      value = substr($0, index($0, "=") + 1)
+      gsub(/\r/, "", value)
+      print value
+      exit
+    }
+  ' "${ENV_FILE}"
 }
 
 trim_quotes() {

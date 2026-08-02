@@ -189,12 +189,17 @@ jobs:
 
       # 홈서버 관측·검증 게이트의 판정 로직. 이 스텝이 없으면 게이트 파일만 저장소에 남고
       # 판정이 언제 깨졌는지는 다음 수동 실행 때까지 아무도 모른다 (#1541).
+      #
+      # monitoring-alerts.test.mjs가 여기 있는 이유: task-alerts.yml의 알람 계약을 소유하는데
+      # 그동안 어떤 워크플로에도 걸려 있지 않았다. promtool이 있는 환경에서는 rule 문법과
+      # cache-state 알람 동작까지 함께 본다(없으면 구조 단언만 도는 것을 테스트가 명시한다).
       - name: Test homeserver front verification gates
         run: >-
           node --test
           tools/test/public-edge-probe.test.mjs
           tools/test/docker-runtime-probe.test.mjs
           tools/test/front-render-gate.test.mjs
+          tools/test/monitoring-alerts.test.mjs
 
       - name: Test Platform deploy workflow classification
         run: bash tools/test/verify-deploy-workflow-classification.sh

@@ -576,9 +576,23 @@ groups:
       # `x-vercel-cache`, never `x-nextjs-cache`. Without the gate this alert would fire for the
       # entire transition window while nothing is wrong on the home server.
       #
-      # Known limit: after 24h of uninterrupted non-observation the gate goes false and the alert
-      # resolves. The non-decaying checks are the `Cache State Header Observed` panel and
-      # front-render-gate's `isr-cache-state-header`, which runs on every front deploy.
+      # Two known holes, both measured with promtool and pinned in
+      # tools/test/task-alerts.promtool-test.yml. They sit on opposite ends of the same `[24h]`
+      # knob, so widening the window trades one for the other and fixes neither. #1602 owns the
+      # real fix: drive the activation from a signal that does not decay (WEB_DOMAIN is only
+      # present after cutover and is deleted on rollback).
+      #
+      #   1. Decay. After 24h of uninterrupted non-observation the gate goes false and the alert
+      #      resolves on its own - not because the fault ended. The surfaces that do not decay are
+      #      the `Cache State Header Observed` panel on the blog-public-edge dashboard and the
+      #      `isr-cache-state-header` check in deploy/homeserver/front-render-gate.mjs. That gate
+      #      has no automated caller today: it runs from the two manual commands in
+      #      docs/ops/homeserver-front-domain-cutover.md. Wiring it is part of #1602.
+      #   2. Rollback direction. Rolling the cutover back (runbook Rollback table: delete the
+      #      WEB_DOMAIN line and restore the probe base URL) leaves up to 24h of prior observation
+      #      behind, so this alert fires for that long against a host that is not ours any more.
+      #      During a rollback, treat a firing instance whose probe base URL is not the home-server
+      #      web host as expected and ignore it; it clears once the 24h window empties.
       - alert: AquilaPublicEdgeCacheStateUnobserved
         expr: |
           (

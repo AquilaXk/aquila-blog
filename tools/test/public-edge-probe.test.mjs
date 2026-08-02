@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
 import http from "node:http"
-import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs"
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -112,22 +112,8 @@ test("public edge probe ignores the Vercel cache header and flags the missing st
   })
 })
 
-// 전환 전 deploy.yml은 PUBLIC_EDGE_PROBE_BASE_URL을 이전 플랫폼이 서빙하는 호스트로 핀한다. 그
-// 호스트는 x-nextjs-cache를 내지 않으므로, 활성화 게이트가 없으면 이 알람이 전환 창 내내 울린다.
-test("cache-state alert only evaluates after the header has been observed", () => {
-  const alerts = readFileSync(
-    path.resolve(import.meta.dirname, "../../deploy/homeserver/monitoring/rules/task-alerts.yml"),
-    "utf8",
-  )
-  const rule = alerts.slice(alerts.indexOf("alert: AquilaPublicEdgeCacheStateUnobserved"))
-  const expr = rule.slice(0, rule.indexOf("annotations:"))
-
-  assert.match(expr, /absent\(aquila_public_edge_probe_cache_state_observed\{route="\/"\}\)/)
-  assert.match(
-    expr,
-    /max_over_time\(aquila_public_edge_probe_cache_state_observed\{route="\/"\}\[24h\]\)\) > 0/,
-  )
-})
+// task-alerts.yml 계약은 tools/test/monitoring-alerts.test.mjs가 소유한다. 여기에 있던 부분
+// 문자열 단언은 활성화 게이트가 깨진 두 형태(괄호 누락, and -> or)를 모두 통과시켰다.
 
 test("readCacheState normalizes the header and never reports UNKNOWN", () => {
   assert.equal(readCacheState("hit"), "HIT")

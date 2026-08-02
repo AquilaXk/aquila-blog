@@ -1,11 +1,15 @@
-# 홈서버 front 도메인 전환 순서 (#1538 · #1575)
+# 홈서버 front 도메인 전환 순서 (#1538 · #1575 · #1605)
 
-`blog.aquilaxk.site` 하나를 Cloudflare Tunnel → Caddy → 홈서버 컨테이너로 개통하는 절차다.
+`blog.aquilaxk.site`를 Cloudflare Tunnel → Caddy → 홈서버 컨테이너로 개통하는 절차다.
 front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스트가 아니라 이 호스트의 경로다
 (#1575). 현재 `blog.aquilaxk.site`는 **Vercel**을 가리키고, `www.aquilaxk.site`(Vercel)와
 `api.aquilaxk.site`(홈서버)가 구 공개 경로로 살아 있다.
 
+그 다음 단계로 **같은 front 이미지가 회사·제품 표면과 apex redirect까지 서빙한다** (#1605).
+`www`는 폐기 대상에서 회사 표면으로 바뀌었다 — 아래 Locked decision 절의 번복 기록을 먼저 읽는다.
+
 - 저장소 쪽 변경(#1538): compose front 서비스, Caddy `{$WEB_DOMAIN}` vhost, env 계약.
+- 회사·제품·apex vhost와 그 env 키(#1605): 6단계와 "표면 세 개와 vhost 네 개" 절.
 - 경로 기반 공개 API·쿠키 위상·env 스위치(#1575): 이 문서가 그 결과다.
 - blue/green 전환 로직과 `FRONT_*_IMAGE`·`BACKEND_INTERNAL_URL` 주입(#1539).
 - Cloudflare Tunnel public hostname과 DNS 레코드는 **콘솔 전용 작업(오너)** 이다. 이 저장소에
@@ -14,9 +18,25 @@ front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스�
 
 ## Locked decision
 
-- 공개 web 호스트는 `blog.aquilaxk.site` 하나다 (Epic #1535 Locked Decision 5).
-- `www.aquilaxk.site`는 **301 redirect 없이 완전 폐기**한다 (Locked Decision 6). Caddy `redir`,
-  Cloudflare Redirect Rule, `www` vhost 유지 어느 형태도 만들지 않는다.
+- **블로그** 공개 web 호스트는 `blog.aquilaxk.site` 하나다 (Epic #1535 Locked Decision 5).
+- ~~`www.aquilaxk.site`는 **301 redirect 없이 완전 폐기**한다 (Locked Decision 6).~~
+  **2026-08-02 오너 결정으로 번복 (#1605).** `www.aquilaxk.site`는 폐기되지 않고 **회사 소개
+  표면**으로 살아나며 **사이트 canonical**이다. apex `aquilaxk.site`는 경로·query를 보존한 **308**로
+  `www`에 넘긴다. 제품 소개 표면은 `easysubway.aquilaxk.site`다.
+
+  번복 사유: 폐기 결정은 "www가 타 서비스로 넘어간다"는 전제 위에 있었다. 그 전제가 바뀌었다 —
+  오너가 세 호스트(apex/www/제품)를 회수해 이 저장소의 단일 front 이미지로 서빙하기로 했다.
+  그래서 `www`는 지울 대상이 아니라 만들 대상이 됐고, redirect를 금지할 이유도 사라졌다.
+
+  이 결정이 취소한 것과 남긴 것:
+
+  | 항목 | 폐기 결정 시절 | 현재 |
+  | --- | --- | --- |
+  | `www` Tunnel hostname/DNS | 6단계에서 **제거** | **유지·신설** (회사 표면) |
+  | Caddy `redir` | 이 파일에 어떤 형태로도 없음 | **apex vhost 하나**가 308로 소유 |
+  | front 이미지의 `https://www.aquilaxk.site` 문자열 | 산출물 게이트가 **부재를 요구** | 요구 **폐기** (아래 게이트 절) |
+  | 블로그 canonical | `blog.aquilaxk.site` | 변동 없음 |
+  | 인증 쿠키 스코프 | `blog.aquilaxk.site` | 변동 없음 (회사·제품 표면은 front 전용) |
 - **공개 API는 별도 호스트가 아니라 `blog.aquilaxk.site`의 경로다** (2026-08-02 오너 결정,
   Locked Decision 8 대체 · #1575). `api.blog.aquilaxk.site`는 **만들 수 없다** — 2단계
   서브도메인은 Cloudflare Universal SSL 커버 밖이라 TLS handshake failure(alert 40)가 난다.
@@ -113,18 +133,24 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
   fail=0
   grep -rq "https://blog\.aquilaxk\.site" /app/.next || { echo "FAIL: public site URL is not inlined"; fail=1; }
   if grep -rq "https://api\.blog\.aquilaxk\.site" /app/.next; then echo "FAIL: cross-host API URL is inlined"; fail=1; fi
-  if grep -rq "https://www\.aquilaxk\.site"      /app/.next; then echo "FAIL: retired www URL is inlined";  fail=1; fi
   exit "$fail"
 '; echo "gate exit=$?"   # 0이어야 쓸 수 있다
 ```
+
+> **`https://www.aquilaxk.site` **부재** 조건은 2026-08-02에 제거했다 (#1605).** www는 이제 폐기
+> 대상이 아니라 회사 표면이자 사이트 canonical이고, 그 문자열은 `front/site.config.js`의 표면
+> 표에 있어 **정상 이미지에도 반드시 인라인된다.** 조건을 그대로 두면 모든 새 이미지가 반려된다.
+>
+> 그 조건이 걸러내던 위험(폐기 호스트를 광고하는 이미지)은 이제 존재하지 않는다. 대신 회사·제품
+> 표면의 canonical은 빌드 시점 값이 아니라 **요청 호스트**로 계산되므로
+> (`front/src/libs/publicSurfaceUrl.ts`), 이미지 문자열 검사로 확인할 대상이 애초에 아니다.
 
 > ⚠️ **`set -e` + `! grep ...` 형태로 쓰지 마라. 부정 조건이 둘 이상이면 통과 판정이 거짓이 된다.**
 > POSIX `set -e`는 `!`로 시작하는 pipeline에 적용되지 않고, 스크립트 종료 코드는 마지막 명령의
 > 것이다. 따라서 부정 조건이 여러 개면 **마지막 하나만** 실제로 게이트로 동작한다.
 >
-> 이건 **#1575가 게이트를 고쳐 쓰면서 새로 생기는** 결함이지 이전 게이트의 결함이 아니다.
-> 이전 형태(긍정 2개 + 마지막에 부정 1개)는 부정이 하나뿐이라 그 시절 기준으로 정상 동작했다.
-> `api.blog` 조건이 존재→부재로 뒤집히면서 부정이 둘이 되는 순간 무너진다. 실측(stub `.next`):
+> 이 함정은 #1575가 게이트를 고쳐 쓰면서 부정 조건이 둘이 되는 순간 처음 드러났다. `if` 형태로
+> 쓰면 개수와 무관하게 성립하므로 그 형태를 유지한다. 실측(stub `.next`):
 >
 > ```
 > 이미지                          이전 형태   부정 2개로 단순 치환   이 문서의 if 형태
@@ -132,14 +158,17 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
 > #1555~#1575 (api.blog 포함)      통과(당시 정상)  통과 ← 새 결함      반려
 > #1575 이후 (same-origin)         반려(당시 정상)  반려                통과
 > ```
+>
+> 부정 조건은 #1605에서 하나(`api.blog` 부재)로 줄었지만, 조건을 다시 늘릴 때 같은 함정을 밟지
+> 않도록 `if` 형태를 그대로 둔다.
 
-세 조건이 각각 무엇을 걸러내는지:
+두 조건이 각각 무엇을 걸러내는지:
 
 | 조건 | 반려되는 이미지 |
 | --- | --- |
-| `https://blog.aquilaxk.site` **존재** | ARG 기본값이 빈 문자열이던 시절 빌드 — `site.config.js`의 `isProd`가 false로 굳고 canonical/OG URL이 틀린다 |
+| `https://blog.aquilaxk.site` **존재** | ARG 기본값이 빈 문자열이던 시절 빌드 — `site.config.js`의 `isProd`가 false로 굳고 블로그 canonical/OG URL이 틀린다 |
 | `https://api.blog.aquilaxk.site` **부재** | #1555~#1575 사이 빌드 — 브라우저가 **존재할 수 없는 호스트**(TLS alert 40)로 XHR한다. #1575 이전 게이트는 이 문자열을 반대로 *요구*했으므로, 그 시절 게이트를 그대로 쓰면 새 이미지가 전부 반려된다 |
-| `https://www.aquilaxk.site` **부재** | 폐기 대상이자 타 서비스가 가져갈 호스트를 광고하는 이미지 |
+| ~~`https://www.aquilaxk.site` **부재**~~ | **폐기 (#1605).** www는 회사 표면이자 사이트 canonical이므로 정상 이미지에도 들어 있다 |
 
 실측(같은 트리에서 `front/Dockerfile.runtime`을 두 번 빌드):
 
@@ -157,6 +186,46 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
 두 값이 갈라지면 브라우저 요청이 다시 cross-origin이 되고 edge에는 그 origin을 허용하는 CORS가
 더 이상 없다. 계약 테스트가 이 등식을 고정한다(`tools/test/env-contract.test.mjs`,
 `front/scripts/env/env-contract.test.mjs`).
+
+**이 등식은 #1605 이후에도 그대로다.** 한 이미지가 세 호스트를 서빙하지만 `NEXT_PUBLIC_*`은 빌드
+시점 값 하나뿐이고, 그 값은 **블로그 표면**의 것이다. 회사·제품 표면은 브라우저에서 백엔드를 부르지
+않으므로 `NEXT_PUBLIC_BACKEND_URL`이 블로그 호스트를 가리키는 것이 문제가 되지 않고, 두 표면의
+canonical/OG는 SSR에서 **요청 호스트**로 계산된다(`front/src/libs/publicSurfaceUrl.ts`). 그래서
+빌드 인자를 호스트별로 갈라야 할 이유가 없다 — 갈랐다면 호스트마다 다른 이미지가 필요해지고
+blue/green 전환이 호스트 수만큼 늘어난다.
+
+`isProd`(GA·web-vitals 게이트)도 같은 이유로 바꾸지 않았다. 판정 기준은 주입된 SITE_URL이 블로그
+정본과 같은지이며, 세 호스트가 한 이미지를 공유하므로 판정 결과도 하나다. GA는 현재
+`CONFIG.googleAnalytics.enable=false`로 꺼져 있어 어느 호스트에서도 전송이 없다.
+
+## 표면 세 개와 vhost 네 개 (#1605)
+
+| 호스트 | env 키 | vhost가 하는 일 | 백엔드 경로 |
+| --- | --- | --- | --- |
+| `blog.aquilaxk.site` | `WEB_DOMAIN` | 블로그 표면 + 경로 기반 공개 API | **있음** (`backend_edge_gates`) |
+| `www.aquilaxk.site` | `COMPANY_DOMAIN` | front 전용. `/` → `/company` rewrite | 없음 |
+| `easysubway.aquilaxk.site` | `PRODUCT_DOMAIN` | front 전용. `/` → `/easysubway` rewrite | 없음 |
+| `aquilaxk.site` | `APEX_DOMAIN` | 경로·query 보존 **308** → `{$COMPANY_DOMAIN}` | 없음 |
+
+- 회사·제품 vhost는 **`(front_surface_vhost)` snippet 하나**를 route 인자만 바꿔 import한다. 두
+  호스트에 몸통을 복사하면 캐시 floor나 robots 정책이 한쪽에서만 조용히 사라진다.
+- **백엔드 경로는 blog vhost에만 둔다.** 공개 API는 그 호스트의 경로이고 인증 쿠키도 그 호스트에
+  스코프돼 있다(#1575). 회사·제품 호스트에 백엔드 prefix를 실으면 쿠키를 apex까지 넓히거나, 그
+  호스트에서 쓸 수 없는 세션을 발급하게 된다.
+- **robots.txt는 각 표면의 vhost가 응답한다.** `front/public/robots.txt`는 블로그 호스트의 파일이고
+  블로그 sitemap을 광고하므로, 그대로 나가면 회사·제품 표면이 남의 URL 목록을 자기 것으로 광고한다.
+  표면 vhost는 `Allow: /$` + `Disallow: /`로 루트만 색인 대상에 둔다 — 같은 컨테이너가 그 호스트에서
+  블로그 라우트도 200으로 응답하기 때문에, 열어 두면 블로그가 두 번째 호스트로 중복 색인된다.
+  같은 이유로 `/sitemap.xml`은 표면 호스트에서 404다(`front/src/pages/sitemap.xml.tsx`).
+- 세 키는 모두 **optional + `.localhost` 기본값**이다. Tunnel hostname을 열기 전까지 어떤 신규
+  호스트도 공개되지 않는다. 대신 **빈 값은 계약이 거부한다** — Caddy의 `{$VAR:default}`는 변수가
+  unset일 때만 기본값을 쓰므로, `KEY=`는 주소를 `http://`로 붕괴시켜 host matcher 없는 :80
+  catch-all을 만든다.
+- 세 키는 서로, 그리고 `API_DOMAIN`·`WEB_DOMAIN`과 **달라야 한다.** site address가 겹치면 404가
+  아니라 caddy가 기동하지 못하고 edge 전체가 내려간다. 계약의 `allDistinct` crossCheck가 집합으로
+  막는다(`mustDifferFrom`은 쌍 비교라 집합을 닫지 못한다).
+- `APEX_DOMAIN`만 있고 `COMPANY_DOMAIN`이 없으면 apex가 `company.localhost`로 308한다 — 설정은
+  통과하는데 방문자에게는 죽은 사이트다. 계약의 `requiresKey`가 짝을 강제한다.
 
 커밋 대조가 필요하면 같은 방식으로 본다(`NEXT_PUBLIC_AQUILA_BUILD_SHA`도 인라인된다):
 
@@ -263,8 +332,26 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
 5. **확인.** 아래 "개통 확인"이 전부 green이어야 한다. 신 호스트 기준으로 판정한다 — 구 호스트는
    라우팅만 살아 있으므로 인증 경로를 여기서 기대하지 않는다.
 
-6. **(5)가 green인 뒤에** `www.aquilaxk.site`의 Tunnel public hostname과 DNS 레코드를 제거한다
-   (오너, 콘솔).
+6. **(5)가 green인 뒤에** 회사·제품·apex 표면을 연다 (#1605). **`www.aquilaxk.site` 제거 단계는
+   폐기됐다** — Locked Decision 6 번복으로 그 호스트는 지울 대상이 아니라 회사 표면이 됐다.
+
+   순서는 **env 먼저, hostname 나중이다.** hostname을 먼저 열면 그 Host를 매치하는 vhost가 없어
+   Caddy가 404가 아니라 **`200` + 빈 본문**을 주고, Cloudflare가 그 200을 캐시할 수도 있다(4단계의
+   같은 경고).
+
+   1. `HOME_SERVER_ENV`에 세 값을 넣고 배포한다. 세 값은 서로, 그리고 `API_DOMAIN`·`WEB_DOMAIN`과
+      달라야 하며, `APEX_DOMAIN`은 `COMPANY_DOMAIN` 없이 넣을 수 없다(계약이 둘 다 막는다).
+
+      - `COMPANY_DOMAIN=www.aquilaxk.site`
+      - `PRODUCT_DOMAIN=easysubway.aquilaxk.site`
+      - `APEX_DOMAIN=aquilaxk.site`
+
+   2. 배포가 green이면 Tunnel public hostname 셋을 만든다 (오너, 콘솔). 셋 다 `http://caddy:80`이다.
+   3. 아래 "표면 개통 확인"을 실행한다.
+
+   > ⚠️ 이 단계는 블로그 표면의 라우팅·쿠키·API 경로를 **하나도 건드리지 않는다.** 신규 vhost는
+   > 자기 Host만 매치하고 front upstream만 갖는다. 그래서 롤백도 블로그와 무관하게, 세 env 줄을
+   > **지우고**(비우지 말고) 재배포하는 것으로 끝난다.
 
 7. **(6)이 green인 뒤에** 구 API 호스트를 접는다. `api.aquilaxk.site`의 Tunnel public hostname과
    DNS 레코드를 제거하고, **그 다음** 저장소에서 `{$API_DOMAIN}` **주소와** `API_DOMAIN` 키를
@@ -348,15 +435,40 @@ unset ADMIN_PASSWORD ADMIN_EMAIL
 # 판정: Domain 속성이 없거나 Domain=blog.aquilaxk.site 여야 한다.
 #       aquilaxk.site 또는 www가 보이면 즉시 롤백한다 (Rollback 표 3단계 행).
 
-# 구 hostname 폐기 확인 (6~7번 이후)
-dig +short www.aquilaxk.site
+# 구 API hostname 폐기 확인 (7번 이후)
 dig +short api.aquilaxk.site
 curl -sSI --max-time 10 https://api.aquilaxk.site/actuator/health/readiness ; echo "exit=$?"
 ```
 
-`www.aquilaxk.site`는 apex와 함께 **타 서비스가 사용**하므로 제거 후에도 응답이 올 수 있다.
-확인 기준은 "우리 Tunnel public hostname 목록과 우리 Caddy 설정에 남아 있지 않은 것"이며, 응답이
-오면 우리 홈서버에서 나온 것인지 `x-request-id` 등 우리 헤더 유무로 구분한다.
+## 표면 개통 확인 (6번 이후 · #1605)
+
+```bash
+# 회사·제품 표면은 각자 호스트의 루트에서 200이어야 한다 (Caddy가 rewrite한다).
+curl -sS -o /dev/null -w "company=%{http_code}\n" https://www.aquilaxk.site/
+curl -sS -o /dev/null -w "product=%{http_code}\n" https://easysubway.aquilaxk.site/
+
+# canonical은 요청 호스트의 루트여야 한다. 경로(/company)가 보이면 호스트 판정이 어긋난 것이다.
+curl -sS https://www.aquilaxk.site/ | grep -o '<link rel="canonical"[^>]*>'
+curl -sS https://easysubway.aquilaxk.site/ | grep -o '<link rel="canonical"[^>]*>'
+
+# apex는 경로와 query를 보존한 308이어야 한다. Location이 루트로 붕괴하면 {uri}가 빠진 것이다.
+curl -sSI "https://aquilaxk.site/posts/1?utm_source=x" | sed -n '1p;/^[Ll]ocation/p'
+
+# 표면 robots는 루트만 열고 블로그 sitemap을 광고하지 않는다.
+curl -sS https://www.aquilaxk.site/robots.txt
+curl -sS https://easysubway.aquilaxk.site/robots.txt
+
+# 표면 호스트의 sitemap은 404다. 200이면 그 호스트가 블로그 URL 목록을 자기 것으로 광고한다.
+curl -sS -o /dev/null -w "company_sitemap=%{http_code}\n" https://www.aquilaxk.site/sitemap.xml
+
+# 표면 호스트에는 백엔드 경로가 없다. 200이면 blog vhost의 게이트가 새어 나온 것이다.
+curl -sS -o /dev/null -w "company_backend=%{http_code}\n" \
+  https://www.aquilaxk.site/member/api/v1/auth/session
+
+# 블로그 표면 무회귀: robots/sitemap이 그대로 블로그 값이어야 한다.
+curl -sS https://blog.aquilaxk.site/robots.txt
+curl -sS -o /dev/null -w "blog_sitemap=%{http_code}\n" https://blog.aquilaxk.site/sitemap.xml
+```
 
 ## Rollback
 
@@ -366,7 +478,7 @@ curl -sSI --max-time 10 https://api.aquilaxk.site/actuator/health/readiness ; ec
 | 3단계 배포 후 백엔드·인증 장애 (DNS 전환 전) | **3단계에서 바꾼 네 값을 전부 되돌린다** — `CUSTOM_PROD_BACKURL=https://api.aquilaxk.site`, `CUSTOM_PROD_FRONTURL=https://www.aquilaxk.site`, `CUSTOM_PROD_COOKIEDOMAIN=aquilaxk.site`, 그리고 `WEB_DOMAIN` 줄 **삭제**. 그 뒤 재배포한다. 구 topology가 복원되고 `www` origin 로그인이 살아난다. `API_DOMAIN`은 내내 그대로였으므로 구 API 경로는 끊긴 적이 없다. **스위치만 되돌리면 `validate-env`가 `ok=false`로 배포를 막는다**(실측: `CUSTOM_PROD_COOKIEDOMAIN`·`CUSTOM_PROD_FRONTURL` 두 error) — 장애 중 롤백이 게이트에서 멈추는 경로라 네 값을 한 번에 되돌린다. |
 | 4단계 직후 `blog.aquilaxk.site` 장애 | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **Vercel을 가리키던 이전 값으로 되돌린다.** Vercel 프로젝트는 이 시점까지 살아 있다(`front/vercel.json` 제거는 #1542 소관). **`HOME_SERVER_ENV`의 네 값도 위 행처럼 함께 되돌린다** — DNS만 되돌리면 쿠키 Domain이 이미 blog라 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다. |
 | front 컨테이너만 문제 | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포하면 front 서비스가 기동 대상에서 빠진다. 그 상태에서 `blog.aquilaxk.site`는 front 경로에 502를 내고 API 경로는 계속 동작하므로, 공개 노출 중이라면 위 DNS 되돌리기를 함께 한다. |
-| 6단계까지 끝난 뒤 문제 발견 (`www` 제거 후) | `www` 경로 rollback은 없다. Locked Decision 6이 www를 완전 폐기하기로 한 것이므로 되돌릴 대상 자체가 없다. |
+| 6단계 표면 개통 후 문제 발견 (#1605) | `HOME_SERVER_ENV`에서 `COMPANY_DOMAIN`·`PRODUCT_DOMAIN`·`APEX_DOMAIN` 줄을 **삭제**하고(비우지 말고 — 빈 값은 vhost 주소를 :80 catch-all로 만든다) 재배포한다. 세 vhost가 `.localhost` 기본값으로 내려앉아 그 호스트를 매치하지 않는다. **공개 노출을 즉시 끊어야 하면 Tunnel public hostname을 먼저 삭제한다** — env만 되돌리면 hostname은 살아 있는데 매치하는 vhost가 없어 Caddy가 404가 아니라 `200` + 빈 본문을 준다. 블로그 표면은 이 롤백에 영향받지 않는다(신규 vhost는 자기 Host만 매치하고 blog vhost를 건드리지 않는다). |
 | 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API 경로 rollback은 DNS/Tunnel hostname 재생성이다. 그래서 7단계는 (6)이 green인 뒤에만 한다. |
 
 ## 저장소 쪽 fail-safe

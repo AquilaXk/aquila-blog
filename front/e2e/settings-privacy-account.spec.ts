@@ -21,6 +21,64 @@ const fulfillAuthMe = async (page: import("@playwright/test").Page) => {
   })
 }
 
+const legalReconsentCurrent = {
+  status: "CURRENT",
+  required: false,
+  termsVersion: "1.0.2",
+  termsContentSha256: "a".repeat(64),
+  privacyVersion: "1.0.3",
+  privacyContentSha256: "b".repeat(64),
+  acceptedAt: "2026-06-21T00:10:00Z",
+  refusalGuidePath: "/settings/privacy",
+  exportGuidePath: "/settings/privacy",
+  deletionGuidePath: "/settings/privacy",
+}
+
+const legalReconsentRequired = {
+  ...legalReconsentCurrent,
+  status: "RECONSENT_REQUIRED",
+  required: true,
+  acceptedAt: null,
+}
+
+const fulfillLegalSession = async (
+  page: import("@playwright/test").Page,
+  legalReconsent: Record<string, unknown>
+) => {
+  await page.route("**/member/api/v1/auth/session", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ legalReconsent }),
+    })
+  })
+}
+
+const fulfillPrivacyExport = async (page: import("@playwright/test").Page) => {
+  await page.route("**/member/api/v1/privacy/export", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "개인정보 내보내기 데이터를 조회했습니다.",
+        data: {
+          generatedAt: "2026-06-22T01:00:00Z",
+          member: {
+            id: authMember.id,
+            email: "privacy-user@example.com",
+            username: authMember.username,
+            nickname: authMember.nickname,
+            createdAt: authMember.createdAt,
+            modifiedAt: authMember.modifiedAt,
+          },
+          latestLegalAcceptance: null,
+        },
+      }),
+    })
+  })
+}
+
 const confirmAccountDeletion = async (page: import("@playwright/test").Page) => {
   await page.getByRole("button", { name: "계정 탈퇴" }).click()
   const dialog = page.getByRole("dialog")
@@ -34,6 +92,7 @@ test("settings privacy page exposes export snapshot and creates privacy request"
   let createdRequestBody: Record<string, unknown> | null = null
 
   await fulfillAuthMe(page)
+  await fulfillLegalSession(page, legalReconsentCurrent)
   await page.route("**/member/api/v1/privacy/export", async (route) => {
     await route.fulfill({
       status: 200,
@@ -89,12 +148,25 @@ test("settings privacy page exposes export snapshot and creates privacy request"
   await page.goto("/settings/privacy")
 
   await expect(page.getByRole("heading", { name: "개인정보 관리" })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "선택 analytics·RUM" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "선택 분석" })).toBeVisible()
   await expect(page.getByText("privacy-user@example.com")).toBeVisible()
   await expect(page.getByText("개인정보처리방침 1.0.2")).toBeVisible()
 
-  await page.getByRole("button", { name: "선택 분석 동의" }).click()
-  await expect(page.getByText("동의됨")).toBeVisible()
+  // 1597: 게이트가 아닌 일반 방문은 게이트 표식 없이 현재 동의 상태만 보여준다.
+  const legalSection = page.getByRole("region", { name: "법적 문서 재동의" })
+  await expect(legalSection).not.toHaveAttribute("data-gate", "required")
+  await expect(legalSection.getByText("최신 문서에 동의한 상태입니다.")).toBeVisible()
+
+  // 1597: 내부 상태 덤프는 1차 정보에서 제거하고 요약 한 줄 + 접힘 상세로만 노출한다.
+  await expect(page.getByText("선택 분석: 꺼짐")).toBeVisible()
+  await expect(page.getByText("저장 경로")).toHaveCount(0)
+  await expect(page.getByText("브라우저 거부 신호")).toHaveCount(0)
+  await expect(page.getByText("선택한 곳")).toBeHidden()
+  await page.getByText("내 선택 기록 자세히 보기").click()
+  await expect(page.getByText("선택한 곳")).toBeVisible()
+
+  await page.getByRole("button", { name: "선택 분석 켜기" }).click()
+  await expect(page.getByText("선택 분석: 켜짐")).toBeVisible()
   const grantedConsent = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || "{}"), OPTIONAL_TRACKING_CONSENT_STORAGE_KEY)
   expect(grantedConsent).toMatchObject({
     version: 1,
@@ -107,8 +179,8 @@ test("settings privacy page exposes export snapshot and creates privacy request"
   })
   expect(typeof grantedConsent.updatedAt).toBe("string")
 
-  await page.getByRole("button", { name: "선택 분석 거부·철회" }).click()
-  await expect(page.getByText("거부됨")).toBeVisible()
+  await page.getByRole("button", { name: "선택 분석 끄기" }).click()
+  await expect(page.getByText("선택 분석: 꺼짐")).toBeVisible()
   const deniedConsent = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || "{}"), OPTIONAL_TRACKING_CONSENT_STORAGE_KEY)
   expect(deniedConsent).toMatchObject({
     version: 1,
@@ -135,6 +207,7 @@ test("settings privacy page exposes export snapshot and creates privacy request"
 
 test("settings privacy request failure prefers server message with danger tone", async ({ page }) => {
   await fulfillAuthMe(page)
+  await fulfillLegalSession(page, legalReconsentCurrent)
   await page.route("**/member/api/v1/privacy/export", async (route) => {
     await route.fulfill({
       status: 200,
@@ -175,6 +248,81 @@ test("settings privacy request failure prefers server message with danger tone",
   const alert = page.getByRole("alert").filter({ hasText: "요청 사유가 너무 짧습니다." })
   await expect(alert).toBeVisible()
   await expect(alert).toHaveAttribute("data-tone", "danger")
+})
+
+test("settings privacy reconsent gate frames purpose and blocks incomplete consent", async ({ page }) => {
+  let reconsentRequestCount = 0
+
+  await fulfillAuthMe(page)
+  await fulfillLegalSession(page, legalReconsentRequired)
+  await fulfillPrivacyExport(page)
+  await page.route("**/member/api/v1/auth/legal-reconsent", async (route) => {
+    reconsentRequestCount += 1
+    await route.fulfill({ status: 500, contentType: "application/json", body: "{}" })
+  })
+
+  await page.goto("/settings/privacy?reconsent=required&next=%2Fsettings%2Faccount")
+
+  const gate = page.getByRole("region", { name: "법적 문서 재동의" })
+  await expect(gate).toHaveAttribute("data-gate", "required")
+  await expect(gate.getByRole("heading", { name: "계속 이용하려면 다시 동의해 주세요" })).toBeVisible()
+  await expect(gate.getByText("최신 버전(이용약관 1.0.2 · 개인정보처리방침 1.0.3)")).toBeVisible()
+  await expect(gate.getByText("/settings/account")).toBeVisible()
+  await expect(gate.getByText("화면으로 자동으로 돌아갑니다")).toBeVisible()
+  await expect(gate.getByRole("checkbox")).toHaveCount(3)
+  // 주 행동은 하나만 남긴다: 동급 버튼 병렬 노출이 회귀하지 않게 고정한다.
+  await expect(gate.getByRole("button")).toHaveCount(1)
+  await expect(page.getByText("저장 경로")).toHaveCount(0)
+  await expect(page.getByText("브라우저 거부 신호")).toHaveCount(0)
+
+  await gate.getByRole("button", { name: "동의하고 계속 이용" }).click()
+
+  await expect(gate.getByRole("alert")).toContainText("세 항목을 모두 확인해야 계속 이용할 수 있습니다.")
+  await expect(gate.getByLabel("만 14세 이상입니다.")).toBeFocused()
+  expect(reconsentRequestCount).toBe(0)
+  expect(page.url()).toContain("reconsent=required")
+})
+
+test("settings privacy reconsent gate submits three consents and returns to next path", async ({ page }) => {
+  let reconsentBody: Record<string, unknown> | null = null
+
+  await fulfillAuthMe(page)
+  await fulfillLegalSession(page, legalReconsentRequired)
+  await fulfillPrivacyExport(page)
+  await page.route("**/member/api/v1/auth/legal-reconsent", async (route) => {
+    reconsentBody = route.request().postDataJSON()
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "최신 약관 동의를 저장했습니다.",
+        data: { legalReconsent: legalReconsentCurrent },
+      }),
+    })
+  })
+
+  await page.goto("/settings/privacy?reconsent=required&next=%2Fsettings%2Faccount")
+
+  const gate = page.getByRole("region", { name: "법적 문서 재동의" })
+  await expect(gate.getByText("필수 0/3 확인")).toBeVisible()
+  await gate.getByLabel("만 14세 이상입니다.").check()
+  await gate.getByLabel("필수 개인정보 처리 안내를 확인했습니다.").check()
+  await gate.getByLabel("국외 이전 및 외부 처리자 안내를 확인했습니다.").check()
+  await expect(gate.getByText("필수 3/3 확인")).toBeVisible()
+
+  await gate.getByRole("button", { name: "동의하고 계속 이용" }).click()
+
+  await expect(page).toHaveURL(/\/settings\/account$/)
+  await expect(page.getByRole("heading", { name: "계정 보안" })).toBeVisible()
+  expect(reconsentBody).toMatchObject({
+    termsVersion: "1.0.2",
+    privacyVersion: "1.0.3",
+    age14OrOlder: true,
+    requiredPrivacyConfirmed: true,
+    analyticsConsent: false,
+    overseasTransferAcknowledged: true,
+  })
 })
 
 test("settings account page deletes account after password reauthentication", async ({ page }) => {

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useRef, useState } from "react"
 import { getLegalReconsentStatus, LegalReconsentStatus, submitLegalReconsent } from "src/apis/backend/legal"
 import { toUserFacingMessage } from "src/apis/backend/errorClassification"
 import {
@@ -21,6 +21,7 @@ import {
 import { normalizeNextPath, replaceRoute } from "src/libs/router"
 import { EmptyState, Skeleton } from "src/design-system/StatePresenters"
 import SettingsLayout from "./SettingsLayout"
+import { privacyPageStyles } from "./SettingsPrivacyPage.styles"
 
 type FeedbackTone = "danger" | "success"
 
@@ -49,6 +50,8 @@ const optionalTrackingSourceLabels: Record<OptionalTrackingConsentRecord["source
   "legacy-string": "이전 저장 형식",
 }
 
+const RECONSENT_INCOMPLETE_MESSAGE = "세 항목을 모두 확인해야 계속 이용할 수 있습니다."
+
 const SettingsPrivacyPage = () => {
   const router = useRouter()
   const [snapshot, setSnapshot] = useState<PrivacyExportResponse | null>(null)
@@ -65,8 +68,10 @@ const SettingsPrivacyPage = () => {
   const [trackingAllowed, setTrackingAllowed] = useState(false)
   const [browserPrivacySignal, setBrowserPrivacySignal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [legalLoading, setLegalLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [legalSubmitting, setLegalSubmitting] = useState(false)
+  const reconsentFormRef = useRef<HTMLFormElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -97,6 +102,9 @@ const SettingsPrivacyPage = () => {
             text: toUserFacingMessage(error),
           })
         }
+      })
+      .finally(() => {
+        if (!cancelled) setLegalLoading(false)
       })
     return () => {
       cancelled = true
@@ -152,6 +160,13 @@ const SettingsPrivacyPage = () => {
 
   const submitReconsent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (legalSubmitting) return
+    if (!ageConfirmed || !privacyConfirmed || !overseasConfirmed) {
+      // 필수 3항목이 비면 서버 400을 만들지 않고 화면에서 먼저 되돌려 첫 미확인 항목으로 포커스를 옮긴다.
+      setLegalFeedback({ tone: "danger", text: RECONSENT_INCOMPLETE_MESSAGE })
+      reconsentFormRef.current?.querySelector<HTMLInputElement>('input[type="checkbox"]:not(:checked)')?.focus()
+      return
+    }
     setLegalSubmitting(true)
     setLegalFeedback(null)
     try {
@@ -175,53 +190,118 @@ const SettingsPrivacyPage = () => {
     }
   }
 
+  const reconsentRequired = legalReconsent?.required === true
+  const nextPath = normalizeNextPath(router.query.next, "/")
+  const nextLabel = nextPath === "/" ? "홈" : nextPath
+  // 법무 문구 고정: 세 항목의 라벨은 회원가입 동의와 같은 문장을 그대로 유지해야 감사 기록이 일치한다.
+  const consentItems = [
+    {
+      id: "reconsent-age",
+      label: "만 14세 이상입니다.",
+      checked: ageConfirmed,
+      onChange: setAgeConfirmed,
+    },
+    {
+      id: "reconsent-privacy",
+      label: "필수 개인정보 처리 안내를 확인했습니다.",
+      checked: privacyConfirmed,
+      onChange: setPrivacyConfirmed,
+    },
+    {
+      id: "reconsent-overseas",
+      label: "국외 이전 및 외부 처리자 안내를 확인했습니다.",
+      checked: overseasConfirmed,
+      onChange: setOverseasConfirmed,
+    },
+  ]
+  const confirmedCount = consentItems.filter((item) => item.checked).length
+  const trackingSummary = trackingAllowed ? "켜짐" : "꺼짐"
+  const trackingRecordLabel = trackingConsent
+    ? trackingConsent.state === "granted"
+      ? "동의함"
+      : "거부함"
+    : "선택한 적 없음"
+
   return (
     <SettingsLayout active="privacy" title="개인정보 관리">
       <div className="settingsGrid">
-        <section className="panel" aria-label="법적 문서 재동의">
-          <h2>약관·개인정보처리방침 동의</h2>
-          {legalReconsent?.required ? (
+        <section
+          className={reconsentRequired ? "panel gatePanel" : "panel"}
+          aria-label="법적 문서 재동의"
+          data-gate={reconsentRequired ? "required" : undefined}
+        >
+          {legalLoading ? (
             <>
-              <p className="muted">
-                기존 계정은 최신 <Link href="/terms">이용약관</Link>과{" "}
-                <Link href="/privacy">개인정보처리방침</Link> 확인 후 계속 이용할 수 있습니다.
+              <h2>약관·개인정보처리방침 동의</h2>
+              <div className="statusSkeleton" aria-busy="true" aria-label="법적 문서 동의 상태 확인 중">
+                <Skeleton height="1rem" width="42%" />
+                <Skeleton height="1rem" width="66%" />
+              </div>
+            </>
+          ) : reconsentRequired && legalReconsent ? (
+            <>
+              <p className="sectionLabel">RECONSENT</p>
+              <h2 className="gateTitle">계속 이용하려면 다시 동의해 주세요</h2>
+              <p className="lead">
+                이용약관과 개인정보처리방침이 최신 버전(이용약관 {legalReconsent.termsVersion} · 개인정보처리방침{" "}
+                {legalReconsent.privacyVersion})으로 갱신되어, 아래 세 항목을 다시 확인해야 합니다.
               </p>
-              <form className="requestForm" onSubmit={submitReconsent}>
-                <label className="checkLabel">
-                  <input type="checkbox" checked={ageConfirmed} onChange={(event) => setAgeConfirmed(event.target.checked)} />
-                  만 14세 이상입니다.
-                </label>
-                <label className="checkLabel">
-                  <input
-                    type="checkbox"
-                    checked={privacyConfirmed}
-                    onChange={(event) => setPrivacyConfirmed(event.target.checked)}
-                  />
-                  필수 개인정보 처리 안내를 확인했습니다.
-                </label>
-                <label className="checkLabel">
-                  <input
-                    type="checkbox"
-                    checked={overseasConfirmed}
-                    onChange={(event) => setOverseasConfirmed(event.target.checked)}
-                  />
-                  국외 이전 및 외부 처리자 안내를 확인했습니다.
-                </label>
-                <button type="submit" disabled={legalSubmitting || !ageConfirmed || !privacyConfirmed || !overseasConfirmed}>
-                  {legalSubmitting ? "저장 중" : "동의하고 계속 이용"}
-                </button>
+              {router.isReady ? (
+                <p className="gateReturn">
+                  동의를 마치면 <span className="gateReturnPath">{nextLabel}</span> 화면으로 자동으로 돌아갑니다.
+                </p>
+              ) : null}
+              <form className="consentForm" ref={reconsentFormRef} onSubmit={submitReconsent} noValidate>
+                <ul className="consentList">
+                  {consentItems.map((item) => (
+                    <li key={item.id}>
+                      <label className="consentRow">
+                        <input
+                          id={item.id}
+                          type="checkbox"
+                          checked={item.checked}
+                          onChange={(event) => item.onChange(event.target.checked)}
+                        />
+                        <span className="consentText">{item.label}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <div className="actionRow">
+                  <button type="submit" className="actionPrimary" disabled={legalSubmitting}>
+                    {legalSubmitting ? "저장 중" : "동의하고 계속 이용"}
+                  </button>
+                  <p className="actionHint" role="status" aria-live="polite">
+                    필수 {confirmedCount}/{consentItems.length} 확인
+                  </p>
+                </div>
               </form>
               <p className="muted">
-                동의하지 않는 경우 이 화면에서 개인정보 내보내기 또는 삭제 요청을 접수할 수 있습니다.
+                최신 문서는 <Link href="/terms">이용약관</Link>과 <Link href="/privacy">개인정보처리방침</Link>에서
+                확인할 수 있습니다. 동의하지 않으려면 아래 <a href="#privacy-requests">처리 요청</a>에서 내보내기 또는
+                삭제를 접수할 수 있습니다.
               </p>
             </>
           ) : legalReconsent ? (
-            <p className="muted">
-              최신 약관·개인정보처리방침 동의 상태입니다.
-              {legalReconsent?.acceptedAt ? ` 저장 시각: ${formatDateTime(legalReconsent.acceptedAt)}` : ""}
-            </p>
+            <>
+              <h2>약관·개인정보처리방침 동의</h2>
+              <p className="statusLine" data-tone="success">
+                <span className="statusDot" aria-hidden="true" />
+                최신 문서에 동의한 상태입니다.
+              </p>
+              <p className="muted">
+                {legalReconsent.acceptedAt ? `${formatDateTime(legalReconsent.acceptedAt)} 동의 · ` : ""}이용약관{" "}
+                {legalReconsent.termsVersion} · 개인정보처리방침 {legalReconsent.privacyVersion}
+              </p>
+              <p className="muted">
+                <Link href="/terms">이용약관</Link> · <Link href="/privacy">개인정보처리방침</Link>
+              </p>
+            </>
           ) : (
-            <p className="muted">법적 문서 동의 상태를 확인하는 중입니다.</p>
+            <>
+              <h2>약관·개인정보처리방침 동의</h2>
+              <p className="muted">동의 상태를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</p>
+            </>
           )}
           {legalFeedback ? (
             <p
@@ -236,53 +316,66 @@ const SettingsPrivacyPage = () => {
         </section>
 
         <section className="panel" aria-label="선택 analytics와 RUM 설정">
-          <h2>선택 analytics·RUM</h2>
-          <p className="muted">
-            로그인과 보안에 필요한 cookie는 필수이며, Vercel Analytics, Speed Insights, Google Analytics,
-            자체 RUM은 서비스 품질 측정을 위한 선택 항목입니다. 선택하지 않아도 계정과 글 읽기 기능은 제한되지 않습니다.
+          <h2>선택 분석</h2>
+          <p className="lead">
+            로그인과 보안에 필요한 쿠키는 필수입니다. 서비스 품질을 확인하기 위한 접속 분석(analytics)과 성능
+            측정(RUM)은 선택 항목이며, 켜지 않아도 계정과 글 읽기 기능은 제한되지 않습니다.
           </p>
-          <dl className="snapshotList">
-            <div>
-              <dt>현재 상태</dt>
-              <dd>{trackingAllowed ? "동의됨" : trackingConsent?.state === "denied" ? "거부됨" : "미동의"}</dd>
-            </div>
-            <div>
-              <dt>저장 버전</dt>
-              <dd>{trackingConsent ? `v${trackingConsent.version}` : "미저장"}</dd>
-            </div>
-            <div>
-              <dt>저장 시각</dt>
-              <dd>{formatDateTime(trackingConsent?.updatedAt)}</dd>
-            </div>
-            <div>
-              <dt>저장 경로</dt>
-              <dd>{trackingConsent ? optionalTrackingSourceLabels[trackingConsent.source] || trackingConsent.source : "미저장"}</dd>
-            </div>
-            <div>
-              <dt>선택 범주</dt>
-              <dd>
-                analytics {trackingConsent?.categories.analytics ? "허용" : "차단"} · RUM{" "}
-                {trackingConsent?.categories.rum ? "허용" : "차단"}
-              </dd>
-            </div>
-            <div>
-              <dt>브라우저 거부 신호</dt>
-              <dd>{browserPrivacySignal ? "감지됨" : "없음"}</dd>
-            </div>
-          </dl>
+          <p className="statusLine" data-tone={trackingAllowed ? "accent" : "neutral"} role="status" aria-live="polite">
+            <span className="statusDot" aria-hidden="true" />
+            선택 분석: {trackingSummary}
+          </p>
           {browserPrivacySignal ? (
-            <p className="muted">Do Not Track 또는 Global Privacy Control 신호가 감지되어 선택 추적 전송을 차단합니다.</p>
+            <p className="muted" id="tracking-signal-note">
+              브라우저에서 추적 거부를 요청하고 있어 선택 분석은 항상 꺼진 상태로 유지됩니다.
+            </p>
           ) : null}
-          <div className="buttonRow">
-            <button type="button" onClick={() => updateTrackingConsent(true)} disabled={browserPrivacySignal}>
-              선택 분석 동의
-            </button>
-            <button type="button" onClick={() => updateTrackingConsent(false)}>
-              선택 분석 거부·철회
+          <div className="actionRow">
+            <button
+              type="button"
+              className="actionSecondary"
+              aria-describedby={browserPrivacySignal ? "tracking-signal-note" : undefined}
+              disabled={browserPrivacySignal && !trackingAllowed}
+              onClick={() => updateTrackingConsent(!trackingAllowed)}
+            >
+              {trackingAllowed ? "선택 분석 끄기" : "선택 분석 켜기"}
             </button>
           </div>
+          <details className="detailBlock">
+            <summary>내 선택 기록 자세히 보기</summary>
+            <dl className="detailList">
+              <div>
+                <dt>내 선택</dt>
+                <dd>{trackingRecordLabel}</dd>
+              </div>
+              <div>
+                <dt>선택한 시각</dt>
+                <dd>{formatDateTime(trackingConsent?.updatedAt)}</dd>
+              </div>
+              <div>
+                <dt>선택한 곳</dt>
+                <dd>
+                  {trackingConsent
+                    ? optionalTrackingSourceLabels[trackingConsent.source] || trackingConsent.source
+                    : "없음"}
+                </dd>
+              </div>
+              <div>
+                <dt>적용 범위</dt>
+                <dd>
+                  접속 분석 {trackingConsent?.categories.analytics ? "허용" : "차단"} · 성능 측정{" "}
+                  {trackingConsent?.categories.rum ? "허용" : "차단"}
+                </dd>
+              </div>
+              <div>
+                <dt>브라우저 추적 거부 요청</dt>
+                <dd>{browserPrivacySignal ? "있음" : "없음"}</dd>
+              </div>
+            </dl>
+          </details>
           <p className="muted">
-            자세한 항목은 <Link href="/cookies">쿠키 정책</Link>과 <Link href="/privacy">개인정보처리방침</Link>에서 확인할 수 있습니다.
+            처리하는 항목과 외부 처리자는 <Link href="/cookies">쿠키 정책</Link>과{" "}
+            <Link href="/privacy">개인정보처리방침</Link>에서 확인할 수 있습니다.
           </p>
         </section>
 
@@ -326,7 +419,7 @@ const SettingsPrivacyPage = () => {
           )}
         </section>
 
-        <section className="panel" aria-label="개인정보 처리 요청">
+        <section className="panel" id="privacy-requests" aria-label="개인정보 처리 요청">
           <h2>처리 요청</h2>
           <form className="requestForm" onSubmit={submitRequest}>
             <label>
@@ -343,7 +436,9 @@ const SettingsPrivacyPage = () => {
               요청 사유
               <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={4} />
             </label>
-            <button type="submit" disabled={submitting}>{submitting ? "접수 중" : "처리 요청 접수"}</button>
+            <button type="submit" className="actionPrimary" disabled={submitting}>
+              {submitting ? "접수 중" : "처리 요청 접수"}
+            </button>
           </form>
           {feedback ? (
             <p
@@ -363,117 +458,7 @@ const SettingsPrivacyPage = () => {
         </section>
       </div>
 
-      <style jsx>{`
-        .snapshotSkeleton {
-          display: grid;
-          gap: 12px;
-          margin-top: 4px;
-        }
-
-        .snapshotList {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 14px;
-          margin: 0;
-        }
-
-        .snapshotList div {
-          min-width: 0;
-        }
-
-        dt {
-          color: var(--aq-muted);
-          font-size: 0.82rem;
-          font-weight: 800;
-        }
-
-        dd {
-          margin: 5px 0 0;
-          overflow-wrap: anywhere;
-          color: var(--aq-text);
-          font-weight: 700;
-        }
-
-        .requestForm {
-          display: grid;
-          gap: 14px;
-        }
-
-        .buttonRow {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          margin-top: 16px;
-        }
-
-        label {
-          display: grid;
-          gap: 7px;
-          color: var(--aq-text-secondary);
-          font-weight: 800;
-        }
-
-        .checkLabel {
-          display: flex;
-          align-items: center;
-          gap: 9px;
-        }
-
-        .checkLabel input {
-          width: 18px;
-          height: 18px;
-        }
-
-        select,
-        textarea {
-          width: 100%;
-          border: 1px solid var(--aq-border);
-          border-radius: 7px;
-          padding: 11px 12px;
-          color: var(--aq-text);
-          font: inherit;
-        }
-
-        .muted,
-        .requestResult {
-          margin: 12px 0 0;
-          color: var(--aq-text-secondary);
-          line-height: 1.6;
-        }
-
-        .feedback {
-          margin: 12px 0 0;
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-          font-weight: 800;
-          line-height: 1.55;
-        }
-
-        .feedback::before {
-          content: "";
-          width: 8px;
-          height: 8px;
-          margin-top: 0.45em;
-          border-radius: 50%;
-          flex: 0 0 auto;
-          background: currentColor;
-        }
-
-        .feedback[data-tone="danger"] {
-          color: var(--aq-status-danger);
-        }
-
-        .feedback[data-tone="success"] {
-          color: var(--aq-status-success);
-        }
-
-        @media (max-width: 640px) {
-          .snapshotList {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
+      <style jsx>{privacyPageStyles}</style>
     </SettingsLayout>
   )
 }

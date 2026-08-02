@@ -274,7 +274,7 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
 7. **(6)이 green인 뒤에** 구 API 호스트를 접는다. **순서가 런북의 다른 단계와 반대다 — 저장소가
    먼저다** (#1596).
 
-   1. 저장소 PR을 먼저 병합한다. 이 PR이 `deploy.yml`의 배포 후 공개 검증을 `WEB_DOMAIN` 기준으로
+   1. 저장소 PR(#1596)을 먼저 병합한다. 그 변경이 `deploy.yml`의 배포 후 공개 검증을 `WEB_DOMAIN` 기준으로
       옮기고, Caddyfile의 `{$API_DOMAIN}` 주소와 `API_DOMAIN` 키·파생(materialize allowlist,
       doctor, blue/green·steady-state·status probe, env 계약)을 제거한다.
    2. 그 커밋으로 배포가 green인지 확인한다.
@@ -291,9 +291,9 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    > 경로다. vhost를 통째로 지우면 front가 모든 SSR 경로에서 죽는다.
 
    **1과 3 사이(전환 창)에 구 호스트는 "매치되는 vhost 없음" 상태가 된다.** Caddy는 그때 404가
-   아니라 **`200` + 빈 본문**을 준다. 실측(`caddy run` + 이 PR의 Caddyfile, `WEB_DOMAIN` 설정):
+   아니라 **`200` + 빈 본문**을 준다. 실측(`caddy run` + #1596 이후의 Caddyfile, `WEB_DOMAIN` 설정):
 
-   ```
+   ```text
    Host: api.aquilaxk.site   /actuator/health/readiness  → 200, 0 bytes  (매치 vhost 없음)
    Host: api.aquilaxk.site   /post/api/v1/posts/feed     → 200, 0 bytes, CORS 헤더 없음
    Host: caddy               /actuator/health/readiness  → 502           (내부 진입점 → 백엔드)
@@ -304,17 +304,19 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    갈라진다**는 점이다. blog cutover가 이미 끝나 구 호스트를 부르는 정상 소비자는 없으므로 이
    상태를 수용하고, 3단계에서 hostname 자체를 없앤다.
 
-   `LEGACY_API_DOMAIN`은 이 전환에서 **쓰지 않는다.** 이 전환이 떠나는 구 API 호스트는
-   `API_DOMAIN`이고 남길 주소가 없기 때문이다. 키와 그 site address 슬롯은 **다음 host 이전을
-   위해 계약과 Caddyfile에 남긴다.**
+   `LEGACY_API_DOMAIN`은 **이 전환의 공개 DNS/Tunnel 작업에는 쓰지 않는다** — 떠나는 구 API
+   호스트가 `API_DOMAIN`이고 두 번째 주소로 남길 대상이 없기 때문이다. 그러나 **키 자체는
+   계약(`deploy/env/env.contract.json`), Caddyfile의 site address 슬롯, `materialize_service_env.sh`
+   의 caddy allowlist에 그대로 유지한다.** 다음 host 이전 때 구·신 주소를 동시에 살려 두는 수단이
+   그것뿐이므로, 지우면 안 된다. 운영값(`HOME_SERVER_ENV`)에서 unset인 것이 정상 상태다.
 
    > ⚠️ 전환 창 키를 닫을 때는 **줄을 비우지 말고 지운다.** `KEY=`(빈 값)은 unset이 아니라 빈
    > 문자열로 보간돼 vhost 주소가 `http://`가 되고, `caddy adapt` 실측 결과 그 site의 host
    > matcher가 통째로 사라져 :80 catch-all이 된다. env 계약이
    > `must be removed entirely rather than set to an empty value`로 막지만, 그 전에 알고 있어야
    > 한다.
-
-   > ⚠️ 이 PR 이후 **`WEB_DOMAIN`이 없는 위상은 배포되지 않는다.** `blue_green_deploy.sh`의
+   >
+   > ⚠️ #1596 이후 **`WEB_DOMAIN`이 없는 위상은 배포되지 않는다.** `blue_green_deploy.sh`의
    > `require_nonempty_env_key "WEB_DOMAIN"`이 먼저 막고, `deploy.yml`도 `missing_web_domain`으로
    > 멈춘다. 배포 후 공개 검증이 때릴 호스트가 그 값 하나뿐이라, 없으면 검증 없이 green이 된다.
    > 아래 Rollback 표의 "3단계 되돌리기" 행은 그래서 6단계 이후로는 성립하지 않는다.
@@ -330,8 +332,10 @@ curl -sSI https://blog.aquilaxk.site/ \
 curl -sSI "https://blog.aquilaxk.site/_next/static/<실제 asset 경로>" | grep -i cache-control
 
 # SEO 진입점. front/public/robots.txt는 tracked 정적 파일이고 postbuild가 next-sitemap을 스킵하므로
-# 빌드가 이 값을 갱신하지 않는다. web 호스트에서는 front가 robots.txt를 서빙해야 한다 —
-# backend vhost의 `Disallow: /`가 아니라. doctor.sh의 robots 점검이 같은 판정을 한다.
+# 빌드가 이 값을 갱신하지 않는다. 아래 응답은 front가 서빙한 그 파일이어야 한다: `Allow: /`와
+# `Sitemap: https://blog.aquilaxk.site/sitemap.xml` 줄이 보여야 하고, backend vhost가 쓰는
+# `Disallow: /`가 보이면 라우팅이 backend로 샌 것이라 블로그 전체가 색인에서 빠진다.
+# doctor.sh의 robots 점검이 같은 기준으로 WARN을 낸다.
 curl -sS https://blog.aquilaxk.site/robots.txt
 curl -sS -o /dev/null -w "sitemap=%{http_code}\n" https://blog.aquilaxk.site/sitemap.xml
 
@@ -382,7 +386,13 @@ dig +short www.aquilaxk.site
 dig +short api.aquilaxk.site
 # 7단계 1(저장소 병합)과 3(콘솔 제거) 사이에는 이 호스트가 200 + 빈 본문을 준다. 매치되는
 # vhost가 없을 때 Caddy가 주는 응답이며, 404가 아니라는 점을 알고 봐야 한다.
-curl -sSI --max-time 10 https://api.aquilaxk.site/actuator/health/readiness ; echo "exit=$?"
+#
+# `curl -I`(HEAD)로 보지 마라 - HEAD 응답에는 원래 본문이 없어서 "빈 200"과 정상 응답을
+# 구분할 수 없다. GET으로 보내고 내려받은 바이트 수를 함께 읽는다.
+curl -sS --max-time 10 -o /dev/null -w 'status=%{http_code} bytes=%{size_download}\n' \
+  https://api.aquilaxk.site/actuator/health/readiness
+# 판정: status=200 bytes=0 이면 아직 우리 Caddy에 도달하지만 어떤 vhost도 매치하지 않는
+#       전환 창 상태다. 3단계(hostname·DNS 제거)가 끝나면 이 호스트는 아예 해석되지 않는다.
 ```
 
 `www.aquilaxk.site`는 apex와 함께 **타 서비스가 사용**하므로 제거 후에도 응답이 올 수 있다.

@@ -436,41 +436,53 @@ ensure_caddy_mount_sync() {
   return 1
 }
 
+# 상태 코드와 본문 길이를 함께 걷는다. 매치되는 vhost가 없는 Host에 Caddy가 주는 응답은 404가
+# 아니라 `200` + 빈 본문이라(실측), 상태 코드만 보면 WEB_DOMAIN과 Caddy site address가 어긋난
+# 순간 이 guard가 전부 "정상"이라고 보고하고 복구가 돌지 않는다.
+probe_internal_caddy_route_metrics() {
+  local web_domain="$1"
+  local path="$2"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 8 \
+    -s -o /dev/null -w "%{http_code} %{size_download}" \
+    "http://caddy:80${path}" \
+    -H "Host: ${web_domain}" || true
+}
+
+# 미매치 Host의 서명은 언제나 `200` + 0 bytes다. 200일 때만 본문을 요구하므로, 인증 응답
+# (401/403)의 본문 유무를 가정하지 않고 그 신호만 정확히 걸러낸다.
+is_unmatched_host_response() {
+  local code="$1"
+  local bytes="$2"
+  [[ "${code}" == "200" ]] && ! [[ "${bytes}" =~ ^[1-9][0-9]*$ ]]
+}
+
 check_api_readiness() {
   local web_domain
-  web_domain="$(env_value "WEB_DOMAIN")"
+  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
   if [[ -z "${web_domain}" ]]; then
     log "FAIL missing WEB_DOMAIN in ${ENV_FILE}"
     return 1
   fi
 
-  local code
-  code="$(
-    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
-      --connect-timeout 3 \
-      --max-time 8 \
-      -s -o /dev/null -w "%{http_code}" \
-      "http://caddy:80/actuator/health/readiness" \
-      -H "Host: ${web_domain}" || true
-  )"
+  local metrics code bytes
+  metrics="$(probe_internal_caddy_route_metrics "${web_domain}" "/actuator/health/readiness")"
+  code="${metrics%% *}"
+  bytes="${metrics##* }"
+
+  if is_unmatched_host_response "${code}" "${bytes}"; then
+    log "FAIL api readiness status=200 with an empty body: no Caddy vhost matched Host ${web_domain}"
+    return 1
+  fi
 
   if [[ "${code}" == "200" ]]; then
-    log "OK api readiness status=${code}"
+    log "OK api readiness status=${code} bytes=${bytes}"
     return 0
   fi
 
   log "FAIL api readiness status=${code:-none}"
   return 1
-}
-
-probe_notification_snapshot_route_code() {
-  local web_domain="$1"
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
-    --connect-timeout 3 \
-    --max-time 8 \
-    -s -o /dev/null -w "%{http_code}" \
-    "http://caddy:80/member/api/v1/notifications/snapshot" \
-    -H "Host: ${web_domain}" || true
 }
 
 check_notification_snapshot_route() {
@@ -481,8 +493,17 @@ check_notification_snapshot_route() {
     return 1
   fi
 
-  local code
-  code="$(probe_notification_snapshot_route_code "${web_domain}")"
+  local metrics code bytes
+  metrics="$(probe_internal_caddy_route_metrics "${web_domain}" "/member/api/v1/notifications/snapshot")"
+  code="${metrics%% *}"
+  bytes="${metrics##* }"
+
+  if is_unmatched_host_response "${code}" "${bytes}"; then
+    log "FAIL notification snapshot route status=200 with an empty body: no Caddy vhost matched Host ${web_domain}"
+    return 1
+  fi
+
+  # 미인증 호출이라 401/403이 정상 응답이다. 여기서는 라우팅이 살아 있는지만 본다.
   if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
     log "OK notification snapshot route status=${code}"
     return 0

@@ -2279,6 +2279,58 @@ test("배포 후 게이트가 same-origin 공개 표면도 검증한다", () => 
   assert.doesNotMatch(workflow, /API_DOMAIN/)
 })
 
+// 매치되는 vhost가 없는 Host에도 Caddy는 404가 아니라 `200` + 빈 본문을 준다. 실측(이 트리의
+// Caddyfile을 `caddy run`으로 띄우고 `Host: api.aquilaxk.site`): 200, 0 bytes.
+//
+// 그래서 내부 edge probe가 상태 코드만 보면, WEB_DOMAIN과 Caddy site address가 어긋난 순간
+// 전부 "정상"으로 보고한다 - steady-state guard는 복구를 돌리지 않고 status 리포트는 green을
+// 찍는다. 백엔드가 죽어도 같은 결과가 나오는 것이 아니라, "아무 vhost도 매치하지 않았다"가
+// 성공으로 읽히는 것이다.
+//
+// 문 하나만 고치면 다른 문에서 게이트가 조용히 사라지므로 두 스크립트를 함께 고정한다.
+test("내부 edge probe는 미매치 Host의 빈 200을 성공으로 읽지 않는다", () => {
+  const guards = [
+    ["steady_state_guard.sh", readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")],
+    ["check_deploy_status.sh", readFileSync(path.join(repoRoot, "deploy/homeserver/check_deploy_status.sh"), "utf8")],
+  ]
+
+  // 함수 하나만 떼어 본다. 같은 파일의 로그인 POST probe도 `%{http_code}`만 쓰지만, 그쪽은
+  // 토큰 추출이 뒤따라서 빈 200이 조용히 통과하지 않는다 - 여기서 고정할 대상이 아니다.
+  const shellFunctionBody = (script, name) => {
+    const start = script.indexOf(`${name}() {`)
+    if (start === -1) return ""
+    const end = script.indexOf("\n}\n", start)
+    return end === -1 ? "" : script.slice(start, end + 3)
+  }
+
+  for (const [name, script] of guards) {
+    // 상태 코드 옆에서 본문 길이를 같이 걷어야 두 상태를 구분할 수 있다.
+    const routeProbe = shellFunctionBody(script, "probe_internal_caddy_route_metrics")
+    assert.notEqual(routeProbe, "", `${name} must route internal probes through one metrics helper`)
+    assert.match(
+      routeProbe,
+      /-w "%\{http_code\} %\{size_download\}"/,
+      `${name} must collect the body length next to the status code`,
+    )
+    assert.doesNotMatch(
+      routeProbe,
+      /-w "%\{http_code\}"/,
+      `${name} must not keep a status-only internal route probe`,
+    )
+    // 미매치 Host는 언제나 200 + 0 bytes다. 200일 때만 본문을 요구하면 인증 응답(401/403)의
+    // 본문 유무를 가정하지 않고 그 신호만 정확히 걸러낸다.
+    const predicate = shellFunctionBody(script, "is_unmatched_host_response")
+    assert.notEqual(predicate, "", `${name} must name the unmatched-host signature in one place`)
+    assert.match(predicate, /\[\[ "\$\{code\}" == "200" \]\]/, `${name} predicate must key on 200`)
+    assert.match(predicate, /\^\[1-9\]\[0-9\]\*\$/, `${name} predicate must require a non-empty body`)
+    // 판정 지점에서 실제로 쓰여야 한다. 정의만 있고 호출이 없으면 게이트가 아니다.
+    assert(
+      script.split("is_unmatched_host_response").length - 1 >= 3,
+      `${name} must call the predicate on every internal probe verdict`,
+    )
+  }
+})
+
 test("deploy workflow validates live API security headers after homeserver rollout", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 

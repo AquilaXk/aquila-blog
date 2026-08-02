@@ -4175,6 +4175,116 @@ test("표면 도메인 키는 caddy env까지 전달되고 site address 유일�
   assert(orphanResult.errors.some((error) => error.key === "APEX_DOMAIN"))
 })
 
+// 키를 생략하는 것은 vhost를 끄는 것이 아니다. Caddy의 `{$VAR:default}`는 변수가 unset일 때
+// 기본값을 쓰므로, 생략된 도메인 키의 site address는 `.localhost` 기본 주소로 살아 있다.
+// 집합 검사가 생략된 키를 그냥 건너뛰면 "설정된 값 == 생략된 키의 기본 주소" 조합이 통과하는데,
+// 그것은 caddy 기동 거부(중복 site address)라서 edge 전체가 내려가는 조합이다.
+test("site address 유일성은 생략된 도메인 키의 Caddyfile 기본 주소까지 포함한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const siteAddressCheck = (contract.targets["home-server-source"].crossChecks || []).find(
+    (check) => check.type === "allDistinct",
+  )
+  assert.ok(siteAddressCheck, "Caddy site address keys must be checked for uniqueness as a set")
+
+  // 기대값은 Caddyfile에서 읽는다. 여기 값을 적어 두면 Caddyfile의 기본값이 바뀐 뒤에도 계약의
+  // 낡은 표가 그린으로 남고, 그 순간 이 검사가 실제 주소가 아닌 유령 주소를 지킨다.
+  const caddyDefaults = {}
+  for (const key of siteAddressCheck.keys) {
+    const occurrences = [...caddyfile.matchAll(new RegExp(`\\{\\$${key}:([^}]*)\\}`, "g"))].map((match) => match[1])
+    assert.ok(occurrences.length > 0, `${key} must be interpolated with a default in the Caddyfile`)
+    // 같은 키가 여러 번 보간되면(회사 호스트는 vhost 주소와 apex의 redirect 목적지 양쪽에 쓰인다)
+    // 기본값이 하나여야 한다. 갈라지면 어느 쪽이 실제 주소인지 계약이 표현할 수 없다.
+    assert.deepEqual([...new Set(occurrences)], [occurrences[0]], `${key} default must be spelled once`)
+    caddyDefaults[key] = occurrences[0]
+  }
+  assert.deepEqual(
+    siteAddressCheck.fallbacks,
+    caddyDefaults,
+    "the contract fallback table must be the Caddyfile's own defaults for every site address key",
+  )
+  // 기본 주소끼리 겹치면 아무 키도 설정하지 않은 상태에서 이미 caddy가 기동하지 못한다.
+  assert.equal(
+    new Set(Object.values(caddyDefaults).map((host) => host.toLowerCase())).size,
+    Object.keys(caddyDefaults).length,
+    "the .localhost defaults themselves must be distinct site addresses",
+  )
+
+  const healthy = [
+    baseHomeServerEnv,
+    "COMPANY_DOMAIN=www.aquilaxk.site",
+    "PRODUCT_DOMAIN=easysubway.aquilaxk.site",
+    "APEX_DOMAIN=aquilaxk.site",
+  ].join("\n")
+  const healthyResult = validateEnvText({ contract, target: "home-server-source", text: healthy })
+  assert.equal(
+    healthyResult.ok,
+    true,
+    healthyResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+
+  // 표면 키를 아직 열지 않은 컷오버 전 조합도 통과해야 한다 - 생략된 세 키의 기본 주소는 서로
+  // 다르므로, 기본 주소를 집합에 넣는 것만으로 배포가 잠기면 안 된다.
+  const preCutover = validateEnvText({ contract, target: "home-server-source", text: baseHomeServerEnv })
+  assert.equal(
+    preCutover.ok,
+    true,
+    preCutover.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+
+  // 실측은 APEX_DOMAIN으로 한다. COMPANY_DOMAIN·PRODUCT_DOMAIN은 allowedValues로 고정돼 있어
+  // 충돌을 표현할 수조차 없고, apex는 고정값이 없어 이 검사가 유일한 방어선이다.
+  for (const [omitted, reason] of [
+    ["PRODUCT_DOMAIN", "the product vhost still answers on its default address while the key is unset"],
+    ["COMPANY_DOMAIN", "the company vhost still answers on its default address while the key is unset"],
+  ]) {
+    const fallbackHost = caddyDefaults[omitted]
+    // apex는 COMPANY_DOMAIN을 요구하므로 회사 키는 남겨 두고 충돌 대상만 생략한다.
+    const collided = [
+      baseHomeServerEnv,
+      ...(omitted === "COMPANY_DOMAIN" ? [] : ["COMPANY_DOMAIN=www.aquilaxk.site"]),
+      `APEX_DOMAIN=${fallbackHost}`,
+    ].join("\n")
+    const result = validateEnvText({ contract, target: "home-server-source", text: collided })
+    assert.equal(result.ok, false, `APEX_DOMAIN=${fallbackHost} collides because ${reason}`)
+    assert(
+      result.errors.some(
+        (error) => error.key === "APEX_DOMAIN" && error.message.includes(`must differ from the ${omitted} default site address`),
+      ),
+      JSON.stringify(result.errors),
+    )
+  }
+
+  // 대소문자만 다른 충돌도 Caddy에는 같은 주소다.
+  const casedCollision = [
+    baseHomeServerEnv,
+    "COMPANY_DOMAIN=www.aquilaxk.site",
+    `APEX_DOMAIN=${caddyDefaults.PRODUCT_DOMAIN.toUpperCase()}`,
+  ].join("\n")
+  const casedResult = validateEnvText({ contract, target: "home-server-source", text: casedCollision })
+  assert.equal(casedResult.ok, false, "a default-address duplicate that differs only in case is still a duplicate")
+  assert(
+    casedResult.errors.some((error) => error.key === "APEX_DOMAIN" && /default site address/.test(error.message)),
+    JSON.stringify(casedResult.errors),
+  )
+
+  // 생략된 키를 실제로 설정하면 그 기본 주소는 더 이상 점유되지 않는다. 계속 막으면 유령 주소
+  // 때문에 정상 조합이 거부된다.
+  const releasedFallback = [
+    baseHomeServerEnv,
+    "COMPANY_DOMAIN=www.aquilaxk.site",
+    "PRODUCT_DOMAIN=easysubway.aquilaxk.site",
+    `APEX_DOMAIN=${caddyDefaults.PRODUCT_DOMAIN}`,
+  ].join("\n")
+  const releasedResult = validateEnvText({ contract, target: "home-server-source", text: releasedFallback })
+  assert.equal(
+    releasedResult.ok,
+    true,
+    releasedResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+})
+
 test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과 교차 검증된다", () => {
   const contract = JSON.parse(readFileSync(contractPath, "utf8"))
   const caddyEnvExample = readFileSync(

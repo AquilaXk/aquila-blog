@@ -11,12 +11,12 @@ class AuthCookieDomainPolicyTest {
     fun `normalize api subdomain to shared site domain`() {
         val resolved =
             AuthCookieDomainPolicy.resolve(
-                configuredDomain = "api.aquilaxk.site",
-                frontUrl = "https://www.aquilaxk.site",
-                backUrl = "https://api.aquilaxk.site",
+                configuredDomain = "api.blog.aquilaxk.site",
+                frontUrl = "https://blog.aquilaxk.site",
+                backUrl = "https://api.blog.aquilaxk.site",
             )
 
-        assertThat(resolved).isEqualTo("aquilaxk.site")
+        assertThat(resolved).isEqualTo("blog.aquilaxk.site")
     }
 
     @Test
@@ -24,24 +24,56 @@ class AuthCookieDomainPolicyTest {
     fun `normalize url like configured domain`() {
         val resolved =
             AuthCookieDomainPolicy.resolve(
-                configuredDomain = "https://www.aquilaxk.site",
-                frontUrl = "https://www.aquilaxk.site",
-                backUrl = "https://api.aquilaxk.site",
+                configuredDomain = "https://blog.aquilaxk.site",
+                frontUrl = "https://blog.aquilaxk.site",
+                backUrl = "https://api.blog.aquilaxk.site",
             )
 
-        assertThat(resolved).isEqualTo("aquilaxk.site")
+        assertThat(resolved).isEqualTo("blog.aquilaxk.site")
     }
 
     @Test
     @DisplayName("설정 도메인이 이미 사이트 도메인이면 그대로 유지한다")
-    fun `keep apex domain when already correct`() {
+    fun `keep site domain when already correct`() {
         val resolved =
             AuthCookieDomainPolicy.resolve(
-                configuredDomain = "aquilaxk.site",
-                frontUrl = "https://www.aquilaxk.site",
+                configuredDomain = "blog.aquilaxk.site",
+                frontUrl = "https://blog.aquilaxk.site",
+                backUrl = "https://api.blog.aquilaxk.site",
+            )
+
+        assertThat(resolved).isEqualTo("blog.aquilaxk.site")
+    }
+
+    @Test
+    @DisplayName("운영 조합(front blog + back api.blog)은 쿠키 도메인을 blog 하위로 제한한다")
+    fun `home server production combination scopes cookie to blog subtree`() {
+        val resolved =
+            AuthCookieDomainPolicy.resolve(
+                configuredDomain = "blog.aquilaxk.site",
+                frontUrl = "https://blog.aquilaxk.site",
+                backUrl = "https://api.blog.aquilaxk.site",
+            )
+
+        assertThat(resolved).isEqualTo("blog.aquilaxk.site")
+        // apex와 www는 타 서비스 소유다. 쿠키가 그쪽으로 새면 안 된다.
+        assertThat(resolved).isNotEqualTo("aquilaxk.site")
+        assertThat(resolved).doesNotStartWith(".")
+    }
+
+    @Test
+    @DisplayName("회귀 방지: back이 구 api 도메인이면 공통 접미사가 apex로 떨어져 쿠키가 타 서비스로 샌다")
+    fun `legacy api host on sibling subtree falls back to apex`() {
+        val resolved =
+            AuthCookieDomainPolicy.resolve(
+                configuredDomain = "blog.aquilaxk.site",
+                frontUrl = "https://blog.aquilaxk.site",
+                // 전환 전 상태: api가 blog의 형제라서 공통 접미사가 apex가 된다.
                 backUrl = "https://api.aquilaxk.site",
             )
 
+        // 이 값이 바로 이번 전환이 막으려는 상태다. CUSTOM_PROD_BACKURL/API_DOMAIN이
+        // api.blog.aquilaxk.site로 유지되지 않으면 쿠키 스코프가 여기로 넓어진다.
         assertThat(resolved).isEqualTo("aquilaxk.site")
     }
 
@@ -51,8 +83,8 @@ class AuthCookieDomainPolicyTest {
         val resolved =
             AuthCookieDomainPolicy.resolve(
                 configuredDomain = "",
-                frontUrl = "https://www.aquilaxk.site",
-                backUrl = "https://api.aquilaxk.site",
+                frontUrl = "https://blog.aquilaxk.site",
+                backUrl = "https://api.blog.aquilaxk.site",
             )
 
         assertThat(resolved).isEmpty()

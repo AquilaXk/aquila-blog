@@ -24,6 +24,18 @@ export const loadContract = (contractPath = defaultContractPath) => JSON.parse(r
 const valueOf = (env, key) => env.get(key)?.trim() || ""
 const safeError = (key, message) => ({ key, message })
 
+// compose 서비스명(점 없는 단일 레이블), loopback, RFC1918 사설 IP만 평문 http를 허용한다.
+// 공개 호스트로 http를 쓰면 SSR 트래픽이 평문으로 나가므로 계속 거부한다.
+const isContainerInternalHost = (host) => {
+  if (host === "localhost" || host === "::1" || host === "[::1]") return true
+  if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true
+  if (/^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host)) return true
+  // compose 네트워크의 서비스명은 점이 없다. 공개 FQDN과 구분되는 지점이다.
+  return /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/i.test(host)
+}
+
 const validateKind = (kind, value) => {
   if (kind === undefined) return null
   if (kind === "positive-decimal") return /^[1-9]\d*$/.test(value) ? null : "must be a positive decimal"
@@ -33,6 +45,17 @@ const validateKind = (kind, value) => {
     } catch {
       return "must be an HTTPS URL"
     }
+  }
+  if (kind === "internal-url") {
+    let parsed
+    try {
+      parsed = new URL(value)
+    } catch {
+      return "must be a URL"
+    }
+    if (parsed.protocol === "https:") return null
+    if (parsed.protocol !== "http:") return "must be an HTTP or HTTPS URL"
+    return isContainerInternalHost(parsed.hostname) ? null : "must start with https:// for a public host"
   }
   return "has an unsupported validation kind"
 }

@@ -1,4 +1,7 @@
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.aquilaxk.site").replace(/\/+$/, "")
+// 운영 사이트의 정본 URL. NEXT_PUBLIC_SITE_URL 기본값이자 isProd 판정 기준이다.
+const PRODUCTION_SITE_URL = "https://blog.aquilaxk.site"
+const INJECTED_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/+$/, "")
+const SITE_URL = INJECTED_SITE_URL || PRODUCTION_SITE_URL
 /**
  * @param {string | undefined} value
  * @param {boolean} [defaultValue]
@@ -98,7 +101,14 @@ const CONFIG = {
       appid: "", // Embed Code -> data-app-id value
     },
   },
-  isProd: process.env.VERCEL_ENV === "production", // distinguish between development and production environment (ref: https://vercel.com/docs/environment-variables#system-environment-variables)
+  // 홈서버 컨테이너에는 VERCEL_ENV가 없어 이 값이 항상 false로 굳어 있었다.
+  // 운영 사이트 URL이 빌드에 명시적으로 주입된 경우에만 production으로 본다.
+  // (NEXT_PUBLIC_*는 빌드 시점에 번들에 인라인되므로 이미지 빌드 인자로 넘어와야 한다)
+  // 홈서버 컨테이너에는 VERCEL_ENV가 없어 이 값이 항상 false로 굳어 있었다.
+  // 운영 사이트 URL이 명시적으로 주입된 빌드, 또는 Vercel production 빌드를 production으로 본다.
+  // Vercel은 #1542 전까지 라이브이자 rollback 경로다 — URL 완전 일치만 보면 거기서 GA와
+  // web-vitals가 무음으로 꺼진다.
+  isProd: INJECTED_SITE_URL === PRODUCTION_SITE_URL || process.env.VERCEL_ENV === "production",
   revalidateTime: 3600, // revalidate time for [slug], index
 }
 

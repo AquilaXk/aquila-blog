@@ -480,12 +480,12 @@ test.describe("live critical error filter", () => {
   test("WebKit Next data prefetch access-control noise는 critical error에서 제외한다", () => {
     expect(
       isWebKitCorsAccessControlNoise(
-        "/www.aquilaxk.site/_next/data/FsB_f7gB6UefGQbKBjMeG/index.json due to access control checks."
+        "/blog.aquilaxk.site/_next/data/FsB_f7gB6UefGQbKBjMeG/index.json due to access control checks."
       )
     ).toBe(true)
     expect(
       isWebKitCorsAccessControlNoise(
-        "https://api.aquilaxk.site/member/api/v1/notifications/snapshot due to access control checks."
+        "https://api.blog.aquilaxk.site/member/api/v1/notifications/snapshot due to access control checks."
       )
     ).toBe(true)
     expect(isWebKitCorsAccessControlNoise("TypeError: Cannot read properties of undefined")).toBe(false)
@@ -518,8 +518,8 @@ test.describe("live public RSS feed", () => {
     expect(body).toContain('<?xml version="1.0" encoding="UTF-8"?>')
     expect(body).toContain('<rss version="2.0">')
     expect(body).toContain("<channel>")
-    expect(body).toContain("<link>https://www.aquilaxk.site</link>")
-    expect(body).toMatch(/<item>[\s\S]*<guid>https:\/\/www\.aquilaxk\.site\/posts\/\d+<\/guid>[\s\S]*<\/item>/)
+    expect(body).toContain("<link>https://blog.aquilaxk.site</link>")
+    expect(body).toMatch(/<item>[\s\S]*<guid>https:\/\/blog\.aquilaxk\.site\/posts\/\d+<\/guid>[\s\S]*<\/item>/)
     expect(body).not.toContain("<!DOCTYPE")
   })
 })

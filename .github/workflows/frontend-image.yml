@@ -95,7 +95,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # front/Dockerfile은 front/Makefile이 쓰는 로컬 개발 컨테이너다. 운영 이미지는 Dockerfile.runtime뿐이다.
-      # NEXT_PUBLIC_* build-arg 주입은 #1540이 확정한다. 이 워크플로는 값을 정하지 않는다.
+      # 공개 도메인 값은 Dockerfile.runtime의 ARG 기본값이 갖는다(#1540). 여기서 주는 것은
+      # 워크플로만 알 수 있는 값 하나뿐이다 - 빌드된 commit SHA.
       - name: Build and push front image
         id: build_front_image
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
@@ -103,6 +104,8 @@ jobs:
           context: ./front
           file: ./front/Dockerfile.runtime
           push: true
+          build-args: |
+            NEXT_PUBLIC_AQUILA_BUILD_SHA=${{ steps.meta.outputs.build_sha }}
           tags: ${{ steps.meta.outputs.image_ref }}
           cache-from: type=gha,scope=front-image
           cache-to: type=gha,mode=max,scope=front-image

@@ -82,7 +82,7 @@ test.describe("backend proxy forwarded header boundary", () => {
   test("strips spoofable forwarding headers before upstream fetch", async () => {
     const { captured, res } = await invokeBackendProxy({
       headers: {
-        host: "www.aquilaxk.site",
+        host: "blog.aquilaxk.site",
         cookie: "accessToken=token",
         "x-forwarded-for": "203.0.113.9",
         "x-forwarded-host": "evil.example",
@@ -99,7 +99,7 @@ test.describe("backend proxy forwarded header boundary", () => {
     const headers = captured[0].headers
 
     expect(headers.get("cookie")).toBe("accessToken=token")
-    expect(headers.get("x-forwarded-host")).toBe("www.aquilaxk.site")
+    expect(headers.get("x-forwarded-host")).toBe("blog.aquilaxk.site")
     expect(headers.get("x-forwarded-proto")).toBe("https")
     expect(headers.get("x-forwarded-for")).toBe("10.0.0.8")
     expect(headers.get("x-real-ip")).toBeNull()
@@ -112,7 +112,7 @@ test.describe("backend proxy forwarded header boundary", () => {
     const { captured, res } = await invokeBackendProxy({
       method: "POST",
       headers: {
-        host: "www.aquilaxk.site",
+        host: "blog.aquilaxk.site",
         "content-type": "application/json",
         "content-length": String(1 * 1024 * 1024 + 1),
       },

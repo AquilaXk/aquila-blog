@@ -523,30 +523,20 @@ extract_host() {
   echo "${raw}" | sed -E 's#^[a-zA-Z]+://##; s#/.*$##; s#:[0-9]+$##'
 }
 
-site_key() {
-  local host="$1"
+# 인증 쿠키 Domain은 front/back 호스트의 공통 접미사로 계산된다(AuthCookieDomainPolicy).
+# 마지막 두 레이블만 비교하면 apex(aquilaxk.site)와 blog.aquilaxk.site가 같은 값으로 축약돼,
+# 쿠키가 상위 도메인으로 새는 오설정을 WARN 없이 통과시킨다. 전체 호스트로 비교한다.
+is_strict_subdomain_of() {
+  local candidate="$1"
+  local parent="$2"
 
-  if [[ -z "${host}" ]]; then
-    echo ""
-    return
+  if [[ -z "${candidate}" || -z "${parent}" ]]; then
+    return 1
   fi
-
-  if [[ "${host}" == "localhost" || "${host}" == "127.0.0.1" ]]; then
-    echo "${host}"
-    return
+  if [[ "${candidate}" == "${parent}" ]]; then
+    return 1
   fi
-
-  IFS='.' read -r -a labels <<< "${host}"
-  local count="${#labels[@]}"
-
-  if (( count <= 2 )); then
-    echo "${host}"
-    return
-  fi
-
-  local last=$((count - 1))
-  local prev=$((count - 2))
-  echo "${labels[prev]}.${labels[last]}"
+  [[ "${candidate}" == *".${parent}" ]]
 }
 
 print_section "Basic Info"
@@ -625,30 +615,38 @@ api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
 
 front_host="$(extract_host "${front_url}")"
 back_host="$(extract_host "${back_url}")"
-cookie_site="$(site_key "${cookie_domain}")"
-front_site="$(site_key "${front_host}")"
-back_site="$(site_key "${back_host}")"
-api_site="$(site_key "${api_domain}")"
 
 echo "CUSTOM_PROD_FRONTURL host: ${front_host:-<empty>}"
 echo "CUSTOM_PROD_BACKURL host:  ${back_host:-<empty>}"
 echo "CUSTOM_PROD_COOKIEDOMAIN:  ${cookie_domain:-<empty>}"
 echo "API_DOMAIN:                ${api_domain:-<empty>}"
 
-if [[ -n "${front_site}" && -n "${back_site}" && "${front_site}" != "${back_site}" ]]; then
-  echo "WARN: FRONTURL/BACKURL are cross-site (${front_site} vs ${back_site})"
+# 쿠키 스코프는 front 호스트 그 자체여야 하고, 공개 API는 그 하위에 있어야 한다.
+# front가 쿠키 도메인의 형제이거나 API가 형제 subtree에 있으면 공통 접미사가 한 단계 위로
+# 올라가, 우리 소유가 아닌 상위 호스트로 세션 쿠키가 전송된다.
+#
+# front/back 관계 점검은 cookie_domain이 비어 있어도 사라지면 안 된다. 쿠키 도메인이 통째로
+# 빠진 .env.prod가 가장 위험한 상태인데, 그때 점검이 함께 사라지면 아무 WARN도 안 나온다.
+if [[ -n "${front_host}" && -n "${back_host}" ]] && ! is_strict_subdomain_of "${back_host}" "${front_host}"; then
+  # 전환 창에는 이 WARN이 예상된 상태지만, 그 판정을 문구에 상수로 박으면 전환이 끝난 뒤
+  # 진짜 위험한 조합에서도 "예상된 것"이라고 말하게 된다. 상태는 API_DOMAIN으로 구분한다.
+  if [[ "${api_domain}" == "api.aquilaxk.site" ]]; then
+    echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - expected while API_DOMAIN is still the pre-transition host (#1540)"
+  else
+    echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - the shared suffix widens the auth cookie scope above ${front_host}"
+  fi
 fi
 
-if [[ -n "${cookie_site}" && -n "${front_site}" && "${cookie_site}" != "${front_site}" ]]; then
-  echo "WARN: COOKIEDOMAIN does not match FRONTURL site (${cookie_site} vs ${front_site})"
+if [[ -n "${cookie_domain}" && -n "${front_host}" && "${cookie_domain}" != "${front_host}" ]]; then
+  echo "WARN: COOKIEDOMAIN must equal FRONTURL host (${cookie_domain} vs ${front_host}) - auth cookies would reach hosts above ${front_host}"
 fi
 
-if [[ -n "${cookie_site}" && -n "${back_site}" && "${cookie_site}" != "${back_site}" ]]; then
-  echo "WARN: COOKIEDOMAIN does not match BACKURL site (${cookie_site} vs ${back_site})"
+if [[ -n "${cookie_domain}" && -n "${back_host}" ]] && ! is_strict_subdomain_of "${back_host}" "${cookie_domain}"; then
+  echo "WARN: BACKURL host must sit strictly under COOKIEDOMAIN (${back_host} vs ${cookie_domain})"
 fi
 
-if [[ -n "${api_site}" && -n "${back_site}" && "${api_site}" != "${back_site}" ]]; then
-  echo "WARN: API_DOMAIN does not match BACKURL site (${api_site} vs ${back_site})"
+if [[ -n "${api_domain}" && -n "${back_host}" && "${api_domain}" != "${back_host}" ]]; then
+  echo "WARN: API_DOMAIN does not match BACKURL host (${api_domain} vs ${back_host})"
 fi
 
 print_section "Grafana Embed Route"

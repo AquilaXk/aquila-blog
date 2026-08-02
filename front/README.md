@@ -35,7 +35,7 @@ Node.js 20.x와 Yarn 1.22.22를 기준으로 실행합니다. `package.json`의 
 | 이름 | 용도 |
 | --- | --- |
 | `NEXT_PUBLIC_BACKEND_URL` | 브라우저 런타임 API base URL |
-| `BACKEND_INTERNAL_URL` | SSR/server-side API base URL |
+| `BACKEND_INTERNAL_URL` | SSR/server-side API base URL. 공개 인터넷을 왕복하지 않는 컨테이너 내부 주소(예: `http://back_blue:8080`)를 허용하며, 공개 호스트에는 `https://`만 허용합니다 |
 
 ## 선택 환경변수
 

@@ -29,7 +29,7 @@ export const RELEASE_UI_QA_TAGS = Array.from(
 )
 
 export const RELEASE_UI_QA_LONG_URL =
-  "https://www.aquilaxk.site/releases/preflight/very-long-url/" +
+  "https://blog.aquilaxk.site/releases/preflight/very-long-url/" +
   "device-ui-qa-matrix-with-keyboard-scroll-restoration-and-overflow-checks"
 
 export const RELEASE_UI_QA_IMAGE_PATHS = Array.from(

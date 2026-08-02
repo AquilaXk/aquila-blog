@@ -6,9 +6,9 @@ test.describe("live auth navigation helper", () => {
   test("treats Playwright net ERR_ABORTED as a retriable navigation interruption", () => {
     const error = new Error(
       [
-        "page.goto: net::ERR_ABORTED at https://www.aquilaxk.site/editor/new",
+        "page.goto: net::ERR_ABORTED at https://blog.aquilaxk.site/editor/new",
         "Call log:",
-        '  - navigating to "https://www.aquilaxk.site/editor/new", waiting until "load"',
+        '  - navigating to "https://blog.aquilaxk.site/editor/new", waiting until "load"',
       ].join("\n")
     )
 
@@ -16,14 +16,14 @@ test.describe("live auth navigation helper", () => {
   })
 
   test("does not hide unrelated navigation failures", () => {
-    const error = new Error("page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.aquilaxk.site/editor/new")
+    const error = new Error("page.goto: net::ERR_NAME_NOT_RESOLVED at https://blog.aquilaxk.site/editor/new")
 
     expect(isNavigationInterruptedError(error)).toBe(false)
   })
 
   test("detects legal reconsent gate urls", () => {
-    expect(isLegalReconsentGateUrl("https://www.aquilaxk.site/settings/privacy?reconsent=required")).toBe(true)
-    expect(isLegalReconsentGateUrl("https://www.aquilaxk.site/settings/privacy")).toBe(false)
-    expect(isLegalReconsentGateUrl("https://www.aquilaxk.site/editor/new")).toBe(false)
+    expect(isLegalReconsentGateUrl("https://blog.aquilaxk.site/settings/privacy?reconsent=required")).toBe(true)
+    expect(isLegalReconsentGateUrl("https://blog.aquilaxk.site/settings/privacy")).toBe(false)
+    expect(isLegalReconsentGateUrl("https://blog.aquilaxk.site/editor/new")).toBe(false)
   })
 })

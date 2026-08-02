@@ -6,7 +6,7 @@
     "k6Version": "<k6 version>"
   },
   "env": {
-    "baseUrl": "https://api.aquilaxk.site",
+    "baseUrl": "https://api.blog.aquilaxk.site",
     "cloudFileId": "<redacted>",
     "concurrentViewers": 5,
     "exclude429": false

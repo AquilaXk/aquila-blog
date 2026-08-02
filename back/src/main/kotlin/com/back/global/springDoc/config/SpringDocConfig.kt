@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration
 @Configuration
 @OpenAPIDefinition(
     info = Info(title = "API 서버", version = "beta", description = "API 서버 문서입니다."),
-    servers = [Server(url = "https://api.aquilaxk.site")],
+    servers = [Server(url = "https://api.blog.aquilaxk.site")],
 )
 @SecurityScheme(name = "bearerAuth", type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "JWT")
 class SpringDocConfig {

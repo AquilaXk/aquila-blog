@@ -85,7 +85,7 @@ export const sanitizeRumUrlPath = (value?: string) => {
   if (!value) return undefined
 
   try {
-    const baseOrigin = typeof window === "undefined" ? "https://www.aquilaxk.site" : window.location.origin
+    const baseOrigin = typeof window === "undefined" ? "https://blog.aquilaxk.site" : window.location.origin
     const url = new URL(value, baseOrigin)
     if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
     return url.pathname

@@ -226,7 +226,25 @@ test("build pushes the homeserver runtime Dockerfile from the front context", ()
   assert.equal(build.with.file, "./front/Dockerfile.runtime")
   assert.equal(build.with.push, true)
   assert.equal(build.with.tags, "${{ steps.meta.outputs.image_ref }}")
-  assert.equal("build-args" in build.with, false, "NEXT_PUBLIC_* 주입은 #1540 소관이다")
+
+  // 공개 도메인 값은 Dockerfile.runtime의 ARG 기본값이 갖는다(#1540). 여기서 주는 것은
+  // 워크플로만 알 수 있는 값 하나 - 빌드된 commit SHA다. 이게 없으면
+  // <meta name="aquila-build-sha">가 "unknown"이 되어 라이브 호스트가 어느 커밋인지 알 수 없다.
+  assert.match(build.with["build-args"], /^NEXT_PUBLIC_AQUILA_BUILD_SHA=\$\{\{ steps\.meta\.outputs\.build_sha \}\}$/m)
+  for (const domainArg of ["NEXT_PUBLIC_SITE_URL", "NEXT_PUBLIC_BACKEND_URL"]) {
+    assert.doesNotMatch(build.with["build-args"], new RegExp(domainArg), `${domainArg}는 Dockerfile ARG 기본값 소관이다`)
+  }
+})
+
+test("runtime Dockerfile declares the build SHA arg the workflow injects", () => {
+  const dockerfile = readFileSync(path.join(repoRoot, "front/Dockerfile.runtime"), "utf8")
+
+  assert.match(dockerfile, /^ARG NEXT_PUBLIC_AQUILA_BUILD_SHA=""$/m)
+  // NEXT_PUBLIC_*는 빌드 시점에 번들로 인라인된다. ENV로 넘기지 않으면 next build가 못 본다.
+  assert.match(dockerfile, /^ENV NEXT_PUBLIC_AQUILA_BUILD_SHA=\$\{NEXT_PUBLIC_AQUILA_BUILD_SHA\}$/m)
+  // builder 스테이지에서 선언돼야 한다. ENV는 스테이지를 넘지 않는다.
+  const builderStage = dockerfile.slice(dockerfile.indexOf("AS builder"), dockerfile.lastIndexOf("FROM node:"))
+  assert.match(builderStage, /NEXT_PUBLIC_AQUILA_BUILD_SHA/)
 })
 
 test("digest export is fail-closed and is the only ref exposed to consumers", () => {

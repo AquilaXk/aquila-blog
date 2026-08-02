@@ -2,7 +2,7 @@
 
 > 공개 블로그, 관리자 글쓰기 작업실, 홈서버 배포를 포함한 개인 풀스택 기술 블로그 프로젝트입니다.
 
-[Live Site](https://www.aquilaxk.site) ·
+[Live Site](https://blog.aquilaxk.site) ·
 [Frontend](front/README.md) ·
 [Backend](back/README.md) ·
 [Deploy](deploy/homeserver/HARDENING.md) ·

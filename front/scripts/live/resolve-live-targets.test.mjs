@@ -32,7 +32,7 @@ test("promoted verifies the production custom domain with a distinct status", ()
     sourceCommit,
   }), {
     phase: "promoted",
-    webUrl: "https://www.aquilaxk.site",
+    webUrl: "https://blog.aquilaxk.site",
     checkName: "Vercel - aquila-blog-web: production-promoted",
     requiresCredentials: true,
     sourceCommit,
@@ -50,7 +50,7 @@ test("manual dispatch follows the ready gate and rejects mutable or insecure tar
   for (const deploymentUrl of [
     "http://aquila-blog-web.vercel.app",
     "https://unrelated.vercel.app",
-    "https://www.aquilaxk.site",
+    "https://blog.aquilaxk.site",
     "https://aquila-blog-web-git-main-aquilaxks-projects.vercel.app",
     "https://aquila-blog-web-aquilaxks-projects.vercel.app",
     "https://aquila-blog-web-aquila-xk.vercel.app",

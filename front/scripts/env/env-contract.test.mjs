@@ -176,14 +176,95 @@ test("live-e2e rejects placeholder credentials", async () => {
   assert(result.errors.some((error) => error.key === "E2E_LIVE_ADMIN_PASSWORD" && error.message.includes("placeholder")))
 })
 
-test("prebuild validates the Vercel build contract only for production deployment and Web CI runs the contract suite", () => {
+test("prebuild validates both the container build and the Vercel build, and Web CI runs the contract suite", () => {
   const packageJson = JSON.parse(readFileSync(path.join(frontRoot, "package.json"), "utf8"))
   const webWorkflow = readFileSync(path.join(frontRoot, ".github/workflows/ci.yml"), "utf8")
 
+  // 컨테이너 경로: VERCEL/VERCEL_ENV가 없는 빌드에서도 검증이 돌아야 한다.
+  assert.match(packageJson.scripts.prebuild, /AQUILA_PROD_BUILD:-.*1/)
+  assert.match(packageJson.scripts.prebuild, /--target container-build --process-env/)
+  // Vercel 경로: 아직 라이브 호스트라 이 분기를 지우면 검증이 양쪽 모두에서 사라진다.
   assert.match(packageJson.scripts.prebuild, /VERCEL:-.*1.*VERCEL_ENV:-.*production/)
-  assert.match(packageJson.scripts.prebuild, /scripts\/env\/validate-env\.mjs --target production-build --process-env/)
+  assert.match(packageJson.scripts.prebuild, /--target production-build --process-env/)
   assert.doesNotMatch(packageJson.scripts.prebuild, /--target production --process-env/)
   assert.match(webWorkflow, /node --test scripts\/env\/env-contract\.test\.mjs/)
+})
+
+test("container build marker and NEXT_PUBLIC build args are wired in the runtime Dockerfile", async () => {
+  const { loadContract, validateEnvText } = await import("./validate-env.mjs")
+  const dockerfile = readFileSync(path.join(frontRoot, "Dockerfile.runtime"), "utf8")
+
+  // 마커가 없으면 prebuild 검증이 컨테이너 빌드에서 통째로 skip된다.
+  assert.match(dockerfile, /^ENV AQUILA_PROD_BUILD=1$/m)
+
+  const argDefaults = new Map(
+    [...dockerfile.matchAll(/^ARG (NEXT_PUBLIC_[A-Z0-9_]+)="([^"]*)"$/gm)].map((match) => [match[1], match[2]]),
+  )
+  const contract = loadContract(contractPath)
+  const containerBuildKeys = contract.targets["container-build"].keys.map((key) => key.name)
+
+  // NEXT_PUBLIC_AQUILA_BUILD_SHA는 값이 아니라 출처를 나르는 관측용 인자다. 워크플로만 아는
+  // 값이라 로컬 docker build에서는 빈 채로 두어야 하므로 container-build 계약에 넣지 않는다.
+  const observabilityArgs = new Set(["NEXT_PUBLIC_AQUILA_BUILD_SHA"])
+  assert.equal(argDefaults.has("NEXT_PUBLIC_AQUILA_BUILD_SHA"), true, "build SHA arg가 선언돼 있어야 한다")
+
+  // 나머지 build-arg 표면과 container-build 계약이 갈라지면 게이트가 공허해진다.
+  const configArgs = [...argDefaults.keys()].filter((key) => !observabilityArgs.has(key))
+  assert.deepEqual(configArgs.sort(), [...containerBuildKeys].sort())
+
+  // 기본값이 비어 있으면 isProd가 false로 굳고 canonical/OG URL이 틀린 이미지가 조용히 나간다.
+  const result = validateEnvText({
+    contract,
+    target: "container-build",
+    text: configArgs.map((key) => `${key}=${argDefaults.get(key)}`).join("\n"),
+  })
+  assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
+  assert.equal(argDefaults.get("NEXT_PUBLIC_SITE_URL"), "https://blog.aquilaxk.site")
+})
+
+test("container-build fails closed when a NEXT_PUBLIC build arg is missing or empty", async () => {
+  const { loadContract, validateEnvText } = await import("./validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const complete = [
+    "NEXT_PUBLIC_BACKEND_URL=https://api.blog.aquilaxk.site",
+    "NEXT_PUBLIC_SITE_URL=https://blog.aquilaxk.site",
+    "NEXT_PUBLIC_SIGNUP_ENABLED=false",
+    "NEXT_PUBLIC_RUM_SAMPLE_RATE=0",
+  ]
+
+  assert.equal(validateEnvText({ contract, target: "container-build", text: complete.join("\n") }).ok, true)
+
+  for (const index of complete.keys()) {
+    const key = complete[index].split("=")[0]
+    const emptied = complete.map((line, position) => (position === index ? `${key}=` : line))
+    const result = validateEnvText({ contract, target: "container-build", text: emptied.join("\n") })
+    assert.equal(result.ok, false, `${key} must be required for a container build`)
+    assert(result.errors.some((error) => error.key === key && error.message === "is required"))
+  }
+})
+
+test("BACKEND_INTERNAL_URL accepts container-internal http but still rejects plaintext public hosts", async () => {
+  const { loadContract, validateEnvText } = await import("./validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  for (const internalUrl of ["http://back_blue:8080", "http://127.0.0.1:1", "http://localhost:3000", "https://api.blog.aquilaxk.site"]) {
+    const result = validateEnvText({
+      contract,
+      target: "production",
+      text: productionEnv.replace("BACKEND_INTERNAL_URL=https://api.example.test", `BACKEND_INTERNAL_URL=${internalUrl}`),
+    })
+    assert.equal(result.ok, true, `${internalUrl}: ${result.errors.map((error) => `${error.key}: ${error.message}`).join("\n")}`)
+  }
+
+  for (const rejected of ["http://api.blog.aquilaxk.site", "http://api.example.test", "ftp://back_blue", "back_blue:8080"]) {
+    const result = validateEnvText({
+      contract,
+      target: "production",
+      text: productionEnv.replace("BACKEND_INTERNAL_URL=https://api.example.test", `BACKEND_INTERNAL_URL=${rejected}`),
+    })
+    assert.equal(result.ok, false, `${rejected} must not pass BACKEND_INTERNAL_URL validation`)
+    assert(result.errors.some((error) => error.key === "BACKEND_INTERNAL_URL"))
+  }
 })
 
 test("CLI failure exposes only key and message, never secret input", () => {

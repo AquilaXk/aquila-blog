@@ -16,7 +16,7 @@ import java.time.Instant
 class CustomOAuth2LoginFailureHandlerTest {
     @Test
     fun `pending OAuth 가입은 social complete 화면에 fragment token과 next를 전달한다`() {
-        val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+        val handler = CustomOAuth2LoginFailureHandler("https://blog.aquilaxk.site")
         val request =
             MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
                 setParameter("state", OAuth2State("/posts/1?tab=comments", "state-id").encode())
@@ -36,15 +36,15 @@ class CustomOAuth2LoginFailureHandlerTest {
         assertThat(response.status).isEqualTo(302)
         assertThat(response.redirectedUrl)
             .isEqualTo(
-                "https://www.aquilaxk.site/signup/social/complete#token=pending-token&provider=kakao&next=%2Fposts%2F1%3Ftab%3Dcomments",
+                "https://blog.aquilaxk.site/signup/social/complete#token=pending-token&provider=kakao&next=%2Fposts%2F1%3Ftab%3Dcomments",
             )
     }
 
     @Test
     fun `absolute redirect state는 해당 origin의 social complete 화면으로 pending token을 전달한다`() {
-        AppConfig("https://api.aquilaxk.site", "https://preview.aquilaxk.site")
+        AppConfig("https://api.blog.aquilaxk.site", "https://preview.aquilaxk.site")
         try {
-            val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+            val handler = CustomOAuth2LoginFailureHandler("https://blog.aquilaxk.site")
             val request =
                 MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
                     setParameter(
@@ -72,13 +72,13 @@ class CustomOAuth2LoginFailureHandlerTest {
                     "https://preview.aquilaxk.site/signup/social/complete#token=pending-token&provider=kakao&next=%2Feditor%3Fdraft%3D1",
                 )
         } finally {
-            AppConfig("https://api.aquilaxk.site", "https://www.aquilaxk.site")
+            AppConfig("https://api.blog.aquilaxk.site", "https://blog.aquilaxk.site")
         }
     }
 
     @Test
     fun `신규 OAuth 가입 feature freeze는 로그인 화면에 signup-disabled 코드와 next를 전달한다`() {
-        val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+        val handler = CustomOAuth2LoginFailureHandler("https://blog.aquilaxk.site")
         val request =
             MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
                 setParameter("state", OAuth2State("/posts/1?tab=comments", "state-id").encode())
@@ -96,12 +96,12 @@ class CustomOAuth2LoginFailureHandlerTest {
 
         assertThat(response.status).isEqualTo(302)
         assertThat(response.redirectedUrl)
-            .isEqualTo("https://www.aquilaxk.site/login?oauthError=signup-disabled&next=%2Fposts%2F1%3Ftab%3Dcomments")
+            .isEqualTo("https://blog.aquilaxk.site/login?oauthError=signup-disabled&next=%2Fposts%2F1%3Ftab%3Dcomments")
     }
 
     @Test
     fun `신규 OAuth 가입 차단 실패는 로그인 화면에 signup-required 코드와 next를 전달한다`() {
-        val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+        val handler = CustomOAuth2LoginFailureHandler("https://blog.aquilaxk.site")
         val request =
             MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
                 setParameter("state", OAuth2State("/posts/1?tab=comments", "state-id").encode())
@@ -119,12 +119,12 @@ class CustomOAuth2LoginFailureHandlerTest {
 
         assertThat(response.status).isEqualTo(302)
         assertThat(response.redirectedUrl)
-            .isEqualTo("https://www.aquilaxk.site/login?oauthError=signup-required&next=%2Fposts%2F1%3Ftab%3Dcomments")
+            .isEqualTo("https://blog.aquilaxk.site/login?oauthError=signup-required&next=%2Fposts%2F1%3Ftab%3Dcomments")
     }
 
     @Test
     fun `일반 OAuth 실패는 fallback login URL에 oauth-failed 코드를 전달한다`() {
-        val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+        val handler = CustomOAuth2LoginFailureHandler("https://blog.aquilaxk.site")
         val request = MockHttpServletRequest("GET", "/login/oauth2/code/kakao")
         val response = MockHttpServletResponse()
 
@@ -135,14 +135,14 @@ class CustomOAuth2LoginFailureHandlerTest {
         )
 
         assertThat(response.status).isEqualTo(302)
-        assertThat(response.redirectedUrl).isEqualTo("https://www.aquilaxk.site/login?oauthError=oauth-failed")
+        assertThat(response.redirectedUrl).isEqualTo("https://blog.aquilaxk.site/login?oauthError=oauth-failed")
     }
 
     @Test
     fun `absolute redirect state는 해당 origin의 로그인 화면으로 OAuth 실패 코드를 전달한다`() {
-        AppConfig("https://api.aquilaxk.site", "https://preview.aquilaxk.site")
+        AppConfig("https://api.blog.aquilaxk.site", "https://preview.aquilaxk.site")
         try {
-            val handler = CustomOAuth2LoginFailureHandler("https://www.aquilaxk.site")
+            val handler = CustomOAuth2LoginFailureHandler("https://blog.aquilaxk.site")
             val request =
                 MockHttpServletRequest("GET", "/login/oauth2/code/kakao").apply {
                     setParameter(
@@ -164,7 +164,31 @@ class CustomOAuth2LoginFailureHandlerTest {
             assertThat(response.redirectedUrl)
                 .isEqualTo("https://preview.aquilaxk.site/login?oauthError=oauth-failed&next=%2Feditor%3Fdraft%3D1")
         } finally {
-            AppConfig("https://api.aquilaxk.site", "https://www.aquilaxk.site")
+            AppConfig("https://api.blog.aquilaxk.site", "https://blog.aquilaxk.site")
+        }
+    }
+
+    @Test
+    fun `redirect allowlist는 blog origin만 허용하고 apex·www origin은 기본 경로로 떨어뜨린다`() {
+        AppConfig("https://api.blog.aquilaxk.site", "https://blog.aquilaxk.site")
+
+        assertThat(OAuth2State.of("https://blog.aquilaxk.site/editor?draft=1").redirectUrl)
+            .isEqualTo("https://blog.aquilaxk.site/editor?draft=1")
+
+        // apex·www는 타 서비스 소유다. 전환 후 이 origin으로는 절대 되돌아가지 않는다.
+        val rejectedRedirectUrls =
+            listOf(
+                "https://aquilaxk.site/editor?draft=1",
+                "https://www.aquilaxk.site/editor?draft=1",
+                "https://www.blog.aquilaxk.site/editor?draft=1",
+                "https://blog.aquilaxk.site.evil.example/editor",
+                "//www.aquilaxk.site/editor",
+            )
+
+        for (rejected in rejectedRedirectUrls) {
+            assertThat(OAuth2State.of(rejected).redirectUrl)
+                .describedAs("rejected redirect target: %s", rejected)
+                .isEqualTo("/")
         }
     }
 }

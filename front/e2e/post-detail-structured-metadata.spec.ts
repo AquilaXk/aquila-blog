@@ -107,7 +107,7 @@ test.describe("post detail structured metadata", () => {
         page.getByRole("heading", { name: fixture.title })
       ).toBeVisible()
 
-      const canonicalUrl = `https://www.aquilaxk.site/posts/${fixture.id}`
+      const canonicalUrl = `https://blog.aquilaxk.site/posts/${fixture.id}`
       const expectedCreatedAt = toExpectedIso(fixture.createdAt)
       const expectedModifiedAt = toExpectedIso(fixture.modifiedAt)
       const expectedImage = toExpectedFallbackImage(fixture.title)
@@ -166,7 +166,7 @@ test.describe("post detail structured metadata", () => {
           "@type": "ListItem",
           position: 1,
           name: "홈",
-          item: "https://www.aquilaxk.site",
+          item: "https://blog.aquilaxk.site",
         },
         {
           "@type": "ListItem",

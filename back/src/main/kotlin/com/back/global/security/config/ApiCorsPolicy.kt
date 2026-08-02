@@ -21,8 +21,6 @@ class ApiCorsPolicy(
     private val siteFrontUrl: String,
     @Value("\${custom.site.backUrl:}")
     private val siteBackUrl: String,
-    @Value("\${custom.site.cookieDomain:}")
-    private val siteCookieDomain: String,
 ) {
     private val configuration =
         CorsConfiguration().apply {
@@ -62,17 +60,18 @@ class ApiCorsPolicy(
         appendVaryHeader(response, "Access-Control-Request-Headers")
     }
 
+    /**
+     * allowlist는 실제로 운영되는 origin(`custom.site.frontUrl`·`custom.site.backUrl`)에서만 만듭니다.
+     * 쿠키 도메인 파생(`https://<cookieDomain>`·`https://www.<cookieDomain>`)은 넣지 않습니다.
+     * 쿠키 도메인은 front/back의 공통 접미사라서, 파생하면 우리 소유가 아닌 상위 호스트의 origin이
+     * allowlist에 들어옵니다.
+     */
     private fun buildAllowedOriginPatterns(): List<String> {
-        val cookieDomain = siteCookieDomain.trim()
         val isProd = environment.matchesProfiles("prod")
         val configuredOrigins =
             buildList {
                 add(siteFrontUrl)
                 add(siteBackUrl)
-                if (cookieDomain.isNotBlank()) {
-                    add("https://$cookieDomain")
-                    add("https://www.$cookieDomain")
-                }
                 if (!isProd) {
                     add("http://localhost:*")
                     add("http://127.0.0.1:*")

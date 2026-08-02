@@ -67,7 +67,13 @@ export default async function handler(
       count: paths.length,
       paths,
     })
-  } catch {
+  } catch (error) {
+    // 실패를 로그로 남기지 않으면 재생성 실패가 stale 응답으로만 나타나 조용히 묻힌다.
+    // 응답 본문에는 내부 정보를 담지 않고 서버 로그에만 남긴다.
+    console.error("[api/revalidate] failed to revalidate:", {
+      targetCount: targetPaths.length,
+      error,
+    })
     return res.status(500).send("Error revalidating")
   }
 }

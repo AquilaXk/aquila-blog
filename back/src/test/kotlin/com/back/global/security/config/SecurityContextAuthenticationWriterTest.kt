@@ -14,8 +14,8 @@ class SecurityContextAuthenticationWriterTest {
     @DisplayName("회원 정보를 SecurityUser principal 인증으로 SecurityContext에 기록한다")
     fun writeMemberAuthenticationToSecurityContext() {
         AppConfig(
-            siteBackUrl = "https://api.aquilaxk.site",
-            siteFrontUrl = "https://www.aquilaxk.site",
+            siteBackUrl = "https://api.blog.aquilaxk.site",
+            siteFrontUrl = "https://blog.aquilaxk.site",
         )
         val writer = SecurityContextAuthenticationWriter()
         val member = Member(54L, "internal-admin", null, "aquila", "admin@test.com", "admin-api-key")

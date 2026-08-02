@@ -135,9 +135,8 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
         fun apiCorsPolicy(environment: Environment): ApiCorsPolicy =
             ApiCorsPolicy(
                 environment = environment,
-                siteFrontUrl = "https://www.aquilaxk.site",
-                siteBackUrl = "https://api.aquilaxk.site",
-                siteCookieDomain = "aquilaxk.site",
+                siteFrontUrl = "https://blog.aquilaxk.site",
+                siteBackUrl = "https://api.blog.aquilaxk.site",
             )
 
         @Bean

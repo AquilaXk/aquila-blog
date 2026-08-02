@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://www.aquilaxk.site/legal/schemas/processing-activity.schema.json",
+  "$id": "https://blog.aquilaxk.site/legal/schemas/processing-activity.schema.json",
   "title": "AquilaLog privacy processing activity",
   "type": "object",
   "required": [

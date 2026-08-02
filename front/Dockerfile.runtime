@@ -44,20 +44,35 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build-arg surface for the values Next.js inlines into the client bundle.
-# Names come from config/env.contract.json target `production-build`; the non-public keys of that
-# target (BACKEND_INTERNAL_URL, TOKEN_FOR_REVALIDATE, BACKEND_PROXY_MAX_*) are runtime-only and are
-# deliberately not build args. Defaults stay empty — the injection contract is #1540.
-ARG NEXT_PUBLIC_BACKEND_URL=""
-ARG NEXT_PUBLIC_SITE_URL=""
-ARG NEXT_PUBLIC_SIGNUP_ENABLED=""
-ARG NEXT_PUBLIC_RUM_SAMPLE_RATE=""
+# Names come from config/env.contract.json target `container-build`; the non-public keys of the
+# `production` target (BACKEND_INTERNAL_URL, TOKEN_FOR_REVALIDATE, BACKEND_PROXY_MAX_*) are
+# runtime-only and are deliberately not build args.
+#
+# Defaults are the production values (#1540). They are defaults, not a pin: a caller can still
+# override them with --build-arg. Leaving them empty is what made site.config.js `isProd` false and
+# the canonical/OG URLs wrong in every image, with no error anywhere.
+ARG NEXT_PUBLIC_BACKEND_URL="https://api.blog.aquilaxk.site"
+ARG NEXT_PUBLIC_SITE_URL="https://blog.aquilaxk.site"
+# soft-launch gate가 얼려 둔 값이다. config/env.contract.json이 다른 값을 거부한다.
+ARG NEXT_PUBLIC_SIGNUP_ENABLED="false"
+ARG NEXT_PUBLIC_RUM_SAMPLE_RATE="0"
+# Commit SHA exposed as <meta name="aquila-build-sha">. NEXT_PUBLIC_* so it is inlined into the
+# client bundle and therefore fixed to the image digest. Without a producer the meta renders
+# "unknown" and front/e2e/live.spec.ts cannot tell which commit a live host is serving.
+# frontend-image.yml passes github.sha; an empty default keeps local `docker build` working.
+ARG NEXT_PUBLIC_AQUILA_BUILD_SHA=""
 ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
 ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 ENV NEXT_PUBLIC_SIGNUP_ENABLED=${NEXT_PUBLIC_SIGNUP_ENABLED}
 ENV NEXT_PUBLIC_RUM_SAMPLE_RATE=${NEXT_PUBLIC_RUM_SAMPLE_RATE}
+ENV NEXT_PUBLIC_AQUILA_BUILD_SHA=${NEXT_PUBLIC_AQUILA_BUILD_SHA}
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# `prebuild`가 이 마커를 보고 --target container-build 검증을 돌린다.
+# 이 줄이 없으면 컨테이너 production 빌드에서 env 검증이 통째로 skip된다.
+ENV AQUILA_PROD_BUILD=1
 
 # `output: "standalone"` emits .next/standalone/server.js with only the traced dependencies.
 RUN yarn build

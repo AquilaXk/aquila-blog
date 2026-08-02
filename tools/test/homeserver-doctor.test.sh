@@ -684,4 +684,16 @@ if [[ "${post_transition_output}" != *"widens the auth cookie scope"* ]]; then
   fail "expected a post-transition cross-site combination to be reported as widening the cookie scope, got: ${post_transition_output}"
 fi
 
+# front .next/cache 점검(#1541). 이 섹션이 사라지면 "이미지 최적화 캐시가 볼륨 밖으로 나갔다"를
+# 알려 주는 유일한 상시 신호가 없어진다 - /_next/image는 그 상태에서도 200을 계속 반환한다.
+if ! grep -q 'print_section "Front .next/cache Volume"' "${doctor}"; then
+  fail "expected doctor.sh to report the front .next/cache volume state"
+fi
+if ! grep -q '/app/.next/cache' "${doctor}"; then
+  fail "expected the front cache check to inspect the /app/.next/cache mount destination"
+fi
+if ! grep -q "^for svc in front_blue front_green; do$" "${doctor}"; then
+  fail "expected the front cache check to cover both front colours"
+fi
+
 echo "[test] homeserver doctor checkup rules passed"

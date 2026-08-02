@@ -358,6 +358,84 @@ curl -sSI --max-time 10 https://api.aquilaxk.site/actuator/health/readiness ; ec
 확인 기준은 "우리 Tunnel public hostname 목록과 우리 Caddy 설정에 남아 있지 않은 것"이며, 응답이
 오면 우리 홈서버에서 나온 것인지 `x-request-id` 등 우리 헤더 유무로 구분한다.
 
+## 렌더 게이트 (#1541)
+
+위 명령들은 상태 코드와 헤더까지 본다. 그 위 계층 — **응답 내용이 실제로 SSR·ISR·최적화 결과인가** —
+는 `deploy/homeserver/front-render-gate.mjs`가 한 번에 검증한다. 하나라도 실패하면 exit 1이다.
+
+DNS 전환이 끝난 뒤에는 Node가 있는 어디서든 공개 URL로 돌린다. 토큰은 인자로 넘기지 않는다 —
+프로세스 목록과 셸 history에 남는다. 게이트는 토큰이 없으면 revalidate 검사를 건너뛰지 않고
+**실패**한다.
+
+```bash
+TOKEN_FOR_REVALIDATE="<CUSTOM__REVALIDATE__TOKEN 값>" \
+  node deploy/homeserver/front-render-gate.mjs --base-url https://blog.aquilaxk.site
+echo "exit=$?"
+```
+
+DNS 전환 전에는 공개 URL이 아직 홈서버를 가리키지 않으므로 edge 네트워크에서 Host 헤더로
+같은 검증을 한다. Host 값은 Caddy web vhost가 실제로 매치하는 이름이다 — `WEB_DOMAIN`이 아직
+없으면 Caddyfile 기본값 `web.localhost`, 설정한 뒤에는 `blog.aquilaxk.site`다.
+홈서버 호스트에는 Node가 설치돼 있지 않으므로(실측) 컨테이너로 돌린다.
+
+```bash
+cd ~/app
+export TOKEN_FOR_REVALIDATE="$(grep -E '^CUSTOM__REVALIDATE__TOKEN=' deploy/homeserver/.env.prod | cut -d= -f2-)"
+NODE_RUNTIME_IMAGE="$(grep -E '^NODE_RUNTIME_IMAGE=' deploy/homeserver/.env.prod | cut -d= -f2-)"
+docker run --rm --network blog_home_edge \
+  -e TOKEN_FOR_REVALIDATE \
+  -v "$PWD/deploy/homeserver/front-render-gate.mjs:/app/front-render-gate.mjs:ro" \
+  "${NODE_RUNTIME_IMAGE}" \
+  node /app/front-render-gate.mjs --base-url http://caddy:80 --host-header web.localhost
+echo "exit=$?"
+unset TOKEN_FOR_REVALIDATE
+```
+
+게이트가 보는 것과, 각 항목이 잡는 "성공으로 보고되는 열화":
+
+| 검사 | 실패로 잡는 상태 |
+| --- | --- |
+| `ssr-backend-data` | `/feed`·`/sitemap.xml`이 200인데 backend가 가진 글이 하나도 렌더되지 않는다 (SSR이 껍데기를 그린다) |
+| `static-immutable-cache` | `/_next/static/*`에 장기 immutable 캐시가 빠진다 (페이지는 정상, 대역폭만 는다) |
+| `image-optimization` | `/_next/image`가 원본 바이트를 그대로 돌려준다 (화면상 차이 없음) |
+| `isr-cache-state-header` | `x-nextjs-cache`가 사라진다 (`public_edge_probe`의 캐시 관측이 죽는다) |
+| `isr-timed-regeneration` | revalidate 주기가 지나도 stale 200만 계속 나간다 |
+| `isr-on-demand-revalidate` | `/api/revalidate`가 200을 반환하는데 페이지가 안 바뀐다 / 토큰 없이도 통과한다 |
+
+**상시 게이트가 아니다.** 시간 기반 ISR 검증이 대상 라우트의 `revalidate`(홈 60s) 이상 대기하므로
+스크레이프 루프에 넣을 수 없다. 전환·front 배포 직후 1회 실행하고, 상시 관측은
+`public_edge_probe`(캐시 상태·라우트 up)와 `docker_runtime_probe`(front 컨테이너·readiness)가 맡는다.
+
+### 게이트에 넣지 않은 것과 그 이유
+
+- **구 호스트 폐기 확인(`api.aquilaxk.site` 무응답, `www` 부재)**: 전환 7단계 이후에만 유효하다.
+  그 전에 상시 게이트에 넣으면 정상 상태가 실패로 보고된다. 위 "개통 확인"의 1회 수동 확인으로 남긴다.
+  `www`는 타 서비스가 쓰므로 "무응답"을 기준으로 삼을 수 없고, 판정은 우리 Tunnel public hostname
+  목록·Caddy 설정에 없다는 것 + 응답 헤더 지문이다.
+- **로그인 응답 `Set-Cookie`의 `Domain`**: 익명 프로브로는 관측되지 않는다. 위 로그인 왕복 절차가
+  유일한 관측 지점이며 게이트에 억지로 넣지 않는다. 쿠키 **값은 어디에도 기록하지 않는다** —
+  `Domain` 속성만 본다.
+- **`.next/cache` 보존**: 이 앱에서 그 볼륨이 보존하는 것은 **이미지 최적화 캐시뿐**이다. Pages
+  Router의 ISR 산출물은 `.next/server/pages`(이미지 레이어 안)에 쓰이고 `fetch-cache`는 App Router
+  전용이라 채워지지 않는다(#1538 실측). 컨테이너 교체 후 ISR HTML은 보존되지 않으며 blue/green의
+  새 색깔은 **항상 cold ISR로 시작한다**. 보존을 요구사항으로 되살리려면 `next.config.js`의 공유
+  `cacheHandler`가 선행돼야 하고 그것은 애플리케이션 변경이다. 그때까지 게이트는 보존을 전제하지
+  않고, "교체 후 첫 요청이 정상 재생성되는가"를 위 `isr-timed-regeneration`으로 본다.
+  마운트·소유권(보존이 가능한 상태인지)은 `doctor.sh`의 `Front .next/cache Volume` 섹션이 상시 보고한다.
+  실제 보존 여부를 눈으로 확인해야 하면 교체 전후를 직접 비교한다.
+
+  ```bash
+  cd ~/app
+  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+    exec -T front_blue sh -lc 'ls /app/.next/cache/images | sort' > /tmp/next-cache-before.txt
+  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+    up -d --force-recreate front_blue
+  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+    exec -T front_blue sh -lc 'ls /app/.next/cache/images | sort' > /tmp/next-cache-after.txt
+  diff /tmp/next-cache-before.txt /tmp/next-cache-after.txt && echo "image cache preserved"
+  # ISR HTML은 여기서 비교 대상이 아니다. 보존되지 않는 것이 현재 사실이다.
+  ```
+
 ## Rollback
 
 | 상황 | 되돌리는 방법 |

@@ -469,11 +469,25 @@ curl -sS https://easysubway.aquilaxk.site/robots.txt
 # 표면 호스트의 sitemap은 404다. 200이면 그 호스트가 블로그 URL 목록을 자기 것으로 광고한다.
 curl -sS -o /dev/null -w "company_sitemap=%{http_code}\n" https://www.aquilaxk.site/sitemap.xml
 
-# RSS도 블로그 호스트의 자산이다. 표면 호스트에서 200이면 블로그 아이템이 이 호스트의 피드로
-# 두 번째 색인된다. 페이지의 alternate 링크가 사라졌는지도 함께 본다(출력이 있으면 회귀다).
-curl -sS -o /dev/null -w "company_feed=%{http_code}\n" https://www.aquilaxk.site/feed
-curl -sS -o /dev/null -w "product_feed=%{http_code}\n" https://easysubway.aquilaxk.site/feed
-curl -sS https://www.aquilaxk.site/ | grep -o '<link rel="alternate"[^>]*rss[^>]*>'
+# RSS도 블로그 호스트의 자산이다. 표면 호스트에서 차단되지 않으면 블로그 아이템이 이 호스트의
+# 피드로 두 번째 색인된다. 상태 코드를 출력만 하면 그 열화가 "성공"으로 보고되므로 판정까지 한다.
+# 계약된 차단 코드는 404다 (Caddyfile `(front_surface_vhost)`의 `@surfaceFeedDenied` → `respond 404`).
+# `-L`은 최종 응답을 보기 위한 것이다 - 리다이렉트가 블로그 피드로 이어지면 그것도 차단이 아니다.
+# alternate 링크는 두 호스트 모두에서 확인한다(한쪽만 보면 다른 호스트의 누출을 놓친다).
+# no-match가 정상이므로 `grep`은 `if` 안에서 판정한다 - 그 exit 1은 실패가 아니다.
+rss_isolation=0
+for surface in https://www.aquilaxk.site https://easysubway.aquilaxk.site; do
+  feed_code="$(curl -sSL -o /dev/null -w '%{http_code}' "${surface}/feed")"
+  echo "${surface}/feed=${feed_code}"
+  [ "${feed_code}" = "404" ] || { echo "FAIL: feed not blocked"; rss_isolation=1; }
+  if curl -sSL "${surface}/" | grep -o '<link rel="alternate"[^>]*rss[^>]*>'; then
+    echo "FAIL: RSS alternate still advertised on ${surface}"
+    rss_isolation=1
+  fi
+done
+[ "${rss_isolation}" -eq 0 ] && echo "rss isolation ok" || echo "rss isolation FAILED"
+# 판정 결과를 블록의 종료 코드로 남긴다. `(exit N)`은 셸을 죽이지 않고 마지막 상태만 N으로 만든다.
+(exit "${rss_isolation}")
 
 # 표면 호스트에는 백엔드 경로가 없다. 200이면 blog vhost의 게이트가 새어 나온 것이다.
 curl -sS -o /dev/null -w "company_backend=%{http_code}\n" \
@@ -489,14 +503,23 @@ curl -sS -o /dev/null -w "blog_sitemap=%{http_code}\n" https://blog.aquilaxk.sit
 위 명령들은 상태 코드와 헤더까지 본다. 그 위 계층 — **응답 내용이 실제로 SSR·ISR·최적화 결과인가** —
 는 `deploy/homeserver/front-render-gate.mjs`가 한 번에 검증한다. 하나라도 실패하면 exit 1이다.
 
-DNS 전환이 끝난 뒤에는 Node가 있는 어디서든 공개 URL로 돌린다. 토큰은 인자로 넘기지 않는다 —
-프로세스 목록과 셸 history에 남는다. 게이트는 토큰이 없으면 revalidate 검사를 건너뛰지 않고
-**실패**한다.
+DNS 전환이 끝난 뒤에는 Node가 있는 어디서든 공개 URL로 돌린다. 토큰은 **인자로도, 명령 앞 변수
+할당으로도 넣지 않는다** — 앞 할당은 프로세스 목록(argv)에는 안 남지만 셸 history에는 값이 그대로
+남는다. 가려진 입력으로 받아 환경변수로만 넘기고, 끝나면 지운다. 게이트는 토큰이 없으면 revalidate
+검사를 건너뛰지 않고 **실패**한다.
 
 ```bash
-TOKEN_FOR_REVALIDATE="<CUSTOM__REVALIDATE__TOKEN 값>" \
-  node deploy/homeserver/front-render-gate.mjs --base-url https://blog.aquilaxk.site
-echo "exit=$?"
+read -r -s -p "TOKEN_FOR_REVALIDATE: " TOKEN_FOR_REVALIDATE
+printf '\n'
+export TOKEN_FOR_REVALIDATE
+node deploy/homeserver/front-render-gate.mjs --base-url https://blog.aquilaxk.site
+status=$?
+unset TOKEN_FOR_REVALIDATE
+# 종료 코드를 보존한다. `echo "exit=$?"`로 끝내면 그 echo의 0이 블록의 결과가 되어 게이트 실패가
+# 성공으로 보고된다(스크립트에서 이 블록을 호출하면 특히). `(exit N)`은 셸을 죽이지 않고 마지막
+# 상태만 N으로 되돌린다.
+echo "exit=${status}"
+(exit "${status}")
 ```
 
 DNS 전환 전에는 공개 URL이 아직 홈서버를 가리키지 않으므로 edge 네트워크에서 Host 헤더로
@@ -516,8 +539,11 @@ docker run --rm --network blog_home_edge \
   -v "$PWD/deploy/homeserver/front-render-gate.mjs:/app/front-render-gate.mjs:ro" \
   "${NODE_RUNTIME_IMAGE}" \
   node /app/front-render-gate.mjs --base-url http://caddy:80 --host-header web.localhost
-echo "exit=$?"
+status=$?
 unset TOKEN_FOR_REVALIDATE
+# 위 블록과 같은 이유로 종료 코드를 보존한다. `unset`을 먼저 하고 상태를 마지막에 되돌린다.
+echo "exit=${status}"
+(exit "${status}")
 ```
 
 게이트가 보는 것과, 각 항목이 잡는 "성공으로 보고되는 열화":
@@ -555,13 +581,26 @@ unset TOKEN_FOR_REVALIDATE
 
   ```bash
   cd ~/app
-  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
-    exec -T front_blue sh -lc 'ls /app/.next/cache/images | sort' > /tmp/next-cache-before.txt
-  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
-    up -d --force-recreate front_blue
-  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
-    exec -T front_blue sh -lc 'ls /app/.next/cache/images | sort' > /tmp/next-cache-after.txt
-  diff /tmp/next-cache-before.txt /tmp/next-cache-after.txt && echo "image cache preserved"
+  # 목록 수집이 실패해도 빈 파일이 남으면 두 빈 파일의 diff가 성공한다 - "보존됐다"는 잘못된 판정이다.
+  # 그래서 부재를 컨테이너 안에서 먼저 실패로 만든다. `ls | sort`는 컨테이너 sh의 파이프라인이라
+  # 여기서 `set -o pipefail`을 켜도 걸리지 않고(그 sh는 pipefail이 없을 수 있다) sort의 0이 나온다.
+  snapshot_image_cache() {
+    docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+      exec -T front_blue sh -lc \
+      'test -d /app/.next/cache/images || { echo "missing /app/.next/cache/images" >&2; exit 1; }
+       ls /app/.next/cache/images | sort' > "$1"
+  }
+  if snapshot_image_cache /tmp/next-cache-before.txt \
+    && docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+      up -d --force-recreate front_blue \
+    && snapshot_image_cache /tmp/next-cache-after.txt \
+    && diff /tmp/next-cache-before.txt /tmp/next-cache-after.txt
+  then
+    echo "image cache preserved"
+  else
+    echo "image cache NOT preserved 또는 목록 수집 실패 - 위 출력이 판정 근거다"
+    (exit 1)
+  fi
   # ISR HTML은 여기서 비교 대상이 아니다. 보존되지 않는 것이 현재 사실이다.
   ```
 

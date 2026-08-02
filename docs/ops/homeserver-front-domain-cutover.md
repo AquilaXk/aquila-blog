@@ -640,13 +640,22 @@ echo "exit=${status}"
   ```bash
   cd ~/app
   # 목록 수집이 실패해도 빈 파일이 남으면 두 빈 파일의 diff가 성공한다 - "보존됐다"는 잘못된 판정이다.
-  # 그래서 부재를 컨테이너 안에서 먼저 실패로 만든다. `ls | sort`는 컨테이너 sh의 파이프라인이라
-  # 여기서 `set -o pipefail`을 켜도 걸리지 않고(그 sh는 pipefail이 없을 수 있다) sort의 0이 나온다.
+  # 그래서 수집 실패를 컨테이너 안에서 전부 실패로 만든다. 두 경로가 있다: 디렉터리 부재는 `test -d`가
+  # 잡고, 디렉터리는 있는데 `ls` 자체가 실패하는 경우는 `ls`의 종료 코드를 직접 본다.
+  #
+  # `ls | sort`로 쓰면 안 된다 - 그 파이프라인은 컨테이너 sh의 것이라 호스트에서 `set -o pipefail`을
+  # 켜도 걸리지 않고(그 sh에는 pipefail이 없을 수 있다) 파이프라인의 종료 코드는 sort의 0이 된다.
+  # 그래서 `ls`를 먼저 파일로 받아 그 종료 코드를 확인한 뒤 `sort`한다.
   snapshot_image_cache() {
     docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
       exec -T front_blue sh -lc \
       'test -d /app/.next/cache/images || { echo "missing /app/.next/cache/images" >&2; exit 1; }
-       ls /app/.next/cache/images | sort' > "$1"
+       list_file="/tmp/image-cache-list.$$"
+       ls /app/.next/cache/images >"$list_file" || { rm -f "$list_file"; exit 1; }
+       sort "$list_file"
+       status=$?
+       rm -f "$list_file"
+       exit "$status"' > "$1"
   }
   if snapshot_image_cache /tmp/next-cache-before.txt \
     && docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \

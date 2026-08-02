@@ -77,6 +77,10 @@ const RootLayout = ({
   // 쓰지 않고 자기 헤더·풀블리드 섹션을 소유한다.
   const isStandaloneSurfaceRoute = pathname === "/company" || pathname === "/easysubway"
   const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute || isStandaloneSurfaceRoute
+  // 독립 표면은 자기 <main>을 소유한다. 여기서도 <main>으로 감싸면 랜드마크가 중첩돼 보조기술이
+  // 읽는 문서 구조가 무효화되고, 표면의 <header>/<footer>도 main 자손이 되어 banner/contentinfo
+  // 역할을 잃는다. 이 라우트에서만 껍데기를 div로 내려 main을 하나로 유지한다.
+  const LayoutShell = isStandaloneSurfaceRoute ? StandaloneShell : StyledMain
   const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
     // 독립 표면은 관리자 프로필을 전혀 읽지 않는다. 여기서 켜 두면 blog 호스트 백엔드로 credentialed
@@ -163,7 +167,7 @@ const RootLayout = ({
         {isAdminRoute || isDedicatedEditorRoute || isStandaloneSurfaceRoute ? null : (
           <Header fullWidth={false} blogTitle={headerBlogTitle} />
         )}
-        <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>
+        <LayoutShell $fullBleed={isFullBleedRoute}>{children}</LayoutShell>
       </RootAdminProfileContext.Provider>
     </ThemeProvider>
   )
@@ -187,3 +191,9 @@ const StyledMain = styled.main<{ $fullBleed?: boolean }>`
         }
       `}
 `
+
+/**
+ * 같은 껍데기의 non-landmark 버전. 스타일을 복사하지 않고 `withComponent`로 태그만 바꾼다 - 복사하면
+ * 한쪽 폭·overflow 규칙이 조용히 갈라진다.
+ */
+const StandaloneShell = StyledMain.withComponent("div")

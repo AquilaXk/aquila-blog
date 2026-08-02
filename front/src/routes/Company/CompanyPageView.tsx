@@ -27,11 +27,21 @@ type Props = {
   news: CompanyNewsItem[]
 }
 
+/**
+ * 소식 섹션은 backend가 응답하지 않거나 글이 0건이면 자리를 채우지 않고 사라진다. 내비 항목은 그
+ * 조건을 그대로 따라야 한다 - 섹션 없이 링크만 남으면 '소식' 클릭이 아무 일도 하지 않는 죽은
+ * anchor가 된다. 그래서 섹션 id와 내비 href가 같은 상수를 공유한다.
+ */
+const NEWS_SECTION_ID = "news"
+
 const NAV_ITEMS = [
   { id: "capabilities", label: "역량", href: "#capabilities" },
   { id: "product", label: "제품", href: "#product" },
-  { id: "news", label: "소식", href: "#news" },
+  { id: NEWS_SECTION_ID, label: "소식", href: `#${NEWS_SECTION_ID}` },
 ] as const
+
+const visibleNavItems = (hasNews: boolean) =>
+  NAV_ITEMS.filter((item) => item.id !== NEWS_SECTION_ID || hasNews)
 
 const CompanyPageView: React.FC<Props> = ({ news }) => (
   <S.CompanySurface>
@@ -41,7 +51,7 @@ const CompanyPageView: React.FC<Props> = ({ news }) => (
         {COMPANY_SURFACE.name}
       </S.BrandLink>
       <S.SurfaceNav aria-label="회사 소개 둘러보기">
-        {NAV_ITEMS.map((item) => (
+        {visibleNavItems(news.length > 0).map((item) => (
           <S.NavLink key={item.id} href={item.href}>
             {item.label}
           </S.NavLink>
@@ -142,7 +152,7 @@ const CompanyPageView: React.FC<Props> = ({ news }) => (
       </S.Section>
 
       {news.length > 0 ? (
-        <S.Section id="news">
+        <S.Section id={NEWS_SECTION_ID}>
           <S.SectionInner>
             <S.SectionLabel>소식</S.SectionLabel>
             <S.SectionHeading>만들면서 부딪힌 기록</S.SectionHeading>

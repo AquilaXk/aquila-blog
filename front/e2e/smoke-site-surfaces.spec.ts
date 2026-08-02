@@ -38,6 +38,23 @@ const measureRenderedAspectRatio = async (image: Locator) =>
     return measured.offsetWidth / measured.offsetHeight
   })
 
+/**
+ * 요소가 뷰포트 가로 범위 안에 실제로 남아 있는지 본다.
+ *
+ * `toBeVisible`로는 부족하다 - 그 단언은 박스가 비어 있지 않고 visibility가 살아 있는지만 보므로,
+ * 상위 래퍼가 가로 overflow를 clip해 화면 밖으로 밀려난 요소도 그대로 통과한다. 헤더가 잘리는
+ * 회귀는 정확히 그 형태이고, 가로 스크롤도 생기지 않아 overflow 단언에도 걸리지 않는다.
+ */
+const expectWithinViewport = async (page: Page, target: Locator, label: string) => {
+  await expect(target).toBeVisible()
+  const box = await target.boundingBox()
+  expect(box, label).not.toBeNull()
+  const viewport = page.viewportSize()
+  const viewportWidth = viewport?.width ?? 0
+  expect(box?.x ?? -1, label).toBeGreaterThanOrEqual(0)
+  expect((box?.x ?? 0) + (box?.width ?? 0), label).toBeLessThanOrEqual(viewportWidth + 1)
+}
+
 const expectTouchTargets = async (page: Page, selector: string) => {
   const boxes = await page.locator(selector).all()
   expect(boxes.length).toBeGreaterThan(0)
@@ -80,6 +97,12 @@ test.describe("공개 표면 스모크: 회사 소개", () => {
     // e2e 웹서버는 도달 불가한 BACKEND_INTERNAL_URL로 뜬다. placeholder 카드를 만들지 않는 계약이다.
     await page.goto("/company")
     await expect(page.locator("#news")).toHaveCount(0)
+    // 섹션이 사라졌는데 내비 항목이 남으면 '소식'은 아무 일도 하지 않는 죽은 anchor가 된다.
+    const nav = page.getByRole("navigation", { name: "회사 소개 둘러보기" })
+    await expect(nav.getByRole("link", { name: "소식" })).toHaveCount(0)
+    // 나머지 항목은 그대로 있어야 한다 - 조건이 넓게 걸려 내비가 통째로 비면 그것도 회귀다.
+    await expect(nav.getByRole("link", { name: "역량" })).toBeVisible()
+    await expect(nav.getByRole("link", { name: "제품" })).toBeVisible()
   })
 
   for (const viewport of VIEWPORTS) {
@@ -123,6 +146,19 @@ test.describe("공개 표면 스모크: EasySubway 제품", () => {
     const canonical = page.locator("link[rel='canonical']")
     await expect(canonical).toHaveAttribute("href", `${baseURL}/easysubway`)
     await expect(page.locator("meta[property='og:site_name']")).toHaveAttribute("content", "EasySubway")
+  })
+
+  test("390px 헤더의 내비 링크와 문의 CTA가 뷰포트 안에 남는다", async ({ page }) => {
+    // 헤더가 단일 flex row로 고정돼 있으면 이 폭에서 우측 링크와 문의 CTA가 clip돼 닿을 수 없다.
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto("/easysubway")
+
+    const nav = page.getByRole("navigation", { name: "제품 소개 둘러보기" })
+    await expectWithinViewport(page, nav.getByRole("link", { name: "문의" }), "문의 CTA")
+    for (const label of ["기능", "제공 범위", "회사 소개"]) {
+      await expectWithinViewport(page, nav.getByRole("link", { name: label }), label)
+    }
+    await expectTouchTargets(page, "header a")
   })
 
   test("파일럿 범위는 검증한 역만 사실대로 노출한다", async ({ page }) => {

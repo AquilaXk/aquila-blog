@@ -38,6 +38,13 @@ export const SurfaceHeader = styled.header`
   padding: 0.75rem ${SECTION_PADDING_X};
   background: ${c.gray1};
   border-bottom: 1px solid ${c.gray3};
+
+  /* 브랜드 + 내비 4개는 좁은 폭에서 한 줄에 들어가지 않는다. 상위 풀블리드 래퍼가 가로 overflow를
+     clip하므로 줄바꿈을 허용하지 않으면 우측 링크와 문의 CTA가 스크롤도 못 하는 상태로 잘려 나간다. */
+  @media (max-width: ${layoutBreakpoint.navCompact}px) {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+  }
 `
 
 export const BrandLink = styled.a`
@@ -57,6 +64,12 @@ export const BrandLink = styled.a`
     font-size: 0.8rem;
     font-weight: ${fontWeight.regular};
     color: ${c.gray10};
+
+    /* 모바일 헤더는 브랜드명만 남긴다. by-line까지 두면 브랜드가 두 줄로 랩해 헤더 높이가 흔들린다.
+       회사 귀속은 footer가 유지하므로 여기서 숨겨도 정보가 사라지지 않는다. */
+    @media (max-width: ${breakpoint.sm}px) {
+      display: none;
+    }
   }
 `
 
@@ -64,6 +77,17 @@ export const HeaderLinks = styled.nav`
   display: flex;
   align-items: center;
   gap: 0.25rem;
+
+  /* 좁은 폭에서는 통째로 둘째 줄로 내려가 남은 폭 안에서 랩한다. 가로 스크롤 컨테이너로 만들지
+     않는 이유는 문의 CTA가 이 nav 안에 있어서다 - 스크롤이면 CTA가 화면 밖에 주차된 채로도
+     "보인다"고 측정되고, 실제로는 아무도 닿지 못한다. */
+  @media (max-width: ${layoutBreakpoint.navCompact}px) {
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    margin-left: -0.5rem;
+    row-gap: 0.25rem;
+  }
 `
 
 export const NavLink = styled.a`

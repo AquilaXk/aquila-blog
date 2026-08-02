@@ -73,10 +73,16 @@ const RootLayout = ({
   const isPublicBlogRoute = pathname === "/" || pathname === "/about" || pathname === "/posts/[id]"
   const isDedicatedEditorRoute = pathname === "/editor/[id]" || pathname === "/editor/new"
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")
-  const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute
+  // 회사·제품 표면은 전용 호스트의 루트로 서빙되는 독립 랜딩이다. 블로그 헤더와 본문 폭 컨테이너를
+  // 쓰지 않고 자기 헤더·풀블리드 섹션을 소유한다.
+  const isStandaloneSurfaceRoute = pathname === "/company" || pathname === "/easysubway"
+  const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute || isStandaloneSurfaceRoute
   const isDesignAwareRoute = pathname[1] !== "_" && pathname !== "/sitemap.xml"
   const adminProfile = usePublicAdminProfile(initialAdminProfile, {
-    enabled: isDesignAwareRoute || initialAdminProfileShouldRefetch,
+    // 독립 표면은 관리자 프로필을 전혀 읽지 않는다. 여기서 켜 두면 blog 호스트 백엔드로 credentialed
+    // XHR이 나가는데, 회사·제품 호스트에서는 그것이 cross-origin이고 edge에 그 origin을 허용하는
+    // CORS가 없다 - 아무 화면 효과 없이 실패하는 요청만 남는다.
+    enabled: !isStandaloneSurfaceRoute && (isDesignAwareRoute || initialAdminProfileShouldRefetch),
     refetchOnMount: isDesignAwareRoute,
     staleTimeMs: isDesignAwareRoute ? 0 : undefined,
   })
@@ -154,7 +160,7 @@ const RootLayout = ({
     <ThemeProvider scheme={effectiveScheme} blogDesign={effectiveBlogDesign}>
       <RootAdminProfileContext.Provider value={adminProfile}>
         <Scripts />
-        {isAdminRoute || isDedicatedEditorRoute ? null : (
+        {isAdminRoute || isDedicatedEditorRoute || isStandaloneSurfaceRoute ? null : (
           <Header fullWidth={false} blogTitle={headerBlogTitle} />
         )}
         <StyledMain $fullBleed={isFullBleedRoute}>{children}</StyledMain>

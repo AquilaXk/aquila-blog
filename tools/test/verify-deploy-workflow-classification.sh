@@ -120,6 +120,21 @@ reject_pattern 'FRONT_BUILD_SHA_PATHS_PATTERN' "Platform deploy must not classif
 reject_pattern 'FRONT_LIVE_VERIFY_PATHS_PATTERN' "Platform deploy must not classify frontend live verification paths"
 reject_pattern 'EDITOR_LIVE_CANARY_PATHS_PATTERN' "Platform deploy must not classify editor live canary paths"
 reject_pattern 'EXPECTED_FRONT_COMMIT_SHA' "Platform deploy must not calculate frontend commit metadata"
+# 구 API 호스트 접기 (#1596). 배포 후 공개 검증은 실제로 서비스되는 호스트를 때려야 한다.
+# 구 호스트를 남겨 두면 Tunnel public hostname을 지우는 순간 다음 배포가 이 게이트에서 깨지고,
+# 검증만 먼저 지우면 아무도 안 보는 사이 배포가 green으로 통과한다.
+reject_pattern 'API_DOMAIN' "Platform deploy must not read or probe the retired host-based API domain"
+require_pattern 'rollback_and_exit "missing_web_domain"' "post-deploy verification must fail closed when WEB_DOMAIN is absent"
+require_pattern 'wait_public_api_health "\$\{WEB_DOMAIN\}"' "public API health must be probed on the public web host"
+require_pattern 'https://\$\{WEB_DOMAIN\}/post/api/v1/posts/feed' "public read canary must run on the public web host"
+require_pattern 'https://\$\{WEB_DOMAIN\}/member/api/v1/auth/me' "protected-path security header smoke must run on the public web host"
+# 내부 edge 스모크(#1591)는 DNS 전 라우팅 게이트고 공개 HTTPS 스모크는 실서비스 게이트다.
+# 전환이 끝난 뒤에도 내부 게이트가 조건부로 남으면 WEB_DOMAIN이 빠진 배포가 검증 없이 통과한다.
+reject_pattern 'skipping the same-origin public API route gate' "the internal edge route gate must not be skippable after the cutover"
+# 매치되는 vhost가 없는 Host에 Caddy는 404가 아니라 `200` + 빈 본문을 준다(실측). 상태 코드만
+# 보면 WEB_DOMAIN과 Caddyfile이 어긋난 순간 이 게이트가 조용히 통과한다.
+require_pattern 'rollback_and_exit "web_host_api_route_empty_body"' "the internal edge route gate must reject an empty body that an unmatched Host also returns"
+
 require_pattern 'create_external_backup\.sh' "homeserver deploy must create an external storage backup before rollout mutation"
 require_pattern 'prune_external_backups\.sh' "homeserver deploy must prune external backups around backup creation"
 

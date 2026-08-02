@@ -239,14 +239,14 @@ grafana_embed_headers_are_healthy() {
 }
 
 probe_grafana_embed_origin_headers() {
-  local api_domain="$1"
+  local web_domain="$1"
   local grafana_domain="$2"
   local path="$3"
   local admin_email="$4"
   local admin_password="$5"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
     set -eu
-    api_domain="$1"
+    web_domain="$1"
     grafana_domain="$2"
     path="$3"
     admin_email="$4"
@@ -261,7 +261,7 @@ probe_grafana_embed_origin_headers() {
         -c "${cookie_jar}" \
         -o /dev/null \
         -w "%{http_code}" \
-        -H "Host: ${api_domain}" \
+        -H "Host: ${web_domain}" \
         -H "Content-Type: application/json" \
         --data "${login_payload}" \
         "http://caddy:80/member/api/v1/auth/login" || true
@@ -276,7 +276,7 @@ probe_grafana_embed_origin_headers() {
       -b "${cookie_jar}" \
       -H "Host: ${grafana_domain}" \
       "http://caddy:80${path}" || true
-  ' sh "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
+  ' sh "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
 }
 
 host_caddy_sha256() {
@@ -437,10 +437,10 @@ ensure_caddy_mount_sync() {
 }
 
 check_api_readiness() {
-  local api_domain
-  api_domain="$(env_value "API_DOMAIN")"
-  if [[ -z "${api_domain}" ]]; then
-    log "FAIL missing API_DOMAIN in ${ENV_FILE}"
+  local web_domain
+  web_domain="$(env_value "WEB_DOMAIN")"
+  if [[ -z "${web_domain}" ]]; then
+    log "FAIL missing WEB_DOMAIN in ${ENV_FILE}"
     return 1
   fi
 
@@ -451,7 +451,7 @@ check_api_readiness() {
       --max-time 8 \
       -s -o /dev/null -w "%{http_code}" \
       "http://caddy:80/actuator/health/readiness" \
-      -H "Host: ${api_domain}" || true
+      -H "Host: ${web_domain}" || true
   )"
 
   if [[ "${code}" == "200" ]]; then
@@ -464,25 +464,25 @@ check_api_readiness() {
 }
 
 probe_notification_snapshot_route_code() {
-  local api_domain="$1"
+  local web_domain="$1"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 8 \
     -s -o /dev/null -w "%{http_code}" \
     "http://caddy:80/member/api/v1/notifications/snapshot" \
-    -H "Host: ${api_domain}" || true
+    -H "Host: ${web_domain}" || true
 }
 
 check_notification_snapshot_route() {
-  local api_domain
-  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
-  if [[ -z "${api_domain}" ]]; then
-    log "FAIL missing API_DOMAIN in ${ENV_FILE}"
+  local web_domain
+  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+  if [[ -z "${web_domain}" ]]; then
+    log "FAIL missing WEB_DOMAIN in ${ENV_FILE}"
     return 1
   fi
 
   local code
-  code="$(probe_notification_snapshot_route_code "${api_domain}")"
+  code="$(probe_notification_snapshot_route_code "${web_domain}")"
   if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
     log "OK notification snapshot route status=${code}"
     return 0
@@ -596,8 +596,8 @@ check_grafana_core_datasources() {
 }
 
 check_grafana_embed_route() {
-  local api_domain grafana_domain path admin_email admin_password
-  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  local web_domain grafana_domain path admin_email admin_password
+  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
   grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
   path="$(monitoring_embed_candidate_path)"
   if ! auth_probes_enabled; then
@@ -610,8 +610,8 @@ check_grafana_embed_route() {
     log "skip grafana origin route check (no GRAFANA_DOMAIN configured)"
     return 0
   fi
-  if [[ -z "${api_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
-    log "skip grafana origin route check (missing API_DOMAIN or admin credentials)"
+  if [[ -z "${web_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
+    log "skip grafana origin route check (missing WEB_DOMAIN or admin credentials)"
     return 0
   fi
 
@@ -623,7 +623,7 @@ check_grafana_embed_route() {
 
   local headers internal_health
   internal_health="$(inspect_grafana_internal_health)"
-  headers="$(probe_grafana_embed_origin_headers "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+  headers="$(probe_grafana_embed_origin_headers "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
 
   if grafana_embed_headers_are_healthy "${headers}" "${internal_health}"; then
     if (( GRAFANA_EMBED_FAIL_COUNT > 0 )); then
@@ -661,7 +661,7 @@ check_grafana_embed_route() {
   sleep 3
 
   internal_health="$(inspect_grafana_internal_health)"
-  headers="$(probe_grafana_embed_origin_headers "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+  headers="$(probe_grafana_embed_origin_headers "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
   if grafana_embed_headers_are_healthy "${headers}" "${internal_health}"; then
     GRAFANA_EMBED_FAIL_COUNT=0
     save_grafana_embed_state
@@ -674,7 +674,7 @@ check_grafana_embed_route() {
 }
 
 probe_notification_sse_route() {
-  local api_domain="$1"
+  local web_domain="$1"
   local admin_email admin_password
   admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
   admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
@@ -688,7 +688,7 @@ probe_notification_sse_route() {
   probe_output="$(
     docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
       set -eu
-      api_domain="$1"
+      web_domain="$1"
       admin_email="$2"
       admin_password="$3"
       cookie_jar="$(mktemp)"
@@ -701,7 +701,7 @@ probe_notification_sse_route() {
           -c "${cookie_jar}" \
           -o /dev/null \
           -w "%{http_code}" \
-          -H "Host: ${api_domain}" \
+          -H "Host: ${web_domain}" \
           -H "Content-Type: application/json" \
           --data "${login_payload}" \
           "http://caddy:80/member/api/v1/auth/login" || true
@@ -716,11 +716,11 @@ probe_notification_sse_route() {
           --connect-timeout 3 \
           --max-time 35 \
           -b "${cookie_jar}" \
-          -H "Host: ${api_domain}" \
+          -H "Host: ${web_domain}" \
           "http://caddy:80/member/api/v1/notifications/stream" || true
       )"
       printf "%s\n" "${stream_body}" | tr -d "\r"
-    ' sh "${api_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
+    ' sh "${web_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
   )"
 
   if [[ "${probe_output}" == *"event: connected"* && "${probe_output}" == *"event: heartbeat"* ]]; then
@@ -732,10 +732,10 @@ probe_notification_sse_route() {
 }
 
 check_notification_sse_route() {
-  local api_domain
-  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
-  if [[ -z "${api_domain}" ]]; then
-    log "FAIL missing API_DOMAIN in ${ENV_FILE}"
+  local web_domain
+  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+  if [[ -z "${web_domain}" ]]; then
+    log "FAIL missing WEB_DOMAIN in ${ENV_FILE}"
     return 1
   fi
   if ! auth_probes_enabled; then
@@ -750,7 +750,7 @@ check_notification_sse_route() {
   load_notification_sse_state
 
   local probe_output
-  if probe_output="$(probe_notification_sse_route "${api_domain}")"; then
+  if probe_output="$(probe_notification_sse_route "${web_domain}")"; then
     if (( NOTIFICATION_SSE_FAIL_COUNT > 0 )); then
       log "OK notification sse route recovered consecutive_failures=${NOTIFICATION_SSE_FAIL_COUNT}"
     else
@@ -788,7 +788,7 @@ check_notification_sse_route() {
   save_notification_sse_state
   sleep 3
 
-  if probe_output="$(probe_notification_sse_route "${api_domain}")"; then
+  if probe_output="$(probe_notification_sse_route "${web_domain}")"; then
     NOTIFICATION_SSE_FAIL_COUNT=0
     save_notification_sse_state
     log "OK notification sse repaired connected+heartbeat"

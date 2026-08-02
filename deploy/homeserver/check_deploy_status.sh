@@ -144,7 +144,7 @@ require_file "${ENV_FILE}"
 require_file "${STATE_FILE}"
 
 ACTIVE_BACKEND="$(cat "${STATE_FILE}" 2>/dev/null || true)"
-API_DOMAIN="$(trim_quotes "$(env_value "API_DOMAIN")")"
+WEB_DOMAIN="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
 ADMIN_API_UPSTREAM="$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
 READ_API_UPSTREAM="$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
 # Resolved exactly like caddy_upstream_probe.sh: an inherited value wins over the env file,
@@ -205,18 +205,18 @@ INTERNAL_HTTP_CODE="$(
     -s -o /dev/null -w "%{http_code}" \
     --connect-timeout 3 \
     --max-time 8 \
-    -H "Host: ${API_DOMAIN}" \
+    -H "Host: ${WEB_DOMAIN}" \
     "http://caddy:80/actuator/health/readiness" || true
 )"
 
 PUBLIC_HTTP_CODE="$(
-  probe_public_route_code "${API_DOMAIN}" "/actuator/health/readiness"
+  probe_public_route_code "${WEB_DOMAIN}" "/actuator/health/readiness"
 )"
 INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE="$(
-  probe_internal_caddy_route_code "${API_DOMAIN}" "/member/api/v1/notifications/snapshot"
+  probe_internal_caddy_route_code "${WEB_DOMAIN}" "/member/api/v1/notifications/snapshot"
 )"
 PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE="$(
-  probe_public_route_code "${API_DOMAIN}" "/member/api/v1/notifications/snapshot"
+  probe_public_route_code "${WEB_DOMAIN}" "/member/api/v1/notifications/snapshot"
 )"
 BACK_ADMIN_RUNTIME_STATE="$(compose_service_runtime_state "back_admin")"
 BACK_READ_RUNTIME_STATE="$(compose_service_runtime_state "back_read")"
@@ -275,8 +275,8 @@ if [[ -z "${EXPECTED_BACK_IMAGE}" ]]; then
   remember_failure "missing_expected_back_image key=${ACTIVE_BACKEND_IMAGE_KEY:-none}"
 fi
 
-if [[ -z "${API_DOMAIN}" ]]; then
-  remember_failure "missing_api_domain"
+if [[ -z "${WEB_DOMAIN}" ]]; then
+  remember_failure "missing_web_domain"
 fi
 
 if ! echo "${RUNNING_SERVICES}" | grep -qx "${ACTIVE_BACKEND}"; then

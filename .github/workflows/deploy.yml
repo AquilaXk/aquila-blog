@@ -855,9 +855,7 @@ jobs:
           # session cookies.
           #
           # The values must move together, so they are derived from a single switch:
-          # CUSTOM_PROD_BACKURL in HOME_SERVER_ENV, compared by HOST. It replaced API_DOMAIN as the
-          # switch in #1575: API_DOMAIN is now only the Caddy host-based API vhost address and must
-          # differ from WEB_DOMAIN, so it can no longer name the public API. Repository changes alone
+          # CUSTOM_PROD_BACKURL in HOME_SERVER_ENV, compared by HOST. Repository changes alone
           # never flip the live domain - the owner flips it by updating the secret, and this block
           # follows in the same deploy. The same table lives in deploy/env/env.contract.json
           # (cookieDomainScope.topologies) and a test pins them together.
@@ -1241,9 +1239,13 @@ jobs:
             rollback_and_exit "blue_green_deploy_failed"
           fi
 
-          API_DOMAIN="$(awk -F= '$1=="API_DOMAIN"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod)"
-          if [ -z "${API_DOMAIN}" ]; then
-            rollback_and_exit "missing_api_domain"
+          # Every post-deploy check below targets the public web host. Since #1596 retired the
+          # host-based API vhost address, that host is the only public front door this deploy has,
+          # so an absent WEB_DOMAIN means there is nothing left to verify - fail closed instead of
+          # reporting a green deploy nobody checked.
+          WEB_DOMAIN="$(read_prod_env_value WEB_DOMAIN)"
+          if [ -z "${WEB_DOMAIN}" ]; then
+            rollback_and_exit "missing_web_domain"
           fi
 
           ACTIVE_BACKEND="$(cat deploy/homeserver/.active_backend 2>/dev/null || true)"
@@ -1298,14 +1300,38 @@ jobs:
             rollback_and_exit "inactive_backend_still_running"
           fi
 
-          HTTP_CODE="$(docker run --rm --network blog_home_edge curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health/readiness" -H "Host: ${API_DOMAIN}" || true)"
-          echo "post-deploy caddy health status=${HTTP_CODE}"
-          if ! echo "${HTTP_CODE}" | grep -Eq '^200$'; then
-            rollback_and_exit "caddy_route_healthcheck_failed"
-          fi
+          # Internal edge routing gate (#1591), probed through the edge network with a Host header
+          # instead of public HTTPS. It answers a different question than the public smoke below:
+          # this one proves Caddy still routes the backend prefixes on the web host even when DNS,
+          # Cloudflare, or the tunnel is the thing that is broken, so a routing regression is not
+          # reported as an outage of something else. Dropping a prefix from the web vhost's
+          # @backendApi matcher would otherwise leave CD green while every public API call 404s
+          # from Next.js - visible only in a browser.
+          #
+          # Unconditional since #1596: the pre-cutover skip existed because WEB_DOMAIN had no DNS
+          # record yet, and this host-header form never depended on DNS in the first place.
+          #
+          # The status code alone is not enough. A Host that matches no vhost gets `200` with an
+          # EMPTY body from Caddy, not 404 (measured: `Host: api.aquilaxk.site` against this
+          # config -> 200, 0 bytes). So if WEB_DOMAIN and the Caddyfile ever disagree, a
+          # status-only probe passes while nothing is routed. Both probed paths return a JSON
+          # body, so a non-zero body length is what separates "routed to the backend" from
+          # "matched nothing".
+          for web_api_probe_path in "/actuator/health/readiness" "/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT"; do
+            WEB_API_PROBE="$(docker run --rm --network blog_home_edge curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code} %{size_download}" "http://caddy:80${web_api_probe_path}" -H "Host: ${WEB_DOMAIN}" || true)"
+            WEB_API_CODE="${WEB_API_PROBE%% *}"
+            WEB_API_BYTES="${WEB_API_PROBE##* }"
+            echo "post-deploy web-host api route: host=${WEB_DOMAIN} path=${web_api_probe_path} status=${WEB_API_CODE:-none} bytes=${WEB_API_BYTES:-none}"
+            if ! echo "${WEB_API_CODE}" | grep -Eq '^2[0-9][0-9]$'; then
+              rollback_and_exit "web_host_api_route_failed"
+            fi
+            if ! echo "${WEB_API_BYTES}" | grep -Eq '^[1-9][0-9]*$'; then
+              rollback_and_exit "web_host_api_route_empty_body"
+            fi
+          done
 
           wait_public_api_health() {
-            local api_domain="$1"
+            local web_domain="$1"
             local attempts="${DEPLOY_PUBLIC_API_ATTEMPTS:-12}"
             local connect_timeout="${DEPLOY_PUBLIC_API_CONNECT_TIMEOUT_SECONDS:-5}"
             local max_time="${DEPLOY_PUBLIC_API_MAX_TIME_SECONDS:-15}"
@@ -1314,7 +1340,7 @@ jobs:
             local code
 
             for attempt in $(seq 1 "${attempts}"); do
-              code="$(curl -sS --connect-timeout "${connect_timeout}" -m "${max_time}" -o /dev/null -w "%{http_code}" "https://${api_domain}/actuator/health/readiness" || true)"
+              code="$(curl -sS --connect-timeout "${connect_timeout}" -m "${max_time}" -o /dev/null -w "%{http_code}" "https://${web_domain}/actuator/health/readiness" || true)"
               echo "post-deploy public-api health attempt=${attempt}/${attempts} status=${code}"
               if [[ "${code}" =~ ^2[0-9][0-9]$ ]]; then
                 return 0
@@ -1330,35 +1356,15 @@ jobs:
               sleep "${sleep_seconds}"
             done
 
-            echo "post-deploy public-api healthcheck failed for https://${api_domain}/actuator/health/readiness" >&2
+            echo "post-deploy public-api healthcheck failed for https://${web_domain}/actuator/health/readiness" >&2
             docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 cloudflared >&2 || true
             return 1
           }
 
-          if ! wait_public_api_health "${API_DOMAIN}"; then
+          # Public HTTPS gate. Unlike the host-header probe above this one crosses DNS, Cloudflare
+          # and the tunnel, so it is the check that fails when the site is down for real visitors.
+          if ! wait_public_api_health "${WEB_DOMAIN}"; then
             rollback_and_exit "public_api_healthcheck_failed"
-          fi
-
-          # Same-origin public API surface gate (#1575). Every check above targets API_DOMAIN, the
-          # host the transition is leaving. Without this, dropping a prefix from the web vhost's
-          # @backendApi matcher would leave CD fully green while every public API call 404s from
-          # Next.js - the failure would only surface in a browser.
-          #
-          # Probed through the edge network with a Host header, not over public HTTPS: WEB_DOMAIN is
-          # pinned by this deploy but its DNS/Tunnel hostname is a later manual step, so a public
-          # HTTPS probe would fail the very deploy that introduces the host. This form checks the
-          # Caddy routing itself, which is what can regress here, and works before and after DNS.
-          WEB_DOMAIN_VALUE="$(read_prod_env_value WEB_DOMAIN)"
-          if [ -n "${WEB_DOMAIN_VALUE}" ]; then
-            for web_api_probe_path in "/actuator/health/readiness" "/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT"; do
-              WEB_API_CODE="$(docker run --rm --network blog_home_edge curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80${web_api_probe_path}" -H "Host: ${WEB_DOMAIN_VALUE}" || true)"
-              echo "post-deploy web-host api route: host=${WEB_DOMAIN_VALUE} path=${web_api_probe_path} status=${WEB_API_CODE}"
-              if ! echo "${WEB_API_CODE}" | grep -Eq '^2[0-9][0-9]$'; then
-                rollback_and_exit "web_host_api_route_failed"
-              fi
-            done
-          else
-            echo "WEB_DOMAIN is unset: skipping the same-origin public API route gate (pre-cutover)"
           fi
 
           header_value_from_file() {
@@ -1454,14 +1460,14 @@ jobs:
 
           if ! assert_live_security_headers \
             "public-feed" \
-            "https://${API_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT" \
+            "https://${WEB_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT" \
             '^200$'; then
             rollback_and_exit "public_feed_security_header_smoke_failed"
           fi
 
           if ! assert_live_security_headers \
             "protected-auth-me" \
-            "https://${API_DOMAIN}/member/api/v1/auth/me" \
+            "https://${WEB_DOMAIN}/member/api/v1/auth/me" \
             '^401$' \
             "no-store"; then
             rollback_and_exit "protected_auth_security_header_smoke_failed"
@@ -1528,8 +1534,8 @@ jobs:
             [ -n "${post_id}" ] && printf '%s' "${post_id}"
           }
 
-          FEED_URL="https://${API_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=30&sort=CREATED_AT"
-          EXPLORE_URL="https://${API_DOMAIN}/post/api/v1/posts/explore?kw=&tag=&sort=CREATED_AT&page=1&pageSize=30"
+          FEED_URL="https://${WEB_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=30&sort=CREATED_AT"
+          EXPLORE_URL="https://${WEB_DOMAIN}/post/api/v1/posts/explore?kw=&tag=&sort=CREATED_AT&page=1&pageSize=30"
 
           if ! run_canary_ratio_check "feed" "${FEED_URL}"; then
             rollback_and_exit "post_public_read_canary_feed_failed"
@@ -1543,7 +1549,7 @@ jobs:
           if [ -z "${DETAIL_POST_ID}" ]; then
             rollback_and_exit "post_public_read_canary_missing_post_id"
           fi
-          DETAIL_URL="https://${API_DOMAIN}/post/api/v1/posts/${DETAIL_POST_ID}"
+          DETAIL_URL="https://${WEB_DOMAIN}/post/api/v1/posts/${DETAIL_POST_ID}"
 
           if ! run_canary_ratio_check "detail(${DETAIL_POST_ID})" "${DETAIL_URL}"; then
             rollback_and_exit "post_public_read_canary_detail_failed"

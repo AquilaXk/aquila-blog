@@ -20,9 +20,11 @@ of the split execution, not a state this document already describes.
 ## Stable runtime ownership
 
 The Web URL is `https://blog.aquilaxk.site`, and the public API is served from that
-same host by path rather than from a separate API host (#1575). Platform retains DB,
-Redis, MinIO, cookie, OAuth callback, and backend runtime ownership. The GHCR image
-family remains unchanged, including `ghcr.io/aquilaxk/aquila-blog-back`.
+same host by path rather than from a separate API host (#1575). The pre-transition
+hosts `www.aquilaxk.site` and `api.aquilaxk.site` are retired (#1555, #1596).
+Platform retains DB, Redis, MinIO, cookie, OAuth callback, and backend runtime
+ownership. The GHCR image family remains unchanged, including
+`ghcr.io/aquilaxk/aquila-blog-back`.
 
 This split does not include a DB migration, data movement, cookie-domain change, or
 OAuth callback change.

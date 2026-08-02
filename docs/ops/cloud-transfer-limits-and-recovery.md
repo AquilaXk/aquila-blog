@@ -85,7 +85,7 @@ docker compose exec -T db psql -U postgres -d blog -c \
 # 2) 가능하면 cancel API (admin 인증 필요)
 curl -sS -X DELETE \
   -H "Cookie: ${ADMIN_COOKIE}" \
-  "https://${API_DOMAIN}/system/api/v1/adm/cloud/files/video-upload-sessions/${SESSION_ID}"
+  "https://${WEB_DOMAIN}/system/api/v1/adm/cloud/files/video-upload-sessions/${SESSION_ID}"
 
 # 3) API 불가·scheduler 정지 시: 상태만 기록 후 remote abort (임의 IN_PROGRESS 되돌리기 금지)
 docker compose exec -T minio mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"

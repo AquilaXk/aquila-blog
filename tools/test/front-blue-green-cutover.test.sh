@@ -227,7 +227,6 @@ setup_case() {
   mkdir -p "${case_dir}/caddy"
 
   {
-    printf 'API_DOMAIN=api.blog.aquilaxk.site\n'
     if [ -n "${profiles}" ]; then
       printf 'COMPOSE_PROFILES=%s\n' "${profiles}"
     fi
@@ -240,7 +239,7 @@ setup_case() {
   grep -n 'reverse_proxy {\$WEB_UPSTREAM:front_blue}:3000' "${caddy_source}" >/dev/null \
     || fail "tracked Caddyfile no longer carries the {\$WEB_UPSTREAM:front_blue}:3000 token this test pins"
   {
-    printf 'http://{$API_DOMAIN} {\n'
+    printf 'http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {\n'
     printf '  handle {\n'
     printf '    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080\n'
     printf '  }\n'

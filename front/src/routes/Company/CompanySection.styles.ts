@@ -326,7 +326,13 @@ export const StoryHeadline = styled.h2`
   }
 `
 
-/** hairline divider stat 리스트. 확인 가능한 값만 올린다. */
+/**
+ * hairline divider stat 리스트. 확인 가능한 값만 올린다.
+ *
+ * 구분선은 **항목 사이와 마지막 항목 아래**에만 둔다 - 첫 항목 위 여는 선은 섹션 리드와 리스트를
+ * 한 번 더 끊어 리스트가 별개의 표처럼 떠 보인다(오너 지시 2026-08-03). 1열로 스택되는 좁은 폭에서도
+ * 같은 규칙이 유지된다: 선 규칙이 열 수가 아니라 항목 순서에 걸려 있다.
+ */
 export const StatList = styled.dl`
   margin: clamp(2.25rem, 5vw, 3.5rem) 0 0;
   max-width: 34rem;
@@ -338,6 +344,10 @@ export const StatList = styled.dl`
     gap: 0.35rem 1.5rem;
     padding: 1.15rem 0;
     border-top: 1px solid ${light.border};
+  }
+
+  > div:first-of-type {
+    border-top: none;
   }
 
   > div:last-of-type {
@@ -367,6 +377,17 @@ export const StatList = styled.dl`
   }
 `
 
+/**
+ * 2x2 비전 체크리스트.
+ *
+ * 구분선 규칙은 StatList와 같다: **여는 선 없음 · 줄 사이 · 닫는 선**(오너 지시 2026-08-03).
+ * 2열에서는 앞 두 항목이 첫 줄, 뒤 두 항목이 마지막 줄이므로 순서 기반 `nth-child`로 건다.
+ * 1열로 접히면 첫 줄·마지막 줄이 각각 한 항목이라 media query가 두 항목의 선을 되돌린다.
+ * 닫는 선은 컨테이너 border가 아니라 항목별 border다 - 열 사이 간격에서 선이 끊기는 모습이
+ * 줄 사이 선과 같아야 한다.
+ */
+const PRINCIPLE_RULE = `1px solid ${light.borderBrand}`
+
 export const PrincipleList = styled.ul`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -380,11 +401,19 @@ export const PrincipleList = styled.ul`
     align-items: center;
     gap: 0.85rem;
     padding: 1.1rem 0;
-    border-top: 1px solid ${light.borderBrand};
+    border-top: ${PRINCIPLE_RULE};
     font-size: clamp(1.0625rem, 1.8vw, 1.15rem);
     line-height: 1.6;
     font-weight: ${fontWeight.semibold};
     color: ${light.inkPrimary};
+  }
+
+  li:nth-child(-n + 2) {
+    border-top: none;
+  }
+
+  li:nth-last-child(-n + 2) {
+    border-bottom: ${PRINCIPLE_RULE};
   }
 
   li > span:first-of-type {
@@ -402,6 +431,14 @@ export const PrincipleList = styled.ul`
 
   @media (max-width: ${breakpoint.md}px) {
     grid-template-columns: minmax(0, 1fr);
+
+    li:nth-child(2) {
+      border-top: ${PRINCIPLE_RULE};
+    }
+
+    li:nth-last-child(2) {
+      border-bottom: none;
+    }
   }
 `
 

@@ -332,13 +332,31 @@ test("image size is measured and reported on every build", () => {
 })
 
 // Locked Decision 2 (Epic #1535): Web 은 GHCR push 까지, 홈서버 배포는 Platform 이 한다.
-// deploy.yml 에 front 빌드가 들어가면 소유권 분리와 verify-deploy-workflow-classification.sh 가 함께 깨진다.
-test("platform deploy workflow never builds or names the front image", () => {
+//
+// 원래 이 테스트는 deploy.yml 이 front 이미지를 "이름조차" 부르지 못하게 막았다. Platform 에
+// front 역할이 아직 없던 시점에는 그것이 빌드 금지의 가장 싼 근사였지만, Locked Decision 2 의
+// 후반부(#1539)가 Platform 에 front **배포**를 맡기면서 그 근사가 배포까지 같이 막게 됐다.
+// 그래서 금지 대상을 빌드 그 자체로 좁히고, 대신 "이름은 digest ref 를 만드는 데만 쓴다"를
+// 명시적으로 고정한다. 느슨해진 것이 아니라 옮겨간 것이다 - 빌드 신호는 Dockerfile 하나에서
+// 빌드 컨텍스트·캐시 스코프·build-arg·push 로 넓어졌고, 태그 ref 로의 회귀도 새로 막는다.
+test("platform deploy workflow deploys the front image but never builds or publishes it", () => {
   const deploySource = readFileSync(deployWorkflowPath, "utf8")
 
+  // 빌드 신호. 하나라도 나타나면 Web 소유 경계를 넘은 것이다.
   assert.doesNotMatch(deploySource, /Dockerfile\.runtime/)
-  assert.doesNotMatch(deploySource, /-front"/)
-  assert.doesNotMatch(deploySource, /front_image_ref/)
+  assert.doesNotMatch(deploySource, /context:\s*\.\/front/)
+  assert.doesNotMatch(deploySource, /scope=front-image/)
+  assert.doesNotMatch(deploySource, /NEXT_PUBLIC_AQUILA_BUILD_SHA/)
+  // Platform 은 어떤 이미지도 registry 에 직접 올리지 않는다.
+  assert.doesNotMatch(deploySource, /docker push/)
+  // packages 쓰기 권한을 가진 job 은 backend 빌드 하나뿐이다. front job 은 읽기만 한다.
+  assert.equal([...deploySource.matchAll(/packages: write/g)].length, 1)
+
+  // 배포는 허용된다. 다만 front 이미지 이름이 나오는 곳은 digest ref 를 만드는 지점 하나여야
+  // 하고, 그 결과는 항상 @sha256 이다. 태그 ref 로 되돌아가면 mutable 참조가 홈서버에 닿는다.
+  assert.match(deploySource, /FRONT_IMAGE_NAME="ghcr\.io\/\$\{OWNER_LC\}\/\$\{REPO_NAME\}-front"/)
+  assert.match(deploySource, /front_image_ref=\$\{FRONT_IMAGE_NAME\}@\$\{FRONT_IMAGE_DIGEST\}/)
+  assert.doesNotMatch(deploySource, /front_image_ref=\$\{FRONT_IMAGE_NAME\}:/)
 })
 
 // 파일만 추가하고 CI 에 배선하지 않으면 이 계약 테스트 전체가 조용히 잠든다 (#1477 교정 사례).

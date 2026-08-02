@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { execFileSync, spawnSync } from "node:child_process"
+import { spawnSync } from "node:child_process"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -41,9 +41,25 @@ const promtoolAvailable = () => {
   return probe.status === 0
 }
 
-const dockerComposeAvailable = () => {
-  const probe = spawnSync("docker", ["compose", "version"], { stdio: "ignore" })
-  return probe.status === 0
+// Resolved `command:` of a compose service, or null when this environment cannot resolve the file.
+//
+// Availability of the docker CLI is the wrong predicate. The backend-ci runner has docker compose
+// but its version rejects this file under --no-interpolate:
+//   invalid spec: ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}:/host-storage:ro: too many colons
+// (the short volume syntax carries a `:` inside the default expansion). So the probe has to be the
+// real call. Callers assert the same contract either way - only the reader changes, never the check.
+const resolvedServiceCommand = (service) => {
+  const resolved = spawnSync(
+    "docker",
+    ["compose", "-f", composePath, "config", "--no-interpolate", "--format", "json"],
+    { encoding: "utf8" },
+  )
+  if (resolved.status !== 0 || !resolved.stdout) return null
+  try {
+    return JSON.parse(resolved.stdout).services[service].command
+  } catch {
+    return null
+  }
 }
 
 const runPromtoolTest = (testFilePath) => spawnSync("promtool", ["test", "rules", testFilePath], { encoding: "utf8" })
@@ -211,19 +227,11 @@ test("postgres_exporter image pins, compose flags, and blind-spot alerts stay co
   assert(exporterStart >= 0, "postgres_exporter service is missing from the compose file")
   // slice() would silently widen to the whole file if the end marker moved (negative index).
   assert(grafanaStart > exporterStart, "grafana must still follow postgres_exporter in the compose file")
-  // This file joined CI with #1541; before that it only ever ran locally. The backend-ci runner has
-  // no usable docker compose plugin (measured: this call is the one thing that failed there), so
-  // the compose-resolution assertion is conditional while every check around it still runs. Losing
-  // one assertion in CI is strictly better than the whole file continuing to run nowhere.
-  if (dockerComposeAvailable()) {
-    const resolvedCompose = JSON.parse(
-      execFileSync(
-        "docker",
-        ["compose", "-f", composePath, "config", "--no-interpolate", "--format", "json"],
-        { encoding: "utf8" },
-      ),
-    )
-    assert.deepEqual(resolvedCompose.services.postgres_exporter.command, ["--collector.stat_checkpointer"])
+  // This file joined CI with #1541; before that it only ever ran locally, where compose resolves.
+  // Both branches assert the same contract, so bringing the file into CI costs no coverage.
+  const exporterCommand = resolvedServiceCommand("postgres_exporter")
+  if (exporterCommand) {
+    assert.deepEqual(exporterCommand, ["--collector.stat_checkpointer"])
   } else {
     // Same guarantee without compose: the flag must be the service's only command entry.
     const exporterBlock = compose.slice(exporterStart, grafanaStart)

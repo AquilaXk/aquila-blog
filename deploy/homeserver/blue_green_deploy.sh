@@ -2856,6 +2856,9 @@ front_edge_host() {
     printf '%s' "${host}"
     return 0
   fi
+  # stdout은 호출자가 값으로 받으므로 신호는 stderr로 낸다. 기본값을 조용히 쓰면 "공개
+  # 도메인에서 검증했다"와 "아직 공개 트래픽이 오지 않는 이름에서 검증했다"가 로그에서 같아 보인다.
+  echo "WEB_DOMAIN is unset: verifying the front edge through the Caddyfile default host (web.localhost); the public web host is not served yet" >&2
   printf 'web.localhost'
 }
 

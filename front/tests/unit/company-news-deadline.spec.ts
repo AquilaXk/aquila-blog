@@ -6,7 +6,10 @@ import { getServerSideProps } from "../../src/pages/company"
 // 소식 fetch의 서버측 정책 타임아웃은 8초다. 그 값이 회사 랜딩의 비캐시 TTFB를 정하면, 없어도
 // 되는 섹션 하나 때문에 페이지 전체가 멈춘 것처럼 보인다. 페이지가 스스로 건 deadline이 그것을
 // 끊는지 실측한다.
-const POLICY_TIMEOUT_MS = 8_000
+//
+// 상한을 정책 타임아웃(8초) 기준으로 잡으면 deadline이 3.5초로 늘어나도 통과해 1.5초 계약을
+// 못 지킨다. 페이지가 건 deadline 1.5초에 CI 지연 여유만 얹은 상한으로 좁혀 둔다.
+const MAX_COMPANY_NEWS_DEADLINE_MS = 2_500
 
 const originalFetch = globalThis.fetch
 const originalBackendInternalUrl = process.env.BACKEND_INTERNAL_URL
@@ -50,9 +53,8 @@ test("소식 백엔드가 멈춰도 회사 랜딩은 deadline 안에 빈 소식�
     // 페이지 자체는 정상 렌더 경로다 - canonical과 캐시 헤더가 그대로 나가야 한다.
     expect(propsOf(result).canonicalUrl).toBe(CONFIG.surfaces.company.url)
     expect(headers.get("Cache-Control")).toContain("s-maxage=300")
-    // deadline이 정책 타임아웃보다 훨씬 먼저 끊었는지 본다. 상한을 정책 타임아웃으로 두면
-    // deadline이 사라져도 통과할 수 있어, 그 절반보다 아래로 좁힌다.
-    expect(elapsedMs).toBeLessThan(POLICY_TIMEOUT_MS / 2)
+    // deadline이 정책 타임아웃보다 훨씬 먼저 끊었는지 본다.
+    expect(elapsedMs).toBeLessThan(MAX_COMPANY_NEWS_DEADLINE_MS)
   } finally {
     releaseHungFetch()
   }

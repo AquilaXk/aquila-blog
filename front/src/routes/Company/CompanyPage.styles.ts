@@ -1,33 +1,62 @@
 import styled from "@emotion/styled"
 import { breakpoint, editorialLabel, fontWeight, layoutBreakpoint, radius } from "src/design-system/tokens"
 import { focusVisibleRing } from "src/design-system/focusRing"
-import { colors, variables } from "src/styles"
+import { marketingDark as dark, marketingLight as light } from "src/design-system/marketingPalette"
+import { variables } from "src/styles"
 
 /**
- * 회사 표면의 시각 정체성은 순백 배경 + 브랜드 블루다. 블루는 기존 blue 스케일 단계만 쓴다.
+ * 회사 표면의 chrome(공지 스트립 · 헤더 · 히어로 · footer)과 섹션 공통 프리미티브.
+ * 섹션별 레이아웃은 `CompanySection.styles.ts`에 있다.
  *
- * 블루 단계 선택은 색이 아니라 대비가 결정했다.
- * - 채운 컨트롤(pill CTA)은 `blue9`/`blue10` 배경 + `gray12` 글자다. 같은 배경에 흰 글자를 얹으면
- *   대비가 3:1 아래로 떨어져 axe color-contrast가 실패한다(관리자 팔레트에서 이미 실측된 회귀다).
- * - 큰 디스플레이 텍스트(≥24px bold)는 large-text 기준 3:1이 적용되므로 `blue10`을 쓴다.
- * - 본문 크기 텍스트·링크는 `blue11`이다.
- * 배경 층위는 `blue1`~`blue3` 단색 단계이고 gradient·glow·overlay는 쓰지 않는다.
- * 그림자는 hero 플로팅 카드와 제품 스크린샷 패널 두 곳뿐이다.
+ * 이 표면은 방문자 테마와 무관하게 라이트로 고정한다 - 회사 사이트의 화이트 헤더는 브랜드
+ * 정체성이지 사용자 설정이 아니다. 그래서 Emotion 테마가 아니라 마케팅 팔레트를 직접 참조한다.
+ * 색·대비 근거는 `src/design-system/marketingPalette.ts` 주석에 있다.
+ *
+ * 배경 장식(세로 그리드 라인 + 양측 소프트 일립스)은 오너가 마케팅 표면 한정으로 승인한
+ * gradient 예외다(2026-08-02). 블로그·관리자 표면에는 적용하지 않는다.
+ * 그림자는 히어로 플로팅 카드와 그 위 폰 목업 두 곳뿐이다.
  */
-const CONTENT_MAX_WIDTH = "75rem"
-const SECTION_PADDING_Y = "clamp(4rem, 10vw, 10rem)"
-const SECTION_PADDING_X = "clamp(1.25rem, 5vw, 3rem)"
-const TRANSITION = "150ms ease-out"
-
-/** 다크 footer는 라이트 테마 위에 얹히므로 다크 스케일을 직접 참조한다. */
-const darkColors = colors.dark
+export const CONTENT_MAX_WIDTH = "75rem"
+export const SECTION_PADDING_Y = "clamp(4.5rem, 10vw, 10rem)"
+export const SECTION_PADDING_X = "clamp(1.25rem, 5vw, 3rem)"
+export const TRANSITION = "160ms ease-out"
 
 export const CompanySurface = styled.div`
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
+  /* 이 표면 안의 focus ring은 브랜드 focus 색을 쓴다(정본 semantic focus.default). */
+  --aq-focus-ring: ${light.focus};
+  background: ${light.surface};
+  color: ${light.inkPrimary};
   /* 한국어 본문이 단어 중간에서 끊기지 않게 한다. 블로그 타이포에 영향을 주지 않도록 이 표면에만 둔다. */
   word-break: keep-all;
   overflow-wrap: break-word;
+`
+
+/**
+ * 헤더 위 공지 스트립. 채운 accent 면이라 focus ring을 그 위에서 보이는 색으로 바꾼다 -
+ * 기본 ring 색이 배경과 같은 값이면 키보드 위치가 사라진다.
+ */
+export const NoticeBanner = styled.div`
+  --aq-focus-ring: ${light.onAccent};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 ${SECTION_PADDING_X};
+  background: ${light.accent};
+  text-align: center;
+
+  a {
+    ${focusVisibleRing};
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 0.35rem;
+    border-radius: ${radius.sm}px;
+    color: ${light.onAccent};
+    font-size: 0.9rem;
+    font-weight: ${fontWeight.medium};
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 `
 
 export const SurfaceHeader = styled.header`
@@ -40,9 +69,11 @@ export const SurfaceHeader = styled.header`
   gap: 1rem;
   min-height: 72px;
   padding: 0.75rem ${SECTION_PADDING_X};
-  background: ${({ theme }) => theme.colors.gray1};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray4};
+  background: ${light.surface};
+  border-bottom: 1px solid ${light.border};
 
+  /* 좁은 폭에서는 내비가 통째로 둘째 줄로 내려가 남은 폭 안에서 랩한다. 가로 스크롤 컨테이너로
+     만들면 항목이 화면 밖에 주차된 채로도 "보인다"고 측정된다. */
   @media (max-width: ${layoutBreakpoint.navCompact}px) {
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 0.35rem;
@@ -58,7 +89,7 @@ export const BrandLink = styled.a`
   min-height: 44px;
   padding-right: 0.35rem;
   border-radius: ${radius.md}px;
-  color: ${({ theme }) => theme.colors.gray12};
+  color: ${light.inkPrimary};
   text-decoration: none;
   font-size: 1.06rem;
   font-weight: ${fontWeight.extraBold};
@@ -79,19 +110,16 @@ export const SurfaceNav = styled.nav`
   gap: 0.25rem;
 
   @media (max-width: ${layoutBreakpoint.navCompact}px) {
+    grid-row: 2;
     grid-column: 1 / -1;
+    flex-wrap: wrap;
     justify-content: flex-start;
     margin-left: -0.5rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
+    row-gap: 0.25rem;
   }
 `
 
-export const NavLink = styled.a<{ $current?: boolean }>`
+export const NavLink = styled.a`
   ${focusVisibleRing};
   display: inline-flex;
   align-items: center;
@@ -99,19 +127,19 @@ export const NavLink = styled.a<{ $current?: boolean }>`
   min-height: 44px;
   padding: 0 0.75rem;
   border-radius: ${radius.md}px;
-  color: ${({ theme, $current }) => ($current ? theme.colors.blue11 : theme.colors.gray11)};
+  color: ${light.inkSecondary};
   text-decoration: none;
   font-size: 0.94rem;
-  font-weight: ${({ $current }) => ($current ? fontWeight.bold : fontWeight.medium)};
+  font-weight: ${fontWeight.medium};
   transition: color ${TRANSITION}, background-color ${TRANSITION};
 
   &:hover {
-    color: ${({ theme }) => theme.colors.blue11};
-    background: ${({ theme }) => theme.colors.blue2};
+    color: ${light.onSignature};
+    background: ${light.surfaceBrand};
   }
 `
 
-/** pill CTA. blue9 면 + near-black 글자로 브랜드 블루를 유지하면서 AA 대비를 넘긴다. */
+/** pill CTA. accent 면 + 흰 글자가 정본 contrastPairs의 primary-action 조합이다. */
 export const PillAction = styled.a`
   ${focusVisibleRing};
   display: inline-flex;
@@ -120,8 +148,8 @@ export const PillAction = styled.a`
   min-height: 48px;
   padding: 0 1.5rem;
   border-radius: ${variables.ui.button.radiusPill}px;
-  background: ${({ theme }) => theme.colors.blue9};
-  color: ${({ theme }) => theme.colors.gray12};
+  background: ${light.accent};
+  color: ${light.onAccent};
   text-decoration: none;
   font-size: 1rem;
   font-weight: ${fontWeight.bold};
@@ -129,59 +157,49 @@ export const PillAction = styled.a`
   transition: background-color ${TRANSITION};
 
   &:hover {
-    background: ${({ theme }) => theme.colors.blue10};
+    background: ${light.accentPressed};
   }
 `
 
+/** 좁은 폭에서도 브랜드와 같은 줄에 남는다 - 내비만 둘째 줄로 내려간다. */
 export const HeaderAction = styled(PillAction)`
   justify-self: end;
   min-height: 44px;
   padding: 0 1.25rem;
   font-size: 0.94rem;
-`
 
-export const QuietLink = styled.a`
-  ${focusVisibleRing};
-  display: inline-flex;
-  align-items: center;
-  min-height: 48px;
-  padding: 0 0.35rem;
-  border-radius: ${radius.sm}px;
-  color: ${({ theme }) => theme.colors.blue11};
-  text-decoration: none;
-  font-size: 1rem;
-  font-weight: ${fontWeight.semibold};
-  transition: color ${TRANSITION};
-
-  &::after {
-    content: "→";
-    margin-left: 0.35rem;
-  }
-
-  &:hover {
-    color: ${({ theme }) => theme.colors.blue12};
+  @media (max-width: ${layoutBreakpoint.navCompact}px) {
+    grid-row: 1;
+    grid-column: 2;
   }
 `
 
 export const Hero = styled.section`
   position: relative;
-  padding: clamp(3.5rem, 9vw, 9rem) ${SECTION_PADDING_X} 0;
+  padding: clamp(4rem, 9.5vw, 9.5rem) ${SECTION_PADDING_X} 0;
   text-align: center;
 `
 
 /**
- * hero 배경의 옅은 세로 규칙선. gradient 대신 실제 1px 보더를 가진 열로 그린다 —
- * 배경에는 단색만 쓴다는 규칙을 우회하지 않으려는 선택이다.
+ * 히어로 배경. 옅은 세로 그리드는 실제 1px 보더를 가진 열로 그리고, 양측 소프트 일립스는 승인된
+ * gradient 예외다. 일립스가 섹션 밖으로 새지 않도록 clip은 이 래퍼가 담당한다 - 히어로 자신에
+ * `overflow: hidden`을 걸면 다음 섹션에 걸치는 플로팅 카드가 잘린다.
  */
+export const HeroBackdrop = styled.div`
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+`
+
 export const HeroGrid = styled.div`
   position: absolute;
   inset: 0;
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  pointer-events: none;
 
   span {
-    border-left: 1px solid ${({ theme }) => theme.colors.gray3};
+    border-left: 1px solid ${light.border};
   }
 
   span:first-of-type {
@@ -191,6 +209,15 @@ export const HeroGrid = styled.div`
   @media (max-width: ${breakpoint.md}px) {
     grid-template-columns: repeat(4, 1fr);
   }
+`
+
+export const HeroEllipse = styled.span<{ $side: "left" | "right" }>`
+  position: absolute;
+  top: ${({ $side }) => ($side === "left" ? "2%" : "16%")};
+  ${({ $side }) => ($side === "left" ? "left: -14%;" : "right: -12%;")}
+  width: ${({ $side }) => ($side === "left" ? "42%" : "48%")};
+  height: ${({ $side }) => ($side === "left" ? "58%" : "66%")};
+  background: radial-gradient(closest-side, ${light.surfaceBrandStrong}, transparent);
 `
 
 export const HeroCopy = styled.div`
@@ -205,66 +232,102 @@ export const HeroCopy = styled.div`
 
 export const HeroTitle = styled.h1`
   margin: 0;
-  font-size: clamp(2.5rem, 6vw, 4.25rem);
+  font-size: clamp(2.1rem, 6vw, 4.25rem);
   line-height: 1.1;
   letter-spacing: -0.02em;
   font-weight: ${fontWeight.extraBold};
-  color: ${({ theme }) => theme.colors.gray12};
+  color: ${light.inkPrimary};
 `
 
 export const HeroAccent = styled.em`
   font-style: normal;
-  color: ${({ theme }) => theme.colors.blue10};
+  color: ${light.accentText};
 `
 
 export const HeroLead = styled.p`
   margin: 0;
-  max-width: 30rem;
+  max-width: 34rem;
   font-size: clamp(1rem, 1.5vw, 1.12rem);
   line-height: 1.6;
-  color: ${({ theme }) => theme.colors.gray11};
-`
-
-export const HeroActions = styled.div<{ $align?: "center" | "start" }>`
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: ${({ $align }) => ($align === "start" ? "flex-start" : "center")};
-  gap: 0.5rem 1rem;
+  color: ${light.inkSecondary};
 `
 
 /**
- * hero 스크린샷 플로팅 카드. 다음 섹션에 살짝 걸치도록 음수 마진으로 내려 앉힌다.
- * 스크린샷은 1080x2340 원본 비율을 유지하고 잘라내지 않는다.
+ * 와이드 플로팅 제품 카드. 뷰포트 62% 폭(1440에서 896px)이고 하단이 다음 섹션에 걸친다.
+ * 카드 안의 컷은 라이브 블로그 홈 캡처이며 폰 목업이 우하단에 겹친다.
  */
 export const HeroShowcase = styled.figure`
   position: relative;
-  margin: clamp(3rem, 6vw, 5rem) auto calc(-1 * clamp(2rem, 5vw, 4rem));
-  width: min(100%, 20rem);
+  z-index: 1;
+  margin: clamp(3rem, 5.5vw, 4.5rem) auto calc(-1 * clamp(3rem, 6vw, 5.5rem));
+  width: min(100%, 56rem);
   padding: 0.75rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 1.5rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${light.border};
+  border-radius: 1rem;
+  background: ${light.surface};
+  box-shadow: ${variables.ui.card.shadowFloating};
+`
+
+/** 브라우저 프레임 상단 바. 단색 원 세 개만 두고 텍스처를 만들지 않는다. */
+export const ShowcaseChrome = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.1rem 0.35rem 0.6rem;
+
+  span {
+    display: block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: ${radius.pill}px;
+    background: ${light.border};
+  }
+`
+
+export const ShowcaseCapture = styled.div`
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: ${light.surfaceSubtle};
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+`
+
+/**
+ * 카드 위에 겹치는 소형 폰. 스크린샷은 1080x2340 원본 비율 그대로다.
+ * 가로 오프셋은 카드 안에 두고 아래로만 걸치게 한다 - 좁은 폭에서 가로 넘침을 만들지 않기 위한
+ * 제약이다.
+ */
+export const ShowcasePhone = styled.div`
+  position: absolute;
+  right: clamp(0.75rem, 3vw, 2rem);
+  bottom: calc(-1 * clamp(1rem, 3vw, 2.5rem));
+  width: clamp(4.5rem, 11vw, 9rem);
+  padding: 0.3rem;
+  border: 1px solid ${dark.hairline};
+  border-radius: 1.15rem;
+  background: ${dark.field};
   box-shadow: ${variables.ui.card.shadowFloating};
 
   img {
     display: block;
     width: 100%;
     height: auto;
-    border-radius: 1rem;
-    background: ${({ theme }) => theme.colors.blue2};
-  }
-
-  figcaption {
-    margin-top: 0.75rem;
-    font-size: 0.82rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    border-radius: 0.9rem;
   }
 `
 
-export const Section = styled.section<{ $tone?: "plain" | "accent" }>`
+export const Section = styled.section<{ $tone?: "plain" | "scaffold" | "chrome" }>`
+  position: relative;
   padding: ${SECTION_PADDING_Y} ${SECTION_PADDING_X};
-  background: ${({ theme, $tone }) => ($tone === "accent" ? theme.colors.blue1 : theme.colors.gray1)};
+  background: ${({ $tone }) => {
+    if ($tone === "scaffold") return light.surfaceScaffold
+    if ($tone === "chrome") return light.surfaceBrandChrome
+    return light.surface
+  }};
 `
 
 export const SectionInner = styled.div`
@@ -279,7 +342,7 @@ export const SectionLabel = styled.p`
   font-weight: ${editorialLabel.fontWeight};
   letter-spacing: ${editorialLabel.letterSpacing};
   text-transform: ${editorialLabel.textTransform};
-  color: ${({ theme }) => theme.colors.blue11};
+  color: ${light.accentText};
 `
 
 export const SectionHeading = styled.h2`
@@ -289,280 +352,22 @@ export const SectionHeading = styled.h2`
   line-height: 1.2;
   letter-spacing: -0.02em;
   font-weight: ${fontWeight.extraBold};
-  color: ${({ theme }) => theme.colors.gray12};
+  color: ${light.inkPrimary};
 `
 
 export const SectionAside = styled.p`
   margin: 0;
-  max-width: 22rem;
+  max-width: 24rem;
   font-size: 0.94rem;
-  line-height: 1.7;
-  color: ${({ theme }) => theme.colors.gray10};
+  line-height: 1.75;
+  color: ${light.inkSecondary};
 `
 
-export const CapabilityGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(1rem, 2vw, 1.5rem);
-  margin-top: clamp(2.25rem, 5vw, 3.5rem);
-
-  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-`
-
-export const CapabilityCard = styled.article`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: clamp(1.25rem, 2.4vw, 1.75rem);
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: ${radius.lg}px;
-  background: ${({ theme }) => theme.colors.gray1};
-  transition: border-color ${TRANSITION};
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.gray7};
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 1.25rem;
-    line-height: 1.4;
-    letter-spacing: -0.01em;
-    font-weight: ${fontWeight.bold};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0;
-    font-size: 0.94rem;
-    line-height: 1.7;
-    color: ${({ theme }) => theme.colors.gray11};
-  }
-`
-
-export const CapabilityGlyphPanel = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 6.5rem;
-  border-radius: ${radius.md}px;
-  background: ${({ theme }) => theme.colors.blue2};
-  color: ${({ theme }) => theme.colors.blue10};
-`
-
-export const CapabilityTag = styled.span`
-  align-self: flex-start;
-  padding: 0.25rem 0.6rem;
-  border-radius: ${variables.ui.button.radiusPill}px;
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
-  font-family: ${editorialLabel.fontFamily};
-  font-size: 11px;
-  font-weight: ${editorialLabel.fontWeight};
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-`
-
-export const ProductLayout = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
-  align-items: start;
-  gap: clamp(2rem, 5vw, 4.5rem);
-
-  @media (max-width: ${layoutBreakpoint.adminCompact}px) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-`
-
-export const ProductHeadline = styled.h2`
-  margin: 0 0 1.75rem;
-  font-size: clamp(1.85rem, 4vw, 2.9rem);
-  line-height: 1.18;
-  letter-spacing: -0.02em;
-  font-weight: ${fontWeight.extraBold};
-  color: ${({ theme }) => theme.colors.gray12};
-`
-
-export const ProductPointList = styled.dl`
-  margin: 0;
-
-  > div {
-    display: grid;
-    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
-    gap: 0.5rem 1.5rem;
-    padding: 1.15rem 0;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray4};
-  }
-
-  > div:last-of-type {
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray4};
-  }
-
-  dt {
-    margin: 0;
-    font-size: 1.06rem;
-    font-weight: ${fontWeight.bold};
-    letter-spacing: -0.01em;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  dd {
-    margin: 0;
-    font-size: 0.94rem;
-    line-height: 1.7;
-    color: ${({ theme }) => theme.colors.gray11};
-  }
-
-  @media (max-width: ${breakpoint.sm}px) {
-    > div {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-`
-
-export const ProductAside = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-`
-
-/** 제품 섹션 우측 칼럼의 사실 칩. 스크린샷 반복 대신 확인 가능한 범위를 보여 준다. */
-export const ChipCluster = styled.ul`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-`
-
-export const FactChip = styled.span<{ $accent?: boolean }>`
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 0.85rem;
-  border-radius: ${variables.ui.button.radiusPill}px;
-  background: ${({ theme, $accent }) => ($accent ? theme.colors.blue3 : theme.colors.gray3)};
-  color: ${({ theme, $accent }) => ($accent ? theme.colors.blue11 : theme.colors.gray11)};
-  font-size: 0.9rem;
-  font-weight: ${fontWeight.medium};
-`
-
-export const NewsList = styled.ol`
-  margin: clamp(2rem, 4vw, 3rem) 0 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: company-news;
-
-  li {
-    counter-increment: company-news;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray4};
-  }
-
-  li:last-of-type {
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray4};
-  }
-`
-
-export const NewsLink = styled.a`
-  ${focusVisibleRing};
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 0.35rem 1.5rem;
-  padding: 1.35rem 0.35rem;
-  border-radius: ${radius.sm}px;
-  text-decoration: none;
-  transition: background-color ${TRANSITION};
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.blue2};
-  }
-
-  &:hover strong {
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-
-  &::before {
-    content: counter(company-news, decimal-leading-zero);
-    font-family: ${editorialLabel.fontFamily};
-    font-size: ${editorialLabel.fontSize};
-    font-weight: ${editorialLabel.fontWeight};
-    letter-spacing: ${editorialLabel.letterSpacing};
-    color: ${({ theme }) => theme.colors.blue10};
-  }
-
-  strong {
-    display: block;
-    font-size: 1.12rem;
-    line-height: 1.45;
-    letter-spacing: -0.01em;
-    font-weight: ${fontWeight.bold};
-    color: ${({ theme }) => theme.colors.gray12};
-    transition: color ${TRANSITION};
-  }
-
-  span {
-    display: block;
-    margin-top: 0.35rem;
-    font-size: 0.92rem;
-    line-height: 1.65;
-    color: ${({ theme }) => theme.colors.gray10};
-  }
-
-  time {
-    font-family: ${editorialLabel.fontFamily};
-    font-size: 0.78rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    white-space: nowrap;
-  }
-
-  @media (max-width: ${breakpoint.sm}px) {
-    grid-template-columns: auto minmax(0, 1fr);
-
-    time {
-      grid-column: 2;
-    }
-  }
-`
-
-export const ContactBand = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem 2.5rem;
-  width: min(100%, ${CONTENT_MAX_WIDTH});
-  margin: 0 auto;
-  padding: clamp(1.75rem, 4vw, 3rem);
-  border-radius: 1.75rem;
-  background: ${({ theme }) => theme.colors.blue3};
-
-  h2 {
-    margin: 0 0 0.5rem;
-    font-size: clamp(1.4rem, 2.8vw, 2rem);
-    line-height: 1.25;
-    letter-spacing: -0.02em;
-    font-weight: ${fontWeight.extraBold};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0;
-    font-size: 0.98rem;
-    line-height: 1.65;
-    color: ${({ theme }) => theme.colors.gray11};
-  }
-`
-
-/** 다크 풀블리드 footer. 라이트 페이지의 마지막 면을 우리 near-black 스케일로 닫는다. */
+/** 다크 풀블리드 footer. 라이트 페이지의 마지막 면을 제품 표면과 같은 인디고-블랙으로 닫는다. */
 export const SurfaceFooter = styled.footer`
   padding: clamp(2.75rem, 6vw, 4.5rem) ${SECTION_PADDING_X};
-  background: ${darkColors.gray1};
-  color: ${darkColors.gray12};
+  background: ${dark.field};
+  color: ${dark.textPrimary};
 `
 
 export const FooterInner = styled.div`
@@ -595,11 +400,15 @@ export const FooterBrand = styled.div`
     letter-spacing: -0.02em;
   }
 
+  /* 마스코트는 어두운 실루엣이라 다크 면에 그대로 얹으면 사라진다. 밝은 원판 위에 올린다. */
   > div > span:first-of-type {
     display: block;
     flex: 0 0 auto;
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
+    padding: 3px;
+    border-radius: ${radius.pill}px;
+    background: ${light.surface};
   }
 
   p {
@@ -607,12 +416,12 @@ export const FooterBrand = styled.div`
     max-width: 22rem;
     font-size: 0.92rem;
     line-height: 1.7;
-    color: ${darkColors.gray10};
+    color: ${dark.textSecondary};
   }
 
   small {
     font-size: 0.82rem;
-    color: ${darkColors.gray10};
+    color: ${dark.textMuted};
   }
 `
 
@@ -628,7 +437,7 @@ export const FooterGroup = styled.nav`
     font-weight: ${editorialLabel.fontWeight};
     letter-spacing: ${editorialLabel.letterSpacing};
     text-transform: ${editorialLabel.textTransform};
-    color: ${darkColors.gray10};
+    color: ${dark.textMuted};
   }
 
   a {
@@ -637,14 +446,14 @@ export const FooterGroup = styled.nav`
     align-items: center;
     min-height: 44px;
     border-radius: ${radius.sm}px;
-    color: ${darkColors.gray12};
+    color: ${dark.textPrimary};
     text-decoration: none;
     font-size: 0.94rem;
     font-weight: ${fontWeight.medium};
     transition: color ${TRANSITION};
 
     &:hover {
-      color: ${darkColors.blue11};
+      color: ${dark.signature};
     }
   }
 `

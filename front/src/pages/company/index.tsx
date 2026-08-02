@@ -7,6 +7,7 @@ import {
   BLOG_URL,
   COMPANY_SURFACE,
   toCompanyNewsDate,
+  toCompanyNewsIndex,
   toCompanyNewsSummary,
   type CompanyNewsItem,
 } from "src/routes/Company/CompanyPageModel"
@@ -28,12 +29,15 @@ type CompanyPageProps = {
 const loadCompanyNews = async (): Promise<CompanyNewsItem[]> => {
   try {
     const bootstrap = await getPostsBootstrap({ pageSize: NEWS_ITEM_COUNT })
-    return bootstrap.posts.slice(0, NEWS_ITEM_COUNT).map((post) => ({
+    return bootstrap.posts.slice(0, NEWS_ITEM_COUNT).map((post, position) => ({
       id: post.id,
+      index: toCompanyNewsIndex(position),
       title: post.title,
       summary: toCompanyNewsSummary(post.summary),
       date: toCompanyNewsDate(post.modifiedTime || post.createdTime),
       href: `${BLOG_URL}/posts/${post.id}`,
+      // 썸네일이 없는 글도 있다. 그 경우 카드 미디어 슬롯은 자리를 채우는 이미지 대신 글 번호를 쓴다.
+      thumbnail: post.thumbnail || "",
     }))
   } catch {
     return []

@@ -8,6 +8,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
  * 쓰는 의미가 사라진다.
  */
 const SCREENSHOT_ASPECT_RATIO = 1080 / 2340
+const BLOG_CAPTURE_ASPECT_RATIO = 1920 / 733
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
   { name: "narrow", width: 600, height: 900 },
@@ -66,13 +67,14 @@ const expectTouchTargets = async (page: Page, selector: string) => {
 }
 
 test.describe("공개 표면 스모크: 회사 소개", () => {
-  test("헤더·hero·역량·제품·문의 섹션이 렌더되고 canonical이 요청 호스트를 따른다", async ({ page, baseURL }) => {
+  test("헤더·hero·역량·활동·문의 섹션이 렌더되고 canonical이 요청 호스트를 따른다", async ({ page, baseURL }) => {
     const response = await page.goto("/company")
     expect(response?.status()).toBe(200)
 
     await expect(page.getByRole("heading", { level: 1 })).toContainText("소프트웨어를 만듭니다")
     await expect(page.locator("#capabilities")).toBeVisible()
-    await expect(page.locator("#product")).toBeVisible()
+    await expect(page.locator("#work")).toBeVisible()
+    await expect(page.locator("#approach")).toBeVisible()
     await expect(page.getByRole("heading", { name: "함께 만들 이야기가 있다면" })).toBeVisible()
     await expect(page.getByRole("link", { name: "aquila@aquilaxk.site" })).toHaveAttribute(
       "href",
@@ -119,11 +121,34 @@ test.describe("공개 표면 스모크: 회사 소개", () => {
     await expectTouchTargets(page, "header a")
   })
 
-  test("hero 스크린샷은 원본 비율로 잘림 없이 표시된다", async ({ page }) => {
+  test("hero 카드의 블로그 캡처와 겹친 폰이 각자 원본 비율을 유지한다", async ({ page }) => {
     await page.goto("/company")
-    const hero = page.locator("main figure img").first()
-    await expect(hero).toBeVisible()
-    expect(await measureRenderedAspectRatio(hero)).toBeCloseTo(SCREENSHOT_ASPECT_RATIO, 2)
+    // 와이드 카드 안의 컷은 라이브 블로그 홈 캡처다. 자리를 채우는 껍데기 자산이 아니어야 한다.
+    const capture = page.locator("[data-ui='company-hero-capture']")
+    await expect(capture).toBeVisible()
+    expect(await measureRenderedAspectRatio(capture)).toBeCloseTo(BLOG_CAPTURE_ASPECT_RATIO, 2)
+    // 겹친 폰은 제품 검수본이므로 1080x2340이 잘리지 않아야 한다.
+    const phone = page.locator("[data-ui='company-hero-phone']")
+    await expect(phone).toBeVisible()
+    expect(await measureRenderedAspectRatio(phone)).toBeCloseTo(SCREENSHOT_ASPECT_RATIO, 2)
+  })
+
+  test("역량 캐러셀은 키보드로 접근 가능하고 화살표로 카드를 넘긴다", async ({ page }) => {
+    await page.goto("/company")
+    // 스크롤 영역이 포커스를 못 받으면 키보드만 쓰는 방문자는 세 번째 카드 뒤를 볼 수 없다.
+    const viewport = page.getByRole("group", { name: "핵심 역량 카드" })
+    await expect(viewport).toHaveAttribute("tabindex", "0")
+
+    const before = await viewport.evaluate((element) => element.scrollLeft)
+    await page.getByRole("button", { name: "다음 카드 보기" }).click()
+    await expect
+      .poll(async () => await viewport.evaluate((element) => element.scrollLeft))
+      .toBeGreaterThan(before)
+    // 처음 위치에서는 이전 버튼이 눌리지 않아야 한다.
+    await page.getByRole("button", { name: "이전 카드 보기" }).click()
+    await expect
+      .poll(async () => await viewport.evaluate((element) => element.scrollLeft))
+      .toBeLessThanOrEqual(before + 2)
   })
 })
 

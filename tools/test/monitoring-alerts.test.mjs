@@ -41,6 +41,11 @@ const promtoolAvailable = () => {
   return probe.status === 0
 }
 
+const dockerComposeAvailable = () => {
+  const probe = spawnSync("docker", ["compose", "version"], { stdio: "ignore" })
+  return probe.status === 0
+}
+
 const runPromtoolTest = (testFilePath) => spawnSync("promtool", ["test", "rules", testFilePath], { encoding: "utf8" })
 
 const targetKey = (contract, targetName, keyName) => {
@@ -206,14 +211,36 @@ test("postgres_exporter image pins, compose flags, and blind-spot alerts stay co
   assert(exporterStart >= 0, "postgres_exporter service is missing from the compose file")
   // slice() would silently widen to the whole file if the end marker moved (negative index).
   assert(grafanaStart > exporterStart, "grafana must still follow postgres_exporter in the compose file")
-  const resolvedCompose = JSON.parse(
-    execFileSync(
-      "docker",
-      ["compose", "-f", composePath, "config", "--no-interpolate", "--format", "json"],
-      { encoding: "utf8" },
-    ),
-  )
-  assert.deepEqual(resolvedCompose.services.postgres_exporter.command, ["--collector.stat_checkpointer"])
+  // This file joined CI with #1541; before that it only ever ran locally. The backend-ci runner has
+  // no usable docker compose plugin (measured: this call is the one thing that failed there), so
+  // the compose-resolution assertion is conditional while every check around it still runs. Losing
+  // one assertion in CI is strictly better than the whole file continuing to run nowhere.
+  if (dockerComposeAvailable()) {
+    const resolvedCompose = JSON.parse(
+      execFileSync(
+        "docker",
+        ["compose", "-f", composePath, "config", "--no-interpolate", "--format", "json"],
+        { encoding: "utf8" },
+      ),
+    )
+    assert.deepEqual(resolvedCompose.services.postgres_exporter.command, ["--collector.stat_checkpointer"])
+  } else {
+    // Same guarantee without compose: the flag must be the service's only command entry.
+    const exporterBlock = compose.slice(exporterStart, grafanaStart)
+    const commandStart = exporterBlock.indexOf("\n    command:\n")
+    assert.notEqual(commandStart, -1, "postgres_exporter must declare a command list")
+    // Only the list items directly under `command:`. Filtering the whole block instead would also
+    // collect the depends_on and networks entries.
+    const commandEntries = []
+    for (const line of exporterBlock.slice(commandStart + "\n    command:\n".length).split("\n")) {
+      if (!/^\s+-\s/.test(line)) break
+      commandEntries.push(line)
+    }
+    assert.deepEqual(
+      commandEntries.map((line) => line.trim().replace(/^-\s*/, "").replace(/^"(.*)"$/, "$1")),
+      ["--collector.stat_checkpointer"],
+    )
+  }
 
   // Drift guard only: keeps the three tracked fallback pins from diverging or rolling back
   // below v0.17.0, the first release carrying the pg_stat_checkpointer fix. These three did

@@ -802,6 +802,7 @@ jobs:
             api.blog.aquilaxk.site)
               PROD_SITE_COOKIE_DOMAIN="blog.aquilaxk.site"
               PROD_SITE_FRONT_URL="https://blog.aquilaxk.site"
+              PROD_SITE_WEB_DOMAIN="blog.aquilaxk.site"
               PROD_SITE_BACK_URL="https://api.blog.aquilaxk.site"
               PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://blog.aquilaxk.site"
               PROD_SITE_ADMIN_EMBED_ORIGINS="https://blog.aquilaxk.site"
@@ -812,6 +813,7 @@ jobs:
               # site scope is kept intact. Remove this branch once the secret is updated (#1540).
               PROD_SITE_COOKIE_DOMAIN="aquilaxk.site"
               PROD_SITE_FRONT_URL="https://www.aquilaxk.site"
+              PROD_SITE_WEB_DOMAIN="www.aquilaxk.site"
               PROD_SITE_BACK_URL="https://api.aquilaxk.site"
               PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://www.aquilaxk.site"
               PROD_SITE_ADMIN_EMBED_ORIGINS="https://www.aquilaxk.site"
@@ -827,6 +829,9 @@ jobs:
           upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "${PROD_SITE_COOKIE_DOMAIN}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM_PROD_FRONTURL" "${PROD_SITE_FRONT_URL}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM_PROD_BACKURL" "${PROD_SITE_BACK_URL}" "deploy/homeserver/.env.prod"
+          # Caddy web vhost address (#1538). Left behind it would 404 the public site after the
+          # cutover while urlHostEquals(CUSTOM_PROD_FRONTURL, WEB_DOMAIN) blocks the deploy.
+          upsert_env_key "WEB_DOMAIN" "${PROD_SITE_WEB_DOMAIN}" "deploy/homeserver/.env.prod"
           # The public edge probe must keep watching the host that is actually serving traffic.
           # Pinning it to the post-transition host while DNS still points elsewhere (#1538) would
           # fire PublicEdgeRouteDown for the whole transition window and monitor nothing real.

@@ -151,9 +151,12 @@ export const validateEnvText = ({ contract, target, text }) => {
       // 거부한다. 개별 키 나열이 아니라 계약 층 규칙이라, 새로 선언되는 보간 키도 자동으로 덮인다.
       // 예외는 requiredWhen 게이트가 꺼진 키뿐이다 — 거기서 빈 값은 "기능 꺼짐"이라는 문서화된
       // 상태이고, 줄을 지우는 것과 같은 뜻이다.
+      // rejectEmptyValue는 그 예외에서 다시 빠져나오는 opt-in이다. requiredWhen 게이트가 닫혀
+      // 있어도 빈 값이 어떤 상태도 뜻하지 않는 키(Caddy 주소, SSR upstream)에 붙인다.
       const declaresValueShape =
         definition.kind !== undefined || Boolean(definition.allowedValues) || Boolean(definition.minLength)
-      if (env.has(definition.name) && declaresValueShape && !definition.requiredWhen) {
+      const exemptWhileGateClosed = Boolean(definition.requiredWhen) && definition.rejectEmptyValue !== true
+      if (env.has(definition.name) && declaresValueShape && !exemptWhileGateClosed) {
         errors.push(safeError(definition.name, "must be removed entirely rather than set to an empty value"))
         continue
       }
@@ -285,6 +288,7 @@ export const validateEnvText = ({ contract, target, text }) => {
           { key: check.domainKey, actual: valueOf(env, check.domainKey), expected: topology.cookieDomain, label: "must be the cookie domain declared for" },
           { key: check.frontUrlKey, actual: hostOf(valueOf(env, check.frontUrlKey)), expected: topology.frontHost, label: "host must be the web host declared for" },
           { key: check.backUrlKey, actual: hostOf(valueOf(env, check.backUrlKey)), expected: topology.backHost, label: "host must be the API host declared for" },
+          { key: check.webDomainKey, actual: valueOf(env, check.webDomainKey), expected: topology.webHost, pinnedByDeploy: true },
           { key: check.publicEdgeProbeUrlKey, actual: hostOf(valueOf(env, check.publicEdgeProbeUrlKey)), expected: hostOf(topology.publicEdgeProbeBaseUrl), pinnedByDeploy: true },
           { key: check.revalidateUrlKey, actual: hostOf(valueOf(env, check.revalidateUrlKey)), expected: hostOf(topology.revalidateUrl), pinnedByDeploy: true },
         ]

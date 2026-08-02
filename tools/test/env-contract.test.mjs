@@ -160,6 +160,9 @@ const targetKeyNames = (contract, targetName) => {
 
 const baseHomeServerEnv = [
   "API_DOMAIN=api.blog.aquilaxk.site",
+  // API_DOMAIN이 blog topology면 #1557의 requiredWhen이 이 둘을 필수로 만든다.
+  "WEB_DOMAIN=blog.aquilaxk.site",
+  "BACKEND_INTERNAL_URL=http://back-blue:8080",
   "MONITOR_DOMAIN=status.aquilaxk.site",
   "GRAFANA_DOMAIN=grafana.aquilaxk.site",
   "PROMETHEUS_DOMAIN=prometheus.aquilaxk.site",
@@ -421,6 +424,28 @@ test("every declared key with a value shape rejects a present-but-empty value", 
 
     assert.equal(result.ok, false, `${key.name} must not pass when present but empty`)
     assert(result.errors.some((error) => error.key === key.name), `${key.name} must be named in the error`)
+  }
+})
+
+test("keys where an empty value is never meaningful reject it even before their requiredWhen gate opens", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  // requiredWhen 예외는 "기능 꺼짐"을 뜻하는 빈 값(SMTP auth 등)을 위한 것이다.
+  // WEB_DOMAIN·BACKEND_INTERNAL_URL은 빈 값이 어떤 상태도 뜻하지 않는다 - Caddy web vhost가
+  // web.localhost로 내려앉거나 SSR이 500난다. 게이트가 닫혀 있어도 빈 값은 거부해야 한다.
+  for (const key of ["WEB_DOMAIN", "BACKEND_INTERNAL_URL"]) {
+    const text = withEnvKeys(baseHomeServerEnv, [
+      ["API_DOMAIN", "api.aquilaxk.site"],
+      ...PRE_TRANSITION_DOMAIN_ENV.filter(([name]) => name !== "API_DOMAIN" && name !== "WEB_DOMAIN"),
+      ["ADMIN_EMBED_ORIGINS", "https://www.aquilaxk.site"],
+      ["WEB_DOMAIN", key === "WEB_DOMAIN" ? "" : "www.aquilaxk.site"],
+      ...(key === "BACKEND_INTERNAL_URL" ? [["BACKEND_INTERNAL_URL", ""]] : []),
+    ])
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+
+    assert.equal(result.ok, false, `${key} must reject an empty value even pre-cutover`)
+    assert(result.errors.some((error) => error.key === key), `${key} must be named in the error`)
   }
 })
 
@@ -1219,6 +1244,9 @@ const PRE_TRANSITION_DOMAIN_ENV = [
   ["CUSTOM_PROD_COOKIEDOMAIN", "aquilaxk.site"],
   ["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"],
   ["CUSTOM_PROD_BACKURL", "https://api.aquilaxk.site"],
+  // WEB_DOMAIN도 front 파생이라 같은 세트로 움직인다. 뒤처지면 #1557의
+  // urlHostEquals(CUSTOM_PROD_FRONTURL, WEB_DOMAIN)가 깨진다.
+  ["WEB_DOMAIN", "www.aquilaxk.site"],
 ]
 
 const withEnvKeys = (text, pairs) =>
@@ -1491,6 +1519,25 @@ test("cookie scope check rejects a cookie domain that is not the one declared fo
     assert.equal(result.ok, false, `${wrongCookieDomain} must not be accepted`)
     assert(result.errors.some((error) => error.key === "CUSTOM_PROD_COOKIEDOMAIN"))
   }
+})
+
+test("WEB_DOMAIN is derived from the same switch as the other front-derived values", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  // WEB_DOMAIN이 스위치 밖에 있으면 오너가 API_DOMAIN만 바꿨을 때 web vhost가 구 호스트에
+  // 남고, #1557의 urlHostEquals(CUSTOM_PROD_FRONTURL, WEB_DOMAIN)가 배포를 막는다.
+  const scope = contract.targets["home-server-source"].crossChecks.find((c) => c.type === "cookieDomainScope")
+  assert.equal(scope.webDomainKey, "WEB_DOMAIN")
+
+  const drifted = withEnvKeys(baseHomeServerEnv, [["WEB_DOMAIN", "www.aquilaxk.site"]])
+  const result = validateEnvText({ contract, target: "home-server-source", text: drifted })
+  assert(result.warnings.some((warning) => warning.key === "WEB_DOMAIN"), "drift must be announced")
+
+  const workflow = readFileSync(workflowPath, "utf8")
+  assert.match(workflow, /PROD_SITE_WEB_DOMAIN="blog\.aquilaxk\.site"/)
+  assert.match(workflow, /PROD_SITE_WEB_DOMAIN="www\.aquilaxk\.site"/)
+  assert.match(workflow, /upsert_env_key "WEB_DOMAIN" "\$\{PROD_SITE_WEB_DOMAIN\}" "deploy\/homeserver\/\.env\.prod"/)
 })
 
 test("cookie scope check rejects a front host that is not the one declared for API_DOMAIN", async () => {

@@ -475,3 +475,34 @@ test("법적 정책 route는 200% zoom과 light mode에서 심각도 높은 접�
   await expectPrimaryLandmarks(page)
   await expectLaunchGateAccessibility(page, testInfo, "legal-privacy-light-zoom")
 })
+
+test("회사 소개 표면은 데스크톱·모바일 폭에서 심각도 높은 접근성 위반이 없다", async ({
+  page,
+}, testInfo) => {
+  // 브랜드 블루는 blue 스케일에서 대비를 넘기는 단계만 쓴다. 그 판정을 여기서 실측한다.
+  await page.goto("/company")
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "회사 소개 둘러보기" })).toBeVisible()
+  await expectPrimaryLandmarks(page)
+  await expectLaunchGateAccessibility(page, testInfo, "company-surface-desktop")
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expectNoHorizontalOverflow(page)
+  await expectLaunchGateAccessibility(page, testInfo, "company-surface-phone")
+})
+
+test("EasySubway 제품 표면은 고정 다크 톤에서 심각도 높은 접근성 위반이 없다", async ({
+  page,
+}, testInfo) => {
+  // 이 표면은 방문자 설정과 무관하게 near-black으로 고정된다. 라이트 쿠키에서도 대비를 확인한다.
+  await setSchemeCookie(page, "light")
+  await page.goto("/easysubway")
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "제품 소개 둘러보기" })).toBeVisible()
+  await expectPrimaryLandmarks(page)
+  await expectLaunchGateAccessibility(page, testInfo, "easysubway-surface-desktop")
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expectNoHorizontalOverflow(page)
+  await expectLaunchGateAccessibility(page, testInfo, "easysubway-surface-phone")
+})

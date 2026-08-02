@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url"
 const DEFAULT_BASE_REFS = ["origin/main", "main"]
 const TARGET_PATHS = [
   "src/design-system",
+  "src/routes/Company",
+  "src/routes/EasySubway",
   "src/routes/Feed",
   "src/routes/Settings",
   "src/components/auth",

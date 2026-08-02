@@ -8,7 +8,7 @@
 - 저장소 쪽 변경(#1538): compose front 서비스, Caddy `{$WEB_DOMAIN}` vhost, env 계약.
 - env 값 전환(#1540): `API_DOMAIN`, `CUSTOM_PROD_BACKURL`, `CUSTOM_PROD_FRONTURL`,
   `CUSTOM_PROD_COOKIEDOMAIN`.
-- blue/green 전환 로직과 `FRONT_*_IMAGE` 주입(#1539).
+- blue/green 전환 로직과 `FRONT_*_IMAGE` 주입(#1539) — 아래 "front 배포 동작(#1539)" 참조.
 - Cloudflare Tunnel public hostname과 DNS 레코드는 **콘솔 전용 작업(오너)** 이다. 이 저장소에
   tunnel ingress 설정 파일은 없다 — compose의 `cloudflared`는
   `tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}`으로 원격 관리 tunnel을 실행한다.
@@ -69,6 +69,12 @@
      compose는 image가 빈 서비스를 `neither an image nor a build context`로 거부한다. 값을 비워
      두면 안 된다. 두 digest가 갈라지는 것은 cutover 시점(#1539가 새 색깔에만 새 digest를 넣는다)
      이며, `BACK_BLUE_IMAGE`/`BACK_GREEN_IMAGE`가 이미 같은 방식으로 동작한다.
+
+     > **이 두 키를 손으로 넣는 것은 프로필을 켜는 이 한 번뿐이다.** 이후에는 `#1539`의 front 배포가
+     > 새 색깔의 digest를 `.env.prod`에 직접 쓰고, backend 배포는 값이 사라졌을 때 실행 중인
+     > 컨테이너에서 복원한다. 반대로 프로필을 켜면서 이 값을 넣지 않으면 **backend 배포가 먼저
+     > 실패한다** — 프로필이 켜진 채 이미지 값이 없으면 `docker compose` 평가 자체가 깨지므로,
+     > `blue_green_deploy.sh`가 compose를 처음 부르기 전에 fail closed 한다.
    - `BACKEND_INTERNAL_URL=http://back-blue:8080` — **없으면 front가 모든 SSR 경로에서 500이다.**
      `front/src/libs/server/backend.ts`가 production에서 이 값 없이는 throw하고, 이미지가
      `NODE_ENV=production`을 박고 있다. compose 내부 주소만 쓰고 공개 인터넷을 왕복하지 않는다.
@@ -141,6 +147,35 @@
 8. **(7)이 green인 뒤에** `www.aquilaxk.site`의 Tunnel public hostname과 DNS 레코드를 제거한다
    (오너, 콘솔).
 
+## front 배포 동작 (#1539)
+
+프로필을 켠 뒤부터 front 이미지 갱신은 수동 작업이 아니다. `Deploy to Home Server` 워크플로의
+`frontBlueGreenDeploy` job이 담당한다.
+
+- **트리거**: `front/**` 또는 `.github/workflows/frontend-image.yml`이 바뀐 main 커밋. backend
+  트리거(`back/`, `deploy/homeserver/`, `deploy/env/`, `tools/env/`)와 겹치지 않으므로 한쪽만
+  바뀌면 다른 쪽은 재배포되지 않는다. 두 배포가 같이 도는 커밋에서는 **backend가 먼저** 끝나야
+  front가 시작한다(front SSR이 `BACKEND_INTERNAL_URL`로 backend에 의존한다). backend가 실패하면
+  front는 아예 실행되지 않는다.
+- **이미지**: 배포 대상은 DEPLOY_SHA가 아니라 그 조상 중 마지막으로 front를 바꾼 main 커밋의
+  이미지다(`Frontend Image`가 태그를 그 커밋 sha로 붙인다). 러너가 GHCR에서 그 태그의
+  `Docker-Content-Digest`를 읽어 digest ref로 바꾼 뒤 홈서버에 넘긴다. 태그 ref는 홈서버에
+  도달하지 않으며, 이미지가 아직 push되지 않았으면 최대 30분 기다린 뒤 실패한다.
+- **cutover 게이트**: 대기 색 기동 → 컨테이너 health + `/robots.txt` + `/` 렌더 확인 →
+  `WEB_UPSTREAM`과 Caddyfile 리터럴 교체 + `caddy reload` → edge(`Host: WEB_DOMAIN`)에서 200 →
+  **edge가 서빙하는 `<meta name="aquila-build-sha">`가 배포한 커밋과 일치**. 마지막 단계까지
+  통과해야 성공이다. "컨테이너가 떴다"는 성공 근거가 아니다.
+- **rollback**: 위 단계 중 하나라도 실패하면 이전 색으로 되돌리고, 되돌린 뒤에도 edge 200과
+  **cutover 직전에 관측한 build sha**가 다시 서빙되는지 확인한다. 확인에 실패하면 워크플로는
+  실패로 끝난다. 이전 색은 성공한 배포 뒤에도 정지시키지 않는다 — warm rollback 대상이다.
+- **증거**: `deploy/homeserver/.front-release-state.env`에 활성/이전 색, 두 색의 digest, 전환
+  시각, 서빙 build sha, 결과(`deployed`/`rolled_back`)와 사유가 남는다. 같은 값이 워크플로
+  Step Summary의 `## Deploy Boundary (front)` 섹션에도 나온다.
+- **프로필이 꺼져 있을 때**: `WEB_DOMAIN`이 없으면 front tier가 아직 이 서버의 일부가 아니라는
+  뜻이라 job은 `front_deploy_result=profile_disabled`을 남기고 성공으로 끝난다. 반대로
+  `WEB_DOMAIN`이 설정된 채 프로필만 꺼져 있으면 **공개 트래픽을 받는 tier가 배포 대상 밖**이라는
+  뜻이므로 job이 실패한다.
+
 ## 개통 확인
 
 ```bash
@@ -183,7 +218,8 @@ curl -sSI --max-time 10 https://api.aquilaxk.site/actuator/health/readiness ; ec
 | `blog.aquilaxk.site`가 홈서버에서 정상 동작하지 않음 (3~5단계) | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **Vercel을 가리키던 이전 값으로 되돌린다.** Vercel 프로젝트는 이 시점까지 살아 있으므로 즉시 복구된다. `front/vercel.json` 제거는 #1542 소관이며, 그 전까지 Vercel은 rollback 경로로 유지한다. |
 | `api.blog.aquilaxk.site` 전환 후 백엔드 장애 (4단계 이후) | `HOME_SERVER_ENV`의 `API_DOMAIN`·`CUSTOM_PROD_BACKURL`·`CUSTOM_PROD_FRONTURL`·`CUSTOM_PROD_COOKIEDOMAIN`·`WEB_DOMAIN`을 이전 값으로 되돌려 재배포한다. `LEGACY_API_DOMAIN` 덕분에 구 API 호스트는 7단계 전까지 Caddy vhost로 계속 매치되므로, env를 되돌리는 즉시 구 경로가 살아난다. |
 | 5단계 직후 blog 도메인 문제 | **blog DNS를 되돌리고 `HOME_SERVER_ENV`도 함께 되돌린다.** 구 API 호스트는 라우팅만 살아 있고 쿠키 `Domain`은 이미 `blog.aquilaxk.site`라 구 web origin에서 로그인이 성립하지 않는다. DNS만 되돌리면 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다. 이중 호스트가 줄여 주는 것은 공개 GET 경로의 다운타임이지 rollback 단계 수가 아니다. |
-| front 컨테이너만 문제 | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포하면 front 서비스가 기동 대상에서 빠진다. 그 상태에서 `blog.aquilaxk.site`는 Caddy가 502를 내므로, 공개 노출 중이라면 위 첫 행의 DNS 되돌리기를 함께 한다. |
+| front 이미지 하나가 문제 (개통 후) | 되돌릴 것이 이미지뿐이면 `COMPOSE_PROFILES`를 건드리지 않는다. 직전 커밋을 revert해 main에 올리면 그 커밋의 front 이미지로 다시 cutover된다. 즉시 되돌려야 하면 `deploy/homeserver/.front-release-state.env`의 `front_previous_image`가 직전 digest이고, 그 색은 아직 떠 있다. |
+| front 컨테이너만 문제 | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포하면 front 서비스가 기동 대상에서 빠진다. 그 상태에서 `blog.aquilaxk.site`는 Caddy가 502를 내므로, 공개 노출 중이라면 위 첫 행의 DNS 되돌리기를 함께 한다. **`WEB_DOMAIN`도 같이 빼야 한다** — 프로필만 끄고 `WEB_DOMAIN`을 남기면 #1539의 front 배포가 "공개 트래픽을 받는 tier가 배포 대상 밖"으로 판정해 이후 front 배포마다 실패한다. |
 | 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API 경로 rollback은 없다. `LEGACY_API_DOMAIN`을 다시 넣고 DNS/Tunnel hostname을 재생성해야 한다. 그래서 7단계는 (6)이 전부 green인 뒤에만 한다. |
 | 8단계까지 끝난 뒤 문제 발견 | 도메인 rollback 경로는 없다. 구 hostname을 다시 만들어야 하며, 그래서 8단계는 (7)이 green인 뒤에만 한다. |
 

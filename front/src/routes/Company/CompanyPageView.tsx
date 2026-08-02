@@ -2,7 +2,7 @@
 import { CONFIG } from "site.config"
 import BrandMark from "src/components/branding/BrandMark"
 import CompanyFeatureCarousel from "src/routes/Company/CompanyFeatureCarousel"
-import CompanyGlyph from "src/routes/Company/CompanyGlyph"
+import CompanyIcon from "src/routes/Company/CompanyIcon"
 import {
   BLOG_CAPTURE,
   BLOG_CAPTURE_ALT,
@@ -168,7 +168,7 @@ const CompanyPageView: React.FC<Props> = ({ news, surfaceUrl }) => (
             {COMPANY_WORK_TILES.map((tile, position) => (
               <Sec.WorkTile key={tile.id} $alternate={position % 2 === 1}>
                 <span>
-                  <CompanyGlyph name={tile.glyph} size={96} />
+                  <CompanyIcon name={tile.icon} />
                 </span>
                 <span>{tile.label}</span>
               </Sec.WorkTile>
@@ -211,7 +211,7 @@ const CompanyPageView: React.FC<Props> = ({ news, surfaceUrl }) => (
             {COMPANY_PRINCIPLES.map((principle) => (
               <li key={principle}>
                 <span>
-                  <CompanyGlyph name="check" size={24} />
+                  <CompanyIcon name="check" />
                 </span>
                 {principle}
               </li>

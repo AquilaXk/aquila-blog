@@ -121,7 +121,11 @@ export const FeatureCard = styled.article`
   }
 `
 
-export const FeatureGlyphPanel = styled.div`
+/**
+ * 카드 상단 아이콘 면. 아이콘 크기와 획은 `CompanyIcon`이 아니라 이 자리가 정한다
+ * (그 이유는 컴포넌트 주석). 72px에 24 viewBox 기준 0.75 → 렌더 2.25px 획이다.
+ */
+export const FeatureIconPanel = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,6 +134,12 @@ export const FeatureGlyphPanel = styled.div`
   border-radius: ${radius.md}px;
   background: ${light.surfaceBrand};
   color: ${light.accentText};
+
+  svg {
+    width: 4.5rem;
+    height: 4.5rem;
+    stroke-width: 0.75;
+  }
 `
 
 /**
@@ -234,8 +244,11 @@ export const WorkGrid = styled.ul`
 `
 
 /**
- * 다크 단색 타일. 사진 대신 타일마다 다른 1px 라인아트 모티프를 우상단에 크게 놓고 라벨은 좌하단에
+ * 다크 단색 타일. 사진 대신 타일마다 다른 아이콘 모티프를 면 가운데에 크게 놓고 라벨은 좌하단에
  * 둔다. 면은 두 단계를 교대해 격자에 리듬을 준다.
+ *
+ * 레퍼런스 타일이 이미지로 면을 채우던 밀도를 아이콘 크기로 재현한다 - 작은 우상단 글리프는
+ * 타일을 비어 보이게 만들었다(오너 판정 2026-08-03).
  */
 export const WorkTile = styled.li<{ $alternate?: boolean }>`
   position: relative;
@@ -244,11 +257,27 @@ export const WorkTile = styled.li<{ $alternate?: boolean }>`
   border-radius: ${radius.lg}px;
   background: ${({ $alternate }) => ($alternate ? dark.fieldRaised : dark.field)};
 
+  /** 아이콘 면: 좌하단 라벨 자리를 뺀 영역을 채우고 그 안에서 가운데 정렬한다. */
   > span:first-of-type {
     position: absolute;
-    top: 8%;
-    right: 8%;
-    color: ${dark.graphic};
+    inset: 0 0 clamp(3rem, 7vw, 4rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: ${dark.textMuted};
+    transition: color ${TRANSITION};
+  }
+
+  /**
+   * 크기를 px이 아니라 타일 폭의 비율로 준다. 타일이 4:3이라 34%는 어느 열 수에서도 아이콘이
+   * 타일 높이의 약 45%를 차지한다(실측 타일 폭 339~496px → 아이콘 115~169px). 획은 24 viewBox
+   * 기준 0.42로, 그 크기 범위에서 2.0~3.0px로 렌더된다 - 크기에 비례하되 큰 타일에서 선이
+   * 가늘어 보이지 않는 값이다.
+   */
+  > span:first-of-type svg {
+    width: 34%;
+    height: auto;
+    stroke-width: 0.42;
   }
 
   > span:last-of-type {
@@ -256,10 +285,18 @@ export const WorkTile = styled.li<{ $alternate?: boolean }>`
     bottom: clamp(0.9rem, 2vw, 1.35rem);
     left: clamp(0.9rem, 2vw, 1.35rem);
     max-width: calc(100% - 2 * clamp(0.9rem, 2vw, 1.35rem));
-    font-size: clamp(1rem, 1.5vw, 1.0625rem);
-    font-weight: ${fontWeight.bold};
+    font-size: clamp(1.125rem, 1.9vw, 1.25rem);
+    font-weight: ${fontWeight.semibold};
     letter-spacing: -0.01em;
     color: ${dark.textPrimary};
+  }
+
+  /**
+   * 타일은 링크가 아니다. 그래서 반응은 아이콘 톤 한 단계뿐이고 커서·이동·그림자는 바꾸지 않는다 -
+   * 그 이상을 주면 눌러도 아무 일이 없는 면을 누를 수 있는 것처럼 보이게 한다.
+   */
+  &:hover > span:first-of-type {
+    color: ${dark.textSecondary};
   }
 `
 
@@ -354,6 +391,13 @@ export const PrincipleList = styled.ul`
     display: flex;
     flex: 0 0 auto;
     color: ${light.accentText};
+  }
+
+  /** 22px에 24 viewBox 기준 2.1 → 렌더 2.1px 획. 본문 옆에서 확인 표시가 또렷하게 읽히는 두께다. */
+  li > span:first-of-type svg {
+    width: 1.375rem;
+    height: 1.375rem;
+    stroke-width: 2.1;
   }
 
   @media (max-width: ${breakpoint.md}px) {

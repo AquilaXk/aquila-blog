@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import CompanyGlyph from "src/routes/Company/CompanyGlyph"
+import CompanyIcon from "src/routes/Company/CompanyIcon"
 import { COMPANY_FEATURE_CARDS } from "src/routes/Company/CompanyPageModel"
 import * as S from "src/routes/Company/CompanySection.styles"
 
@@ -72,9 +72,9 @@ const CompanyFeatureCarousel: React.FC = () => {
       >
         {COMPANY_FEATURE_CARDS.map((card) => (
           <S.FeatureCard key={card.id}>
-            <S.FeatureGlyphPanel>
-              <CompanyGlyph name={card.glyph} size={72} />
-            </S.FeatureGlyphPanel>
+            <S.FeatureIconPanel>
+              <CompanyIcon name={card.icon} />
+            </S.FeatureIconPanel>
             <S.FeatureTag>{card.tag}</S.FeatureTag>
             <h3>{card.title}</h3>
             <p>{card.body}</p>

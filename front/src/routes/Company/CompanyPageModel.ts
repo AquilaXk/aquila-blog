@@ -16,13 +16,21 @@ export const CONTACT_MAILTO = `mailto:${COMPANY_SURFACE.contactEmail}`
  */
 export const PRODUCT_URL = PRODUCT_SURFACE.url
 
-export type CompanyGlyphName =
-  | "route"
-  | "journal"
-  | "verify"
-  | "operate"
-  | "access"
-  | "gate"
+/**
+ * 아이콘 이름. 값은 `CompanyIcon`이 옮겨 적은 Lucide 아이콘 파일 이름 그대로다 - 이름만 보고
+ * 원본을 대조할 수 있게 하려는 것이며, 의미 매핑은 각 카드·타일에 붙은 주석이 소유한다.
+ */
+export type CompanyIconName =
+  | "accessibility"
+  | "map-pinned"
+  | "file-check-2"
+  | "wifi-off"
+  | "server"
+  | "shield-check"
+  | "train-front"
+  | "notebook-pen"
+  | "workflow"
+  | "hard-drive"
   | "check"
 
 export type CompanyNoticeLink = {
@@ -38,7 +46,7 @@ export type CompanyWordmark = {
 export type CompanyFeatureCard = {
   id: string
   tag: string
-  glyph: CompanyGlyphName
+  icon: CompanyIconName
   title: string
   body: string
 }
@@ -46,7 +54,7 @@ export type CompanyFeatureCard = {
 export type CompanyWorkTile = {
   id: string
   label: string
-  glyph: CompanyGlyphName
+  icon: CompanyIconName
 }
 
 export type CompanyStat = {
@@ -109,55 +117,55 @@ export const COMPANY_FEATURE_CARDS: CompanyFeatureCard[] = [
   {
     id: "accessibility",
     tag: "ACCESSIBILITY",
-    glyph: "access",
+    icon: "accessibility",
     title: "계단과 환승을 먼저 계산합니다",
     body: "이동을 막는 조건을 첫 화면의 경로 계산에 넣습니다. 나중에 붙이는 옵션으로 두지 않습니다.",
   },
   {
     id: "route-ui",
     tag: "ROUTE UI",
-    glyph: "route",
+    icon: "map-pinned",
     title: "노선도 한 화면에서 끝냅니다",
     body: "역을 눌러 출발·경유·도착을 지정합니다. 목록과 지도를 왕복하지 않습니다.",
   },
   {
     id: "data-integrity",
     tag: "DATA INTEGRITY",
-    glyph: "verify",
+    icon: "file-check-2",
     title: "화면과 원본을 배포마다 대조합니다",
     body: "역명과 노드가 어긋나는 오류를 사람 눈이 아니라 검증 단계가 잡습니다.",
   },
   {
     id: "resilience",
     tag: "RESILIENCE",
-    glyph: "journal",
+    icon: "wifi-off",
     title: "실시간이 끊겨도 멈추지 않습니다",
     body: "받지 못한 사실을 화면에 적고, 역 정보와 경로 검색은 계속 동작합니다.",
   },
   {
     id: "operations",
     tag: "OPERATIONS",
-    glyph: "operate",
+    icon: "server",
     title: "우리 서버에서 직접 운영합니다",
     body: "빌드부터 배포와 모니터링까지 우리가 소유한 인프라에서 돌립니다.",
   },
   {
     id: "quality",
     tag: "QUALITY GATE",
-    glyph: "gate",
+    icon: "shield-check",
     title: "게이트를 통과하지 않으면 배포하지 않습니다",
     body: "접근성·성능·이미지 예산을 자동 게이트로 검사하고, 실패하면 배포를 멈춥니다.",
   },
 ]
 
-/** 3x2 타일 그리드. 실제 활동 6개다. */
+/** 3x2 타일 그리드. 실제 활동 6개다. 아이콘은 타일마다 다른 모티프를 크게 놓는다. */
 export const COMPANY_WORK_TILES: CompanyWorkTile[] = [
-  { id: "easysubway", label: "EasySubway", glyph: "route" },
-  { id: "aquilalog", label: "AquilaLog 기술 블로그", glyph: "journal" },
-  { id: "pipeline", label: "데이터 검증 파이프라인", glyph: "verify" },
-  { id: "homeserver", label: "자체 인프라 운영", glyph: "operate" },
-  { id: "accessibility", label: "접근성 설계", glyph: "access" },
-  { id: "gates", label: "품질 게이트", glyph: "gate" },
+  { id: "easysubway", label: "EasySubway", icon: "train-front" },
+  { id: "aquilalog", label: "AquilaLog 기술 블로그", icon: "notebook-pen" },
+  { id: "pipeline", label: "데이터 검증 파이프라인", icon: "workflow" },
+  { id: "homeserver", label: "자체 인프라 운영", icon: "hard-drive" },
+  { id: "accessibility", label: "접근성 설계", icon: "accessibility" },
+  { id: "gates", label: "품질 게이트", icon: "shield-check" },
 ]
 
 /**

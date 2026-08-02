@@ -552,15 +552,37 @@ for surface in https://www.aquilaxk.site https://easysubway.aquilaxk.site; do
 done
 [ "${backend_isolation}" -eq 0 ] && echo "backend isolation ok" || echo "backend isolation FAILED"
 
-# 블로그 표면 무회귀: robots/sitemap이 그대로 블로그 값이어야 한다.
-curl -sS https://blog.aquilaxk.site/robots.txt
-curl -sS -o /dev/null -w "blog_sitemap=%{http_code}\n" https://blog.aquilaxk.site/sitemap.xml
+# 블로그 표면 무회귀: robots/sitemap이 그대로 블로그 값(200)이어야 한다. 여기서도 상태 코드를
+# 출력만 하면 그 열화가 "성공"으로 보고되므로 판정까지 한다 - 표면 격리에 성공하면서 블로그 표면을
+# 깨뜨리는 것이 이 전환의 실제 회귀 형태다. curl 자체가 DNS/TLS/transport로 실패하는 것(코드 000)도
+# 회귀이므로 종료 상태를 먼저 본다. robots는 본문도 눈으로 대조할 수 있게 그대로 출력한다.
+blog_regression=0
+blog_robots_body="$(mktemp)"
+if blog_robots_code="$(curl -sS -o "${blog_robots_body}" -w '%{http_code}' https://blog.aquilaxk.site/robots.txt)"; then
+  cat "${blog_robots_body}"
+  echo "blog_robots=${blog_robots_code}"
+  [ "${blog_robots_code}" = "200" ] || { echo "FAIL: blog robots.txt not 200"; blog_regression=1; }
+else
+  echo "FAIL: blog robots.txt request failed"
+  blog_regression=1
+fi
+rm -f "${blog_robots_body}"
+if blog_sitemap_code="$(curl -sS -o /dev/null -w '%{http_code}' https://blog.aquilaxk.site/sitemap.xml)"; then
+  echo "blog_sitemap=${blog_sitemap_code}"
+  [ "${blog_sitemap_code}" = "200" ] || { echo "FAIL: blog sitemap.xml not 200"; blog_regression=1; }
+else
+  echo "FAIL: blog sitemap.xml request failed"
+  blog_regression=1
+fi
+[ "${blog_regression}" -eq 0 ] && echo "blog regression ok" || echo "blog regression FAILED"
 
-# 블록 전체의 판정. 앞선 검사 중 하나라도 실패했으면 여기서 nonzero로 끝난다 - 위 curl들이
-# 상태를 덮어써도 결과가 뒤집히지 않는다. `(exit N)`은 셸을 죽이지 않고 마지막 상태만 N으로 만든다.
+# 블록 전체의 판정. 위 세 검사(표면 RSS 격리·백엔드 격리·블로그 무회귀) 중 하나라도 실패했으면
+# 여기서 nonzero로 끝난다 - 판정을 변수에 누적했으므로 뒤따르는 명령이 종료 상태를 덮어써도 결과가
+# 뒤집히지 않는다. `(exit N)`은 셸을 죽이지 않고 마지막 상태만 N으로 만든다.
 surface_gate=0
 [ "${rss_isolation}" -eq 0 ] || surface_gate=1
 [ "${backend_isolation}" -eq 0 ] || surface_gate=1
+[ "${blog_regression}" -eq 0 ] || surface_gate=1
 [ "${surface_gate}" -eq 0 ] && echo "surface gate ok" || echo "surface gate FAILED"
 (exit "${surface_gate}")
 ```

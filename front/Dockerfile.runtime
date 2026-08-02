@@ -56,10 +56,16 @@ ARG NEXT_PUBLIC_SITE_URL="https://blog.aquilaxk.site"
 # soft-launch gate가 얼려 둔 값이다. config/env.contract.json이 다른 값을 거부한다.
 ARG NEXT_PUBLIC_SIGNUP_ENABLED="false"
 ARG NEXT_PUBLIC_RUM_SAMPLE_RATE="0"
+# Commit SHA exposed as <meta name="aquila-build-sha">. NEXT_PUBLIC_* so it is inlined into the
+# client bundle and therefore fixed to the image digest. Without a producer the meta renders
+# "unknown" and front/e2e/live.spec.ts cannot tell which commit a live host is serving.
+# frontend-image.yml passes github.sha; an empty default keeps local `docker build` working.
+ARG NEXT_PUBLIC_AQUILA_BUILD_SHA=""
 ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
 ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 ENV NEXT_PUBLIC_SIGNUP_ENABLED=${NEXT_PUBLIC_SIGNUP_ENABLED}
 ENV NEXT_PUBLIC_RUM_SAMPLE_RATE=${NEXT_PUBLIC_RUM_SAMPLE_RATE}
+ENV NEXT_PUBLIC_AQUILA_BUILD_SHA=${NEXT_PUBLIC_AQUILA_BUILD_SHA}
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

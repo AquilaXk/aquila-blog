@@ -38,12 +38,29 @@
    > 동안 빌드된 이미지는 (a) `site.config.js`가 `https://www.aquilaxk.site`로 폴백해 canonical·
    > OG·sitemap URL이 **폐기 대상이자 타 서비스 소유가 될 호스트**를 가리키고, (b) `isProd`가
    > `VERCEL_ENV === "production"` 판정이라 홈서버에서 영원히 false다. #1540이 셋 다 고친다.
-   > **GHCR에 이미 있는 digest(`sha-7364318ef`, #1557 병합이 트리거한 빌드 포함)를 집어 오면 안 된다.**
-   > `docker inspect`로 `NEXT_PUBLIC_SITE_URL=https://blog.aquilaxk.site`가 박혔는지 확인하고 쓴다.
+   > **GHCR에 이미 있는 digest(`sha-7364318ef`·`sha-86e5547a5`처럼 #1540 병합 이전 빌드)를 집어
+   > 오면 안 된다.** 값은 클라이언트 번들에 **인라인**되므로 `printenv`로는 확인할 수 없다 —
+   > `ENV`는 builder 스테이지를 넘지 않아 런타임 스테이지에는 존재하지 않고, 좋은 digest와 나쁜
+   > digest 모두 빈 출력 + `exit 1`이다(실측). **산출물을 봐야 한다.**
+   > ```bash
+   > docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<digest> -c '
+   >   set -e
+   >   grep -rq "https://blog\.aquilaxk\.site"     /app/.next
+   >   grep -rq "https://api\.blog\.aquilaxk\.site" /app/.next
+   >   ! grep -rq "https://www\.aquilaxk\.site"    /app/.next
+   > '; echo "gate exit=$?"   # 0이어야 쓸 수 있다
+   > ```
+   > 실측(좋은 이미지 = 이 PR 기준 로컬 빌드 / 나쁜 이미지 = `sha-86e5547a5`):
+   > ```
+   > printenv NEXT_PUBLIC_SITE_URL   bad: (빈 출력) exit=1   good: (빈 출력) exit=1   ← 구분 불가
+   > 산출물 gate                      bad: exit=1            good: exit=0            ← 구분됨
+   > 실제 광고 호스트                  bad: https://www.aquilaxk.site
+   >                                 good: https://blog.aquilaxk.site https://api.blog.aquilaxk.site
+   > ```
+   > 커밋 대조가 필요하면 같은 방식으로 본다(`NEXT_PUBLIC_AQUILA_BUILD_SHA`도 인라인된다):
    > ```bash
    > docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<digest> \
-   >   -c 'printenv NEXT_PUBLIC_SITE_URL NEXT_PUBLIC_BACKEND_URL'
-   > # 기대: https://blog.aquilaxk.site / https://api.blog.aquilaxk.site
+   >   -c 'grep -rhoE "aquila-build-sha[^0-9a-f]+[0-9a-f]{40}" /app/.next | head -1'
    > ```
 
    - `FRONT_BLUE_IMAGE=ghcr.io/aquilaxk/aquila-blog-front@sha256:...` (digest 전용)
@@ -105,11 +122,15 @@
    전환 창 동안 blog에서 서빙되는 프론트가 **구** API 호스트를 부를 때도 `Origin`은
    `https://blog.aquilaxk.site`라 같은 정규식을 통과한다(실측: blog ALLOW / www·apex·www.blog REJECT).
    두 site address가 한 vhost를 공유하므로 CORS 설정도 공유된다.
-5. **`blog.aquilaxk.site` DNS를 Tunnel로 전환한다 (오너, 콘솔).** 4단계에서 `LEGACY_API_DOMAIN`
-   덕분에 구·신 API 호스트가 **둘 다** 살아 있으므로, 여기서 문제가 나면 blog DNS만 Vercel로
-   되돌리면 즉시 복구된다.
-6. **양쪽 확인.** 아래 "개통 확인"의 명령이 전부 green이어야 한다. 신 호스트로 서빙되는 front와
-   구 호스트로 오는 잔여 트래픽 모두 정상이어야 한다.
+5. **`blog.aquilaxk.site` DNS를 Tunnel로 전환한다 (오너, 콘솔).**
+
+   ⚠️ **전환 창이 보존하는 것은 라우팅이지 세션이 아니다.** `LEGACY_API_DOMAIN`은 Caddy host
+   matcher만 살린다. 4단계 이후 백엔드는 요청 호스트와 무관하게 `Domain=blog.aquilaxk.site`로
+   쿠키를 굽는다(`back/.../Rq.kt`의 `builder.domain(cookieDomain)`에 호스트 조건이 없다).
+   따라서 구 `api.aquilaxk.site`로 오는 요청은 **응답은 하지만 브라우저가 RFC 6265 §5.3으로
+   그 쿠키를 거부해 인증이 성립하지 않는다.** 구 경로로 기대할 수 있는 것은 공개 GET뿐이다.
+6. **확인.** 아래 "개통 확인"의 명령이 전부 green이어야 한다. 신 호스트 기준으로 판정한다 —
+   구 호스트는 라우팅만 살아 있으므로 인증 경로를 여기서 기대하지 않는다.
 7. **(6)이 green인 뒤에 `LEGACY_API_DOMAIN` 줄을 `HOME_SERVER_ENV`에서 삭제**하고 재배포한 다음,
    `api.aquilaxk.site`의 Tunnel public hostname과 DNS 레코드를 제거한다 (오너, 콘솔).
 
@@ -132,8 +153,8 @@ curl -sSI "https://blog.aquilaxk.site/_next/static/<실제 asset 경로>" | grep
 
 # SEO 진입점이 새 도메인을 가리키는지. front/public/robots.txt는 tracked 정적 파일이고
 # package.json의 postbuild가 next-sitemap을 스킵하므로 빌드가 이 값을 갱신하지 않는다.
-# 현재 이 파일은 Host/Sitemap을 vercel.app으로 광고한다 — 전환 전에 정정돼야 하고,
-# #1542로 Vercel이 내려가면 그 sitemap URL은 404가 된다.
+# 그래서 #1540이 Host/Sitemap을 https://blog.aquilaxk.site로 직접 정정했다 — 그 전까지
+# https://aquilaxk.vercel.app을 광고했고, #1542로 Vercel이 내려가면 404가 될 값이었다.
 curl -sS https://blog.aquilaxk.site/robots.txt
 curl -sS -o /dev/null -w "sitemap=%{http_code}\n" https://blog.aquilaxk.site/sitemap.xml
 
@@ -161,7 +182,7 @@ curl -sSI --max-time 10 https://api.aquilaxk.site/actuator/health/readiness ; ec
 | --- | --- |
 | `blog.aquilaxk.site`가 홈서버에서 정상 동작하지 않음 (3~5단계) | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **Vercel을 가리키던 이전 값으로 되돌린다.** Vercel 프로젝트는 이 시점까지 살아 있으므로 즉시 복구된다. `front/vercel.json` 제거는 #1542 소관이며, 그 전까지 Vercel은 rollback 경로로 유지한다. |
 | `api.blog.aquilaxk.site` 전환 후 백엔드 장애 (4단계 이후) | `HOME_SERVER_ENV`의 `API_DOMAIN`·`CUSTOM_PROD_BACKURL`·`CUSTOM_PROD_FRONTURL`·`CUSTOM_PROD_COOKIEDOMAIN`·`WEB_DOMAIN`을 이전 값으로 되돌려 재배포한다. `LEGACY_API_DOMAIN` 덕분에 구 API 호스트는 7단계 전까지 Caddy vhost로 계속 매치되므로, env를 되돌리는 즉시 구 경로가 살아난다. |
-| 5단계 직후 blog 도메인 문제 | **blog DNS만 Vercel로 되돌린다.** 구 API 호스트가 아직 살아 있어 구 web origin이 백엔드를 그대로 쓴다. env를 되돌릴 필요가 없다 — 이중 호스트가 만든 가장 싼 rollback 경로다. |
+| 5단계 직후 blog 도메인 문제 | **blog DNS를 되돌리고 `HOME_SERVER_ENV`도 함께 되돌린다.** 구 API 호스트는 라우팅만 살아 있고 쿠키 `Domain`은 이미 `blog.aquilaxk.site`라 구 web origin에서 로그인이 성립하지 않는다. DNS만 되돌리면 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다. 이중 호스트가 줄여 주는 것은 공개 GET 경로의 다운타임이지 rollback 단계 수가 아니다. |
 | front 컨테이너만 문제 | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포하면 front 서비스가 기동 대상에서 빠진다. 그 상태에서 `blog.aquilaxk.site`는 Caddy가 502를 내므로, 공개 노출 중이라면 위 첫 행의 DNS 되돌리기를 함께 한다. |
 | 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API 경로 rollback은 없다. `LEGACY_API_DOMAIN`을 다시 넣고 DNS/Tunnel hostname을 재생성해야 한다. 그래서 7단계는 (6)이 전부 green인 뒤에만 한다. |
 | 8단계까지 끝난 뒤 문제 발견 | 도메인 rollback 경로는 없다. 구 hostname을 다시 만들어야 하며, 그래서 8단계는 (7)이 green인 뒤에만 한다. |

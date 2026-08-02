@@ -203,14 +203,20 @@ test("container build marker and NEXT_PUBLIC build args are wired in the runtime
   const contract = loadContract(contractPath)
   const containerBuildKeys = contract.targets["container-build"].keys.map((key) => key.name)
 
-  // Dockerfile의 build-arg 표면과 container-build 계약이 갈라지면 게이트가 공허해진다.
-  assert.deepEqual([...argDefaults.keys()].sort(), [...containerBuildKeys].sort())
+  // NEXT_PUBLIC_AQUILA_BUILD_SHA는 값이 아니라 출처를 나르는 관측용 인자다. 워크플로만 아는
+  // 값이라 로컬 docker build에서는 빈 채로 두어야 하므로 container-build 계약에 넣지 않는다.
+  const observabilityArgs = new Set(["NEXT_PUBLIC_AQUILA_BUILD_SHA"])
+  assert.equal(argDefaults.has("NEXT_PUBLIC_AQUILA_BUILD_SHA"), true, "build SHA arg가 선언돼 있어야 한다")
+
+  // 나머지 build-arg 표면과 container-build 계약이 갈라지면 게이트가 공허해진다.
+  const configArgs = [...argDefaults.keys()].filter((key) => !observabilityArgs.has(key))
+  assert.deepEqual(configArgs.sort(), [...containerBuildKeys].sort())
 
   // 기본값이 비어 있으면 isProd가 false로 굳고 canonical/OG URL이 틀린 이미지가 조용히 나간다.
   const result = validateEnvText({
     contract,
     target: "container-build",
-    text: [...argDefaults].map(([key, value]) => `${key}=${value}`).join("\n"),
+    text: configArgs.map((key) => `${key}=${argDefaults.get(key)}`).join("\n"),
   })
   assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
   assert.equal(argDefaults.get("NEXT_PUBLIC_SITE_URL"), "https://blog.aquilaxk.site")

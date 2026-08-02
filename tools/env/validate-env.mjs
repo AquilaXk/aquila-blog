@@ -181,7 +181,12 @@ export const validateEnvText = ({ contract, target, text }) => {
       errors.push(safeError(definition.name, `must be at least ${definition.minLength} characters`))
     }
 
-    if (definition.forbiddenValues?.includes(value)) {
+    // DNS 호스트는 대소문자를 구분하지 않는다. Caddy도 소문자로 정규화하므로 raw 비교면
+    // 대문자로 적힌 금지 호스트가 그대로 vhost 주소가 된다.
+    const comparableValue = definition.kind === "hostname" ? normalizeHost(value) : value
+    const comparableForbidden =
+      definition.kind === "hostname" ? definition.forbiddenValues?.map(normalizeHost) : definition.forbiddenValues
+    if (comparableForbidden?.includes(comparableValue)) {
       errors.push(safeError(definition.name, "must not use forbidden value"))
     }
 
@@ -195,7 +200,11 @@ export const validateEnvText = ({ contract, target, text }) => {
       errors.push(safeError(definition.name, "must not use forbidden fingerprint"))
     }
 
-    if (definition.mustDifferFrom && value === valueOf(env, definition.mustDifferFrom)) {
+    const comparableOther =
+      definition.kind === "hostname"
+        ? normalizeHost(valueOf(env, definition.mustDifferFrom))
+        : valueOf(env, definition.mustDifferFrom)
+    if (definition.mustDifferFrom && comparableValue === comparableOther) {
       errors.push(safeError(definition.name, `must differ from ${definition.mustDifferFrom}`))
     }
 
@@ -242,9 +251,12 @@ export const validateEnvText = ({ contract, target, text }) => {
       //    선택된 항목만 보면 전환 순간까지 오염을 못 잡으므로 표 전체를 본다.
       //    불변식을 위반하는 것이 알려진 전환 전 조합은 legacyUnsafeTopology 하나로만 격리한다.
       const invariants = check.invariants || {}
-      const forbiddenCookieDomains = invariants.forbiddenCookieDomains || []
+      // 호스트 비교는 전부 normalizeHost를 거친다. Caddy가 host를 소문자로 정규화하므로
+      // 대문자로 적힌 apex가 raw 비교를 통과하면 그대로 vhost 주소가 된다.
+      const forbiddenCookieDomains = (invariants.forbiddenCookieDomains || []).map(normalizeHost)
       const legacyKey = invariants.legacyUnsafeTopology
       for (const [name, entry] of Object.entries(topologies)) {
+        const unsafe = (message) => errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: ${message}`))
         if (name === legacyKey) {
           if (entry.structurallyUnsafe !== true) {
             errors.push(safeError(check.apiHostKey, `topology ${name} is the declared legacy exception and must be labelled structurallyUnsafe`))
@@ -255,23 +267,48 @@ export const validateEnvText = ({ contract, target, text }) => {
           errors.push(safeError(check.apiHostKey, `topology ${name} claims an undeclared legacy exception`))
           continue
         }
-        if (entry.cookieDomain !== entry.frontHost) {
-          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: cookieDomain must equal frontHost`))
+
+        const cookieDomain = normalizeHost(entry.cookieDomain)
+        const frontHost = normalizeHost(entry.frontHost)
+        const webHost = normalizeHost(entry.webHost)
+        const backHost = normalizeHost(entry.backHost)
+
+        // 선언돼야 할 값이 비어 있으면 "검사할 게 없어 통과"가 아니라 error다.
+        // 빈 값이면 아래 비교들이 조용히 사라져 표 검증 층 전체가 공허해진다.
+        for (const [field, value] of [
+          ["cookieDomain", cookieDomain],
+          ["frontHost", frontHost],
+          ["webHost", webHost],
+          ["backHost", backHost],
+          ["adminEmbedOrigins", String(entry.adminEmbedOrigins || "").trim()],
+          ["publicEdgeProbeBaseUrl", String(entry.publicEdgeProbeBaseUrl || "").trim()],
+          ["revalidateUrl", String(entry.revalidateUrl || "").trim()],
+        ]) {
+          if (!value) unsafe(`${field} must be declared`)
         }
-        if (entry.webHost && entry.webHost !== entry.cookieDomain) {
-          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: webHost must equal cookieDomain`))
-        }
-        if (!isStrictSubdomainOf(entry.backHost, entry.cookieDomain)) {
-          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: backHost must be a subdomain of cookieDomain`))
-        }
-        // admin embed allowlist는 Caddy의 frame-ancestors로 들어간다. 표가 web 호스트 밖의
-        // origin을 선언하면 그 origin이 관리 화면을 iframe으로 감쌀 권한을 갖는다.
+
+        if (cookieDomain && frontHost && cookieDomain !== frontHost) unsafe("cookieDomain must equal frontHost")
+        if (webHost && cookieDomain && webHost !== cookieDomain) unsafe("webHost must equal cookieDomain")
+        if (!isStrictSubdomainOf(backHost, cookieDomain)) unsafe("backHost must be a subdomain of cookieDomain")
+        if (forbiddenCookieDomains.includes(cookieDomain)) unsafe("cookieDomain is owned by another service")
+
+        // 아래 셋은 전부 web 호스트 파생이다. 표에 오타가 나면 각각
+        // (a) 타 서비스 origin에 iframe embed 권한 (b) 존재하지 않는 호스트를 감시하는 probe
+        // (c) x-revalidate-token을 담은 POST가 타 서비스 호스트로 나가는 토큰 유출이 된다.
+        const expectedWebHost = webHost || frontHost
         const declaredEmbedOrigins = String(entry.adminEmbedOrigins || "").split(/\s+/).filter(Boolean)
-        if (declaredEmbedOrigins.some((origin) => normalizeHost(hostOf(origin)) !== normalizeHost(entry.webHost || entry.frontHost))) {
-          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: adminEmbedOrigins must stay on its own web host`))
+        if (declaredEmbedOrigins.some((origin) => normalizeHost(hostOf(origin)) !== expectedWebHost)) {
+          unsafe("adminEmbedOrigins must stay on its own web host")
         }
-        if (forbiddenCookieDomains.includes(entry.cookieDomain)) {
-          errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: cookieDomain is owned by another service`))
+        for (const [field, url] of [
+          ["publicEdgeProbeBaseUrl", entry.publicEdgeProbeBaseUrl],
+          ["revalidateUrl", entry.revalidateUrl],
+        ]) {
+          if (!url) continue
+          // hostOf()는 스킴이 없으면 ""를 돌려준다. 그걸 "비교 생략"으로 두면 검사가 사라진다.
+          const host = normalizeHost(hostOf(url))
+          if (!host) unsafe(`${field} must be an absolute URL`)
+          else if (host !== expectedWebHost) unsafe(`${field} must stay on its own web host`)
         }
       }
 
@@ -383,7 +420,10 @@ const main = () => {
   })
 
   for (const warning of result.warnings || []) {
-    console.error(`[env-contract] WARN ${warning.key}: ${warning.message}`)
+    // ::warning:: 은 GitHub Actions run summary 상단에 올라온다. 일반 stderr은 스텝을
+    // 펼쳐야 보이므로, 전환 창 종료를 이 경고에 의존하는 런북에는 사실상 침묵이다.
+    const annotation = process.env.GITHUB_ACTIONS === "true" ? "::warning::" : ""
+    console.error(`${annotation}[env-contract] WARN ${warning.key}: ${warning.message}`)
   }
 
   if (!result.ok) {

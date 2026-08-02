@@ -1371,6 +1371,67 @@ test("a topology whose web host differs from the cookie domain is rejected", asy
   assert(result.errors.some((error) => error.message.includes("webHost")))
 })
 
+test("every front-derived value in a topology is checked, not just the host trio", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+
+  // 표에 오타가 나면 백엔드가 x-revalidate-token을 담은 POST를 타 서비스 호스트로 보낸다.
+  // probe는 존재하지 않는 호스트를 감시하게 된다. 호스트 3개만 보면 이게 통과한다.
+  for (const patch of [
+    { revalidateUrl: "https://www.aquilaxk.site/api/revalidate" },
+    { publicEdgeProbeBaseUrl: "https://aquilaxk.site" },
+    // 스킴이 빠지면 hostOf()가 ""를 반환해 비교가 조용히 사라지던 자리다.
+    { publicEdgeProbeBaseUrl: "blog.aquilaxk.site" },
+    { revalidateUrl: "blog.aquilaxk.site/api/revalidate" },
+    { adminEmbedOrigins: "" },
+    { webHost: "" },
+  ]) {
+    const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", patch)
+    const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
+
+    assert.equal(result.ok, false, `topology patch must be rejected: ${JSON.stringify(patch)}`)
+    assert(
+      result.errors.some((error) => error.message.includes("api.blog.aquilaxk.site")),
+      `error must name the topology: ${JSON.stringify(patch)}`,
+    )
+  }
+})
+
+test("topology invariants compare hosts case-insensitively", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+
+  // Caddy는 host를 소문자로 정규화한다. 대문자로 적힌 apex가 통과하면 그대로 API vhost가 된다.
+  const upper = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=AQUILAXK.SITE`,
+  })
+  assert.equal(upper.ok, false, "uppercase apex must not slip past forbiddenValues")
+  assert(upper.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
+
+  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+    cookieDomain: "AQUILAXK.SITE",
+    frontHost: "AQUILAXK.SITE",
+    webHost: "AQUILAXK.SITE",
+  })
+  const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
+  assert.equal(result.ok, false, "uppercase apex cookieDomain must still hit forbiddenCookieDomains")
+})
+
+test("LEGACY_API_DOMAIN may not duplicate API_DOMAIN", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+
+  // caddy adapt가 같은 주소를 dedup하므로 구 호스트는 실제로 서빙되지 않는데,
+  // 경고는 "구 호스트가 아직 서빙된다"고 말한다. 그 거짓말을 계약이 막아야 한다.
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=api.blog.aquilaxk.site`,
+  })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
+})
+
 test("a topology whose API host is not under the cookie domain is rejected", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const poisoned = JSON.parse(JSON.stringify(loadContract(contractPath)))
@@ -1536,8 +1597,13 @@ test("WEB_DOMAIN is derived from the same switch as the other front-derived valu
 
   const workflow = readFileSync(workflowPath, "utf8")
   assert.match(workflow, /PROD_SITE_WEB_DOMAIN="blog\.aquilaxk\.site"/)
-  assert.match(workflow, /PROD_SITE_WEB_DOMAIN="www\.aquilaxk\.site"/)
   assert.match(workflow, /upsert_env_key "WEB_DOMAIN" "\$\{PROD_SITE_WEB_DOMAIN\}" "deploy\/homeserver\/\.env\.prod"/)
+
+  // 전환 전에는 WEB_DOMAIN을 핀하지 않는다. 핀하면 폐기 대상이자 타 서비스가 가져갈
+  // www 호스트로 Caddy web vhost가 생기고, front가 아직 검증 전이면 502가 된다.
+  // 런북 2단계가 "여기서 넣지 않는다"를 명시적으로 보장하므로 그 보장을 깨면 안 된다.
+  assert.doesNotMatch(workflow, /PROD_SITE_WEB_DOMAIN="www\.aquilaxk\.site"/)
+  assert.match(workflow, /PROD_SITE_WEB_DOMAIN=""/)
 })
 
 test("cookie scope check rejects a front host that is not the one declared for API_DOMAIN", async () => {

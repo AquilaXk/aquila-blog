@@ -224,23 +224,27 @@ if ! printf '%s' "${first_placeholder_default}" | grep -Eq '^back_(blue|green|re
 fi
 
 # ---------------------------------------------------------------------------
-# upstream 토큰 awk 패턴은 세 파일에서 동일해야 한다
+# backend upstream 토큰 awk 패턴은 세 파일에서 동일해야 한다
 #
 # 토큰 해석은 probe와 두 배포 스크립트에 각각 구현돼 있다. 한쪽 패턴만 고치면 cutover의 판정과
 # 후검증 게이트의 판정이 갈린다. 구현 통합은 배포 크리티컬 스크립트를 외부 파일 source에
 # 의존하게 만들므로, 대신 패턴 문자열의 동일성을 기계적으로 고정한다.
+#
+# :8080 토큰으로 한정한다. front web vhost의 upstream 토큰(:3000, WEB_UPSTREAM)은 별개 계약이고
+# 이 세 파일에 같은 형태로 존재하지도 않는다 — 그쪽은 front-blue-green-cutover.test.sh가 본다.
+# 한정하지 않으면 front 토큰이 "두 개 이상"으로 잡혀 backend 드리프트와 구분되지 않는다.
 # ---------------------------------------------------------------------------
 
 upstream_token_pattern_of() {
   local script="$1"
   local patterns
-  patterns="$(grep -hoE '\$1 == "reverse_proxy" && \$2 ~ /[^/]+/' "${script}" | sort -u)"
+  patterns="$(grep -hoE '\$1 == "reverse_proxy" && \$2 ~ /[^/]+/' "${script}" | grep -F ':8080' | sort -u)"
   if [ -z "${patterns}" ]; then
-    fail "cannot find the upstream token awk pattern in ${script}; the pattern drift guard would pass vacuously"
+    fail "cannot find the backend upstream token awk pattern in ${script}; the pattern drift guard would pass vacuously"
   fi
   if [ "$(printf '%s\n' "${patterns}" | wc -l | tr -d '[:space:]')" -ne 1 ]; then
     printf '%s\n' "${patterns}" >&2
-    fail "${script} carries more than one upstream token awk pattern"
+    fail "${script} carries more than one backend upstream token awk pattern"
   fi
   printf '%s' "${patterns}"
 }

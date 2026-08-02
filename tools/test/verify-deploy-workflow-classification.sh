@@ -77,6 +77,34 @@ require_pattern 'back_image_ref:[[:space:]]*\$\{\{ steps\.backend_image\.outputs
 require_pattern 'HOME_BACK_IMAGE:[[:space:]]*\$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}' "deploy job must use immutable backend digest ref"
 reject_pattern 'image_latest_ref' "deploy workflow must not calculate or push latest image refs"
 reject_pattern 'IMAGE_LATEST_REF="\$\{IMAGE_NAME\}:latest"' "deploy workflow must not create latest image refs"
+
+# front 배포 계약 (#1539). 위의 reject 목록이 막는 것은 "Platform deploy가 프론트를 빌드·검증하는
+# 것"이고, 여기서 요구하는 것은 "Platform deploy가 이미 push된 front digest를 홈서버에 올리는 것"
+# 이다. 두 목록은 서로를 무효화하지 않는다.
+require_pattern 'front_deploy:[[:space:]]*\$\{\{ steps\.meta\.outputs\.front_deploy \}\}' "workflow must expose a front_deploy output"
+require_pattern 'needs\.calculateTag\.outputs\.front_deploy == .true.' "front deploy job must be gated by front_deploy"
+require_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*front/' "front deploy trigger must classify front source paths"
+require_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*frontend-image' "front deploy trigger must follow the workflow that builds the front image"
+reject_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*(back/|deploy/homeserver/|deploy/env/|tools/env/)' "front deploy must trigger independently of backend deploy paths"
+reject_pattern 'BACKEND_DEPLOY_PATHS_PATTERN=.*front/' "backend deploy must not be triggered by front-only changes"
+require_pattern 'needs\.blueGreenDeploy\.result == .success.' "front deploy must be serialized after the backend deploy on the same host"
+require_pattern 'needs\.calculateTag\.outputs\.backend_deploy != .true. \|\|' "front deploy must still run on commits where the backend was never scheduled"
+# GitHub 은 의존 job 이 실패해 **실행되지 않은** job 의 result 도 skipped 로 보고한다. skipped 를
+# 전제 충족으로 읽으면 backend 빌드가 깨진 커밋에서 front 가 구 backend 위로 cutover 된다.
+# 정상 skip 과 사고 skip 을 가르는 신호는 result 가 아니라 calculateTag 의 backend_deploy 판정이다.
+reject_pattern 'needs\.blueGreenDeploy\.result == .skipped.' "a skipped backend deploy must not admit the front deploy: an upstream build failure produces the same result value"
+reject_pattern 'always\(\) &&' "front deploy must not run on cancelled workflows"
+require_pattern 'HOME_FRONT_IMAGE:[[:space:]]*\$\{\{ steps\.front_image\.outputs\.front_image_ref \}\}' "front deploy job must use the resolved front digest ref"
+require_pattern 'front_image_ref=\$\{FRONT_IMAGE_NAME\}@\$\{FRONT_IMAGE_DIGEST\}' "front image ref must be resolved to an immutable digest ref"
+reject_pattern 'front_image_ref=\$\{FRONT_IMAGE_NAME\}:' "front image ref must not stay on a mutable tag ref"
+require_pattern 'front image must be pinned by sha256 digest' "remote front deploy must reject a front image that is not digest pinned"
+require_pattern 'DEPLOY_TARGET=front' "front rollout must run through the shared blue/green script"
+require_pattern 'STAGED_FRONT_BUILD_SHA=' "front deploy must pass the build sha that the cutover verification compares the served build against"
+require_pattern 'front deploy finished without reporting a result marker' "front deploy must fail when the remote rollout reports no result"
+# 결과 요약은 ssh 성공 후에만 실행된다. 시도한 이미지·커밋은 그 앞에서 적어야 실패한 run에도
+# "무엇을 배포하려 했는지"가 남는다.
+require_pattern 'echo "- deploy sha: \$\{HOME_DEPLOY_SHA\}"' "front deploy must record the attempted image and sha before the remote rollout runs"
+require_pattern 'front deploy reported success but the edge served build sha' "runner must re-check the served build sha the remote reported"
 require_pattern 'HOME_KNOWN_HOSTS:[[:space:]]*\$\{\{ secrets\.HOME_KNOWN_HOSTS \}\}' "pinned known_hosts secret must be required"
 require_pattern 'HOME_GHCR_USERNAME:[[:space:]]*\$\{\{ secrets\.HOME_GHCR_USERNAME \}\}' "private GHCR username must be required"
 require_pattern 'HOME_GHCR_TOKEN:[[:space:]]*\$\{\{ secrets\.HOME_GHCR_TOKEN \}\}' "private GHCR token must be required"
@@ -111,3 +139,5 @@ if [[ "${last_prune_line}" -le "${external_create_line}" ]]; then
   echo "unexpected: external backup prune must run after backup creation to enforce retention" >&2
   exit 1
 fi
+
+echo "[test] Platform deploy workflow classification: PASS"

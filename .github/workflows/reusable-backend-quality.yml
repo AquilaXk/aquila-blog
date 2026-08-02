@@ -184,6 +184,12 @@ jobs:
       - name: Test runtime-split Caddy upstream contract
         run: bash tools/test/runtime-split-caddy-upstream.test.sh
 
+      - name: Test front blue/green cutover contract
+        run: bash tools/test/front-blue-green-cutover.test.sh
+
+      - name: Test Platform deploy workflow classification
+        run: bash tools/test/verify-deploy-workflow-classification.sh
+
       - name: Dependency review
         if: github.event_name == 'pull_request'
         shell: bash

@@ -86,7 +86,21 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
 # LEGACY_API_DOMAIN is transition-only and unset outside the cutover window. Its `.localhost`
 # default is required: an empty value collapses the address to `http://`, which Caddy adapts
 # into a host-matcher-less :80 catch-all.
-http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost} {
+#
+# The third address `http://caddy` is the container-internal entry point (#1539). The front
+# tier calls the backend from the server side (SSR helpers and the /api/backend/* proxy) and
+# must reach the same route split the browser gets: under runtime-split, public reads belong
+# to back_read and everything else to back_admin, and no single backend container serves both
+# (ApiRuntimeBoundaryFilter answers 503 outside its mode). Pointing the front at one container
+# would therefore break either the public feed or the auth/write paths, and pointing it at the
+# active blue/green colour would break again on every colour flip. Routing it through this
+# vhost keeps one source of truth for the split and needs no colour tracking.
+#
+# It is a literal name, not an env placeholder, so it can never collapse into the empty
+# address the note above warns about. Reachability is unchanged: the only listeners are the
+# compose networks caddy joins plus a 127.0.0.1-only host bind, and Cloudflare Tunnel forwards
+# the original public Host, so no external request can arrive with `Host: caddy`.
+http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {
   log {
     output stdout
     format json

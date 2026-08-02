@@ -16,6 +16,11 @@ on:
         required: false
         default: true
         type: boolean
+      force_front_deploy:
+        description: "Deploy the front image built from the newest front commit reachable from this sha, even when changed-file detection would skip it."
+        required: false
+        default: false
+        type: boolean
       allow_deploy_without_ci_success:
         description: "DANGEROUS: Skip verifying a successful CI run for this SHA before manual deploy."
         required: false
@@ -63,6 +68,9 @@ jobs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
       deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
       backend_deploy: ${{ steps.meta.outputs.backend_deploy }}
+      front_deploy: ${{ steps.meta.outputs.front_deploy }}
+      front_image_name: ${{ steps.meta.outputs.front_image_name }}
+      front_source_sha: ${{ steps.meta.outputs.front_source_sha }}
 
     steps:
       - name: Checkout
@@ -164,6 +172,7 @@ jobs:
         env:
           DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
           FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
+          FORCE_FRONT_DEPLOY_INPUT: ${{ github.event.inputs.force_front_deploy || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -179,9 +188,19 @@ jobs:
           IMAGE_NAME="ghcr.io/${OWNER_LC}/${REPO_NAME}-back"
           IMAGE_TAG="sha-${DEPLOY_SHA}"
           IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
+          FRONT_IMAGE_NAME="ghcr.io/${OWNER_LC}/${REPO_NAME}-front"
           BACKEND_DEPLOY="false"
+          FRONT_DEPLOY="false"
+          FRONT_SOURCE_SHA=""
+          FRONT_STALE_BLOCKED="false"
+          FRONT_FAIL_OPEN="false"
+          FRONT_FAIL_OPEN_STALE="false"
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
+          # front 배포 트리거는 backend와 겹치지 않는다. 여기 적힌 경로는 Frontend Image
+          # 워크플로가 새 front 이미지를 굽는 경로와 정확히 같아야 한다: 그보다 넓으면 존재하지
+          # 않는 digest를 기다리다 실패하고, 좁으면 새 이미지가 배포되지 않은 채 남는다.
+          FRONT_DEPLOY_PATHS_PATTERN='^(front/|\.github/workflows/frontend-image\.yml)'
           STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
           CHANGED_FILES=""
           if [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]; then
@@ -209,6 +228,12 @@ jobs:
               fi
               echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
               CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
+              # 더 새로운 main 커밋이 front를 바꿨다면 그 커밋의 배포가 최신 front 이미지를
+              # 올린다. 이 stale run이 예전 이미지로 cutover하면 그 결과를 덮어써 되돌린다.
+              if echo "${STALE_CHANGED_FILES}" | grep -Eq "${FRONT_DEPLOY_PATHS_PATTERN}"; then
+                FRONT_STALE_BLOCKED="true"
+                echo "front deploy deferred to the newer main commit that owns the front image: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+              fi
             fi
           fi
           CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
@@ -218,10 +243,15 @@ jobs:
           fi
           if [ -z "${CHANGED_FILES}" ]; then
             BACKEND_DEPLOY="true"
+            FRONT_DEPLOY="true"
+            FRONT_FAIL_OPEN="true"
             CHANGE_SOURCE="fail-open:no-changed-files"
           else
             if echo "${CHANGED_FILES}" | grep -Eq "${BACKEND_DEPLOY_PATHS_PATTERN}"; then
               BACKEND_DEPLOY="true"
+            fi
+            if echo "${CHANGED_FILES}" | grep -Eq "${FRONT_DEPLOY_PATHS_PATTERN}"; then
+              FRONT_DEPLOY="true"
             fi
           fi
 
@@ -230,13 +260,51 @@ jobs:
             CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-backend"
           fi
 
+          if [ "${FORCE_FRONT_DEPLOY_INPUT}" = "true" ]; then
+            FRONT_DEPLOY="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-front"
+          fi
+
+          # 강제 입력보다 뒤에 둔다: 더 새로운 main이 front를 소유한 상황에서는 수동 실행이라도
+          # 예전 이미지로 되돌리는 결과가 된다.
+          if [ "${FRONT_STALE_BLOCKED}" = "true" ] && [ "${FRONT_DEPLOY}" = "true" ]; then
+            FRONT_DEPLOY="false"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+front-owned-by-newer-main"
+          fi
+
+          # 배포할 front 이미지는 DEPLOY_SHA가 아니라 그 조상 중 마지막으로 front를 바꾼 main
+          # 커밋에서 나온다. Frontend Image 워크플로가 태그를 그 커밋 sha로 붙이기 때문이다.
+          if [ "${FRONT_DEPLOY}" = "true" ]; then
+            FRONT_SOURCE_SHA="$(git rev-list -1 --first-parent "${DEPLOY_SHA}" -- front .github/workflows/frontend-image.yml || true)"
+            if [ -z "${FRONT_SOURCE_SHA}" ]; then
+              echo "front deploy requested but no front-image commit is reachable from ${DEPLOY_SHA}" >&2
+              exit 1
+            fi
+          fi
+
+          # fail-open은 "변경 파일을 못 읽었으니 안전한 쪽으로 배포한다"인데, front에서 안전한 쪽은
+          # 배포가 아니다. 이 커밋이 front를 바꾸지 않았다면 FRONT_SOURCE_SHA는 몇 달 전 커밋일 수
+          # 있고, 그 구 digest로 cutover하면 이미 배포된 최신 front를 성공적으로 되돌린다.
+          # 이 커밋 자신이 front 이미지를 굽는 커밋일 때만 fail-open 배포를 허용한다.
+          if [ "${FRONT_FAIL_OPEN}" = "true" ] && [ "${FRONT_SOURCE_SHA}" != "${DEPLOY_SHA}" ]; then
+            FRONT_DEPLOY="false"
+            FRONT_SOURCE_SHA=""
+            FRONT_FAIL_OPEN_STALE="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+front-fail-open-refused-stale-image"
+          fi
+
           echo "deploy_target_source=${CHANGE_SOURCE}"
 
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "image_name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
-          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
-          echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
-          echo "backend_deploy=${BACKEND_DEPLOY}" >> "$GITHUB_OUTPUT"
+          {
+            echo "image_tag=${IMAGE_TAG}"
+            echo "image_name=${IMAGE_NAME}"
+            echo "image_ref=${IMAGE_REF}"
+            echo "deploy_sha=${DEPLOY_SHA}"
+            echo "backend_deploy=${BACKEND_DEPLOY}"
+            echo "front_deploy=${FRONT_DEPLOY}"
+            echo "front_image_name=${FRONT_IMAGE_NAME}"
+            echo "front_source_sha=${FRONT_SOURCE_SHA}"
+          } >> "$GITHUB_OUTPUT"
 
           {
             echo "## Deploy Boundary"
@@ -246,6 +314,17 @@ jobs:
               echo "- backend result: backend deploy pipeline continues"
             else
               echo "- backend result: homeserver deploy skipped because backend/deploy paths did not change"
+            fi
+            echo "- front deploy: homeserver blue/green (image built by the Frontend Image workflow)"
+            echo "- front_deploy: ${FRONT_DEPLOY}"
+            if [ "${FRONT_DEPLOY}" = "true" ]; then
+              echo "- front result: front deploy pipeline continues for front source sha ${FRONT_SOURCE_SHA}"
+            elif [ "${FRONT_STALE_BLOCKED}" = "true" ]; then
+              echo "- front result: front deploy deferred to the newer main commit that owns the front image"
+            elif [ "${FRONT_FAIL_OPEN_STALE}" = "true" ]; then
+              echo "- front result: front deploy refused on fail-open because this sha builds no front image and the reachable one is older"
+            else
+              echo "- front result: front deploy skipped because no front image path changed"
             fi
             echo "- decision source: ${CHANGE_SOURCE}"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -838,6 +917,11 @@ jobs:
           # upsert_env_key is a no-op on an empty value, so the pre-cutover branch leaves the key
           # exactly as the owner has it (absent).
           upsert_env_key "WEB_DOMAIN" "${PROD_SITE_WEB_DOMAIN}" "deploy/homeserver/.env.prod"
+          # front 서버 사이드가 backend를 부르는 주소(#1539). 색깔에 묶인 값은 backend cutover마다
+          # 깨지고, back_read/back_admin은 런타임 모드 밖 요청을 503으로 막는다. 라우트 분리를
+          # 소유한 Caddy 내부 주소만 두 조건을 모두 만족하므로 여기서 고정한다. 오너 시크릿에 남은
+          # 옛 색깔 값이 살아남으면 front는 healthy를 보고하면서 프록시만 죽는다.
+          upsert_env_key "BACKEND_INTERNAL_URL" "http://caddy" "deploy/homeserver/.env.prod"
           # The public edge probe must keep watching the host that is actually serving traffic.
           # Pinning it to the post-transition host while DNS still points elsewhere (#1538) would
           # fire PublicEdgeRouteDown for the whole transition window and monitor nothing real.
@@ -1441,3 +1525,377 @@ jobs:
           REMOTE
           REMOTE_TMP_DIR=""
           trap - EXIT
+
+  # Epic #1535 Locked Decision 2 후반부(#1539): Web 워크플로는 GHCR push까지만 소유하고,
+  # 홈서버 배포는 Platform이 한다. 이 job은 front를 빌드하거나 검증하지 않는다 - 이미 push된
+  # digest를 받아 홈서버 blue/green으로 올릴 뿐이다.
+  #
+  # backend job과 분리된 이유: 트리거가 독립이다(front만 바뀌면 backend는 재배포되지 않는다).
+  # 그러면서 needs로 직렬화하는 이유: 두 배포가 같은 홈서버 checkout과 .env.prod, Caddyfile을
+  # 만지고, front SSR은 BACKEND_INTERNAL_URL로 backend에 의존한다. backend가 먼저 성공해야
+  # front를 그 위에 올린다. backend가 스킵된 run에서는 front만 단독으로 돈다.
+  frontBlueGreenDeploy:
+    runs-on: ubuntu-latest
+    needs:
+      - calculateTag
+      - blueGreenDeploy
+    # blueGreenDeploy는 `always()`가 없으므로 의존 job(buildAndPush)이 실패하면 **실행되지 않은 채
+    # result가 skipped**가 된다. 그래서 skipped를 전제 충족으로 읽으면 backend 빌드가 깨진 커밋에서
+    # front가 구 backend 위로 cutover된다. 정상 skip(backend를 애초에 배포하지 않는 커밋)과
+    # 사고 skip을 구분하는 신호는 result가 아니라 calculateTag의 backend_deploy 판정이다.
+    if: >
+      !cancelled() &&
+      needs.calculateTag.result == 'success' &&
+      needs.calculateTag.outputs.front_deploy == 'true' &&
+      (needs.calculateTag.outputs.backend_deploy != 'true' || needs.blueGreenDeploy.result == 'success')
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Verify required secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            TS_OAUTH_CLIENT_ID
+            TS_OAUTH_SECRET
+            HOME_SSH_USER
+            HOME_APP_DIR
+            HOME_TAILSCALE_HOST
+            HOME_SSH_KEY
+            HOME_KNOWN_HOSTS
+            HOME_GHCR_USERNAME
+            HOME_GHCR_TOKEN
+          )
+
+          for key in "${required[@]}"; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "$key missing"
+              exit 1
+            fi
+            echo "$key present"
+          done
+
+          if [[ ! "${HOME_TAILSCALE_HOST}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.[a-z0-9]([a-z0-9-]*[a-z0-9])?\.ts\.net$ ]]; then
+            echo "HOME_TAILSCALE_HOST must be a full MagicDNS FQDN ending in .ts.net." >&2
+            exit 1
+          fi
+
+      # 태그로 배포하지 않는다. 여기서 태그를 한 번 digest로 확정하고, 그 뒤 모든 경로는
+      # digest ref만 다룬다. Frontend Image 워크플로는 이 워크플로와 병렬로 도므로, 아직
+      # push되지 않았으면 정해진 시간만 기다리고 그 뒤에는 fail closed 한다.
+      - name: Resolve front image digest
+        id: front_image
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FRONT_IMAGE_NAME: ${{ needs.calculateTag.outputs.front_image_name }}
+          FRONT_SOURCE_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          FRONT_IMAGE_WAIT_ATTEMPTS: "90"
+          FRONT_IMAGE_SETTLED_ATTEMPTS: "3"
+          FRONT_IMAGE_WAIT_SLEEP_SECONDS: "20"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${FRONT_SOURCE_SHA}" ]; then
+            echo "front source sha is empty; cannot resolve a front image" >&2
+            exit 1
+          fi
+          if [ -z "${FRONT_IMAGE_NAME}" ]; then
+            echo "front image name is empty" >&2
+            exit 1
+          fi
+
+          IMAGE_PATH="${FRONT_IMAGE_NAME#ghcr.io/}"
+          FRONT_IMAGE_TAG="sha-${FRONT_SOURCE_SHA}"
+
+          registry_pull_token() {
+            curl -fsSL -u "${GHCR_USERNAME}:${GHCR_TOKEN}" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:${IMAGE_PATH}:pull" \
+              | jq -r '.token // empty'
+          }
+
+          # Docker-Content-Digest는 그 태그가 가리키는 manifest의 정본 digest다. HEAD라서
+          # 이미지를 내려받지 않고, 태그가 없으면 404가 와서 대기 루프의 종료 조건이 된다.
+          manifest_digest() {
+            local bearer="$1"
+            curl -sS -I \
+              -H "Authorization: Bearer ${bearer}" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json' \
+              -H 'Accept: application/vnd.oci.image.manifest.v1+json' \
+              -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
+              -H 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/${IMAGE_PATH}/manifests/${FRONT_IMAGE_TAG}" \
+              | awk 'tolower($1) == "docker-content-digest:" { print $2 }' \
+              | tr -d '\r' \
+              | tail -n 1
+          }
+
+          # 기다릴 이유가 있는 경우와 없는 경우를 나눈다. 배포 대상 커밋이 곧 front 이미지를 굽는
+          # 커밋이면 Frontend Image가 지금 돌고 있을 수 있으니 끝까지 기다린다. 그렇지 않으면 그
+          # 이미지는 이미 예전에 올라가 있어야 하므로, 없다는 것은 "곧 생긴다"가 아니라 "없다"는
+          # 뜻이다. 그때까지 30분을 기다리면 실패 원인이 로그에서 30분 뒤에야 드러난다.
+          MAX_ATTEMPTS="${FRONT_IMAGE_WAIT_ATTEMPTS}"
+          if [ "${FRONT_SOURCE_SHA}" != "${DEPLOY_SHA}" ]; then
+            MAX_ATTEMPTS="${FRONT_IMAGE_SETTLED_ATTEMPTS}"
+            echo "front image for ${FRONT_IMAGE_TAG} was built by an earlier commit and must already exist: waiting at most ${MAX_ATTEMPTS} attempts"
+          fi
+
+          FRONT_IMAGE_DIGEST=""
+          attempt=1
+          while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+            BEARER="$(registry_pull_token || true)"
+            if [ -n "${BEARER}" ]; then
+              FRONT_IMAGE_DIGEST="$(manifest_digest "${BEARER}" || true)"
+            fi
+            if [ -n "${FRONT_IMAGE_DIGEST}" ]; then
+              break
+            fi
+            echo "front image is not published yet: ${FRONT_IMAGE_NAME}:${FRONT_IMAGE_TAG} (attempt ${attempt}/${MAX_ATTEMPTS})"
+            # 마지막 시도 뒤에는 자지 않는다. 실패가 확정된 뒤의 대기는 로그만 늦춘다.
+            if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
+              sleep "${FRONT_IMAGE_WAIT_SLEEP_SECONDS}"
+            fi
+            attempt=$((attempt + 1))
+          done
+
+          if [ -z "${FRONT_IMAGE_DIGEST}" ]; then
+            echo "front image was never published for ${FRONT_IMAGE_TAG}; the Frontend Image workflow must succeed for commit ${FRONT_SOURCE_SHA} before it can be deployed" >&2
+            exit 1
+          fi
+          case "${FRONT_IMAGE_DIGEST}" in
+            sha256:*) ;;
+            *)
+              echo "front image digest is not a sha256 reference: ${FRONT_IMAGE_DIGEST}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "front_image_ref=${FRONT_IMAGE_NAME}@${FRONT_IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "front image ref: ${FRONT_IMAGE_NAME}@${FRONT_IMAGE_DIGEST} (tag ${FRONT_IMAGE_TAG})"
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: ${{ vars.TS_OAUTH_TAGS || secrets.TS_OAUTH_TAGS || 'tag:ci' }}
+
+      - name: Configure SSH key
+        env:
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH_DIR="${RUNNER_TEMP}/ssh"
+          rm -rf "$SSH_DIR"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
+
+          printf '%s\n' "${HOME_SSH_KEY}" > "$SSH_DIR/home_key"
+          chmod 600 "$SSH_DIR/home_key"
+          printf '%s\n' "${HOME_KNOWN_HOSTS}" > "$SSH_DIR/known_hosts"
+          if [ ! -s "$SSH_DIR/known_hosts" ]; then
+            echo "HOME_KNOWN_HOSTS is required for production deploy" >&2
+            exit 1
+          fi
+          chmod 600 "$SSH_DIR/known_hosts"
+          echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
+
+      - name: Deploy front over SSH (pull image + blue/green switch)
+        env:
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_FRONT_IMAGE: ${{ steps.front_image.outputs.front_image_ref }}
+          HOME_FRONT_BUILD_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          PORT="${HOME_SSH_PORT:-22}"
+          HOME_APP_DIR_B64="$(printf '%s' "${HOME_APP_DIR}" | base64 | tr -d '\n')"
+          LOCAL_REMOTE_VARS_FILE="${RUNNER_TEMP}/home-front-vars.env"
+          FRONT_DEPLOY_LOG="${RUNNER_TEMP}/front-deploy.log"
+          {
+            printf 'HOME_FRONT_IMAGE=%q\n' "${HOME_FRONT_IMAGE}"
+            printf 'HOME_FRONT_BUILD_SHA=%q\n' "${HOME_FRONT_BUILD_SHA}"
+            printf 'HOME_DEPLOY_SHA=%q\n' "${HOME_DEPLOY_SHA}"
+            printf 'HOME_GHCR_USERNAME=%q\n' "${HOME_GHCR_USERNAME}"
+            printf 'HOME_GHCR_TOKEN=%q\n' "${HOME_GHCR_TOKEN}"
+          } > "${LOCAL_REMOTE_VARS_FILE}"
+          chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
+
+          # 시도한 대상은 결과보다 먼저 적는다. ssh 파이프라인이 실패하면 아래 결과 블록에
+          # 도달하지 못하는데, 그때가 바로 "무엇을 배포하려 했는지"가 가장 필요한 순간이다.
+          {
+            echo "## Deploy Boundary (front)"
+            echo "- front image: \`${HOME_FRONT_IMAGE}\`"
+            echo "- front build sha: ${HOME_FRONT_BUILD_SHA}"
+            echo "- deploy sha: ${HOME_DEPLOY_SHA}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          REMOTE_TMP_DIR="$(ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" "umask 077 && mktemp -d /tmp/aquila-front-deploy.XXXXXX")"
+          case "${REMOTE_TMP_DIR}" in
+            /tmp/aquila-front-deploy.*) ;;
+            *)
+              echo "unexpected remote tmp dir: ${REMOTE_TMP_DIR}" >&2
+              exit 1
+              ;;
+          esac
+          cleanup_remote_tmp_from_runner() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ]; then
+              ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" "rm -rf -- ${REMOTE_TMP_DIR}" || true
+            fi
+          }
+          trap cleanup_remote_tmp_from_runner EXIT
+
+          scp -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$PORT" \
+            "${LOCAL_REMOTE_VARS_FILE}" \
+            "$HOME_SSH_USER@$HOME_TAILSCALE_HOST:${REMOTE_TMP_DIR}/"
+
+          ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" \
+            "umask 077 && cat > '${REMOTE_TMP_DIR}/front-deploy.sh' && HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' bash '${REMOTE_TMP_DIR}/front-deploy.sh' </dev/null" <<'REMOTE' | tee "${FRONT_DEPLOY_LOG}"
+          set -euo pipefail
+
+          decode_b64() {
+            if printf '' | base64 --decode >/dev/null 2>&1; then
+              printf '%s' "$1" | base64 --decode
+            else
+              printf '%s' "$1" | base64 -d
+            fi
+          }
+
+          HOME_APP_DIR="$(decode_b64 "${HOME_APP_DIR_B64:-}")"
+          REMOTE_VARS_FILE="${REMOTE_TMP_DIR}/home-front-vars.env"
+
+          cleanup_remote_tmp() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ] && [ -d "${REMOTE_TMP_DIR}" ]; then
+              rm -rf "${REMOTE_TMP_DIR}" || true
+            fi
+          }
+          trap cleanup_remote_tmp EXIT
+
+          # shellcheck disable=SC1090
+          . "${REMOTE_VARS_FILE}"
+
+          cd "${HOME_APP_DIR}"
+
+          if [ -z "${HOME_DEPLOY_SHA:-}" ]; then
+            echo "HOME_DEPLOY_SHA is empty. abort front deploy." >&2
+            exit 1
+          fi
+          if [ -z "${HOME_FRONT_IMAGE:-}" ]; then
+            echo "HOME_FRONT_IMAGE is empty. abort front deploy to avoid a stale front rollout." >&2
+            exit 1
+          fi
+          # `repo:latest@sha256:<64hex>`는 아래 digest 정규식을 **통과한다**(`[^[:space:]@]+`가
+          # `repo:latest`를 그대로 먹는다). 그래서 이 case는 사문이 아니라 그 형태를 잡는
+          # 유일한 장치다. 순수 `repo:latest`는 두 검사 모두에 걸린다.
+          case "${HOME_FRONT_IMAGE}" in
+            *":latest" | *":latest@"*)
+              echo "latest tag is not allowed for HOME_FRONT_IMAGE: ${HOME_FRONT_IMAGE}" >&2
+              exit 1
+              ;;
+          esac
+          if ! printf '%s' "${HOME_FRONT_IMAGE}" | grep -Eq '^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$'; then
+            echo "front image must be pinned by sha256 digest: ${HOME_FRONT_IMAGE}" >&2
+            exit 1
+          fi
+          if ! printf '%s' "${HOME_FRONT_BUILD_SHA:-}" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "HOME_FRONT_BUILD_SHA must be the 40-hex commit the front image was built from: '${HOME_FRONT_BUILD_SHA:-}'" >&2
+            exit 1
+          fi
+
+          umask 077
+          git fetch origin main --prune
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "${HOME_DEPLOY_SHA}" --depth 1 || true
+          fi
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            echo "deploy sha not found in remote repository: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${HOME_DEPLOY_SHA}" "origin/main"; then
+            echo "deploy sha is not reachable from origin/main: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+          git checkout --force "${HOME_DEPLOY_SHA}"
+
+          chmod +x \
+            deploy/homeserver/blue_green_deploy.sh \
+            deploy/homeserver/materialize_service_env.sh
+
+          # front rollout은 .env.prod를 다시 만들지 않는다. 도메인 파생 계약은 backend 배포가
+          # 소유하고, 여기서 그 블록을 복제하면 두 벌이 서로 어긋난다. 마지막 backend 배포가
+          # 남긴 파일이 없으면 배포할 수 있는 상태가 아니므로 멈춘다.
+          if [ ! -f deploy/homeserver/.env.prod ]; then
+            echo "deploy/homeserver/.env.prod is missing; run a backend deploy before the first front deploy" >&2
+            exit 1
+          fi
+
+          if [ -z "${HOME_GHCR_USERNAME:-}" ] || [ -z "${HOME_GHCR_TOKEN:-}" ]; then
+            echo "HOME_GHCR_USERNAME and HOME_GHCR_TOKEN are required for private GHCR deploy" >&2
+            exit 1
+          fi
+          echo "${HOME_GHCR_TOKEN}" | docker login ghcr.io -u "${HOME_GHCR_USERNAME}" --password-stdin
+
+          DEPLOY_TARGET=front \
+            STAGED_FRONT_IMAGE="${HOME_FRONT_IMAGE}" \
+            STAGED_FRONT_BUILD_SHA="${HOME_FRONT_BUILD_SHA}" \
+            ./deploy/homeserver/blue_green_deploy.sh
+
+          cleanup_remote_tmp
+          trap - EXIT
+          REMOTE
+          REMOTE_TMP_DIR=""
+          trap - EXIT
+
+          # 원격 스크립트는 성공 경로마다 결과 마커를 정확히 하나 남긴다. 마커가 없으면 "성공
+          # 종료했지만 무엇을 했는지 모른다"는 뜻이라 성공으로 보고하지 않는다.
+          FRONT_DEPLOY_RESULT="$(grep -oE '^front_deploy_result=[a-z_]+$' "${FRONT_DEPLOY_LOG}" | tail -n 1 | cut -d= -f2 || true)"
+          FRONT_SERVED_BUILD_SHA="$(grep -oE 'served_build_sha=[0-9a-f]{40}' "${FRONT_DEPLOY_LOG}" | tail -n 1 | cut -d= -f2 || true)"
+          FRONT_SWITCHED_AT="$(grep -oE 'switched_at=[0-9TZ:-]+' "${FRONT_DEPLOY_LOG}" | tail -n 1 | cut -d= -f2 || true)"
+
+          {
+            echo "- front result: ${FRONT_DEPLOY_RESULT:-unknown}"
+            echo "- served build sha after cutover: ${FRONT_SERVED_BUILD_SHA:-not observed}"
+            echo "- cutover time (UTC): ${FRONT_SWITCHED_AT:-not observed}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "${FRONT_DEPLOY_RESULT}" in
+            deployed | profile_disabled) ;;
+            *)
+              echo "front deploy finished without reporting a result marker" >&2
+              exit 1
+              ;;
+          esac
+
+          # 원격이 이미 같은 대조를 하고 실패 시 rollback까지 한다. 여기서 다시 보는 이유는 그
+          # 대조가 실제로 일어났는지를 러너가 독립적으로 확인하기 위해서다 - 원격 스크립트가
+          # 검증을 건너뛰면서 성공 마커만 남기는 회귀가 여기서 걸린다.
+          if [ "${FRONT_DEPLOY_RESULT}" = "deployed" ] && [ "${FRONT_SERVED_BUILD_SHA}" != "${HOME_FRONT_BUILD_SHA}" ]; then
+            echo "front deploy reported success but the edge served build sha=${FRONT_SERVED_BUILD_SHA:-none}, expected ${HOME_FRONT_BUILD_SHA}" >&2
+            exit 1
+          fi

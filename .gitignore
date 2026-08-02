@@ -11,6 +11,9 @@ deploy/homeserver/.env.caddy.prod
 deploy/homeserver/.env.front.prod
 deploy/homeserver/.deploy-backups/
 deploy/homeserver/.deploy-baseline*
+# front blue/green 런타임 상태와 rollback 증거 (#1539). 서버에서만 생성된다.
+deploy/homeserver/.active_front
+deploy/homeserver/.front-release-state.env
 deploy/homeserver/*.backup
 deploy/homeserver/*.enc
 

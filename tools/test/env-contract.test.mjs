@@ -174,7 +174,7 @@ const baseHomeServerEnv = [
   "API_DOMAIN=api.blog.aquilaxk.site",
   // API_DOMAIN이 blog topology면 #1557의 requiredWhen이 이 둘을 필수로 만든다.
   "WEB_DOMAIN=blog.aquilaxk.site",
-  "BACKEND_INTERNAL_URL=http://back-blue:8080",
+  "BACKEND_INTERNAL_URL=http://caddy",
   "MONITOR_DOMAIN=status.aquilaxk.site",
   "GRAFANA_DOMAIN=grafana.aquilaxk.site",
   "PROMETHEUS_DOMAIN=prometheus.aquilaxk.site",
@@ -356,9 +356,47 @@ test("API vhost keeps the legacy API host reachable during the domain cutover", 
   assert(addressLine, "API vhost address line must exist")
   // 단일 site address면 구·신 API 호스트가 동시에 살 수 없어, 어느 순서로 전환해도
   // 공개 사이트가 죽는 창이 생긴다.
-  assert.match(addressLine, /^http:\/\/\{\$API_DOMAIN\}, http:\/\/\{\$LEGACY_API_DOMAIN:[^}]+\} \{$/, addressLine)
+  assert.match(
+    addressLine,
+    /^http:\/\/\{\$API_DOMAIN\}, http:\/\/\{\$LEGACY_API_DOMAIN:[^}]+\}, http:\/\/[a-z0-9-]+ \{$/,
+    addressLine,
+  )
   // 기본값이 비면 주소가 `http://`가 되어 host matcher 없는 :80 catch-all이 된다.
   assert.match(addressLine, /\{\$LEGACY_API_DOMAIN:[a-z0-9-]+\.localhost\}/, addressLine)
+  // 세 번째 주소는 front 서버 사이드 호출용 컨테이너 내부 진입점이다(#1539). env placeholder면
+  // 값이 비는 순간 `http://`로 붕괴해 host matcher 없는 :80 catch-all이 되므로 리터럴만 허용한다.
+  const internalAddress = addressLine.split(", ")[2].replace(/ \{$/, "")
+  assert.equal(internalAddress, "http://caddy", addressLine)
+  assert.doesNotMatch(internalAddress, /\{\$/, "the internal API address must not be env-interpolated")
+  // 공개 호스트를 내부 주소로 쓰면 front 호출이 공개 인터넷을 왕복한다.
+  assert.doesNotMatch(internalAddress, /\./, "the internal API address must not be a public hostname")
+})
+
+// front SSR과 /api/backend/* 프록시는 BACKEND_INTERNAL_URL 하나로 backend를 부른다. 그 값이
+// 특정 색깔이면 backend blue/green 전환마다 깨지고, back_read/back_admin이면 런타임 모드 밖의
+// 요청이 503이 된다(ApiRuntimeBoundaryFilter). 유일하게 성립하는 값은 라우트 분리를 소유한
+// Caddy 내부 주소이며, 계약과 배포가 그 값을 함께 고정한다.
+test("BACKEND_INTERNAL_URL은 색깔에 묶이지 않는 Caddy 내부 주소로 고정된다", async () => {
+  const { loadContract } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const definition = contract.targets["home-server-source"].keys.find((key) => key.name === "BACKEND_INTERNAL_URL")
+
+  assert(definition, "BACKEND_INTERNAL_URL must be declared")
+  assert.deepEqual(definition.allowedValues, ["http://caddy"])
+
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const addressLine = caddyfile.split("\n").find((line) => line.startsWith("http://{$API_DOMAIN}"))
+  assert(addressLine.includes("http://caddy"), "the contract value must be an address the API vhost answers")
+
+  // 배포가 같은 값을 .env.prod에 핀한다. 오너 시크릿에 남은 옛 색깔 값이 그대로 살아남으면
+  // front는 healthy를 보고하면서 프록시만 죽는다.
+  const workflow = readFileSync(workflowPath, "utf8")
+  assert.match(workflow, /upsert_env_key "BACKEND_INTERNAL_URL" "http:\/\/caddy"/)
+
+  // 색깔 URL은 계약 단계에서 막힌다.
+  const example = readFileSync(envExamplePath, "utf8")
+  assert.match(example, /^BACKEND_INTERNAL_URL=http:\/\/caddy$/m)
+  assert.doesNotMatch(example, /BACKEND_INTERNAL_URL=http:\/\/back[-_](blue|green|read|admin)/)
 })
 
 test("LEGACY_API_DOMAIN is declared as an optional transition-only key and reaches Caddy", async () => {

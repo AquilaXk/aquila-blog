@@ -59,6 +59,10 @@ DEPLOY_TARGET="${DEPLOY_TARGET:-backend}"
 FRONT_LIVENESS_PATH="${FRONT_LIVENESS_PATH:-/robots.txt}"
 # 공개 트래픽이 실제로 통과하는 렌더 경로. cutover 게이트는 여기까지 200이어야 통과한다.
 FRONT_RENDER_PATH="${FRONT_RENDER_PATH:-/}"
+# front -> backend 서버 사이드 경로. 실측(2026-08-02): BACKEND_INTERNAL_URL이 비어 있으면 컨테이너는
+# healthy, `/`는 빌드 타임 프리렌더라 200인데 이 경로만 502였다. 렌더 경로까지만 보는 게이트는 그
+# 상태를 통과시킨다. 공개 read GET이라 인증이 필요 없고 back_read 모드에서도 허용되는 경로를 쓴다.
+FRONT_BACKEND_PROXY_PATH="${FRONT_BACKEND_PROXY_PATH:-/api/backend/post/api/v1/posts/tags}"
 # first boot는 .next/cache가 비어 SSR이 전부 cold다. 150 x 2s = 300s로 그 구간을 견딘다.
 FRONT_HEALTHCHECK_RETRIES="${FRONT_HEALTHCHECK_RETRIES:-150}"
 FRONT_HEALTHCHECK_INTERVAL_SECONDS="${FRONT_HEALTHCHECK_INTERVAL_SECONDS:-2}"
@@ -2863,7 +2867,7 @@ served_front_build_sha() {
 check_front_health() {
   local service="$1"
   local attempt=1
-  local health liveness_code render_code
+  local health liveness_code render_code proxy_code
 
   while [[ "${attempt}" -le "${FRONT_HEALTHCHECK_RETRIES}" ]]; do
     health="$(front_container_health "${service}")"
@@ -2872,11 +2876,14 @@ check_front_health() {
       # liveness는 tracked 정적 파일만 증명한다. 공개 트래픽이 닿는 것은 렌더 경로이므로
       # cutover 게이트는 SSR 응답까지 요구한다.
       render_code="$(probe_front_http_code "${service}" "${FRONT_RENDER_PATH}")"
-      if is_healthy_http_code "${render_code}"; then
-        echo "front healthcheck ok: ${service} (health=${health}, liveness=${liveness_code}, render=${render_code})"
+      # 렌더 경로도 부족하다. 홈은 빌드 타임 프리렌더라 BACKEND_INTERNAL_URL이 비어 있어도
+      # 200이고, 그 상태에서 브라우저가 실제로 쓰는 backend 프록시만 502였다(실측).
+      proxy_code="$(probe_front_http_code "${service}" "${FRONT_BACKEND_PROXY_PATH}")"
+      if is_healthy_http_code "${render_code}" && is_healthy_http_code "${proxy_code}"; then
+        echo "front healthcheck ok: ${service} (health=${health}, liveness=${liveness_code}, render=${render_code}, backend_proxy=${proxy_code})"
         return 0
       fi
-      echo "front render pending: ${service} (try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, render=${render_code:-none})"
+      echo "front render/proxy pending: ${service} (try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, render=${render_code:-none}, backend_proxy=${proxy_code:-none})"
     else
       echo "front healthcheck pending: ${service} (try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, health=${health:-none}, liveness=${liveness_code:-none})"
     fi

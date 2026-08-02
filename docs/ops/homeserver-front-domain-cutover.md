@@ -75,9 +75,16 @@
      > 컨테이너에서 복원한다. 반대로 프로필을 켜면서 이 값을 넣지 않으면 **backend 배포가 먼저
      > 실패한다** — 프로필이 켜진 채 이미지 값이 없으면 `docker compose` 평가 자체가 깨지므로,
      > `blue_green_deploy.sh`가 compose를 처음 부르기 전에 fail closed 한다.
-   - `BACKEND_INTERNAL_URL=http://back-blue:8080` — **없으면 front가 모든 SSR 경로에서 500이다.**
+   - `BACKEND_INTERNAL_URL=http://caddy` — **없으면 front SSR과 `/api/backend/*` 프록시가 죽는다.**
      `front/src/libs/server/backend.ts`가 production에서 이 값 없이는 throw하고, 이미지가
-     `NODE_ENV=production`을 박고 있다. compose 내부 주소만 쓰고 공개 인터넷을 왕복하지 않는다.
+     `NODE_ENV=production`을 박고 있다. 실측(2026-08-02): 값이 없으면 컨테이너는 `healthy`,
+     `/`는 빌드 타임 프리렌더라 200인데 `/api/backend/post/api/v1/posts/tags`만 502였다.
+
+     **값은 이 하나뿐이고 계약(`allowedValues`)과 배포가 함께 고정한다.** 색깔 URL
+     (`http://back-blue:8080`)은 backend blue/green 전환마다 깨지고, `back_read`/`back_admin`은
+     `ApiRuntimeBoundaryFilter`가 자기 런타임 모드 밖 요청을 503으로 막아 각각 인증·쓰기 경로와
+     공개 피드가 죽는다. 라우트 분리를 소유한 것은 Caddy이므로 front도 브라우저와 같은 경로로
+     들어간다. 공개 인터넷을 왕복하지 않는다 — `caddy`는 compose 네트워크 안에서만 도달한다.
    - `COMPOSE_PROFILES`에 `front` 추가 (기존 값이 `runtime-split`이면 `runtime-split,front`)
 
    **`WEB_DOMAIN`은 여기서 넣지 않는다.** 이 값은 4단계에서 `CUSTOM_PROD_FRONTURL`과 **함께**
@@ -90,26 +97,36 @@
    ```bash
    docker compose ps
    docker inspect --format '{{.State.Health.Status}}' <front 컨테이너>   # healthy
-   # healthy는 정적 서빙만 증명한다. SSR이 실제로 도는지는 여기서 직접 본다.
+   # healthy는 정적 서빙만 증명한다. `/`도 부족하다 - 빌드 타임 프리렌더라
+   # BACKEND_INTERNAL_URL이 비어 있어도 200이다. 실제 backend 왕복까지 본다.
    docker compose exec -T front_blue wget -qS -O /dev/null http://127.0.0.1:3000/ 2>&1 | head -3
+   docker compose exec -T front_blue wget -qS -O /dev/null \
+     http://127.0.0.1:3000/api/backend/post/api/v1/posts/tags 2>&1 | head -3
    docker compose exec -T front_blue printenv BACKEND_INTERNAL_URL
    ```
-   `/`가 200이 아니거나 `BACKEND_INTERNAL_URL`이 비어 있으면 **3단계로 넘어가지 않는다.**
-3. **DNS 레코드와 Tunnel public hostname을 둘 다 만든다 (오너, 콘솔).**
-   - `blog.aquilaxk.site` → `http://caddy:80`
+   `/`나 backend 프록시 경로가 200이 아니거나 `BACKEND_INTERNAL_URL`이 비어 있으면 **3단계로
+   넘어가지 않는다.** (#1539의 front 배포 게이트가 같은 세 신호를 자동으로 확인한다.)
+3. **`api.blog.aquilaxk.site` Tunnel public hostname만 만든다 (오너, 콘솔).**
    - `api.blog.aquilaxk.site` → `http://caddy:80`
 
-   구 hostname(`www.aquilaxk.site`, `api.aquilaxk.site`)은 이 단계에서 **그대로 둔다.** 네 호스트가
-   동시에 살아 있는 상태가 정상이며, 4단계 이후에도 `LEGACY_API_DOMAIN`이 구 API 호스트를 계속
-   Caddy vhost에 매치시킨다.
+   **`blog.aquilaxk.site`는 여기서 만들지 않는다.** Cloudflare에서 tunnel public hostname을
+   만들면 DNS 레코드가 함께 생성되므로, blog를 지금 만들면 기존 Vercel 레코드를 교체하게 되고
+   그 순간이 사실상 DNS 전환이다. 아직 4단계(env flip)를 하기 전이라 `WEB_DOMAIN`이 비어 있고
+   web vhost는 `web.localhost` 기본값이므로, 공개 blog 트래픽이 vhost 미매치 상태로 노출된다.
+   blog hostname과 DNS는 5단계에서 Vercel 레코드를 교체하며 만든다. `api.blog`는 신규 레코드라
+   충돌 없이 미리 만들어도 안전하고, 4단계에서 `API_DOMAIN`이 넘어갈 때 바로 필요하다.
+
+   구 hostname(`www.aquilaxk.site`, `api.aquilaxk.site`)은 이 단계에서 **그대로 둔다.** 4단계
+   이후에도 `LEGACY_API_DOMAIN`이 구 API 호스트를 계속 Caddy vhost에 매치시킨다.
 4. **#1540의 env 전환을 한 배포로 함께 적용한다.** `API_DOMAIN`·`CUSTOM_PROD_BACKURL`·
    `CUSTOM_PROD_FRONTURL`·`CUSTOM_PROD_COOKIEDOMAIN`, 그리고 **`WEB_DOMAIN=blog.aquilaxk.site`를
    같은 배포에서 함께** 넣는다. 이 다섯을 동시에 넣어야 `urlHostEquals(CUSTOM_PROD_FRONTURL,
    WEB_DOMAIN)`이 처음부터 만족되고, `API_DOMAIN`이 새 topology로 가는 순간 `WEB_DOMAIN`이
    `requiredWhen`으로 필수가 되므로 빠뜨리면 배포가 멈춘다(공개 도메인만 404가 되는 대신).
-   **`LEGACY_API_DOMAIN=api.aquilaxk.site`도 같은 배포에 넣는다.** API vhost는 site address가
+   **`LEGACY_API_DOMAIN=api.aquilaxk.site`도 같은 배포에 넣는다.** API vhost는 공개 site address가
    둘(`http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost}`)이라, 이 키가 있는
-   동안 구·신 API 호스트가 **동시에** 살아 있다. 없으면 이 배포 순간 구 `api.aquilaxk.site`가 Caddy
+   동안 구·신 API 호스트가 **동시에** 살아 있다 (세 번째 `http://caddy`는 컨테이너 내부 전용이라
+   공개 호스트 수에 들어가지 않는다). 없으면 이 배포 순간 구 `api.aquilaxk.site`가 Caddy
    vhost 미매치가 되어, 아직 구 web origin에서 서빙 중인 트래픽이 백엔드를 잃는다.
    `caddy adapt` 실측: `host matcher: api.blog.aquilaxk.site , api.aquilaxk.site`.
 
@@ -128,7 +145,9 @@
    전환 창 동안 blog에서 서빙되는 프론트가 **구** API 호스트를 부를 때도 `Origin`은
    `https://blog.aquilaxk.site`라 같은 정규식을 통과한다(실측: blog ALLOW / www·apex·www.blog REJECT).
    두 site address가 한 vhost를 공유하므로 CORS 설정도 공유된다.
-5. **`blog.aquilaxk.site` DNS를 Tunnel로 전환한다 (오너, 콘솔).**
+5. **`blog.aquilaxk.site` Tunnel public hostname을 만들고 DNS를 Vercel에서 Tunnel로 교체한다
+   (오너, 콘솔).** 3단계에서 미룬 작업이 여기다 — hostname 생성이 곧 DNS 전환이므로 4단계가
+   끝난 뒤에만 한다.
 
    ⚠️ **전환 창이 보존하는 것은 라우팅이지 세션이 아니다.** `LEGACY_API_DOMAIN`은 Caddy host
    matcher만 살린다. 4단계 이후 백엔드는 요청 호스트와 무관하게 `Domain=blog.aquilaxk.site`로

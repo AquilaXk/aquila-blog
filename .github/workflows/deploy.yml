@@ -901,6 +901,11 @@ jobs:
           # upsert_env_key is a no-op on an empty value, so the pre-cutover branch leaves the key
           # exactly as the owner has it (absent).
           upsert_env_key "WEB_DOMAIN" "${PROD_SITE_WEB_DOMAIN}" "deploy/homeserver/.env.prod"
+          # front 서버 사이드가 backend를 부르는 주소(#1539). 색깔에 묶인 값은 backend cutover마다
+          # 깨지고, back_read/back_admin은 런타임 모드 밖 요청을 503으로 막는다. 라우트 분리를
+          # 소유한 Caddy 내부 주소만 두 조건을 모두 만족하므로 여기서 고정한다. 오너 시크릿에 남은
+          # 옛 색깔 값이 살아남으면 front는 healthy를 보고하면서 프록시만 죽는다.
+          upsert_env_key "BACKEND_INTERNAL_URL" "http://caddy" "deploy/homeserver/.env.prod"
           # The public edge probe must keep watching the host that is actually serving traffic.
           # Pinning it to the post-transition host while DNS still points elsewhere (#1538) would
           # fire PublicEdgeRouteDown for the whole transition window and monitor nothing real.

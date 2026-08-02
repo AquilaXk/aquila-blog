@@ -268,6 +268,7 @@ run_front_case() {
     printf '%s\n' 'EDGE_NETWORK_NAME=blog_home_edge'
     printf '%s\n' 'FRONT_LIVENESS_PATH=/robots.txt'
     printf '%s\n' 'FRONT_RENDER_PATH=/'
+    printf '%s\n' 'FRONT_BACKEND_PROXY_PATH=/proxy'
     printf '%s\n' 'FRONT_HEALTHCHECK_RETRIES=2'
     printf '%s\n' 'FRONT_HEALTHCHECK_INTERVAL_SECONDS=1'
     printf '%s\n' 'FRONT_HEALTHCHECK_CONNECT_TIMEOUT_SECONDS=3'
@@ -377,13 +378,31 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=unhealthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_green/robots.txt=200\nfront_green/=500\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=500\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "an unhealthy candidate must fail the front deploy" "1" "${status}"
 assert_file_lacks "an unhealthy candidate must never receive the edge upstream" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
 assert_file_contains "WEB_UPSTREAM must stay pinned to the live colour" "${case_dir}/.env.prod" '^WEB_UPSTREAM=front_blue$'
 assert_file_contains "the failed candidate must be stopped" "${case_dir}/call-log" '^compose stop front_green$'
+assert_file_lacks "a failed front deploy must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
+
+# ---------------------------------------------------------------------------
+# 4-1) 실측 재현(2026-08-02, 홈서버 2단계 상태): BACKEND_INTERNAL_URL이 비면 컨테이너는 healthy,
+#      `/`는 빌드 타임 프리렌더라 200인데 브라우저가 실제로 쓰는 backend 프록시만 502다.
+#      liveness와 렌더 경로까지만 보는 게이트는 이 상태를 성공으로 통과시킨다.
+# ---------------------------------------------------------------------------
+setup_case "candidate-backend-proxy-broken" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=502\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a healthy container whose backend proxy is broken must fail the front deploy" "1" "${status}"
+assert_file_lacks "a broken backend proxy must never receive the edge upstream" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
+assert_file_contains "WEB_UPSTREAM must stay pinned to the live colour" "${case_dir}/.env.prod" '^WEB_UPSTREAM=front_blue$'
 assert_file_lacks "a failed front deploy must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
 
 # ---------------------------------------------------------------------------
@@ -395,7 +414,7 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_green/robots.txt=200\nfront_green/=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 # green은 뜨지만 edge에서 관측되는 빌드는 여전히 예전 것이다(예: 캐시된 라우팅, 잘못된 digest).
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${old_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
@@ -418,7 +437,7 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_green/robots.txt=200\nfront_green/=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "a verified cutover must succeed" "0" "${status}"

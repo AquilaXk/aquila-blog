@@ -12,6 +12,20 @@ const TARGET_PATHS = [
   "src/layouts/RootLayout",
 ]
 
+/**
+ * 색 리터럴을 정의해도 되는 유일한 파일들. 게이트의 목적은 "hex 금지"가 아니라 "색 정의 지점을
+ * 한 곳으로 모으기"이므로, 정본 팔레트를 옮겨 적는 토큰 모듈은 여기서 예외로 둔다. 표면 코드는
+ * 그 모듈이 내보낸 토큰만 참조하고, 새 예외를 추가할 때는 정본 출처를 파일 주석에 남긴다.
+ *
+ * 경로는 이 앱 기준(`front/` 아래)으로 적는다. git이 diff 헤더에 쓰는 경로는 pathspec을 어디서
+ * 주든 저장소 루트 기준이므로(`front/src/...`), 비교는 suffix로 한다 - 앱 기준 경로와 문자열
+ * 일치만 보면 커밋된 diff에서 예외가 조용히 풀린다.
+ */
+const COLOR_SOURCE_ALLOWLIST = ["src/design-system/marketingPalette.ts"]
+
+export const isColorSourceFile = (file) =>
+  COLOR_SOURCE_ALLOWLIST.some((allowed) => file === allowed || file.endsWith(`/${allowed}`))
+
 const DIRECT_COLOR_PATTERN =
   /(?:^|[^A-Za-z0-9_-])(?:#[0-9A-Fa-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))/
 const FUNCTION_COLOR_START_PATTERN = /(?:^|[^A-Za-z0-9_-])(?:rgba?|hsla?)\(/
@@ -98,8 +112,9 @@ export const findDirectColorViolations = (diffText) => {
     const sourceLine = line.slice(1)
     const colorSourceLine = sourceLine.replace(FRAGMENT_REFERENCE_PATTERN, "")
     if (
-      DIRECT_COLOR_PATTERN.test(colorSourceLine) ||
-      FUNCTION_COLOR_START_PATTERN.test(colorSourceLine)
+      !isColorSourceFile(currentFile) &&
+      (DIRECT_COLOR_PATTERN.test(colorSourceLine) ||
+        FUNCTION_COLOR_START_PATTERN.test(colorSourceLine))
     ) {
       violations.push({
         file: currentFile,

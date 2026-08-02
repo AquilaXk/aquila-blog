@@ -489,9 +489,24 @@ done
 # 판정 결과를 블록의 종료 코드로 남긴다. `(exit N)`은 셸을 죽이지 않고 마지막 상태만 N으로 만든다.
 (exit "${rss_isolation}")
 
-# 표면 호스트에는 백엔드 경로가 없다. 200이면 blog vhost의 게이트가 새어 나온 것이다.
-curl -sS -o /dev/null -w "company_backend=%{http_code}\n" \
-  https://www.aquilaxk.site/member/api/v1/auth/session
+# 표면 호스트에는 백엔드 표면이 없다. 실제로 닫아야 하는 것은 Next의 백엔드 프록시 라우트
+# (`front/src/pages/api/backend/[...path].ts`)이고, 그것을 닫는 것은 Caddyfile
+# `(front_surface_vhost)`의 `@frontApiDenied`(`/api/*` 중 `/api/rum/*`만 허용) → `respond 404`다.
+# `/member/...`는 이 vhost가 애초에 백엔드로 프록시하지 않는 경로라서 그것만 보면 `@frontApiDenied`가
+# 제거되거나 catch-all 뒤로 밀려도 통과한다 - 그래서 프록시 표면을 직접 찌른다. `/member/...`도
+# 함께 남긴다: 그 경로가 404가 아니면 이 vhost에 백엔드 prefix가 붙은 것이다.
+# 계약된 차단 코드는 404다. 상태 코드를 출력만 하면 그 열화가 "성공"으로 보고되므로 판정까지 한다.
+# `-L`을 쓰지 않는다 - 리다이렉트로 백엔드에 닿는 것도 차단이 아니므로 3xx는 그대로 실패다.
+backend_isolation=0
+for surface in https://www.aquilaxk.site https://easysubway.aquilaxk.site; do
+  for probe in /api/backend/member/api/v1/auth/session /member/api/v1/auth/session; do
+    backend_code="$(curl -sS -o /dev/null -w '%{http_code}' "${surface}${probe}")"
+    echo "${surface}${probe}=${backend_code}"
+    [ "${backend_code}" = "404" ] || { echo "FAIL: backend surface reachable"; backend_isolation=1; }
+  done
+done
+[ "${backend_isolation}" -eq 0 ] && echo "backend isolation ok" || echo "backend isolation FAILED"
+(exit "${backend_isolation}")
 
 # 블로그 표면 무회귀: robots/sitemap이 그대로 블로그 값이어야 한다.
 curl -sS https://blog.aquilaxk.site/robots.txt

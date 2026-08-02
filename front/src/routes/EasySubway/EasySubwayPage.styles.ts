@@ -16,6 +16,11 @@ import { variables } from "src/styles"
  * (2026-08-02). 보조 광원은 두지 않는다.
  *
  * 그림자는 폰 목업과 stat 카드 두 곳뿐이다.
+ *
+ * 타이포 하한(상용 마케팅 기준, 2026-08-03): 본문·설명·내비·CTA는 1rem 이상, 히어로 서브와 기능
+ * 본문은 1.0625~1.125rem, 캡션·저작권 같은 보조 텍스트는 0.875rem 이상, 한국어 본문 line-height는
+ * 1.6~1.7이다. 예외는 대문자 + letter-spacing으로 읽는 editorial 라벨(eyebrow·메타 라벨)뿐이며 그
+ * 값은 `editorialLabel` 토큰이 소유한다.
  */
 const CONTENT_MAX_WIDTH = "75rem"
 const SECTION_PADDING_Y = "clamp(4rem, 9vw, 9rem)"
@@ -65,7 +70,7 @@ export const BrandLink = styled.a`
   letter-spacing: -0.02em;
 
   small {
-    font-size: 0.8rem;
+    font-size: 0.875rem;
     font-weight: ${fontWeight.regular};
     color: ${dark.textMuted};
 
@@ -103,7 +108,7 @@ export const NavLink = styled.a`
   border-radius: ${radius.md}px;
   color: ${dark.textSecondary};
   text-decoration: none;
-  font-size: 0.94rem;
+  font-size: 1rem;
   font-weight: ${fontWeight.regular};
   transition: color ${TRANSITION}, background-color ${TRANSITION};
 
@@ -112,9 +117,9 @@ export const NavLink = styled.a`
     background: ${dark.fieldRaised};
   }
 
+  /* 좁은 폭에서는 글자를 줄이지 않고 좌우 패딩만 좁힌다 - 내비는 이미 둘째 줄에서 랩한다. */
   @media (max-width: ${breakpoint.sm}px) {
     padding: 0 0.5rem;
-    font-size: 0.88rem;
   }
 `
 
@@ -139,10 +144,10 @@ export const PillAction = styled.a`
   }
 `
 
+/** 글자 크기는 줄이지 않고 `PillAction`의 1rem을 그대로 쓴다. 높이·패딩만 좁힌다. */
 export const HeaderAction = styled(PillAction)`
   min-height: 44px;
   padding: 0 1.15rem;
-  font-size: 0.92rem;
 `
 
 export const StatusPill = styled.span`
@@ -153,7 +158,7 @@ export const StatusPill = styled.span`
   border-radius: ${variables.ui.button.radiusPill}px;
   background: ${dark.fieldRaised};
   color: ${dark.textPrimary};
-  font-size: 0.86rem;
+  font-size: 0.9375rem;
   font-weight: ${fontWeight.medium};
 
   &::before {
@@ -253,7 +258,7 @@ export const HeroLead = styled.p`
   position: relative;
   margin: 0;
   max-width: 30rem;
-  font-size: clamp(0.98rem, 1.4vw, 1.08rem);
+  font-size: clamp(1.0625rem, 1.5vw, 1.125rem);
   line-height: 1.7;
   color: ${dark.textSecondary};
 `
@@ -372,8 +377,8 @@ export const IntroLayout = styled.div`
 export const IntroAside = styled.p`
   margin: 0;
   max-width: 22rem;
-  font-size: 0.94rem;
-  line-height: 1.75;
+  font-size: 1.0625rem;
+  line-height: 1.7;
   color: ${dark.textSecondary};
 
   strong {
@@ -417,7 +422,7 @@ export const MetaPill = styled.span<{ $accent?: boolean }>`
   border-radius: ${variables.ui.button.radiusPill}px;
   background: ${({ $accent }) => ($accent ? dark.signature : dark.fieldDeep)};
   color: ${({ $accent }) => ($accent ? dark.onSignature : dark.textSecondary)};
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: ${fontWeight.medium};
 `
 
@@ -469,8 +474,8 @@ export const FeatureName = styled.h3`
 export const FeatureBody = styled.p`
   margin: 0;
   max-width: 30rem;
-  font-size: 1rem;
-  line-height: 1.8;
+  font-size: 1.0625rem;
+  line-height: 1.7;
   color: ${dark.textSecondary};
 `
 
@@ -552,7 +557,7 @@ export const DetailCrop = styled.figure`
 
   figcaption {
     margin-top: 0.6rem;
-    font-size: 0.8rem;
+    font-size: 0.875rem;
     color: ${dark.textMuted};
   }
 `
@@ -639,7 +644,7 @@ export const StatCard = styled.div`
     display: block;
     margin-top: 0.85rem;
     max-width: 14rem;
-    font-size: 0.98rem;
+    font-size: 1.0625rem;
     line-height: 1.6;
     font-weight: ${fontWeight.medium};
   }
@@ -670,7 +675,7 @@ export const ContactBand = styled.div`
   p {
     margin: 0;
     max-width: 30rem;
-    font-size: 0.96rem;
+    font-size: 1.0625rem;
     line-height: 1.7;
     color: ${dark.textSecondary};
   }
@@ -705,12 +710,12 @@ export const FooterBrand = styled.div`
   }
 
   span {
-    font-size: 0.9rem;
+    font-size: 1rem;
     color: ${dark.textSecondary};
   }
 
   small {
-    font-size: 0.82rem;
+    font-size: 0.875rem;
     color: ${dark.textMuted};
   }
 `
@@ -728,7 +733,7 @@ export const FooterLinks = styled.nav`
     border-radius: ${radius.sm}px;
     color: ${dark.textSecondary};
     text-decoration: none;
-    font-size: 0.94rem;
+    font-size: 1rem;
     font-weight: ${fontWeight.regular};
     transition: color ${TRANSITION};
 

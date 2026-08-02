@@ -15,6 +15,11 @@ import { variables } from "src/styles"
  * 배경 장식(세로 그리드 라인 + 양측 소프트 일립스)은 오너가 마케팅 표면 한정으로 승인한
  * gradient 예외다(2026-08-02). 블로그·관리자 표면에는 적용하지 않는다.
  * 그림자는 히어로 플로팅 카드와 그 위 폰 목업 두 곳뿐이다.
+ *
+ * 타이포 하한(상용 마케팅 기준, 2026-08-03): 본문·설명·내비·CTA는 1rem 이상, 히어로 서브와 섹션
+ * 리드는 1.0625~1.125rem, 저작권·캡션 같은 보조 텍스트는 0.875rem 이상, 한국어 본문 line-height는
+ * 1.6~1.7이다. 예외는 대문자 + letter-spacing으로 읽는 editorial 라벨(eyebrow·pill)뿐이며 그 값은
+ * `editorialLabel` 토큰이 소유한다 - 본문 하한을 그 라벨에 적용하면 라벨이 소제목처럼 읽힌다.
  */
 export const CONTENT_MAX_WIDTH = "75rem"
 export const SECTION_PADDING_Y = "clamp(4.5rem, 10vw, 10rem)"
@@ -52,7 +57,7 @@ export const NoticeBanner = styled.div`
     padding: 0 0.35rem;
     border-radius: ${radius.sm}px;
     color: ${light.onAccent};
-    font-size: 0.9rem;
+    font-size: 1rem;
     font-weight: ${fontWeight.medium};
     text-decoration: underline;
     text-underline-offset: 3px;
@@ -129,7 +134,7 @@ export const NavLink = styled.a`
   border-radius: ${radius.md}px;
   color: ${light.inkSecondary};
   text-decoration: none;
-  font-size: 0.94rem;
+  font-size: 1rem;
   font-weight: ${fontWeight.medium};
   transition: color ${TRANSITION}, background-color ${TRANSITION};
 
@@ -161,12 +166,14 @@ export const PillAction = styled.a`
   }
 `
 
-/** 좁은 폭에서도 브랜드와 같은 줄에 남는다 - 내비만 둘째 줄로 내려간다. */
+/**
+ * 좁은 폭에서도 브랜드와 같은 줄에 남는다 - 내비만 둘째 줄로 내려간다.
+ * 글자 크기는 줄이지 않고 `PillAction`의 1rem을 그대로 쓴다. 높이·패딩만 좁힌다.
+ */
 export const HeaderAction = styled(PillAction)`
   justify-self: end;
   min-height: 44px;
   padding: 0 1.25rem;
-  font-size: 0.94rem;
 
   @media (max-width: ${layoutBreakpoint.navCompact}px) {
     grid-row: 1;
@@ -247,8 +254,8 @@ export const HeroAccent = styled.em`
 export const HeroLead = styled.p`
   margin: 0;
   max-width: 34rem;
-  font-size: clamp(1rem, 1.5vw, 1.12rem);
-  line-height: 1.6;
+  font-size: clamp(1.0625rem, 1.5vw, 1.125rem);
+  line-height: 1.65;
   color: ${light.inkSecondary};
 `
 
@@ -358,8 +365,8 @@ export const SectionHeading = styled.h2`
 export const SectionAside = styled.p`
   margin: 0;
   max-width: 24rem;
-  font-size: 0.94rem;
-  line-height: 1.75;
+  font-size: 1.0625rem;
+  line-height: 1.7;
   color: ${light.inkSecondary};
 `
 
@@ -414,13 +421,13 @@ export const FooterBrand = styled.div`
   p {
     margin: 0;
     max-width: 22rem;
-    font-size: 0.92rem;
+    font-size: 1rem;
     line-height: 1.7;
     color: ${dark.textSecondary};
   }
 
   small {
-    font-size: 0.82rem;
+    font-size: 0.875rem;
     color: ${dark.textMuted};
   }
 `
@@ -448,7 +455,7 @@ export const FooterGroup = styled.nav`
     border-radius: ${radius.sm}px;
     color: ${dark.textPrimary};
     text-decoration: none;
-    font-size: 0.94rem;
+    font-size: 1rem;
     font-weight: ${fontWeight.medium};
     transition: color ${TRANSITION};
 

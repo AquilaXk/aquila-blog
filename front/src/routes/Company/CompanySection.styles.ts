@@ -46,7 +46,7 @@ export const WordmarkRow = styled.ul`
   list-style: none;
 
   li {
-    font-size: clamp(0.95rem, 1.6vw, 1.15rem);
+    font-size: clamp(1rem, 1.6vw, 1.15rem);
     font-weight: ${fontWeight.bold};
     letter-spacing: 0.12em;
     color: ${light.inkSecondary};
@@ -107,7 +107,7 @@ export const FeatureCard = styled.article`
 
   p {
     margin: 0;
-    font-size: 0.94rem;
+    font-size: 1rem;
     line-height: 1.7;
     color: ${light.inkSecondary};
   }
@@ -132,6 +132,10 @@ export const FeatureGlyphPanel = styled.div`
   color: ${light.accentText};
 `
 
+/**
+ * 카드 분류 pill. 본문 하한(1rem)을 적용하지 않는 유일한 종류 - 대문자 + letter-spacing으로 읽는
+ * editorial 라벨이라 크기를 올리면 카드 제목과 경쟁한다. 값은 `editorialLabel` 라벨 축과 같은 11px다.
+ */
 export const FeatureTag = styled.span`
   align-self: flex-start;
   padding: 0.25rem 0.6rem;
@@ -139,7 +143,7 @@ export const FeatureTag = styled.span`
   background: ${light.surfaceBrandStrong};
   color: ${light.onSignature};
   font-family: ${editorialLabel.fontFamily};
-  font-size: 11px;
+  font-size: ${editorialLabel.fontSize};
   font-weight: ${editorialLabel.fontWeight};
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -252,7 +256,7 @@ export const WorkTile = styled.li<{ $alternate?: boolean }>`
     bottom: clamp(0.9rem, 2vw, 1.35rem);
     left: clamp(0.9rem, 2vw, 1.35rem);
     max-width: calc(100% - 2 * clamp(0.9rem, 2vw, 1.35rem));
-    font-size: clamp(0.9rem, 1.5vw, 1.02rem);
+    font-size: clamp(1rem, 1.5vw, 1.0625rem);
     font-weight: ${fontWeight.bold};
     letter-spacing: -0.01em;
     color: ${dark.textPrimary};
@@ -314,7 +318,7 @@ export const StatList = styled.dl`
 
   dd {
     margin: 0;
-    font-size: 0.92rem;
+    font-size: 1rem;
     line-height: 1.6;
     color: ${light.inkSecondary};
   }
@@ -340,8 +344,8 @@ export const PrincipleList = styled.ul`
     gap: 0.85rem;
     padding: 1.1rem 0;
     border-top: 1px solid ${light.borderBrand};
-    font-size: clamp(1rem, 1.8vw, 1.15rem);
-    line-height: 1.5;
+    font-size: clamp(1.0625rem, 1.8vw, 1.15rem);
+    line-height: 1.6;
     font-weight: ${fontWeight.semibold};
     color: ${light.inkPrimary};
   }
@@ -402,14 +406,14 @@ export const NewsCard = styled.a`
 
   p {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: 1rem;
     line-height: 1.65;
     color: ${light.inkSecondary};
   }
 
   time {
     font-family: ${editorialLabel.fontFamily};
-    font-size: 0.78rem;
+    font-size: 0.875rem;
     color: ${light.inkMuted};
   }
 `
@@ -472,7 +476,7 @@ export const ContactBand = styled.div`
 
   p {
     margin: 0;
-    font-size: 0.98rem;
+    font-size: 1.0625rem;
     line-height: 1.65;
   }
 `

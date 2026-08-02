@@ -2,8 +2,8 @@
 import { CONFIG } from "site.config"
 import EasySubwayLineArt from "src/routes/EasySubway/EasySubwayLineArt"
 import {
-  COMPANY_ROUTE,
   COMPANY_SURFACE,
+  COMPANY_URL,
   CONTACT_MAILTO,
   PRODUCT_FEATURES,
   PRODUCT_FOOTER_LINKS,
@@ -24,17 +24,28 @@ import * as S from "src/routes/EasySubway/EasySubwayPage.styles"
  */
 const [PICK_FEATURE, OFFLINE_FEATURE] = PRODUCT_FEATURES
 
-const EasySubwayPageView: React.FC = () => (
+/**
+ * `surfaceUrl`은 요청 호스트로 resolve한 이 표면의 공개 URL이다(페이지의 canonical과 같은 값).
+ *
+ * 브랜드 셀프 링크에 내부 라우트 `/easysubway`를 쓰지 않는 이유: 전용 호스트에서 공개 페이지는
+ * 루트이고 `/easysubway`는 Caddy rewrite가 쓰는 내부 경로다. 그 경로는 표면 robots에서 disallow돼
+ * 있으므로, 브랜드를 누른 방문자가 canonical 루트에서 중복 경로로 이동하게 된다.
+ */
+type Props = {
+  surfaceUrl: string
+}
+
+const EasySubwayPageView: React.FC<Props> = ({ surfaceUrl }) => (
   <S.ProductSurface>
     <S.SurfaceHeader>
-      <S.BrandLink href={PRODUCT_SURFACE.route} aria-current="page">
+      <S.BrandLink href={surfaceUrl} aria-current="page">
         {PRODUCT_SURFACE.name}
         <small>by {COMPANY_SURFACE.name}</small>
       </S.BrandLink>
       <S.HeaderLinks aria-label="제품 소개 둘러보기">
         <S.NavLink href="#features">기능</S.NavLink>
         <S.NavLink href="#scope">제공 범위</S.NavLink>
-        <S.NavLink href={COMPANY_ROUTE}>회사 소개</S.NavLink>
+        <S.NavLink href={COMPANY_URL}>회사 소개</S.NavLink>
         <S.HeaderAction href={CONTACT_MAILTO}>문의</S.HeaderAction>
       </S.HeaderLinks>
     </S.SurfaceHeader>

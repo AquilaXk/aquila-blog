@@ -4051,6 +4051,31 @@ test("front 전용 표면 vhost는 backend에 닿는 front API 경로를 catch-a
   assert.doesNotMatch(webBlock, /@frontApiDenied/)
 })
 
+test("front 전용 표면 vhost는 블로그 RSS 경로를 catch-all 앞에서 거부한다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const surfaceSnippet = extractCaddySiteBlock(caddyfile, "(front_surface_vhost) {")
+  assert.notEqual(surfaceSnippet, "", "shared front surface snippet must be extractable")
+
+  // 막는 대상이 실제 라우트여야 한다. 라우트가 사라지면 아래 단언은 아무것도 지키지 않는다.
+  assert.ok(
+    existsSync(path.join(repoRoot, "front/src/pages/feed.tsx")),
+    "the blog RSS route this gate must keep off the surface hosts has to exist",
+  )
+
+  // `_document`가 alternate 링크를 끄는 것은 절반이다. 경로 자체가 살아 있으면 다른 데서 링크를
+  // 배운 크롤러가 이 호스트의 피드로 블로그 아이템을 다시 색인한다.
+  assert.match(surfaceSnippet, /@surfaceFeedDenied path \/feed \/feed\/\*/)
+  const denyHandleIndex = surfaceSnippet.indexOf("handle @surfaceFeedDenied {")
+  const catchAllIndex = surfaceSnippet.indexOf("\n  handle {")
+  assert.ok(denyHandleIndex > -1, "the deny must be a handle, not a top-level respond")
+  assert.ok(catchAllIndex > denyHandleIndex, "the deny must be written before the catch-all proxy")
+  assert.match(surfaceSnippet.slice(denyHandleIndex, catchAllIndex), /respond 404/)
+
+  // blog vhost는 이 deny를 상속하지 않는다. RSS의 집이 그 호스트다.
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+  assert.doesNotMatch(webBlock, /@surfaceFeedDenied/)
+})
+
 test("apex vhost는 경로·query를 보존한 308로 회사 호스트에 넘긴다", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const apexBlock = extractCaddySiteBlock(caddyfile, "http://{$APEX_DOMAIN")

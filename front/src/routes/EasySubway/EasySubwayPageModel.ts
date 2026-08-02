@@ -5,7 +5,15 @@ export const COMPANY_SURFACE = CONFIG.surfaces.company
 
 export const BLOG_URL = CONFIG.link
 export const CONTACT_MAILTO = `mailto:${PRODUCT_SURFACE.contactEmail}`
-export const COMPANY_ROUTE = COMPANY_SURFACE.route
+
+/**
+ * 회사 표면 링크는 절대 URL이다.
+ *
+ * 회사는 자기 canonical 호스트를 가진 별개의 공개 표면이다. 상대 경로 `/company`로 두면 제품
+ * 호스트에서 그 경로가 그대로 서빙되고(표면 vhost의 catch-all), canonical이 회사 호스트인 페이지가
+ * 제품 호스트 밑에 중복 노출된다. 회사 표면이 제품을 가리킬 때도 같은 규칙을 쓴다.
+ */
+export const COMPANY_URL = COMPANY_SURFACE.url
 
 export const PRODUCT_RELEASE_STATUS = "Android 출시 준비 중"
 
@@ -81,7 +89,7 @@ export const PRODUCT_SCOPE_CHIPS: ProductScopeChip[] = [
 ]
 
 export const PRODUCT_FOOTER_LINKS = [
-  { label: "회사 소개", href: COMPANY_ROUTE },
+  { label: "회사 소개", href: COMPANY_URL },
   { label: "기술 블로그", href: BLOG_URL },
   { label: "개인정보처리방침", href: `${BLOG_URL}/privacy` },
   { label: "이용약관", href: `${BLOG_URL}/terms` },

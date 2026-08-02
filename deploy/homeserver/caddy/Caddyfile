@@ -494,6 +494,20 @@ http://{$WEB_DOMAIN:web.localhost} {
     respond 404
   }
 
+  # The RSS feed belongs to the blog host. `pages/feed.tsx` is a blog route, and the catch-all below
+  # would serve the blog's feed under these hostnames - so a crawler that learned the path elsewhere
+  # would index the blog's item set a second time as this surface's own feed. `_document` no longer
+  # advertises the alternate link on these routes; this is the other half, so the path cannot be
+  # served even when nothing links to it.
+  #
+  # Same shape as the front API gate above and for the same reasons: a `handle` written before the
+  # catch-all (directive order puts a bare `respond` behind it), and 404 because on this host the
+  # route does not exist.
+  @surfaceFeedDenied path /feed /feed/*
+  handle @surfaceFeedDenied {
+    respond 404
+  }
+
   # Blue/Green cutover rewrites the single active upstream host (#1539 owns the switch).
   handle {
     encode gzip zstd

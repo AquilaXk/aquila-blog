@@ -31,7 +31,7 @@ const EasySubwayPage: NextPageWithLayout<EasySubwayPageProps> = ({ canonicalUrl 
       canonicalUrl={canonicalUrl}
       siteName={PRODUCT_SURFACE.name}
     />
-    <EasySubwayPageView />
+    <EasySubwayPageView surfaceUrl={canonicalUrl} />
   </>
 )
 

@@ -133,6 +133,26 @@ test.describe("공개 표면 스모크: 회사 소개", () => {
     expect(await measureRenderedAspectRatio(phone)).toBeCloseTo(SCREENSHOT_ASPECT_RATIO, 2)
   })
 
+  test("브랜드 셀프 링크는 canonical과 같은 공개 URL이고 블로그 RSS alternate를 상속하지 않는다", async ({
+    page,
+    baseURL,
+  }) => {
+    await page.goto("/company")
+    // 브랜드 링크가 내부 rewrite 경로를 노출하면 전용 호스트에서 robots가 disallow한 중복 경로로
+    // 방문자를 보낸다. 그 호스트의 공개 페이지는 루트이므로 resolved 공개 URL이어야 한다.
+    await expect(page.locator("header a[aria-current='page']")).toHaveAttribute(
+      "href",
+      `${baseURL}/company`
+    )
+    // RSS는 블로그 호스트의 자산이다. 표면이 자기 호스트로 광고하면 같은 아이템이 두 번째 호스트의
+    // 피드로 색인된다.
+    await expect(page.locator("link[rel='alternate'][type='application/rss+xml']")).toHaveCount(0)
+
+    // 조건이 넓게 걸려 블로그에서도 alternate가 사라지면 그것도 회귀다.
+    await page.goto("/")
+    await expect(page.locator("link[rel='alternate'][type='application/rss+xml']")).toHaveCount(1)
+  })
+
   test("역량 캐러셀은 키보드로 접근 가능하고 화살표로 카드를 넘긴다", async ({ page }) => {
     await page.goto("/company")
     // 스크롤 영역이 포커스를 못 받으면 키보드만 쓰는 방문자는 세 번째 카드 뒤를 볼 수 없다.
@@ -184,6 +204,26 @@ test.describe("공개 표면 스모크: EasySubway 제품", () => {
       await expectWithinViewport(page, nav.getByRole("link", { name: label }), label)
     }
     await expectTouchTargets(page, "header a")
+  })
+
+  test("셀프 링크는 공개 URL이고 회사 표면 교차 링크는 절대 URL이다", async ({ page, baseURL }) => {
+    await page.goto("/easysubway")
+    await expect(page.locator("header a[aria-current='page']")).toHaveAttribute(
+      "href",
+      `${baseURL}/easysubway`
+    )
+    // 회사는 자기 canonical 호스트를 가진 별개 표면이다. 상대 경로로 두면 제품 호스트의 catch-all이
+    // 회사 페이지를 그 호스트 밑에 중복 서빙한다.
+    for (const scope of [
+      page.getByRole("navigation", { name: "제품 소개 둘러보기" }),
+      page.getByRole("navigation", { name: "제품 관련 링크" }),
+    ]) {
+      await expect(scope.getByRole("link", { name: "회사 소개" })).toHaveAttribute(
+        "href",
+        "https://www.aquilaxk.site"
+      )
+    }
+    await expect(page.locator("link[rel='alternate'][type='application/rss+xml']")).toHaveCount(0)
   })
 
   test("파일럿 범위는 검증한 역만 사실대로 노출한다", async ({ page }) => {

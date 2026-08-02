@@ -65,7 +65,7 @@ const CompanyPage: NextPageWithLayout<CompanyPageProps> = ({ canonicalUrl, news 
       canonicalUrl={canonicalUrl}
       siteName={COMPANY_SURFACE.name}
     />
-    <CompanyPageView news={news} />
+    <CompanyPageView news={news} surfaceUrl={canonicalUrl} />
   </>
 )
 

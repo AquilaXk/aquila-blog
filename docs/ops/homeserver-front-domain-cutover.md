@@ -461,6 +461,12 @@ curl -sS https://easysubway.aquilaxk.site/robots.txt
 # 표면 호스트의 sitemap은 404다. 200이면 그 호스트가 블로그 URL 목록을 자기 것으로 광고한다.
 curl -sS -o /dev/null -w "company_sitemap=%{http_code}\n" https://www.aquilaxk.site/sitemap.xml
 
+# RSS도 블로그 호스트의 자산이다. 표면 호스트에서 200이면 블로그 아이템이 이 호스트의 피드로
+# 두 번째 색인된다. 페이지의 alternate 링크가 사라졌는지도 함께 본다(출력이 있으면 회귀다).
+curl -sS -o /dev/null -w "company_feed=%{http_code}\n" https://www.aquilaxk.site/feed
+curl -sS -o /dev/null -w "product_feed=%{http_code}\n" https://easysubway.aquilaxk.site/feed
+curl -sS https://www.aquilaxk.site/ | grep -o '<link rel="alternate"[^>]*rss[^>]*>'
+
 # 표면 호스트에는 백엔드 경로가 없다. 200이면 blog vhost의 게이트가 새어 나온 것이다.
 curl -sS -o /dev/null -w "company_backend=%{http_code}\n" \
   https://www.aquilaxk.site/member/api/v1/auth/session

@@ -41,3 +41,17 @@ export const resolvePublicSurfaceUrl = (surface: PublicSurface, requestHost: str
 /** 이 표면의 전용 호스트로 들어온 요청인지. 블로그 전용 라우트(sitemap 등)의 분기에 쓴다. */
 export const isPublicSurfaceHost = (surface: PublicSurface, requestHost: string | undefined) =>
   normalizeKnownHost(requestHost) === hostOf(CONFIG.surfaces[surface].url)
+
+/**
+ * 독립 표면 라우트(전용 호스트의 루트로 서빙되는 랜딩)인지.
+ *
+ * 블로그 전용 chrome과 메타(RootLayout의 `<main>` 껍데기, `_document`의 RSS alternate)를 이 라우트
+ * 에서만 끄기 위한 판정이다. 라우트 목록은 표면 정본 표에서 파생한다 - 경로를 여기에 다시 적으면
+ * 표면이 하나 늘 때 한쪽만 갱신된다.
+ */
+const STANDALONE_SURFACE_ROUTES: ReadonlySet<string> = new Set(
+  Object.values(CONFIG.surfaces).map((surface) => surface.route)
+)
+
+export const isStandaloneSurfacePathname = (pathname: string) =>
+  STANDALONE_SURFACE_ROUTES.has(pathname)

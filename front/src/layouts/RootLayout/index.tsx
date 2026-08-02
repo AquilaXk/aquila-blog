@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
 import type { AdminProfile } from "src/hooks/useAdminProfile"
 import { isNavigationCancelledError, isRequestCancelledError } from "src/libs/router"
+import { isStandaloneSurfacePathname } from "src/libs/publicSurfaceUrl"
 import { FLUID_LAYOUT_MAX_PX } from "./layoutTiers"
 
 const PUBLIC_ADMIN_PROFILE_QUERY_KEY = ["member", "adminProfile"] as const
@@ -74,8 +75,9 @@ const RootLayout = ({
   const isDedicatedEditorRoute = pathname === "/editor/[id]" || pathname === "/editor/new"
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")
   // 회사·제품 표면은 전용 호스트의 루트로 서빙되는 독립 랜딩이다. 블로그 헤더와 본문 폭 컨테이너를
-  // 쓰지 않고 자기 헤더·풀블리드 섹션을 소유한다.
-  const isStandaloneSurfaceRoute = pathname === "/company" || pathname === "/easysubway"
+  // 쓰지 않고 자기 헤더·풀블리드 섹션을 소유한다. 판정은 표면 정본 표에서 파생한 공용 helper가
+  // 소유한다 - `_document`의 블로그 메타 분기도 같은 목록을 봐야 한다.
+  const isStandaloneSurfaceRoute = isStandaloneSurfacePathname(pathname)
   const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute || isStandaloneSurfaceRoute
   // 독립 표면은 자기 <main>을 소유한다. 여기서도 <main>으로 감싸면 랜드마크가 중첩돼 보조기술이
   // 읽는 문서 구조가 무효화되고, 표면의 <header>/<footer>도 main 자손이 되어 banner/contentinfo

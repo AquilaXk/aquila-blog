@@ -34,8 +34,14 @@ import * as Sec from "src/routes/Company/CompanySection.styles"
  * 페이지의 주어는 언제나 '회사'다. 제품은 회사가 만드는 것 중 하나로만 등장하고, 기능 서술은
  * 제품 표면이 소유한다.
  */
+/**
+ * `surfaceUrl`은 요청 호스트로 resolve한 이 표면의 공개 URL이다(페이지의 canonical과 같은 값).
+ * 브랜드 셀프 링크에 내부 라우트 `/company`를 쓰면 전용 호스트에서 robots가 disallow한 중복 경로로
+ * 방문자를 보낸다 - 그 호스트의 공개 페이지는 루트다.
+ */
 type Props = {
   news: CompanyNewsItem[]
+  surfaceUrl: string
 }
 
 /**
@@ -55,14 +61,14 @@ const NAV_ITEMS = [
 const visibleNavItems = (hasNews: boolean) =>
   NAV_ITEMS.filter((item) => item.id !== NEWS_SECTION_ID || hasNews)
 
-const CompanyPageView: React.FC<Props> = ({ news }) => (
+const CompanyPageView: React.FC<Props> = ({ news, surfaceUrl }) => (
   <S.CompanySurface>
     <S.NoticeBanner>
       <a href={COMPANY_NOTICE.href}>{COMPANY_NOTICE.label}</a>
     </S.NoticeBanner>
 
     <S.SurfaceHeader>
-      <S.BrandLink href={COMPANY_SURFACE.route} aria-current="page">
+      <S.BrandLink href={surfaceUrl} aria-current="page">
         <BrandMark priority />
         {COMPANY_SURFACE.name}
       </S.BrandLink>

@@ -3317,8 +3317,6 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
   exit 1
 fi
 
-resolve_runtime_split_from_env_file
-
 case "${DEPLOY_TARGET}" in
   backend | front) ;;
   *)
@@ -3337,6 +3335,10 @@ require_supported_docker_engine
 # front rollout은 backend 시퀀스를 재실행하지 않고 여기서 끝난다. 같은 deploy lock을 잡으므로
 # backend 배포와 동시에 진행되지 않는다.
 if [[ "${DEPLOY_TARGET}" == "front" ]]; then
+  # backend 경로는 deploy.yml이 이 값을 항상 넘기지만 front 경로는 HOME_SERVER_ENV를 넘기지
+  # 않는다. front 경로에서만 파일을 읽는 이유는 backend 경로에서 값이 뒤늦게 바뀌면 위에서
+  # 이미 계산된 auto-memory-tuner 예산 상한과 어긋나기 때문이다(그 경로는 손대지 않는다).
+  resolve_runtime_split_from_env_file
   if ! run_front_blue_green_deploy; then
     exit 1
   fi

@@ -134,13 +134,31 @@ export const validateEnvText = ({ contract, target, text }) => {
     const required = isRequired(definition, env)
 
     if (!value) {
-      // 키가 아예 없는 것과, 있는데 빈 것은 다르다. Caddy의 {$VAR:default}는 unset일 때만
-      // 기본값을 쓰므로, 빈 값은 기본값도 못 받고 주소를 통째로 무너뜨린다.
-      if (definition.rejectEmptyValue && env.has(definition.name)) {
-        errors.push(safeError(definition.name, "must be removed entirely, not left empty"))
-      } else if (required) {
+      if (required) {
         errors.push(safeError(definition.name, "is required"))
-      } else if (definition.warnWhenAbsent) {
+        continue
+      }
+
+      // 키가 아예 없는 것과, 있는데 빈 것은 다르다.
+      //
+      // Caddy의 {$VAR:default}는 변수가 unset일 때만 기본값을 쓴다. 존재하되 빈 값이면 빈
+      // 문자열을 그대로 보간해 설정을 무너뜨린다 — 증상은 키마다 갈린다(vhost 소멸 /
+      // host matcher 없는 :80 catch-all / upstream 주소 파손). 그런데 이 분기가 falsy 값을
+      // 그냥 넘겨 왔기 때문에 required: false 키의 빈 값은 무조건 통과했고, kind·minLength·
+      // allowedValues 같은 형태 검사가 아예 닿지 못했다.
+      //
+      // 값의 형태를 선언한 키는 빈 값을 의미 있는 상태로 쓰지 않는다. 그래서 present-but-empty를
+      // 거부한다. 개별 키 나열이 아니라 계약 층 규칙이라, 새로 선언되는 보간 키도 자동으로 덮인다.
+      // 예외는 requiredWhen 게이트가 꺼진 키뿐이다 — 거기서 빈 값은 "기능 꺼짐"이라는 문서화된
+      // 상태이고, 줄을 지우는 것과 같은 뜻이다.
+      const declaresValueShape =
+        definition.kind !== undefined || Boolean(definition.allowedValues) || Boolean(definition.minLength)
+      if (env.has(definition.name) && declaresValueShape && !definition.requiredWhen) {
+        errors.push(safeError(definition.name, "must be removed entirely rather than set to an empty value"))
+        continue
+      }
+
+      if (definition.warnWhenAbsent) {
         // required: false인데 소비하는 코드 경로가 살아 있으면, 빈 값은 "기능 꺼짐"이 아니라
         // "조용히 아무것도 안 함"이 된다. 그 침묵을 여기서 깬다.
         warnings.push(safeError(definition.name, definition.warnWhenAbsent))

@@ -387,6 +387,62 @@ test("LEGACY_API_DOMAIN warns while set and is rejected for another service host
   assert.equal(closed.warnings.some((warning) => warning.key === "LEGACY_API_DOMAIN"), false)
 })
 
+test("a required key that is present but empty is still rejected", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  // 회귀 가드. required 키는 falsy continue 이전에 잡히므로 present-but-empty가 통과하지 않는다.
+  // 이게 무너지면 빈 API_DOMAIN이 Caddy vhost를 host matcher 없는 catch-all로 만든다.
+  for (const key of ["API_DOMAIN", "MONITOR_DOMAIN", "ADMIN_EMBED_ORIGINS", "CUSTOM_PROD_COOKIEDOMAIN"]) {
+    const text = withEnvKeys(baseHomeServerEnv, [[key, ""]])
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+
+    assert.equal(result.ok, false, `${key} must not pass when present but empty`)
+    assert(result.errors.some((error) => error.key === key))
+  }
+})
+
+test("every declared key with a value shape rejects a present-but-empty value", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const keys = contract.targets["home-server-source"].keys
+
+  // present-but-empty와 absent는 다르다. Caddy의 {$VAR:default}는 unset일 때만 기본값을 쓰므로
+  // 빈 값은 기본값도 못 받고 설정을 무너뜨린다(vhost 소멸 / :80 catch-all / upstream 파손).
+  // 이 규칙은 계약 층이라, 새로 선언되는 Caddy 보간 키도 자동으로 덮인다.
+  const shaped = keys.filter(
+    (key) => !key.requiredWhen && (key.kind !== undefined || key.allowedValues || key.minLength),
+  )
+  assert(shaped.length > 0)
+
+  for (const key of shaped) {
+    const text = `${baseHomeServerEnv}\n${key.name}=`
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+
+    assert.equal(result.ok, false, `${key.name} must not pass when present but empty`)
+    assert(result.errors.some((error) => error.key === key.name), `${key.name} must be named in the error`)
+  }
+})
+
+test("an absent optional key stays valid and a disabled feature may keep an empty value", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  // 줄 자체가 없는 것은 정상 사용이다. 빈 값 규칙이 이걸 깨면 안 된다.
+  const absent = baseHomeServerEnv.replace(/^CUSTOM__REVALIDATE__URL=.*$\n?/m, "")
+  const absentResult = validateEnvText({ contract, target: "home-server-source", text: absent })
+  assert.equal(absentResult.ok, true, absentResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
+
+  // requiredWhen 게이트가 꺼진 키의 빈 값은 "기능 꺼짐"이라는 문서화된 상태다.
+  const disabled = withEnvKeys(baseHomeServerEnv, [["CUSTOM__AI__SUMMARY__GEMINI__API_KEY", ""]])
+  const disabledResult = validateEnvText({ contract, target: "home-server-source", text: disabled })
+  assert.equal(
+    disabledResult.ok,
+    true,
+    disabledResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+})
+
 test("LEGACY_API_DOMAIN must be removed, not blanked, because an empty value deletes the API vhost", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   // 실측: `caddy adapt`에서 LEGACY_API_DOMAIN= (present but empty)이면 두 번째 주소가

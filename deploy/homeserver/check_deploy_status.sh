@@ -85,15 +85,26 @@ compose_service_runtime_state() {
   printf '%s|%s|%s|%s' "${status:-unknown}" "${health:-unknown}" "${restart_count:-unknown}" "${oom_killed:-unknown}"
 }
 
-probe_internal_caddy_route_code() {
-  local api_domain="$1"
+# 상태 코드와 본문 길이를 함께 걷는다. 매치되는 vhost가 없는 Host에 Caddy가 주는 응답은 404가
+# 아니라 `200` + 빈 본문이라(실측), 상태 코드만 보면 WEB_DOMAIN과 Caddy site address가 어긋난
+# 상태를 이 리포트가 green으로 찍는다.
+probe_internal_caddy_route_metrics() {
+  local web_domain="$1"
   local path="$2"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
-    -s -o /dev/null -w "%{http_code}" \
+    -s -o /dev/null -w "%{http_code} %{size_download}" \
     --connect-timeout 3 \
     --max-time 8 \
-    -H "Host: ${api_domain}" \
+    -H "Host: ${web_domain}" \
     "http://caddy:80${path}" || true
+}
+
+# 미매치 Host의 서명은 언제나 `200` + 0 bytes다. 200일 때만 본문을 요구하므로, 인증 응답
+# (401/403)의 본문 유무를 가정하지 않고 그 신호만 정확히 걸러낸다.
+is_unmatched_host_response() {
+  local code="$1"
+  local bytes="$2"
+  [[ "${code}" == "200" ]] && ! [[ "${bytes}" =~ ^[1-9][0-9]*$ ]]
 }
 
 probe_public_route_code() {
@@ -144,7 +155,12 @@ require_file "${ENV_FILE}"
 require_file "${STATE_FILE}"
 
 ACTIVE_BACKEND="$(cat "${STATE_FILE}" 2>/dev/null || true)"
-API_DOMAIN="$(trim_quotes "$(env_value "API_DOMAIN")")"
+WEB_DOMAIN="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+# probe들보다 먼저 기록한다. 값이 비면 아래 probe가 빈 Host 헤더와 `https:///...`로 먼저 돌아
+# 000/none을 남기고, 진짜 원인은 리포트 맨 끝에야 나온다.
+if [[ -z "${WEB_DOMAIN}" ]]; then
+  remember_failure "missing_web_domain"
+fi
 ADMIN_API_UPSTREAM="$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
 READ_API_UPSTREAM="$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
 # Resolved exactly like caddy_upstream_probe.sh: an inherited value wins over the env file,
@@ -200,23 +216,22 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   fi
 fi
 
-INTERNAL_HTTP_CODE="$(
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
-    -s -o /dev/null -w "%{http_code}" \
-    --connect-timeout 3 \
-    --max-time 8 \
-    -H "Host: ${API_DOMAIN}" \
-    "http://caddy:80/actuator/health/readiness" || true
+INTERNAL_HTTP_METRICS="$(
+  probe_internal_caddy_route_metrics "${WEB_DOMAIN}" "/actuator/health/readiness"
 )"
+INTERNAL_HTTP_CODE="${INTERNAL_HTTP_METRICS%% *}"
+INTERNAL_HTTP_BYTES="${INTERNAL_HTTP_METRICS##* }"
 
 PUBLIC_HTTP_CODE="$(
-  probe_public_route_code "${API_DOMAIN}" "/actuator/health/readiness"
+  probe_public_route_code "${WEB_DOMAIN}" "/actuator/health/readiness"
 )"
-INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE="$(
-  probe_internal_caddy_route_code "${API_DOMAIN}" "/member/api/v1/notifications/snapshot"
+INTERNAL_NOTIFICATION_SNAPSHOT_METRICS="$(
+  probe_internal_caddy_route_metrics "${WEB_DOMAIN}" "/member/api/v1/notifications/snapshot"
 )"
+INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE="${INTERNAL_NOTIFICATION_SNAPSHOT_METRICS%% *}"
+INTERNAL_NOTIFICATION_SNAPSHOT_BYTES="${INTERNAL_NOTIFICATION_SNAPSHOT_METRICS##* }"
 PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE="$(
-  probe_public_route_code "${API_DOMAIN}" "/member/api/v1/notifications/snapshot"
+  probe_public_route_code "${WEB_DOMAIN}" "/member/api/v1/notifications/snapshot"
 )"
 BACK_ADMIN_RUNTIME_STATE="$(compose_service_runtime_state "back_admin")"
 BACK_READ_RUNTIME_STATE="$(compose_service_runtime_state "back_read")"
@@ -260,9 +275,9 @@ log "inactive_backend=${INACTIVE_BACKEND}"
 log "admin_api_upstream=${ADMIN_API_UPSTREAM:-none}"
 log "read_api_upstream=${READ_API_UPSTREAM:-none}"
 log "runtime_split_enabled=${RUNTIME_SPLIT_ENABLED} split_literal_upstream=${HAS_SPLIT_LITERAL_UPSTREAM}"
-log "internal_readiness=${INTERNAL_HTTP_CODE:-none}"
+log "internal_readiness=${INTERNAL_HTTP_CODE:-none} bytes=${INTERNAL_HTTP_BYTES:-none}"
 log "public_readiness=${PUBLIC_HTTP_CODE:-none}"
-log "internal_notification_snapshot=${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
+log "internal_notification_snapshot=${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none} bytes=${INTERNAL_NOTIFICATION_SNAPSHOT_BYTES:-none}"
 log "public_notification_snapshot=${PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
 log "back_admin_runtime=status:${BACK_ADMIN_STATUS} health:${BACK_ADMIN_HEALTH} restart_count:${BACK_ADMIN_RESTART_COUNT} oom_killed:${BACK_ADMIN_OOM_KILLED}"
 log "back_read_runtime=status:${BACK_READ_STATUS} health:${BACK_READ_HEALTH} restart_count:${BACK_READ_RESTART_COUNT} oom_killed:${BACK_READ_OOM_KILLED}"
@@ -273,10 +288,6 @@ log "grafana_loki_datasource_status=${GRAFANA_LOKI_DS_STATUS}"
 
 if [[ -z "${EXPECTED_BACK_IMAGE}" ]]; then
   remember_failure "missing_expected_back_image key=${ACTIVE_BACKEND_IMAGE_KEY:-none}"
-fi
-
-if [[ -z "${API_DOMAIN}" ]]; then
-  remember_failure "missing_api_domain"
 fi
 
 if ! echo "${RUNNING_SERVICES}" | grep -qx "${ACTIVE_BACKEND}"; then
@@ -301,7 +312,9 @@ if echo "${RUNNING_SERVICES}" | grep -qx "${INACTIVE_BACKEND}"; then
   remember_failure "inactive_backend_still_running=${INACTIVE_BACKEND}"
 fi
 
-if [[ "${INTERNAL_HTTP_CODE}" != "200" ]]; then
+if is_unmatched_host_response "${INTERNAL_HTTP_CODE}" "${INTERNAL_HTTP_BYTES}"; then
+  remember_failure "internal_caddy_readiness_empty_body host=${WEB_DOMAIN:-none} (no Caddy vhost matched this Host)"
+elif [[ "${INTERNAL_HTTP_CODE}" != "200" ]]; then
   remember_failure "internal_caddy_readiness=${INTERNAL_HTTP_CODE:-none}"
 fi
 
@@ -309,7 +322,9 @@ if ! public_http_reachable "${PUBLIC_HTTP_CODE}"; then
   remember_failure "public_readiness=${PUBLIC_HTTP_CODE:-none}"
 fi
 
-if ! public_http_reachable "${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE}"; then
+if is_unmatched_host_response "${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE}" "${INTERNAL_NOTIFICATION_SNAPSHOT_BYTES}"; then
+  remember_failure "internal_notification_snapshot_empty_body host=${WEB_DOMAIN:-none} (no Caddy vhost matched this Host)"
+elif ! public_http_reachable "${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE}"; then
   remember_failure "internal_notification_snapshot=${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
 fi
 

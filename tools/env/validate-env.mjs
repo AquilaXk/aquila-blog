@@ -256,9 +256,8 @@ export const validateEnvText = ({ contract, target, text }) => {
       // 그래서 쿠키 도메인·web 호스트·API 호스트는 한 덩어리로만 의미가 있고, 따로 움직이면
       // 공통 접미사가 한 단계 위로 올라가 우리 소유가 아닌 호스트로 세션 쿠키가 전송된다.
       //
-      // 스위치는 공개 API origin(CUSTOM_PROD_BACKURL) 하나다. same-origin 전환(#1575) 전에는
-      // API_DOMAIN이 그 역할을 했지만, 이제 API_DOMAIN은 Caddy의 host 기반 API vhost 주소일
-      // 뿐이고 공개 API origin과 다른 값을 가진다(같으면 web vhost와 site address가 충돌한다).
+      // 스위치는 공개 API origin(CUSTOM_PROD_BACKURL) 하나다. same-origin 전환(#1575)으로 공개
+      // API가 web 호스트의 경로가 됐고, #1596이 host 기반 공개 API 주소를 접었다.
       // deploy.yml이 배포 직전에 같은 표로 나머지를 덮어쓰므로 여기서도 같은 표를 쓴다. 비교는
       // raw 문자열이 아니라 host 기준이다 — HOME_SERVER_ENV의 CUSTOM_PROD_*는 후행 슬래시·
       // 대소문자 정도가 실 운영값과 다를 수 있고, 그것 때문에 배포가 막히면 안 된다.

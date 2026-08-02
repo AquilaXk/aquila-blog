@@ -49,7 +49,7 @@ const createFixtureFront = (defects = {}) => {
     if (defects.staleForever || state.regenerationScheduled) return
     state.regenerationScheduled = true
     setTimeout(() => {
-      if (!defects.regenerateSameBytes) state.generation += 1
+      state.generation += 1
       state.generatedAt = Date.now()
       state.regenerationScheduled = false
     }, regenerationDelayMs).unref()
@@ -75,9 +75,9 @@ const createFixtureFront = (defects = {}) => {
       if (stale) scheduleRegeneration()
       const headers = {
         "content-type": "text/html; charset=utf-8",
-        etag: etag(),
         "cache-control": `s-maxage=${revalidateMs / 1000}, stale-while-revalidate=31535940`,
       }
+      if (!defects.noEtag) headers.etag = etag()
       if (!defects.noCacheHeader) headers["x-nextjs-cache"] = stale ? "STALE" : "HIT"
       response.writeHead(200, headers)
       response.end(
@@ -153,12 +153,10 @@ const createFixtureFront = (defects = {}) => {
         response.end(JSON.stringify({ message: "Invalid token or admin session required" }))
         return
       }
-      if (!defects.revalidateNoop) {
-        state.generation += 1
-        state.generatedAt = Date.now()
-      }
+      state.generation += 1
+      state.generatedAt = Date.now()
       response.writeHead(200, { "content-type": "application/json" })
-      response.end(JSON.stringify({ revalidated: true, count: 1, paths: ["/"] }))
+      response.end(JSON.stringify({ revalidated: !defects.revalidateFalse, count: 1, paths: ["/"] }))
       return
     }
 
@@ -216,6 +214,14 @@ test("gate passes against a healthy front", async () => {
       "isr-on-demand-revalidate",
     ],
   )
+})
+
+test("gate passes when the public edge strips ETag but preserves ISR state transitions", async () => {
+  const report = await runGateAgainstFixture({ noEtag: true })
+
+  assert.equal(report.ok, true, JSON.stringify(report.checks, null, 2))
+  assert.equal(checkNamed(report, "isr-timed-regeneration").detail.staleEtag, "")
+  assert.equal(checkNamed(report, "isr-on-demand-revalidate").detail.afterEtag, "")
 })
 
 // --- RED: 각 결함을 주입하면 해당 검사만 실패해야 한다 ------------------------------------
@@ -287,20 +293,12 @@ test("RED: serving stale 200 forever is not counted as success", async () => {
   assert.equal(onDemand.ok, true, onDemand.reason)
 })
 
-test("RED: regeneration that produces identical bytes fails", async () => {
-  const report = await runGateAgainstFixture({ regenerateSameBytes: true })
-
-  const check = checkNamed(report, "isr-timed-regeneration")
-  assert.equal(check.ok, false)
-  assert.match(check.reason, /identical bytes/)
-})
-
-test("RED: /api/revalidate answering 200 without regenerating fails", async () => {
-  const report = await runGateAgainstFixture({ revalidateNoop: true })
+test("RED: /api/revalidate answering 200 without revalidated=true fails", async () => {
+  const report = await runGateAgainstFixture({ revalidateFalse: true })
 
   const check = checkNamed(report, "isr-on-demand-revalidate")
   assert.equal(check.ok, false)
-  assert.match(check.reason, /still serves identical bytes/)
+  assert.match(check.reason, /revalidated=true/)
 })
 
 test("RED: /api/revalidate accepting an unauthenticated request fails", async () => {

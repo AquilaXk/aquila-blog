@@ -790,6 +790,44 @@ docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blo
 print_section "Back Container Memory"
 docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}' | grep -E 'blog_home-back_(blue|green|read|admin|worker)-1|NAME' || true
 
+print_section "Front .next/cache Volume"
+# 이 볼륨이 실제로 보존하는 것은 이미지 최적화 캐시(.next/cache/images)뿐이다. 이 앱은 Pages
+# Router라 ISR 산출물은 .next/server/pages(이미지 레이어 안)에 쓰이고, fetch-cache는 App Router
+# 전용이라 채워지지 않는다(#1538 실측). 따라서 컨테이너 교체 후 ISR HTML은 보존되지 않으며
+# 새 색깔은 항상 cold ISR로 시작한다 - 그것이 현재 사실이고, 게이트도 보존을 전제하지 않는다.
+#
+# 여기서 보는 것은 "보존이 가능한 상태인가"다. 마운트가 빠지거나 마운트 지점이 root:root로
+# 생성되면 /_next/image는 200을 반환하면서 캐시를 전혀 쓰지 못한다(#1538 실측) - 화면상 차이가
+# 없어 조용히 열화되는 경로다.
+for svc in front_blue front_green; do
+  cid="$(compose ps -q "${svc}" 2>/dev/null | head -n 1 || true)"
+  if [[ -z "${cid}" ]]; then
+    echo "${svc}: MISSING (front profile off or not deployed)"
+    continue
+  fi
+  mount_source="$(
+    docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/.next/cache"}}{{.Name}}{{end}}{{end}}' \
+      "${cid}" 2>/dev/null || true
+  )"
+  echo "${svc}: next_cache_volume=${mount_source:-<none>}"
+  if [[ -z "${mount_source}" ]]; then
+    echo "WARN: ${svc} has no named volume at /app/.next/cache; the image optimizer cache is lost on every replacement"
+    continue
+  fi
+  # 소유자 출력만으로는 부족하다. 컨테이너 사용자가 쓰지 못하면 /_next/image는 계속 200을
+  # 반환하면서 캐시 적중률만 0으로 굳는다(#1538 실측) - 출력만 하고 넘어가면 그 상태가 진단
+  # 로그에서도 정상처럼 보인다. 쓰기 가능 여부를 명시적으로 판정해 WARN을 낸다.
+  docker exec "${cid}" sh -lc 'ls -ld /app/.next/cache 2>/dev/null; ls /app/.next/cache 2>/dev/null | head -n 5' 2>/dev/null || true
+  if docker exec "${cid}" sh -lc 'test -w /app/.next/cache' >/dev/null 2>&1; then
+    echo "${svc}: next_cache_writable=yes"
+  else
+    echo "${svc}: next_cache_writable=no"
+    echo "WARN: ${svc} cannot write /app/.next/cache; /_next/image keeps answering 200 with a permanently cold cache"
+  fi
+  image_cache_entries="$(docker exec "${cid}" sh -lc 'ls /app/.next/cache/images 2>/dev/null | wc -l' 2>/dev/null | tr -d '\r' || true)"
+  echo "${svc}: image_cache_entries=${image_cache_entries:-unknown}"
+done
+
 print_section "Caddy Logs (tail 80)"
 compose logs --no-color --tail=80 caddy || true
 

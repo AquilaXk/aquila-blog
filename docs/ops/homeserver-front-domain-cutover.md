@@ -1,9 +1,17 @@
 # 홈서버 front 도메인 전환 순서 (#1538 · #1575 · #1605)
 
+> **상태: 블로그 표면 전환 완료.** `blog.aquilaxk.site`는 홈서버가 서빙한다. 아래 본문의
+> "착수 시점"은 전환 착수 당시의 상태이며, 실행 기록으로 남긴다. 이전 호스팅 provider로 되돌리는
+> 경로는 #1542로 닫혔다.
+>
+> **`www`는 폐기되지 않았다.** 폐기 결정(Locked Decision 6)은 2026-08-02 오너 결정으로 번복돼
+> `www.aquilaxk.site`는 회사 표면이자 사이트 canonical이 됐다 (#1605). 이전 provider 계약 제거와
+> 양립한다 — 계약은 저장소에서 사라졌고, `www`는 홈서버 Caddy의 회사 vhost가 서빙한다.
+
 `blog.aquilaxk.site`를 Cloudflare Tunnel → Caddy → 홈서버 컨테이너로 개통하는 절차다.
 front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스트가 아니라 이 호스트의 경로다
-(#1575). 현재 `blog.aquilaxk.site`는 **Vercel**을 가리키고, `www.aquilaxk.site`(Vercel)와
-`api.aquilaxk.site`(홈서버)가 구 공개 경로로 살아 있다.
+(#1575). 착수 시점의 `blog.aquilaxk.site`는 **Vercel**을 가리켰고, `www.aquilaxk.site`(Vercel)와
+`api.aquilaxk.site`(홈서버)가 구 공개 경로로 살아 있었다.
 
 그 다음 단계로 **같은 front 이미지가 회사·제품 표면과 apex redirect까지 서빙한다** (#1605).
 `www`는 폐기 대상에서 회사 표면으로 바뀌었다 — 아래 Locked decision 절의 번복 기록을 먼저 읽는다.
@@ -476,13 +484,94 @@ curl -sS https://blog.aquilaxk.site/robots.txt
 curl -sS -o /dev/null -w "blog_sitemap=%{http_code}\n" https://blog.aquilaxk.site/sitemap.xml
 ```
 
+## 렌더 게이트 (#1541)
+
+위 명령들은 상태 코드와 헤더까지 본다. 그 위 계층 — **응답 내용이 실제로 SSR·ISR·최적화 결과인가** —
+는 `deploy/homeserver/front-render-gate.mjs`가 한 번에 검증한다. 하나라도 실패하면 exit 1이다.
+
+DNS 전환이 끝난 뒤에는 Node가 있는 어디서든 공개 URL로 돌린다. 토큰은 인자로 넘기지 않는다 —
+프로세스 목록과 셸 history에 남는다. 게이트는 토큰이 없으면 revalidate 검사를 건너뛰지 않고
+**실패**한다.
+
+```bash
+TOKEN_FOR_REVALIDATE="<CUSTOM__REVALIDATE__TOKEN 값>" \
+  node deploy/homeserver/front-render-gate.mjs --base-url https://blog.aquilaxk.site
+echo "exit=$?"
+```
+
+DNS 전환 전에는 공개 URL이 아직 홈서버를 가리키지 않으므로 edge 네트워크에서 Host 헤더로
+같은 검증을 한다. Host 값은 Caddy web vhost가 실제로 매치하는 이름이다 — `WEB_DOMAIN`이 아직
+없으면 Caddyfile 기본값 `web.localhost`, 설정한 뒤에는 `blog.aquilaxk.site`다.
+홈서버 호스트에는 Node가 설치돼 있지 않으므로(실측) 컨테이너로 돌린다.
+
+```bash
+cd ~/app
+# .env.prod 값은 따옴표로 감싸여 있을 수 있다. 그대로 넘기면 게이트가 401을 받고, 실패 사유가
+# "토큰 형식"이라는 사실이 드러나지 않는다. `tr -d` 로 양끝 따옴표를 떼고 넘긴다.
+env_value() { grep -E "^$1=" deploy/homeserver/.env.prod | tail -n 1 | cut -d= -f2- | tr -d "\"'"; }
+export TOKEN_FOR_REVALIDATE="$(env_value CUSTOM__REVALIDATE__TOKEN)"
+NODE_RUNTIME_IMAGE="$(env_value NODE_RUNTIME_IMAGE)"
+docker run --rm --network blog_home_edge \
+  -e TOKEN_FOR_REVALIDATE \
+  -v "$PWD/deploy/homeserver/front-render-gate.mjs:/app/front-render-gate.mjs:ro" \
+  "${NODE_RUNTIME_IMAGE}" \
+  node /app/front-render-gate.mjs --base-url http://caddy:80 --host-header web.localhost
+echo "exit=$?"
+unset TOKEN_FOR_REVALIDATE
+```
+
+게이트가 보는 것과, 각 항목이 잡는 "성공으로 보고되는 열화":
+
+| 검사 | 실패로 잡는 상태 |
+| --- | --- |
+| `ssr-backend-data` | `/feed`·`/sitemap.xml`이 200인데 backend가 가진 글이 하나도 렌더되지 않는다 (SSR이 껍데기를 그린다) |
+| `static-immutable-cache` | `/_next/static/*`에 장기 immutable 캐시가 빠진다 (페이지는 정상, 대역폭만 는다) |
+| `image-optimization` | `/_next/image`가 원본 바이트를 그대로 돌려준다 (화면상 차이 없음) |
+| `isr-cache-state-header` | `x-nextjs-cache`가 사라진다 (`public_edge_probe`의 캐시 관측이 죽는다) |
+| `isr-timed-regeneration` | revalidate 주기가 지나도 stale 200만 계속 나간다 |
+| `isr-on-demand-revalidate` | `/api/revalidate`가 200을 반환하는데 페이지가 안 바뀐다 / 토큰 없이도 통과한다 |
+
+**상시 게이트가 아니다.** 시간 기반 ISR 검증이 대상 라우트의 `revalidate`(홈 60s) 이상 대기하므로
+스크레이프 루프에 넣을 수 없다. 전환·front 배포 직후 1회 실행하고, 상시 관측은
+`public_edge_probe`(캐시 상태·라우트 up)와 `docker_runtime_probe`(front 컨테이너·readiness)가 맡는다.
+
+### 게이트에 넣지 않은 것과 그 이유
+
+- **구 API 호스트 폐기 확인(`api.aquilaxk.site` 무응답)**: 전환 7단계 이후에만 유효하다.
+  그 전에 상시 게이트에 넣으면 정상 상태가 실패로 보고된다. 위 "개통 확인"의 1회 수동 확인으로 남긴다.
+  `www` 부재는 판정 항목이 **아니다** — Locked Decision 6 번복(#1605)으로 그 호스트는 우리 회사
+  표면이고, 확인 기준은 부재가 아니라 위 "표면 개통 확인"의 200·canonical이다.
+- **로그인 응답 `Set-Cookie`의 `Domain`**: 익명 프로브로는 관측되지 않는다. 위 로그인 왕복 절차가
+  유일한 관측 지점이며 게이트에 억지로 넣지 않는다. 쿠키 **값은 어디에도 기록하지 않는다** —
+  `Domain` 속성만 본다.
+- **`.next/cache` 보존**: 이 앱에서 그 볼륨이 보존하는 것은 **이미지 최적화 캐시뿐**이다. Pages
+  Router의 ISR 산출물은 `.next/server/pages`(이미지 레이어 안)에 쓰이고 `fetch-cache`는 App Router
+  전용이라 채워지지 않는다(#1538 실측). 컨테이너 교체 후 ISR HTML은 보존되지 않으며 blue/green의
+  새 색깔은 **항상 cold ISR로 시작한다**. 보존을 요구사항으로 되살리려면 `next.config.js`의 공유
+  `cacheHandler`가 선행돼야 하고 그것은 애플리케이션 변경이다. 그때까지 게이트는 보존을 전제하지
+  않고, "교체 후 첫 요청이 정상 재생성되는가"를 위 `isr-timed-regeneration`으로 본다.
+  마운트·소유권(보존이 가능한 상태인지)은 `doctor.sh`의 `Front .next/cache Volume` 섹션이 상시 보고한다.
+  실제 보존 여부를 눈으로 확인해야 하면 교체 전후를 직접 비교한다.
+
+  ```bash
+  cd ~/app
+  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+    exec -T front_blue sh -lc 'ls /app/.next/cache/images | sort' > /tmp/next-cache-before.txt
+  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+    up -d --force-recreate front_blue
+  docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml \
+    exec -T front_blue sh -lc 'ls /app/.next/cache/images | sort' > /tmp/next-cache-after.txt
+  diff /tmp/next-cache-before.txt /tmp/next-cache-after.txt && echo "image cache preserved"
+  # ISR HTML은 여기서 비교 대상이 아니다. 보존되지 않는 것이 현재 사실이다.
+  ```
+
 ## Rollback
 
 | 상황 | 되돌리는 방법 |
 | --- | --- |
 | front 기동 검증 실패 (2단계) | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포한다. 공개 노출 전이라 사용자 영향이 없다. |
 | 3단계 배포 후 백엔드·인증 장애 (DNS 전환 전) | **3단계에서 바꾼 네 값을 전부 되돌린다** — `CUSTOM_PROD_BACKURL=https://api.aquilaxk.site`, `CUSTOM_PROD_FRONTURL=https://www.aquilaxk.site`, `CUSTOM_PROD_COOKIEDOMAIN=aquilaxk.site`, 그리고 `WEB_DOMAIN` 줄 **삭제**. 그 뒤 재배포한다. 구 topology가 복원되고 `www` origin 로그인이 살아난다. `API_DOMAIN`은 내내 그대로였으므로 구 API 경로는 끊긴 적이 없다. **스위치만 되돌리면 `validate-env`가 `ok=false`로 배포를 막는다**(실측: `CUSTOM_PROD_COOKIEDOMAIN`·`CUSTOM_PROD_FRONTURL` 두 error) — 장애 중 롤백이 게이트에서 멈추는 경로라 네 값을 한 번에 되돌린다. |
-| 4단계 직후 `blog.aquilaxk.site` 장애 | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **Vercel을 가리키던 이전 값으로 되돌린다.** Vercel 프로젝트는 이 시점까지 살아 있다(`front/vercel.json` 제거는 #1542 소관). **`HOME_SERVER_ENV`의 네 값도 위 행처럼 함께 되돌린다** — DNS만 되돌리면 쿠키 Domain이 이미 blog라 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다. |
+| 4단계 직후 `blog.aquilaxk.site` 장애 | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **Vercel을 가리키던 이전 값으로 되돌린다.** Vercel 프로젝트는 이 시점까지 살아 있다(`front/vercel.json` 제거는 #1542 소관). **`HOME_SERVER_ENV`의 네 값도 위 행처럼 함께 되돌린다** — DNS만 되돌리면 쿠키 Domain이 이미 blog라 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다.<br><br>**(후행 주석 · #1542)** 이 행은 cutover 진행 중의 rollback 절차였고 그 시점의 사실 기록으로 보존한다. cutover 완료 후 #1542가 저장소의 Vercel 호스팅 계약을 제거하고 오너가 Vercel Git 연결을 해제하면서 **이 경로는 닫혔다.** 이후의 front 장애는 `deploy/homeserver/rollback_last_deploy.sh`와 front blue/green 되돌리기로 대응한다. |
 | front 컨테이너만 문제 | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포하면 front 서비스가 기동 대상에서 빠진다. 그 상태에서 `blog.aquilaxk.site`는 front 경로에 502를 내고 API 경로는 계속 동작하므로, 공개 노출 중이라면 위 DNS 되돌리기를 함께 한다. |
 | 6단계 표면 개통 후 문제 발견 (#1605) | `HOME_SERVER_ENV`에서 `COMPANY_DOMAIN`·`PRODUCT_DOMAIN`·`APEX_DOMAIN` 줄을 **삭제**하고(비우지 말고 — 빈 값은 vhost 주소를 :80 catch-all로 만든다) 재배포한다. 세 vhost가 `.localhost` 기본값으로 내려앉아 그 호스트를 매치하지 않는다. **공개 노출을 즉시 끊어야 하면 Tunnel public hostname을 먼저 삭제한다** — env만 되돌리면 hostname은 살아 있는데 매치하는 vhost가 없어 Caddy가 404가 아니라 `200` + 빈 본문을 준다. 블로그 표면은 이 롤백에 영향받지 않는다(신규 vhost는 자기 Host만 매치하고 blog vhost를 건드리지 않는다). |
 | 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API 경로 rollback은 DNS/Tunnel hostname 재생성이다. 그래서 7단계는 (6)이 green인 뒤에만 한다. |

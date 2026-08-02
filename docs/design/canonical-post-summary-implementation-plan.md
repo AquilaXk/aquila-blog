@@ -200,7 +200,7 @@ yarn --cwd front test:e2e:authoring
 yarn --cwd front test:e2e:smoke
 ```
 
-Vercel Preview READY와 browser smoke 후 merge한다.
+required CI green과 browser smoke 후 merge한다.
 
 ## #1498 — AI/Gemini summary residue removal
 
@@ -239,7 +239,7 @@ yarn --cwd front build
 
 1. latest main required CI와 main-triggered workflow 확인
 2. homeserver backend blue-green deployment가 expected SHA로 healthy인지 확인
-3. Vercel production deployment가 READY이고 expected Web artifact인지 확인
+3. 홈서버 front blue/green cutover가 expected build SHA로 완료됐는지 확인
 4. production logs에서 summary 관련 오류 확인
 5. feed/detail/SEO/JSON-LD/RSS/editor smoke
 6. 증거 링크를 #1493에 첨부하고 checklist 완료 후 close

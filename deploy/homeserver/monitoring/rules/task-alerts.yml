@@ -190,6 +190,24 @@ groups:
           summary: "Back API readiness path is unavailable"
           description: "No blue/green API backend readiness endpoint has returned 200 for 3m."
 
+      # front readiness는 front -> backend 서버 사이드 프록시 경로를 재는 것이라, 여기가 0이면
+      # 컨테이너가 healthy여도 로그인·목록·상세가 전부 죽은 상태다(#1539 실측).
+      #
+      # 두 번째 항이 필요한 이유: front 프로필을 끄는 것은 문서화된 rollback 경로다
+      # (docs/ops/homeserver-front-domain-cutover.md). 컨테이너가 아예 없는 상태에서도 readiness는
+      # 0이므로, 조건 없이 걸면 의도한 rollback이 critical 알람을 계속 울린다.
+      - alert: AquilaFrontReadinessDown
+        expr: |
+          max(aquila_backend_readiness_up{component="front"}) < 1
+          and
+          max(docker_container_running{job="docker_runtime_probe",service=~"front_(blue|green)"}) == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Front backend-proxy readiness path is unavailable"
+          description: "A front container is running but no blue/green front readiness probe has returned 200 for 5m. Check BACKEND_INTERNAL_URL, the Caddy internal site address, and backend health."
+
       - alert: AquilaBackWorkerScrapeDown
         expr: max(up{job="back",service="aquila-back",component="worker"}) < 1
         for: 3m
@@ -249,7 +267,7 @@ groups:
           description: "Prometheus cannot scrape docker_runtime_probe for 3m. Check probe container health and docker socket access."
 
       - alert: AquilaContainerRestarted
-        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1|cloudflared|autoheal|docker_socket_proxy|postgres_exporter"}[15m]) > 0
+        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|front_.+|db_1|redis_1|minio_1|cloudflared|autoheal|docker_socket_proxy|postgres_exporter"}[15m]) > 0
         for: 1m
         labels:
           severity: warning
@@ -258,7 +276,7 @@ groups:
           description: "{{ $labels.service }} restart_count increased in the last 15m. Check deploy churn, host pressure, or crash loops."
 
       - alert: AquilaContainerOomKilled
-        expr: docker_container_oom_killed{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1"} > 0
+        expr: docker_container_oom_killed{job="docker_runtime_probe",service=~"back_.+|front_.+|db_1|redis_1|minio_1"} > 0
         for: 1m
         labels:
           severity: critical
@@ -542,7 +560,53 @@ groups:
           severity: critical
         annotations:
           summary: "Public edge route probe is failing"
-          description: "At least one public edge probe route has failed for 5m. Check Cloudflare, Vercel, and origin health."
+          description: "At least one public edge probe route has failed for 5m. Check Cloudflare Tunnel (cloudflared), the Caddy web vhost, and the active front/back containers on the home server."
+
+      # The cache-state source is the Next.js `x-nextjs-cache` header emitted by the home-server
+      # front (#1541). Nothing else reports whether ISR is actually caching, so if the header stops
+      # arriving the cold-ratio panel and AquilaPublicEdgeColdRatioHigh keep evaluating a value that
+      # can never change again - a dead gauge that still looks green.
+      #
+      # `absent()` is part of the expression on purpose: if the home route drops out of the probe's
+      # route set the series disappears entirely, and `min()` over nothing produces no alert at all.
+      #
+      # The `max_over_time` term is an activation gate, not decoration. Before the domain cutover
+      # deploy.yml deliberately pins PUBLIC_EDGE_PROBE_BASE_URL to the host the previous platform
+      # still serves (same reasoning as the comment next to that upsert), and that host emits
+      # `x-vercel-cache`, never `x-nextjs-cache`. Without the gate this alert would fire for the
+      # entire transition window while nothing is wrong on the home server.
+      #
+      # Two known holes, both measured with promtool and pinned in
+      # tools/test/task-alerts.promtool-test.yml. They sit on opposite ends of the same `[24h]`
+      # knob, so widening the window trades one for the other and fixes neither. #1602 owns the
+      # real fix: drive the activation from a signal that does not decay (WEB_DOMAIN is only
+      # present after cutover and is deleted on rollback).
+      #
+      #   1. Decay. After 24h of uninterrupted non-observation the gate goes false and the alert
+      #      resolves on its own - not because the fault ended. The surfaces that do not decay are
+      #      the `Cache State Header Observed` panel on the blog-public-edge dashboard and the
+      #      `isr-cache-state-header` check in deploy/homeserver/front-render-gate.mjs. That gate
+      #      has no automated caller today: it runs from the two manual commands in
+      #      docs/ops/homeserver-front-domain-cutover.md. Wiring it is part of #1602.
+      #   2. Rollback direction. Rolling the cutover back (runbook Rollback table: delete the
+      #      WEB_DOMAIN line and restore the probe base URL) leaves up to 24h of prior observation
+      #      behind, so this alert fires for that long against a host that is not ours any more.
+      #      During a rollback, treat a firing instance whose probe base URL is not the home-server
+      #      web host as expected and ignore it; it clears once the 24h window empties.
+      - alert: AquilaPublicEdgeCacheStateUnobserved
+        expr: |
+          (
+            min(aquila_public_edge_probe_cache_state_observed{route="/"}) < 1
+            or absent(aquila_public_edge_probe_cache_state_observed{route="/"})
+          )
+          and on()
+          (max(max_over_time(aquila_public_edge_probe_cache_state_observed{route="/"}[24h])) > 0)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge cache state is no longer observable"
+          description: "The home route reported the Next.js ISR cache-state header within the last 24h but has stopped for 30m. Cache observability is dead until this is fixed. Check the front container, the Caddy web vhost header handling, and the probe route set."
 
       - alert: AquilaExternalBackupFailed
         expr: increase(aquila_external_backup_failed_total[30m]) > 0

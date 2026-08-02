@@ -46,7 +46,7 @@ reject_pattern 'needs\.calculateTag\.outputs\.front_live_verify' "Platform deplo
 reject_pattern 'needs\.calculateTag\.outputs\.editor_live_canary' "Platform deploy must not gate jobs on an editor live canary"
 reject_pattern 'needs\.calculateTag\.outputs\.expected_front_commit_sha' "Platform deploy must not consume a frontend commit sha output"
 reject_pattern 'E2E_EXPECTED_FRONT_COMMIT_SHA' "Platform deploy must not parse a frontend live commit sha"
-reject_pattern 'statuses:[[:space:]]*read' "Platform deploy must not require frontend Vercel status access"
+reject_pattern 'statuses:[[:space:]]*read' "Platform deploy must not require frontend deployment status access"
 reject_pattern 'WEB_LIVE_E2E_ENV' "Platform deploy must not parse the Web live E2E environment"
 reject_pattern 'validate-env\.mjs --target live-e2e' "Platform deploy must not validate the Web live E2E environment"
 reject_pattern 'PLAYWRIGHT_' "Platform deploy must not parse Playwright environment variables"

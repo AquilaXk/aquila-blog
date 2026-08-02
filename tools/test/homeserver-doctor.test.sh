@@ -548,6 +548,33 @@ if ! declare -F is_strict_subdomain_of >/dev/null; then
   fail "expected doctor.sh to define is_strict_subdomain_of for the cookie scope check"
 fi
 
+eval "$(extract_function is_same_or_strict_subdomain_of)"
+if ! declare -F is_same_or_strict_subdomain_of >/dev/null; then
+  fail "expected doctor.sh to define is_same_or_strict_subdomain_of for the same-origin cookie scope check"
+fi
+
+# same-origin(#1575)은 정상 위상이다. 그러나 완화가 "아무거나 좋다"로 새면 안 된다: 형제·apex는
+# 여전히 공통 접미사를 한 단계 위로 올리고, 빈 값은 점검이 사라지는 상태라 계속 거짓이어야 한다.
+if ! is_same_or_strict_subdomain_of "blog.aquilaxk.site" "blog.aquilaxk.site"; then
+  fail "expected the same-origin public API host to pass the relaxed subdomain check"
+fi
+for not_under in \
+  "api.aquilaxk.site blog.aquilaxk.site" \
+  "aquilaxk.site blog.aquilaxk.site" \
+  "blog.aquilaxk.site.evil.example blog.aquilaxk.site"; do
+  # shellcheck disable=SC2086  # 두 인자로 나눠 전달하려는 의도적 word splitting
+  if is_same_or_strict_subdomain_of ${not_under}; then
+    fail "expected '${not_under}' not to pass the relaxed subdomain check"
+  fi
+done
+# 빈 호스트를 참으로 두면 .env.prod에서 값이 통째로 빠졌을 때 점검이 조용히 사라진다.
+if is_same_or_strict_subdomain_of "" "blog.aquilaxk.site"; then
+  fail "expected an empty candidate host not to pass the relaxed subdomain check"
+fi
+if is_same_or_strict_subdomain_of "blog.aquilaxk.site" ""; then
+  fail "expected an empty parent host not to pass the relaxed subdomain check"
+fi
+
 if ! is_strict_subdomain_of "api.blog.aquilaxk.site" "blog.aquilaxk.site"; then
   fail "expected api.blog.aquilaxk.site to be reported as strictly under blog.aquilaxk.site"
 fi
@@ -575,7 +602,7 @@ if [ -z "${env_domain_consistency_block}" ]; then
 fi
 
 run_env_domain_consistency() {
-  local cookie="$1" front="$2" back="$3" api="$4"
+  local cookie="$1" front="$2" back="$3" api="$4" web="${5:-}"
   (
     set -uo pipefail
     trim_quotes() { printf '%s' "$1"; }
@@ -585,30 +612,57 @@ run_env_domain_consistency() {
         CUSTOM_PROD_FRONTURL) printf '%s' "${front}" ;;
         CUSTOM_PROD_BACKURL) printf '%s' "${back}" ;;
         API_DOMAIN) printf '%s' "${api}" ;;
+        WEB_DOMAIN) printf '%s' "${web}" ;;
         *) printf '' ;;
       esac
     }
     eval "$(extract_function extract_host)"
     eval "$(extract_function is_strict_subdomain_of)"
+    eval "$(extract_function is_same_or_strict_subdomain_of)"
     eval "${env_domain_consistency_block}"
   )
 }
 
+# same-origin 위상(#1575): 공개 API가 web 호스트의 경로다. API_DOMAIN은 전환 창 동안 남는
+# host 기반 vhost 주소일 뿐이라 BACKURL과 달라도 WARN이 아니다. 여기서 WARN이 나면 doctor가
+# 정상 운영 상태에서 상시 경고를 내고, 그 소음이 진짜 경고를 덮는다.
 healthy_domain_output="$(run_env_domain_consistency \
-  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.blog.aquilaxk.site" "api.blog.aquilaxk.site")"
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "api.aquilaxk.site")"
 if [[ "${healthy_domain_output}" == *"WARN:"* ]]; then
-  fail "expected the blog domain contract to produce no domain WARN, got: ${healthy_domain_output}"
+  fail "expected the same-origin blog domain contract to produce no domain WARN, got: ${healthy_domain_output}"
+fi
+
+# API_DOMAIN이 web 호스트와 겹치면 Caddy site address가 중복돼 edge가 통째로 기동하지 못한다.
+duplicate_address_output="$(run_env_domain_consistency \
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "blog.aquilaxk.site" "blog.aquilaxk.site")"
+if [[ "${duplicate_address_output}" != *"API_DOMAIN duplicates WEB_DOMAIN"* ]]; then
+  fail "expected a duplicated Caddy site address to be reported, got: ${duplicate_address_output}"
+fi
+
+# 실제 site address가 되는 값은 WEB_DOMAIN이다. FRONTURL host만 보면 손으로 편집한 .env.prod에서
+# WEB_DOMAIN == API_DOMAIN인 조합(= edge가 기동하지 못하는 조합)을 놓친다.
+# 두 값을 일부러 갈라 놓아야 FRONTURL 비교와 WEB_DOMAIN 비교를 구분할 수 있다.
+web_only_duplicate_output="$(run_env_domain_consistency \
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "api.aquilaxk.site" "api.aquilaxk.site")"
+if [[ "${web_only_duplicate_output}" != *"API_DOMAIN duplicates WEB_DOMAIN"* ]]; then
+  fail "expected the duplicate check to read WEB_DOMAIN (not FRONTURL host), got: ${web_only_duplicate_output}"
+fi
+# WEB_DOMAIN이 아직 없는 전환 전 상태에서는 이 경고가 나오면 안 된다.
+pre_cutover_no_dup_output="$(run_env_domain_consistency \
+  "aquilaxk.site" "https://www.aquilaxk.site" "https://api.aquilaxk.site" "api.aquilaxk.site" "")"
+if [[ "${pre_cutover_no_dup_output}" == *"API_DOMAIN duplicates"* ]]; then
+  fail "expected no duplicate-address warning while WEB_DOMAIN is unset, got: ${pre_cutover_no_dup_output}"
 fi
 
 apex_cookie_output="$(run_env_domain_consistency \
-  "aquilaxk.site" "https://blog.aquilaxk.site" "https://api.blog.aquilaxk.site" "api.blog.aquilaxk.site")"
+  "aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "api.aquilaxk.site")"
 if [[ "${apex_cookie_output}" != *"COOKIEDOMAIN must equal FRONTURL host"* ]]; then
   fail "expected an apex cookie domain to be reported as wider than the front host, got: ${apex_cookie_output}"
 fi
 
 sibling_api_output="$(run_env_domain_consistency \
   "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.aquilaxk.site" "api.aquilaxk.site")"
-if [[ "${sibling_api_output}" != *"BACKURL host must sit strictly under COOKIEDOMAIN"* ]]; then
+if [[ "${sibling_api_output}" != *"BACKURL host must be the COOKIEDOMAIN host or sit strictly under it"* ]]; then
   fail "expected a sibling API host to be reported as outside the cookie domain subtree, got: ${sibling_api_output}"
 fi
 
@@ -616,14 +670,14 @@ fi
 # 함께 사라지면 아무 WARN도 안 나온다. 커버리지가 cookie_domain에 종속되면 안 된다.
 missing_cookie_output="$(run_env_domain_consistency \
   "" "https://blog.aquilaxk.site" "https://api.aquilaxk.site" "api.aquilaxk.site")"
-if [[ "${missing_cookie_output}" != *"BACKURL host must sit strictly under FRONTURL host"* ]]; then
+if [[ "${missing_cookie_output}" != *"BACKURL host must be the FRONTURL host or sit strictly under it"* ]]; then
   fail "expected the front/back cross-site check to survive an empty COOKIEDOMAIN, got: ${missing_cookie_output}"
 fi
 
 # 전환 창 판정을 문구에 상수로 박으면, 전환이 끝난 뒤 진짜 위험한 조합도 "예상된 것"이 된다.
 post_transition_output="$(run_env_domain_consistency \
   "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.other.example" "api.other.example")"
-if [[ "${post_transition_output}" == *"expected while API_DOMAIN is still the pre-transition host"* ]]; then
+if [[ "${post_transition_output}" == *"expected while CUSTOM_PROD_BACKURL is still the pre-transition API origin"* ]]; then
   fail "expected a post-transition cross-site combination not to be excused as the transition window, got: ${post_transition_output}"
 fi
 if [[ "${post_transition_output}" != *"widens the auth cookie scope"* ]]; then

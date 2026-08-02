@@ -37,7 +37,16 @@ const isRequired = (definition, env) => {
     if (!definition.requiredWhen) return false
   }
   if (!definition.requiredWhen) return definition.required !== false
-  return valueOf(env, definition.requiredWhen.key) === String(definition.requiredWhen.equals)
+
+  // `hostEquals`는 URL 값을 host로 비교한다. raw 문자열 비교면 후행 슬래시·대문자 하나로 게이트가
+  // 조용히 닫혀, 필수여야 할 키가 optional로 통과하고 결과는 배포 실패가 아니라 공개 사이트 404다.
+  // 계약의 다른 host 비교(urlHostEquals·cookieDomainScope)는 이미 host 기준이라 여기만 raw면
+  // 같은 스위치가 두 층에서 다르게 읽힌다.
+  const gate = definition.requiredWhen
+  if (gate.hostEquals !== undefined) {
+    return normalizeHost(hostOf(valueOf(env, gate.key))) === normalizeHost(gate.hostEquals)
+  }
+  return valueOf(env, gate.key) === String(gate.equals)
 }
 
 const resolveTarget = (contract, targetName) => {
@@ -177,6 +186,17 @@ export const validateEnvText = ({ contract, target, text }) => {
       errors.push(safeError(definition.name, `must be one of: ${definition.allowedValues.join(", ")}`))
     }
 
+    // URL 키의 허용 집합은 host로 좁힌다. allowedValues(raw 문자열)를 쓰면 후행 슬래시 하나가
+    // 거부 사유가 되는데, 이 계약의 나머지 층은 전부 host로 비교하므로 같은 값이 층마다 다르게
+    // 읽히게 된다. topology 표가 유일한 정의였을 때는 표에 항목을 추가하는 것만으로 스위치가
+    // 받아들이는 값이 늘었다 - 여기서 두 번째 편집 지점을 만든다.
+    if (definition.allowedHosts) {
+      const actualHost = normalizeHost(hostOf(value))
+      if (!definition.allowedHosts.map(normalizeHost).includes(actualHost)) {
+        errors.push(safeError(definition.name, `host must be one of: ${definition.allowedHosts.join(", ")}`))
+      }
+    }
+
     if (definition.minLength && value.length < definition.minLength) {
       errors.push(safeError(definition.name, `must be at least ${definition.minLength} characters`))
     }
@@ -236,15 +256,18 @@ export const validateEnvText = ({ contract, target, text }) => {
       // 그래서 쿠키 도메인·web 호스트·API 호스트는 한 덩어리로만 의미가 있고, 따로 움직이면
       // 공통 접미사가 한 단계 위로 올라가 우리 소유가 아닌 호스트로 세션 쿠키가 전송된다.
       //
-      // 스위치는 API_DOMAIN 하나다. deploy.yml이 배포 직전에 같은 표로 나머지를 덮어쓰므로
-      // 여기서도 같은 표를 쓴다. 비교는 raw 문자열이 아니라 host 기준이다 — HOME_SERVER_ENV의
-      // CUSTOM_PROD_*는 후행 슬래시·대소문자 정도가 실 운영값과 다를 수 있고, 그것 때문에
-      // 배포가 막히면 안 된다(하드 핀이 원래 존재했던 이유다).
-      const apiHost = normalizeHost(valueOf(env, check.apiHostKey))
+      // 스위치는 공개 API origin(CUSTOM_PROD_BACKURL) 하나다. same-origin 전환(#1575) 전에는
+      // API_DOMAIN이 그 역할을 했지만, 이제 API_DOMAIN은 Caddy의 host 기반 API vhost 주소일
+      // 뿐이고 공개 API origin과 다른 값을 가진다(같으면 web vhost와 site address가 충돌한다).
+      // deploy.yml이 배포 직전에 같은 표로 나머지를 덮어쓰므로 여기서도 같은 표를 쓴다. 비교는
+      // raw 문자열이 아니라 host 기준이다 — HOME_SERVER_ENV의 CUSTOM_PROD_*는 후행 슬래시·
+      // 대소문자 정도가 실 운영값과 다를 수 있고, 그것 때문에 배포가 막히면 안 된다.
+      const switchKey = check.switchUrlKey
+      const switchHost = normalizeHost(hostOf(valueOf(env, switchKey)))
       const topologies = check.topologies || {}
       // Object.hasOwn: `constructor`·`__proto__` 같은 prototype 키가 topology로 해석되면
       // 이 crossCheck가 통째로 무력화된다.
-      const topology = apiHost && Object.hasOwn(topologies, apiHost) ? topologies[apiHost] : undefined
+      const topology = switchHost && Object.hasOwn(topologies, switchHost) ? topologies[switchHost] : undefined
 
       // 1) 표 자체를 검증한다. 값 대조만 하면 표가 틀렸을 때 아무도 못 잡는다 -
       //    deploy.yml도 같은 표를 읽으므로 잘못된 값을 그대로 따라 핀한다.
@@ -256,15 +279,15 @@ export const validateEnvText = ({ contract, target, text }) => {
       const forbiddenCookieDomains = (invariants.forbiddenCookieDomains || []).map(normalizeHost)
       const legacyKey = invariants.legacyUnsafeTopology
       for (const [name, entry] of Object.entries(topologies)) {
-        const unsafe = (message) => errors.push(safeError(check.apiHostKey, `topology ${name} is unsafe: ${message}`))
+        const unsafe = (message) => errors.push(safeError(switchKey, `topology ${name} is unsafe: ${message}`))
         if (name === legacyKey) {
           if (entry.structurallyUnsafe !== true) {
-            errors.push(safeError(check.apiHostKey, `topology ${name} is the declared legacy exception and must be labelled structurallyUnsafe`))
+            errors.push(safeError(switchKey, `topology ${name} is the declared legacy exception and must be labelled structurallyUnsafe`))
           }
           continue
         }
         if (entry.structurallyUnsafe === true) {
-          errors.push(safeError(check.apiHostKey, `topology ${name} claims an undeclared legacy exception`))
+          errors.push(safeError(switchKey, `topology ${name} claims an undeclared legacy exception`))
           continue
         }
 
@@ -272,6 +295,10 @@ export const validateEnvText = ({ contract, target, text }) => {
         const frontHost = normalizeHost(entry.frontHost)
         const webHost = normalizeHost(entry.webHost)
         const backHost = normalizeHost(entry.backHost)
+
+        // 표의 키는 공개 API origin의 host다. 그 키와 entry.backHost가 갈라지면 스위치는 A를
+        // 골랐는데 검증되는 위상은 B가 된다 - 아래 불변식이 전부 엉뚱한 항목에 적용된다.
+        if (normalizeHost(name) !== backHost) unsafe(`topology key must equal backHost (${backHost || "empty"})`)
 
         // 선언돼야 할 값이 비어 있으면 "검사할 게 없어 통과"가 아니라 error다.
         // 빈 값이면 아래 비교들이 조용히 사라져 표 검증 층 전체가 공허해진다.
@@ -289,7 +316,18 @@ export const validateEnvText = ({ contract, target, text }) => {
 
         if (cookieDomain && frontHost && cookieDomain !== frontHost) unsafe("cookieDomain must equal frontHost")
         if (webHost && cookieDomain && webHost !== cookieDomain) unsafe("webHost must equal cookieDomain")
-        if (!isStrictSubdomainOf(backHost, cookieDomain)) unsafe("backHost must be a subdomain of cookieDomain")
+        // 공개 API가 web 호스트 밖으로 나가는 순간 쿠키 Domain은 두 호스트의 공통 접미사가 된다.
+        // 그것이 web 호스트보다 넓어지지 않는 조합은 둘뿐이다.
+        //   - same-origin: 공개 API가 web 호스트 자신의 경로다(#1575의 목표 위상). 공통 접미사가
+        //     web 호스트 그대로라 애초에 넓어질 곳이 없다.
+        //   - cross-host: 공개 API가 쿠키 도메인의 진성 하위여야 한다. 형제(api.aquilaxk.site 대
+        //     blog.aquilaxk.site)면 공통 접미사가 apex로 떨어진다.
+        // same-origin을 예외가 아니라 1급 조합으로 둔다. 대신 "web 호스트 자신"이라는 조건은
+        // webHost와의 동등성으로 못박아, backHost만 apex로 바꿔 놓는 오염은 여전히 걸린다.
+        const sameOriginApi = Boolean(backHost) && backHost === webHost
+        if (!sameOriginApi && !isStrictSubdomainOf(backHost, cookieDomain)) {
+          unsafe("backHost must equal webHost (same-origin) or be a subdomain of cookieDomain")
+        }
         if (forbiddenCookieDomains.includes(cookieDomain)) unsafe("cookieDomain is owned by another service")
 
         // 아래 셋은 전부 web 호스트 파생이다. 표에 오타가 나면 각각
@@ -312,19 +350,20 @@ export const validateEnvText = ({ contract, target, text }) => {
         }
       }
 
-      if (apiHost && !topology) {
-        errors.push(safeError(check.apiHostKey, "has no declared prod site topology"))
+      if (switchHost && !topology) {
+        errors.push(safeError(switchKey, "has no declared prod site topology"))
       } else if (topology) {
         // 2) secret 값이 선택된 topology와 일치하는가. 비교는 host 기준이다.
         //
         // pinnedByDeploy 키는 오너가 유지보수하는 값이 아니다. deploy.yml이 같은 표에서 파생해
         // 덮어쓰므로 error로 올리면 "곧 교체될 값" 때문에 배포가 막힌다. 대신 교체 예정을
         // 알린다 - M3가 지적한 "무고지 변경"은 침묵이 문제였지 교체 자체가 아니다.
-        // CUSTOM_PROD_* 셋은 오너가 API_DOMAIN과 한 세트로 갱신하는 값이라 error를 유지한다.
+        // 스위치 키(CUSTOM_PROD_BACKURL) 자신은 여기서 비교하지 않는다 - topology를 고른 값이라
+        // 자기 자신과의 대조가 된다. 나머지 CUSTOM_PROD_*는 오너가 스위치와 한 세트로 갱신하는
+        // 값이라 error를 유지한다.
         const comparisons = [
           { key: check.domainKey, actual: valueOf(env, check.domainKey), expected: topology.cookieDomain, label: "must be the cookie domain declared for" },
           { key: check.frontUrlKey, actual: hostOf(valueOf(env, check.frontUrlKey)), expected: topology.frontHost, label: "host must be the web host declared for" },
-          { key: check.backUrlKey, actual: hostOf(valueOf(env, check.backUrlKey)), expected: topology.backHost, label: "host must be the API host declared for" },
           { key: check.webDomainKey, actual: valueOf(env, check.webDomainKey), expected: topology.webHost, pinnedByDeploy: true },
           { key: check.publicEdgeProbeUrlKey, actual: hostOf(valueOf(env, check.publicEdgeProbeUrlKey)), expected: hostOf(topology.publicEdgeProbeBaseUrl), pinnedByDeploy: true },
           { key: check.revalidateUrlKey, actual: hostOf(valueOf(env, check.revalidateUrlKey)), expected: hostOf(topology.revalidateUrl), pinnedByDeploy: true },
@@ -336,15 +375,15 @@ export const validateEnvText = ({ contract, target, text }) => {
           if (!normalizedActual) {
             // 빈 값을 조용히 건너뛰면 fail-open이다. 값이 있는데 host가 안 나오는 경우만 잡는다.
             if (rawValue && !pinnedByDeploy) {
-              errors.push(safeError(key, `must resolve to a host to be checked against ${check.apiHostKey}=${apiHost}`))
+              errors.push(safeError(key, `must resolve to a host to be checked against ${switchKey} host ${switchHost}`))
             }
             continue
           }
           if (normalizedActual === normalizeHost(expected)) continue
           if (pinnedByDeploy) {
-            warnings.push(safeError(key, `will be replaced by the deploy to match ${check.apiHostKey}=${apiHost}`))
+            warnings.push(safeError(key, `will be replaced by the deploy to match ${switchKey} host ${switchHost}`))
           } else {
-            errors.push(safeError(key, `${label} ${check.apiHostKey}=${apiHost}`))
+            errors.push(safeError(key, `${label} ${switchKey} host ${switchHost}`))
           }
         }
 
@@ -367,7 +406,7 @@ export const validateEnvText = ({ contract, target, text }) => {
           }
         }
 
-        if (topology.warn) warnings.push(safeError(check.apiHostKey, topology.warn))
+        if (topology.warn) warnings.push(safeError(switchKey, topology.warn))
       }
     }
 

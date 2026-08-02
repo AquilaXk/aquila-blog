@@ -220,6 +220,11 @@ test("container build marker and NEXT_PUBLIC build args are wired in the runtime
   })
   assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
   assert.equal(argDefaults.get("NEXT_PUBLIC_SITE_URL"), "https://blog.aquilaxk.site")
+  // #1575: 공개 API가 web 호스트의 경로다. 두 값이 갈라지면 브라우저 요청이 다시 cross-origin이
+  // 되고, edge에는 그 origin을 허용하는 CORS가 더 이상 없다. 목표 호스트만 보면 SITE_URL이
+  // 따로 움직여도 통과하므로 두 값의 동일성을 함께 고정한다.
+  assert.equal(argDefaults.get("NEXT_PUBLIC_BACKEND_URL"), argDefaults.get("NEXT_PUBLIC_SITE_URL"))
+  assert.equal(argDefaults.get("NEXT_PUBLIC_BACKEND_URL"), "https://blog.aquilaxk.site")
 })
 
 test("container-build fails closed when a NEXT_PUBLIC build arg is missing or empty", async () => {

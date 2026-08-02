@@ -82,7 +82,9 @@ front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스�
 
 front 서버 사이드(SSR helper와 `/api/backend/*` proxy)는 `BACKEND_INTERNAL_URL=http://caddy`로
 백엔드를 부른다(#1539). 그 주소는 **공개 web vhost가 아니라 backend 전용 vhost**에 있다 — 같은
-site block이 `{$API_DOMAIN}`과 `http://caddy`를 함께 갖고, 그 안에는 front upstream이 없다.
+site block이 `{$LEGACY_API_DOMAIN:legacy-api.localhost}`(host 이전 창 전용 슬롯, #1596으로 구
+API 호스트 주소가 빠진 뒤 남은 유일한 host 기반 주소)와 `http://caddy`를 함께 갖고, 그 안에는
+front upstream이 없다.
 그래서 `Host: caddy` 요청이 front로 되돌아가는 무한 루프(front → caddy → front)가 구조적으로
 불가능하다. 실측(`caddy run` + stub upstream):
 
@@ -229,7 +231,8 @@ blue/green 전환이 호스트 수만큼 늘어난다.
   호스트도 공개되지 않는다. 대신 **빈 값은 계약이 거부한다** — Caddy의 `{$VAR:default}`는 변수가
   unset일 때만 기본값을 쓰므로, `KEY=`는 주소를 `http://`로 붕괴시켜 host matcher 없는 :80
   catch-all을 만든다.
-- 세 키는 서로, 그리고 `API_DOMAIN`·`WEB_DOMAIN`과 **달라야 한다.** site address가 겹치면 404가
+- 세 키는 서로, 그리고 나머지 Caddy site address 키(`WEB_DOMAIN`, 전환 창 전용
+  `LEGACY_API_DOMAIN`, 모니터링 세 호스트)와 **달라야 한다.** site address가 겹치면 404가
   아니라 caddy가 기동하지 못하고 edge 전체가 내려간다. 계약의 `allDistinct` crossCheck가 집합으로
   막는다(`mustDifferFrom`은 쌍 비교라 집합을 닫지 못한다).
 - `APEX_DOMAIN`만 있고 `COMPANY_DOMAIN`이 없으면 apex가 `company.localhost`로 308한다 — 설정은
@@ -306,10 +309,9 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    위 네 값 전부                                          → ok=true  (교체 예정 warning 2건)
    ```
 
-   `API_DOMAIN`은 **그대로 `api.aquilaxk.site`로 둔다.** 이 키는 더 이상 공개 API 호스트가
-   아니라 host 기반 API vhost 주소이며, 구 web origin이 아직 그 호스트로 백엔드를 부르는 동안
-   살아 있어야 한다. `WEB_DOMAIN`과 같은 값이면 Caddy site address가 중복돼 edge 전체가 기동하지
-   못한다 — 계약의 `mustDifferFrom`이 막는다.
+   `API_DOMAIN`은 이 단계에서 **그대로 `api.aquilaxk.site`로 둔다.** 구 web origin이 아직 그
+   호스트로 백엔드를 부르는 동안 살아 있어야 하기 때문이다. 이 키는 7단계에서 저장소 계약과 함께
+   사라진다(#1596).
 
    나머지 front 파생 키는 **오너가 만질 필요가 없다.** 단 `ADMIN_EMBED_ORIGINS`는 이 배포에서
    `https://blog.aquilaxk.site` 하나로 좁혀진다 — 배포 전 `validate-env`가 제거되는 origin을
@@ -347,8 +349,9 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    Caddy가 404가 아니라 **`200` + 빈 본문**을 주고, Cloudflare가 그 200을 캐시할 수도 있다(4단계의
    같은 경고).
 
-   1. `HOME_SERVER_ENV`에 세 값을 넣고 배포한다. 세 값은 서로, 그리고 `API_DOMAIN`·`WEB_DOMAIN`과
-      달라야 하며, `APEX_DOMAIN`은 `COMPANY_DOMAIN` 없이 넣을 수 없다(계약이 둘 다 막는다).
+   1. `HOME_SERVER_ENV`에 세 값을 넣고 배포한다. 세 값은 서로, 그리고 나머지 site address
+      키(`WEB_DOMAIN`, 전환 창 전용 `LEGACY_API_DOMAIN`, 모니터링 세 호스트)와 달라야 하며,
+      `APEX_DOMAIN`은 `COMPANY_DOMAIN` 없이 넣을 수 없다(계약이 둘 다 막는다).
 
       - `COMPANY_DOMAIN=www.aquilaxk.site`
       - `PRODUCT_DOMAIN=easysubway.aquilaxk.site`
@@ -361,28 +364,59 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    > 자기 Host만 매치하고 front upstream만 갖는다. 그래서 롤백도 블로그와 무관하게, 세 env 줄을
    > **지우고**(비우지 말고) 재배포하는 것으로 끝난다.
 
-7. **(6)이 green인 뒤에** 구 API 호스트를 접는다. `api.aquilaxk.site`의 Tunnel public hostname과
-   DNS 레코드를 제거하고, **그 다음** 저장소에서 `{$API_DOMAIN}` **주소와** `API_DOMAIN` 키를
-   제거하는 후속 PR을 낸다. 순서가 반대면 `API_DOMAIN`이 required인 채로 사라져 배포가 막힌다.
+7. 구 API 호스트를 접는다. **순서가 런북의 다른 단계와 반대다 — 저장소가 먼저다** (#1596).
+
+   **6단계와 서로 독립이다.** "(6)이 green인 뒤에"라는 원래 제약은 6단계가 `www` 제거였을 때
+   나온 것이고, Locked Decision 6 번복으로 6단계가 표면 개통으로 바뀌면서 그 의존은 사라졌다 —
+   구 API 호스트와 회사·제품·apex 표면은 겹치는 호스트도 vhost도 없다. 실제로 아래 1의 저장소
+   변경은 6단계보다 먼저 병합됐다.
+
+   1. 저장소 PR(#1596)을 먼저 병합한다 — **완료.** 그 변경이 `deploy.yml`의 배포 후 공개 검증을 `WEB_DOMAIN` 기준으로
+      옮기고, Caddyfile의 `{$API_DOMAIN}` 주소와 `API_DOMAIN` 키·파생(materialize allowlist,
+      doctor, blue/green·steady-state·status probe, env 계약)을 제거한다.
+   2. 그 커밋으로 배포가 green인지 확인한다.
+   3. **그 다음** `api.aquilaxk.site`의 Tunnel public hostname과 DNS 레코드를 제거한다(오너/코디네이터,
+      콘솔). 마지막으로 `HOME_SERVER_ENV`에서 `API_DOMAIN` 줄을 지운다 — 이 시점에는 아무도 읽지
+      않는 값이다.
+
+   반대 순서로 하면 콘솔에서 hostname을 지운 직후의 배포가 여전히 구 호스트를 때리는 게이트에서
+   깨진다. 두 단계를 다 미루면 검증이 구 호스트에 남아, 아무도 안 보는 사이 배포가 green으로
+   통과한다.
 
    > ⚠️ **지우는 것은 주소이지 vhost가 아니다.** 그 site block은 `http://caddy` 내부 진입점을
    > 함께 갖고 있고(#1539), front 서버 사이드(SSR·`/api/backend/*` proxy)가 백엔드에 닿는 유일한
    > 경로다. vhost를 통째로 지우면 front가 모든 SSR 경로에서 죽는다.
 
-   그 후속 PR은 **`deploy.yml`의 배포 후 검증도 함께 옮겨야 한다.** 현재 post-deploy health
-   probe(`Host: ${API_DOMAIN}`로 `http://caddy:80/actuator/health/readiness`)와 live 보안 헤더·
-   스모크 체크(`https://${API_DOMAIN}/...`)가 그 호스트를 쓴다. 호스트를 지우고 검증을 그대로
-   두면 배포가 실패하고, 검증만 먼저 지우면 아무도 안 보는 사이 배포가 green으로 통과한다.
+   **1과 3 사이(전환 창)에 구 호스트는 "매치되는 vhost 없음" 상태가 된다.** Caddy는 그때 404가
+   아니라 **`200` + 빈 본문**을 준다. 실측(`caddy run` + #1596 이후의 Caddyfile, `WEB_DOMAIN` 설정):
 
-   `LEGACY_API_DOMAIN`은 이 전환에서 **쓰지 않는다.** 이 전환이 떠나는 구 API 호스트는
-   `API_DOMAIN` 자신이고 그 주소는 계속 남기 때문이다. 키는 다음 host 이전을 위해 계약에 남겨
-   둔다.
+   ```text
+   Host: api.aquilaxk.site   /actuator/health/readiness  → 200, 0 bytes  (매치 vhost 없음)
+   Host: api.aquilaxk.site   /post/api/v1/posts/feed     → 200, 0 bytes, CORS 헤더 없음
+   Host: caddy               /actuator/health/readiness  → 502           (내부 진입점 → 백엔드)
+   Host: blog.aquilaxk.site  /actuator/health/readiness  → 502           (web vhost → 백엔드)
+   ```
+
+   502는 이 실측이 upstream 없이 Caddy만 띄운 결과다 — 중요한 것은 **구 호스트만 빈 200으로
+   갈라진다**는 점이다. blog cutover가 이미 끝나 구 호스트를 부르는 정상 소비자는 없으므로 이
+   상태를 수용하고, 3단계에서 hostname 자체를 없앤다.
+
+   `LEGACY_API_DOMAIN`은 **이 전환의 공개 DNS/Tunnel 작업에는 쓰지 않는다** — 떠나는 구 API
+   호스트가 `API_DOMAIN`이고 두 번째 주소로 남길 대상이 없기 때문이다. 그러나 **키 자체는
+   계약(`deploy/env/env.contract.json`), Caddyfile의 site address 슬롯, `materialize_service_env.sh`
+   의 caddy allowlist에 그대로 유지한다.** 다음 host 이전 때 구·신 주소를 동시에 살려 두는 수단이
+   그것뿐이므로, 지우면 안 된다. 운영값(`HOME_SERVER_ENV`)에서 unset인 것이 정상 상태다.
 
    > ⚠️ 전환 창 키를 닫을 때는 **줄을 비우지 말고 지운다.** `KEY=`(빈 값)은 unset이 아니라 빈
    > 문자열로 보간돼 vhost 주소가 `http://`가 되고, `caddy adapt` 실측 결과 그 site의 host
    > matcher가 통째로 사라져 :80 catch-all이 된다. env 계약이
    > `must be removed entirely rather than set to an empty value`로 막지만, 그 전에 알고 있어야
    > 한다.
+   >
+   > ⚠️ #1596 이후 **`WEB_DOMAIN`이 없는 위상은 배포되지 않는다.** `blue_green_deploy.sh`의
+   > `require_nonempty_env_key "WEB_DOMAIN"`이 먼저 막고, `deploy.yml`도 `missing_web_domain`으로
+   > 멈춘다. 배포 후 공개 검증이 때릴 호스트가 그 값 하나뿐이라, 없으면 검증 없이 green이 된다.
+   > 아래 Rollback 표의 "3단계 되돌리기" 행은 그래서 현재 성립하지 않는다.
 
 ## 개통 확인
 
@@ -395,8 +429,10 @@ curl -sSI https://blog.aquilaxk.site/ \
 curl -sSI "https://blog.aquilaxk.site/_next/static/<실제 asset 경로>" | grep -i cache-control
 
 # SEO 진입점. front/public/robots.txt는 tracked 정적 파일이고 postbuild가 next-sitemap을 스킵하므로
-# 빌드가 이 값을 갱신하지 않는다. web 호스트에서는 front가 robots.txt를 서빙해야 한다 —
-# API vhost의 `Disallow: /`가 아니라.
+# 빌드가 이 값을 갱신하지 않는다. 아래 응답은 front가 서빙한 그 파일이어야 한다: `Allow: /`와
+# `Sitemap: https://blog.aquilaxk.site/sitemap.xml` 줄이 보여야 하고, backend vhost가 쓰는
+# `Disallow: /`가 보이면 라우팅이 backend로 샌 것이라 블로그 전체가 색인에서 빠진다.
+# doctor.sh의 robots 점검이 같은 기준으로 WARN을 낸다.
 curl -sS https://blog.aquilaxk.site/robots.txt
 curl -sS -o /dev/null -w "sitemap=%{http_code}\n" https://blog.aquilaxk.site/sitemap.xml
 
@@ -404,9 +440,8 @@ curl -sS -o /dev/null -w "sitemap=%{http_code}\n" https://blog.aquilaxk.site/sit
 curl -sS https://blog.aquilaxk.site/actuator/health/readiness
 curl -sS -o /dev/null -w "feed=%{http_code}\n" \
   "https://blog.aquilaxk.site/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT"
-# /actuator/prometheus는 백엔드로 가지 않는다 (web에서는 front 404, API 호스트에서는 edge 403)
+# /actuator/prometheus는 백엔드로 가지 않는다 (web에서는 front 404)
 curl -sS -o /dev/null -w "prom_web=%{http_code}\n" https://blog.aquilaxk.site/actuator/prometheus
-curl -sS -o /dev/null -w "prom_api=%{http_code}\n" https://api.aquilaxk.site/actuator/prometheus
 
 # 백엔드 응답에 API 보안 헤더가 붙는지 (front 응답 헤더와 섞이지 않아야 한다)
 curl -sSI https://blog.aquilaxk.site/actuator/health/readiness \
@@ -445,7 +480,15 @@ unset ADMIN_PASSWORD ADMIN_EMAIL
 
 # 구 API hostname 폐기 확인 (7번 이후)
 dig +short api.aquilaxk.site
-curl -sSI --max-time 10 https://api.aquilaxk.site/actuator/health/readiness ; echo "exit=$?"
+# 7단계 1(저장소 병합)과 3(콘솔 제거) 사이에는 이 호스트가 200 + 빈 본문을 준다. 매치되는
+# vhost가 없을 때 Caddy가 주는 응답이며, 404가 아니라는 점을 알고 봐야 한다.
+#
+# `curl -I`(HEAD)로 보지 마라 - HEAD 응답에는 원래 본문이 없어서 "빈 200"과 정상 응답을
+# 구분할 수 없다. GET으로 보내고 내려받은 바이트 수를 함께 읽는다.
+curl -sS --max-time 10 -o /dev/null -w 'status=%{http_code} bytes=%{size_download}\n' \
+  https://api.aquilaxk.site/actuator/health/readiness
+# 판정: status=200 bytes=0 이면 아직 우리 Caddy에 도달하지만 어떤 vhost도 매치하지 않는
+#       전환 창 상태다. 3단계(hostname·DNS 제거)가 끝나면 이 호스트는 아예 해석되지 않는다.
 ```
 
 ## 표면 개통 확인 (6번 이후 · #1605)
@@ -621,14 +664,21 @@ echo "exit=${status}"
 
 ## Rollback
 
+> **Historical record — current execution prohibited**, except the `#1605` surface row, which is a
+> live procedure. The other rows preserve the cutover-era facts only. Do not restore the retired
+> `api.aquilaxk.site` topology, DNS, or Tunnel hostnames, and do not restore the cutover-era
+> `www.aquilaxk.site` **blog** origin — that host is the company surface now (#1605), not a front
+> origin to fall back to. Current front rollback uses `deploy/homeserver/rollback_last_deploy.sh`
+> and the front blue/green procedure while keeping the same-origin `blog.aquilaxk.site` edge.
+
 | 상황 | 되돌리는 방법 |
 | --- | --- |
-| front 기동 검증 실패 (2단계) | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포한다. 공개 노출 전이라 사용자 영향이 없다. |
-| 3단계 배포 후 백엔드·인증 장애 (DNS 전환 전) | **3단계에서 바꾼 네 값을 전부 되돌린다** — `CUSTOM_PROD_BACKURL=https://api.aquilaxk.site`, `CUSTOM_PROD_FRONTURL=https://www.aquilaxk.site`, `CUSTOM_PROD_COOKIEDOMAIN=aquilaxk.site`, 그리고 `WEB_DOMAIN` 줄 **삭제**. 그 뒤 재배포한다. 구 topology가 복원되고 `www` origin 로그인이 살아난다. `API_DOMAIN`은 내내 그대로였으므로 구 API 경로는 끊긴 적이 없다. **스위치만 되돌리면 `validate-env`가 `ok=false`로 배포를 막는다**(실측: `CUSTOM_PROD_COOKIEDOMAIN`·`CUSTOM_PROD_FRONTURL` 두 error) — 장애 중 롤백이 게이트에서 멈추는 경로라 네 값을 한 번에 되돌린다. |
-| 4단계 직후 `blog.aquilaxk.site` 장애 | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **Vercel을 가리키던 이전 값으로 되돌린다.** Vercel 프로젝트는 이 시점까지 살아 있다(`front/vercel.json` 제거는 #1542 소관). **`HOME_SERVER_ENV`의 네 값도 위 행처럼 함께 되돌린다** — DNS만 되돌리면 쿠키 Domain이 이미 blog라 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다.<br><br>**(후행 주석 · #1542)** 이 행은 cutover 진행 중의 rollback 절차였고 그 시점의 사실 기록으로 보존한다. cutover 완료 후 #1542가 저장소의 Vercel 호스팅 계약을 제거하고 오너가 Vercel Git 연결을 해제하면서 **이 경로는 닫혔다.** 이후의 front 장애는 `deploy/homeserver/rollback_last_deploy.sh`와 front blue/green 되돌리기로 대응한다. |
-| front 컨테이너만 문제 | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포하면 front 서비스가 기동 대상에서 빠진다. 그 상태에서 `blog.aquilaxk.site`는 front 경로에 502를 내고 API 경로는 계속 동작하므로, 공개 노출 중이라면 위 DNS 되돌리기를 함께 한다. |
+| front 기동 검증 실패 (2단계) | 당시에는 `COMPOSE_PROFILES`에서 `front`를 빼고 재배포했다. |
+| 3단계 배포 후 백엔드·인증 장애 (DNS 전환 전) | **3단계에서 바꾼 네 값을 전부 되돌린다** — `CUSTOM_PROD_BACKURL=https://api.aquilaxk.site`, `CUSTOM_PROD_FRONTURL=https://www.aquilaxk.site`, `CUSTOM_PROD_COOKIEDOMAIN=aquilaxk.site`, 그리고 `WEB_DOMAIN` 줄 **삭제**. 그 뒤 재배포한다. 구 topology가 복원되고 `www` origin 로그인이 살아난다. `API_DOMAIN`은 내내 그대로였으므로 구 API 경로는 끊긴 적이 없다. **스위치만 되돌리면 `validate-env`가 `ok=false`로 배포를 막는다**(실측: `CUSTOM_PROD_COOKIEDOMAIN`·`CUSTOM_PROD_FRONTURL` 두 error) — 장애 중 롤백이 게이트에서 멈추는 경로라 네 값을 한 번에 되돌린다. **이 행은 현재 성립하지 않는다** — `www.aquilaxk.site`는 #1605로 회사 표면이 됐으므로 블로그 front origin으로 되돌릴 대상이 아니고, #1596 이후 `WEB_DOMAIN`을 지운 위상은 `blue_green_deploy.sh`의 `require_nonempty_env_key "WEB_DOMAIN"`에서 배포가 멈춘다. |
+| 4단계 직후 `blog.aquilaxk.site` 장애 | 당시에는 Cloudflare public hostname과 DNS를 Vercel로 되돌리고 네 env 값을 함께 복원하는 절차였다. #1542 이후 이 경로는 닫혔다. |
+| front 컨테이너만 문제 | 현재는 `rollback_last_deploy.sh`와 front blue/green rollback으로 마지막 검증된 front를 같은 `blog.aquilaxk.site` edge에 복원한다. 프로필을 끄거나 DNS를 되돌리지 않는다. |
 | 6단계 표면 개통 후 문제 발견 (#1605) | `HOME_SERVER_ENV`에서 `COMPANY_DOMAIN`·`PRODUCT_DOMAIN`·`APEX_DOMAIN` 줄을 **삭제**하고(비우지 말고 — 빈 값은 vhost 주소를 :80 catch-all로 만든다) 재배포한다. 세 vhost가 `.localhost` 기본값으로 내려앉아 그 호스트를 매치하지 않는다. **공개 노출을 즉시 끊어야 하면 Tunnel public hostname을 먼저 삭제한다** — env만 되돌리면 hostname은 살아 있는데 매치하는 vhost가 없어 Caddy가 404가 아니라 `200` + 빈 본문을 준다. 블로그 표면은 이 롤백에 영향받지 않는다(신규 vhost는 자기 Host만 매치하고 blog vhost를 건드리지 않는다). |
-| 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API 경로 rollback은 DNS/Tunnel hostname 재생성이다. 그래서 7단계는 (6)이 green인 뒤에만 한다. |
+| 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API hostname의 DNS/Tunnel 재생성은 현재 rollback 절차가 아니다. same-origin front rollback만 수행한다. |
 
 ## 저장소 쪽 fail-safe
 
@@ -643,14 +693,21 @@ echo "exit=${status}"
   `WEB_UPSTREAM`은 `reverse_proxy :3000`을 만든다. 두 층이 막는다: env 계약이
   `must be removed entirely rather than set to an empty value`로 실패시키고,
   `materialize_service_env.sh`가 빈 값 caddy 키를 아예 내보내지 않는다.
-- `WEB_DOMAIN`·`API_DOMAIN`·`LEGACY_API_DOMAIN`은 `materialize_service_env.sh`의 caddy 키
-  allowlist에 있어야 `.env.caddy.prod`로 전달된다. 빠지면 vhost가 조용히 기본값으로 내려앉는다.
+- `WEB_DOMAIN`·`LEGACY_API_DOMAIN`·`COMPANY_DOMAIN`·`PRODUCT_DOMAIN`·`APEX_DOMAIN`은
+  `materialize_service_env.sh`의 caddy 키 allowlist에 있어야 `.env.caddy.prod`로 전달된다. 빠지면
+  vhost가 조용히 기본값으로 내려앉는다.
+- **배포 후 공개 검증은 `WEB_DOMAIN` 하나에 걸려 있다**(#1596). 그래서 그 값이 비면 검증을 건너뛰는
+  대신 배포가 멈춘다: `blue_green_deploy.sh`의 `require_nonempty_env_key "WEB_DOMAIN"`이 첫 층,
+  `deploy.yml`의 `missing_web_domain`이 둘째 층이다. 내부 edge 스모크(Host 헤더 + edge network)와
+  공개 HTTPS 스모크는 역할이 다르다 — 앞의 것은 DNS·Cloudflare·터널이 고장 나도 "Caddy 라우팅이
+  맞는가"를 답하고, 뒤의 것은 실제 방문자 경로가 살아 있는가를 답한다. 둘 중 하나만 남기면 한쪽
+  실패가 다른 쪽 장애로 오인된다.
 - `FRONT_*_IMAGE`가 비면 compose `front` 프로필이 꺼진 채로 `docker compose config`가 통과하고,
   프로필을 켠 채 키가 비면 compose가 `neither an image nor a build context`로 실패한다.
   `${FRONT_BLUE_IMAGE:?}` 형태를 쓰면 프로필과 무관하게 보간 단계에서 죽어 기존 배포·백업·doctor의
   compose 평가가 전부 깨지므로 쓰지 않는다.
 - 공개 API 게이트(요청 body 상한, 보안 헤더, 민감 경로 `log_skip`, `/actuator/prometheus` 403,
-  read/admin upstream 분리)는 **`(backend_edge_gates)` snippet 하나**에 있고 host 기반 API vhost와
+  read/admin upstream 분리)는 **`(backend_edge_gates)` snippet 하나**에 있고 backend 전용 vhost와
   web vhost가 그것을 import한다. vhost마다 복사하면 한쪽 문에서만 게이트가 조용히 사라지므로,
   계약 테스트가 "정의는 snippet 안에 하나뿐"임을 고정한다. web vhost의 import는 backend prefix
   handle **안**에 있어야 한다 — site level로 올라가면 공유 보안 헤더가 front 응답까지 덮어

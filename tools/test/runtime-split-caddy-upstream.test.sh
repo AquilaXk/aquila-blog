@@ -133,7 +133,6 @@ fi
 
 write_split_env() {
   {
-    printf '%s\n' 'API_DOMAIN=api.example.com'
     printf '%s\n' 'RUNTIME_SPLIT_ENABLED=true'
     printf '%s\n' 'READ_API_UPSTREAM=back_read'
     printf '%s\n' 'ADMIN_API_UPSTREAM=back_admin'
@@ -142,7 +141,6 @@ write_split_env() {
 
 write_single_env() {
   {
-    printf '%s\n' 'API_DOMAIN=api.example.com'
     printf '%s\n' 'RUNTIME_SPLIT_ENABLED=false'
     printf '%s\n' 'READ_API_UPSTREAM=back_blue'
     printf '%s\n' 'ADMIN_API_UPSTREAM=back_blue'
@@ -152,7 +150,6 @@ write_single_env() {
 # ADMIN_API_UPSTREAM이 없는 split env. placeholder 기본값 fallback과 기대값 fail-fast를 본다.
 write_split_env_without_admin() {
   {
-    printf '%s\n' 'API_DOMAIN=api.example.com'
     printf '%s\n' 'RUNTIME_SPLIT_ENABLED=true'
     printf '%s\n' 'READ_API_UPSTREAM=back_read'
   } > "$1"

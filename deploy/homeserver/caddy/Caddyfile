@@ -260,24 +260,27 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
 
 # Cloudflare Tunnel origin: HTTP only between cloudflared and Caddy.
 #
-# Backend-only vhost. Since #1575 the *public* API is same-origin under {$WEB_DOMAIN}, so the
-# public host addresses here are transition-only: `{$API_DOMAIN}` keeps the pre-transition host
-# reachable while the old web origin is still served. Retiring that host drops the address, not
-# the vhost - `http://caddy` below is permanent (see docs/ops/homeserver-front-domain-cutover.md).
+# Backend-only vhost. Since #1575 the *public* API is same-origin under {$WEB_DOMAIN}, and #1596
+# retired the pre-transition public API host, so no live public address is left here. The vhost
+# stays because `http://caddy` below is permanent and because the transition-only
+# `{$LEGACY_API_DOMAIN}` slot is what makes a future host-based migration possible
+# (see docs/ops/homeserver-front-domain-cutover.md).
 #
 # Nothing in this block proxies to the front tier, which is what makes the internal entry point
 # loop-free: a front server-side call to `http://caddy` can only ever land on the backend.
 #
-# Two site addresses, not one. A single address means the old and the new public API host can
-# never be live at the same time, so every cutover order breaks the public site for a while:
-# flip the web DNS first and the API host does not exist yet (404 on every API call); flip the
-# API host first and whatever still serves the old web origin loses its backend.
+# LEGACY_API_DOMAIN is transition-only and unset outside a migration window. It exists so an old
+# and a new host-based address can be live at the same time - with a single address every cutover
+# order breaks one side of the switch for a while. Its `.localhost` default is required: an empty
+# value collapses the address to `http://`, which Caddy adapts into a host-matcher-less :80
+# catch-all. It must also differ from WEB_DOMAIN, because two site blocks sharing one address take
+# the whole edge down on the next caddy recreate (the env contract enforces both).
 #
-# LEGACY_API_DOMAIN is transition-only and unset outside the cutover window. Its `.localhost`
-# default is required: an empty value collapses the address to `http://`, which Caddy adapts
-# into a host-matcher-less :80 catch-all.
+# There is deliberately no CORS anywhere in this file. The public API is a path on the web host,
+# so browser calls to it are same-origin and a cross-origin allowlist would only widen what this
+# edge accepts. The retired API host was the last address that needed one (#1596).
 #
-# The third address `http://caddy` is the container-internal entry point (#1539). The front
+# The other address `http://caddy` is the container-internal entry point (#1539). The front
 # tier calls the backend from the server side (SSR helpers and the /api/backend/* proxy) and
 # must reach the same route split the browser gets: under runtime-split, public reads belong
 # to back_read and everything else to back_admin, and no single backend container serves both
@@ -290,7 +293,7 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
 # address the note above warns about. Reachability is unchanged: the only listeners are the
 # compose networks caddy joins plus a 127.0.0.1-only host bind, and Cloudflare Tunnel forwards
 # the original public Host, so no external request can arrive with `Host: caddy`.
-http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {
+http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {
   log {
     output stdout
     format json
@@ -298,37 +301,10 @@ http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://c
 
   import edge_client_ip_capture
 
-  # Edge CORS allowlist is the public web origin only. The apex and www hosts belong to a
-  # different service, so `(www\.)?aquilaxk\.site` must never come back here (#1540).
-  # Only this host-based vhost needs it: on the web vhost the browser origin and the API origin
-  # are the same, so those requests are not cross-origin at all (#1575).
-  @corsAllowed {
-    header_regexp Origin Origin ^https://blog\.aquilaxk\.site$
-  }
-  @corsPreflight {
-    method OPTIONS
-    header_regexp Origin Origin ^https://blog\.aquilaxk\.site$
-  }
-  handle @corsPreflight {
-    header {
-      Access-Control-Allow-Origin "{http.request.header.Origin}"
-      Access-Control-Allow-Credentials "true"
-      Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-      Access-Control-Allow-Headers "{http.request.header.Access-Control-Request-Headers}"
-      Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
-    }
-    respond 204
-  }
-  header @corsAllowed {
-    ?Access-Control-Allow-Origin "{http.request.header.Origin}"
-    ?Access-Control-Allow-Credentials "true"
-    # Browser JS can read X-Request-Id from cross-origin API error responses.
-    ?Access-Control-Expose-Headers "X-Request-Id"
-    ?Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
-  }
-
-  # API-host-only. The web vhost must NOT get this: there front/public/robots.txt is the real
+  # This vhost only. The web vhost must NOT get this: there front/public/robots.txt is the real
   # robots.txt and it advertises the sitemap, so a `Disallow: /` here would deindex the blog.
+  # A host-based backend address has no crawlable content, so it keeps refusing crawlers even
+  # while a migration window has LEGACY_API_DOMAIN publicly resolvable.
   # It shares the handle group with the imported gates below, and their matchers are disjoint.
   @apiRobots path /robots.txt
   handle @apiRobots {

@@ -558,10 +558,10 @@ cloudflared_registration_log_exists() {
 }
 
 probe_cloudflared_public_readiness_code() {
-  local api_domain="$1"
+  local web_domain="$1"
   local connect_timeout="${CLOUDFLARED_PUBLIC_CONNECT_TIMEOUT_SECONDS:-5}"
   local max_time="${CLOUDFLARED_PUBLIC_MAX_TIME_SECONDS:-15}"
-  if [[ -z "${api_domain}" ]]; then
+  if [[ -z "${web_domain}" ]]; then
     echo ""
     return 0
   fi
@@ -571,39 +571,39 @@ probe_cloudflared_public_readiness_code() {
     -m "${max_time}" \
     -o /dev/null \
     -w "%{http_code}" \
-    "https://${api_domain}${HEALTHCHECK_PATH}" || true
+    "https://${web_domain}${HEALTHCHECK_PATH}" || true
 }
 
 check_cloudflared_public_readiness() {
-  local api_domain="$1"
+  local web_domain="$1"
   local retries="${CLOUDFLARED_PUBLIC_READINESS_RETRIES:-5}"
   local sleep_seconds="${CLOUDFLARED_PUBLIC_READINESS_SLEEP_SECONDS:-2}"
   local attempt=1
   local code
 
-  if [[ -z "${api_domain}" ]]; then
-    echo "skip cloudflared public readiness: API_DOMAIN is empty"
+  if [[ -z "${web_domain}" ]]; then
+    echo "skip cloudflared public readiness: WEB_DOMAIN is empty"
     return 0
   fi
 
   while [[ "${attempt}" -le "${retries}" ]]; do
-    code="$(probe_cloudflared_public_readiness_code "${api_domain}")"
+    code="$(probe_cloudflared_public_readiness_code "${web_domain}")"
     if is_healthy_http_code "${code}"; then
-      echo "cloudflared public readiness ok: domain=${api_domain} status=${code} attempt=${attempt}/${retries}"
+      echo "cloudflared public readiness ok: domain=${web_domain} status=${code} attempt=${attempt}/${retries}"
       return 0
     fi
 
-    echo "cloudflared public readiness pending: domain=${api_domain} status=${code:-none} attempt=${attempt}/${retries}" >&2
+    echo "cloudflared public readiness pending: domain=${web_domain} status=${code:-none} attempt=${attempt}/${retries}" >&2
     sleep "${sleep_seconds}"
     attempt=$((attempt + 1))
   done
 
-  echo "cloudflared public readiness failed: domain=${api_domain} status=${code:-none} attempts=${retries}" >&2
+  echo "cloudflared public readiness failed: domain=${web_domain} status=${code:-none} attempts=${retries}" >&2
   return 1
 }
 
 check_cloudflared_runtime() {
-  local api_domain="${1:-}"
+  local web_domain="${1:-}"
   local cid
   cid="$(compose ps -q cloudflared | head -n 1)"
   if [[ -z "${cid}" ]]; then
@@ -637,7 +637,7 @@ check_cloudflared_runtime() {
 
   if [[ "${has_registration_log}" != "true" ]]; then
     echo "WARN cloudflared registration log missing in recent tail; verifying public readiness before restart" >&2
-    if check_cloudflared_public_readiness "${api_domain}"; then
+    if check_cloudflared_public_readiness "${web_domain}"; then
       echo "cloudflared runtime check ok: status=${status}, restart_count=${restart_count}, registration=missing_recent_tail"
       return 0
     fi
@@ -660,7 +660,7 @@ check_cloudflared_runtime() {
       has_registration_log="true"
     fi
 
-    if ! check_cloudflared_public_readiness "${api_domain}"; then
+    if ! check_cloudflared_public_readiness "${web_domain}"; then
       echo "cloudflared runtime verify failed after restart" >&2
       echo "${cf_logs}" >&2
       return 1
@@ -742,14 +742,14 @@ probe_grafana_internal_health() {
 }
 
 probe_grafana_embed_origin_headers() {
-  local api_domain="$1"
+  local web_domain="$1"
   local grafana_domain="$2"
   local path="$3"
   local admin_email="$4"
   local admin_password="$5"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
     set -eu
-    api_domain="$1"
+    web_domain="$1"
     grafana_domain="$2"
     path="$3"
     admin_email="$4"
@@ -764,7 +764,7 @@ probe_grafana_embed_origin_headers() {
         -c "${cookie_jar}" \
         -o /dev/null \
         -w "%{http_code}" \
-        -H "Host: ${api_domain}" \
+        -H "Host: ${web_domain}" \
         -H "Content-Type: application/json" \
         --data "${login_payload}" \
         "http://caddy:80/member/api/v1/auth/login" || true
@@ -781,12 +781,12 @@ probe_grafana_embed_origin_headers() {
       -b "${cookie_jar}" \
       -H "Host: ${grafana_domain}" \
       "http://caddy:80${path}" || true
-  ' sh "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
+  ' sh "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
 }
 
 check_grafana_embed_origin_route() {
-  local api_domain grafana_domain path admin_email admin_password
-  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  local web_domain grafana_domain path admin_email admin_password
+  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
   grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
   path="$(monitoring_embed_candidate_path)"
   admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
@@ -796,8 +796,8 @@ check_grafana_embed_origin_route() {
     echo "skip grafana origin route check: no GRAFANA_DOMAIN configured"
     return 0
   fi
-  if [[ -z "${api_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
-    echo "skip grafana origin route check: missing API_DOMAIN or admin credentials"
+  if [[ -z "${web_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
+    echo "skip grafana origin route check: missing WEB_DOMAIN or admin credentials"
     return 0
   fi
 
@@ -808,7 +808,7 @@ check_grafana_embed_origin_route() {
 
   while (( try <= attempts )); do
     internal_health="$(probe_grafana_internal_health)"
-    headers="$(probe_grafana_embed_origin_headers "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+    headers="$(probe_grafana_embed_origin_headers "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
     status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
     location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
     xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
@@ -1381,7 +1381,7 @@ require_digest_image_env_key() {
 }
 
 validate_required_runtime_env() {
-  require_nonempty_env_key "API_DOMAIN"
+  require_nonempty_env_key "WEB_DOMAIN"
   require_nonempty_env_key "CF_TUNNEL_TOKEN"
   require_nonempty_env_key "PROD___SPRING__DATASOURCE__USERNAME"
   require_nonempty_env_key "PROD___SPRING__DATASOURCE__PASSWORD"
@@ -2093,26 +2093,26 @@ restore_runtime_split_helper_backends_to_active() {
 }
 
 probe_caddy_http_code() {
-  local api_domain="$1"
+  local web_domain="$1"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
     -s -o /dev/null -w "%{http_code}" "http://caddy:80${HEALTHCHECK_PATH}" \
-    -H "Host: ${api_domain}" || true
+    -H "Host: ${web_domain}" || true
 }
 
 probe_caddy_route_http_code() {
-  local api_domain="$1"
+  local web_domain="$1"
   local path="$2"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${PREWARM_MAX_TIME_SECONDS}" \
     -s -o /dev/null -w "%{http_code}" "http://caddy:80${path}" \
-    -H "Host: ${api_domain}" || true
+    -H "Host: ${web_domain}" || true
 }
 
 prewarm_public_read_cache() {
-  local api_domain="$1"
+  local web_domain="$1"
   if [[ "${PREWARM_ENABLED}" != "true" ]]; then
     echo "prewarm skipped: PREWARM_ENABLED=${PREWARM_ENABLED}"
     return 0
@@ -2133,7 +2133,7 @@ prewarm_public_read_cache() {
     local attempt=1
     local code=""
     while [[ "${attempt}" -le "${max_attempts}" ]]; do
-      code="$(probe_caddy_route_http_code "${api_domain}" "${path}")"
+      code="$(probe_caddy_route_http_code "${web_domain}" "${path}")"
       if is_cacheable_warmup_http_code "${code}"; then
         echo "prewarm ok: ${label} status=${code} attempt=${attempt}/${max_attempts}"
         return 0
@@ -2161,7 +2161,7 @@ prewarm_public_read_cache() {
         --data-urlencode "sort=CREATED_AT" \
         --data-urlencode "tag=${tag}" \
         -s -o /dev/null -w "%{http_code}" "http://caddy:80/post/api/v1/posts/explore/cursor" \
-        -H "Host: ${api_domain}" || true)"
+        -H "Host: ${web_domain}" || true)"
       if is_cacheable_warmup_http_code "${code}"; then
         echo "prewarm ok: ${label} status=${code} attempt=${attempt}/${max_attempts}"
         return 0
@@ -2185,7 +2185,7 @@ prewarm_public_read_cache() {
     --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${PREWARM_MAX_TIME_SECONDS}" \
     -s "http://caddy:80/post/api/v1/posts/feed/cursor?pageSize=30&sort=CREATED_AT" \
-    -H "Host: ${api_domain}" || true)"
+    -H "Host: ${web_domain}" || true)"
   first_feed_id="$(printf '%s' "${feed_body}" | awk -F'"id":' 'NF > 1 {split($2,a,/[^0-9]/); print a[1]; exit}')"
   if [[ -n "${first_feed_id}" ]]; then
     prewarm_path_with_retry "/post/api/v1/posts/${first_feed_id}" "/post/api/v1/posts/${first_feed_id}" || true
@@ -2198,7 +2198,7 @@ prewarm_public_read_cache() {
     --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${PREWARM_MAX_TIME_SECONDS}" \
     -s "http://caddy:80/post/api/v1/posts/tags" \
-    -H "Host: ${api_domain}" || true)"
+    -H "Host: ${web_domain}" || true)"
   first_tag="$(printf '%s' "${tags_body}" | awk -F'"tag":"' 'NF > 1 {split($2,a,"\""); print a[1]; exit}')"
   if [[ -n "${first_tag}" ]]; then
     prewarm_explore_cursor_with_retry "${first_tag}" "/post/api/v1/posts/explore/cursor(tag=${first_tag})" || true
@@ -2214,7 +2214,7 @@ prewarm_public_read_cache() {
     --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${PREWARM_MAX_TIME_SECONDS}" \
     -s "http://caddy:80/sitemap.xml" \
-    -H "Host: ${api_domain}" || true)"
+    -H "Host: ${web_domain}" || true)"
   latest_public_routes="$(
     printf '%s' "${sitemap_body}" |
       grep -oE '<loc>https?://[^<]+/posts/[0-9]+</loc>' |
@@ -2284,7 +2284,7 @@ check_candidate_backend_health() {
 }
 
 check_notification_sse_route() {
-  local api_domain="$1"
+  local web_domain="$1"
   local admin_email admin_password
   admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
   admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
@@ -2298,7 +2298,7 @@ check_notification_sse_route() {
   probe_output="$(
     docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
       set -eu
-      api_domain="$1"
+      web_domain="$1"
       admin_email="$2"
       admin_password="$3"
       cookie_jar="$(mktemp)"
@@ -2312,7 +2312,7 @@ check_notification_sse_route() {
           -c "${cookie_jar}" \
           -o /dev/null \
           -w "%{http_code}" \
-          -H "Host: ${api_domain}" \
+          -H "Host: ${web_domain}" \
           -H "Content-Type: application/json" \
           --data "${login_payload}" \
           "http://caddy:80/member/api/v1/auth/login" || true
@@ -2327,14 +2327,14 @@ check_notification_sse_route() {
           --connect-timeout 3 \
           --max-time 35 \
           -b "${cookie_jar}" \
-          -H "Host: ${api_domain}" \
+          -H "Host: ${web_domain}" \
           -o "${stream_body_file}" \
           -w "%{http_code}" \
           "http://caddy:80/member/api/v1/notifications/stream" || true
       )"
       echo "stream_status=${stream_status}"
       tr -d "\r" < "${stream_body_file}"
-    ' sh "${api_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
+    ' sh "${web_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
   )"
 
   if [[ "${probe_output}" == *"event: connected"* && "${probe_output}" == *"event: heartbeat"* ]]; then
@@ -2375,7 +2375,7 @@ switch_caddy_upstream() {
 
 verify_caddy_route() {
   local expected_backend="$1"
-  local api_domain="$2"
+  local web_domain="$2"
   local expected_host
   if ! expected_host="$(expected_caddy_upstream_host "${expected_backend}")"; then
     return 1
@@ -2396,7 +2396,7 @@ verify_caddy_route() {
     local all_healthy="true"
     for _ in 1 2 3; do
       local code
-      code="$(probe_caddy_http_code "${api_domain}")"
+      code="$(probe_caddy_http_code "${web_domain}")"
       codes+=("${code:-none}")
       if ! is_healthy_http_code "${code}"; then
         all_healthy="false"
@@ -2523,7 +2523,7 @@ resolve_blue_green_burn_in_seconds() {
 rollback_caddy_route_only() {
   local previous_backend="$1"
   local candidate_backend="$2"
-  local api_domain="$3"
+  local web_domain="$3"
 
   echo "burn-in failed; keeping previous backend active: previous=${previous_backend}, candidate=${candidate_backend}" >&2
 
@@ -2560,7 +2560,7 @@ rollback_caddy_route_only() {
     fi
   fi
 
-  if ! verify_caddy_route "${previous_backend}" "${api_domain}"; then
+  if ! verify_caddy_route "${previous_backend}" "${web_domain}"; then
     echo "burn-in rollback failed: caddy route verify failed" >&2
     return 1
   fi
@@ -2583,7 +2583,7 @@ rollback_caddy_route_only() {
 run_blue_green_burn_in() {
   local candidate_backend="$1"
   local previous_backend="$2"
-  local api_domain="$3"
+  local web_domain="$3"
   local duration_seconds
   duration_seconds="$(resolve_blue_green_burn_in_seconds)"
 
@@ -2609,31 +2609,31 @@ run_blue_green_burn_in() {
     fi
 
     if ! check_backend_health "${candidate_backend}"; then
-      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${web_domain}" || true
       return 1
     fi
 
-    if ! verify_caddy_route "${candidate_backend}" "${api_domain}"; then
-      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+    if ! verify_caddy_route "${candidate_backend}" "${web_domain}"; then
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${web_domain}" || true
       return 1
     fi
 
-    post_code="$(probe_caddy_http_code "${api_domain}")"
+    post_code="$(probe_caddy_http_code "${web_domain}")"
     if ! is_healthy_http_code "${post_code}"; then
       echo "burn-in public route verify failed (status=${post_code:-none})" >&2
-      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${web_domain}" || true
       return 1
     fi
 
-    if ! check_notification_sse_route "${api_domain}"; then
+    if ! check_notification_sse_route "${web_domain}"; then
       echo "burn-in notification sse verify failed" >&2
-      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${web_domain}" || true
       return 1
     fi
 
-    if ! check_cloudflared_runtime "${api_domain}"; then
+    if ! check_cloudflared_runtime "${web_domain}"; then
       echo "burn-in cloudflared runtime verify failed" >&2
-      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${api_domain}" || true
+      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${web_domain}" || true
       return 1
     fi
 
@@ -2645,7 +2645,7 @@ run_blue_green_burn_in() {
 
 rollback_to_backend() {
   local rollback_backend="$1"
-  local api_domain="$2"
+  local web_domain="$2"
 
   echo "attempting rollback to ${rollback_backend}" >&2
 
@@ -2675,7 +2675,7 @@ rollback_to_backend() {
     fi
   fi
 
-  if ! verify_caddy_route "${rollback_backend}" "${api_domain}"; then
+  if ! verify_caddy_route "${rollback_backend}" "${web_domain}"; then
     echo "rollback failed: caddy route verify failed" >&2
     return 1
   fi
@@ -2885,8 +2885,6 @@ persist_front_caddy_upstream() {
   echo "front web upstream pinned before edge boot: WEB_UPSTREAM=${active} (Caddyfile literal restored)"
 }
 
-# WEB_DOMAIN이 비어 있으면 Caddyfile 기본값(web.localhost)이 유일한 도달 이름이다. 공개 전환
-# 전에도 edge 경로를 끝까지 검증할 수 있어야 하므로 기본값을 그대로 쓴다.
 front_edge_host() {
   local host
   host="$(host_env_value "WEB_DOMAIN")"
@@ -2894,10 +2892,8 @@ front_edge_host() {
     printf '%s' "${host}"
     return 0
   fi
-  # stdout은 호출자가 값으로 받으므로 신호는 stderr로 낸다. 기본값을 조용히 쓰면 "공개
-  # 도메인에서 검증했다"와 "아직 공개 트래픽이 오지 않는 이름에서 검증했다"가 로그에서 같아 보인다.
-  echo "WEB_DOMAIN is unset: verifying the front edge through the Caddyfile default host (web.localhost); the public web host is not served yet" >&2
-  printf 'web.localhost'
+  echo "WEB_DOMAIN is required for front edge verification" >&2
+  return 1
 }
 
 probe_front_http_code() {
@@ -3190,22 +3186,12 @@ rollback_front_to() {
 }
 
 run_front_blue_green_deploy() {
-  local web_domain active_front next_front active_image previous_candidate_image
+  local active_front next_front active_image previous_candidate_image
   local web_host pre_switch_sha switched_at served_sha
 
   if ! compose_profile_enabled "front"; then
-    web_domain="$(host_env_value "WEB_DOMAIN")"
-    if [[ -n "${web_domain}" ]]; then
-      # 프로필이 꺼졌는데 공개 web 호스트가 살아 있으면 front tier는 배포 대상 밖에 있으면서도
-      # 트래픽을 받고 있다는 뜻이다. 그 상태를 성공으로 보고하면 stale front가 그대로 서빙된다.
-      echo "front profile is disabled while WEB_DOMAIN=${web_domain} is served by the front tier: refusing to report a front deploy that cannot happen" >&2
-      return 1
-    fi
-    # 서버가 front tier를 아직 채택하지 않은 상태(cutover 런북 2단계 전, 또는 의도적 opt-out).
-    # 배포할 대상이 없으므로 실패가 아니지만, 결과를 명시적으로 남긴다.
-    echo "front_deploy_result=profile_disabled"
-    echo "front deploy skipped: COMPOSE_PROFILES has no 'front' profile and WEB_DOMAIN is unset (the front tier is not part of this server yet)"
-    return 0
+    echo "front profile is disabled: refusing front deploy" >&2
+    return 1
   fi
 
   if [[ -z "${STAGED_FRONT_IMAGE}" ]]; then
@@ -3223,7 +3209,7 @@ run_front_blue_green_deploy() {
 
   active_front="$(detect_active_front)"
   next_front="$(other_front "${active_front}")"
-  web_host="$(front_edge_host)"
+  web_host="$(front_edge_host)" || return 1
 
   active_image="$(resolve_preserved_front_image "${active_front}")" || return 1
   if [[ -z "${active_image}" ]]; then
@@ -3355,9 +3341,9 @@ apply_auto_memory_tuner
 prepare_front_runtime_images
 persist_front_caddy_upstream
 
-api_domain="$(env_value "API_DOMAIN")"
-if [[ -z "${api_domain}" ]]; then
-  echo "missing API_DOMAIN in ${ENV_FILE}" >&2
+web_domain="$(env_value "WEB_DOMAIN")"
+if [[ -z "${web_domain}" ]]; then
+  echo "missing WEB_DOMAIN in ${ENV_FILE}" >&2
   exit 1
 fi
 
@@ -3420,7 +3406,7 @@ warn_crashlooping_services \
 reset_grafana_admin_password
 ensure_caddy_mount_sync
 if [[ "${active_backend_was_running}" == "true" ]]; then
-  check_cloudflared_runtime "${api_domain}"
+  check_cloudflared_runtime "${web_domain}"
 else
   echo "skip cloudflared runtime check before candidate health: active backend is not running (${active_backend})"
 fi
@@ -3466,30 +3452,30 @@ fi
 
 switch_caddy_upstream "${next_backend}"
 
-if ! verify_caddy_route "${next_backend}" "${api_domain}"; then
-  rollback_to_backend "${active_backend}" "${api_domain}" || true
+if ! verify_caddy_route "${next_backend}" "${web_domain}"; then
+  rollback_to_backend "${active_backend}" "${web_domain}" || true
   compose stop "${next_backend}" || true
   exit 1
 fi
 
-post_code="$(probe_caddy_http_code "${api_domain}")"
+post_code="$(probe_caddy_http_code "${web_domain}")"
 if ! is_healthy_http_code "${post_code}"; then
   echo "post-switch verify failed (status=${post_code:-none})" >&2
-  rollback_to_backend "${active_backend}" "${api_domain}" || true
+  rollback_to_backend "${active_backend}" "${web_domain}" || true
   compose stop "${next_backend}" || true
   exit 1
 fi
 
 echo "post-switch phase: notification sse verify"
-if ! check_notification_sse_route "${api_domain}"; then
+if ! check_notification_sse_route "${web_domain}"; then
   echo "post-switch notification sse verify failed" >&2
-  rollback_to_backend "${active_backend}" "${api_domain}" || true
+  rollback_to_backend "${active_backend}" "${web_domain}" || true
   compose stop "${next_backend}" || true
   exit 1
 fi
 
 echo "post-switch phase: blue/green burn-in"
-if ! run_blue_green_burn_in "${next_backend}" "${active_backend}" "${api_domain}"; then
+if ! run_blue_green_burn_in "${next_backend}" "${active_backend}" "${web_domain}"; then
   exit 1
 fi
 
@@ -3501,9 +3487,9 @@ echo "post-switch phase: install steady-state guard"
 ensure_steady_state_guard || true
 
 echo "post-switch phase: cloudflared runtime verify"
-if ! check_cloudflared_runtime "${api_domain}"; then
+if ! check_cloudflared_runtime "${web_domain}"; then
   echo "post-switch cloudflared runtime verify failed" >&2
-  rollback_to_backend "${active_backend}" "${api_domain}" || true
+  rollback_to_backend "${active_backend}" "${web_domain}" || true
   compose stop "${next_backend}" || true
   exit 1
 fi
@@ -3513,7 +3499,7 @@ warn_grafana_embed_origin_route
 warn_grafana_embed_public_route
 
 echo "post-switch phase: public read prewarm"
-prewarm_public_read_cache "${api_domain}"
+prewarm_public_read_cache "${web_domain}"
 
 echo "post-switch verify ok (status=${post_code}); burn-in complete; inactive backend stopped"
 compose ps

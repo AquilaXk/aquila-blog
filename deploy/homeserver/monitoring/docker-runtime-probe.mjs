@@ -1,5 +1,7 @@
 import fs from "node:fs"
 import http from "node:http"
+import { realpathSync } from "node:fs"
+import { pathToFileURL } from "node:url"
 
 const args = process.argv.slice(2)
 const optionValue = (name, fallback) => {
@@ -32,17 +34,38 @@ const diskPaths = optionValue("--disk-paths", "minio=/host-storage/minio")
   .filter(Boolean)
 
 const dockerSocketPath = optionValue("--docker-socket", "/var/run/docker.sock")
-const readinessTargets = optionValue(
-  "--readiness-targets",
-  "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back_worker:8080",
+
+// Spring Boot's readiness group. Every backend container answers here, so it stays the default and
+// the pre-#1541 `<component>=<host>:<port>` argument form keeps working unchanged.
+const DEFAULT_READINESS_PATH = "/actuator/health/readiness"
+
+// `<component>=<host>:<port>` or `<component>=<host>:<port><path>`.
+//
+// The front tier has no `/actuator/*` surface, so probing it without a per-target path would report
+// every front container as never-ready (404) - a permanently red gauge that operators learn to
+// ignore. The path is read from the first `/` after the address, which keeps `target` (the metric
+// label) at `host:port` so existing series and the `{component="api"}` alert are untouched.
+const parseReadinessTargets = (raw) =>
+  String(raw ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => {
+      const separator = value.indexOf("=")
+      const component = separator > 0 ? value.slice(0, separator) : "unknown"
+      const address = separator > 0 ? value.slice(separator + 1) : value
+      const pathStart = address.indexOf("/")
+      const target = pathStart === -1 ? address : address.slice(0, pathStart)
+      const path = pathStart === -1 ? DEFAULT_READINESS_PATH : address.slice(pathStart)
+      return { component, target: target || value, path }
+    })
+
+const readinessTargets = parseReadinessTargets(
+  optionValue(
+    "--readiness-targets",
+    "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back_worker:8080",
+  ),
 )
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean)
-  .map((value) => {
-    const [component, target] = value.split("=")
-    return { component: component || "unknown", target: target || value }
-  })
 
 const escapeLabel = (value) => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")
 
@@ -90,7 +113,7 @@ const dockerGet = (path) =>
     request.end()
   })
 
-const probeReadiness = ({ component, target }) =>
+const probeReadiness = ({ component, target, path = DEFAULT_READINESS_PATH }) =>
   new Promise((resolve) => {
     const [host, port = "8080"] = target.split(":")
     const request = http.request(
@@ -98,7 +121,10 @@ const probeReadiness = ({ component, target }) =>
         method: "GET",
         host,
         port: Number(port),
-        path: "/actuator/health/readiness",
+        path,
+        // front readiness 경로는 실제 백엔드까지 가는 요청이라(30s 스크레이프 x 두 색 = 분당 4회)
+        // 백엔드 접근 로그에 섞인다. 프로브 트래픽을 사용자 트래픽과 구분할 수 있게 표시한다.
+        headers: { "user-agent": "aquila-docker-runtime-probe/1.0" },
         timeout: 3000,
       },
       (response) => {
@@ -193,7 +219,9 @@ const collectMetrics = async () => {
     "# TYPE docker_container_memory_limit_bytes gauge",
     "# HELP docker_container_oom_killed Docker OOMKilled state by compose service.",
     "# TYPE docker_container_oom_killed gauge",
-    "# HELP aquila_backend_readiness_up Backend readiness endpoint probe result.",
+    // Name kept for series continuity. Since #1541 it also carries component=\"front\", whose
+    // readiness path is the front -> backend server-side proxy route rather than an actuator group.
+    "# HELP aquila_backend_readiness_up Readiness endpoint probe result by component.",
     "# TYPE aquila_backend_readiness_up gauge",
   ]
 
@@ -230,6 +258,22 @@ const server = http.createServer(async (request, response) => {
   }
 })
 
-server.listen(servePort, "0.0.0.0", () => {
-  console.log(`docker-runtime-probe listening on :${servePort}`)
-})
+// Same CLI-entry guard as public-edge-probe.mjs. Without it, importing this module from a unit test
+// would bind the exporter port as a side effect.
+const isCliEntry = () => {
+  const entryPath = process.argv[1]
+  if (!entryPath) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entryPath)).href
+  } catch {
+    return import.meta.url === pathToFileURL(entryPath).href
+  }
+}
+
+if (isCliEntry()) {
+  server.listen(servePort, "0.0.0.0", () => {
+    console.log(`docker-runtime-probe listening on :${servePort}`)
+  })
+}
+
+export { DEFAULT_READINESS_PATH, parseReadinessTargets }

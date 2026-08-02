@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
-import { execFileSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 
@@ -13,6 +14,59 @@ const alertmanagerPath = path.join(repoRoot, "deploy/homeserver/monitoring/alert
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 
 const read = (filePath) => readFileSync(filePath, "utf8")
+
+const promtoolTestPath = path.join(repoRoot, "tools/test/task-alerts.promtool-test.yml")
+const CACHE_STATE_ALERT = "AquilaPublicEdgeCacheStateUnobserved"
+
+// Block-scalar expr of a single alert, located by name. Every index is asserted so a rename or a
+// reformat reports what moved instead of throwing on a -1 slice.
+const alertExpr = (alertsText, alertName) => {
+  const ruleStart = alertsText.indexOf(`alert: ${alertName}`)
+  assert.notEqual(ruleStart, -1, `${alertName} is missing from task-alerts.yml`)
+  const rule = alertsText.slice(ruleStart)
+
+  const exprStart = rule.indexOf("expr: |")
+  assert.notEqual(exprStart, -1, `${alertName} no longer uses a block-scalar expr`)
+  const body = rule.slice(exprStart + "expr: |".length)
+
+  const exprEnd = body.indexOf("\n        for:")
+  assert.notEqual(exprEnd, -1, `${alertName} expr block is not terminated by a for: line`)
+  return {
+    text: body.slice(0, exprEnd),
+    start: ruleStart + exprStart,
+    end: ruleStart + exprStart + "expr: |".length + exprEnd,
+  }
+}
+
+const collapseWhitespace = (text) => text.replace(/\s+/g, " ").trim()
+
+const promtoolAvailable = () => {
+  const probe = spawnSync("promtool", ["--version"], { stdio: "ignore" })
+  return probe.status === 0
+}
+
+// Resolved `command:` of a compose service, or null when this environment cannot resolve the file.
+//
+// Availability of the docker CLI is the wrong predicate. The backend-ci runner has docker compose
+// but its version rejects this file under --no-interpolate:
+//   invalid spec: ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}:/host-storage:ro: too many colons
+// (the short volume syntax carries a `:` inside the default expansion). So the probe has to be the
+// real call. Callers assert the same contract either way - only the reader changes, never the check.
+const resolvedServiceCommand = (service) => {
+  const resolved = spawnSync(
+    "docker",
+    ["compose", "-f", composePath, "config", "--no-interpolate", "--format", "json"],
+    { encoding: "utf8" },
+  )
+  if (resolved.status !== 0 || !resolved.stdout) return null
+  try {
+    return JSON.parse(resolved.stdout).services[service].command
+  } catch {
+    return null
+  }
+}
+
+const runPromtoolTest = (testFilePath) => spawnSync("promtool", ["test", "rules", testFilePath], { encoding: "utf8" })
 
 const targetKey = (contract, targetName, keyName) => {
   const target = contract.targets[targetName]
@@ -177,14 +231,28 @@ test("postgres_exporter image pins, compose flags, and blind-spot alerts stay co
   assert(exporterStart >= 0, "postgres_exporter service is missing from the compose file")
   // slice() would silently widen to the whole file if the end marker moved (negative index).
   assert(grafanaStart > exporterStart, "grafana must still follow postgres_exporter in the compose file")
-  const resolvedCompose = JSON.parse(
-    execFileSync(
-      "docker",
-      ["compose", "-f", composePath, "config", "--no-interpolate", "--format", "json"],
-      { encoding: "utf8" },
-    ),
-  )
-  assert.deepEqual(resolvedCompose.services.postgres_exporter.command, ["--collector.stat_checkpointer"])
+  // This file joined CI with #1541; before that it only ever ran locally, where compose resolves.
+  // Both branches assert the same contract, so bringing the file into CI costs no coverage.
+  const exporterCommand = resolvedServiceCommand("postgres_exporter")
+  if (exporterCommand) {
+    assert.deepEqual(exporterCommand, ["--collector.stat_checkpointer"])
+  } else {
+    // Same guarantee without compose: the flag must be the service's only command entry.
+    const exporterBlock = compose.slice(exporterStart, grafanaStart)
+    const commandStart = exporterBlock.indexOf("\n    command:\n")
+    assert.notEqual(commandStart, -1, "postgres_exporter must declare a command list")
+    // Only the list items directly under `command:`. Filtering the whole block instead would also
+    // collect the depends_on and networks entries.
+    const commandEntries = []
+    for (const line of exporterBlock.slice(commandStart + "\n    command:\n".length).split("\n")) {
+      if (!/^\s+-\s/.test(line)) break
+      commandEntries.push(line)
+    }
+    assert.deepEqual(
+      commandEntries.map((line) => line.trim().replace(/^-\s*/, "").replace(/^"(.*)"$/, "$1")),
+      ["--collector.stat_checkpointer"],
+    )
+  }
 
   // Drift guard only: keeps the three tracked fallback pins from diverging or rolling back
   // below v0.17.0, the first release carrying the pg_stat_checkpointer fix. These three did
@@ -251,3 +319,128 @@ test("autoheal and its docker socket proxy stay under continuous restart observa
     assert(alertedAlternatives.includes(service), `${service} must be covered by AquilaContainerRestarted`)
   }
 })
+
+// The activation gate is what keeps this alert silent through the domain transition window, where
+// deploy.yml deliberately points the probe at the host the previous platform still serves. PromQL
+// binds `and` tighter than `or`, so dropping the parentheses around the `or` branch lets the
+// `min < 1` side escape the gate entirely - measured: the alert then fires on a transition-window
+// series. Substring assertions do not see either mutation, so this pins the whole shape.
+//
+// This runs with no external tooling, which makes it the gate that is always in effect. The
+// promtool tests below are the semantic superset.
+test("cache-state alert keeps its activation gate structure", () => {
+  const expr = alertExpr(read(taskAlertsPath), CACHE_STATE_ALERT)
+
+  assert.equal(
+    collapseWhitespace(expr.text),
+    '( min(aquila_public_edge_probe_cache_state_observed{route="/"}) < 1' +
+      ' or absent(aquila_public_edge_probe_cache_state_observed{route="/"}) )' +
+      " and on()" +
+      ' (max(max_over_time(aquila_public_edge_probe_cache_state_observed{route="/"}[24h])) > 0)',
+  )
+
+  // The promtool cases are skipped where promtool is absent, so nothing else notices if the file
+  // is deleted or unhooked from the rules it is supposed to cover.
+  const promtoolTest = read(promtoolTestPath)
+  assert.match(promtoolTest, /rule_files:\s*\n\s*-\s*\.\.\/\.\.\/deploy\/homeserver\/monitoring\/rules\/task-alerts\.yml/)
+  assert.match(promtoolTest, new RegExp(`alertname: ${CACHE_STATE_ALERT}`))
+})
+
+// The decay note next to the alert states that front-render-gate has no automated caller and that
+// wiring it belongs to #1602. That sentence was wrong once already - it claimed the gate ran on
+// every front deploy when nothing invoked it. This pins the claim to the tree: wiring a caller
+// makes the sentence false, and this test fails until the comment is corrected.
+test("the cache-state decay note matches how front-render-gate is actually invoked", () => {
+  const alerts = read(taskAlertsPath)
+  const workflow = read(workflowPath)
+
+  const gateIsWired = workflow.includes("front-render-gate")
+  assert.equal(
+    gateIsWired,
+    false,
+    "deploy.yml now invokes front-render-gate: update the decay note in task-alerts.yml, which states it has no automated caller",
+  )
+  assert.match(alerts, /#1602/, "the decay note must point at the issue that owns the real fix")
+})
+
+// One malformed expr makes Prometheus reject the whole file, and all 45 alerts in it go silent
+// while every dashboard still looks normal. Mirrors tools/test/cloud-media-alerts.test.sh.
+test("task alert rules parse", { skip: promtoolAvailable() ? false : "promtool is not installed" }, () => {
+  const result = spawnSync("promtool", ["check", "rules", taskAlertsPath], { encoding: "utf8" })
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.match(result.stdout, /SUCCESS/)
+})
+
+test(
+  "cache-state alert behaviour is pinned by promtool unit tests",
+  { skip: promtoolAvailable() ? false : "promtool is not installed" },
+  () => {
+    const result = runPromtoolTest(promtoolTestPath)
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  },
+)
+
+// Mutation coverage: proves the promtool cases above actually discriminate. Without this, the unit
+// tests could be passing for a reason unrelated to the gate.
+test(
+  "promtool unit tests reject a broken activation gate",
+  { skip: promtoolAvailable() ? false : "promtool is not installed" },
+  () => {
+    const alerts = read(taskAlertsPath)
+    const expr = alertExpr(alerts, CACHE_STATE_ALERT)
+    const shipped = expr.text
+
+    const withoutParentheses = shipped
+      .replace(/^(\n[ \t]*)\(\n[ \t]*/, "$1")
+      .replace(/\n[ \t]*\)\n([ \t]*)and on\(\)/, "\n$1and on()")
+    const withOrJoin = shipped.replace("and on()", "or on()")
+
+    assert.notEqual(withoutParentheses, shipped, "parenthesis mutation did not change the expr")
+    assert.notEqual(withOrJoin, shipped, "join mutation did not change the expr")
+
+    const workdir = mkdtempSync(path.join(tmpdir(), "task-alerts-mutation-"))
+    try {
+      for (const [name, mutatedExpr] of [
+        ["unparenthesized or branch", withoutParentheses],
+        ["or join instead of and join", withOrJoin],
+      ]) {
+        const rulesPath = path.join(workdir, "rules.yml")
+        const testPath = path.join(workdir, "test.yml")
+        writeFileSync(rulesPath, alerts.slice(0, expr.start) + "expr: |" + mutatedExpr + alerts.slice(expr.end))
+        writeFileSync(
+          testPath,
+          [
+            "rule_files:",
+            "  - rules.yml",
+            "evaluation_interval: 1m",
+            "tests:",
+            "  - name: transition window must stay silent",
+            "    interval: 5m",
+            "    input_series:",
+            `      - series: 'aquila_public_edge_probe_cache_state_observed{route="/",request_index="1"}'`,
+            '        values: "0+0x300"',
+            "    alert_rule_test:",
+            "      - eval_time: 3h",
+            `        alertname: ${CACHE_STATE_ALERT}`,
+            "        exp_alerts: []",
+            "",
+          ].join("\n"),
+        )
+
+        const syntax = spawnSync("promtool", ["check", "rules", rulesPath], { encoding: "utf8" })
+        assert.equal(
+          syntax.status,
+          0,
+          `mutation "${name}" must remain syntactically valid:\n${syntax.stdout}\n${syntax.stderr}`,
+        )
+
+        const result = runPromtoolTest(testPath)
+        assert.notEqual(result.status, 0, `mutation "${name}" was not caught:\n${result.stdout}\n${result.stderr}`)
+      }
+    } finally {
+      rmSync(workdir, { recursive: true, force: true })
+    }
+  },
+)

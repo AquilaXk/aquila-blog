@@ -26,6 +26,28 @@ const ROUTE_ALLOWED_STATUSES = new Map([
   ["/not-found", [404]],
 ])
 
+// Cache-state source for the home-server front (#1541). Vercel's `x-vercel-cache` never appears
+// again after the move, so reading it would pin every sample to one constant and the cold-ratio
+// panels/alerts would keep evaluating a value that can no longer change.
+//
+// Measured on the home server (2026-08-02, front_green behind the Caddy web vhost):
+//   GET /            -> `X-Nextjs-Cache: STALE`, then `HIT` once background regeneration finished
+//   GET /posts/507   -> `X-Nextjs-Cache: HIT`
+// So Next.js emits the state on ISR responses and this is the replacement source.
+const CACHE_STATE_HEADER = "x-nextjs-cache"
+// Deleting the Vercel header without a replacement would leave every sample at `UNKNOWN`, which
+// reads exactly like "probe has not looked yet". A missing header is a distinct, actionable fact -
+// the route is not ISR, or something on the edge stripped the header - so it gets its own label and
+// a companion gauge (`..._cache_state_observed`) that an alert can watch. Never fold it back into
+// `UNKNOWN`.
+const CACHE_STATE_ABSENT = "NO_CACHE_HEADER"
+const CACHE_STATE_ERROR = "ERROR"
+
+const readCacheState = (headerValue) => {
+  const value = String(headerValue ?? "").trim()
+  return value ? value.toUpperCase() : CACHE_STATE_ABSENT
+}
+
 const HELP_TEXT = `public-edge-probe.mjs
 
 Usage:
@@ -307,6 +329,7 @@ const toMarkdownReport = (report) => {
   lines.push("")
   lines.push(`- baseUrl: ${report.baseUrl}`)
   lines.push(`- probedAt: ${report.probedAt}`)
+  lines.push(`- cache state header: ${CACHE_STATE_HEADER}`)
   lines.push(`- first request cache counts: ${JSON.stringify(report.overall.firstRequestCache.counts)}`)
   lines.push("")
 
@@ -339,6 +362,8 @@ const toPrometheusText = (report) => {
     "# TYPE aquila_public_edge_probe_route_up gauge",
     "# HELP aquila_public_edge_probe_first_probe_after_publish Indicates whether the current probe is the first probe after publish.",
     "# TYPE aquila_public_edge_probe_first_probe_after_publish gauge",
+    `# HELP aquila_public_edge_probe_cache_state_observed Indicates whether the response carried the ${CACHE_STATE_HEADER} cache-state header.`,
+    "# TYPE aquila_public_edge_probe_cache_state_observed gauge",
   ]
 
   for (const route of report.routes) {
@@ -349,6 +374,9 @@ const toPrometheusText = (report) => {
       )
       lines.push(
         `aquila_public_edge_probe_status_code{route="${slugifyMetricLabel(route.route)}",request_index="${sample.requestIndex}"} ${sample.status || 0}`
+      )
+      lines.push(
+        `aquila_public_edge_probe_cache_state_observed{route="${slugifyMetricLabel(route.route)}",request_index="${sample.requestIndex}"} ${sample.cacheStateObserved ? 1 : 0}`
       )
     }
     lines.push(
@@ -391,7 +419,7 @@ const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }
     const targetUrl = `${baseUrl}${route}`
     try {
       const { response, body, ttfbMs, totalMs } = await fetchText(targetUrl, timeoutMs)
-      const cacheState = response.headers.get("x-vercel-cache") || "UNKNOWN"
+      const cacheState = readCacheState(response.headers.get(CACHE_STATE_HEADER))
       const ageHeader = safeNumber(response.headers.get("age") || "")
       buildId = buildId || parseBuildId(body)
       const parsedCanonicalPath = parseCanonicalPath(body)
@@ -402,6 +430,7 @@ const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }
         status: response.status,
         statusAllowed: isStatusAllowedForRoute(route, response.status),
         cacheState,
+        cacheStateObserved: cacheState !== CACHE_STATE_ABSENT,
         ageSeconds: ageHeader ?? 0,
         ttfbMs,
         totalMs,
@@ -412,7 +441,8 @@ const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }
         requestIndex,
         status: 0,
         statusAllowed: false,
-        cacheState: "ERROR",
+        cacheState: CACHE_STATE_ERROR,
+        cacheStateObserved: false,
         ageSeconds: 0,
         ttfbMs: timeoutMs,
         totalMs: timeoutMs,
@@ -693,4 +723,4 @@ if (isCliEntry()) {
   })
 }
 
-export { createHealthPayload, runProbe }
+export { CACHE_STATE_ABSENT, CACHE_STATE_HEADER, createHealthPayload, readCacheState, runProbe }

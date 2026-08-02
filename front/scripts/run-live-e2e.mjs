@@ -69,15 +69,21 @@ applyFallbackEnv("E2E_ADMIN_EMAIL", "E2E_LIVE_ADMIN_EMAIL")
 applyFallbackEnv("E2E_ADMIN_USERNAME", "E2E_LIVE_ADMIN_USERNAME")
 applyFallbackEnv("E2E_ADMIN_PASSWORD", "E2E_LIVE_ADMIN_PASSWORD")
 
+const normalizeLiveCredentialEnv = () => {
+  for (const suffix of ["EMAIL", "USERNAME", "PASSWORD"]) {
+    const liveKey = `E2E_LIVE_ADMIN_${suffix}`
+    const value = process.env[`E2E_ADMIN_${suffix}`]?.trim()
+    if (value) process.env[liveKey] = value
+    else delete process.env[liveKey]
+  }
+}
+
 const loadedEnvFileNames = loadedEnvFiles.map((envFile) => envFile.path).join(", ")
 if (loadedEnvFileNames) {
   console.log(`[live-e2e] loaded env files: ${loadedEnvFileNames}`)
 }
 
-const hasLiveCredentials = Boolean(
-  (process.env.E2E_ADMIN_EMAIL?.trim() || process.env.E2E_ADMIN_USERNAME?.trim()) &&
-    process.env.E2E_ADMIN_PASSWORD?.trim()
-)
+const hasLiveCredentials = ["E2E_ADMIN_EMAIL", "E2E_ADMIN_USERNAME", "E2E_ADMIN_PASSWORD"].some((key) => process.env[key]?.trim())
 
 if (!hasLiveCredentials) {
   console.warn(
@@ -99,7 +105,10 @@ const assertEnvTarget = (target) => {
 assertEnvTarget("live-ready")
 // 자격 증명은 선택이다(없으면 해당 테스트가 skip). 다만 주어졌다면 placeholder나 반쪽짜리
 // identity로 실행되지 않도록 credentialed 계약까지 확인한다.
-if (process.env.E2E_LIVE_ADMIN_PASSWORD?.trim()) assertEnvTarget("live-e2e")
+if (hasLiveCredentials) {
+  normalizeLiveCredentialEnv()
+  assertEnvTarget("live-e2e")
+}
 
 const childEnv = {
   ...process.env,

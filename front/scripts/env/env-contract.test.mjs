@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 
@@ -144,8 +145,71 @@ test("the manual live E2E runner consumes the live env targets and runs both liv
 
   assert.match(runner, /assertEnvTarget\("live-ready"\)/)
   assert.match(runner, /assertEnvTarget\("live-e2e"\)/)
+  assert.match(runner, /if \(hasLiveCredentials\) \{\s+normalizeLiveCredentialEnv\(\)\s+assertEnvTarget\("live-e2e"\)\s+\}/)
   assert.match(runner, /const liveSpecs = \["e2e\/live\.spec\.ts", "e2e\/editor-live-visual\.spec\.ts"\]/)
   assert.match(runner, /spawn\("yarn", \["playwright", "test", \.\.\.liveSpecs/)
+})
+
+test("the manual live E2E runner validates every supplied direct credential shape", () => {
+  const sourceRunnerPath = path.join(frontRoot, "scripts/run-live-e2e.mjs")
+  const tempRoot = mkdtempSync(path.join(tmpdir(), "aquila-live-e2e-"))
+  const runnerPath = path.join(tempRoot, "scripts/run-live-e2e.mjs")
+  const binDir = path.join(tempRoot, "bin")
+  const yarnPath = path.join(binDir, "yarn")
+  mkdirSync(path.join(tempRoot, "scripts/env"), { recursive: true })
+  mkdirSync(path.join(tempRoot, "config"), { recursive: true })
+  mkdirSync(path.join(tempRoot, "node_modules/@next/env"), { recursive: true })
+  mkdirSync(binDir)
+  copyFileSync(sourceRunnerPath, runnerPath)
+  copyFileSync(path.join(frontRoot, "scripts/env/validate-env.mjs"), path.join(tempRoot, "scripts/env/validate-env.mjs"))
+  copyFileSync(path.join(frontRoot, "config/env.contract.json"), path.join(tempRoot, "config/env.contract.json"))
+  writeFileSync(path.join(tempRoot, "node_modules/@next/env/package.json"), '{"type":"module","exports":"./index.js"}')
+  writeFileSync(path.join(tempRoot, "node_modules/@next/env/index.js"), "export const loadEnvConfig = () => ({ loadedEnvFiles: [] })\nexport default { loadEnvConfig }\n")
+  writeFileSync(yarnPath, "#!/usr/bin/env node\nprocess.stdout.write('live-e2e-stub-ran\\n')\n")
+  chmodSync(yarnPath, 0o755)
+
+  const run = (credentials) =>
+    spawnSync(process.execPath, [runnerPath], {
+      cwd: tempRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH || ""}`,
+        PLAYWRIGHT_BASE_URL: "https://www.example.test",
+        E2E_API_BASE_URL: "https://api.example.test",
+        E2E_ADMIN_EMAIL: "",
+        E2E_ADMIN_USERNAME: "",
+        E2E_ADMIN_PASSWORD: "",
+        E2E_LIVE_ADMIN_EMAIL: "",
+        E2E_LIVE_ADMIN_USERNAME: "",
+        E2E_LIVE_ADMIN_PASSWORD: "",
+        ...credentials,
+      },
+    })
+
+  try {
+    const valid = run({ E2E_ADMIN_EMAIL: "admin@example.test", E2E_ADMIN_PASSWORD: "live-admin-password" })
+    assert.equal(valid.status, 0, valid.stderr)
+    assert.match(valid.stdout, /live-e2e-stub-ran/)
+
+    const placeholder = "change_me_live_admin_password"
+    const invalid = [
+      run({ E2E_ADMIN_EMAIL: "admin@example.test", E2E_ADMIN_PASSWORD: placeholder }),
+      run({ E2E_ADMIN_EMAIL: "admin@example.test", E2E_ADMIN_USERNAME: "admin", E2E_ADMIN_PASSWORD: "live-admin-password" }),
+      run({ E2E_ADMIN_PASSWORD: "live-admin-password" }),
+    ]
+    for (const result of invalid) {
+      assert.equal(result.status, 1, result.stderr)
+      assert.doesNotMatch(result.stdout, /live-e2e-stub-ran/)
+    }
+    assert.doesNotMatch(invalid[0].stderr, new RegExp(placeholder))
+
+    const credentialFree = run({})
+    assert.equal(credentialFree.status, 0, credentialFree.stderr)
+    assert.match(credentialFree.stdout, /live-e2e-stub-ran/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
 
 test("live-e2e rejects placeholder credentials", async () => {

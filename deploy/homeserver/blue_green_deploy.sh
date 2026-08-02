@@ -40,6 +40,10 @@ BLUE_GREEN_BURN_IN_SECONDS="${BLUE_GREEN_BURN_IN_SECONDS:-}"
 BLUE_GREEN_BURN_IN_STANDARD_SECONDS="${BLUE_GREEN_BURN_IN_STANDARD_SECONDS:-180}"
 BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS="${BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS:-600}"
 BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS="${BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS:-15}"
+# 정규화 뒤에는 "셸이 넘기지 않음"과 "셸이 false로 넘김"이 구분되지 않는다. 그 구분이 필요해서
+# 원본 제공 여부를 먼저 기록한다 - deploy.yml의 backend 경로는 이 값을 넘기지만 front 경로는
+# .env.prod를 신뢰하고 넘기지 않는다(아래 resolve_runtime_split_from_env_file).
+RUNTIME_SPLIT_ENABLED_FROM_SHELL="${RUNTIME_SPLIT_ENABLED+provided}"
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
 RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE:-A}"
 AUTO_MEMORY_TUNER_ENABLED="${AUTO_MEMORY_TUNER_ENABLED:-true}"
@@ -62,12 +66,24 @@ FRONT_RENDER_PATH="${FRONT_RENDER_PATH:-/}"
 # front -> backend 서버 사이드 경로. 실측(2026-08-02): BACKEND_INTERNAL_URL이 비어 있으면 컨테이너는
 # healthy, `/`는 빌드 타임 프리렌더라 200인데 이 경로만 502였다. 렌더 경로까지만 보는 게이트는 그
 # 상태를 통과시킨다. 공개 read GET이라 인증이 필요 없고 back_read 모드에서도 허용되는 경로를 쓴다.
+#
+# 트레이드오프: backend가 죽어 있으면 front-only hotfix도 이 게이트에서 막힌다. 의도한 것이다 —
+# 이 경로가 502인 front는 로그인·목록·상세가 전부 죽은 상태이고, 그것을 "배포 성공"으로 보고하면
+# 안 된다. backend 장애 중 front만 올려야 하는 예외 상황에서는 이 변수를 backend를 타지 않는
+# 경로로 지정해 배포하고(예: /robots.txt), 그 사실이 배포 로그에 남는다.
 FRONT_BACKEND_PROXY_PATH="${FRONT_BACKEND_PROXY_PATH:-/api/backend/post/api/v1/posts/tags}"
-# first boot는 .next/cache가 비어 SSR이 전부 cold다. 150 x 2s = 300s로 그 구간을 견딘다.
+# first boot는 .next/cache가 비어 SSR이 전부 cold다.
+#
+# 시도당 최악 = 프로브 3개(liveness/render/backend proxy) x max-time + interval. 기본값으로
+# 3x10s + 2s = 32s이고, 150회를 다 쓰면 80분이라 job timeout(60분)에 먼저 잘린다. 잘리면
+# rollback 없이 끝나므로 시도 횟수가 아니라 **벽시계 예산**이 실질 상한이어야 한다.
+# 600s는 cold SSR 기동 실측(수십 초)의 열 배 이상이면서 rollback과 후속 검증에 필요한 시간을
+# job timeout 안에 남긴다.
 FRONT_HEALTHCHECK_RETRIES="${FRONT_HEALTHCHECK_RETRIES:-150}"
+FRONT_HEALTHCHECK_DEADLINE_SECONDS="${FRONT_HEALTHCHECK_DEADLINE_SECONDS:-600}"
 FRONT_HEALTHCHECK_INTERVAL_SECONDS="${FRONT_HEALTHCHECK_INTERVAL_SECONDS:-2}"
 FRONT_HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${FRONT_HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-3}"
-FRONT_HEALTHCHECK_MAX_TIME_SECONDS="${FRONT_HEALTHCHECK_MAX_TIME_SECONDS:-20}"
+FRONT_HEALTHCHECK_MAX_TIME_SECONDS="${FRONT_HEALTHCHECK_MAX_TIME_SECONDS:-10}"
 FRONT_ROUTE_VERIFY_RETRIES="${FRONT_ROUTE_VERIFY_RETRIES:-20}"
 FRONT_ROUTE_VERIFY_INTERVAL_SECONDS="${FRONT_ROUTE_VERIFY_INTERVAL_SECONDS:-2}"
 STAGED_FRONT_IMAGE="${STAGED_FRONT_IMAGE:-}"
@@ -157,6 +173,7 @@ AUTO_MEMORY_TUNER_MAX_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_M
 AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB}" "2048")"
 AUTO_MEMORY_TUNER_MIN_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MIN_BUDGET_MB}" "1280")"
 FRONT_HEALTHCHECK_RETRIES="$(normalize_positive_int "${FRONT_HEALTHCHECK_RETRIES}" "150")"
+FRONT_HEALTHCHECK_DEADLINE_SECONDS="$(normalize_positive_int "${FRONT_HEALTHCHECK_DEADLINE_SECONDS}" "600")"
 FRONT_HEALTHCHECK_INTERVAL_SECONDS="$(normalize_positive_int "${FRONT_HEALTHCHECK_INTERVAL_SECONDS}" "2")"
 FRONT_ROUTE_VERIFY_RETRIES="$(normalize_positive_int "${FRONT_ROUTE_VERIFY_RETRIES}" "20")"
 FRONT_ROUTE_VERIFY_INTERVAL_SECONDS="$(normalize_positive_int "${FRONT_ROUTE_VERIFY_INTERVAL_SECONDS}" "2")"
@@ -166,6 +183,23 @@ FRONT_ROUTE_VERIFY_INTERVAL_SECONDS="$(normalize_positive_int "${FRONT_ROUTE_VER
 compose_profiles_from_env_file() {
   [[ -f "${ENV_FILE}" ]] || return 0
   trim_quotes "$(env_value "COMPOSE_PROFILES")"
+}
+
+# RUNTIME_SPLIT_ENABLED는 resolve_compose_profiles가 프로필 집합을 만들 때 쓰는 입력이다. 셸이
+# 넘기지 않으면 false로 떨어지는데, front 경로(deploy.yml이 HOME_SERVER_ENV를 넘기지 않는다)에서
+# 그러면 .env.prod가 runtime-split을 켜 두었어도 backend 경로와 **다른 프로필 집합**으로
+# compose를 평가하게 된다. 셸 값이 없을 때만 파일을 읽는다 - 셸이 넘긴 값은 언제나 우선한다
+# (check_deploy_status.sh가 probe와 모드를 맞추는 방식과 같다).
+resolve_runtime_split_from_env_file() {
+  [[ -z "${RUNTIME_SPLIT_ENABLED_FROM_SHELL}" ]] || return 0
+  [[ -f "${ENV_FILE}" ]] || return 0
+
+  local raw
+  raw="$(trim_quotes "$(env_value "RUNTIME_SPLIT_ENABLED")")"
+  [[ -n "${raw}" ]] || return 0
+
+  RUNTIME_SPLIT_ENABLED="$(normalize_bool "${raw}")"
+  echo "runtime-split resolved from ${ENV_FILE}: ${RUNTIME_SPLIT_ENABLED}"
 }
 
 # COMPOSE_PROFILES는 셸과 .env.prod 양쪽에 존재할 수 있는데, compose()가 해석 결과를 항상 명시
@@ -2732,38 +2766,42 @@ front_container_health() {
   docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${cid}" 2>/dev/null | tr -d '\r' | head -n 1 || true
 }
 
-# cutover 후 이전 색을 정지시키므로(`restart: unless-stopped`는 정지 상태를 되살리지 않는다)
-# 호스트 재부팅 뒤에도 활성 색만 돌아온다. 그래서 "실행 중인 색"이 1차 신호다. 두 색이 모두 멈춘
-# 구간에서는 상태 파일을 신뢰한다 — 그때 front_blue로 되돌리면 마지막으로 검증된 색이 아니라
-# 반대 색으로 WEB_UPSTREAM을 고정해 버린다.
+# backend와 달리 front는 두 색을 상시 유지한다(cutover 뒤에도 이전 색을 warm rollback 대상으로
+# 남기고, backend 배포는 두 색을 모두 기동한다). 그래서 "실행 중인 색"은 두 색을 구분하지 못하고
+# 1차 신호가 될 수 없다 — 실효 신호는 상태 파일 하나다.
+#
+# 상태 파일은 untracked라 유실될 수 있으므로(서버 재구축, 수동 정리) 그 다음 신호로 **지금 edge가
+# 실제로 프록시하는 색**을 읽는다. 그것이 "마지막으로 검증된 색"의 관측 가능한 근거다. 두 신호가
+# 모두 없을 때만 실행 중인 색으로, 그것도 없으면 Caddyfile 기본값과 같은 front_blue로 떨어진다.
 detect_active_front() {
-  local blue_running="false"
-  local green_running="false"
   local from_state=""
-  if front_service_running "front_blue"; then blue_running="true"; fi
-  if front_service_running "front_green"; then green_running="true"; fi
   if [[ -f "${FRONT_STATE_FILE}" ]]; then
     from_state="$(tr -d '[:space:]' < "${FRONT_STATE_FILE}" || true)"
   fi
+  if [[ "${from_state}" == "front_blue" || "${from_state}" == "front_green" ]]; then
+    echo "${from_state}"
+    return
+  fi
 
-  if [[ "${from_state}" == "front_blue" && "${blue_running}" == "true" ]]; then
-    echo "front_blue"
+  # caddy가 아직 뜨지 않은 단계(backend 배포의 edge boot 전)에서는 빈 값이 온다. 실패해도
+  # 다음 신호로 넘어갈 뿐이라 여기서 배포를 멈추지 않는다.
+  local from_edge=""
+  from_edge="$(current_caddy_web_upstream_host 2>/dev/null || true)"
+  if [[ "${from_edge}" == "front_blue" || "${from_edge}" == "front_green" ]]; then
+    echo "${from_edge}"
     return
   fi
-  if [[ "${from_state}" == "front_green" && "${green_running}" == "true" ]]; then
-    echo "front_green"
-    return
-  fi
+
+  local blue_running="false"
+  local green_running="false"
+  if front_service_running "front_blue"; then blue_running="true"; fi
+  if front_service_running "front_green"; then green_running="true"; fi
   if [[ "${blue_running}" == "true" && "${green_running}" != "true" ]]; then
     echo "front_blue"
     return
   fi
   if [[ "${green_running}" == "true" && "${blue_running}" != "true" ]]; then
     echo "front_green"
-    return
-  fi
-  if [[ "${from_state}" == "front_blue" || "${from_state}" == "front_green" ]]; then
-    echo "${from_state}"
     return
   fi
   echo "front_blue"
@@ -2902,8 +2940,18 @@ check_front_health() {
   local service="$1"
   local attempt=1
   local health liveness_code render_code proxy_code
+  # 시도 횟수만으로는 상한이 정해지지 않는다(프로브 timeout이 시도 길이를 좌우한다). job timeout에
+  # 잘리면 rollback 없이 끝나므로 벽시계 예산을 함께 건다.
+  local started_at deadline_at now
+  started_at="$(date -u +%s)"
+  deadline_at=$((started_at + FRONT_HEALTHCHECK_DEADLINE_SECONDS))
 
   while [[ "${attempt}" -le "${FRONT_HEALTHCHECK_RETRIES}" ]]; do
+    now="$(date -u +%s)"
+    if (( now >= deadline_at )); then
+      echo "front healthcheck deadline reached after ${FRONT_HEALTHCHECK_DEADLINE_SECONDS}s: ${service} (attempt ${attempt}/${FRONT_HEALTHCHECK_RETRIES})" >&2
+      break
+    fi
     health="$(front_container_health "${service}")"
     liveness_code="$(probe_front_http_code "${service}" "${FRONT_LIVENESS_PATH}")"
     if [[ "${health}" == "healthy" ]] && is_healthy_http_code "${liveness_code}"; then
@@ -3042,6 +3090,31 @@ write_front_release_state() {
   echo "front release state: active=${active} active_image=$(runtime_front_image_value "${active}") previous=${previous} previous_image=$(runtime_front_image_value "${previous}") switched_at=${switched_at} served_build_sha=${served_sha:-none} previous_build_sha=${pre_switch_sha:-none} result=${result} reason=${reason:-none}"
 }
 
+# compose 보간 때문에 후보 digest는 pull/up **전에** .env.prod에 있어야 한다. 그래서 health 검사가
+# 그 뒤에 오고, 실패해도 깨진 digest가 파일에 남는다. 그대로 두면 다음 backend 배포가 두 색을
+# 모두 기동하면서 그 digest를 다시 띄우고(autoheal 재시작 루프), 배포는 성공으로 끝난다.
+# 실패 시 후보 색의 값을 되돌린다. 되돌릴 이전 값이 없으면(후보가 처음 만들어지는 경우) 활성 색의
+# 검증된 digest로 맞춘다 — 키를 비우면 front 프로필이 켜진 채 compose 평가가 깨진다.
+restore_front_candidate_image() {
+  local candidate="$1"
+  local previous_candidate_image="$2"
+  local active_image="$3"
+  local restore_to="${previous_candidate_image}"
+
+  if [[ -z "${restore_to}" ]]; then
+    restore_to="${active_image}"
+  fi
+  if [[ -z "${restore_to}" ]]; then
+    echo "cannot restore the front candidate image for ${candidate}: no known good digest" >&2
+    return 1
+  fi
+  if ! upsert_runtime_front_image "${candidate}" "${restore_to}"; then
+    echo "failed to restore the front candidate image for ${candidate}" >&2
+    return 1
+  fi
+  echo "front candidate image restored after a failed rollout: ${candidate} -> ${restore_to}"
+}
+
 # cutover 전 실패 경로용. 활성 색은 그대로이므로 전환 시각은 없고, 서빙 중인 빌드는 cutover 직전에
 # 관측한 값 그대로다. 이걸 남기지 않으면 직전 성공 배포의 `deployed`가 현재 상태처럼 남는다.
 record_front_failure_state() {
@@ -3117,7 +3190,7 @@ rollback_front_to() {
 }
 
 run_front_blue_green_deploy() {
-  local web_domain active_front next_front active_image
+  local web_domain active_front next_front active_image previous_candidate_image
   local web_host pre_switch_sha switched_at served_sha
 
   if ! compose_profile_enabled "front"; then
@@ -3157,6 +3230,8 @@ run_front_blue_green_deploy() {
     # 최초 rollout: 활성 색에 되돌아갈 이미지가 없으므로 두 색을 같은 digest로 맞춘다.
     active_image="${STAGED_FRONT_IMAGE}"
   fi
+  # 실패 시 되돌릴 후보 색의 현재 값. 덮어쓰기 전에 잡아 둔다.
+  previous_candidate_image="$(resolve_preserved_front_image "${next_front}")" || return 1
   upsert_runtime_front_image "${active_front}" "${active_image}" || return 1
   upsert_runtime_front_image "${next_front}" "${STAGED_FRONT_IMAGE}" || return 1
   # 후보가 뜨는 동안 edge는 활성 색에 고정돼 있어야 한다. 리터럴까지 함께 복구하는 이유는
@@ -3173,12 +3248,14 @@ run_front_blue_green_deploy() {
 
   if ! compose pull "${next_front}"; then
     echo "front candidate image pull failed: ${next_front} (${STAGED_FRONT_IMAGE})" >&2
+    restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     record_front_failure_state "${active_front}" "${next_front}" "front_candidate_pull_failed" "${pre_switch_sha}"
     return 1
   fi
   if ! compose_up_force_recreate_with_retry "${next_front}"; then
     emit_backend_diagnostics "${next_front}" >&2 || true
     compose stop "${next_front}" || true
+    restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     record_front_failure_state "${active_front}" "${next_front}" "front_candidate_boot_failed" "${pre_switch_sha}"
     return 1
   fi
@@ -3186,18 +3263,21 @@ run_front_blue_green_deploy() {
   if ! check_front_health "${next_front}"; then
     echo "front candidate health failed before cutover: ${next_front}" >&2
     compose stop "${next_front}" || true
+    restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     record_front_failure_state "${active_front}" "${next_front}" "front_candidate_health_failed" "${pre_switch_sha}"
     return 1
   fi
 
   if ! switch_caddy_web_upstream "${next_front}"; then
     rollback_front_to "${active_front}" "${next_front}" "caddy_web_upstream_switch_failed" "${web_host}" "${pre_switch_sha}" || true
+    restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi
   switched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   if ! verify_front_edge_route "${next_front}" "${web_host}"; then
     rollback_front_to "${active_front}" "${next_front}" "front_edge_route_verify_failed" "${web_host}" "${pre_switch_sha}" || true
+    restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi
 
@@ -3205,6 +3285,7 @@ run_front_blue_green_deploy() {
   if [[ "${served_sha}" != "${STAGED_FRONT_BUILD_SHA}" ]]; then
     echo "front cutover verify failed: edge serves build sha=${served_sha:-none}, expected ${STAGED_FRONT_BUILD_SHA}" >&2
     rollback_front_to "${active_front}" "${next_front}" "front_served_build_sha_mismatch" "${web_host}" "${pre_switch_sha}" || true
+    restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi
 
@@ -3235,6 +3316,8 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
   echo "missing caddy file: ${CADDY_FILE}" >&2
   exit 1
 fi
+
+resolve_runtime_split_from_env_file
 
 case "${DEPLOY_TARGET}" in
   backend | front) ;;

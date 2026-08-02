@@ -101,6 +101,10 @@ require_pattern 'front image must be pinned by sha256 digest' "remote front depl
 require_pattern 'DEPLOY_TARGET=front' "front rollout must run through the shared blue/green script"
 require_pattern 'STAGED_FRONT_BUILD_SHA=' "front deploy must pass the build sha that the cutover verification compares the served build against"
 require_pattern 'front deploy finished without reporting a result marker' "front deploy must fail when the remote rollout reports no result"
+# 결과 요약은 ssh 성공 후에만 실행된다. 시도한 이미지·커밋은 그 앞에서 적어야 실패한 run에도
+# "무엇을 배포하려 했는지"가 남는다.
+require_pattern 'echo "- deploy sha: \$\{HOME_DEPLOY_SHA\}"' "front deploy must record the attempted image and sha before the remote rollout runs"
+require_pattern 'front deploy reported success but the edge served build sha' "runner must re-check the served build sha the remote reported"
 require_pattern 'HOME_KNOWN_HOSTS:[[:space:]]*\$\{\{ secrets\.HOME_KNOWN_HOSTS \}\}' "pinned known_hosts secret must be required"
 require_pattern 'HOME_GHCR_USERNAME:[[:space:]]*\$\{\{ secrets\.HOME_GHCR_USERNAME \}\}' "private GHCR username must be required"
 require_pattern 'HOME_GHCR_TOKEN:[[:space:]]*\$\{\{ secrets\.HOME_GHCR_TOKEN \}\}' "private GHCR token must be required"
@@ -135,3 +139,5 @@ if [[ "${last_prune_line}" -le "${external_create_line}" ]]; then
   echo "unexpected: external backup prune must run after backup creation to enforce retention" >&2
   exit 1
 fi
+
+echo "[test] Platform deploy workflow classification: PASS"

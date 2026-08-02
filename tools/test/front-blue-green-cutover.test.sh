@@ -64,6 +64,7 @@ extracted_functions=(
   switch_caddy_web_upstream
   verify_front_edge_route
   write_front_release_state
+  restore_front_candidate_image
   record_front_failure_state
   rollback_front_to
   run_front_blue_green_deploy
@@ -290,6 +291,7 @@ run_front_case() {
     printf '%s\n' 'FRONT_RENDER_PATH=/'
     printf '%s\n' 'FRONT_BACKEND_PROXY_PATH=/proxy'
     printf '%s\n' 'FRONT_HEALTHCHECK_RETRIES=2'
+    printf '%s\n' 'FRONT_HEALTHCHECK_DEADLINE_SECONDS=600'
     printf '%s\n' 'FRONT_HEALTHCHECK_INTERVAL_SECONDS=1'
     printf '%s\n' 'FRONT_HEALTHCHECK_CONNECT_TIMEOUT_SECONDS=3'
     printf '%s\n' 'FRONT_HEALTHCHECK_MAX_TIME_SECONDS=20'
@@ -414,6 +416,26 @@ assert_file_contains "a failed deploy must leave the active colour pinned as a l
 assert_file_lacks "the placeholder must not survive a failed deploy" "${case_dir}/caddy/Caddyfile" 'reverse_proxy \{\$WEB_UPSTREAM:'
 assert_file_contains "a pre-cutover failure must be recorded as a failure" "${case_dir}/.front-release-state.env" '^front_result=failed$'
 assert_file_contains "the recorded reason must name the failing gate" "${case_dir}/.front-release-state.env" '^front_reason=front_candidate_health_failed$'
+# compose 보간 때문에 후보 digest는 health 검사 전에 .env.prod에 들어간다. 실패한 digest를 그대로
+# 두면 다음 backend 배포가 두 색을 모두 기동하면서 그것을 다시 띄운다.
+assert_file_lacks "a failed candidate digest must not stay in the env file" "${case_dir}/.env.prod" "^FRONT_GREEN_IMAGE=${good_image}$"
+assert_file_contains "the candidate colour must fall back to a verified digest" "${case_dir}/.env.prod" "^FRONT_GREEN_IMAGE=${old_image}$"
+
+# ---------------------------------------------------------------------------
+# 4-2) health 대기는 시도 횟수가 아니라 벽시계 예산이 실질 상한이다. 예산을 넘기면 시도가 남아
+#      있어도 멈춰야 한다 - job timeout에 잘리면 rollback 없이 끝난다.
+# ---------------------------------------------------------------------------
+setup_case "candidate-health-deadline" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'FRONT_HEALTHCHECK_DEADLINE_SECONDS=0; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "an exhausted health budget must fail the deploy even with retries left" "1" "${status}"
+assert_file_contains "the deadline must be named in the failure" "${case_dir}/stderr" 'front healthcheck deadline reached'
+assert_file_lacks "a candidate that never proved healthy must not receive the edge upstream" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
 
 # ---------------------------------------------------------------------------
 # 4-1) 실측 재현(2026-08-02, 홈서버 2단계 상태): BACKEND_INTERNAL_URL이 비면 컨테이너는 healthy,

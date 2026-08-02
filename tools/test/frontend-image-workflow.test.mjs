@@ -348,8 +348,15 @@ test("platform deploy workflow deploys the front image but never builds or publi
   assert.doesNotMatch(deploySource, /^\s*context:\s*\.?\/?front(\/|\s*$)/m)
   assert.doesNotMatch(deploySource, /scope=front-image/)
   assert.doesNotMatch(deploySource, /NEXT_PUBLIC_AQUILA_BUILD_SHA/)
-  // Platform 은 어떤 이미지도 registry 에 직접 올리지 않는다.
+  // Platform 은 어떤 이미지도 registry 에 직접 올리지 않는다. `docker push` 문자열만 막으면
+  // `build-push-action` + `push: true` 경로가 그대로 열려 있으므로 빌드 step 자체를 본다.
   assert.doesNotMatch(deploySource, /docker push/)
+  const deployBuildSteps = Object.values(parseWorkflow(deployWorkflowPath).jobs)
+    .flatMap((job) => job.steps || [])
+    .filter((step) => typeof step.uses === "string" && step.uses.startsWith("docker/build-push-action"))
+  assert.equal(deployBuildSteps.length, 1, "Platform deploy builds exactly one image")
+  assert.equal(deployBuildSteps[0].with.context, "./back")
+  assert.equal(deployBuildSteps[0].with.file, "./back/Dockerfile")
 
   // packages 쓰기 권한을 가진 job 은 backend 빌드 하나뿐이다. front job 은 읽기만 한다.
   // 원문 문자열을 세면 주석·설명에 오탐하므로 job 스코프로 판정한다.

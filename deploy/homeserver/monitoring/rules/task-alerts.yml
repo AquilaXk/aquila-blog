@@ -542,7 +542,24 @@ groups:
           severity: critical
         annotations:
           summary: "Public edge route probe is failing"
-          description: "At least one public edge probe route has failed for 5m. Check Cloudflare, Vercel, and origin health."
+          description: "At least one public edge probe route has failed for 5m. Check Cloudflare Tunnel (cloudflared), the Caddy web vhost, and the active front/back containers on the home server."
+
+      # The cache-state source is the Next.js `x-nextjs-cache` header emitted by the home-server
+      # front (#1541). Nothing else reports whether ISR is actually caching, so if the header stops
+      # arriving the cold-ratio panel and AquilaPublicEdgeColdRatioHigh keep evaluating a value that
+      # can never change again - a dead gauge that still looks green. `absent()` is part of the
+      # expression on purpose: if the home route drops out of the probe's route set the series
+      # disappears entirely, and `min()` over nothing produces no alert at all.
+      - alert: AquilaPublicEdgeCacheStateUnobserved
+        expr: |
+          min(aquila_public_edge_probe_cache_state_observed{route="/"}) < 1
+          or absent(aquila_public_edge_probe_cache_state_observed{route="/"})
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge cache state is no longer observable"
+          description: "The home route stopped reporting the Next.js ISR cache-state header for 30m. Cache observability is dead until this is fixed. Check the front container, the Caddy web vhost header handling, and the probe route set."
 
       - alert: AquilaExternalBackupFailed
         expr: increase(aquila_external_backup_failed_total[30m]) > 0

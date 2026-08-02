@@ -6,7 +6,13 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { createHealthPayload, runProbe } from "../../deploy/homeserver/monitoring/public-edge-probe.mjs"
+import {
+  CACHE_STATE_ABSENT,
+  CACHE_STATE_HEADER,
+  createHealthPayload,
+  readCacheState,
+  runProbe,
+} from "../../deploy/homeserver/monitoring/public-edge-probe.mjs"
 
 const withServer = async (handler, callback) => {
   const server = http.createServer(handler)
@@ -49,7 +55,7 @@ const runProbeFixture = async (baseUrl, route, options = {}) => {
 
 test("public edge probe marks 200 route healthy", async () => {
   await withServer((request, response) => {
-    response.writeHead(200, { "content-type": "text/html", "x-vercel-cache": "HIT" })
+    response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "HIT" })
     response.end("<html><head></head><body>ok</body></html>")
   }, async (baseUrl) => {
     const result = await runProbeFixture(baseUrl, "/")
@@ -59,12 +65,62 @@ test("public edge probe marks 200 route healthy", async () => {
     assert.match(result.prometheus, /aquila_public_edge_probe_status_code\{route="\/",request_index="1"\} 200/)
     assert.match(result.prometheus, /aquila_public_edge_probe_up 1/)
     assert.match(result.prometheus, /aquila_public_edge_probe_last_success_timestamp_seconds [1-9][0-9]+/)
+    assert.equal(result.report.routes[0].samples[0].cacheState, "HIT")
+    assert.equal(result.report.routes[0].samples[0].cacheStateObserved, true)
+    assert.match(result.prometheus, /cache_state="HIT"/)
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_observed\{route="\/",request_index="1"\} 1/,
+    )
   })
+})
+
+test("public edge probe reads the cache state from the Next.js header", async () => {
+  await withServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "stale" })
+    response.end("<html><head></head><body>ok</body></html>")
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/")
+
+    assert.equal(result.report.routes[0].samples[0].cacheState, "STALE")
+    assert.equal(result.report.routes[0].samples[0].cacheStateObserved, true)
+    assert.deepEqual(result.report.overall.firstRequestCache.counts, { STALE: 1 })
+  })
+})
+
+// RED guard for the failure this issue exists to prevent: dropping the Vercel header without a
+// replacement turns cache observability into a constant. If someone reintroduces `x-vercel-cache`
+// as the source, this fixture (Vercel header present, Next.js header absent) starts reporting HIT.
+test("public edge probe ignores the Vercel cache header and flags the missing state", async () => {
+  await withServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html", "x-vercel-cache": "HIT" })
+    response.end("<html><head></head><body>ok</body></html>")
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/")
+
+    assert.equal(result.report.routes[0].samples[0].cacheState, CACHE_STATE_ABSENT)
+    assert.equal(result.report.routes[0].samples[0].cacheStateObserved, false)
+    assert.doesNotMatch(result.prometheus, /cache_state="HIT"/)
+    assert.doesNotMatch(result.prometheus, /cache_state="UNKNOWN"/)
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_observed\{route="\/",request_index="1"\} 0/,
+    )
+  })
+})
+
+test("readCacheState normalizes the header and never reports UNKNOWN", () => {
+  assert.equal(readCacheState("hit"), "HIT")
+  assert.equal(readCacheState("  REVALIDATED "), "REVALIDATED")
+  assert.equal(readCacheState(""), CACHE_STATE_ABSENT)
+  assert.equal(readCacheState(null), CACHE_STATE_ABSENT)
+  assert.equal(readCacheState(undefined), CACHE_STATE_ABSENT)
+  assert.notEqual(CACHE_STATE_ABSENT, "UNKNOWN")
 })
 
 test("public edge probe allows the explicit 404 route policy", async () => {
   await withServer((request, response) => {
-    response.writeHead(404, { "content-type": "text/html", "x-vercel-cache": "MISS" })
+    response.writeHead(404, { "content-type": "text/html", [CACHE_STATE_HEADER]: "MISS" })
     response.end("<html><head><link rel=\"canonical\" href=\"http://example.test/404\" /></head><body>not found</body></html>")
   }, async (baseUrl) => {
     const result = await runProbeFixture(baseUrl, "/404")
@@ -77,7 +133,7 @@ test("public edge probe allows the explicit 404 route policy", async () => {
 
 test("public edge probe checks status policy against the requested route", async () => {
   await withServer((request, response) => {
-    response.writeHead(200, { "content-type": "text/html", "x-vercel-cache": "HIT" })
+    response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "HIT" })
     response.end("<html><head><link rel=\"canonical\" href=\"http://example.test/\" /></head><body>ok</body></html>")
   }, async (baseUrl) => {
     const result = await runProbeFixture(baseUrl, "/404")
@@ -91,7 +147,7 @@ test("public edge probe checks status policy against the requested route", async
 
 test("public edge probe exposes 5xx as route and overall failure", async () => {
   await withServer((request, response) => {
-    response.writeHead(500, { "content-type": "text/html", "x-vercel-cache": "MISS" })
+    response.writeHead(500, { "content-type": "text/html", [CACHE_STATE_HEADER]: "MISS" })
     response.end("<html><head></head><body>error</body></html>")
   }, async (baseUrl) => {
     const result = await runProbeFixture(baseUrl, "/")

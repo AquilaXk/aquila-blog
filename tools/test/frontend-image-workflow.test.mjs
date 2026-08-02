@@ -344,13 +344,21 @@ test("platform deploy workflow deploys the front image but never builds or publi
 
   // 빌드 신호. 하나라도 나타나면 Web 소유 경계를 넘은 것이다.
   assert.doesNotMatch(deploySource, /Dockerfile\.runtime/)
-  assert.doesNotMatch(deploySource, /context:\s*\.\/front/)
+  // `context: ./front` 와 `context: front` 는 buildx 에 같은 뜻이다. 한쪽만 막으면 우회가 된다.
+  assert.doesNotMatch(deploySource, /^\s*context:\s*\.?\/?front(\/|\s*$)/m)
   assert.doesNotMatch(deploySource, /scope=front-image/)
   assert.doesNotMatch(deploySource, /NEXT_PUBLIC_AQUILA_BUILD_SHA/)
   // Platform 은 어떤 이미지도 registry 에 직접 올리지 않는다.
   assert.doesNotMatch(deploySource, /docker push/)
+
   // packages 쓰기 권한을 가진 job 은 backend 빌드 하나뿐이다. front job 은 읽기만 한다.
-  assert.equal([...deploySource.matchAll(/packages: write/g)].length, 1)
+  // 원문 문자열을 세면 주석·설명에 오탐하므로 job 스코프로 판정한다.
+  const deployDocument = parseWorkflow(deployWorkflowPath)
+  const packagesWriteJobs = Object.entries(deployDocument.jobs)
+    .filter(([, job]) => job.permissions?.packages === "write")
+    .map(([name]) => name)
+  assert.deepEqual(packagesWriteJobs, ["buildAndPush"])
+  assert.equal(deployDocument.jobs.frontBlueGreenDeploy.permissions.packages, "read")
 
   // 배포는 허용된다. 다만 front 이미지 이름이 나오는 곳은 digest ref 를 만드는 지점 하나여야
   // 하고, 그 결과는 항상 @sha256 이다. 태그 ref 로 되돌아가면 mutable 참조가 홈서버에 닿는다.

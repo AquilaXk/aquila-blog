@@ -709,7 +709,9 @@ grep -nE 'reverse_proxy (\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blu
 echo "ADMIN_API_UPSTREAM=$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
 echo "READ_API_UPSTREAM=$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
 # 위 grep은 :8080 backend upstream만 매치한다. front는 :3000이라 별도로 출력한다.
-grep -nE 'reverse_proxy \{\$WEB_UPSTREAM:front_(blue|green)\}:3000' "${CADDY_HOST_FILE}" || true
+# placeholder와 리터럴을 모두 매치해야 한다: cutover(#1539)가 활성 색을 리터럴로 고정하므로,
+# placeholder 형태만 보면 배포가 끝난 뒤에는 이 줄이 아무것도 출력하지 않는다.
+grep -nE 'reverse_proxy (\{\$WEB_UPSTREAM:front[-_](blue|green)\}|front[-_](blue|green)):3000' "${CADDY_HOST_FILE}" || true
 echo "WEB_UPSTREAM=$(trim_quotes "$(env_value "WEB_UPSTREAM")")"
 
 print_section "Caddy Mount Sync"

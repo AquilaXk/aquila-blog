@@ -87,8 +87,13 @@ require_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*front/' "front deploy trigger must
 require_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*frontend-image' "front deploy trigger must follow the workflow that builds the front image"
 reject_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*(back/|deploy/homeserver/|deploy/env/|tools/env/)' "front deploy must trigger independently of backend deploy paths"
 reject_pattern 'BACKEND_DEPLOY_PATHS_PATTERN=.*front/' "backend deploy must not be triggered by front-only changes"
-require_pattern 'needs\.blueGreenDeploy\.result == .success. \|\|' "front deploy must be serialized after the backend deploy on the same host"
-require_pattern 'needs\.blueGreenDeploy\.result == .skipped.' "front deploy must still run when the backend deploy is skipped"
+require_pattern 'needs\.blueGreenDeploy\.result == .success.' "front deploy must be serialized after the backend deploy on the same host"
+require_pattern 'needs\.calculateTag\.outputs\.backend_deploy != .true. \|\|' "front deploy must still run on commits where the backend was never scheduled"
+# GitHub 은 의존 job 이 실패해 **실행되지 않은** job 의 result 도 skipped 로 보고한다. skipped 를
+# 전제 충족으로 읽으면 backend 빌드가 깨진 커밋에서 front 가 구 backend 위로 cutover 된다.
+# 정상 skip 과 사고 skip 을 가르는 신호는 result 가 아니라 calculateTag 의 backend_deploy 판정이다.
+reject_pattern 'needs\.blueGreenDeploy\.result == .skipped.' "a skipped backend deploy must not admit the front deploy: an upstream build failure produces the same result value"
+reject_pattern 'always\(\) &&' "front deploy must not run on cancelled workflows"
 require_pattern 'HOME_FRONT_IMAGE:[[:space:]]*\$\{\{ steps\.front_image\.outputs\.front_image_ref \}\}' "front deploy job must use the resolved front digest ref"
 require_pattern 'front_image_ref=\$\{FRONT_IMAGE_NAME\}@\$\{FRONT_IMAGE_DIGEST\}' "front image ref must be resolved to an immutable digest ref"
 reject_pattern 'front_image_ref=\$\{FRONT_IMAGE_NAME\}:' "front image ref must not stay on a mutable tag ref"

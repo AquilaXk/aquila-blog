@@ -59,9 +59,12 @@ extracted_functions=(
   front_edge_host
   check_front_health
   resolve_caddy_web_upstream_token
+  write_front_caddy_upstream_literal
+  pin_front_caddy_upstream
   switch_caddy_web_upstream
   verify_front_edge_route
   write_front_release_state
+  record_front_failure_state
   rollback_front_to
   run_front_blue_green_deploy
 )
@@ -134,16 +137,31 @@ probe_web_edge_http_code() {
 
 # 서빙 중인 색에 따라 다른 빌드 sha를 돌려준다. rollback이 "이전 빌드가 다시 서빙되는지"까지
 # 확인하는지 보려면 이 값이 색과 함께 움직여야 한다.
+#
+# STUB_SERVED_SHA_STICKY는 그 반대 상황을 만든다: **cutover 이후** edge가 색과 무관하게 한 빌드에
+# 고착되는 경우(캐시된 라우팅, 잘못된 digest 등). 첫 호출(=cutover 직전 관측)은 색을 따르고 그
+# 뒤부터 고착값을 돌려주므로, "되돌렸는데 이전 빌드가 다시 서빙되지 않는" 상태를 만들 수 있다.
+# 이게 없으면 rollback의 서빙 빌드 대조를 통째로 지워도 색을 따라간 값이 우연히 맞아 테스트가
+# 통과한다 - 실제로 그 상태였다(F-06).
 served_front_build_sha() {
-  local colour
+  local colour value
+  if [ -n "${STUB_SERVED_SHA_STICKY:-}" ] && [ -f "${STUB_SERVED_SHA_SEEN_FILE}" ]; then
+    printf '%s' "${STUB_SERVED_SHA_STICKY}"
+    return 0
+  fi
   colour="$(current_caddy_web_upstream_host)"
-  awk -F= -v k="${colour}" '$1 == k { print substr($0, index($0, "=") + 1) }' "${STUB_SERVED_SHA_FILE}" 2>/dev/null | tail -n 1
+  value="$(awk -F= -v k="${colour}" '$1 == k { print substr($0, index($0, "=") + 1) }' "${STUB_SERVED_SHA_FILE}" 2>/dev/null | tail -n 1)"
+  : > "${STUB_SERVED_SHA_SEEN_FILE}"
+  printf '%s' "${value}"
   return 0
 }
 
 resolve_in_caddy() { return 0; }
-reload_caddy() { printf 'reload_caddy\n' >> "${STUB_CALL_LOG}"; }
-ensure_caddy_mount_sync() { printf 'ensure_caddy_mount_sync\n' >> "${STUB_CALL_LOG}"; }
+reload_caddy() { printf 'reload_caddy\n' >> "${STUB_CALL_LOG}"; return "${STUB_RELOAD_CADDY_STATUS:-0}"; }
+ensure_caddy_mount_sync() {
+  printf 'ensure_caddy_mount_sync\n' >> "${STUB_CALL_LOG}"
+  return "${STUB_MOUNT_SYNC_STATUS:-0}"
+}
 emit_backend_diagnostics() { return 0; }
 run_compose_diagnostic() { return 0; }
 
@@ -239,6 +257,7 @@ setup_case() {
   : > "${case_dir}/health"
   : > "${case_dir}/front-http"
   : > "${case_dir}/served-sha"
+  rm -f "${case_dir}/served-sha-seen"
   : > "${case_dir}/call-log"
 }
 
@@ -258,6 +277,7 @@ run_front_case() {
     printf 'STUB_HEALTH_FILE=%q\n' "${case_dir}/health"
     printf 'STUB_FRONT_HTTP_FILE=%q\n' "${case_dir}/front-http"
     printf 'STUB_SERVED_SHA_FILE=%q\n' "${case_dir}/served-sha"
+    printf 'STUB_SERVED_SHA_SEEN_FILE=%q\n' "${case_dir}/served-sha-seen"
     printf 'STUB_CALL_LOG=%q\n' "${case_dir}/call-log"
     printf '%s\n' 'COMPOSE_PROJECT_NAME=blog_home'
     # resolve_compose_profiles가 참조한다. 비어 있으면 set -u로 죽고, 그 실패가
@@ -340,6 +360,7 @@ good_image="ghcr.io/aquilaxk/aquila-blog-front@sha256:11111111111111111111111111
 old_image="ghcr.io/aquilaxk/aquila-blog-front@sha256:2222222222222222222222222222222222222222222222222222222222222222"
 new_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 old_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+wrong_sha="cccccccccccccccccccccccccccccccccccccccc"
 
 # ---------------------------------------------------------------------------
 # 1) front 프로필이 꺼져 있고 WEB_DOMAIN도 없으면 배포할 대상이 없다: 결과를 남기고 0으로 끝난다.
@@ -386,6 +407,13 @@ assert_file_lacks "an unhealthy candidate must never receive the edge upstream" 
 assert_file_contains "WEB_UPSTREAM must stay pinned to the live colour" "${case_dir}/.env.prod" '^WEB_UPSTREAM=front_blue$'
 assert_file_contains "the failed candidate must be stopped" "${case_dir}/call-log" '^compose stop front_green$'
 assert_file_lacks "a failed front deploy must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
+# 이 배포를 시작한 `git checkout --force`가 Caddyfile을 placeholder로 되돌렸다. cutover 전에
+# 실패해도 활성 색 리터럴이 복구돼 있어야 한다 - 그러지 않으면 다음 caddy 재시작(04:10 정기
+# 재부팅, autoheal)이 placeholder를 컨테이너 env로 해석해 공개 사이트를 조용히 되돌린다.
+assert_file_contains "a failed deploy must leave the active colour pinned as a literal" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_blue:3000'
+assert_file_lacks "the placeholder must not survive a failed deploy" "${case_dir}/caddy/Caddyfile" 'reverse_proxy \{\$WEB_UPSTREAM:'
+assert_file_contains "a pre-cutover failure must be recorded as a failure" "${case_dir}/.front-release-state.env" '^front_result=failed$'
+assert_file_contains "the recorded reason must name the failing gate" "${case_dir}/.front-release-state.env" '^front_reason=front_candidate_health_failed$'
 
 # ---------------------------------------------------------------------------
 # 4-1) 실측 재현(2026-08-02, 홈서버 2단계 상태): BACKEND_INTERNAL_URL이 비면 컨테이너는 healthy,
@@ -428,6 +456,75 @@ assert_file_contains "rollback must record when the edge was switched back" "${c
 assert_file_contains "rollback must record the build the edge serves again" "${case_dir}/.front-release-state.env" "^front_active_build_sha=${old_sha}$"
 assert_file_contains "the failed candidate must be stopped after rollback" "${case_dir}/call-log" '^compose stop front_green$'
 assert_file_lacks "a rolled back front deploy must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
+
+# ---------------------------------------------------------------------------
+# 5-1) rollback도 게이트다. 이전 색 health가 통과하지 못하면 rollback은 성공이 아니며, 그 사실이
+#      증거 파일에 남아야 한다. 게이트가 없으면 rollback이 "성공"으로 끝나 실패한 배포가
+#      복구된 것처럼 보인다.
+# ---------------------------------------------------------------------------
+setup_case "rollback-previous-unhealthy" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+# 후보는 뜨지만 서빙 빌드가 어긋나 rollback이 걸린다. 그 시점에 이전 색은 이미 망가져 있다.
+printf 'front_blue=unhealthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=500\nfront_blue/=500\nfront_blue/proxy=500\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${old_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a rollback that cannot restore the previous colour must fail the deploy" "1" "${status}"
+assert_file_contains "an unhealthy previous colour must block the upstream switch back" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
+assert_file_contains "the failed rollback must be recorded, not left as the last success" "${case_dir}/.front-release-state.env" '^front_result=rollback_failed$'
+assert_file_contains "the failed rollback must name what blocked it" "${case_dir}/.front-release-state.env" '^front_reason=.*healthcheck failed for front_blue$'
+
+# ---------------------------------------------------------------------------
+# 5-2) edge가 200을 주지 않으면 cutover는 성립하지 않는다. rollback도 같은 신호로 판정하므로
+#      edge가 계속 죽어 있으면 rollback 역시 실패로 끝나야 한다.
+# ---------------------------------------------------------------------------
+setup_case "edge-route-never-healthy" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'STUB_EDGE_HTTP_CODE=502; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "an edge that never returns 200 must fail the deploy" "1" "${status}"
+assert_file_contains "the failed rollback must be recorded" "${case_dir}/.front-release-state.env" '^front_result=rollback_failed$'
+assert_file_contains "the recorded reason must name the edge verify" "${case_dir}/.front-release-state.env" '^front_reason=.*edge route verify failed'
+assert_file_lacks "a deploy that never verified the edge must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
+
+# ---------------------------------------------------------------------------
+# 5-3) 색을 되돌려도 edge가 여전히 새 빌드를 서빙하면 rollback은 완료된 것이 아니다. 컨테이너
+#      상태가 아니라 "무엇이 서빙되는가"로 판정하는지 본다.
+# ---------------------------------------------------------------------------
+setup_case "rollback-edge-still-serves-new-build" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
+# cutover 직전에는 이전 빌드(old_sha)가 관측되지만, 그 뒤로 edge가 제3의 빌드에 고착된다.
+# cutover 대조가 먼저 실패하고, 색을 되돌린 뒤에도 pre-cutover 빌드로 돌아오지 않는다.
+status="$(run_front_case 'STUB_SERVED_SHA_STICKY="'"${wrong_sha}"'"; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a rollback that does not restore the pre-cutover build must fail the deploy" "1" "${status}"
+assert_file_contains "the failed rollback must be recorded" "${case_dir}/.front-release-state.env" '^front_result=rollback_failed$'
+assert_file_contains "the recorded reason must name the served build mismatch" "${case_dir}/.front-release-state.env" '^front_reason=.*expected the pre-cutover build'
+
+# ---------------------------------------------------------------------------
+# 5-4) caddy 설정 적용이 실패하면 전환은 성립하지 않는다. 호스트 파일과 마운트된 설정이 갈린
+#      상태에서 성공을 보고하면, 다음 caddy 재시작이 어느 색을 서빙할지 아무도 모른다.
+# ---------------------------------------------------------------------------
+setup_case "caddy-mount-sync-failure" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'STUB_MOUNT_SYNC_STATUS=1; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a caddy config sync failure must fail the front deploy" "1" "${status}"
+assert_file_lacks "a deploy whose caddy config never synced must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
 
 # ---------------------------------------------------------------------------
 # 6) 정상 cutover: 후보가 health를 통과하고 edge가 그 빌드를 서빙하면 전환이 확정된다.

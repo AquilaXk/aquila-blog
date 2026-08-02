@@ -2801,6 +2801,37 @@ prepare_front_runtime_images() {
   echo "front runtime image map prepared: front_blue=$(runtime_front_image_value front_blue) front_green=$(runtime_front_image_value front_green)"
 }
 
+# Caddyfile의 web upstream 토큰을 한 색으로 고정한다. sed가 실패해 결과가 비면 Caddyfile을 통째로
+# 비워 edge 전체가 죽으므로, 빈 결과는 쓰지 않고 실패로 끝낸다.
+write_front_caddy_upstream_literal() {
+  local colour="$1"
+  local rewritten
+  rewritten="$(sed -E \
+    -e 's/\{\$WEB_UPSTREAM:front[-_](blue|green)\}:3000/'"${colour}"':3000/g' \
+    -e 's/front[-_](blue|green):3000/'"${colour}"':3000/g' \
+    "${CADDY_FILE}")"
+  if [[ -z "${rewritten}" ]]; then
+    echo "refusing to write an empty Caddyfile while pinning the front upstream to ${colour}" >&2
+    return 1
+  fi
+  printf '%s\n' "${rewritten}" > "${CADDY_FILE}" || return 1
+}
+
+# env 키와 Caddyfile 리터럴을 함께 고정한다. 둘 중 하나만 맞으면 caddy가 설정을 다시 읽는 시점에
+# 서로 다른 색으로 갈린다.
+#
+# 리터럴까지 쓰는 이유: caddy는 placeholder를 **컨테이너 생성 시점의 env**로 해석하고, 그 env는
+# cutover 이후 갱신되지 않는다(cutover는 caddy를 재생성하지 않는다). 배포의 `git checkout --force`가
+# 리터럴을 placeholder로 되돌린 상태로 남으면, 04:10 정기 재부팅이나 autoheal 재시작 한 번으로
+# 공개 사이트가 조용히 이전 색으로 돌아간다 - 전부 200이고 아무 알림도 뜨지 않는다.
+# 파일만 고친다: 실행 중인 caddy의 라우팅은 이미 같은 색이므로 reload가 필요 없고, caddy가 떠
+# 있지 않은 단계(edge boot 전)에서도 성립해야 한다.
+pin_front_caddy_upstream() {
+  local colour="$1"
+  upsert_env_key "WEB_UPSTREAM" "${colour}" || return 1
+  write_front_caddy_upstream_literal "${colour}" || return 1
+}
+
 # WEB_UPSTREAM이 없으면 Caddy web vhost가 `{$WEB_UPSTREAM:front_blue}` 기본값으로 내려앉는다.
 # .env.prod는 매 배포마다 재생성되므로, 활성 색이 green인 상태에서 backend 배포만 돌면 공개
 # 트래픽이 조용히 멈춰 있는 blue로 넘어간다. caddy 컨테이너가 생성될 때 값을 갖도록 boot 전에 핀한다.
@@ -2812,8 +2843,8 @@ persist_front_caddy_upstream() {
 
   local active
   active="$(detect_active_front)"
-  upsert_env_key "WEB_UPSTREAM" "${active}"
-  echo "front web upstream pinned before edge boot: WEB_UPSTREAM=${active}"
+  pin_front_caddy_upstream "${active}" || return 1
+  echo "front web upstream pinned before edge boot: WEB_UPSTREAM=${active} (Caddyfile literal restored)"
 }
 
 # WEB_DOMAIN이 비어 있으면 Caddyfile 기본값(web.localhost)이 유일한 도달 이름이다. 공개 전환
@@ -2940,17 +2971,16 @@ switch_caddy_web_upstream() {
     return 1
   fi
 
-  upsert_env_key "WEB_UPSTREAM" "${colour}"
+  pin_front_caddy_upstream "${colour}" || return 1
 
-  local rewritten
-  rewritten="$(sed -E \
-    -e 's/\{\$WEB_UPSTREAM:front[-_](blue|green)\}:3000/'"${colour}"':3000/g' \
-    -e 's/front[-_](blue|green):3000/'"${colour}"':3000/g' \
-    "${CADDY_FILE}")"
-  printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
-  reload_caddy
-  ensure_caddy_mount_sync
+  if ! reload_caddy; then
+    echo "caddy reload failed while switching the web upstream to ${colour}" >&2
+    return 1
+  fi
   echo "caddy web upstream switched to ${colour}:3000"
+  # backend의 switch_caddy_upstream과 같은 형태: mount sync가 마지막이라 그 실패가 그대로
+  # 호출자에게 전달된다. echo를 마지막에 두면 reload/mount sync 실패가 성공이 된다.
+  ensure_caddy_mount_sync
 }
 
 verify_front_edge_route() {
@@ -2990,7 +3020,8 @@ write_front_release_state() {
   local served_sha="$6"
   local pre_switch_sha="$7"
 
-  {
+  # 기록 실패를 삼키면 다음 배포와 운영자가 "직전 성공 배포"의 낡은 증거를 현재 상태로 읽는다.
+  if ! {
     printf 'front_active=%s\n' "${active}"
     printf 'front_previous=%s\n' "${previous}"
     printf 'front_active_image=%s\n' "$(runtime_front_image_value "${active}")"
@@ -3000,9 +3031,22 @@ write_front_release_state() {
     printf 'front_switched_at=%s\n' "${switched_at}"
     printf 'front_result=%s\n' "${result}"
     printf 'front_reason=%s\n' "${reason}"
-  } > "${FRONT_RELEASE_STATE_FILE}"
+  } > "${FRONT_RELEASE_STATE_FILE}"; then
+    echo "failed to write the front release state file: ${FRONT_RELEASE_STATE_FILE}" >&2
+    return 1
+  fi
 
   echo "front release state: active=${active} active_image=$(runtime_front_image_value "${active}") previous=${previous} previous_image=$(runtime_front_image_value "${previous}") switched_at=${switched_at} served_build_sha=${served_sha:-none} previous_build_sha=${pre_switch_sha:-none} result=${result} reason=${reason:-none}"
+}
+
+# cutover 전 실패 경로용. 활성 색은 그대로이므로 전환 시각은 없고, 서빙 중인 빌드는 cutover 직전에
+# 관측한 값 그대로다. 이걸 남기지 않으면 직전 성공 배포의 `deployed`가 현재 상태처럼 남는다.
+record_front_failure_state() {
+  local active="$1"
+  local candidate="$2"
+  local reason="$3"
+  local pre_switch_sha="$4"
+  write_front_release_state "${active}" "${candidate}" "failed" "${reason}" "" "${pre_switch_sha}" "${pre_switch_sha}" || true
 }
 
 # 실패한 cutover를 이전 색으로 되돌린다. "컨테이너가 떴다"는 성공 근거가 아니므로 health ->
@@ -3018,39 +3062,52 @@ rollback_front_to() {
 
   echo "front cutover failed (${reason}); rolling back to ${previous}" >&2
 
+  # rollback이 어느 단계에서 멈추든 실패 사실이 파일에 남아야 한다. 남기지 않으면 직전 성공
+  # 배포의 `deployed`가 현재 상태처럼 읽힌다.
+  fail_rollback() {
+    local detail="$1"
+    echo "front rollback failed: ${detail}" >&2
+    write_front_release_state "${previous}" "${failed}" "rollback_failed" "${reason}:${detail}" "" \
+      "$(served_front_build_sha "${web_host}")" "${pre_switch_sha}" || true
+    return 1
+  }
+
   if ! front_service_running "${previous}"; then
     compose up -d "${previous}" || true
   fi
 
   if ! check_front_health "${previous}"; then
-    echo "front rollback blocked: healthcheck failed for ${previous}" >&2
+    fail_rollback "healthcheck failed for ${previous}"
     return 1
   fi
 
   if ! switch_caddy_web_upstream "${previous}"; then
-    echo "front rollback blocked: caddy web upstream switch failed for ${previous}" >&2
+    fail_rollback "caddy web upstream switch failed for ${previous}"
     return 1
   fi
 
   rolled_back_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   if ! verify_front_edge_route "${previous}" "${web_host}"; then
-    echo "front rollback failed: edge route verify failed for ${previous}" >&2
+    fail_rollback "edge route verify failed for ${previous}"
     return 1
   fi
 
   served_sha="$(served_front_build_sha "${web_host}")"
   if [[ -z "${served_sha}" ]]; then
-    echo "front rollback failed: edge did not report a build sha after rolling back to ${previous}" >&2
+    fail_rollback "edge did not report a build sha after rolling back to ${previous}"
     return 1
   fi
   if [[ -n "${pre_switch_sha}" && "${served_sha}" != "${pre_switch_sha}" ]]; then
-    echo "front rollback failed: edge serves build sha=${served_sha}, expected the pre-cutover build ${pre_switch_sha}" >&2
+    fail_rollback "edge serves build sha=${served_sha}, expected the pre-cutover build ${pre_switch_sha}"
     return 1
   fi
 
-  printf '%s\n' "${previous}" > "${FRONT_STATE_FILE}"
-  write_front_release_state "${previous}" "${failed}" "rolled_back" "${reason}" "${rolled_back_at}" "${served_sha}" "${pre_switch_sha}"
+  printf '%s\n' "${previous}" > "${FRONT_STATE_FILE}" || {
+    fail_rollback "cannot write the active front state file: ${FRONT_STATE_FILE}"
+    return 1
+  }
+  write_front_release_state "${previous}" "${failed}" "rolled_back" "${reason}" "${rolled_back_at}" "${served_sha}" "${pre_switch_sha}" || return 1
   compose stop "${failed}" || true
   echo "front rollback ok: upstream=${previous}, served_build_sha=${served_sha}, stopped_candidate=${failed}"
   return 0
@@ -3099,8 +3156,11 @@ run_front_blue_green_deploy() {
   fi
   upsert_runtime_front_image "${active_front}" "${active_image}" || return 1
   upsert_runtime_front_image "${next_front}" "${STAGED_FRONT_IMAGE}" || return 1
-  # 후보가 뜨는 동안 edge는 활성 색에 고정돼 있어야 한다.
-  upsert_env_key "WEB_UPSTREAM" "${active_front}"
+  # 후보가 뜨는 동안 edge는 활성 색에 고정돼 있어야 한다. 리터럴까지 함께 복구하는 이유는
+  # pin_front_caddy_upstream 주석 참조 - 이 배포를 시작한 `git checkout --force`가 방금
+  # Caddyfile을 placeholder로 되돌렸고, 여기서 복구하지 않으면 cutover 전에 실패했을 때
+  # 다음 caddy 재시작이 공개 사이트를 조용히 이전 색으로 돌린다.
+  pin_front_caddy_upstream "${active_front}" || return 1
 
   echo "front active colour: ${active_front} (image=${active_image})"
   echo "front next colour: ${next_front} (image=${STAGED_FRONT_IMAGE}, build_sha=${STAGED_FRONT_BUILD_SHA})"
@@ -3108,16 +3168,22 @@ run_front_blue_green_deploy() {
   pre_switch_sha="$(served_front_build_sha "${web_host}")"
   echo "front pre-cutover served build sha: ${pre_switch_sha:-none} (host=${web_host})"
 
-  compose pull "${next_front}"
+  if ! compose pull "${next_front}"; then
+    echo "front candidate image pull failed: ${next_front} (${STAGED_FRONT_IMAGE})" >&2
+    record_front_failure_state "${active_front}" "${next_front}" "front_candidate_pull_failed" "${pre_switch_sha}"
+    return 1
+  fi
   if ! compose_up_force_recreate_with_retry "${next_front}"; then
     emit_backend_diagnostics "${next_front}" >&2 || true
     compose stop "${next_front}" || true
+    record_front_failure_state "${active_front}" "${next_front}" "front_candidate_boot_failed" "${pre_switch_sha}"
     return 1
   fi
 
   if ! check_front_health "${next_front}"; then
     echo "front candidate health failed before cutover: ${next_front}" >&2
     compose stop "${next_front}" || true
+    record_front_failure_state "${active_front}" "${next_front}" "front_candidate_health_failed" "${pre_switch_sha}"
     return 1
   fi
 
@@ -3139,8 +3205,13 @@ run_front_blue_green_deploy() {
     return 1
   fi
 
-  printf '%s\n' "${next_front}" > "${FRONT_STATE_FILE}"
-  write_front_release_state "${next_front}" "${active_front}" "deployed" "" "${switched_at}" "${served_sha}" "${pre_switch_sha}"
+  # 상태·증거 기록 실패를 삼키면 다음 배포가 활성 색을 잘못 판정하고, 운영자는 이번 배포의
+  # digest·전환 시각을 잃는다. 그 상태로 `deployed`를 보고하지 않는다.
+  if ! printf '%s\n' "${next_front}" > "${FRONT_STATE_FILE}"; then
+    echo "cannot write the active front state file: ${FRONT_STATE_FILE}" >&2
+    return 1
+  fi
+  write_front_release_state "${next_front}" "${active_front}" "deployed" "" "${switched_at}" "${served_sha}" "${pre_switch_sha}" || return 1
 
   # 이전 색은 정지시키지 않는다. 트래픽은 받지 않지만 다음 배포가 실패했을 때 즉시 되돌릴 warm
   # rollback 대상이고, 정지시키면 그 rollback이 cold boot를 기다리는 동안 공개 사이트가 깨진

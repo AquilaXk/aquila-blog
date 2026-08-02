@@ -193,6 +193,8 @@ jobs:
           FRONT_DEPLOY="false"
           FRONT_SOURCE_SHA=""
           FRONT_STALE_BLOCKED="false"
+          FRONT_FAIL_OPEN="false"
+          FRONT_FAIL_OPEN_STALE="false"
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           # front 배포 트리거는 backend와 겹치지 않는다. 여기 적힌 경로는 Frontend Image
@@ -242,6 +244,7 @@ jobs:
           if [ -z "${CHANGED_FILES}" ]; then
             BACKEND_DEPLOY="true"
             FRONT_DEPLOY="true"
+            FRONT_FAIL_OPEN="true"
             CHANGE_SOURCE="fail-open:no-changed-files"
           else
             if echo "${CHANGED_FILES}" | grep -Eq "${BACKEND_DEPLOY_PATHS_PATTERN}"; then
@@ -279,6 +282,17 @@ jobs:
             fi
           fi
 
+          # fail-open은 "변경 파일을 못 읽었으니 안전한 쪽으로 배포한다"인데, front에서 안전한 쪽은
+          # 배포가 아니다. 이 커밋이 front를 바꾸지 않았다면 FRONT_SOURCE_SHA는 몇 달 전 커밋일 수
+          # 있고, 그 구 digest로 cutover하면 이미 배포된 최신 front를 성공적으로 되돌린다.
+          # 이 커밋 자신이 front 이미지를 굽는 커밋일 때만 fail-open 배포를 허용한다.
+          if [ "${FRONT_FAIL_OPEN}" = "true" ] && [ "${FRONT_SOURCE_SHA}" != "${DEPLOY_SHA}" ]; then
+            FRONT_DEPLOY="false"
+            FRONT_SOURCE_SHA=""
+            FRONT_FAIL_OPEN_STALE="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+front-fail-open-refused-stale-image"
+          fi
+
           echo "deploy_target_source=${CHANGE_SOURCE}"
 
           {
@@ -307,6 +321,8 @@ jobs:
               echo "- front result: front deploy pipeline continues for front source sha ${FRONT_SOURCE_SHA}"
             elif [ "${FRONT_STALE_BLOCKED}" = "true" ]; then
               echo "- front result: front deploy deferred to the newer main commit that owns the front image"
+            elif [ "${FRONT_FAIL_OPEN_STALE}" = "true" ]; then
+              echo "- front result: front deploy refused on fail-open because this sha builds no front image and the reachable one is older"
             else
               echo "- front result: front deploy skipped because no front image path changed"
             fi
@@ -1523,11 +1539,15 @@ jobs:
     needs:
       - calculateTag
       - blueGreenDeploy
+    # blueGreenDeploy는 `always()`가 없으므로 의존 job(buildAndPush)이 실패하면 **실행되지 않은 채
+    # result가 skipped**가 된다. 그래서 skipped를 전제 충족으로 읽으면 backend 빌드가 깨진 커밋에서
+    # front가 구 backend 위로 cutover된다. 정상 skip(backend를 애초에 배포하지 않는 커밋)과
+    # 사고 skip을 구분하는 신호는 result가 아니라 calculateTag의 backend_deploy 판정이다.
     if: >
-      always() &&
+      !cancelled() &&
       needs.calculateTag.result == 'success' &&
       needs.calculateTag.outputs.front_deploy == 'true' &&
-      (needs.blueGreenDeploy.result == 'success' || needs.blueGreenDeploy.result == 'skipped')
+      (needs.calculateTag.outputs.backend_deploy != 'true' || needs.blueGreenDeploy.result == 'success')
     timeout-minutes: 60
     permissions:
       contents: read

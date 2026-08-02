@@ -251,6 +251,29 @@ export const validateEnvText = ({ contract, target, text }) => {
       }
     }
 
+    // Caddy site address 집합의 유일성. mustDifferFrom은 키 하나와만 비교하므로 집합을 닫지
+    // 못한다 - 주소가 겹치면 caddy가 기동하지 못하고 edge 전체가 내려가므로, 쌍이 아니라 집합으로
+    // 본다. 비교는 host 정규화 후에 한다: 대소문자만 다른 중복도 Caddy에는 같은 주소다.
+    if (check.type === "allDistinct") {
+      const seen = new Map()
+      for (const key of check.keys || []) {
+        const raw = valueOf(env, key)
+        if (!raw) continue
+        const comparable = check.asHost ? normalizeHost(raw) : raw
+        const owner = seen.get(comparable)
+        if (owner) errors.push(safeError(key, `must differ from ${owner}`))
+        else seen.set(comparable, key)
+      }
+    }
+
+    // 한 키가 다른 키의 값을 참조하는 경우(예: apex vhost의 redirect 목적지가 회사 호스트다).
+    // 참조 대상이 없으면 설정은 통과하는데 실제 동작은 기본값(.localhost)을 가리켜 죽는다.
+    if (check.type === "requiresKey") {
+      if (valueOf(env, check.key) && !valueOf(env, check.requires)) {
+        errors.push(safeError(check.key, `requires ${check.requires}`))
+      }
+    }
+
     if (check.type === "cookieDomainScope") {
       // 인증 쿠키 Domain은 front/back 호스트의 공통 접미사로 계산된다(AuthCookieDomainPolicy).
       // 그래서 쿠키 도메인·web 호스트·API 호스트는 한 덩어리로만 의미가 있고, 따로 움직이면

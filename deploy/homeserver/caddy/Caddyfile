@@ -343,8 +343,10 @@ http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://c
 }
 
 # Public web host (#1538). Value is WEB_DOMAIN=blog.aquilaxk.site (Epic #1535 Locked Decision 5).
-# www.aquilaxk.site is retired without a redirect (Locked Decision 6), so this vhost carries the
-# one address and no `redir` exists anywhere in this file.
+# It is the blog surface only. The company surface (`{$COMPANY_DOMAIN}`) and the product surface
+# (`{$PRODUCT_DOMAIN}`) are served by the same front container from their own vhosts below, and the
+# apex redirects to the company host - Locked Decision 6 ("retire www without a redirect") was
+# reversed by the owner on 2026-08-02 (#1605, docs/ops/homeserver-front-domain-cutover.md).
 #
 # The .localhost default is not cosmetic: an unset WEB_DOMAIN leaves the address as bare
 # `http://`, which caddy adapt turns into a route with no host matcher — a port-80 catch-all that
@@ -407,4 +409,114 @@ http://{$WEB_DOMAIN:web.localhost} {
       }
     }
   }
+}
+
+# Front-only public surface body, shared by the company and the product host (#1605).
+#
+# Those two hosts differ in exactly one thing: which Next route their root serves. Everything else -
+# the immutable static-asset floor, the host's own robots policy, the upstream and its forwarded
+# headers - is identical, and duplicating it per host is how one of those silently drifts or
+# disappears on a single door. So the body lives here once and each vhost imports it with its route.
+#
+# `{args[0]}` is that route.
+#
+# These surfaces get NO backend paths. The public API is same-origin under {$WEB_DOMAIN} and the
+# auth cookie is scoped to that host (#1575), so routing backend prefixes here would either widen
+# the cookie beyond its host or hand this surface a session it cannot use. Nothing on these pages
+# calls the backend from the browser, which is what makes front-only the complete answer rather
+# than a restriction.
+#
+# front/next.config.js owns the security headers; like the web vhost this block adds no site-level
+# `header` and no `header_down`, so it cannot strip or weaken them (HR-56).
+(front_surface_vhost) {
+  log {
+    output stdout
+    format json
+  }
+
+  # front API routes (rum/vitals, rum/client-errors) must see a client IP they can trust.
+  import edge_client_ip_capture
+
+  # /_next/static/* is content-hashed and immutable. Next.js already emits this exact
+  # Cache-Control, so the `?` prefix asserts a floor without overwriting the app's value.
+  @nextImmutable path /_next/static/*
+  header @nextImmutable {
+    ?Cache-Control "public, max-age=31536000, immutable"
+  }
+
+  # This host answers its own robots.txt. `front/public/robots.txt` is the BLOG host's file and it
+  # advertises the blog sitemap, so serving it here would make this surface advertise another
+  # host's URL set as its own.
+  #
+  # Only the root is indexable. The same front container also answers the blog routes on this
+  # hostname (the rewrite below claims `/` and nothing else), so an open `Allow: /` would let
+  # crawlers index the whole blog a second time under this host. `Allow: /$` is the longer, more
+  # specific rule, so it wins for `/` while `Disallow: /` covers the rest.
+  #
+  # It must be a `handle`, not a bare `respond`: Caddy's directive order puts `respond` AFTER
+  # `handle`, so a top-level `respond` would compile behind the catch-all proxy and never run.
+  @surfaceRobots path /robots.txt
+  handle @surfaceRobots {
+    header {
+      Content-Type "text/plain; charset=utf-8"
+      Cache-Control "public, max-age=300"
+    }
+    respond "User-agent: *\nAllow: /$\nDisallow: /\n" 200
+  }
+
+  # Blue/Green cutover rewrites the single active upstream host (#1539 owns the switch).
+  handle {
+    encode gzip zstd
+
+    # The surface route lives at `{args[0]}` in the Next app; this host serves it at the root.
+    # Exact `/` only - deeper paths keep going to their own routes so `/_next/*` and the static
+    # assets the page needs are untouched.
+    rewrite / {args[0]}
+
+    reverse_proxy {$WEB_UPSTREAM:front_blue}:3000 {
+      # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to Caddy is
+      # plain HTTP. Next.js builds absolute URLs from forwarded headers, so pin them here.
+      import trusted_edge_client_ip
+      header_up Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 15s
+      }
+    }
+  }
+}
+
+# Company surface host (#1605). Value is COMPANY_DOMAIN=www.aquilaxk.site, the site canonical.
+#
+# The `.localhost` default is required for the same reason as every other optional vhost here: an
+# unset value leaves the address as bare `http://`, which caddy adapt turns into a route with no
+# host matcher - a port-80 catch-all that answers every hostname the other vhosts do not claim.
+http://{$COMPANY_DOMAIN:company.localhost} {
+  import front_surface_vhost /company
+}
+
+# Product surface host (#1605). Value is PRODUCT_DOMAIN=easysubway.aquilaxk.site.
+http://{$PRODUCT_DOMAIN:product.localhost} {
+  import front_surface_vhost /easysubway
+}
+
+# Apex host (#1605). Not a surface of its own: it forwards to the company host.
+#
+# Path and query are preserved through `{uri}`, so a deep link or a shared URL with tracking
+# parameters lands on the same page instead of collapsing to the home page.
+#
+# The destination reuses `{$COMPANY_DOMAIN}` rather than spelling the host again. One source of
+# truth means the redirect target cannot drift away from the vhost that actually serves it.
+#
+# 308, not 301 or 302: permanent AND method-preserving, so a POST to the apex is not silently
+# rewritten into a GET. `redir` defaults to 302, so the status is explicit.
+http://{$APEX_DOMAIN:apex.localhost} {
+  log {
+    output stdout
+    format json
+  }
+
+  redir https://{$COMPANY_DOMAIN:company.localhost}{uri} 308
 }

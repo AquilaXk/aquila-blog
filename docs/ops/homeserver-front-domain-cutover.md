@@ -1,9 +1,13 @@
 # 홈서버 front 도메인 전환 순서 (#1538 · #1575)
 
+> **상태: 전환 완료.** `blog.aquilaxk.site`는 홈서버가 서빙하고 `www`는 폐기됐다. 아래 본문의
+> "현재"는 전환 착수 시점의 상태이며, 실행 기록으로 남긴다. 이전 호스팅 provider로 되돌리는
+> 경로는 #1542로 닫혔다.
+
 `blog.aquilaxk.site` 하나를 Cloudflare Tunnel → Caddy → 홈서버 컨테이너로 개통하는 절차다.
 front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스트가 아니라 이 호스트의 경로다
-(#1575). 현재 `blog.aquilaxk.site`는 **Vercel**을 가리키고, `www.aquilaxk.site`(Vercel)와
-`api.aquilaxk.site`(홈서버)가 구 공개 경로로 살아 있다.
+(#1575). 착수 시점의 `blog.aquilaxk.site`는 **Vercel**을 가리켰고, `www.aquilaxk.site`(Vercel)와
+`api.aquilaxk.site`(홈서버)가 구 공개 경로로 살아 있었다.
 
 - 저장소 쪽 변경(#1538): compose front 서비스, Caddy `{$WEB_DOMAIN}` vhost, env 계약.
 - 경로 기반 공개 API·쿠키 위상·env 스위치(#1575): 이 문서가 그 결과다.
@@ -364,7 +368,7 @@ curl -sSI --max-time 10 https://api.aquilaxk.site/actuator/health/readiness ; ec
 | --- | --- |
 | front 기동 검증 실패 (2단계) | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포한다. 공개 노출 전이라 사용자 영향이 없다. |
 | 3단계 배포 후 백엔드·인증 장애 (DNS 전환 전) | **3단계에서 바꾼 네 값을 전부 되돌린다** — `CUSTOM_PROD_BACKURL=https://api.aquilaxk.site`, `CUSTOM_PROD_FRONTURL=https://www.aquilaxk.site`, `CUSTOM_PROD_COOKIEDOMAIN=aquilaxk.site`, 그리고 `WEB_DOMAIN` 줄 **삭제**. 그 뒤 재배포한다. 구 topology가 복원되고 `www` origin 로그인이 살아난다. `API_DOMAIN`은 내내 그대로였으므로 구 API 경로는 끊긴 적이 없다. **스위치만 되돌리면 `validate-env`가 `ok=false`로 배포를 막는다**(실측: `CUSTOM_PROD_COOKIEDOMAIN`·`CUSTOM_PROD_FRONTURL` 두 error) — 장애 중 롤백이 게이트에서 멈추는 경로라 네 값을 한 번에 되돌린다. |
-| 4단계 직후 `blog.aquilaxk.site` 장애 | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **Vercel을 가리키던 이전 값으로 되돌린다.** Vercel 프로젝트는 이 시점까지 살아 있다(`front/vercel.json` 제거는 #1542 소관). **`HOME_SERVER_ENV`의 네 값도 위 행처럼 함께 되돌린다** — DNS만 되돌리면 쿠키 Domain이 이미 blog라 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다. |
+| 4단계 직후 `blog.aquilaxk.site` 장애 | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **이전 호스팅 provider를 가리키던 값으로 되돌린다.** **`HOME_SERVER_ENV`의 네 값도 위 행처럼 함께 되돌린다** — DNS만 되돌리면 쿠키 Domain이 이미 blog라 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다. **이 경로는 #1542로 닫혔다** — 저장소에서 이전 provider 호스팅 계약이 제거됐으므로 cutover 완료 이후에는 이 행이 적용되지 않는다. 4단계 이후의 front 장애는 `deploy/homeserver/rollback_last_deploy.sh`와 front blue/green 되돌리기로 대응한다. |
 | front 컨테이너만 문제 | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포하면 front 서비스가 기동 대상에서 빠진다. 그 상태에서 `blog.aquilaxk.site`는 front 경로에 502를 내고 API 경로는 계속 동작하므로, 공개 노출 중이라면 위 DNS 되돌리기를 함께 한다. |
 | 6단계까지 끝난 뒤 문제 발견 (`www` 제거 후) | `www` 경로 rollback은 없다. Locked Decision 6이 www를 완전 폐기하기로 한 것이므로 되돌릴 대상 자체가 없다. |
 | 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API 경로 rollback은 DNS/Tunnel hostname 재생성이다. 그래서 7단계는 (6)이 green인 뒤에만 한다. |

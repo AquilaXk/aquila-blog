@@ -904,22 +904,6 @@ jobs:
               PROD_SITE_ADMIN_EMBED_ORIGINS="https://blog.aquilaxk.site"
               PROD_SITE_REVALIDATE_URL="https://blog.aquilaxk.site/api/revalidate"
               ;;
-            api.aquilaxk.site)
-              # Pre-transition state: HOME_SERVER_ENV still carries the old API origin, so the old
-              # site scope is kept intact. Remove this branch once the secret is updated (#1575).
-              PROD_SITE_COOKIE_DOMAIN="aquilaxk.site"
-              PROD_SITE_FRONT_URL="https://www.aquilaxk.site"
-              # Deliberately empty before the cutover. Pinning it would create a Caddy web vhost
-              # for the host we are abandoning (and that another service takes over), and the
-              # front tier is not verified yet at that point - the runbook step 2 guarantees the
-              # web vhost stays on its unreachable default until the cutover deploy.
-              PROD_SITE_WEB_DOMAIN=""
-              PROD_SITE_BACK_URL="https://api.aquilaxk.site"
-              PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://www.aquilaxk.site"
-              PROD_SITE_ADMIN_EMBED_ORIGINS="https://www.aquilaxk.site"
-              PROD_SITE_REVALIDATE_URL="https://www.aquilaxk.site/api/revalidate"
-              echo "WARNING: CUSTOM_PROD_BACKURL is still the pre-transition API origin (${PROD_SITE_BACK_HOST}). Update HOME_SERVER_ENV to https://blog.aquilaxk.site to activate the same-origin blog domain contract." >&2
-              ;;
             *)
               echo "unsupported CUSTOM_PROD_BACKURL host for the prod site contract: '${PROD_SITE_BACK_HOST}'" >&2
               exit 1
@@ -932,10 +916,7 @@ jobs:
           # alone, so a trailing slash or an uppercase label reaches the containers normalised
           # instead of flowing into custom.site.backUrl (and from there into the OAuth redirect-uri).
           upsert_env_key "CUSTOM_PROD_BACKURL" "${PROD_SITE_BACK_URL}" "deploy/homeserver/.env.prod"
-          # Caddy web vhost address (#1538). Left behind it would 404 the public site after the
-          # cutover while urlHostEquals(CUSTOM_PROD_FRONTURL, WEB_DOMAIN) blocks the deploy.
-          # upsert_env_key is a no-op on an empty value, so the pre-cutover branch leaves the key
-          # exactly as the owner has it (absent).
+          # Caddy web vhost address (#1538). The only supported topology always pins it.
           upsert_env_key "WEB_DOMAIN" "${PROD_SITE_WEB_DOMAIN}" "deploy/homeserver/.env.prod"
           # front 서버 사이드가 backend를 부르는 주소(#1539). 색깔에 묶인 값은 backend cutover마다
           # 깨지고, back_read/back_admin은 런타임 모드 밖 요청을 503으로 막는다. 라우트 분리를
@@ -1935,7 +1916,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           case "${FRONT_DEPLOY_RESULT}" in
-            deployed | profile_disabled) ;;
+            deployed) ;;
             *)
               echo "front deploy finished without reporting a result marker" >&2
               exit 1

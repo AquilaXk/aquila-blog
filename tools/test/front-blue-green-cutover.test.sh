@@ -364,20 +364,19 @@ old_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 wrong_sha="cccccccccccccccccccccccccccccccccccccccc"
 
 # ---------------------------------------------------------------------------
-# 1) front 프로필이 꺼져 있고 WEB_DOMAIN도 없으면 배포할 대상이 없다: 결과를 남기고 0으로 끝난다.
+# 1) front 프로필이 꺼져 있으면 WEB_DOMAIN 유무와 무관하게 front 배포를 성공으로 보고할 수 없다.
 # ---------------------------------------------------------------------------
 setup_case "profile-off-no-web-domain" "runtime-split" ""
 status="$(run_front_case 'STAGED_FRONT_IMAGE=""; STAGED_FRONT_BUILD_SHA=""; run_front_blue_green_deploy')"
-assert_equals "profile off without WEB_DOMAIN must not fail the deploy" "0" "${status}"
-assert_file_contains "profile off must report an explicit result" "${case_dir}/stdout" '^front_deploy_result=profile_disabled$'
+assert_equals "profile off without WEB_DOMAIN must fail the front deploy" "1" "${status}"
+assert_file_lacks "a failed front deploy must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
 
 # ---------------------------------------------------------------------------
-# 2) 프로필이 꺼졌는데 WEB_DOMAIN이 공개 트래픽을 받고 있으면 stale front가 서빙 중이라는 뜻이다.
-#    그 상태를 성공으로 보고하면 안 된다.
+# 2) front 프로필이 켜져 있어도 WEB_DOMAIN 없이는 공개 edge를 검증할 수 없으므로 실패해야 한다.
 # ---------------------------------------------------------------------------
-setup_case "profile-off-with-web-domain" "runtime-split" "blog.aquilaxk.site"
-status="$(run_front_case 'STAGED_FRONT_IMAGE=""; STAGED_FRONT_BUILD_SHA=""; run_front_blue_green_deploy')"
-assert_equals "profile off while WEB_DOMAIN serves traffic must fail" "1" "${status}"
+setup_case "profile-on-no-web-domain" "runtime-split,front" ""
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "front profile without WEB_DOMAIN must fail the front deploy" "1" "${status}"
 assert_file_lacks "a failed front deploy must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
 
 # ---------------------------------------------------------------------------

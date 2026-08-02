@@ -482,14 +482,19 @@ unset TOKEN_FOR_REVALIDATE
 
 ## Rollback
 
+> **Historical record — current execution prohibited.** The table below preserves the cutover-era
+> facts only. Do not restore the retired `api.aquilaxk.site`/`www.aquilaxk.site` topology, DNS, or
+> Tunnel hostnames. Current front rollback uses `deploy/homeserver/rollback_last_deploy.sh` and the
+> front blue/green procedure while keeping the same-origin `blog.aquilaxk.site` edge.
+
 | 상황 | 되돌리는 방법 |
 | --- | --- |
-| front 기동 검증 실패 (2단계) | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포한다. 공개 노출 전이라 사용자 영향이 없다. |
+| front 기동 검증 실패 (2단계) | 당시에는 `COMPOSE_PROFILES`에서 `front`를 빼고 재배포했다. |
 | 3단계 배포 후 백엔드·인증 장애 (DNS 전환 전) | **3단계에서 바꾼 네 값을 전부 되돌린다** — `CUSTOM_PROD_BACKURL=https://api.aquilaxk.site`, `CUSTOM_PROD_FRONTURL=https://www.aquilaxk.site`, `CUSTOM_PROD_COOKIEDOMAIN=aquilaxk.site`, 그리고 `WEB_DOMAIN` 줄 **삭제**. 그 뒤 재배포한다. 구 topology가 복원되고 `www` origin 로그인이 살아난다. `API_DOMAIN`은 내내 그대로였으므로 구 API 경로는 끊긴 적이 없다. **스위치만 되돌리면 `validate-env`가 `ok=false`로 배포를 막는다**(실측: `CUSTOM_PROD_COOKIEDOMAIN`·`CUSTOM_PROD_FRONTURL` 두 error) — 장애 중 롤백이 게이트에서 멈추는 경로라 네 값을 한 번에 되돌린다. **6단계(`www` 제거) 이후에는 이 행이 성립하지 않는다** — 되돌릴 `www` 호스트가 없고, #1596 이후 `WEB_DOMAIN`을 지운 위상은 `blue_green_deploy.sh`의 `require_nonempty_env_key "WEB_DOMAIN"`에서 배포가 멈춘다. |
-| 4단계 직후 `blog.aquilaxk.site` 장애 | Cloudflare 콘솔에서 `blog.aquilaxk.site` public hostname을 삭제하고 DNS 레코드를 **Vercel을 가리키던 이전 값으로 되돌린다.** Vercel 프로젝트는 이 시점까지 살아 있다(`front/vercel.json` 제거는 #1542 소관). **`HOME_SERVER_ENV`의 네 값도 위 행처럼 함께 되돌린다** — DNS만 되돌리면 쿠키 Domain이 이미 blog라 "사이트는 뜨는데 로그인이 안 되는" 상태가 된다.<br><br>**(후행 주석 · #1542)** 이 행은 cutover 진행 중의 rollback 절차였고 그 시점의 사실 기록으로 보존한다. cutover 완료 후 #1542가 저장소의 Vercel 호스팅 계약을 제거하고 오너가 Vercel Git 연결을 해제하면서 **이 경로는 닫혔다.** 이후의 front 장애는 `deploy/homeserver/rollback_last_deploy.sh`와 front blue/green 되돌리기로 대응한다. |
-| front 컨테이너만 문제 | `COMPOSE_PROFILES`에서 `front`를 빼고 재배포하면 front 서비스가 기동 대상에서 빠진다. 그 상태에서 `blog.aquilaxk.site`는 front 경로에 502를 내고 API 경로는 계속 동작하므로, 공개 노출 중이라면 위 DNS 되돌리기를 함께 한다. |
-| 6단계까지 끝난 뒤 문제 발견 (`www` 제거 후) | `www` 경로 rollback은 없다. Locked Decision 6이 www를 완전 폐기하기로 한 것이므로 되돌릴 대상 자체가 없다. |
-| 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API 경로 rollback은 DNS/Tunnel hostname 재생성이다. 그래서 7단계는 (6)이 green인 뒤에만 한다. |
+| 4단계 직후 `blog.aquilaxk.site` 장애 | 당시에는 Cloudflare public hostname과 DNS를 Vercel로 되돌리고 네 env 값을 함께 복원하는 절차였다. #1542 이후 이 경로는 닫혔다. |
+| front 컨테이너만 문제 | 현재는 `rollback_last_deploy.sh`와 front blue/green rollback으로 마지막 검증된 front를 같은 `blog.aquilaxk.site` edge에 복원한다. 프로필을 끄거나 DNS를 되돌리지 않는다. |
+| 6단계까지 끝난 뒤 문제 발견 (`www` 제거 후) | `www` 경로 rollback은 없으며, 현재 절차도 이를 재생성하지 않는다. |
+| 7단계까지 끝난 뒤 문제 발견 (구 API hostname 제거 후) | 구 API hostname의 DNS/Tunnel 재생성은 현재 rollback 절차가 아니다. same-origin front rollback만 수행한다. |
 
 ## 저장소 쪽 fail-safe
 

@@ -2885,8 +2885,6 @@ persist_front_caddy_upstream() {
   echo "front web upstream pinned before edge boot: WEB_UPSTREAM=${active} (Caddyfile literal restored)"
 }
 
-# WEB_DOMAIN이 비어 있으면 Caddyfile 기본값(web.localhost)이 유일한 도달 이름이다. 공개 전환
-# 전에도 edge 경로를 끝까지 검증할 수 있어야 하므로 기본값을 그대로 쓴다.
 front_edge_host() {
   local host
   host="$(host_env_value "WEB_DOMAIN")"
@@ -2894,10 +2892,8 @@ front_edge_host() {
     printf '%s' "${host}"
     return 0
   fi
-  # stdout은 호출자가 값으로 받으므로 신호는 stderr로 낸다. 기본값을 조용히 쓰면 "공개
-  # 도메인에서 검증했다"와 "아직 공개 트래픽이 오지 않는 이름에서 검증했다"가 로그에서 같아 보인다.
-  echo "WEB_DOMAIN is unset: verifying the front edge through the Caddyfile default host (web.localhost); the public web host is not served yet" >&2
-  printf 'web.localhost'
+  echo "WEB_DOMAIN is required for front edge verification" >&2
+  return 1
 }
 
 probe_front_http_code() {
@@ -3190,22 +3186,12 @@ rollback_front_to() {
 }
 
 run_front_blue_green_deploy() {
-  local web_domain active_front next_front active_image previous_candidate_image
+  local active_front next_front active_image previous_candidate_image
   local web_host pre_switch_sha switched_at served_sha
 
   if ! compose_profile_enabled "front"; then
-    web_domain="$(host_env_value "WEB_DOMAIN")"
-    if [[ -n "${web_domain}" ]]; then
-      # 프로필이 꺼졌는데 공개 web 호스트가 살아 있으면 front tier는 배포 대상 밖에 있으면서도
-      # 트래픽을 받고 있다는 뜻이다. 그 상태를 성공으로 보고하면 stale front가 그대로 서빙된다.
-      echo "front profile is disabled while WEB_DOMAIN=${web_domain} is served by the front tier: refusing to report a front deploy that cannot happen" >&2
-      return 1
-    fi
-    # 서버가 front tier를 아직 채택하지 않은 상태(cutover 런북 2단계 전, 또는 의도적 opt-out).
-    # 배포할 대상이 없으므로 실패가 아니지만, 결과를 명시적으로 남긴다.
-    echo "front_deploy_result=profile_disabled"
-    echo "front deploy skipped: COMPOSE_PROFILES has no 'front' profile and WEB_DOMAIN is unset (the front tier is not part of this server yet)"
-    return 0
+    echo "front profile is disabled: refusing front deploy" >&2
+    return 1
   fi
 
   if [[ -z "${STAGED_FRONT_IMAGE}" ]]; then
@@ -3223,7 +3209,7 @@ run_front_blue_green_deploy() {
 
   active_front="$(detect_active_front)"
   next_front="$(other_front "${active_front}")"
-  web_host="$(front_edge_host)"
+  web_host="$(front_edge_host)" || return 1
 
   active_image="$(resolve_preserved_front_image "${active_front}")" || return 1
   if [[ -z "${active_image}" ]]; then

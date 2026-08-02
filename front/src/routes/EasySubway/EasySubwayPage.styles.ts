@@ -1,26 +1,30 @@
 import styled from "@emotion/styled"
 import { breakpoint, editorialLabel, fontWeight, layoutBreakpoint, radius } from "src/design-system/tokens"
 import { focusVisibleRing } from "src/design-system/focusRing"
-import { colors, variables } from "src/styles"
+import { marketingDark as dark } from "src/design-system/marketingPalette"
+import { variables } from "src/styles"
 
 /**
- * 제품 표면은 사이트 전역 라이트 테마와 무관하게 near-black 다크 톤으로 고정한다. 그래서 테마
- * 객체가 아니라 다크 스케일을 직접 참조한다 - 이 페이지의 색은 방문자 설정이 아니라 제품 정체성이다.
+ * 제품 표면은 방문자 테마와 무관하게 인디고-블랙 다크로 고정한다 - 이 페이지의 색은 사용자 설정이
+ * 아니라 제품 정체성이다. 색·대비 근거는 `src/design-system/marketingPalette.ts` 주석에 있다.
  *
- * 블루는 near-black 위에서 `blue9`도 5.7:1을 넘기므로 인터랙티브 면·강조·수치에 그대로 쓴다.
- * 채운 blue 면 위의 글자는 near-black(`gray1`)이다 - 밝은 블루에 흰 글자를 얹으면 대비가 무너진다.
- * 텍스처·사진·gradient·glow는 쓰지 않는다. 깊이는 gray2/gray3 단색 기하 패널로만 만든다.
- * 그림자는 폰 목업 패널과 stat 카드 두 곳뿐이다.
+ * 배경은 한 세계로 읽혀야 한다. 그래서 층위를 세 가지 장치로만 만든다:
+ * 1) 필드 세 단계(`fieldDeep` / `field` / `fieldRaised`)의 섹션 명도 교대 + hairline 구획선
+ * 2) 좌우에서 중앙으로 좁아지는 깊이 형상 두 장(터널 구도) - 회전한 라운드 사각형(블롭)은 쓰지 않는다
+ * 3) 추상 노선도 라인 아트(별도 컴포넌트, 저대비)
+ * 히어로 폰 뒤 저강도 radial 광원 하나는 오너가 마케팅 표면 한정으로 승인한 gradient 예외다
+ * (2026-08-02). 보조 광원은 두지 않는다.
+ *
+ * 그림자는 폰 목업과 stat 카드 두 곳뿐이다.
  */
-const c = colors.dark
 const CONTENT_MAX_WIDTH = "75rem"
 const SECTION_PADDING_Y = "clamp(4rem, 9vw, 9rem)"
 const SECTION_PADDING_X = "clamp(1.25rem, 5vw, 3rem)"
 const TRANSITION = "160ms ease-out"
 
 export const ProductSurface = styled.div`
-  background: ${c.gray1};
-  color: ${c.gray12};
+  background: ${dark.field};
+  color: ${dark.textPrimary};
   /* 한국어 본문이 단어 중간에서 끊기지 않게 한다. 블로그 타이포에 영향을 주지 않도록 이 표면에만 둔다. */
   word-break: keep-all;
   overflow-wrap: break-word;
@@ -36,8 +40,8 @@ export const SurfaceHeader = styled.header`
   gap: 1rem;
   min-height: 72px;
   padding: 0.75rem ${SECTION_PADDING_X};
-  background: ${c.gray1};
-  border-bottom: 1px solid ${c.gray3};
+  background: ${dark.fieldDeep};
+  border-bottom: 1px solid ${dark.hairline};
 
   /* 브랜드 + 내비 4개는 좁은 폭에서 한 줄에 들어가지 않는다. 상위 풀블리드 래퍼가 가로 overflow를
      clip하므로 줄바꿈을 허용하지 않으면 우측 링크와 문의 CTA가 스크롤도 못 하는 상태로 잘려 나간다. */
@@ -54,7 +58,7 @@ export const BrandLink = styled.a`
   gap: 0.5rem;
   min-height: 44px;
   border-radius: ${radius.md}px;
-  color: ${c.gray12};
+  color: ${dark.textPrimary};
   text-decoration: none;
   font-size: 1.06rem;
   font-weight: ${fontWeight.bold};
@@ -63,7 +67,7 @@ export const BrandLink = styled.a`
   small {
     font-size: 0.8rem;
     font-weight: ${fontWeight.regular};
-    color: ${c.gray10};
+    color: ${dark.textMuted};
 
     /* 모바일 헤더는 브랜드명만 남긴다. by-line까지 두면 브랜드가 두 줄로 랩해 헤더 높이가 흔들린다.
        회사 귀속은 footer가 유지하므로 여기서 숨겨도 정보가 사라지지 않는다. */
@@ -97,15 +101,15 @@ export const NavLink = styled.a`
   min-height: 44px;
   padding: 0 0.75rem;
   border-radius: ${radius.md}px;
-  color: ${c.gray10};
+  color: ${dark.textSecondary};
   text-decoration: none;
   font-size: 0.94rem;
   font-weight: ${fontWeight.regular};
   transition: color ${TRANSITION}, background-color ${TRANSITION};
 
   &:hover {
-    color: ${c.gray12};
-    background: ${c.gray3};
+    color: ${dark.textPrimary};
+    background: ${dark.fieldRaised};
   }
 
   @media (max-width: ${breakpoint.sm}px) {
@@ -122,8 +126,8 @@ export const PillAction = styled.a`
   min-height: 48px;
   padding: 0 1.5rem;
   border-radius: ${variables.ui.button.radiusPill}px;
-  background: ${c.blue9};
-  color: ${c.gray1};
+  background: ${dark.accent};
+  color: ${dark.onAccent};
   text-decoration: none;
   font-size: 1rem;
   font-weight: ${fontWeight.semibold};
@@ -131,7 +135,7 @@ export const PillAction = styled.a`
   transition: background-color ${TRANSITION};
 
   &:hover {
-    background: ${c.blue10};
+    background: ${dark.accentPressed};
   }
 `
 
@@ -147,8 +151,8 @@ export const StatusPill = styled.span`
   gap: 0.45rem;
   padding: 0.4rem 0.9rem;
   border-radius: ${variables.ui.button.radiusPill}px;
-  background: ${c.gray3};
-  color: ${c.gray12};
+  background: ${dark.fieldRaised};
+  color: ${dark.textPrimary};
   font-size: 0.86rem;
   font-weight: ${fontWeight.medium};
 
@@ -157,58 +161,66 @@ export const StatusPill = styled.span`
     width: 0.4rem;
     height: 0.4rem;
     border-radius: ${radius.pill}px;
-    background: ${c.blue9};
+    background: ${dark.signature};
   }
 `
 
 /**
  * 시네마틱 다크 히어로. 폰이 주인공이고 텍스트는 그 위에서 최소로 머문다.
- * 배경 깊이는 크게 겹친 단색 기하 패널 세 장이 만든다 - 텍스처도 사진도 gradient도 쓰지 않는다.
+ * 가장 어두운 필드 단계를 쓰고 층위는 아래 무대 장치들이 만든다.
  */
 export const Hero = styled.section`
   position: relative;
   overflow: hidden;
   padding: clamp(3rem, 7vw, 6rem) ${SECTION_PADDING_X} 0;
-  background: ${c.gray1};
+  background: ${dark.fieldDeep};
 `
 
+/**
+ * 히어로 무대. 좌우에서 중앙으로 좁아지는 깊이 형상 두 장이 터널 구도를 만들고, 그 사이 중앙에
+ * 폰 뒤로 들어가는 저강도 radial 광원 하나를 둔다.
+ */
 export const HeroStage = styled.div`
   position: absolute;
   inset: 0;
   pointer-events: none;
 
-  span {
-    position: absolute;
-    display: block;
-    border-radius: 2.5rem;
-  }
-
+  /* 좌측 벽: 왼쪽 끝은 화면 높이를 다 쓰고 중앙으로 갈수록 좁아진다. */
   span:nth-of-type(1) {
-    top: -12%;
-    left: -8%;
-    width: 46%;
-    height: 78%;
-    background: ${c.gray2};
-    transform: rotate(-9deg);
+    position: absolute;
+    inset: 0 62% 0 0;
+    background: ${dark.field};
+    clip-path: polygon(0 0, 100% 26%, 100% 76%, 0 100%);
   }
 
+  /* 우측 벽: 좌측의 거울상이되 비대칭이 남게 비율을 다르게 잡는다. */
   span:nth-of-type(2) {
-    right: -14%;
-    bottom: -22%;
-    width: 52%;
-    height: 86%;
-    background: ${c.gray3};
-    transform: rotate(7deg);
+    position: absolute;
+    inset: 0 0 0 58%;
+    background: ${dark.field};
+    clip-path: polygon(100% 0, 0 20%, 0 82%, 100% 100%);
   }
 
+  /* 폰 뒤 광원 하나. 승인된 gradient 예외이며 세기는 필드 한 단계 밝기까지만 올린다. */
   span:nth-of-type(3) {
-    top: 26%;
-    right: 18%;
-    width: 22%;
-    height: 34%;
-    background: ${c.gray2};
-    transform: rotate(-16deg);
+    position: absolute;
+    top: 22%;
+    left: 50%;
+    width: min(46rem, 92%);
+    height: 62%;
+    background: radial-gradient(closest-side, ${dark.hairline}, transparent);
+    transform: translateX(-50%);
   }
+`
+
+/** 배경 노선도 라인 아트를 담는 층. 텍스트보다 뒤, 무대 형상보다 앞이다. */
+export const LineArtLayer = styled.div<{ $align?: "top" | "bottom" }>`
+  position: absolute;
+  right: 0;
+  left: 0;
+  ${({ $align }) => ($align === "bottom" ? "bottom: 0;" : "top: 0;")}
+  height: clamp(14rem, 34vw, 26rem);
+  pointer-events: none;
 `
 
 export const HeroCopy = styled.div`
@@ -224,16 +236,16 @@ export const HeroCopy = styled.div`
 
 export const HeroTitle = styled.h1`
   margin: 0;
-  font-size: clamp(2.25rem, 5.4vw, 3.9rem);
+  font-size: clamp(2.1rem, 5.4vw, 3.9rem);
   line-height: 1.1;
   letter-spacing: -0.02em;
   font-weight: ${fontWeight.regular};
-  color: ${c.gray10};
+  color: ${dark.textMuted};
 
   strong {
     display: block;
     font-weight: ${fontWeight.bold};
-    color: ${c.gray12};
+    color: ${dark.textPrimary};
   }
 `
 
@@ -243,15 +255,15 @@ export const HeroLead = styled.p`
   max-width: 30rem;
   font-size: clamp(0.98rem, 1.4vw, 1.08rem);
   line-height: 1.7;
-  color: ${c.gray10};
+  color: ${dark.textSecondary};
 `
 
-/** 본문 안에서 키워드만 blue 틴트 박스로 들어 올린다. */
+/** 본문 안에서 키워드만 인디고 틴트 박스로 들어 올린다. */
 export const InlineHighlight = styled.strong`
   padding: 0.1rem 0.35rem;
   border-radius: ${radius.sm}px;
-  background: ${c.blue3};
-  color: ${c.blue11};
+  background: ${dark.hairline};
+  color: ${dark.textPrimary};
   font-weight: ${fontWeight.semibold};
 `
 
@@ -262,11 +274,12 @@ export const InlineHighlight = styled.strong`
 export const PhoneFrame = styled.figure<{ $tilt?: number; $width?: string }>`
   position: relative;
   margin: 0;
-  width: min(100%, ${({ $width }) => $width || "19rem"});
+  /* 좁은 폭에서도 무대 여백이 남게 컨테이너를 다 채우지 않는다. */
+  width: min(94%, ${({ $width }) => $width || "19rem"});
   padding: 0.6rem;
-  border: 2px solid ${c.gray6};
+  border: 2px solid ${dark.borderStrong};
   border-radius: 2.75rem;
-  background: ${c.gray2};
+  background: ${dark.fieldDeep};
   box-shadow: ${variables.ui.card.shadowFloatingDark};
   transform: rotate(${({ $tilt }) => $tilt ?? 0}deg);
 
@@ -279,7 +292,7 @@ export const PhoneFrame = styled.figure<{ $tilt?: number; $width?: string }>`
     width: 3.5rem;
     height: 0.3rem;
     border-radius: ${radius.pill}px;
-    background: ${c.gray6};
+    background: ${dark.borderStrong};
     transform: translateX(-50%);
   }
 
@@ -300,12 +313,20 @@ export const HeroPhoneWrap = styled.div`
   margin-bottom: calc(-1 * clamp(4rem, 9vw, 8rem));
 `
 
+/**
+ * 섹션 명도 교대. `base`와 `raised`를 번갈아 쓰고 경계마다 hairline을 둬서 한 세계 안에서 층이
+ * 바뀐 것처럼 읽히게 한다.
+ */
 export const Section = styled.section<{ $tone?: "base" | "raised" }>`
+  position: relative;
+  overflow: hidden;
   padding: ${SECTION_PADDING_Y} ${SECTION_PADDING_X};
-  background: ${({ $tone }) => ($tone === "raised" ? c.gray2 : c.gray1)};
+  background: ${({ $tone }) => ($tone === "raised" ? dark.fieldRaised : dark.field)};
+  border-top: 1px solid ${dark.hairline};
 `
 
 export const SectionInner = styled.div`
+  position: relative;
   width: min(100%, ${CONTENT_MAX_WIDTH});
   margin: 0 auto;
 `
@@ -317,23 +338,23 @@ export const Eyebrow = styled.p`
   font-weight: ${editorialLabel.fontWeight};
   letter-spacing: ${editorialLabel.letterSpacing};
   text-transform: ${editorialLabel.textTransform};
-  color: ${c.blue11};
+  color: ${dark.textMuted};
 `
 
-/** 혼합 웨이트 디스플레이. 1행은 얇은 gray, 2행은 굵은 white. */
+/** 혼합 웨이트 디스플레이. 1행은 얇은 인디고 틴트, 2행은 굵은 white. */
 export const DisplayHeading = styled.h2`
   margin: 0;
   max-width: 32rem;
-  font-size: clamp(1.9rem, 4vw, 3.1rem);
+  font-size: clamp(1.75rem, 4vw, 3.1rem);
   line-height: 1.14;
   letter-spacing: -0.02em;
   font-weight: ${fontWeight.regular};
-  color: ${c.gray10};
+  color: ${dark.textMuted};
 
   strong {
     display: block;
     font-weight: ${fontWeight.bold};
-    color: ${c.gray12};
+    color: ${dark.textPrimary};
   }
 `
 
@@ -353,11 +374,11 @@ export const IntroAside = styled.p`
   max-width: 22rem;
   font-size: 0.94rem;
   line-height: 1.75;
-  color: ${c.gray10};
+  color: ${dark.textSecondary};
 
   strong {
     font-weight: ${fontWeight.semibold};
-    color: ${c.gray12};
+    color: ${dark.textPrimary};
   }
 `
 
@@ -367,7 +388,7 @@ export const MetaFactRow = styled.dl`
   gap: 1.25rem 1.5rem;
   margin: clamp(2rem, 4vw, 3rem) 0 0;
   padding-top: clamp(1.5rem, 3vw, 2.25rem);
-  border-top: 1px solid ${c.gray3};
+  border-top: 1px solid ${dark.hairline};
 
   dt {
     margin: 0 0 0.5rem;
@@ -376,7 +397,7 @@ export const MetaFactRow = styled.dl`
     font-weight: ${editorialLabel.fontWeight};
     letter-spacing: ${editorialLabel.letterSpacing};
     text-transform: ${editorialLabel.textTransform};
-    color: ${c.gray10};
+    color: ${dark.textMuted};
   }
 
   dd {
@@ -394,8 +415,8 @@ export const MetaPill = styled.span<{ $accent?: boolean }>`
   min-height: 32px;
   padding: 0 0.85rem;
   border-radius: ${variables.ui.button.radiusPill}px;
-  background: ${({ $accent }) => ($accent ? c.blue9 : c.gray3)};
-  color: ${({ $accent }) => ($accent ? c.gray1 : c.gray11)};
+  background: ${({ $accent }) => ($accent ? dark.signature : dark.fieldDeep)};
+  color: ${({ $accent }) => ($accent ? dark.onSignature : dark.textSecondary)};
   font-size: 0.92rem;
   font-weight: ${fontWeight.medium};
 `
@@ -420,16 +441,20 @@ export const FeatureBlock = styled.div<{ $reverse?: boolean }>`
   }
 `
 
-/** 거대한 아웃라인 고스트 숫자. 채움 없이 1px stroke만. */
+/**
+ * 거대한 아웃라인 고스트 숫자. 채움 없이 stroke만 쓰되, 배경 위 1.3:1이던 near-black gray 대신
+ * 인디고 포인트 색(4.2:1)으로 올려 실제로 읽히게 한다.
+ */
 export const GhostIndex = styled.span`
   display: block;
-  margin-bottom: -0.35em;
+  /* 대비를 올린 뒤에는 기존 -0.35em이 기능명 글자를 파고들어 둘 다 읽기 어려워진다. */
+  margin-bottom: -0.1em;
   font-size: clamp(5.5rem, 11vw, 9rem);
   line-height: 1;
   letter-spacing: -0.04em;
   font-weight: ${fontWeight.bold};
   color: transparent;
-  -webkit-text-stroke: 1px ${c.gray6};
+  -webkit-text-stroke: 1.5px ${dark.lineArtAccent};
 `
 
 export const FeatureName = styled.h3`
@@ -438,7 +463,7 @@ export const FeatureName = styled.h3`
   line-height: 1.25;
   letter-spacing: -0.02em;
   font-weight: ${fontWeight.bold};
-  color: ${c.gray12};
+  color: ${dark.textPrimary};
 `
 
 export const FeatureBody = styled.p`
@@ -446,7 +471,7 @@ export const FeatureBody = styled.p`
   max-width: 30rem;
   font-size: 1rem;
   line-height: 1.8;
-  color: ${c.gray10};
+  color: ${dark.textSecondary};
 `
 
 /** 스크린샷이 없는 블록의 시각 축. 자리를 채우는 이미지를 만들지 않고 단색 면과 타이포로 만든다. */
@@ -457,9 +482,9 @@ export const StatementPanel = styled.div`
   gap: 1rem;
   min-height: 16rem;
   padding: clamp(1.75rem, 4vw, 2.75rem);
-  border: 1px solid ${c.gray6};
+  border: 1px solid ${dark.hairline};
   border-radius: 1.5rem;
-  background: ${c.gray2};
+  background: ${dark.fieldDeep};
 
   p {
     margin: 0;
@@ -467,7 +492,7 @@ export const StatementPanel = styled.div`
     line-height: 1.5;
     letter-spacing: -0.01em;
     font-weight: ${fontWeight.regular};
-    color: ${c.gray12};
+    color: ${dark.textPrimary};
   }
 
   span {
@@ -476,7 +501,7 @@ export const StatementPanel = styled.div`
     font-weight: ${editorialLabel.fontWeight};
     letter-spacing: ${editorialLabel.letterSpacing};
     text-transform: ${editorialLabel.textTransform};
-    color: ${c.gray10};
+    color: ${dark.textMuted};
   }
 `
 
@@ -486,8 +511,9 @@ export const FeatureStage = styled.div`
   justify-content: center;
   gap: clamp(1rem, 2vw, 1.75rem);
   padding: clamp(1.25rem, 2.4vw, 1.85rem);
+  border: 1px solid ${dark.hairline};
   border-radius: 1.5rem;
-  background: ${c.gray2};
+  background: ${dark.fieldDeep};
 
   @media (max-width: ${breakpoint.sm}px) {
     flex-direction: column;
@@ -506,9 +532,9 @@ export const DetailCrop = styled.figure`
   > div {
     overflow: hidden;
     aspect-ratio: 4 / 3;
-    border: 1px solid ${c.gray6};
+    border: 1px solid ${dark.borderStrong};
     border-radius: 1rem;
-    background: ${c.gray3};
+    background: ${dark.fieldRaised};
   }
 
   /*
@@ -527,22 +553,21 @@ export const DetailCrop = styled.figure`
   figcaption {
     margin-top: 0.6rem;
     font-size: 0.8rem;
-    color: ${c.gray10};
+    color: ${dark.textMuted};
   }
 `
 
-/** 섹션 사이 호흡용 풀블리드 브레이크 컷. 사선으로 걸친 폰 하나와 한 줄 텍스트만 둔다. */
 /**
  * 섹션 사이 호흡용 풀블리드 브레이크 컷. 공개 가능한 검수본이 한 장뿐이라 폰 컷을 세 번째로
- * 반복하지 않고, 한 줄 진술과 단색 기하 패널만으로 화면을 비운다.
+ * 반복하지 않고, 가장 어두운 필드 위에 노선도 라인 아트와 한 줄 진술만 둔다.
  */
 export const BreakCut = styled.section`
   position: relative;
   overflow: hidden;
   padding: clamp(4rem, 9vw, 8rem) ${SECTION_PADDING_X};
-  background: ${c.gray1};
-  border-top: 1px solid ${c.gray3};
-  border-bottom: 1px solid ${c.gray3};
+  background: ${dark.fieldDeep};
+  border-top: 1px solid ${dark.hairline};
+  border-bottom: 1px solid ${dark.hairline};
 
   p {
     position: relative;
@@ -553,12 +578,12 @@ export const BreakCut = styled.section`
     line-height: 1.4;
     letter-spacing: -0.02em;
     font-weight: ${fontWeight.regular};
-    color: ${c.gray11};
+    color: ${dark.textSecondary};
   }
 
   strong {
     font-weight: ${fontWeight.bold};
-    color: ${c.gray12};
+    color: ${dark.textPrimary};
   }
 
   @media (max-width: ${breakpoint.md}px) {
@@ -566,35 +591,6 @@ export const BreakCut = styled.section`
       margin: 0;
       text-align: left;
     }
-  }
-`
-
-export const BreakCutStage = styled.div`
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-
-  span {
-    position: absolute;
-    display: block;
-    border-radius: 2rem;
-    background: ${c.gray2};
-  }
-
-  span:nth-of-type(1) {
-    top: -18%;
-    left: -6%;
-    width: 34%;
-    height: 96%;
-    transform: rotate(-11deg);
-  }
-
-  span:nth-of-type(2) {
-    bottom: -26%;
-    left: 22%;
-    width: 24%;
-    height: 78%;
-    transform: rotate(9deg);
   }
 `
 
@@ -619,12 +615,16 @@ export const ChipCluster = styled.ul`
   list-style: none;
 `
 
-/** 임팩트용 stat 카드 하나. 큰 radius 단색 blue 면에 실측값만 올린다. */
+/**
+ * 임팩트용 stat 카드 하나. 오너 페어링의 시그니처 면이고 그 위 텍스트는 전부 onSignature다.
+ * 채운 면이라 focus ring도 그 위에서 보이는 색으로 바꾼다.
+ */
 export const StatCard = styled.div`
+  --aq-focus-ring: ${dark.onSignature};
   padding: clamp(1.75rem, 4vw, 2.75rem);
   border-radius: 2.5rem;
-  background: ${c.blue9};
-  color: ${c.gray1};
+  background: ${dark.signature};
+  color: ${dark.onSignature};
   box-shadow: ${variables.ui.card.shadowFloatingDark};
 
   strong {
@@ -654,9 +654,9 @@ export const ContactBand = styled.div`
   width: min(100%, ${CONTENT_MAX_WIDTH});
   margin: 0 auto;
   padding: clamp(1.75rem, 4vw, 3rem);
-  border: 1px solid ${c.gray3};
+  border: 1px solid ${dark.hairline};
   border-radius: 1.75rem;
-  background: ${c.gray2};
+  background: ${dark.fieldRaised};
 
   h2 {
     margin: 0 0 0.6rem;
@@ -664,7 +664,7 @@ export const ContactBand = styled.div`
     line-height: 1.25;
     letter-spacing: -0.02em;
     font-weight: ${fontWeight.bold};
-    color: ${c.gray12};
+    color: ${dark.textPrimary};
   }
 
   p {
@@ -672,14 +672,14 @@ export const ContactBand = styled.div`
     max-width: 30rem;
     font-size: 0.96rem;
     line-height: 1.7;
-    color: ${c.gray10};
+    color: ${dark.textSecondary};
   }
 `
 
 export const SurfaceFooter = styled.footer`
   padding: clamp(2.5rem, 5vw, 4rem) ${SECTION_PADDING_X};
-  border-top: 1px solid ${c.gray3};
-  background: ${c.gray1};
+  border-top: 1px solid ${dark.hairline};
+  background: ${dark.fieldDeep};
 `
 
 export const FooterInner = styled.div`
@@ -701,17 +701,17 @@ export const FooterBrand = styled.div`
     font-size: 1rem;
     font-weight: ${fontWeight.bold};
     letter-spacing: -0.02em;
-    color: ${c.gray12};
+    color: ${dark.textPrimary};
   }
 
   span {
     font-size: 0.9rem;
-    color: ${c.gray10};
+    color: ${dark.textSecondary};
   }
 
   small {
     font-size: 0.82rem;
-    color: ${c.gray10};
+    color: ${dark.textMuted};
   }
 `
 
@@ -726,14 +726,14 @@ export const FooterLinks = styled.nav`
     align-items: center;
     min-height: 44px;
     border-radius: ${radius.sm}px;
-    color: ${c.gray11};
+    color: ${dark.textSecondary};
     text-decoration: none;
     font-size: 0.94rem;
     font-weight: ${fontWeight.regular};
     transition: color ${TRANSITION};
 
     &:hover {
-      color: ${c.blue11};
+      color: ${dark.signature};
     }
   }
 `

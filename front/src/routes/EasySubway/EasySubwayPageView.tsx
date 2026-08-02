@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { CONFIG } from "site.config"
+import EasySubwayLineArt from "src/routes/EasySubway/EasySubwayLineArt"
 import {
   COMPANY_ROUTE,
   COMPANY_SURFACE,
@@ -45,6 +46,9 @@ const EasySubwayPageView: React.FC = () => (
           <span />
           <span />
         </S.HeroStage>
+        <S.LineArtLayer $align="bottom">
+          <EasySubwayLineArt />
+        </S.LineArtLayer>
         <S.HeroCopy>
           <S.StatusPill>{PRODUCT_RELEASE_STATUS}</S.StatusPill>
           <S.HeroTitle>
@@ -57,7 +61,8 @@ const EasySubwayPageView: React.FC = () => (
           </S.HeroLead>
         </S.HeroCopy>
         <S.HeroPhoneWrap>
-          <S.PhoneFrame $tilt={-4} $width="20rem">
+          {/* 히어로 폰은 무대의 주인공이라 다른 폰 컷보다 한 단계 크게 둔다(D6: 기존 20rem → +12.5%). */}
+          <S.PhoneFrame $tilt={-4} $width="22.5rem">
             <img
               src={PRODUCT_SCREENSHOT}
               alt={PRODUCT_SCREENSHOT_ALT}
@@ -163,10 +168,9 @@ const EasySubwayPageView: React.FC = () => (
       </S.Section>
 
       <S.BreakCut>
-        <S.BreakCutStage aria-hidden="true">
-          <span />
-          <span />
-        </S.BreakCutStage>
+        <S.LineArtLayer>
+          <EasySubwayLineArt />
+        </S.LineArtLayer>
         <p>
           연결이 끊기는 곳에서 필요한 정보는, <strong>이미 화면에 있어야 합니다.</strong>
         </p>

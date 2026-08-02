@@ -407,15 +407,15 @@ export const FooterBrand = styled.div`
     letter-spacing: -0.02em;
   }
 
-  /* 마스코트는 어두운 실루엣이라 다크 면에 그대로 얹으면 사라진다. 밝은 원판 위에 올린다. */
+  /*
+   * 마크는 은색 벡터라 다크 면 위에서 그대로 읽힌다. 밝은 원판을 두지 않는 이유는 실측 결과다:
+   * 34px 원판은 안쪽 마크를 한 단계 더 줄이고 다크 footer에 흰 덩어리를 남긴다.
+   */
   > div > span:first-of-type {
     display: block;
     flex: 0 0 auto;
     width: 34px;
     height: 34px;
-    padding: 3px;
-    border-radius: ${radius.pill}px;
-    background: ${light.surface};
   }
 
   p {

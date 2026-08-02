@@ -4011,6 +4011,46 @@ test("회사·제품 표면 vhost는 front 전용이고 공유 snippet 하나를
   assert.match(surfaceSnippet, /respond "User-agent: \*\\nAllow: \/\$\\nDisallow: \/\\n" 200/)
 })
 
+test("front 전용 표면 vhost는 backend에 닿는 front API 경로를 catch-all 앞에서 거부한다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const surfaceSnippet = extractCaddySiteBlock(caddyfile, "(front_surface_vhost) {")
+  assert.notEqual(surfaceSnippet, "", "shared front surface snippet must be extractable")
+
+  // 이 계약이 막는 대상은 실제로 존재하는 front 라우트다. 라우트가 사라지거나 이름이 바뀌면 아래
+  // 단언들은 아무것도 지키지 않으면서 그린으로 남으므로, 존재 자체를 먼저 실측한다.
+  assert.ok(
+    existsSync(path.join(repoRoot, "front/src/pages/api/backend/[...path].ts")),
+    "the backend proxy route these hosts must not expose has to exist for this contract to mean anything",
+  )
+  assert.ok(
+    existsSync(path.join(repoRoot, "front/src/pages/api/revalidate.ts")),
+    "the revalidate route also reaches the backend from the server side",
+  )
+
+  // allow-list여야 한다. backend에 닿는 오늘의 경로만 나열하는 deny-list는 기본값이 "노출"이라,
+  // blog용으로 추가되는 다음 front API route가 이 호스트에서도 조용히 공개된다.
+  const deniedMatcherStart = surfaceSnippet.indexOf("@frontApiDenied {")
+  assert.ok(deniedMatcherStart > -1, "the front API allow-list matcher must exist")
+  const deniedMatcher = surfaceSnippet.slice(deniedMatcherStart, surfaceSnippet.indexOf("}", deniedMatcherStart))
+  assert.match(deniedMatcher, /^\s*path \/api\/\*$/m, "the matcher must start from the whole front API namespace")
+  assert.match(deniedMatcher, /^\s*not path \/api\/rum\/\*$/m, "RUM ingest is the one namespace these pages use")
+  // 개별 경로를 나열하기 시작하면 그것이 곧 deny-list다.
+  assert.doesNotMatch(deniedMatcher, /\/api\/backend|\/api\/revalidate/)
+
+  // `handle`이어야 하고 catch-all proxy보다 먼저 쓰여야 한다. Caddy는 같은 handle 그룹을 작성
+  // 순서로 평가하므로, 뒤에 오면 Next가 이미 응답한 뒤다.
+  const denyHandleIndex = surfaceSnippet.indexOf("handle @frontApiDenied {")
+  const catchAllIndex = surfaceSnippet.indexOf("\n  handle {")
+  assert.ok(denyHandleIndex > -1, "the deny must be a handle, not a top-level respond")
+  assert.ok(catchAllIndex > denyHandleIndex, "the deny must be written before the catch-all proxy")
+  // 404다. 403은 이 호스트에 그 라우트가 존재한다는 사실을 알려 준다.
+  assert.match(surfaceSnippet.slice(denyHandleIndex, catchAllIndex), /respond 404/)
+
+  // blog vhost는 이 deny를 상속하지 않는다. 공개 API와 revalidate webhook의 집이 그 호스트다.
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+  assert.doesNotMatch(webBlock, /@frontApiDenied/)
+})
+
 test("apex vhost는 경로·query를 보존한 308로 회사 호스트에 넘긴다", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const apexBlock = extractCaddySiteBlock(caddyfile, "http://{$APEX_DOMAIN")
@@ -4074,16 +4114,58 @@ test("표면 도메인 키는 caddy env까지 전달되고 site address 유일�
     healthyResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
   )
 
-  // 주소 중복은 caddy를 기동 불가로 만든다. 대소문자만 다른 중복도 같은 주소다.
-  for (const [key, value] of [
-    ["COMPANY_DOMAIN", "blog.aquilaxk.site"],
-    ["PRODUCT_DOMAIN", "WWW.AQUILAXK.SITE"],
-    ["APEX_DOMAIN", "api.aquilaxk.site"],
+  // 표면 정본은 front가 런타임에 배우는 값이 아니다. front/site.config.js가 표면별 정본 URL 표를
+  // 컴파일해 들고 있고 publicSurfaceUrl.ts가 요청 Host를 그 표와 대조한다. 그래서 표에 없는
+  // 호스트를 배포하면 Caddy는 서빙하는데 canonical/OG는 다른 곳을 가리키고 sitemap host guard는
+  // 404를 낸다 - 설정 실수가 거부되지 않고 조용한 메타 불일치로 나간다. 계약이 fail-closed로 막는다.
+  //
+  // 기대값은 site.config.js에서 읽는다. 여기 값을 적어 두면 front 정본이 움직였을 때 두 층이
+  // 갈라진 채로 그린이 된다.
+  const siteConfig = readFileSync(path.join(repoRoot, "front/site.config.js"), "utf8")
+  const frontSurfaceHostOf = (constantName) => {
+    const declared = siteConfig.match(new RegExp(`const ${constantName} = "https://([^"/]+)"`))
+    assert.ok(declared, `${constantName} must be declared in front/site.config.js`)
+    return declared[1]
+  }
+  for (const [key, constantName] of [
+    ["COMPANY_DOMAIN", "COMPANY_SITE_URL"],
+    ["PRODUCT_DOMAIN", "PRODUCT_SITE_URL"],
   ]) {
-    const collided = withEnvKeys(healthy, [[key, value]])
+    const canonicalHost = frontSurfaceHostOf(constantName)
+    const definition = sourceKeys.find((name) => name.name === key)
+    assert.deepEqual(
+      definition.allowedValues,
+      [canonicalHost],
+      `${key} must be pinned to the canonical host front/site.config.js compiles in`,
+    )
+
+    const mismatched = withEnvKeys(healthy, [[key, `surface.${canonicalHost}`]])
+    const result = validateEnvText({ contract, target: "home-server-source", text: mismatched })
+    assert.equal(result.ok, false, `${key} must reject a host the front cannot resolve to a canonical`)
+    assert(
+      result.errors.some((error) => error.key === key && /must be one of/.test(error.message)),
+      JSON.stringify(result.errors),
+    )
+  }
+
+  // 주소 중복은 caddy를 기동 불가로 만든다. 대소문자만 다른 중복도 같은 주소다.
+  //
+  // 실측은 APEX_DOMAIN으로 한다. 위에서 고정한 두 키는 중복을 표현할 수조차 없어(허용 값이 각각
+  // 하나뿐이다) 집합 검사가 아니라 고정값 검사가 먼저 막는다 - 그 키로 이 루프를 돌리면 통과 사유가
+  // 바뀐 것을 눈치채지 못한 채 집합 검사가 검증되지 않는다. apex는 정본 표에 없는 키라서
+  // (front는 apex를 canonical로 쓰지 않고 vhost가 회사 호스트로 308할 뿐이다) 고정값이 없고,
+  // 그래서 집합 검사가 유일한 방어선이다.
+  for (const [value, reason] of [
+    ["api.aquilaxk.site", "an exact duplicate of the API vhost address"],
+    ["API.AQUILAXK.SITE", "a duplicate that differs only in case"],
+  ]) {
+    const collided = withEnvKeys(healthy, [["APEX_DOMAIN", value]])
     const result = validateEnvText({ contract, target: "home-server-source", text: collided })
-    assert.equal(result.ok, false, `${key}=${value} duplicates another Caddy site address`)
-    assert(result.errors.some((error) => error.key === key), `${key} must be named in the error`)
+    assert.equal(result.ok, false, `APEX_DOMAIN=${value} is ${reason}`)
+    assert(
+      result.errors.some((error) => error.key === "APEX_DOMAIN" && /must differ from/.test(error.message)),
+      JSON.stringify(result.errors),
+    )
   }
 
   // apex의 redirect 목적지는 COMPANY_DOMAIN이다. 짝이 없으면 apex가 .localhost로 넘긴다.

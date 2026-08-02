@@ -426,6 +426,11 @@ http://{$WEB_DOMAIN:web.localhost} {
 # calls the backend from the browser, which is what makes front-only the complete answer rather
 # than a restriction.
 #
+# "No backend paths" is not the same as "no backend reachability": the front app itself owns
+# `/api/backend/*` and `/api/revalidate`, both of which reach BACKEND_INTERNAL_URL from the server
+# side. Not adding backend prefixes here leaves those open, so the front API allow-list below is
+# what actually closes the surface.
+#
 # front/next.config.js owns the security headers; like the web vhost this block adds no site-level
 # `header` and no `header_down`, so it cannot strip or weaken them (HR-56).
 (front_surface_vhost) {
@@ -462,6 +467,31 @@ http://{$WEB_DOMAIN:web.localhost} {
       Cache-Control "public, max-age=300"
     }
     respond "User-agent: *\nAllow: /$\nDisallow: /\n" 200
+  }
+
+  # front API surface of these hosts, as an allow-list.
+  #
+  # The catch-all below hands every unclaimed path to Next, and Next owns `/api/*`. One of those
+  # routes is `pages/api/backend/[...path].ts`, which proxies straight to BACKEND_INTERNAL_URL - so
+  # a catch-all alone publishes the whole backend proxy surface (auth, signup, posts) on hosts that
+  # have no CORS entry, no cookie scope and no page that calls it. `/api/revalidate` reaches the
+  # backend too (admin session check + read-cache invalidation). Neither belongs here.
+  #
+  # It is an allow-list, not a deny-list of today's backend-touching routes: a deny-list defaults to
+  # exposure, so the next front API route added for the blog would silently appear on these hosts as
+  # well. `/api/rum/*` is the one namespace these pages do use - web-vitals and client-error
+  # reporting run from _app on every route - so it is the one namespace that stays reachable.
+  #
+  # It must be a `handle`, not a bare `respond`: Caddy's directive order puts `respond` AFTER
+  # `handle`, so a top-level respond would compile behind the catch-all proxy and never run.
+  #
+  # 404, not 403: on this host these routes do not exist. A 403 would confirm they do.
+  @frontApiDenied {
+    path /api/*
+    not path /api/rum/*
+  }
+  handle @frontApiDenied {
+    respond 404
   }
 
   # Blue/Green cutover rewrites the single active upstream host (#1539 owns the switch).

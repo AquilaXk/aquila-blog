@@ -47,46 +47,20 @@ test("production rejects missing secret, non-HTTPS URLs, and non-positive proxy 
   assert(result.errors.some((error) => error.key === "NEXT_PUBLIC_RUM_SAMPLE_RATE" && error.message.includes("0")))
 })
 
-test("Vercel production build accepts runtime defaults while strict production remains fail-closed", async () => {
+// `production-build` target은 Vercel production 빌드 전용 완화 계약이었고, 그 빌드 경로가
+// 사라지면서 어떤 호출자도 없다(#1542). 남겨두면 실행되지 않는 계약이 유지보수 대상으로만 남는다.
+// 홈서버 빌드 인자 표면은 아래 container-build 계약이 계속 검증한다.
+test("only the container build target validates a production build", async () => {
   const { loadContract, validateEnvText } = await import("./validate-env.mjs")
   const contract = loadContract(contractPath)
 
-  const buildResult = validateEnvText({ contract, target: "production-build", text: productionBuildEnv })
-  assert.equal(buildResult.ok, true, buildResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
+  assert.equal("production-build" in contract.targets, false)
+  assert.equal("container-build" in contract.targets, true)
 
+  // 완화되지 않은 strict production 계약은 그대로 fail-closed여야 한다.
   const strictResult = validateEnvText({ contract, target: "production", text: productionBuildEnv })
   assert.equal(strictResult.ok, false)
   assert(strictResult.errors.some((error) => error.key === "TOKEN_FOR_REVALIDATE" && error.message === "is required"))
-})
-
-test("Vercel production build validates optional values when they are supplied", async () => {
-  const { loadContract, validateEnvText } = await import("./validate-env.mjs")
-  const contract = loadContract(contractPath)
-  const result = validateEnvText({
-    contract,
-    target: "production-build",
-    text: [
-      productionBuildEnv,
-      "NEXT_PUBLIC_SITE_URL=http://www.example.test",
-      "TOKEN_FOR_REVALIDATE=short-token",
-      "BACKEND_PROXY_MAX_BODY_BYTES=0",
-      "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES=0",
-      "NEXT_PUBLIC_SIGNUP_ENABLED=true",
-      "NEXT_PUBLIC_RUM_SAMPLE_RATE=1",
-    ].join("\n"),
-  })
-
-  assert.equal(result.ok, false)
-  for (const key of [
-    "NEXT_PUBLIC_SITE_URL",
-    "TOKEN_FOR_REVALIDATE",
-    "BACKEND_PROXY_MAX_BODY_BYTES",
-    "BACKEND_PROXY_MAX_IN_FLIGHT_BODY_BYTES",
-    "NEXT_PUBLIC_SIGNUP_ENABLED",
-    "NEXT_PUBLIC_RUM_SAMPLE_RATE",
-  ]) {
-    assert(result.errors.some((error) => error.key === key), key)
-  }
 })
 
 test("production rejects short and placeholder revalidation tokens", async () => {
@@ -176,18 +150,44 @@ test("live-e2e rejects placeholder credentials", async () => {
   assert(result.errors.some((error) => error.key === "E2E_LIVE_ADMIN_PASSWORD" && error.message.includes("placeholder")))
 })
 
-test("prebuild validates both the container build and the Vercel build, and Web CI runs the contract suite", () => {
+test("prebuild validates the container build, and Web CI runs the contract suite", () => {
   const packageJson = JSON.parse(readFileSync(path.join(frontRoot, "package.json"), "utf8"))
   const webWorkflow = readFileSync(path.join(frontRoot, ".github/workflows/ci.yml"), "utf8")
 
-  // 컨테이너 경로: VERCEL/VERCEL_ENV가 없는 빌드에서도 검증이 돌아야 한다.
+  // 운영 빌드 경로는 홈서버 이미지 하나뿐이다. 마커가 빠지면 검증이 통째로 skip된다.
   assert.match(packageJson.scripts.prebuild, /AQUILA_PROD_BUILD:-.*1/)
   assert.match(packageJson.scripts.prebuild, /--target container-build --process-env/)
-  // Vercel 경로: 아직 라이브 호스트라 이 분기를 지우면 검증이 양쪽 모두에서 사라진다.
-  assert.match(packageJson.scripts.prebuild, /VERCEL:-.*1.*VERCEL_ENV:-.*production/)
-  assert.match(packageJson.scripts.prebuild, /--target production-build --process-env/)
-  assert.doesNotMatch(packageJson.scripts.prebuild, /--target production --process-env/)
+  // 호스팅 provider가 주는 환경변수로 운영 빌드를 판정하던 분기는 남아 있으면 안 된다.
+  assert.doesNotMatch(packageJson.scripts.prebuild, /VERCEL/)
+  assert.doesNotMatch(packageJson.scripts.prebuild, /--target production(-build)? --process-env/)
   assert.match(webWorkflow, /node --test scripts\/env\/env-contract\.test\.mjs/)
+})
+
+// isProd는 GA와 web-vitals 전송을 켜는 유일한 스위치다. 판정 소스가 둘이면 한쪽이 조용히 참이
+// 되어 운영이 아닌 빌드에서 분석이 켜지거나, 반대로 운영 빌드에서 꺼진 채로 green이 된다.
+// 홈서버 이미지 빌드는 NEXT_PUBLIC_SITE_URL을 build arg로 구워 넣는다(#1591). 그 주입이 유일한
+// 판정 경로여야 한다.
+test("production is decided only by the injected NEXT_PUBLIC_SITE_URL", () => {
+  const siteConfigPath = path.join(frontRoot, "site.config.js")
+  const readIsProd = (overrides) => {
+    const env = { ...process.env }
+    delete env.NEXT_PUBLIC_SITE_URL
+    delete env.VERCEL_ENV
+    const result = spawnSync(
+      process.execPath,
+      ["-e", "process.stdout.write(String(require(process.argv[1]).CONFIG.isProd))", siteConfigPath],
+      { encoding: "utf8", env: { ...env, ...overrides } },
+    )
+    assert.equal(result.status, 0, result.stderr)
+    return result.stdout
+  }
+
+  assert.equal(readIsProd({ NEXT_PUBLIC_SITE_URL: "https://blog.aquilaxk.site" }), "true")
+  assert.equal(readIsProd({ NEXT_PUBLIC_SITE_URL: "https://blog.aquilaxk.site/" }), "true")
+  assert.equal(readIsProd({}), "false")
+  assert.equal(readIsProd({ NEXT_PUBLIC_SITE_URL: "https://staging.example.test" }), "false")
+  assert.equal(readIsProd({ VERCEL_ENV: "production" }), "false")
+  assert.equal(readIsProd({ NEXT_PUBLIC_SITE_URL: "https://staging.example.test", VERCEL_ENV: "production" }), "false")
 })
 
 test("container build marker and NEXT_PUBLIC build args are wired in the runtime Dockerfile", async () => {

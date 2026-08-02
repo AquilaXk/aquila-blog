@@ -257,7 +257,10 @@ jobs:
           NEXT_PUBLIC_SIGNUP_ENABLED: "true"
           NEXT_PUBLIC_RUM_SAMPLE_RATE: "1"
           NODE_ENV: production
-          VERCEL_ENV: production
+          # site.config.js의 isProd를 켜는 유일한 입력이다(#1542). optional tracking 동의 UI는
+          # production 판정에서만 실제 telemetry 경로를 그리므로 이 값이 빠지면 이 e2e가
+          # 검증 대상 없이 통과한다.
+          NEXT_PUBLIC_SITE_URL: https://blog.aquilaxk.site
         run: yarn playwright test e2e/legal-policy-pages.spec.ts e2e/privacy-tracking-consent.spec.ts e2e/browser-storage-registry.spec.ts --project=chromium --workers=1
 
       - name: Run editor authoring e2e

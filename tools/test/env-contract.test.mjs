@@ -111,6 +111,14 @@ const createDeployStaleFixture = () => {
     '{"updated":true}\n',
     "env contract change",
   )
+  const frontSha = commitFile(workDir, "front/app.txt", "front change\n", "front change")
+  const laterFrontSha = commitFile(workDir, "front/later.txt", "later front change\n", "later front change")
+  const backendAfterFrontSha = commitFile(
+    workDir,
+    "deploy/homeserver/after-front.txt",
+    "deploy change after front\n",
+    "deploy change after front",
+  )
   git(workDir, ["checkout", "-b", "detached-deploy", initialSha])
   const nonAncestorSha = commitFile(workDir, "back/side.txt", "side backend\n", "side backend change")
   git(workDir, ["checkout", "main"])
@@ -121,6 +129,9 @@ const createDeployStaleFixture = () => {
     docsSha,
     backendAfterDocsSha,
     envContractAfterDocsSha,
+    frontSha,
+    laterFrontSha,
+    backendAfterFrontSha,
     nonAncestorSha,
   }
 }
@@ -143,6 +154,7 @@ const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha }) => {
       GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
       DEPLOY_SHA_INPUT: deploySha,
       FORCE_BACKEND_DEPLOY_INPUT: "false",
+      FORCE_FRONT_DEPLOY_INPUT: "false",
       GITHUB_OUTPUT: outputFile,
       GITHUB_STEP_SUMMARY: summaryFile,
     },
@@ -1994,6 +2006,69 @@ test("deploy calculateTag는 deploy-time env 검증 입력 현재 main 변경이
     const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
 
     assert.match(output, /backend_deploy=true/)
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+// front와 backend 배포는 트리거가 독립이다 (#1539). 한쪽만 바뀐 커밋이 다른 쪽까지 재배포하면
+// 무관한 tier가 무중단 전환과 burn-in을 다시 겪는다. 두 방향 모두 고정한다.
+test("deploy calculateTag는 front만 바뀐 커밋에서 backend를 재배포하지 않는다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({
+      cwd: fixture.workDir,
+      deploySha: fixture.frontSha,
+      currentMainSha: fixture.frontSha,
+    })
+
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+
+    assert.match(output, /front_deploy=true/)
+    assert.match(output, /backend_deploy=false/)
+    // 배포할 front 이미지는 그 커밋에서 구워진다.
+    assert.match(output, new RegExp(`front_source_sha=${fixture.frontSha}`))
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag는 backend만 바뀐 커밋에서 front를 재배포하지 않는다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({
+      cwd: fixture.workDir,
+      deploySha: fixture.backendAfterFrontSha,
+      currentMainSha: fixture.backendAfterFrontSha,
+    })
+
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+
+    assert.match(output, /backend_deploy=true/)
+    assert.match(output, /front_deploy=false/)
+    // front를 배포하지 않으므로 front 이미지 sha도 계산하지 않는다.
+    assert.match(output, /front_source_sha=\n/)
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+// stale run이 예전 front 이미지로 cutover하면 이미 배포된 최신 front를 되돌린다. 그 커밋의 배포가
+// 최신 이미지를 소유하므로 여기서는 front만 미룬다 (backend는 기존 판정 그대로다).
+test("deploy calculateTag는 더 새로운 main이 front를 소유하면 stale front 배포를 미룬다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({
+      cwd: fixture.workDir,
+      deploySha: fixture.frontSha,
+      currentMainSha: fixture.laterFrontSha,
+    })
+
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+    const summary = readFileSync(path.join(fixture.workDir, "github-summary.md"), "utf8")
+
+    assert.match(output, /front_deploy=false/)
+    assert.match(summary, /front deploy deferred to the newer main commit that owns the front image/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }

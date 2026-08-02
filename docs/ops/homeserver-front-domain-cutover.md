@@ -380,8 +380,11 @@ DNS 전환 전에는 공개 URL이 아직 홈서버를 가리키지 않으므로
 
 ```bash
 cd ~/app
-export TOKEN_FOR_REVALIDATE="$(grep -E '^CUSTOM__REVALIDATE__TOKEN=' deploy/homeserver/.env.prod | cut -d= -f2-)"
-NODE_RUNTIME_IMAGE="$(grep -E '^NODE_RUNTIME_IMAGE=' deploy/homeserver/.env.prod | cut -d= -f2-)"
+# .env.prod 값은 따옴표로 감싸여 있을 수 있다. 그대로 넘기면 게이트가 401을 받고, 실패 사유가
+# "토큰 형식"이라는 사실이 드러나지 않는다. `tr -d` 로 양끝 따옴표를 떼고 넘긴다.
+env_value() { grep -E "^$1=" deploy/homeserver/.env.prod | tail -n 1 | cut -d= -f2- | tr -d "\"'"; }
+export TOKEN_FOR_REVALIDATE="$(env_value CUSTOM__REVALIDATE__TOKEN)"
+NODE_RUNTIME_IMAGE="$(env_value NODE_RUNTIME_IMAGE)"
 docker run --rm --network blog_home_edge \
   -e TOKEN_FOR_REVALIDATE \
   -v "$PWD/deploy/homeserver/front-render-gate.mjs:/app/front-render-gate.mjs:ro" \

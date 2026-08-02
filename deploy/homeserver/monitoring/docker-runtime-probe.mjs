@@ -122,6 +122,9 @@ const probeReadiness = ({ component, target, path = DEFAULT_READINESS_PATH }) =>
         host,
         port: Number(port),
         path,
+        // front readiness 경로는 실제 백엔드까지 가는 요청이라(30s 스크레이프 x 두 색 = 분당 4회)
+        // 백엔드 접근 로그에 섞인다. 프로브 트래픽을 사용자 트래픽과 구분할 수 있게 표시한다.
+        headers: { "user-agent": "aquila-docker-runtime-probe/1.0" },
         timeout: 3000,
       },
       (response) => {

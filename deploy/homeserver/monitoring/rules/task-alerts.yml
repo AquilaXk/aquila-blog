@@ -276,7 +276,7 @@ groups:
           description: "{{ $labels.service }} restart_count increased in the last 15m. Check deploy churn, host pressure, or crash loops."
 
       - alert: AquilaContainerOomKilled
-        expr: docker_container_oom_killed{job="docker_runtime_probe",service=~"back_.+|db_1|redis_1|minio_1"} > 0
+        expr: docker_container_oom_killed{job="docker_runtime_probe",service=~"back_.+|front_.+|db_1|redis_1|minio_1"} > 0
         for: 1m
         labels:
           severity: critical

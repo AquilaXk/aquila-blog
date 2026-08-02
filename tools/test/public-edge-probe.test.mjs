@@ -106,6 +106,9 @@ test("public edge probe ignores the Vercel cache header and flags the missing st
       result.prometheus,
       /aquila_public_edge_probe_cache_state_observed\{route="\/",request_index="1"\} 0/,
     )
+    // 집계 경로에서도 부재가 사라지지 않아야 한다. 여기서 빈 counts가 나오면 대시보드는
+    // "관측 대상이 없다"와 "헤더가 사라졌다"를 구분하지 못한다.
+    assert.deepEqual(result.report.overall.firstRequestCache.counts, { [CACHE_STATE_ABSENT]: 1 })
   })
 })
 

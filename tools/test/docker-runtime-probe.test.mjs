@@ -21,6 +21,7 @@ const composeArgumentValue = (compose, flag) => {
   // The next non-comment line is the argument value; comments between a flag and its value are the
   // house style in this file.
   const valueLine = lines.slice(index + 1).find((line) => line.trim() && !line.trim().startsWith("#"))
+  assert.ok(valueLine, `missing value line after ${flag} in compose`)
   const match = valueLine.trim().match(/^- "(.*)"$/)
   assert.ok(match, `unexpected ${flag} value line: ${valueLine}`)
   return match[1]
@@ -91,19 +92,25 @@ test("compose front readiness targets probe the backend proxy path, not a static
   assert.ok(targets.some((target) => target.component === "api" && target.path === DEFAULT_READINESS_PATH))
 })
 
-test("front containers are covered by restart and readiness alerts", () => {
+test("front containers are covered by restart, OOM and readiness alerts", () => {
   const alerts = read(alertsPath)
 
   assert.match(alerts, /alert: AquilaFrontReadinessDown/)
   assert.match(alerts, /aquila_backend_readiness_up\{component="front"\}/)
   // The readiness alert must stay gated on a running container so the documented
   // "disable the front profile" rollback does not page anyone.
+  // Whitespace is matched loosely: a YAML reformat must not turn an intact gate into a red test.
   assert.match(
     alerts,
-    /max\(docker_container_running\{job="docker_runtime_probe",service=~"front_\(blue\|green\)"\}\) == 1/,
+    /max\(\s*docker_container_running\{job="docker_runtime_probe",service=~"front_\(blue\|green\)"\}\s*\)\s*==\s*1/,
   )
+  // A front container that exceeds mem_limit must page, not just raise the restart warning.
   assert.match(
     alerts,
     /increase\(docker_container_restart_count\{job="docker_runtime_probe",service=~"back_\.\+\|front_\.\+/,
+  )
+  assert.match(
+    alerts,
+    /docker_container_oom_killed\{job="docker_runtime_probe",service=~"back_\.\+\|front_\.\+/,
   )
 })

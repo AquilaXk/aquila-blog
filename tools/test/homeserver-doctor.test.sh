@@ -695,5 +695,13 @@ fi
 if ! grep -q "^for svc in front_blue front_green; do$" "${doctor}"; then
   fail "expected the front cache check to cover both front colours"
 fi
+# 소유자 출력만 하고 넘어가면 "쓰기 불가"가 진단 로그에서도 정상처럼 보인다. 판정과 WARN이 있어야
+# 한다 - /_next/image는 그 상태에서도 200을 계속 반환한다.
+if ! grep -q "test -w /app/.next/cache" "${doctor}"; then
+  fail "expected the front cache check to judge write access, not only print ownership"
+fi
+if ! grep -q "WARN: \${svc} cannot write /app/.next/cache" "${doctor}"; then
+  fail "expected a WARN when the front runtime user cannot write the next cache mount"
+fi
 
 echo "[test] homeserver doctor checkup rules passed"

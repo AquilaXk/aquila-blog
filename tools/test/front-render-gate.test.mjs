@@ -30,7 +30,10 @@ const OPTIMIZED_IMAGE_BYTES = Buffer.alloc(2190, 2)
  * 홈서버 실측 동작(2026-08-02: STALE -> 약 3초 뒤 HIT, 재생성마다 ETag 변경)에 맞춰 흉내낸다.
  */
 const createFixtureFront = (defects = {}) => {
-  const revalidateMs = 5_000
+  // on-demand 귀속 가드는 "시간 기반 단계가 HIT를 본 시각부터 revalidate 창 안에 끝났는가"를 본다.
+  // 픽스처는 처음부터 창이 지난 상태로 시작하므로 이 값을 키워도 테스트가 느려지지 않고, 부하가
+  // 큰 CI에서 게이트 왕복이 창을 넘겨 "rerun the gate"로 떨어지는 flake만 사라진다.
+  const revalidateMs = 30_000
   const regenerationDelayMs = 120
   const state = {
     generation: 1,
@@ -184,7 +187,7 @@ const runGateAgainstFixture = (defects = {}) =>
     runGate({
       baseUrl,
       revalidateToken: FIXTURE_TOKEN,
-      isrRevalidateSeconds: 5,
+      isrRevalidateSeconds: 30,
       timeoutMs: 5_000,
       pollIntervalMs: 100,
       ageDeadlineMs: 3_000,

@@ -814,9 +814,16 @@ for svc in front_blue front_green; do
     echo "WARN: ${svc} has no named volume at /app/.next/cache; the image optimizer cache is lost on every replacement"
     continue
   fi
-  # `find -writable`가 아니라 실제 소유자를 본다. 컨테이너 사용자가 쓰지 못하면 최적화 응답은
-  # 200이면서 캐시 적중률이 0으로 굳는다.
+  # 소유자 출력만으로는 부족하다. 컨테이너 사용자가 쓰지 못하면 /_next/image는 계속 200을
+  # 반환하면서 캐시 적중률만 0으로 굳는다(#1538 실측) - 출력만 하고 넘어가면 그 상태가 진단
+  # 로그에서도 정상처럼 보인다. 쓰기 가능 여부를 명시적으로 판정해 WARN을 낸다.
   docker exec "${cid}" sh -lc 'ls -ld /app/.next/cache 2>/dev/null; ls /app/.next/cache 2>/dev/null | head -n 5' 2>/dev/null || true
+  if docker exec "${cid}" sh -lc 'test -w /app/.next/cache' >/dev/null 2>&1; then
+    echo "${svc}: next_cache_writable=yes"
+  else
+    echo "${svc}: next_cache_writable=no"
+    echo "WARN: ${svc} cannot write /app/.next/cache; /_next/image keeps answering 200 with a permanently cold cache"
+  fi
   image_cache_entries="$(docker exec "${cid}" sh -lc 'ls /app/.next/cache/images 2>/dev/null | wc -l' 2>/dev/null | tr -d '\r' || true)"
   echo "${svc}: image_cache_entries=${image_cache_entries:-unknown}"
 done

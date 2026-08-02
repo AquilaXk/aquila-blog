@@ -47,8 +47,10 @@ test("production rejects missing secret, non-HTTPS URLs, and non-positive proxy 
   assert(result.errors.some((error) => error.key === "NEXT_PUBLIC_RUM_SAMPLE_RATE" && error.message.includes("0")))
 })
 
-// `production-build` target은 Vercel production 빌드 전용 완화 계약이었고, 그 빌드 경로가
-// 사라지면서 어떤 호출자도 없다(#1542). 남겨두면 실행되지 않는 계약이 유지보수 대상으로만 남는다.
+// `production-build`는 독립적인 env 표면이 아니라 `production`을 그대로 복사해 대부분의 키를
+// `required: false`로 낮춘 **완화 사본**이었다. 그 완화가 뜻하는 것("이 키들은 빌드가 아니라
+// 런타임에 provider가 채운다")은 Vercel 빌드에서만 성립하고, 홈서버 이미지 빌드에서는 성립하지
+// 않는다(#1542). 두 벌 중 약한 쪽이 남아 있으면 나중에 그쪽이 선택돼도 게이트가 통과한다.
 // 홈서버 빌드 인자 표면은 아래 container-build 계약이 계속 검증한다.
 test("only the container build target validates a production build", async () => {
   const { loadContract, validateEnvText } = await import("./validate-env.mjs")
@@ -131,6 +133,19 @@ test("live-ready requires only HTTPS Web and API targets", async () => {
   ]) {
     assert.equal(validateEnvText({ contract, target: "live-ready", text }).ok, false)
   }
+})
+
+// live target들은 `production-live-verify.yml`이 유일한 호출자였다. 워크플로가 사라진 뒤
+// 계약만 남으면 잠자는 게이트가 되므로, 남은 유일한 live 실행 경로가 실제로 이 계약을
+// 소비하는지 고정한다. 특히 playwright.config.ts는 PLAYWRIGHT_BASE_URL이 없으면 localhost로
+// 내려앉기 때문에, 이 검증이 빠지면 "live" 실행이 아무것도 보지 않고 통과한다.
+test("the manual live E2E runner consumes the live env targets and runs both live specs", () => {
+  const runner = readFileSync(path.join(frontRoot, "scripts/run-live-e2e.mjs"), "utf8")
+
+  assert.match(runner, /assertEnvTarget\("live-ready"\)/)
+  assert.match(runner, /assertEnvTarget\("live-e2e"\)/)
+  assert.match(runner, /const liveSpecs = \["e2e\/live\.spec\.ts", "e2e\/editor-live-visual\.spec\.ts"\]/)
+  assert.match(runner, /spawn\("yarn", \["playwright", "test", \.\.\.liveSpecs/)
 })
 
 test("live-e2e rejects placeholder credentials", async () => {

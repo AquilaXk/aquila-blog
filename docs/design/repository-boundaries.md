@@ -7,11 +7,15 @@ The final topology is exactly two repositories.
 | Repository | Role | Ownership |
 | --- | --- | --- |
 | `AquilaXk/aquila-blog` | Platform | API, data, home-server operations, and Platform contracts |
-| `AquilaXk/aquila-blog-web` | Web | Web source, Web contracts, and the Web container image build |
+| `AquilaXk/aquila-blog-web` | Web | Web source, Web contracts, and (after the split) the Web container image build |
 
 No API, Ops, Worker, Shared, Contracts, domain, or other repository is created.
 `AquilaXk/aquila-blog` remains the Platform repository; its existing history is not
 rewritten.
+
+The table states the target ownership. Today the Web container image is still built by
+Platform (`.github/workflows/frontend-image.yml`); moving that workflow to Web is part
+of the split execution, not a state this document already describes.
 
 ## Stable runtime ownership
 

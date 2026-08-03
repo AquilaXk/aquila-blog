@@ -33,9 +33,14 @@ const DEFAULT_ISR_ROUTE = "/"
 // 그 경로는 장애 상태에서만 선택된다). 드리프트는 tools/test/front-render-gate.test.mjs가 잡는다.
 const DEFAULT_ISR_REVALIDATE_SECONDS = 60
 const DEFAULT_API_FEED_PATH = "/post/api/v1/posts/feed?page=1&pageSize=5&sort=CREATED_AT"
-// front/public/brand-mascot.png. tracked 정적 파일이라 원본 바이트가 고정돼 있고, 상대 URL이라
-// next/image remotePatterns와 무관하게 최적화 파이프라인만 검증한다.
-const DEFAULT_ORIGIN_IMAGE_PATH = "/brand-mascot.png"
+// front/public/apple-touch-icon.png. tracked 정적 파일이라 원본 바이트가 고정돼 있고, 상대 URL이라
+// next/image remotePatterns와 무관하게 최적화 파이프라인만 검증한다. probe 원본에는 조건이 두 개
+// 더 붙는다: raster여야 하고(svg는 /_next/image 최적화 대상이 아니라 판정 신호가 없다),
+// front/src/pages/_document.tsx의 apple-touch-icon link가 참조하는 경로라 브랜딩 자산 교체로
+// 조용히 사라지지 않아야 한다. 앞선 기본값(brand-mascot.png)은 벡터로 교체되면서 삭제됐고, 게이트는
+// 그 뒤 "origin image responded 404"로 항상 실패했다(#1612). 파일 존재와 raster 여부는
+// tools/test/front-render-gate.test.mjs가 잡는다.
+const DEFAULT_ORIGIN_IMAGE_PATH = "/apple-touch-icon.png"
 const DEFAULT_IMAGE_WIDTH = 640
 const DEFAULT_IMAGE_QUALITY = 75
 const DEFAULT_TIMEOUT_MS = 20_000

@@ -3,7 +3,6 @@ import { expect, type Page } from "@playwright/test"
 export const adminEmail = process.env.E2E_ADMIN_EMAIL?.trim() || ""
 export const adminLegacyLoginId = process.env.E2E_ADMIN_USERNAME?.trim() || ""
 export const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || ""
-export const explicitApiBaseUrl = process.env.E2E_API_BASE_URL?.trim() || ""
 export const liveApiProbeAttempts = Number.parseInt(process.env.E2E_LIVE_API_PROBE_ATTEMPTS || "4", 10)
 export const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTEMPTS || "3", 10)
 export const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS || "30000", 10)
@@ -11,12 +10,9 @@ export const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_B
 export const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
 export const quickReconsentProbeTimeoutMs = 1_500
 
-export const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export const resolveApiBaseUrl = (currentUrl: string) => {
-  if (explicitApiBaseUrl) return stripTrailingSlash(explicitApiBaseUrl)
-
   const parsed = new URL(currentUrl)
 
   if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
@@ -24,13 +20,21 @@ export const resolveApiBaseUrl = (currentUrl: string) => {
     return `${parsed.protocol}//${parsed.hostname}:${localApiPort}`
   }
 
-  if (parsed.hostname.startsWith("www.")) {
-    parsed.hostname = `api.${parsed.hostname.slice(4)}`
-    return `${parsed.protocol}//${parsed.host}`
+  return parsed.origin
+}
+
+export const cleanupLiveEditorPost = async (page: Page, postId: number) => {
+  const apiBaseUrl = resolveApiBaseUrl(page.url())
+  const headers = { "X-Aquila-CSRF": "1" }
+  const softDelete = await page.request.delete(`${apiBaseUrl}/post/api/v1/posts/${postId}`, { headers })
+  if (!softDelete.ok()) {
+    throw new Error(`live editor canary cleanup failed for ${postId}: soft-delete status=${softDelete.status()}`)
   }
 
-  parsed.hostname = `api.${parsed.hostname}`
-  return `${parsed.protocol}//${parsed.host}`
+  const hardDelete = await page.request.delete(`${apiBaseUrl}/post/api/v1/adm/posts/${postId}/hard`, { headers })
+  if (!hardDelete.ok()) {
+    throw new Error(`live editor canary cleanup failed for ${postId}: hard-delete status=${hardDelete.status()}`)
+  }
 }
 
 export const isRetriableNetworkError = (error: unknown) => {

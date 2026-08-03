@@ -77,7 +77,7 @@ class MyDocument extends Document<SurfaceAwareDocumentProps> {
           <link rel="icon" href="/favicon.ico" />
           <link
             rel="apple-touch-icon"
-            sizes="192x192"
+            sizes="180x180"
             href="/apple-touch-icon.png"
           ></link>
           {hasBlogFeedAlternate && (

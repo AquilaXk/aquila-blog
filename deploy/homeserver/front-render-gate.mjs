@@ -38,8 +38,10 @@ const DEFAULT_API_FEED_PATH = "/post/api/v1/posts/feed?page=1&pageSize=5&sort=CR
 // 더 붙는다: raster여야 하고(svg는 /_next/image 최적화 대상이 아니라 판정 신호가 없다),
 // front/src/pages/_document.tsx의 apple-touch-icon link가 참조하는 경로라 브랜딩 자산 교체로
 // 조용히 사라지지 않아야 한다. 앞선 기본값(brand-mascot.png)은 벡터로 교체되면서 삭제됐고, 게이트는
-// 그 뒤 "origin image responded 404"로 항상 실패했다(#1612). 파일 존재와 raster 여부는
-// tools/test/front-render-gate.test.mjs가 잡는다.
+// 그 뒤 "origin image responded 404"로 항상 실패했다(#1612). 그 파일은 #1616에서 래스터로 되돌아왔지만
+// 기본값은 다시 옮기지 않는다 - probe 원본은 _document.tsx의 link가 참조해 존재가 계약으로 고정되는
+// 경로여야 하고, brand-mascot.png는 컴포넌트가 참조할 뿐이라 같은 보장이 없다. 파일 존재와 raster
+// 여부는 tools/test/front-render-gate.test.mjs가 잡는다.
 const DEFAULT_ORIGIN_IMAGE_PATH = "/apple-touch-icon.png"
 const DEFAULT_IMAGE_WIDTH = 640
 const DEFAULT_IMAGE_QUALITY = 75

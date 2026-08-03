@@ -4,6 +4,7 @@ import {
   adminLegacyLoginId,
   adminPassword,
   buildLoginPayloadCandidates,
+  cleanupLiveEditorPost,
   completeLegalReconsentIfRequired,
   hasAuthCookie,
   isInvalidLoginRequestBody,
@@ -347,19 +348,6 @@ const createHiddenEditorPost = async (page: Page, title: string, content: string
   return postId
 }
 
-const deleteHiddenEditorPost = async (page: Page, postId: number) => {
-  const apiBaseUrl = resolveApiBaseUrl(page.url())
-  const response = await page.request.delete(`${apiBaseUrl}/post/api/v1/posts/${postId}`, {
-    headers: {
-      "X-Aquila-CSRF": "1",
-    },
-  })
-  if (!response.ok()) {
-    const body = await response.text().catch(() => "")
-    throw new Error(`failed to delete live editor post ${postId}: status=${response.status()} body=${body.slice(0, 300)}`)
-  }
-}
-
 const expectMarkdownEditorShell = async (page: Page) => {
   await expect(page.getByTestId("markdown-editor")).toBeVisible()
   await expect(page.getByTestId("markdown-editor-write-pane")).toBeVisible()
@@ -459,7 +447,7 @@ test.describe("editor live visual regression", () => {
       await expect.poll(() => readEditorSelection(page)).toContain(post507FinalTableTargetCell)
       await expect.poll(() => readEditorSelection(page)).toContain(post507CodeText)
     } finally {
-      await deleteHiddenEditorPost(page, postId)
+      await cleanupLiveEditorPost(page, postId)
     }
   })
 

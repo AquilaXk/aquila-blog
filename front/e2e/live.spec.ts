@@ -1,9 +1,10 @@
-import { expect, test, type Locator, type Page, type Response } from "@playwright/test"
+import { expect, test, type Locator, type Page, type Response, type Route } from "@playwright/test"
 import {
   adminEmail,
   adminLegacyLoginId,
   adminPassword,
   buildLoginPayloadCandidates,
+  cleanupLiveEditorPost,
   completeLegalReconsentIfRequired,
   hasAuthCookie,
   isInvalidLoginRequestBody,
@@ -154,23 +155,6 @@ const waitForUiLoginOutcome = async (
   return { kind: "timeout" }
 }
 
-
-const openAdminNewPostEntry = async (page: Page) => {
-  const buttonCta = page.getByRole("button", { name: /^새 글 작성/ }).first()
-  if (await buttonCta.isVisible().catch(() => false)) {
-    await buttonCta.click()
-    return
-  }
-
-  const linkCta = page.getByRole("link", { name: /^새 글 작성/ }).first()
-  if (await linkCta.isVisible().catch(() => false)) {
-    await linkCta.click()
-    return
-  }
-
-  throw new Error("관리자 글 작업 공간에서 '새 글 작성' CTA를 찾지 못했습니다.")
-}
-
 const liveEditorSmokeMarkdown = [
   "라이브 E2E 편집 확인",
   "",
@@ -183,6 +167,12 @@ const liveEditorSmokeMarkdown = [
   "| 1 | 2 | 3 | 4 | 5 | 6 | 7 |",
   "| aa | bb | cc | dd | ee | ff | gg |",
 ].join("\n")
+
+type LiveWriteResponse = {
+  data?: {
+    id?: number
+  }
+}
 
 const appendMarkdownToEditor = async (page: Page, markdown: string) => {
   const editorRoot = page.getByTestId("markdown-editor")
@@ -556,8 +546,8 @@ test.describe("live public release gate", () => {
       expect(legalResponse?.ok(), legalPath).toBe(true)
     }
 
-    expect(explicitLiveApiBaseUrl).toMatch(/^https:\/\//)
-    const readinessUrl = new URL("/actuator/health/readiness", explicitLiveApiBaseUrl).toString()
+    const webOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL || page.url()).origin
+    const readinessUrl = new URL("/actuator/health/readiness", webOrigin).toString()
     const readiness = await page.request.get(readinessUrl)
     expect(readiness.status()).toBe(200)
   })
@@ -567,7 +557,7 @@ test.describe("live production e2e", () => {
   test.skip(!hasLiveCredentials, "E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD is required")
   test.setTimeout(120_000)
 
-  test("image upload endpoint accepts the production Web CORS preflight", async ({ page }) => {
+  test("image upload endpoint accepts the same-origin production preflight without CORS headers", async ({ page }) => {
     const webOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL || "").origin
     const apiBaseUrl = resolveApiBaseUrl(webOrigin)
     expect(apiBaseUrl).toMatch(/^https:\/\//)
@@ -584,13 +574,7 @@ test.describe("live production e2e", () => {
     )
 
     expect([200, 204]).toContain(response.status())
-    expect(response.headers()["access-control-allow-origin"]).toBe(webOrigin)
-    expect(response.headers()["access-control-allow-methods"]).toContain("POST")
-    expect(response.headers()["access-control-allow-credentials"]).toBe("true")
-    const allowedHeaders = (response.headers()["access-control-allow-headers"] || "")
-      .split(",")
-      .map((header) => header.trim().toLowerCase())
-    expect(allowedHeaders).toContain("x-aquila-csrf")
+    expect(response.headers()["access-control-allow-origin"]).toBeUndefined()
   })
 
   test("비로그인 사용자는 /admin 접근 시 로그인 페이지로 이동한다", async ({ page }) => {
@@ -655,18 +639,95 @@ test.describe("live production e2e", () => {
     await expect(page.getByRole("tab", { name: /^작업 큐 진단/ })).toBeVisible()
 
     await expectLiveAdminRoute(page, apiBaseUrl, "/admin/posts", adminPostsHeadingPattern, "admin posts")
-    const titleInput = page.locator("#post-title").first()
-    const legacyTitleInput = page.getByPlaceholder("제목을 입력하세요").first()
-    await openAdminNewPostEntry(page)
-    await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write|admin\/posts\/new)(\/|$|\?)/)
+    const canaryTitle = `__live_e2e_${crypto.randomUUID()}`
+    const canarySeedContent = "live editor canary seed"
+    const savedTitle = `${canaryTitle} 수정`
+    let postId: number | null = null
+    let postWriteUrl = ""
+    let postWriteRoute: ((route: Route) => Promise<void>) | null = null
+    let isPostWriteRouteActive = false
 
-    if (await titleInput.isVisible().catch(() => false)) {
+    try {
+      const createResponse = await page.request.post(`${apiBaseUrl}/post/api/v1/posts`, {
+        data: {
+          title: canaryTitle,
+          content: canarySeedContent,
+          published: false,
+          listed: false,
+        },
+        headers: { "X-Aquila-CSRF": "1" },
+      })
+      const createBody = (await createResponse.json().catch(() => null)) as LiveWriteResponse | null
+      if (createResponse.status() !== 201 || typeof createBody?.data?.id !== "number") {
+        throw new Error(`live editor canary creation failed: status=${createResponse.status()}`)
+      }
+      postId = createBody.data.id
+      postWriteUrl = `**/post/api/v1/posts/${postId}`
+      postWriteRoute = async (route: Route) => {
+        const request = route.request()
+        if (request.method() !== "PUT") {
+          await route.fallback()
+          return
+        }
+
+        let payload: { published?: unknown; listed?: unknown } | null = null
+        try {
+          payload = request.postDataJSON() as { published?: unknown; listed?: unknown } | null
+        } catch {
+          await route.fulfill({ status: 400, body: "invalid live editor canary payload" })
+          return
+        }
+        if (payload?.published !== false || payload.listed !== false) {
+          await route.fulfill({ status: 400, body: "live editor canary write must be private" })
+          return
+        }
+        await route.continue()
+      }
+
+      await page.goto(`/editor/${postId}`)
+      await expect(page).toHaveURL(new RegExp(`/editor/${postId}(\\?|$)`))
+
+      const titleInput = page.getByPlaceholder("제목을 입력하세요").first()
       await expect(titleInput).toBeVisible()
-    } else {
-      await expect(legacyTitleInput).toBeVisible()
+      const editorContent = page.getByTestId("markdown-editor-write-pane").locator("textarea").first()
+      await expect(titleInput).toHaveValue(canaryTitle)
+      await expect(editorContent).toHaveValue(canarySeedContent)
+      await expect(page.getByLabel("Visibility")).toHaveValue("PRIVATE")
+
+      await titleInput.fill(savedTitle)
+      const previewPane = await appendMarkdownToEditor(page, liveEditorSmokeMarkdown)
+      await expectLiveEditorHoverWheelScrollChain(page, previewPane)
+
+      await page.getByRole("button", { name: "발행 설정", exact: true }).click()
+      const publishDialog = page.getByRole("dialog", { name: "수정 설정" })
+      await expect(publishDialog).toBeVisible()
+      await publishDialog.getByRole("button", { name: "비공개", exact: true }).click()
+      await page.route(postWriteUrl, postWriteRoute)
+      isPostWriteRouteActive = true
+      const writeResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "PUT" &&
+          new URL(response.url()).pathname === `/post/api/v1/posts/${postId}`
+      )
+      await publishDialog.getByRole("button", { name: "변경 반영", exact: true }).click()
+      const response = await writeResponse
+      await page.unroute(postWriteUrl, postWriteRoute)
+      isPostWriteRouteActive = false
+      expect(response.ok()).toBe(true)
+
+      await page.goto(`/editor/${postId}`)
+      await expect(page).toHaveURL(new RegExp(`/editor/${postId}(\\?|$)`))
+      await expect(titleInput).toHaveValue(savedTitle)
+      await expect(editorContent).toHaveValue(new RegExp(canarySeedContent))
+      await expect(editorContent).toHaveValue(/라이브 E2E 편집 확인/)
+      await expect(page.getByLabel("Visibility")).toHaveValue("PRIVATE")
+      const reloadedPreview = page.getByTestId("markdown-editor-preview-pane")
+      await expect(reloadedPreview.locator("pre").first()).toContainText("const liveHoverWheel = true")
+      await expect(reloadedPreview.locator("table").first()).toContainText("aa")
+    } finally {
+      if (isPostWriteRouteActive && postWriteRoute) await page.unroute(postWriteUrl, postWriteRoute)
+      if (postId !== null) await cleanupLiveEditorPost(page, postId)
     }
-    const previewPane = await appendMarkdownToEditor(page, liveEditorSmokeMarkdown)
-    await expectLiveEditorHoverWheelScrollChain(page, previewPane)
 
     const backToPostManagement = page.getByRole("button", { name: /글 관리/ }).first()
     if (await backToPostManagement.isVisible().catch(() => false)) {

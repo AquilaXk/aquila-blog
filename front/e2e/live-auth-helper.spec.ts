@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-import { isLegalReconsentGateUrl, isNavigationInterruptedError } from "./helpers/liveAuth"
+import { isLegalReconsentGateUrl, isNavigationInterruptedError, resolveApiBaseUrl } from "./helpers/liveAuth"
 
 test.describe("live auth navigation helper", () => {
   test("treats Playwright net ERR_ABORTED as a retriable navigation interruption", () => {
@@ -25,5 +25,11 @@ test.describe("live auth navigation helper", () => {
     expect(isLegalReconsentGateUrl("https://blog.aquilaxk.site/settings/privacy?reconsent=required")).toBe(true)
     expect(isLegalReconsentGateUrl("https://blog.aquilaxk.site/settings/privacy")).toBe(false)
     expect(isLegalReconsentGateUrl("https://blog.aquilaxk.site/editor/new")).toBe(false)
+  })
+
+  test("uses the production web origin for the API while preserving localhost's explicit port", () => {
+    expect(resolveApiBaseUrl("https://blog.aquilaxk.site/editor/new")).toBe("https://blog.aquilaxk.site")
+    expect(resolveApiBaseUrl("https://www.aquilaxk.site/editor/new")).toBe("https://www.aquilaxk.site")
+    expect(resolveApiBaseUrl("http://127.0.0.1:3100/editor/new")).toBe("http://127.0.0.1:8080")
   })
 })

@@ -451,27 +451,26 @@ curl -sSI https://blog.aquilaxk.site/actuator/health/readiness \
 # HEAD의 transient 503 응답으로 잘못 판정하지 않도록 실제 GET 200의 헤더를 검사한다.
 # `grep ... || echo` 형태로 쓰지 마라 - 헤더가 있든 없든 최종 종료 코드가 0이라, 자동 검증에
 # 넣으면 CORS 회귀가 게이트를 그대로 통과한다.
-cors_headers="$(mktemp)" || { echo "FAIL: CORS 헤더 임시 파일을 만들 수 없다"; false; }
-if ! cors_status="$(curl -fsS -X GET -D "$cors_headers" -o /dev/null -w '%{http_code}' \
-  -H 'Origin: https://blog.aquilaxk.site' \
-  "https://blog.aquilaxk.site/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT")"; then
-  rm -f "$cors_headers"
-  echo "FAIL: CORS 확인 GET이 실패했거나 HTTP 4xx/5xx를 반환했다"; false
-elif [ "$cors_status" != 200 ]; then
-  rm -f "$cors_headers"
-  echo "FAIL: CORS 확인 GET이 HTTP $cors_status를 반환했다 (200 필요)"; false
-elif grep -qi '^access-control-allow-origin:' "$cors_headers"; then
-  rm -f "$cors_headers"
-  echo "FAIL: same-origin 경로에 CORS 헤더가 남아 있다"; false
-else
-  grep_status=$?
-  rm -f "$cors_headers"
-  if [ "$grep_status" -eq 1 ]; then
-    echo "no CORS (expected)"
+(
+  cors_headers="$(mktemp)" || { echo "FAIL: CORS 헤더 임시 파일을 만들 수 없다"; exit 1; }
+  trap 'rm -f "$cors_headers"' EXIT
+  if ! cors_status="$(curl -fsS -X GET -D "$cors_headers" -o /dev/null -w '%{http_code}' \
+    -H 'Origin: https://blog.aquilaxk.site' \
+    "https://blog.aquilaxk.site/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT")"; then
+    echo "FAIL: CORS 확인 GET이 실패했거나 HTTP 4xx/5xx를 반환했다"; exit 1
+  elif [ "$cors_status" != 200 ]; then
+    echo "FAIL: CORS 확인 GET이 HTTP $cors_status를 반환했다 (200 필요)"; exit 1
+  elif grep -qi '^access-control-allow-origin:' "$cors_headers"; then
+    echo "FAIL: same-origin 경로에 CORS 헤더가 남아 있다"; exit 1
   else
-    echo "FAIL: CORS 응답 헤더를 검사할 수 없다"; false
+    grep_status=$?
+    if [ "$grep_status" -eq 1 ]; then
+      echo "no CORS (expected)"
+    else
+      echo "FAIL: CORS 응답 헤더를 검사할 수 없다"; exit 1
+    fi
   fi
-fi
+) || exit $?
 
 # OAuth 시작 URL이 같은 호스트로 나가는지 (redirect_uri 파라미터 확인)
 curl -sSI https://blog.aquilaxk.site/oauth2/authorization/kakao | grep -i '^location'

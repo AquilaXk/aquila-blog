@@ -2,6 +2,28 @@
   "extends": ["next/core-web-vitals"],
   "overrides": [
     {
+      "files": ["src/**/*.{ts,tsx}"],
+      "excludedFiles": [
+        "src/pages/company/index.tsx",
+        "src/pages/easysubway/index.tsx",
+        "src/routes/Company/**/*.{ts,tsx}",
+        "src/routes/EasySubway/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["src/routes/Company/**", "src/routes/EasySubway/**"],
+                "message": "Only the marketing entrypoints src/pages/company and src/pages/easysubway may import the marketing surface modules. Blog code must not depend on them so the marketing surface stays extractable into its own repository."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["src/apis/**/*.{ts,tsx}"],
       "rules": {
         "no-restricted-imports": [
@@ -59,6 +81,74 @@
               {
                 "group": ["src/pages/**"],
                 "message": "Route modules must not import Next.js page entrypoints. Keep page wiring in src/pages and shared helpers in src/libs."
+              },
+              {
+                "group": ["src/routes/Company/**", "src/routes/EasySubway/**"],
+                "message": "Only the marketing entrypoints src/pages/company and src/pages/easysubway may import the marketing surface modules. Blog routes must not depend on them so the marketing surface stays extractable into its own repository."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/routes/Company/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["src/apis/**", "src/hooks/**", "src/pages/**"],
+                "message": "Marketing surface modules must not import blog data or page layers. Load data in src/pages/company and pass plain props down so this module stays extractable into its own repository."
+              },
+              {
+                "group": [
+                  "src/components/**",
+                  "!src/components/branding",
+                  "!src/components/branding/**"
+                ],
+                "message": "Marketing surface modules may only import src/components/branding, the shared brand seam. Other blog components must stay out so this module stays extractable into its own repository."
+              },
+              {
+                "group": [
+                  "src/routes/**",
+                  "!src/routes/Company",
+                  "!src/routes/Company/**"
+                ],
+                "message": "The company marketing module must not import other route modules. Keep it self-contained so this module stays extractable into its own repository."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/routes/EasySubway/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["src/apis/**", "src/hooks/**", "src/pages/**"],
+                "message": "Marketing surface modules must not import blog data or page layers. Load data in src/pages/easysubway and pass plain props down so this module stays extractable into its own repository."
+              },
+              {
+                "group": [
+                  "src/components/**",
+                  "!src/components/branding",
+                  "!src/components/branding/**"
+                ],
+                "message": "Marketing surface modules may only import src/components/branding, the shared brand seam. Other blog components must stay out so this module stays extractable into its own repository."
+              },
+              {
+                "group": [
+                  "src/routes/**",
+                  "!src/routes/EasySubway",
+                  "!src/routes/EasySubway/**"
+                ],
+                "message": "The product marketing module must not import other route modules. Keep it self-contained so this module stays extractable into its own repository."
               }
             ]
           }

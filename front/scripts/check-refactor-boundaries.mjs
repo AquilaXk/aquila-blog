@@ -174,6 +174,26 @@ for (const relativePath of Object.keys(e2eRootAllowlist)) {
   }
 }
 
+/**
+ * 마케팅 표면(회사·제품 랜딩)은 블로그 앱 안에 있지만 언제든 별도 저장소로 추출할 수 있어야 한다
+ * (docs/marketing-surface-extraction.md). 같은 경계를 front/.eslintrc.json도 막지만 그 규칙은
+ * import 문자열이 `src/...` 형태일 때만 본다 - 상대 경로로 같은 곳을 가져오면 통과한다. 아래
+ * 정규식은 절대·상대 두 형태를 함께 막아 그 구멍을 덮는다.
+ */
+const MARKETING_MODULE_FORBIDDEN = [
+  /from "[^"]*\/apis\//,
+  /from "[^"]*\/hooks\//,
+  /from "[^"]*\/pages\//,
+  /from "[^"]*\/components\/(?!branding\/)/,
+  /from "\.\.\//,
+]
+
+const MARKETING_MODULE_HINT =
+  "Marketing surface modules may only depend on their own module, src/design-system, src/styles, src/components/branding, and site.config so the surface stays extractable into its own repository."
+
+const MARKETING_ENTRYPOINT_HINT =
+  "Marketing page entrypoints own the seam between blog infrastructure and one marketing module, and pass plain props down. Styling and design tokens stay inside the module."
+
 const ownershipRules = [
   {
     file: "src/routes/Admin/EditorStudioWorkspaceController.tsx",
@@ -247,6 +267,73 @@ const ownershipRules = [
     ],
     forbidden: [/\bapiFetch\b/, /\baxios\b/, /\bqueryClient\b/],
     hint: "posts.ts must stay a facade over DTO/cache/mapper/request modules.",
+  },
+  {
+    file: "src/routes/Company/CompanyPageView.tsx",
+    required: [
+      'from "src/routes/Company/CompanyPageModel"',
+      'from "src/routes/Company/CompanyPage.styles"',
+      'from "src/routes/Company/CompanySection.styles"',
+    ],
+    forbidden: [...MARKETING_MODULE_FORBIDDEN, /from "[^"]*\/routes\/(?!Company\/)/],
+    hint: MARKETING_MODULE_HINT,
+  },
+  {
+    file: "src/routes/Company/CompanyPageModel.ts",
+    required: ['from "site.config"'],
+    forbidden: [
+      ...MARKETING_MODULE_FORBIDDEN,
+      /from "[^"]*\/routes\/(?!Company\/)/,
+      /\bstyled\./,
+    ],
+    hint: MARKETING_MODULE_HINT,
+  },
+  {
+    file: "src/routes/EasySubway/EasySubwayPageView.tsx",
+    required: [
+      'from "src/routes/EasySubway/EasySubwayPageModel"',
+      'from "src/routes/EasySubway/EasySubwayPage.styles"',
+    ],
+    forbidden: [...MARKETING_MODULE_FORBIDDEN, /from "[^"]*\/routes\/(?!EasySubway\/)/],
+    hint: MARKETING_MODULE_HINT,
+  },
+  {
+    file: "src/routes/EasySubway/EasySubwayPageModel.ts",
+    required: ['from "site.config"'],
+    forbidden: [
+      ...MARKETING_MODULE_FORBIDDEN,
+      /from "[^"]*\/routes\/(?!EasySubway\/)/,
+      /\bstyled\./,
+    ],
+    hint: MARKETING_MODULE_HINT,
+  },
+  {
+    file: "src/pages/company/index.tsx",
+    required: [
+      'from "src/routes/Company/CompanyPageView"',
+      'from "src/routes/Company/CompanyPageModel"',
+      'from "src/libs/publicSurfaceUrl"',
+    ],
+    forbidden: [
+      /from "[^"]*\/routes\/(?!Company\/)/,
+      /from "[^"]*\/design-system\//,
+      /\bstyled\./,
+    ],
+    hint: MARKETING_ENTRYPOINT_HINT,
+  },
+  {
+    file: "src/pages/easysubway/index.tsx",
+    required: [
+      'from "src/routes/EasySubway/EasySubwayPageView"',
+      'from "src/routes/EasySubway/EasySubwayPageModel"',
+      'from "src/libs/publicSurfaceUrl"',
+    ],
+    forbidden: [
+      /from "[^"]*\/routes\/(?!EasySubway\/)/,
+      /from "[^"]*\/design-system\//,
+      /\bstyled\./,
+    ],
+    hint: MARKETING_ENTRYPOINT_HINT,
   },
 ]
 

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict"
 import http from "node:http"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
 import {
   DEFAULT_ISR_REVALIDATE_SECONDS,
+  DEFAULT_ORIGIN_IMAGE_PATH,
   judgeImageOptimization,
   judgeIsrCacheState,
   judgeOnDemandRevalidate,
@@ -108,7 +109,7 @@ const createFixtureFront = (defects = {}) => {
       return
     }
 
-    if (route === "/brand-mascot.png") {
+    if (route === DEFAULT_ORIGIN_IMAGE_PATH) {
       response.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=0" })
       response.end(ORIGIN_IMAGE_BYTES)
       return
@@ -425,4 +426,15 @@ test("the gate default matches the home route revalidate value in the app", () =
 
   assert.ok(match, "HOME_ISR_REVALIDATE_SECONDS not found in front/src/pages/index.tsx")
   assert.equal(Number(match[1]), DEFAULT_ISR_REVALIDATE_SECONDS)
+})
+
+// 정적 자산 삭제는 게이트를 조용히 깨뜨린다: 기본 probe 원본이 사라지면 image-optimization은
+// "origin image responded 404"로 항상 실패하고, 그 자산을 지운 PR의 diff에는 게이트 파일이 없어
+// 리뷰가 소비자 파손을 보지 못한다(#1612). svg는 /_next/image 최적화 대상이 아니라 raster도 함께
+// 요구한다.
+test("the gate default origin image is a raster asset that still exists in front/public", () => {
+  assert.match(DEFAULT_ORIGIN_IMAGE_PATH, /^\/[^?#]+\.(?:png|jpe?g|webp|avif)$/)
+
+  const assetPath = path.join(repoRoot, "front/public", DEFAULT_ORIGIN_IMAGE_PATH)
+  assert.ok(existsSync(assetPath), `${DEFAULT_ORIGIN_IMAGE_PATH} is missing from front/public`)
 })

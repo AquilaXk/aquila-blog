@@ -251,6 +251,60 @@ export const validateEnvText = ({ contract, target, text }) => {
       }
     }
 
+    // Caddy site address 집합의 유일성. mustDifferFrom은 키 하나와만 비교하므로 집합을 닫지
+    // 못한다 - 주소가 겹치면 caddy가 기동하지 못하고 edge 전체가 내려가므로, 쌍이 아니라 집합으로
+    // 본다. 비교는 host 정규화 후에 한다: 대소문자만 다른 중복도 Caddy에는 같은 주소다.
+    if (check.type === "allDistinct") {
+      const comparableOf = (raw) => (check.asHost ? normalizeHost(raw) : raw)
+      const fallbacks = check.fallbacks || {}
+      // comparable -> { key, fallback }. fallback이 있으면 그 주소의 출처가 생략된 키의 기본값이다.
+      const seen = new Map()
+      const unsetWithFallback = []
+      for (const key of check.keys || []) {
+        const raw = valueOf(env, key)
+        if (!raw) {
+          if (fallbacks[key]) unsetWithFallback.push(key)
+          continue
+        }
+        const comparable = comparableOf(raw)
+        const owner = seen.get(comparable)
+        if (owner) errors.push(safeError(key, `must differ from ${owner.key}`))
+        else seen.set(comparable, { key })
+      }
+
+      // 키를 생략해도 vhost는 사라지지 않는다. Caddy의 `{$VAR:default}`는 변수가 unset일 때
+      // 기본값을 쓰므로 생략된 키의 site address는 `.localhost` 기본 주소로 그대로 살아 있다.
+      // 위 루프는 값이 없는 키를 건너뛰기 때문에, 설정된 값이 생략된 키의 기본 주소와 겹치는
+      // 조합(예: PRODUCT_DOMAIN 생략 + APEX_DOMAIN=product.localhost)을 통과시킨다 - 그러면
+      // caddy가 중복 주소로 기동을 거부하고 edge 전체가 내려간다.
+      for (const key of unsetWithFallback) {
+        const fallback = fallbacks[key]
+        const comparable = comparableOf(fallback)
+        const owner = seen.get(comparable)
+        if (!owner) {
+          seen.set(comparable, { key, fallback })
+          continue
+        }
+        // 고칠 수 있는 쪽에 오류를 붙인다: 값이 설정된 키다. 두 기본 주소가 겹치는 경우는
+        // env가 아니라 계약/Caddyfile의 오류이므로 그 사실을 그대로 적는다.
+        if (owner.fallback) {
+          errors.push(
+            safeError(key, `default site address ${fallback} must differ from the ${owner.key} default site address`),
+          )
+        } else {
+          errors.push(safeError(owner.key, `must differ from the ${key} default site address (${fallback})`))
+        }
+      }
+    }
+
+    // 한 키가 다른 키의 값을 참조하는 경우(예: apex vhost의 redirect 목적지가 회사 호스트다).
+    // 참조 대상이 없으면 설정은 통과하는데 실제 동작은 기본값(.localhost)을 가리켜 죽는다.
+    if (check.type === "requiresKey") {
+      if (valueOf(env, check.key) && !valueOf(env, check.requires)) {
+        errors.push(safeError(check.key, `requires ${check.requires}`))
+      }
+    }
+
     if (check.type === "cookieDomainScope") {
       // 인증 쿠키 Domain은 front/back 호스트의 공통 접미사로 계산된다(AuthCookieDomainPolicy).
       // 그래서 쿠키 도메인·web 호스트·API 호스트는 한 덩어리로만 의미가 있고, 따로 움직이면

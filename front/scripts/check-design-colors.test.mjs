@@ -3,7 +3,12 @@ import assert from "node:assert/strict"
 import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { collectDiffText, committedDiffRange, findDirectColorViolations } from "./check-design-colors.mjs"
+import {
+  collectDiffText,
+  committedDiffRange,
+  findDirectColorViolations,
+  isColorSourceFile,
+} from "./check-design-colors.mjs"
 
 test("findDirectColorViolations reports added hex colors", () => {
   const diff = [
@@ -87,6 +92,51 @@ test("findDirectColorViolations ignores URL fragment references", () => {
       source: 'color: "#ffffff";',
     },
   ])
+})
+
+test("findDirectColorViolations allows color literals in the palette source module", () => {
+  const diff = [
+    "diff --git a/src/design-system/marketingPalette.ts b/src/design-system/marketingPalette.ts",
+    "+++ b/src/design-system/marketingPalette.ts",
+    "@@ -1,0 +1,2 @@",
+    '+  700: "#5C6BC0",',
+    '+  900: "#3B4890",',
+  ].join("\n")
+
+  assert.deepEqual(findDirectColorViolations(diff), [])
+})
+
+/**
+ * git은 pathspec을 front에서 주더라도 diff 헤더 경로를 저장소 루트 기준으로 쓴다. 예외를 앱 기준
+ * 경로와 문자열 일치로만 보면 워킹트리 diff에서는 통과하고 커밋된 diff에서는 실패한다.
+ */
+test("findDirectColorViolations allows the palette module under a repository-root diff path", () => {
+  const diff = [
+    "diff --git a/front/src/design-system/marketingPalette.ts b/front/src/design-system/marketingPalette.ts",
+    "+++ b/front/src/design-system/marketingPalette.ts",
+    "@@ -1,0 +1,1 @@",
+    '+  400: "#B4BCFB",',
+  ].join("\n")
+
+  assert.deepEqual(findDirectColorViolations(diff), [])
+})
+
+test("isColorSourceFile does not exempt look-alike paths outside the allowlist", () => {
+  assert.equal(isColorSourceFile("src/design-system/marketingPalette.ts"), true)
+  assert.equal(isColorSourceFile("front/src/design-system/marketingPalette.ts"), true)
+  assert.equal(isColorSourceFile("front/src/design-system/otherMarketingPalette.ts"), false)
+  assert.equal(isColorSourceFile("front/src/routes/Company/marketingPalette.ts"), false)
+})
+
+test("findDirectColorViolations still guards surfaces that consume the palette", () => {
+  const diff = [
+    "diff --git a/src/routes/Company/CompanyPage.styles.ts b/src/routes/Company/CompanyPage.styles.ts",
+    "+++ b/src/routes/Company/CompanyPage.styles.ts",
+    "@@ -1,0 +1,1 @@",
+    "+  background: #5C6BC0;",
+  ].join("\n")
+
+  assert.equal(findDirectColorViolations(diff).length, 1)
 })
 
 test("committedDiffRange avoids requiring a shallow checkout merge base", () => {

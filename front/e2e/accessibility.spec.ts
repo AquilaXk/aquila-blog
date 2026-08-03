@@ -289,6 +289,17 @@ const expectPrimaryLandmarks = async (page: Page) => {
   await expect.poll(async () => page.locator("h1").count()).toBeGreaterThanOrEqual(1)
 }
 
+/**
+ * 독립 표면은 자기 <main>·<header>·<footer>를 소유한다. RootLayout이 그 위에 <main>을 한 겹 더
+ * 씌우면 main 랜드마크가 중첩되고, 표면의 header/footer는 main 자손이 되어 banner/contentinfo
+ * 역할을 잃는다. 두 증상은 화면에 아무 흔적을 남기지 않으므로 개수로만 실측할 수 있다.
+ */
+const expectStandaloneSurfaceLandmarks = async (page: Page) => {
+  await expect(page.locator("main")).toHaveCount(1)
+  await expect(page.getByRole("banner")).toHaveCount(1)
+  await expect(page.getByRole("contentinfo")).toHaveCount(1)
+}
+
 const expectNoHorizontalOverflow = async (page: Page) => {
   const snapshot = await page.evaluate(() => ({
     viewportWidth: window.innerWidth,
@@ -474,4 +485,37 @@ test("법적 정책 route는 200% zoom과 light mode에서 심각도 높은 접�
   await expectNoHorizontalOverflow(page)
   await expectPrimaryLandmarks(page)
   await expectLaunchGateAccessibility(page, testInfo, "legal-privacy-light-zoom")
+})
+
+test("회사 소개 표면은 데스크톱·모바일 폭에서 심각도 높은 접근성 위반이 없다", async ({
+  page,
+}, testInfo) => {
+  // 브랜드 블루는 blue 스케일에서 대비를 넘기는 단계만 쓴다. 그 판정을 여기서 실측한다.
+  await page.goto("/company")
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "회사 소개 둘러보기" })).toBeVisible()
+  await expectPrimaryLandmarks(page)
+  await expectStandaloneSurfaceLandmarks(page)
+  await expectLaunchGateAccessibility(page, testInfo, "company-surface-desktop")
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expectNoHorizontalOverflow(page)
+  await expectLaunchGateAccessibility(page, testInfo, "company-surface-phone")
+})
+
+test("EasySubway 제품 표면은 고정 다크 톤에서 심각도 높은 접근성 위반이 없다", async ({
+  page,
+}, testInfo) => {
+  // 이 표면은 방문자 설정과 무관하게 near-black으로 고정된다. 라이트 쿠키에서도 대비를 확인한다.
+  await setSchemeCookie(page, "light")
+  await page.goto("/easysubway")
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "제품 소개 둘러보기" })).toBeVisible()
+  await expectPrimaryLandmarks(page)
+  await expectStandaloneSurfaceLandmarks(page)
+  await expectLaunchGateAccessibility(page, testInfo, "easysubway-surface-desktop")
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expectNoHorizontalOverflow(page)
+  await expectLaunchGateAccessibility(page, testInfo, "easysubway-surface-phone")
 })

@@ -5,7 +5,7 @@
 경계를 사람의 기억이 아니라 게이트가 지킨다.
 
 - `front/.eslintrc.json`: 마케팅 모듈은 블로그 내부(`src/apis`, `src/hooks`, 다른 `src/routes`, `src/components` — `src/components/branding`만 예외)를 import할 수 없고, 블로그 코드는 마케팅 모듈을 import할 수 없다(진입점 두 파일만 예외).
-- `front/scripts/check-refactor-boundaries.mjs`: 마케팅 핵심 파일의 required/forbidden import를 검사한다. eslint 규칙은 `src/...` 형태의 import만 보므로 상대 경로 우회는 이 스크립트가 막는다. `prebuild`에서 자동 실행된다.
+- `front/scripts/check-refactor-boundaries.mjs`: 마케팅 모듈 두 디렉터리의 모든 파일과 진입점 두 개에서 모듈 지정자를 TypeScript AST로 뽑아 front 루트 기준 경로로 정규화한 뒤, 모듈이 쓸 수 있는 것만 적은 allowlist(자기 모듈, `src/design-system`, `src/styles`, `src/components/branding`, `site.config`, react·emotion 런타임)와 대조한다. 블로그 코드가 마케팅 모듈을 가져가는 역방향도 같은 정규화로 확인한다. eslint 규칙은 정적 `import` 선언만 보고 그중 `src/...` 형태만 group에 걸리므로, 상대 경로·동적 `import()`·`require()`·`src/routes/Company/../Blog` 같은 위장 경로는 이 스크립트가 막는다. 핵심 파일의 required import와 `styled.` 금지도 함께 검사하고 `prebuild`에서 자동 실행된다.
 
 두 게이트가 초록이면 아래 "가져갈 것" 목록이 곧 추출 단위다.
 
@@ -25,7 +25,7 @@
 - `marketingPalette.ts`의 정본(provenance) 주석을 그대로 가져간다. 값의 원천은 `AquilaXk/easysubway`의 `tools/design/easysubway-color-system.json`이고, 색 변경은 그 파일을 다시 받아 갱신하는 것이지 손으로 고치는 것이 아니다.
 - `front/scripts/check-design-colors.mjs`가 마케팅 경로의 새 hex/rgb 리터럴을 막고 `marketingPalette.ts`만 색 정의 지점으로 허용한다. 새 저장소에서 같은 게이트를 세우지 않으면 팔레트가 곧 흩어진다.
 - 마케팅 모듈이 참조하는 공유 디자인 코드(`front/src/design-system/tokens`, `front/src/design-system/focusRing`, `front/src/styles`의 `variables`)와 `front/site.config.js`의 표면 값은 블로그 소유다. 새 저장소는 필요한 부분만 복사해 자기 소유로 만든다 — 두 리포가 같은 파일을 공유하려 하면 추출의 이유가 사라진다.
-- 블로그에 남는 게이트 규칙은 삭제한다: `front/.eslintrc.json`의 마케팅 override(역방향 금지 규칙, `src/routes/Company`, `src/routes/EasySubway`)와 `src/routes/**` override에 들어간 마케팅 금지 group, 그리고 `front/scripts/check-refactor-boundaries.mjs`의 마케팅 `ownershipRules`와 상수. 파일이 사라진 채 ownership 규칙이 남으면 `readSource`가 던져 `prebuild`가 멈춘다.
+- 블로그에 남는 게이트 규칙은 삭제한다: `front/.eslintrc.json`의 마케팅 override(역방향 금지 규칙, `src/routes/Company`, `src/routes/EasySubway`)와 `src/routes/**` override에 들어간 마케팅 금지 group, 그리고 `front/scripts/check-refactor-boundaries.mjs`의 마케팅 `ownershipRules`와 모듈 경계 검사(`MARKETING_MODULES`·allowlist 상수·AST 헬퍼). 파일이나 모듈 디렉터리가 사라진 채 규칙이 남으면 `readSource`/`walk`가 던져 `prebuild`가 멈춘다.
 
 ## 2. 블로그에 남는 seam
 
@@ -59,11 +59,15 @@
 
 ### 회사 소식 섹션 (프로세스 경계를 넘는 유일한 데이터)
 
-지금은 `front/src/pages/company/index.tsx`가 같은 프로세스에서 `front/src/apis/backend/posts`의 `getPostsBootstrap`을 호출해 최신 글 3건을 SSR로 채우고, 짧은 deadline을 넘기면 섹션을 비운 채 렌더한다. 추출하면 이 호출이 네트워크 경계를 넘는다. 필요한 계약은 다음과 같다.
+지금은 `front/src/pages/company/index.tsx`가 같은 프로세스에서 `front/src/apis/backend/posts`의 `getPostsBootstrap({ pageSize: 3 })`을 호출해 최신 글 3건을 SSR로 채우고, 짧은 deadline을 넘기면 섹션을 비운 채 렌더한다. 추출하면 이 호출이 네트워크 경계를 넘는다. 계약은 "글 목록"이 아니라 지금 실제로 소비하는 필드와 변환에 맞춰야 한다. 아래가 그 실측이다.
 
-- 공개 읽기 엔드포인트: 제목, 요약, 날짜, 절대 URL. 인증 없음, 캐시 가능. `contracts/public-api`의 공개 계약 동기화 대상에 넣는다.
-- 실패·지연 정책 유지: 소식은 선택 섹션이다. 응답이 늦으면 섹션을 비우고 페이지를 낸다. 새 앱이 이 deadline을 자기 쪽에서 다시 구현해야 하며, 값과 근거를 코드 주석으로 남긴다.
-- 캐시 헤더: 현재 표면 응답은 `s-maxage`/`stale-while-revalidate`로 나간다. 새 앱도 같은 계열로 맞춰 백엔드에 요청이 몰리지 않게 한다.
+- 응답 스키마: 글 하나가 `id`, `title`, `summary`, `createdTime`, `modifiedTime`, `thumbnail`을 준다. `id`는 카드 key이자 URL 조립 값이고, `summary`·`thumbnail`은 없을 수 있다. 인증 없음, 캐시 가능한 공개 읽기 엔드포인트로 내고 `contracts/public-api`의 공개 계약 동기화 대상에 넣는다.
+- 정렬·개수: `order=desc`(최신순) `pageSize=3`으로 받아 앞 3건만 쓴다. 카드 번호(`01`·`02`·`03`)가 응답 순서에서 파생되므로 순서 자체가 계약이다.
+- 변환 책임은 표면이 갖는다(`front/src/routes/Company/CompanyPageModel.ts`). 요약은 공백을 접고 96자에서 `…`로 자르고(`toCompanyNewsSummary`), 날짜는 `modifiedTime || createdTime`을 UTC `YYYY.MM.DD`로 찍고(`toCompanyNewsDate`, 파싱 실패는 빈 문자열), 번호는 위치+1을 두 자리로 채운다(`toCompanyNewsIndex`). 썸네일이 없으면 빈 문자열로 내려 카드가 이미지 대신 글 번호를 쓴다. 백엔드가 이 서식을 대신 만들어 주는 계약으로 바꾸지 않는다 — 새 앱이 이 변환을 그대로 가져간다.
+- 카드 URL 호스트: `href`는 `${CONFIG.link}/posts/${id}`(=`BLOG_URL`)로 조립한 절대 URL이다. 소식 카드는 블로그 호스트로 나가는 이탈 링크이고, 새 앱은 그 호스트 값을 자기 설정으로 들고 있어야 한다.
+- 실패·지연 정책: 소식은 선택 섹션이다. 페이지가 1.5초 deadline(`NEWS_DEADLINE_MS`)을 걸고 넘기면 빈 목록으로 렌더하며, 예외는 `loadCompanyNews`가 빈 목록으로 흡수한다. 다만 이 호출은 `signal`을 넘기지 않아 서버 SSR 스냅샷 경로를 타고, 그 경로는 요청이 실패해도 TTL 안의 스냅샷이 있으면 그 값을 돌려준다(`front/src/apis/backend/posts/PostApiRequests.ts`의 `getPostsBootstrap`). 그래서 현재 동작은 "실패=항상 빈 섹션"이 아니라 "빈 섹션 또는 직전 스냅샷"이다. 새 앱은 deadline과 스냅샷 재사용 중 무엇을 옮길지 정하고, 값과 근거를 코드 주석으로 남긴다.
+- 캐시 헤더 소유자: 표면 응답 헤더는 진입점의 `getServerSideProps`가 직접 세운다 — `public, max-age=0, s-maxage=300, stale-while-revalidate=600`. 백엔드 응답 헤더가 아니다. 새 앱이 자기 표면 응답에서 같은 값을 세우고, 공개 엔드포인트 쪽 캐시 정책은 백엔드가 따로 소유한다.
+- 이 계약을 실행하는 테스트: `front/tests/unit/company-news-deadline.spec.ts`(백엔드가 멈춰도 deadline 안에 빈 소식으로 렌더되고 canonical·`s-maxage=300`이 그대로 나가는지)와 `front/e2e/smoke-site-surfaces.spec.ts`의 "백엔드가 응답하지 않으면 소식 섹션은 자리를 채우지 않고 사라진다". 새 앱은 같은 두 판정을 자기 쪽 테스트로 갖는다. 없으면 카드 필드와 실패 동작은 다음 리팩토링에서 조용히 바뀐다.
 
 제품 표면은 백엔드 데이터가 없다(`site.config` 파생 값과 정적 자산뿐). 계약화 대상이 아니다.
 
@@ -81,10 +85,11 @@
 
 앞 단계가 초록이 아니면 다음 단계로 가지 않는다.
 
-1. **새 저장소** — `yarn lint`, 색 게이트(`check-design-colors` 계열), `yarn build`. 팔레트 정본 주석과 색 게이트 allowlist 경로가 함께 옮겨졌는지 확인한다.
-2. **블로그 저장소 정적 게이트** — `yarn --cwd front lint`, `yarn --cwd front check:refactor-boundaries`, `yarn --cwd front build`, `yarn --cwd front check:bundle-size`. 마케팅 파일과 그 게이트 규칙이 함께 사라졌는지가 여기서 드러난다(규칙만 남으면 boundary 검사가 즉시 실패한다).
-3. **계약·정책 게이트** — `node --test tools/test/env-contract.test.mjs`(표면 도메인 키 정본 대조가 새 기준을 가리키는지), `bash tools/guards/check-forbidden-tracked-files.sh`.
-4. **E2E** — `yarn --cwd front test:e2e:smoke`. 표면 스펙 이동/삭제가 반영되어 블로그 스모크가 표면 라우트를 더 이상 기대하지 않는지 확인한다.
-5. **배포 후 실측** — 표면 vhost upstream을 새 컨테이너로 바꾼 뒤 실제 URL에서 확인한다. 표면 호스트 루트 200과 canonical이 그 호스트를 가리키는지, 표면 호스트 `robots.txt`가 의도한 정책 하나만 응답하는지, apex가 회사 호스트로 308인지, 블로그 호스트의 `/company`·`/easysubway`가 404인지, 블로그 `sitemap.xml`이 200이며 표면 URL을 담지 않는지.
+1. **새 저장소 정적 게이트** — `yarn lint`, 색 게이트(`check-design-colors` 계열), `yarn build`. 팔레트 정본 주석과 색 게이트 allowlist 경로가 함께 옮겨졌는지 확인한다.
+2. **새 저장소 표면 E2E·접근성** — 옮겨온 `smoke-site-surfaces.spec.ts`와 `accessibility.spec.ts`의 표면 케이스(회사 표면 데스크톱·모바일, 제품 표면 라이트 쿠키 포함)를 새 저장소에서 실행한다. 새 앱은 표면이 루트이므로 `/company`·`/easysubway` 경로와 canonical 기대값을 새 호스트 기준으로 고친 뒤 돌린다. 이 단계가 없으면 표면 라우트·접근성 회귀가 lint/build 초록 뒤에 그대로 남는다.
+3. **블로그 저장소 정적 게이트** — `yarn --cwd front lint`, `yarn --cwd front check:refactor-boundaries`, `yarn --cwd front build`, `yarn --cwd front check:bundle-size`. 마케팅 파일과 그 게이트 규칙이 함께 사라졌는지가 여기서 드러난다(규칙만 남으면 boundary 검사가 즉시 실패한다).
+4. **계약·정책 게이트** — `node --test tools/test/env-contract.test.mjs`(표면 도메인 키 정본 대조가 새 기준을 가리키는지), 소식 엔드포인트를 만들었으면 백엔드 openapi 산출물로 `node tools/contracts/check-public-contracts.mjs`(공개 계약 사본이 새 엔드포인트를 담고 tracked 산출물과 일치하는지), `bash tools/guards/check-forbidden-tracked-files.sh`.
+5. **블로그 E2E** — `yarn --cwd front test:e2e:smoke`로 표면 스펙 이동/삭제가 반영되어 블로그 스모크가 표면 라우트를 더 이상 기대하지 않는지 확인하고, `yarn --cwd front test:e2e:a11y`로 표면 케이스를 뺀 나머지 접근성 케이스가 그대로 초록인지 확인한다(이 명령이 `accessibility.spec.ts`를 통째로 돌리므로, 표면 케이스만 빠지고 블로그 케이스는 남았다는 것이 여기서 실측된다). 소식 계약 판정이 블로그에 남는 동안은 `yarn --cwd front test:unit`도 같이 돌린다.
+6. **배포 후 실측** — 표면 vhost upstream을 새 컨테이너로 바꾼 뒤 실제 URL에서 확인한다. 표면 호스트 루트 200과 canonical이 그 호스트를 가리키는지, 표면 호스트 `robots.txt`가 의도한 정책 하나만 응답하는지, apex가 회사 호스트로 308인지, 블로그 호스트의 `/company`·`/easysubway`가 404인지, 블로그 `sitemap.xml`이 200이며 표면 URL을 담지 않는지.
 
-5번을 통과하기 전에는 추출을 완료로 보지 않는다. 마케팅 표면의 실패 양상은 대부분 "서빙은 되는데 메타가 다른 호스트를 가리킨다"처럼 조용하다.
+6번을 통과하기 전에는 추출을 완료로 보지 않는다. 마케팅 표면의 실패 양상은 대부분 "서빙은 되는데 메타가 다른 호스트를 가리킨다"처럼 조용하다.

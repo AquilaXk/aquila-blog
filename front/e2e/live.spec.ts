@@ -155,23 +155,6 @@ const waitForUiLoginOutcome = async (
   return { kind: "timeout" }
 }
 
-
-const openAdminNewPostEntry = async (page: Page) => {
-  const buttonCta = page.getByRole("button", { name: /^새 글 작성/ }).first()
-  if (await buttonCta.isVisible().catch(() => false)) {
-    await buttonCta.click()
-    return
-  }
-
-  const linkCta = page.getByRole("link", { name: /^새 글 작성/ }).first()
-  if (await linkCta.isVisible().catch(() => false)) {
-    await linkCta.click()
-    return
-  }
-
-  throw new Error("관리자 글 작업 공간에서 '새 글 작성' CTA를 찾지 못했습니다.")
-}
-
 const liveEditorSmokeMarkdown = [
   "라이브 E2E 편집 확인",
   "",
@@ -656,61 +639,93 @@ test.describe("live production e2e", () => {
     await expect(page.getByRole("tab", { name: /^작업 큐 진단/ })).toBeVisible()
 
     await expectLiveAdminRoute(page, apiBaseUrl, "/admin/posts", adminPostsHeadingPattern, "admin posts")
-    await openAdminNewPostEntry(page)
-    await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write|admin\/posts\/new)(\/|$|\?)/)
-
-    const titleInput = page.getByPlaceholder("제목을 입력하세요").first()
-    await expect(titleInput).toBeVisible()
     const canaryTitle = `__live_e2e_${crypto.randomUUID()}`
+    const canarySeedContent = "live editor canary seed"
+    const savedTitle = `${canaryTitle} 수정`
     let postId: number | null = null
-    const postWriteRoute = async (route: Route) => {
-      let payload: { published?: unknown; listed?: unknown } | null = null
-      try {
-        payload = route.request().postDataJSON() as { published?: unknown; listed?: unknown } | null
-      } catch {
-        await route.abort()
-        throw new Error("live editor canary write must use a private JSON payload")
-      }
-      if (payload?.published !== false || payload.listed !== false) {
-        await route.abort()
-        throw new Error("live editor canary write must be private")
-      }
-      await route.continue()
-    }
+    let postWriteUrl = ""
+    let postWriteRoute: ((route: Route) => Promise<void>) | null = null
     let isPostWriteRouteActive = false
 
     try {
-      await titleInput.fill(canaryTitle)
+      const createResponse = await page.request.post(`${apiBaseUrl}/post/api/v1/posts`, {
+        data: {
+          title: canaryTitle,
+          content: canarySeedContent,
+          published: false,
+          listed: false,
+        },
+        headers: { "X-Aquila-CSRF": "1" },
+      })
+      const createBody = (await createResponse.json().catch(() => null)) as LiveWriteResponse | null
+      if (createResponse.status() !== 201 || typeof createBody?.data?.id !== "number") {
+        throw new Error(`live editor canary creation failed: status=${createResponse.status()}`)
+      }
+      postId = createBody.data.id
+      postWriteUrl = `**/post/api/v1/posts/${postId}`
+      postWriteRoute = async (route: Route) => {
+        const request = route.request()
+        if (request.method() !== "PUT") {
+          await route.fallback()
+          return
+        }
+
+        let payload: { published?: unknown; listed?: unknown } | null = null
+        try {
+          payload = request.postDataJSON() as { published?: unknown; listed?: unknown } | null
+        } catch {
+          await route.fulfill({ status: 400, body: "invalid live editor canary payload" })
+          return
+        }
+        if (payload?.published !== false || payload.listed !== false) {
+          await route.fulfill({ status: 400, body: "live editor canary write must be private" })
+          return
+        }
+        await route.continue()
+      }
+
+      await page.goto(`/editor/${postId}`)
+      await expect(page).toHaveURL(new RegExp(`/editor/${postId}(\\?|$)`))
+
+      const titleInput = page.getByPlaceholder("제목을 입력하세요").first()
+      await expect(titleInput).toBeVisible()
+      const editorContent = page.getByTestId("markdown-editor-write-pane").locator("textarea").first()
+      await expect(titleInput).toHaveValue(canaryTitle)
+      await expect(editorContent).toHaveValue(canarySeedContent)
+      await expect(page.getByLabel("Visibility")).toHaveValue("PRIVATE")
+
+      await titleInput.fill(savedTitle)
       const previewPane = await appendMarkdownToEditor(page, liveEditorSmokeMarkdown)
       await expectLiveEditorHoverWheelScrollChain(page, previewPane)
 
       await page.getByRole("button", { name: "발행 설정", exact: true }).click()
-      const publishDialog = page.getByRole("dialog", { name: "발행 설정" })
+      const publishDialog = page.getByRole("dialog", { name: "수정 설정" })
       await expect(publishDialog).toBeVisible()
       await publishDialog.getByRole("button", { name: "비공개", exact: true }).click()
-      await page.route("**/post/api/v1/posts", postWriteRoute)
+      await page.route(postWriteUrl, postWriteRoute)
       isPostWriteRouteActive = true
       const writeResponse = page.waitForResponse(
-        (response) => response.request().method() === "POST" && /\/post\/api\/v1\/posts$/.test(response.url())
+        (response) =>
+          response.request().method() === "PUT" &&
+          new URL(response.url()).pathname === `/post/api/v1/posts/${postId}`
       )
-      await publishDialog.getByRole("button", { name: "발행하기", exact: true }).click()
+      await publishDialog.getByRole("button", { name: "변경 반영", exact: true }).click()
       const response = await writeResponse
-      await page.unroute("**/post/api/v1/posts", postWriteRoute)
+      await page.unroute(postWriteUrl, postWriteRoute)
       isPostWriteRouteActive = false
-      const body = (await response.json().catch(() => null)) as LiveWriteResponse | null
-      postId = body?.data?.id ?? null
       expect(response.ok()).toBe(true)
-      expect(postId).not.toBeNull()
 
       await page.goto(`/editor/${postId}`)
       await expect(page).toHaveURL(new RegExp(`/editor/${postId}(\\?|$)`))
-      await expect(titleInput).toHaveValue(canaryTitle)
+      await expect(titleInput).toHaveValue(savedTitle)
+      await expect(editorContent).toHaveValue(new RegExp(canarySeedContent))
+      await expect(editorContent).toHaveValue(/라이브 E2E 편집 확인/)
       await expect(page.getByLabel("Visibility")).toHaveValue("PRIVATE")
       const reloadedPreview = page.getByTestId("markdown-editor-preview-pane")
       await expect(reloadedPreview.locator("pre").first()).toContainText("const liveHoverWheel = true")
       await expect(reloadedPreview.locator("table").first()).toContainText("aa")
     } finally {
-      if (isPostWriteRouteActive) await page.unroute("**/post/api/v1/posts", postWriteRoute)
+      if (isPostWriteRouteActive && postWriteRoute) await page.unroute(postWriteUrl, postWriteRoute)
       if (postId !== null) await cleanupLiveEditorPost(page, postId)
     }
 

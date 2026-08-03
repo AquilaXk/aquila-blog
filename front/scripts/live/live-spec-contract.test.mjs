@@ -16,13 +16,45 @@ test("live spec pins the same-origin image preflight and editor save cleanup", (
     /image upload endpoint accepts the same-origin production preflight without CORS headers[\s\S]*?const apiBaseUrl = resolveApiBaseUrl\(webOrigin\)[\s\S]*?new URL\("\/post\/api\/v1\/posts\/images", apiBaseUrl\)[\s\S]*?access-control-allow-origin"\]\)\.toBeUndefined\(\)/
   )
   assert.match(liveSpec, /__live_e2e_\$\{crypto\.randomUUID\(\)\}/)
-  assert.match(liveSpec, /publishDialog\.getByRole\("button", \{ name: "비공개", exact: true \}\)\.click\(\)/)
-  assert.match(liveSpec, /await page\.route\("\*\*\/post\/api\/v1\/posts", postWriteRoute\)/)
+  assert.equal(
+    (liveSpec.match(/page\.request\.post\(`\$\{apiBaseUrl\}\/post\/api\/v1\/posts`/g) ?? []).length,
+    1
+  )
+  assert.match(
+    liveSpec,
+    /data: \{[\s\S]*?title: canaryTitle,[\s\S]*?content: canarySeedContent,[\s\S]*?published: false,[\s\S]*?listed: false/
+  )
+  assert.match(liveSpec, /headers: \{ "X-Aquila-CSRF": "1" \}/)
+  assert.match(liveSpec, /createResponse\.status\(\) !== 201 \|\| typeof createBody\?\.data\?\.id !== "number"/)
+  assert.match(liveSpec, /postId = createBody\.data\.id/)
+  assert.doesNotMatch(liveSpec, /posts\/temp|tempResponse\.ok\(\)|waitForResponse\([\s\S]*?posts\\\/temp|openAdminNewPostEntry/)
+  assert.match(liveSpec, /toHaveURL\(new RegExp\(`\/editor\/\$\{postId\}/)
+  assert.match(
+    liveSpec,
+    /expect\(titleInput\)\.toHaveValue\(canaryTitle\)[\s\S]*?expect\(editorContent\)\.toHaveValue\(canarySeedContent\)[\s\S]*?Visibility"\)\)\.toHaveValue\("PRIVATE"\)[\s\S]*?titleInput\.fill\(savedTitle\)/
+  )
+  assert.match(liveSpec, /publishDialog = page\.getByRole\("dialog", \{ name: "수정 설정" \}\)/)
+  assert.match(liveSpec, /publishDialog\.getByRole\("button", \{ name: "변경 반영", exact: true \}\)\.click\(\)/)
+  assert.match(liveSpec, /postWriteUrl = `\*\*\/post\/api\/v1\/posts\/\$\{postId\}`/)
+  assert.match(liveSpec, /await page\.route\(postWriteUrl, postWriteRoute\)/)
+  assert.match(
+    liveSpec,
+    /const request = route\.request\(\)[\s\S]*?request\.method\(\) !== "PUT"[\s\S]*?await route\.fallback\(\)[\s\S]*?return[\s\S]*?request\.postDataJSON\(\)/
+  )
   assert.match(liveSpec, /payload\?\.published !== false \|\| payload\.listed !== false/)
-  assert.match(liveSpec, /await page\.unroute\("\*\*\/post\/api\/v1\/posts", postWriteRoute\)/)
+  assert.match(
+    liveSpec,
+    /catch \{[\s\S]*?await route\.fulfill\(\{ status: 400,[\s\S]*?return[\s\S]*?payload\?\.published !== false \|\| payload\.listed !== false[\s\S]*?await route\.fulfill\(\{ status: 400,[\s\S]*?return/
+  )
+  assert.doesNotMatch(liveSpec, /route\.abort\(/)
+  assert.match(liveSpec, /response\.request\(\)\.method\(\) === "PUT"[\s\S]*?pathname === `\/post\/api\/v1\/posts\/\$\{postId\}`/)
+  assert.match(liveSpec, /await page\.unroute\(postWriteUrl, postWriteRoute\)/)
   assert.match(liveSpec, /await page\.goto\(`\/editor\/\$\{postId\}`\)/)
   assert.match(liveSpec, /expect\(page\.getByLabel\("Visibility"\)\)\.toHaveValue\("PRIVATE"\)/)
-  assert.match(liveSpec, /finally \{[\s\S]*?cleanupLiveEditorPost\(page, postId\)/)
+  assert.match(
+    liveSpec,
+    /finally \{[\s\S]*?page\.unroute\(postWriteUrl, postWriteRoute\)[\s\S]*?cleanupLiveEditorPost\(page, postId\)/
+  )
   assert.match(liveAuth, /return parsed\.origin/)
   assert.doesNotMatch(liveAuth, /E2E_API_BASE_URL/)
   assert.doesNotMatch(liveAuth, /stripTrailingSlash/)

@@ -205,6 +205,40 @@ test("settings privacy page exposes export snapshot and creates privacy request"
   })
 })
 
+test("settings privacy page withdraws stored analytics consent while DNT is active", async ({ page }) => {
+  await page.addInitScript(({ key }) => {
+    Object.defineProperty(window, "doNotTrack", { configurable: true, value: "1" })
+    Object.defineProperty(Navigator.prototype, "doNotTrack", { configurable: true, value: "yes" })
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        version: 1,
+        state: "granted",
+        updatedAt: "2026-08-03T00:00:00Z",
+        source: "settings",
+        categories: { analytics: true, rum: true },
+      })
+    )
+  }, { key: OPTIONAL_TRACKING_CONSENT_STORAGE_KEY })
+  await fulfillAuthMe(page)
+  await fulfillLegalSession(page, legalReconsentCurrent)
+  await fulfillPrivacyExport(page)
+
+  await page.goto("/settings/privacy")
+
+  await expect(page.getByText("선택 분석: 꺼짐")).toBeVisible()
+  const withdrawButton = page.getByRole("button", { name: "선택 분석 끄기" })
+  await expect(withdrawButton).toBeEnabled()
+  await withdrawButton.click()
+
+  const deniedConsent = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) || "{}"), OPTIONAL_TRACKING_CONSENT_STORAGE_KEY)
+  expect(deniedConsent).toMatchObject({
+    state: "denied",
+    source: "settings",
+    categories: { analytics: false, rum: false },
+  })
+})
+
 test("settings privacy request failure prefers server message with danger tone", async ({ page }) => {
   await fulfillAuthMe(page)
   await fulfillLegalSession(page, legalReconsentCurrent)

@@ -216,6 +216,7 @@ const SettingsPrivacyPage = () => {
   ]
   const confirmedCount = consentItems.filter((item) => item.checked).length
   const trackingSummary = trackingAllowed ? "켜짐" : "꺼짐"
+  const trackingConsentGranted = trackingConsent?.state === "granted"
   const trackingRecordLabel = trackingConsent
     ? trackingConsent.state === "granted"
       ? "동의함"
@@ -335,10 +336,10 @@ const SettingsPrivacyPage = () => {
               type="button"
               className="actionSecondary"
               aria-describedby={browserPrivacySignal ? "tracking-signal-note" : undefined}
-              disabled={browserPrivacySignal && !trackingAllowed}
-              onClick={() => updateTrackingConsent(!trackingAllowed)}
+              disabled={browserPrivacySignal && !trackingConsentGranted}
+              onClick={() => updateTrackingConsent(!trackingConsentGranted)}
             >
-              {trackingAllowed ? "선택 분석 끄기" : "선택 분석 켜기"}
+              {trackingConsentGranted ? "선택 분석 끄기" : "선택 분석 켜기"}
             </button>
           </div>
           <details className="detailBlock">

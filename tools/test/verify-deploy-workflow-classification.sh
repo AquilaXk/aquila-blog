@@ -18,6 +18,16 @@ require_pattern() {
   fi
 }
 
+require_fixed() {
+  local text="$1"
+  local message="$2"
+
+  if ! grep -Fq -- "${text}" "${workflow}"; then
+    echo "missing: ${message}" >&2
+    exit 1
+  fi
+}
+
 reject_pattern() {
   local pattern="$1"
   local message="$2"
@@ -90,7 +100,7 @@ require_pattern 'front_deploy:[[:space:]]*\$\{\{ steps\.meta\.outputs\.front_dep
 require_pattern 'needs\.calculateTag\.outputs\.front_deploy == .true.' "front deploy job must be gated by front_deploy"
 require_pattern 'repository_dispatch:' "Platform must receive the Web image dispatch"
 require_pattern 'web_frontend_image_ready' "Platform must accept only the Web image event"
-require_pattern 'WEB_FRONTEND_DISPATCH_SENDER: \$\{\{ github\.event\.sender\.login \|\| '\''\'\'' \}\}' "dispatch sender must be passed to executable validation"
+require_fixed "WEB_FRONTEND_DISPATCH_SENDER: \${{ github.event.sender.login || '' }}" "dispatch sender must be passed to executable validation"
 require_pattern 'WEB_FRONTEND_DISPATCH_SENDER.*REPO_SYNC_APP_BOT_LOGIN' "dispatch sender must be compared to the configured App bot"
 require_pattern 'WEB_FRONTEND_SOURCE_REPOSITORY.*github\.event\.client_payload\.source_repository' "source repository must come from the dispatch payload"
 require_pattern 'WEB_FRONTEND_SOURCE_SHA.*github\.event\.client_payload\.source_sha' "source sha must come from the dispatch payload"

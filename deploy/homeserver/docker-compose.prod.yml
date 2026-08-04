@@ -331,8 +331,8 @@ services:
       - "--timeout-ms"
       - "${PUBLIC_EDGE_PROBE_TIMEOUT_MS:-15000}"
       - "--base-url"
-      # 실제 값은 deploy.yml이 API_DOMAIN에서 파생해 .env.prod에 핀한다. 이 기본값은
-      # 그 핀이 아직 없는 .env.prod에서만 쓰이며, 도메인 전환 창에 이 기본값이 쓰이면
+      # 실제 값은 deploy.yml이 CUSTOM_PROD_BACKURL의 host에서 파생해 .env.prod에 핀한다(#1575).
+      # 이 기본값은 그 핀이 아직 없는 .env.prod에서만 쓰이며, 도메인 전환 창에 이 기본값이 쓰이면
       # 아직 없는 호스트를 감시하게 되므로 배포 경로에서는 항상 덮어써야 한다.
       - "${PUBLIC_EDGE_PROBE_BASE_URL:-https://blog.aquilaxk.site}"
       - "--state-path"
@@ -362,9 +362,16 @@ services:
       - "--project"
       - "blog_home"
       - "--services"
-      - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1,autoheal,docker_socket_proxy,postgres_exporter"
+      - "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,front_blue,front_green,db_1,redis_1,minio_1,autoheal,docker_socket_proxy,postgres_exporter"
+      # front readiness는 /robots.txt(컨테이너 healthcheck 경로)가 아니라 front -> backend 서버
+      # 사이드 프록시 경로를 쓴다. 실측(#1539): BACKEND_INTERNAL_URL이 비어 있으면 컨테이너는
+      # healthy이고 정적 경로도 200인데 이 경로만 502였다. 정적 경로로 준비성을 재면 그 상태가
+      # 계속 ready로 보고된다.
+      #
+      # front는 blue/green 두 색을 상시 유지하므로(#1539) 두 항목 모두 정상 상태에서 1이다.
+      # 알람은 "둘 다 0"에서만 울린다(AquilaFrontReadinessDown).
       - "--readiness-targets"
-      - "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back-worker:8080"
+      - "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back-worker:8080,front=front_blue:3000/api/backend/post/api/v1/posts/tags,front=front_green:3000/api/backend/post/api/v1/posts/tags"
       - "--disk-paths"
       - "minio=/host-storage/minio"
     volumes:

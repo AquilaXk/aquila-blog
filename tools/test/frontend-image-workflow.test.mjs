@@ -89,6 +89,16 @@ test("front image build triggers on front changes and never on pull_request", ()
   assert.doesNotMatch(source, /^  pull_request(_target)?:$/m)
 })
 
+// `front/vercel.json` 의 ignoreCommand 를 제거하면서(#1542) "front 입력만 이미지 빌드를 유발한다"
+// 를 검증하던 유일한 지점이 사라졌다. 위 테스트는 두 경로가 **존재하는지**만 보므로 트리거가
+// 넓어져도(예: docs/**) 통과한다. 목록 동등성으로 고정해 그 판정을 여기서 잇는다.
+// `on:` 은 YAML 1.1 boolean 이라 파싱 결과에서 키가 `true` 다.
+test("front image build inputs are exactly the front tree and this workflow", () => {
+  const { document } = workflow()
+
+  assert.deepEqual(document[true].push.paths, ["front/**", ".github/workflows/frontend-image.yml"])
+})
+
 test("front image workflow keeps the least privilege GHCR token surface", () => {
   const { document, source } = workflow()
 

@@ -105,13 +105,13 @@ env_full="${workdir}/env.full"
 env_minimal="${workdir}/env.minimal"
 # 운영 .env.prod처럼 optional 키(CUSTOM__AI__SUMMARY__GEMINI__API_KEY)가 없는 상태를 재현한다.
 {
-  printf '%s\n' 'API_DOMAIN=api.example.com'
+  printf '%s\n' 'WEB_DOMAIN=web.example.com'
   printf '%s\n' 'ADMIN_EMBED_ORIGINS=https://admin.example.com'
   printf '%s\n' 'CUSTOM_PROD_BACKURL=https://api.example.com/path?a=b'
   printf '%s\n' 'CUSTOM__ADMIN__EMAIL=first@example.com'
   printf '%s\n' 'CUSTOM__ADMIN__EMAIL=last@example.com'
 } > "${env_full}"
-printf '%s\n' 'API_DOMAIN=api.example.com' > "${env_minimal}"
+printf '%s\n' 'WEB_DOMAIN=web.example.com' > "${env_minimal}"
 
 eval "$(extract_function env_value)"
 eval "$(extract_function print_env_key_status)"
@@ -132,7 +132,7 @@ if [ -n "${optional_value}" ]; then
   fail "expected a missing optional key to read as an empty value, got '${optional_value}'"
 fi
 
-if [ "$(env_value "API_DOMAIN")" != "api.example.com" ]; then
+if [ "$(env_value "WEB_DOMAIN")" != "web.example.com" ]; then
   fail "expected env_value to keep reading a present key"
 fi
 if [ "$(env_value "CUSTOM_PROD_BACKURL")" != "https://api.example.com/path?a=b" ]; then
@@ -273,7 +273,8 @@ fi
 # 않으므로 대상이 아니다.
 host_url_env_keys="${workdir}/host-url-env-keys.txt"
 {
-  printf '%s\n' 'API_DOMAIN'
+  printf '%s\n' 'LEGACY_API_DOMAIN'
+  printf '%s\n' 'WEB_DOMAIN'
   printf '%s\n' 'CUSTOM_PROD_BACKURL'
   printf '%s\n' 'CUSTOM_PROD_COOKIEDOMAIN'
   printf '%s\n' 'CUSTOM_PROD_FRONTURL'
@@ -335,7 +336,7 @@ fi
 trim_quotes_guard_fixture="${workdir}/env-value-trim-quotes.sh"
 {
   printf '%s\n' '#!/usr/bin/env bash'
-  printf '%s\n' 'wrapped="$(trim_quotes "$(env_value "API_DOMAIN")")"'
+  printf '%s\n' 'wrapped="$(trim_quotes "$(env_value "WEB_DOMAIN")")"'
   printf '%s\n' 'unwrapped="$(env_value "CUSTOM_PROD_FRONTURL")"'
   printf '%s\n' 'display_only="$(env_value "CUSTOM__AI__SUMMARY__GEMINI__MODEL")"'
 } > "${trim_quotes_guard_fixture}"
@@ -548,6 +549,33 @@ if ! declare -F is_strict_subdomain_of >/dev/null; then
   fail "expected doctor.sh to define is_strict_subdomain_of for the cookie scope check"
 fi
 
+eval "$(extract_function is_same_or_strict_subdomain_of)"
+if ! declare -F is_same_or_strict_subdomain_of >/dev/null; then
+  fail "expected doctor.sh to define is_same_or_strict_subdomain_of for the same-origin cookie scope check"
+fi
+
+# same-origin(#1575)은 정상 위상이다. 그러나 완화가 "아무거나 좋다"로 새면 안 된다: 형제·apex는
+# 여전히 공통 접미사를 한 단계 위로 올리고, 빈 값은 점검이 사라지는 상태라 계속 거짓이어야 한다.
+if ! is_same_or_strict_subdomain_of "blog.aquilaxk.site" "blog.aquilaxk.site"; then
+  fail "expected the same-origin public API host to pass the relaxed subdomain check"
+fi
+for not_under in \
+  "api.aquilaxk.site blog.aquilaxk.site" \
+  "aquilaxk.site blog.aquilaxk.site" \
+  "blog.aquilaxk.site.evil.example blog.aquilaxk.site"; do
+  # shellcheck disable=SC2086  # 두 인자로 나눠 전달하려는 의도적 word splitting
+  if is_same_or_strict_subdomain_of ${not_under}; then
+    fail "expected '${not_under}' not to pass the relaxed subdomain check"
+  fi
+done
+# 빈 호스트를 참으로 두면 .env.prod에서 값이 통째로 빠졌을 때 점검이 조용히 사라진다.
+if is_same_or_strict_subdomain_of "" "blog.aquilaxk.site"; then
+  fail "expected an empty candidate host not to pass the relaxed subdomain check"
+fi
+if is_same_or_strict_subdomain_of "blog.aquilaxk.site" ""; then
+  fail "expected an empty parent host not to pass the relaxed subdomain check"
+fi
+
 if ! is_strict_subdomain_of "api.blog.aquilaxk.site" "blog.aquilaxk.site"; then
   fail "expected api.blog.aquilaxk.site to be reported as strictly under blog.aquilaxk.site"
 fi
@@ -575,7 +603,7 @@ if [ -z "${env_domain_consistency_block}" ]; then
 fi
 
 run_env_domain_consistency() {
-  local cookie="$1" front="$2" back="$3" api="$4"
+  local cookie="$1" front="$2" back="$3" web="$4" legacy="${5:-}"
   (
     set -uo pipefail
     trim_quotes() { printf '%s' "$1"; }
@@ -584,50 +612,104 @@ run_env_domain_consistency() {
         CUSTOM_PROD_COOKIEDOMAIN) printf '%s' "${cookie}" ;;
         CUSTOM_PROD_FRONTURL) printf '%s' "${front}" ;;
         CUSTOM_PROD_BACKURL) printf '%s' "${back}" ;;
-        API_DOMAIN) printf '%s' "${api}" ;;
+        WEB_DOMAIN) printf '%s' "${web}" ;;
+        LEGACY_API_DOMAIN) printf '%s' "${legacy}" ;;
         *) printf '' ;;
       esac
     }
     eval "$(extract_function extract_host)"
     eval "$(extract_function is_strict_subdomain_of)"
+    eval "$(extract_function is_same_or_strict_subdomain_of)"
     eval "${env_domain_consistency_block}"
   )
 }
 
+# same-origin 위상(#1575 · #1596): 공개 API가 web 호스트의 경로이고 host 기반 공개 주소는 없다.
+# 여기서 WARN이 나면 doctor가 정상 운영 상태에서 상시 경고를 내고, 그 소음이 진짜 경고를 덮는다.
 healthy_domain_output="$(run_env_domain_consistency \
-  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.blog.aquilaxk.site" "api.blog.aquilaxk.site")"
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "blog.aquilaxk.site")"
 if [[ "${healthy_domain_output}" == *"WARN:"* ]]; then
-  fail "expected the blog domain contract to produce no domain WARN, got: ${healthy_domain_output}"
+  fail "expected the same-origin blog domain contract to produce no domain WARN, got: ${healthy_domain_output}"
+fi
+
+# host 이전 창 전용 LEGACY_API_DOMAIN이 web 호스트와 겹치면 두 site block이 한 주소를 공유해
+# edge가 통째로 기동하지 못한다.
+duplicate_address_output="$(run_env_domain_consistency \
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "blog.aquilaxk.site" "blog.aquilaxk.site")"
+if [[ "${duplicate_address_output}" != *"LEGACY_API_DOMAIN duplicates WEB_DOMAIN"* ]]; then
+  fail "expected a duplicated Caddy site address to be reported, got: ${duplicate_address_output}"
+fi
+
+# 실제 site address가 되는 값은 WEB_DOMAIN이다. FRONTURL host만 보면 손으로 편집한 .env.prod에서
+# WEB_DOMAIN == LEGACY_API_DOMAIN인 조합(= edge가 기동하지 못하는 조합)을 놓친다.
+# 두 값을 일부러 갈라 놓아야 FRONTURL 비교와 WEB_DOMAIN 비교를 구분할 수 있다.
+web_only_duplicate_output="$(run_env_domain_consistency \
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "legacy-api.aquilaxk.site" "legacy-api.aquilaxk.site")"
+if [[ "${web_only_duplicate_output}" != *"LEGACY_API_DOMAIN duplicates WEB_DOMAIN"* ]]; then
+  fail "expected the duplicate check to read WEB_DOMAIN (not FRONTURL host), got: ${web_only_duplicate_output}"
+fi
+# WEB_DOMAIN이 없으면 겹칠 주소 자체가 없다.
+missing_web_no_dup_output="$(run_env_domain_consistency \
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "" "legacy-api.aquilaxk.site")"
+if [[ "${missing_web_no_dup_output}" == *"duplicates WEB_DOMAIN"* ]]; then
+  fail "expected no duplicate-address warning while WEB_DOMAIN is unset, got: ${missing_web_no_dup_output}"
+fi
+# 열린 이전 창은 조용히 영구 잔존하면 안 된다. 설정돼 있다는 사실 자체가 임시 상태다.
+if [[ "${web_only_duplicate_output}" != *"LEGACY_API_DOMAIN is set"* ]]; then
+  fail "expected an open host migration window to be reported, got: ${web_only_duplicate_output}"
+fi
+if [[ "${healthy_domain_output}" == *"LEGACY_API_DOMAIN is set"* ]]; then
+  fail "expected no migration-window warning while LEGACY_API_DOMAIN is unset, got: ${healthy_domain_output}"
 fi
 
 apex_cookie_output="$(run_env_domain_consistency \
-  "aquilaxk.site" "https://blog.aquilaxk.site" "https://api.blog.aquilaxk.site" "api.blog.aquilaxk.site")"
+  "aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "blog.aquilaxk.site")"
 if [[ "${apex_cookie_output}" != *"COOKIEDOMAIN must equal FRONTURL host"* ]]; then
   fail "expected an apex cookie domain to be reported as wider than the front host, got: ${apex_cookie_output}"
 fi
 
 sibling_api_output="$(run_env_domain_consistency \
-  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.aquilaxk.site" "api.aquilaxk.site")"
-if [[ "${sibling_api_output}" != *"BACKURL host must sit strictly under COOKIEDOMAIN"* ]]; then
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.aquilaxk.site" "blog.aquilaxk.site")"
+if [[ "${sibling_api_output}" != *"BACKURL host must be the COOKIEDOMAIN host or sit strictly under it"* ]]; then
   fail "expected a sibling API host to be reported as outside the cookie domain subtree, got: ${sibling_api_output}"
 fi
 
 # 쿠키 도메인이 통째로 빠진 .env.prod가 가장 위험한 상태다. 그때 front/back 교차 사이트 점검이
 # 함께 사라지면 아무 WARN도 안 나온다. 커버리지가 cookie_domain에 종속되면 안 된다.
 missing_cookie_output="$(run_env_domain_consistency \
-  "" "https://blog.aquilaxk.site" "https://api.aquilaxk.site" "api.aquilaxk.site")"
-if [[ "${missing_cookie_output}" != *"BACKURL host must sit strictly under FRONTURL host"* ]]; then
+  "" "https://blog.aquilaxk.site" "https://api.aquilaxk.site" "blog.aquilaxk.site")"
+if [[ "${missing_cookie_output}" != *"BACKURL host must be the FRONTURL host or sit strictly under it"* ]]; then
   fail "expected the front/back cross-site check to survive an empty COOKIEDOMAIN, got: ${missing_cookie_output}"
 fi
 
 # 전환 창 판정을 문구에 상수로 박으면, 전환이 끝난 뒤 진짜 위험한 조합도 "예상된 것"이 된다.
 post_transition_output="$(run_env_domain_consistency \
-  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.other.example" "api.other.example")"
-if [[ "${post_transition_output}" == *"expected while API_DOMAIN is still the pre-transition host"* ]]; then
+  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://api.other.example" "blog.aquilaxk.site")"
+if [[ "${post_transition_output}" == *"expected while CUSTOM_PROD_BACKURL is still the pre-transition API origin"* ]]; then
   fail "expected a post-transition cross-site combination not to be excused as the transition window, got: ${post_transition_output}"
 fi
 if [[ "${post_transition_output}" != *"widens the auth cookie scope"* ]]; then
   fail "expected a post-transition cross-site combination to be reported as widening the cookie scope, got: ${post_transition_output}"
+fi
+
+# front .next/cache 점검(#1541). 이 섹션이 사라지면 "이미지 최적화 캐시가 볼륨 밖으로 나갔다"를
+# 알려 주는 유일한 상시 신호가 없어진다 - /_next/image는 그 상태에서도 200을 계속 반환한다.
+if ! grep -q 'print_section "Front .next/cache Volume"' "${doctor}"; then
+  fail "expected doctor.sh to report the front .next/cache volume state"
+fi
+if ! grep -q '/app/.next/cache' "${doctor}"; then
+  fail "expected the front cache check to inspect the /app/.next/cache mount destination"
+fi
+if ! grep -q "^for svc in front_blue front_green; do$" "${doctor}"; then
+  fail "expected the front cache check to cover both front colours"
+fi
+# 소유자 출력만 하고 넘어가면 "쓰기 불가"가 진단 로그에서도 정상처럼 보인다. 판정과 WARN이 있어야
+# 한다 - /_next/image는 그 상태에서도 200을 계속 반환한다.
+if ! grep -q "test -w /app/.next/cache" "${doctor}"; then
+  fail "expected the front cache check to judge write access, not only print ownership"
+fi
+if ! grep -q "WARN: \${svc} cannot write /app/.next/cache" "${doctor}"; then
+  fail "expected a WARN when the front runtime user cannot write the next cache mount"
 fi
 
 echo "[test] homeserver doctor checkup rules passed"

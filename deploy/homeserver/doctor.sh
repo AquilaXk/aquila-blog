@@ -50,7 +50,7 @@ trim_quotes() {
 }
 
 notification_sse_probe_output() {
-  local api_domain="$1"
+  local web_domain="$1"
   local admin_email admin_password
   admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
   admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
@@ -62,7 +62,7 @@ notification_sse_probe_output() {
 
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
     set -eu
-    api_domain="$1"
+    web_domain="$1"
     admin_email="$2"
     admin_password="$3"
     login_headers="$(mktemp)"
@@ -75,7 +75,7 @@ notification_sse_probe_output() {
         -D "${login_headers}" \
         -o /dev/null \
         -w "%{http_code}" \
-        -H "Host: ${api_domain}" \
+        -H "Host: ${web_domain}" \
         -H "Content-Type: application/json" \
         --data "${login_payload}" \
         "http://caddy:80/member/api/v1/auth/login" || true
@@ -104,23 +104,23 @@ notification_sse_probe_output() {
         --max-time 35 \
         -H "Authorization: Bearer ${access_token}" \
         -H "Accept: text/event-stream" \
-        -H "Host: ${api_domain}" \
+        -H "Host: ${web_domain}" \
         "http://caddy:80/member/api/v1/notifications/stream" || true
     )"
     printf "%s\n" "${stream_body}" | tr -d "\r"
-  ' sh "${api_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
+  ' sh "${web_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
 }
 
 print_notification_sse_status() {
-  local api_domain
-  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
-  if [[ -z "${api_domain}" ]]; then
-    echo "notification sse: skip (missing API_DOMAIN)"
+  local web_domain
+  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+  if [[ -z "${web_domain}" ]]; then
+    echo "notification sse: skip (missing WEB_DOMAIN)"
     return 0
   fi
 
   local probe_output
-  probe_output="$(notification_sse_probe_output "${api_domain}")"
+  probe_output="$(notification_sse_probe_output "${web_domain}")"
   if grep -qx 'event:[[:space:]]*connected' <<< "${probe_output}" && grep -qx 'event:[[:space:]]*heartbeat' <<< "${probe_output}"; then
     echo "notification sse probe: OK (connected+heartbeat)"
   else
@@ -139,7 +139,7 @@ print_notification_sse_status() {
   diagnostics_body="$(
     docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
       set -eu
-      api_domain="$1"
+      web_domain="$1"
       admin_email="$2"
       admin_password="$3"
       login_headers="$(mktemp)"
@@ -152,7 +152,7 @@ print_notification_sse_status() {
           -D "${login_headers}" \
           -o /dev/null \
           -w "%{http_code}" \
-          -H "Host: ${api_domain}" \
+          -H "Host: ${web_domain}" \
           -H "Content-Type: application/json" \
           --data "${login_payload}" \
           "http://caddy:80/member/api/v1/auth/login" || true
@@ -180,11 +180,11 @@ print_notification_sse_status() {
           --max-time 10 \
           -H "Authorization: Bearer ${access_token}" \
           -w $"\nHTTP_STATUS:%{http_code}\n" \
-          -H "Host: ${api_domain}" \
+          -H "Host: ${web_domain}" \
           "http://caddy:80/system/api/v1/adm/notifications/stream" || true
       )"
       printf "%s\n" "${response}"
-    ' sh "${api_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
+    ' sh "${web_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
   )"
   diagnostics_code="$(printf '%s\n' "${diagnostics_body}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
   [[ -n "${diagnostics_code}" ]] || diagnostics_code="none"
@@ -307,14 +307,14 @@ print_monitoring_stack_status() {
 }
 
 inspect_grafana_origin_auth_proxy_headers() {
-  local api_domain="$1"
+  local web_domain="$1"
   local grafana_domain="$2"
   local path="$3"
   local admin_email="$4"
   local admin_password="$5"
   docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
     set -eu
-    api_domain="$1"
+    web_domain="$1"
     grafana_domain="$2"
     path="$3"
     admin_email="$4"
@@ -329,7 +329,7 @@ inspect_grafana_origin_auth_proxy_headers() {
         -D "${login_headers}" \
         -o /dev/null \
         -w "%{http_code}" \
-        -H "Host: ${api_domain}" \
+        -H "Host: ${web_domain}" \
         -H "Content-Type: application/json" \
         --data "${login_payload}" \
         "http://caddy:80/member/api/v1/auth/login" || true
@@ -356,25 +356,25 @@ inspect_grafana_origin_auth_proxy_headers() {
       -H "Authorization: Bearer ${access_token}" \
       -H "Host: ${grafana_domain}" \
       "http://caddy:80${path}" || true
-  ' sh "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
+  ' sh "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
 }
 
 print_grafana_origin_status() {
-  local api_domain grafana_domain path admin_email admin_password
-  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  local web_domain grafana_domain path admin_email admin_password
+  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
   grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
   path="$(monitoring_embed_candidate_path)"
   admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
   admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
 
-  if [[ -z "${grafana_domain}" || -z "${api_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
-    echo "grafana origin auth-proxy: skip (missing GRAFANA_DOMAIN/API_DOMAIN/admin credentials)"
+  if [[ -z "${grafana_domain}" || -z "${web_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
+    echo "grafana origin auth-proxy: skip (missing GRAFANA_DOMAIN/WEB_DOMAIN/admin credentials)"
     return 0
   fi
 
   local headers status location xfo csp internal_health
   internal_health="$(inspect_grafana_internal_health)"
-  headers="$(inspect_grafana_origin_auth_proxy_headers "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+  headers="$(inspect_grafana_origin_auth_proxy_headers "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
   status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
   location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
   xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
@@ -445,10 +445,10 @@ print_grafana_embed_status() {
 }
 
 print_robots_status() {
-  local api_domain
-  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
-  if [[ -z "${api_domain}" ]]; then
-    echo "robots.txt: skip (missing API_DOMAIN)"
+  local web_domain
+  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+  if [[ -z "${web_domain}" ]]; then
+    echo "robots.txt: skip (missing WEB_DOMAIN)"
     return 0
   fi
 
@@ -463,7 +463,7 @@ print_robots_status() {
     -sS \
     -D "${origin_headers}" \
     -o "${origin_body}" \
-    -H "Host: ${api_domain}" \
+    -H "Host: ${web_domain}" \
     "http://caddy/robots.txt" >/dev/null 2>&1 || true
 
   curl -sS \
@@ -471,7 +471,7 @@ print_robots_status() {
     --max-time 15 \
     -D "${public_headers}" \
     -o "${public_body}" \
-    "https://${api_domain}/robots.txt" >/dev/null 2>&1 || true
+    "https://${web_domain}/robots.txt" >/dev/null 2>&1 || true
 
   # 헤더 파일이 없으면 awk가 exit 2로 끝나고 pipefail이 이를 대입 실패로 만들어 점검이 중단된다.
   # 응답을 못 받은 상태는 아래 none 처리와 WARN이 이미 담당한다.
@@ -481,12 +481,16 @@ print_robots_status() {
   [[ -n "${origin_code}" ]] || origin_code="none"
   [[ -n "${public_code}" ]] || public_code="none"
 
-  local origin_disallow_all public_has_content_signals public_has_managed_block
+  local origin_disallow_all origin_has_sitemap public_has_content_signals public_has_managed_block
   origin_disallow_all="false"
+  origin_has_sitemap="false"
   public_has_content_signals="false"
   public_has_managed_block="false"
   if grep -q '^User-agent: \*$' "${origin_body}" 2>/dev/null && grep -q '^Disallow: /$' "${origin_body}" 2>/dev/null; then
     origin_disallow_all="true"
+  fi
+  if grep -qi '^Sitemap:' "${origin_body}" 2>/dev/null; then
+    origin_has_sitemap="true"
   fi
   if grep -q '^# As a condition of accessing this website' "${public_body}" 2>/dev/null; then
     public_has_content_signals="true"
@@ -497,6 +501,7 @@ print_robots_status() {
 
   echo "origin robots status: ${origin_code}"
   echo "origin robots disallow-all block: ${origin_disallow_all}"
+  echo "origin robots sitemap line: ${origin_has_sitemap}"
   echo "public robots status: ${public_code}"
   echo "public robots content-signals preface: ${public_has_content_signals}"
   echo "public robots managed block: ${public_has_managed_block}"
@@ -505,12 +510,23 @@ print_robots_status() {
   echo "-- public robots preview --"
   sed -n '1,12p' "${public_body}" 2>/dev/null || true
 
-  if [[ "${origin_code}" == "200" && "${origin_disallow_all}" == "true" && ( "${public_has_content_signals}" == "true" || "${public_has_managed_block}" == "true" ) ]]; then
+  if [[ "${origin_code}" == "200" && ( "${public_has_content_signals}" == "true" || "${public_has_managed_block}" == "true" ) ]]; then
     echo "INFO: public robots differs by design; Cloudflare managed robots/content-signals is prepending edge-managed content before origin robots."
   fi
 
   if [[ "${origin_code}" != "200" ]]; then
     echo "WARN: origin robots.txt is not returning 200 from Caddy. investigate local route/auth before blaming Cloudflare."
+  fi
+
+  # 이 probe는 #1596 전에는 API 호스트를 봤고 거기서는 `Disallow: /`가 정답이었다. 지금 보는
+  # 호스트는 공개 web 호스트이며 front/public/robots.txt가 정본이다 - 여기서 disallow-all이
+  # 보이면 라우팅이 backend vhost로 새어 블로그 전체가 색인에서 빠진다.
+  if [[ "${origin_code}" == "200" && "${origin_disallow_all}" == "true" ]]; then
+    echo "WARN: the public web host is serving a disallow-all robots.txt - the blog would be deindexed. front/public/robots.txt must answer on ${web_domain}."
+  fi
+
+  if [[ "${origin_code}" == "200" && "${origin_disallow_all}" == "false" && "${origin_has_sitemap}" == "false" ]]; then
+    echo "WARN: origin robots.txt has no Sitemap line - crawlers lose the sitemap entry point."
   fi
 
   if [[ "${public_code}" == "200" && "${origin_code}" != "200" && "${public_has_content_signals}" == "true" ]]; then
@@ -539,6 +555,22 @@ is_strict_subdomain_of() {
   [[ "${candidate}" == *".${parent}" ]]
 }
 
+# 공개 API가 web 호스트 밖으로 나가지 않는 조합은 둘이다: 같은 호스트(same-origin, #1575) 또는
+# 진성 하위. 동등을 여기서 허용하되 빈 값은 계속 거짓이다 - 빈 값을 참으로 두면 .env.prod에서
+# 호스트가 통째로 빠졌을 때 점검이 조용히 사라진다.
+is_same_or_strict_subdomain_of() {
+  local candidate="$1"
+  local parent="$2"
+
+  if [[ -z "${candidate}" || -z "${parent}" ]]; then
+    return 1
+  fi
+  if [[ "${candidate}" == "${parent}" ]]; then
+    return 0
+  fi
+  [[ "${candidate}" == *".${parent}" ]]
+}
+
 print_section "Basic Info"
 echo "Host: $(hostname)"
 echo "Time: $(date -Is)"
@@ -562,10 +594,10 @@ if [[ ! -f "${ENV_FILE}" ]]; then
 fi
 
 print_section "Env Required Keys"
-print_env_key_status "API_DOMAIN"
 # front (#1538): WEB_DOMAIN이 비면 web vhost가 web.localhost 기본값에 머물러 공개 도메인이
 # 404가 되고, BACKEND_INTERNAL_URL이 비면 컨테이너는 healthy인 채 모든 SSR이 500이 된다.
-# 둘 다 컨테이너 밖에서는 보이지 않으므로 여기서 노출한다.
+# 둘 다 컨테이너 밖에서는 보이지 않으므로 여기서 노출한다. #1596으로 구 API 호스트가 접힌 뒤
+# WEB_DOMAIN은 공개 진입점이자 이 도구의 모든 edge probe가 쓰는 유일한 Host다.
 print_env_key_status "WEB_DOMAIN"
 print_env_key_status "FRONT_BLUE_IMAGE"
 print_env_key_status "FRONT_GREEN_IMAGE"
@@ -611,7 +643,7 @@ print_section "Env Domain Consistency"
 front_url="$(trim_quotes "$(env_value "CUSTOM_PROD_FRONTURL")")"
 back_url="$(trim_quotes "$(env_value "CUSTOM_PROD_BACKURL")")"
 cookie_domain="$(trim_quotes "$(env_value "CUSTOM_PROD_COOKIEDOMAIN")")"
-api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
 
 front_host="$(extract_host "${front_url}")"
 back_host="$(extract_host "${back_url}")"
@@ -619,34 +651,43 @@ back_host="$(extract_host "${back_url}")"
 echo "CUSTOM_PROD_FRONTURL host: ${front_host:-<empty>}"
 echo "CUSTOM_PROD_BACKURL host:  ${back_host:-<empty>}"
 echo "CUSTOM_PROD_COOKIEDOMAIN:  ${cookie_domain:-<empty>}"
-echo "API_DOMAIN:                ${api_domain:-<empty>}"
+echo "WEB_DOMAIN:                ${web_domain:-<empty>}"
 
-# 쿠키 스코프는 front 호스트 그 자체여야 하고, 공개 API는 그 하위에 있어야 한다.
-# front가 쿠키 도메인의 형제이거나 API가 형제 subtree에 있으면 공통 접미사가 한 단계 위로
-# 올라가, 우리 소유가 아닌 상위 호스트로 세션 쿠키가 전송된다.
+# 쿠키 스코프는 front 호스트 그 자체여야 하고, 공개 API는 그 호스트 자신이거나(same-origin,
+# #1575의 목표 위상) 그 하위여야 한다. front가 쿠키 도메인의 형제이거나 API가 형제 subtree에
+# 있으면 공통 접미사가 한 단계 위로 올라가, 우리 소유가 아닌 상위 호스트로 세션 쿠키가 전송된다.
 #
 # front/back 관계 점검은 cookie_domain이 비어 있어도 사라지면 안 된다. 쿠키 도메인이 통째로
 # 빠진 .env.prod가 가장 위험한 상태인데, 그때 점검이 함께 사라지면 아무 WARN도 안 나온다.
-if [[ -n "${front_host}" && -n "${back_host}" ]] && ! is_strict_subdomain_of "${back_host}" "${front_host}"; then
-  # 전환 창에는 이 WARN이 예상된 상태지만, 그 판정을 문구에 상수로 박으면 전환이 끝난 뒤
-  # 진짜 위험한 조합에서도 "예상된 것"이라고 말하게 된다. 상태는 API_DOMAIN으로 구분한다.
-  if [[ "${api_domain}" == "api.aquilaxk.site" ]]; then
-    echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - expected while API_DOMAIN is still the pre-transition host (#1540)"
-  else
-    echo "WARN: BACKURL host must sit strictly under FRONTURL host (${back_host} vs ${front_host}) - the shared suffix widens the auth cookie scope above ${front_host}"
-  fi
+# 전환 창 동안에는 이 WARN이 "예상된 상태"인 분기가 있었다. #1596으로 구 API 호스트가 접히고
+# WEB_DOMAIN이 배포 필수가 된 뒤에는 그런 위상이 배포될 수 없으므로, 이 조합은 언제나 실제 위험이다.
+if [[ -n "${front_host}" && -n "${back_host}" ]] \
+  && ! is_same_or_strict_subdomain_of "${back_host}" "${front_host}"; then
+  echo "WARN: BACKURL host must be the FRONTURL host or sit strictly under it (${back_host} vs ${front_host}) - the shared suffix widens the auth cookie scope above ${front_host}"
 fi
 
 if [[ -n "${cookie_domain}" && -n "${front_host}" && "${cookie_domain}" != "${front_host}" ]]; then
   echo "WARN: COOKIEDOMAIN must equal FRONTURL host (${cookie_domain} vs ${front_host}) - auth cookies would reach hosts above ${front_host}"
 fi
 
-if [[ -n "${cookie_domain}" && -n "${back_host}" ]] && ! is_strict_subdomain_of "${back_host}" "${cookie_domain}"; then
-  echo "WARN: BACKURL host must sit strictly under COOKIEDOMAIN (${back_host} vs ${cookie_domain})"
+if [[ -n "${cookie_domain}" && -n "${back_host}" ]] \
+  && ! is_same_or_strict_subdomain_of "${back_host}" "${cookie_domain}"; then
+  echo "WARN: BACKURL host must be the COOKIEDOMAIN host or sit strictly under it (${back_host} vs ${cookie_domain})"
 fi
 
-if [[ -n "${api_domain}" && -n "${back_host}" && "${api_domain}" != "${back_host}" ]]; then
-  echo "WARN: API_DOMAIN does not match BACKURL host (${api_domain} vs ${back_host})"
+# LEGACY_API_DOMAIN은 host 이전 창에만 설정하는 두 번째 site address다(#1596 이후 유일하게
+# 남은 host 기반 주소). WEB_DOMAIN과 같은 값이면 두 site block이 한 주소를 공유해 edge 전체가
+# 기동하지 못한다. 계약이 이미 막지만 doctor는 손으로 편집된 .env.prod를 보는 도구다.
+#
+# 비교 대상은 FRONTURL host가 아니라 WEB_DOMAIN이다. 실제로 Caddy site address로 보간되는 값이
+# WEB_DOMAIN이라, FRONTURL만 보면 정확히 그 충돌 조합을 놓친다.
+legacy_api_domain="$(trim_quotes "$(env_value "LEGACY_API_DOMAIN")")"
+echo "LEGACY_API_DOMAIN:         ${legacy_api_domain:-<empty>}"
+if [[ -n "${legacy_api_domain}" && -n "${web_domain}" && "${legacy_api_domain}" == "${web_domain}" ]]; then
+  echo "WARN: LEGACY_API_DOMAIN duplicates WEB_DOMAIN (${web_domain}) - two Caddy site blocks would share one address and the edge would fail to start"
+fi
+if [[ -n "${legacy_api_domain}" ]]; then
+  echo "WARN: LEGACY_API_DOMAIN is set - a host migration window is open and an extra host-based backend address is being served"
 fi
 
 print_section "Grafana Embed Route"
@@ -747,12 +788,12 @@ internal_snapshot_code="$(
     -s -o /dev/null -w "%{http_code}" \
     --connect-timeout 3 \
     --max-time 8 \
-    -H "Host: ${api_domain}" \
+    -H "Host: ${web_domain}" \
     "http://caddy:80/member/api/v1/notifications/snapshot" || true
 )"
 public_snapshot_code="$(
   curl -sS --connect-timeout 5 -m 15 -o /dev/null -w "%{http_code}" \
-    "https://${api_domain}/member/api/v1/notifications/snapshot" || true
+    "https://${web_domain}/member/api/v1/notifications/snapshot" || true
 )"
 echo "internal_snapshot=${internal_snapshot_code:-none}"
 echo "public_snapshot=${public_snapshot_code:-none}"
@@ -762,6 +803,44 @@ docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blo
 
 print_section "Back Container Memory"
 docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}' | grep -E 'blog_home-back_(blue|green|read|admin|worker)-1|NAME' || true
+
+print_section "Front .next/cache Volume"
+# 이 볼륨이 실제로 보존하는 것은 이미지 최적화 캐시(.next/cache/images)뿐이다. 이 앱은 Pages
+# Router라 ISR 산출물은 .next/server/pages(이미지 레이어 안)에 쓰이고, fetch-cache는 App Router
+# 전용이라 채워지지 않는다(#1538 실측). 따라서 컨테이너 교체 후 ISR HTML은 보존되지 않으며
+# 새 색깔은 항상 cold ISR로 시작한다 - 그것이 현재 사실이고, 게이트도 보존을 전제하지 않는다.
+#
+# 여기서 보는 것은 "보존이 가능한 상태인가"다. 마운트가 빠지거나 마운트 지점이 root:root로
+# 생성되면 /_next/image는 200을 반환하면서 캐시를 전혀 쓰지 못한다(#1538 실측) - 화면상 차이가
+# 없어 조용히 열화되는 경로다.
+for svc in front_blue front_green; do
+  cid="$(compose ps -q "${svc}" 2>/dev/null | head -n 1 || true)"
+  if [[ -z "${cid}" ]]; then
+    echo "${svc}: MISSING (front profile off or not deployed)"
+    continue
+  fi
+  mount_source="$(
+    docker inspect --format '{{range .Mounts}}{{if eq .Destination "/app/.next/cache"}}{{.Name}}{{end}}{{end}}' \
+      "${cid}" 2>/dev/null || true
+  )"
+  echo "${svc}: next_cache_volume=${mount_source:-<none>}"
+  if [[ -z "${mount_source}" ]]; then
+    echo "WARN: ${svc} has no named volume at /app/.next/cache; the image optimizer cache is lost on every replacement"
+    continue
+  fi
+  # 소유자 출력만으로는 부족하다. 컨테이너 사용자가 쓰지 못하면 /_next/image는 계속 200을
+  # 반환하면서 캐시 적중률만 0으로 굳는다(#1538 실측) - 출력만 하고 넘어가면 그 상태가 진단
+  # 로그에서도 정상처럼 보인다. 쓰기 가능 여부를 명시적으로 판정해 WARN을 낸다.
+  docker exec "${cid}" sh -lc 'ls -ld /app/.next/cache 2>/dev/null; ls /app/.next/cache 2>/dev/null | head -n 5' 2>/dev/null || true
+  if docker exec "${cid}" sh -lc 'test -w /app/.next/cache' >/dev/null 2>&1; then
+    echo "${svc}: next_cache_writable=yes"
+  else
+    echo "${svc}: next_cache_writable=no"
+    echo "WARN: ${svc} cannot write /app/.next/cache; /_next/image keeps answering 200 with a permanently cold cache"
+  fi
+  image_cache_entries="$(docker exec "${cid}" sh -lc 'ls /app/.next/cache/images 2>/dev/null | wc -l' 2>/dev/null | tr -d '\r' || true)"
+  echo "${svc}: image_cache_entries=${image_cache_entries:-unknown}"
+done
 
 print_section "Caddy Logs (tail 80)"
 compose logs --no-color --tail=80 caddy || true

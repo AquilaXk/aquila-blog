@@ -19,6 +19,13 @@ export const variables = {
       paddingLg: 20,
       shadow: "0 8px 20px rgba(0, 0, 0, 0.18)",
       shadowHover: "0 14px 28px rgba(0, 0, 0, 0.24)",
+      /**
+       * 랜딩 표면의 플로팅 시각 요소(hero 스크린샷 카드, 폰 목업 패널) 전용 그림자.
+       * 카드 목록에 쓰는 `shadow`보다 훨씬 옅고 넓다 - 면을 띄우는 것이 목적이고 카드를 구획하는
+       * 것이 목적이 아니다. 그림자는 그 두 용도에만 쓴다.
+       */
+      shadowFloating: "0 24px 48px rgba(0, 0, 0, 0.08)",
+      shadowFloatingDark: "0 28px 56px rgba(0, 0, 0, 0.45)",
     },
     button: {
       radius: 10,

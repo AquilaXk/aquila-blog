@@ -12,6 +12,188 @@
 	header_up -True-Client-IP
 }
 
+# Capture the one client IP the upstream is allowed to believe, then strip every spoofable hop
+# header. `vars` is ordered before `request_header` in Caddy's directive order, which is why the
+# capture can read a header the next lines delete.
+#
+# CF-Connecting-IP is only trustworthy where Cloudflare Tunnel is the one writing it. The API vhost
+# also carries the container-internal site address `http://caddy` (#1539), which any container on
+# the compose networks can reach directly; there the header is caller-controlled, so believing it
+# would let an internal caller forge the client IP that lands in audit logs and rate-limit buckets.
+# On that address the peer address is the only honest answer.
+#
+# The split lives here rather than in the API vhost so a future internal address on any other vhost
+# inherits the same boundary instead of silently trusting the header.
+#
+# request_header supports single-line ops only (no block form; unlike `header`).
+(edge_client_ip_capture) {
+	@internalEntry host caddy
+	@cloudflareEdge not host caddy
+	vars @cloudflareEdge trusted_client_ip {http.request.header.CF-Connecting-IP}
+	vars @internalEntry trusted_client_ip {remote_host}
+
+	request_header -X-Forwarded-For
+	request_header -CF-Connecting-IP
+	request_header -True-Client-IP
+	request_header -X-Real-IP
+}
+
+# Public API edge gates, shared by the host-based API vhost and the same-origin web vhost (#1575).
+#
+# The public API moved from its own host to `{$WEB_DOMAIN}` paths, so the same request now has two
+# possible front doors during the transition window. Duplicating the gate list per vhost is how a
+# security gate silently disappears on one door only, which is why this is one snippet imported in
+# both places instead of two copies.
+#
+# `import` is token substitution, so the import site decides the scope. At an API vhost's top level
+# the `header` block below applies to that whole vhost (its only content is the API). Inside the web
+# vhost it is imported within `handle @backendApi`, so it covers backend responses only and never
+# touches the Next.js responses whose headers front/next.config.js owns (HR-56).
+#
+# The terminal `handle` is part of the snippet: whatever the gates above did not claim is backend
+# traffic in both vhosts - on the web vhost only because the import already sits inside the
+# backend-prefix handle.
+(backend_edge_gates) {
+	# Align with Cloudflare free-plan body limit (100 MiB). Oversized bodies get 413 before Spring.
+	request_body {
+		max_size 100MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	@notificationSse path /member/api/v1/notifications/stream
+	log_skip @notificationSse
+
+	@oauthCallbackSensitive path /login/oauth2/code/*
+	log_skip @oauthCallbackSensitive
+
+	@signupVerifySensitive path /member/api/v1/signup/email/verify
+	log_skip @signupVerifySensitive
+
+	@socialSignupSensitive path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete
+	log_skip @socialSignupSensitive
+
+	@accountDeletionSensitive path /member/api/v1/privacy/account
+	log_skip @accountDeletionSensitive
+
+	@cloudExternalContentSensitive path /system/api/v1/adm/cloud/files/*/external-content
+	log_skip @cloudExternalContentSensitive
+
+	@publicSearchSensitive path /post/api/v1/posts/search
+	log_skip @publicSearchSensitive
+
+	# Prometheus metrics are scraped via internal Docker network only.
+	# Public access through any edge host is explicitly denied.
+	#
+	# This must be a `handle`, not a bare `respond`. Caddy's directive order puts `respond` AFTER
+	# `handle`, so a top-level `respond @denyPrometheus 403` is compiled behind the catch-all
+	# backend proxy and never runs - measured on the pre-#1575 config, which answered
+	# `GET /actuator/prometheus` with the backend response instead of 403.
+	@denyPrometheus path /actuator/prometheus
+	handle @denyPrometheus {
+		respond 403
+	}
+
+	handle @notificationSse {
+		header {
+			Cache-Control "no-cache, no-transform"
+		}
+
+		reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+			import trusted_edge_client_ip
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
+			header_down -Strict-Transport-Security
+			header_down -X-Content-Type-Options
+			header_down -X-Frame-Options
+			header_down -Referrer-Policy
+			header_down -Permissions-Policy
+			flush_interval -1
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 10s
+			}
+		}
+	}
+
+	# read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
+	# Paths must match PublicApiRouteContributor SoT export (tools/guards/public-api-read-caddy-paths.sot).
+	@publicReadFallback {
+		path /post/api/v1/files/* /post/api/v1/images/* /post/api/v1/posts /post/api/v1/posts/* /post/api/v1/posts/*/comments /post/api/v1/posts/*/comments/* /post/api/v1/posts/bootstrap /post/api/v1/posts/explore /post/api/v1/posts/explore/cursor /post/api/v1/posts/feed /post/api/v1/posts/feed/cursor /post/api/v1/posts/related/author /post/api/v1/posts/search /post/api/v1/posts/tags /system/api/v1/adm/cloud/files/*/external-content
+		method GET HEAD OPTIONS
+	}
+	handle @publicReadFallback {
+		reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
+			import trusted_edge_client_ip
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
+			header_down -Strict-Transport-Security
+			header_down -X-Content-Type-Options
+			header_down -X-Frame-Options
+			header_down -Referrer-Policy
+			header_down -Permissions-Policy
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 12s
+			}
+		}
+	}
+
+	# 점진 분리: admin API는 별도 upstream으로 라우팅 가능(기본 back_blue 유지).
+	@adminApi {
+		path /post/api/v1/adm/* /member/api/v1/adm/* /system/api/v1/adm/*
+	}
+	handle @adminApi {
+		reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+			import trusted_edge_client_ip
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
+			header_down -Strict-Transport-Security
+			header_down -X-Content-Type-Options
+			header_down -X-Frame-Options
+			header_down -Referrer-Policy
+			header_down -Permissions-Policy
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 12s
+			}
+		}
+	}
+
+	# Blue/Green cutover rewrites single active upstream host.
+	handle {
+		encode gzip zstd
+
+		reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+			# Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
+			# Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
+			# callback URLs, so we pin the upstream scheme/host to the external URL.
+			import trusted_edge_client_ip
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
+			header_down -Strict-Transport-Security
+			header_down -X-Content-Type-Options
+			header_down -X-Frame-Options
+			header_down -Referrer-Policy
+			header_down -Permissions-Policy
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 12s
+			}
+		}
+	}
+}
+
 # Uptime Kuma dashboard/status endpoint (optional).
 # Set MONITOR_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
 # ADMIN_EMBED_ORIGINS: space-separated admin UI origins allowed to iframe this host.
@@ -78,16 +260,27 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
 
 # Cloudflare Tunnel origin: HTTP only between cloudflared and Caddy.
 #
-# Two site addresses, not one. A single address means the old and the new public API host can
-# never be live at the same time, so every cutover order breaks the public site for a while:
-# flip the web DNS first and the API host does not exist yet (404 on every API call); flip the
-# API host first and whatever still serves the old web origin loses its backend.
+# Backend-only vhost. Since #1575 the *public* API is same-origin under {$WEB_DOMAIN}, and #1596
+# retired the pre-transition public API host, so no live public address is left here. The vhost
+# stays because `http://caddy` below is permanent and because the transition-only
+# `{$LEGACY_API_DOMAIN}` slot is what makes a future host-based migration possible
+# (see docs/ops/homeserver-front-domain-cutover.md).
 #
-# LEGACY_API_DOMAIN is transition-only and unset outside the cutover window. Its `.localhost`
-# default is required: an empty value collapses the address to `http://`, which Caddy adapts
-# into a host-matcher-less :80 catch-all.
+# Nothing in this block proxies to the front tier, which is what makes the internal entry point
+# loop-free: a front server-side call to `http://caddy` can only ever land on the backend.
 #
-# The third address `http://caddy` is the container-internal entry point (#1539). The front
+# LEGACY_API_DOMAIN is transition-only and unset outside a migration window. It exists so an old
+# and a new host-based address can be live at the same time - with a single address every cutover
+# order breaks one side of the switch for a while. Its `.localhost` default is required: an empty
+# value collapses the address to `http://`, which Caddy adapts into a host-matcher-less :80
+# catch-all. It must also differ from WEB_DOMAIN, because two site blocks sharing one address take
+# the whole edge down on the next caddy recreate (the env contract enforces both).
+#
+# There is deliberately no CORS anywhere in this file. The public API is a path on the web host,
+# so browser calls to it are same-origin and a cross-origin allowlist would only widen what this
+# edge accepts. The retired API host was the last address that needed one (#1596).
+#
+# The other address `http://caddy` is the container-internal entry point (#1539). The front
 # tier calls the backend from the server side (SSR helpers and the /api/backend/* proxy) and
 # must reach the same route split the browser gets: under runtime-split, public reads belong
 # to back_read and everything else to back_admin, and no single backend container serves both
@@ -100,63 +293,19 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
 # address the note above warns about. Reachability is unchanged: the only listeners are the
 # compose networks caddy joins plus a 127.0.0.1-only host bind, and Cloudflare Tunnel forwards
 # the original public Host, so no external request can arrive with `Host: caddy`.
-http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {
+http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {
   log {
     output stdout
     format json
   }
 
-  # Align with Cloudflare free-plan body limit (100 MiB). Oversized bodies get 413 before Spring.
-  request_body {
-    max_size 100MB
-  }
+  import edge_client_ip_capture
 
-  # Capture trusted client IP before stripping spoofable hop headers.
-  # request_header supports single-line ops only (no block form; unlike `header`).
-  vars {
-    trusted_client_ip {http.request.header.CF-Connecting-IP}
-  }
-  request_header -X-Forwarded-For
-  request_header -CF-Connecting-IP
-  request_header -True-Client-IP
-  request_header -X-Real-IP
-
-  header {
-    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-    X-Content-Type-Options "nosniff"
-    X-Frame-Options "DENY"
-    Referrer-Policy "strict-origin-when-cross-origin"
-    Permissions-Policy "camera=(), microphone=(), geolocation=()"
-  }
-
-  # Edge CORS allowlist is the public web origin only. The apex and www hosts belong to a
-  # different service, so `(www\.)?aquilaxk\.site` must never come back here (#1540).
-  # Deriving this from an env key belongs to the web vhost work (#1538).
-  @corsAllowed {
-    header_regexp Origin Origin ^https://blog\.aquilaxk\.site$
-  }
-  @corsPreflight {
-    method OPTIONS
-    header_regexp Origin Origin ^https://blog\.aquilaxk\.site$
-  }
-  handle @corsPreflight {
-    header {
-      Access-Control-Allow-Origin "{http.request.header.Origin}"
-      Access-Control-Allow-Credentials "true"
-      Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-      Access-Control-Allow-Headers "{http.request.header.Access-Control-Request-Headers}"
-      Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
-    }
-    respond 204
-  }
-  header @corsAllowed {
-    ?Access-Control-Allow-Origin "{http.request.header.Origin}"
-    ?Access-Control-Allow-Credentials "true"
-    # Browser JS can read X-Request-Id from cross-origin API error responses.
-    ?Access-Control-Expose-Headers "X-Request-Id"
-    ?Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
-  }
-
+  # This vhost only. The web vhost must NOT get this: there front/public/robots.txt is the real
+  # robots.txt and it advertises the sitemap, so a `Disallow: /` here would deindex the blog.
+  # A host-based backend address has no crawlable content, so it keeps refusing crawlers even
+  # while a migration window has LEGACY_API_DOMAIN publicly resolvable.
+  # It shares the handle group with the imported gates below, and their matchers are disjoint.
   @apiRobots path /robots.txt
   handle @apiRobots {
     header {
@@ -166,129 +315,14 @@ http://{$API_DOMAIN}, http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://c
     respond "User-agent: *\nDisallow: /\n" 200
   }
 
-  @notificationSse path /member/api/v1/notifications/stream
-  log_skip @notificationSse
-
-  @oauthCallbackSensitive path /login/oauth2/code/*
-  log_skip @oauthCallbackSensitive
-
-  @signupVerifySensitive path /member/api/v1/signup/email/verify
-  log_skip @signupVerifySensitive
-
-  @socialSignupSensitive path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete
-  log_skip @socialSignupSensitive
-
-  @accountDeletionSensitive path /member/api/v1/privacy/account
-  log_skip @accountDeletionSensitive
-
-  @cloudExternalContentSensitive path /system/api/v1/adm/cloud/files/*/external-content
-  log_skip @cloudExternalContentSensitive
-
-  @publicSearchSensitive path /post/api/v1/posts/search
-  log_skip @publicSearchSensitive
-
-  handle @notificationSse {
-    header {
-      Cache-Control "no-cache, no-transform"
-    }
-
-    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
-      import trusted_edge_client_ip
-      header_up Host {host}
-      header_up X-Forwarded-Proto https
-      header_up X-Forwarded-Port 443
-      header_down -Strict-Transport-Security
-      header_down -X-Content-Type-Options
-      header_down -X-Frame-Options
-      header_down -Referrer-Policy
-      header_down -Permissions-Policy
-      flush_interval -1
-      transport http {
-        dial_timeout 3s
-        response_header_timeout 10s
-      }
-    }
-  }
-
-  # Prometheus metrics are scraped via internal Docker network only.
-  # Public access via API domain is explicitly denied.
-  @denyPrometheus path /actuator/prometheus
-  respond @denyPrometheus 403
-
-  # read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
-  # Paths must match PublicApiRouteContributor SoT export (tools/guards/public-api-read-caddy-paths.sot).
-  @publicReadFallback {
-    path /post/api/v1/files/* /post/api/v1/images/* /post/api/v1/posts /post/api/v1/posts/* /post/api/v1/posts/*/comments /post/api/v1/posts/*/comments/* /post/api/v1/posts/bootstrap /post/api/v1/posts/explore /post/api/v1/posts/explore/cursor /post/api/v1/posts/feed /post/api/v1/posts/feed/cursor /post/api/v1/posts/related/author /post/api/v1/posts/search /post/api/v1/posts/tags /system/api/v1/adm/cloud/files/*/external-content
-    method GET HEAD OPTIONS
-  }
-  handle @publicReadFallback {
-    reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
-      import trusted_edge_client_ip
-      header_up Host {host}
-      header_up X-Forwarded-Proto https
-      header_up X-Forwarded-Port 443
-      header_down -Strict-Transport-Security
-      header_down -X-Content-Type-Options
-      header_down -X-Frame-Options
-      header_down -Referrer-Policy
-      header_down -Permissions-Policy
-      transport http {
-        dial_timeout 3s
-        response_header_timeout 12s
-      }
-    }
-  }
-
-  # 점진 분리: admin API는 별도 upstream으로 라우팅 가능(기본 back_blue 유지).
-  @adminApi {
-    path /post/api/v1/adm/* /member/api/v1/adm/* /system/api/v1/adm/*
-  }
-  handle @adminApi {
-    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
-      import trusted_edge_client_ip
-      header_up Host {host}
-      header_up X-Forwarded-Proto https
-      header_up X-Forwarded-Port 443
-      header_down -Strict-Transport-Security
-      header_down -X-Content-Type-Options
-      header_down -X-Frame-Options
-      header_down -Referrer-Policy
-      header_down -Permissions-Policy
-      transport http {
-        dial_timeout 3s
-        response_header_timeout 12s
-      }
-    }
-  }
-
-  # Blue/Green cutover rewrites single active upstream host.
-  handle {
-    encode gzip zstd
-
-    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
-      # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
-      # Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
-      # callback URLs, so we pin the upstream scheme/host to the external URL.
-      import trusted_edge_client_ip
-      header_up Host {host}
-      header_up X-Forwarded-Proto https
-      header_up X-Forwarded-Port 443
-      header_down -Strict-Transport-Security
-      header_down -X-Content-Type-Options
-      header_down -X-Frame-Options
-      header_down -Referrer-Policy
-      header_down -Permissions-Policy
-      transport http {
-        dial_timeout 3s
-        response_header_timeout 12s
-      }
-    }
-  }
+  import backend_edge_gates
 }
 
 # Public web host (#1538). Value is WEB_DOMAIN=blog.aquilaxk.site (Epic #1535 Locked Decision 5).
-# www.aquilaxk.site is retired without a redirect (Locked Decision 6), so this vhost carries the
-# one address and no `redir` exists anywhere in this file.
+# It is the blog surface only. The company surface (`{$COMPANY_DOMAIN}`) and the product surface
+# (`{$PRODUCT_DOMAIN}`) are served by the same front container from their own vhosts below, and the
+# apex redirects to the company host - Locked Decision 6 ("retire www without a redirect") was
+# reversed by the owner on 2026-08-02 (#1605, docs/ops/homeserver-front-domain-cutover.md).
 #
 # The .localhost default is not cosmetic: an unset WEB_DOMAIN leaves the address as bare
 # `http://`, which caddy adapt turns into a route with no host matcher — a port-80 catch-all that
@@ -300,16 +334,8 @@ http://{$WEB_DOMAIN:web.localhost} {
     format json
   }
 
-  # Capture trusted client IP before stripping spoofable hop headers.
   # front API routes (rum/vitals, rum/client-errors) must see a client IP they can trust.
-  # request_header supports single-line ops only (no block form; unlike `header`).
-  vars {
-    trusted_client_ip {http.request.header.CF-Connecting-IP}
-  }
-  request_header -X-Forwarded-For
-  request_header -CF-Connecting-IP
-  request_header -True-Client-IP
-  request_header -X-Real-IP
+  import edge_client_ip_capture
 
   # /_next/static/* is content-hashed and immutable. Next.js already emits this exact
   # Cache-Control, so the `?` prefix asserts a floor without overwriting the app's value.
@@ -318,6 +344,28 @@ http://{$WEB_DOMAIN:web.localhost} {
   @nextImmutable path /_next/static/*
   header @nextImmutable {
     ?Cache-Control "public, max-age=31536000, immutable"
+  }
+
+  # Same-origin public API (#1575). The public API host was going to be api.blog.aquilaxk.site,
+  # but a two-label subdomain sits outside Cloudflare Universal SSL and fails the TLS handshake
+  # (alert 40, measured), so the API is served from this host by path instead.
+  #
+  # The prefix list is the backend's public route surface, verified against the front route table:
+  # front owns `/api/*` (Next API routes) and the backend has no bare `/api` prefix, and
+  # `/login` (front page) is one path segment shorter than `/login/oauth2/*` (Spring callback).
+  # `/actuator/*` is narrowed to health only: the rest has no reason to be public on the web host.
+  # Both the aggregate `/actuator/health` and the `/actuator/health/*` probes are listed - a path
+  # matcher without the bare form would send the aggregate endpoint (documented in
+  # deploy/homeserver/HARDENING.md and reachable to external monitors) to front's 404 instead.
+  # `/actuator/prometheus` therefore never reaches the backend through this vhost - it falls
+  # through to front and 404s. The shared gates deny it outright as well, which is what answers on
+  # the host-based API vhost and what would answer here if this prefix were ever widened.
+  #
+  # The backend's `GET /` and `GET /session` are deliberately NOT routed here: front does not call
+  # them (it uses /member/api/v1/auth/session) and `/` is the site itself.
+  @backendApi path /member/* /post/* /system/* /oauth2/* /login/oauth2/* /actuator/health /actuator/health/*
+  handle @backendApi {
+    import backend_edge_gates
   }
 
   # Blue/Green cutover rewrites the single active upstream host (#1539 owns the switch).
@@ -337,4 +385,158 @@ http://{$WEB_DOMAIN:web.localhost} {
       }
     }
   }
+}
+
+# Front-only public surface body, shared by the company and the product host (#1605).
+#
+# Those two hosts differ in exactly one thing: which Next route their root serves. Everything else -
+# the immutable static-asset floor, the host's own robots policy, the upstream and its forwarded
+# headers - is identical, and duplicating it per host is how one of those silently drifts or
+# disappears on a single door. So the body lives here once and each vhost imports it with its route.
+#
+# `{args[0]}` is that route.
+#
+# These surfaces get NO backend paths. The public API is same-origin under {$WEB_DOMAIN} and the
+# auth cookie is scoped to that host (#1575), so routing backend prefixes here would either widen
+# the cookie beyond its host or hand this surface a session it cannot use. Nothing on these pages
+# calls the backend from the browser, which is what makes front-only the complete answer rather
+# than a restriction.
+#
+# "No backend paths" is not the same as "no backend reachability": the front app itself owns
+# `/api/backend/*` and `/api/revalidate`, both of which reach BACKEND_INTERNAL_URL from the server
+# side. Not adding backend prefixes here leaves those open, so the front API allow-list below is
+# what actually closes the surface.
+#
+# front/next.config.js owns the security headers; like the web vhost this block adds no site-level
+# `header` and no `header_down`, so it cannot strip or weaken them (HR-56).
+(front_surface_vhost) {
+  log {
+    output stdout
+    format json
+  }
+
+  # front API routes (rum/vitals, rum/client-errors) must see a client IP they can trust.
+  import edge_client_ip_capture
+
+  # /_next/static/* is content-hashed and immutable. Next.js already emits this exact
+  # Cache-Control, so the `?` prefix asserts a floor without overwriting the app's value.
+  @nextImmutable path /_next/static/*
+  header @nextImmutable {
+    ?Cache-Control "public, max-age=31536000, immutable"
+  }
+
+  # This host answers its own robots.txt. `front/public/robots.txt` is the BLOG host's file and it
+  # advertises the blog sitemap, so serving it here would make this surface advertise another
+  # host's URL set as its own.
+  #
+  # Only the root is indexable. The same front container also answers the blog routes on this
+  # hostname (the rewrite below claims `/` and nothing else), so an open `Allow: /` would let
+  # crawlers index the whole blog a second time under this host. `Allow: /$` is the longer, more
+  # specific rule, so it wins for `/` while `Disallow: /` covers the rest.
+  #
+  # It must be a `handle`, not a bare `respond`: Caddy's directive order puts `respond` AFTER
+  # `handle`, so a top-level `respond` would compile behind the catch-all proxy and never run.
+  @surfaceRobots path /robots.txt
+  handle @surfaceRobots {
+    header {
+      Content-Type "text/plain; charset=utf-8"
+      Cache-Control "public, max-age=300"
+    }
+    respond "User-agent: *\nAllow: /$\nDisallow: /\n" 200
+  }
+
+  # front API surface of these hosts, as an allow-list.
+  #
+  # The catch-all below hands every unclaimed path to Next, and Next owns `/api/*`. One of those
+  # routes is `pages/api/backend/[...path].ts`, which proxies straight to BACKEND_INTERNAL_URL - so
+  # a catch-all alone publishes the whole backend proxy surface (auth, signup, posts) on hosts that
+  # have no CORS entry, no cookie scope and no page that calls it. `/api/revalidate` reaches the
+  # backend too (admin session check + read-cache invalidation). Neither belongs here.
+  #
+  # It is an allow-list, not a deny-list of today's backend-touching routes: a deny-list defaults to
+  # exposure, so the next front API route added for the blog would silently appear on these hosts as
+  # well. `/api/rum/*` is the one namespace these pages do use - web-vitals and client-error
+  # reporting run from _app on every route - so it is the one namespace that stays reachable.
+  #
+  # It must be a `handle`, not a bare `respond`: Caddy's directive order puts `respond` AFTER
+  # `handle`, so a top-level respond would compile behind the catch-all proxy and never run.
+  #
+  # 404, not 403: on this host these routes do not exist. A 403 would confirm they do.
+  @frontApiDenied {
+    path /api/*
+    not path /api/rum/*
+  }
+  handle @frontApiDenied {
+    respond 404
+  }
+
+  # The RSS feed belongs to the blog host. `pages/feed.tsx` is a blog route, and the catch-all below
+  # would serve the blog's feed under these hostnames - so a crawler that learned the path elsewhere
+  # would index the blog's item set a second time as this surface's own feed. `_document` no longer
+  # advertises the alternate link on these routes; this is the other half, so the path cannot be
+  # served even when nothing links to it.
+  #
+  # Same shape as the front API gate above and for the same reasons: a `handle` written before the
+  # catch-all (directive order puts a bare `respond` behind it), and 404 because on this host the
+  # route does not exist.
+  @surfaceFeedDenied path /feed /feed/*
+  handle @surfaceFeedDenied {
+    respond 404
+  }
+
+  # Blue/Green cutover rewrites the single active upstream host (#1539 owns the switch).
+  handle {
+    encode gzip zstd
+
+    # The surface route lives at `{args[0]}` in the Next app; this host serves it at the root.
+    # Exact `/` only - deeper paths keep going to their own routes so `/_next/*` and the static
+    # assets the page needs are untouched.
+    rewrite / {args[0]}
+
+    reverse_proxy {$WEB_UPSTREAM:front_blue}:3000 {
+      # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to Caddy is
+      # plain HTTP. Next.js builds absolute URLs from forwarded headers, so pin them here.
+      import trusted_edge_client_ip
+      header_up Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 15s
+      }
+    }
+  }
+}
+
+# Company surface host (#1605). Value is COMPANY_DOMAIN=www.aquilaxk.site, the site canonical.
+#
+# The `.localhost` default is required for the same reason as every other optional vhost here: an
+# unset value leaves the address as bare `http://`, which caddy adapt turns into a route with no
+# host matcher - a port-80 catch-all that answers every hostname the other vhosts do not claim.
+http://{$COMPANY_DOMAIN:company.localhost} {
+  import front_surface_vhost /company
+}
+
+# Product surface host (#1605). Value is PRODUCT_DOMAIN=easysubway.aquilaxk.site.
+http://{$PRODUCT_DOMAIN:product.localhost} {
+  import front_surface_vhost /easysubway
+}
+
+# Apex host (#1605). Not a surface of its own: it forwards to the company host.
+#
+# Path and query are preserved through `{uri}`, so a deep link or a shared URL with tracking
+# parameters lands on the same page instead of collapsing to the home page.
+#
+# The destination reuses `{$COMPANY_DOMAIN}` rather than spelling the host again. One source of
+# truth means the redirect target cannot drift away from the vhost that actually serves it.
+#
+# 308, not 301 or 302: permanent AND method-preserving, so a POST to the apex is not silently
+# rewritten into a GET. `redir` defaults to 302, so the status is explicit.
+http://{$APEX_DOMAIN:apex.localhost} {
+  log {
+    output stdout
+    format json
+  }
+
+  redir https://{$COMPANY_DOMAIN:company.localhost}{uri} 308
 }

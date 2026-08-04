@@ -22,7 +22,6 @@ const hardeningScriptPath = path.join(repoRoot, "deploy/homeserver/hardening/set
 const hardeningDocPath = path.join(repoRoot, "deploy/homeserver/HARDENING.md")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
-const vercelConfigPath = path.join(repoRoot, "front/vercel.json")
 
 const extractCaddySiteBlock = (caddyfile, siteMarker) => {
   const start = caddyfile.indexOf(siteMarker)
@@ -45,6 +44,14 @@ const extractCaddySiteBlock = (caddyfile, siteMarker) => {
   }
   return ""
 }
+
+// 공개 API 게이트는 backend 전용 vhost와 same-origin web vhost가 공유하는 snippet 하나에 있다.
+const backendGatesSnippet = "(backend_edge_gates) {"
+// #1596이 구 API 호스트 주소를 지운 뒤, backend 전용 vhost의 첫 주소는 host 이전 창 전용
+// LEGACY 슬롯이고 두 번째 주소 `http://caddy`가 영구 컨테이너 내부 진입점이다.
+const backendVhostMarker = "http://{$LEGACY_API_DOMAIN:"
+// client IP 신뢰 경계도 같은 이유로 한 곳에만 있다.
+const clientIpCaptureSnippet = "(edge_client_ip_capture) {"
 
 const forbiddenSecretBackupCopyPattern =
   /for file in[^\n]*[\s/]\.env\.prod(?:\.compose)?(?:[\s"';]|$)|\b(?:cp|install)\b[^\n]*[\s/]\.env\.prod(?:\.compose)?(?:[\s"';]|$)/
@@ -171,8 +178,7 @@ const targetKeyNames = (contract, targetName) => {
 }
 
 const baseHomeServerEnv = [
-  "API_DOMAIN=api.blog.aquilaxk.site",
-  // API_DOMAIN이 blog topology면 #1557의 requiredWhen이 이 둘을 필수로 만든다.
+  // 스위치가 same-origin topology면 #1557/#1575의 requiredWhen이 이 둘을 필수로 만든다.
   "WEB_DOMAIN=blog.aquilaxk.site",
   "BACKEND_INTERNAL_URL=http://caddy",
   "MONITOR_DOMAIN=status.aquilaxk.site",
@@ -227,7 +233,7 @@ const baseHomeServerEnv = [
   "CUSTOM__ADMIN__PASSWORD=valid-admin-password",
   "CUSTOM_PROD_COOKIEDOMAIN=blog.aquilaxk.site",
   "CUSTOM_PROD_FRONTURL=https://blog.aquilaxk.site",
-  "CUSTOM_PROD_BACKURL=https://api.blog.aquilaxk.site",
+  "CUSTOM_PROD_BACKURL=https://blog.aquilaxk.site",
   "CUSTOM_PROD_DBNAME=blog_prod",
   "CUSTOM_PROD_REDISDATABASE=0",
   "CUSTOM__REVALIDATE__URL=https://blog.aquilaxk.site/api/revalidate",
@@ -314,18 +320,86 @@ test("home-server-source contract rejects enabled AI summary before SSH deployme
 
 test("Caddy access logs skip signup verification endpoint before proxying", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
-  const matcherIndex = caddyfile.indexOf("@signupVerifySensitive path /member/api/v1/signup/email/verify")
-  const skipIndex = caddyfile.indexOf("log_skip @signupVerifySensitive")
-  const apiBlockIndex = caddyfile.indexOf("http://{$API_DOMAIN}")
-  const proxyIndex = caddyfile.indexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080", apiBlockIndex)
+  const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
+  const matcherIndex = gates.indexOf("@signupVerifySensitive path /member/api/v1/signup/email/verify")
+  const skipIndex = gates.indexOf("log_skip @signupVerifySensitive")
+  const proxyIndex = gates.lastIndexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080")
 
-  assert.notEqual(apiBlockIndex, -1, "API domain block must be configured")
+  assert.notEqual(gates, "", "shared backend gate snippet must be extractable")
   assert.notEqual(matcherIndex, -1, "signup verify sensitive matcher must be configured")
   assert.notEqual(skipIndex, -1, "signup verify access log skip must be configured")
   assert(skipIndex > matcherIndex, "signup verify log_skip must reference the sensitive matcher")
   assert(skipIndex < proxyIndex, "signup verify log_skip must be declared before API proxy handling")
   assert(!caddyfile.includes("?token="), "Caddy config must not preserve signup verification token query examples")
   assert(!caddyfile.includes("signup=done&email="), "Caddy config must not preserve signup completion email query examples")
+})
+
+test("공개 API 게이트는 두 vhost가 같은 snippet을 공유하고 front 응답에는 닿지 않는다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
+  const apiBlock = extractCaddySiteBlock(caddyfile, backendVhostMarker)
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+
+  assert.notEqual(gates, "", "shared backend gate snippet must exist")
+  assert.notEqual(apiBlock, "", "API vhost must be extractable")
+  assert.notEqual(webBlock, "", "web vhost must be extractable")
+
+  // 게이트를 vhost마다 복사하면 한쪽에서만 조용히 사라진다. 정의는 snippet 하나뿐이어야 한다.
+  for (const gate of [
+    "@denyPrometheus",
+    "@notificationSse",
+    "@publicReadFallback",
+    "@adminApi",
+    "max_size 100MB",
+  ]) {
+    assert.equal(
+      caddyfile.split(gate).length - 1,
+      gates.split(gate).length - 1,
+      `${gate} must be declared only inside the shared backend gate snippet`,
+    )
+  }
+
+  assert.match(apiBlock, /^\s*import backend_edge_gates\s*$/m, "API vhost must import the shared gates")
+
+  // web vhost의 import는 backend prefix handle **안**에 있어야 한다. site level로 올라가면
+  // 공유 header 블록이 front 응답까지 덮어 next.config.js가 소유한 헤더와 충돌한다(HR-56).
+  const backendHandle = extractCaddySiteBlock(webBlock, "handle @backendApi {")
+  assert.notEqual(backendHandle, "", "web vhost must route the backend prefixes through a handle")
+  assert.match(backendHandle, /^\s*import backend_edge_gates\s*$/m, "web vhost must import the shared gates")
+  assert.equal(
+    webBlock.split("import backend_edge_gates").length - 1,
+    1,
+    "web vhost must import the shared gates exactly once, inside the backend prefix handle",
+  )
+
+  const backendPrefixes = webBlock.match(/^\s*@backendApi path (.+)$/m)
+  assert(backendPrefixes, "web vhost must declare the backend prefix matcher")
+  assert.deepEqual(backendPrefixes[1].trim().split(/\s+/), [
+    "/member/*",
+    "/post/*",
+    "/system/*",
+    "/oauth2/*",
+    "/login/oauth2/*",
+    // 집계 엔드포인트와 개별 probe는 다른 경로다. bare 형태가 빠지면 HARDENING.md가 안내하는
+    // `/actuator/health`가 web 호스트에서 front 404로 떨어진다.
+    "/actuator/health",
+    "/actuator/health/*",
+  ])
+})
+
+test("edge의 prometheus 차단은 handle이어야 한다 (respond는 catch-all 뒤로 정렬된다)", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
+
+  // Caddy 지시자 순서는 respond를 handle보다 뒤에 둔다. 최상위 `respond @denyPrometheus 403`은
+  // catch-all backend proxy 뒤로 컴파일돼 실행되지 않는다 — 실측: 변경 전 설정에서
+  // `GET /actuator/prometheus`가 403이 아니라 백엔드 응답을 돌려줬다.
+  assert.doesNotMatch(gates, /^\s*respond @denyPrometheus\b/m, "denyPrometheus must not be a bare respond")
+  assert.match(gates, /@denyPrometheus path \/actuator\/prometheus\s*\n\s*handle @denyPrometheus \{\s*\n\s*respond 403\s*\n\s*\}/)
+
+  const denyIndex = gates.indexOf("handle @denyPrometheus {")
+  const catchAllIndex = gates.lastIndexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080")
+  assert(denyIndex !== -1 && denyIndex < catchAllIndex, "deny gate must precede the catch-all backend proxy")
 })
 
 test("Caddy routes tokenized cloud external content through public read upstream before admin API", () => {
@@ -349,23 +423,25 @@ test("Caddy routes tokenized cloud external content through public read upstream
   assert(readProxyIndex < adminMatcherIndex, "public read proxy must be declared before admin API matcher")
 })
 
-test("API vhost keeps the legacy API host reachable during the domain cutover", () => {
+test("backend vhost drops the retired API host but keeps the migration slot and the internal entry point", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
-  const addressLine = caddyfile.split("\n").find((line) => line.startsWith("http://{$API_DOMAIN}"))
+  const addressLine = caddyfile.split("\n").find((line) => line.startsWith(backendVhostMarker))
 
-  assert(addressLine, "API vhost address line must exist")
-  // 단일 site address면 구·신 API 호스트가 동시에 살 수 없어, 어느 순서로 전환해도
-  // 공개 사이트가 죽는 창이 생긴다.
+  assert(addressLine, "backend vhost address line must exist")
+  // #1596: 구 API 호스트 주소는 사라졌지만 vhost는 남는다. 주소가 둘이어야 하는 이유는
+  // 하나로 줄이면 다음 host 이전에서 구·신 주소가 동시에 살 수 없기 때문이다.
   assert.match(
     addressLine,
-    /^http:\/\/\{\$API_DOMAIN\}, http:\/\/\{\$LEGACY_API_DOMAIN:[^}]+\}, http:\/\/[a-z0-9-]+ \{$/,
+    /^http:\/\/\{\$LEGACY_API_DOMAIN:[^}]+\}, http:\/\/[a-z0-9-]+ \{$/,
     addressLine,
   )
+  // 접힌 호스트가 주소로 되살아나면 Cloudflare 콘솔에서 지운 hostname이 다시 백엔드를 노출한다.
+  assert.doesNotMatch(caddyfile, /\{\$API_DOMAIN\}/, "the retired API host address must not come back")
   // 기본값이 비면 주소가 `http://`가 되어 host matcher 없는 :80 catch-all이 된다.
   assert.match(addressLine, /\{\$LEGACY_API_DOMAIN:[a-z0-9-]+\.localhost\}/, addressLine)
-  // 세 번째 주소는 front 서버 사이드 호출용 컨테이너 내부 진입점이다(#1539). env placeholder면
+  // 두 번째 주소는 front 서버 사이드 호출용 컨테이너 내부 진입점이다(#1539). env placeholder면
   // 값이 비는 순간 `http://`로 붕괴해 host matcher 없는 :80 catch-all이 되므로 리터럴만 허용한다.
-  const internalAddress = addressLine.split(", ")[2].replace(/ \{$/, "")
+  const internalAddress = addressLine.split(", ")[1].replace(/ \{$/, "")
   assert.equal(internalAddress, "http://caddy", addressLine)
   assert.doesNotMatch(internalAddress, /\{\$/, "the internal API address must not be env-interpolated")
   // 공개 호스트를 내부 주소로 쓰면 front 호출이 공개 인터넷을 왕복한다.
@@ -385,8 +461,8 @@ test("BACKEND_INTERNAL_URL은 색깔에 묶이지 않는 Caddy 내부 주소로 
   assert.deepEqual(definition.allowedValues, ["http://caddy"])
 
   const caddyfile = readFileSync(caddyfilePath, "utf8")
-  const addressLine = caddyfile.split("\n").find((line) => line.startsWith("http://{$API_DOMAIN}"))
-  assert(addressLine.includes("http://caddy"), "the contract value must be an address the API vhost answers")
+  const addressLine = caddyfile.split("\n").find((line) => line.startsWith(backendVhostMarker))
+  assert(addressLine.includes("http://caddy"), "the contract value must be an address the backend vhost answers")
 
   // 배포가 같은 값을 .env.prod에 핀한다. 오너 시크릿에 남은 옛 색깔 값이 그대로 살아남으면
   // front는 healthy를 보고하면서 프록시만 죽는다.
@@ -420,7 +496,9 @@ test("LEGACY_API_DOMAIN warns while set and is rejected for another service host
   const open = validateEnvText({
     contract,
     target: "home-server-source",
-    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=api.aquilaxk.site`,
+    // WEB_DOMAIN(blog.aquilaxk.site)과 달라야 한다. 같으면 두 site block이 한 주소를 공유해
+    // edge 전체가 기동하지 못하고, 계약이 그것을 error로 막는다.
+    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=legacy-api.aquilaxk.site`,
   })
   assert.equal(open.ok, true, open.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
   // 조용히 영구 잔존하면 apex 소유가 바뀐 뒤에도 구 호스트가 백엔드를 계속 노출한다.
@@ -432,7 +510,7 @@ test("LEGACY_API_DOMAIN warns while set and is rejected for another service host
       target: "home-server-source",
       text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=${forbidden}`,
     })
-    assert.equal(result.ok, false, `${forbidden} must not become an API vhost address`)
+    assert.equal(result.ok, false, `${forbidden} must not become a backend vhost address`)
     assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
   }
 
@@ -445,8 +523,8 @@ test("a required key that is present but empty is still rejected", async () => {
   const contract = loadContract(contractPath)
 
   // 회귀 가드. required 키는 falsy continue 이전에 잡히므로 present-but-empty가 통과하지 않는다.
-  // 이게 무너지면 빈 API_DOMAIN이 Caddy vhost를 host matcher 없는 catch-all로 만든다.
-  for (const key of ["API_DOMAIN", "MONITOR_DOMAIN", "ADMIN_EMBED_ORIGINS", "CUSTOM_PROD_COOKIEDOMAIN"]) {
+  // 이게 무너지면 빈 MONITOR_DOMAIN이 Caddy vhost를 host matcher 없는 catch-all로 만든다.
+  for (const key of ["MONITOR_DOMAIN", "ADMIN_EMBED_ORIGINS", "CUSTOM_PROD_COOKIEDOMAIN"]) {
     const text = withEnvKeys(baseHomeServerEnv, [[key, ""]])
     const result = validateEnvText({ contract, target: "home-server-source", text })
 
@@ -483,18 +561,15 @@ test("keys where an empty value is never meaningful reject it even before their 
 
   // requiredWhen 예외는 "기능 꺼짐"을 뜻하는 빈 값(SMTP auth 등)을 위한 것이다.
   // WEB_DOMAIN·BACKEND_INTERNAL_URL은 빈 값이 어떤 상태도 뜻하지 않는다 - Caddy web vhost가
-  // web.localhost로 내려앉거나 SSR이 500난다. 게이트가 닫혀 있어도 빈 값은 거부해야 한다.
+  // web.localhost로 내려앉거나 SSR이 500난다.
   for (const key of ["WEB_DOMAIN", "BACKEND_INTERNAL_URL"]) {
     const text = withEnvKeys(baseHomeServerEnv, [
-      ["API_DOMAIN", "api.aquilaxk.site"],
-      ...PRE_TRANSITION_DOMAIN_ENV.filter(([name]) => name !== "API_DOMAIN" && name !== "WEB_DOMAIN"),
-      ["ADMIN_EMBED_ORIGINS", "https://www.aquilaxk.site"],
-      ["WEB_DOMAIN", key === "WEB_DOMAIN" ? "" : "www.aquilaxk.site"],
+      ["WEB_DOMAIN", key === "WEB_DOMAIN" ? "" : "blog.aquilaxk.site"],
       ...(key === "BACKEND_INTERNAL_URL" ? [["BACKEND_INTERNAL_URL", ""]] : []),
     ])
     const result = validateEnvText({ contract, target: "home-server-source", text })
 
-    assert.equal(result.ok, false, `${key} must reject an empty value even pre-cutover`)
+    assert.equal(result.ok, false, `${key} must reject an empty value`)
     assert(result.errors.some((error) => error.key === key), `${key} must be named in the error`)
   }
 })
@@ -518,11 +593,11 @@ test("an absent optional key stays valid and a disabled feature may keep an empt
   )
 })
 
-test("LEGACY_API_DOMAIN must be removed, not blanked, because an empty value deletes the API vhost", async () => {
+test("LEGACY_API_DOMAIN must be removed, not blanked, because an empty value deletes the backend vhost", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  // 실측: `caddy adapt`에서 LEGACY_API_DOMAIN= (present but empty)이면 두 번째 주소가
-  // `http://`가 되어 site 전체가 host matcher 없는 :80 catch-all이 되고, API vhost의
-  // api.blog.aquilaxk.site host matcher가 출력에서 통째로 사라진다.
+  // 실측: `caddy adapt`에서 LEGACY_API_DOMAIN= (present but empty)이면 첫 주소가
+  // `http://`가 되어 site 전체가 host matcher 없는 :80 catch-all이 되고, 내부 진입점을 포함한
+  // host matcher가 출력에서 통째로 사라진다.
   // 창을 닫을 때 줄을 지우지 않고 비우는 것이 가장 자연스러운 실수라 여기서 막는다.
   const result = validateEnvText({
     contract: loadContract(contractPath),
@@ -534,45 +609,162 @@ test("LEGACY_API_DOMAIN must be removed, not blanked, because an empty value del
   assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
 })
 
-test("Caddy edge CORS allows the public web origin only", () => {
+test("edge에는 CORS가 없다 - 공개 API가 web 호스트의 경로이기 때문이다", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
-  const apiBlock = extractCaddySiteBlock(caddyfile, "http://{$API_DOMAIN}")
 
-  assert.notEqual(apiBlock, "", "API domain site block must be extractable")
-
-  const originMatchers = [...apiBlock.matchAll(/header_regexp Origin Origin (\S+)/g)].map((match) => match[1])
-  assert.equal(originMatchers.length, 2, "both @corsAllowed and @corsPreflight must match the Origin header")
-
-  for (const pattern of originMatchers) {
-    const originPattern = new RegExp(pattern)
-    // 전환 후 실제 front origin이 매치돼야 edge CORS가 살아 있다.
-    assert(originPattern.test("https://blog.aquilaxk.site"), `edge CORS must allow the public web origin: ${pattern}`)
-    // apex와 www는 타 서비스 소유다. 매치되면 우리 API가 그쪽에 열린다.
-    assert(!originPattern.test("https://aquilaxk.site"), `edge CORS must not allow the apex origin: ${pattern}`)
-    assert(!originPattern.test("https://www.aquilaxk.site"), `edge CORS must not allow the www origin: ${pattern}`)
-    assert(!originPattern.test("https://www.blog.aquilaxk.site"), `edge CORS must not allow a www.blog origin: ${pattern}`)
-    assert(!originPattern.test("https://blog.aquilaxk.site.evil.example"), `edge CORS must anchor the origin: ${pattern}`)
+  // #1575가 공개 API를 web 호스트의 경로로 옮기면서 브라우저 요청은 전부 same-origin이 됐고,
+  // #1596이 CORS가 필요했던 마지막 주소(구 API 호스트)를 접었다. 남은 주소는 컨테이너 내부
+  // 진입점과 host 이전 창 전용 슬롯뿐이라 어떤 브라우저 origin도 여기에 도달하지 않는다.
+  // 되살아나면 edge가 받아 주는 origin 집합만 넓어진다.
+  for (const directive of [
+    "Access-Control-Allow-Origin",
+    "Access-Control-Allow-Credentials",
+    "Access-Control-Allow-Methods",
+    "Access-Control-Allow-Headers",
+    "Access-Control-Expose-Headers",
+    "header_regexp Origin",
+  ]) {
+    assert(!caddyfile.includes(directive), `the edge must not declare ${directive} on a same-origin surface`)
   }
 })
 
 test("Caddy request_header hop deletions use single-line syntax", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
-  const apiBlock = extractCaddySiteBlock(caddyfile, "http://{$API_DOMAIN}")
+  const capture = extractCaddySiteBlock(caddyfile, clientIpCaptureSnippet)
 
-  assert.notEqual(apiBlock, "", "API domain site block must be extractable")
+  assert.notEqual(capture, "", "shared client IP capture snippet must be extractable")
   // request_header does not support block form; `{` after the directive fails caddy adapt.
-  assert.doesNotMatch(apiBlock, /request_header\s*\{/)
-  assert.match(apiBlock, /^\s*request_header -X-Forwarded-For\s*$/m)
-  assert.match(apiBlock, /^\s*request_header -CF-Connecting-IP\s*$/m)
-  assert.match(apiBlock, /^\s*request_header -True-Client-IP\s*$/m)
-  assert.match(apiBlock, /^\s*request_header -X-Real-IP\s*$/m)
+  assert.doesNotMatch(capture, /request_header\s*\{/)
+  assert.match(capture, /^\s*request_header -X-Forwarded-For\s*$/m)
+  assert.match(capture, /^\s*request_header -CF-Connecting-IP\s*$/m)
+  assert.match(capture, /^\s*request_header -True-Client-IP\s*$/m)
+  assert.match(capture, /^\s*request_header -X-Real-IP\s*$/m)
+})
+
+test("CF-Connecting-IP는 Cloudflare가 쓴 주소에서만 신뢰되고 컨테이너 내부 진입점에서는 버려진다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const capture = extractCaddySiteBlock(caddyfile, clientIpCaptureSnippet)
+  const apiBlock = extractCaddySiteBlock(caddyfile, backendVhostMarker)
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+
+  assert.notEqual(capture, "", "shared client IP capture snippet must exist")
+
+  // 두 vhost가 각자 캡처를 복사하면 한쪽만 신뢰 경계를 잃는다. 정의는 snippet 하나뿐이어야 한다.
+  assert.equal(
+    caddyfile.split("trusted_client_ip {http.request.header.CF-Connecting-IP}").length - 1,
+    1,
+    "CF-Connecting-IP must be captured in exactly one place",
+  )
+  for (const block of [apiBlock, webBlock]) {
+    assert.match(block, /^\s*import edge_client_ip_capture\s*$/m)
+    assert.doesNotMatch(block, /trusted_client_ip \{http\.request\.header/)
+  }
+
+  // 내부 site address(`http://caddy`, #1539)는 compose 네트워크의 아무 컨테이너나 도달할 수 있다.
+  // 거기서 CF-Connecting-IP는 호출자가 쓰는 값이라, 그대로 믿으면 audit log와 rate-limit 버킷에
+  // 남는 client IP를 내부 호출자가 위조할 수 있다. 실측: `Host: caddy`로 보낸 위조 헤더는
+  // upstream에 도달하지 않고 peer 주소로 대체된다.
+  assert.match(capture, /@internalEntry host caddy/)
+  assert.match(capture, /@cloudflareEdge not host caddy/)
+  assert.match(capture, /vars @cloudflareEdge trusted_client_ip \{http\.request\.header\.CF-Connecting-IP\}/)
+  assert.match(capture, /vars @internalEntry trusted_client_ip \{remote_host\}/)
+})
+
+test("backend 전용 vhost의 edge 게이트는 그 vhost의 모든 주소에 적용된다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const apiBlock = extractCaddySiteBlock(caddyfile, backendVhostMarker)
+
+  // 게이트 import가 특정 주소로 좁혀지면(예: 공개 호스트 matcher 안으로) 내부 진입점만
+  // read/admin upstream 분리와 prometheus 차단 없이 백엔드에 닿는다. site level이어야 한다.
+  const gateImportLine = apiBlock.split("\n").find((line) => line.includes("import backend_edge_gates"))
+  assert(gateImportLine, "backend vhost must import the shared gates")
+  assert.equal(gateImportLine, "  import backend_edge_gates", gateImportLine)
+  assert.doesNotMatch(apiBlock, /handle @[A-Za-z]+ \{\s*\n\s*import backend_edge_gates/)
+})
+
+test("web vhost의 backend prefix 목록이 백엔드 라우트 표면과 어긋나지 않는다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+  const routedMatch = webBlock.match(/^\s*@backendApi path (.+)$/m)
+  assert(routedMatch, "web vhost must declare the @backendApi prefix matcher")
+  const routed = routedMatch[1].trim().split(/\s+/)
+
+  // @publicReadFallback은 SoT 파생 drift guard가 있지만 이 prefix 목록은 리터럴이다. 백엔드에
+  // 새 최상위 prefix가 생기면 여기 추가되지 않고, 공개 web 호스트에서 그 API 전체가 front
+  // 404가 된다 - 배포는 green이다. 그래서 어노테이션 표면과 대조한다.
+  //
+  // 목록 전체를 파생시키지는 않는다: `/oauth2/*`·`/login/oauth2/*`·`/actuator/health*`는 우리
+  // 어노테이션이 아니라 Spring이 소유하는 경로이고, `/`·`/session`은 의도적 제외다. 반쯤 파생된
+  // 표는 "전부 검증됐다"는 잘못된 확신을 준다. 대조 대상은 우리가 소유한 부분으로 한정한다.
+  const backendMainDir = path.join(repoRoot, "back/src/main/kotlin")
+  const kotlinFiles = []
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (entry.name.endsWith(".kt")) kotlinFiles.push(full)
+    }
+  }
+  walk(backendMainDir)
+
+  const classPrefixes = new Set()
+  for (const file of kotlinFiles) {
+    for (const match of readFileSync(file, "utf8").matchAll(/@RequestMapping\("(\/[^"]*)"/g)) {
+      classPrefixes.add(`/${match[1].split("/").filter(Boolean)[0] ?? ""}`)
+    }
+  }
+  assert(classPrefixes.size > 0, "backend class-level @RequestMapping prefixes must be discoverable")
+
+  // 공개 라우팅에서 뺀 것과 그 이유. 여기 없는 새 prefix는 반드시 라우팅돼야 한다.
+  const deliberatelyUnrouted = new Set([
+    // front가 쓰지 않는다(front는 /member/api/v1/auth/session 사용). `/`는 사이트 자신이다.
+    "/",
+    "/session",
+  ])
+
+  for (const prefix of classPrefixes) {
+    if (deliberatelyUnrouted.has(prefix)) continue
+    assert(
+      routed.includes(`${prefix}/*`),
+      `backend prefix ${prefix} is not routed on the public web host (add it to @backendApi or document the exclusion)`,
+    )
+  }
+
+  // Spring 소유 경로는 어노테이션에서 안 나온다. 리터럴로 고정한다.
+  for (const frameworkPath of ["/oauth2/*", "/login/oauth2/*", "/actuator/health", "/actuator/health/*"]) {
+    assert(routed.includes(frameworkPath), `${frameworkPath} must stay routed to the backend`)
+  }
+})
+
+test("컨테이너 내부 진입점은 backend 전용 vhost에 있어 front로 되돌아가는 루프가 불가능하다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const apiBlock = extractCaddySiteBlock(caddyfile, backendVhostMarker)
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+
+  // front 서버 사이드는 BACKEND_INTERNAL_URL=http://caddy로 백엔드를 부른다(#1539). 그 주소가
+  // front upstream을 가진 vhost로 옮겨가면 front -> caddy -> front 무한 루프가 된다.
+  const apiAddressLine = caddyfile.split("\n").find((line) => line.startsWith(backendVhostMarker))
+  assert(apiAddressLine, "backend vhost address line must exist")
+  assert(apiAddressLine.includes(", http://caddy"), apiAddressLine)
+
+  assert.doesNotMatch(apiBlock, /reverse_proxy [^\n]*:3000/, "the internal entry point vhost must have no front upstream")
+  assert.doesNotMatch(webBlock, /^\s*http:\/\/caddy/m, "the internal entry point must not move onto the web vhost")
+
+  // front cutover 게이트의 프록시 probe가 타는 경로다: front proxy -> http://caddy ->
+  // @publicReadFallback -> READ_API_UPSTREAM. 이 경로가 끊기면 front 배포가 막힌다.
+  const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
+  const readMatcher = gates.slice(gates.indexOf("@publicReadFallback"), gates.indexOf("handle @publicReadFallback"))
+  assert(readMatcher.includes("/post/api/v1/posts/tags"), "front cutover proxy probe path must stay on the read upstream")
+
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  assert.match(deployScript, /FRONT_BACKEND_PROXY_PATH="\$\{FRONT_BACKEND_PROXY_PATH:-\/api\/backend\/post\/api\/v1\/posts\/tags\}"/)
 })
 
 test("Caddy access logs skip sensitive query routes before proxying", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
-  const apiBlockIndex = caddyfile.indexOf("http://{$API_DOMAIN}")
-  const adminHandleIndex = caddyfile.indexOf("handle @adminApi {", apiBlockIndex)
-  const publicReadHandleIndex = caddyfile.indexOf("handle @publicReadFallback {", apiBlockIndex)
+  const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
+  const adminHandleIndex = gates.indexOf("handle @adminApi {")
+  const publicReadHandleIndex = gates.indexOf("handle @publicReadFallback {")
   const sensitiveRoutes = [
     ["@oauthCallbackSensitive", "path /login/oauth2/code/*"],
     ["@socialSignupSensitive", "path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete"],
@@ -580,13 +772,13 @@ test("Caddy access logs skip sensitive query routes before proxying", () => {
     ["@publicSearchSensitive", "path /post/api/v1/posts/search"],
   ]
 
-  assert.notEqual(apiBlockIndex, -1, "API domain block must be configured")
+  assert.notEqual(gates, "", "shared backend gate snippet must be configured")
   assert.notEqual(adminHandleIndex, -1, "admin API handle must be configured")
   assert.notEqual(publicReadHandleIndex, -1, "public read handle must be configured")
 
   for (const [matcherName, pathMatcher] of sensitiveRoutes) {
-    const matcherIndex = caddyfile.indexOf(`${matcherName} ${pathMatcher}`)
-    const skipIndex = caddyfile.indexOf(`log_skip ${matcherName}`)
+    const matcherIndex = gates.indexOf(`${matcherName} ${pathMatcher}`)
+    const skipIndex = gates.indexOf(`log_skip ${matcherName}`)
 
     assert.notEqual(matcherIndex, -1, `${matcherName} matcher must be configured`)
     assert.notEqual(skipIndex, -1, `${matcherName} access log skip must be configured`)
@@ -1290,12 +1482,10 @@ test("external backup root must stay strictly inside the default or configured s
 })
 
 const PRE_TRANSITION_DOMAIN_ENV = [
-  ["API_DOMAIN", "api.aquilaxk.site"],
   ["CUSTOM_PROD_COOKIEDOMAIN", "aquilaxk.site"],
   ["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"],
   ["CUSTOM_PROD_BACKURL", "https://api.aquilaxk.site"],
-  // WEB_DOMAIN도 front 파생이라 같은 세트로 움직인다. 뒤처지면 #1557의
-  // urlHostEquals(CUSTOM_PROD_FRONTURL, WEB_DOMAIN)가 깨진다.
+  // Retired topology rejection input only. It must never become a deployable configuration again.
   ["WEB_DOMAIN", "www.aquilaxk.site"],
 ]
 
@@ -1308,30 +1498,66 @@ const withEnvKeys = (text, pairs) =>
 const siteTopologies = (contract) =>
   contract.targets["home-server-source"].crossChecks.find((check) => check.type === "cookieDomainScope").topologies
 
-test("site topology is keyed on API_DOMAIN alone so a single secret value selects every front-derived value", async () => {
+// 표는 공개 API origin의 host로 키가 매겨진다. same-origin 전환(#1575) 이후 그 host는 web 호스트다.
+const SAME_ORIGIN_TOPOLOGY = "blog.aquilaxk.site"
+
+test("스위치 키의 허용 집합은 topology 표와 독립된 두 번째 편집 지점이다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const definition = contract.targets["home-server-source"].keys.find((key) => key.name === "CUSTOM_PROD_BACKURL")
+
+  // 스위치의 허용 host는 allowedHosts로 한 번 더 좁혀진다. 스위치가 표 하나에만
+  // 의존하면 topology 항목 추가가 그대로 스위치 허용 값 확대가 된다.
+  assert.deepEqual(definition.allowedHosts, ["blog.aquilaxk.site"])
+
+  // 표에만 추가하고 키 선언을 안 고치면 거부돼야 한다.
+  const widened = JSON.parse(JSON.stringify(contract))
+  const scope = widened.targets["home-server-source"].crossChecks.find((c) => c.type === "cookieDomainScope")
+  scope.topologies["preview.aquilaxk.site"] = {
+    cookieDomain: "preview.aquilaxk.site",
+    frontHost: "preview.aquilaxk.site",
+    webHost: "preview.aquilaxk.site",
+    backHost: "preview.aquilaxk.site",
+    publicEdgeProbeBaseUrl: "https://preview.aquilaxk.site",
+    adminEmbedOrigins: "https://preview.aquilaxk.site",
+    revalidateUrl: "https://preview.aquilaxk.site/api/revalidate",
+  }
+  const text = withEnvKeys(baseHomeServerEnv, [
+    ["CUSTOM_PROD_BACKURL", "https://preview.aquilaxk.site"],
+    ["CUSTOM_PROD_FRONTURL", "https://preview.aquilaxk.site"],
+    ["CUSTOM_PROD_COOKIEDOMAIN", "preview.aquilaxk.site"],
+    ["WEB_DOMAIN", "preview.aquilaxk.site"],
+  ])
+  const result = validateEnvText({ contract: widened, target: "home-server-source", text })
+  assert.equal(result.ok, false, "a table-only addition must not widen the switch")
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_BACKURL" && error.message.includes("host must be one of")))
+
+  // host 비교여야 한다. raw allowedValues였다면 후행 슬래시가 거부 사유가 되어, 같은 값을
+  // 계약의 다른 층은 받고 이 층만 막는 상태가 된다.
+  const slashed = validateEnvText({
+    contract,
+    target: "home-server-source",
+    text: withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_BACKURL", "https://BLOG.aquilaxk.site/"]]),
+  })
+  assert.equal(slashed.ok, true, slashed.errors.map((e) => `${e.key}: ${e.message}`).join("\n"))
+})
+
+test("site topology is keyed on the public API origin alone so a single secret value selects every front-derived value", async () => {
   const { loadContract } = await import("../env/validate-env.mjs")
   const topologies = siteTopologies(loadContract(contractPath))
 
-  assert.deepEqual(Object.keys(topologies).sort(), ["api.aquilaxk.site", "api.blog.aquilaxk.site"])
-  assert.deepEqual(topologies["api.blog.aquilaxk.site"], {
+  assert.deepEqual(Object.keys(topologies).sort(), [SAME_ORIGIN_TOPOLOGY])
+  assert.deepEqual(topologies[SAME_ORIGIN_TOPOLOGY], {
     cookieDomain: "blog.aquilaxk.site",
     frontHost: "blog.aquilaxk.site",
     webHost: "blog.aquilaxk.site",
-    backHost: "api.blog.aquilaxk.site",
+    // same-origin: 공개 API가 web 호스트 자신이다. 이것이 #1575가 만든 목표 위상이고,
+    // 공통 접미사가 web 호스트를 넘어갈 여지 자체를 없앤다.
+    backHost: "blog.aquilaxk.site",
     publicEdgeProbeBaseUrl: "https://blog.aquilaxk.site",
     adminEmbedOrigins: "https://blog.aquilaxk.site",
     revalidateUrl: "https://blog.aquilaxk.site/api/revalidate",
   })
-  assert.equal(topologies["api.aquilaxk.site"].webHost, "www.aquilaxk.site")
-  assert.equal(topologies["api.aquilaxk.site"].cookieDomain, "aquilaxk.site")
-  assert.equal(topologies["api.aquilaxk.site"].frontHost, "www.aquilaxk.site")
-  assert.equal(topologies["api.aquilaxk.site"].backHost, "api.aquilaxk.site")
-  assert.equal(topologies["api.aquilaxk.site"].publicEdgeProbeBaseUrl, "https://www.aquilaxk.site")
-  assert.equal(topologies["api.aquilaxk.site"].adminEmbedOrigins, "https://www.aquilaxk.site")
-  assert.equal(topologies["api.aquilaxk.site"].revalidateUrl, "https://www.aquilaxk.site/api/revalidate")
-  // 전환 전 조합은 구조 불변식(cookieDomain === frontHost)을 위반한다. 그 사실이 표에 표기돼야 한다.
-  assert.equal(topologies["api.aquilaxk.site"].structurallyUnsafe, true)
-  assert(typeof topologies["api.aquilaxk.site"].warn === "string")
 })
 
 test("declared topology itself is checked against the cookie scope invariants, not just matched", async () => {
@@ -1342,13 +1568,13 @@ test("declared topology itself is checked against the cookie scope invariants, n
   // deploy.yml도 같은 표를 읽으므로 따라간다. 표를 검증하는 층이 있어야 한다.
   const poisoned = JSON.parse(JSON.stringify(base))
   const scope = poisoned.targets["home-server-source"].crossChecks.find((check) => check.type === "cookieDomainScope")
-  scope.topologies["api.blog.aquilaxk.site"].cookieDomain = "aquilaxk.site"
+  scope.topologies[SAME_ORIGIN_TOPOLOGY].cookieDomain = "aquilaxk.site"
 
   const matching = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_COOKIEDOMAIN", "aquilaxk.site"]])
   const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: matching })
 
   assert.equal(result.ok, false, "a topology that violates the cookie scope invariant must not be usable")
-  assert(result.errors.some((error) => error.key === "API_DOMAIN" && error.message.includes("unsafe")))
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_BACKURL" && error.message.includes("unsafe")))
 })
 
 const poisonTopology = (contract, name, patch) => {
@@ -1358,60 +1584,21 @@ const poisonTopology = (contract, name, patch) => {
   return copy
 }
 
-test("structural invariants are enforced for every declared topology, not only the selected one", async () => {
+test("structural invariants are enforced for every declared topology", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  // API_DOMAIN이 전환 전 값이어도, 표의 blog 항목이 오염되면 그 사실이 드러나야 한다.
-  // 선택된 항목만 보면 전환 순간까지 오염을 못 잡는다.
-  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+  // 표의 blog 항목이 오염되면 선택된 값과 무관하게 그 사실이 드러나야 한다.
+  const poisoned = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, {
     cookieDomain: "aquilaxk.site",
   })
-  const text = withEnvKeys(baseHomeServerEnv, [
-    ...PRE_TRANSITION_DOMAIN_ENV,
-    ["ADMIN_EMBED_ORIGINS", "https://www.aquilaxk.site"],
-    ["CUSTOM__REVALIDATE__URL", "https://www.aquilaxk.site/api/revalidate"],
-  ])
-
-  const result = validateEnvText({ contract: poisoned, target: "home-server-source", text })
-
-  assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.message.includes("api.blog.aquilaxk.site")))
-})
-
-test("only the single declared legacy topology may skip the structural invariants", async () => {
-  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  // 두 번째 예외가 생기면 불변식을 우회하는 문이 열린다.
-  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
-    cookieDomain: "aquilaxk.site",
-    structurallyUnsafe: true,
-  })
-
   const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
 
   assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.message.includes("undeclared legacy exception")))
-})
-
-test("the declared legacy topology must carry its label", async () => {
-  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const contract = loadContract(contractPath)
-  const scope = contract.targets["home-server-source"].crossChecks.find((check) => check.type === "cookieDomainScope")
-  assert.equal(scope.invariants.legacyUnsafeTopology, "api.aquilaxk.site")
-
-  const unlabelled = JSON.parse(JSON.stringify(contract))
-  const unlabelledScope = unlabelled.targets["home-server-source"].crossChecks.find(
-    (check) => check.type === "cookieDomainScope",
-  )
-  delete unlabelledScope.topologies["api.aquilaxk.site"].structurallyUnsafe
-
-  const result = validateEnvText({ contract: unlabelled, target: "home-server-source", text: baseHomeServerEnv })
-
-  assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.message.includes("must be labelled")))
+  assert(result.errors.some((error) => error.message.includes(SAME_ORIGIN_TOPOLOGY)))
 })
 
 test("a topology whose web host differs from the cookie domain is rejected", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+  const poisoned = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, {
     webHost: "www.blog.aquilaxk.site",
   })
 
@@ -1435,12 +1622,12 @@ test("every front-derived value in a topology is checked, not just the host trio
     { adminEmbedOrigins: "" },
     { webHost: "" },
   ]) {
-    const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", patch)
+    const poisoned = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, patch)
     const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
 
     assert.equal(result.ok, false, `topology patch must be rejected: ${JSON.stringify(patch)}`)
     assert(
-      result.errors.some((error) => error.message.includes("api.blog.aquilaxk.site")),
+      result.errors.some((error) => error.message.includes(SAME_ORIGIN_TOPOLOGY)),
       `error must name the topology: ${JSON.stringify(patch)}`,
     )
   }
@@ -1458,7 +1645,7 @@ test("topology invariants compare hosts case-insensitively", async () => {
   assert.equal(upper.ok, false, "uppercase apex must not slip past forbiddenValues")
   assert(upper.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
 
-  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+  const poisoned = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, {
     cookieDomain: "AQUILAXK.SITE",
     frontHost: "AQUILAXK.SITE",
     webHost: "AQUILAXK.SITE",
@@ -1467,37 +1654,60 @@ test("topology invariants compare hosts case-insensitively", async () => {
   assert.equal(result.ok, false, "uppercase apex cookieDomain must still hit forbiddenCookieDomains")
 })
 
-test("LEGACY_API_DOMAIN may not duplicate API_DOMAIN", async () => {
+test("LEGACY_API_DOMAIN may not duplicate WEB_DOMAIN", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
 
-  // caddy adapt가 같은 주소를 dedup하므로 구 호스트는 실제로 서빙되지 않는데,
-  // 경고는 "구 호스트가 아직 서빙된다"고 말한다. 그 거짓말을 계약이 막아야 한다.
+  // 두 site block이 같은 주소를 선언하면 caddy는 그 설정을 거부하고 edge 전체가 기동하지 못한다.
+  // #1596 이후 backend 전용 vhost에 남은 host 기반 주소는 이 키 하나뿐이라, 충돌 상대는
+  // 사라진 API_DOMAIN이 아니라 공개 web 호스트다.
   const result = validateEnvText({
     contract: loadContract(contractPath),
     target: "home-server-source",
-    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=api.blog.aquilaxk.site`,
+    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=blog.aquilaxk.site`,
   })
 
   assert.equal(result.ok, false)
   assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
 })
 
-test("a topology whose API host is not under the cookie domain is rejected", async () => {
+test("표의 키는 그 항목의 backHost와 묶여 있다", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const poisoned = JSON.parse(JSON.stringify(loadContract(contractPath)))
-  const scope = poisoned.targets["home-server-source"].crossChecks.find((check) => check.type === "cookieDomainScope")
-  scope.topologies["api.blog.aquilaxk.site"].backHost = "api.aquilaxk.site"
 
-  const matching = withEnvKeys(baseHomeServerEnv, [
-    ["API_DOMAIN", "api.aquilaxk.site"],
-    ["CUSTOM_PROD_BACKURL", "https://api.aquilaxk.site"],
-  ])
-  // API_DOMAIN을 바꾸지 않은 채 표만 오염된 경우를 본다.
-  const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
+  // 키가 공개 API origin host이고 entry.backHost가 다른 값이면, 스위치는 키로 항목을 고르는데
+  // 불변식은 backHost로 검사한다 - 고른 위상과 검증된 위상이 갈라진다.
+  const poisoned = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, {
+    backHost: "blog.aquilaxk.site.",
+  })
+  const ok = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
+  assert.equal(ok.ok, true, "trailing-dot FQDN is the same host and must stay accepted")
 
-  assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "API_DOMAIN" && error.message.includes("unsafe")))
-  assert(matching.length > 0)
+  const drifted = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, {
+    backHost: "other.blog.aquilaxk.site",
+    webHost: "other.blog.aquilaxk.site",
+    cookieDomain: "other.blog.aquilaxk.site",
+    frontHost: "other.blog.aquilaxk.site",
+  })
+  const result = validateEnvText({ contract: drifted, target: "home-server-source", text: baseHomeServerEnv })
+  assert.equal(result.ok, false, "a topology key that does not name its own backHost must be rejected")
+  assert(result.errors.some((error) => error.message.includes("topology key must equal backHost")))
+})
+
+test("a topology whose API host is neither the web host nor under the cookie domain is rejected", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+
+  // same-origin 완화(backHost === webHost)가 "backHost는 아무거나 좋다"로 새면 안 된다.
+  // 형제 호스트는 공통 접미사를 apex로 떨어뜨리므로 여전히 거부돼야 하고, apex 자신도 마찬가지다.
+  for (const backHost of ["api.aquilaxk.site", "aquilaxk.site", "www.aquilaxk.site"]) {
+    const poisoned = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, { backHost })
+    // 스위치를 바꾸지 않은 채 표만 오염된 경우를 본다.
+    const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
+
+    assert.equal(result.ok, false, `backHost=${backHost} must be rejected`)
+    assert(
+      result.errors.some((error) => error.key === "CUSTOM_PROD_BACKURL" && error.message.includes("unsafe")),
+      `backHost=${backHost} must be reported against the switch key`,
+    )
+  }
 })
 
 test("front-derived keys pinned by the deploy announce their replacement instead of blocking it", async () => {
@@ -1544,7 +1754,7 @@ test("ADMIN_EMBED_ORIGINS warning names the origins that lose embed rights", asy
 
 test("a topology may not grant admin embed rights outside its own web host", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const poisoned = poisonTopology(loadContract(contractPath), "api.blog.aquilaxk.site", {
+  const poisoned = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, {
     adminEmbedOrigins: "https://blog.aquilaxk.site https://aquilaxk.site",
   })
 
@@ -1598,12 +1808,16 @@ test("prototype keys never resolve to a topology", async () => {
   const scope = contract.targets["home-server-source"].crossChecks.find((check) => check.type === "cookieDomainScope")
   // allowedValues가 먼저 막지만, crossCheck 자체가 구조적으로 닫혀 있어야 한다.
   scope.topologies = { ...scope.topologies }
-  const text = withEnvKeys(baseHomeServerEnv, [["API_DOMAIN", "constructor"]])
+  const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_BACKURL", "https://constructor"]])
 
   const result = validateEnvText({ contract, target: "home-server-source", text })
 
   assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "API_DOMAIN" && error.message.includes("no declared prod site topology")))
+  assert(
+    result.errors.some(
+      (error) => error.key === "CUSTOM_PROD_BACKURL" && error.message.includes("no declared prod site topology"),
+    ),
+  )
 })
 
 test("cookie scope check compares hosts, so URL spelling drift in the secret does not block deploys", async () => {
@@ -1612,7 +1826,8 @@ test("cookie scope check compares hosts, so URL spelling drift in the secret doe
   // 후행 슬래시와 대소문자는 같은 host를 가리키므로 통과해야 한다.
   const text = withEnvKeys(baseHomeServerEnv, [
     ["CUSTOM_PROD_FRONTURL", "https://BLOG.aquilaxk.site/"],
-    ["CUSTOM_PROD_BACKURL", "https://api.blog.aquilaxk.site/"],
+    // 스위치 키 자신도 host로 읽힌다. raw 비교면 이 한 줄이 topology를 통째로 놓친다.
+    ["CUSTOM_PROD_BACKURL", "https://BLOG.aquilaxk.site/"],
     ["CUSTOM_PROD_COOKIEDOMAIN", "Blog.aquilaxk.site"],
   ])
 
@@ -1621,7 +1836,7 @@ test("cookie scope check compares hosts, so URL spelling drift in the secret doe
   assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
 })
 
-test("cookie scope check rejects a cookie domain that is not the one declared for API_DOMAIN", async () => {
+test("cookie scope check rejects a cookie domain that is not the one declared for the switch host", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   for (const wrongCookieDomain of ["aquilaxk.site", "www.aquilaxk.site", "www.blog.aquilaxk.site"]) {
     const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_COOKIEDOMAIN", wrongCookieDomain]])
@@ -1636,7 +1851,7 @@ test("WEB_DOMAIN is derived from the same switch as the other front-derived valu
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const contract = loadContract(contractPath)
 
-  // WEB_DOMAIN이 스위치 밖에 있으면 오너가 API_DOMAIN만 바꿨을 때 web vhost가 구 호스트에
+  // WEB_DOMAIN이 스위치 밖에 있으면 오너가 스위치만 바꿨을 때 web vhost가 구 호스트에
   // 남고, #1557의 urlHostEquals(CUSTOM_PROD_FRONTURL, WEB_DOMAIN)가 배포를 막는다.
   const scope = contract.targets["home-server-source"].crossChecks.find((c) => c.type === "cookieDomainScope")
   assert.equal(scope.webDomainKey, "WEB_DOMAIN")
@@ -1649,14 +1864,36 @@ test("WEB_DOMAIN is derived from the same switch as the other front-derived valu
   assert.match(workflow, /PROD_SITE_WEB_DOMAIN="blog\.aquilaxk\.site"/)
   assert.match(workflow, /upsert_env_key "WEB_DOMAIN" "\$\{PROD_SITE_WEB_DOMAIN\}" "deploy\/homeserver\/\.env\.prod"/)
 
-  // 전환 전에는 WEB_DOMAIN을 핀하지 않는다. 핀하면 폐기 대상이자 타 서비스가 가져갈
-  // www 호스트로 Caddy web vhost가 생기고, front가 아직 검증 전이면 502가 된다.
-  // 런북 2단계가 "여기서 넣지 않는다"를 명시적으로 보장하므로 그 보장을 깨면 안 된다.
+  // Retired topology가 빈 WEB_DOMAIN으로 배포를 통과시키면 공개 edge 검증이 사라진다.
   assert.doesNotMatch(workflow, /PROD_SITE_WEB_DOMAIN="www\.aquilaxk\.site"/)
-  assert.match(workflow, /PROD_SITE_WEB_DOMAIN=""/)
+  assert.doesNotMatch(workflow, /PROD_SITE_WEB_DOMAIN=""/)
 })
 
-test("cookie scope check rejects a front host that is not the one declared for API_DOMAIN", async () => {
+test("스위치 표기 흔들림이 WEB_DOMAIN·BACKEND_INTERNAL_URL requiredWhen 게이트를 조용히 닫지 못한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+
+  // 게이트가 raw 문자열 비교이던 시절, 후행 슬래시나 대문자 하나면 requiredWhen이 false가 되고
+  // 두 키가 optional로 통과했다. 그 결과는 "배포 실패"가 아니라 공개 사이트/공개 API 404다.
+  // 계약의 다른 host 비교는 이미 슬래시·대소문자를 흡수하므로, 여기만 raw면 같은 스위치를
+  // 두 층이 다르게 읽는다.
+  for (const spelling of ["https://blog.aquilaxk.site/", "https://BLOG.aquilaxk.site"]) {
+    const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_BACKURL", spelling]])
+      .replace(/^WEB_DOMAIN=.*\n/m, "")
+      .replace(/^BACKEND_INTERNAL_URL=.*\n/m, "")
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+
+    assert.equal(result.ok, false, `${spelling} must keep the same-origin gate open`)
+    for (const key of ["WEB_DOMAIN", "BACKEND_INTERNAL_URL"]) {
+      assert(
+        result.errors.some((error) => error.key === key && error.message === "is required"),
+        `${spelling}: ${key} must still be required`,
+      )
+    }
+  }
+})
+
+test("cookie scope check rejects a front host that is not the one declared for the switch host", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"]])
 
@@ -1666,7 +1903,7 @@ test("cookie scope check rejects a front host that is not the one declared for A
   assert(result.errors.some((error) => error.key === "CUSTOM_PROD_FRONTURL"))
 })
 
-test("pre-transition domain set stays valid but is reported as a warning", async () => {
+test("retired pre-transition domain set is rejected", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = withEnvKeys(baseHomeServerEnv, [
     ...PRE_TRANSITION_DOMAIN_ENV,
@@ -1676,15 +1913,13 @@ test("pre-transition domain set stays valid but is reported as a warning", async
 
   const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
 
-  assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
-  assert(result.warnings.some((warning) => warning.key === "API_DOMAIN"))
-  // 전환 전 조합은 구조적으로 안전하지 않다는 사실이 warn 문구에 드러나야 한다.
-  assert(result.warnings.some((warning) => warning.key === "API_DOMAIN" && warning.message.includes("apex")))
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_BACKURL"))
 })
 
 test("partially migrated domain set fails closed instead of mixing both topologies", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  // API_DOMAIN/BACKURL만 옮기고 front·cookie를 그대로 둔 상태.
+  // 스위치(BACKURL)만 옮기고 front·cookie를 그대로 둔 상태.
   const text = withEnvKeys(baseHomeServerEnv, [
     ["CUSTOM_PROD_COOKIEDOMAIN", "aquilaxk.site"],
     ["CUSTOM_PROD_FRONTURL", "https://www.aquilaxk.site"],
@@ -1697,17 +1932,14 @@ test("partially migrated domain set fails closed instead of mixing both topologi
   assert(result.errors.some((error) => error.key === "CUSTOM_PROD_FRONTURL"))
 })
 
-test("API_DOMAIN outside the declared topologies fails on the runner before the remote script runs", async () => {
+test("a switch host outside the declared topologies fails on the runner before the remote script runs", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const text = withEnvKeys(baseHomeServerEnv, [
-    ["API_DOMAIN", "api.other.example"],
-    ["CUSTOM_PROD_BACKURL", "https://api.other.example"],
-  ])
+  const text = withEnvKeys(baseHomeServerEnv, [["CUSTOM_PROD_BACKURL", "https://api.other.example"]])
 
   const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
 
   assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "API_DOMAIN"))
+  assert(result.errors.some((error) => error.key === "CUSTOM_PROD_BACKURL"))
 })
 
 test("deploy workflow derives every prod site value from the same topology table as the env contract", async () => {
@@ -1721,7 +1953,7 @@ test("deploy workflow derives every prod site value from the same topology table
       workflow.indexOf(`            ${apiDomain})`),
       workflow.indexOf(";;", workflow.indexOf(`            ${apiDomain})`)),
     )
-    assert.notEqual(branch, "", `deploy.yml must branch on API_DOMAIN=${apiDomain}`)
+    assert.notEqual(branch, "", `deploy.yml must branch on the public API host ${apiDomain}`)
     assert(branch.includes(`PROD_SITE_COOKIE_DOMAIN="${topology.cookieDomain}"`), `${apiDomain} cookie domain`)
     assert(branch.includes(`PROD_SITE_FRONT_URL="https://${topology.frontHost}"`), `${apiDomain} front url`)
     assert(branch.includes(`PROD_SITE_BACK_URL="https://${topology.backHost}"`), `${apiDomain} back url`)
@@ -1736,7 +1968,7 @@ test("deploy workflow derives every prod site value from the same topology table
     assert(branch.includes(`PROD_SITE_REVALIDATE_URL="${topology.revalidateUrl}"`), `${apiDomain} revalidate url`)
   }
 
-  // front origin 파생 키가 스위치 밖에 있으면 오너가 API_DOMAIN만 바꿨을 때 조용히 어긋난다.
+  // front origin 파생 키가 스위치 밖에 있으면 오너가 스위치만 바꿨을 때 조용히 어긋난다.
   assert.match(workflow, /upsert_env_key "ADMIN_EMBED_ORIGINS" "\$\{PROD_SITE_ADMIN_EMBED_ORIGINS\}" "deploy\/homeserver\/\.env\.prod"/)
   // CUSTOM__REVALIDATE__URL은 required: false다. 비어 있는 상태(재생성 비활성)를 켜 버리면 안 된다.
   assert.match(workflow, /if \[ -n "\$\{EXISTING_REVALIDATE_URL\}" \]; then/)
@@ -1745,7 +1977,7 @@ test("deploy workflow derives every prod site value from the same topology table
 
 test("front runtime image build args match the declared site topology", async () => {
   const { loadContract } = await import("../env/validate-env.mjs")
-  const topology = siteTopologies(loadContract(contractPath))["api.blog.aquilaxk.site"]
+  const topology = siteTopologies(loadContract(contractPath))[SAME_ORIGIN_TOPOLOGY]
   const dockerfile = readFileSync(path.join(repoRoot, "front/Dockerfile.runtime"), "utf8")
 
   const argDefaults = new Map(
@@ -1756,6 +1988,9 @@ test("front runtime image build args match the declared site topology", async ()
   // front 번들은 다른 쪽을 가리켜 브라우저가 존재하지 않는 호스트로 XHR한다.
   assert.equal(argDefaults.get("NEXT_PUBLIC_SITE_URL"), `https://${topology.frontHost}`)
   assert.equal(argDefaults.get("NEXT_PUBLIC_BACKEND_URL"), `https://${topology.backHost}`)
+  // same-origin이므로 둘이 같아야 한다. 이 등식이 깨지는 순간 브라우저 요청이 다시
+  // cross-origin이 되고 edge CORS 없이는 통째로 막힌다.
+  assert.equal(argDefaults.get("NEXT_PUBLIC_BACKEND_URL"), argDefaults.get("NEXT_PUBLIC_SITE_URL"))
 })
 
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
@@ -1776,7 +2011,7 @@ test("validator reports key-level failures without leaking secret values", async
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv
     .replace("CUSTOM__ADMIN__PASSWORD=valid-admin-password", "CUSTOM__ADMIN__PASSWORD=change_me_admin_password")
-    .replace("CUSTOM_PROD_BACKURL=https://api.blog.aquilaxk.site", "CUSTOM_PROD_BACKURL=https://wrong.blog.aquilaxk.site")
+    .replace("CUSTOM_PROD_FRONTURL=https://blog.aquilaxk.site", "CUSTOM_PROD_FRONTURL=https://wrong.blog.aquilaxk.site")
 
   const result = validateEnvText({
     contract: loadContract(contractPath),
@@ -1786,7 +2021,7 @@ test("validator reports key-level failures without leaking secret values", async
 
   assert.equal(result.ok, false)
   assert(result.errors.some((error) => error.key === "CUSTOM__ADMIN__PASSWORD"))
-  assert(result.errors.some((error) => error.message.includes("API_DOMAIN")))
+  assert(result.errors.some((error) => error.message.includes("CUSTOM_PROD_BACKURL")))
   assert(!JSON.stringify(result).includes("change_me_admin_password"))
 })
 
@@ -1860,19 +2095,24 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
 })
 
-test("deploy workflow derives the pinned prod site scope from API_DOMAIN instead of hard-coding it", () => {
+test("deploy workflow derives the pinned prod site scope from the switch instead of hard-coding it", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 
-  // 하드 핀 문자열이 남아 있으면 API_DOMAIN secret과 갈라진다.
+  // 하드 핀 문자열이 남아 있으면 HOME_SERVER_ENV 스위치와 갈라진다.
   assert.doesNotMatch(workflow, /upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "aquilaxk\.site"/)
   assert.doesNotMatch(workflow, /upsert_env_key "CUSTOM_PROD_FRONTURL" "https:\/\/www\.aquilaxk\.site"/)
   assert.doesNotMatch(workflow, /upsert_env_key "CUSTOM_PROD_BACKURL" "https:\/\/api\.aquilaxk\.site"/)
 
-  // 전환 스위치는 HOME_SERVER_ENV의 API_DOMAIN 하나뿐이다.
-  assert.match(workflow, /PROD_SITE_API_DOMAIN=/)
+  // 전환 스위치는 HOME_SERVER_ENV의 CUSTOM_PROD_BACKURL 하나뿐이고, host로 읽는다 (#1575).
+  // raw URL 비교로 되돌아가면 후행 슬래시 하나가 fail-closed 분기로 떨어져, env 계약이 방금
+  // 통과시킨 값이 배포에서만 죽는다.
+  assert.match(workflow, /PROD_SITE_BACK_URL_RAW="\$\(read_prod_env_value CUSTOM_PROD_BACKURL\)"/)
+  assert.match(workflow, /PROD_SITE_BACK_HOST="\$\{PROD_SITE_BACK_URL_RAW#\*:\/\/\}"/)
+  assert.match(workflow, /case "\$\{PROD_SITE_BACK_HOST\}" in/)
+  assert.doesNotMatch(workflow, /PROD_SITE_API_DOMAIN=/)
 
-  // 알려지지 않은 API_DOMAIN은 fail-closed다.
-  assert.match(workflow, /unsupported API_DOMAIN for the prod site contract/)
+  // 알려지지 않은 공개 API origin은 fail-closed다.
+  assert.match(workflow, /unsupported CUSTOM_PROD_BACKURL host for the prod site contract/)
 
   assert.match(workflow, /upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "\$\{PROD_SITE_COOKIE_DOMAIN\}" "deploy\/homeserver\/\.env\.prod"/)
   assert.match(workflow, /upsert_env_key "CUSTOM_PROD_FRONTURL" "\$\{PROD_SITE_FRONT_URL\}" "deploy\/homeserver\/\.env\.prod"/)
@@ -1886,6 +2126,136 @@ test("deploy workflow derives the pinned prod site scope from API_DOMAIN instead
     workflow.indexOf('upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN"') <
       workflow.indexOf('require_nonempty_env_key "CF_TUNNEL_TOKEN"'),
   )
+})
+
+test("deploy.yml의 host 파싱이 validate-env와 같은 host를 낸다", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  // 두 층이 다르게 파싱하면 "계약은 통과했는데 배포만 죽는" 클래스가 된다. userinfo가 그 경로다:
+  // new URL().hostname은 벗겨내고, shell 파싱이 안 벗기면 `u@host`가 남아 case가 abort한다.
+  // 순서도 계약이다 - path에 '@'가 올 수 있어 path를 먼저, userinfo에 ':'가 올 수 있어 port를
+  // 마지막에 벗긴다.
+  const order = [
+    'PROD_SITE_BACK_HOST="${PROD_SITE_BACK_URL_RAW#*://}"',
+    'PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST%%/*}"',
+    'PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST##*@}"',
+    'PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST%%:*}"',
+  ]
+  let cursor = -1
+  for (const step of order) {
+    const at = workflow.indexOf(step)
+    assert.notEqual(at, -1, `missing host parse step: ${step}`)
+    assert(at > cursor, `host parse steps out of order at: ${step}`)
+    cursor = at
+  }
+
+  // 같은 순서를 여기서 재현해 new URL().hostname과 대조한다.
+  const shellHost = (url) => {
+    let host = url.replace(/^[^:]*:\/\//, "")
+    host = host.replace(/\/.*$/, "")
+    host = host.replace(/^.*@/, "")
+    host = host.replace(/:.*$/, "")
+    return host.toLowerCase()
+  }
+  for (const url of [
+    "https://blog.aquilaxk.site",
+    "https://blog.aquilaxk.site/",
+    "https://BLOG.aquilaxk.site",
+    "https://blog.aquilaxk.site:443",
+    "https://u@blog.aquilaxk.site",
+    "https://u:p@blog.aquilaxk.site",
+    "https://u:p@blog.aquilaxk.site:443/x",
+    "https://blog.aquilaxk.site/a@b",
+  ]) {
+    assert.equal(shellHost(url), new URL(url).hostname.toLowerCase(), `host parse mismatch for ${url}`)
+  }
+})
+
+test("배포 후 게이트가 same-origin 공개 표면도 검증한다", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  // web vhost의 @backendApi prefix가 하나 빠져도 CD가 끝까지 green이고 공개 API만 Next.js
+  // 404가 되는 실패를 잡는 게이트다 - 브라우저에서만 드러나는 실패다.
+  assert.match(workflow, /WEB_DOMAIN="\$\(read_prod_env_value WEB_DOMAIN\)"/)
+  assert.match(workflow, /rollback_and_exit "web_host_api_route_failed"/)
+  // 백엔드 경로 하나만 보면 prefix 목록이 통째로 사라져도 health 하나로 통과할 수 있다.
+  assert.match(workflow, /\/post\/api\/v1\/posts\/feed\?page=1&pageSize=1&sort=CREATED_AT/)
+  assert.match(workflow, /-H "Host: \$\{WEB_DOMAIN\}"/)
+
+  // #1596: WEB_DOMAIN이 없으면 검증할 공개 표면 자체가 없다. 조건부로 건너뛰면 아무도 안 보는
+  // 사이 배포가 green으로 통과하므로, 건너뛰지 말고 배포를 멈춘다.
+  assert.match(workflow, /rollback_and_exit "missing_web_domain"/)
+  assert.doesNotMatch(workflow, /skipping the same-origin public API route gate/)
+
+  // 내부 게이트는 공개 HTTPS가 아니라 edge network + Host 헤더여야 한다. DNS·Cloudflare·터널이
+  // 고장 난 상황에서도 "Caddy 라우팅이 맞는가"를 따로 답할 수 있어야, 라우팅 회귀가 다른 장애로
+  // 오인되지 않는다. 공개 HTTPS 판정은 아래 wait_public_api_health가 소유한다.
+  const gate = workflow.slice(
+    workflow.indexOf("for web_api_probe_path in "),
+    workflow.indexOf('rollback_and_exit "web_host_api_route_failed"'),
+  )
+  assert.match(gate, /--network blog_home_edge/)
+  assert.doesNotMatch(gate, /https:\/\//)
+  // 매치되는 vhost가 없는 Host는 404가 아니라 `200` + 빈 본문이다(실측). 상태 코드만 보면
+  // WEB_DOMAIN과 Caddyfile이 어긋난 순간 이 게이트가 그 빈 200으로 통과한다.
+  assert.match(gate, /%\{size_download\}/)
+  assert.match(workflow, /rollback_and_exit "web_host_api_route_empty_body"/)
+
+  // 공개 HTTPS 게이트는 구 API 호스트가 아니라 실제로 서비스되는 web 호스트를 때린다.
+  assert.match(workflow, /wait_public_api_health "\$\{WEB_DOMAIN\}"/)
+  assert.doesNotMatch(workflow, /API_DOMAIN/)
+})
+
+// 매치되는 vhost가 없는 Host에도 Caddy는 404가 아니라 `200` + 빈 본문을 준다. 실측(이 트리의
+// Caddyfile을 `caddy run`으로 띄우고 `Host: api.aquilaxk.site`): 200, 0 bytes.
+//
+// 그래서 내부 edge probe가 상태 코드만 보면, WEB_DOMAIN과 Caddy site address가 어긋난 순간
+// 전부 "정상"으로 보고한다 - steady-state guard는 복구를 돌리지 않고 status 리포트는 green을
+// 찍는다. 백엔드가 죽어도 같은 결과가 나오는 것이 아니라, "아무 vhost도 매치하지 않았다"가
+// 성공으로 읽히는 것이다.
+//
+// 문 하나만 고치면 다른 문에서 게이트가 조용히 사라지므로 두 스크립트를 함께 고정한다.
+test("내부 edge probe는 미매치 Host의 빈 200을 성공으로 읽지 않는다", () => {
+  const guards = [
+    ["steady_state_guard.sh", readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")],
+    ["check_deploy_status.sh", readFileSync(path.join(repoRoot, "deploy/homeserver/check_deploy_status.sh"), "utf8")],
+  ]
+
+  // 함수 하나만 떼어 본다. 같은 파일의 로그인 POST probe도 `%{http_code}`만 쓰지만, 그쪽은
+  // 토큰 추출이 뒤따라서 빈 200이 조용히 통과하지 않는다 - 여기서 고정할 대상이 아니다.
+  const shellFunctionBody = (script, name) => {
+    const start = script.indexOf(`${name}() {`)
+    if (start === -1) return ""
+    const end = script.indexOf("\n}\n", start)
+    return end === -1 ? "" : script.slice(start, end + 3)
+  }
+
+  for (const [name, script] of guards) {
+    // 상태 코드 옆에서 본문 길이를 같이 걷어야 두 상태를 구분할 수 있다.
+    const routeProbe = shellFunctionBody(script, "probe_internal_caddy_route_metrics")
+    assert.notEqual(routeProbe, "", `${name} must route internal probes through one metrics helper`)
+    assert.match(
+      routeProbe,
+      /-w "%\{http_code\} %\{size_download\}"/,
+      `${name} must collect the body length next to the status code`,
+    )
+    assert.doesNotMatch(
+      routeProbe,
+      /-w "%\{http_code\}"/,
+      `${name} must not keep a status-only internal route probe`,
+    )
+    // 미매치 Host는 언제나 200 + 0 bytes다. 200일 때만 본문을 요구하면 인증 응답(401/403)의
+    // 본문 유무를 가정하지 않고 그 신호만 정확히 걸러낸다.
+    const predicate = shellFunctionBody(script, "is_unmatched_host_response")
+    assert.notEqual(predicate, "", `${name} must name the unmatched-host signature in one place`)
+    assert.match(predicate, /\[\[ "\$\{code\}" == "200" \]\]/, `${name} predicate must key on 200`)
+    assert.match(predicate, /\^\[1-9\]\[0-9\]\*\$/, `${name} predicate must require a non-empty body`)
+    // 판정 지점에서 실제로 쓰여야 한다. 정의만 있고 호출이 없으면 게이트가 아니다.
+    assert(
+      script.split("is_unmatched_host_response").length - 1 >= 3,
+      `${name} must call the predicate on every internal probe verdict`,
+    )
+  }
 })
 
 test("deploy workflow validates live API security headers after homeserver rollout", () => {
@@ -1905,10 +2275,10 @@ test("deploy workflow validates live API security headers after homeserver rollo
   assert.match(workflow, /\/member\/api\/v1\/auth\/me/)
   assert.match(workflow, /rollback_and_exit "public_feed_security_header_smoke_failed"/)
   assert.match(workflow, /rollback_and_exit "protected_auth_security_header_smoke_failed"/)
-  assert(
-    workflow.indexOf('wait_public_api_health "${API_DOMAIN}"') <
-      workflow.indexOf('assert_live_security_headers'),
-  )
+  // indexOf(-1)이 항상 작으므로, 순서 단언 전에 두 지점이 실제로 존재하는지부터 확인한다.
+  const publicHealthIndex = workflow.indexOf('wait_public_api_health "${WEB_DOMAIN}"')
+  assert(publicHealthIndex !== -1, "the public health gate must target the public web host")
+  assert(publicHealthIndex < workflow.indexOf("assert_live_security_headers"))
   assert(
     workflow.indexOf('assert_live_security_headers') <
       workflow.indexOf("run_canary_ratio_check()"),
@@ -1943,13 +2313,6 @@ test("required secret check does not inject multi-line HOME_SERVER_ENV into shel
   assert(!workflow.includes("HOME_SERVER_ENV=${{ secrets.HOME_SERVER_ENV }}"))
   assert.match(workflow, /env:\n(?:.*\n)*\s+HOME_SERVER_ENV: \$\{\{ secrets\.HOME_SERVER_ENV \}\}/)
   assert.match(workflow, /value="\$\{!key:-\}"/)
-})
-
-test("Vercel frontend project skips builds when frontend inputs did not change", () => {
-  const config = JSON.parse(readFileSync(vercelConfigPath, "utf8"))
-
-  assert.equal(config.$schema, "https://openapi.vercel.sh/vercel.json")
-  assert.equal(config.ignoreCommand, "node scripts/vercel/should-ignore-build.mjs")
 })
 
 test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경만 차단한다", () => {
@@ -2582,7 +2945,7 @@ test("blue-green deploy pauses autoheal while staging a candidate backend", () =
 
 test("blue-green deploy keeps old backend running during burn-in rollback window", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
-  const burnInIndex = deployScript.indexOf('run_blue_green_burn_in "${next_backend}" "${active_backend}" "${api_domain}"')
+  const burnInIndex = deployScript.indexOf('run_blue_green_burn_in "${next_backend}" "${active_backend}" "${web_domain}"')
   const stopOldIndex = deployScript.indexOf('drain_and_stop_backend_if_running "${active_backend}"')
   const stateWriteIndex = deployScript.indexOf('write_backend_release_state "${next_backend}" "${active_backend}"')
 
@@ -2591,7 +2954,7 @@ test("blue-green deploy keeps old backend running during burn-in rollback window
   assert.match(deployScript, /resolve_blue_green_burn_in_seconds\(\)/)
   assert.match(deployScript, /rollback_caddy_route_only\(\)/)
   assert.match(deployScript, /run_blue_green_burn_in\(\)/)
-  assert.match(deployScript, /rollback_caddy_route_only "\$\{previous_backend\}" "\$\{candidate_backend\}" "\$\{api_domain\}"/)
+  assert.match(deployScript, /rollback_caddy_route_only "\$\{previous_backend\}" "\$\{candidate_backend\}" "\$\{web_domain\}"/)
   assert.match(deployScript, /burn-in failed; keeping previous backend active/)
   assert.match(deployScript, /burn-in ok: candidate=.*previous=.*duration_seconds=/)
   assert(burnInIndex > 0, "deploy script must run burn-in after candidate cutover")
@@ -2791,7 +3154,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const activeBackendRunningFlagInitIndex = deployScript.indexOf('active_backend_was_running="false"')
   const activeBackendRunningFlagSetIndex = deployScript.indexOf('active_backend_was_running="true"')
   const edgeBootIndex = deployScript.indexOf("edge_services_to_boot=(caddy cloudflared)")
-  const preCandidateCloudflaredCheckIndex = deployScript.indexOf('check_cloudflared_runtime "${api_domain}"', edgeBootIndex)
+  const preCandidateCloudflaredCheckIndex = deployScript.indexOf('check_cloudflared_runtime "${web_domain}"', edgeBootIndex)
   const preCandidateCloudflaredSkipIndex = deployScript.indexOf(
     "skip cloudflared runtime check before candidate health: active backend is not running",
   )
@@ -3541,21 +3904,385 @@ test("Caddy web vhost는 env 파생 호스트로 front upstream을 프록시한�
   // 호스트명 하드코딩은 #1540의 단일 스위치를 깬다. 값이 비었을 때 `http://`만 남으면 Caddy는
   // 전 호스트를 삼키는 catch-all이 되므로, 다른 선택적 vhost와 같은 .localhost 기본값을 둔다.
   assert.match(caddyfile, /^http:\/\/\{\$WEB_DOMAIN:[a-z.-]+\} \{$/m)
-  assert.doesNotMatch(webBlock, /aquilaxk\.site/)
+  // 주석은 결정 근거를 남기는 자리라 호스트명을 적어도 된다. 설정 지시자에 박히면 안 된다.
+  const webDirectives = webBlock
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .join("\n")
+  assert.doesNotMatch(webDirectives, /aquilaxk\.site/)
   assert.match(webBlock, /reverse_proxy \{\$WEB_UPSTREAM:front_blue\}:3000 \{/)
   assert.match(webBlock, /import trusted_edge_client_ip/)
-  assert.match(webBlock, /^\s*request_header -X-Forwarded-For\s*$/m)
-  assert.match(webBlock, /^\s*request_header -CF-Connecting-IP\s*$/m)
-  assert.match(webBlock, /^\s*request_header -True-Client-IP\s*$/m)
-  assert.match(webBlock, /^\s*request_header -X-Real-IP\s*$/m)
+  // hop 헤더 제거와 신뢰 client IP 캡처는 API vhost와 공유하는 snippet 하나가 소유한다.
+  assert.match(webBlock, /^\s*import edge_client_ip_capture\s*$/m)
   // /_next/static/*는 콘텐츠 해시 자산이다. `?` 접두사로 Next가 이미 보낸 값을 덮어쓰지 않는다.
   assert.match(webBlock, /@nextImmutable path \/_next\/static\/\*/)
   assert.match(webBlock, /\?Cache-Control "public, max-age=31536000, immutable"/)
   // next.config.js가 내보내는 보안 헤더 7종을 edge가 벗기거나 약화시키면 안 된다.
   assert.doesNotMatch(webBlock, /header_down -/)
   assert.doesNotMatch(webBlock, /Content-Security-Policy/)
-  // www 폐기는 redirect 없이 한다 (Epic #1535 Locked Decision 6).
-  assert.doesNotMatch(caddyfile, /^\s*redir\b/m)
+  // 이 vhost는 블로그 표면만 서빙한다. redirect는 여기 있지 않고 apex vhost가 소유한다
+  // (Locked Decision 6은 2026-08-02 오너 결정으로 번복됐다 - #1605).
+  assert.doesNotMatch(webBlock, /^\s*redir\b/m)
+  // 회사·제품 표면이 web vhost 안으로 섞여 들어오면 백엔드 경로 게이트와 쿠키 스코프가 그
+  // 표면들에도 적용된다. 두 표면은 각자 vhost를 가져야 한다.
+  assert.doesNotMatch(webBlock, /rewrite \//)
+})
+
+test("회사·제품 표면 vhost는 front 전용이고 공유 snippet 하나를 import한다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const companyBlock = extractCaddySiteBlock(caddyfile, "http://{$COMPANY_DOMAIN")
+  const productBlock = extractCaddySiteBlock(caddyfile, "http://{$PRODUCT_DOMAIN")
+  const surfaceSnippet = extractCaddySiteBlock(caddyfile, "(front_surface_vhost) {")
+
+  assert.notEqual(companyBlock, "", "company surface site block must be extractable")
+  assert.notEqual(productBlock, "", "product surface site block must be extractable")
+  assert.notEqual(surfaceSnippet, "", "shared front surface snippet must be extractable")
+
+  // 값이 비었을 때 `http://`만 남으면 Caddy는 다른 vhost가 잡지 않는 전 호스트를 삼키는
+  // catch-all이 된다. 다른 선택적 vhost와 같은 .localhost 기본값을 강제한다.
+  assert.match(caddyfile, /^http:\/\/\{\$COMPANY_DOMAIN:[a-z.-]+\} \{$/m)
+  assert.match(caddyfile, /^http:\/\/\{\$PRODUCT_DOMAIN:[a-z.-]+\} \{$/m)
+
+  // 두 vhost는 route 인자만 다른 같은 몸통이어야 한다. 복사되면 robots 정책이나 캐시 floor가
+  // 한쪽에서만 조용히 사라진다.
+  assert.match(companyBlock, /import front_surface_vhost \/company/)
+  assert.match(productBlock, /import front_surface_vhost \/easysubway/)
+  assert.equal(caddyfile.split("(front_surface_vhost) {").length - 1, 1)
+
+  // 백엔드 경로 게이트는 blog vhost 전용이다. 공개 API는 그 호스트의 경로이고 인증 쿠키도 그
+  // 호스트에 스코프돼 있으므로(#1575), 이 표면들에 백엔드 prefix를 실으면 쿠키가 넓어지거나
+  // 쓸 수 없는 세션이 생긴다.
+  for (const block of [companyBlock, productBlock, surfaceSnippet]) {
+    assert.doesNotMatch(block, /import backend_edge_gates/)
+    assert.doesNotMatch(block, /back_blue|back_read|back_admin|ADMIN_API_UPSTREAM|READ_API_UPSTREAM/)
+  }
+
+  // 호스트명은 주석에만 쓴다. 지시자에 박히면 단일 env 스위치가 깨진다.
+  const surfaceDirectives = surfaceSnippet
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .join("\n")
+  assert.doesNotMatch(surfaceDirectives, /aquilaxk\.site/)
+
+  // front upstream은 blue/green 스위치를 web vhost와 공유한다.
+  assert.match(surfaceSnippet, /reverse_proxy \{\$WEB_UPSTREAM:front_blue\}:3000 \{/)
+  assert.match(surfaceSnippet, /^\s*import edge_client_ip_capture\s*$/m)
+  assert.match(surfaceSnippet, /import trusted_edge_client_ip/)
+  // next.config.js가 내보내는 보안 헤더를 edge가 벗기거나 약화시키면 안 된다.
+  assert.doesNotMatch(surfaceSnippet, /header_down -/)
+  assert.doesNotMatch(surfaceSnippet, /Content-Security-Policy/)
+
+  // 루트만 표면 라우트로 rewrite한다. 더 깊은 경로까지 잡으면 /_next/* 자산이 끊긴다.
+  assert.match(surfaceSnippet, /^\s*rewrite \/ \{args\[0\]\}\s*$/m)
+
+  // 이 호스트의 robots.txt는 vhost가 응답한다. front/public/robots.txt는 blog sitemap을
+  // 광고하므로 그대로 나가면 이 표면이 남의 URL 목록을 자기 것으로 광고한다.
+  // `handle`이어야 한다 - Caddy 지시자 순서는 `respond`를 `handle` 뒤에 두므로 최상위 respond는
+  // catch-all proxy 뒤로 컴파일돼 실행되지 않는다.
+  assert.match(surfaceSnippet, /@surfaceRobots path \/robots\.txt/)
+  assert.match(surfaceSnippet, /handle @surfaceRobots \{/)
+  // 루트만 색인 대상이다. 같은 컨테이너가 이 호스트에서도 블로그 라우트를 응답하므로 열어 두면
+  // 블로그가 두 번째 호스트로 중복 색인된다.
+  assert.match(surfaceSnippet, /respond "User-agent: \*\\nAllow: \/\$\\nDisallow: \/\\n" 200/)
+})
+
+test("front 전용 표면 vhost는 backend에 닿는 front API 경로를 catch-all 앞에서 거부한다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const surfaceSnippet = extractCaddySiteBlock(caddyfile, "(front_surface_vhost) {")
+  assert.notEqual(surfaceSnippet, "", "shared front surface snippet must be extractable")
+
+  // 이 계약이 막는 대상은 실제로 존재하는 front 라우트다. 라우트가 사라지거나 이름이 바뀌면 아래
+  // 단언들은 아무것도 지키지 않으면서 그린으로 남으므로, 존재 자체를 먼저 실측한다.
+  assert.ok(
+    existsSync(path.join(repoRoot, "front/src/pages/api/backend/[...path].ts")),
+    "the backend proxy route these hosts must not expose has to exist for this contract to mean anything",
+  )
+  assert.ok(
+    existsSync(path.join(repoRoot, "front/src/pages/api/revalidate.ts")),
+    "the revalidate route also reaches the backend from the server side",
+  )
+
+  // allow-list여야 한다. backend에 닿는 오늘의 경로만 나열하는 deny-list는 기본값이 "노출"이라,
+  // blog용으로 추가되는 다음 front API route가 이 호스트에서도 조용히 공개된다.
+  const deniedMatcherStart = surfaceSnippet.indexOf("@frontApiDenied {")
+  assert.ok(deniedMatcherStart > -1, "the front API allow-list matcher must exist")
+  const deniedMatcher = surfaceSnippet.slice(deniedMatcherStart, surfaceSnippet.indexOf("}", deniedMatcherStart))
+  assert.match(deniedMatcher, /^\s*path \/api\/\*$/m, "the matcher must start from the whole front API namespace")
+  assert.match(deniedMatcher, /^\s*not path \/api\/rum\/\*$/m, "RUM ingest is the one namespace these pages use")
+  // 개별 경로를 나열하기 시작하면 그것이 곧 deny-list다.
+  assert.doesNotMatch(deniedMatcher, /\/api\/backend|\/api\/revalidate/)
+
+  // `handle`이어야 하고 catch-all proxy보다 먼저 쓰여야 한다. Caddy는 같은 handle 그룹을 작성
+  // 순서로 평가하므로, 뒤에 오면 Next가 이미 응답한 뒤다.
+  const denyHandleIndex = surfaceSnippet.indexOf("handle @frontApiDenied {")
+  const catchAllIndex = surfaceSnippet.indexOf("\n  handle {")
+  assert.ok(denyHandleIndex > -1, "the deny must be a handle, not a top-level respond")
+  assert.ok(catchAllIndex > denyHandleIndex, "the deny must be written before the catch-all proxy")
+  // 404다. 403은 이 호스트에 그 라우트가 존재한다는 사실을 알려 준다.
+  assert.match(surfaceSnippet.slice(denyHandleIndex, catchAllIndex), /respond 404/)
+
+  // blog vhost는 이 deny를 상속하지 않는다. 공개 API와 revalidate webhook의 집이 그 호스트다.
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+  assert.doesNotMatch(webBlock, /@frontApiDenied/)
+})
+
+test("front 전용 표면 vhost는 블로그 RSS 경로를 catch-all 앞에서 거부한다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const surfaceSnippet = extractCaddySiteBlock(caddyfile, "(front_surface_vhost) {")
+  assert.notEqual(surfaceSnippet, "", "shared front surface snippet must be extractable")
+
+  // 막는 대상이 실제 라우트여야 한다. 라우트가 사라지면 아래 단언은 아무것도 지키지 않는다.
+  assert.ok(
+    existsSync(path.join(repoRoot, "front/src/pages/feed.tsx")),
+    "the blog RSS route this gate must keep off the surface hosts has to exist",
+  )
+
+  // `_document`가 alternate 링크를 끄는 것은 절반이다. 경로 자체가 살아 있으면 다른 데서 링크를
+  // 배운 크롤러가 이 호스트의 피드로 블로그 아이템을 다시 색인한다.
+  assert.match(surfaceSnippet, /@surfaceFeedDenied path \/feed \/feed\/\*/)
+  const denyHandleIndex = surfaceSnippet.indexOf("handle @surfaceFeedDenied {")
+  const catchAllIndex = surfaceSnippet.indexOf("\n  handle {")
+  assert.ok(denyHandleIndex > -1, "the deny must be a handle, not a top-level respond")
+  assert.ok(catchAllIndex > denyHandleIndex, "the deny must be written before the catch-all proxy")
+  assert.match(surfaceSnippet.slice(denyHandleIndex, catchAllIndex), /respond 404/)
+
+  // blog vhost는 이 deny를 상속하지 않는다. RSS의 집이 그 호스트다.
+  const webBlock = extractCaddySiteBlock(caddyfile, "http://{$WEB_DOMAIN")
+  assert.doesNotMatch(webBlock, /@surfaceFeedDenied/)
+})
+
+test("apex vhost는 경로·query를 보존한 308로 회사 호스트에 넘긴다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const apexBlock = extractCaddySiteBlock(caddyfile, "http://{$APEX_DOMAIN")
+
+  assert.notEqual(apexBlock, "", "apex site block must be extractable")
+  assert.match(caddyfile, /^http:\/\/\{\$APEX_DOMAIN:[a-z.-]+\} \{$/m)
+
+  // 목적지는 COMPANY_DOMAIN 재사용이어야 한다. 호스트명을 다시 적으면 실제로 서빙하는 vhost와
+  // redirect 목적지가 따로 움직인다.
+  assert.match(apexBlock, /redir https:\/\/\{\$COMPANY_DOMAIN:[a-z.-]+\}\{uri\} 308/)
+  // `{uri}`가 없으면 딥링크가 전부 홈으로 붕괴한다. 308이 아니면(301/302) POST가 GET으로 바뀐다.
+  assert.doesNotMatch(apexBlock, /redir [^\n]*(?<!\{uri\}) 30[12]\b/)
+  // apex는 자기 콘텐츠가 없다. front upstream이 붙으면 같은 페이지가 두 호스트에서 200이 된다.
+  assert.doesNotMatch(apexBlock, /reverse_proxy/)
+})
+
+test("표면 도메인 키는 caddy env까지 전달되고 site address 유일성이 계약으로 막힌다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const sourceKeys = JSON.parse(readFileSync(contractPath, "utf8")).targets["home-server-source"].keys
+  const materialize = readFileSync(path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"), "utf8")
+  const caddyEnvExample = readFileSync(
+    path.join(repoRoot, "deploy/homeserver/.env.caddy.prod.example"),
+    "utf8",
+  )
+
+  for (const name of ["COMPANY_DOMAIN", "PRODUCT_DOMAIN", "APEX_DOMAIN"]) {
+    const definition = sourceKeys.find((key) => key.name === name)
+    assert.ok(definition, `${name} must be declared in the home-server-source contract`)
+    assert.equal(definition.kind, "hostname")
+    // DNS 전환은 오너 승인 게이트다. required로 만들면 hostname을 열기 전에 배포가 잠긴다.
+    assert.equal(definition.required, false, `${name} must stay optional until its hostname exists`)
+    // 빈 값은 어떤 상태도 뜻하지 않는다 - vhost 주소가 :80 catch-all이 된다.
+    assert.equal(definition.rejectEmptyValue, true, `${name} must reject an empty value`)
+    // caddy service env로 전달되지 않으면 vhost가 조용히 .localhost 기본값에 머문다.
+    assert.match(materialize, new RegExp(`\\b${name}\\b`), `${name} must reach the caddy env`)
+    assert.match(caddyEnvExample, new RegExp(`^${name}=`, "m"))
+  }
+
+  const siteAddressCheck = (contract.targets["home-server-source"].crossChecks || []).find(
+    (check) => check.type === "allDistinct",
+  )
+  assert.ok(siteAddressCheck, "Caddy site address keys must be checked for uniqueness as a set")
+  assert.equal(siteAddressCheck.asHost, true, "duplicates that differ only in case are still duplicates")
+  for (const name of ["LEGACY_API_DOMAIN", "WEB_DOMAIN", "COMPANY_DOMAIN", "PRODUCT_DOMAIN", "APEX_DOMAIN"]) {
+    assert(siteAddressCheck.keys.includes(name), `${name} is a Caddy site address and must be in the set`)
+  }
+
+  // 정상 조합은 통과한다. 세 키는 base fixture에 없으므로 줄을 덧붙인다 - withEnvKeys는 이미
+  // 있는 줄만 치환하므로 여기서 쓰면 아무 값도 설정되지 않고 아래 충돌 검사가 공허해진다.
+  const healthy = [
+    baseHomeServerEnv,
+    "COMPANY_DOMAIN=www.aquilaxk.site",
+    "PRODUCT_DOMAIN=easysubway.aquilaxk.site",
+    "APEX_DOMAIN=aquilaxk.site",
+  ].join("\n")
+  const healthyResult = validateEnvText({ contract, target: "home-server-source", text: healthy })
+  assert.equal(
+    healthyResult.ok,
+    true,
+    healthyResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+
+  // 표면 정본은 front가 런타임에 배우는 값이 아니다. front/site.config.js가 표면별 정본 URL 표를
+  // 컴파일해 들고 있고 publicSurfaceUrl.ts가 요청 Host를 그 표와 대조한다. 그래서 표에 없는
+  // 호스트를 배포하면 Caddy는 서빙하는데 canonical/OG는 다른 곳을 가리키고 sitemap host guard는
+  // 404를 낸다 - 설정 실수가 거부되지 않고 조용한 메타 불일치로 나간다. 계약이 fail-closed로 막는다.
+  //
+  // 기대값은 site.config.js에서 읽는다. 여기 값을 적어 두면 front 정본이 움직였을 때 두 층이
+  // 갈라진 채로 그린이 된다.
+  const siteConfig = readFileSync(path.join(repoRoot, "front/site.config.js"), "utf8")
+  const frontSurfaceHostOf = (constantName) => {
+    const declared = siteConfig.match(new RegExp(`const ${constantName} = "https://([^"/]+)"`))
+    assert.ok(declared, `${constantName} must be declared in front/site.config.js`)
+    return declared[1]
+  }
+  for (const [key, constantName] of [
+    ["COMPANY_DOMAIN", "COMPANY_SITE_URL"],
+    ["PRODUCT_DOMAIN", "PRODUCT_SITE_URL"],
+  ]) {
+    const canonicalHost = frontSurfaceHostOf(constantName)
+    const definition = sourceKeys.find((name) => name.name === key)
+    assert.deepEqual(
+      definition.allowedValues,
+      [canonicalHost],
+      `${key} must be pinned to the canonical host front/site.config.js compiles in`,
+    )
+
+    const mismatched = withEnvKeys(healthy, [[key, `surface.${canonicalHost}`]])
+    const result = validateEnvText({ contract, target: "home-server-source", text: mismatched })
+    assert.equal(result.ok, false, `${key} must reject a host the front cannot resolve to a canonical`)
+    assert(
+      result.errors.some((error) => error.key === key && /must be one of/.test(error.message)),
+      JSON.stringify(result.errors),
+    )
+  }
+
+  // 주소 중복은 caddy를 기동 불가로 만든다. 대소문자만 다른 중복도 같은 주소다.
+  //
+  // 실측은 APEX_DOMAIN으로 한다. 위에서 고정한 두 키는 중복을 표현할 수조차 없어(허용 값이 각각
+  // 하나뿐이다) 집합 검사가 아니라 고정값 검사가 먼저 막는다 - 그 키로 이 루프를 돌리면 통과 사유가
+  // 바뀐 것을 눈치채지 못한 채 집합 검사가 검증되지 않는다. apex는 정본 표에 없는 키라서
+  // (front는 apex를 canonical로 쓰지 않고 vhost가 회사 호스트로 308할 뿐이다) 고정값이 없고,
+  // 그래서 집합 검사가 유일한 방어선이다.
+  for (const [value, reason] of [
+    ["blog.aquilaxk.site", "an exact duplicate of the web vhost address"],
+    ["BLOG.AQUILAXK.SITE", "a duplicate that differs only in case"],
+  ]) {
+    const collided = withEnvKeys(healthy, [["APEX_DOMAIN", value]])
+    const result = validateEnvText({ contract, target: "home-server-source", text: collided })
+    assert.equal(result.ok, false, `APEX_DOMAIN=${value} is ${reason}`)
+    assert(
+      result.errors.some((error) => error.key === "APEX_DOMAIN" && /must differ from/.test(error.message)),
+      JSON.stringify(result.errors),
+    )
+  }
+
+  // apex의 redirect 목적지는 COMPANY_DOMAIN이다. 짝이 없으면 apex가 .localhost로 넘긴다.
+  const orphanApex = `${baseHomeServerEnv}\nAPEX_DOMAIN=aquilaxk.site`
+  const orphanResult = validateEnvText({ contract, target: "home-server-source", text: orphanApex })
+  assert.equal(orphanResult.ok, false, "APEX_DOMAIN without COMPANY_DOMAIN redirects to nothing")
+  assert(orphanResult.errors.some((error) => error.key === "APEX_DOMAIN"))
+})
+
+// 키를 생략하는 것은 vhost를 끄는 것이 아니다. Caddy의 `{$VAR:default}`는 변수가 unset일 때
+// 기본값을 쓰므로, 생략된 도메인 키의 site address는 `.localhost` 기본 주소로 살아 있다.
+// 집합 검사가 생략된 키를 그냥 건너뛰면 "설정된 값 == 생략된 키의 기본 주소" 조합이 통과하는데,
+// 그것은 caddy 기동 거부(중복 site address)라서 edge 전체가 내려가는 조합이다.
+test("site address 유일성은 생략된 도메인 키의 Caddyfile 기본 주소까지 포함한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const siteAddressCheck = (contract.targets["home-server-source"].crossChecks || []).find(
+    (check) => check.type === "allDistinct",
+  )
+  assert.ok(siteAddressCheck, "Caddy site address keys must be checked for uniqueness as a set")
+
+  // 기대값은 Caddyfile에서 읽는다. 여기 값을 적어 두면 Caddyfile의 기본값이 바뀐 뒤에도 계약의
+  // 낡은 표가 그린으로 남고, 그 순간 이 검사가 실제 주소가 아닌 유령 주소를 지킨다.
+  const caddyDefaults = {}
+  for (const key of siteAddressCheck.keys) {
+    const occurrences = [...caddyfile.matchAll(new RegExp(`\\{\\$${key}:([^}]*)\\}`, "g"))].map((match) => match[1])
+    assert.ok(occurrences.length > 0, `${key} must be interpolated with a default in the Caddyfile`)
+    // 같은 키가 여러 번 보간되면(회사 호스트는 vhost 주소와 apex의 redirect 목적지 양쪽에 쓰인다)
+    // 기본값이 하나여야 한다. 갈라지면 어느 쪽이 실제 주소인지 계약이 표현할 수 없다.
+    assert.deepEqual([...new Set(occurrences)], [occurrences[0]], `${key} default must be spelled once`)
+    caddyDefaults[key] = occurrences[0]
+  }
+  assert.deepEqual(
+    siteAddressCheck.fallbacks,
+    caddyDefaults,
+    "the contract fallback table must be the Caddyfile's own defaults for every site address key",
+  )
+  // 기본 주소끼리 겹치면 아무 키도 설정하지 않은 상태에서 이미 caddy가 기동하지 못한다.
+  assert.equal(
+    new Set(Object.values(caddyDefaults).map((host) => host.toLowerCase())).size,
+    Object.keys(caddyDefaults).length,
+    "the .localhost defaults themselves must be distinct site addresses",
+  )
+
+  const healthy = [
+    baseHomeServerEnv,
+    "COMPANY_DOMAIN=www.aquilaxk.site",
+    "PRODUCT_DOMAIN=easysubway.aquilaxk.site",
+    "APEX_DOMAIN=aquilaxk.site",
+  ].join("\n")
+  const healthyResult = validateEnvText({ contract, target: "home-server-source", text: healthy })
+  assert.equal(
+    healthyResult.ok,
+    true,
+    healthyResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+
+  // 표면 키를 아직 열지 않은 컷오버 전 조합도 통과해야 한다 - 생략된 세 키의 기본 주소는 서로
+  // 다르므로, 기본 주소를 집합에 넣는 것만으로 배포가 잠기면 안 된다.
+  const preCutover = validateEnvText({ contract, target: "home-server-source", text: baseHomeServerEnv })
+  assert.equal(
+    preCutover.ok,
+    true,
+    preCutover.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
+
+  // 실측은 APEX_DOMAIN으로 한다. COMPANY_DOMAIN·PRODUCT_DOMAIN은 allowedValues로 고정돼 있어
+  // 충돌을 표현할 수조차 없고, apex는 고정값이 없어 이 검사가 유일한 방어선이다.
+  for (const [omitted, reason] of [
+    ["PRODUCT_DOMAIN", "the product vhost still answers on its default address while the key is unset"],
+    ["COMPANY_DOMAIN", "the company vhost still answers on its default address while the key is unset"],
+  ]) {
+    const fallbackHost = caddyDefaults[omitted]
+    // apex는 COMPANY_DOMAIN을 요구하므로 회사 키는 남겨 두고 충돌 대상만 생략한다.
+    const collided = [
+      baseHomeServerEnv,
+      ...(omitted === "COMPANY_DOMAIN" ? [] : ["COMPANY_DOMAIN=www.aquilaxk.site"]),
+      `APEX_DOMAIN=${fallbackHost}`,
+    ].join("\n")
+    const result = validateEnvText({ contract, target: "home-server-source", text: collided })
+    assert.equal(result.ok, false, `APEX_DOMAIN=${fallbackHost} collides because ${reason}`)
+    assert(
+      result.errors.some(
+        (error) => error.key === "APEX_DOMAIN" && error.message.includes(`must differ from the ${omitted} default site address`),
+      ),
+      JSON.stringify(result.errors),
+    )
+  }
+
+  // 대소문자만 다른 충돌도 Caddy에는 같은 주소다.
+  const casedCollision = [
+    baseHomeServerEnv,
+    "COMPANY_DOMAIN=www.aquilaxk.site",
+    `APEX_DOMAIN=${caddyDefaults.PRODUCT_DOMAIN.toUpperCase()}`,
+  ].join("\n")
+  const casedResult = validateEnvText({ contract, target: "home-server-source", text: casedCollision })
+  assert.equal(casedResult.ok, false, "a default-address duplicate that differs only in case is still a duplicate")
+  assert(
+    casedResult.errors.some((error) => error.key === "APEX_DOMAIN" && /default site address/.test(error.message)),
+    JSON.stringify(casedResult.errors),
+  )
+
+  // 생략된 키를 실제로 설정하면 그 기본 주소는 더 이상 점유되지 않는다. 계속 막으면 유령 주소
+  // 때문에 정상 조합이 거부된다.
+  const releasedFallback = [
+    baseHomeServerEnv,
+    "COMPANY_DOMAIN=www.aquilaxk.site",
+    "PRODUCT_DOMAIN=easysubway.aquilaxk.site",
+    `APEX_DOMAIN=${caddyDefaults.PRODUCT_DOMAIN}`,
+  ].join("\n")
+  const releasedResult = validateEnvText({ contract, target: "home-server-source", text: releasedFallback })
+  assert.equal(
+    releasedResult.ok,
+    true,
+    releasedResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
+  )
 })
 
 test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과 교차 검증된다", () => {
@@ -3586,9 +4313,18 @@ test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과
   )
   // WEB_DOMAIN을 잊은 채 CUSTOM_PROD_FRONTURL만 옮기면 crossCheck는 한쪽이 비어 스킵되고
   // 공개 도메인만 404가 된다. 새 topology에서는 필수로 좁힌다.
-  assert.deepEqual(webDomain.requiredWhen, { key: "API_DOMAIN", equals: "api.blog.aquilaxk.site" })
+  // host 비교여야 한다. raw 비교면 후행 슬래시 하나로 게이트가 조용히 닫히고, WEB_DOMAIN이
+  // optional로 통과해 공개 사이트와 공개 API가 함께 404가 된다.
+  assert.deepEqual(webDomain.requiredWhen, { key: "CUSTOM_PROD_BACKURL", hostEquals: "blog.aquilaxk.site" })
+  // #1596 이후 web 호스트와 주소가 겹칠 수 있는 키는 host 이전 창 전용 LEGACY 슬롯 하나뿐이다.
   // 두 값이 같으면 Caddy site address가 중복돼 caddy가 기동하지 못하고 edge 전체가 내려간다.
-  assert.equal(webDomain.mustDifferFrom, "API_DOMAIN")
+  const legacyApiDomain = sourceKeys.find((key) => key.name === "LEGACY_API_DOMAIN")
+  assert.ok(legacyApiDomain, "LEGACY_API_DOMAIN must stay declared for the next host migration")
+  assert.equal(legacyApiDomain.mustDifferFrom, "WEB_DOMAIN")
+  // 접힌 구 API 호스트 키가 계약으로 되살아나면 Caddy가 더 이상 읽지 않는 값을 오너가 계속
+  // 유지보수하게 되고, 그 키를 요구하는 게이트가 다시 붙을 여지가 남는다.
+  assert.equal(sourceKeys.some((key) => key.name === "API_DOMAIN"), false)
+  assert.doesNotMatch(caddyEnvExample, /^API_DOMAIN=/m)
 })
 
 // 주석에만 키 이름이 있어도 통과하던 검사를 실제 산출물 검사로 바꾼다. materialize를 돌려
@@ -3601,11 +4337,11 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
     writeFileSync(
       sourceEnv,
       [
-        "API_DOMAIN=api.blog.example.com",
+        "LEGACY_API_DOMAIN=legacy-api.blog.example.com",
         "WEB_DOMAIN=blog.example.com",
         "WEB_UPSTREAM=front_green",
         "MONITOR_DOMAIN=",
-        "BACKEND_INTERNAL_URL=http://back-blue:8080",
+        "BACKEND_INTERNAL_URL=http://caddy",
         "CUSTOM__REVALIDATE__TOKEN=revalidate_secret_value",
         "BACKEND_PROXY_MAX_BODY_BYTES=1048576",
         "CUSTOM_PROD_DBNAME=blog_prod",
@@ -3630,6 +4366,8 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
 
       assert.match(caddyEnv, /^WEB_DOMAIN=blog\.example\.com$/m)
       assert.match(caddyEnv, /^WEB_UPSTREAM=front_green$/m)
+      // host 이전 창 슬롯이 caddy env에 실리지 않으면 vhost 주소가 .localhost 기본값에 머문다.
+      assert.match(caddyEnv, /^LEGACY_API_DOMAIN=legacy-api\.blog\.example\.com$/m)
       // 값이 빈 키는 caddy env로 내보내지 않는다. Caddy의 `{$VAR:default}`는 변수가 **unset**일
       // 때만 기본값을 쓰고, 존재하되 비어 있으면 빈 문자열을 그대로 쓴다. 그러면 site address가
       // `http://`가 되어 host matcher 없는 :80 catch-all 라우트가 되고, 다른 vhost가 잡지 않는
@@ -3637,7 +4375,7 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       // edge 라우팅을 통째로 바꾸는 경로라 여기서 끊는다.
       assert.doesNotMatch(caddyEnv, /^MONITOR_DOMAIN=$/m)
       // front 런타임 키가 빠지면 컨테이너는 healthy를 보고하면서 모든 SSR 경로가 500이 된다.
-      assert.match(frontEnv, /^BACKEND_INTERNAL_URL=http:\/\/back-blue:8080$/m)
+      assert.match(frontEnv, /^BACKEND_INTERNAL_URL=http:\/\/caddy$/m)
       // front의 TOKEN_FOR_REVALIDATE와 backend의 CUSTOM__REVALIDATE__TOKEN은 같은 공유 비밀이다.
       // 별도 키로 두면 어긋나도 아무도 실패하지 않고 revalidate만 401이 된다.
       assert.match(frontEnv, /^TOKEN_FOR_REVALIDATE=revalidate_secret_value$/m)
@@ -3708,10 +4446,13 @@ test(".env.prod.example은 자기 자신이 env 계약을 통과한다", async (
   }
 
   const result = validateEnvText({ contract: relaxed, target: "home-server-source", text: example })
-  const relevant = result.errors.filter((error) => !error.message.includes("is required"))
 
+  // `is required`를 걸러내던 필터를 걷었다. 그 필터가 있는 동안 이 게이트는 "예시가 계약을
+  // 통과한다"고 말하면서 실제로는 필수 키 누락을 통째로 눈감았고, requiredWhen 게이트가
+  // 새 스위치로 옮겨가면서 실제로 빠진 키(BACKEND_INTERNAL_URL)를 놓쳤다. 예시 파일은
+  // 오너가 복사해 쓰는 출발점이므로 필수 키가 빠진 상태를 통과시키면 안 된다.
   assert.deepEqual(
-    relevant.map((error) => `${error.key}: ${error.message}`),
+    result.errors.map((error) => `${error.key}: ${error.message}`),
     [],
     ".env.prod.example must stay internally consistent with the env contract",
   )

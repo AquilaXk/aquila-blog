@@ -1,14 +1,14 @@
 const path = require("path")
 const { buildContentSecurityPolicy } = require("./src/libs/security/contentSecurityPolicy")
 
-/** Prefer package source over yarn `file:` node_modules copy (Vercel cache drift). */
+/** Prefer package source over the yarn `file:` node_modules copy, which goes stale on cached installs. */
 const sharedUiTokensEntry = path.resolve(__dirname, "packages/shared-ui-tokens/src/index.js")
 
 /**
  * yarn 1 filters optional dependencies by `os`/`cpu` but not by libc, so both the glibc and the
  * musl `@img/sharp-*` builds land in node_modules while sharp only ever opens the one matching the
  * host libc. Build host and serve host share a libc here (Dockerfile.runtime builds and runs on
- * node:20-alpine; Vercel builds and runs on glibc), so the mismatched flavour is dead weight.
+ * node:20-alpine), so the mismatched flavour is dead weight.
  * `glibcVersionRuntime` is the same probe sharp itself uses through detect-libc.
  */
 const nodeReportHeader =

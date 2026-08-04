@@ -64,7 +64,14 @@ test.describe("모바일 레이아웃 소스 경계", () => {
     )
     expect(rootLayoutSource).toContain('const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/")')
     expect(rootLayoutSource).toContain("const isFullBleedRoute = isDedicatedEditorRoute || isAdminRoute")
-    expect(rootLayoutSource).toContain("<StyledMain $fullBleed={isFullBleedRoute}>")
+    expect(rootLayoutSource).toContain("<LayoutShell $fullBleed={isFullBleedRoute}>")
+    // 독립 표면(회사·제품)은 자기 <main>을 소유한다. 그 라우트에서만 이 레이아웃의 껍데기를 div로
+    // 내려 main 랜드마크 중첩을 막는다 - 중첩은 화면에 아무 흔적을 남기지 않으므로 소스 경계로도
+    // 고정한다(런타임 단언은 e2e/accessibility.spec.ts).
+    expect(rootLayoutSource).toContain(
+      "const LayoutShell = isStandaloneSurfaceRoute ? StandaloneShell : StyledMain"
+    )
+    expect(rootLayoutSource).toContain('const StandaloneShell = StyledMain.withComponent("div")')
     expect(rootLayoutSource).not.toContain("resolvePublicBlogAppearance(isDesignAwareRoute ? adminProfile : null)")
     expect(adminColorTokenSource).toContain("export const adminSystemThemeVariables = (theme: Theme) =>")
     expect(adminColorTokenSource).toContain('theme.scheme === "dark" ? adminDarkThemeVariables : adminLightThemeVariables')

@@ -31,7 +31,7 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: node scripts/repo-boundary/check-web-boundary.mjs
       - run: node --test scripts/env/env-contract.test.mjs
-      - run: node --test scripts/live/resolve-live-targets.test.mjs
+      - run: node --test scripts/live/live-spec-contract.test.mjs
       - run: node --test scripts/repo-boundary/web-build-inputs.test.mjs
       - run: yarn contracts:check
       - run: yarn legal:check

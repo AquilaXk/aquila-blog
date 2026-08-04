@@ -2412,9 +2412,9 @@ test("deploy calculateTag는 deploy-time env 검증 입력 현재 main 변경이
   }
 })
 
-// front와 backend 배포는 트리거가 독립이다 (#1539). 한쪽만 바뀐 커밋이 다른 쪽까지 재배포하면
-// 무관한 tier가 무중단 전환과 burn-in을 다시 겪는다. 두 방향 모두 고정한다.
-test("deploy calculateTag는 front만 바뀐 커밋에서 backend를 재배포하지 않는다", () => {
+// Platform은 Web front 변경 이력으로 배포를 결정하지 않는다. Web이 검증한 immutable digest의
+// repository_dispatch만 front rollout을 시작하므로, Platform의 front-only 커밋은 둘 다 건너뛴다.
+test("deploy calculateTag는 front만 바뀐 커밋에서 backend와 front를 재배포하지 않는다", () => {
   const fixture = createDeployStaleFixture()
   try {
     runDeployCalculateScript({
@@ -2425,10 +2425,9 @@ test("deploy calculateTag는 front만 바뀐 커밋에서 backend를 재배포�
 
     const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
 
-    assert.match(output, /front_deploy=true/)
     assert.match(output, /backend_deploy=false/)
-    // 배포할 front 이미지는 그 커밋에서 구워진다.
-    assert.match(output, new RegExp(`front_source_sha=${fixture.frontSha}`))
+    assert.match(output, /front_deploy=false/)
+    assert.match(output, /front_source_sha=\n/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }
@@ -2454,9 +2453,7 @@ test("deploy calculateTag는 backend만 바뀐 커밋에서 front를 재배포�
   }
 })
 
-// stale run이 예전 front 이미지로 cutover하면 이미 배포된 최신 front를 되돌린다. 그 커밋의 배포가
-// 최신 이미지를 소유하므로 여기서는 front만 미룬다 (backend는 기존 판정 그대로다).
-test("deploy calculateTag는 더 새로운 main이 front를 소유하면 stale front 배포를 미룬다", () => {
+test("deploy calculateTag는 stale front-only main 변경도 Platform front 배포를 시작하지 않는다", () => {
   const fixture = createDeployStaleFixture()
   try {
     runDeployCalculateScript({
@@ -2468,8 +2465,11 @@ test("deploy calculateTag는 더 새로운 main이 front를 소유하면 stale f
     const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
     const summary = readFileSync(path.join(fixture.workDir, "github-summary.md"), "utf8")
 
+    assert.match(output, /backend_deploy=false/)
     assert.match(output, /front_deploy=false/)
-    assert.match(summary, /front deploy deferred to the newer main commit that owns the front image/)
+    assert.match(output, /front_source_sha=\n/)
+    assert.match(summary, /decision source: first-parent-diff\+path-aware-stale-neutral/)
+    assert.match(summary, /front deploy: skipped; only a Web image digest dispatch may deploy front/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }

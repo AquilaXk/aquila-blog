@@ -79,6 +79,8 @@ reject_pattern 'stale workflow_run payload: deploy_sha=' "stale workflow_run pay
 reject_pattern 'STALE_WORKFLOW_RUN' "stale workflow_run payloads must not bypass deploy safety checks"
 require_pattern 'back_image_ref:[[:space:]]*\$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}' "build job must expose immutable backend digest ref"
 require_pattern 'HOME_BACK_IMAGE:[[:space:]]*\$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}' "deploy job must use immutable backend digest ref"
+require_pattern 'Require successful Security for deploy SHA' "dispatches must pass the existing Security success gate"
+reject_pattern "if: github\.event_name != 'repository_dispatch'" "Security success gate must not skip repository_dispatch"
 reject_pattern 'image_latest_ref' "deploy workflow must not calculate or push latest image refs"
 reject_pattern 'IMAGE_LATEST_REF="\$\{IMAGE_NAME\}:latest"' "deploy workflow must not create latest image refs"
 

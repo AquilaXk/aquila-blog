@@ -116,6 +116,9 @@ test("handoff keeps deployment ordering and the existing SSH cutover gates", () 
   assert.match(source, /needs\.calculateTag\.outputs\.backend_deploy != 'true' \|\| needs\.blueGreenDeploy\.result == 'success'/)
   assert.match(source, /back_image_ref: \$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}/)
   assert.match(source, /HOME_BACK_IMAGE: \$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}/)
+  const securityStep = source.match(/      - name: Require successful Security for deploy SHA\n([\s\S]*?)(?=\n      - name: Calculate deploy targets)/)
+  assert.ok(securityStep, "Security gate step must exist")
+  assert.doesNotMatch(securityStep[1], /repository_dispatch/, "Security gate must also run for dispatches")
   assert.equal((source.match(/docker\/build-push-action@/g) || []).length, 1, "only the backend build may publish")
   assert.equal((source.match(/^\s+packages: write$/gm) || []).length, 1, "only the backend build keeps package write")
   for (const forbidden of [
@@ -159,6 +162,10 @@ test("Platform no longer resolves a front tag or classifies front history", () =
 
 test("Platform has no structural path to check out, build, or push Web", () => {
   const steps = Object.values(deployDocument().jobs).flatMap((job) => job.steps || [])
+  const securityGate = steps.find((step) => step.name === "Require successful Security for deploy SHA")
+  assert.ok(securityGate, "Security gate step must exist")
+  assert.equal(securityGate.if, undefined, "Security gate must not allowlist event types")
+  assert.equal(securityGate.env.DEPLOY_SHA, "${{ github.event.workflow_run.head_sha || github.sha }}")
   const checkouts = steps.filter((step) => typeof step.uses === "string" && step.uses.startsWith("actions/checkout@"))
   assert.ok(checkouts.length > 0)
   for (const step of checkouts) assert.equal(step.with?.repository, undefined, "checkout repository override is forbidden")

@@ -119,7 +119,6 @@ jobs:
           echo "workflow_dispatch CI success gate passed: deploy_sha=${DEPLOY_SHA} ci_run_id=${SUCCESS_RUN_ID}"
 
       - name: Require successful Security for deploy SHA
-        if: github.event_name != 'repository_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}

@@ -240,10 +240,6 @@ jobs:
               echo "Deploy workflow success gate passed: deploy_sha=${DEPLOY_SHA} deploy_run_id=${SUCCESS_RUN_ID}"
               exit 0
             fi
-            if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
-              echo "repository dispatch blocked: matching Deploy workflow run failed for deploy_sha=${DEPLOY_SHA}" >&2
-              exit 1
-            fi
             if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
           done
 

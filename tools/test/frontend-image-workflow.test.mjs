@@ -250,8 +250,17 @@ test("dispatch waits for the exact deploy workflow run to succeed", () => {
   ])
 })
 
+test("dispatch ignores terminal invalid-trigger runs until the valid Deploy run succeeds", () => {
+  const result = runWorkflowGate("Require successful Deploy workflow for dispatch SHA", ["terminal:1", "active:2", "success:3"])
+  const apiCall = `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [apiCall, apiCall, apiCall])
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60", "sleep 60"])
+})
+
 for (const [label, responses, expectedApiCalls, expectedSleeps] of [
-  ["terminal failure", ["terminal:1"], 1, 0],
+  ["terminal-only rows after its bounded wait", Array(250).fill("terminal:1"), 250, 249],
   ["API failure", ["error"], 1, 0],
   ["bounded timeout", Array(250).fill(""), 250, 249],
 ]) {

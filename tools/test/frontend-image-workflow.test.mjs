@@ -20,7 +20,7 @@ function deployDocument() {
   return JSON.parse(result.stdout)
 }
 
-const dockerCommand = /\bdocker\s+(?:(?:image|buildx)\s+)?(?:build|push)\b/i
+const dockerCommand = /\bdocker\s+(?:(?:image|buildx)\s+)?(?:build|bake|push)\b/i
 const buildAction = /^docker\/(?:build-push|buildx|bake)-action@/i
 
 test("Platform consumes only the Web digest handoff", () => {
@@ -196,6 +196,7 @@ test("Platform has no structural path to check out, build, or push Web", () => {
 
   assert.equal(dockerCommand.test("docker  image  push ghcr.io/x"), true)
   assert.equal(dockerCommand.test("docker buildx build ."), true)
+  assert.equal(dockerCommand.test("docker buildx bake --push"), true)
   assert.equal(buildAction.test("docker/bake-action@0123456789012345678901234567890123456789"), true)
   assert.notEqual({ repository: "${{ github.event.client_payload.repository }}" }.repository, undefined)
 })

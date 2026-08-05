@@ -224,17 +224,6 @@ jobs:
             FRONT_IMAGE_REF="${WEB_FRONTEND_IMAGE_REF}"
             FRONT_SOURCE_SHA="${WEB_FRONTEND_SOURCE_SHA}"
             CHANGE_SOURCE="web-frontend-image-ready"
-            {
-              echo "image_tag=${IMAGE_TAG}"
-              echo "image_name=${IMAGE_NAME}"
-              echo "image_ref=${IMAGE_REF}"
-              echo "deploy_sha=${DEPLOY_SHA}"
-              echo "backend_deploy=false"
-              echo "front_deploy=true"
-              echo "front_image_ref=${FRONT_IMAGE_REF}"
-              echo "front_source_sha=${FRONT_SOURCE_SHA}"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
           fi
           CHANGED_FILES=""
           if [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]; then
@@ -263,6 +252,19 @@ jobs:
               echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
               CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
             fi
+          fi
+          if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
+            {
+              echo "image_tag=${IMAGE_TAG}"
+              echo "image_name=${IMAGE_NAME}"
+              echo "image_ref=${IMAGE_REF}"
+              echo "deploy_sha=${DEPLOY_SHA}"
+              echo "backend_deploy=false"
+              echo "front_deploy=true"
+              echo "front_image_ref=${FRONT_IMAGE_REF}"
+              echo "front_source_sha=${FRONT_SOURCE_SHA}"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
           if [ -z "${CHANGED_FILES}" ]; then

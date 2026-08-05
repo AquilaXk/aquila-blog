@@ -143,7 +143,7 @@ const createDeployStaleFixture = () => {
   }
 }
 
-const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha }) => {
+const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = "workflow_run" }) => {
   git(cwd, ["update-ref", "refs/heads/main", currentMainSha])
   git(cwd, ["checkout", "--detach", deploySha])
 
@@ -156,12 +156,17 @@ const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha }) => {
     encoding: "utf8",
     env: {
       ...process.env,
-      GITHUB_EVENT_NAME: "workflow_run",
+      GITHUB_EVENT_NAME: eventName,
       GITHUB_REPOSITORY_OWNER: "AquilaXk",
       GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
       DEPLOY_SHA_INPUT: deploySha,
       FORCE_BACKEND_DEPLOY_INPUT: "false",
       FORCE_FRONT_DEPLOY_INPUT: "false",
+      REPO_SYNC_APP_BOT_LOGIN: "aquila-sync[bot]",
+      WEB_FRONTEND_DISPATCH_SENDER: "aquila-sync[bot]",
+      WEB_FRONTEND_SOURCE_REPOSITORY: "AquilaXk/aquila-blog-web",
+      WEB_FRONTEND_SOURCE_SHA: "a".repeat(40),
+      WEB_FRONTEND_IMAGE_REF: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"b".repeat(64)}`,
       GITHUB_OUTPUT: outputFile,
       GITHUB_STEP_SUMMARY: summaryFile,
     },
@@ -2390,6 +2395,30 @@ test("deploy calculateTag는 deploy-time env 검증 입력 후속 변경이면 s
         }),
       /stale workflow_run blocked by backend-impacting newer main changes/,
     )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("dispatch calculateTag는 더 새로운 deploy 영향 main 변경을 차단한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    assert.throws(
+      () => runDeployCalculateScript({ cwd: fixture.workDir, deploySha: fixture.docsSha, currentMainSha: fixture.backendAfterDocsSha, eventName: "repository_dispatch" }),
+      /stale workflow_run blocked by backend-impacting newer main changes/,
+    )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("dispatch calculateTag는 current main에서 immutable front payload를 출력한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({ cwd: fixture.workDir, deploySha: fixture.docsSha, currentMainSha: fixture.docsSha, eventName: "repository_dispatch" })
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+    assert.match(output, /front_deploy=true/)
+    assert.match(output, /backend_deploy=false/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }

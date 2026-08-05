@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
@@ -52,7 +52,13 @@ function runDispatch(payload) {
   const script = run[1].replace(/^          /gm, "")
   const directory = mkdtempSync(path.join(tmpdir(), "aquila-dispatch-"))
   const output = path.join(directory, "output")
+  const git = path.join(directory, "git")
   writeFileSync(output, "")
+  writeFileSync(
+    git,
+    `#!/usr/bin/env bash\ncase "$1" in\n  ls-remote|rev-parse) printf '%s\\n' "\${DEPLOY_SHA_INPUT}" ;;\n  fetch|merge-base) exit 0 ;;\n  *) echo "unexpected git args: $*" >&2; exit 1 ;;\nesac\n`,
+  )
+  chmodSync(git, 0o755)
   const result = spawnSync("bash", ["-c", script], {
     encoding: "utf8",
     env: {
@@ -67,6 +73,7 @@ function runDispatch(payload) {
       WEB_FRONTEND_SOURCE_SHA: payload.sha,
       WEB_FRONTEND_IMAGE_REF: payload.image,
       GITHUB_OUTPUT: output,
+      PATH: `${directory}:${process.env.PATH}`,
     },
   })
   const outputs = readFileSync(output, "utf8")

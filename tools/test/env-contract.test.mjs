@@ -2366,7 +2366,7 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
   assert.doesNotMatch(workflow, /git fetch --depth=1 origin main/)
   assert.doesNotMatch(workflow, /git rev-parse origin\/main/)
-  assert.match(workflow, /stale workflow_run blocked by backend-impacting newer main changes: deploy_sha=/)
+  assert.match(workflow, /stale deploy blocked by backend-impacting newer main changes: deploy_sha=/)
   assert.match(workflow, /stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=/)
   assert.doesNotMatch(workflow, /stale workflow_run payload: deploy_sha=/)
   assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
@@ -2401,7 +2401,7 @@ test("deploy calculateTag는 backend 영향 후속 main 변경이면 stale deplo
           deploySha: fixture.backendSha,
           currentMainSha: fixture.backendAfterDocsSha,
         }),
-      /stale workflow_run blocked by backend-impacting newer main changes/,
+      /stale deploy blocked by backend-impacting newer main changes/,
     )
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
@@ -2418,7 +2418,7 @@ test("deploy calculateTag는 deploy-time env 검증 입력 후속 변경이면 s
           deploySha: fixture.backendSha,
           currentMainSha: fixture.envContractAfterDocsSha,
         }),
-      /stale workflow_run blocked by backend-impacting newer main changes/,
+      /stale deploy blocked by backend-impacting newer main changes/,
     )
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
@@ -2430,7 +2430,7 @@ test("dispatch calculateTag는 더 새로운 deploy 영향 main 변경을 차단
   try {
     assert.throws(
       () => runDeployCalculateScript({ cwd: fixture.workDir, deploySha: fixture.docsSha, currentMainSha: fixture.backendAfterDocsSha, eventName: "repository_dispatch" }),
-      /stale workflow_run blocked by backend-impacting newer main changes/,
+      /stale deploy blocked by backend-impacting newer main changes/,
     )
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })

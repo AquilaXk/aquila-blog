@@ -7,21 +7,65 @@ import test from "node:test"
 
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const deployPath = path.join(repoRoot, ".github/workflows/deploy.yml")
+const ciPath = path.join(repoRoot, ".github/workflows/ci.yml")
 const producerPath = path.join(repoRoot, ".github/workflows/frontend-image.yml")
 
 function deploy() {
   return readFileSync(deployPath, "utf8")
 }
 
-function deployDocument() {
-  const result = spawnSync("ruby", ["-e", 'require "yaml"; require "json"; puts JSON.generate(YAML.load_file(ARGV[0]))', deployPath], { encoding: "utf8" })
+function workflowDocument(workflowPath) {
+  const result = spawnSync("ruby", ["-e", 'require "yaml"; require "json"; document = YAML.load_file(ARGV[0]); document["on"] = document.delete(true) if document.key?(true); puts JSON.generate(document)', workflowPath], { encoding: "utf8" })
   assert.ifError(result.error)
   assert.equal(result.status, 0, result.stderr)
   return JSON.parse(result.stdout)
 }
 
+function deployDocument() {
+  return workflowDocument(deployPath)
+}
+
 const dockerCommand = /\bdocker\s+(?:(?:image|buildx)\s+)?(?:build|bake|push)\b/i
 const buildAction = /^docker\/(?:build-push|buildx|bake)-action@/i
+
+test("CI runs for every main push while retaining PR path filtering", () => {
+  const triggers = workflowDocument(ciPath).on
+
+  assert.equal(triggers.push.paths, undefined)
+  assert.equal(triggers.push["paths-ignore"], undefined)
+  assert.deepEqual(triggers.push.branches, ["main"])
+  assert.deepEqual(triggers.pull_request.paths, [
+    "back/**",
+    "front/**",
+    "contracts/public-api/**",
+    "tools/contracts/**",
+    "tools/test/public-contract-manifest.test.mjs",
+    "tools/test/sync-public-contract-workflow.test.mjs",
+    "tools/test/setup-node-pin-parity.test.mjs",
+    "tools/test/frontend-image-workflow.test.mjs",
+    "tools/test/dockerfile-supply-chain.test.mjs",
+    "deploy/**",
+    "restore-privacy-gate.sh",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "CURSOR.md",
+    "COPILOT.md",
+    "docs/**",
+    "tools/guards/check-forbidden-tracked-files.sh",
+    "tools/guards/check-terraform-no-world-open-sg.sh",
+    "tools/ci/**",
+    "tools/repo-boundary/**",
+    "tools/repo-split/**",
+    "tools/guards/check-public-api-caddy-drift.sh",
+    "tools/guards/public-api-read-caddy-paths.sot",
+    "infra/**",
+    "tools/test/check-forbidden-tracked-files.test.sh",
+    "tools/test/materialize-compose-test-env.test.mjs",
+    "tools/test/repository-standalone-verification.test.sh",
+    ".github/workflows/**",
+  ])
+})
 
 test("Platform consumes only the Web digest handoff", () => {
   const source = deploy()

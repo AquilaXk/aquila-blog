@@ -15,6 +15,7 @@ function deploy() {
 
 function deployDocument() {
   const result = spawnSync("ruby", ["-e", 'require "yaml"; require "json"; puts JSON.generate(YAML.load_file(ARGV[0]))', deployPath], { encoding: "utf8" })
+  assert.ifError(result.error)
   assert.equal(result.status, 0, result.stderr)
   return JSON.parse(result.stdout)
 }

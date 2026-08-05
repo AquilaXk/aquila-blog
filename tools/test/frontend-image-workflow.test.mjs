@@ -9,6 +9,7 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 const deployPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const ciPath = path.join(repoRoot, ".github/workflows/ci.yml")
 const producerPath = path.join(repoRoot, ".github/workflows/frontend-image.yml")
+const securityPath = path.join(repoRoot, ".github/workflows/security.yml")
 
 function deploy() {
   return readFileSync(deployPath, "utf8")
@@ -23,6 +24,10 @@ function workflowDocument(workflowPath) {
 
 function deployDocument() {
   return workflowDocument(deployPath)
+}
+
+function securityDocument() {
+  return workflowDocument(securityPath)
 }
 
 function runWorkflowGate(stepName, responses) {
@@ -115,6 +120,14 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "tools/test/repository-standalone-verification.test.sh",
     ".github/workflows/**",
   ])
+})
+
+test("Security queues exact-SHA runs without cancellation", () => {
+  const concurrency = securityDocument().concurrency
+
+  assert.equal(concurrency.group, "security-${{ github.workflow }}-${{ github.ref }}")
+  assert.equal(concurrency.queue, "max")
+  assert.equal(concurrency["cancel-in-progress"], undefined)
 })
 
 test("CI gate waits for an active matching run to succeed", () => {

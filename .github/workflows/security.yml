@@ -19,7 +19,7 @@ env:
 
 concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  queue: max
 
 jobs:
   privacy-drift-gate:

@@ -25,6 +25,49 @@ function deployDocument() {
   return workflowDocument(deployPath)
 }
 
+function runWorkflowGate(stepName, responses) {
+  const step = Object.values(deployDocument().jobs).flatMap((job) => job.steps || []).find((item) => item.name === stepName)
+  assert.ok(step, `${stepName} step must exist`)
+  const directory = mkdtempSync(path.join(tmpdir(), "aquila-workflow-gate-"))
+  const gh = path.join(directory, "gh")
+  const sleep = path.join(directory, "sleep")
+  const calls = path.join(directory, "calls")
+  const responseFile = path.join(directory, "responses")
+  writeFileSync(calls, "")
+  writeFileSync(responseFile, responses.join("\n"))
+  writeFileSync(
+    gh,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${calls}"\nresponse="$(head -n 1 "${responseFile}")"\ntail -n +2 "${responseFile}" > "${responseFile}.next"\nmv "${responseFile}.next" "${responseFile}"\ncase "$response" in\n  error) exit 1 ;;\n  *) printf '%s\\n' "$response" ;;\nesac\n`,
+  )
+  writeFileSync(sleep, `#!/usr/bin/env bash\nprintf 'sleep %s\\n' "$*" >> "${calls}"\n`)
+  chmodSync(gh, 0o755)
+  chmodSync(sleep, 0o755)
+  const result = spawnSync("bash", ["-c", step.run], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_EVENT_NAME: "repository_dispatch",
+      GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
+      DEPLOY_SHA: "a".repeat(40),
+      ALLOW_DEPLOY_WITHOUT_CI_SUCCESS: "false",
+      ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS: "false",
+      TRIGGER_WORKFLOW_NAME: "",
+      PATH: `${directory}:${process.env.PATH}`,
+    },
+  })
+  const callLog = readFileSync(calls, "utf8").trim().split("\n").filter(Boolean)
+  rmSync(directory, { recursive: true, force: true })
+  return { ...result, callLog }
+}
+
+function gateJq(stepName) {
+  const step = Object.values(deployDocument().jobs).flatMap((job) => job.steps || []).find((item) => item.name === stepName)
+  assert.ok(step, `${stepName} step must exist`)
+  const match = step.run.match(/--jq '([\s\S]*?)'\n/)
+  assert.ok(match, `${stepName} must define a jq selector`)
+  return match[1]
+}
+
 const dockerCommand = /\bdocker(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)--?[^\s]+(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)(?!--)[^\s]+)?)*(?:\s+|[ \t]*\\\r?\n[ \t]*)(?:(?:image|buildx)(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)--?[^\s]+(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)(?!--)[^\s]+)?)*(?:\s+|[ \t]*\\\r?\n[ \t]*))?(?:build|bake|push)\b/i
 const buildAction = /^docker\/(?:build-push|buildx|bake)-action@/i
 
@@ -65,6 +108,72 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "tools/test/repository-standalone-verification.test.sh",
     ".github/workflows/**",
   ])
+})
+
+test("CI gate waits for an active matching run to succeed", () => {
+  const result = runWorkflowGate("Require successful CI for workflow_dispatch or Security trigger", ["active:1", "success:1"])
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60"])
+})
+
+test("Security gate fails immediately when matching runs are terminal non-success", () => {
+  const result = runWorkflowGate("Require successful Security for deploy SHA", ["terminal:2"])
+
+  assert.notEqual(result.status, 0)
+  assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 1)
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), [])
+})
+
+test("CI gate fails immediately when the workflow API errors", () => {
+  const result = runWorkflowGate("Require successful CI for workflow_dispatch or Security trigger", ["error"])
+
+  assert.notEqual(result.status, 0)
+  assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 1)
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), [])
+})
+
+test("dispatch gate selectors classify every nonterminal GitHub status as active", () => {
+  const input = JSON.stringify({
+    workflow_runs: [
+      { id: 1, event: "push", head_branch: "main", status: "completed", conclusion: "failure" },
+      { id: 2, event: "push", head_branch: "main", status: "requested" },
+      { id: 3, event: "push", head_branch: "main", status: "waiting" },
+      { id: 4, event: "push", head_branch: "main", status: "pending" },
+    ],
+  })
+  for (const stepName of [
+    "Require successful CI for workflow_dispatch or Security trigger",
+    "Require successful Security for deploy SHA",
+  ]) {
+    const result = spawnSync("jq", ["-r", gateJq(stepName)], { encoding: "utf8", input })
+    assert.ifError(result.error)
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(result.stdout.trim().split("\n"), ["terminal:1", "active:2", "active:3", "active:4"])
+  }
+})
+
+test("Security gate fails closed after its bounded wait", () => {
+  const result = runWorkflowGate("Require successful Security for deploy SHA", Array(250).fill(""))
+
+  assert.notEqual(result.status, 0)
+  assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 250)
+  assert.equal(result.callLog.filter((call) => call.startsWith("sleep ")).length, 249)
+})
+
+test("dispatch gates query only their exact workflow paths", () => {
+  for (const [stepName, workflowPath] of [
+    ["Require successful CI for workflow_dispatch or Security trigger", "ci.yml"],
+    ["Require successful Security for deploy SHA", "security.yml"],
+  ]) {
+    const result = runWorkflowGate(stepName, ["success:3"])
+    assert.equal(result.status, 0, result.stderr)
+    const apiCalls = result.callLog.filter((call) => call.startsWith("api "))
+    assert.deepEqual(apiCalls, [
+      `api repos/AquilaXk/aquila-blog/actions/workflows/${workflowPath}/runs?head_sha=${"a".repeat(40)}&per_page=50 --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    ])
+  }
 })
 
 test("Platform consumes only the Web digest handoff", () => {

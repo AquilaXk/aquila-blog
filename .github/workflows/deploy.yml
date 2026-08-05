@@ -104,20 +104,30 @@ jobs:
             exit 1
           fi
 
-          # Mirror workflow_run gating: successful CI push to main for this SHA.
-          SUCCESS_RUN_ID="$(
-            gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${DEPLOY_SHA}&status=completed&per_page=50" \
-              --jq '.workflow_runs[] | select(.conclusion == "success" and .event == "push" and .head_branch == "main") | .id' \
-              | head -n 1 || true
-          )"
+          for ATTEMPT in $(seq 1 250); do
+            RUN_STATES="$(
+              gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+            )" || {
+              echo "CI workflow API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            }
 
-          if [ -z "${SUCCESS_RUN_ID}" ]; then
-            echo "workflow_dispatch blocked: no successful CI push run found for deploy_sha=${DEPLOY_SHA}" >&2
-            exit 1
-          fi
+            SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
+            if [ -n "${SUCCESS_RUN_ID}" ]; then
+              echo "workflow_dispatch CI success gate passed: deploy_sha=${DEPLOY_SHA} ci_run_id=${SUCCESS_RUN_ID}"
+              exit 0
+            fi
+            if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
+              echo "workflow_dispatch blocked: matching CI push run failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            fi
+            if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
+          done
 
-          echo "workflow_dispatch CI success gate passed: deploy_sha=${DEPLOY_SHA} ci_run_id=${SUCCESS_RUN_ID}"
+          echo "workflow_dispatch blocked: timed out waiting for successful CI push run for deploy_sha=${DEPLOY_SHA}" >&2
+          exit 1
 
       - name: Require successful Security for deploy SHA
         env:
@@ -145,30 +155,30 @@ jobs:
             exit 0
           fi
 
-          # Mirror CI success style: successful Security push (or manual) run for this SHA.
-          SUCCESS_RUN_ID="$(
-            gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&status=completed&per_page=50" \
-              --jq '.workflow_runs[] | select(.conclusion == "success" and .event == "push" and .head_branch == "main") | .id' \
-              | head -n 1 || true
-          )"
-
-          if [ -z "${SUCCESS_RUN_ID}" ]; then
-            # Fallback by workflow name in case path lookup drifts.
-            SUCCESS_RUN_ID="$(
+          for ATTEMPT in $(seq 1 250); do
+            RUN_STATES="$(
               gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${DEPLOY_SHA}&status=completed&per_page=50" \
-                --jq '.workflow_runs[] | select(.name == "Security" and .conclusion == "success" and .event == "push" and .head_branch == "main") | .id' \
-                | head -n 1 || true
-            )"
-          fi
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+            )" || {
+              echo "Security workflow API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            }
 
-          if [ -z "${SUCCESS_RUN_ID}" ]; then
-            echo "deploy blocked: no successful Security run found for deploy_sha=${DEPLOY_SHA}" >&2
-            exit 1
-          fi
+            SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
+            if [ -n "${SUCCESS_RUN_ID}" ]; then
+              echo "Security success gate passed: deploy_sha=${DEPLOY_SHA} security_run_id=${SUCCESS_RUN_ID}"
+              exit 0
+            fi
+            if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
+              echo "deploy blocked: matching Security push run failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            fi
+            if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
+          done
 
-          echo "Security success gate passed: deploy_sha=${DEPLOY_SHA} security_run_id=${SUCCESS_RUN_ID}"
+          echo "deploy blocked: timed out waiting for successful Security push run for deploy_sha=${DEPLOY_SHA}" >&2
+          exit 1
 
       - name: Calculate deploy targets and image tags
         id: meta

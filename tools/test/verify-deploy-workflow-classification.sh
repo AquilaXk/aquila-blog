@@ -82,7 +82,7 @@ require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy/env/' "stale detectio
 require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools/env/' "stale detection must block newer deploy env validator changes"
 require_pattern 'grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"' "stale detection must use the deploy safety path pattern"
 require_pattern 'stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=' "backend-neutral newer main changes must not block a pending backend deploy"
-require_pattern 'stale workflow_run blocked by backend-impacting newer main changes: deploy_sha=' "backend-impacting newer main changes must block stale deploys"
+require_pattern 'stale deploy blocked by backend-impacting newer main changes: deploy_sha=' "backend-impacting newer main changes must block stale deploys"
 reject_pattern 'git fetch --depth=1 origin main' "stale detection must not make the checkout shallow before changed-file detection"
 reject_pattern 'git rev-parse origin/main' "stale detection must not depend on a locally mutated origin/main ref"
 reject_pattern 'stale workflow_run payload: deploy_sha=' "stale workflow_run payloads must not continue after log-only detection"

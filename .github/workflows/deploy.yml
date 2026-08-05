@@ -84,6 +84,7 @@ jobs:
       - name: Require successful CI for workflow_dispatch or Security trigger
         if: >
           github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'repository_dispatch' ||
           (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Security')
         env:
           GH_TOKEN: ${{ github.token }}

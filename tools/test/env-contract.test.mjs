@@ -147,11 +147,27 @@ const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = 
   git(cwd, ["update-ref", "refs/heads/main", currentMainSha])
   git(cwd, ["checkout", "--detach", deploySha])
 
+  const stubDir = path.join(cwd, "bin")
+  mkdirSync(stubDir)
+  const ghCallLog = path.join(cwd, "gh-calls.txt")
+  writeFileSync(
+    path.join(stubDir, "gh"),
+    `#!/bin/sh
+printf '%s\\n' "$*" >> "$GH_CALL_LOG"
+if [ "$#" -eq 4 ] && [ "$1" = "api" ] && [ "$2" = "repos/AquilaXk/aquila-blog-web/commits/main" ] && [ "$3" = "--jq" ] && [ "$4" = ".sha" ]; then
+  printf '%s\\n' "$WEB_FRONTEND_SOURCE_SHA"
+  exit 0
+fi
+exit 1
+`,
+    { mode: 0o755 },
+  )
+
   const outputFile = path.join(cwd, "github-output.txt")
   const summaryFile = path.join(cwd, "github-summary.md")
   const script = extractDeployCalculateScript()
 
-  return execFileSync("bash", ["-lc", script], {
+  const output = execFileSync("bash", ["-c", script], {
     cwd,
     encoding: "utf8",
     env: {
@@ -167,11 +183,20 @@ const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = 
       WEB_FRONTEND_SOURCE_REPOSITORY: "AquilaXk/aquila-blog-web",
       WEB_FRONTEND_SOURCE_SHA: "a".repeat(40),
       WEB_FRONTEND_IMAGE_REF: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"b".repeat(64)}`,
+      PATH: `${stubDir}:${process.env.PATH}`,
+      GH_CALL_LOG: ghCallLog,
       GITHUB_OUTPUT: outputFile,
       GITHUB_STEP_SUMMARY: summaryFile,
     },
     stdio: ["ignore", "pipe", "pipe"],
   })
+
+  const ghCalls = existsSync(ghCallLog) ? readFileSync(ghCallLog, "utf8").trim().split("\n") : []
+  const expectedGhCalls =
+    eventName === "repository_dispatch" ? ["api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha"] : []
+  assert.deepEqual(ghCalls, expectedGhCalls, `unexpected gh calls for ${eventName}`)
+
+  return { output, ghCallCount: ghCalls.length }
 }
 
 const targetKeyNames = (contract, targetName) => {

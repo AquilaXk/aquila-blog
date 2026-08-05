@@ -30,6 +30,27 @@ function securityDocument() {
   return workflowDocument(securityPath)
 }
 
+function runDeployTriggerGuard(input) {
+  const guard = deployDocument().jobs.triggerGuard
+  assert.ok(guard, "deploy trigger guard job must exist")
+  const step = guard.steps.find((item) => item.name === "Validate deploy trigger")
+  assert.ok(step, "deploy trigger guard step must exist")
+  return spawnSync("bash", ["-c", step.run], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_EVENT_NAME: input.eventName,
+      GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
+      TRIGGER_WORKFLOW_NAME: input.workflowName ?? "Security",
+      TRIGGER_WORKFLOW_CONCLUSION: input.conclusion ?? "success",
+      TRIGGER_WORKFLOW_EVENT: input.workflowEvent ?? "push",
+      TRIGGER_WORKFLOW_BRANCH: input.branch ?? "main",
+      TRIGGER_WORKFLOW_REPOSITORY: input.workflowRepository ?? "AquilaXk/aquila-blog",
+      CURRENT_REPOSITORY: "AquilaXk/aquila-blog",
+    },
+  })
+}
+
 function runWorkflowGate(stepName, responses) {
   const step = Object.values(deployDocument().jobs).flatMap((job) => job.steps || []).find((item) => item.name === stepName)
   assert.ok(step, `${stepName} step must exist`)
@@ -128,6 +149,37 @@ test("Security queues exact-SHA runs without cancellation", () => {
   assert.equal(concurrency.group, "security-${{ github.workflow }}-${{ github.ref }}")
   assert.equal(concurrency.queue, "max")
   assert.equal(concurrency["cancel-in-progress"], undefined)
+})
+
+test("deploy trigger guard permits only valid Security workflow runs", () => {
+  for (const input of [
+    { eventName: "workflow_run" },
+    { eventName: "repository_dispatch" },
+  ]) {
+    const result = runDeployTriggerGuard(input)
+    assert.equal(result.status, 0, result.stderr)
+  }
+
+  for (const input of [
+    { eventName: "workflow_run", workflowName: "CI" },
+    { eventName: "workflow_run", conclusion: "failure" },
+    { eventName: "workflow_run", workflowEvent: "schedule" },
+    { eventName: "workflow_run", workflowEvent: "workflow_dispatch" },
+    { eventName: "workflow_run", branch: "release" },
+    { eventName: "workflow_run", workflowRepository: "AquilaXk/fork" },
+  ]) {
+    const result = runDeployTriggerGuard(input)
+    assert.notEqual(result.status, 0)
+  }
+
+  assert.deepEqual(deployDocument().jobs.calculateTag.needs, ["triggerGuard"])
+})
+
+test("calculateTag requires the trigger guard for every allowed event group", () => {
+  assert.equal(
+    deployDocument().jobs.calculateTag.if.replace(/\s+/g, ""),
+    "needs.triggerGuard.result=='success'&&((github.event_name=='workflow_run'&&github.event.workflow_run.conclusion=='success'&&github.event.workflow_run.event=='push'&&github.event.workflow_run.head_branch=='main'&&github.event.workflow_run.head_repository.full_name==github.repository)||(github.event_name=='workflow_dispatch'&&github.ref=='refs/heads/main')||(github.event_name=='repository_dispatch'&&github.event.action=='web_frontend_image_ready'))",
+  )
 })
 
 test("CI gate waits for an active matching run to succeed", () => {

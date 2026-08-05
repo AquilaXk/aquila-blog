@@ -42,13 +42,44 @@ permissions:
   actions: read
 
 jobs:
+  triggerGuard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate deploy trigger
+        env:
+          TRIGGER_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          TRIGGER_WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          TRIGGER_WORKFLOW_EVENT: ${{ github.event.workflow_run.event }}
+          TRIGGER_WORKFLOW_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          TRIGGER_WORKFLOW_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" != "workflow_run" ]; then
+            exit 0
+          fi
+
+          if [ "${TRIGGER_WORKFLOW_NAME}" != "Security" ] || \
+            [ "${TRIGGER_WORKFLOW_CONCLUSION}" != "success" ] || \
+            [ "${TRIGGER_WORKFLOW_EVENT}" != "push" ] || \
+            [ "${TRIGGER_WORKFLOW_BRANCH}" != "main" ] || \
+            [ "${TRIGGER_WORKFLOW_REPOSITORY}" != "${CURRENT_REPOSITORY}" ]; then
+            echo "deploy blocked: workflow_run must be a successful Security push from this repository's main branch" >&2
+            exit 1
+          fi
+
   calculateTag:
+    needs:
+      - triggerGuard
     permissions:
       contents: read
       actions: read
     runs-on: ubuntu-latest
     if: >
-      (
+      needs.triggerGuard.result == 'success' && (
+        (
         github.event_name == 'workflow_run' &&
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'push' &&
@@ -62,6 +93,7 @@ jobs:
       (
         github.event_name == 'repository_dispatch' &&
         github.event.action == 'web_frontend_image_ready'
+      )
       )
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}

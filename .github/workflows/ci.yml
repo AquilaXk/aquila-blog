@@ -37,36 +37,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "back/**"
-      - "front/**"
-      - "contracts/public-api/**"
-      - "tools/contracts/**"
-      - "tools/test/public-contract-manifest.test.mjs"
-      - "tools/test/sync-public-contract-workflow.test.mjs"
-      - "tools/test/setup-node-pin-parity.test.mjs"
-      - "tools/test/frontend-image-workflow.test.mjs"
-      - "tools/test/dockerfile-supply-chain.test.mjs"
-      - "deploy/**"
-      - "restore-privacy-gate.sh"
-      - "AGENTS.md"
-      - "CLAUDE.md"
-      - "GEMINI.md"
-      - "CURSOR.md"
-      - "COPILOT.md"
-      - "docs/**"
-      - "tools/guards/check-forbidden-tracked-files.sh"
-      - "tools/guards/check-terraform-no-world-open-sg.sh"
-      - "tools/ci/**"
-      - "tools/repo-boundary/**"
-      - "tools/repo-split/**"
-      - "tools/guards/check-public-api-caddy-drift.sh"
-      - "tools/guards/public-api-read-caddy-paths.sot"
-      - "infra/**"
-      - "tools/test/check-forbidden-tracked-files.test.sh"
-      - "tools/test/materialize-compose-test-env.test.mjs"
-      - "tools/test/repository-standalone-verification.test.sh"
-      - ".github/workflows/**"
 
 permissions:
   contents: read

@@ -143,12 +143,8 @@ test("CI runs for every main push while retaining PR path filtering", () => {
   ])
 })
 
-test("Security queues exact-SHA runs without cancellation", () => {
-  const concurrency = securityDocument().concurrency
-
-  assert.equal(concurrency.group, "security-${{ github.workflow }}-${{ github.ref }}")
-  assert.equal(concurrency.queue, "max")
-  assert.equal(concurrency["cancel-in-progress"], undefined)
+test("Security leaves exact-SHA runs independent", () => {
+  assert.equal(securityDocument().concurrency, undefined)
 })
 
 test("deploy trigger guard permits only valid Security workflow runs", () => {

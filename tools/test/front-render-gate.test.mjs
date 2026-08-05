@@ -40,7 +40,7 @@ const createFixtureFront = (defects = {}) => {
     generation: 1,
     // 시작부터 창이 지난 상태로 둔다. 게이트의 시간 기반 단계가 즉시 STALE을 관측하고 끝나야
     // 테스트가 revalidate 창만큼 대기하지 않는다.
-    generatedAt: Date.now() - revalidateMs * 2,
+    generatedAt: defects.initialHitNearExpiry ? Date.now() - revalidateMs + 1_000 : Date.now() - revalidateMs * 2,
     regenerationScheduled: false,
   }
 
@@ -67,13 +67,18 @@ const createFixtureFront = (defects = {}) => {
       .join("\n")
   }
 
-  const server = http.createServer((request, response) => {
+  const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, "http://fixture.test")
     const route = url.pathname
 
     if (route === "/") {
       const stale = Date.now() - state.generatedAt >= revalidateMs
-      if (stale) scheduleRegeneration()
+      const regenerateAfterResponse = stale && defects.initialStaleRegeneratesBeforeTimedProbe && state.generation === 1
+      if (stale) {
+        if (!regenerateAfterResponse) {
+          scheduleRegeneration()
+        }
+      }
       const headers = {
         "content-type": "text/html; charset=utf-8",
         "cache-control": `s-maxage=${revalidateMs / 1000}, stale-while-revalidate=31535940`,
@@ -84,6 +89,10 @@ const createFixtureFront = (defects = {}) => {
       response.end(
         `<!DOCTYPE html><html><head><script src="/_next/static/chunks/main-${state.generation}.js"></script></head><body>gen ${state.generation}</body></html>`,
       )
+      if (regenerateAfterResponse) {
+        state.generation += 1
+        state.generatedAt = Date.now()
+      }
       return
     }
 
@@ -116,6 +125,9 @@ const createFixtureFront = (defects = {}) => {
     }
 
     if (route === "/post/api/v1/posts/feed") {
+      if (defects.intermediateProbeDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, defects.intermediateProbeDelayMs))
+      }
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" })
       response.end(
         JSON.stringify({
@@ -215,6 +227,36 @@ test("gate passes against a healthy front", async () => {
       "isr-on-demand-revalidate",
     ],
   )
+})
+
+test("gate retains an initial STALE sample when regeneration finishes before timed probing", async () => {
+  const report = await runGateAgainstFixture({ initialStaleRegeneratesBeforeTimedProbe: true })
+  const timed = checkNamed(report, "isr-timed-regeneration")
+
+  assert.equal(checkNamed(report, "isr-cache-state-header").detail.cacheState, "STALE")
+  assert.equal(timed.ok, true, timed.reason)
+  assert.equal(timed.detail.staleEtag, '"gen-1"')
+  assert.equal(timed.detail.regeneratedEtag, '"gen-2"')
+})
+
+test("gate age polling handles an initial HIT that expires during the checks", async () => {
+  const report = await runGateAgainstFixture({ initialHitNearExpiry: true })
+  const timed = checkNamed(report, "isr-timed-regeneration")
+
+  assert.equal(checkNamed(report, "isr-cache-state-header").detail.cacheState, "HIT")
+  assert.equal(timed.ok, true, timed.reason)
+  assert.equal(timed.detail.staleEtag, '"gen-1"')
+  assert.equal(timed.detail.regeneratedEtag, '"gen-2"')
+})
+
+test("gate fails when intermediate probes consume the initial STALE regeneration deadline", async () => {
+  const report = await runGateAgainstFixture({
+    initialStaleRegeneratesBeforeTimedProbe: true,
+    intermediateProbeDelayMs: 3_100,
+  })
+
+  assert.equal(report.ok, false, JSON.stringify(report.checks, null, 2))
+  assert.match(checkNamed(report, "isr-timed-regeneration").reason, /regeneration never completed/)
 })
 
 test("gate passes when the public edge strips ETag but preserves ISR state transitions", async () => {

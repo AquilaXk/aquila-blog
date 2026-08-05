@@ -469,6 +469,7 @@ const probeRoute = async (context, route, extraHeaders = {}) => {
     timeoutMs: context.timeoutMs,
   })
   return {
+    observedAt: Date.now(),
     status: response.status,
     contentType: header(response.headers, "content-type"),
     cacheControl: header(response.headers, "cache-control"),
@@ -526,10 +527,10 @@ const checkImageOptimization = async (context) => {
   })
 }
 
-const checkTimedRegeneration = async (context) => {
+const checkTimedRegeneration = async (context, initialSample) => {
   const ageDeadlineMs = context.ageDeadlineMs
-  const ageStartedAt = Date.now()
-  let sample = await probeRoute(context, context.isrRoute)
+  const ageStartedAt = initialSample.observedAt
+  let sample = initialSample
   let observedStale = sample.cacheState === CACHE_STATE_STALE
 
   while (!observedStale && Date.now() - ageStartedAt < ageDeadlineMs) {
@@ -557,7 +558,7 @@ const checkTimedRegeneration = async (context) => {
   }
 
   const staleEtag = sample.etag
-  const regenerationStartedAt = Date.now()
+  const regenerationStartedAt = sample.observedAt
   let reachedHit = sample.cacheState === CACHE_STATE_HIT
   while (!reachedHit && Date.now() - regenerationStartedAt < context.regenerationDeadlineMs) {
     await sleep(context.pollIntervalMs)
@@ -661,7 +662,7 @@ const runGate = async (options) => {
 
   // 시간 기반 검증을 먼저 끝내 신선한 엔트리를 만든 뒤 on-demand를 돌린다. 순서를 뒤집으면
   // on-demand 직후의 바이트 변화가 시간 기반 재생성 때문인지 구분할 수 없다.
-  const timed = await checkTimedRegeneration(context)
+  const timed = await checkTimedRegeneration(context, home)
   checks.push(timed.result)
   checks.push(await checkOnDemandRevalidate(context, timed))
 

@@ -64,7 +64,121 @@ reject_pattern 'PLAYWRIGHT_' "Platform deploy must not parse Playwright environm
 reject_pattern 'E2E_LIVE_ADMIN_' "Platform deploy must not parse frontend live admin credentials"
 reject_pattern 'cache-dependency-path:[[:space:]]*front/yarn\.lock' "Platform deploy must not cache frontend Yarn dependencies"
 reject_pattern 'working-directory:[[:space:]]*front' "Platform deploy must not run commands from the frontend directory"
-reject_pattern 'docker[[:space:]]+((image|buildx)[[:space:]]+)?(build|push)' "Platform must not shell-build or push a Web image"
+docker_publish_command_matches() {
+  local source="$1"
+
+  awk '
+    function find_command(fields, count, start, commands, i, token) {
+      command_index = 0
+      for (i = start; i <= count; i++) {
+        token = fields[i]
+        if (token ~ /^-/) {
+          if (i < count && fields[i + 1] !~ /^-/ && fields[i + 1] !~ commands) i++
+          continue
+        }
+        command_index = i
+        return token
+      }
+      return ""
+    }
+    function inspect(line, count, fields, position, command, subcommand, quote) {
+      sub(/^[[:space:]]*/, "", line)
+      sub(/^(if|then)[[:space:]]+/, "", line)
+      sub(/^-[[:space:]]+run:[[:space:]]+/, "", line)
+      sub(/^run:[[:space:]]+/, "", line)
+      sub(/^[[:space:]]*/, "", line)
+      quote = sprintf("%c", 39)
+      if (substr(line, 1, 1) == "\"" || substr(line, 1, 1) == quote) line = substr(line, 2)
+      if (substr(line, length(line), 1) == "\"" || substr(line, length(line), 1) == quote) line = substr(line, 1, length(line) - 1)
+      count = split(line, fields, /[[:space:]]+/)
+      position = 1
+      while (fields[position] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) position++
+      if (fields[position] == "sudo") position++
+      if (fields[position] != "docker") return
+      command = find_command(fields, count, position + 1, "^(image|buildx|manifest|build|bake|push)$")
+      if (command ~ /^(build|bake|push)$/) {
+        found = 1
+        return
+      }
+      if (command == "image") {
+        subcommand = find_command(fields, count, command_index + 1, "^(build|push)$")
+        if (subcommand ~ /^(build|push)$/) found = 1
+        return
+      }
+      if (command == "manifest") {
+        if (find_command(fields, count, command_index + 1, "^push$") == "push") found = 1
+        return
+      }
+      if (command == "buildx") {
+        subcommand = find_command(fields, count, command_index + 1, "^(build|bake|imagetools)$")
+        if (subcommand ~ /^(build|bake)$/) {
+          found = 1
+          return
+        }
+        if (subcommand == "imagetools" && find_command(fields, count, command_index + 1, "^create$") == "create") found = 1
+      }
+    }
+    {
+      sub(/\r$/, "")
+      line = continued ? buffered " " $0 : $0
+      if (line ~ /\\[[:space:]]*$/) {
+        sub(/\\[[:space:]]*$/, "", line)
+        buffered = line
+        continued = 1
+        next
+      }
+      segment_count = split(line, segments, /&&|\|\||[;|]/)
+      for (segment = 1; segment <= segment_count; segment++) inspect(segments[segment])
+      buffered = ""
+      continued = 0
+    }
+    END {
+      if (continued) inspect(buffered)
+      exit found ? 0 : 1
+    }
+  ' <<< "${source}"
+}
+
+for docker_publish_fixture in \
+  'docker --debug manifest --insecure push ghcr.io/x' \
+  'docker buildx --builder deploy imagetools --debug create ghcr.io/x' \
+  'docker --context x buildx --builder y bake --push' \
+  'docker --context x build' \
+  'docker buildx --builder y build' \
+  'docker image build ghcr.io/x' \
+  'DOCKER_BUILDKIT=1 docker build .' \
+  'sudo docker push ghcr.io/x' \
+  '- run: docker build .' \
+  'run: "docker build ."' \
+  "run: 'docker build .'" \
+  'cd x && docker build .' \
+  'true; docker push ghcr.io/x' \
+  'printf context | docker build -' \
+  'if docker build .; then true; fi' \
+  $'docker --context unix:///var/run/docker.sock \\\n  manifest --insecure \\\n  push ghcr.io/x' \
+  $'docker buildx --builder deploy \\\r\n  imagetools --debug \\\r\n  create ghcr.io/x'; do
+  if ! docker_publish_command_matches "${docker_publish_fixture}"; then
+    echo "missing: Platform Docker publish classifier must reject ${docker_publish_fixture//$'\n'/ }" >&2
+    exit 1
+  fi
+done
+
+for docker_publish_non_fixture in \
+  'echo "docker manifest push is forbidden"' \
+  '# docker manifest push is forbidden' \
+  'docker image inspect push' \
+  'docker run --rm alpine echo build' \
+  'docker pull x # manifest push'; do
+  if docker_publish_command_matches "${docker_publish_non_fixture}"; then
+    echo "unexpected: Platform Docker publish classifier rejected non-command text" >&2
+    exit 1
+  fi
+done
+
+if docker_publish_command_matches "$(< "${workflow}")"; then
+  echo "unexpected: Platform must not shell-build or publish a Web image" >&2
+  exit 1
+fi
 reject_pattern 'repository:[[:space:]]*.*aquila-blog-web' "Platform must not check out the Web repository"
 reject_pattern 'Dockerfile\.runtime' "Platform must not reference the Web runtime Dockerfile"
 reject_pattern '(^|[^[:alnum:]_])[Yy][Aa][Rr][Nn]([^[:alnum:]_]|$)' "Platform deploy must not use Yarn"

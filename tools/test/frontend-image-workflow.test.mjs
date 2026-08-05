@@ -68,7 +68,14 @@ function gateJq(stepName) {
   return match[1]
 }
 
-const dockerCommand = /\bdocker(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)--?[^\s]+(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)(?!--)[^\s]+)?)*(?:\s+|[ \t]*\\\r?\n[ \t]*)(?:(?:image|buildx)(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)--?[^\s]+(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)(?!--)[^\s]+)?)*(?:\s+|[ \t]*\\\r?\n[ \t]*))?(?:build|bake|push)\b/i
+const dockerSeparator = String.raw`(?:\s+|[ \t]*\\\r?\n[ \t]*)`
+const dockerOption = String.raw`--?[^\s]+(?:${dockerSeparator}(?!--)[^\s]+)?`
+const dockerOptions = String.raw`(?:${dockerSeparator}${dockerOption})*`
+const dockerCommandStart = String.raw`(?:^|[\r\n;|]|&&|\|\|)[ \t]*(?:(?:if|then)${dockerSeparator})?(?:-[ \t]+)?(?:run:[ \t]*)?["']?(?:[A-Za-z_][A-Za-z0-9_]*=[^\s]+${dockerSeparator})*(?:sudo${dockerSeparator})?`
+const dockerCommand = new RegExp(
+  String.raw`${dockerCommandStart}docker${dockerOptions}${dockerSeparator}(?:(?:image${dockerOptions}${dockerSeparator})?(?:build|push)|bake|manifest${dockerOptions}${dockerSeparator}push|buildx${dockerOptions}${dockerSeparator}(?:build|bake|imagetools${dockerOptions}${dockerSeparator}create))\b`,
+  "i",
+)
 const buildAction = /^docker\/(?:build-push|buildx|bake)-action@/i
 
 test("CI runs for every main push while retaining PR path filtering", () => {
@@ -383,6 +390,26 @@ test("Platform has no structural path to check out, build, or push Web", () => {
   assert.equal(dockerCommand.test(String.raw`docker --context unix:///var/run/docker.sock \
   buildx --builder deploy \
   bake --push`), true)
+  assert.equal(dockerCommand.test("docker --debug manifest --insecure push ghcr.io/x"), true)
+  assert.equal(dockerCommand.test("docker buildx --builder deploy imagetools --debug create ghcr.io/x"), true)
+  assert.equal(dockerCommand.test("docker --context x buildx --builder y bake --push"), true)
+  assert.equal(dockerCommand.test("docker --context x build"), true)
+  assert.equal(dockerCommand.test("docker buildx --builder y build"), true)
+  assert.equal(dockerCommand.test("docker image build ghcr.io/x"), true)
+  assert.equal(dockerCommand.test("DOCKER_BUILDKIT=1 docker build ."), true)
+  assert.equal(dockerCommand.test("sudo docker push ghcr.io/x"), true)
+  assert.equal(dockerCommand.test("- run: docker build ."), true)
+  assert.equal(dockerCommand.test('run: "docker build ."'), true)
+  assert.equal(dockerCommand.test("printf context | docker build -"), true)
+  assert.equal(dockerCommand.test("if docker build .; then true; fi"), true)
+  assert.equal(dockerCommand.test(String.raw`docker --context unix:///var/run/docker.sock \
+  manifest --insecure \
+  push ghcr.io/x`), true)
+  assert.equal(dockerCommand.test("docker buildx --builder deploy \\\r\n  imagetools --debug \\\r\n  create ghcr.io/x"), true)
+  assert.equal(dockerCommand.test('echo "docker manifest push is forbidden"'), false)
+  assert.equal(dockerCommand.test("# docker manifest push is forbidden"), false)
+  assert.equal(dockerCommand.test("docker run --rm alpine echo build"), false)
+  assert.equal(dockerCommand.test("docker pull x # manifest push"), false)
   assert.equal(buildAction.test("docker/bake-action@0123456789012345678901234567890123456789"), true)
   assert.notEqual({ repository: "${{ github.event.client_payload.repository }}" }.repository, undefined)
 })

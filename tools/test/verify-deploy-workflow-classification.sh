@@ -95,7 +95,7 @@ docker_publish_command_matches() {
       while (fields[position] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) position++
       if (fields[position] == "sudo") position++
       if (fields[position] != "docker") return
-      command = find_command(fields, count, position + 1, "^(image|buildx|manifest|build|bake|push)$")
+      command = find_command(fields, count, position + 1, "^(image|buildx|builder|compose|manifest|build|bake|push)$")
       if (command ~ /^(build|bake|push)$/) {
         found = 1
         return
@@ -116,6 +116,26 @@ docker_publish_command_matches() {
           return
         }
         if (subcommand == "imagetools" && find_command(fields, count, command_index + 1, "^create$") == "create") found = 1
+        return
+      }
+      if (command == "builder") {
+        if (find_command(fields, count, command_index + 1, "^build$") == "build") found = 1
+        return
+      }
+      if (command == "compose") {
+        subcommand = find_command(fields, count, command_index + 1, "^(build|push|up)$")
+        if (subcommand ~ /^(build|push)$/) {
+          found = 1
+          return
+        }
+        if (subcommand == "up") {
+          for (i = command_index + 1; i <= count; i++) {
+            if (fields[i] == "--build") {
+              found = 1
+              return
+            }
+          }
+        }
       }
     }
     {
@@ -146,6 +166,14 @@ for docker_publish_fixture in \
   'docker --context x build' \
   'docker buildx --builder y build' \
   'docker image build ghcr.io/x' \
+  'docker compose build' \
+  'docker compose push' \
+  'docker compose up --build' \
+  'docker --context x compose -f file build' \
+  'docker compose -f file up --build' \
+  'docker --context x compose -f file up -d --build' \
+  'docker builder build' \
+  'docker builder --context x build' \
   'DOCKER_BUILDKIT=1 docker build .' \
   'sudo docker push ghcr.io/x' \
   '- run: docker build .' \

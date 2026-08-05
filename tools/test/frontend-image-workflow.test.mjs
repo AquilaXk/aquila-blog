@@ -73,7 +73,7 @@ const dockerOption = String.raw`--?[^\s]+(?:${dockerSeparator}(?!--)[^\s]+)?`
 const dockerOptions = String.raw`(?:${dockerSeparator}${dockerOption})*`
 const dockerCommandStart = String.raw`(?:^|[\r\n;|]|&&|\|\|)[ \t]*(?:(?:if|then)${dockerSeparator})?(?:-[ \t]+)?(?:run:[ \t]*)?["']?(?:[A-Za-z_][A-Za-z0-9_]*=[^\s]+${dockerSeparator})*(?:sudo${dockerSeparator})?`
 const dockerCommand = new RegExp(
-  String.raw`${dockerCommandStart}docker${dockerOptions}${dockerSeparator}(?:(?:image${dockerOptions}${dockerSeparator})?(?:build|push)|bake|manifest${dockerOptions}${dockerSeparator}push|buildx${dockerOptions}${dockerSeparator}(?:build|bake|imagetools${dockerOptions}${dockerSeparator}create))\b`,
+  String.raw`${dockerCommandStart}docker${dockerOptions}${dockerSeparator}(?:(?:image${dockerOptions}${dockerSeparator})?(?:build|push)|bake|manifest${dockerOptions}${dockerSeparator}push|buildx${dockerOptions}${dockerSeparator}(?:build|bake|imagetools${dockerOptions}${dockerSeparator}create)|builder${dockerOptions}${dockerSeparator}build|compose${dockerOptions}${dockerSeparator}(?:build|push|up${dockerOptions}${dockerSeparator}--build))\b`,
   "i",
 )
 const buildAction = /^docker\/(?:build-push|buildx|bake)-action@/i
@@ -437,6 +437,14 @@ test("Platform has no structural path to check out, build, or push Web", () => {
   assert.equal(dockerCommand.test("docker --context x build"), true)
   assert.equal(dockerCommand.test("docker buildx --builder y build"), true)
   assert.equal(dockerCommand.test("docker image build ghcr.io/x"), true)
+  assert.equal(dockerCommand.test("docker compose build"), true)
+  assert.equal(dockerCommand.test("docker compose push"), true)
+  assert.equal(dockerCommand.test("docker compose up --build"), true)
+  assert.equal(dockerCommand.test("docker --context x compose -f file build"), true)
+  assert.equal(dockerCommand.test("docker compose -f file up --build"), true)
+  assert.equal(dockerCommand.test("docker --context x compose -f file up -d --build"), true)
+  assert.equal(dockerCommand.test("docker builder build"), true)
+  assert.equal(dockerCommand.test("docker builder --context x build"), true)
   assert.equal(dockerCommand.test("DOCKER_BUILDKIT=1 docker build ."), true)
   assert.equal(dockerCommand.test("sudo docker push ghcr.io/x"), true)
   assert.equal(dockerCommand.test("- run: docker build ."), true)

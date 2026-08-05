@@ -1633,6 +1633,61 @@ jobs:
         with:
           ref: ${{ needs.calculateTag.outputs.deploy_sha }}
 
+      - name: Verify dispatch freshness after queue
+        if: github.event_name == 'repository_dispatch'
+        env:
+          FRONT_SOURCE_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! WEB_FRONTEND_CURRENT_MAIN_SHA="$(gh api "repos/AquilaXk/aquila-blog-web/commits/main" --jq '.sha')"; then
+            echo "front dispatch Web main sha lookup failed" >&2
+            exit 1
+          fi
+          if [[ ! "${WEB_FRONTEND_CURRENT_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "front dispatch current Web main sha is invalid" >&2
+            exit 1
+          fi
+          if [ "${FRONT_SOURCE_SHA}" != "${WEB_FRONTEND_CURRENT_MAIN_SHA}" ]; then
+            echo "front dispatch source sha is stale: source=${FRONT_SOURCE_SHA} current_main=${WEB_FRONTEND_CURRENT_MAIN_SHA}" >&2
+            exit 1
+          fi
+
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+          REMOTE_MAIN_SHA="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          if [[ ! "${REMOTE_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "front dispatch origin/main sha lookup failed" >&2
+            exit 1
+          fi
+          git fetch --no-tags --prune origin "+refs/heads/main:refs/remotes/origin/main"
+          FETCHED_MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
+          if [ "${FETCHED_MAIN_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+            echo "front dispatch origin/main sha changed during stale check: remote=${REMOTE_MAIN_SHA} fetched=${FETCHED_MAIN_SHA}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}"; then
+            echo "front dispatch deploy sha is not reachable from origin/main: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+            exit 1
+          fi
+          if [ "${DEPLOY_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+            STALE_CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}")"
+            if grep -Eq "${STALE_DEPLOY_BLOCK_PATHS_PATTERN}" <<< "${STALE_CHANGED_FILES}"; then
+              echo "front dispatch blocked by backend-impacting newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+              echo "${STALE_CHANGED_FILES}" >&2
+              exit 1
+            else
+              STALE_PATH_MATCH_STATUS=$?
+              if [ "${STALE_PATH_MATCH_STATUS}" -ne 1 ]; then
+                echo "front dispatch stale path matcher failed: status=${STALE_PATH_MATCH_STATUS}" >&2
+                exit 1
+              fi
+            fi
+            echo "front dispatch allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+          fi
+
       - name: Verify required secrets
         env:
           TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}

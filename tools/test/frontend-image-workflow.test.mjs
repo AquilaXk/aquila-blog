@@ -381,6 +381,173 @@ test("dispatch front deployment joins the homeserver queue without nesting its w
   assert.equal(job.concurrency.queue, "max")
 })
 
+function runFrontQueueFreshnessGate(input) {
+  const job = deployDocument().jobs.frontBlueGreenDeploy
+  const steps = job.steps || []
+  const checkoutIndex = steps.findIndex((item) => item.name === "Checkout")
+  const stepIndex = steps.findIndex((item) => item.name === "Verify dispatch freshness after queue")
+  const secretsIndex = steps.findIndex((item) => item.name === "Verify required secrets")
+  assert.notEqual(checkoutIndex, -1, "front deployment checkout must exist")
+  assert.equal(stepIndex, checkoutIndex + 1, "freshness revalidation must run immediately after front checkout")
+  assert.ok(secretsIndex > stepIndex, "freshness revalidation must run before secrets are read")
+  const step = steps[stepIndex]
+  assert.ok(step, "front deployment must revalidate dispatch freshness after acquiring the homeserver queue")
+  assert.equal(step.if, "github.event_name == 'repository_dispatch'")
+  const directory = mkdtempSync(path.join(tmpdir(), "aquila-front-queue-freshness-"))
+  const calls = path.join(directory, "calls")
+  const gh = path.join(directory, "gh")
+  const git = path.join(directory, "git")
+  const grep = path.join(directory, "grep")
+  const changedFiles = path.join(directory, "changed-files")
+  writeFileSync(calls, "")
+  writeFileSync(changedFiles, input.changedFiles ?? "")
+  writeFileSync(
+    gh,
+    `#!/usr/bin/env bash\nprintf 'gh %s\\n' "$*" >> "${calls}"\nif [ "$1" = api ] && [ "$2" = repos/AquilaXk/aquila-blog-web/commits/main ] && [ "$3" = --jq ] && [ "$4" = .sha ] && [ "$#" = 4 ]; then\n  [ "${input.webApiExitCode ?? 0}" = 0 ] || exit "${input.webApiExitCode}"\n  printf '%s\\n' '${input.webMainSha}'\n  exit 0\nfi\necho "unexpected gh args: $*" >&2\nexit 1\n`,
+  )
+  writeFileSync(
+    git,
+    `#!/usr/bin/env bash\nprintf 'git %s\\n' "$*" >> "${calls}"\n[ "$1" = '${input.gitFailureCommand ?? ""}' ] && exit 1\ncase "$1" in\n  ls-remote) printf '%s refs/heads/main\\n' '${input.platformMainSha}' ;;\n  fetch) exit 0 ;;\n  rev-parse) printf '%s\\n' '${input.fetchedPlatformMainSha ?? input.platformMainSha}' ;;\n  merge-base) exit ${input.platformAncestor === false ? 1 : 0} ;;\n  diff) cat "${changedFiles}" ;;\n  *) echo "unexpected git args: $*" >&2; exit 1 ;;\nesac\n`,
+  )
+  if (input.grepExitCode !== undefined) writeFileSync(grep, `#!/usr/bin/env bash\nexit ${input.grepExitCode}\n`)
+  chmodSync(gh, 0o755)
+  chmodSync(git, 0o755)
+  if (input.grepExitCode !== undefined) chmodSync(grep, 0o755)
+  const result = spawnSync("bash", ["-c", step.run], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_EVENT_NAME: "repository_dispatch",
+      FRONT_SOURCE_SHA: input.frontSourceSha,
+      DEPLOY_SHA: input.deploySha,
+      PATH: `${input.grepExitCode === undefined ? "" : `${directory}:`}${directory}:${process.env.PATH}`,
+    },
+  })
+  const callLog = readFileSync(calls, "utf8").trim().split("\n").filter(Boolean)
+  rmSync(directory, { recursive: true, force: true })
+  return { ...result, callLog }
+}
+
+test("front deployment revalidates the queued dispatch against exact Web and Platform main", () => {
+  const input = {
+    frontSourceSha: "a".repeat(40),
+    webMainSha: "a".repeat(40),
+    deploySha: "b".repeat(40),
+    platformMainSha: "b".repeat(40),
+  }
+  const result = runFrontQueueFreshnessGate(input)
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(result.callLog, [
+    "gh api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha",
+    `git ls-remote --exit-code origin refs/heads/main`,
+    `git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main`,
+    `git rev-parse refs/remotes/origin/main`,
+    `git merge-base --is-ancestor ${input.deploySha} ${input.platformMainSha}`,
+  ])
+})
+
+for (const [label, overrides, expected] of [
+  ["Web main has advanced", { webMainSha: "c".repeat(40) }, /front dispatch source sha is stale/],
+  ["Web API fails", { webApiExitCode: 1 }, /front dispatch Web main sha lookup failed/],
+  ["Web API returns malformed SHA", { webMainSha: "not-a-sha" }, /front dispatch current Web main sha is invalid/],
+  ["Platform main contains a deployment-impacting change", { platformMainSha: "c".repeat(40), changedFiles: "deploy/homeserver/compose.yml" }, /front dispatch blocked by backend-impacting newer main changes/],
+  ["Platform deploy SHA is no longer an ancestor", { platformMainSha: "c".repeat(40), platformAncestor: false }, /front dispatch deploy sha is not reachable from origin\/main/],
+]) {
+  test(`front deployment fails closed when ${label}`, () => {
+    const result = runFrontQueueFreshnessGate({
+      frontSourceSha: "a".repeat(40),
+      webMainSha: "a".repeat(40),
+      deploySha: "b".repeat(40),
+      platformMainSha: "b".repeat(40),
+      ...overrides,
+    })
+
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, expected)
+  })
+}
+
+test("front deployment permits a queue-delayed Platform main advance with neutral paths only", () => {
+  const result = runFrontQueueFreshnessGate({
+    frontSourceSha: "a".repeat(40),
+    webMainSha: "a".repeat(40),
+    deploySha: "b".repeat(40),
+    platformMainSha: "c".repeat(40),
+    changedFiles: "docs/release-notes.md",
+  })
+
+  assert.equal(result.status, 0, result.stderr)
+})
+
+test("front deployment rejects a fetched Platform main SHA that differs from ls-remote", () => {
+  const remoteMainSha = "c".repeat(40)
+  const fetchedMainSha = "d".repeat(40)
+  const result = runFrontQueueFreshnessGate({
+    frontSourceSha: "a".repeat(40),
+    webMainSha: "a".repeat(40),
+    deploySha: "b".repeat(40),
+    platformMainSha: remoteMainSha,
+    fetchedPlatformMainSha: fetchedMainSha,
+  })
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, new RegExp(`front dispatch origin/main sha changed during stale check: remote=${remoteMainSha} fetched=${fetchedMainSha}`))
+})
+
+test("front deployment fails closed when the stale path matcher errors", () => {
+  const result = runFrontQueueFreshnessGate({
+    frontSourceSha: "a".repeat(40),
+    webMainSha: "a".repeat(40),
+    deploySha: "b".repeat(40),
+    platformMainSha: "c".repeat(40),
+    changedFiles: "docs/release-notes.md",
+    grepExitCode: 2,
+  })
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /front dispatch stale path matcher failed: status=2/)
+})
+
+test("front deployment blocks a long changed-file list that begins with a deployment-impacting path", () => {
+  const result = runFrontQueueFreshnessGate({
+    frontSourceSha: "a".repeat(40),
+    webMainSha: "a".repeat(40),
+    deploySha: "b".repeat(40),
+    platformMainSha: "c".repeat(40),
+    changedFiles: `deploy/homeserver/compose.yml\n${"docs/neutral.md\n".repeat(100_000)}`,
+  })
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /front dispatch blocked by backend-impacting newer main changes/)
+})
+
+for (const command of ["ls-remote", "fetch", "rev-parse", "diff"]) {
+  test(`front deployment fails closed when git ${command} fails`, () => {
+    const result = runFrontQueueFreshnessGate({
+      frontSourceSha: "a".repeat(40),
+      webMainSha: "a".repeat(40),
+      deploySha: "b".repeat(40),
+      platformMainSha: "c".repeat(40),
+      gitFailureCommand: command,
+    })
+
+    assert.notEqual(result.status, 0)
+  })
+}
+
+test("front queue freshness uses calculateTag's exact stale deployment path pattern", () => {
+  const source = deploy()
+  const patterns = [...source.matchAll(/STALE_DEPLOY_BLOCK_PATHS_PATTERN='([^']+)'/g)].map((match) => match[1])
+  const step = deployDocument().jobs.frontBlueGreenDeploy.steps.find((item) => item.name === "Verify dispatch freshness after queue")
+
+  assert.equal(patterns.length, 2)
+  assert.equal(patterns[1], patterns[0])
+  assert.ok(step)
+  assert.match(step.run, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}" <<< "\$\{STALE_CHANGED_FILES\}"/)
+  assert.doesNotMatch(step.run, /echo "\$\{STALE_CHANGED_FILES\}" \| grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
+})
+
 test("Platform no longer resolves a front tag or classifies front history", () => {
   const source = deploy()
 

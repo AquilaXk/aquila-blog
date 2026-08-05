@@ -52,13 +52,21 @@ function runDispatch(payload) {
   const script = run[1].replace(/^          /gm, "")
   const directory = mkdtempSync(path.join(tmpdir(), "aquila-dispatch-"))
   const output = path.join(directory, "output")
+  const ghCallsOutput = path.join(directory, "gh-calls")
   const git = path.join(directory, "git")
+  const gh = path.join(directory, "gh")
   writeFileSync(output, "")
+  writeFileSync(ghCallsOutput, "")
   writeFileSync(
     git,
     `#!/usr/bin/env bash\ncase "$1" in\n  ls-remote|rev-parse) printf '%s\\n' "\${DEPLOY_SHA_INPUT}" ;;\n  fetch|merge-base) exit 0 ;;\n  *) echo "unexpected git args: $*" >&2; exit 1 ;;\nesac\n`,
   )
   chmodSync(git, 0o755)
+  writeFileSync(
+    gh,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "\${GH_CALLS_OUTPUT}"\nif [ "$1" = "api" ] && [ "$2" = "repos/AquilaXk/aquila-blog-web/commits/main" ] && [ "$3" = "--jq" ] && [ "$4" = ".sha" ] && [ "$#" = 4 ]; then\n  if [ "\${WEB_FRONTEND_GH_API_EXIT_CODE}" != "0" ]; then\n    exit "\${WEB_FRONTEND_GH_API_EXIT_CODE}"\n  fi\n  printf '%s\\n' "\${WEB_FRONTEND_CURRENT_MAIN_SHA}"\nelse\n  echo "unexpected gh args: $*" >&2\n  exit 1\nfi\n`,
+  )
+  chmodSync(gh, 0o755)
   const result = spawnSync("bash", ["-c", script], {
     encoding: "utf8",
     env: {
@@ -71,14 +79,18 @@ function runDispatch(payload) {
       WEB_FRONTEND_DISPATCH_SENDER: payload.sender,
       WEB_FRONTEND_SOURCE_REPOSITORY: payload.repository,
       WEB_FRONTEND_SOURCE_SHA: payload.sha,
+      WEB_FRONTEND_CURRENT_MAIN_SHA: payload.currentWebMainSha ?? payload.sha,
+      WEB_FRONTEND_GH_API_EXIT_CODE: String(payload.ghApiExitCode ?? 0),
       WEB_FRONTEND_IMAGE_REF: payload.image,
       GITHUB_OUTPUT: output,
+      GH_CALLS_OUTPUT: ghCallsOutput,
       PATH: `${directory}:${process.env.PATH}`,
     },
   })
   const outputs = readFileSync(output, "utf8")
+  const ghCalls = readFileSync(ghCallsOutput, "utf8").trim().split("\n").filter(Boolean).length
   rmSync(directory, { recursive: true, force: true })
-  return { ...result, outputs }
+  return { ...result, outputs, ghCalls }
 }
 
 test("dispatch payload validation executes fail-closed", () => {
@@ -93,6 +105,22 @@ test("dispatch payload validation executes fail-closed", () => {
   assert.match(accepted.outputs, /^front_deploy=true$/m)
   assert.match(accepted.outputs, /^front_source_sha=a{40}$/m)
   assert.match(accepted.outputs, new RegExp(`^front_image_ref=${valid.image}$`, "m"))
+  assert.equal(accepted.ghCalls, 1)
+
+  const stale = runDispatch({ ...valid, currentWebMainSha: "c".repeat(40) })
+  assert.notEqual(stale.status, 0)
+  assert.match(stale.stderr, /repository dispatch source sha is stale/)
+  assert.equal(stale.ghCalls, 1)
+
+  for (const payload of [
+    { ...valid, currentWebMainSha: "" },
+    { ...valid, currentWebMainSha: "not-a-sha" },
+    { ...valid, ghApiExitCode: 1 },
+  ]) {
+    const blocked = runDispatch(payload)
+    assert.notEqual(blocked.status, 0, JSON.stringify(payload))
+    assert.equal(blocked.ghCalls, 1, JSON.stringify(payload))
+  }
 
   for (const payload of [
     { ...valid, sender: "" },

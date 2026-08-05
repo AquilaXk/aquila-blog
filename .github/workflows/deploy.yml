@@ -180,6 +180,7 @@ jobs:
           WEB_FRONTEND_SOURCE_REPOSITORY: ${{ github.event.client_payload.source_repository || '' }}
           WEB_FRONTEND_SOURCE_SHA: ${{ github.event.client_payload.source_sha || '' }}
           WEB_FRONTEND_IMAGE_REF: ${{ github.event.client_payload.image_ref || '' }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -214,6 +215,15 @@ jobs:
             fi
             if [[ ! "${WEB_FRONTEND_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
               echo "repository dispatch source sha is invalid" >&2
+              exit 1
+            fi
+            WEB_FRONTEND_CURRENT_MAIN_SHA="$(gh api "repos/AquilaXk/aquila-blog-web/commits/main" --jq '.sha')"
+            if [[ ! "${WEB_FRONTEND_CURRENT_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "repository dispatch current Web main sha is invalid" >&2
+              exit 1
+            fi
+            if [ "${WEB_FRONTEND_SOURCE_SHA}" != "${WEB_FRONTEND_CURRENT_MAIN_SHA}" ]; then
+              echo "repository dispatch source sha is stale: source=${WEB_FRONTEND_SOURCE_SHA} current_main=${WEB_FRONTEND_CURRENT_MAIN_SHA}" >&2
               exit 1
             fi
             if [[ ! "${WEB_FRONTEND_IMAGE_REF}" =~ ^ghcr\.io/aquilaxk/aquila-blog-web-front@sha256:[0-9a-f]{64}$ ]]; then

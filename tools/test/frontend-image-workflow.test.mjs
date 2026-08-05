@@ -25,7 +25,7 @@ function deployDocument() {
   return workflowDocument(deployPath)
 }
 
-const dockerCommand = /\bdocker\s+(?:(?:image|buildx)\s+)?(?:build|bake|push)\b/i
+const dockerCommand = /\bdocker(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)--?[^\s]+(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)(?!--)[^\s]+)?)*(?:\s+|[ \t]*\\\r?\n[ \t]*)(?:(?:image|buildx)(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)--?[^\s]+(?:(?:\s+|[ \t]*\\\r?\n[ \t]*)(?!--)[^\s]+)?)*(?:\s+|[ \t]*\\\r?\n[ \t]*))?(?:build|bake|push)\b/i
 const buildAction = /^docker\/(?:build-push|buildx|bake)-action@/i
 
 test("CI runs for every main push while retaining PR path filtering", () => {
@@ -269,6 +269,11 @@ test("Platform has no structural path to check out, build, or push Web", () => {
   assert.equal(dockerCommand.test("docker  image  push ghcr.io/x"), true)
   assert.equal(dockerCommand.test("docker buildx build ."), true)
   assert.equal(dockerCommand.test("docker buildx bake --push"), true)
+  assert.equal(dockerCommand.test("docker --context unix:///var/run/docker.sock buildx bake --push"), true)
+  assert.equal(dockerCommand.test("docker buildx --builder deploy bake --push"), true)
+  assert.equal(dockerCommand.test(String.raw`docker --context unix:///var/run/docker.sock \
+  buildx --builder deploy \
+  bake --push`), true)
   assert.equal(buildAction.test("docker/bake-action@0123456789012345678901234567890123456789"), true)
   assert.notEqual({ repository: "${{ github.event.client_payload.repository }}" }.repository, undefined)
 })

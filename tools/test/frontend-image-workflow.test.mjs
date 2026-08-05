@@ -169,6 +169,40 @@ test("Security gate fails closed after its bounded wait", () => {
   assert.equal(result.callLog.filter((call) => call.startsWith("sleep ")).length, 249)
 })
 
+test("workflow_run deploy trigger is Security-only and dispatches use an isolated workflow queue", () => {
+  const document = deployDocument()
+
+  assert.deepEqual(document.on.workflow_run.workflows, ["Security"])
+  assert.equal(document.concurrency.group, "${{ github.event_name == 'repository_dispatch' && format('homeserver-deploy-dispatch-{0}', github.run_id) || 'homeserver-deploy-main' }}")
+  assert.equal(document.concurrency.queue, "max")
+})
+
+test("dispatch waits for the exact deploy workflow run to succeed", () => {
+  const result = runWorkflowGate("Require successful Deploy workflow for dispatch SHA", ["active:1", "success:1"])
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60"])
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [
+    `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+  ])
+})
+
+for (const [label, responses, expectedApiCalls, expectedSleeps] of [
+  ["terminal failure", ["terminal:1"], 1, 0],
+  ["API failure", ["error"], 1, 0],
+  ["bounded timeout", Array(250).fill(""), 250, 249],
+]) {
+  test(`dispatch Deploy workflow gate fails closed on ${label}`, () => {
+    const result = runWorkflowGate("Require successful Deploy workflow for dispatch SHA", responses)
+
+    assert.notEqual(result.status, 0)
+    assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, expectedApiCalls)
+    assert.equal(result.callLog.filter((call) => call.startsWith("sleep ")).length, expectedSleeps)
+  })
+}
+
 test("dispatch gates query only their exact workflow paths", () => {
   for (const [stepName, workflowPath] of [
     ["Require successful CI for workflow_dispatch or Security trigger", "ci.yml"],
@@ -312,7 +346,7 @@ test("handoff keeps deployment ordering and the existing SSH cutover gates", () 
   assert.match(source, /needs\.calculateTag\.outputs\.backend_deploy != 'true' \|\| needs\.blueGreenDeploy\.result == 'success'/)
   assert.match(source, /back_image_ref: \$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}/)
   assert.match(source, /HOME_BACK_IMAGE: \$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}/)
-  const securityStep = source.match(/      - name: Require successful Security for deploy SHA\n([\s\S]*?)(?=\n      - name: Calculate deploy targets)/)
+  const securityStep = source.match(/      - name: Require successful Security for deploy SHA\n([\s\S]*?)(?=\n      - name: Require successful Deploy workflow for dispatch SHA)/)
   assert.ok(securityStep, "Security gate step must exist")
   assert.doesNotMatch(securityStep[1], /repository_dispatch/, "Security gate must also run for dispatches")
   assert.equal((source.match(/docker\/build-push-action@/g) || []).length, 1, "only the backend build may publish")
@@ -338,6 +372,13 @@ test("handoff keeps deployment ordering and the existing SSH cutover gates", () 
   assert.match(source, /STAGED_FRONT_BUILD_SHA="\$\{HOME_FRONT_BUILD_SHA\}"/)
   assert.match(source, /front deploy finished without reporting a result marker/)
   assert.match(source, /front deploy reported success but the edge served build sha=/)
+})
+
+test("dispatch front deployment joins the homeserver queue without nesting its workflow queue", () => {
+  const job = deployDocument().jobs.frontBlueGreenDeploy
+
+  assert.equal(job.concurrency.group, "${{ github.event_name == 'repository_dispatch' && 'homeserver-deploy-main' || format('homeserver-deploy-front-{0}', github.run_id) }}")
+  assert.equal(job.concurrency.queue, "max")
 })
 
 test("Platform no longer resolves a front tag or classifies front history", () => {

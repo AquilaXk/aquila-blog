@@ -3,7 +3,6 @@ name: Deploy to Home Server
 on:
   workflow_run:
     workflows:
-      - CI
       - Security
     types:
       - completed
@@ -31,7 +30,7 @@ on:
         type: boolean
 
 concurrency:
-  group: homeserver-deploy-main
+  group: ${{ github.event_name == 'repository_dispatch' && format('homeserver-deploy-dispatch-{0}', github.run_id) || 'homeserver-deploy-main' }}
   queue: max
 
 env:
@@ -178,6 +177,45 @@ jobs:
           done
 
           echo "deploy blocked: timed out waiting for successful Security push run for deploy_sha=${DEPLOY_SHA}" >&2
+          exit 1
+
+      - name: Require successful Deploy workflow for dispatch SHA
+        if: github.event_name == 'repository_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DEPLOY_SHA}" ]; then
+            echo "deploy sha is empty; cannot verify Deploy workflow success" >&2
+            exit 1
+          fi
+
+          for ATTEMPT in $(seq 1 250); do
+            RUN_STATES="$(
+              gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                --jq '.workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+            )" || {
+              echo "Deploy workflow API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            }
+
+            SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
+            if [ -n "${SUCCESS_RUN_ID}" ]; then
+              echo "Deploy workflow success gate passed: deploy_sha=${DEPLOY_SHA} deploy_run_id=${SUCCESS_RUN_ID}"
+              exit 0
+            fi
+            if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
+              echo "repository dispatch blocked: matching Deploy workflow run failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            fi
+            if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
+          done
+
+          echo "repository dispatch blocked: timed out waiting for successful Deploy workflow run for deploy_sha=${DEPLOY_SHA}" >&2
           exit 1
 
       - name: Calculate deploy targets and image tags
@@ -1569,6 +1607,9 @@ jobs:
   # front를 그 위에 올린다. backend가 스킵된 run에서는 front만 단독으로 돈다.
   frontBlueGreenDeploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.event_name == 'repository_dispatch' && 'homeserver-deploy-main' || format('homeserver-deploy-front-{0}', github.run_id) }}
+      queue: max
     needs:
       - calculateTag
       - blueGreenDeploy

@@ -51,7 +51,7 @@ function runDeployTriggerGuard(input) {
   })
 }
 
-function runWorkflowGate(stepName, responses) {
+function runWorkflowGate(stepName, responses, options = {}) {
   const step = Object.values(deployDocument().jobs).flatMap((job) => job.steps || []).find((item) => item.name === stepName)
   assert.ok(step, `${stepName} step must exist`)
   const directory = mkdtempSync(path.join(tmpdir(), "aquila-workflow-gate-"))
@@ -63,7 +63,7 @@ function runWorkflowGate(stepName, responses) {
   writeFileSync(responseFile, responses.join("\n"))
   writeFileSync(
     gh,
-    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${calls}"\nresponse="$(head -n 1 "${responseFile}")"\ntail -n +2 "${responseFile}" > "${responseFile}.next"\nmv "${responseFile}.next" "${responseFile}"\ncase "$response" in\n  error) exit 1 ;;\n  *) printf '%s\\n' "$response" ;;\nesac\n`,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${calls}"\nif [ "\${PAGINATED_SUCCESS_FIXTURE}" = "true" ]; then\n  for id in {1..50}; do printf 'terminal:%s\\n' "$id"; done\n  if [[ " $* " == *" --paginate "* ]]; then printf 'success:51\\n'; fi\n  exit 0\nfi\nresponse="$(head -n 1 "${responseFile}")"\ntail -n +2 "${responseFile}" > "${responseFile}.next"\nmv "${responseFile}.next" "${responseFile}"\ncase "$response" in\n  error) exit 1 ;;\n  *) printf '%s\\n' "$response" ;;\nesac\n`,
   )
   writeFileSync(sleep, `#!/usr/bin/env bash\nprintf 'sleep %s\\n' "$*" >> "${calls}"\n`)
   chmodSync(gh, 0o755)
@@ -77,6 +77,7 @@ function runWorkflowGate(stepName, responses) {
       DEPLOY_SHA: "a".repeat(40),
       ALLOW_DEPLOY_WITHOUT_CI_SUCCESS: "false",
       ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS: "false",
+      PAGINATED_SUCCESS_FIXTURE: options.paginatedSuccessFixture ? "true" : "false",
       TRIGGER_WORKFLOW_NAME: "",
       PATH: `${directory}:${process.env.PATH}`,
     },
@@ -245,14 +246,30 @@ test("dispatch waits for the exact deploy workflow run to succeed", () => {
   assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60"])
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [
-    `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
-    `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
   ])
+})
+
+test("dispatch gates paginate past terminal first pages to find the exact workflow success", () => {
+  for (const stepName of [
+    "Require successful CI for workflow_dispatch or Security trigger",
+    "Require successful Security for deploy SHA",
+    "Require successful Deploy workflow for dispatch SHA",
+  ]) {
+    const result = runWorkflowGate(stepName, [], { paginatedSuccessFixture: true })
+    const apiCalls = result.callLog.filter((call) => call.startsWith("api "))
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(apiCalls.length, 1)
+    assert.match(apiCalls[0], /--paginate/)
+    assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), [])
+  }
 })
 
 test("dispatch ignores terminal invalid-trigger runs until the valid Deploy run succeeds", () => {
   const result = runWorkflowGate("Require successful Deploy workflow for dispatch SHA", ["terminal:1", "active:2", "success:3"])
-  const apiCall = `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`
+  const apiCall = `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`
 
   assert.equal(result.status, 0, result.stderr)
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [apiCall, apiCall, apiCall])
@@ -282,7 +299,7 @@ test("dispatch gates query only their exact workflow paths", () => {
     assert.equal(result.status, 0, result.stderr)
     const apiCalls = result.callLog.filter((call) => call.startsWith("api "))
     assert.deepEqual(apiCalls, [
-      `api repos/AquilaXk/aquila-blog/actions/workflows/${workflowPath}/runs?head_sha=${"a".repeat(40)}&per_page=50 --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+      `api repos/AquilaXk/aquila-blog/actions/workflows/${workflowPath}/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
     ])
   }
 })

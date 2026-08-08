@@ -119,6 +119,7 @@ printf '%s\n' 'WEB_DOMAIN=web.example.com' > "${env_minimal}"
   printf 'QUOTED_VALUE="quoted value"\r\n'
   printf 'DUPLICATED_VALUE=first\r\n'
   printf 'DUPLICATED_VALUE=last\r\n'
+  printf 'INTERNAL_CR=left\rright\r\n'
 } > "${env_crlf}"
 
 eval "$(extract_function env_value)"
@@ -164,6 +165,10 @@ if [ "$(env_value "QUOTED_VALUE")" != '"quoted value"' ]; then
 fi
 if [ "$(env_value "DUPLICATED_VALUE")" != "last" ]; then
   fail "expected env_value to keep the last duplicated CRLF assignment without the carriage return"
+fi
+expected_internal_cr="$(printf 'left\rright')"
+if [ "$(env_value "INTERNAL_CR")" != "${expected_internal_cr}" ]; then
+  fail "expected env_value to strip only the CRLF terminator and preserve an internal carriage return"
 fi
 
 ENV_FILE="${env_full}"

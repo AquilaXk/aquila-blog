@@ -37,7 +37,13 @@ print_env_key_status() {
 # 종료 코드로 승격시키면 호출부 대입에서 set -e가 점검 전체를 중단시키므로 여기서 끊는다.
 env_value() {
   local key="$1"
-  grep -E "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -n 1 | cut -d '=' -f2- || return 0
+  grep -E "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -n 1 | awk '
+    {
+      value = substr($0, index($0, "=") + 1)
+      sub(/\r$/, "", value)
+      print value
+    }
+  ' || return 0
 }
 
 trim_quotes() {

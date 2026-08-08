@@ -103,6 +103,7 @@ run_probe_snippet() {
 
 env_full="${workdir}/env.full"
 env_minimal="${workdir}/env.minimal"
+env_crlf="${workdir}/env.crlf"
 # 운영 .env.prod처럼 optional 키(CUSTOM__AI__SUMMARY__GEMINI__API_KEY)가 없는 상태를 재현한다.
 {
   printf '%s\n' 'WEB_DOMAIN=web.example.com'
@@ -112,6 +113,13 @@ env_minimal="${workdir}/env.minimal"
   printf '%s\n' 'CUSTOM__ADMIN__EMAIL=last@example.com'
 } > "${env_full}"
 printf '%s\n' 'WEB_DOMAIN=web.example.com' > "${env_minimal}"
+{
+  printf 'WEB_DOMAIN=web.example.com\r\n'
+  printf 'EMPTY_VALUE=\r\n'
+  printf 'QUOTED_VALUE="quoted value"\r\n'
+  printf 'DUPLICATED_VALUE=first\r\n'
+  printf 'DUPLICATED_VALUE=last\r\n'
+} > "${env_crlf}"
 
 eval "$(extract_function env_value)"
 eval "$(extract_function print_env_key_status)"
@@ -142,6 +150,23 @@ if [ "$(env_value "CUSTOM__ADMIN__EMAIL")" != "last@example.com" ]; then
   fail "expected env_value to keep reading the last assignment of a duplicated key"
 fi
 
+# .env.prod는 운영 중 편집기로 CRLF가 될 수 있다. reader에서 CR을 제거하지 않으면 뒤이은
+# trim_quotes가 닫는 따옴표를 못 떼고, empty/중복값도 runtime과 달라진다.
+ENV_FILE="${env_crlf}"
+if [ "$(env_value "WEB_DOMAIN")" != "web.example.com" ]; then
+  fail "expected env_value to read an LF and CRLF value identically"
+fi
+if [ -n "$(env_value "EMPTY_VALUE")" ]; then
+  fail "expected env_value to preserve an empty CRLF value"
+fi
+if [ "$(env_value "QUOTED_VALUE")" != '"quoted value"' ]; then
+  fail "expected env_value to preserve quoted CRLF values without the carriage return"
+fi
+if [ "$(env_value "DUPLICATED_VALUE")" != "last" ]; then
+  fail "expected env_value to keep the last duplicated CRLF assignment without the carriage return"
+fi
+
+ENV_FILE="${env_full}"
 if [ "$(print_env_key_status "ADMIN_EMBED_ORIGINS")" != "ADMIN_EMBED_ORIGINS=SET" ]; then
   fail "expected a present ADMIN_EMBED_ORIGINS to report SET"
 fi

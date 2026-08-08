@@ -170,4 +170,8 @@ test("backend dependency suppression scopes the Tomcat examples CVE to embedded 
   assert.ok(noteLines.includes("Tracked: https://github.com/AquilaXk/aquila-blog/issues/1647"))
   assert.match(build, /failBuildOnCVSS = 7\.0f/)
   assert.match(build, /failOnError = true/)
+  assert.match(
+    build,
+    /suppressionFiles\.add\("config\/dependency-check-suppressions\.xml"\)/,
+  )
 })

@@ -157,6 +157,7 @@ test("backend dependency suppression scopes the Tomcat examples CVE to embedded 
   const selectors = [...block.matchAll(/<([A-Za-z][\w-]*)(?:\s[^>]*)?>/g)]
     .map(([, tag]) => tag)
     .filter((tag) => tag !== "suppress" && tag !== "notes")
+  const noteLines = block.split("\n").map((line) => line.trim())
 
   assert.equal(expiry, "2026-08-23")
   assert.deepEqual(selectors, ["packageUrl", "cve"])
@@ -165,8 +166,8 @@ test("backend dependency suppression scopes the Tomcat examples CVE to embedded 
     /<packageUrl regex="true">\^pkg:maven\/org\\\.apache\\\.tomcat\\\.embed\/tomcat-embed-\(\?:core\|websocket\)@11\\\.0\\\.24\$<\/packageUrl>/,
   )
   assert.match(block, /<cve>CVE-2026-66299<\/cve>/)
-  assert.ok(block.includes("https://tomcat.apache.org/security-11.html"))
-  assert.ok(block.includes("https://github.com/AquilaXk/aquila-blog/issues/1647"))
+  assert.ok(noteLines.includes("Apache guidance: https://tomcat.apache.org/security-11.html"))
+  assert.ok(noteLines.includes("Tracked: https://github.com/AquilaXk/aquila-blog/issues/1647"))
   assert.match(build, /failBuildOnCVSS = 7\.0f/)
   assert.match(build, /failOnError = true/)
 })

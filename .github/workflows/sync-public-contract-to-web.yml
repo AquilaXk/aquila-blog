@@ -167,7 +167,8 @@ jobs:
         run: |
           set -euo pipefail
           yarn contracts:generate
-          yarn contracts:check
+          node --test scripts/contracts/platform-contracts.test.mjs scripts/openapi/check-contract-drift.test.mjs
+          node scripts/contracts/verify-platform-contracts.mjs
           git diff --check
 
       - name: Detect generated contract changes

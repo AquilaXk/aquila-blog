@@ -143,30 +143,60 @@ const createDeployStaleFixture = () => {
   }
 }
 
-const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha }) => {
+const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = "workflow_run" }) => {
   git(cwd, ["update-ref", "refs/heads/main", currentMainSha])
   git(cwd, ["checkout", "--detach", deploySha])
+
+  const stubDir = path.join(cwd, "bin")
+  mkdirSync(stubDir)
+  const ghCallLog = path.join(cwd, "gh-calls.txt")
+  writeFileSync(
+    path.join(stubDir, "gh"),
+    `#!/bin/sh
+printf '%s\\n' "$*" >> "$GH_CALL_LOG"
+if [ "$#" -eq 4 ] && [ "$1" = "api" ] && [ "$2" = "repos/AquilaXk/aquila-blog-web/commits/main" ] && [ "$3" = "--jq" ] && [ "$4" = ".sha" ]; then
+  printf '%s\\n' "$WEB_FRONTEND_SOURCE_SHA"
+  exit 0
+fi
+exit 1
+`,
+    { mode: 0o755 },
+  )
 
   const outputFile = path.join(cwd, "github-output.txt")
   const summaryFile = path.join(cwd, "github-summary.md")
   const script = extractDeployCalculateScript()
 
-  return execFileSync("bash", ["-lc", script], {
+  const output = execFileSync("bash", ["-c", script], {
     cwd,
     encoding: "utf8",
     env: {
       ...process.env,
-      GITHUB_EVENT_NAME: "workflow_run",
+      GITHUB_EVENT_NAME: eventName,
       GITHUB_REPOSITORY_OWNER: "AquilaXk",
       GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
       DEPLOY_SHA_INPUT: deploySha,
       FORCE_BACKEND_DEPLOY_INPUT: "false",
       FORCE_FRONT_DEPLOY_INPUT: "false",
+      REPO_SYNC_APP_BOT_LOGIN: "aquila-sync[bot]",
+      WEB_FRONTEND_DISPATCH_SENDER: "aquila-sync[bot]",
+      WEB_FRONTEND_SOURCE_REPOSITORY: "AquilaXk/aquila-blog-web",
+      WEB_FRONTEND_SOURCE_SHA: "a".repeat(40),
+      WEB_FRONTEND_IMAGE_REF: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"b".repeat(64)}`,
+      PATH: `${stubDir}:${process.env.PATH}`,
+      GH_CALL_LOG: ghCallLog,
       GITHUB_OUTPUT: outputFile,
       GITHUB_STEP_SUMMARY: summaryFile,
     },
     stdio: ["ignore", "pipe", "pipe"],
   })
+
+  const ghCalls = existsSync(ghCallLog) ? readFileSync(ghCallLog, "utf8").trim().split("\n") : []
+  const expectedGhCalls =
+    eventName === "repository_dispatch" ? ["api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha"] : []
+  assert.deepEqual(ghCalls, expectedGhCalls, `unexpected gh calls for ${eventName}`)
+
+  return { output, ghCallCount: ghCalls.length }
 }
 
 const targetKeyNames = (contract, targetName) => {
@@ -2336,7 +2366,7 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
   assert.doesNotMatch(workflow, /git fetch --depth=1 origin main/)
   assert.doesNotMatch(workflow, /git rev-parse origin\/main/)
-  assert.match(workflow, /stale workflow_run blocked by backend-impacting newer main changes: deploy_sha=/)
+  assert.match(workflow, /stale deploy blocked by backend-impacting newer main changes: deploy_sha=/)
   assert.match(workflow, /stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=/)
   assert.doesNotMatch(workflow, /stale workflow_run payload: deploy_sha=/)
   assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
@@ -2371,7 +2401,7 @@ test("deploy calculateTag는 backend 영향 후속 main 변경이면 stale deplo
           deploySha: fixture.backendSha,
           currentMainSha: fixture.backendAfterDocsSha,
         }),
-      /stale workflow_run blocked by backend-impacting newer main changes/,
+      /stale deploy blocked by backend-impacting newer main changes/,
     )
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
@@ -2388,8 +2418,32 @@ test("deploy calculateTag는 deploy-time env 검증 입력 후속 변경이면 s
           deploySha: fixture.backendSha,
           currentMainSha: fixture.envContractAfterDocsSha,
         }),
-      /stale workflow_run blocked by backend-impacting newer main changes/,
+      /stale deploy blocked by backend-impacting newer main changes/,
     )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("dispatch calculateTag는 더 새로운 deploy 영향 main 변경을 차단한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    assert.throws(
+      () => runDeployCalculateScript({ cwd: fixture.workDir, deploySha: fixture.docsSha, currentMainSha: fixture.backendAfterDocsSha, eventName: "repository_dispatch" }),
+      /stale deploy blocked by backend-impacting newer main changes/,
+    )
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("dispatch calculateTag는 current main에서 immutable front payload를 출력한다", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({ cwd: fixture.workDir, deploySha: fixture.docsSha, currentMainSha: fixture.docsSha, eventName: "repository_dispatch" })
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+    assert.match(output, /front_deploy=true/)
+    assert.match(output, /backend_deploy=false/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }
@@ -2412,9 +2466,9 @@ test("deploy calculateTag는 deploy-time env 검증 입력 현재 main 변경이
   }
 })
 
-// front와 backend 배포는 트리거가 독립이다 (#1539). 한쪽만 바뀐 커밋이 다른 쪽까지 재배포하면
-// 무관한 tier가 무중단 전환과 burn-in을 다시 겪는다. 두 방향 모두 고정한다.
-test("deploy calculateTag는 front만 바뀐 커밋에서 backend를 재배포하지 않는다", () => {
+// Platform은 Web front 변경 이력으로 배포를 결정하지 않는다. Web이 검증한 immutable digest의
+// repository_dispatch만 front rollout을 시작하므로, Platform의 front-only 커밋은 둘 다 건너뛴다.
+test("deploy calculateTag는 front만 바뀐 커밋에서 backend와 front를 재배포하지 않는다", () => {
   const fixture = createDeployStaleFixture()
   try {
     runDeployCalculateScript({
@@ -2425,10 +2479,9 @@ test("deploy calculateTag는 front만 바뀐 커밋에서 backend를 재배포�
 
     const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
 
-    assert.match(output, /front_deploy=true/)
     assert.match(output, /backend_deploy=false/)
-    // 배포할 front 이미지는 그 커밋에서 구워진다.
-    assert.match(output, new RegExp(`front_source_sha=${fixture.frontSha}`))
+    assert.match(output, /front_deploy=false/)
+    assert.match(output, /front_source_sha=\n/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }
@@ -2454,9 +2507,7 @@ test("deploy calculateTag는 backend만 바뀐 커밋에서 front를 재배포�
   }
 })
 
-// stale run이 예전 front 이미지로 cutover하면 이미 배포된 최신 front를 되돌린다. 그 커밋의 배포가
-// 최신 이미지를 소유하므로 여기서는 front만 미룬다 (backend는 기존 판정 그대로다).
-test("deploy calculateTag는 더 새로운 main이 front를 소유하면 stale front 배포를 미룬다", () => {
+test("deploy calculateTag는 stale front-only main 변경도 Platform front 배포를 시작하지 않는다", () => {
   const fixture = createDeployStaleFixture()
   try {
     runDeployCalculateScript({
@@ -2468,8 +2519,11 @@ test("deploy calculateTag는 더 새로운 main이 front를 소유하면 stale f
     const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
     const summary = readFileSync(path.join(fixture.workDir, "github-summary.md"), "utf8")
 
+    assert.match(output, /backend_deploy=false/)
     assert.match(output, /front_deploy=false/)
-    assert.match(summary, /front deploy deferred to the newer main commit that owns the front image/)
+    assert.match(output, /front_source_sha=\n/)
+    assert.match(summary, /decision source: first-parent-diff\+path-aware-stale-neutral/)
+    assert.match(summary, /front deploy: skipped; only a Web image digest dispatch may deploy front/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }

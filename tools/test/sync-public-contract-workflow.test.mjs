@@ -81,7 +81,10 @@ test("test-only path checks out latest Web main, imports, generates, and tests w
 
   const verifyStep = stepByName(job, "Generate and verify Web contract artifacts")
   assert.match(verifyStep.run, /yarn contracts:generate/)
-  assert.match(verifyStep.run, /yarn contracts:check/)
+  assert.match(verifyStep.run, /^[ \t]*node --test scripts\/contracts\/platform-contracts\.test\.mjs scripts\/openapi\/check-contract-drift\.test\.mjs$/m)
+  assert.match(verifyStep.run, /^[ \t]*node scripts\/contracts\/verify-platform-contracts\.mjs$/m)
+  assert.match(verifyStep.run, /^[ \t]*git diff --check$/m)
+  assert.doesNotMatch(verifyStep.run, /yarn contracts:check/)
 
   const readOnlyStep = stepByName(job, "Assert read-only mode cannot publish")
   assert.match(String(readOnlyStep.if), /write_enabled != 'true'/)

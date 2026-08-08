@@ -18,6 +18,16 @@ require_pattern() {
   fi
 }
 
+require_fixed() {
+  local text="$1"
+  local message="$2"
+
+  if ! grep -Fq -- "${text}" "${workflow}"; then
+    echo "missing: ${message}" >&2
+    exit 1
+  fi
+}
+
 reject_pattern() {
   local pattern="$1"
   local message="$2"
@@ -28,8 +38,9 @@ reject_pattern() {
   fi
 }
 
-require_pattern 'cancel-in-progress:[[:space:]]*false' "homeserver deploy concurrency must serialize instead of cancelling in-progress deploys"
+require_pattern 'queue:[[:space:]]*max' "homeserver deploy concurrency must retain queued deploys"
 reject_pattern 'cancel-in-progress:[[:space:]]*true' "homeserver deploy must not cancel an in-progress stateful deploy"
+reject_pattern 'cancel-in-progress:[[:space:]]*false' "native queue mode must not be combined with legacy concurrency cancellation"
 
 require_pattern 'backend_deploy:' "workflow must expose a backend_deploy output"
 reject_pattern 'front_live_verify:' "Platform deploy must not expose a frontend live verification output"
@@ -53,6 +64,151 @@ reject_pattern 'PLAYWRIGHT_' "Platform deploy must not parse Playwright environm
 reject_pattern 'E2E_LIVE_ADMIN_' "Platform deploy must not parse frontend live admin credentials"
 reject_pattern 'cache-dependency-path:[[:space:]]*front/yarn\.lock' "Platform deploy must not cache frontend Yarn dependencies"
 reject_pattern 'working-directory:[[:space:]]*front' "Platform deploy must not run commands from the frontend directory"
+docker_publish_command_matches() {
+  local source="$1"
+
+  awk '
+    function find_command(fields, count, start, commands, i, token) {
+      command_index = 0
+      for (i = start; i <= count; i++) {
+        token = fields[i]
+        if (token ~ /^-/) {
+          if (i < count && fields[i + 1] !~ /^-/ && fields[i + 1] !~ commands) i++
+          continue
+        }
+        command_index = i
+        return token
+      }
+      return ""
+    }
+    function inspect(line, count, fields, position, command, subcommand, quote) {
+      sub(/^[[:space:]]*/, "", line)
+      sub(/^(if|then)[[:space:]]+/, "", line)
+      sub(/^-[[:space:]]+run:[[:space:]]+/, "", line)
+      sub(/^run:[[:space:]]+/, "", line)
+      sub(/^[[:space:]]*/, "", line)
+      quote = sprintf("%c", 39)
+      if (substr(line, 1, 1) == "\"" || substr(line, 1, 1) == quote) line = substr(line, 2)
+      if (substr(line, length(line), 1) == "\"" || substr(line, length(line), 1) == quote) line = substr(line, 1, length(line) - 1)
+      count = split(line, fields, /[[:space:]]+/)
+      position = 1
+      while (fields[position] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) position++
+      if (fields[position] == "sudo") position++
+      if (fields[position] != "docker") return
+      command = find_command(fields, count, position + 1, "^(image|buildx|builder|compose|manifest|build|bake|push)$")
+      if (command ~ /^(build|bake|push)$/) {
+        found = 1
+        return
+      }
+      if (command == "image") {
+        subcommand = find_command(fields, count, command_index + 1, "^(build|push)$")
+        if (subcommand ~ /^(build|push)$/) found = 1
+        return
+      }
+      if (command == "manifest") {
+        if (find_command(fields, count, command_index + 1, "^push$") == "push") found = 1
+        return
+      }
+      if (command == "buildx") {
+        subcommand = find_command(fields, count, command_index + 1, "^(build|bake|imagetools)$")
+        if (subcommand ~ /^(build|bake)$/) {
+          found = 1
+          return
+        }
+        if (subcommand == "imagetools" && find_command(fields, count, command_index + 1, "^create$") == "create") found = 1
+        return
+      }
+      if (command == "builder") {
+        if (find_command(fields, count, command_index + 1, "^build$") == "build") found = 1
+        return
+      }
+      if (command == "compose") {
+        subcommand = find_command(fields, count, command_index + 1, "^(build|push|up)$")
+        if (subcommand ~ /^(build|push)$/) {
+          found = 1
+          return
+        }
+        if (subcommand == "up") {
+          for (i = command_index + 1; i <= count; i++) {
+            if (fields[i] == "--build") {
+              found = 1
+              return
+            }
+          }
+        }
+      }
+    }
+    {
+      sub(/\r$/, "")
+      line = continued ? buffered " " $0 : $0
+      if (line ~ /\\[[:space:]]*$/) {
+        sub(/\\[[:space:]]*$/, "", line)
+        buffered = line
+        continued = 1
+        next
+      }
+      segment_count = split(line, segments, /&&|\|\||[;|]/)
+      for (segment = 1; segment <= segment_count; segment++) inspect(segments[segment])
+      buffered = ""
+      continued = 0
+    }
+    END {
+      if (continued) inspect(buffered)
+      exit found ? 0 : 1
+    }
+  ' <<< "${source}"
+}
+
+for docker_publish_fixture in \
+  'docker --debug manifest --insecure push ghcr.io/x' \
+  'docker buildx --builder deploy imagetools --debug create ghcr.io/x' \
+  'docker --context x buildx --builder y bake --push' \
+  'docker --context x build' \
+  'docker buildx --builder y build' \
+  'docker image build ghcr.io/x' \
+  'docker compose build' \
+  'docker compose push' \
+  'docker compose up --build' \
+  'docker --context x compose -f file build' \
+  'docker compose -f file up --build' \
+  'docker --context x compose -f file up -d --build' \
+  'docker builder build' \
+  'docker builder --context x build' \
+  'DOCKER_BUILDKIT=1 docker build .' \
+  'sudo docker push ghcr.io/x' \
+  '- run: docker build .' \
+  'run: "docker build ."' \
+  "run: 'docker build .'" \
+  'cd x && docker build .' \
+  'true; docker push ghcr.io/x' \
+  'printf context | docker build -' \
+  'if docker build .; then true; fi' \
+  $'docker --context unix:///var/run/docker.sock \\\n  manifest --insecure \\\n  push ghcr.io/x' \
+  $'docker buildx --builder deploy \\\r\n  imagetools --debug \\\r\n  create ghcr.io/x'; do
+  if ! docker_publish_command_matches "${docker_publish_fixture}"; then
+    echo "missing: Platform Docker publish classifier must reject ${docker_publish_fixture//$'\n'/ }" >&2
+    exit 1
+  fi
+done
+
+for docker_publish_non_fixture in \
+  'echo "docker manifest push is forbidden"' \
+  '# docker manifest push is forbidden' \
+  'docker image inspect push' \
+  'docker run --rm alpine echo build' \
+  'docker pull x # manifest push'; do
+  if docker_publish_command_matches "${docker_publish_non_fixture}"; then
+    echo "unexpected: Platform Docker publish classifier rejected non-command text" >&2
+    exit 1
+  fi
+done
+
+if docker_publish_command_matches "$(< "${workflow}")"; then
+  echo "unexpected: Platform must not shell-build or publish a Web image" >&2
+  exit 1
+fi
+reject_pattern 'repository:[[:space:]]*.*aquila-blog-web' "Platform must not check out the Web repository"
+reject_pattern 'Dockerfile\.runtime' "Platform must not reference the Web runtime Dockerfile"
 reject_pattern '(^|[^[:alnum:]_])[Yy][Aa][Rr][Nn]([^[:alnum:]_]|$)' "Platform deploy must not use Yarn"
 reject_pattern 'playwright' "Platform deploy must not install or run Playwright"
 require_pattern 'DEPLOY_SHA_INPUT:[[:space:]]*\$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}' "workflow_run deploy target must stay tied to the CI-validated sha"
@@ -68,24 +224,40 @@ require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy/env/' "stale detectio
 require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools/env/' "stale detection must block newer deploy env validator changes"
 require_pattern 'grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"' "stale detection must use the deploy safety path pattern"
 require_pattern 'stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=' "backend-neutral newer main changes must not block a pending backend deploy"
-require_pattern 'stale workflow_run blocked by backend-impacting newer main changes: deploy_sha=' "backend-impacting newer main changes must block stale deploys"
+require_pattern 'stale deploy blocked by backend-impacting newer main changes: deploy_sha=' "backend-impacting newer main changes must block stale deploys"
 reject_pattern 'git fetch --depth=1 origin main' "stale detection must not make the checkout shallow before changed-file detection"
 reject_pattern 'git rev-parse origin/main' "stale detection must not depend on a locally mutated origin/main ref"
 reject_pattern 'stale workflow_run payload: deploy_sha=' "stale workflow_run payloads must not continue after log-only detection"
 reject_pattern 'STALE_WORKFLOW_RUN' "stale workflow_run payloads must not bypass deploy safety checks"
 require_pattern 'back_image_ref:[[:space:]]*\$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}' "build job must expose immutable backend digest ref"
 require_pattern 'HOME_BACK_IMAGE:[[:space:]]*\$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}' "deploy job must use immutable backend digest ref"
+require_pattern 'Require successful Security for deploy SHA' "dispatches must pass the existing Security success gate"
+reject_pattern "if: github\.event_name != 'repository_dispatch'" "Security success gate must not skip repository_dispatch"
 reject_pattern 'image_latest_ref' "deploy workflow must not calculate or push latest image refs"
 reject_pattern 'IMAGE_LATEST_REF="\$\{IMAGE_NAME\}:latest"' "deploy workflow must not create latest image refs"
 
-# front 배포 계약 (#1539). 위의 reject 목록이 막는 것은 "Platform deploy가 프론트를 빌드·검증하는
-# 것"이고, 여기서 요구하는 것은 "Platform deploy가 이미 push된 front digest를 홈서버에 올리는 것"
-# 이다. 두 목록은 서로를 무효화하지 않는다.
+# Web producer가 검증한 immutable digest만 dispatch로 전달한다. Platform은 tag 조회·대기·재조립을
+# 하지 않고 payload를 fail-closed로 검증한 뒤 그대로 원격 rollout에 넘긴다.
 require_pattern 'front_deploy:[[:space:]]*\$\{\{ steps\.meta\.outputs\.front_deploy \}\}' "workflow must expose a front_deploy output"
 require_pattern 'needs\.calculateTag\.outputs\.front_deploy == .true.' "front deploy job must be gated by front_deploy"
-require_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*front/' "front deploy trigger must classify front source paths"
-require_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*frontend-image' "front deploy trigger must follow the workflow that builds the front image"
-reject_pattern 'FRONT_DEPLOY_PATHS_PATTERN=.*(back/|deploy/homeserver/|deploy/env/|tools/env/)' "front deploy must trigger independently of backend deploy paths"
+require_pattern 'repository_dispatch:' "Platform must receive the Web image dispatch"
+require_pattern 'web_frontend_image_ready' "Platform must accept only the Web image event"
+require_fixed "WEB_FRONTEND_DISPATCH_SENDER: \${{ github.event.sender.login || '' }}" "dispatch sender must be passed to executable validation"
+require_pattern 'WEB_FRONTEND_DISPATCH_SENDER.*REPO_SYNC_APP_BOT_LOGIN' "dispatch sender must be compared to the configured App bot"
+require_pattern 'WEB_FRONTEND_SOURCE_REPOSITORY.*github\.event\.client_payload\.source_repository' "source repository must come from the dispatch payload"
+require_pattern 'WEB_FRONTEND_SOURCE_SHA.*github\.event\.client_payload\.source_sha' "source sha must come from the dispatch payload"
+require_pattern 'WEB_FRONTEND_IMAGE_REF.*github\.event\.client_payload\.image_ref' "image ref must come from the dispatch payload"
+require_pattern 'WEB_FRONTEND_SOURCE_REPOSITORY.*AquilaXk/aquila-blog-web' "only the Web repository may trigger a front deploy"
+require_pattern "repository dispatch source sha is invalid" "source sha must fail closed"
+require_pattern "repository dispatch image ref is not the immutable Web digest" "front image ref must fail closed"
+require_pattern 'front_image_ref=\$\{FRONT_IMAGE_REF\}' "payload digest must be the sole front image output"
+require_pattern 'front_source_sha=\$\{FRONT_SOURCE_SHA\}' "payload source sha must be the sole front build sha output"
+reject_pattern 'FRONT_DEPLOY_PATHS_PATTERN' "Platform must not classify front paths"
+reject_pattern 'git rev-list -1 --first-parent' "Platform must not infer a front source commit"
+reject_pattern 'FRONT_IMAGE_WAIT_ATTEMPTS' "Platform must not poll for an image tag"
+reject_pattern 'manifest_digest\(' "Platform must not resolve a mutable tag to a digest"
+reject_pattern 'registry_pull_token\(' "Platform must not query GHCR for a replacement digest"
+reject_pattern 'force_front_deploy' "manual front fallback is forbidden"
 reject_pattern 'BACKEND_DEPLOY_PATHS_PATTERN=.*front/' "backend deploy must not be triggered by front-only changes"
 require_pattern 'needs\.blueGreenDeploy\.result == .success.' "front deploy must be serialized after the backend deploy on the same host"
 require_pattern 'needs\.calculateTag\.outputs\.backend_deploy != .true. \|\|' "front deploy must still run on commits where the backend was never scheduled"
@@ -94,9 +266,7 @@ require_pattern 'needs\.calculateTag\.outputs\.backend_deploy != .true. \|\|' "f
 # 정상 skip 과 사고 skip 을 가르는 신호는 result 가 아니라 calculateTag 의 backend_deploy 판정이다.
 reject_pattern 'needs\.blueGreenDeploy\.result == .skipped.' "a skipped backend deploy must not admit the front deploy: an upstream build failure produces the same result value"
 reject_pattern 'always\(\) &&' "front deploy must not run on cancelled workflows"
-require_pattern 'HOME_FRONT_IMAGE:[[:space:]]*\$\{\{ steps\.front_image\.outputs\.front_image_ref \}\}' "front deploy job must use the resolved front digest ref"
-require_pattern 'front_image_ref=\$\{FRONT_IMAGE_NAME\}@\$\{FRONT_IMAGE_DIGEST\}' "front image ref must be resolved to an immutable digest ref"
-reject_pattern 'front_image_ref=\$\{FRONT_IMAGE_NAME\}:' "front image ref must not stay on a mutable tag ref"
+require_pattern 'HOME_FRONT_IMAGE:[[:space:]]*\$\{\{ needs\.calculateTag\.outputs\.front_image_ref \}\}' "front deploy job must use the dispatched digest ref"
 require_pattern 'front image must be pinned by sha256 digest' "remote front deploy must reject a front image that is not digest pinned"
 require_pattern 'DEPLOY_TARGET=front' "front rollout must run through the shared blue/green script"
 require_pattern 'STAGED_FRONT_BUILD_SHA=' "front deploy must pass the build sha that the cutover verification compares the served build against"

@@ -165,8 +165,8 @@ test("backend dependency suppression scopes the Tomcat examples CVE to embedded 
     /<packageUrl regex="true">\^pkg:maven\/org\\\.apache\\\.tomcat\\\.embed\/tomcat-embed-\(\?:core\|websocket\)@11\\\.0\\\.24\$<\/packageUrl>/,
   )
   assert.match(block, /<cve>CVE-2026-66299<\/cve>/)
-  assert.match(block, /https:\/\/tomcat\.apache\.org\/security-11\.html/)
-  assert.match(block, /https:\/\/github\.com\/AquilaXk\/aquila-blog\/issues\/1647/)
+  assert.ok(block.includes("https://tomcat.apache.org/security-11.html"))
+  assert.ok(block.includes("https://github.com/AquilaXk/aquila-blog/issues/1647"))
   assert.match(build, /failBuildOnCVSS = 7\.0f/)
   assert.match(build, /failOnError = true/)
 })

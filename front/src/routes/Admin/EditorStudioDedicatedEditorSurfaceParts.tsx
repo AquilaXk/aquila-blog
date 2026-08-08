@@ -486,7 +486,7 @@ export const PublishNotice = styled.div `
   }
 
   &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green11};
+    color: ${({ theme }) => theme.colors.green12};
     border: 1px solid ${({ theme }) => theme.colors.green7};
     background: ${({ theme }) => theme.colors.green3};
   }

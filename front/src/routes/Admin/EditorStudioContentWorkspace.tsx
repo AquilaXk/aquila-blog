@@ -181,7 +181,7 @@ const GlobalNoticeBar = styled.div `
   }
 
   &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green12};
+    color: ${({ theme }) => theme.colors.green11};
     background: ${({ theme }) => theme.colors.green3};
     border-color: ${({ theme }) => theme.colors.green7};
   }

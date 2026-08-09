@@ -1,13 +1,14 @@
 import org.gradle.api.tasks.compile.JavaCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.2.21"
-    kotlin("plugin.spring") version "2.2.21"
+    kotlin("jvm") version "2.4.10"
+    kotlin("plugin.spring") version "2.4.10"
     jacoco
     id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"
-    kotlin("plugin.jpa") version "2.2.21"
-    kotlin("kapt") version "2.2.21"
+    kotlin("plugin.jpa") version "2.4.10"
+    kotlin("kapt") version "2.4.10"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
     id("org.owasp.dependencycheck") version "13.0.0"
 }
@@ -66,11 +67,11 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
 
     // QueryDSL
-    implementation("io.github.openfeign.querydsl:querydsl-jpa:7.1") {
+    implementation("io.github.openfeign.querydsl:querydsl-jpa:7.5") {
         exclude("jakarta.persistence", "jakarta.persistence-api")
     }
-    implementation("io.github.openfeign.querydsl:querydsl-kotlin:7.1")
-    kapt("io.github.openfeign.querydsl:querydsl-apt:7.1:jpa")
+    implementation("io.github.openfeign.querydsl:querydsl-kotlin:7.5")
+    kapt("io.github.openfeign.querydsl:querydsl-apt:7.5:jpa")
 
     // SpringDoc
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
@@ -109,6 +110,7 @@ dependencies {
 
 kotlin {
     compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_24)
         freeCompilerArgs.addAll(
             "-Xjsr305=strict",
             "-Xannotation-default-target=param-property",

@@ -432,6 +432,24 @@ class PostPublicReadResponseFactoryTest {
     }
 
     @Test
+    @DisplayName("canonical summary와 공개 본문 필드 변경은 상세·feed ETag seed를 변경한다")
+    fun buildEtagSeedsWithPublicContentFields() {
+        val basePost = feedPost(id = 1L, modifiedAt = Instant.parse("2026-01-01T00:00:00Z"))
+        val baseFeedSeed = responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(basePost))
+        val baseDetail = detailPost()
+        val baseDetailSeed = responseFactory.buildPublicDetailEtagSeed(baseDetail)
+
+        assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(basePost.copy(title = "Title v2"))))
+            .isNotEqualTo(baseFeedSeed)
+        assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(basePost.copy(summary = "Summary v2"))))
+            .isNotEqualTo(baseFeedSeed)
+        assertThat(responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(title = "Title v2")))
+            .isNotEqualTo(baseDetailSeed)
+        assertThat(responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(content = "content v2", summary = "Summary v2")))
+            .isNotEqualTo(baseDetailSeed)
+    }
+
+    @Test
     @DisplayName("공개 read cache policy registry는 모든 endpoint 정책을 노출한다")
     fun exposeAllPublicReadCachePolicies() {
         val policies =

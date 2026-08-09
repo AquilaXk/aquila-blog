@@ -46,19 +46,11 @@ class PostPublicReadQueryService(
     @Value("\${custom.post.read.detail-snapshot-cache-max-chars:180000}") detailSnapshotCacheMaxChars: Int,
 ) : PostPublicReadQueryUseCase {
     private val logger = LoggerFactory.getLogger(PostPublicReadQueryService::class.java)
-    private val cursorSecretBytes = resolveCursorSecret(cursorSigningSecret).toByteArray(StandardCharsets.UTF_8)
+    private val cursorSecretBytes = requireCursorSigningSecret(cursorSigningSecret).toByteArray(StandardCharsets.UTF_8)
     private val detailContentCacheLimit = detailContentCacheMaxChars.coerceAtLeast(2_048)
     private val detailSnapshotCacheLimit = detailSnapshotCacheMaxChars.coerceAtLeast(detailContentCacheLimit)
     private val detailCacheLockRegistry = ConcurrentHashMap<Long, Any>()
     private val cachePayloadMaxBytes = ConcurrentHashMap<String, AtomicLong>()
-
-    init {
-        if (cursorSigningSecret.isBlank()) {
-            logger.warn(
-                "cursor_signing_secret_not_set: fallback secret is in use. set custom.post.read.cursor-signing-secret in production",
-            )
-        }
-    }
 
     @Transactional(readOnly = true)
     @Cacheable(
@@ -785,36 +777,10 @@ class PostPublicReadQueryService(
         val value = raw?.trim().orEmpty()
         if (value.isBlank()) return null
         val parts = value.split(":")
-        return when (parts.size) {
-            CURSOR_LEGACY_PART_COUNT -> parseLegacyCreatedAtCursor(parts, expectedSort)
-            CURSOR_SORT_BOUND_PART_COUNT -> parseSortBoundCursor(parts, expectedSort)
-            else -> throw AppException(ErrorCode.BAD_REQUEST, "cursor 형식이 올바르지 않습니다.")
+        if (parts.size != CURSOR_SORT_BOUND_PART_COUNT) {
+            throw AppException(ErrorCode.BAD_REQUEST, "cursor 형식이 올바르지 않습니다.")
         }
-    }
-
-    private fun parseLegacyCreatedAtCursor(
-        parts: List<String>,
-        expectedSort: PostSearchSortType1,
-    ): CursorToken {
-        // Legacy 3-part tokens predate sort binding; accept for both created-at directions.
-        // New 4-part tokens remain sort-bound via parseSortBoundCursor.
-        if (
-            expectedSort != PostSearchSortType1.CREATED_AT &&
-            expectedSort != PostSearchSortType1.CREATED_AT_ASC
-        ) {
-            throw AppException(
-                ErrorCode.BAD_REQUEST,
-                "cursor에 정렬 모드가 없어 ${expectedSort.name} 요청에 사용할 수 없습니다.",
-            )
-        }
-        val sortValue =
-            parts[0].toLongOrNull()
-                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor sortValue 형식이 올바르지 않습니다.")
-        val id =
-            parts[1].toLongOrNull()
-                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor id 형식이 올바르지 않습니다.")
-        verifyCursorToken(sortValue, id, payload = "$sortValue:$id", signature = parts[2])
-        return CursorToken(sortValue, id, expectedSort)
+        return parseSortBoundCursor(parts, expectedSort)
     }
 
     private fun parseSortBoundCursor(
@@ -909,9 +875,30 @@ class PostPublicReadQueryService(
         return Base64.getUrlEncoder().withoutPadding().encodeToString(truncated)
     }
 
-    private fun resolveCursorSecret(raw: String): String = raw.ifBlank { DEFAULT_CURSOR_SIGNING_SECRET }
+    private fun requireCursorSigningSecret(raw: String): String {
+        require(raw.isNotBlank()) { "cursor signing secret must be configured" }
+        require(raw == raw.trim()) { "cursor signing secret must not include surrounding whitespace" }
+        require(raw.length >= MIN_CURSOR_SECRET_LENGTH) { "cursor signing secret must be at least $MIN_CURSOR_SECRET_LENGTH characters" }
+        require(!raw.contains("change-me", ignoreCase = true)) { "cursor signing secret must not use a placeholder" }
+        return raw
+    }
 
     companion object {
+        private fun requireCursorSigningSecret(raw: String): String {
+            require(raw.isNotBlank()) { "cursor signing secret must be configured" }
+            require(raw == raw.trim()) { "cursor signing secret must not include surrounding whitespace" }
+            require(raw.length >= MIN_CURSOR_SECRET_LENGTH) {
+                "cursor signing secret must be at least $MIN_CURSOR_SECRET_LENGTH characters"
+            }
+            require(
+                !CURSOR_SECRET_PLACEHOLDER.containsMatchIn(raw) &&
+                    !raw.contains("change-me", ignoreCase = true),
+            ) {
+                "cursor signing secret must not use a placeholder"
+            }
+            return raw
+        }
+
         @JvmStatic
         fun normalizeCacheToken(raw: String): String =
             raw
@@ -979,9 +966,14 @@ class PostPublicReadQueryService(
         private const val MAX_CURSOR_PAGE_SIZE = 30
         private const val CURSOR_HMAC_ALGORITHM = "HmacSHA256"
         private const val CURSOR_SIGNATURE_BYTES = 18
-        private const val CURSOR_LEGACY_PART_COUNT = 3
         private const val CURSOR_SORT_BOUND_PART_COUNT = 4
-        private const val DEFAULT_CURSOR_SIGNING_SECRET = "aquila-post-cursor-signing-secret-change-me"
+        private const val MIN_CURSOR_SECRET_LENGTH = 32
+        private val CURSOR_SECRET_PLACEHOLDER =
+            Regex(
+                "^(?:NEED_TO|EMPTY$|change_me|change-me|.*example\\.com$|https://www\\.example\\.com|" +
+                    "https://api\\.example\\.com|smtp\\.example\\.com|.*<[^>]+>.*|.*sha-<[^>]+>.*)",
+                RegexOption.IGNORE_CASE,
+            )
     }
 
     private data class CursorToken(

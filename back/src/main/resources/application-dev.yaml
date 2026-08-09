@@ -25,5 +25,8 @@ logging:
     org.hibernate.orm.jdbc.batch: TRACE
     org.springframework.transaction.interceptor: TRACE
 custom:
+  post:
+    read:
+      cursor-signing-secret: dev-cursor-signing-secret-abcdefghijklmnopqrstuvwxyz0123456789
   jwt:
     secretKey: "${CUSTOM__JWT__SECRET_KEY:dev-only-jwt-secret-key-please-change-1234567890}"

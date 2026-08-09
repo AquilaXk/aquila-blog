@@ -414,7 +414,6 @@ custom:
           failureThreshold: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CIRCUIT__FAILURE_THRESHOLD:5}
           openSeconds: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CIRCUIT__OPEN_SECONDS:60}
     read:
-      cursor-signing-secret: ${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}
       prewarm:
         enabled: ${CUSTOM__POST__READ__PREWARM__ENABLED:true}
         page-size: ${CUSTOM__POST__READ__PREWARM__PAGE_SIZE:30}

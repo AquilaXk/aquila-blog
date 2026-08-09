@@ -227,14 +227,19 @@ class PostPublicReadQueryService(
                 val postPage = postUseCase.findPagedByKw(kw, sort, page, pageSize)
                 val pageDto = toFeedPostDtoPage(postPage)
                 if (shouldCacheSearchNegative(page, kw) && postPage.content.isEmpty()) {
-                    cacheManager
-                        .getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
-                        ?.put(buildSearchCacheKey(page, pageSize, sort, kw), true)
-                    recordCacheResult(PostQueryCacheNames.SEARCH_NEGATIVE, "put")
+                    val written =
+                        recordCacheWriteFailureSafe(PostQueryCacheNames.SEARCH_NEGATIVE, "put") {
+                            cacheManager
+                                .getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
+                                ?.put(buildSearchCacheKey(page, pageSize, sort, kw), true)
+                        }
+                    if (written) recordCacheResult(PostQueryCacheNames.SEARCH_NEGATIVE, "put")
                 } else if (pageDto.content.isNotEmpty()) {
-                    cacheManager
-                        .getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
-                        ?.evict(buildSearchCacheKey(page, pageSize, sort, kw))
+                    recordCacheWriteFailureSafe(PostQueryCacheNames.SEARCH_NEGATIVE, "evict") {
+                        cacheManager
+                            .getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
+                            ?.evict(buildSearchCacheKey(page, pageSize, sort, kw))
+                    }
                 }
                 pageDto
             }
@@ -266,8 +271,11 @@ class PostPublicReadQueryService(
                     val content = getOrLoadPublicPostDetailContent(id)
                     val merged = meta.merge(content)
                     if (shouldCacheDetailSnapshot(merged)) {
-                        snapshotCache?.put(id, PublicPostDetailSnapshotCacheDto.from(merged))
-                        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put")
+                        val written =
+                            recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put") {
+                                snapshotCache?.put(id, PublicPostDetailSnapshotCacheDto.from(merged))
+                            }
+                        if (written) recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put")
                         recordCachePayloadSize(
                             PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
                             estimateDetailSnapshotPayloadSize(merged),
@@ -575,8 +583,11 @@ class PostPublicReadQueryService(
                     }
 
             if (shouldCacheDetailContent(loaded)) {
-                contentCache?.put(id, loaded)
-                recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put")
+                val written =
+                    recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put") {
+                        contentCache?.put(id, loaded)
+                    }
+                if (written) recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put")
                 recordCachePayloadSize(
                     PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
                     loaded.content.length + (loaded.contentHtml?.length ?: 0),
@@ -635,8 +646,11 @@ class PostPublicReadQueryService(
                     }
             post.checkActorCanRead(null)
             val loaded = PublicPostDetailMetaCacheDto.from(PostWithContentDto(post))
-            metaCache?.put(id, loaded)
-            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "put")
+            val written =
+                recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_META, "put") {
+                    metaCache?.put(id, loaded)
+                }
+            if (written) recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "put")
             recordCachePayloadSize(PostQueryCacheNames.DETAIL_PUBLIC_META, estimateDetailMetaPayloadSize(loaded))
             loaded
         }

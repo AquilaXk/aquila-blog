@@ -84,6 +84,16 @@ class PostPublicReadEtagSeedBuilder {
             append(data.commentsCount)
             append("|")
             append(data.hitCount)
+            append("|content=")
+            append(
+                buildLengthPrefixedToken(
+                    data.title,
+                    data.content,
+                    data.contentHtml.orEmpty(),
+                    data.summary,
+                    data.summarySource.name,
+                ),
+            )
             append("|author=")
             append(
                 buildLengthPrefixedToken(
@@ -140,6 +150,7 @@ class PostPublicReadEtagSeedBuilder {
     private fun buildFeedItemsToken(posts: List<FeedPostDto>): String =
         posts.joinToString(separator = "|") {
             "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}:" +
+                "content=${buildLengthPrefixedToken(it.title, it.thumbnail.orEmpty(), it.summary)}:" +
                 "author=${
                     buildLengthPrefixedToken(
                         it.authorId.toString(),

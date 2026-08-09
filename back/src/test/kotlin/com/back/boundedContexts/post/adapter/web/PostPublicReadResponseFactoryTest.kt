@@ -327,21 +327,22 @@ class PostPublicReadResponseFactoryTest {
         // then
         assertThat(pageSeed).isEqualTo(
             "search|page=2|size=10|sort=CREATED_AT|kw=kotlin|tag=spring|total=22|pages=3|" +
-                "items=1:1767225600000:11:12:13:author=1:1,6:Author,6:author,31:https://example.com/profile.png|" +
-                "2:1767312000000:11:12:13:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=1:1767225600000:11:12:13:content=7:Title 1,0:,9:Summary 1:" +
+                "author=1:1,6:Author,6:author,31:https://example.com/profile.png|" +
+                "2:1767312000000:11:12:13:content=7:Title 2,0:,9:Summary 2:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(cursorSeed).isEqualTo(
             "feed-cursor|size=10|sort=CREATED_AT|cursor=cursor-1|tag=backend|hasNext=true|nextCursor=next-1|" +
-                "items=1:1767225600000:11:12:13:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=1:1767225600000:11:12:13:content=7:Title 1,0:,9:Summary 1:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(detailSeed).isEqualTo(
-            "9|1767398400000|7|8|9|10|author=1:1,6:Author,6:author," +
+            "9|1767398400000|7|8|9|10|content=5:Title,7:content,14:<p>content</p>,0:,4:NONE|author=1:1,6:Author,6:author," +
                 "31:https://example.com/profile.png,38:https://example.com/profile-direct.png",
         )
         assertThat(responseFactory.buildTagsEtagSeed(tags)).isEqualTo("Kotlin:3|Spring:2")
         assertThat(relatedSeed).isEqualTo(
             "related-author|authorId=3|excludePostId=0|limit=4|" +
-                "items=2:1767312000000:11:12:13:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=2:1767312000000:11:12:13:content=7:Title 2,0:,9:Summary 2:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(bootstrapFeedSeed).startsWith("bootstrap-feed-cursor|")
         assertThat(bootstrapExploreSeed).startsWith("bootstrap-explore-cursor|")
@@ -435,18 +436,81 @@ class PostPublicReadResponseFactoryTest {
     @DisplayName("canonical summary와 공개 본문 필드 변경은 상세·feed ETag seed를 변경한다")
     fun buildEtagSeedsWithPublicContentFields() {
         val basePost = feedPost(id = 1L, modifiedAt = Instant.parse("2026-01-01T00:00:00Z"))
-        val baseFeedSeed = responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(basePost))
+        val baseFeedSeed =
+            responseFactory.buildFeedPageEtagSeed(
+                "feed",
+                0,
+                10,
+                PostSearchSortType1.CREATED_AT,
+                data = pageOf(basePost),
+            )
         val baseDetail = detailPost()
         val baseDetailSeed = responseFactory.buildPublicDetailEtagSeed(baseDetail)
 
-        assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(basePost.copy(title = "Title v2"))))
-            .isNotEqualTo(baseFeedSeed)
-        assertThat(responseFactory.buildFeedPageEtagSeed("feed", 0, 10, PostSearchSortType1.CREATED_AT, data = pageOf(basePost.copy(summary = "Summary v2"))))
-            .isNotEqualTo(baseFeedSeed)
+        val titleChangedFeed = basePost.copy(title = "Title v2")
+        val summaryChangedFeed = basePost.copy(summary = "Summary v2")
+        assertThat(
+            responseFactory.buildFeedPageEtagSeed(
+                "feed",
+                0,
+                10,
+                PostSearchSortType1.CREATED_AT,
+                data = pageOf(titleChangedFeed),
+            ),
+        ).isNotEqualTo(baseFeedSeed)
+        assertThat(
+            responseFactory.buildFeedPageEtagSeed(
+                "feed",
+                0,
+                10,
+                PostSearchSortType1.CREATED_AT,
+                data = pageOf(summaryChangedFeed),
+            ),
+        ).isNotEqualTo(baseFeedSeed)
         assertThat(responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(title = "Title v2")))
             .isNotEqualTo(baseDetailSeed)
         assertThat(responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(content = "content v2", summary = "Summary v2")))
             .isNotEqualTo(baseDetailSeed)
+    }
+
+    @Test
+    @DisplayName("canonical summary backfill 후 이전 ETag 재검증은 304가 아닌 새 본문을 반환한다")
+    fun revalidationWithChangedCanonicalSummaryReturnsNewBody() {
+        val policy = PostPublicReadCachePolicies.DETAIL
+        val base = detailPost()
+        val oldResponse = MockHttpServletResponse()
+        responseFactory.respondWithEtag(
+            request = MockHttpServletRequest(),
+            response = oldResponse,
+            cachePolicy = policy,
+            surrogateKeys = setOf("post:9"),
+            etagSeed = responseFactory.buildPublicDetailEtagSeed(base),
+            startedAtNanos = System.nanoTime(),
+            body = base.summary,
+        )
+        val oldEtag = requireNotNull(oldResponse.getHeader(HttpHeaders.ETAG))
+
+        val revalidation =
+            MockHttpServletRequest().apply {
+                addHeader(HttpHeaders.IF_NONE_MATCH, oldEtag)
+            }
+        val newBody = "Summary v2"
+        val newResponse = MockHttpServletResponse()
+
+        val result =
+            responseFactory.respondWithEtag(
+                request = revalidation,
+                response = newResponse,
+                cachePolicy = policy,
+                surrogateKeys = setOf("post:9"),
+                etagSeed = responseFactory.buildPublicDetailEtagSeed(base.copy(summary = newBody)),
+                startedAtNanos = System.nanoTime(),
+                body = newBody,
+            )
+
+        assertThat(result.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(result.body).isEqualTo(newBody)
+        assertThat(newResponse.getHeader(HttpHeaders.ETAG)).isNotEqualTo(oldEtag)
     }
 
     @Test

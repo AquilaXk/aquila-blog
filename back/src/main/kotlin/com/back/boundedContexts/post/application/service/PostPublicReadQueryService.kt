@@ -440,16 +440,35 @@ class PostPublicReadQueryService(
     }
 
     private fun markDetailNegativeCache(id: Long) {
-        cacheManager
-            .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
-            ?.put(id, true)
+        recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put") {
+            cacheManager
+                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
+                ?.put(id, true)
+        }
         recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put")
     }
 
     private fun clearDetailNegativeCache(id: Long) {
-        cacheManager
-            .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
-            ?.evict(id)
+        recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "evict") {
+            cacheManager
+                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
+                ?.evict(id)
+        }
+    }
+
+    private fun recordCacheWriteFailureSafe(
+        cacheName: String,
+        operation: String,
+        write: () -> Unit,
+    ) {
+        try {
+            write()
+        } catch (exception: RuntimeException) {
+            meterRegistry
+                ?.counter("post.read.cache.write.failure", "cache", cacheName, "operation", operation)
+                ?.increment()
+            logger.warn("Cache write failed (cache={}, operation={})", cacheName, operation, exception)
+        }
     }
 
     /**

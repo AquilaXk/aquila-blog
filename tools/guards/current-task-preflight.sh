@@ -4,6 +4,8 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
+bash tools/guards/check-hook-drift.sh
+
 CURRENT_TASK_FILE="$(bash tools/guards/current-task-resolve.sh)"
 CURRENT_TASK_FILE_REL="$(bash tools/guards/current-task-resolve.sh --relative)"
 scope_mode="staged"

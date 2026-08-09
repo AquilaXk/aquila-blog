@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
-import { readdirSync, readFileSync } from "node:fs"
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { execFileSync } from "node:child_process"
+import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
@@ -10,15 +12,7 @@ const backendPullRequestWorkflow = readFileSync(
   "utf8",
 )
 
-// 테스트 자격 증명 fallback 규칙 (#1510, #1523)
-// `.github/workflows/**`에서 아래 secret을 읽는 모든 `${{ ... }}` 표현식은
-// secret이 비어 있는 실행 컨텍스트(Dependabot PR 등)에서도 결정적 기본값을 받도록
-// `${{ secrets.X || '<test-only-default>' }}` 형태를 사용한다.
-// caller와 reusable workflow 정의 중 한쪽만 고르지 않고 참조 지점 전부에 적용한다.
-const testCredentialDefaults = new Map([
-  ["CI_DB_PASSWORD", "test_db_password_change_me"],
-  ["CI_REDIS_PASSWORD", "test_redis_password_change_me"],
-])
+const testCredentialSecrets = ["CI_DB_PASSWORD", "CI_REDIS_PASSWORD"]
 
 // 소비자 목록은 하드코딩하지 않되, 참조가 조용히 사라져 뒤따르는 전수 검사가
 // 대상 0건으로 vacuously 통과하는 상태는 막는다. 소비자를 실제로 줄이는 변경은
@@ -45,8 +39,8 @@ const secretAccessSource = (name) => {
 
 const secretAccessPattern = (name) => new RegExp(secretAccessSource(name))
 
-const secretAccessWithFallbackPattern = (name, fallbackValue) =>
-  new RegExp(`${secretAccessSource(name)}\\s*\\|\\|\\s*['"]${escapeRegExp(fallbackValue)}['"]`)
+const rawCredentialExpressionPattern = (name) =>
+  new RegExp(`^\\s*${secretAccessSource(name)}\\s*$`)
 
 // 리터럴 키가 아닌 동적 인덱싱은 어떤 secret을 읽는지 정적으로 알 수 없어 fallback
 // 적용 여부를 증명할 수 없다. 증명 불가는 통과가 아니라 실패로 다룬다.
@@ -70,7 +64,7 @@ const scanWorkflowSource = (workflow, source) => {
       dynamicAccesses.push(location)
     }
 
-    for (const [name, fallbackValue] of testCredentialDefaults) {
+    for (const name of testCredentialSecrets) {
       if (!secretAccessPattern(name).test(expression)) {
         continue
       }
@@ -78,7 +72,7 @@ const scanWorkflowSource = (workflow, source) => {
         workflow,
         location,
         name,
-        hasFallback: secretAccessWithFallbackPattern(name, fallbackValue).test(expression),
+        hasFallback: !rawCredentialExpressionPattern(name).test(expression),
       })
     }
   }
@@ -106,22 +100,20 @@ const scanFixture = (source) => scanWorkflowSource("fixture.yml", source)
 
 const summarize = ({ name, location, hasFallback }) => ({ name, location, hasFallback })
 
-test("backend PR CI falls back to isolated test credentials when Dependabot secrets are empty", () => {
-  assert.match(
-    backendPullRequestWorkflow,
-    /CI_DB_PASSWORD:\s*\$\{\{\s*secrets\.CI_DB_PASSWORD\s*\|\|\s*['"]test_db_password_change_me['"]\s*\}\}/,
-  )
-  assert.match(
-    backendPullRequestWorkflow,
-    /CI_REDIS_PASSWORD:\s*\$\{\{\s*secrets\.CI_REDIS_PASSWORD\s*\|\|\s*['"]test_redis_password_change_me['"]\s*\}\}/,
-  )
+test("backend PR CI forwards raw test credentials to the Gradle chokepoint", () => {
+  for (const name of testCredentialSecrets) {
+    assert.match(
+      backendPullRequestWorkflow,
+      new RegExp(`${name}:\\s*\\$\\{\\{\\s*secrets\\.${name}\\s*\\}\\}`),
+    )
+  }
 })
 
-test("credential fallback scan reaches every workflow consumer", () => {
+test("credential scan reaches every workflow consumer", () => {
   assert.ok(listWorkflowFiles(workflowRoot).length > 0, "스캔한 workflow 파일이 없다")
 
   const { references } = scanWorkflows()
-  const shortfall = [...testCredentialDefaults.keys()]
+  const shortfall = testCredentialSecrets
     .map((name) => ({
       name,
       found: references.filter((reference) => reference.name === name).length,
@@ -131,15 +123,15 @@ test("credential fallback scan reaches every workflow consumer", () => {
   assert.deepEqual(shortfall, [], `secret별 참조가 최소 ${minimumConsumerReferences}건에 못 미친다`)
 })
 
-test("every workflow reference to shared test credentials carries the fallback default", () => {
-  const missing = scanWorkflows()
-    .references.filter((reference) => !reference.hasFallback)
+test("every workflow reference to shared test credentials is raw", () => {
+  const fallback = scanWorkflows()
+    .references.filter((reference) => reference.hasFallback)
     .map((reference) => `${reference.location} ${reference.name}`)
 
-  assert.deepEqual(missing, [], "fallback 없이 test credential을 참조하는 지점이 있다")
+  assert.deepEqual(fallback, [], "workflow은 credential 기본값을 알면 안 된다")
 })
 
-test("workflows declaring the credentials as workflow_call secrets also apply the fallback", () => {
+test("workflows declaring the credentials as workflow_call secrets forward them raw", () => {
   const { references } = scanWorkflows()
   const gaps = []
 
@@ -150,13 +142,13 @@ test("workflows declaring the credentials as workflow_call secrets also apply th
     }
 
     const workflow = path.relative(repoRoot, filePath)
-    for (const name of testCredentialDefaults.keys()) {
+    for (const name of testCredentialSecrets) {
       if (!new RegExp(`^\\s+${escapeRegExp(name)}:\\s*$`, "m").test(content)) {
         continue
       }
       const applied = references.some(
         (reference) =>
-          reference.workflow === workflow && reference.name === name && reference.hasFallback,
+          reference.workflow === workflow && reference.name === name && !reference.hasFallback,
       )
       if (!applied) {
         gaps.push(`${workflow} ${name}`)
@@ -164,7 +156,7 @@ test("workflows declaring the credentials as workflow_call secrets also apply th
     }
   }
 
-  assert.deepEqual(gaps, [], "workflow_call secret을 선언한 workflow의 정의 쪽 fallback이 없다")
+  assert.deepEqual(gaps, [], "workflow_call secret을 선언한 workflow의 raw 전달 지점이 없다")
 })
 
 test("workflows do not reach secrets through indexes the scan cannot resolve", () => {
@@ -212,6 +204,16 @@ test("scan detects credential references split across lines", () => {
   ])
 })
 
+test("scan rejects credential expressions with another provider fallback", () => {
+  const scan = scanFixture(
+    "      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD || vars.CI_DB_PASSWORD }}\n",
+  )
+
+  assert.deepEqual(scan.references.map(summarize), [
+    { name: "CI_DB_PASSWORD", location: "fixture.yml:1", hasFallback: true },
+  ])
+})
+
 test("scan reports dynamic secret indexing instead of silently finding nothing", () => {
   const scan = scanFixture(
     "      TEST_DB_PASSWORD: ${{ secrets[format('CI_{0}', 'DB_PASSWORD')] }}\n",
@@ -219,4 +221,137 @@ test("scan reports dynamic secret indexing instead of silently finding nothing",
 
   assert.deepEqual(scan.dynamicAccesses, ["fixture.yml:1"])
   assert.deepEqual(scan.references, [])
+})
+
+const gradleWrapper = path.join(repoRoot, "back/gradlew")
+const testInfraScript = path.join(repoRoot, "back/gradle/backend-test-infra.gradle.kts")
+
+const kotlinPath = (value) => value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')
+
+const resolveFixtureCredentials = (env) => {
+  const fixture = mkdtempSync(path.join(os.tmpdir(), "aquila-test-credentials-"))
+  const sanitizedEnvironment = { ...process.env }
+  for (const name of [
+    "TEST_DB_PASSWORD",
+    "TEST_REDIS_PASSWORD",
+    "SPRING__DATASOURCE__PASSWORD",
+    "SPRING__DATA__REDIS__PASSWORD",
+  ]) {
+    delete sanitizedEnvironment[name]
+  }
+  try {
+    writeFileSync(
+      path.join(fixture, "settings.gradle.kts"),
+      'rootProject.name = "test-credential-fixture"\n',
+    )
+    writeFileSync(
+      path.join(fixture, "build.gradle.kts"),
+      [
+        'plugins { java }',
+        'import org.gradle.api.tasks.testing.Test',
+        `apply(from = file("${kotlinPath(testInfraScript)}"))`,
+        'tasks.register("printTestCredentials") {',
+        '    doLast {',
+        '        val testTask = tasks.named<Test>("test").get()',
+        '        println("DB=" + testTask.environment["SPRING__DATASOURCE__PASSWORD"])',
+        '        println("REDIS=" + testTask.environment["SPRING__DATA__REDIS__PASSWORD"])',
+        '    }',
+        '}',
+        '',
+      ].join("\n"),
+    )
+    const output = execFileSync(
+      gradleWrapper,
+      ["-p", fixture, "--no-daemon", "--console=plain", "-q", "printTestCredentials"],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: { ...sanitizedEnvironment, ...env, TEST_INFRA_MODE: "none" },
+        timeout: 55000,
+      },
+    )
+    return Object.fromEntries(
+      output
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("DB=") || line.startsWith("REDIS="))
+        .map((line) => {
+          const separator = line.indexOf("=")
+          return [line.slice(0, separator), line.slice(separator + 1)]
+        }),
+    )
+  } finally {
+    rmSync(fixture, { recursive: true, force: true })
+  }
+}
+
+test("backend test infra resolves blank primary credentials through alias then default", () => {
+  const cases = [
+    {
+      name: "unset uses defaults",
+      env: {},
+      expected: { DB: "test_db_password_change_me", REDIS: "test_redis_password_change_me" },
+    },
+    {
+      name: "empty primary uses aliases",
+      env: {
+        TEST_DB_PASSWORD: "",
+        TEST_REDIS_PASSWORD: "",
+        SPRING__DATASOURCE__PASSWORD: "db-alias",
+        SPRING__DATA__REDIS__PASSWORD: "redis-alias",
+      },
+      expected: { DB: "db-alias", REDIS: "redis-alias" },
+    },
+    {
+      name: "empty primary and alias use defaults",
+      env: {
+        TEST_DB_PASSWORD: "",
+        TEST_REDIS_PASSWORD: "",
+        SPRING__DATASOURCE__PASSWORD: "",
+        SPRING__DATA__REDIS__PASSWORD: "",
+      },
+      expected: { DB: "test_db_password_change_me", REDIS: "test_redis_password_change_me" },
+    },
+    {
+      name: "whitespace primary uses aliases",
+      env: {
+        TEST_DB_PASSWORD: " \t ",
+        TEST_REDIS_PASSWORD: "\n",
+        SPRING__DATASOURCE__PASSWORD: "db-alias",
+        SPRING__DATA__REDIS__PASSWORD: "redis-alias",
+      },
+      expected: { DB: "db-alias", REDIS: "redis-alias" },
+    },
+    {
+      name: "whitespace primary and alias use defaults",
+      env: {
+        TEST_DB_PASSWORD: " \t ",
+        TEST_REDIS_PASSWORD: "\n",
+        SPRING__DATASOURCE__PASSWORD: " \t ",
+        SPRING__DATA__REDIS__PASSWORD: "\n",
+      },
+      expected: { DB: "test_db_password_change_me", REDIS: "test_redis_password_change_me" },
+    },
+    {
+      name: "primary wins over aliases",
+      env: {
+        TEST_DB_PASSWORD: "db-primary",
+        TEST_REDIS_PASSWORD: "redis-primary",
+        SPRING__DATASOURCE__PASSWORD: "db-alias",
+        SPRING__DATA__REDIS__PASSWORD: "redis-alias",
+      },
+      expected: { DB: "db-primary", REDIS: "redis-primary" },
+    },
+    {
+      name: "primary credentials preserve equals and trailing whitespace",
+      env: {
+        TEST_DB_PASSWORD: "db-primary=with=equals",
+        TEST_REDIS_PASSWORD: "redis-primary \t ",
+      },
+      expected: { DB: "db-primary=with=equals", REDIS: "redis-primary \t " },
+    },
+  ]
+
+  for (const fixture of cases) {
+    assert.deepEqual(resolveFixtureCredentials(fixture.env), fixture.expected, fixture.name)
+  }
 })

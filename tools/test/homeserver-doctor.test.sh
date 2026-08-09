@@ -127,6 +127,16 @@ eval "$(extract_function print_env_key_status)"
 eval "$(extract_function trim_quotes)"
 eval "$(extract_function print_notification_sse_status)"
 
+if ! grep -qF 'print_section "Cursor Signing Keyring"' "${doctor}"; then
+  fail "expected doctor to report cursor signing keyring identity"
+fi
+if ! grep -qF 'cursor keyring: VALID' "${doctor}" || ! grep -qF 'cursor keyring: INVALID' "${doctor}"; then
+  fail "expected doctor to distinguish a valid and invalid cursor keyring"
+fi
+if grep -qF 'CURSOR_SIGNING_SECRET")' "${doctor}"; then
+  fail "doctor must delegate cursor secret handling to the safe keyring guard"
+fi
+
 # shellcheck disable=SC2034  # 원본에서 떼어 온 env_value/print_env_key_status가 읽는 입력이다
 ENV_FILE="${env_full}"
 

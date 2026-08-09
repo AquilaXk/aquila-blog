@@ -786,6 +786,15 @@ if ! acquire_deploy_lock; then
 fi
 trap 'release_deploy_lock' EXIT INT TERM
 
+if [[ ! -x "${SCRIPT_DIR}/cursor_keyring_guard.sh" ]]; then
+  echo "rollback failed: cursor keyring guard missing or not executable" >&2
+  exit 1
+fi
+if ! "${SCRIPT_DIR}/cursor_keyring_guard.sh" "${SCRIPT_DIR}/.env.prod"; then
+  echo "rollback failed: live cursor keyring is invalid; release activation was not started" >&2
+  exit 1
+fi
+
 echo "rollback from backup: ${BACKUP_DIR}"
 log_backup_restore_provenance
 

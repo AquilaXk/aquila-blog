@@ -92,7 +92,11 @@ custom:
         replayProbeSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_PROBE_SECONDS:60}
   post:
     read:
-      cursor-signing-secret: ${PROD___CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}}
+      cursor-signing-secret: ${PROD___CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}
+      cursor-signing-key-version: ${PROD___CUSTOM__POST__READ__CURSOR_SIGNING_KEY_VERSION:}
+      cursor-previous-signing-secret: ${PROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_SECRET:}
+      cursor-previous-signing-key-version: ${PROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_KEY_VERSION:}
+      cursor-previous-expires-at-epoch-seconds: ${PROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_EXPIRES_AT_EPOCH_SECONDS:}
       detail-content-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_CONTENT_CACHE_MAX_CHARS:120000}
       detail-snapshot-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_SNAPSHOT_CACHE_MAX_CHARS:180000}
       bulkhead:

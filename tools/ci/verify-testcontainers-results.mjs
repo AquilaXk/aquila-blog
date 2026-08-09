@@ -34,9 +34,12 @@ const parseArguments = (argumentsList) => {
 const numericAttributes = ["tests", "skipped", "failures", "errors"]
 
 const assertWellFormedXml = (report) => {
+  if (report.includes("<!--") || report.includes("-->")) {
+    throw new Error("JUnit XML comments are not allowed.")
+  }
+
   const document = report
     .replace(/<\?xml[\s\S]*?\?>/g, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "")
   const elements = /<(\/?)([A-Za-z_][\w:.-]*)([^<>]*?)(\/?)>/g
   const stack = []

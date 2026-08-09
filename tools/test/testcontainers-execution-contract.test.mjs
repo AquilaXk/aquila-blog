@@ -185,6 +185,26 @@ test("verifier rejects malformed counts and skipped tests in any report", (t) =>
     errors: 0,
     status: "failed",
   })
+
+  const commentedDirectory = fixture(t)
+  const commentedResults = path.join(commentedDirectory, "results")
+  const commentedSummary = path.join(commentedDirectory, "summary.json")
+  fs.mkdirSync(commentedResults)
+  fs.writeFileSync(
+    path.join(commentedResults, "TEST-commented.xml"),
+    '<testsuite tests="1" skipped="0" failures="0" errors="0"><!--metadata--><testcase/></testsuite>',
+  )
+
+  const commentedResult = runVerifier(commentedResults, commentedSummary)
+
+  assert.notEqual(commentedResult.status, 0)
+  assert.deepEqual(readSummary(commentedSummary), {
+    tests: 0,
+    skipped: 0,
+    failures: 0,
+    errors: 0,
+    status: "failed",
+  })
 })
 
 test("verifier aggregates multiple successful JUnit XML reports into the summary", (t) => {

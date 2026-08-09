@@ -24,12 +24,19 @@ jobs:
           git fetch --depth=1 origin "${GITHUB_REF}"
           git checkout --force FETCH_HEAD
 
-      - name: Verify Dependabot test credential fallback
+      - name: Set up JDK 25
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Verify Dependabot test credential contract
         run: node --test tools/test/backend-ci-dependabot-credentials.test.mjs
 
   backend-ci:
     needs: dependabot-credential-contract
     uses: ./.github/workflows/reusable-backend-quality.yml
     secrets:
-      CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD || 'test_db_password_change_me' }}
-      CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD || 'test_redis_password_change_me' }}
+      CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}

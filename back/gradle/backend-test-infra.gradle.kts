@@ -28,16 +28,17 @@ val testInfraMarkerFile =
         .get()
         .asFile
 
+fun nonblankEnvironmentVariable(name: String) =
+    providers.environmentVariable(name).filter { it.isNotBlank() }
+
 val resolvedTestDbPassword =
-    providers
-        .environmentVariable("TEST_DB_PASSWORD")
-        .orElse(providers.environmentVariable("SPRING__DATASOURCE__PASSWORD"))
+    nonblankEnvironmentVariable("TEST_DB_PASSWORD")
+        .orElse(nonblankEnvironmentVariable("SPRING__DATASOURCE__PASSWORD"))
         .orElse(defaultTestDbPassword)
 
 val resolvedTestRedisPassword =
-    providers
-        .environmentVariable("TEST_REDIS_PASSWORD")
-        .orElse(providers.environmentVariable("SPRING__DATA__REDIS__PASSWORD"))
+    nonblankEnvironmentVariable("TEST_REDIS_PASSWORD")
+        .orElse(nonblankEnvironmentVariable("SPRING__DATA__REDIS__PASSWORD"))
         .orElse(defaultTestRedisPassword)
 
 val resolvedTestDbPort =

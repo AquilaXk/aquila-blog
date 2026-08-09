@@ -190,6 +190,7 @@ tasks.register("ciFastCheck") {
         "jacocoPrFullCoverageReport",
         "ciFastCoverageVerification",
         "verifyJacocoBaselineExclusions",
+        "verifyTestcontainersVersionAlignment",
         "ktlintCheck",
     )
 }
@@ -197,5 +198,6 @@ tasks.register("ciFastCheck") {
 tasks.named("check") {
     dependsOn("testcontainersTest")
     dependsOn("verifyJacocoBaselineExclusions")
+    dependsOn("verifyTestcontainersVersionAlignment")
     dependsOn(tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification"))
 }

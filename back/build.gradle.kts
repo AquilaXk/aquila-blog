@@ -9,7 +9,7 @@ plugins {
     kotlin("plugin.jpa") version "2.2.21"
     kotlin("kapt") version "2.2.21"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
-    id("org.owasp.dependencycheck") version "12.2.2"
+    id("org.owasp.dependencycheck") version "13.0.0"
 }
 
 apply(from = "gradle/backend-test-infra.gradle.kts")
@@ -99,7 +99,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-session-data-redis-test")
     testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
-    testImplementation("com.tngtech.archunit:archunit:1.4.1")
+    testImplementation("com.tngtech.archunit:archunit:1.5.0")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.testcontainers:junit-jupiter:1.21.4")
     testImplementation("org.testcontainers:postgresql:1.21.4")

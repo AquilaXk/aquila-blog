@@ -31,8 +31,7 @@
       Revisit when Kotlin 2.4.20+ GA is available.
       Tracked: https://github.com/AquilaXk/aquila-blog/issues/1387
     ]]></notes>
-    <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/.*@2\.4\.10$</packageUrl>
-    <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/(?:kotlin-build-tools-cri-impl|kotlin-build-tools-impl|kotlin-compiler-runner)@2\.4\.0$</packageUrl>
+    <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/(?:.*@2\.4\.10|(?:kotlin-build-tools-cri-impl|kotlin-build-tools-impl|kotlin-compiler-runner)@2\.4\.0)$</packageUrl>
     <cve>CVE-2026-53914</cve>
   </suppress>
 

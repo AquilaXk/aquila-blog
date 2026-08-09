@@ -27,6 +27,7 @@ custom:
   post:
     read:
       cursor-signing-secret: test-cursor-signing-secret-abcdefghijklmnopqrstuvwxyz0123456789
+      cursor-signing-key-version: 1
   bootstrap:
     seed-demo-data-enabled: true
   member:

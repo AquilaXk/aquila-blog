@@ -39,7 +39,8 @@ const secretAccessSource = (name) => {
 
 const secretAccessPattern = (name) => new RegExp(secretAccessSource(name))
 
-const fallbackExpressionPattern = /\|\|\s*['"][^'"]+['"]/
+const rawCredentialExpressionPattern = (name) =>
+  new RegExp(`^\\s*${secretAccessSource(name)}\\s*$`)
 
 // 리터럴 키가 아닌 동적 인덱싱은 어떤 secret을 읽는지 정적으로 알 수 없어 fallback
 // 적용 여부를 증명할 수 없다. 증명 불가는 통과가 아니라 실패로 다룬다.
@@ -71,7 +72,7 @@ const scanWorkflowSource = (workflow, source) => {
         workflow,
         location,
         name,
-        hasFallback: fallbackExpressionPattern.test(expression),
+        hasFallback: !rawCredentialExpressionPattern(name).test(expression),
       })
     }
   }
@@ -200,6 +201,16 @@ test("scan detects credential references split across lines", () => {
   )
   assert.deepEqual(withFallback.references.map(summarize), [
     { name: "CI_REDIS_PASSWORD", location: "fixture.yml:2", hasFallback: true },
+  ])
+})
+
+test("scan rejects credential expressions with another provider fallback", () => {
+  const scan = scanFixture(
+    "      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD || vars.CI_DB_PASSWORD }}\n",
+  )
+
+  assert.deepEqual(scan.references.map(summarize), [
+    { name: "CI_DB_PASSWORD", location: "fixture.yml:1", hasFallback: true },
   ])
 })
 

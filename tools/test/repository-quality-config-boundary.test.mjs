@@ -145,3 +145,33 @@ test("root quality configuration preserves Web coverage until physical cutover",
   assert.match(dependabot, /package-ecosystem: "gradle"/)
   assert.match(dependabot, /package-ecosystem: "github-actions"/)
 })
+
+test("backend dependency suppression scopes the Tomcat examples CVE to embedded 11.0.24", () => {
+  const suppressions = read("back/config/dependency-check-suppressions.xml")
+  const build = read("back/build.gradle.kts")
+  const blocks = [...suppressions.matchAll(/<suppress until="([^"]+)">([\s\S]*?)<\/suppress>/g)]
+    .filter(([, , body]) => body.includes("CVE-2026-66299"))
+
+  assert.equal(blocks.length, 1)
+  const [block, expiry] = blocks[0]
+  const selectors = [...block.matchAll(/<([A-Za-z][\w-]*)(?:\s[^>]*)?>/g)]
+    .map(([, tag]) => tag)
+    .filter((tag) => tag !== "suppress" && tag !== "notes")
+  const noteLines = block.split("\n").map((line) => line.trim())
+
+  assert.equal(expiry, "2026-08-23")
+  assert.deepEqual(selectors, ["packageUrl", "cve"])
+  assert.match(
+    block,
+    /<packageUrl regex="true">\^pkg:maven\/org\\\.apache\\\.tomcat\\\.embed\/tomcat-embed-\(\?:core\|websocket\)@11\\\.0\\\.24\$<\/packageUrl>/,
+  )
+  assert.match(block, /<cve>CVE-2026-66299<\/cve>/)
+  assert.ok(noteLines.includes("Apache guidance: https://tomcat.apache.org/security-11.html"))
+  assert.ok(noteLines.includes("Tracked: https://github.com/AquilaXk/aquila-blog/issues/1647"))
+  assert.match(build, /failBuildOnCVSS = 7\.0f/)
+  assert.match(build, /failOnError = true/)
+  assert.match(
+    build,
+    /suppressionFiles\.add\("config\/dependency-check-suppressions\.xml"\)/,
+  )
+})

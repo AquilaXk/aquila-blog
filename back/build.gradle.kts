@@ -1,15 +1,16 @@
 import org.gradle.api.tasks.compile.JavaCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.2.21"
-    kotlin("plugin.spring") version "2.2.21"
+    kotlin("jvm") version "2.4.10"
+    kotlin("plugin.spring") version "2.4.10"
     jacoco
     id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"
-    kotlin("plugin.jpa") version "2.2.21"
-    kotlin("kapt") version "2.2.21"
+    kotlin("plugin.jpa") version "2.4.10"
+    kotlin("kapt") version "2.4.10"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
-    id("org.owasp.dependencycheck") version "12.2.2"
+    id("org.owasp.dependencycheck") version "13.0.0"
 }
 
 apply(from = "gradle/backend-test-infra.gradle.kts")
@@ -66,11 +67,11 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
 
     // QueryDSL
-    implementation("io.github.openfeign.querydsl:querydsl-jpa:7.1") {
+    implementation("io.github.openfeign.querydsl:querydsl-jpa:7.5") {
         exclude("jakarta.persistence", "jakarta.persistence-api")
     }
-    implementation("io.github.openfeign.querydsl:querydsl-kotlin:7.1")
-    kapt("io.github.openfeign.querydsl:querydsl-apt:7.1:jpa")
+    implementation("io.github.openfeign.querydsl:querydsl-kotlin:7.5")
+    kapt("io.github.openfeign.querydsl:querydsl-apt:7.5:jpa")
 
     // SpringDoc
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
@@ -99,7 +100,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-session-data-redis-test")
     testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
-    testImplementation("com.tngtech.archunit:archunit:1.4.1")
+    testImplementation("com.tngtech.archunit:archunit:1.5.0")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.testcontainers:junit-jupiter:1.21.4")
     testImplementation("org.testcontainers:postgresql:1.21.4")
@@ -109,6 +110,7 @@ dependencies {
 
 kotlin {
     compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_24)
         freeCompilerArgs.addAll(
             "-Xjsr305=strict",
             "-Xannotation-default-target=param-property",

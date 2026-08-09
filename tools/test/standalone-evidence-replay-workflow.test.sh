@@ -93,8 +93,8 @@ ruby - "${workflow}" <<'RUBY'
 
   platform_gate = platform.fetch("steps").find { |step| step["name"] == "Run Platform archive standalone gate" }
   expected_secrets = {
-    "TEST_DB_PASSWORD" => "${{ secrets.CI_DB_PASSWORD || 'test_db_password_change_me' }}",
-    "TEST_REDIS_PASSWORD" => "${{ secrets.CI_REDIS_PASSWORD || 'test_redis_password_change_me' }}",
+    "TEST_DB_PASSWORD" => "${{ secrets.CI_DB_PASSWORD }}",
+    "TEST_REDIS_PASSWORD" => "${{ secrets.CI_REDIS_PASSWORD }}",
   }
   expected_secrets.each do |key, value|
     raise "replay platform secret mismatch: #{key}" unless platform_gate.dig("env", key) == value

@@ -18,6 +18,7 @@ for hook in commit-msg pre-commit pre-push; do
   printf '#!/usr/bin/env bash\nexit 0\n' > "${owner}/.githooks/${hook}"
   chmod +x "${owner}/.githooks/${hook}"
 done
+git -C "${owner}" config core.hooksPath .githooks
 git -C "${owner}" add .githooks
 git -C "${owner}" commit -qm 'test: fixture hooks'
 git -C "${owner}" worktree add -qb linked "${linked}"

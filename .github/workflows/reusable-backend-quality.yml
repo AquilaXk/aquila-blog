@@ -76,7 +76,7 @@ jobs:
           backend=false
           while IFS= read -r file; do
             case "${file}" in
-              back/*|deploy/homeserver/*|contracts/public-api/*|tools/contracts/*|tools/test/public-contract-manifest.test.mjs|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/check-r-migration-no-ddl.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|tools/test/check-r-migration-no-ddl.test.sh|tools/test/commit-msg-hook.test.sh|tools/test/pre-push-hook.test.sh|tools/test/homeserver-doctor.test.sh|tools/test/runtime-split-caddy-upstream.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml|.githooks/*)
+              back/*|deploy/homeserver/*|contracts/public-api/*|tools/contracts/*|tools/test/public-contract-manifest.test.mjs|tools/ci/*|tools/guards/check-forbidden-tracked-files.sh|tools/guards/check-hook-drift.sh|tools/guards/check-public-api-caddy-drift.sh|tools/guards/check-r-migration-no-ddl.sh|tools/guards/public-api-read-caddy-paths.sot|tools/test/check-forbidden-tracked-files.test.sh|tools/test/hook-drift-guard.test.sh|tools/test/check-r-migration-no-ddl.test.sh|tools/test/commit-msg-hook.test.sh|tools/test/pre-push-hook.test.sh|tools/test/homeserver-doctor.test.sh|tools/test/runtime-split-caddy-upstream.test.sh|.github/workflows/backend-ci.yml|.github/workflows/ci.yml|.github/workflows/deploy.yml|.github/workflows/reusable-backend-quality.yml|.githooks/*)
                 backend=true
                 break
                 ;;
@@ -171,6 +171,9 @@ jobs:
 
       - name: Test pre-push branch rules
         run: bash tools/test/pre-push-hook.test.sh
+
+      - name: Test hook drift guard
+        run: bash tools/test/hook-drift-guard.test.sh
 
       - name: Test homeserver doctor checkup rules
         run: bash tools/test/homeserver-doctor.test.sh

@@ -7,6 +7,7 @@ exec </dev/null
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
+CURSOR_KEYRING_GUARD="${SCRIPT_DIR}/cursor_keyring_guard.sh"
 
 env_value() {
   local key="$1"
@@ -73,11 +74,18 @@ main() {
   if [[ ! -f "${ENV_FILE}" ]]; then
     post_precheck_env_fail "env_file_missing" "missing env file=${ENV_FILE}"
   fi
+  if [[ ! -x "${CURSOR_KEYRING_GUARD}" ]]; then
+    post_precheck_env_fail "cursor_keyring_guard_missing" "cursor keyring guard is missing or not executable"
+  fi
+  if ! "${CURSOR_KEYRING_GUARD}" "${ENV_FILE}"; then
+    post_precheck_env_fail "cursor_keyring_invalid" "cursor keyring validation failed"
+  fi
 
   staged_back_image="${STAGED_BACK_IMAGE:-${1:-}}"
   staged_back_image="$(trim_quotes "${staged_back_image}")"
   require_digest_image_value "staged_back_image" "${staged_back_image}"
 
+  echo "[POST_PRECHECK_ENV] checkpoint=after_cursor_keyring_guard"
   echo "[POST_PRECHECK_ENV] checkpoint=after_pgroonga_precheck"
 
   enabled_value="$(trim_quotes "$(env_value "CUSTOM__AI__SUMMARY__ENABLED")")"

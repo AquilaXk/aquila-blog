@@ -32,6 +32,19 @@ export const loadContract = (contractPath = defaultContractPath) =>
 
 const valueOf = (env, key) => env.get(key)?.trim() || ""
 
+const rawValueOfText = (text, key) => {
+  let value = ""
+  const assignment = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=(.*)$`)
+  for (const rawLine of String(text || "").split(/\r?\n/)) {
+    const match = rawLine.replace(/\r$/, "").match(assignment)
+    if (!match) continue
+    value = match[1]
+    const quote = value[0]
+    if ((quote === "\"" || quote === "'") && value.endsWith(quote)) value = value.slice(1, -1)
+  }
+  return value
+}
+
 const isRequired = (definition, env) => {
   if (definition.required === false) {
     if (!definition.requiredWhen) return false
@@ -131,7 +144,7 @@ const validateKind = (definition, value) => {
   }
 }
 
-export const validateEnvText = ({ contract, target, text }) => {
+export const validateEnvText = ({ contract, target, text, nowEpochSeconds = Math.floor(Date.now() / 1000) }) => {
   const resolved = resolveTarget(contract, target)
   const env = parseEnvText(text)
   const placeholder = new RegExp(contract.placeholderPattern, "i")
@@ -243,6 +256,64 @@ export const validateEnvText = ({ contract, target, text }) => {
   }
 
   for (const check of resolved.crossChecks || []) {
+    if (check.type === "cursorKeyring") {
+      const currentSecret = valueOf(env, check.currentSecretKey)
+      const currentSecretRaw = rawValueOfText(text, check.currentSecretKey)
+      const currentVersion = valueOf(env, check.currentVersionKey)
+      const previousSecret = valueOf(env, check.previousSecretKey)
+      const previousSecretRaw = rawValueOfText(text, check.previousSecretKey)
+      const previousVersion = valueOf(env, check.previousVersionKey)
+      const previousExpiry = valueOf(env, check.previousExpiryKey)
+      const canonicalPositiveDecimal = (value) => /^[1-9]\d*$/.test(value)
+      const maxSignedLong = 9223372036854775807n
+      const boundedPositiveDecimal = (value) => canonicalPositiveDecimal(value) && BigInt(value) <= maxSignedLong
+      const previousValues = [previousSecret, previousVersion, previousExpiry]
+      const previousPresent = previousValues.some(Boolean)
+      const previousComplete = previousValues.every(Boolean)
+      if (!Number.isSafeInteger(nowEpochSeconds)) {
+        throw new Error("nowEpochSeconds must be a safe integer")
+      }
+      const now = BigInt(nowEpochSeconds)
+
+      if (!boundedPositiveDecimal(currentVersion)) {
+        errors.push(safeError(check.currentVersionKey, "must be a canonical positive decimal integer"))
+      }
+      if (currentSecretRaw !== currentSecret) {
+        errors.push(safeError(check.currentSecretKey, "must not have leading or trailing whitespace"))
+      }
+      if (previousPresent && !previousComplete) {
+        errors.push(safeError(check.previousSecretKey, "previous key, version, and expiry must be present together"))
+        continue
+      }
+      if (!previousPresent) continue
+
+      if (!boundedPositiveDecimal(previousVersion)) {
+        errors.push(safeError(check.previousVersionKey, "must be a canonical positive decimal integer"))
+      }
+      if (previousSecretRaw !== previousSecret) {
+        errors.push(safeError(check.previousSecretKey, "must not have leading or trailing whitespace"))
+      }
+      if (!boundedPositiveDecimal(previousExpiry)) {
+        errors.push(safeError(check.previousExpiryKey, "must be a canonical signed 64-bit epoch seconds value"))
+        continue
+      }
+
+      const currentVersionNumber = boundedPositiveDecimal(currentVersion) ? BigInt(currentVersion) : null
+      const previousVersionNumber = boundedPositiveDecimal(previousVersion) ? BigInt(previousVersion) : null
+      const expiry = BigInt(previousExpiry)
+      if (currentSecret && previousSecret && currentSecret === previousSecret) {
+        errors.push(safeError(check.previousSecretKey, "must differ from current signing key"))
+      }
+      if (currentVersionNumber !== null && previousVersionNumber !== null && previousVersionNumber >= currentVersionNumber) {
+        errors.push(safeError(check.previousVersionKey, "must be lower than current signing key version"))
+      }
+      if (expiry <= now) {
+        errors.push(safeError(check.previousExpiryKey, "must be in the future"))
+      } else if (expiry > now + BigInt(check.maxPreviousLifetimeSeconds)) {
+        errors.push(safeError(check.previousExpiryKey, `must be within ${check.maxPreviousLifetimeSeconds} seconds`))
+      }
+    }
+
     if (check.type === "urlHostEquals") {
       const urlHost = normalizeHost(hostOf(valueOf(env, check.urlKey)))
       const expectedHost = normalizeHost(valueOf(env, check.hostKey))

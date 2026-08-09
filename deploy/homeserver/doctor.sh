@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
+CURSOR_KEYRING_GUARD="${SCRIPT_DIR}/cursor_keyring_guard.sh"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 EDGE_NETWORK_NAME="blog_home_edge"
@@ -803,6 +804,18 @@ public_snapshot_code="$(
 )"
 echo "internal_snapshot=${internal_snapshot_code:-none}"
 echo "public_snapshot=${public_snapshot_code:-none}"
+
+print_section "Cursor Signing Keyring"
+if [[ ! -x "${CURSOR_KEYRING_GUARD}" ]]; then
+  echo "cursor keyring: INVALID (guard missing)"
+elif cursor_keyring_status="$("${CURSOR_KEYRING_GUARD}" "${ENV_FILE}" 2>&1)"; then
+  echo "cursor keyring: VALID"
+  printf '%s\n' "${cursor_keyring_status}"
+else
+  echo "cursor keyring: INVALID"
+  # guard의 오류는 버전/존재/만료 원인만 담고 key 원문은 절대 출력하지 않는다.
+  printf '%s\n' "${cursor_keyring_status}"
+fi
 
 print_section "Back Container States"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blog_home-back_(blue|green|read|admin|worker)-1|NAMES' || true

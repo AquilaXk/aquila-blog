@@ -271,6 +271,8 @@ const baseHomeServerEnv = [
   "PROD___POSTGRES_EXPORTER__PASSWORD=valid-exporter-password",
   "PROD___SPRING__DATA__REDIS__PASSWORD=valid-redis-password",
   "CUSTOM__JWT__SECRET_KEY=abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz",
+  "PROD___CUSTOM__POST__READ__CURSOR_SIGNING_SECRET=cursor-signing-current-key-abcdefghijklmnopqrstuvwxyz012345",
+  "PROD___CUSTOM__POST__READ__CURSOR_SIGNING_KEY_VERSION=2",
   "CUSTOM__ADMIN__USERNAME=관리자",
   "CUSTOM__ADMIN__EMAIL=admin@aquilaxk.site",
   "CUSTOM__ADMIN__PASSWORD=valid-admin-password",
@@ -328,6 +330,48 @@ test("home-server-source contract accepts a complete deployment env without BACK
   })
 
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
+})
+
+test("home-server-source cursor keyring rejects unsafe rotation states without exposing key material", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const valid = (text) =>
+    validateEnvText({ contract, target: "home-server-source", text, nowEpochSeconds: 1_700_000_000 })
+
+  assert.equal(valid(baseHomeServerEnv).ok, true)
+
+  for (const [name, text] of [
+    ["missing current version", baseHomeServerEnv.replace(/^PROD___CUSTOM__POST__READ__CURSOR_SIGNING_KEY_VERSION=.*\n/m, "")],
+    ["placeholder current key", baseHomeServerEnv.replace(/CURSOR_SIGNING_SECRET=.*/, "CURSOR_SIGNING_SECRET=change_me_cursor_key")],
+    ["example.com current key", baseHomeServerEnv.replace(/CURSOR_SIGNING_SECRET=.*/, "CURSOR_SIGNING_SECRET=cursor-signing-secret.example.com")],
+    ["current key with edge whitespace", baseHomeServerEnv.replace(/CURSOR_SIGNING_SECRET=.*/, "CURSOR_SIGNING_SECRET= cursor-signing-current-key-abcdefghijklmnopqrstuvwxyz012345 ")],
+    ["current version beyond signed long", baseHomeServerEnv.replace(/CURSOR_SIGNING_KEY_VERSION=.*/, "CURSOR_SIGNING_KEY_VERSION=9223372036854775808")],
+    [
+      "partial previous keyring",
+      `${baseHomeServerEnv}\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_SECRET=cursor-signing-previous-key-abcdefghijklmnopqrstuvwxyz012345`,
+    ],
+    [
+      "same key version",
+      `${baseHomeServerEnv}\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_SECRET=cursor-signing-previous-key-abcdefghijklmnopqrstuvwxyz012345\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_KEY_VERSION=2\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_EXPIRES_AT_EPOCH_SECONDS=1700003600`,
+    ],
+    [
+      "expired previous key",
+      `${baseHomeServerEnv}\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_SECRET=cursor-signing-previous-key-abcdefghijklmnopqrstuvwxyz012345\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_KEY_VERSION=1\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_EXPIRES_AT_EPOCH_SECONDS=1700000000`,
+    ],
+    [
+      "previous key beyond cursor maximum age",
+      `${baseHomeServerEnv}\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_SECRET=cursor-signing-previous-key-abcdefghijklmnopqrstuvwxyz012345\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_KEY_VERSION=1\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_EXPIRES_AT_EPOCH_SECONDS=1700086401`,
+    ],
+    [
+      "previous expiry beyond signed long",
+      `${baseHomeServerEnv}\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_SECRET=cursor-signing-previous-key-abcdefghijklmnopqrstuvwxyz012345\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_SIGNING_KEY_VERSION=1\nPROD___CUSTOM__POST__READ__CURSOR_PREVIOUS_EXPIRES_AT_EPOCH_SECONDS=9223372036854775808`,
+    ],
+  ]) {
+    const result = valid(text)
+    assert.equal(result.ok, false, name)
+    assert.equal(JSON.stringify(result.errors).includes("cursor-signing-current-key"), false, `${name} leaked a key`)
+    assert.equal(JSON.stringify(result.errors).includes("cursor-signing-previous-key"), false, `${name} leaked a key`)
+  }
 })
 
 test("home-server-source requires admin embed origins before SSH deployment", async () => {

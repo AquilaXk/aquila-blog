@@ -25,11 +25,14 @@
   -->
   <suppress until="2026-10-31">
     <notes><![CDATA[
-      Temporary: Kotlin 2.4.10 has no GA fix for CVE-2026-53914 (2.4.20-Beta only).
+      Temporary: Kotlin plugin-family artifacts resolve at 2.4.10 and have no GA fix for CVE-2026-53914
+      (2.4.20-Beta only). Its internal kotlin-build-tools-cri-impl, kotlin-build-tools-impl, and
+      kotlin-compiler-runner artifacts resolve at 2.4.0 and are covered by the exact rule below.
       Revisit when Kotlin 2.4.20+ GA is available.
       Tracked: https://github.com/AquilaXk/aquila-blog/issues/1387
     ]]></notes>
     <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/.*@2\.4\.10$</packageUrl>
+    <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/(?:kotlin-build-tools-cri-impl|kotlin-build-tools-impl|kotlin-compiler-runner)@2\.4\.0$</packageUrl>
     <cve>CVE-2026-53914</cve>
   </suppress>
 

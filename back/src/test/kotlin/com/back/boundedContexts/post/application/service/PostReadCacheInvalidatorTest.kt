@@ -6,6 +6,10 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
+import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
 
@@ -14,6 +18,32 @@ class PostReadCacheInvalidatorTest {
     private val meterRegistry = SimpleMeterRegistry()
     private val cacheManager = newCacheManager()
     private val invalidator = PostReadCacheInvalidator(cacheManager, meterRegistry)
+
+    @Test
+    @DisplayName("작성자 표시 캐시 clear 실패는 호출자에게 전파하지 않고 실패 메트릭을 남긴다")
+    fun authorInvalidationIsolatesCacheWriteFailure() {
+        val failingCache = mock(Cache::class.java)
+        doThrow(IllegalStateException("redis unavailable")).`when`(failingCache).clear()
+        val failingManager = mock(CacheManager::class.java)
+        `when`(failingManager.getCache(PostQueryCacheNames.FEED)).thenReturn(failingCache)
+        val isolatedInvalidator = PostReadCacheInvalidator(failingManager, meterRegistry)
+
+        isolatedInvalidator.invalidateAuthorRepresentation("test-redis-failure")
+
+        assertThat(
+            meterRegistry
+                .find("post.read.cache.write.failure")
+                .tag("cache", PostQueryCacheNames.FEED)
+                .counter(),
+        ).isNotNull
+        assertThat(
+            meterRegistry
+                .find("post.read.cache.write.failure")
+                .tag("cache", PostQueryCacheNames.FEED)
+                .counter()!!
+                .count(),
+        ).isEqualTo(1.0)
+    }
 
     @Test
     @DisplayName("공개 글 변경은 hot feed, 검색 첫 페이지, 영향 태그, 상세 캐시를 함께 축출한다")

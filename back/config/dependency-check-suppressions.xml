@@ -25,11 +25,11 @@
   -->
   <suppress until="2026-10-31">
     <notes><![CDATA[
-      Temporary: Kotlin 2.2.21 has no GA fix for CVE-2026-53914 (2.4.20-Beta only).
+      Temporary: Kotlin 2.4.10 has no GA fix for CVE-2026-53914 (2.4.20-Beta only).
       Revisit when Kotlin 2.4.20+ GA is available.
       Tracked: https://github.com/AquilaXk/aquila-blog/issues/1387
     ]]></notes>
-    <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/.*@2\.2\.21$</packageUrl>
+    <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/.*@2\.4\.10$</packageUrl>
     <cve>CVE-2026-53914</cve>
   </suppress>
 

@@ -262,7 +262,9 @@ tasks.register<Test>("testcontainersTest") {
     useJUnitPlatform()
     filter {
         includeTestsMatching("com.back.infrastructure.*")
+        isFailOnNoMatchingTests = true
     }
+    failOnNoDiscoveredTests = true
     systemProperty("spring.profiles.active", "test")
     environment("TEST_INFRA_MODE", "none")
     shouldRunAfter("test")

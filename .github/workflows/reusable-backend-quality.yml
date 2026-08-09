@@ -155,7 +155,7 @@ jobs:
           exit 1
 
       - name: Test release planner guards
-        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs tools/test/comment-jacoco-summary.test.mjs tools/test/demo-seed-prod-gate.test.mjs tools/test/env-contract.test.mjs tools/test/public-contract-manifest.test.mjs
+        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs tools/test/comment-jacoco-summary.test.mjs tools/test/demo-seed-prod-gate.test.mjs tools/test/env-contract.test.mjs tools/test/public-contract-manifest.test.mjs tools/test/testcontainers-execution-contract.test.mjs
 
       - name: Guard forbidden AI docs and tool metadata
         run: bash tools/guards/check-forbidden-tracked-files.sh
@@ -324,10 +324,29 @@ jobs:
         run: ./gradlew check --rerun-tasks
 
       - name: Set up Node.js for canonical public contract check
-        if: steps.changes.outputs.backend == 'true'
+        if: always() && steps.changes.outputs.backend == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "20"
+      - name: Verify Testcontainers execution evidence
+        if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
+        run: node tools/ci/verify-testcontainers-results.mjs --results back/build/test-results/testcontainersTest --summary back/build/test-results/testcontainers-summary.json
+      - name: Upload Testcontainers raw XML evidence
+        if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testcontainers-raw-xml-${{ github.run_id }}-${{ github.run_attempt }}
+          path: back/build/test-results/testcontainersTest/TEST-*.xml
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload Testcontainers execution summary
+        if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testcontainers-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: back/build/test-results/testcontainers-summary.json
+          if-no-files-found: error
+          retention-days: 3
       - name: Verify canonical public contract bundle
         if: steps.changes.outputs.backend == 'true'
         shell: bash

@@ -1,3 +1,4 @@
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.tasks.compile.JavaCompile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -25,6 +26,8 @@ description = "back"
 extra["tomcat.version"] = "11.0.24"
 extra["netty.version"] = "4.2.16.Final"
 extra["postgresql.version"] = "42.7.13"
+
+val testcontainersVersion = "1.21.4"
 
 java {
     toolchain {
@@ -102,10 +105,43 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("com.tngtech.archunit:archunit:1.5.0")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-    testImplementation("org.testcontainers:junit-jupiter:1.21.4")
-    testImplementation("org.testcontainers:postgresql:1.21.4")
-    testImplementation("org.testcontainers:testcontainers:1.21.4")
+    testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
+    testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
+    testImplementation("org.testcontainers:testcontainers:$testcontainersVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.register("verifyTestcontainersVersionAlignment") {
+    description = "Verifies the resolved Testcontainers modules use the approved version."
+    group = "verification"
+
+    doLast {
+        val testcontainersComponents =
+            configurations
+                .getByName("testRuntimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+                .filter { component -> component.group == "org.testcontainers" }
+
+        if (testcontainersComponents.isEmpty()) {
+            throw GradleException("No org.testcontainers modules resolved in testRuntimeClasspath.")
+        }
+
+        val misalignedComponents =
+            testcontainersComponents.filter { component -> component.version != testcontainersVersion }
+        if (misalignedComponents.isNotEmpty()) {
+            val resolvedModules =
+                testcontainersComponents
+                    .map { component -> "${component.module}:${component.version}" }
+                    .sorted()
+                    .joinToString(separator = ", ")
+            throw GradleException(
+                "Testcontainers version alignment failed: expected $testcontainersVersion, resolved $resolvedModules",
+            )
+        }
+    }
 }
 
 kotlin {

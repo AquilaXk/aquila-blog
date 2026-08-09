@@ -66,6 +66,7 @@ test("verifier fails closed for a missing report directory and writes a machine-
   const result = runVerifier(path.join(directory, "missing"), summary)
 
   assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /JUnit report directory is missing or unreadable/)
   assert.deepEqual(readSummary(summary), {
     tests: 0,
     skipped: 0,
@@ -205,6 +206,31 @@ test("verifier rejects malformed counts and skipped tests in any report", (t) =>
     errors: 0,
     status: "failed",
   })
+
+  const malformedDocuments = [
+    '<testsuite tests="1" tests="0" skipped="0" failures="0" errors="0"/>',
+    '<testsuite tests="1" skipped="0" failures="0" errors="0"><testcase name="&unsupported;"/></testsuite>',
+    '<testsuite tests="1" skipped="0" failures="0" errors="0"><?xml version="1.0"?><testcase/></testsuite>',
+  ]
+  for (const [index, document] of malformedDocuments.entries()) {
+    const directory = fixture(t)
+    const results = path.join(directory, "results")
+    const summary = path.join(directory, "summary.json")
+    fs.mkdirSync(results)
+    fs.writeFileSync(path.join(results, `TEST-strict-${index}.xml`), document)
+
+    const result = runVerifier(results, summary)
+
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /Malformed JUnit XML/)
+    assert.deepEqual(readSummary(summary), {
+      tests: 0,
+      skipped: 0,
+      failures: 0,
+      errors: 0,
+      status: "failed",
+    })
+  }
 })
 
 test("verifier aggregates multiple successful JUnit XML reports into the summary", (t) => {
@@ -239,10 +265,12 @@ test("Gradle and reusable backend workflow fail closed and retain Testcontainers
   const fullCheckBlock = extractWorkflowStep(workflow, "Run backend full check")
   const nodeSetupBlock = extractWorkflowStep(workflow, "Set up Node.js for canonical public contract check")
   const verifierBlock = extractWorkflowStep(workflow, "Verify Testcontainers execution evidence")
-  const artifactBlock = extractWorkflowStep(workflow, "Upload Testcontainers execution evidence")
+  const rawArtifactBlock = extractWorkflowStep(workflow, "Upload Testcontainers raw XML evidence")
+  const summaryArtifactBlock = extractWorkflowStep(workflow, "Upload Testcontainers execution summary")
   assert(workflow.indexOf(fullCheckBlock) < workflow.indexOf(nodeSetupBlock))
   assert(workflow.indexOf(nodeSetupBlock) < workflow.indexOf(verifierBlock))
-  assert(workflow.indexOf(verifierBlock) < workflow.indexOf(artifactBlock))
+  assert(workflow.indexOf(verifierBlock) < workflow.indexOf(rawArtifactBlock))
+  assert(workflow.indexOf(rawArtifactBlock) < workflow.indexOf(summaryArtifactBlock))
   assert.match(fullCheckBlock, /github\.event_name != 'pull_request'/)
   assert.match(nodeSetupBlock, /if: always\(\) && steps\.changes\.outputs\.backend == 'true'/)
   assert.match(verifierBlock, /if: always\(\) && steps\.changes\.outputs\.backend == 'true' && github\.event_name != 'pull_request'/)
@@ -250,12 +278,17 @@ test("Gradle and reusable backend workflow fail closed and retain Testcontainers
   assert.match(verifierBlock, /--results back\/build\/test-results\/testcontainersTest/)
   assert.match(verifierBlock, /--summary back\/build\/test-results\/testcontainers-summary\.json/)
   assert.doesNotMatch(verifierBlock, /continue-on-error:\s*true/)
-  assert.match(artifactBlock, /if: always\(\) && steps\.changes\.outputs\.backend == 'true' && github\.event_name != 'pull_request'/)
-  assert.match(artifactBlock, /uses: actions\/upload-artifact@[a-f0-9]{40}/)
-  assert.match(artifactBlock, /name: testcontainers-execution-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/)
-  assert.match(artifactBlock, /back\/build\/test-results\/testcontainersTest/)
-  assert.match(artifactBlock, /back\/build\/test-results\/testcontainers-summary\.json/)
-  assert.match(artifactBlock, /if-no-files-found: error/)
+  for (const artifactBlock of [rawArtifactBlock, summaryArtifactBlock]) {
+    assert.match(artifactBlock, /if: always\(\) && steps\.changes\.outputs\.backend == 'true' && github\.event_name != 'pull_request'/)
+    assert.match(artifactBlock, /uses: actions\/upload-artifact@[a-f0-9]{40}/)
+    assert.match(artifactBlock, /if-no-files-found: error/)
+  }
+  assert.match(rawArtifactBlock, /name: testcontainers-raw-xml-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/)
+  assert.match(rawArtifactBlock, /back\/build\/test-results\/testcontainersTest\/TEST-\*\.xml/)
+  assert.doesNotMatch(rawArtifactBlock, /testcontainers-summary\.json/)
+  assert.match(summaryArtifactBlock, /name: testcontainers-summary-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/)
+  assert.match(summaryArtifactBlock, /back\/build\/test-results\/testcontainers-summary\.json/)
+  assert.doesNotMatch(summaryArtifactBlock, /testcontainersTest\/TEST-/)
 })
 
 test("Gradle resolves the approved Testcontainers family version in PR and main gates", () => {

@@ -33,14 +33,45 @@ const parseArguments = (argumentsList) => {
 
 const numericAttributes = ["tests", "skipped", "failures", "errors"]
 
+const assertUniqueAttributes = (attributes) => {
+  const attributePattern = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"[^"]*"|'[^']*')/g
+  const names = new Set()
+  let cursor = 0
+
+  for (const attribute of attributes.matchAll(attributePattern)) {
+    if (attributes.slice(cursor, attribute.index).trim() !== "" || names.has(attribute[1])) {
+      throw new Error("Malformed JUnit XML attributes.")
+    }
+    names.add(attribute[1])
+    cursor = attribute.index + attribute[0].length
+  }
+
+  if (attributes.slice(cursor).trim() !== "") {
+    throw new Error("Malformed JUnit XML attributes.")
+  }
+}
+
 const assertWellFormedXml = (report) => {
   if (report.includes("<!--") || report.includes("-->")) {
     throw new Error("JUnit XML comments are not allowed.")
   }
 
-  const document = report
-    .replace(/<\?xml[\s\S]*?\?>/g, "")
-    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "")
+  const declarations = [...report.matchAll(/<\?xml[\s\S]*?\?>/g)]
+  const firstContentIndex = report.search(/\S/)
+  if (declarations.length > 1 || (declarations.length === 1 && declarations[0].index !== firstContentIndex)) {
+    throw new Error("Malformed JUnit XML declaration.")
+  }
+
+  const declaration = declarations[0]
+  const withoutDeclaration = declaration
+    ? report.slice(0, declaration.index) + report.slice(declaration.index + declaration[0].length)
+    : report
+  const document = withoutDeclaration.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "")
+  const withoutAllowedEntities = document.replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[\dA-Fa-f]+);/g, "")
+  if (withoutAllowedEntities.includes("&")) {
+    throw new Error("Malformed JUnit XML entity.")
+  }
+
   const elements = /<(\/?)([A-Za-z_][\w:.-]*)([^<>]*?)(\/?)>/g
   const stack = []
   let cursor = 0
@@ -60,6 +91,7 @@ const assertWellFormedXml = (report) => {
         throw new Error("Malformed JUnit XML.")
       }
     } else {
+      assertUniqueAttributes(attributes)
       if (stack.length === 0) rootElements += 1
       if (!selfClosing) stack.push(name)
     }
@@ -119,8 +151,14 @@ try {
   const totals = emptySummary()
   fs.mkdirSync(path.dirname(summaryPath), { recursive: true })
 
-  const reports = fs
-    .readdirSync(results, { withFileTypes: true })
+  let reportEntries
+  try {
+    reportEntries = fs.readdirSync(results, { withFileTypes: true })
+  } catch {
+    throw new Error("Testcontainers JUnit report directory is missing or unreadable.")
+  }
+
+  const reports = reportEntries
     .filter((entry) => entry.isFile() && /^TEST-.*\.xml$/.test(entry.name))
     .map((entry) => path.join(results, entry.name))
 
@@ -146,10 +184,11 @@ try {
   } else {
     console.log("Testcontainers execution evidence passed.")
   }
-} catch {
+} catch (error) {
   if (summaryPath) {
     writeSummary(summaryPath, emptySummary())
   }
-  console.error("Testcontainers execution evidence failed.")
+  const diagnostic = error instanceof Error ? error.message : "Unknown verifier failure."
+  console.error(`Testcontainers execution evidence failed: ${diagnostic}`)
   process.exitCode = 1
 }

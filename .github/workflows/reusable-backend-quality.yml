@@ -331,14 +331,20 @@ jobs:
       - name: Verify Testcontainers execution evidence
         if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
         run: node tools/ci/verify-testcontainers-results.mjs --results back/build/test-results/testcontainersTest --summary back/build/test-results/testcontainers-summary.json
-      - name: Upload Testcontainers execution evidence
+      - name: Upload Testcontainers raw XML evidence
         if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: testcontainers-execution-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            back/build/test-results/testcontainersTest
-            back/build/test-results/testcontainers-summary.json
+          name: testcontainers-raw-xml-${{ github.run_id }}-${{ github.run_attempt }}
+          path: back/build/test-results/testcontainersTest/TEST-*.xml
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload Testcontainers execution summary
+        if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testcontainers-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: back/build/test-results/testcontainers-summary.json
           if-no-files-found: error
           retention-days: 3
       - name: Verify canonical public contract bundle

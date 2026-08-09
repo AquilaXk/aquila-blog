@@ -1673,10 +1673,10 @@
     schema-utils "^4.2.0"
     source-map "^0.7.3"
 
-"@radix-ui/colors@^1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@radix-ui/colors/-/colors-1.0.0.tgz#3ec423748d5ba8f5ae9e2ad1b91c796c726dc000"
-  integrity sha512-l8Rfw7zR6sfPsbXrBq3Xit96Xo+CSFyRFqRX/ls8W/w+HXzbwc5dbVvl+qRjsSIRoC9EiTMRV/QpJHziuTjoqg==
+"@radix-ui/colors@^3.0.0":
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/colors/-/colors-3.0.0.tgz#e8a591a303c44e503bd1212cacf40a09511165e0"
+  integrity sha512-FUOsGBkHrYJwCSEtWRCIfQbZG7q1e6DgxCIOe1SUQzDe/7rXXeA47s8yCn6fuTNQAj1Zq4oTFi9Yjp3wzElcxg==
 
 "@redocly/ajv@8.11.2":
   version "8.11.2"
@@ -8558,10 +8558,10 @@ remark-gfm@^4.0.1:
     remark-stringify "^11.0.0"
     unified "^11.0.0"
 
-remark-github-blockquote-alert@^2.0.1:
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/remark-github-blockquote-alert/-/remark-github-blockquote-alert-2.0.1.tgz#7efbfc7afccd676af5d1d8e8372b92f6902e3e97"
-  integrity sha512-0w0u3/wjBEK555yzm5UUnDCWO38Qk60laA5FvJrnES+YA/+r3hvvLgE/5SpMjaVpPOpVzunXk9caob1NTheM0g==
+remark-github-blockquote-alert@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/remark-github-blockquote-alert/-/remark-github-blockquote-alert-2.1.0.tgz#2138e2e2eb13aa74082b349016feb5fc078e0145"
+  integrity sha512-J392jmIP684d7iGsENN0uguL10IGbRdc8bTUSrd/jOLzdWkwg721Fj3JPQGN8tF6fTIrE5HHOIA3nBuwuaeuPQ==
   dependencies:
     unist-util-visit "^5.0.0"
 

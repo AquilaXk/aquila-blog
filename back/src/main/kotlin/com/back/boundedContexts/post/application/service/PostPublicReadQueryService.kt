@@ -440,12 +440,15 @@ class PostPublicReadQueryService(
     }
 
     private fun markDetailNegativeCache(id: Long) {
-        recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put") {
-            cacheManager
-                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
-                ?.put(id, true)
+        val written =
+            recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put") {
+                cacheManager
+                    .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
+                    ?.put(id, true)
+            }
+        if (written) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put")
         }
-        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put")
     }
 
     private fun clearDetailNegativeCache(id: Long) {
@@ -460,14 +463,16 @@ class PostPublicReadQueryService(
         cacheName: String,
         operation: String,
         write: () -> Unit,
-    ) {
+    ): Boolean {
         try {
             write()
+            return true
         } catch (exception: RuntimeException) {
             meterRegistry
                 ?.counter("post.read.cache.write.failure", "cache", cacheName, "operation", operation)
                 ?.increment()
             logger.warn("Cache write failed (cache={}, operation={})", cacheName, operation, exception)
+            return false
         }
     }
 

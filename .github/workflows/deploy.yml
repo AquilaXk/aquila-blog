@@ -669,6 +669,7 @@ jobs:
           DEPLOY_COMPLETED="false"
           ROLLBACK_IN_PROGRESS="false"
           ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
+          RUNTIME_ENV_MATERIALIZED="false"
           PRE_DEPLOY_ENV_CAPTURED="false"
           PRE_DEPLOY_ENV_CONTENT=""
           BACKUP_DIR=""
@@ -840,10 +841,6 @@ jobs:
             fi
 
             echo "rollback from backup: ${BACKUP_DIR} (reason=${reason})" >&2
-            if [ "${PRE_DEPLOY_ENV_CAPTURED}" = "true" ]; then
-              printf '%s\n' "${PRE_DEPLOY_ENV_CONTENT}" > deploy/homeserver/.env.prod
-              echo "pre-deploy env restored from shell memory before rollback" >&2
-            fi
 
             if ! restore_backup_files_minimally "${BACKUP_DIR}"; then
               echo "minimal backup restore failed before rollback script: ${BACKUP_DIR}" >&2
@@ -863,6 +860,9 @@ jobs:
           rollback_from_backup_if_needed() {
             local reason="${1:-unexpected_exit}"
             if [ "${DEPLOY_COMPLETED}" = "true" ] || [ "${ROLLBACK_IN_PROGRESS}" = "true" ]; then
+              return 0
+            fi
+            if [ "${RUNTIME_ENV_MATERIALIZED}" != "true" ]; then
               return 0
             fi
             if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
@@ -1287,6 +1287,7 @@ jobs:
 
           ensure_monitoring_bind_mount_permissions
 
+          RUNTIME_ENV_MATERIALIZED="true"
           if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
             rollback_and_exit "blue_green_deploy_failed"
           fi

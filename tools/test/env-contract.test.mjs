@@ -2684,9 +2684,8 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(workflow, /for file in docker-compose\.prod\.yml \.active_backend; do/)
   assert.doesNotMatch(workflow, /for file in \.env\.prod docker-compose\.prod\.yml \.active_backend \.backend-release-state\.env/)
   assert.match(workflow, /PRE_DEPLOY_ENV_CONTENT="\$\(cat deploy\/homeserver\/\.env\.prod\)"/)
-  assert.match(workflow, /printf '%s\\n' "\$\{PRE_DEPLOY_ENV_CONTENT\}" > deploy\/homeserver\/\.env\.prod/)
+  assert.doesNotMatch(workflow, /printf '%s\\n' "\$\{PRE_DEPLOY_ENV_CONTENT\}" > deploy\/homeserver\/\.env\.prod/)
   assert(workflow.indexOf("PRE_DEPLOY_ENV_CONTENT=\"$(cat deploy/homeserver/.env.prod)\"") < workflow.indexOf("printf '%s\\n' \"${HOME_SERVER_ENV}\" > deploy/homeserver/.env.prod"))
-  assert(workflow.indexOf("printf '%s\\n' \"${PRE_DEPLOY_ENV_CONTENT}\" > deploy/homeserver/.env.prod") < workflow.indexOf("./deploy/homeserver/rollback_last_deploy.sh"))
   assert.match(workflow, /preserve_pre_deploy_runtime_image_env_keys\(\) \{/)
   assert.match(workflow, /resolve_repo_digest_with_pull_fallback\(\) \{/)
   assert.match(workflow, /preserved \$\{key\} from pre-deploy env after HOME_SERVER_ENV overwrite/)
@@ -2708,6 +2707,31 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(steadyStateGuard, /image_key="BACK_GREEN_IMAGE"/)
   assert.doesNotMatch(statusScript, /env_value "BACK_IMAGE"/)
   assert.doesNotMatch(steadyStateGuard, /env_value "BACK_IMAGE"/)
+})
+
+test("rollback keeps the current materialized keyring and only arms after blue-green activation", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+  const sourceExample = readFileSync(path.join(repoRoot, "deploy/homeserver/.env.prod.example"), "utf8")
+  const backExample = readFileSync(path.join(repoRoot, "deploy/homeserver/.env.back.prod.example"), "utf8")
+  const rollbackStart = workflow.indexOf("run_backup_rollback() {")
+  const rollbackEnd = workflow.indexOf("rollback_from_backup_if_needed() {", rollbackStart)
+  const rollbackBlock = workflow.slice(rollbackStart, rollbackEnd)
+  const trapGate = workflow.slice(workflow.indexOf("rollback_from_backup_if_needed() {"), workflow.indexOf("./deploy/homeserver/prune_external_backups.sh"))
+  const materializedIndex = workflow.indexOf('RUNTIME_ENV_MATERIALIZED="true"')
+  const blueGreenIndex = workflow.indexOf('if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED=')
+
+  for (const example of [sourceExample, backExample]) {
+    assert.match(example, /remove all three previous entries from authoritative HOME_SERVER_ENV/i)
+    assert.match(example, /before expiry/i)
+    assert.match(example, /expired previous key makes startup\/precheck\/doctor\/rollback fail/i)
+  }
+  assert(rollbackStart >= 0 && rollbackEnd > rollbackStart, "rollback block must be discoverable")
+  assert.doesNotMatch(rollbackBlock, /PRE_DEPLOY_ENV_CONTENT/)
+  assert.match(workflow, /PRE_DEPLOY_ENV_CONTENT="\$\(cat deploy\/homeserver\/\.env\.prod\)"/)
+  assert.match(workflow, /previous="\$\(extract_env_value_from_text "\$\{key\}" "\$\{PRE_DEPLOY_ENV_CONTENT\}"\)"/)
+  assert.match(workflow, /RUNTIME_ENV_MATERIALIZED="false"/)
+  assert.match(trapGate, /if \[ "\$\{RUNTIME_ENV_MATERIALIZED\}" != "true" \]; then\s*return 0\s*fi/)
+  assert(materializedIndex > 0 && materializedIndex < blueGreenIndex, "rollback must arm immediately before blue-green activation")
 })
 
 test("deploy workflow requires pinned known_hosts and private GHCR credentials", () => {

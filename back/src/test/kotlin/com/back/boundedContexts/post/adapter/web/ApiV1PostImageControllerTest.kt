@@ -14,7 +14,6 @@ import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileStatus
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
@@ -27,20 +26,10 @@ import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.multipart.MultipartFile
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.lang.reflect.Field
 
 @DisplayName("ApiV1PostImageController 업로드 테스트")
 class ApiV1PostImageControllerTest {
-    companion object {
-        @JvmStatic
-        @BeforeAll
-        fun initAppConfig() {
-            AppConfig(
-                siteBackUrl = "https://api.aquilaxk.test",
-                siteFrontUrl = "https://www.aquilaxk.test",
-            )
-        }
-    }
-
     private val postImageStorageService = FakePostImageStoragePort()
     private val uploadedFileRetentionService = mock(UploadedFileRetentionService::class.java)
     private val uploadedFileRepository = mock(UploadedFileRepositoryPort::class.java)
@@ -62,7 +51,7 @@ class ApiV1PostImageControllerTest {
         postImageStorageService.nextImageKey = "posts/2026/03/sample.png"
 
         // when
-        val response = controller.uploadPostImage(file)
+        val response = withIsolatedAppConfig { controller.uploadPostImage(file) }
 
         // then
         assertThat(response.resultCode).isEqualTo("201-1")
@@ -84,7 +73,7 @@ class ApiV1PostImageControllerTest {
         postImageStorageService.nextFileKey = "posts/2026/03/manual.pdf"
 
         // when
-        val response = controller.uploadPostFile(file)
+        val response = withIsolatedAppConfig { controller.uploadPostFile(file) }
 
         // then
         assertThat(response.resultCode).isEqualTo("201-2")
@@ -96,6 +85,21 @@ class ApiV1PostImageControllerTest {
             file.size,
             UploadedFilePurpose.POST_FILE,
         )
+    }
+
+    @Test
+    @DisplayName("AppConfig URL 설정은 테스트 밖으로 누출되지 않는다")
+    fun `AppConfig URL 설정 뒤 raw companion 상태를 복원한다`() {
+        val snapshot = appConfigUrlSnapshot()
+
+        withIsolatedAppConfig {
+            assertThat(appConfigUrlSnapshot()).containsExactly(
+                "https://api.aquilaxk.test",
+                "https://www.aquilaxk.test",
+            )
+        }
+
+        assertThat(appConfigUrlSnapshot()).isEqualTo(snapshot)
     }
 
     @Test
@@ -195,6 +199,28 @@ class ApiV1PostImageControllerTest {
         assertThatThrownBy { controller.getPostFile(fileRequest(objectKey)) }
             .isInstanceOf(AppException::class.java)
             .hasMessageContaining("첨부 파일을 찾을 수 없습니다.")
+    }
+
+    private fun <T> withIsolatedAppConfig(block: () -> T): T {
+        val snapshot = appConfigUrlSnapshot()
+        AppConfig(
+            siteBackUrl = "https://api.aquilaxk.test",
+            siteFrontUrl = "https://www.aquilaxk.test",
+        )
+
+        return try {
+            block()
+        } finally {
+            appConfigUrlFields.zip(snapshot).forEach { (field, value) -> field.set(null, value) }
+        }
+    }
+
+    private fun appConfigUrlSnapshot(): List<Any?> = appConfigUrlFields.map { field -> field.get(null) }
+
+    private val appConfigUrlFields: List<Field> by lazy {
+        listOf("siteBackUrl", "siteFrontUrl").map { name ->
+            AppConfig::class.java.getDeclaredField(name).apply { isAccessible = true }
+        }
     }
 
     private fun fileRequest(objectKey: String): MockHttpServletRequest = MockHttpServletRequest("GET", "/post/api/v1/files/$objectKey")

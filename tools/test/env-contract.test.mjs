@@ -16,7 +16,6 @@ const envExamplePath = path.join(repoRoot, "deploy/homeserver/.env.prod.example"
 const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
 const doctorScriptPath = path.join(repoRoot, "deploy/homeserver/doctor.sh")
-const rollbackScriptPath = path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh")
 const deployStatusScriptPath = path.join(repoRoot, "deploy/homeserver/check_deploy_status.sh")
 const deployBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_deploy_backup.sh")
 const baselineScriptPath = path.join(repoRoot, "deploy/homeserver/record_deploy_baseline.sh")

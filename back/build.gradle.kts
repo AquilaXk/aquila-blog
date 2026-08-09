@@ -9,7 +9,7 @@ plugins {
     kotlin("plugin.jpa") version "2.2.21"
     kotlin("kapt") version "2.2.21"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
-    id("org.owasp.dependencycheck") version "12.2.2"
+    id("org.owasp.dependencycheck") version "13.0.0"
 }
 
 apply(from = "gradle/backend-test-infra.gradle.kts")

@@ -86,10 +86,10 @@ class PostPublicReadEtagSeedBuilder {
             append(data.hitCount)
             append("|content=")
             append(
-                buildLengthPrefixedToken(
+                buildNullableLengthPrefixedToken(
                     data.title,
                     data.content,
-                    data.contentHtml.orEmpty(),
+                    data.contentHtml,
                     data.summary,
                     data.summarySource.name,
                 ),
@@ -150,7 +150,7 @@ class PostPublicReadEtagSeedBuilder {
     private fun buildFeedItemsToken(posts: List<FeedPostDto>): String =
         posts.joinToString(separator = "|") {
             "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}:" +
-                "content=${buildLengthPrefixedToken(it.title, it.thumbnail.orEmpty(), it.summary)}:" +
+                "content=${buildNullableLengthPrefixedToken(it.title, it.thumbnail, it.summary)}:" +
                 "author=${
                     buildLengthPrefixedToken(
                         it.authorId.toString(),
@@ -164,6 +164,11 @@ class PostPublicReadEtagSeedBuilder {
     private fun buildLengthPrefixedToken(vararg parts: String): String =
         parts.joinToString(separator = ",") { part ->
             "${part.length}:$part"
+        }
+
+    private fun buildNullableLengthPrefixedToken(vararg parts: String?): String =
+        parts.joinToString(separator = ",") { part ->
+            if (part == null) "null" else "${part.length}:$part"
         }
 
     private fun toEpochMillis(instant: Instant): Long = instant.toEpochMilli()

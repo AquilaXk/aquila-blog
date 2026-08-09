@@ -327,13 +327,13 @@ class PostPublicReadResponseFactoryTest {
         // then
         assertThat(pageSeed).isEqualTo(
             "search|page=2|size=10|sort=CREATED_AT|kw=kotlin|tag=spring|total=22|pages=3|" +
-                "items=1:1767225600000:11:12:13:content=7:Title 1,0:,9:Summary 1:" +
+                "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1:" +
                 "author=1:1,6:Author,6:author,31:https://example.com/profile.png|" +
-                "2:1767312000000:11:12:13:content=7:Title 2,0:,9:Summary 2:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "2:1767312000000:11:12:13:content=7:Title 2,null,9:Summary 2:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(cursorSeed).isEqualTo(
             "feed-cursor|size=10|sort=CREATED_AT|cursor=cursor-1|tag=backend|hasNext=true|nextCursor=next-1|" +
-                "items=1:1767225600000:11:12:13:content=7:Title 1,0:,9:Summary 1:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(detailSeed).isEqualTo(
             "9|1767398400000|7|8|9|10|content=5:Title,7:content,14:<p>content</p>,0:,4:NONE|author=1:1,6:Author,6:author," +
@@ -342,7 +342,7 @@ class PostPublicReadResponseFactoryTest {
         assertThat(responseFactory.buildTagsEtagSeed(tags)).isEqualTo("Kotlin:3|Spring:2")
         assertThat(relatedSeed).isEqualTo(
             "related-author|authorId=3|excludePostId=0|limit=4|" +
-                "items=2:1767312000000:11:12:13:content=7:Title 2,0:,9:Summary 2:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=2:1767312000000:11:12:13:content=7:Title 2,null,9:Summary 2:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(bootstrapFeedSeed).startsWith("bootstrap-feed-cursor|")
         assertThat(bootstrapExploreSeed).startsWith("bootstrap-explore-cursor|")
@@ -471,6 +471,18 @@ class PostPublicReadResponseFactoryTest {
             .isNotEqualTo(baseDetailSeed)
         assertThat(responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(content = "content v2", summary = "Summary v2")))
             .isNotEqualTo(baseDetailSeed)
+        assertThat(
+            responseFactory.buildFeedPageEtagSeed(
+                "feed",
+                0,
+                10,
+                PostSearchSortType1.CREATED_AT,
+                data = pageOf(basePost.copy(thumbnail = "")),
+            ),
+        ).isNotEqualTo(baseFeedSeed)
+        assertThat(
+            responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(contentHtml = "")),
+        ).isNotEqualTo(baseDetailSeed)
     }
 
     @Test

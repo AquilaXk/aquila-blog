@@ -8,6 +8,8 @@ import test from "node:test"
 const root = path.resolve(import.meta.dirname, "../..")
 const verifier = path.join(root, "tools/ci/verify-testcontainers-results.mjs")
 const workflowPath = path.join(root, ".github/workflows/reusable-backend-quality.yml")
+const buildGradlePath = path.join(root, "back/build.gradle.kts")
+const jacocoGradlePath = path.join(root, "back/gradle/backend-jacoco.gradle.kts")
 const testInfraPath = path.join(root, "back/gradle/backend-test-infra.gradle.kts")
 
 const fixture = (t) => {
@@ -234,4 +236,37 @@ test("Gradle and reusable backend workflow fail closed and retain Testcontainers
   assert.match(artifactBlock, /back\/build\/test-results\/testcontainersTest/)
   assert.match(artifactBlock, /back\/build\/test-results\/testcontainers-summary\.json/)
   assert.match(artifactBlock, /if-no-files-found: error/)
+})
+
+test("Gradle resolves the approved Testcontainers family version in PR and main gates", () => {
+  const buildGradle = fs.readFileSync(buildGradlePath, "utf8")
+  const jacocoGradle = fs.readFileSync(jacocoGradlePath, "utf8")
+  const alignmentTask = extractBalancedBlock(
+    buildGradle,
+    'tasks.register("verifyTestcontainersVersionAlignment")',
+  )
+  const ciFastCheck = extractBalancedBlock(jacocoGradle, 'tasks.register("ciFastCheck")')
+  const fullCheck = extractBalancedBlock(jacocoGradle, 'tasks.named("check")')
+
+  assert.match(buildGradle, /val testcontainersVersion\s*=\s*"1\.21\.4"/)
+  assert.match(
+    buildGradle,
+    /testImplementation\("org\.testcontainers:junit-jupiter:\$testcontainersVersion"\)/,
+  )
+  assert.match(
+    buildGradle,
+    /testImplementation\("org\.testcontainers:postgresql:\$testcontainersVersion"\)/,
+  )
+  assert.match(
+    buildGradle,
+    /testImplementation\("org\.testcontainers:testcontainers:\$testcontainersVersion"\)/,
+  )
+  assert.match(alignmentTask, /testRuntimeClasspath/)
+  assert.match(alignmentTask, /ModuleComponentIdentifier/)
+  assert.match(alignmentTask, /org\.testcontainers/)
+  assert.match(alignmentTask, /\.isEmpty\(\)/)
+  assert.match(alignmentTask, /testcontainersVersion/)
+  assert.match(alignmentTask, /GradleException/)
+  assert.match(ciFastCheck, /"verifyTestcontainersVersionAlignment"/)
+  assert.match(fullCheck, /"verifyTestcontainersVersionAlignment"/)
 })

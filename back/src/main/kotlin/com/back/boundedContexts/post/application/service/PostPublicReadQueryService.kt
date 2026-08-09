@@ -924,7 +924,7 @@ class PostPublicReadQueryService(
             rawVersion: String,
             nowEpochSeconds: Long,
         ): CursorKey {
-            val version = parseVersion(rawVersion)
+            val version = parsePublicVersion(rawVersion)
             if (version == current.version) return current
             val previousKey = previous
             if (previousKey != null && version == previousKey.version) {
@@ -978,6 +978,13 @@ class PostPublicReadQueryService(
                 }
                 return raw.toLongOrNull() ?: throw IllegalArgumentException("cursor key version is out of range")
             }
+
+            private fun parsePublicVersion(raw: String): Long =
+                try {
+                    parseVersion(raw)
+                } catch (exception: IllegalArgumentException) {
+                    throw AppException(ErrorCode.BAD_REQUEST, "cursor key version이 올바르지 않습니다.")
+                }
         }
     }
 

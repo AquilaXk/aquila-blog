@@ -394,6 +394,23 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
     }
 
     @Test
+    @DisplayName("malformed cursor key version은 공개 경계에서 BAD_REQUEST로 거절한다")
+    fun rejectsMalformedCursorKeyVersionAsBadRequest() {
+        val service = createService(mock(PostUseCase::class.java), SimpleMeterRegistry())
+        val now = CURSOR_TEST_CLOCK.instant().epochSecond
+        listOf("abc", "0", "007", "-1", "9223372036854775808").forEach { version ->
+            val payload = "$version:$now:1:1:CREATED_AT"
+            val token = "$payload:${signCursorPayload(payload, CURSOR_TEST_SECRET)}"
+
+            assertThatThrownBy {
+                service.getPublicFeedByCursor(token, 1, PostSearchSortType1.CREATED_AT)
+            }.isInstanceOfSatisfying(AppException::class.java) { exception ->
+                assertThat(exception.errorCode).isEqualTo(com.back.global.exception.application.ErrorCode.BAD_REQUEST)
+            }
+        }
+    }
+
+    @Test
     @DisplayName("invalid cursor 원문과 signature를 로그에 남기지 않고 presence만 기록한다")
     fun redactsInvalidCursorFromFeedAndExploreLogs() {
         val service = createService(mock(PostUseCase::class.java), SimpleMeterRegistry())

@@ -15,6 +15,8 @@ const caddyfilePath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
 const envExamplePath = path.join(repoRoot, "deploy/homeserver/.env.prod.example")
 const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
+const doctorScriptPath = path.join(repoRoot, "deploy/homeserver/doctor.sh")
+const deployStatusScriptPath = path.join(repoRoot, "deploy/homeserver/check_deploy_status.sh")
 const deployBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_deploy_backup.sh")
 const baselineScriptPath = path.join(repoRoot, "deploy/homeserver/record_deploy_baseline.sh")
 const externalBackupScriptPath = path.join(repoRoot, "deploy/homeserver/create_external_backup.sh")
@@ -62,6 +64,17 @@ const git = (cwd, args) =>
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim()
+
+const extractTopLevelShellFunction = (source, name) => {
+  const lines = source.split("\n")
+  const signature = new RegExp(`^(\\s*)${name}\\(\\) \\{$`)
+  const start = lines.findIndex((line) => signature.test(line))
+  assert.notEqual(start, -1, `${name} function must exist`)
+  const indentation = lines[start].match(signature)[1]
+  const end = lines.findIndex((line, index) => index > start && line === `${indentation}}`)
+  assert.notEqual(end, -1, `${name} function must have a closing brace`)
+  return lines.slice(start, end + 1).join("\n")
+}
 
 const commitFile = (cwd, relativePath, content, message) => {
   const filePath = path.join(cwd, relativePath)
@@ -4469,11 +4482,24 @@ test("배포·롤백 스크립트는 env 파일의 COMPOSE_PROFILES를 병합하
   // CRLF로 저장된 .env.prod에서는 값 끝에 \r이 남는다. trim_quotes가 그 뒤에 돌면 마지막 문자가
   // \r이라 닫는 따옴표를 못 떼고 `front"`가 되어 프로필이 조용히 꺼진다. 같은 리더가 DB 비밀번호와
   // 스토리지 키도 읽으므로 값 손상 범위가 프로필에 그치지 않는다. 읽는 지점에서 없앤다.
-  for (const [name, script] of [["blue_green_deploy.sh", deployScript], ["rollback_last_deploy.sh", rollbackScript]]) {
-    const envValueBody = script.slice(script.indexOf("env_value() {"), script.indexOf("trim_quotes() {"))
-    assert.notEqual(envValueBody, "", `${name} must define env_value before trim_quotes`)
-    assert.match(envValueBody, /gsub\(\/\\r\/, "", value\)/, `${name} env_value must strip CR`)
+  const readers = [
+    ["deploy.yml", readFileSync(workflowPath, "utf8"), "read_prod_env_value"],
+    ["blue_green_deploy.sh", deployScript, "env_value"],
+    ["rollback_last_deploy.sh", rollbackScript, "env_value"],
+    ["check_deploy_status.sh", readFileSync(deployStatusScriptPath, "utf8"), "env_value"],
+    ["doctor.sh", readFileSync(doctorScriptPath, "utf8"), "env_value"],
+  ]
+  for (const [name, script, functionName] of readers) {
+    const readerBody = extractTopLevelShellFunction(script, functionName)
+    const executableReaderBody = readerBody
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n")
+    assert.match(executableReaderBody, /^\s*(?:gsub\(\/\\r\/, "", value\)|sub\(\/\\r\$\/, "", value\))\s*$/m, `${name} reader must execute CRLF terminator removal`)
   }
+  const doctorReader = extractTopLevelShellFunction(readFileSync(doctorScriptPath, "utf8"), "env_value")
+  assert.match(doctorReader, /^\s*sub\(\/\\r\$\/, "", value\)\s*$/m, "doctor.sh env_value must preserve internal carriage returns")
+  assert.doesNotMatch(doctorReader, /^\s*gsub\(\/\\r\/, "", value\)\s*$/m, "doctor.sh env_value must not remove internal carriage returns")
 })
 
 // .env.prod.example은 deploy.yml이 HOME_SERVER_ENV 부재 시 .env.prod로 복사하는 파일이고

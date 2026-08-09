@@ -272,10 +272,12 @@ const resolveFixtureCredentials = (env) => {
     )
     return Object.fromEntries(
       output
-        .trim()
-        .split("\n")
+        .split(/\r?\n/)
         .filter((line) => line.startsWith("DB=") || line.startsWith("REDIS="))
-        .map((line) => line.split("=", 2)),
+        .map((line) => {
+          const separator = line.indexOf("=")
+          return [line.slice(0, separator), line.slice(separator + 1)]
+        }),
     )
   } finally {
     rmSync(fixture, { recursive: true, force: true })
@@ -338,6 +340,14 @@ test("backend test infra resolves blank primary credentials through alias then d
         SPRING__DATA__REDIS__PASSWORD: "redis-alias",
       },
       expected: { DB: "db-primary", REDIS: "redis-primary" },
+    },
+    {
+      name: "primary credentials preserve equals and trailing whitespace",
+      env: {
+        TEST_DB_PASSWORD: "db-primary=with=equals",
+        TEST_REDIS_PASSWORD: "redis-primary \t ",
+      },
+      expected: { DB: "db-primary=with=equals", REDIS: "redis-primary \t " },
     },
   ]
 

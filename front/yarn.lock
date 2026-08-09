@@ -8558,10 +8558,10 @@ remark-gfm@^4.0.1:
     remark-stringify "^11.0.0"
     unified "^11.0.0"
 
-remark-github-blockquote-alert@^2.0.1:
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/remark-github-blockquote-alert/-/remark-github-blockquote-alert-2.0.1.tgz#7efbfc7afccd676af5d1d8e8372b92f6902e3e97"
-  integrity sha512-0w0u3/wjBEK555yzm5UUnDCWO38Qk60laA5FvJrnES+YA/+r3hvvLgE/5SpMjaVpPOpVzunXk9caob1NTheM0g==
+remark-github-blockquote-alert@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/remark-github-blockquote-alert/-/remark-github-blockquote-alert-2.1.0.tgz#2138e2e2eb13aa74082b349016feb5fc078e0145"
+  integrity sha512-J392jmIP684d7iGsENN0uguL10IGbRdc8bTUSrd/jOLzdWkwg721Fj3JPQGN8tF6fTIrE5HHOIA3nBuwuaeuPQ==
   dependencies:
     unist-util-visit "^5.0.0"
 

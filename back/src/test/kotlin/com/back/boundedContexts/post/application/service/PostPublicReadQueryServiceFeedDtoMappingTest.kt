@@ -30,7 +30,7 @@ import javax.crypto.spec.SecretKeySpec
 class PostPublicReadQueryServiceFeedDtoMappingTest {
     companion object {
         private const val MAPPING_FAILURE_METRIC = "post.feed.dto.mapping.failure"
-        private const val CURSOR_TEST_SECRET = "test-secret"
+        private const val CURSOR_TEST_SECRET = "test-cursor-signing-secret-abcdefghijklmnopqrstuvwxyz0123456789"
 
         @JvmStatic
         @BeforeAll
@@ -191,39 +191,49 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
     }
 
     @Test
-    @DisplayName("legacy CREATED_AT 커서는 CREATED_AT/CREATED_AT_ASC 요청에서 허용한다")
-    fun acceptsLegacyCreatedAtCursorForCreatedAtSorts() {
+    @DisplayName("version 없는 legacy CREATED_AT 커서는 요청 정렬과 무관하게 거절한다")
+    fun rejectsLegacyCreatedAtCursor() {
         val postUseCase = mock(PostUseCase::class.java)
         val service = createService(postUseCase, SimpleMeterRegistry())
-        val nextRawPost = postByAuthor(id = 41L)
-        val ascNextRawPost = postByAuthor(id = 42L)
         val legacyCursor = signLegacyCursor(sortValue = 1_767_312_000_000L, id = 40L)
-        given(
-            postUseCase.findPublicByCursor(
-                cursorSortValue = 1_767_312_000_000L,
-                cursorId = 40L,
-                limit = 3,
-                sort = PostSearchSortType1.CREATED_AT,
-            ),
-        ).willReturn(listOf(nextRawPost))
-        given(
-            postUseCase.findPublicByCursor(
-                cursorSortValue = 1_767_312_000_000L,
-                cursorId = 40L,
-                limit = 3,
-                sort = PostSearchSortType1.CREATED_AT_ASC,
-            ),
-        ).willReturn(listOf(ascNextRawPost))
-
-        val page = service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.CREATED_AT)
-        val ascPage = service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.CREATED_AT_ASC)
-
-        assertThat(page.content.map { it.id }).containsExactly(41L)
-        assertThat(ascPage.content.map { it.id }).containsExactly(42L)
         assertThatThrownBy {
-            service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.HIT_COUNT)
+            service.getPublicFeedByCursor(legacyCursor, 1, PostSearchSortType1.CREATED_AT)
         }.isInstanceOf(AppException::class.java)
-            .hasMessageContaining("정렬 모드가 없어")
+            .hasMessageContaining("cursor 형식")
+    }
+
+    @Test
+    @DisplayName("blank 또는 compiled default cursor signing secret은 즉시 거절한다")
+    fun rejectsBlankOrDefaultCursorSigningSecret() {
+        assertThatThrownBy {
+            createService(mock(PostUseCase::class.java), SimpleMeterRegistry(), cursorSigningSecret = "")
+        }.isInstanceOf(IllegalArgumentException::class.java)
+
+        assertThatThrownBy {
+            createService(
+                mock(PostUseCase::class.java),
+                SimpleMeterRegistry(),
+                cursorSigningSecret = "aquila-post-cursor-signing-secret-change-me",
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    @DisplayName("env contract placeholder 형식의 cursor signing secret은 기동을 거절한다")
+    fun rejectsCursorSigningSecretPlaceholders() {
+        listOf(
+            "NEED_TO_CONFIGURE_CURSOR_SIGNING_SECRET_123",
+            "EMPTY",
+            "change_me_cursor_signing_secret_123456789",
+            "change-me-cursor-signing-secret-123456789",
+            "cursor-signing-secret.example.com",
+            "cursor-signing-<replace-this>-secret-123456789",
+            "cursor-signing-sha-<commit>-secret-123456789",
+        ).forEach { placeholder ->
+            assertThatThrownBy {
+                createService(mock(PostUseCase::class.java), SimpleMeterRegistry(), cursorSigningSecret = placeholder)
+            }.isInstanceOf(IllegalArgumentException::class.java)
+        }
     }
 
     @Test
@@ -280,6 +290,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
     private fun createService(
         postUseCase: PostUseCase,
         meterRegistry: SimpleMeterRegistry,
+        cursorSigningSecret: String = CURSOR_TEST_SECRET,
     ): PostPublicReadQueryService =
         PostPublicReadQueryService(
             postUseCase = postUseCase,
@@ -295,7 +306,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 ),
             cacheManager = ConcurrentMapCacheManager(),
             meterRegistry = meterRegistry,
-            cursorSigningSecret = CURSOR_TEST_SECRET,
+            cursorSigningSecret = cursorSigningSecret,
             detailContentCacheMaxChars = 120000,
             detailSnapshotCacheMaxChars = 180000,
         )

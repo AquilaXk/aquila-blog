@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.MeterRegistry
+import org.slf4j.LoggerFactory
 import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
 import org.springframework.stereotype.Component
@@ -19,6 +20,7 @@ class PostReadCacheInvalidator(
     private val cacheManager: CacheManager,
     private val meterRegistry: MeterRegistry? = null,
 ) {
+    private val logger = LoggerFactory.getLogger(PostReadCacheInvalidator::class.java)
     private val hotPageSizes = listOf(30, 24, 16)
     private val hotSorts =
         listOf(
@@ -95,8 +97,14 @@ class PostReadCacheInvalidator(
             PostQueryCacheNames.DETAIL_PUBLIC_META,
             PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
         ).forEach { cacheName ->
-            cacheManager.getCache(cacheName)?.clear()
-            recordCacheEvict(cacheName, "clear", reason)
+            cacheManager.getCache(cacheName)?.let { cache ->
+                try {
+                    cache.clear()
+                    recordCacheEvict(cacheName, "clear", reason)
+                } catch (exception: RuntimeException) {
+                    recordCacheWriteFailure(cacheName, "clear", exception)
+                }
+            }
         }
     }
 
@@ -301,5 +309,16 @@ class PostReadCacheInvalidator(
         reason: String,
     ) {
         meterRegistry?.counter("post.read.cache.evict", "cache", cacheName, "scope", scope, "reason", reason)?.increment()
+    }
+
+    private fun recordCacheWriteFailure(
+        cacheName: String,
+        operation: String,
+        exception: RuntimeException,
+    ) {
+        meterRegistry
+            ?.counter("post.read.cache.write.failure", "cache", cacheName, "operation", operation)
+            ?.increment()
+        logger.warn("Cache write failed (cache={}, operation={})", cacheName, operation, exception)
     }
 }

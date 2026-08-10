@@ -10,6 +10,8 @@ import com.back.boundedContexts.member.subContexts.session.model.MemberSessionRe
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionWithRefreshToken
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import io.micrometer.core.instrument.MeterRegistry
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.CacheManager
 import org.springframework.cache.annotation.Cacheable
@@ -35,7 +37,10 @@ class MemberSessionService(
     private val maxActivePerMember: Int = 32,
     @param:Value("\${custom.privacy.retention.revokedSessionDays:\${custom.auth.session.revokedRetentionDays:30}}")
     private val revokedSessionRetentionDays: Int = 30,
+    private val meterRegistry: MeterRegistry? = null,
 ) : MemberSessionUseCase {
+    private val logger = LoggerFactory.getLogger(MemberSessionService::class.java)
+
     @Transactional
     override fun createSession(
         member: Member,
@@ -209,13 +214,37 @@ class MemberSessionService(
         sessionKey: String,
     ) {
         cacheManager.getCache(MemberSessionCacheNames.ACTIVE)?.let { cache ->
-            cache.evict("session:$sessionKey")
-            cache.evict("member:$memberId:session:$sessionKey")
+            runCacheWriteSafely("evict") { cache.evict("session:$sessionKey") }
+            runCacheWriteSafely("evict") { cache.evict("member:$memberId:session:$sessionKey") }
         }
     }
 
     private fun evictAllActiveSnapshots() {
-        cacheManager.getCache(MemberSessionCacheNames.ACTIVE)?.clear()
+        cacheManager.getCache(MemberSessionCacheNames.ACTIVE)?.let { cache ->
+            runCacheWriteSafely("clear") { cache.clear() }
+        }
+    }
+
+    private fun runCacheWriteSafely(
+        operation: String,
+        write: () -> Unit,
+    ) {
+        try {
+            write()
+        } catch (exception: RuntimeException) {
+            meterRegistry?.let { registry ->
+                val counter =
+                    registry.counter(
+                        "member.session.cache.write.failure",
+                        "cache",
+                        MemberSessionCacheNames.ACTIVE,
+                        "operation",
+                        operation,
+                    )
+                counter.increment()
+            }
+            logger.warn("Session cache write failed (cache={}, operation={})", MemberSessionCacheNames.ACTIVE, operation, exception)
+        }
     }
 
     private fun evictAllActiveSnapshotsNowAndAfterCommit() {

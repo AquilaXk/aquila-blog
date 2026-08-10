@@ -5,10 +5,16 @@ import com.back.boundedContexts.member.model.shared.Member
 import com.back.boundedContexts.member.subContexts.session.application.port.output.MemberSessionStorePort
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
+import org.springframework.cache.Cache
+import org.springframework.cache.CacheManager
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Instant
@@ -200,6 +206,37 @@ class MemberSessionServiceTest {
         } finally {
             TransactionSynchronizationManager.clearSynchronization()
         }
+    }
+
+    @Test
+    fun `세션 캐시 clear 실패는 트랜잭션 결과를 유지하고 실패 메트릭을 기록한다`() {
+        val store = RecordingMemberSessionStorePort()
+        val member = Member(60L, "session-cache-failure", null, "캐시실패", "cache-failure@example.com", MemberPolicy.genApiKey())
+        store.save(memberSession(member, "cache-failure-session"))
+        val cache = mock(Cache::class.java)
+        doThrow(IllegalStateException("redis unavailable")).`when`(cache).clear()
+        val cacheManager = mock(CacheManager::class.java)
+        `when`(cacheManager.getCache(MemberSessionCacheNames.ACTIVE)).thenReturn(cache)
+        val meterRegistry = SimpleMeterRegistry()
+        val service =
+            MemberSessionService(
+                memberSessionStorePort = store,
+                cacheManager = cacheManager,
+                touchMinIntervalSeconds = 60,
+                meterRegistry = meterRegistry,
+            )
+
+        val revokedCount = service.revokeAllActiveSessionsForMember(member.id)
+
+        assertThat(revokedCount).isEqualTo(1)
+        assertThat(
+            meterRegistry
+                .find("member.session.cache.write.failure")
+                .tag("cache", MemberSessionCacheNames.ACTIVE)
+                .tag("operation", "clear")
+                .counter()!!
+                .count(),
+        ).isEqualTo(1.0)
     }
 
     @Test

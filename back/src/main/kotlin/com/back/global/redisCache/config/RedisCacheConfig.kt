@@ -9,6 +9,7 @@ import org.springframework.cache.annotation.EnableCaching
 import org.springframework.cache.interceptor.CacheErrorHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.data.redis.cache.BatchStrategies
 import org.springframework.data.redis.cache.RedisCacheConfiguration
 import org.springframework.data.redis.cache.RedisCacheManager
 import org.springframework.data.redis.cache.RedisCacheWriter
@@ -125,7 +126,10 @@ class RedisCacheConfig(
         // 최신으로 보고, PostWriteSideEffectHandler는 evict 예외를 잡아 task를 재시도한다. 비동기 기본값에서는
         // 쓰기 직후 read가 stale 스냅샷을 돌려주고(read-your-write 위반), evict가 실패해도 예외가 오지 않아
         // task가 성공으로 완료된다. immediateWrites로 동기 적용을 복구한다. (issue #1533)
-        val cacheWriter = RedisCacheWriter.create(redisConnectionFactory) { configurer -> configurer.immediateWrites() }
+        val cacheWriter =
+            RedisCacheWriter.create(redisConnectionFactory) { configurer ->
+                configurer.batchStrategy(BatchStrategies.scan(1_000)).immediateWrites()
+            }
 
         return RedisCacheManager
             .builder(cacheWriter)

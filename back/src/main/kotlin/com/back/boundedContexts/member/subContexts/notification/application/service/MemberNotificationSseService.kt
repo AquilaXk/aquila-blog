@@ -3,6 +3,8 @@ package com.back.boundedContexts.member.subContexts.notification.application.ser
 import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationStreamPayload
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -15,10 +17,13 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 @Service
 class MemberNotificationSseService(
     private val memberNotificationRepository: MemberNotificationRepositoryPort,
+    private val emitterFactory: MemberNotificationSseEmitterFactory,
     @param:Value("\${custom.member.notification.sse.maxEmittersPerMember:3}")
     private val maxEmittersPerMember: Int,
     @param:Value("\${custom.member.notification.sse.maxGlobalEmitters:2000}")
@@ -44,8 +49,13 @@ class MemberNotificationSseService(
         val disconnectCount: Long,
         val replayBatchCount: Long,
         val replayNotificationCount: Long,
+        val replayUnavailableNotificationCount: Long,
+        val replayFailureCount: Long,
+        val unreadUnavailableCount: Long,
         val heartbeatSentCount: Long,
         val sendFailureCount: Long,
+        val sendFailureRemovedEmitterCount: Long,
+        val emitterStateMismatchCount: Int,
     )
 
     private val logger = LoggerFactory.getLogger(MemberNotificationSseService::class.java)
@@ -55,6 +65,19 @@ class MemberNotificationSseService(
         private const val MAX_REPLAY_NOTIFICATIONS = 100
     }
 
+    init {
+        require(maxEmittersPerMember > 0) { "maxEmittersPerMember must be positive" }
+        require(maxGlobalEmitters > 0) { "maxGlobalEmitters must be positive" }
+        require(heartbeatSeconds >= 3) { "heartbeatSeconds must be at least 3" }
+        require(replayProbeSeconds >= heartbeatSeconds) { "replayProbeSeconds must be at least heartbeatSeconds" }
+        require(replayBatchSize in 1..MAX_REPLAY_NOTIFICATIONS) {
+            "replayBatchSize must be between 1 and $MAX_REPLAY_NOTIFICATIONS"
+        }
+    }
+
+    private class NotificationSendFailedException : RuntimeException()
+
+    private val stateLock = ReentrantLock()
     private val emittersByMemberId = ConcurrentHashMap<Long, MutableSet<SseEmitter>>()
     private val heartbeatTasks = ConcurrentHashMap<SseEmitter, ScheduledFuture<*>>()
     private val emitterOwners = ConcurrentHashMap<SseEmitter, Long>()
@@ -66,8 +89,12 @@ class MemberNotificationSseService(
     private val disconnectCount = AtomicLong(0)
     private val replayBatchCount = AtomicLong(0)
     private val replayNotificationCount = AtomicLong(0)
+    private val replayUnavailableNotificationCount = AtomicLong(0)
+    private val replayFailureCount = AtomicLong(0)
+    private val unreadUnavailableCount = AtomicLong(0)
     private val heartbeatSentCount = AtomicLong(0)
     private val sendFailureCount = AtomicLong(0)
+    private val sendFailureRemovedEmitterCount = AtomicLong(0)
     private val heartbeatScheduler =
         Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "member-notification-sse-heartbeat").apply {
@@ -79,35 +106,37 @@ class MemberNotificationSseService(
         memberId: Long,
         lastEventIdRaw: String?,
     ): SseEmitter {
-        val emitter = SseEmitter(0L)
-        val emitters = emittersByMemberId.computeIfAbsent(memberId) { ConcurrentHashMap.newKeySet() }
-        emitters.add(emitter)
-        emitterOwners[emitter] = memberId
-        emitterConnectedAtEpochMillis[emitter] = Instant.now().toEpochMilli()
-        enforceMemberEmitterLimit(memberId, emitters)
-        enforceGlobalEmitterLimit()
-
+        val emitter = emitterFactory.create()
         emitter.onCompletion { remove(memberId, emitter) }
         emitter.onTimeout { remove(memberId, emitter) }
         emitter.onError { remove(memberId, emitter) }
 
         val replayFrom = parseLastNotificationId(lastEventIdRaw) ?: 0L
+        val replayedLastId =
+            try {
+                replayMissedNotificationEvents(
+                    memberId = memberId,
+                    emitter = emitter,
+                    lastNotificationId = replayFrom,
+                )
+            } catch (_: NotificationSendFailedException) {
+                throw unavailableException()
+            }
+
+        registerEmitter(
+            memberId = memberId,
+            emitter = emitter,
+            lastNotificationId = maxOf(replayFrom, replayedLastId),
+        )
+        if (!sendConnectedEvent(memberId, emitter)) {
+            throw unavailableException()
+        }
+
         connectedCount.incrementAndGet()
         if (replayFrom > 0L) {
             reconnectSubscribeCount.incrementAndGet()
         }
-        val replayedLastId =
-            replayMissedNotificationEvents(
-                memberId = memberId,
-                emitter = emitter,
-                lastNotificationId = replayFrom,
-            )
-        emitterLastNotificationId[emitter] = maxOf(replayFrom, replayedLastId)
-        emitterLastReplayEpochMillis[emitter] = Instant.now().toEpochMilli()
-
-        sendConnectedEvent(emitter)
         registerHeartbeat(memberId, emitter)
-
         return emitter
     }
 
@@ -120,23 +149,49 @@ class MemberNotificationSseService(
         emittersByMemberId[memberId]
             ?.toList()
             ?.forEach { emitter ->
-                send(
-                    emitter = emitter,
-                    memberId = memberId,
-                    eventId = notificationEventId(notification.id),
-                    eventName = "notification",
-                    data = payload,
-                )
-                emitterLastNotificationId[emitter] = notification.id
+                val sent =
+                    send(
+                        emitter = emitter,
+                        memberId = memberId,
+                        eventId = notificationEventId(notification.id),
+                        eventName = "notification",
+                        data = payload,
+                    )
+                if (sent) {
+                    advanceCursorIfOwned(memberId, emitter, notification.id)
+                }
             }
     }
 
-    private fun sendConnectedEvent(emitter: SseEmitter) {
+    private fun registerEmitter(
+        memberId: Long,
+        emitter: SseEmitter,
+        lastNotificationId: Long,
+    ) {
+        stateLock.withLock {
+            val existingEmitters = emittersByMemberId.computeIfAbsent(memberId) { ConcurrentHashMap.newKeySet() }
+            enforceMemberEmitterCapacity(memberId, existingEmitters)
+            enforceGlobalEmitterCapacity()
+
+            emittersByMemberId
+                .computeIfAbsent(memberId) { ConcurrentHashMap.newKeySet() }
+                .add(emitter)
+            emitterOwners[emitter] = memberId
+            emitterConnectedAtEpochMillis[emitter] = Instant.now().toEpochMilli()
+            emitterLastNotificationId[emitter] = lastNotificationId
+            emitterLastReplayEpochMillis[emitter] = Instant.now().toEpochMilli()
+        }
+    }
+
+    private fun sendConnectedEvent(
+        memberId: Long,
+        emitter: SseEmitter,
+    ): Boolean {
         val connectedAt = Instant.now()
-        send(
+        return send(
             emitter = emitter,
-            memberId = null,
-            eventId = "connected-${connectedAt.toEpochMilli()}",
+            memberId = memberId,
+            eventId = null,
             eventName = "connected",
             data = mapOf("connectedAt" to connectedAt.toString()),
         )
@@ -145,23 +200,24 @@ class MemberNotificationSseService(
     private fun send(
         emitter: SseEmitter,
         memberId: Long?,
-        eventId: String,
+        eventId: String?,
         eventName: String,
         data: Any,
     ): Boolean {
         try {
-            emitter.send(
-                SseEmitter
-                    .event()
-                    .id(eventId)
-                    .name(eventName)
-                    .reconnectTime(DEFAULT_RETRY_MILLIS)
-                    .data(data, MediaType.APPLICATION_JSON),
-            )
+            val eventBuilder = SseEmitter.event()
+            eventId?.let(eventBuilder::id)
+            eventBuilder
+                .name(eventName)
+                .reconnectTime(DEFAULT_RETRY_MILLIS)
+                .data(data, MediaType.APPLICATION_JSON)
+            emitter.send(eventBuilder)
             return true
         } catch (_: Exception) {
             sendFailureCount.incrementAndGet()
-            memberId?.let { remove(it, emitter) }
+            if (memberId != null && remove(memberId, emitter)) {
+                sendFailureRemovedEmitterCount.incrementAndGet()
+            }
             return false
         }
     }
@@ -169,97 +225,168 @@ class MemberNotificationSseService(
     private fun sendHeartbeat(
         memberId: Long,
         emitter: SseEmitter,
-    ) {
+    ): Boolean {
         val heartbeatAt = Instant.now()
-        send(
-            emitter = emitter,
-            memberId = memberId,
-            eventId = "heartbeat-${heartbeatAt.toEpochMilli()}",
-            eventName = "heartbeat",
-            data = mapOf("heartbeatAt" to heartbeatAt.toString()),
-        )
-        heartbeatSentCount.incrementAndGet()
+        val sent =
+            send(
+                emitter = emitter,
+                memberId = memberId,
+                eventId = null,
+                eventName = "heartbeat",
+                data = mapOf("heartbeatAt" to heartbeatAt.toString()),
+            )
+        if (sent) {
+            heartbeatSentCount.incrementAndGet()
+        }
+        return sent
     }
 
     private fun registerHeartbeat(
         memberId: Long,
         emitter: SseEmitter,
     ) {
-        val fixedDelaySeconds = heartbeatSeconds.coerceAtLeast(3)
         val task =
             heartbeatScheduler.scheduleAtFixedRate(
                 {
-                    sendHeartbeat(memberId, emitter)
-                    if (shouldProbeReplay(emitter)) {
-                        replayMissedNotificationEvents(
-                            memberId = memberId,
-                            emitter = emitter,
-                            lastNotificationId = emitterLastNotificationId[emitter] ?: 0L,
-                        )
+                    if (!sendHeartbeat(memberId, emitter)) {
+                        return@scheduleAtFixedRate
                     }
+                    if (!shouldProbeReplay(memberId, emitter)) {
+                        return@scheduleAtFixedRate
+                    }
+                    replayOpenEmitter(memberId, emitter)
                 },
-                fixedDelaySeconds,
-                fixedDelaySeconds,
+                heartbeatSeconds,
+                heartbeatSeconds,
                 TimeUnit.SECONDS,
             )
 
-        heartbeatTasks[emitter] = task
+        stateLock.withLock {
+            if (emitterOwners[emitter] == memberId) {
+                heartbeatTasks[emitter] = task
+            } else {
+                task.cancel(true)
+            }
+        }
+    }
+
+    internal fun replayOpenEmitter(
+        memberId: Long,
+        emitter: SseEmitter,
+    ) {
+        val cursor = lastNotificationId(memberId, emitter) ?: return
+        try {
+            replayMissedNotificationEvents(
+                memberId = memberId,
+                emitter = emitter,
+                lastNotificationId = cursor,
+            )
+        } catch (_: NotificationSendFailedException) {
+            // send() already removed the failed emitter. Servlet error dispatch owns completion.
+        } catch (exception: AppException) {
+            if (remove(memberId, emitter)) {
+                emitter.completeWithError(exception)
+            }
+        }
     }
 
     private fun remove(
         memberId: Long,
         emitter: SseEmitter,
-    ) {
-        val removedOwner = emitterOwners.remove(emitter)
-        heartbeatTasks.remove(emitter)?.cancel(true)
-        emitterConnectedAtEpochMillis.remove(emitter)
-        emitterLastNotificationId.remove(emitter)
-        emitterLastReplayEpochMillis.remove(emitter)
-        emittersByMemberId[memberId]?.remove(emitter)
-        if (emittersByMemberId[memberId].isNullOrEmpty()) {
-            emittersByMemberId.remove(memberId)
-        }
-        if (removedOwner != null) {
+    ): Boolean =
+        stateLock.withLock {
+            if (emitterOwners[emitter] != memberId) {
+                return@withLock false
+            }
+            emitterOwners.remove(emitter)
+            heartbeatTasks.remove(emitter)?.cancel(true)
+            emitterConnectedAtEpochMillis.remove(emitter)
+            emitterLastNotificationId.remove(emitter)
+            emitterLastReplayEpochMillis.remove(emitter)
+            emittersByMemberId[memberId]?.remove(emitter)
+            if (emittersByMemberId[memberId].isNullOrEmpty()) {
+                emittersByMemberId.remove(memberId)
+            }
             disconnectCount.incrementAndGet()
+            true
         }
-    }
 
-    private fun shouldProbeReplay(emitter: SseEmitter): Boolean {
-        val now = Instant.now().toEpochMilli()
-        val replayIntervalMillis = replayProbeSeconds.coerceAtLeast(heartbeatSeconds).coerceAtLeast(3) * 1_000
-        val lastReplayAt = emitterLastReplayEpochMillis[emitter] ?: 0L
-        if (now - lastReplayAt < replayIntervalMillis) return false
-        emitterLastReplayEpochMillis[emitter] = now
-        return true
-    }
+    private fun advanceCursorIfOwned(
+        memberId: Long,
+        emitter: SseEmitter,
+        notificationId: Long,
+    ): Boolean =
+        stateLock.withLock {
+            if (emitterOwners[emitter] != memberId || !emitterLastNotificationId.containsKey(emitter)) {
+                return@withLock false
+            }
+            val previousId = emitterLastNotificationId.getValue(emitter)
+            emitterLastNotificationId[emitter] = maxOf(previousId, notificationId)
+            true
+        }
 
-    private fun enforceMemberEmitterLimit(
+    private fun lastNotificationId(
+        memberId: Long,
+        emitter: SseEmitter,
+    ): Long? =
+        stateLock.withLock {
+            if (emitterOwners[emitter] != memberId) {
+                null
+            } else {
+                emitterLastNotificationId[emitter]
+            }
+        }
+
+    private fun shouldProbeReplay(
+        memberId: Long,
+        emitter: SseEmitter,
+    ): Boolean =
+        stateLock.withLock {
+            if (emitterOwners[emitter] != memberId) {
+                return@withLock false
+            }
+            val now = Instant.now().toEpochMilli()
+            val replayIntervalMillis = replayProbeSeconds * 1_000
+            val lastReplayAt = emitterLastReplayEpochMillis[emitter] ?: return@withLock false
+            if (now - lastReplayAt < replayIntervalMillis) {
+                return@withLock false
+            }
+            emitterLastReplayEpochMillis[emitter] = now
+            true
+        }
+
+    private fun enforceMemberEmitterCapacity(
         memberId: Long,
         emitters: MutableSet<SseEmitter>,
     ) {
-        val safeLimit = maxEmittersPerMember.coerceAtLeast(1)
-        while (emitters.size > safeLimit) {
+        while (emitters.size >= maxEmittersPerMember) {
             val oldestEmitter = emitters.minByOrNull { emitterConnectedAtEpochMillis[it] ?: Long.MAX_VALUE } ?: return
             remove(memberId, oldestEmitter)
-            runCatching { oldestEmitter.complete() }
+            completeEvictedEmitter(oldestEmitter)
         }
     }
 
-    private fun enforceGlobalEmitterLimit() {
-        val safeGlobalLimit = maxGlobalEmitters.coerceAtLeast(100)
-        while (emitterConnectedAtEpochMillis.size > safeGlobalLimit) {
+    private fun enforceGlobalEmitterCapacity() {
+        while (emitterConnectedAtEpochMillis.size >= maxGlobalEmitters) {
             val oldestEmitter =
                 emitterConnectedAtEpochMillis.entries
                     .minByOrNull { it.value }
                     ?.key
                     ?: return
-            val ownerId = emitterOwners[oldestEmitter]
-            if (ownerId == null) {
-                emitterConnectedAtEpochMillis.remove(oldestEmitter)
-                continue
-            }
+            val ownerId = emitterOwners[oldestEmitter] ?: return
             remove(ownerId, oldestEmitter)
-            runCatching { oldestEmitter.complete() }
+            completeEvictedEmitter(oldestEmitter)
+        }
+    }
+
+    private fun completeEvictedEmitter(emitter: SseEmitter) {
+        try {
+            emitter.complete()
+        } catch (exception: Exception) {
+            logger.warn(
+                "notification_emitter_eviction_completion_failed reasonType={}",
+                exception::class.java.simpleName,
+            )
         }
     }
 
@@ -268,95 +395,164 @@ class MemberNotificationSseService(
         emitter: SseEmitter,
         lastNotificationId: Long,
     ): Long {
-        val safeLimit = replayBatchSize.coerceIn(1, MAX_REPLAY_NOTIFICATIONS)
         val notifications =
-            memberNotificationRepository.findByReceiverIdAndIdGreaterThan(
-                receiverId = memberId,
-                lastNotificationId = lastNotificationId,
-                limit = safeLimit,
-            )
-        if (notifications.isEmpty()) return lastNotificationId
+            try {
+                memberNotificationRepository.findByReceiverIdAndIdGreaterThan(
+                    receiverId = memberId,
+                    lastNotificationId = lastNotificationId,
+                    limit = replayBatchSize,
+                )
+            } catch (exception: Exception) {
+                throw replayUnavailable(memberId, "list", exception)
+            }
+        if (notifications.isEmpty()) {
+            return lastNotificationId
+        }
         replayBatchCount.incrementAndGet()
+
         val unreadCount =
-            runCatching { memberNotificationRepository.countUnreadByReceiverId(memberId).toInt() }
-                .onFailure { exception ->
-                    logger.warn(
-                        "notification_replay_unread_count_fallback memberId={} reason={}",
-                        memberId,
-                        exception::class.java.simpleName,
-                        exception,
-                    )
-                }.getOrDefault(0)
+            try {
+                memberNotificationRepository.countUnreadByReceiverId(memberId).toInt()
+            } catch (exception: Exception) {
+                unreadUnavailableCount.incrementAndGet()
+                throw replayUnavailable(memberId, "unread-count", exception)
+            }
 
         var latestId = lastNotificationId
         notifications.forEach { notification ->
+            val notificationId =
+                try {
+                    notification.id
+                } catch (exception: Exception) {
+                    throw replayUnavailable(memberId, "notification-id", exception)
+                }
             val dto =
-                runCatching { MemberNotificationDto(notification) }
-                    .onFailure { exception ->
-                        logger.warn(
-                            "notification_replay_item_skip memberId={} notificationId={} reason={}",
-                            memberId,
-                            notification.id,
-                            exception::class.java.simpleName,
-                            exception,
-                        )
-                    }.getOrNull()
-            if (dto == null) {
-                latestId = notification.id
-                emitterLastNotificationId[emitter] = latestId
-                return@forEach
-            }
-            val payload = MemberNotificationStreamPayload(dto, unreadCount)
+                try {
+                    MemberNotificationDto(notification)
+                } catch (exception: Exception) {
+                    logger.warn(
+                        "notification_replay_item_unavailable memberId={} notificationId={} reasonType={}",
+                        memberId,
+                        notificationId,
+                        exception::class.java.simpleName,
+                    )
+                    null
+                }
+            val unavailable = dto == null
             val sent =
                 send(
                     emitter = emitter,
                     memberId = memberId,
-                    eventId = notificationEventId(notification.id),
-                    eventName = "notification",
-                    data = payload,
+                    eventId = notificationEventId(notificationId),
+                    eventName = if (unavailable) "notification-unavailable" else "notification",
+                    data =
+                        dto?.let { MemberNotificationStreamPayload(it, unreadCount) }
+                            ?: mapOf(
+                                "notificationId" to notificationId,
+                                "status" to "UNAVAILABLE",
+                            ),
                 )
             if (!sent) {
-                return latestId
+                throw NotificationSendFailedException()
             }
-            latestId = notification.id
-            emitterLastNotificationId[emitter] = latestId
-            replayNotificationCount.incrementAndGet()
+
+            latestId = maxOf(latestId, notificationId)
+            advanceCursorIfOwned(memberId, emitter, notificationId)
+            if (unavailable) {
+                replayUnavailableNotificationCount.incrementAndGet()
+            } else {
+                replayNotificationCount.incrementAndGet()
+            }
         }
         return latestId
     }
 
+    private fun replayUnavailable(
+        memberId: Long,
+        operation: String,
+        exception: Exception,
+    ): AppException {
+        replayFailureCount.incrementAndGet()
+        logger.warn(
+            "notification_replay_unavailable memberId={} operation={} reasonType={}",
+            memberId,
+            operation,
+            exception::class.java.simpleName,
+        )
+        return AppException(
+            errorCode = ErrorCode.SERVICE_UNAVAILABLE,
+            cause = exception,
+        )
+    }
+
+    private fun unavailableException(): AppException = AppException(ErrorCode.SERVICE_UNAVAILABLE)
+
     private fun parseLastNotificationId(lastEventIdRaw: String?): Long? {
         val raw = lastEventIdRaw?.trim().orEmpty()
-        if (raw.isBlank()) return null
-        if (raw.startsWith("notification-")) return raw.removePrefix("notification-").toLongOrNull()
-        return raw.toLongOrNull()
+        if (raw.isBlank()) {
+            return null
+        }
+        val parsed =
+            if (raw.startsWith("notification-")) {
+                raw.removePrefix("notification-").toLongOrNull()
+            } else {
+                raw.toLongOrNull()
+            }
+        return parsed
+            ?.takeIf { it >= 0 }
+            ?: throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 알림 cursor입니다.")
     }
 
     private fun notificationEventId(notificationId: Long): String = "notification-$notificationId"
 
-    fun diagnostics(): StreamDiagnostics {
-        val now = Instant.now().toEpochMilli()
-        val oldestConnectedAt = emitterConnectedAtEpochMillis.values.minOrNull()
-        return StreamDiagnostics(
-            memberEmitterCount = emittersByMemberId.count { !it.value.isNullOrEmpty() },
-            globalEmitterCount = emitterConnectedAtEpochMillis.size,
-            oldestEmitterAgeSeconds =
-                oldestConnectedAt
-                    ?.let { connectedAt -> ((now - connectedAt).coerceAtLeast(0) / 1_000) }
-                    ?: 0,
-            maxEmittersPerMember = maxEmittersPerMember.coerceAtLeast(1),
-            maxGlobalEmitters = maxGlobalEmitters.coerceAtLeast(100),
-            heartbeatSeconds = heartbeatSeconds.coerceAtLeast(3),
-            replayProbeSeconds = replayProbeSeconds.coerceAtLeast(heartbeatSeconds).coerceAtLeast(3),
-            replayBatchSize = replayBatchSize.coerceIn(1, MAX_REPLAY_NOTIFICATIONS),
-            connectedCount = connectedCount.get(),
-            reconnectSubscribeCount = reconnectSubscribeCount.get(),
-            disconnectCount = disconnectCount.get(),
-            replayBatchCount = replayBatchCount.get(),
-            replayNotificationCount = replayNotificationCount.get(),
-            heartbeatSentCount = heartbeatSentCount.get(),
-            sendFailureCount = sendFailureCount.get(),
-        )
+    fun diagnostics(): StreamDiagnostics =
+        stateLock.withLock {
+            val now = Instant.now().toEpochMilli()
+            val oldestConnectedAt = emitterConnectedAtEpochMillis.values.minOrNull()
+            StreamDiagnostics(
+                memberEmitterCount = emittersByMemberId.count { !it.value.isNullOrEmpty() },
+                globalEmitterCount = emitterConnectedAtEpochMillis.size,
+                oldestEmitterAgeSeconds =
+                    oldestConnectedAt
+                        ?.let { connectedAt -> ((now - connectedAt).coerceAtLeast(0) / 1_000) }
+                        ?: 0,
+                maxEmittersPerMember = maxEmittersPerMember,
+                maxGlobalEmitters = maxGlobalEmitters,
+                heartbeatSeconds = heartbeatSeconds,
+                replayProbeSeconds = replayProbeSeconds,
+                replayBatchSize = replayBatchSize,
+                connectedCount = connectedCount.get(),
+                reconnectSubscribeCount = reconnectSubscribeCount.get(),
+                disconnectCount = disconnectCount.get(),
+                replayBatchCount = replayBatchCount.get(),
+                replayNotificationCount = replayNotificationCount.get(),
+                replayUnavailableNotificationCount = replayUnavailableNotificationCount.get(),
+                replayFailureCount = replayFailureCount.get(),
+                unreadUnavailableCount = unreadUnavailableCount.get(),
+                heartbeatSentCount = heartbeatSentCount.get(),
+                sendFailureCount = sendFailureCount.get(),
+                sendFailureRemovedEmitterCount = sendFailureRemovedEmitterCount.get(),
+                emitterStateMismatchCount = emitterStateMismatchCount(),
+            )
+        }
+
+    private fun emitterStateMismatchCount(): Int {
+        val allEmitters = mutableSetOf<SseEmitter>()
+        allEmitters.addAll(emitterOwners.keys)
+        allEmitters.addAll(emitterConnectedAtEpochMillis.keys)
+        allEmitters.addAll(emitterLastNotificationId.keys)
+        allEmitters.addAll(emitterLastReplayEpochMillis.keys)
+        allEmitters.addAll(heartbeatTasks.keys)
+        emittersByMemberId.values.forEach(allEmitters::addAll)
+        return allEmitters.count { emitter ->
+            val ownerId = emitterOwners[emitter]
+            ownerId == null ||
+                emitterConnectedAtEpochMillis[emitter] == null ||
+                emitterLastNotificationId[emitter] == null ||
+                emitterLastReplayEpochMillis[emitter] == null ||
+                heartbeatTasks[emitter] == null ||
+                emittersByMemberId[ownerId]?.contains(emitter) != true
+        }
     }
 
     @PreDestroy

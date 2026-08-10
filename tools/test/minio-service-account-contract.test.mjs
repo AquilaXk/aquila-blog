@@ -2,12 +2,14 @@ import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
 import {
   chmodSync,
+  closeSync,
   copyFileSync,
   existsSync,
+  fstatSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -67,6 +69,18 @@ const runNode = (args, options = {}) =>
     stdio: ["ignore", "pipe", "pipe"],
     ...options,
   })
+
+const readPrivateText = (filePath) => {
+  const fileDescriptor = openSync(filePath, "r")
+  try {
+    return {
+      mode: fstatSync(fileDescriptor).mode & 0o777,
+      text: readFileSync(fileDescriptor, "utf8"),
+    }
+  } finally {
+    closeSync(fileDescriptor)
+  }
+}
 
 test("storage identity env contract pins immutable images and closes the root/current/rotation boundary", async () => {
   const contract = JSON.parse(requiredText(contractPath))
@@ -277,8 +291,9 @@ test("owner rotation consumes generated credentials atomically and keeps only no
     ])
     assert.equal(firstOutput.includes(firstSecret), false)
     assert.equal(existsSync(firstCredential), false, "consumed credential file must be removed")
-    assert.equal(statSync(envFile).mode & 0o777, 0o600)
-    let updated = readFileSync(envFile, "utf8")
+    const firstEnvSnapshot = readPrivateText(envFile)
+    assert.equal(firstEnvSnapshot.mode, 0o600)
+    let updated = firstEnvSnapshot.text
     assert.match(updated, /^CUSTOM_STORAGE_ACCESSKEY=storage-app-v1$/m)
     assert.match(updated, new RegExp(`^CUSTOM_STORAGE_SECRETKEY=${firstSecret}$`, "m"))
     assert.match(updated, /^CUSTOM_STORAGE_CREDENTIAL_VERSION=1$/m)
@@ -302,7 +317,7 @@ test("owner rotation consumes generated credentials atomically and keeps only no
       "1700000100",
     ])
     assert.equal(secondOutput.includes(secondSecret), false)
-    updated = readFileSync(envFile, "utf8")
+    updated = readPrivateText(envFile).text
     assert.match(updated, /^CUSTOM_STORAGE_ACCESSKEY=storage-app-v2$/m)
     assert.match(updated, new RegExp(`^CUSTOM_STORAGE_SECRETKEY=${secondSecret}$`, "m"))
     assert.match(updated, /^CUSTOM_STORAGE_CREDENTIAL_VERSION=2$/m)
@@ -335,7 +350,7 @@ test("owner rotation consumes generated credentials atomically and keeps only no
     assert.equal(`${blocked.stdout}${blocked.stderr}`.includes("third-secret-value"), false)
 
     runNode([rotationToolPath, "finalize", "--env-file", envFile])
-    updated = readFileSync(envFile, "utf8")
+    updated = readPrivateText(envFile).text
     assert.doesNotMatch(updated, /CUSTOM_STORAGE_PREVIOUS_/)
     assert.doesNotMatch(updated, /CUSTOM_STORAGE_ROTATION_STARTED_AT_EPOCH_SECONDS/)
     assert.match(updated, /^CUSTOM_STORAGE_ACCESSKEY=storage-app-v2$/m)

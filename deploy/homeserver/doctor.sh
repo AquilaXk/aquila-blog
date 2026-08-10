@@ -6,11 +6,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CURSOR_KEYRING_GUARD="${SCRIPT_DIR}/cursor_keyring_guard.sh"
+MINIO_SERVICE_IDENTITY_GUARD="${SCRIPT_DIR}/minio_service_identity.sh"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 EDGE_NETWORK_NAME="blog_home_edge"
 APP_NETWORK_NAME="blog_home_app"
 OBSERVE_NETWORK_NAME="blog_home_observe"
+DATA_NETWORK_NAME="blog_home_data"
 NETWORK_NAME="${EDGE_NETWORK_NAME}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -804,6 +806,18 @@ public_snapshot_code="$(
 )"
 echo "internal_snapshot=${internal_snapshot_code:-none}"
 echo "public_snapshot=${public_snapshot_code:-none}"
+
+print_section "MinIO Service Identity"
+if [[ ! -x "${MINIO_SERVICE_IDENTITY_GUARD}" ]]; then
+  echo "minio service identity: INVALID (guard missing)"
+elif minio_identity_status="$("${SCRIPT_DIR}/minio_service_identity.sh" check "${ENV_FILE}" "${DATA_NETWORK_NAME}" 2>&1)"; then
+  echo "minio service identity: VALID"
+  printf '%s\n' "${minio_identity_status}"
+else
+  echo "minio service identity: INVALID"
+  # identity guard diagnostics contain only state/reason/version, never credentials.
+  printf '%s\n' "${minio_identity_status}"
+fi
 
 print_section "Cursor Signing Keyring"
 if [[ ! -x "${CURSOR_KEYRING_GUARD}" ]]; then

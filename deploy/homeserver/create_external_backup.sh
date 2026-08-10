@@ -303,6 +303,19 @@ ensure_image_env_key_from_local_digest() {
   log "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
 }
 
+require_digest_image_env_key() {
+  local key="$1"
+  local value file_value
+  value="$(trim_quotes "$(env_value "${key}")")"
+  [[ -n "${value}" ]] || fail "required image env key is missing before backup compose evaluation: ${key}"
+  require_digest_image_value "${key}" "${value}"
+  file_value="$(trim_quotes "$(read_key_from_file "${key}" "${ENV_FILE}")")"
+  if [[ "${value}" != "${file_value}" ]]; then
+    ensure_compose_env_work_file
+    upsert_env_key "${key}" "${value}"
+  fi
+}
+
 container_image_for_service_any_state() {
   local service="$1"
   local container_id
@@ -378,7 +391,7 @@ ensure_compose_image_env_defaults() {
   ensure_image_env_key_from_local_digest "NODE_RUNTIME_IMAGE" "node:20-alpine"
   ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
   ensure_image_env_key_from_local_digest "REDIS_IMAGE" "redis:7-alpine"
-  ensure_image_env_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
+  require_digest_image_env_key "MINIO_IMAGE"
   ensure_backend_runtime_image_env_key "BACK_BLUE_IMAGE" "back_blue"
   ensure_backend_runtime_image_env_key "BACK_GREEN_IMAGE" "back_green"
   ensure_backend_runtime_image_env_key "BACK_READ_IMAGE" "back_read"

@@ -176,7 +176,10 @@ export const validateEnvText = ({ contract, target, text, nowEpochSeconds = Math
       // rejectEmptyValue는 그 예외에서 다시 빠져나오는 opt-in이다. requiredWhen 게이트가 닫혀
       // 있어도 빈 값이 어떤 상태도 뜻하지 않는 키(Caddy 주소, SSR upstream)에 붙인다.
       const declaresValueShape =
-        definition.kind !== undefined || Boolean(definition.allowedValues) || Boolean(definition.minLength)
+        definition.kind !== undefined ||
+        Boolean(definition.allowedValues) ||
+        Boolean(definition.minLength) ||
+        Boolean(definition.maxLength)
       const exemptWhileGateClosed = Boolean(definition.requiredWhen) && definition.rejectEmptyValue !== true
       if (env.has(definition.name) && declaresValueShape && !exemptWhileGateClosed) {
         errors.push(safeError(definition.name, "must be removed entirely rather than set to an empty value"))
@@ -212,6 +215,9 @@ export const validateEnvText = ({ contract, target, text, nowEpochSeconds = Math
 
     if (definition.minLength && value.length < definition.minLength) {
       errors.push(safeError(definition.name, `must be at least ${definition.minLength} characters`))
+    }
+    if (definition.maxLength && value.length > definition.maxLength) {
+      errors.push(safeError(definition.name, `must be at most ${definition.maxLength} characters`))
     }
 
     // DNS 호스트는 대소문자를 구분하지 않는다. Caddy도 소문자로 정규화하므로 raw 비교면
@@ -256,6 +262,106 @@ export const validateEnvText = ({ contract, target, text, nowEpochSeconds = Math
   }
 
   for (const check of resolved.crossChecks || []) {
+    if (check.type === "storageServiceIdentity") {
+      if (valueOf(env, check.enabledKey).toLowerCase() !== "true") continue
+
+      const rootAccess = valueOf(env, check.rootAccessKey)
+      const rootSecret = valueOf(env, check.rootSecretKey)
+      const currentAccess = valueOf(env, check.currentAccessKey)
+      const currentAccessRaw = rawValueOfText(text, check.currentAccessKey)
+      const currentSecret = valueOf(env, check.currentSecretKey)
+      const currentSecretRaw = rawValueOfText(text, check.currentSecretKey)
+      const currentVersion = valueOf(env, check.currentVersionKey)
+      const previousAccess = valueOf(env, check.previousAccessKey)
+      const previousAccessRaw = rawValueOfText(text, check.previousAccessKey)
+      const previousVersion = valueOf(env, check.previousVersionKey)
+      const rotationStartedAt = valueOf(env, check.rotationStartedAtKey)
+      const canonicalPositiveDecimal = (value) => /^[1-9]\d*$/.test(value)
+      const boundedPositiveDecimal = (value) =>
+        canonicalPositiveDecimal(value) && BigInt(value) <= 9223372036854775807n
+      const previousValues = [previousAccess, previousVersion, rotationStartedAt]
+      const previousPresent = previousValues.some(Boolean)
+      const previousComplete = previousValues.every(Boolean)
+      const mcHostSecretPattern = /^[-A-Za-z0-9+/_~.=]+$/
+      if (!Number.isSafeInteger(nowEpochSeconds)) throw new Error("nowEpochSeconds must be a safe integer")
+      const now = BigInt(nowEpochSeconds)
+
+      for (const forbiddenKey of check.forbiddenKeys || []) {
+        if (env.has(forbiddenKey)) errors.push(safeError(forbiddenKey, "must not be present"))
+      }
+      if (rootAccess && currentAccess && rootAccess === currentAccess) {
+        errors.push(safeError(check.currentAccessKey, `must differ from ${check.rootAccessKey}`))
+      }
+      if (rootAccess && !/^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$/.test(rootAccess)) {
+        errors.push(safeError(check.rootAccessKey, "must be safe for MC_HOST credential transport"))
+      }
+      if (currentAccess && !/^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$/.test(currentAccess)) {
+        errors.push(safeError(check.currentAccessKey, "must be a safe MinIO application access-key id"))
+      }
+      if (rootSecret && currentSecret && rootSecret === currentSecret) {
+        errors.push(safeError(check.currentSecretKey, `must differ from ${check.rootSecretKey}`))
+      }
+      if (rootSecret && !mcHostSecretPattern.test(rootSecret)) {
+        errors.push(safeError(check.rootSecretKey, "must be safe for MC_HOST credential transport"))
+      }
+      if (currentSecret && !mcHostSecretPattern.test(currentSecret)) {
+        errors.push(safeError(check.currentSecretKey, "must be safe for MC_HOST credential transport"))
+      }
+      if (currentAccessRaw !== currentAccess) {
+        errors.push(safeError(check.currentAccessKey, "must not have leading or trailing whitespace"))
+      }
+      if (currentSecretRaw !== currentSecret) {
+        errors.push(safeError(check.currentSecretKey, "must not have leading or trailing whitespace"))
+      }
+      if (!boundedPositiveDecimal(currentVersion)) {
+        errors.push(safeError(check.currentVersionKey, "must be a canonical positive signed 64-bit integer"))
+      }
+      if (previousPresent && !previousComplete) {
+        errors.push(
+          safeError(
+            check.previousAccessKey,
+            "previous access key, version, and rotation start must be present together",
+          ),
+        )
+        continue
+      }
+      if (!previousPresent) continue
+
+      if (previousAccessRaw !== previousAccess) {
+        errors.push(safeError(check.previousAccessKey, "must not have leading or trailing whitespace"))
+      }
+      if (previousAccess === currentAccess || previousAccess === rootAccess) {
+        errors.push(safeError(check.previousAccessKey, "must differ from current and root access keys"))
+      }
+      if (previousAccess && !/^[A-Za-z0-9][A-Za-z0-9._-]{2,39}$/.test(previousAccess)) {
+        errors.push(safeError(check.previousAccessKey, "must be a safe MinIO application access-key id"))
+      }
+      if (!boundedPositiveDecimal(previousVersion)) {
+        errors.push(safeError(check.previousVersionKey, "must be a canonical positive signed 64-bit integer"))
+      }
+      if (!boundedPositiveDecimal(rotationStartedAt)) {
+        errors.push(safeError(check.rotationStartedAtKey, "must be canonical signed 64-bit epoch seconds"))
+        continue
+      }
+
+      const currentVersionNumber = boundedPositiveDecimal(currentVersion) ? BigInt(currentVersion) : null
+      const previousVersionNumber = boundedPositiveDecimal(previousVersion) ? BigInt(previousVersion) : null
+      const startedAt = BigInt(rotationStartedAt)
+      if (currentVersionNumber !== null && previousVersionNumber !== null && previousVersionNumber >= currentVersionNumber) {
+        errors.push(safeError(check.previousVersionKey, "must be lower than current storage credential version"))
+      }
+      if (startedAt > now) {
+        errors.push(safeError(check.rotationStartedAtKey, "must not be in the future"))
+      } else if (startedAt < now - BigInt(check.maxRotationLifetimeSeconds)) {
+        errors.push(
+          safeError(
+            check.rotationStartedAtKey,
+            `must be within ${check.maxRotationLifetimeSeconds} seconds`,
+          ),
+        )
+      }
+    }
+
     if (check.type === "cursorKeyring") {
       const currentSecret = valueOf(env, check.currentSecretKey)
       const currentSecretRaw = rawValueOfText(text, check.currentSecretKey)

@@ -1056,6 +1056,11 @@ jobs:
               GRAFANA_IMAGE \
               LOKI_IMAGE \
               PROMTAIL_IMAGE \
+              BACK_BLUE_IMAGE \
+              BACK_GREEN_IMAGE \
+              BACK_READ_IMAGE \
+              BACK_ADMIN_IMAGE \
+              BACK_WORKER_IMAGE \
               NODE_RUNTIME_IMAGE \
               DB_IMAGE \
               REDIS_IMAGE \

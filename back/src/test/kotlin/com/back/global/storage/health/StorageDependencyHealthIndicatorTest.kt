@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.s3.model.HeadBucketResponse
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException
 import software.amazon.awssdk.services.s3.model.S3Exception
 import java.net.SocketTimeoutException
+import java.net.URI
 import java.net.UnknownHostException
 
 @DisplayName("Storage dependency readiness")
@@ -113,6 +114,69 @@ class StorageDependencyHealthIndicatorTest {
         assertThat(health.details.toString()).doesNotContain(TEST_SECRET)
     }
 
+    @Test
+    fun `default down result omits credential identity`() {
+        val result = StorageDependencyProbeResult.down(StorageDependencyFailureReason.OTHER)
+
+        assertThat(result.state).isEqualTo(StorageDependencyState.DOWN)
+        assertThat(result.reason).isEqualTo(StorageDependencyFailureReason.OTHER)
+        assertThat(result.credentialVersion).isNull()
+    }
+
+    @Test
+    fun `shared prober builds the SDK client before reporting bucket failure`() {
+        val outcome =
+            StorageDependencyProber.probe(
+                enabled = true,
+                existingClient = null,
+                forcePathStyle = true,
+            ) {
+                validatedConfiguration(endpoint = URI.create("http://127.0.0.1:1"))
+            }
+
+        try {
+            assertThat(outcome.client).isNotNull()
+            assertThat(outcome.result.state).isEqualTo(StorageDependencyState.DOWN)
+            assertThat(outcome.result.credentialVersion).isEqualTo("7")
+            assertThat(outcome.failureStage).isEqualTo(StorageDependencyProbeStage.BUCKET)
+        } finally {
+            outcome.client?.close()
+        }
+    }
+
+    @Test
+    fun `shared prober reports client construction failure without alternate client`() {
+        val outcome =
+            StorageDependencyProber.probe(
+                enabled = true,
+                existingClient = null,
+                forcePathStyle = true,
+            ) {
+                validatedConfiguration(endpoint = URI.create("relative-endpoint"))
+            }
+
+        assertThat(outcome.client).isNull()
+        assertThat(outcome.result.state).isEqualTo(StorageDependencyState.DOWN)
+        assertThat(outcome.result.reason).isEqualTo(StorageDependencyFailureReason.OTHER)
+        assertThat(outcome.result.credentialVersion).isEqualTo("7")
+        assertThat(outcome.failureStage).isEqualTo(StorageDependencyProbeStage.CLIENT)
+    }
+
+    @Test
+    fun `invalid endpoint and blank bucket fail closed with bounded reason`() {
+        listOf(
+            configuredProperties().apply { endpoint = "ftp://minio:9000" },
+            configuredProperties().apply { bucket = " " },
+        ).forEach { properties ->
+            val registry = SimpleMeterRegistry()
+            val health = StorageDependencyHealthIndicator(CloudStorageAdapter(properties, registry), registry).health()
+
+            assertThat(health.status).isEqualTo(Status.DOWN)
+            assertThat(health.details).containsOnlyKeys("state", "reason")
+            assertThat(health.details["reason"]).isEqualTo(StorageDependencyFailureReason.INVALID_CONFIGURATION.wireValue)
+        }
+    }
+
     private fun indicator(
         registry: SimpleMeterRegistry,
         onHeadBucket: () -> HeadBucketResponse,
@@ -127,6 +191,16 @@ class StorageDependencyHealthIndicatorTest {
         CloudStorageProperties(
             enabled = true,
             endpoint = "http://minio:9000",
+            region = "us-east-1",
+            bucket = "contract-bucket",
+            accessKey = "contract-access",
+            secretKey = TEST_SECRET,
+            credentialVersion = "7",
+        )
+
+    private fun validatedConfiguration(endpoint: URI): ValidatedStorageConfiguration =
+        ValidatedStorageConfiguration(
+            endpoint = endpoint,
             region = "us-east-1",
             bucket = "contract-bucket",
             accessKey = "contract-access",

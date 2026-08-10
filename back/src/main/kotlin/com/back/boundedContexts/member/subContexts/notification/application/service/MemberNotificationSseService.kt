@@ -63,6 +63,7 @@ class MemberNotificationSseService(
     companion object {
         private const val DEFAULT_RETRY_MILLIS = 5_000L
         private const val MAX_REPLAY_NOTIFICATIONS = 100
+        private const val MEMBER_DELIVERY_LOCK_STRIPES = 64
     }
 
     init {
@@ -78,6 +79,9 @@ class MemberNotificationSseService(
     private class NotificationSendFailedException : RuntimeException()
 
     private val stateLock = ReentrantLock()
+
+    // Bounded stripes prevent member-key lock growth while closing replay/register delivery gaps.
+    private val memberDeliveryLocks = Array(MEMBER_DELIVERY_LOCK_STRIPES) { ReentrantLock() }
     private val emittersByMemberId = ConcurrentHashMap<Long, MutableSet<SseEmitter>>()
     private val heartbeatTasks = ConcurrentHashMap<SseEmitter, ScheduledFuture<*>>()
     private val emitterOwners = ConcurrentHashMap<SseEmitter, Long>()
@@ -112,32 +116,34 @@ class MemberNotificationSseService(
         emitter.onError { remove(memberId, emitter) }
 
         val replayFrom = parseLastNotificationId(lastEventIdRaw) ?: 0L
-        val replayedLastId =
-            try {
-                replayMissedNotificationEvents(
-                    memberId = memberId,
-                    emitter = emitter,
-                    lastNotificationId = replayFrom,
-                )
-            } catch (_: NotificationSendFailedException) {
+        return memberDeliveryLock(memberId).withLock {
+            val replayedLastId =
+                try {
+                    replayMissedNotificationEvents(
+                        memberId = memberId,
+                        emitter = emitter,
+                        lastNotificationId = replayFrom,
+                    )
+                } catch (_: NotificationSendFailedException) {
+                    throw unavailableException()
+                }
+
+            registerEmitter(
+                memberId = memberId,
+                emitter = emitter,
+                lastNotificationId = maxOf(replayFrom, replayedLastId),
+            )
+            if (!sendConnectedEvent(memberId, emitter)) {
                 throw unavailableException()
             }
 
-        registerEmitter(
-            memberId = memberId,
-            emitter = emitter,
-            lastNotificationId = maxOf(replayFrom, replayedLastId),
-        )
-        if (!sendConnectedEvent(memberId, emitter)) {
-            throw unavailableException()
+            connectedCount.incrementAndGet()
+            if (replayFrom > 0L) {
+                reconnectSubscribeCount.incrementAndGet()
+            }
+            registerHeartbeat(memberId, emitter)
+            emitter
         }
-
-        connectedCount.incrementAndGet()
-        if (replayFrom > 0L) {
-            reconnectSubscribeCount.incrementAndGet()
-        }
-        registerHeartbeat(memberId, emitter)
-        return emitter
     }
 
     fun publish(
@@ -145,22 +151,24 @@ class MemberNotificationSseService(
         notification: MemberNotificationDto,
         unreadCount: Int,
     ) {
-        val payload = MemberNotificationStreamPayload(notification, unreadCount)
-        emittersByMemberId[memberId]
-            ?.toList()
-            ?.forEach { emitter ->
-                val sent =
-                    send(
-                        emitter = emitter,
-                        memberId = memberId,
-                        eventId = notificationEventId(notification.id),
-                        eventName = "notification",
-                        data = payload,
-                    )
-                if (sent) {
-                    advanceCursorIfOwned(memberId, emitter, notification.id)
+        memberDeliveryLock(memberId).withLock {
+            val payload = MemberNotificationStreamPayload(notification, unreadCount)
+            emittersByMemberId[memberId]
+                ?.toList()
+                ?.forEach { emitter ->
+                    val sent =
+                        send(
+                            emitter = emitter,
+                            memberId = memberId,
+                            eventId = notificationEventId(notification.id),
+                            eventName = "notification",
+                            data = payload,
+                        )
+                    if (sent) {
+                        advanceCursorIfOwned(memberId, emitter, notification.id)
+                    }
                 }
-            }
+        }
     }
 
     private fun registerEmitter(
@@ -274,21 +282,26 @@ class MemberNotificationSseService(
         memberId: Long,
         emitter: SseEmitter,
     ) {
-        val cursor = lastNotificationId(memberId, emitter) ?: return
-        try {
-            replayMissedNotificationEvents(
-                memberId = memberId,
-                emitter = emitter,
-                lastNotificationId = cursor,
-            )
-        } catch (_: NotificationSendFailedException) {
-            // send() already removed the failed emitter. Servlet error dispatch owns completion.
-        } catch (exception: AppException) {
-            if (remove(memberId, emitter)) {
-                emitter.completeWithError(exception)
+        memberDeliveryLock(memberId).withLock {
+            val cursor = lastNotificationId(memberId, emitter) ?: return
+            try {
+                replayMissedNotificationEvents(
+                    memberId = memberId,
+                    emitter = emitter,
+                    lastNotificationId = cursor,
+                )
+            } catch (_: NotificationSendFailedException) {
+                // send() already removed the failed emitter. Servlet error dispatch owns completion.
+            } catch (exception: AppException) {
+                if (remove(memberId, emitter)) {
+                    emitter.completeWithError(exception)
+                }
             }
         }
     }
+
+    private fun memberDeliveryLock(memberId: Long): ReentrantLock =
+        memberDeliveryLocks[Math.floorMod(memberId.hashCode(), MEMBER_DELIVERY_LOCK_STRIPES)]
 
     private fun remove(
         memberId: Long,

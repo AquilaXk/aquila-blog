@@ -2,14 +2,19 @@ package com.back.boundedContexts.post.adapter.storage
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
+import com.back.global.storage.health.StorageDependencyDownCache
+import com.back.global.storage.health.StorageDependencyFailureReason
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.test.util.ReflectionTestUtils
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException
+import software.amazon.awssdk.services.s3.model.S3Exception
 import software.amazon.awssdk.services.s3.model.S3Object
 import java.io.ByteArrayInputStream
 
@@ -138,6 +143,53 @@ class PostImageStorageAdapterTest {
             PostImageStoragePort.StoredObjectSummary("posts/2026/06/a.png", 10),
             PostImageStoragePort.StoredObjectSummary("posts/2026/06/b.png", 20),
         )
+    }
+
+    @Test
+    @DisplayName("listObjects dependency 실패는 safe reason과 DOWN 상태로 fail closed 한다")
+    fun listObjectsRecordsDependencyFailureAndFailsClosed() {
+        val failures =
+            listOf(
+                StorageDependencyFailureReason.MISSING_BUCKET to
+                    NoSuchBucketException
+                        .builder()
+                        .statusCode(404)
+                        .message("raw missing bucket detail")
+                        .build(),
+                StorageDependencyFailureReason.INVALID_CREDENTIAL to
+                    S3Exception
+                        .builder()
+                        .statusCode(403)
+                        .awsErrorDetails(
+                            AwsErrorDetails
+                                .builder()
+                                .errorCode("InvalidAccessKeyId")
+                                .errorMessage("raw credential detail")
+                                .build(),
+                        ).build(),
+            )
+
+        failures.forEach { (reason, failure) ->
+            val adapter =
+                PostImageStorageAdapter(
+                    PostImageStorageProperties(
+                        enabled = true,
+                        bucket = TEST_BUCKET,
+                        keyPrefix = "posts",
+                        credentialVersion = "7",
+                    ),
+                )
+            ReflectionTestUtils.setField(adapter, "s3Client", FailingListS3Client(failure))
+
+            assertThatThrownBy {
+                adapter.listObjects("posts/2026/06", limit = 25)
+            }.hasMessageContaining("503-1")
+                .hasMessageContaining("reason=${reason.wireValue}")
+                .hasMessageNotContaining("raw")
+
+            val downCache = ReflectionTestUtils.getField(adapter, "dependencyDownCache") as StorageDependencyDownCache
+            assertThat(downCache.reusableDown()?.reason).isEqualTo(reason)
+        }
     }
 
     @Test
@@ -375,6 +427,18 @@ class PostImageStorageAdapterTest {
             listObjectsRequests += listObjectsV2Request
             return responses.removeFirst()
         }
+
+        override fun serviceName(): String = "s3"
+
+        override fun close() {
+            // S3Client test double has no resources to close.
+        }
+    }
+
+    private class FailingListS3Client(
+        private val failure: RuntimeException,
+    ) : S3Client {
+        override fun listObjectsV2(listObjectsV2Request: ListObjectsV2Request): ListObjectsV2Response = throw failure
 
         override fun serviceName(): String = "s3"
 

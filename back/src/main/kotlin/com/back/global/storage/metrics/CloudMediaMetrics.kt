@@ -18,6 +18,7 @@ object CloudMediaMetrics {
     const val PLAYBACK_TOKEN_OPERATIONS = "cloud.playback.token.operations"
     const val RECONCILE_ORPHANS = "cloud.reconcile.orphans"
     const val STORAGE_OPERATIONS = "cloud.storage.operations"
+    const val STORAGE_DEPENDENCY_FAILURES = "storage.dependency.failures"
     const val DISK_TEMP_AVAIL_BYTES = "cloud.disk.temp.avail.bytes"
     const val DISK_TEMP_TOTAL_BYTES = "cloud.disk.temp.total.bytes"
 
@@ -104,6 +105,18 @@ object CloudMediaMetrics {
                 STORAGE_OPERATIONS,
                 "op",
                 op,
+            )?.increment()
+    }
+
+    fun recordStorageDependencyFailure(
+        meterRegistry: MeterRegistry?,
+        reason: String,
+    ) {
+        meterRegistry
+            ?.counter(
+                STORAGE_DEPENDENCY_FAILURES,
+                "reason",
+                reason,
             )?.increment()
     }
 

@@ -806,6 +806,7 @@ jobs:
             deploy/homeserver/create_external_backup.sh \
             deploy/homeserver/prune_external_backups.sh \
             deploy/homeserver/blue_green_deploy.sh \
+            deploy/homeserver/minio_service_identity.sh \
             deploy/homeserver/pgroonga_precheck.sh \
             deploy/homeserver/post_precheck_env_guard.sh \
             deploy/homeserver/rollback_last_deploy.sh \
@@ -1198,7 +1199,6 @@ jobs:
           ensure_image_key_from_local_digest "NODE_RUNTIME_IMAGE" "node:20-alpine"
           ensure_image_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
           ensure_image_key_from_local_digest "REDIS_IMAGE" "redis:7-alpine"
-          ensure_image_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
           require_digest_image_key "CLOUDFLARED_IMAGE"
           require_digest_image_key "AUTOHEAL_IMAGE"
           require_digest_image_key "DOCKER_SOCKET_PROXY_IMAGE"
@@ -1214,6 +1214,20 @@ jobs:
           require_digest_image_key "DB_IMAGE"
           require_digest_image_key "REDIS_IMAGE"
           require_digest_image_key "MINIO_IMAGE"
+          require_digest_image_key "MINIO_MC_IMAGE"
+
+          # The application identity must exist before any backend is recreated with it.
+          # Starting only MinIO leaves the currently active backend untouched; once prepare
+          # succeeds, every subsequent failure can safely roll back with the current identity.
+          RUNTIME_ENV_MATERIALIZED="true"
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d minio_1; then
+            echo "failed to start MinIO for service identity preparation" >&2
+            exit 1
+          fi
+          if ! "./deploy/homeserver/minio_service_identity.sh" prepare "deploy/homeserver/.env.prod" "blog_home_data"; then
+            echo "failed to prepare MinIO application identity" >&2
+            exit 1
+          fi
 
           if ! BACK_IMAGE="${STAGED_BACK_IMAGE}" ./deploy/homeserver/pgroonga_precheck.sh; then
             exit 1
@@ -1606,6 +1620,13 @@ jobs:
 
           if ! run_canary_ratio_check "detail(${DETAIL_POST_ID})" "${DETAIL_URL}"; then
             rollback_and_exit "post_public_read_canary_detail_failed"
+          fi
+
+          if ! "./deploy/homeserver/minio_service_identity.sh" audit "deploy/homeserver/.env.prod" "blog_home_data"; then
+            rollback_and_exit "minio_service_identity_audit_failed"
+          fi
+          if ! "./deploy/homeserver/minio_service_identity.sh" finalize "deploy/homeserver/.env.prod" "blog_home_data"; then
+            rollback_and_exit "minio_service_identity_finalize_failed"
           fi
 
           rm -f deploy/homeserver/.external-minio-migration-stopped

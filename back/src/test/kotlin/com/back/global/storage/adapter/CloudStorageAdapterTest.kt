@@ -16,6 +16,7 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.S3Exception
 import software.amazon.awssdk.services.s3.model.S3Object
@@ -180,6 +181,25 @@ class CloudStorageAdapterTest {
 
         // then
         assertThat(storedObject).isNull()
+    }
+
+    @Test
+    @DisplayName("openRange는 missing bucket을 object 404 성공으로 변환하지 않는다")
+    fun openRangeFailsClosedForNoSuchBucket() {
+        val s3Client =
+            RecordingS3Client {
+                throw NoSuchBucketException
+                    .builder()
+                    .statusCode(404)
+                    .message("bucket missing")
+                    .build()
+            }
+        val adapter = adapterWithClient(s3Client)
+
+        assertThatThrownBy { adapter.openRange(objectKey, 0L..9L) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("503-1")
+            .hasMessageContaining("reason=missing_bucket")
     }
 
     @Test

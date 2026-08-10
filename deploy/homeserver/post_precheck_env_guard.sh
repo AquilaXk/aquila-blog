@@ -80,12 +80,19 @@ main() {
   if ! "${CURSOR_KEYRING_GUARD}" "${ENV_FILE}"; then
     post_precheck_env_fail "cursor_keyring_invalid" "cursor keyring validation failed"
   fi
+  if [[ ! -x "${SCRIPT_DIR}/minio_service_identity.sh" ]]; then
+    post_precheck_env_fail "minio_identity_guard_missing" "MinIO service identity guard is missing or not executable"
+  fi
+  if ! "${SCRIPT_DIR}/minio_service_identity.sh" check "${ENV_FILE}" "blog_home_data"; then
+    post_precheck_env_fail "minio_identity_invalid" "MinIO service identity verification failed"
+  fi
 
   staged_back_image="${STAGED_BACK_IMAGE:-${1:-}}"
   staged_back_image="$(trim_quotes "${staged_back_image}")"
   require_digest_image_value "staged_back_image" "${staged_back_image}"
 
   echo "[POST_PRECHECK_ENV] checkpoint=after_cursor_keyring_guard"
+  echo "[POST_PRECHECK_ENV] checkpoint=after_minio_service_identity_guard"
   echo "[POST_PRECHECK_ENV] checkpoint=after_pgroonga_precheck"
 
   enabled_value="$(trim_quotes "$(env_value "CUSTOM__AI__SUMMARY__ENABLED")")"

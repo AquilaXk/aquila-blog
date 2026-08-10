@@ -18,6 +18,7 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-blog_home}"
 EDGE_NETWORK_NAME="blog_home_edge"
 APP_NETWORK_NAME="blog_home_app"
 OBSERVE_NETWORK_NAME="blog_home_observe"
+DATA_NETWORK_NAME="blog_home_data"
 NETWORK_NAME="${EDGE_NETWORK_NAME}"
 MATERIALIZE_SERVICE_ENV_SCRIPT="${SCRIPT_DIR}/materialize_service_env.sh"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
@@ -1400,7 +1401,6 @@ validate_required_runtime_env() {
   ensure_image_env_key_from_local_digest "NODE_RUNTIME_IMAGE" "node:20-alpine"
   ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
   ensure_image_env_key_from_local_digest "REDIS_IMAGE" "redis:7-alpine"
-  ensure_image_env_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
   require_digest_image_env_key "CLOUDFLARED_IMAGE"
   require_digest_image_env_key "AUTOHEAL_IMAGE"
   require_digest_image_env_key "DOCKER_SOCKET_PROXY_IMAGE"
@@ -1416,6 +1416,7 @@ validate_required_runtime_env() {
   require_digest_image_env_key "DB_IMAGE"
   require_digest_image_env_key "REDIS_IMAGE"
   require_digest_image_env_key "MINIO_IMAGE"
+  require_digest_image_env_key "MINIO_MC_IMAGE"
 }
 
 ensure_monitoring_bind_mount_permissions() {
@@ -3365,6 +3366,7 @@ action_backend_host="$(backend_host "${next_backend}")"
 echo "starting infra before ${next_backend} (${action_backend_host})"
 services_to_boot=(db_1 redis_1 minio_1 uptime_kuma autoheal)
 compose_up_with_retry "${services_to_boot[@]}"
+"${SCRIPT_DIR}/minio_service_identity.sh" prepare "${ENV_FILE}" "${DATA_NETWORK_NAME}"
 runtime_split_helpers_prebooted="false"
 active_backend_was_running="false"
 if is_backend_running "${active_backend}"; then

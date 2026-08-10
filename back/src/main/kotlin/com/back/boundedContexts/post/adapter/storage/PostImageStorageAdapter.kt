@@ -4,26 +4,26 @@ import com.back.boundedContexts.post.application.port.output.PostImageStoragePor
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.storage.health.StorageDependencyDownCache
+import com.back.global.storage.health.StorageDependencyFailureClassifier
+import com.back.global.storage.health.StorageDependencyOperationGuard
+import com.back.global.storage.health.StorageDependencyProbeResult
+import com.back.global.storage.health.StorageDependencyProber
+import com.back.global.storage.health.StorageRuntimeConfigurationValidator
+import com.back.global.storage.health.ValidatedStorageConfiguration
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.sync.RequestBody
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
-import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.model.CreateBucketRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
-import software.amazon.awssdk.services.s3.model.HeadBucketRequest
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 import java.io.BufferedInputStream
 import java.io.InputStream
-import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -44,6 +44,7 @@ class PostImageStorageAdapter(
     private val datePathFormatter = DateTimeFormatter.ofPattern("yyyy/MM")
     private val logger = LoggerFactory.getLogger(javaClass)
     private val initLock = Any()
+    private val dependencyDownCache = StorageDependencyDownCache()
 
     @Volatile
     private var s3Client: S3Client? = null
@@ -52,54 +53,25 @@ class PostImageStorageAdapter(
     private var initErrorMessage: String? = null
 
     @PostConstruct
-    fun initializeBucket() {
-        initializeStorage(forceRetry = true)
+    fun initializeDependency() {
+        probeStorageDependency()
     }
 
-    // 앱 부팅 시점에는 스토리지가 아직 준비되지 않을 수 있다(컨테이너 기동 순서 경쟁).
-    // 백엔드 재시작 없이 요청 자체가 회복되도록 이 메서드는 재시도 가능해야 한다.
-
-    private fun initializeStorage(forceRetry: Boolean) {
-        if (!properties.enabled) return
-
+    private fun probeStorageDependency(): StorageDependencyProbeResult =
         synchronized(initLock) {
-            if (!forceRetry && s3Client != null && initErrorMessage == null) return
-
-            val client =
-                try {
-                    s3Client ?: buildClient()
-                } catch (e: Exception) {
-                    initErrorMessage = "이미지 스토리지 설정 오류: ${e.message ?: "알 수 없는 오류"}"
-                    logger.error("Post image storage client initialization failed", e)
-                    return
-                }
-            s3Client = client
-
-            try {
-                // 이미 버킷이 있으면 그대로 사용하고, 없을 때만 createBucket을 시도한다.
-                client.headBucket(
-                    HeadBucketRequest
-                        .builder()
-                        .bucket(properties.bucket)
-                        .build(),
+            dependencyDownCache.reusableDown()?.let { return@synchronized it }
+            val outcome =
+                StorageDependencyProber.probe(
+                    enabled = properties.enabled,
+                    existingClient = s3Client,
+                    forcePathStyle = properties.pathStyleAccess,
+                    configurationProvider = ::resolveStorageConfiguration,
                 )
-                initErrorMessage = null
-            } catch (headError: Exception) {
-                try {
-                    client.createBucket(
-                        CreateBucketRequest
-                            .builder()
-                            .bucket(properties.bucket)
-                            .build(),
-                    )
-                    initErrorMessage = null
-                } catch (createError: Exception) {
-                    initErrorMessage = "스토리지 버킷 초기화 실패: ${createError.message ?: headError.message ?: "알 수 없는 오류"}"
-                    logger.error("Post image storage bucket initialization failed", createError)
-                }
-            }
+            s3Client = outcome.client
+            initErrorMessage = outcome.unavailableMessage("이미지 스토리지", logger)
+            dependencyDownCache.record(outcome.result)
+            outcome.result
         }
-    }
 
     override fun uploadPostImage(request: PostImageStoragePort.UploadImageRequest): String {
         validateUploadContentLength(
@@ -146,6 +118,7 @@ class PostImageStorageAdapter(
                     originalFilename = request.originalFilename,
                 )
             } catch (e: Exception) {
+                failIfDependencyUnavailable(e)
                 logger.error("Post image upload failed", e)
                 throw AppException(ErrorCode.INTERNAL_ERROR, "이미지 업로드에 실패했습니다.")
             }
@@ -179,6 +152,7 @@ class PostImageStorageAdapter(
                     originalFilename = request.originalFilename,
                 )
             } catch (e: Exception) {
+                failIfDependencyUnavailable(e)
                 logger.error("Post file upload failed", e)
                 throw AppException(ErrorCode.INTERNAL_ERROR, "첨부 파일 업로드에 실패했습니다.")
             }
@@ -218,7 +192,11 @@ class PostImageStorageAdapter(
         } catch (_: NoSuchKeyException) {
             null
         } catch (e: S3Exception) {
+            if (StorageDependencyFailureClassifier.isExplicitMissingBucket(e)) {
+                failIfDependencyUnavailable(e)
+            }
             if (e.statusCode() == 404) return null
+            failIfDependencyUnavailable(e)
             logger.error("Post image download failed (objectKey={})", objectKey, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, errorMessage)
         }
@@ -246,15 +224,21 @@ class PostImageStorageAdapter(
         do {
             val remaining = safeLimit - objects.size
             val response =
-                client.listObjectsV2(
-                    ListObjectsV2Request
-                        .builder()
-                        .bucket(properties.bucket)
-                        .prefix(normalizedPrefix)
-                        .maxKeys(remaining.coerceAtMost(S3_PAGE_SIZE))
-                        .continuationToken(continuationToken)
-                        .build(),
-                )
+                try {
+                    client.listObjectsV2(
+                        ListObjectsV2Request
+                            .builder()
+                            .bucket(properties.bucket)
+                            .prefix(normalizedPrefix)
+                            .maxKeys(remaining.coerceAtMost(S3_PAGE_SIZE))
+                            .continuationToken(continuationToken)
+                            .build(),
+                    )
+                } catch (e: Exception) {
+                    failIfDependencyUnavailable(e)
+                    logger.error("Post image list failed (prefix={})", normalizedPrefix, e)
+                    throw AppException(ErrorCode.INTERNAL_ERROR, "이미지 목록 조회에 실패했습니다.")
+                }
             val responseObjects = response.contents()
 
             responseObjects.forEach { s3Object ->
@@ -293,7 +277,11 @@ class PostImageStorageAdapter(
                     .build(),
             )
         } catch (e: S3Exception) {
+            if (StorageDependencyFailureClassifier.isExplicitMissingBucket(e)) {
+                failIfDependencyUnavailable(e)
+            }
             if (e.statusCode() == 404) return
+            failIfDependencyUnavailable(e)
             logger.error("Post image delete failed (objectKey={})", objectKey, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, errorMessage)
         }
@@ -394,12 +382,25 @@ class PostImageStorageAdapter(
         if (!properties.enabled) throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "이미지 스토리지가 비활성화되어 있습니다.")
     }
 
+    private fun failIfDependencyUnavailable(error: Throwable) {
+        StorageDependencyOperationGuard.failIfUnavailable(error, "이미지 스토리지", logger) { reason, message ->
+            synchronized(initLock) {
+                initErrorMessage = message
+                dependencyDownCache.record(
+                    StorageDependencyProbeResult.down(
+                        reason,
+                        properties.credentialVersion.trim().takeIf(String::isNotEmpty),
+                    ),
+                )
+            }
+        }
+    }
+
     private fun requireClient(): S3Client {
         ensureStorageEnabled()
 
-        // 부팅 시점에 MinIO가 늦게 떠도, 요청 시점에 재초기화 기회를 주어 503 고착을 막는다.
         if (s3Client == null || initErrorMessage != null) {
-            initializeStorage(forceRetry = true)
+            probeStorageDependency()
         }
 
         initErrorMessage?.let {
@@ -409,79 +410,15 @@ class PostImageStorageAdapter(
         return s3Client ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "이미지 스토리지가 아직 준비되지 않았습니다.")
     }
 
-    private fun buildClient(): S3Client {
-        val accessKey =
-            resolveProperty(
-                rawValue = properties.accessKey,
-                envKeyName = "CUSTOM_STORAGE_ACCESSKEY",
-                fallbackEnvKeyName = "MINIO_ROOT_USER",
-            )
-        val secretKey =
-            resolveProperty(
-                rawValue = properties.secretKey,
-                envKeyName = "CUSTOM_STORAGE_SECRETKEY",
-                fallbackEnvKeyName = "MINIO_ROOT_PASSWORD",
-            )
-
-        if (accessKey.isBlank() || secretKey.isBlank()) {
-            throw IllegalArgumentException("스토리지 계정 정보가 비어 있습니다.")
-        }
-        val endpoint =
-            resolveProperty(
-                rawValue = properties.endpoint,
-                envKeyName = "CUSTOM_STORAGE_ENDPOINT",
-                fallbackEnvKeyName = null,
-            )
-        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
-            throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT 형식이 올바르지 않습니다. (현재: $endpoint)")
-        }
-
-        val endpointUri =
-            try {
-                URI.create(endpoint)
-            } catch (e: Exception) {
-                throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT가 유효한 URI가 아닙니다. (현재: $endpoint)")
-            }
-
-        return S3Client
-            .builder()
-            .httpClientBuilder(UrlConnectionHttpClient.builder())
-            .endpointOverride(endpointUri)
-            .region(Region.of(properties.region))
-            .credentialsProvider(
-                StaticCredentialsProvider.create(
-                    AwsBasicCredentials.create(accessKey, secretKey),
-                ),
-            ).forcePathStyle(properties.pathStyleAccess)
-            .build()
-    }
-
-    private fun resolveProperty(
-        rawValue: String,
-        envKeyName: String,
-        fallbackEnvKeyName: String?,
-    ): String {
-        val trimmed = rawValue.trim()
-        val resolved =
-            // ".env에 ${ENV}" 형태가 들어온 경우 실제 환경변수 값으로 해석한다.
-            resolveEnvReference(trimmed)
-                ?: trimmed
-                    .ifBlank { fallbackEnvKeyName?.let { System.getenv(it)?.trim().orEmpty() } ?: "" }
-
-        if (resolved.contains("\${")) {
-            throw IllegalArgumentException("${envKeyName}에 미해결 placeholder가 포함되어 있습니다. (현재: $resolved)")
-        }
-
-        return resolved
-    }
-
-    private fun resolveEnvReference(value: String): String? {
-        val match = ENV_REFERENCE_REGEX.matchEntire(value) ?: return null
-        val envName = match.groupValues[1]
-        val defaultValue = match.groupValues.getOrNull(2).orEmpty()
-        val envValue = System.getenv(envName)?.trim().orEmpty()
-        return if (envValue.isNotBlank()) envValue else defaultValue
-    }
+    private fun resolveStorageConfiguration(): ValidatedStorageConfiguration =
+        StorageRuntimeConfigurationValidator.validate(
+            endpoint = properties.endpoint,
+            region = properties.region,
+            bucket = properties.bucket,
+            accessKey = properties.accessKey,
+            secretKey = properties.secretKey,
+            credentialVersion = properties.credentialVersion,
+        )
 
     private fun buildObjectKey(originalFilename: String?): String {
         val ext = extractExtension(originalFilename)
@@ -559,7 +496,6 @@ class PostImageStorageAdapter(
                 "image/x-webp" to "image/webp",
             )
 
-        private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
         private const val IMAGE_SIGNATURE_MAX_BYTES = 16
         private const val MAX_LIST_OBJECTS = 1_000
         private const val S3_PAGE_SIZE = 1_000

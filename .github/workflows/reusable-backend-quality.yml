@@ -187,6 +187,17 @@ jobs:
       - name: Test restore drill artifact evidence contract
         run: bash tools/test/restore-drill-artifact-evidence.test.sh
 
+      - name: Test cloud media alerts
+        run: bash tools/test/cloud-media-alerts.test.sh
+
+      - name: Test cursor keyring guard
+        run: bash tools/test/cursor-keyring-guard.test.sh
+
+      - name: Test execution inventory guard
+        run: |
+          node --test tools/test/test-execution-inventory.test.mjs
+          node tools/ci/verify-test-execution-inventory.mjs
+
       - name: Guard Terraform world-open security groups
         run: bash tools/guards/check-terraform-no-world-open-sg.sh
 

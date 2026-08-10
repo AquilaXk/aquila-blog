@@ -298,8 +298,13 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
                     disconnectCount = 8,
                     replayBatchCount = 6,
                     replayNotificationCount = 17,
+                    replayUnavailableNotificationCount = 2,
+                    replayFailureCount = 3,
+                    unreadUnavailableCount = 4,
                     heartbeatSentCount = 31,
                     sendFailureCount = 2,
+                    sendFailureRemovedEmitterCount = 2,
+                    emitterStateMismatchCount = 0,
                 ),
             )
 
@@ -316,8 +321,13 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
             jsonPath("$.disconnectCount") { value(8) }
             jsonPath("$.replayBatchCount") { value(6) }
             jsonPath("$.replayNotificationCount") { value(17) }
+            jsonPath("$.replayUnavailableNotificationCount") { value(2) }
+            jsonPath("$.replayFailureCount") { value(3) }
+            jsonPath("$.unreadUnavailableCount") { value(4) }
             jsonPath("$.heartbeatSentCount") { value(31) }
             jsonPath("$.sendFailureCount") { value(2) }
+            jsonPath("$.sendFailureRemovedEmitterCount") { value(2) }
+            jsonPath("$.emitterStateMismatchCount") { value(0) }
         }
     }
 

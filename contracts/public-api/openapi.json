@@ -6124,6 +6124,18 @@
             "type": "integer",
             "format": "int64"
           },
+          "replayUnavailableNotificationCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "replayFailureCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unreadUnavailableCount": {
+            "type": "integer",
+            "format": "int64"
+          },
           "heartbeatSentCount": {
             "type": "integer",
             "format": "int64"
@@ -6131,6 +6143,14 @@
           "sendFailureCount": {
             "type": "integer",
             "format": "int64"
+          },
+          "sendFailureRemovedEmitterCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "emitterStateMismatchCount": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

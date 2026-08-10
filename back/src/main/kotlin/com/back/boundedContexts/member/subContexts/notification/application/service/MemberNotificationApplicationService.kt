@@ -8,6 +8,8 @@ import com.back.boundedContexts.member.subContexts.notification.domain.MemberNot
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -64,51 +66,46 @@ class MemberNotificationApplicationService(
 
     @Transactional(readOnly = true)
     fun getLatest(member: Member): List<MemberNotificationDto> =
-        memberNotificationRepository
-            .findLatestByReceiverId(member.id)
-            .mapNotNull { notification ->
-                runCatching { MemberNotificationDto(notification) }
-                    .onFailure { exception ->
-                        logger.warn(
-                            "notification_snapshot_item_skip receiverId={} notificationId={} reason={}",
-                            member.id,
-                            notification.id,
-                            exception::class.java.simpleName,
-                            exception,
-                        )
-                    }.getOrNull()
-            }
+        readOrUnavailable(member.id, "latest") {
+            memberNotificationRepository
+                .findLatestByReceiverId(member.id)
+                .map(::MemberNotificationDto)
+        }
 
     @Transactional(readOnly = true)
-    fun unreadCount(member: Member): Int = memberNotificationRepository.countUnreadByReceiverId(member.id).toInt()
+    fun unreadCount(member: Member): Int =
+        readOrUnavailable(member.id, "unread-count") {
+            memberNotificationRepository.countUnreadByReceiverId(member.id).toInt()
+        }
 
     @Transactional(readOnly = true)
-    fun unreadCountSafe(member: Member): Int =
-        runCatching { unreadCount(member) }
-            .onFailure { exception ->
-                logger.warn(
-                    "notification_unread_count_fallback memberId={} reason={}",
-                    member.id,
-                    exception::class.java.simpleName,
-                    exception,
-                )
-            }.getOrDefault(0)
+    fun getSnapshot(member: Member): NotificationSnapshot =
+        NotificationSnapshot(
+            items = getLatest(member),
+            unreadCount = unreadCount(member),
+        )
 
-    @Transactional(readOnly = true)
-    fun getSnapshotSafe(member: Member): NotificationSnapshot {
-        val items =
-            runCatching { getLatest(member) }
-                .onFailure { exception ->
-                    logger.warn(
-                        "notification_snapshot_items_fallback memberId={} reason={}",
-                        member.id,
-                        exception::class.java.simpleName,
-                        exception,
-                    )
-                }.getOrDefault(emptyList())
-        val unreadCount = unreadCountSafe(member)
-        return NotificationSnapshot(items = items, unreadCount = unreadCount)
-    }
+    private fun <T> readOrUnavailable(
+        memberId: Long,
+        operation: String,
+        block: () -> T,
+    ): T =
+        try {
+            block()
+        } catch (exception: AppException) {
+            throw exception
+        } catch (exception: Exception) {
+            logger.warn(
+                "notification_read_unavailable memberId={} operation={} reasonType={}",
+                memberId,
+                operation,
+                exception::class.java.simpleName,
+            )
+            throw AppException(
+                errorCode = ErrorCode.SERVICE_UNAVAILABLE,
+                cause = exception,
+            )
+        }
 
     @Transactional
     fun markAllRead(member: Member): Int = memberNotificationRepository.markAllRead(member.id, java.time.Instant.now())

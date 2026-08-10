@@ -3559,6 +3559,76 @@ test("HOME_SERVER_ENV image digest는 pre-deploy 보존값보다 우선한다", 
   }
 })
 
+test("MinIO bootstrap은 required backend runtime image digest를 보존한다", () => {
+  const staleDigests = Object.fromEntries(
+    runtimeBackendImageKeys.map((key, index) => [
+      key,
+      `ghcr.io/aquilaxk/aquila-blog-back@sha256:${"abcde"[index].repeat(64)}`,
+    ]),
+  )
+  const sourceBlueDigest = `ghcr.io/aquilaxk/aquila-blog-back@sha256:${"f".repeat(64)}`
+  const supersededSourceBlueDigest = `ghcr.io/aquilaxk/aquila-blog-back@sha256:${"9".repeat(64)}`
+  const preDeployEnv = runtimeBackendImageKeys
+    .map((key) => `  export ${key} = '${staleDigests[key]}'`)
+    .join("\r\n")
+    .concat("\r\n")
+  const sourceEnv = [
+    `BACK_BLUE_IMAGE=${supersededSourceBlueDigest}`,
+    `  export BACK_BLUE_IMAGE = "${sourceBlueDigest}"`,
+  ]
+    .join("\r\n")
+    .concat("\r\n")
+  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-back-image-preserve-"))
+  const preDeployEnvPath = path.join(workDir, "pre-deploy.env")
+  const sourceEnvPath = path.join(workDir, "source.env")
+
+  try {
+    writeFileSync(preDeployEnvPath, preDeployEnv)
+    writeFileSync(sourceEnvPath, sourceEnv)
+    const functions = extractDeployRemoteFunctions([
+      "upsert_env_key",
+      "extract_env_value_from_text",
+      "extract_env_value",
+      "preserve_pre_deploy_runtime_image_env_keys",
+    ])
+    const scriptPath = path.join(workDir, "preserve-back-images.sh")
+    writeFileSync(
+      scriptPath,
+      [
+        "set -euo pipefail",
+        `cd ${JSON.stringify(workDir)}`,
+        "mkdir -p deploy/homeserver",
+        'PRE_DEPLOY_ENV_CAPTURED="true"',
+        `PRE_DEPLOY_ENV_CONTENT="$(cat ${JSON.stringify(preDeployEnvPath)})"`,
+        functions,
+        `cp ${JSON.stringify(sourceEnvPath)} deploy/homeserver/.env.prod`,
+        "preserve_pre_deploy_runtime_image_env_keys",
+        `for key in ${runtimeBackendImageKeys.join(" ")}; do echo "$key=$(extract_env_value "$key")"; done`,
+        "",
+      ].join("\n"),
+    )
+
+    const output = execFileSync("bash", [scriptPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+
+    assert.match(output, new RegExp(`^BACK_BLUE_IMAGE=${sourceBlueDigest}$`, "m"))
+    assert.match(
+      output,
+      new RegExp(
+        `HOME_SERVER_ENV overrides BACK_BLUE_IMAGE from pre-deploy env: ${staleDigests.BACK_BLUE_IMAGE} -> ${sourceBlueDigest}`,
+      ),
+    )
+    for (const key of runtimeBackendImageKeys.slice(1)) {
+      assert.match(output, new RegExp(`^${key}=${staleDigests[key]}$`, "m"))
+      assert.match(output, new RegExp(`preserved ${key} from pre-deploy env after HOME_SERVER_ENV overwrite`))
+    }
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
 test("blue-green deploy는 인프라/모니터링 부팅 후 crashloop 컨테이너를 진단한다", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const guardBody = deployScript.slice(

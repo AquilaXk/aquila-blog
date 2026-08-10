@@ -3,9 +3,12 @@ package com.back.boundedContexts.member.subContexts.notification.adapter.web
 import com.back.boundedContexts.member.model.shared.Member
 import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationApplicationService
 import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServletResponse
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.catchThrowable
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
@@ -21,15 +24,64 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 @DisplayName("ApiV1MemberNotificationController 단위 테스트")
 class ApiV1MemberNotificationControllerTest {
     @Test
-    @DisplayName("snapshot 조회 중 예기치 못한 예외가 발생해도 빈 스냅샷으로 폴백한다")
-    fun `snapshot unexpected exception fallback`() {
+    @DisplayName("비로그인 notification 읽기는 기존 empty·zero 계약을 유지한다")
+    fun `anonymous notification reads remain empty`() {
+        val memberNotificationApplicationService = mock(MemberNotificationApplicationService::class.java)
+        val memberNotificationSseService = mock(MemberNotificationSseService::class.java)
+        val rq = mock(Rq::class.java)
+        given(rq.actorOrNull).willReturn(null)
+        val controller =
+            ApiV1MemberNotificationController(
+                memberNotificationApplicationService = memberNotificationApplicationService,
+                memberNotificationSseService = memberNotificationSseService,
+                rq = rq,
+            )
+
+        val items = controller.getItems()
+        val unread = controller.unreadCount()
+        val snapshot = controller.getSnapshot(ServletWebRequest(MockHttpServletRequest(), MockHttpServletResponse()))
+
+        assertThat(items).isEmpty()
+        assertThat(unread.unreadCount).isZero()
+        assertThat(snapshot.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(snapshot.body?.items).isEmpty()
+        assertThat(snapshot.body?.unreadCount).isZero()
+    }
+
+    @Test
+    @DisplayName("인증된 list 조회 실패는 빈 성공 응답으로 바꾸지 않는다")
+    fun `authenticated list failure is unavailable`() {
+        val memberNotificationApplicationService = mock(MemberNotificationApplicationService::class.java)
+        val memberNotificationSseService = mock(MemberNotificationSseService::class.java)
+        val rq = mock(Rq::class.java)
+        val actor = Member(id = 13, username = "user13", password = null, nickname = "유저13", email = "u13@test.com")
+        given(rq.actorOrNull).willReturn(actor)
+        given(memberNotificationApplicationService.getLatest(actor))
+            .willThrow(AppException(ErrorCode.SERVICE_UNAVAILABLE))
+        val controller =
+            ApiV1MemberNotificationController(
+                memberNotificationApplicationService = memberNotificationApplicationService,
+                memberNotificationSseService = memberNotificationSseService,
+                rq = rq,
+            )
+
+        val thrown = catchThrowable { controller.getItems() }
+
+        assertThat(thrown).isInstanceOf(AppException::class.java)
+        assertThat((thrown as AppException).errorCode).isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
+    }
+
+    @Test
+    @DisplayName("인증된 snapshot 조회 실패는 빈 성공 응답으로 바꾸지 않는다")
+    fun `authenticated snapshot failure is unavailable`() {
         val memberNotificationApplicationService = mock(MemberNotificationApplicationService::class.java)
         val memberNotificationSseService = mock(MemberNotificationSseService::class.java)
         val rq = mock(Rq::class.java)
         val actor = Member(id = 1, username = "user1", password = null, nickname = "유저", email = "u@test.com")
 
         given(rq.actorOrNull).willReturn(actor)
-        given(memberNotificationApplicationService.getSnapshotSafe(actor)).willThrow(RuntimeException("unexpected"))
+        given(memberNotificationApplicationService.getSnapshot(actor))
+            .willThrow(AppException(ErrorCode.SERVICE_UNAVAILABLE))
 
         val controller =
             ApiV1MemberNotificationController(
@@ -39,12 +91,10 @@ class ApiV1MemberNotificationControllerTest {
             )
         val webRequest = ServletWebRequest(MockHttpServletRequest(), MockHttpServletResponse())
 
-        val result = controller.getSnapshot(webRequest)
+        val thrown = catchThrowable { controller.getSnapshot(webRequest) }
 
-        assertThat(result.statusCode).isEqualTo(HttpStatus.OK)
-        assertThat(result.body?.items).isEmpty()
-        assertThat(result.body?.unreadCount).isZero()
-        assertThat(result.headers.eTag).isNotBlank()
+        assertThat(thrown).isInstanceOf(AppException::class.java)
+        assertThat((thrown as AppException).errorCode).isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
     }
 
     @Test
@@ -56,7 +106,7 @@ class ApiV1MemberNotificationControllerTest {
         val actor = Member(id = 11, username = "user11", password = null, nickname = "유저11", email = "u11@test.com")
 
         given(rq.actorOrNull).willReturn(actor)
-        given(memberNotificationApplicationService.getSnapshotSafe(actor))
+        given(memberNotificationApplicationService.getSnapshot(actor))
             .willReturn(
                 MemberNotificationApplicationService.NotificationSnapshot(
                     items = emptyList(),
@@ -89,13 +139,16 @@ class ApiV1MemberNotificationControllerTest {
     }
 
     @Test
-    @DisplayName("actor 조회 단계에서 예외가 발생해도 unread-count는 0으로 폴백한다")
-    fun `unread count actor failure fallback`() {
+    @DisplayName("인증된 unread-count 의존성 실패는 0 성공 응답으로 바꾸지 않는다")
+    fun `authenticated unread count failure is unavailable`() {
         val memberNotificationApplicationService = mock(MemberNotificationApplicationService::class.java)
         val memberNotificationSseService = mock(MemberNotificationSseService::class.java)
         val rq = mock(Rq::class.java)
 
-        given(rq.actorOrNull).willThrow(RuntimeException("actor failure"))
+        val actor = Member(id = 12, username = "user12", password = null, nickname = "유저12", email = "u12@test.com")
+        given(rq.actorOrNull).willReturn(actor)
+        given(memberNotificationApplicationService.unreadCount(actor))
+            .willThrow(AppException(ErrorCode.SERVICE_UNAVAILABLE))
 
         val controller =
             ApiV1MemberNotificationController(
@@ -104,9 +157,10 @@ class ApiV1MemberNotificationControllerTest {
                 rq = rq,
             )
 
-        val result = controller.unreadCount()
+        val thrown = catchThrowable { controller.unreadCount() }
 
-        assertThat(result.unreadCount).isZero()
+        assertThat(thrown).isInstanceOf(AppException::class.java)
+        assertThat((thrown as AppException).errorCode).isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
     }
 
     @Test

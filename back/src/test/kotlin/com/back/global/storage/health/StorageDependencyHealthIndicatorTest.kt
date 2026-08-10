@@ -37,6 +37,59 @@ class StorageDependencyHealthIndicatorTest {
     }
 
     @Test
+    fun `consecutive failed readiness checks reuse the bounded down result`() {
+        val registry = SimpleMeterRegistry()
+        val properties = configuredProperties()
+        val client =
+            HeadBucketS3Client {
+                throw SdkClientException
+                    .builder()
+                    .message("timeout")
+                    .cause(SocketTimeoutException("timeout"))
+                    .build()
+            }
+        val adapter = CloudStorageAdapter(properties, registry)
+        ReflectionTestUtils.setField(adapter, "s3Client", client)
+        val indicator = StorageDependencyHealthIndicator(adapter, registry)
+
+        assertThat(indicator.health().status).isEqualTo(Status.DOWN)
+        assertThat(indicator.health().status).isEqualTo(Status.DOWN)
+        assertThat(client.headBucketCalls).isEqualTo(1)
+    }
+
+    @Test
+    fun `successful readiness checks remain live instead of reusing stale up`() {
+        val registry = SimpleMeterRegistry()
+        val properties = configuredProperties()
+        val client = HeadBucketS3Client { HeadBucketResponse.builder().build() }
+        val adapter = CloudStorageAdapter(properties, registry)
+        ReflectionTestUtils.setField(adapter, "s3Client", client)
+        val indicator = StorageDependencyHealthIndicator(adapter, registry)
+
+        assertThat(indicator.health().status).isEqualTo(Status.UP)
+        assertThat(indicator.health().status).isEqualTo(Status.UP)
+        assertThat(client.headBucketCalls).isEqualTo(2)
+    }
+
+    @Test
+    fun `down cache expires at the minimum reprobe boundary and ready clears it`() {
+        var now = 100L
+        val cache = StorageDependencyDownCache(minimumReprobeNanos = 5L) { now }
+        val down = StorageDependencyProbeResult.down(StorageDependencyFailureReason.TIMEOUT, "7")
+
+        cache.record(down)
+        assertThat(cache.reusableDown()).isEqualTo(down)
+        now = 104L
+        assertThat(cache.reusableDown()).isEqualTo(down)
+        now = 105L
+        assertThat(cache.reusableDown()).isNull()
+
+        cache.record(down)
+        cache.record(StorageDependencyProbeResult.ready("7"))
+        assertThat(cache.reusableDown()).isNull()
+    }
+
+    @Test
     fun `disabled storage is ready without credential detail`() {
         val registry = SimpleMeterRegistry()
         val properties = configuredProperties().apply { enabled = false }
@@ -97,6 +150,14 @@ class StorageDependencyHealthIndicatorTest {
                     .count(),
             ).isEqualTo(1.0)
         }
+    }
+
+    @Test
+    fun `generic object or multipart 404 is not classified as a missing bucket`() {
+        assertThat(StorageDependencyFailureClassifier.classify(s3Error("NoSuchUpload", 404)))
+            .isEqualTo(StorageDependencyFailureReason.OTHER)
+        assertThat(StorageDependencyFailureClassifier.classify(s3Error("NoSuchKey", 404)))
+            .isEqualTo(StorageDependencyFailureReason.OTHER)
     }
 
     @Test
@@ -221,7 +282,13 @@ class StorageDependencyHealthIndicatorTest {
     private class HeadBucketS3Client(
         private val onHeadBucket: () -> HeadBucketResponse,
     ) : S3Client {
-        override fun headBucket(headBucketRequest: HeadBucketRequest): HeadBucketResponse = onHeadBucket()
+        var headBucketCalls: Int = 0
+            private set
+
+        override fun headBucket(headBucketRequest: HeadBucketRequest): HeadBucketResponse {
+            headBucketCalls++
+            return onHeadBucket()
+        }
 
         override fun serviceName(): String = "s3"
 

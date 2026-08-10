@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.application.port.output.PostImageStoragePor
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.storage.health.StorageDependencyDownCache
 import com.back.global.storage.health.StorageDependencyFailureClassifier
 import com.back.global.storage.health.StorageDependencyOperationGuard
 import com.back.global.storage.health.StorageDependencyProbeResult
@@ -43,6 +44,7 @@ class PostImageStorageAdapter(
     private val datePathFormatter = DateTimeFormatter.ofPattern("yyyy/MM")
     private val logger = LoggerFactory.getLogger(javaClass)
     private val initLock = Any()
+    private val dependencyDownCache = StorageDependencyDownCache()
 
     @Volatile
     private var s3Client: S3Client? = null
@@ -57,6 +59,7 @@ class PostImageStorageAdapter(
 
     private fun probeStorageDependency(): StorageDependencyProbeResult =
         synchronized(initLock) {
+            dependencyDownCache.reusableDown()?.let { return@synchronized it }
             val outcome =
                 StorageDependencyProber.probe(
                     enabled = properties.enabled,
@@ -66,6 +69,7 @@ class PostImageStorageAdapter(
                 )
             s3Client = outcome.client
             initErrorMessage = outcome.unavailableMessage("이미지 스토리지", logger)
+            dependencyDownCache.record(outcome.result)
             outcome.result
         }
 
@@ -373,8 +377,16 @@ class PostImageStorageAdapter(
     }
 
     private fun failIfDependencyUnavailable(error: Throwable) {
-        StorageDependencyOperationGuard.failIfUnavailable(error, "이미지 스토리지", logger) {
-            initErrorMessage = it
+        StorageDependencyOperationGuard.failIfUnavailable(error, "이미지 스토리지", logger) { reason, message ->
+            synchronized(initLock) {
+                initErrorMessage = message
+                dependencyDownCache.record(
+                    StorageDependencyProbeResult.down(
+                        reason,
+                        properties.credentialVersion.trim().takeIf(String::isNotEmpty),
+                    ),
+                )
+            }
         }
     }
 

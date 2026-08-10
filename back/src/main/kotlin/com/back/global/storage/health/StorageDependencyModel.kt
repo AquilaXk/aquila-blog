@@ -62,6 +62,37 @@ data class StorageDependencyProbeResult(
     }
 }
 
+internal class StorageDependencyDownCache(
+    private val minimumReprobeNanos: Long = MINIMUM_REPROBE_NANOS,
+    private val nanoTime: () -> Long = System::nanoTime,
+) {
+    private var snapshot: Snapshot? = null
+
+    @Synchronized
+    fun reusableDown(): StorageDependencyProbeResult? {
+        val current = snapshot ?: return null
+        val elapsed = nanoTime() - current.recordedAtNanos
+        return current.result.takeIf { elapsed >= 0 && elapsed < minimumReprobeNanos }
+    }
+
+    @Synchronized
+    fun record(result: StorageDependencyProbeResult) {
+        snapshot =
+            result
+                .takeIf { it.state == StorageDependencyState.DOWN }
+                ?.let { Snapshot(it, nanoTime()) }
+    }
+
+    private data class Snapshot(
+        val result: StorageDependencyProbeResult,
+        val recordedAtNanos: Long,
+    )
+
+    private companion object {
+        const val MINIMUM_REPROBE_NANOS = 5_000_000_000L
+    }
+}
+
 class ValidatedStorageConfiguration internal constructor(
     val endpoint: URI,
     val region: String,
@@ -168,13 +199,13 @@ object StorageDependencyOperationGuard {
         error: Throwable,
         dependencyLabel: String,
         logger: Logger,
-        onUnavailable: (String) -> Unit,
+        onUnavailable: (StorageDependencyFailureReason, String) -> Unit,
     ) {
         val reason = StorageDependencyFailureClassifier.classify(error)
         if (reason == StorageDependencyFailureReason.OTHER) return
 
         val safeMessage = "$dependencyLabel dependency 사용 불가 (reason=${reason.wireValue})"
-        onUnavailable(safeMessage)
+        onUnavailable(reason, safeMessage)
         logger.error("{} operation failed (reason={})", dependencyLabel, reason.wireValue)
         throw AppException(ErrorCode.SERVICE_UNAVAILABLE, safeMessage)
     }
@@ -269,7 +300,7 @@ object StorageDependencyFailureClassifier {
                     ?.lowercase()
                     .orEmpty()
             return when {
-                s3Error is NoSuchBucketException || errorCode == "nosuchbucket" || s3Error.statusCode() == 404 ->
+                s3Error is NoSuchBucketException || errorCode == "nosuchbucket" ->
                     StorageDependencyFailureReason.MISSING_BUCKET
                 errorCode in INVALID_CREDENTIAL_CODES || s3Error.statusCode() == 401 ->
                     StorageDependencyFailureReason.INVALID_CREDENTIAL

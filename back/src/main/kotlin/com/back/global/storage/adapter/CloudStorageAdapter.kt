@@ -4,6 +4,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import com.back.global.storage.health.StorageDependencyDownCache
 import com.back.global.storage.health.StorageDependencyFailureClassifier
 import com.back.global.storage.health.StorageDependencyOperationGuard
 import com.back.global.storage.health.StorageDependencyProbeResult
@@ -44,6 +45,7 @@ class CloudStorageAdapter(
 ) : CloudStoragePort {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val initLock = Any()
+    private val dependencyDownCache = StorageDependencyDownCache()
 
     @Volatile
     private var s3Client: S3Client? = null
@@ -425,6 +427,7 @@ class CloudStorageAdapter(
 
     internal fun probeStorageDependency(): StorageDependencyProbeResult =
         synchronized(initLock) {
+            dependencyDownCache.reusableDown()?.let { return@synchronized it }
             val outcome =
                 StorageDependencyProber.probe(
                     enabled = properties.enabled,
@@ -434,6 +437,7 @@ class CloudStorageAdapter(
                 )
             s3Client = outcome.client
             initErrorMessage = outcome.unavailableMessage("클라우드 스토리지", logger)
+            dependencyDownCache.record(outcome.result)
             outcome.result
         }
 
@@ -450,8 +454,16 @@ class CloudStorageAdapter(
     }
 
     private fun failIfDependencyUnavailable(error: Throwable) {
-        StorageDependencyOperationGuard.failIfUnavailable(error, "클라우드 스토리지", logger) {
-            initErrorMessage = it
+        StorageDependencyOperationGuard.failIfUnavailable(error, "클라우드 스토리지", logger) { reason, message ->
+            synchronized(initLock) {
+                initErrorMessage = message
+                dependencyDownCache.record(
+                    StorageDependencyProbeResult.down(
+                        reason,
+                        properties.credentialVersion.trim().takeIf(String::isNotEmpty),
+                    ),
+                )
+            }
         }
     }
 

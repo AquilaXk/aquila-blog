@@ -224,15 +224,21 @@ class PostImageStorageAdapter(
         do {
             val remaining = safeLimit - objects.size
             val response =
-                client.listObjectsV2(
-                    ListObjectsV2Request
-                        .builder()
-                        .bucket(properties.bucket)
-                        .prefix(normalizedPrefix)
-                        .maxKeys(remaining.coerceAtMost(S3_PAGE_SIZE))
-                        .continuationToken(continuationToken)
-                        .build(),
-                )
+                try {
+                    client.listObjectsV2(
+                        ListObjectsV2Request
+                            .builder()
+                            .bucket(properties.bucket)
+                            .prefix(normalizedPrefix)
+                            .maxKeys(remaining.coerceAtMost(S3_PAGE_SIZE))
+                            .continuationToken(continuationToken)
+                            .build(),
+                    )
+                } catch (e: Exception) {
+                    failIfDependencyUnavailable(e)
+                    logger.error("Post image list failed (prefix={})", normalizedPrefix, e)
+                    throw AppException(ErrorCode.INTERNAL_ERROR, "이미지 목록 조회에 실패했습니다.")
+                }
             val responseObjects = response.contents()
 
             responseObjects.forEach { s3Object ->

@@ -19,6 +19,11 @@ const inventoryPath = path.resolve(root, option("--inventory", "tools/test/test-
 
 function fail(message) { failures.push(message) }
 function hasOwn(object, key) { return Object.prototype.hasOwnProperty.call(object || {}, key) }
+function isStaticallyFalse(value) {
+  if (value === false) return true
+  const normalized = String(value ?? "").trim()
+  return normalized === "false" || /^\$\{\{\s*false\s*\}\}$/i.test(normalized)
+}
 function relative(file) { return path.relative(root, file).split(path.sep).join("/") }
 function exists(file) { return existsSync(path.resolve(root, file)) }
 function files(dir) {
@@ -44,10 +49,16 @@ function workflow(entry) {
   if (!data) return null
   const job = data.jobs?.[entry.job]
   if (!entry.job || !job) { fail(`${entry.path}: missing job ${entry.job || ""}`); return null }
-  if (String(job.if).trim() === "false") fail(`${entry.path}: job ${entry.job} is if: false`)
+  if (isStaticallyFalse(job.if)) fail(`${entry.path}: job ${entry.job} is disabled`)
+  if (hasOwn(job, "continue-on-error") && !isStaticallyFalse(job["continue-on-error"])) {
+    fail(`${entry.path}: job ${entry.job} can ignore failures`)
+  }
   const step = (job.steps || []).find((candidate) => candidate.name === entry.step)
   if (!entry.step || !step) { fail(`${entry.path}: missing step ${entry.step || ""}`); return null }
-  if (String(step.if).trim() === "false") fail(`${entry.path}: step ${entry.step} is if: false`)
+  if (isStaticallyFalse(step.if)) fail(`${entry.path}: step ${entry.step} is disabled`)
+  if (hasOwn(step, "continue-on-error") && !isStaticallyFalse(step["continue-on-error"])) {
+    fail(`${entry.path}: step ${entry.step} can ignore failures`)
+  }
   return { data, job, step }
 }
 function simpleCommand(line) {

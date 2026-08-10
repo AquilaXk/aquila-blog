@@ -85,15 +85,27 @@ test("unclassified, duplicate, and stale paths fail closed", () => withFixture({
   ".github/workflows/ci.yml": workflow("node --test tools/test/example.test.mjs"),
 }, (root) => assert.throws(() => run(root), /duplicate|stale|unclassified/i)))
 
-test("job and step if false fail closed", () => withFixture({
+test("job and step disabled or failure-ignoring controls fail closed", () => withFixture({
   "tools/test/example.test.mjs": "",
   "tools/test/test-execution-inventory.json": inventory([direct]),
   ".github/workflows/ci.yml": workflow("node --test tools/test/example.test.mjs", "if: false\n    "),
 }, (root) => {
-  assert.throws(() => run(root), /job .*if: false/i)
+  assert.throws(() => run(root), /job .*disabled/i)
+  for (const control of ["if: ${{ false }}", "continue-on-error: true"]) {
+    writeFileSync(path.join(root, ".github/workflows/ci.yml"), workflow("node --test tools/test/example.test.mjs", `${control}\n    `))
+    assert.throws(() => run(root), /disabled|ignore failures/i)
+  }
   writeFileSync(path.join(root, ".github/workflows/ci.yml"), workflow("node --test tools/test/example.test.mjs", ""))
   writeFileSync(path.join(root, ".github/workflows/ci.yml"), `name: CI\non:\n  workflow_dispatch:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - name: run test\n        if: false\n        run: node --test tools/test/example.test.mjs\n`)
-  assert.throws(() => run(root), /step .*if: false/i)
+  assert.throws(() => run(root), /step .*disabled/i)
+  writeFileSync(path.join(root, ".github/workflows/ci.yml"), `name: CI\non:\n  workflow_dispatch:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - name: run test\n        if: \${{ false }}\n        run: node --test tools/test/example.test.mjs\n`)
+  assert.throws(() => run(root), /step .*disabled/i)
+  writeFileSync(path.join(root, ".github/workflows/ci.yml"), `name: CI\non:\n  workflow_dispatch:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - name: run test\n        continue-on-error: true\n        run: node --test tools/test/example.test.mjs\n`)
+  assert.throws(() => run(root), /step .*ignore failures/i)
+  for (const control of ["continue-on-error: false", "continue-on-error: \${{ false }}"]) {
+    writeFileSync(path.join(root, ".github/workflows/ci.yml"), `name: CI\non:\n  workflow_dispatch:\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - name: run test\n        ${control}\n        run: node --test tools/test/example.test.mjs\n`)
+    assert.match(run(root), /PASS/)
+  }
 }))
 
 test("indirect requires a reachable consumer with non-comment binding and executor evidence", () => withFixture({

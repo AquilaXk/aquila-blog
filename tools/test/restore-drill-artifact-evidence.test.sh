@@ -67,8 +67,13 @@ EOF
 
 expect_fail() {
   local name="$1"
+  local pattern="${2:-}"
   if "${verifier}" --evidence-dir "${artifact_dir}" >"${work_dir}/${name}.out" 2>&1; then
     echo "expected evidence verifier failure: ${name}" >&2
+    exit 1
+  fi
+  if [[ -n "${pattern}" ]] && ! grep -Eq -- "${pattern}" "${work_dir}/${name}.out"; then
+    echo "unexpected evidence verifier failure reason: ${name}" >&2
     exit 1
   fi
 }
@@ -85,9 +90,10 @@ expect_fail nested-file
 write_valid_fixture
 ln -s "${work_dir}/summary" "${artifact_dir}/extra-link"
 expect_fail extra-symlink
+write_valid_fixture
 
 rm "${artifact_dir}/restore-drill-summary.md"
-expect_fail missing-file
+expect_fail missing-file 'required regular nonempty artifact missing: restore-drill-summary\.md'
 write_valid_fixture
 mv "${artifact_dir}/restore-drill-summary.md" "${work_dir}/summary"
 ln -s "${work_dir}/summary" "${artifact_dir}/restore-drill-summary.md"

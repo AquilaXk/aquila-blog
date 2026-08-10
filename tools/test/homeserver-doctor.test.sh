@@ -137,6 +137,19 @@ if grep -qF 'CURSOR_SIGNING_SECRET")' "${doctor}"; then
   fail "doctor must delegate cursor secret handling to the safe keyring guard"
 fi
 
+if ! grep -qF 'print_section "MinIO Service Identity"' "${doctor}"; then
+  fail "expected doctor to report the MinIO service identity boundary"
+fi
+if ! grep -qF 'minio service identity: VALID' "${doctor}" || ! grep -qF 'minio service identity: INVALID' "${doctor}"; then
+  fail "expected doctor to distinguish a valid and invalid MinIO service identity"
+fi
+if ! grep -qF 'minio_service_identity.sh" check' "${doctor}"; then
+  fail "doctor must delegate live MinIO identity verification to the tracked checker"
+fi
+if grep -Eq 'echo .*\$\{?(MINIO_ROOT_PASSWORD|CUSTOM_STORAGE_SECRETKEY)' "${doctor}"; then
+  fail "doctor must never print a MinIO credential value"
+fi
+
 # shellcheck disable=SC2034  # 원본에서 떼어 온 env_value/print_env_key_status가 읽는 입력이다
 ENV_FILE="${env_full}"
 

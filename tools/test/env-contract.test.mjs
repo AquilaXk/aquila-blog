@@ -245,6 +245,7 @@ const baseHomeServerEnv = [
   "REDIS_IMAGE=redis@sha256:3333333333333333333333333333333333333333333333333333333333333333",
   "DB_IMAGE=jangka512/pgj@sha256:5555555555555555555555555555555555555555555555555555555555555555",
   "MINIO_IMAGE=minio/minio@sha256:6666666666666666666666666666666666666666666666666666666666666666",
+  "MINIO_MC_IMAGE=minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727",
   "AQUILA_EXTERNAL_STORAGE_ROOT=/mnt/aquila-blog-data",
   "AQUILA_BACKUP_ROOT=/mnt/aquila-blog-data/backups",
   "AQUILA_BACKUP_RETENTION_DAILY=14",
@@ -302,10 +303,12 @@ const baseHomeServerEnv = [
   "CUSTOM_STORAGE_ENDPOINT=http://minio:9000",
   "CUSTOM_STORAGE_REGION=us-east-1",
   "CUSTOM_STORAGE_BUCKET=blog-images",
-  "CUSTOM_STORAGE_ACCESSKEY=minio",
-  "CUSTOM_STORAGE_SECRETKEY=valid-minio-password",
+  "CUSTOM_STORAGE_ACCESSKEY=aquila-storage-v1",
+  "CUSTOM_STORAGE_SECRETKEY=valid-storage-secret-value",
+  "CUSTOM_STORAGE_CREDENTIAL_VERSION=1",
   "CUSTOM_STORAGE_PATHSTYLEACCESS=true",
   "CUSTOM_STORAGE_KEYPREFIX=posts",
+  "CUSTOM_STORAGE_CLOUD_KEY_PREFIX=cloud",
   "CUSTOM_STORAGE_MAXFILESIZEBYTES=99614720",
   "CUSTOM_STORAGE_CLOUD_DOCUMENT_MAXFILESIZEBYTES=99614720",
   "CUSTOM_STORAGE_CLOUD_PHOTO_MAXFILESIZEBYTES=52428800",
@@ -1168,7 +1171,6 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
     ["NODE_RUNTIME_IMAGE", "node:20-alpine"],
     ["DB_IMAGE", "jangka512/pgj:latest"],
     ["REDIS_IMAGE", "redis:7-alpine"],
-    ["MINIO_IMAGE", "minio/minio:latest"],
   ]
 
   for (const [key, image] of runtimeImageDefaults) {
@@ -1178,6 +1180,17 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
       new RegExp(`ensure_image_env_key_from_local_digest "${key}" "${escapedImage}"`),
     )
   }
+
+  assert.doesNotMatch(
+    externalBackupScript,
+    /ensure_image_env_key_from_local_digest "MINIO_IMAGE"/,
+    "external backup must not synthesize a mutable MinIO image when MINIO_IMAGE is absent",
+  )
+  assert.match(
+    externalBackupScript,
+    /require_digest_image_env_key "MINIO_IMAGE"/,
+    "external backup must require the source-owned immutable MinIO image",
+  )
 
   const imageGuardBody = externalBackupScript.slice(
     externalBackupScript.indexOf("ensure_image_env_key_from_local_digest() {"),

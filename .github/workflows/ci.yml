@@ -9,6 +9,7 @@ on:
       - "front/**"
       - "contracts/public-api/**"
       - "tools/contracts/**"
+      - "tools/test/**"
       - "tools/test/public-contract-manifest.test.mjs"
       - "tools/test/sync-public-contract-workflow.test.mjs"
       - "tools/test/setup-node-pin-parity.test.mjs"
@@ -122,6 +123,12 @@ jobs:
 
       - name: Verify standalone harness contracts
         run: bash tools/test/repository-standalone-verification.test.sh
+
+      - name: Verify repository quality config boundary
+        run: node --test tools/test/repository-quality-config-boundary.test.mjs
+
+      - name: Verify repository split baseline
+        run: bash tools/test/repository-split-baseline.test.sh
 
       - name: Verify public contract sync workflow contract
         run: node --test tools/test/sync-public-contract-workflow.test.mjs

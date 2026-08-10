@@ -116,6 +116,7 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "front/**",
     "contracts/public-api/**",
     "tools/contracts/**",
+    "tools/test/**",
     "tools/test/public-contract-manifest.test.mjs",
     "tools/test/sync-public-contract-workflow.test.mjs",
     "tools/test/setup-node-pin-parity.test.mjs",

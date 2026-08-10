@@ -199,9 +199,16 @@ jobs:
             "${HOME_SSH_USER}@${HOME_TAILSCALE_HOST}:${REMOTE_TMP_DIR}/artifacts/." \
             "${LOCAL_ARTIFACT_DIR}/"
 
+      - name: Verify restore drill evidence
+        run: bash tools/test/verify-external-backup-restore-drill.sh --evidence-dir "${RUNNER_TEMP}/restore-drill-artifacts"
+
+      - name: Publish restore drill summary
+        shell: bash
+        run: |
+          set -euo pipefail
           {
             echo "## Backup Restore Drill"
-            cat "${LOCAL_ARTIFACT_DIR}/restore-drill-summary.md"
+            cat "${RUNNER_TEMP}/restore-drill-artifacts/restore-drill-summary.md"
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload restore drill artifacts

@@ -8,6 +8,110 @@ PRIVACY_GATE_SCRIPT="${ROOT_DIR}/restore-privacy-gate.sh"
 WORKFLOW="${ROOT_DIR}/.github/workflows/backup-restore-drill.yml"
 LAUNCH_GATE_DOC="${ROOT_DIR}/docs/design/launch-gate-operations.md"
 
+evidence_fail() {
+  echo "restore drill evidence: $*" >&2
+  exit 1
+}
+
+require_evidence_file() {
+  local file="$1"
+  [[ -f "${file}" && ! -L "${file}" && -s "${file}" ]] || evidence_fail "required regular nonempty artifact missing: ${file##*/}"
+}
+
+require_exact_key() {
+  local file="$1"
+  local key="$2"
+  local count
+  count="$(grep -Ec "^${key}=" "${file}" || true)"
+  [[ "${count}" == "1" ]] || evidence_fail "${file##*/}: ${key} must occur exactly once"
+}
+
+value_for_key() {
+  local file="$1"
+  local key="$2"
+  grep -E "^${key}=" "${file}" | cut -d= -f2-
+}
+
+require_nonnegative_integer() {
+  local key="$1"
+  local value="$2"
+  [[ "${value}" =~ ^(0|[1-9][0-9]*)$ ]] || evidence_fail "invalid nonnegative integer: ${key}"
+}
+
+verify_evidence_dir() {
+  local evidence_dir="$1"
+  local summary="${evidence_dir}/restore-drill-summary.md"
+  local result="${evidence_dir}/restore-drill-result.env"
+  local privacy="${evidence_dir}/restore-privacy-gate.txt"
+  local checksum="${evidence_dir}/minio-checksums.sha256"
+  local file key value backup_id backup_class minio_hash checksum_hash
+  local -a result_keys=(STATUS BACKUP_SET_ID BACKUP_CLASS RPO_TARGET_MINUTES RPO_ACTUAL_MINUTES RTO_TARGET_MINUTES RTO_ACTUAL_SECONDS FLYWAY_SUCCESS_COUNT POST_ROW_COUNT LATEST_PUBLIC_POST_ID MINIO_SAMPLE_SHA256 ENCRYPTION RESTORE_PRIVACY_GATE)
+  local -a privacy_keys=(status backup_set_id backup_class tombstone_replay tombstone_count latest_tombstone_count missing_latest_tombstone_violations member_anonymization_violations active_session_violations undeleted_post_violations restored_deleted_object_violations minio_checksum traffic_open)
+
+  [[ -d "${evidence_dir}" && ! -L "${evidence_dir}" ]] || evidence_fail "evidence directory must be a real directory"
+  local entry relative_entry
+  while IFS= read -r -d '' entry; do
+    relative_entry="${entry#"${evidence_dir}/"}"
+    case "${relative_entry}" in
+      restore-drill-summary.md|restore-drill-result.env|restore-privacy-gate.txt|minio-checksums.sha256)
+        [[ -f "${entry}" && ! -L "${entry}" && -s "${entry}" ]] || evidence_fail "required regular nonempty artifact missing: ${relative_entry}"
+        ;;
+      *) evidence_fail "unexpected evidence entry: ${relative_entry}" ;;
+    esac
+  done < <(find "${evidence_dir}" -mindepth 1 -print0)
+  for file in "${summary}" "${result}" "${privacy}" "${checksum}"; do
+    require_evidence_file "${file}"
+    if grep -Eq -- '-----BEGIN( [A-Z]+)? PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|AKIA[0-9A-Z]{16}|^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*_)?(PASSWORD|SECRET|TOKEN|PRIVATE_KEY|ENCRYPTION_KEY_FILE)=' "${file}"; then
+      evidence_fail "secret or private-key marker in ${file##*/}"
+    fi
+  done
+
+  for key in "${result_keys[@]}"; do require_exact_key "${result}" "${key}"; done
+  [[ "$(value_for_key "${result}" STATUS)" == "success" ]] || evidence_fail "result STATUS must be success"
+  backup_id="$(value_for_key "${result}" BACKUP_SET_ID)"
+  backup_class="$(value_for_key "${result}" BACKUP_CLASS)"
+  [[ "${backup_id}" =~ ^[0-9]{8}-[0-9]{6}$ ]] || evidence_fail "invalid backup set id"
+  [[ "${backup_class}" =~ ^(daily|weekly|monthly)$ ]] || evidence_fail "invalid backup class"
+  for key in RPO_TARGET_MINUTES RPO_ACTUAL_MINUTES RTO_TARGET_MINUTES RTO_ACTUAL_SECONDS FLYWAY_SUCCESS_COUNT POST_ROW_COUNT LATEST_PUBLIC_POST_ID; do
+    require_nonnegative_integer "${key}" "$(value_for_key "${result}" "${key}")"
+  done
+  minio_hash="$(value_for_key "${result}" MINIO_SAMPLE_SHA256)"
+  [[ "${minio_hash}" =~ ^[0-9a-f]{64}$ ]] || evidence_fail "invalid MINIO_SAMPLE_SHA256"
+  [[ "$(value_for_key "${result}" ENCRYPTION)" == "openssl-enc-aes-256-cbc-pbkdf2" ]] || evidence_fail "unexpected ENCRYPTION"
+  [[ "$(value_for_key "${result}" RESTORE_PRIVACY_GATE)" == "pass" ]] || evidence_fail "result privacy gate must pass"
+
+  for key in "${privacy_keys[@]}"; do require_exact_key "${privacy}" "${key}"; done
+  [[ "$(value_for_key "${privacy}" status)" == "pass" ]] || evidence_fail "privacy status must pass"
+  [[ "$(value_for_key "${privacy}" backup_set_id)" == "${backup_id}" && "$(value_for_key "${privacy}" backup_class)" == "${backup_class}" ]] || evidence_fail "privacy backup identity mismatch"
+  [[ "$(value_for_key "${privacy}" tombstone_replay)" == "latest-state-compared" ]] || evidence_fail "unexpected privacy replay mode"
+  [[ "$(value_for_key "${privacy}" minio_checksum)" == "pass" ]] || evidence_fail "privacy MinIO checksum must pass"
+  [[ "$(value_for_key "${privacy}" traffic_open)" == "blocked_until_gate_pass" ]] || evidence_fail "unexpected privacy traffic state"
+  for key in tombstone_count latest_tombstone_count missing_latest_tombstone_violations member_anonymization_violations active_session_violations undeleted_post_violations restored_deleted_object_violations; do
+    value="$(value_for_key "${privacy}" "${key}")"
+    require_nonnegative_integer "${key}" "${value}"
+    if [[ "${key}" == *_violations ]]; then [[ "${value}" == "0" ]] || evidence_fail "privacy violation is nonzero: ${key}"; fi
+  done
+
+  [[ "$(grep -Ec '^[0-9a-f]{64}  [^[:space:]].*$' "${checksum}" || true)" == "1" && "$(wc -l < "${checksum}" | tr -d ' ')" == "1" ]] || evidence_fail "checksum must contain exactly one hash/object line"
+  checksum_hash="$(cut -c1-64 "${checksum}")"
+  [[ "${checksum_hash}" == "${minio_hash}" ]] || evidence_fail "checksum hash does not match result"
+
+  for value in "- Status: \`success\`" "- Backup set: \`${backup_class}/${backup_id}\`" "- RPO target: \`$(value_for_key "${result}" RPO_TARGET_MINUTES) minutes\`" "- RPO actual: \`$(value_for_key "${result}" RPO_ACTUAL_MINUTES) minutes\`" "- RTO target: \`$(value_for_key "${result}" RTO_TARGET_MINUTES) minutes\`" "- RTO actual: \`$(value_for_key "${result}" RTO_ACTUAL_SECONDS) seconds\`" "- Flyway successful migrations: \`$(value_for_key "${result}" FLYWAY_SUCCESS_COUNT)\`" "- Restored post rows: \`$(value_for_key "${result}" POST_ROW_COUNT)\`" "- Latest public post id: \`$(value_for_key "${result}" LATEST_PUBLIC_POST_ID)\`" "- MinIO sample sha256: \`${minio_hash}\`" "- Restore privacy gate: \`pass\`"; do
+    grep -Fqx -- "${value}" "${summary}" || evidence_fail "summary is missing required evidence"
+  done
+  echo "restore drill evidence: PASS backup=${backup_class}/${backup_id} flyway=$(value_for_key "${result}" FLYWAY_SUCCESS_COUNT) posts=$(value_for_key "${result}" POST_ROW_COUNT)"
+}
+
+case "$#" in
+  0) ;;
+  2)
+    [[ "$1" == "--evidence-dir" && -n "$2" ]] || evidence_fail "usage: $0 --evidence-dir <dir>"
+    verify_evidence_dir "$2"
+    exit 0
+    ;;
+  *) evidence_fail "usage: $0 [--evidence-dir <dir>]" ;;
+esac
+
 require_file() {
   local file="$1"
   local message="$2"

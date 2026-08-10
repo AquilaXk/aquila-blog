@@ -181,6 +181,12 @@ jobs:
       - name: Test MinIO service account against pinned images
         run: bash tools/test/minio-service-account-integration.test.sh
 
+      - name: Test external storage backup retention
+        run: bash tools/test/verify-external-storage-backup-retention.sh
+
+      - name: Test restore drill artifact evidence contract
+        run: bash tools/test/restore-drill-artifact-evidence.test.sh
+
       - name: Guard Terraform world-open security groups
         run: bash tools/guards/check-terraform-no-world-open-sg.sh
 

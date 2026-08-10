@@ -41,6 +41,7 @@
     { "path": "tools/test/verify-external-storage-backup-retention.sh", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test external storage backup retention" },
     { "path": "tools/test/cloud-media-alerts.test.sh", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test cloud media alerts" },
     { "path": "tools/test/cursor-keyring-guard.test.sh", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test cursor keyring guard" },
-    { "path": "tools/test/test-execution-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test execution inventory guard" }
+    { "path": "tools/test/test-execution-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test execution inventory guard" },
+    { "path": "tools/test/restore-drill-artifact-evidence.test.sh", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test restore drill artifact evidence contract" }
   ]
 }

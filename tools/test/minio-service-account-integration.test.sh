@@ -33,6 +33,21 @@ log_file="${workdir}/execution.log"
 root_secret="root-integration-secret-value"
 current_step="setup"
 
+private_file_mode() {
+  local file="$1"
+  local mode
+  if mode="$(stat -c '%a' "${file}" 2>/dev/null)" && [[ "${mode}" =~ ^[0-7]{3,4}$ ]]; then
+    printf '%s' "${mode}"
+    return 0
+  fi
+  if mode="$(stat -f '%Lp' "${file}" 2>/dev/null)" && [[ "${mode}" =~ ^[0-7]{3,4}$ ]]; then
+    printf '%s' "${mode}"
+    return 0
+  fi
+  echo "[test] unable to read generated credential file mode" >&2
+  return 1
+}
+
 cleanup() {
   docker rm -f "${container_name}" >/dev/null 2>&1 || true
   docker network rm "${network_name}" >/dev/null 2>&1 || true
@@ -107,7 +122,8 @@ fi
 
 current_step="create-first-identity"
 bash "${identity_script}" create-rotation "${env_file}" "${network_name}" "${credential_file}" >> "${log_file}" 2>&1
-if [[ "$(stat -f '%Lp' "${credential_file}" 2>/dev/null || stat -c '%a' "${credential_file}")" != "600" ]]; then
+credential_mode="$(private_file_mode "${credential_file}")"
+if [[ "${credential_mode}" != "600" && "${credential_mode}" != "0600" ]]; then
   echo "[test] generated credential handoff must be mode 600" >&2
   exit 1
 fi

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
@@ -24,8 +25,10 @@ class PostReadCacheInvalidatorTest {
     fun authorInvalidationIsolatesCacheWriteFailure() {
         val failingCache = mock(Cache::class.java)
         doThrow(IllegalStateException("redis unavailable")).`when`(failingCache).clear()
+        val succeedingCache = mock(Cache::class.java)
         val failingManager = mock(CacheManager::class.java)
         `when`(failingManager.getCache(PostQueryCacheNames.FEED)).thenReturn(failingCache)
+        `when`(failingManager.getCache(PostQueryCacheNames.EXPLORE)).thenReturn(succeedingCache)
         val isolatedInvalidator = PostReadCacheInvalidator(failingManager, meterRegistry)
 
         isolatedInvalidator.invalidateAuthorRepresentation("test-redis-failure")
@@ -43,6 +46,7 @@ class PostReadCacheInvalidatorTest {
                 .counter()!!
                 .count(),
         ).isEqualTo(1.0)
+        verify(succeedingCache).clear()
     }
 
     @Test

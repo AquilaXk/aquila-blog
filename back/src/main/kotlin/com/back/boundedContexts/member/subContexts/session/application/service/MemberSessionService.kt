@@ -10,6 +10,7 @@ import com.back.boundedContexts.member.subContexts.session.model.MemberSessionRe
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionWithRefreshToken
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.CacheManager
@@ -36,6 +37,7 @@ class MemberSessionService(
     private val maxActivePerMember: Int = 32,
     @param:Value("\${custom.privacy.retention.revokedSessionDays:\${custom.auth.session.revokedRetentionDays:30}}")
     private val revokedSessionRetentionDays: Int = 30,
+    private val meterRegistry: MeterRegistry? = null,
 ) : MemberSessionUseCase {
     private val logger = LoggerFactory.getLogger(MemberSessionService::class.java)
 
@@ -230,6 +232,17 @@ class MemberSessionService(
         try {
             write()
         } catch (exception: RuntimeException) {
+            meterRegistry?.let { registry ->
+                val counter =
+                    registry.counter(
+                        "member.session.cache.write.failure",
+                        "cache",
+                        MemberSessionCacheNames.ACTIVE,
+                        "operation",
+                        operation,
+                    )
+                counter.increment()
+            }
             logger.warn("Session cache write failed (cache={}, operation={})", MemberSessionCacheNames.ACTIVE, operation, exception)
         }
     }

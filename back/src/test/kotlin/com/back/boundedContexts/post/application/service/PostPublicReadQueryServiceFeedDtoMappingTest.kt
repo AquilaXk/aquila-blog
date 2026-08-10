@@ -20,9 +20,13 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.times
+import org.mockito.Mockito.`when`
 import org.slf4j.LoggerFactory
+import org.springframework.cache.Cache
+import org.springframework.cache.CacheManager
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
 import java.nio.charset.StandardCharsets
 import java.time.Clock
@@ -509,6 +513,32 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
             .findPagedByKw("kw", PostSearchSortType1.CREATED_AT, 1, 10)
     }
 
+    @Test
+    @DisplayName("search negative cache write 실패는 공개 응답을 유지하고 실패 metric을 기록한다")
+    fun isolatesSearchNegativeCacheWriteFailure() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val meterRegistry = SimpleMeterRegistry()
+        val cache = mock(Cache::class.java)
+        doThrow(IllegalStateException("redis unavailable")).`when`(cache).put("page=1:size=10:sort=CREATED_AT:kw=kw", true)
+        val cacheManager = mock(CacheManager::class.java)
+        `when`(cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE)).thenReturn(cache)
+        val service = createService(postUseCase, meterRegistry, cacheManager = cacheManager)
+        given(postUseCase.findPagedByKw("kw", PostSearchSortType1.CREATED_AT, 1, 10))
+            .willReturn(PagedResult(content = emptyList(), page = 1, pageSize = 10, totalElements = 0))
+
+        val page = service.getPublicSearch(1, 10, "kw", PostSearchSortType1.CREATED_AT)
+
+        assertThat(page.content).isEmpty()
+        assertThat(
+            meterRegistry
+                .find("post.read.cache.write.failure")
+                .tag("cache", PostQueryCacheNames.SEARCH_NEGATIVE)
+                .tag("operation", "put")
+                .counter()!!
+                .count(),
+        ).isEqualTo(1.0)
+    }
+
     private fun createService(
         postUseCase: PostUseCase,
         meterRegistry: SimpleMeterRegistry,
@@ -518,6 +548,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         previousSigningKeyVersion: String = "",
         previousExpiresAtEpochSeconds: String = "",
         clock: Clock = CURSOR_TEST_CLOCK,
+        cacheManager: CacheManager = ConcurrentMapCacheManager(),
     ): PostPublicReadQueryService =
         PostPublicReadQueryService(
             postUseCase = postUseCase,
@@ -531,7 +562,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                     detailMaxConcurrent = 1,
                     tagsMaxConcurrent = 1,
                 ),
-            cacheManager = ConcurrentMapCacheManager(),
+            cacheManager = cacheManager,
             meterRegistry = meterRegistry,
             cursorSigningSecret = cursorSigningSecret,
             cursorSigningKeyVersion = cursorSigningKeyVersion,

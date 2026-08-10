@@ -275,11 +275,13 @@ class PostPublicReadQueryService(
                             recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put") {
                                 snapshotCache?.put(id, PublicPostDetailSnapshotCacheDto.from(merged))
                             }
-                        if (written) recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put")
-                        recordCachePayloadSize(
-                            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
-                            estimateDetailSnapshotPayloadSize(merged),
-                        )
+                        if (written) {
+                            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put")
+                            recordCachePayloadSize(
+                                PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+                                estimateDetailSnapshotPayloadSize(merged),
+                            )
+                        }
                     } else {
                         recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "skip_large")
                     }
@@ -587,11 +589,13 @@ class PostPublicReadQueryService(
                     recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put") {
                         contentCache?.put(id, loaded)
                     }
-                if (written) recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put")
-                recordCachePayloadSize(
-                    PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
-                    loaded.content.length + (loaded.contentHtml?.length ?: 0),
-                )
+                if (written) {
+                    recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put")
+                    recordCachePayloadSize(
+                        PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+                        loaded.content.length + (loaded.contentHtml?.length ?: 0),
+                    )
+                }
             } else {
                 recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "skip_large")
             }
@@ -650,8 +654,10 @@ class PostPublicReadQueryService(
                 recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_META, "put") {
                     metaCache?.put(id, loaded)
                 }
-            if (written) recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "put")
-            recordCachePayloadSize(PostQueryCacheNames.DETAIL_PUBLIC_META, estimateDetailMetaPayloadSize(loaded))
+            if (written) {
+                recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "put")
+                recordCachePayloadSize(PostQueryCacheNames.DETAIL_PUBLIC_META, estimateDetailMetaPayloadSize(loaded))
+            }
             loaded
         }
     }

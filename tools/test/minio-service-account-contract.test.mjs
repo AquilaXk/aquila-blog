@@ -428,7 +428,7 @@ test("deploy and operator checks use the pinned verifier without mutable image o
   assert.match(identity, /credential_output/)
   assert.match(identity, /chmod 600/)
   assert.match(doctor, /MinIO Service Identity/)
-  assert.match(doctor, /minio_service_identity\.sh" check/)
+  assert.match(doctor, /\$\{MINIO_SERVICE_IDENTITY_GUARD\}" check/)
   assert.match(precheck, /minio_service_identity\.sh" check/)
 
   for (const surface of [workflow, blueGreen, identity, doctor, precheck]) {

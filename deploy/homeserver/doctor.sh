@@ -15,6 +15,7 @@ OBSERVE_NETWORK_NAME="blog_home_observe"
 DATA_NETWORK_NAME="blog_home_data"
 NETWORK_NAME="${EDGE_NETWORK_NAME}"
 TMP_DIR="$(mktemp -d)"
+doctor_failures=0
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 compose() {
@@ -25,6 +26,23 @@ compose() {
 print_section() {
   local title="$1"
   printf '\n===== %s =====\n' "${title}"
+}
+
+print_minio_service_identity_status() {
+  local minio_identity_status
+  if [[ ! -x "${MINIO_SERVICE_IDENTITY_GUARD}" ]]; then
+    echo "minio service identity: INVALID (guard missing)"
+    return 1
+  fi
+  if minio_identity_status="$("${MINIO_SERVICE_IDENTITY_GUARD}" check "${ENV_FILE}" "${DATA_NETWORK_NAME}" 2>&1)"; then
+    echo "minio service identity: VALID"
+    printf '%s\n' "${minio_identity_status}"
+    return 0
+  fi
+  echo "minio service identity: INVALID"
+  # identity guard diagnostics contain only state/reason/version, never credentials.
+  printf '%s\n' "${minio_identity_status}"
+  return 1
 }
 
 print_env_key_status() {
@@ -808,20 +826,14 @@ echo "internal_snapshot=${internal_snapshot_code:-none}"
 echo "public_snapshot=${public_snapshot_code:-none}"
 
 print_section "MinIO Service Identity"
-if [[ ! -x "${MINIO_SERVICE_IDENTITY_GUARD}" ]]; then
-  echo "minio service identity: INVALID (guard missing)"
-elif minio_identity_status="$("${SCRIPT_DIR}/minio_service_identity.sh" check "${ENV_FILE}" "${DATA_NETWORK_NAME}" 2>&1)"; then
-  echo "minio service identity: VALID"
-  printf '%s\n' "${minio_identity_status}"
-else
-  echo "minio service identity: INVALID"
-  # identity guard diagnostics contain only state/reason/version, never credentials.
-  printf '%s\n' "${minio_identity_status}"
+if ! print_minio_service_identity_status; then
+  doctor_failures=$((doctor_failures + 1))
 fi
 
 print_section "Cursor Signing Keyring"
 if [[ ! -x "${CURSOR_KEYRING_GUARD}" ]]; then
   echo "cursor keyring: INVALID (guard missing)"
+  doctor_failures=$((doctor_failures + 1))
 elif cursor_keyring_status="$("${CURSOR_KEYRING_GUARD}" "${ENV_FILE}" 2>&1)"; then
   echo "cursor keyring: VALID"
   printf '%s\n' "${cursor_keyring_status}"
@@ -829,6 +841,7 @@ else
   echo "cursor keyring: INVALID"
   # guard의 오류는 버전/존재/만료 원인만 담고 key 원문은 절대 출력하지 않는다.
   printf '%s\n' "${cursor_keyring_status}"
+  doctor_failures=$((doctor_failures + 1))
 fi
 
 print_section "Back Container States"
@@ -944,4 +957,8 @@ else
 fi
 
 print_section "Done"
+if [ "${doctor_failures}" -ne 0 ]; then
+  echo "doctor.sh completed with ${doctor_failures} invalid identity check(s)." >&2
+  exit "${doctor_failures}"
+fi
 echo "doctor.sh completed."

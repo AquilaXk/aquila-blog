@@ -126,6 +126,11 @@ eval "$(extract_function env_value)"
 eval "$(extract_function print_env_key_status)"
 eval "$(extract_function trim_quotes)"
 eval "$(extract_function print_notification_sse_status)"
+minio_status_function="$(extract_function print_minio_service_identity_status)"
+if [ -z "${minio_status_function}" ]; then
+  fail "expected doctor to isolate the MinIO identity status check"
+fi
+eval "${minio_status_function}"
 
 if ! grep -qF 'print_section "Cursor Signing Keyring"' "${doctor}"; then
   fail "expected doctor to report cursor signing keyring identity"
@@ -143,12 +148,45 @@ fi
 if ! grep -qF 'minio service identity: VALID' "${doctor}" || ! grep -qF 'minio service identity: INVALID' "${doctor}"; then
   fail "expected doctor to distinguish a valid and invalid MinIO service identity"
 fi
-if ! grep -qF 'minio_service_identity.sh" check' "${doctor}"; then
+if ! grep -qF '${MINIO_SERVICE_IDENTITY_GUARD}" check' "${doctor}"; then
   fail "doctor must delegate live MinIO identity verification to the tracked checker"
 fi
 if grep -Eq 'echo .*\$\{?(MINIO_ROOT_PASSWORD|CUSTOM_STORAGE_SECRETKEY)' "${doctor}"; then
   fail "doctor must never print a MinIO credential value"
 fi
+if ! grep -qF 'doctor_failures=$((doctor_failures + 1))' "${doctor}"; then
+  fail "doctor must aggregate invalid MinIO and cursor identity checks"
+fi
+if ! grep -qF 'exit "${doctor_failures}"' "${doctor}"; then
+  fail "doctor must exit non-zero when an identity check is invalid"
+fi
+
+minio_sentinel_env="${workdir}/minio-sentinel.env"
+root_sentinel="root-doctor-sentinel-secret"
+app_sentinel="app-doctor-sentinel-secret"
+{
+  printf 'MINIO_ROOT_USER=minio-root\n'
+  printf 'MINIO_ROOT_PASSWORD=%s\n' "${root_sentinel}"
+  printf 'CUSTOM_STORAGE_ACCESSKEY=storage-app-v1\n'
+  printf 'CUSTOM_STORAGE_SECRETKEY=%s\n' "${app_sentinel}"
+  printf 'CUSTOM_STORAGE_CREDENTIAL_VERSION=1\n'
+} > "${minio_sentinel_env}"
+chmod 600 "${minio_sentinel_env}"
+ENV_FILE="${minio_sentinel_env}"
+MINIO_SERVICE_IDENTITY_GUARD="${repo_root}/deploy/homeserver/minio_service_identity.sh"
+DATA_NETWORK_NAME="aquila-doctor-missing-network-$$"
+set +e
+minio_status_output="$(print_minio_service_identity_status 2>&1)"
+minio_status_code=$?
+set -e
+if [ "${minio_status_code}" -eq 0 ]; then
+  fail "expected an unavailable MinIO identity check to be invalid"
+fi
+for sentinel in "${root_sentinel}" "${app_sentinel}"; do
+  if [[ "${minio_status_output}" == *"${sentinel}"* ]]; then
+    fail "doctor MinIO status output must not contain credential material"
+  fi
+done
 
 # shellcheck disable=SC2034  # 원본에서 떼어 온 env_value/print_env_key_status가 읽는 입력이다
 ENV_FILE="${env_full}"

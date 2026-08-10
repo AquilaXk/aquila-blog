@@ -4,7 +4,6 @@ import io.micrometer.core.instrument.FunctionCounter
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.binder.MeterBinder
-import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.util.concurrent.atomic.AtomicLong
@@ -17,8 +16,6 @@ import java.util.concurrent.atomic.AtomicLong
 class MemberNotificationSseMetricsBinder(
     private val memberNotificationSseService: MemberNotificationSseService,
 ) : MeterBinder {
-    private val logger = LoggerFactory.getLogger(MemberNotificationSseMetricsBinder::class.java)
-
     private val memberEmitterCount = AtomicLong(0)
     private val globalEmitterCount = AtomicLong(0)
     private val oldestEmitterAgeSeconds = AtomicLong(0)
@@ -27,8 +24,13 @@ class MemberNotificationSseMetricsBinder(
     private val disconnectCount = AtomicLong(0)
     private val replayBatchCount = AtomicLong(0)
     private val replayNotificationCount = AtomicLong(0)
+    private val replayUnavailableNotificationCount = AtomicLong(0)
+    private val replayFailureCount = AtomicLong(0)
+    private val unreadUnavailableCount = AtomicLong(0)
     private val heartbeatSentCount = AtomicLong(0)
     private val sendFailureCount = AtomicLong(0)
+    private val sendFailureRemovedEmitterCount = AtomicLong(0)
+    private val emitterStateMismatchCount = AtomicLong(0)
 
     override fun bindTo(registry: MeterRegistry) {
         registerGauge(registry, "member.notification.sse.member_emitters", memberEmitterCount)
@@ -40,29 +42,43 @@ class MemberNotificationSseMetricsBinder(
         registerCounter(registry, "member.notification.sse.disconnect", disconnectCount)
         registerCounter(registry, "member.notification.sse.replay_batch", replayBatchCount)
         registerCounter(registry, "member.notification.sse.replay_notification", replayNotificationCount)
+        registerCounter(
+            registry,
+            "member.notification.sse.replay_unavailable_notification",
+            replayUnavailableNotificationCount,
+        )
+        registerCounter(registry, "member.notification.sse.replay_failure", replayFailureCount)
+        registerCounter(registry, "member.notification.sse.unread_unavailable", unreadUnavailableCount)
         registerCounter(registry, "member.notification.sse.heartbeat_sent", heartbeatSentCount)
         registerCounter(registry, "member.notification.sse.send_failure", sendFailureCount)
+        registerCounter(
+            registry,
+            "member.notification.sse.send_failure_removed_emitter",
+            sendFailureRemovedEmitterCount,
+        )
+        registerGauge(registry, "member.notification.sse.emitter_state_mismatch", emitterStateMismatchCount)
 
         refreshSnapshot()
     }
 
     @Scheduled(fixedDelayString = "\${custom.member.notification.sse.metrics.refreshFixedDelayMs:15000}")
     fun refreshSnapshot() {
-        runCatching { memberNotificationSseService.diagnostics() }
-            .onSuccess { diagnostics ->
-                memberEmitterCount.set(diagnostics.memberEmitterCount.toLong())
-                globalEmitterCount.set(diagnostics.globalEmitterCount.toLong())
-                oldestEmitterAgeSeconds.set(diagnostics.oldestEmitterAgeSeconds)
-                connectedCount.set(diagnostics.connectedCount)
-                reconnectSubscribeCount.set(diagnostics.reconnectSubscribeCount)
-                disconnectCount.set(diagnostics.disconnectCount)
-                replayBatchCount.set(diagnostics.replayBatchCount)
-                replayNotificationCount.set(diagnostics.replayNotificationCount)
-                heartbeatSentCount.set(diagnostics.heartbeatSentCount)
-                sendFailureCount.set(diagnostics.sendFailureCount)
-            }.onFailure { exception ->
-                logger.warn("Skip notification sse metrics refresh due to diagnostics error", exception)
-            }
+        val diagnostics = memberNotificationSseService.diagnostics()
+        memberEmitterCount.set(diagnostics.memberEmitterCount.toLong())
+        globalEmitterCount.set(diagnostics.globalEmitterCount.toLong())
+        oldestEmitterAgeSeconds.set(diagnostics.oldestEmitterAgeSeconds)
+        connectedCount.set(diagnostics.connectedCount)
+        reconnectSubscribeCount.set(diagnostics.reconnectSubscribeCount)
+        disconnectCount.set(diagnostics.disconnectCount)
+        replayBatchCount.set(diagnostics.replayBatchCount)
+        replayNotificationCount.set(diagnostics.replayNotificationCount)
+        replayUnavailableNotificationCount.set(diagnostics.replayUnavailableNotificationCount)
+        replayFailureCount.set(diagnostics.replayFailureCount)
+        unreadUnavailableCount.set(diagnostics.unreadUnavailableCount)
+        heartbeatSentCount.set(diagnostics.heartbeatSentCount)
+        sendFailureCount.set(diagnostics.sendFailureCount)
+        sendFailureRemovedEmitterCount.set(diagnostics.sendFailureRemovedEmitterCount)
+        emitterStateMismatchCount.set(diagnostics.emitterStateMismatchCount.toLong())
     }
 
     private fun registerGauge(

@@ -1064,6 +1064,8 @@ const runtimeBackendImageKeys = [
   "BACK_WORKER_IMAGE",
 ]
 
+const runtimeFrontImageKeys = ["FRONT_BLUE_IMAGE", "FRONT_GREEN_IMAGE"]
+
 const runtimeBackendImageEnv = runtimeBackendImageKeys
   .map((key, index) => `${key}=ghcr.io/aquilaxk/aquila-blog-back@sha256:${"789ab"[index].repeat(64)}`)
   .join("\n")
@@ -3623,6 +3625,84 @@ test("MinIO bootstrap은 required backend runtime image digest를 보존한다",
     for (const key of runtimeBackendImageKeys.slice(1)) {
       assert.match(output, new RegExp(`^${key}=${staleDigests[key]}$`, "m"))
       assert.match(output, new RegExp(`preserved ${key} from pre-deploy env after HOME_SERVER_ENV overwrite`))
+    }
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("backend deploy은 source가 비운 front runtime image digest를 early compose 전에 보존한다", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+  const preDeployDigests = Object.fromEntries(
+    runtimeFrontImageKeys.map((key, index) => [
+      key,
+      `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"ab"[index].repeat(64)}`,
+    ]),
+  )
+  const sourceBlueDigest = `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"c".repeat(64)}`
+  const preDeployEnv = runtimeFrontImageKeys
+    .map((key) => `  export ${key} = '${preDeployDigests[key]}'`)
+    .join("\r\n")
+    .concat("\r\n")
+  const sourceEnv = `FRONT_BLUE_IMAGE=${sourceBlueDigest}\n`
+  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-front-image-preserve-"))
+  const preDeployEnvPath = path.join(workDir, "pre-deploy.env")
+  const sourceEnvPath = path.join(workDir, "source.env")
+  const preserveIndex = workflow.indexOf("preserve_pre_deploy_runtime_image_env_keys\n")
+  const firstComposeIndex = workflow.indexOf(
+    "docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d minio_1",
+  )
+
+  assert(preserveIndex >= 0, "front runtime image preserve call must exist")
+  assert(firstComposeIndex >= 0, "first compose evaluation must exist")
+  assert(preserveIndex < firstComposeIndex, "front runtime image preserve must run before the first compose evaluation")
+
+  try {
+    writeFileSync(preDeployEnvPath, preDeployEnv)
+    writeFileSync(sourceEnvPath, sourceEnv)
+    const functions = extractDeployRemoteFunctions([
+      "upsert_env_key",
+      "extract_env_value_from_text",
+      "extract_env_value",
+      "preserve_pre_deploy_runtime_image_env_keys",
+    ])
+    const scriptPath = path.join(workDir, "preserve-front-images.sh")
+    writeFileSync(
+      scriptPath,
+      [
+        "set -euo pipefail",
+        `cd ${JSON.stringify(workDir)}`,
+        "mkdir -p deploy/homeserver",
+        'PRE_DEPLOY_ENV_CAPTURED="true"',
+        `PRE_DEPLOY_ENV_CONTENT="$(cat ${JSON.stringify(preDeployEnvPath)})"`,
+        functions,
+        `cp ${JSON.stringify(sourceEnvPath)} deploy/homeserver/.env.prod`,
+        "preserve_pre_deploy_runtime_image_env_keys",
+        `for key in ${runtimeFrontImageKeys.join(" ")}; do echo "$key=$(extract_env_value "$key")"; done`,
+        'PRE_DEPLOY_ENV_CONTENT="FOO=bar"',
+        "printf 'FOO=bar\\n' > deploy/homeserver/.env.prod",
+        "preserve_pre_deploy_runtime_image_env_keys",
+        `for key in ${runtimeFrontImageKeys.join(" ")}; do echo "absent-$key=[$(extract_env_value "$key")]"; done`,
+        "",
+      ].join("\n"),
+    )
+
+    const output = execFileSync("bash", [scriptPath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+
+    assert.match(output, new RegExp(`^FRONT_BLUE_IMAGE=${sourceBlueDigest}$`, "m"))
+    assert.match(
+      output,
+      new RegExp(
+        `HOME_SERVER_ENV overrides FRONT_BLUE_IMAGE from pre-deploy env: ${preDeployDigests.FRONT_BLUE_IMAGE} -> ${sourceBlueDigest}`,
+      ),
+    )
+    assert.match(output, new RegExp(`^FRONT_GREEN_IMAGE=${preDeployDigests.FRONT_GREEN_IMAGE}$`, "m"))
+    assert.match(output, /preserved FRONT_GREEN_IMAGE from pre-deploy env after HOME_SERVER_ENV overwrite/)
+    for (const key of runtimeFrontImageKeys) {
+      assert.match(output, new RegExp(`^absent-${key}=\\[\\]$`, "m"))
     }
   } finally {
     rmSync(workDir, { force: true, recursive: true })

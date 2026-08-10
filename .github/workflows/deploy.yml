@@ -1055,6 +1055,8 @@ jobs:
               GRAFANA_IMAGE \
               LOKI_IMAGE \
               PROMTAIL_IMAGE \
+              FRONT_BLUE_IMAGE \
+              FRONT_GREEN_IMAGE \
               BACK_BLUE_IMAGE \
               BACK_GREEN_IMAGE \
               BACK_READ_IMAGE \

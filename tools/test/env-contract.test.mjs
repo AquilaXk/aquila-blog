@@ -3567,10 +3567,24 @@ test("MinIO bootstrap은 required backend runtime image digest를 보존한다",
     ]),
   )
   const sourceBlueDigest = `ghcr.io/aquilaxk/aquila-blog-back@sha256:${"f".repeat(64)}`
-  const preDeployEnv = runtimeBackendImageKeys.map((key) => `${key}=${staleDigests[key]}`).join("\n")
+  const supersededSourceBlueDigest = `ghcr.io/aquilaxk/aquila-blog-back@sha256:${"9".repeat(64)}`
+  const preDeployEnv = runtimeBackendImageKeys
+    .map((key) => `  export ${key} = '${staleDigests[key]}'`)
+    .join("\r\n")
+    .concat("\r\n")
+  const sourceEnv = [
+    `BACK_BLUE_IMAGE=${supersededSourceBlueDigest}`,
+    `  export BACK_BLUE_IMAGE = "${sourceBlueDigest}"`,
+  ]
+    .join("\r\n")
+    .concat("\r\n")
   const workDir = mkdtempSync(path.join(tmpdir(), "aquila-back-image-preserve-"))
+  const preDeployEnvPath = path.join(workDir, "pre-deploy.env")
+  const sourceEnvPath = path.join(workDir, "source.env")
 
   try {
+    writeFileSync(preDeployEnvPath, preDeployEnv)
+    writeFileSync(sourceEnvPath, sourceEnv)
     const functions = extractDeployRemoteFunctions([
       "upsert_env_key",
       "extract_env_value_from_text",
@@ -3585,9 +3599,9 @@ test("MinIO bootstrap은 required backend runtime image digest를 보존한다",
         `cd ${JSON.stringify(workDir)}`,
         "mkdir -p deploy/homeserver",
         'PRE_DEPLOY_ENV_CAPTURED="true"',
-        `PRE_DEPLOY_ENV_CONTENT="${preDeployEnv}"`,
+        `PRE_DEPLOY_ENV_CONTENT="$(cat ${JSON.stringify(preDeployEnvPath)})"`,
         functions,
-        `printf '%s\n' ${JSON.stringify(`BACK_BLUE_IMAGE=${sourceBlueDigest}`)} > deploy/homeserver/.env.prod`,
+        `cp ${JSON.stringify(sourceEnvPath)} deploy/homeserver/.env.prod`,
         "preserve_pre_deploy_runtime_image_env_keys",
         `for key in ${runtimeBackendImageKeys.join(" ")}; do echo "$key=$(extract_env_value "$key")"; done`,
         "",

@@ -1020,14 +1020,13 @@ jobs:
           extract_env_value_from_text() {
             local key="$1"
             local text="$2"
-            printf '%s\n' "${text}" | awk -F= -v k="$key" '
-              $1==k {
-                value=substr($0, index($0, "=")+1)
+            printf '%s\n' "${text}" | awk -v key="$key" '
+              match($0, "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=") {
+                value=substr($0, RSTART + RLENGTH)
                 gsub(/\r/, "", value)
-                gsub(/^"/, "", value)
-                gsub(/"$/, "", value)
-                gsub(/^'\''/, "", value)
-                gsub(/'\''$/, "", value)
+                sub(/^[[:space:]]+/, "", value)
+                sub(/[[:space:]]+$/, "", value)
+                if (value ~ /^".*"$/ || value ~ /^'\''.*'\''$/) value = substr(value, 2, length(value) - 2)
                 print value
               }
             ' | tail -n 1

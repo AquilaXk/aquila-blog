@@ -21,6 +21,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Tag
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
@@ -270,26 +271,33 @@ class PostPublicReadQueryService(
                     val meta = getCachedPublicPostDetailMeta(id)
                     val content = getOrLoadPublicPostDetailContent(id)
                     val merged = meta.merge(content)
-                    if (shouldCacheDetailSnapshot(merged)) {
-                        val written =
-                            recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put") {
-                                snapshotCache?.put(id, PublicPostDetailSnapshotCacheDto.from(merged))
-                            }
-                        if (written) {
-                            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put")
-                            recordCachePayloadSize(
-                                PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
-                                estimateDetailSnapshotPayloadSize(merged),
-                            )
-                        }
-                    } else {
-                        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "skip_large")
-                    }
+                    cachePublicPostDetailSnapshot(snapshotCache, id, merged)
                     clearDetailNegativeCache(id)
                     merged
                 }
             }
         }
+
+    private fun cachePublicPostDetailSnapshot(
+        snapshotCache: Cache?,
+        id: Long,
+        detail: PostWithContentDto,
+    ) {
+        if (!shouldCacheDetailSnapshot(detail)) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "skip_large")
+            return
+        }
+        val written =
+            recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put") {
+                snapshotCache?.put(id, PublicPostDetailSnapshotCacheDto.from(detail))
+            }
+        if (!written) return
+        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put")
+        recordCachePayloadSize(
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            estimateDetailSnapshotPayloadSize(detail),
+        )
+    }
 
     @Transactional(readOnly = true)
     override fun getPublicRelatedByAuthor(

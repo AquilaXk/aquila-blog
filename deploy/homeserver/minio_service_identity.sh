@@ -12,6 +12,7 @@ MODE="${1:-}"
 ENV_FILE="${2:-${SCRIPT_DIR}/.env.prod}"
 DOCKER_NETWORK="${3:-}"
 CREDENTIAL_OUTPUT="${4:-}"
+declare -a AUDIT_PROBE_OBJECTS=()
 
 fail() {
   echo "[MINIO_SERVICE_IDENTITY_INVALID] $1" >&2
@@ -188,11 +189,36 @@ prepare_files() {
   POLICY_FILE="${WORKDIR}/policy.json"
   INFO_FILE="${WORKDIR}/info.json"
   ERROR_FILE="${WORKDIR}/error.json"
-  trap 'rm -rf "${WORKDIR}"' EXIT INT TERM
+  trap cleanup_identity_workdir EXIT INT TERM
 
   write_mc_host_env "${ADMIN_ENV_FILE}" "admin" "${ROOT_ACCESS_KEY}" "${ROOT_SECRET_KEY}" "${STORAGE_ENDPOINT}"
   write_mc_host_env "${APP_ENV_FILE}" "app" "${CURRENT_ACCESS_KEY}" "${CURRENT_SECRET_KEY}" "${STORAGE_ENDPOINT}"
   render_policy
+}
+
+cleanup_audit_probe_objects() {
+  local probe_index probe_object
+  if [[ -z "${ADMIN_ENV_FILE:-}" || ! -f "${ADMIN_ENV_FILE}" || -z "${STORAGE_BUCKET:-}" ]]; then
+    return 0
+  fi
+  if ((${#AUDIT_PROBE_OBJECTS[@]} > 0)); then
+    for probe_object in "${AUDIT_PROBE_OBJECTS[@]}"; do
+      if ! run_mc "${ADMIN_ENV_FILE}" rm "admin/${STORAGE_BUCKET}/${probe_object}" >/dev/null 2>&1; then
+        echo "[MINIO_SERVICE_IDENTITY_INVALID] audit_probe_cleanup_failed" >&2
+      fi
+    done
+  fi
+  AUDIT_PROBE_OBJECTS=()
+}
+
+cleanup_identity_workdir() {
+  local status="$?"
+  trap - EXIT INT TERM
+  cleanup_audit_probe_objects
+  if [[ -n "${WORKDIR:-}" ]]; then
+    rm -rf "${WORKDIR}"
+  fi
+  exit "${status}"
 }
 
 run_mc() {
@@ -301,15 +327,20 @@ audit_permissions() {
   verify_live_identity
   local object_file="${WORKDIR}/probe.txt"
   local audit_bucket="aquila-identity-audit-${CURRENT_VERSION}-$$"
+  local probe_object
   printf 'aquila-storage-policy-probe\n' > "${object_file}"
 
   for prefix in "$(env_value "CUSTOM_STORAGE_KEYPREFIX")" "$(env_value "CUSTOM_STORAGE_CLOUD_KEY_PREFIX")"; do
-    run_mc_with_probe_file "${APP_ENV_FILE}" "${object_file}" cp /identity-probe.txt "app/${STORAGE_BUCKET}/${prefix}/.identity-probe-${CURRENT_VERSION}" >/dev/null 2>&1 ||
+    probe_object="${prefix}/.identity-probe-${CURRENT_VERSION}-$$"
+    AUDIT_PROBE_OBJECTS+=("${probe_object}")
+    run_mc_with_probe_file "${APP_ENV_FILE}" "${object_file}" cp /identity-probe.txt "app/${STORAGE_BUCKET}/${probe_object}" >/dev/null 2>&1 ||
       fail "allowed_put_denied"
-    run_mc "${APP_ENV_FILE}" cat "app/${STORAGE_BUCKET}/${prefix}/.identity-probe-${CURRENT_VERSION}" >/dev/null 2>&1 ||
+    run_mc "${APP_ENV_FILE}" cat "app/${STORAGE_BUCKET}/${probe_object}" >/dev/null 2>&1 ||
       fail "allowed_get_denied"
-    run_mc "${APP_ENV_FILE}" rm "app/${STORAGE_BUCKET}/${prefix}/.identity-probe-${CURRENT_VERSION}" >/dev/null 2>&1 ||
+    run_mc "${APP_ENV_FILE}" rm "app/${STORAGE_BUCKET}/${probe_object}" >/dev/null 2>&1 ||
       fail "allowed_delete_denied"
+    probe_index=$((${#AUDIT_PROBE_OBJECTS[@]} - 1))
+    unset "AUDIT_PROBE_OBJECTS[${probe_index}]"
   done
 
   if run_mc_with_probe_file "${APP_ENV_FILE}" "${object_file}" cp /identity-probe.txt "app/${STORAGE_BUCKET}/outside-prefix/denied" >/dev/null 2>&1; then

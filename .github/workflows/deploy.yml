@@ -1219,6 +1219,7 @@ jobs:
           # The application identity must exist before any backend is recreated with it.
           # Starting only MinIO leaves the currently active backend untouched; once prepare
           # succeeds, every subsequent failure can safely roll back with the current identity.
+          RUNTIME_ENV_MATERIALIZED="true"
           if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d minio_1; then
             echo "failed to start MinIO for service identity preparation" >&2
             exit 1
@@ -1227,7 +1228,6 @@ jobs:
             echo "failed to prepare MinIO application identity" >&2
             exit 1
           fi
-          RUNTIME_ENV_MATERIALIZED="true"
 
           if ! BACK_IMAGE="${STAGED_BACK_IMAGE}" ./deploy/homeserver/pgroonga_precheck.sh; then
             exit 1

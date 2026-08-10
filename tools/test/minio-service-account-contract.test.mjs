@@ -436,3 +436,21 @@ test("deploy and operator checks use the pinned verifier without mutable image o
     assert.equal(surface.includes("MINIO_ROOT_PASSWORD="), false, "scripts must not echo the root secret")
   }
 })
+
+test("deploy rollback is active before MinIO runtime mutation", () => {
+  const workflow = requiredText(deployWorkflowPath)
+  const minioStartIndex = workflow.indexOf("up -d minio_1")
+  const identityPrepareIndex = workflow.indexOf('minio_service_identity.sh" prepare')
+  const rollbackActivationIndex = workflow.indexOf('RUNTIME_ENV_MATERIALIZED="true"', minioStartIndex - 200)
+
+  assert(rollbackActivationIndex >= 0 && rollbackActivationIndex < minioStartIndex)
+  assert(minioStartIndex < identityPrepareIndex)
+})
+
+test("identity audit guarantees admin cleanup for every application probe object", () => {
+  const identity = requiredText(identityScriptPath)
+
+  assert.match(identity, /cleanup_audit_probe_objects\(\)/)
+  assert.match(identity, /AUDIT_PROBE_OBJECTS/)
+  assert.match(identity, /admin\/\$\{STORAGE_BUCKET\}\/\$\{probe_object\}/)
+})

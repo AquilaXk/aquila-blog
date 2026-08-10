@@ -4,6 +4,11 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import com.back.global.storage.health.StorageDependencyFailureClassifier
+import com.back.global.storage.health.StorageDependencyFailureReason
+import com.back.global.storage.health.StorageDependencyProbeResult
+import com.back.global.storage.health.StorageRuntimeConfigurationValidator
+import com.back.global.storage.health.ValidatedStorageConfiguration
 import com.back.global.storage.metrics.CloudMediaMetrics
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.annotation.PostConstruct
@@ -19,7 +24,6 @@ import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest
 import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload
 import software.amazon.awssdk.services.s3.model.CompletedPart
-import software.amazon.awssdk.services.s3.model.CreateBucketRequest
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
@@ -31,7 +35,6 @@ import software.amazon.awssdk.services.s3.model.NoSuchUploadException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 import software.amazon.awssdk.services.s3.model.UploadPartRequest
-import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -53,8 +56,8 @@ class CloudStorageAdapter(
     private var initErrorMessage: String? = null
 
     @PostConstruct
-    fun initializeBucket() {
-        initializeStorage(forceRetry = true)
+    fun initializeDependency() {
+        probeStorageDependency()
     }
 
     override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult {
@@ -82,6 +85,7 @@ class CloudStorageAdapter(
                 )
             }
         } catch (e: Exception) {
+            failIfDependencyUnavailable(e)
             logger.error("Cloud file upload failed (objectKey={})", request.objectKey, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 업로드에 실패했습니다.")
         }
@@ -115,7 +119,11 @@ class CloudStorageAdapter(
         } catch (_: NoSuchKeyException) {
             null
         } catch (e: S3Exception) {
+            if (StorageDependencyFailureClassifier.isExplicitMissingBucket(e)) {
+                failIfDependencyUnavailable(e)
+            }
             if (e.statusCode() == 404) return null
+            failIfDependencyUnavailable(e)
             logger.error("Cloud file download failed (objectKey={})", objectKey, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일을 불러오지 못했습니다.")
         }
@@ -148,7 +156,11 @@ class CloudStorageAdapter(
         } catch (_: NoSuchKeyException) {
             null
         } catch (e: S3Exception) {
+            if (StorageDependencyFailureClassifier.isExplicitMissingBucket(e)) {
+                failIfDependencyUnavailable(e)
+            }
             if (e.statusCode() == 404) return null
+            failIfDependencyUnavailable(e)
             logger.error("Cloud file range download failed (objectKey={}, range={}-{})", objectKey, range.first, range.last, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일을 불러오지 못했습니다.")
         }
@@ -183,6 +195,7 @@ class CloudStorageAdapter(
                 uploadId = response.uploadId(),
             )
         } catch (e: Exception) {
+            failIfDependencyUnavailable(e)
             logger.error("Cloud multipart upload init failed (objectKey={})", request.objectKey, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 대용량 업로드를 시작하지 못했습니다.")
         }
@@ -213,6 +226,7 @@ class CloudStorageAdapter(
                 eTag = response.eTag(),
             )
         } catch (e: Exception) {
+            failIfDependencyUnavailable(e)
             logger.error(
                 "Cloud multipart part upload failed (objectKey={}, uploadId={}, partNumber={})",
                 request.objectKey,
@@ -252,6 +266,7 @@ class CloudStorageAdapter(
                     ).build(),
             )
         } catch (e: Exception) {
+            failIfDependencyUnavailable(e)
             logger.error(
                 "Cloud multipart complete failed (objectKey={}, uploadId={})",
                 request.objectKey,
@@ -278,7 +293,11 @@ class CloudStorageAdapter(
         } catch (_: NoSuchUploadException) {
             return
         } catch (e: S3Exception) {
+            if (StorageDependencyFailureClassifier.isExplicitMissingBucket(e)) {
+                failIfDependencyUnavailable(e)
+            }
             if (isMissingMultipartUpload(e)) return
+            failIfDependencyUnavailable(e)
             logger.error(
                 "Cloud multipart abort failed (objectKey={}, uploadId={})",
                 request.objectKey,
@@ -287,6 +306,7 @@ class CloudStorageAdapter(
             )
             throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 대용량 업로드 취소에 실패했습니다.")
         } catch (e: Exception) {
+            failIfDependencyUnavailable(e)
             logger.error(
                 "Cloud multipart abort failed (objectKey={}, uploadId={})",
                 request.objectKey,
@@ -320,7 +340,11 @@ class CloudStorageAdapter(
         } catch (_: NoSuchKeyException) {
             null
         } catch (e: S3Exception) {
+            if (StorageDependencyFailureClassifier.isExplicitMissingBucket(e)) {
+                failIfDependencyUnavailable(e)
+            }
             if (e.statusCode() == 404) return null
+            failIfDependencyUnavailable(e)
             logger.error("Cloud object head failed (objectKey={})", objectKey, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 메타데이터를 확인하지 못했습니다.")
         }
@@ -367,6 +391,7 @@ class CloudStorageAdapter(
                 hasMore = response.isTruncated == true || continuationToken != null || responseObjects.size > remaining
             } while (objects.size < safeLimit && continuationToken != null)
         } catch (e: Exception) {
+            failIfDependencyUnavailable(e)
             logger.error("Cloud object list failed (prefix={})", normalizedPrefix, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 객체 목록을 조회하지 못했습니다.")
         }
@@ -392,25 +417,41 @@ class CloudStorageAdapter(
                     .build(),
             )
         } catch (e: S3Exception) {
+            if (StorageDependencyFailureClassifier.isExplicitMissingBucket(e)) {
+                failIfDependencyUnavailable(e)
+            }
             if (e.statusCode() == 404) return
+            failIfDependencyUnavailable(e)
             logger.error("Cloud file delete failed (objectKey={})", objectKey, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 삭제에 실패했습니다.")
         }
     }
 
-    private fun initializeStorage(forceRetry: Boolean) {
-        if (!properties.enabled) return
+    internal fun probeStorageDependency(): StorageDependencyProbeResult {
+        if (!properties.enabled) {
+            initErrorMessage = null
+            return StorageDependencyProbeResult.disabled()
+        }
 
-        synchronized(initLock) {
-            if (!forceRetry && s3Client != null && initErrorMessage == null) return
+        return synchronized(initLock) {
+            val configuration =
+                try {
+                    resolveStorageConfiguration()
+                } catch (error: IllegalArgumentException) {
+                    val reason = StorageDependencyFailureClassifier.classify(error)
+                    initErrorMessage = "클라우드 스토리지 dependency 사용 불가 (reason=${reason.wireValue})"
+                    logger.error("Cloud storage configuration rejected (reason={})", reason.wireValue)
+                    return@synchronized StorageDependencyProbeResult.down(reason)
+                }
 
             val client =
                 try {
-                    s3Client ?: buildClient()
-                } catch (e: Exception) {
-                    initErrorMessage = "클라우드 스토리지 설정 오류: ${e.message ?: "알 수 없는 오류"}"
-                    logger.error("Cloud storage client initialization failed", e)
-                    return
+                    s3Client ?: buildClient(configuration)
+                } catch (error: Exception) {
+                    val reason = StorageDependencyFailureClassifier.classify(error)
+                    initErrorMessage = "클라우드 스토리지 dependency 사용 불가 (reason=${reason.wireValue})"
+                    logger.error("Cloud storage client initialization failed (reason={})", reason.wireValue)
+                    return@synchronized StorageDependencyProbeResult.down(reason, configuration.credentialVersion)
                 }
             s3Client = client
 
@@ -422,19 +463,12 @@ class CloudStorageAdapter(
                         .build(),
                 )
                 initErrorMessage = null
-            } catch (headError: Exception) {
-                try {
-                    client.createBucket(
-                        CreateBucketRequest
-                            .builder()
-                            .bucket(properties.bucket)
-                            .build(),
-                    )
-                    initErrorMessage = null
-                } catch (createError: Exception) {
-                    initErrorMessage = "클라우드 스토리지 버킷 초기화 실패: ${createError.message ?: headError.message ?: "알 수 없는 오류"}"
-                    logger.error("Cloud storage bucket initialization failed", createError)
-                }
+                StorageDependencyProbeResult.ready(configuration.credentialVersion)
+            } catch (error: Exception) {
+                val reason = StorageDependencyFailureClassifier.classify(error)
+                initErrorMessage = "클라우드 스토리지 dependency 사용 불가 (reason=${reason.wireValue})"
+                logger.error("Cloud storage probe failed (reason={})", reason.wireValue)
+                StorageDependencyProbeResult.down(reason, configuration.credentialVersion)
             }
         }
     }
@@ -443,7 +477,7 @@ class CloudStorageAdapter(
         if (!properties.enabled) throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "클라우드 스토리지가 비활성화되어 있습니다.")
 
         if (s3Client == null || initErrorMessage != null) {
-            initializeStorage(forceRetry = true)
+            probeStorageDependency()
         }
 
         initErrorMessage?.let { throw AppException(ErrorCode.SERVICE_UNAVAILABLE, it) }
@@ -451,52 +485,38 @@ class CloudStorageAdapter(
         return s3Client ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "클라우드 스토리지가 아직 준비되지 않았습니다.")
     }
 
-    private fun buildClient(): S3Client {
-        val accessKey = resolveProperty(properties.accessKey, "CUSTOM_STORAGE_ACCESSKEY", "MINIO_ROOT_USER")
-        val secretKey = resolveProperty(properties.secretKey, "CUSTOM_STORAGE_SECRETKEY", "MINIO_ROOT_PASSWORD")
-        if (accessKey.isBlank() || secretKey.isBlank()) {
-            throw IllegalArgumentException("스토리지 계정 정보가 비어 있습니다.")
-        }
+    private fun failIfDependencyUnavailable(error: Throwable) {
+        val reason = StorageDependencyFailureClassifier.classify(error)
+        if (reason == StorageDependencyFailureReason.OTHER) return
 
-        val endpoint = resolveProperty(properties.endpoint, "CUSTOM_STORAGE_ENDPOINT", null)
-        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
-            throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT 형식이 올바르지 않습니다. (현재: $endpoint)")
-        }
+        val safeMessage = "클라우드 스토리지 dependency 사용 불가 (reason=${reason.wireValue})"
+        initErrorMessage = safeMessage
+        logger.error("Cloud storage operation failed (reason={})", reason.wireValue)
+        throw AppException(ErrorCode.SERVICE_UNAVAILABLE, safeMessage)
+    }
 
-        return S3Client
+    private fun buildClient(configuration: ValidatedStorageConfiguration): S3Client =
+        S3Client
             .builder()
             .httpClientBuilder(UrlConnectionHttpClient.builder())
-            .endpointOverride(URI.create(endpoint))
-            .region(Region.of(properties.region))
-            .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
-            .forcePathStyle(properties.pathStyleAccess)
+            .endpointOverride(configuration.endpoint)
+            .region(Region.of(configuration.region))
+            .credentialsProvider(
+                StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(configuration.accessKey, configuration.secretKey),
+                ),
+            ).forcePathStyle(properties.pathStyleAccess)
             .build()
-    }
 
-    private fun resolveProperty(
-        rawValue: String,
-        envKeyName: String,
-        fallbackEnvKeyName: String?,
-    ): String {
-        val trimmed = rawValue.trim()
-        val resolved =
-            resolveEnvReference(trimmed)
-                ?: trimmed.ifBlank { fallbackEnvKeyName?.let { System.getenv(it)?.trim().orEmpty() } ?: "" }
-
-        if (resolved.contains("\${")) {
-            throw IllegalArgumentException("${envKeyName}에 미해결 placeholder가 포함되어 있습니다. (현재: $resolved)")
-        }
-
-        return resolved
-    }
-
-    private fun resolveEnvReference(value: String): String? {
-        val match = ENV_REFERENCE_REGEX.matchEntire(value) ?: return null
-        val envName = match.groupValues[1]
-        val defaultValue = match.groupValues.getOrNull(2).orEmpty()
-        val envValue = System.getenv(envName)?.trim().orEmpty()
-        return if (envValue.isNotBlank()) envValue else defaultValue
-    }
+    private fun resolveStorageConfiguration(): ValidatedStorageConfiguration =
+        StorageRuntimeConfigurationValidator.validate(
+            endpoint = properties.endpoint,
+            region = properties.region,
+            bucket = properties.bucket,
+            accessKey = properties.accessKey,
+            secretKey = properties.secretKey,
+            credentialVersion = properties.credentialVersion,
+        )
 
     private fun validateObjectKey(objectKey: String) {
         val prefix =
@@ -549,7 +569,6 @@ class CloudStorageAdapter(
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     companion object {
-        private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
         private const val MAX_LIST_OBJECTS = 1_000
         private const val S3_PAGE_SIZE = 1_000
     }

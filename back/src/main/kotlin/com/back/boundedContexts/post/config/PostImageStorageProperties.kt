@@ -10,6 +10,7 @@ data class PostImageStorageProperties(
     var bucket: String = "blog-images",
     var accessKey: String = "",
     var secretKey: String = "",
+    var credentialVersion: String = "",
     var pathStyleAccess: Boolean = true,
     var keyPrefix: String = "posts",
     var maxFileSizeBytes: Long = 10 * 1024 * 1024,

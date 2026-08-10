@@ -43,7 +43,12 @@ class StorageRuntimeIdentityContractTest {
             PostImageStorageAdapter(
                 PostImageStorageProperties(
                     enabled = true,
+                    endpoint = "http://minio:9000",
+                    region = "us-east-1",
                     bucket = "contract-bucket",
+                    accessKey = "contract-access",
+                    secretKey = "contract-secret",
+                    credentialVersion = "1",
                 ),
             )
         ReflectionTestUtils.setField(postAdapter, "s3Client", postClient)
@@ -53,13 +58,18 @@ class StorageRuntimeIdentityContractTest {
             CloudStorageAdapter(
                 CloudStorageProperties(
                     enabled = true,
+                    endpoint = "http://minio:9000",
+                    region = "us-east-1",
                     bucket = "contract-bucket",
+                    accessKey = "contract-access",
+                    secretKey = "contract-secret",
+                    credentialVersion = "1",
                 ),
             )
         ReflectionTestUtils.setField(cloudAdapter, "s3Client", cloudClient)
 
-        postAdapter.initializeBucket()
-        cloudAdapter.initializeBucket()
+        postAdapter.initializeDependency()
+        cloudAdapter.initializeDependency()
 
         assertThat(postClient.createBucketCalls).isZero()
         assertThat(cloudClient.createBucketCalls).isZero()
@@ -75,13 +85,12 @@ class StorageRuntimeIdentityContractTest {
         var createBucketCalls: Int = 0
             private set
 
-        override fun headBucket(headBucketRequest: HeadBucketRequest): HeadBucketResponse {
+        override fun headBucket(headBucketRequest: HeadBucketRequest): HeadBucketResponse =
             throw NoSuchBucketException
                 .builder()
                 .message("bucket is missing")
                 .statusCode(404)
                 .build()
-        }
 
         override fun createBucket(createBucketRequest: CreateBucketRequest): CreateBucketResponse {
             createBucketCalls++

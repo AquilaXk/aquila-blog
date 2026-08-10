@@ -37,6 +37,7 @@ data class CloudStorageProperties(
     var bucket: String = "blog-images",
     var accessKey: String = "",
     var secretKey: String = "",
+    var credentialVersion: String = "",
     var pathStyleAccess: Boolean = true,
     var cloudKeyPrefix: String = "cloud",
     var maxFileSizeBytes: Long = DEFAULT_CLOUD_DOCUMENT_MAX_SIZE_BYTES,

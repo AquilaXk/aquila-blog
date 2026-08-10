@@ -21,6 +21,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.io.IOException
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @DisplayName("MemberNotificationSseService fail-closed 계약")
 class MemberNotificationSseServiceTest {
@@ -149,6 +152,51 @@ class MemberNotificationSseServiceTest {
 
         assertThat(cursorState()[emitter]).isEqualTo(25)
         assertThat(service.diagnostics().emitterStateMismatchCount).isZero()
+    }
+
+    @Test
+    @DisplayName("initial replay 중 시작된 live publish는 emitter 등록까지 기다린 뒤 즉시 전송한다")
+    fun `live publish waits for subscription registration during initial replay`() {
+        val replayStarted = CountDownLatch(1)
+        val releaseReplay = CountDownLatch(1)
+        val publishStarted = CountDownLatch(1)
+        val publishReturned = CountDownLatch(1)
+        val capturingEmitter = CapturingEventEmitter()
+        val emitterFactory = mock(MemberNotificationSseEmitterFactory::class.java)
+        given(emitterFactory.create()).willReturn(capturingEmitter)
+        val racingService = newService(emitterFactory)
+        given(repository.findByReceiverIdAndIdGreaterThan(7, 0, 50)).willAnswer {
+            replayStarted.countDown()
+            check(releaseReplay.await(2, TimeUnit.SECONDS))
+            emptyList<MemberNotification>()
+        }
+        val executor = Executors.newFixedThreadPool(2)
+
+        try {
+            val subscription = executor.submit<SseEmitter> { racingService.subscribe(memberId = 7, lastEventIdRaw = null) }
+            assertThat(replayStarted.await(1, TimeUnit.SECONDS)).isTrue()
+            val publication =
+                executor.submit {
+                    publishStarted.countDown()
+                    try {
+                        racingService.publish(memberId = 7, notification = notificationDto(id = 61), unreadCount = 1)
+                    } finally {
+                        publishReturned.countDown()
+                    }
+                }
+
+            assertThat(publishStarted.await(1, TimeUnit.SECONDS)).isTrue()
+            assertThat(publishReturned.await(250, TimeUnit.MILLISECONDS)).isFalse()
+            releaseReplay.countDown()
+
+            val emitter = subscription.get(2, TimeUnit.SECONDS)
+            publication.get(2, TimeUnit.SECONDS)
+            assertThat(capturingEmitter.sentWireText).contains("id:notification-61\n")
+            assertThat(cursorState(racingService)[emitter]).isEqualTo(61)
+        } finally {
+            releaseReplay.countDown()
+            executor.shutdownNow()
+        }
     }
 
     @Test

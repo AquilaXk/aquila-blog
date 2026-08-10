@@ -108,6 +108,14 @@ const prepare = (args, text) => {
   const env = parseEnvText(text)
   const rootAccessKey = env.get("MINIO_ROOT_USER") || ""
   const rootSecretKey = env.get("MINIO_ROOT_PASSWORD") || ""
+  if (
+    !rootAccessKey ||
+    rootAccessKey !== rootAccessKey.trim() ||
+    !rootSecretKey ||
+    rootSecretKey !== rootSecretKey.trim()
+  ) {
+    throw new Error("root storage identity is incomplete")
+  }
   const currentAccessKey = env.get("CUSTOM_STORAGE_ACCESSKEY") || ""
   const currentSecretKey = env.get("CUSTOM_STORAGE_SECRETKEY") || ""
   const currentVersion = env.get("CUSTOM_STORAGE_CREDENTIAL_VERSION") || ""

@@ -359,6 +359,43 @@ test("owner rotation consumes generated credentials atomically and keeps only no
   }
 })
 
+test("owner rotation rejects blank root identity before mutating either private file", () => {
+  const fixtures = [
+    envText({ currentAccess: "" }).replace(/^MINIO_ROOT_USER=.*\n/m, ""),
+    envText({ currentSecret: "" }).replace(/^MINIO_ROOT_PASSWORD=.*\n/m, ""),
+  ]
+
+  fixtures.forEach((sourceText, index) => {
+    const workdir = mkdtempSync(path.join(tmpdir(), `aquila-minio-root-missing-${index}-`))
+    try {
+      const envFile = path.join(workdir, ".env.prod")
+      const credentialFile = path.join(workdir, "credential.json")
+      const generatedSecret = `generated-secret-must-stay-private-${index}`
+      writeFileSync(envFile, `${sourceText}\n`, { mode: 0o600 })
+      writeFileSync(
+        credentialFile,
+        JSON.stringify({ status: "success", accessKey: `storage-app-next-${index}`, secretKey: generatedSecret }),
+        { mode: 0o600 },
+      )
+      const originalEnv = readFileSync(envFile, "utf8")
+
+      const result = spawnSync(
+        process.execPath,
+        [rotationToolPath, "prepare", "--env-file", envFile, "--credential-file", credentialFile],
+        { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      )
+
+      assert.notEqual(result.status, 0)
+      assert.match(`${result.stdout}${result.stderr}`, /root storage identity is incomplete/)
+      assert.equal(`${result.stdout}${result.stderr}`.includes(generatedSecret), false)
+      assert.equal(readFileSync(envFile, "utf8"), originalEnv)
+      assert.equal(existsSync(credentialFile), true)
+    } finally {
+      rmSync(workdir, { recursive: true, force: true })
+    }
+  })
+})
+
 test("service env materialization includes only current application identity", () => {
   const workdir = mkdtempSync(path.join(tmpdir(), "aquila-minio-materialize-"))
   try {

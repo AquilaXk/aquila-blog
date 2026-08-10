@@ -1,5 +1,14 @@
 package com.back.global.storage.health
 
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
+import org.slf4j.Logger
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.HeadBucketRequest
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException
 import software.amazon.awssdk.services.s3.model.S3Exception
 import java.net.SocketTimeoutException
@@ -61,6 +70,115 @@ class ValidatedStorageConfiguration internal constructor(
     val secretKey: String,
     val credentialVersion: String,
 )
+
+enum class StorageDependencyProbeStage(
+    val wireValue: String,
+) {
+    CONFIGURATION("configuration"),
+    CLIENT("client"),
+    BUCKET("bucket"),
+}
+
+data class StorageDependencyProbeOutcome(
+    val client: S3Client?,
+    val result: StorageDependencyProbeResult,
+    val failureStage: StorageDependencyProbeStage? = null,
+) {
+    fun unavailableMessage(
+        dependencyLabel: String,
+        logger: Logger,
+    ): String? {
+        val reason = result.reason ?: return null
+        logger.error(
+            "{} dependency probe failed (stage={}, reason={})",
+            dependencyLabel,
+            failureStage?.wireValue,
+            reason.wireValue,
+        )
+        return "$dependencyLabel dependency 사용 불가 (reason=${reason.wireValue})"
+    }
+}
+
+object StorageDependencyProber {
+    fun probe(
+        enabled: Boolean,
+        existingClient: S3Client?,
+        forcePathStyle: Boolean,
+        configurationProvider: () -> ValidatedStorageConfiguration,
+    ): StorageDependencyProbeOutcome {
+        if (!enabled) {
+            return StorageDependencyProbeOutcome(existingClient, StorageDependencyProbeResult.disabled())
+        }
+
+        val configuration =
+            try {
+                configurationProvider()
+            } catch (error: IllegalArgumentException) {
+                return failure(existingClient, error, StorageDependencyProbeStage.CONFIGURATION)
+            }
+        val client =
+            try {
+                existingClient ?: buildClient(configuration, forcePathStyle)
+            } catch (error: Exception) {
+                return failure(null, error, StorageDependencyProbeStage.CLIENT, configuration.credentialVersion)
+            }
+
+        return try {
+            client.headBucket(HeadBucketRequest.builder().bucket(configuration.bucket).build())
+            StorageDependencyProbeOutcome(
+                client = client,
+                result = StorageDependencyProbeResult.ready(configuration.credentialVersion),
+            )
+        } catch (error: Exception) {
+            failure(client, error, StorageDependencyProbeStage.BUCKET, configuration.credentialVersion)
+        }
+    }
+
+    private fun buildClient(
+        configuration: ValidatedStorageConfiguration,
+        forcePathStyle: Boolean,
+    ): S3Client =
+        S3Client
+            .builder()
+            .httpClientBuilder(UrlConnectionHttpClient.builder())
+            .endpointOverride(configuration.endpoint)
+            .region(Region.of(configuration.region))
+            .credentialsProvider(
+                StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(configuration.accessKey, configuration.secretKey),
+                ),
+            ).forcePathStyle(forcePathStyle)
+            .build()
+
+    private fun failure(
+        client: S3Client?,
+        error: Throwable,
+        stage: StorageDependencyProbeStage,
+        credentialVersion: String? = null,
+    ): StorageDependencyProbeOutcome =
+        StorageDependencyProbeOutcome(
+            client = client,
+            result = StorageDependencyProbeResult.down(StorageDependencyFailureClassifier.classify(error), credentialVersion),
+            failureStage = stage,
+        )
+}
+
+object StorageDependencyOperationGuard {
+    fun failIfUnavailable(
+        error: Throwable,
+        dependencyLabel: String,
+        logger: Logger,
+        onUnavailable: (String) -> Unit,
+    ) {
+        val reason = StorageDependencyFailureClassifier.classify(error)
+        if (reason == StorageDependencyFailureReason.OTHER) return
+
+        val safeMessage = "$dependencyLabel dependency 사용 불가 (reason=${reason.wireValue})"
+        onUnavailable(safeMessage)
+        logger.error("{} operation failed (reason={})", dependencyLabel, reason.wireValue)
+        throw AppException(ErrorCode.SERVICE_UNAVAILABLE, safeMessage)
+    }
+}
 
 object StorageRuntimeConfigurationValidator {
     fun validate(

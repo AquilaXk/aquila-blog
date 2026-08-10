@@ -5,22 +5,18 @@ import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.health.StorageDependencyFailureClassifier
-import com.back.global.storage.health.StorageDependencyFailureReason
+import com.back.global.storage.health.StorageDependencyOperationGuard
 import com.back.global.storage.health.StorageDependencyProbeResult
+import com.back.global.storage.health.StorageDependencyProber
 import com.back.global.storage.health.StorageRuntimeConfigurationValidator
 import com.back.global.storage.health.ValidatedStorageConfiguration
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.sync.RequestBody
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
-import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
-import software.amazon.awssdk.services.s3.model.HeadBucketRequest
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
@@ -59,51 +55,19 @@ class PostImageStorageAdapter(
         probeStorageDependency()
     }
 
-    private fun probeStorageDependency(): StorageDependencyProbeResult {
-        if (!properties.enabled) {
-            initErrorMessage = null
-            return StorageDependencyProbeResult.disabled()
-        }
-
-        return synchronized(initLock) {
-            val configuration =
-                try {
-                    resolveStorageConfiguration()
-                } catch (error: IllegalArgumentException) {
-                    val reason = StorageDependencyFailureClassifier.classify(error)
-                    initErrorMessage = "이미지 스토리지 dependency 사용 불가 (reason=${reason.wireValue})"
-                    logger.error("Post image storage configuration rejected (reason={})", reason.wireValue)
-                    return@synchronized StorageDependencyProbeResult.down(reason)
-                }
-
-            val client =
-                try {
-                    s3Client ?: buildClient(configuration)
-                } catch (error: Exception) {
-                    val reason = StorageDependencyFailureClassifier.classify(error)
-                    initErrorMessage = "이미지 스토리지 dependency 사용 불가 (reason=${reason.wireValue})"
-                    logger.error("Post image storage client initialization failed (reason={})", reason.wireValue)
-                    return@synchronized StorageDependencyProbeResult.down(reason, configuration.credentialVersion)
-                }
-            s3Client = client
-
-            try {
-                client.headBucket(
-                    HeadBucketRequest
-                        .builder()
-                        .bucket(properties.bucket)
-                        .build(),
+    private fun probeStorageDependency(): StorageDependencyProbeResult =
+        synchronized(initLock) {
+            val outcome =
+                StorageDependencyProber.probe(
+                    enabled = properties.enabled,
+                    existingClient = s3Client,
+                    forcePathStyle = properties.pathStyleAccess,
+                    configurationProvider = ::resolveStorageConfiguration,
                 )
-                initErrorMessage = null
-                StorageDependencyProbeResult.ready(configuration.credentialVersion)
-            } catch (error: Exception) {
-                val reason = StorageDependencyFailureClassifier.classify(error)
-                initErrorMessage = "이미지 스토리지 dependency 사용 불가 (reason=${reason.wireValue})"
-                logger.error("Post image storage probe failed (reason={})", reason.wireValue)
-                StorageDependencyProbeResult.down(reason, configuration.credentialVersion)
-            }
+            s3Client = outcome.client
+            initErrorMessage = outcome.unavailableMessage("이미지 스토리지", logger)
+            outcome.result
         }
-    }
 
     override fun uploadPostImage(request: PostImageStoragePort.UploadImageRequest): String {
         validateUploadContentLength(
@@ -409,13 +373,9 @@ class PostImageStorageAdapter(
     }
 
     private fun failIfDependencyUnavailable(error: Throwable) {
-        val reason = StorageDependencyFailureClassifier.classify(error)
-        if (reason == StorageDependencyFailureReason.OTHER) return
-
-        val safeMessage = "이미지 스토리지 dependency 사용 불가 (reason=${reason.wireValue})"
-        initErrorMessage = safeMessage
-        logger.error("Post image storage operation failed (reason={})", reason.wireValue)
-        throw AppException(ErrorCode.SERVICE_UNAVAILABLE, safeMessage)
+        StorageDependencyOperationGuard.failIfUnavailable(error, "이미지 스토리지", logger) {
+            initErrorMessage = it
+        }
     }
 
     private fun requireClient(): S3Client {
@@ -431,19 +391,6 @@ class PostImageStorageAdapter(
 
         return s3Client ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE, "이미지 스토리지가 아직 준비되지 않았습니다.")
     }
-
-    private fun buildClient(configuration: ValidatedStorageConfiguration): S3Client =
-        S3Client
-            .builder()
-            .httpClientBuilder(UrlConnectionHttpClient.builder())
-            .endpointOverride(configuration.endpoint)
-            .region(Region.of(configuration.region))
-            .credentialsProvider(
-                StaticCredentialsProvider.create(
-                    AwsBasicCredentials.create(configuration.accessKey, configuration.secretKey),
-                ),
-            ).forcePathStyle(properties.pathStyleAccess)
-            .build()
 
     private fun resolveStorageConfiguration(): ValidatedStorageConfiguration =
         StorageRuntimeConfigurationValidator.validate(

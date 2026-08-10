@@ -37,6 +37,16 @@ class StorageRuntimeIdentityContractTest {
     }
 
     @Test
+    fun `application storage adapters share dependency client and bucket probe flow`() {
+        runtimeAdapterSources().forEach { source ->
+            assertThat(source)
+                .contains("StorageDependencyProber.probe(")
+                .doesNotContain("HeadBucketRequest")
+                .doesNotContain("private fun buildClient")
+        }
+    }
+
+    @Test
     fun `missing bucket never triggers application bucket creation`() {
         val postClient = MissingBucketS3Client()
         val postAdapter =

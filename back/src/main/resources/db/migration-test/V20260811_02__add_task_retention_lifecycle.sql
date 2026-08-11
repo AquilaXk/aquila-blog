@@ -33,27 +33,33 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     terminal_at TIMESTAMPTZ;
+    completed_status CONSTANT TEXT := 'COMPLETED';
+    failed_status CONSTANT TEXT := 'FAILED';
+    quarantined_status CONSTANT TEXT := 'QUARANTINED';
+    redacted_payload CONSTANT TEXT := '{"redacted":true}';
+    replay_retention CONSTANT INTERVAL := INTERVAL '7 days';
+    terminal_retention CONSTANT INTERVAL := INTERVAL '30 days';
 BEGIN
     terminal_at := COALESCE(NEW.modified_at, CURRENT_TIMESTAMP);
-    IF NEW.status = 'COMPLETED' THEN
-        NEW.payload := '{"redacted":true}';
+    IF NEW.status = completed_status THEN
+        NEW.payload := redacted_payload;
         NEW.payload_purge_after := COALESCE(NEW.payload_purge_after, terminal_at);
         NEW.payload_redacted_at := COALESCE(NEW.payload_redacted_at, terminal_at);
-        NEW.row_purge_after := COALESCE(NEW.row_purge_after, terminal_at + INTERVAL '7 days');
-    ELSIF NEW.status = 'FAILED' THEN
+        NEW.row_purge_after := COALESCE(NEW.row_purge_after, terminal_at + replay_retention);
+    ELSIF NEW.status = failed_status THEN
         NEW.payload_purge_after := COALESCE(
             NEW.payload_purge_after,
             CASE
-                WHEN NEW.payload_expires_at IS NULL THEN terminal_at + INTERVAL '7 days'
-                ELSE LEAST(terminal_at + INTERVAL '7 days', NEW.payload_expires_at)
+                WHEN NEW.payload_expires_at IS NULL THEN terminal_at + replay_retention
+                ELSE LEAST(terminal_at + replay_retention, NEW.payload_expires_at)
             END
         );
-        NEW.row_purge_after := COALESCE(NEW.row_purge_after, terminal_at + INTERVAL '30 days');
-    ELSIF NEW.status = 'QUARANTINED' THEN
-        NEW.payload := '{"redacted":true}';
+        NEW.row_purge_after := COALESCE(NEW.row_purge_after, terminal_at + terminal_retention);
+    ELSIF NEW.status = quarantined_status THEN
+        NEW.payload := redacted_payload;
         NEW.payload_purge_after := COALESCE(NEW.payload_purge_after, terminal_at);
         NEW.payload_redacted_at := COALESCE(NEW.payload_redacted_at, terminal_at);
-        NEW.row_purge_after := COALESCE(NEW.row_purge_after, terminal_at + INTERVAL '30 days');
+        NEW.row_purge_after := COALESCE(NEW.row_purge_after, terminal_at + terminal_retention);
     END IF;
     RETURN NEW;
 END;
@@ -69,33 +75,32 @@ UPDATE task
 SET payload_expires_at = modified_at
 WHERE task_type = 'member.signupVerification.sendMail';
 
+WITH terminal_backfill(status, retention_days) AS (
+    VALUES
+        ('COMPLETED', 7),
+        ('QUARANTINED', 30)
+)
 UPDATE task
 SET payload = '{"redacted":true}',
     payload_purge_after = modified_at,
     payload_redacted_at = modified_at,
-    row_purge_after = modified_at + INTERVAL '7 days'
-WHERE status = 'COMPLETED';
+    row_purge_after = modified_at + make_interval(days => terminal_backfill.retention_days)
+FROM terminal_backfill
+WHERE task.status = terminal_backfill.status;
 
 UPDATE task
 SET payload_purge_after =
         CASE
-            WHEN payload_expires_at IS NOT NULL THEN LEAST(modified_at + INTERVAL '7 days', payload_expires_at)
-            ELSE modified_at + INTERVAL '7 days'
+            WHEN payload_expires_at IS NOT NULL THEN LEAST(modified_at + make_interval(days => 7), payload_expires_at)
+            ELSE modified_at + make_interval(days => 7)
         END,
-    row_purge_after = modified_at + INTERVAL '30 days'
+    row_purge_after = modified_at + make_interval(days => 30)
 WHERE status = 'FAILED';
-
-UPDATE task
-SET payload = '{"redacted":true}',
-    payload_purge_after = modified_at,
-    payload_redacted_at = modified_at,
-    row_purge_after = modified_at + INTERVAL '30 days'
-WHERE status = 'QUARANTINED';
 
 CREATE INDEX task_idx_failed_payload_purge_after
     ON task (payload_purge_after ASC)
-    WHERE status = 'FAILED' AND payload_redacted_at IS NULL;
+    WHERE payload_redacted_at IS NULL AND payload_purge_after IS NOT NULL;
 
 CREATE INDEX task_idx_terminal_row_purge_after
     ON task (row_purge_after ASC)
-    WHERE status IN ('COMPLETED', 'FAILED', 'QUARANTINED');
+    WHERE row_purge_after IS NOT NULL;

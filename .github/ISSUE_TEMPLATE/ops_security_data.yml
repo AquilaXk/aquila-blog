@@ -1,0 +1,162 @@
+name: "🛡 Ops / Security / Data"
+description: "배포, 운영 안정성, 보안·개인정보, 데이터 전환과 성능 위험 작업을 정리합니다."
+title: "[Ops] "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        위험 작업은 전체 경우의 수보다 핵심 불변식, 실패 경계와 복구 방법을 명확히 적어 주세요.
+        검증은 변경 위험에 비례하며, dry-run·canary·runtime evidence는 필요한 경우에만 사용합니다.
+
+  - type: dropdown
+    id: change_type
+    attributes:
+      label: Change Type
+      options:
+        - Ops / Reliability
+        - Security / Privacy
+        - Data / Migration
+        - Performance / Capacity
+        - Supply Chain
+        - Cross-repository Contract
+    validations:
+      required: true
+
+  - type: dropdown
+    id: primary_risk
+    attributes:
+      label: Primary Risk
+      options:
+        - Runtime availability
+        - Data integrity or migration
+        - Security or privacy
+        - Deployment or rollback
+        - Cross-repository compatibility
+        - Performance or capacity
+    validations:
+      required: true
+
+  - type: input
+    id: domain
+    attributes:
+      label: Domain
+      description: 관련 runtime, DB, workflow, API 또는 운영 영역을 적어 주세요.
+      placeholder: "예) back/global/task, DB migration, deploy/homeserver, .github/workflows/**"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: 변경 목적과 보호해야 할 핵심 결과를 1~3문장으로 설명해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem_evidence
+    attributes:
+      label: Problem / Evidence
+      description: 현재 위험, 장애·성능 근거, inventory 또는 운영 지표를 적어 주세요.
+      placeholder: |
+        - Current state:
+        - Evidence / incident / metric:
+        - User or operational impact:
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: 완료 후 보장할 운영·데이터·보안 결과와 유효한 경우 목표 지표를 적어 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: 이번 변경과 후속으로 분리할 범위를 구분해 주세요.
+      placeholder: |
+        In Scope
+        - ...
+
+        Out of Scope / Follow-up
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety_contract
+    attributes:
+      label: Safety Contract
+      description: 반드시 보존할 불변식, 실패 처리, 민감 데이터와 금지할 우회 경로를 적어 주세요.
+      placeholder: |
+        - Invariants:
+        - Fail-closed / explicit failure:
+        - Sensitive data:
+        - Forbidden fallback or alternate path:
+    validations:
+      required: true
+
+  - type: textarea
+    id: rollout_rollback
+    attributes:
+      label: Rollout / Rollback / Recovery
+      description: 배포·데이터 변경이면 단계, checkpoint와 복구 방법을 적고, 불필요하면 이유를 적어 주세요.
+      placeholder: |
+        - Rollout / dry-run / canary:
+        - Checkpoint:
+        - Rollback or recovery:
+        - Not applicable reason:
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: 핵심 성공·실패 경계를 관찰 가능한 체크리스트로 적어 주세요.
+      placeholder: |
+        - [ ] 핵심 불변식이 유지됨
+        - [ ] 대표 실패가 성공으로 보고되지 않음
+        - [ ] 운영 또는 데이터 evidence가 남음
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies / Ownership
+      description: 관련 이슈, producer/consumer, 승인자와 external blocker를 적어 주세요.
+      placeholder: |
+        - Parent / Related:
+        - Producer / Consumer:
+        - Blocking decision:
+        - Repository owner:
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: 핵심 negative fixture, focused test와 필요한 실제 환경 evidence를 적어 주세요.
+      placeholder: |
+        - Focused test / negative fixture:
+        - Dry-run or canary:
+        - Runtime / production evidence:
+        - Required CI:
+        - Deferred verification and rerun condition: 없음
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: ready_check
+    attributes:
+      label: Ready Check
+      options:
+        - label: "[열린 이슈](https://github.com/AquilaXk/aquila-blog/issues)에서 중복 owner와 관련 작업을 확인했습니다."
+          required: true
+        - label: "실패 경계, 범위, 복구 방법과 완료 조건이 명확합니다."
+          required: true

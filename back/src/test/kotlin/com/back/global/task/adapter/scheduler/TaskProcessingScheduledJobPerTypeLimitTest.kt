@@ -54,17 +54,19 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         }.isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("perTypeMaxConcurrent")
 
-        assertThatThrownBy {
-            val fixture =
-                createFixture(
-                    maxConcurrent = 2,
-                    perTypeMaxConcurrentRaw = "post.search-index.sync=257",
-                    perTypeAutoTuneEnabled = true,
-                    perTypeAutoTuneMinConcurrent = 1,
-                )
-            fixture.job.shutdownExecutor()
-        }.isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("perTypeMaxConcurrent")
+        listOf(-1, 0, 257).forEach { invalidLimit ->
+            assertThatThrownBy {
+                val fixture =
+                    createFixture(
+                        maxConcurrent = 2,
+                        perTypeMaxConcurrentRaw = "post.search-index.sync=$invalidLimit",
+                        perTypeAutoTuneEnabled = true,
+                        perTypeAutoTuneMinConcurrent = 1,
+                    )
+                fixture.job.shutdownExecutor()
+            }.isInstanceOf(IllegalArgumentException::class.java)
+                .hasMessageContaining("perTypeMaxConcurrent")
+        }
     }
 
     @Test

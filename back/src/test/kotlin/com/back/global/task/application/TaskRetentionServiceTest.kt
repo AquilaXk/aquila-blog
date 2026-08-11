@@ -1,6 +1,6 @@
 package com.back.global.task.application
 
-import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.port.output.TaskRetentionRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -19,7 +19,7 @@ class TaskRetentionServiceTest {
 
     @Test
     fun `cleanup은 due terminal payload와 row만 bounded 처리하고 lease와 processing을 보존한다`() {
-        val repository = mock(TaskRepository::class.java)
+        val repository = mock(TaskRetentionRepositoryPort::class.java)
         val meterRegistry = SimpleMeterRegistry()
         val service =
             TaskRetentionService(

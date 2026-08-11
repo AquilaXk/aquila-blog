@@ -1,6 +1,6 @@
 package com.back.global.task.application
 
-import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.port.output.TaskRetentionRepositoryPort
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -14,7 +14,7 @@ data class TaskRetentionCleanupResult(
 
 @Service
 class TaskRetentionService(
-    private val taskRepository: TaskRepository,
+    private val taskRepository: TaskRetentionRepositoryPort,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry? = null,
 ) {

@@ -1,6 +1,7 @@
 package com.back.global.task.adapter.persistence
 
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
+import com.back.global.task.application.port.output.TaskRetentionRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import org.springframework.data.domain.Pageable
@@ -14,7 +15,8 @@ import java.time.Instant
  */
 interface TaskRepository :
     JpaRepository<Task, Long>,
-    TaskQueueRepositoryPort {
+    TaskQueueRepositoryPort,
+    TaskRetentionRepositoryPort {
     @Query(
         value = """
             SELECT *
@@ -60,7 +62,7 @@ interface TaskRepository :
         """,
         nativeQuery = true,
     )
-    fun findFailedPayloadsForRedactionWithLock(
+    override fun findFailedPayloadsForRedactionWithLock(
         now: Instant,
         limit: Int,
     ): List<Task>
@@ -78,7 +80,7 @@ interface TaskRepository :
         """,
         nativeQuery = true,
     )
-    fun findTerminalRowsForPurgeWithLock(
+    override fun findTerminalRowsForPurgeWithLock(
         now: Instant,
         limit: Int,
     ): List<Task>

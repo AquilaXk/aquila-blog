@@ -1,5 +1,8 @@
 # 홈서버 front 도메인 전환 순서 (#1538 · #1575 · #1605)
 
+> 이 문서의 `front/**` source 경로는 분리 전 이력입니다. 현재 source 정본은
+> https://github.com/AquilaXk/aquila-blog-web 이고, Platform은 immutable Web image만 소비합니다.
+
 > **상태: 블로그 표면 전환 완료.** `blog.aquilaxk.site`는 홈서버가 서빙한다. 아래 본문의
 > "착수 시점"은 전환 착수 당시의 상태이며, 실행 기록으로 남긴다. 이전 호스팅 provider로 되돌리는
 > 경로는 #1542로 닫혔다.

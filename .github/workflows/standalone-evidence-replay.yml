@@ -39,7 +39,7 @@ jobs:
     name: Validate standalone evidence command
     if: >-
       github.event_name == 'issue_comment' &&
-      github.event.issue.number == 1463 &&
+      github.event.issue.number == 1453 &&
       github.actor == github.repository_owner &&
       github.event.issue.pull_request == null &&
       startsWith(github.event.comment.body, '/standalone-evidence ')
@@ -79,47 +79,6 @@ jobs:
           git cat-file -e "${source_sha}^{commit}"
           git merge-base --is-ancestor "${source_sha}" "${main_sha}"
           printf 'source_sha=%s\n' "${source_sha}" >> "${GITHUB_OUTPUT}"
-
-  web_standalone:
-    name: Web Standalone
-    needs: prepare
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    steps:
-      - name: Checkout exact source SHA with history
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.prepare.outputs.source_sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "20"
-          cache: yarn
-          cache-dependency-path: front/yarn.lock
-
-      - name: Verify standalone harness contracts
-        run: |
-          bash tools/test/repository-standalone-verification.test.sh
-          bash tools/test/standalone-evidence-replay-workflow.test.sh
-
-      - name: Run Web archive standalone gate
-        env:
-          STANDALONE_ARTIFACT_DIR: ${{ runner.temp }}/web-standalone
-        run: bash tools/repo-split/verify-web-standalone.sh "${{ needs.prepare.outputs.source_sha }}"
-
-      - name: Upload Web standalone evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: web-standalone-${{ needs.prepare.outputs.source_sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/web-standalone
-          if-no-files-found: error
-          retention-days: 14
 
   platform_standalone:
     name: Platform Standalone
@@ -173,7 +132,6 @@ jobs:
     name: Record Standalone Evidence
     needs:
       - prepare
-      - web_standalone
       - platform_standalone
     if: always() && needs.prepare.result == 'success'
     permissions:
@@ -186,20 +144,16 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
-          WEB_RESULT: ${{ needs.web_standalone.result }}
           PLATFORM_RESULT: ${{ needs.platform_standalone.result }}
-          WEB_ARTIFACT: web-standalone-${{ needs.prepare.outputs.source_sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           PLATFORM_ARTIFACT: platform-standalone-${{ needs.prepare.outputs.source_sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         with:
           script: |
             const sourceSha = process.env.SOURCE_SHA;
-            const webResult = process.env.WEB_RESULT;
             const platformResult = process.env.PLATFORM_RESULT;
-            const webArtifact = process.env.WEB_ARTIFACT;
             const platformArtifact = process.env.PLATFORM_ARTIFACT;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const marker = `<!-- standalone-evidence:${sourceSha}:${context.runId}:${context.runAttempt} -->`;
-            const passed = webResult === 'success' && platformResult === 'success';
+            const passed = platformResult === 'success';
             const body = [
               marker,
               `## ${passed ? '✅' : '❌'} Standalone evidence replay`,
@@ -207,9 +161,7 @@ jobs:
               `- Source main SHA: \`${sourceSha}\``,
               `- Run: ${runUrl}`,
               `- Run ID / attempt: \`${context.runId}\` / \`${context.runAttempt}\``,
-              `- Web Standalone: **${webResult}**`,
               `- Platform Standalone: **${platformResult}**`,
-              `- Web artifact: \`${webArtifact}\``,
               `- Platform artifact: \`${platformArtifact}\``,
             ].join('\n');
 
@@ -220,5 +172,5 @@ jobs:
             });
 
             if (!passed) {
-              core.setFailed(`standalone replay failed: web=${webResult}, platform=${platformResult}`);
+              core.setFailed(`standalone replay failed: platform=${platformResult}`);
             }

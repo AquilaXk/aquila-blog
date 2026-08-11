@@ -10,7 +10,6 @@ on:
       - reopened
     paths:
       - "back/**"
-      - "front/**"
       - "sonar-project.properties"
       - ".sonarcloud.properties"
       - ".github/workflows/sonarcloud.yml"
@@ -19,7 +18,6 @@ on:
       - main
     paths:
       - "back/**"
-      - "front/**"
       - "sonar-project.properties"
       - ".sonarcloud.properties"
       - ".github/workflows/sonarcloud.yml"

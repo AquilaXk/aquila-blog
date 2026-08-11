@@ -14,6 +14,7 @@ run_with_temp_index() {
   local tmp_index
   tmp_index="$(mktemp)"
   GIT_INDEX_FILE="${tmp_index}" git read-tree HEAD
+  GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch front >/dev/null
   set +e
   GIT_INDEX_FILE="${tmp_index}" bash -c "${command}"
   local status=$?
@@ -62,8 +63,8 @@ if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_bl
   exit 1
 fi
 
-if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' front/docs/design/contract.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
-  echo "[test] expected staged front/docs/design/contract.md to be allowed" >&2
+if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' front/docs/design/contract.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged front/docs/design/contract.md to be rejected" >&2
   exit 1
 fi
 

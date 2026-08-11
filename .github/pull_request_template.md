@@ -31,8 +31,8 @@
 ### 실행한 검증과 결과
 - 실제로 실행한 명령마다 관찰 결과나 evidence를 함께 적어 주세요.
 - 예) `./back/gradlew -p back test`: 42 tests passed, exit 0
-- 예) `yarn --cwd front build`: exit 0
-- 예) `yarn --cwd front test:e2e:smoke`: 18 passed
+- Web 변경 예) `AquilaXk/aquila-blog-web`의 `yarn build`: exit 0
+- Web 변경 예) `AquilaXk/aquila-blog-web`의 `yarn test:e2e:smoke`: 18 passed
 
 ### 미실행 검증
 - 없음. 미실행 항목이 있으면 사유와 정확한 재실행 조건을 적어 주세요.

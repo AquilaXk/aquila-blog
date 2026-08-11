@@ -2077,24 +2077,6 @@ test("deploy workflow derives every prod site value from the same topology table
   assert.match(workflow, /upsert_env_key "CUSTOM__REVALIDATE__URL" "\$\{PROD_SITE_REVALIDATE_URL\}" "deploy\/homeserver\/\.env\.prod"/)
 })
 
-test("front runtime image build args match the declared site topology", async () => {
-  const { loadContract } = await import("../env/validate-env.mjs")
-  const topology = siteTopologies(loadContract(contractPath))[SAME_ORIGIN_TOPOLOGY]
-  const dockerfile = readFileSync(path.join(repoRoot, "front/Dockerfile.runtime"), "utf8")
-
-  const argDefaults = new Map(
-    [...dockerfile.matchAll(/^ARG (NEXT_PUBLIC_[A-Z0-9_]+)="([^"]*)"$/gm)].map((match) => [match[1], match[2]]),
-  )
-
-  // NEXT_PUBLIC_*는 빌드 시점에 번들에 인라인된다. 표와 갈라지면 backend/cookie는 한쪽,
-  // front 번들은 다른 쪽을 가리켜 브라우저가 존재하지 않는 호스트로 XHR한다.
-  assert.equal(argDefaults.get("NEXT_PUBLIC_SITE_URL"), `https://${topology.frontHost}`)
-  assert.equal(argDefaults.get("NEXT_PUBLIC_BACKEND_URL"), `https://${topology.backHost}`)
-  // same-origin이므로 둘이 같아야 한다. 이 등식이 깨지는 순간 브라우저 요청이 다시
-  // cross-origin이 되고 edge CORS 없이는 통째로 막힌다.
-  assert.equal(argDefaults.get("NEXT_PUBLIC_BACKEND_URL"), argDefaults.get("NEXT_PUBLIC_SITE_URL"))
-})
-
 test("home-server-source requires DB runtime username after runtime-role cutover", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv.replace(/^PROD___SPRING__DATASOURCE__USERNAME=.*\n/m, "")
@@ -4300,7 +4282,7 @@ test("회사·제품 표면 vhost는 front 전용이고 공유 snippet 하나를
   // 루트만 표면 라우트로 rewrite한다. 더 깊은 경로까지 잡으면 /_next/* 자산이 끊긴다.
   assert.match(surfaceSnippet, /^\s*rewrite \/ \{args\[0\]\}\s*$/m)
 
-  // 이 호스트의 robots.txt는 vhost가 응답한다. front/public/robots.txt는 blog sitemap을
+  // 이 호스트의 robots.txt는 vhost가 응답한다. Web image의 blog robots.txt는 blog sitemap을
   // 광고하므로 그대로 나가면 이 표면이 남의 URL 목록을 자기 것으로 광고한다.
   // `handle`이어야 한다 - Caddy 지시자 순서는 `respond`를 `handle` 뒤에 두므로 최상위 respond는
   // catch-all proxy 뒤로 컴파일돼 실행되지 않는다.
@@ -4315,17 +4297,6 @@ test("front 전용 표면 vhost는 backend에 닿는 front API 경로를 catch-a
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const surfaceSnippet = extractCaddySiteBlock(caddyfile, "(front_surface_vhost) {")
   assert.notEqual(surfaceSnippet, "", "shared front surface snippet must be extractable")
-
-  // 이 계약이 막는 대상은 실제로 존재하는 front 라우트다. 라우트가 사라지거나 이름이 바뀌면 아래
-  // 단언들은 아무것도 지키지 않으면서 그린으로 남으므로, 존재 자체를 먼저 실측한다.
-  assert.ok(
-    existsSync(path.join(repoRoot, "front/src/pages/api/backend/[...path].ts")),
-    "the backend proxy route these hosts must not expose has to exist for this contract to mean anything",
-  )
-  assert.ok(
-    existsSync(path.join(repoRoot, "front/src/pages/api/revalidate.ts")),
-    "the revalidate route also reaches the backend from the server side",
-  )
 
   // allow-list여야 한다. backend에 닿는 오늘의 경로만 나열하는 deny-list는 기본값이 "노출"이라,
   // blog용으로 추가되는 다음 front API route가 이 호스트에서도 조용히 공개된다.
@@ -4355,12 +4326,6 @@ test("front 전용 표면 vhost는 블로그 RSS 경로를 catch-all 앞에서 �
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const surfaceSnippet = extractCaddySiteBlock(caddyfile, "(front_surface_vhost) {")
   assert.notEqual(surfaceSnippet, "", "shared front surface snippet must be extractable")
-
-  // 막는 대상이 실제 라우트여야 한다. 라우트가 사라지면 아래 단언은 아무것도 지키지 않는다.
-  assert.ok(
-    existsSync(path.join(repoRoot, "front/src/pages/feed.tsx")),
-    "the blog RSS route this gate must keep off the surface hosts has to exist",
-  )
 
   // `_document`가 alternate 링크를 끄는 것은 절반이다. 경로 자체가 살아 있으면 다른 데서 링크를
   // 배운 크롤러가 이 호스트의 피드로 블로그 아이템을 다시 색인한다.
@@ -4439,34 +4404,22 @@ test("표면 도메인 키는 caddy env까지 전달되고 site address 유일�
     healthyResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
   )
 
-  // 표면 정본은 front가 런타임에 배우는 값이 아니다. front/site.config.js가 표면별 정본 URL 표를
-  // 컴파일해 들고 있고 publicSurfaceUrl.ts가 요청 Host를 그 표와 대조한다. 그래서 표에 없는
-  // 호스트를 배포하면 Caddy는 서빙하는데 canonical/OG는 다른 곳을 가리키고 sitemap host guard는
-  // 404를 낸다 - 설정 실수가 거부되지 않고 조용한 메타 불일치로 나간다. 계약이 fail-closed로 막는다.
-  //
-  // 기대값은 site.config.js에서 읽는다. 여기 값을 적어 두면 front 정본이 움직였을 때 두 층이
-  // 갈라진 채로 그린이 된다.
-  const siteConfig = readFileSync(path.join(repoRoot, "front/site.config.js"), "utf8")
-  const frontSurfaceHostOf = (constantName) => {
-    const declared = siteConfig.match(new RegExp(`const ${constantName} = "https://([^"/]+)"`))
-    assert.ok(declared, `${constantName} must be declared in front/site.config.js`)
-    return declared[1]
-  }
-  for (const [key, constantName] of [
-    ["COMPANY_DOMAIN", "COMPANY_SITE_URL"],
-    ["PRODUCT_DOMAIN", "PRODUCT_SITE_URL"],
+  // Web source는 별도 저장소가 소유한다. Platform은 Caddy가 실제로 서빙하는 두 surface host만
+  // 배포 계약에 고정하고, sibling checkout이나 source archive를 읽는 fallback을 두지 않는다.
+  for (const [key, canonicalHost] of [
+    ["COMPANY_DOMAIN", "www.aquilaxk.site"],
+    ["PRODUCT_DOMAIN", "easysubway.aquilaxk.site"],
   ]) {
-    const canonicalHost = frontSurfaceHostOf(constantName)
     const definition = sourceKeys.find((name) => name.name === key)
     assert.deepEqual(
       definition.allowedValues,
       [canonicalHost],
-      `${key} must be pinned to the canonical host front/site.config.js compiles in`,
+      `${key} must be pinned to the Platform-owned public surface host`,
     )
 
     const mismatched = withEnvKeys(healthy, [[key, `surface.${canonicalHost}`]])
     const result = validateEnvText({ contract, target: "home-server-source", text: mismatched })
-    assert.equal(result.ok, false, `${key} must reject a host the front cannot resolve to a canonical`)
+    assert.equal(result.ok, false, `${key} must reject an undeclared public surface host`)
     assert(
       result.errors.some((error) => error.key === key && /must be one of/.test(error.message)),
       JSON.stringify(result.errors),

@@ -17,32 +17,21 @@ fi
 bash tools/guards/check-forbidden-tracked-files.sh --staged
 bash tools/guards/check-current-task-state.sh
 bash tools/guards/check-current-task-scope.sh --staged
-node tools/repo-boundary/check-platform-boundary.mjs --report-only
+node tools/repo-boundary/check-platform-boundary.mjs
 
 needs_platform_contract_check="false"
-needs_frontend_contract_check="false"
-needs_detail_render_guard="false"
 while IFS= read -r file; do
   case "${file}" in
     .githooks/pre-commit|back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*|back/src/test/kotlin/com/back/global/contracts/*|contracts/public-api/**|tools/contracts/**|tools/test/public-contract-manifest.test.mjs)
       needs_platform_contract_check="true"
       ;;
-    front/package.json|front/contracts/platform/**|front/packages/shared-contracts/src/generated/backend-openapi.d.ts|front/scripts/contracts/**|front/scripts/openapi/check-contract-drift.mjs)
-      needs_frontend_contract_check="true"
-      ;;
     .github/workflows/ci.yml|.github/workflows/reusable-backend-quality.yml)
       needs_platform_contract_check="true"
-      ;;
-    .github/workflows/reusable-frontend-verify.yml)
-      needs_frontend_contract_check="true"
-      ;;
-    front/src/pages/posts/\[id\].tsx|front/src/routes/Detail/*|front/src/libs/markdown/*|front/src/libs/postSummary.ts|front/src/libs/server/postDetailPage.ts)
-      needs_detail_render_guard="true"
       ;;
   esac
 done <<< "${staged_files}"
 
-if [[ "${needs_platform_contract_check}" != "true" && "${needs_frontend_contract_check}" != "true" && "${needs_detail_render_guard}" != "true" ]]; then
+if [[ "${needs_platform_contract_check}" != "true" ]]; then
   exit 0
 fi
 
@@ -63,37 +52,4 @@ if [[ "${needs_platform_contract_check}" == "true" ]]; then
     contracts/public-api/error-codes.json \
     contracts/public-api/manifest.json >/dev/null
   git diff --exit-code -- contracts/public-api
-fi
-
-if [[ "${needs_frontend_contract_check}" == "true" || "${needs_detail_render_guard}" == "true" ]] && ! command -v yarn >/dev/null 2>&1; then
-  echo "[pre-commit] yarn 명령을 찾지 못해 필요한 프런트엔드 검사를 실행할 수 없습니다." >&2
-  exit 1
-fi
-
-if [[ "${needs_frontend_contract_check}" == "true" ]]; then
-  echo "[pre-commit] OpenAPI 계약 드리프트 검사 실행: yarn contracts:check"
-  (
-    cd front
-    yarn contracts:check
-  )
-fi
-
-if [[ "${needs_detail_render_guard}" == "true" ]]; then
-  echo "[pre-commit] 상세 렌더 회귀 가드 실행: yarn build"
-  (
-    cd front
-    yarn build
-  )
-
-  echo "[pre-commit] 상세 렌더 회귀 가드 실행: node scripts/check-bundle-size.mjs"
-  (
-    cd front
-    node scripts/check-bundle-size.mjs
-  )
-
-  echo "[pre-commit] 상세 렌더 회귀 가드 실행: yarn test:e2e:smoke"
-  (
-    cd front
-    yarn test:e2e:smoke
-  )
 fi

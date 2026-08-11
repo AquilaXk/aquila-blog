@@ -112,8 +112,9 @@ test("CI runs for every main push while retaining PR path filtering", () => {
   assert.equal(triggers.push["paths-ignore"], undefined)
   assert.deepEqual(triggers.push.branches, ["main"])
   assert.deepEqual(triggers.pull_request.paths, [
-    "back/**",
+    "front",
     "front/**",
+    "back/**",
     "contracts/public-api/**",
     "tools/contracts/**",
     "tools/test/**",

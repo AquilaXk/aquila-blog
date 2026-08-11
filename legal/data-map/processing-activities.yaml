@@ -139,7 +139,7 @@ activities:
       - databaseOperator
     encryption: pendingTokenHmacHashAtRest; providerSubjectHmacHashAtRest; transportTls
     userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
-    codeOwner: back/oauth-signup; front/signup-social-complete
+    codeOwner: back/oauth-signup; AquilaXk/aquila-blog-web:src/pages/signup/social/complete.tsx
     policySectionId: privacy-collection-oauth
     enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id; custom.member.oauth-signup.enabled defaults false via CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED
     reviewRequired:
@@ -433,7 +433,7 @@ activities:
       - analyticsOperator
     encryption: transportTls; aggregateMetricsPreferred
     userRightsHandler: /settings/privacy preference and consent withdrawal
-    codeOwner: front/analytics-rum
+    codeOwner: AquilaXk/aquila-blog-web:src/libs/rum
     policySectionId: privacy-cookie-analytics
     enabledByEnv: CONFIG.googleAnalytics.enable with optional tracking consent; Vercel analytics package in production only after optional tracking consent; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0 and explicit non-zero enables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging; Do Not Track and Global Privacy Control block optional tracking
     reviewRequired: []
@@ -465,7 +465,7 @@ activities:
       - contentAuthorAdmin
     encryption: transportTls; serverSideApiKeySecret
     userRightsHandler: contentDeletionAndExternalProcessingDisclosureFutureWork
-    codeOwner: back/post-ai; front/admin-editor
+    codeOwner: back/post-ai; AquilaXk/aquila-blog-web:src/routes/Admin
     policySectionId: privacy-processor-ai
     enabledByEnv: custom.ai.summary.enabled defaults false via CUSTOM__AI__SUMMARY__ENABLED; custom.ai.summary.gemini.*
     reviewRequired:

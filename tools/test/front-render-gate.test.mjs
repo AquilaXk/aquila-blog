@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import http from "node:http"
-import { existsSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
@@ -460,23 +460,10 @@ test("the revalidate token is read from the environment, never from argv", () =>
   assert.doesNotMatch(source, /"--revalidate-token"/)
 })
 
-// 게이트의 시간 기반 단계는 대상 라우트의 revalidate 값보다 오래 기다려야 한다. 앱이 그 값을
-// 늘리면 게이트 기본값이 조용히 너무 짧아져 "창이 지켜지지 않는다"는 오탐을 만든다.
-test("the gate default matches the home route revalidate value in the app", () => {
-  const homePage = readFileSync(path.join(repoRoot, "front/src/pages/index.tsx"), "utf8")
-  const match = homePage.match(/const HOME_ISR_REVALIDATE_SECONDS = (\d+)/)
-
-  assert.ok(match, "HOME_ISR_REVALIDATE_SECONDS not found in front/src/pages/index.tsx")
-  assert.equal(Number(match[1]), DEFAULT_ISR_REVALIDATE_SECONDS)
+test("the timed regeneration consumer contract keeps the deployed Web ISR window", () => {
+  assert.equal(DEFAULT_ISR_REVALIDATE_SECONDS, 60)
 })
 
-// 정적 자산 삭제는 게이트를 조용히 깨뜨린다: 기본 probe 원본이 사라지면 image-optimization은
-// "origin image responded 404"로 항상 실패하고, 그 자산을 지운 PR의 diff에는 게이트 파일이 없어
-// 리뷰가 소비자 파손을 보지 못한다(#1612). svg는 /_next/image 최적화 대상이 아니라 raster도 함께
-// 요구한다.
-test("the gate default origin image is a raster asset that still exists in front/public", () => {
-  assert.match(DEFAULT_ORIGIN_IMAGE_PATH, /^\/[^?#]+\.(?:png|jpe?g|webp|avif)$/)
-
-  const assetPath = path.join(repoRoot, "front/public", DEFAULT_ORIGIN_IMAGE_PATH)
-  assert.ok(existsSync(assetPath), `${DEFAULT_ORIGIN_IMAGE_PATH} is missing from front/public`)
+test("the image optimization consumer contract keeps the deployed Web origin asset", () => {
+  assert.equal(DEFAULT_ORIGIN_IMAGE_PATH, "/apple-touch-icon.png")
 })

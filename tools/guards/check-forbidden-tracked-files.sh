@@ -12,9 +12,6 @@ fi
 
 is_allowed_markdown() {
   case "$1" in
-    front/docs/design/*/*)
-      return 1
-      ;;
     README.md|\
     .github/pull_request_template.md|\
     SECURITY.md|\
@@ -23,11 +20,6 @@ is_allowed_markdown() {
     back/REFACTORING_ROADMAP.md|\
     deploy/homeserver/HARDENING.md|\
     docs/README.md|\
-    front/.github/CODE_OF_CONDUCT.md|\
-    front/.github/CONTRIBUTING.md|\
-    front/.github/PULL_REQUEST_TEMPLATE.md|\
-    front/README.md|\
-    front/docs/design/*.md|\
     infra/README.md|\
     perf/k6/README.md|\
     perf/k6/cloud-launch-criteria.md|\

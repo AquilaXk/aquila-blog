@@ -5,8 +5,8 @@ usage() {
   cat <<'USAGE'
 Usage: bash tools/repo-split/verify-platform-standalone.sh [source-ref]
 
-Creates a temporary Platform archive, removes front/**, and runs the backend,
-contracts, privacy, and production Compose gates that must survive the split.
+Creates a temporary Platform archive and runs the backend, contracts, privacy,
+and production Compose gates on the final Platform-only repository shape.
 Heavy execution is restricted to GitHub Actions.
 USAGE
 }
@@ -69,10 +69,9 @@ printf 'gate=Platform Standalone\nsource_ref=%s\nsource_sha=%s\n' \
 
 git -C "${repo_root}" archive --format=tar "${source_sha}" \
   | tar -xf - -C "${platform_root}"
-rm -rf "${platform_root}/front"
 
 if [[ -e "${platform_root}/front" ]]; then
-  echo "verify-platform-standalone: front/ still exists after archive split" >&2
+  echo "verify-platform-standalone: tracked front/ source is forbidden" >&2
   exit 1
 fi
 if [[ ! -x "${platform_root}/back/gradlew" ]]; then
@@ -84,8 +83,7 @@ if [[ ! -f "${platform_root}/deploy/homeserver/docker-compose.prod.yml" ]]; then
   exit 1
 fi
 
-# Recreate Git metadata after front/ removal so boundary checks inspect the
-# exact future Platform tree rather than the parent monorepo index.
+# Recreate Git metadata so boundary checks inspect the exact archived tree.
 (
   cd "${platform_root}"
   git init --quiet
@@ -101,8 +99,8 @@ fi
   cd "${platform_root}"
   git ls-files | LC_ALL=C sort > "${artifact_dir}/archive-manifest.txt"
 
-  run_step "Report Platform repository boundary" \
-    node tools/repo-boundary/check-platform-boundary.mjs --report-only
+  run_step "Verify Platform repository boundary" \
+    node tools/repo-boundary/check-platform-boundary.mjs
 
   # The full backend gate emits the canonical OpenAPI and ErrorCode build
   # artifacts consumed by check-public-contracts.mjs. Running it first proves

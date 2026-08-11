@@ -1,26 +1,15 @@
 import assert from "node:assert/strict"
-import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
 const repoRoot = path.resolve(import.meta.dirname, "../..")
-const workflowRoots = [
-  path.join(repoRoot, ".github/workflows"),
-  path.join(repoRoot, "front/.github/workflows"),
-]
+const workflowRoot = path.join(repoRoot, ".github/workflows")
+const workflowFiles = readdirSync(workflowRoot, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && /\.ya?ml$/.test(entry.name))
+  .map((entry) => path.join(workflowRoot, entry.name))
 
-// front/.github/workflows 는 저장소 분리 전까지만 존재한다. 분리가 실행되면 이 경로가 사라지는데,
-// readdirSync 를 무방비로 부르면 테스트 등록 이전인 모듈 로드 시점에 ENOENT 로 죽어 이 파일을
-// 실행하는 CI step 전체가 계약 검증 없이 중단된다. 없는 루트는 건너뛰고 남은 루트만 검사한다.
-const workflowFiles = workflowRoots
-  .filter((root) => existsSync(root))
-  .flatMap((root) =>
-    readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && /\.ya?ml$/.test(entry.name))
-      .map((entry) => path.join(root, entry.name)),
-  )
-
-test("monorepo and extracted Web workflows use one pinned setup-node release", () => {
+test("Platform workflows use one pinned setup-node release", () => {
   const references = []
 
   for (const file of workflowFiles) {

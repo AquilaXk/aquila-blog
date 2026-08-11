@@ -35,9 +35,6 @@ reviews:
     - "!**/coverage/**"
     - "!**/test-results/**"
     - "!**/playwright-report/**"
-    - "!front/public/pdf.worker.min.mjs"
-    - "!front/contracts/openapi/**"
-    - "!front/packages/shared-contracts/src/generated/**"
 
   auto_review:
     enabled: true
@@ -59,10 +56,6 @@ reviews:
       enabled: false
 
   path_instructions:
-    - path: "front/**"
-      instructions: |
-        React/Next.js 변경은 사용자에게 보이는 회귀, hydration 불일치, bundle-size 증가, 접근성, 모바일 레이아웃 깨짐, editor/content rendering 회귀를 우선 검토한다.
-        단순 취향성 스타일 변경이나 사소한 네이밍 지적은 실제 유지보수 리스크가 있을 때만 남긴다.
     - path: "back/**"
       instructions: |
         Kotlin/Spring 변경은 API 계약, 트랜잭션 경계, 인증/인가, N+1 쿼리, 동시성, 마이그레이션 호환성, 테스트 누락을 우선 검토한다.

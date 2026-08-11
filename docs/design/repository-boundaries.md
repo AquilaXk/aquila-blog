@@ -6,16 +6,15 @@ The final topology is exactly two repositories.
 
 | Repository | Role | Ownership |
 | --- | --- | --- |
-| `AquilaXk/aquila-blog` | Platform | API, data, home-server operations, and Platform contracts |
-| `AquilaXk/aquila-blog-web` | Web | Web source, Web contracts, and (after the split) the Web container image build |
+| [AquilaXk/aquila-blog](https://github.com/AquilaXk/aquila-blog) | Platform | API, data, home-server operations, and Platform contracts |
+| [AquilaXk/aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web) | Web | Web source, Web contracts, and Web container image production |
 
 No API, Ops, Worker, Shared, Contracts, domain, or other repository is created.
 `AquilaXk/aquila-blog` remains the Platform repository; its existing history is not
 rewritten.
 
-The table states the target ownership. Today the Web container image is still built by
-Platform (`.github/workflows/frontend-image.yml`); moving that workflow to Web is part
-of the split execution, not a state this document already describes.
+Platform consumes the Web image only by immutable digest and source SHA. It does not
+check out, build, scan, or retain a fallback copy of Web source.
 
 ## Stable runtime ownership
 
@@ -45,21 +44,19 @@ validation succeeds.
 
 ## Baseline and rollback
 
-Before every split-stage operation, fetch intentionally and record the immutable base:
+Before a repository-boundary operation, fetch intentionally and record the immutable base:
 
 ```bash
 git fetch origin main --prune
-bash tools/repo-split/capture-baseline.sh \
-  --expected-sha 6545c06296edf05759199718cf712e9c0e1af108
+bash tools/repo-split/capture-baseline.sh --expected-sha <current-platform-main-sha>
 ```
 
 `capture-baseline.sh` never fetches. It stops if already-fetched `origin/main` differs
-from the expected SHA and writes the base SHA, tracked `front`, `back`, and `deploy`
-file counts, plus the Git `size-pack` value. Attach only this non-secret output to the
-migration issue.
+from the expected SHA and writes the base SHA, tracked source counts, plus the Git
+`size-pack` value. Attach only this non-secret output to the migration issue.
 
 Every source-boundary change must be independently reversible with a normal revert.
-Do not rewrite Platform history. Do not delete Platform `front/**` until two Web
-production deployments, rollback evidence, and their required evidence are complete.
-Rollback restores the last verified repository commit and its SHA-pinned contract
-snapshots; it does not move data or alter cookie and OAuth runtime contracts.
+Do not rewrite Platform history. The final Web-source removal is one delete/config
+commit, so reverting that commit restores the pre-cutover copy without changing data,
+cookie, or OAuth runtime contracts. Runtime rollback selects the last verified
+immutable Web image digest rather than rebuilding Web source in Platform.

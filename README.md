@@ -3,7 +3,7 @@
 > 공개 블로그, 관리자 글쓰기 작업실, 홈서버 배포를 포함한 개인 풀스택 기술 블로그 프로젝트입니다.
 
 [Live Site](https://blog.aquilaxk.site) ·
-[Frontend](front/README.md) ·
+[Web Repository](https://github.com/AquilaXk/aquila-blog-web) ·
 [Backend](back/README.md) ·
 [Deploy](deploy/homeserver/HARDENING.md) ·
 [Docs](docs/README.md)
@@ -15,7 +15,7 @@
 
 ## Overview
 
-Aquila Blog는 공개 블로그, 관리자 글쓰기 작업실, 백엔드 API, 홈서버 배포 구성을 하나의 저장소에 둔 개인 풀스택 프로젝트입니다.
+Aquila Blog는 공개 블로그와 관리자 글쓰기 작업실, 백엔드 API, 홈서버 운영을 함께 다루는 개인 풀스택 프로젝트입니다. Web source는 [AquilaXk/aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web), API·data·deploy는 이 Platform 저장소가 소유합니다.
 
 단순 게시글 CRUD뿐 아니라 Markdown 렌더링, 검색/태그 탐색, 이미지 저장, 캐시, 배포, 모니터링, 회귀 검증처럼 실제 운영에 필요한 흐름까지 함께 다룹니다.
 
@@ -80,7 +80,6 @@ Spring Boot + Kotlin API
 
 ```text
 .
-├── front/                  # Next.js frontend, admin/editor UI, Storybook, Playwright
 ├── back/                   # Spring Boot + Kotlin API server
 ├── deploy/homeserver/      # Production compose, Caddy, blue-green deploy, rollback, monitoring
 ├── perf/k6/                # Read-path load and chaos scenarios
@@ -95,8 +94,7 @@ Spring Boot + Kotlin API
 ### Prerequisites
 
 - Java 25 LTS
-- Node.js LTS
-- Yarn Classic 1.22.x
+- Node.js LTS (repository contract and deploy guards)
 - Docker / Docker Compose
 
 ### 1. Clone
@@ -115,7 +113,7 @@ git config --get core.hooksPath
 `.githooks/`에는 아래 훅이 들어 있으며, 위 설정을 해야 적용됩니다.
 
 - `commit-msg`: 커밋 제목이 `<type>(<scope>): 한글+English 요약` 형식인지 검사합니다.
-- `pre-commit`: 스테이징된 파일에 저장소 가드를 실행하고, 변경 경로에 따라 OpenAPI 계약 드리프트·상세 렌더 회귀 검사를 추가로 수행합니다 (상세 렌더 경로는 `yarn build`·E2E smoke 포함).
+- `pre-commit`: 스테이징된 파일에 저장소 경계 가드와 필요한 OpenAPI 계약 드리프트 검사를 실행합니다.
 - `pre-push`: 브랜치 이름이 `type/short-description` 형식인지 확인하고 `main`·`develop` 직접 push 를 차단합니다.
 
 (worktree 사용 시) 절대 경로로 지정하면 linked worktree에서도 메인 checkout에 있는 훅 스크립트(현재 브랜치와 다른 버전일 수 있음)가 실행되므로 상대 경로를 사용합니다.
@@ -133,16 +131,9 @@ cd back
 ./gradlew bootRun
 ```
 
-### 4. Start Frontend
+### 4. Start Web
 
-```bash
-cd front
-yarn install
-
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8080 \
-BACKEND_INTERNAL_URL=http://localhost:8080 \
-yarn dev
-```
+Web source와 로컬 실행 절차는 [AquilaXk/aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web)이 소유합니다.
 
 | Service | URL |
 | --- | --- |
@@ -156,8 +147,6 @@ Local development can run with the default development infrastructure. External 
 
 | Variable | Used by | Description |
 | --- | --- | --- |
-| `NEXT_PUBLIC_BACKEND_URL` | Frontend | Browser-facing backend URL |
-| `BACKEND_INTERNAL_URL` | Frontend SSR | Server-side backend URL |
 | `CUSTOM__JWT__SECRET_KEY` | Backend | JWT signing key |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | MinIO | Local object storage credentials |
 | `SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID` | Backend | Optional Kakao OAuth client ID |
@@ -170,21 +159,16 @@ cd back
 ./gradlew ktlintCheck
 ./gradlew test
 
-# Frontend
-cd ../front
-yarn lint
-yarn build
-yarn contracts:check
 ```
 
-Additional checks include Playwright E2E, Storybook gates, bundle-size checks, k6 load scenarios, and backend architecture tests.
+이 저장소의 추가 검증에는 k6 부하 시나리오와 backend architecture/deploy contract tests가 포함됩니다. Playwright, Storybook, Web bundle 검증은 [Web repository](https://github.com/AquilaXk/aquila-blog-web)에서 실행합니다.
 
 ## Documentation
 
 | Document | Description |
 | --- | --- |
 | [Docs Hub](docs/README.md) | Tracked user-facing design and legal document entry point |
-| [Frontend README](front/README.md) | Frontend routes, scripts, environment variables, and UI checks |
+| [Web Repository](https://github.com/AquilaXk/aquila-blog-web) | Web source, routes, scripts, UI checks, and image production |
 | [Backend README](back/README.md) | Backend architecture, API modules, quality checks, and OpenAPI flow |
 | [k6 Guide](perf/k6/README.md) | Load and chaos scenarios for public read paths |
 | [Home Server Hardening](deploy/homeserver/HARDENING.md) | Home server hardening and operational checklist |

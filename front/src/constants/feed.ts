@@ -1,1 +1,0 @@
-export const FEED_EXPLORE_PAGE_SIZE = 16

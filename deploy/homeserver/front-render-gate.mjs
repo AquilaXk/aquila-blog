@@ -28,20 +28,15 @@ import process from "node:process"
 import { pathToFileURL } from "node:url"
 
 const DEFAULT_ISR_ROUTE = "/"
-// front/src/pages/index.tsx의 HOME_ISR_REVALIDATE_SECONDS와 같은 값이다. 홈이 이 앱에서 가장 짧은
-// 정상 경로 revalidate라 시간 기반 검증 대상이다(상세는 3600s, degraded/recovery 경로는 30s이지만
-// 그 경로는 장애 상태에서만 선택된다). 드리프트는 tools/test/front-render-gate.test.mjs가 잡는다.
+// Web repository src/pages/index.tsx의 HOME_ISR_REVALIDATE_SECONDS와 같은 값이다. 홈이 이 앱에서
+// 가장 짧은 정상 경로 revalidate라 시간 기반 검증 대상이다. Platform test는 consumer 기본값을 exact로
+// 고정하고, 실제 Web image가 다르면 이 runtime gate가 배포를 fail-closed 한다.
 const DEFAULT_ISR_REVALIDATE_SECONDS = 60
 const DEFAULT_API_FEED_PATH = "/post/api/v1/posts/feed?page=1&pageSize=5&sort=CREATED_AT"
-// front/public/apple-touch-icon.png. tracked 정적 파일이라 원본 바이트가 고정돼 있고, 상대 URL이라
-// next/image remotePatterns와 무관하게 최적화 파이프라인만 검증한다. probe 원본에는 조건이 두 개
-// 더 붙는다: raster여야 하고(svg는 /_next/image 최적화 대상이 아니라 판정 신호가 없다),
-// front/src/pages/_document.tsx의 apple-touch-icon link가 참조하는 경로라 브랜딩 자산 교체로
-// 조용히 사라지지 않아야 한다. 앞선 기본값(brand-mascot.png)은 벡터로 교체되면서 삭제됐고, 게이트는
-// 그 뒤 "origin image responded 404"로 항상 실패했다(#1612). 그 파일은 #1616에서 래스터로 되돌아왔지만
-// 기본값은 다시 옮기지 않는다 - probe 원본은 _document.tsx의 link가 참조해 존재가 계약으로 고정되는
-// 경로여야 하고, brand-mascot.png는 컴포넌트가 참조할 뿐이라 같은 보장이 없다. 파일 존재와 raster
-// 여부는 tools/test/front-render-gate.test.mjs가 잡는다.
+// Web repository public/apple-touch-icon.png를 원본으로 쓴다. 상대 URL이라 next/image remotePatterns와
+// 무관하게 최적화 파이프라인만 검증한다. raster여야 하며 Web 문서의 apple-touch-icon link가 참조하는
+// 경로다. Platform test는 consumer 경로를 exact로 고정하고, 파일 부재나 provider drift는 runtime gate의
+// origin/optimization 요청이 배포 전에 fail-closed 한다.
 const DEFAULT_ORIGIN_IMAGE_PATH = "/apple-touch-icon.png"
 const DEFAULT_IMAGE_WIDTH = 640
 const DEFAULT_IMAGE_QUALITY = 75

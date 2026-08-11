@@ -1,5 +1,8 @@
 # 마케팅 표면 추출 런북
 
+> 이 문서의 `front/**` 경로는 분리 전 이력입니다. 현재 Web source 정본은
+> https://github.com/AquilaXk/aquila-blog-web 이며, 아래 Web 명령은 그 저장소 루트에서 실행합니다.
+
 회사(www)·제품(easysubway) 마케팅 표면은 블로그 앱 안에 있지만, 별도 저장소로 옮겨야 할 이유가 생기면 그날 결정으로 옮길 수 있어야 한다. 이 문서는 그 이동의 범위·경계·검증 순서를 적는다. 리포 정체성은 블로그로 유지하고, 이 문서가 요구되기 전까지 추출은 하지 않는다.
 
 경계를 사람의 기억이 아니라 게이트가 지킨다.
@@ -87,9 +90,9 @@
 
 1. **새 저장소 정적 게이트** — `yarn lint`, 색 게이트(`check-design-colors` 계열), `yarn build`. 팔레트 정본 주석과 색 게이트 allowlist 경로가 함께 옮겨졌는지 확인한다.
 2. **새 저장소 표면 E2E·접근성** — 옮겨온 `smoke-site-surfaces.spec.ts`와 `accessibility.spec.ts`의 표면 케이스(회사 표면 데스크톱·모바일, 제품 표면 라이트 쿠키 포함)를 새 저장소에서 실행한다. 새 앱은 표면이 루트이므로 `/company`·`/easysubway` 경로와 canonical 기대값을 새 호스트 기준으로 고친 뒤 돌린다. 이 단계가 없으면 표면 라우트·접근성 회귀가 lint/build 초록 뒤에 그대로 남는다.
-3. **블로그 저장소 정적 게이트** — `yarn --cwd front lint`, `yarn --cwd front check:refactor-boundaries`, `yarn --cwd front build`, `yarn --cwd front check:bundle-size`. 마케팅 파일과 그 게이트 규칙이 함께 사라졌는지가 여기서 드러난다(규칙만 남으면 boundary 검사가 즉시 실패한다).
+3. **Web 저장소 정적 게이트** — `yarn lint`, `yarn check:refactor-boundaries`, `yarn build`, `yarn check:bundle-size`. 마케팅 파일과 그 게이트 규칙이 함께 사라졌는지가 여기서 드러난다(규칙만 남으면 boundary 검사가 즉시 실패한다).
 4. **계약·정책 게이트** — `node --test tools/test/env-contract.test.mjs`(표면 도메인 키 정본 대조가 새 기준을 가리키는지), 소식 엔드포인트를 만들었으면 백엔드 openapi 산출물로 `node tools/contracts/check-public-contracts.mjs`(공개 계약 사본이 새 엔드포인트를 담고 tracked 산출물과 일치하는지), `bash tools/guards/check-forbidden-tracked-files.sh`.
-5. **블로그 E2E** — `yarn --cwd front test:e2e:smoke`로 표면 스펙 이동/삭제가 반영되어 블로그 스모크가 표면 라우트를 더 이상 기대하지 않는지 확인하고, `yarn --cwd front test:e2e:a11y`로 표면 케이스를 뺀 나머지 접근성 케이스가 그대로 초록인지 확인한다(이 명령이 `accessibility.spec.ts`를 통째로 돌리므로, 표면 케이스만 빠지고 블로그 케이스는 남았다는 것이 여기서 실측된다). 소식 계약 판정이 블로그에 남는 동안은 `yarn --cwd front test:unit`도 같이 돌린다.
+5. **Web E2E** — `yarn test:e2e:smoke`로 표면 스펙 이동/삭제가 반영되어 블로그 스모크가 표면 라우트를 더 이상 기대하지 않는지 확인하고, `yarn test:e2e:a11y`로 표면 케이스를 뺀 나머지 접근성 케이스가 그대로 초록인지 확인한다(이 명령이 `accessibility.spec.ts`를 통째로 돌리므로, 표면 케이스만 빠지고 블로그 케이스는 남았다는 것이 여기서 실측된다). 소식 계약 판정이 블로그에 남는 동안은 `yarn test:unit`도 같이 돌린다.
 6. **배포 후 실측** — 표면 vhost upstream을 새 컨테이너로 바꾼 뒤 실제 URL에서 확인한다. 표면 호스트 루트 200과 canonical이 그 호스트를 가리키는지, 표면 호스트 `robots.txt`가 의도한 정책 하나만 응답하는지, apex가 회사 호스트로 308인지, 블로그 호스트의 `/company`·`/easysubway`가 404인지, 블로그 `sitemap.xml`이 200이며 표면 URL을 담지 않는지.
 
 6번을 통과하기 전에는 추출을 완료로 보지 않는다. 마케팅 표면의 실패 양상은 대부분 "서빙은 되는데 메타가 다른 호스트를 가리킨다"처럼 조용하다.

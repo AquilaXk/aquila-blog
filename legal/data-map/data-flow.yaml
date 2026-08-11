@@ -126,8 +126,8 @@ codeEvidence:
   comment: back/src/main/kotlin/com/back/boundedContexts/post/model/PostComment.kt
   uploadedFile: back/src/main/kotlin/com/back/global/storage/model/UploadedFile.kt
   cloudFile: back/src/main/kotlin/com/back/boundedContexts/cloud/model/CloudFile.kt
-  rum: front/src/pages/api/rum/vitals.ts
-  analytics: front/src/libs/gtag.ts
+  rum: https://github.com/AquilaXk/aquila-blog-web/blob/main/src/pages/api/rum/vitals.ts
+  analytics: https://github.com/AquilaXk/aquila-blog-web/blob/main/src/libs/gtag.ts
   geminiConfig: deploy/env/env.contract.json
   backup: deploy/homeserver/create_external_backup.sh
   restoreDrill: deploy/homeserver/restore_external_backup_drill.sh

@@ -55,5 +55,5 @@
 ## Validation
 
 - Web: `yarn legal:check`; Platform: `node tools/contracts/check-web-policy-lock.mjs` 및 `./back/gradlew -p back test --tests '*WebLegalPolicyManifestContractTest'`
-- `yarn --cwd front playwright:preflight`
+- Web repository: `yarn playwright:preflight` in https://github.com/AquilaXk/aquila-blog-web
 - 정책 페이지 e2e 또는 live URL 확인 결과를 PR evidence table에 남긴다.

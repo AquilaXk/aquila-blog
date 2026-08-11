@@ -159,6 +159,16 @@ const fail = (message) => {
   process.exitCode = 1
 }
 
+const activeDataMapSources = [
+  "legal/data-map/data-flow.yaml",
+  "legal/data-map/processing-activities.yaml",
+]
+for (const relativePath of activeDataMapSources) {
+  if (/(?:^|[;\s])front\//m.test(read(relativePath))) {
+    fail(`${relativePath} references removed Platform-local front/ ownership`)
+  }
+}
+
 const assertRequiredFields = (kind, item, requiredFields) => {
   for (const field of requiredFields) {
     if (!(field in item)) {

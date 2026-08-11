@@ -135,7 +135,7 @@
       "status": "Closed",
       "category": "필수 출시 전 완료",
       "target": "신규 개인정보 수집 feature flag 동결",
-      "evidenceRequirement": "`back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, `yarn --cwd front build` 2회 exit 0, privacy data-map/env contract validator exit 0",
+      "evidenceRequirement": "`back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, Web repository `yarn build` 2회 exit 0, privacy data-map/env contract validator exit 0",
       "launchDecision": "완료",
       "disabledByFlag": true,
       "disabledEvidence": ["deploy/env/env.contract.json", ".github/workflows/deploy.yml"],

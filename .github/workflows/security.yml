@@ -144,39 +144,26 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
   codeql:
+    name: codeql (java-kotlin)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       actions: read
       contents: read
       security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        language:
-          - java-kotlin
-          - javascript-typescript
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Fetch PR base ref for design color guard
-        if: github.event_name == 'pull_request' && matrix.language == 'javascript-typescript'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --depth=1 origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@256d634097be96e792d6764f9edaefc4320557b1 # v4
         with:
-          languages: ${{ matrix.language }}
+          languages: java-kotlin
           queries: security-extended,security-and-quality
 
       - name: Set up JDK 25
-        if: matrix.language == 'java-kotlin'
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -184,24 +171,8 @@ jobs:
           cache: gradle
 
       - name: Build JVM sources for CodeQL
-        if: matrix.language == 'java-kotlin'
         working-directory: back
         run: ./gradlew --no-daemon classes -x test
-
-      - name: Set up Node.js 20
-        if: matrix.language == 'javascript-typescript'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "20"
-          cache: "yarn"
-          cache-dependency-path: front/yarn.lock
-
-      - name: Build web sources for CodeQL
-        if: matrix.language == 'javascript-typescript'
-        working-directory: front
-        run: |
-          yarn install --frozen-lockfile
-          yarn build
 
       - name: Perform CodeQL Analysis (trusted context)
         if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]')
@@ -233,109 +204,6 @@ jobs:
         run: |
           node tools/guards/check-vulnerability-exceptions.mjs
           node --test tools/test/vulnerability-exceptions.test.mjs
-
-  frontend-lockfile-audit:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # Both scanners read front/yarn.lock only, so no yarn install / node_modules and no
-      # postinstall script execution inside the security job (#1422).
-      - name: Set up Node.js 20
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "20"
-
-      # OSV runs first (the broken yarn audit step used to sit here and blocked it entirely),
-      # and the Trivy steps below carry `if: !cancelled()` so neither scanner can silence the
-      # other in either direction. A failed step still fails the job, so the gate stays
-      # fail-closed: both signals are always collected, never traded off (#1422).
-      - name: Install OSV Scanner
-        env:
-          OSV_SCANNER_VERSION: "v2.4.0"
-        run: |
-          set -euo pipefail
-          curl -fsSL -o /tmp/osv-scanner \
-            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
-          chmod +x /tmp/osv-scanner
-          sudo mv /tmp/osv-scanner /usr/local/bin/osv-scanner
-          osv-scanner --version
-
-      - name: OSV scan frontend yarn.lock
-        run: |
-          set -euo pipefail
-          set +e
-          osv-scanner --lockfile=front/yarn.lock --format json --output-file="${RUNNER_TEMP}/osv-front.json"
-          osv_status=$?
-          set -e
-          # 0 = clean, 1 = vulns found (still parse), other = tool failure.
-          # A lockfile that parses to 0 packages exits 128 ("No package sources found") on the
-          # pinned v2.4.0, so this branch already rejects the empty-scan false pass. The OSV JSON
-          # only lists vulnerable packages, so it carries no total to assert instead — re-measure
-          # this when bumping OSV_SCANNER_VERSION (#1422).
-          if [ "${osv_status}" -gt 1 ]; then
-            echo "osv-scanner failed with status ${osv_status}" >&2
-            exit "${osv_status}"
-          fi
-          test -s "${RUNNER_TEMP}/osv-front.json"
-          node tools/guards/check-vulnerability-exceptions.mjs --filter-osv "${RUNNER_TEMP}/osv-front.json"
-
-      # Second independent DB for front/yarn.lock (replaces the yarn audit gate from #1342).
-      # The npm registry serves audit responses gzipped without Content-Encoding, so yarn/npm
-      # audit cannot parse them and yarn classic is unmaintained; a local lockfile DB removes
-      # the remote-endpoint single point of failure (#1422).
-      - name: Install Trivy
-        # Run even if OSV above failed: an osv-scanner download/tool failure must not drop the
-        # second lockfile signal. The job still fails on the OSV step (#1422).
-        if: ${{ !cancelled() }}
-        env:
-          TRIVY_VERSION: "0.72.0"
-        run: |
-          set -euo pipefail
-          curl -fsSL -o /tmp/trivy.tgz \
-            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-          tar -xzf /tmp/trivy.tgz -C /tmp trivy
-          sudo mv /tmp/trivy /usr/local/bin/trivy
-          trivy --version
-
-      - name: Trivy scan frontend yarn.lock
-        if: ${{ !cancelled() }}
-        run: |
-          set -euo pipefail
-          set +e
-          trivy fs --scanners vuln --severity HIGH,CRITICAL --list-all-pkgs \
-            --format json --output "${RUNNER_TEMP}/trivy-front-lockfile.json" front/yarn.lock
-          trivy_status=$?
-          set -e
-          # Unlike osv-scanner, trivy exits 0 on findings unless --exit-code is set, so any
-          # non-zero status is a tool/DB failure and must fail the gate (do not add --exit-code:
-          # the allowlist verdict belongs to check-vulnerability-exceptions.mjs).
-          if [ "${trivy_status}" -ne 0 ]; then
-            echo "trivy fs failed with status ${trivy_status}" >&2
-            exit "${trivy_status}"
-          fi
-          test -s "${RUNNER_TEMP}/trivy-front-lockfile.json"
-          # A structurally valid but empty report parses to zero findings and would pass the
-          # allowlist filter. --list-all-pkgs lists every package trivy parsed, so 0 means the
-          # lockfile was never actually scanned: refuse to pass (#1422).
-          scanned_packages="$(node -e '
-            const fs = require("node:fs")
-            const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
-            const total = (report.Results || []).reduce((sum, r) => sum + (r.Packages || []).length, 0)
-            process.stdout.write(String(total))
-          ' "${RUNNER_TEMP}/trivy-front-lockfile.json")"
-          if ! [[ "${scanned_packages}" =~ ^[0-9]+$ ]] || [ "${scanned_packages}" -lt 1 ]; then
-            echo "::error title=Frontend lockfile scan produced no packages::trivy parsed '${scanned_packages}' packages from front/yarn.lock; refusing to pass (#1422)." >&2
-            exit 1
-          fi
-          echo "trivy parsed ${scanned_packages} package(s) from front/yarn.lock"
-          node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-front-lockfile.json"
 
   container-image-scan:
     runs-on: ubuntu-latest
@@ -374,47 +242,22 @@ jobs:
           set -euo pipefail
           # Backend: final FROM of back/Dockerfile (GHCR build/deploy base).
           back_image="$(grep -E '^FROM[[:space:]]+' back/Dockerfile | tail -n1 | awk '{print $2}')"
-          # Frontend homeserver runtime default (see deploy/homeserver/blue_green_deploy.sh NODE_RUNTIME_IMAGE).
-          # front/Dockerfile is the local dev container base (front/Makefile), not a deploy image.
-          # front/Dockerfile.runtime is the app image and pins the same node:20-alpine base, but the scan
-          # below reads the bare base tag: packages its runtime stage adds (wget) are NOT covered here.
-          # Scanning the built app image itself is wired with the GHCR build (#1537).
-          # Pin floating tag to digest so Trivy scans a fixed image (same tag family as deploy).
-          front_tag="node:20-alpine"
-          docker pull "${front_tag}"
-          front_image="$(docker image inspect --format '{{index .RepoDigests 0}}' "${front_tag}")"
           if [[ -z "${back_image}" ]]; then
             echo "failed to parse backend Dockerfile FROM image" >&2
             exit 1
           fi
-          if [[ -z "${front_image}" || "${front_image}" != *@sha256:* ]]; then
-            echo "failed to resolve frontend runtime image digest from ${front_tag}" >&2
-            exit 1
-          fi
           echo "back_image=${back_image}" >> "$GITHUB_OUTPUT"
-          echo "front_image=${front_image}" >> "$GITHUB_OUTPUT"
           echo "back runtime image: ${back_image}"
-          echo "front runtime image: ${front_image} (from ${front_tag})"
 
       - name: Trivy scan backend runtime image
         env:
           IMAGE: ${{ steps.images.outputs.back_image }}
         run: |
           set -euo pipefail
-          # OS packages only: app/library vulns are gated by backend NVD and the
-          # frontend-lockfile-audit job (OSV/Trivy) (#1124, #1422).
+          # OS packages only: app/library vulnerabilities are gated by backend NVD.
           trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --pkg-types os \
             --format json --output "${RUNNER_TEMP}/trivy-back.json" "${IMAGE}"
           node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-back.json"
-
-      - name: Trivy scan frontend runtime image
-        env:
-          IMAGE: ${{ steps.images.outputs.front_image }}
-        run: |
-          set -euo pipefail
-          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --pkg-types os \
-            --format json --output "${RUNNER_TEMP}/trivy-front.json" "${IMAGE}"
-          node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-front.json"
 
   sbom:
     runs-on: ubuntu-latest
@@ -438,13 +281,11 @@ jobs:
           sudo mv /tmp/syft /usr/local/bin/syft
           syft version
 
-      - name: Generate CycloneDX SBOMs
+      - name: Generate backend CycloneDX SBOM
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/sbom"
-          syft dir:front -o cyclonedx-json="${RUNNER_TEMP}/sbom/front.cdx.json"
           syft dir:back -o cyclonedx-json="${RUNNER_TEMP}/sbom/back.cdx.json"
-          test -s "${RUNNER_TEMP}/sbom/front.cdx.json"
           test -s "${RUNNER_TEMP}/sbom/back.cdx.json"
 
       - name: Upload SBOM artifacts

@@ -32,9 +32,9 @@ ruby - "${workflow}" <<'RUBY'
   jobs = document.fetch("jobs")
   contract = jobs.fetch("contract_test")
   prepare = jobs.fetch("prepare")
-  web = jobs.fetch("web_standalone")
   platform = jobs.fetch("platform_standalone")
   record = jobs.fetch("record_evidence")
+  raise "Web standalone replay must be removed" if jobs.key?("web_standalone")
 
   raise "contract test must be PR-only" unless contract.fetch("if") == "github.event_name == 'pull_request'"
   raise "contract test permissions mismatch" unless contract.fetch("permissions") == {"contents" => "read"}
@@ -47,7 +47,7 @@ ruby - "${workflow}" <<'RUBY'
   guard = prepare.fetch("if")
   [
     "github.event_name == 'issue_comment'",
-    "github.event.issue.number == 1463",
+    "github.event.issue.number == 1453",
     "github.actor == github.repository_owner",
     "github.event.issue.pull_request == null",
     "startsWith(github.event.comment.body, '/standalone-evidence ')",
@@ -73,22 +73,19 @@ ruby - "${workflow}" <<'RUBY'
     raise "source validator missing #{entry}" unless source_run.include?(entry)
   end
 
-  {"web_standalone" => web, "platform_standalone" => platform}.each do |job_id, job|
-    expected_name = job_id == "web_standalone" ? "Web Standalone" : "Platform Standalone"
-    raise "#{job_id} name mismatch" unless job.fetch("name") == expected_name
-    raise "#{job_id} must need prepare" unless job.fetch("needs") == "prepare"
-    raise "#{job_id} must be contents: read" unless job.fetch("permissions") == {"contents" => "read"}
-    checkout = job.fetch("steps").find { |step| step["name"] == "Checkout exact source SHA with history" }
-    raise "#{job_id} checkout missing" unless checkout
-    raise "#{job_id} checkout ref mismatch" unless checkout.dig("with", "ref") == "${{ needs.prepare.outputs.source_sha }}"
-    raise "#{job_id} checkout must fetch full history" unless checkout.dig("with", "fetch-depth") == 0
-    raise "#{job_id} checkout must not persist credentials" unless checkout.dig("with", "persist-credentials") == false
-    upload = job.fetch("steps").find { |step| step["name"]&.start_with?("Upload ") }
-    raise "#{job_id} upload missing" unless upload
-    artifact_name = upload.dig("with", "name")
-    ["needs.prepare.outputs.source_sha", "github.run_id", "github.run_attempt"].each do |entry|
-      raise "#{job_id} artifact name missing #{entry}" unless artifact_name.include?(entry)
-    end
+  raise "platform_standalone name mismatch" unless platform.fetch("name") == "Platform Standalone"
+  raise "platform_standalone must need prepare" unless platform.fetch("needs") == "prepare"
+  raise "platform_standalone must be contents: read" unless platform.fetch("permissions") == {"contents" => "read"}
+  checkout = platform.fetch("steps").find { |step| step["name"] == "Checkout exact source SHA with history" }
+  raise "platform_standalone checkout missing" unless checkout
+  raise "platform_standalone checkout ref mismatch" unless checkout.dig("with", "ref") == "${{ needs.prepare.outputs.source_sha }}"
+  raise "platform_standalone checkout must fetch full history" unless checkout.dig("with", "fetch-depth") == 0
+  raise "platform_standalone checkout must not persist credentials" unless checkout.dig("with", "persist-credentials") == false
+  upload = platform.fetch("steps").find { |step| step["name"]&.start_with?("Upload ") }
+  raise "platform_standalone upload missing" unless upload
+  artifact_name = upload.dig("with", "name")
+  ["needs.prepare.outputs.source_sha", "github.run_id", "github.run_attempt"].each do |entry|
+    raise "platform_standalone artifact name missing #{entry}" unless artifact_name.include?(entry)
   end
 
   platform_gate = platform.fetch("steps").find { |step| step["name"] == "Run Platform archive standalone gate" }
@@ -100,7 +97,7 @@ ruby - "${workflow}" <<'RUBY'
     raise "replay platform secret mismatch: #{key}" unless platform_gate.dig("env", key) == value
   end
 
-  raise "record must depend on all gates" unless record.fetch("needs") == ["prepare", "web_standalone", "platform_standalone"]
+  raise "record must depend on Platform gate" unless record.fetch("needs") == ["prepare", "platform_standalone"]
   raise "record must run after gate failure" unless record.fetch("if").include?("always()")
   raise "record must require prepare success" unless record.fetch("if").include?("needs.prepare.result == 'success'")
   raise "record permissions mismatch" unless record.fetch("permissions") == {"contents" => "read", "issues" => "write"}
@@ -111,12 +108,12 @@ ruby - "${workflow}" <<'RUBY'
     "context.runId",
     "context.runAttempt",
     "standalone-evidence:",
-    "webResult",
     "platformResult",
     "github.rest.issues.createComment",
   ].each do |entry|
     raise "recorder script missing #{entry}" unless script.include?(entry)
   end
+  raise "recorder must not retain Web result" if script.include?("webResult")
 RUBY
 
 echo "standalone-evidence-replay-workflow: PASS"

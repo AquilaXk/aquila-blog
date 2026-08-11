@@ -192,12 +192,13 @@ UX:
 검증:
 
 ```bash
-yarn --cwd front contracts:check
-yarn --cwd front test:unit
-yarn --cwd front build
-yarn --cwd front check:bundle-size
-yarn --cwd front test:e2e:authoring
-yarn --cwd front test:e2e:smoke
+# https://github.com/AquilaXk/aquila-blog-web checkout root
+yarn contracts:check
+yarn test:unit
+yarn build
+yarn check:bundle-size
+yarn test:e2e:authoring
+yarn test:e2e:smoke
 ```
 
 required CI green과 browser smoke 후 merge한다.
@@ -229,8 +230,9 @@ node tools/test/env-contract.test.mjs
 bash tools/test/homeserver-doctor.test.sh
 bash tools/test/check-forbidden-tracked-files.test.sh
 ./gradlew -p back ciFastCheck --no-daemon
-yarn --cwd front legal:check
-yarn --cwd front build
+# https://github.com/AquilaXk/aquila-blog-web checkout root
+yarn legal:check
+yarn build
 ```
 
 ## 최종 CD 검증

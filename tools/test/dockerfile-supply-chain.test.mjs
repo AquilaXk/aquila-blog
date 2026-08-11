@@ -5,7 +5,6 @@ import test from "node:test"
 
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const backendDockerfilePath = path.join(repoRoot, "back/Dockerfile")
-const frontRuntimeDockerfilePath = path.join(repoRoot, "front/Dockerfile.runtime")
 const uncheckedJdkDownloadHost = ["download", "java", "net"].join(".")
 
 // Dockerfile keywords are case-insensitive. A case-sensitive split would treat a lowercase final
@@ -36,22 +35,6 @@ test("backend runtime image contains the compose healthcheck client", () => {
   assert.match(runtimeStage, /apt-get install -y --no-install-recommends wget\b/)
 })
 
-test("front runtime Dockerfile pins every external build stage image by digest", () => {
-  const dockerfile = readFileSync(frontRuntimeDockerfilePath, "utf8")
-  const unpinnedFroms = [...dockerfile.matchAll(/^FROM\s+([^\s]+)(?:\s+AS\s+\S+)?$/gim)]
-    .map((match) => match[1])
-    .filter((image) => !image.includes("@sha256:"))
-
-  assert.deepEqual(unpinnedFroms, [])
-})
-
-test("front runtime image contains the compose healthcheck client", () => {
-  const dockerfile = readFileSync(frontRuntimeDockerfilePath, "utf8")
-  const runtimeStage = runtimeStageOf(dockerfile)
-
-  assert.match(runtimeStage, /apk add --no-cache wget\b/)
-})
-
 test("runtime stage extraction is not fooled by a lowercase final FROM", () => {
   const dockerfile = [
     "FROM base@sha256:aaa AS builder",
@@ -65,30 +48,4 @@ test("runtime stage extraction is not fooled by a lowercase final FROM", () => {
 
   assert.doesNotMatch(runtimeStage, /apk add --no-cache wget\b/)
   assert.deepEqual([...runtimeStage.matchAll(/^USER\s+(\S+)/gim)], [])
-})
-
-test("front runtime image drops root before serving", () => {
-  const dockerfile = readFileSync(frontRuntimeDockerfilePath, "utf8")
-  const runtimeStage = runtimeStageOf(dockerfile)
-  const users = [...runtimeStage.matchAll(/^USER\s+(\S+)/gim)].map((match) => match[1])
-
-  assert.notEqual(users.length, 0)
-  assert.equal(["root", "0"].includes(users.at(-1)), false)
-})
-
-// Docker creates a mount point that the image does not contain as root:root, and copies the
-// image directory's ownership onto a fresh named volume only when that directory exists. The
-// compose `.next/cache` volume therefore silently becomes unwritable for the non-root runtime
-// unless the runtime stage pre-creates it: the container still starts, the healthcheck still
-// passes, `/_next/image` still answers 200, and the optimized-image cache is simply never
-// written. (Pages Router ISR output lives in .next/server/pages, not here.)
-test("front runtime image owns the .next/cache mount point the compose volume attaches to", () => {
-  const dockerfile = readFileSync(frontRuntimeDockerfilePath, "utf8")
-  const runtimeStage = runtimeStageOf(dockerfile)
-  const cacheMountSetupIndex = runtimeStage.search(/mkdir -p \.next\/cache/)
-  const dropRootIndex = runtimeStage.search(/^USER\s+\S+/im)
-
-  assert.notEqual(cacheMountSetupIndex, -1, "runtime stage must create .next/cache")
-  assert.match(runtimeStage, /chown app:app \.next\/cache/)
-  assert(cacheMountSetupIndex < dropRootIndex, "the mount point must be created while still root")
 })

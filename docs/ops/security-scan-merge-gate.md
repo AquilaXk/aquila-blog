@@ -5,13 +5,8 @@ PR → `main` merge-blocking vulnerability gates live in `.github/workflows/secu
 
 ## Repository split transition
 
-Until the extracted Web repository security and Sonar workflows are green, the root workflows keep
-the existing JavaScript/TypeScript CodeQL, frontend lockfile/runtime/SBOM, Sonar, and CodeRabbit
-coverage. Files under `front/.github/workflows/` are future Web-root configuration and do not execute
-inside this monorepo. Task 16 removes the transitional Web jobs only after cutover evidence exists.
-
-After Task 16, this repository owns backend/runtime scanning. `AquilaXk/aquila-blog-web` owns Web
-CodeQL, lockfile scanning, browser/CSP checks, and Sonar. Its native `osv-scanner.toml` and
+This repository owns backend/runtime scanning. [AquilaXk/aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web) owns Web
+CodeQL, lockfile scanning, browser/CSP checks, SBOM/image scanning, and Sonar. Its native `osv-scanner.toml` and
 `.trivyignore.yaml` preserve only Web dependency exceptions with explicit expiry dates.
 
 ## Backend NVD path split (#1344)
@@ -36,11 +31,10 @@ DB refresh source under that gate.
 
 - `backend-dependency-check` (PR: deferred success only — not a full NVD result)
 - `vulnerability-exception-schema`
-- `frontend-lockfile-audit`
 - `container-image-scan`
 - `sbom`
 - `privacy-drift-gate`
-- `codeql` (java-kotlin / javascript-typescript)
+- `codeql` (java-kotlin)
 - plus reusable `dependency-review` from backend quality on PRs
 
 ## Required secrets / vars (names only — never commit values)
@@ -51,13 +45,10 @@ DB refresh source under that gate.
 | GitHub Dependency graph | repository Security setting | PR dependency review compare API |
 | `GITHUB_TOKEN` | Actions default | GHCR read (if needed) and API auth for dependency review |
 
-Frontend OSV and Trivy (lockfile + runtime image) use public vulnerability DBs; no extra secrets.
-
 ## Container image gate
 
 - Backend: final `FROM` in `back/Dockerfile` (GHCR deploy base)
-- Frontend homeserver: `node:20-alpine` (`NODE_RUNTIME_IMAGE` default) — not `front/Dockerfile`
-- Trivy scope: `--pkg-types os` + `--ignore-unfixed` High/Critical (app/library vulns are covered by backend NVD and the frontend lockfile gate below)
+- Trivy scope: `--pkg-types os` + `--ignore-unfixed` High/Critical (app/library vulnerabilities are covered by backend NVD)
 - Temporary OS exceptions live in `.github/security/vulnerability-exceptions.yml`
 
 ## Exception allowlist
@@ -66,7 +57,7 @@ Frontend OSV and Trivy (lockfile + runtime image) use public vulnerability DBs; 
 - Validator: `node tools/guards/check-vulnerability-exceptions.mjs`
 - Required fields per entry: `package`, `cve`, `issue` (`#N` or GitHub issue URL), `owner` (`@handle`), `expiry` (`YYYY-MM-DD`), `reason`
 - Expired or schema-invalid entries fail CI
-- Applied to Trivy High/Critical (runtime images and `front/yarn.lock`) and OSV High/Critical
+- Applied to the Platform Trivy/NVD surfaces that invoke the validator
 - **Match the ID each scanner actually reports.** OSV matching also checks the advisory's `aliases`,
   but Trivy matching is an exact comparison against the report's `VulnerabilityID`. When the two
   scanners name the same advisory differently, one entry will not cover both — add one entry per ID.
@@ -78,32 +69,6 @@ Frontend OSV and Trivy (lockfile + runtime image) use public vulnerability DBs; 
   `back/build.gradle.kts` (#1387, #1391). Prefer upgrades; suppress only CPE false-positives
   (e.g. Netty 4.2.16.Final already vendor-fixed while NVD CPE includes that version) or temporary
   no-GA cases with `until` + issue link.
-
-## Frontend lockfile gate (`frontend-lockfile-audit`, #1422)
-
-- Two independent DBs read `front/yarn.lock`: osv-scanner `v2.4.0`, then Trivy `0.72.0`
-  (`trivy fs --scanners vuln --severity HIGH,CRITICAL --list-all-pkgs`). Both verdicts come from
-  `check-vulnerability-exceptions.mjs` (`--filter-osv` / `--filter-trivy`), never from the scanner exit code.
-- **Neither scanner can silence the other.** OSV runs first, and the two Trivy steps carry
-  `if: ${{ !cancelled() }}` so they still run when OSV fails — a step without an `if` inherits an
-  implicit `success()` and would be skipped. The job still fails on the failed step, so this collects
-  both signals without weakening the gate. In #1422 a broken first step hid every scanner behind it,
-  leaving the frontend with zero dependency scanning while also blocking all merges.
-- **An empty scan is not a pass.** A structurally valid report with no results parses to zero findings
-  and would clear the allowlist filter. `--list-all-pkgs` makes Trivy list every package it parsed, and
-  the step fails when that count is 0. osv-scanner needs no equivalent assertion: a lockfile that yields
-  0 packages exits 128 (`No package sources found`), which the tool-failure branch already rejects —
-  its JSON lists only vulnerable packages, so it carries no total to assert. Re-measure that on any
-  `OSV_SCANNER_VERSION` bump.
-- No `yarn install` in this job: both scanners parse the lockfile, so `node_modules` and the
-  `postinstall` script are never needed.
-- `yarn audit` is **not** a gate anymore and must not be reintroduced. The npm registry returns audit
-  responses gzipped without `Content-Encoding`, so yarn classic and npm both fail to parse them, and
-  yarn classic is unmaintained. (Historic trap: yarn classic `--groups dependencies,devDependencies`
-  could audit 0 packages and still exit 0 — the same empty-scan false pass the package count now blocks.)
-- Exit-code contract: `osv-scanner` returns 1 when it finds vulnerabilities (report is still parsed),
-  `trivy fs` returns 0 on findings unless `--exit-code` is passed. Any other non-zero status is a tool
-  failure and fails the job fail-closed.
 
 ## Required repository secret
 

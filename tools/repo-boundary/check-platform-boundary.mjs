@@ -3,9 +3,8 @@ import { execFileSync } from "node:child_process"
 import { closeSync, constants, fstatSync, openSync, readFileSync, readlinkSync } from "node:fs"
 import path from "node:path"
 
-const reportOnly = process.argv[2] === "--report-only"
-if (process.argv.length > (reportOnly ? 3 : 2)) {
-  console.error("Usage: node tools/repo-boundary/check-platform-boundary.mjs [--report-only]")
+if (process.argv.length !== 2) {
+  console.error("Usage: node tools/repo-boundary/check-platform-boundary.mjs")
   process.exit(2)
 }
 
@@ -17,6 +16,10 @@ const findings = []
 
 const tracked = execFileSync("git", ["-C", repositoryRoot, "ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean)
 for (const file of tracked) {
+  if (file === "front" || file.startsWith("front/")) {
+    findings.push(file)
+    continue
+  }
   if (file === self || !scopes.some((scope) => file.startsWith(scope))) continue
   const absolutePath = path.join(repositoryRoot, file)
   let contents
@@ -42,8 +45,8 @@ for (const file of tracked) {
 }
 
 if (findings.length > 0) {
-  console.error(`[platform-boundary] ${reportOnly ? "report" : "forbidden reference"}: ${findings.join(", ")}`)
-  if (!reportOnly) process.exit(1)
+  console.error(`[platform-boundary] forbidden reference: ${findings.join(", ")}`)
+  process.exit(1)
 } else {
   console.log("[platform-boundary] ok")
 }

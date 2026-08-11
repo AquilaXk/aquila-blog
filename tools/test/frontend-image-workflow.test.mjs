@@ -113,7 +113,6 @@ test("CI runs for every main push while retaining PR path filtering", () => {
   assert.deepEqual(triggers.push.branches, ["main"])
   assert.deepEqual(triggers.pull_request.paths, [
     "back/**",
-    "front/**",
     "contracts/public-api/**",
     "tools/contracts/**",
     "tools/test/**",

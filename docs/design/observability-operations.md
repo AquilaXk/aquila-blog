@@ -352,7 +352,7 @@ flowchart LR
 | ExceptionHandler | `back/.../exception/config/ExceptionHandler.kt` | MVC·`AppException`·fallback → `RsData` + `ErrorMetrics`(`source=handler`) + `app_exception` 로그 |
 | ErrorResponseWriter | `back/.../web/ErrorResponseWriter.kt` | Filter/Security JSON 에러 단일화 + 메트릭(`filter`/`security`) + `error_response` 로그 |
 | ErrorMetrics | `back/.../observability/ErrorMetrics.kt` | Micrometer `app.exception` → Prometheus `app_exception_total{code,status,source}` (path 태그 없음) |
-| RUM | `front/src/pages/api/rum/*`, `front/src/libs/rum/*` | 클라이언트 vitals/render 오류. 백엔드 로그와는 `X-Request-Id`/시간·경로로 상관 |
+| RUM | [AquilaXk/aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web)의 `src/pages/api/rum/*`, `src/libs/rum/*` | 클라이언트 vitals/render 오류. 백엔드 로그와는 `X-Request-Id`/시간·경로로 상관 |
 
 ### 운영자가 기억하는 한 줄
 

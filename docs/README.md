@@ -8,7 +8,7 @@ Agent-only 작업 메모와 로컬 상태 파일은 `.gitignore` 대상이므로
 
 | Area | Document | Description |
 | --- | --- | --- |
-| Frontend | [front/README.md](../front/README.md) | Frontend routes, scripts, environment variables, UI quality checks |
+| Web | [AquilaXk/aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web) | Web source, routes, UI quality checks, and image production |
 | Backend | [back/README.md](../back/README.md) | Backend architecture, API modules, quality checks, OpenAPI flow |
 | Performance | [perf/k6/README.md](../perf/k6/README.md) | Read-path load and chaos scenarios |
 | Deployment | [deploy/homeserver/HARDENING.md](../deploy/homeserver/HARDENING.md) | Home server hardening checklist |
@@ -22,8 +22,8 @@ Agent-only 작업 메모와 로컬 상태 파일은 `.gitignore` 대상이므로
 | [Cache Consistency Contract](design/cache-consistency-contract.md) | Public read cache, ETag, invalidation, CDN cache tag contract |
 | [Cloud Multipart State Machine](design/cloud-multipart-state-machine.md) | Multipart upload session transitions and recovery rules |
 | [Profile Workspace Persistence](design/profile-workspace-persistence.md) | Profile workspace draft and published persistence rules |
-| [Release UI QA Matrix](../front/docs/design/release-ui-qa-matrix.md) | Release UI quality checklist |
-| [Security CSP Rollout](../front/docs/design/security-csp-rollout.md) | CSP rollout notes |
+| [Release UI QA Matrix](https://github.com/AquilaXk/aquila-blog-web/blob/main/docs/design/release-ui-qa-matrix.md) | Web-owned release UI quality checklist |
+| [Security CSP Rollout](https://github.com/AquilaXk/aquila-blog-web/blob/main/docs/design/security-csp-rollout.md) | Web-owned CSP rollout notes |
 | [Launch Gate Operations](design/launch-gate-operations.md) | Launch readiness and operations checks |
 | [Privacy Launch Gate Checklist](design/privacy-launch-gate-checklist.md) | Privacy launch checklist |
 | [Code Comment Policy](design/code-comment-policy.md) | Code comment policy |

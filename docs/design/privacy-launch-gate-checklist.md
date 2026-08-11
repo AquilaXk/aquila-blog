@@ -60,7 +60,7 @@ Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues +
 | #1004 | Open | 필수 출시 전 완료 | backup 암호화, deletion tombstone, restore privacy guard | backup artifact encryption, restore drill, deletion tombstone evidence | 차단 |
 | #1005 | Closed | 필수 출시 전 완료 | 침해사고 대응 runbook | `docs/legal/*.md`, tabletop exercise template, owner/contact/evidence 절차 | 완료 |
 | #1006 | Open | 필수 출시 전 완료 | 정책·코드 privacy drift gate | CI command, failing fixture example, passing workflow link | 차단 |
-| #1007 | Closed | 필수 출시 전 완료 | 신규 개인정보 수집 feature flag 동결 | `back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, `yarn --cwd front build` 2회 exit 0, privacy data-map/env contract validator exit 0 | 완료 |
+| #1007 | Closed | 필수 출시 전 완료 | 신규 개인정보 수집 feature flag 동결 | `back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, Web repository `yarn build` 2회 exit 0, privacy data-map/env contract validator exit 0 | 완료 |
 | #1127 | Closed | 필수 출시 전 완료 | Soft-launch 출시 범위와 privacy freeze 키 계약 고정 | Soft-launch 제품 목표=admin publish+anonymous public read; gate=5-key signup/OAuth signup/RUM/`CUSTOM__AI__SUMMARY__ENABLED` false/0; 기존 회원 로그인·쓰기는 예외; live smoke | 완료 |
 | #1008 | Open | 필수 출시 전 완료 | 기존 사용자 재동의와 legacy 고지 migration | legacy account migration, re-consent prompt, audit log evidence | 차단 |
 | #1024 | Closed | 필수 출시 전 완료 | 공개 정책과 legal acceptance version/hash 단일화 | pinned Web policy lock과 `ActiveLegalDocumentMetadata` terms/privacy hash evidence | 완료 |

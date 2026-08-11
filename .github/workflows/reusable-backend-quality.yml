@@ -42,31 +42,32 @@ jobs:
           set -euo pipefail
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            api_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100"
+            if [ -z "${GITHUB_READ_TOKEN:-}" ]; then
+              echo "::error title=GitHub API token missing::Cannot enumerate pull request files."
+              exit 1
+            fi
+
+            api_base_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100"
             changed_files="${RUNNER_TEMP}/changed-files.txt"
             : > "${changed_files}"
+            page=1
 
-            while [ -n "${api_url}" ]; do
-              response_headers="${RUNNER_TEMP}/github-response-headers.txt"
+            while true; do
               response_body="${RUNNER_TEMP}/github-response-body.json"
-              curl_args=(
-                -fsSL
-                -D "${response_headers}"
-                -H "Accept: application/vnd.github+json"
-                -H "X-GitHub-Api-Version: 2022-11-28"
-              )
-              if [ -n "${GITHUB_READ_TOKEN:-}" ] && curl "${curl_args[@]}" -H "Authorization: Bearer ${GITHUB_READ_TOKEN}" "${api_url}" > "${response_body}"; then
-                :
-              else
-                if [ -n "${GITHUB_READ_TOKEN:-}" ]; then
-                  echo "::warning title=GitHub API token fallback::Authenticated PR files API failed; retrying without token."
-                fi
-                curl "${curl_args[@]}" "${api_url}" > "${response_body}"
-              fi
+              curl \
+                -fsSL \
+                --connect-timeout 10 \
+                --max-time 30 \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                -H "Authorization: Bearer ${GITHUB_READ_TOKEN}" \
+                "${api_base_url}&page=${page}" \
+                > "${response_body}"
               jq -r '.[] | .filename, (.previous_filename // empty)' "${response_body}" >> "${changed_files}"
-              api_url="$(
-                awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
-              )"
+              if [ "$(jq 'length' "${response_body}")" -lt 100 ]; then
+                break
+              fi
+              page=$((page + 1))
             done
           else
             echo "backend=true" >> "${GITHUB_OUTPUT}"
@@ -161,7 +162,7 @@ jobs:
         run: bash tools/guards/check-forbidden-tracked-files.sh
 
       - name: Report Platform repository boundary
-        run: node tools/repo-boundary/check-platform-boundary.mjs --report-only
+        run: node tools/repo-boundary/check-platform-boundary.mjs
 
       - name: Test forbidden tracked file guard
         run: bash tools/test/check-forbidden-tracked-files.test.sh
@@ -386,29 +387,30 @@ jobs:
           comments_file="${RUNNER_TEMP}/pr-comments.json"
           changed_files="${RUNNER_TEMP}/changed-files.txt"
 
-          api_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100"
+          if [ -z "${GITHUB_READ_TOKEN:-}" ]; then
+            echo "::error title=GitHub API token missing::Cannot enumerate pull request files."
+            exit 1
+          fi
+
+          api_base_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100"
           : > "${changed_files}"
-          while [ -n "${api_url}" ]; do
-            response_headers="${RUNNER_TEMP}/jacoco-github-response-headers.txt"
+          page=1
+          while true; do
             response_body="${RUNNER_TEMP}/jacoco-github-response-body.json"
-            curl_args=(
-              -fsSL
-              -D "${response_headers}"
-              -H "Accept: application/vnd.github+json"
-              -H "X-GitHub-Api-Version: 2022-11-28"
-            )
-            if [ -n "${GITHUB_READ_TOKEN:-}" ] && curl "${curl_args[@]}" -H "Authorization: Bearer ${GITHUB_READ_TOKEN}" "${api_url}" > "${response_body}"; then
-              :
-            else
-              if [ -n "${GITHUB_READ_TOKEN:-}" ]; then
-                echo "::warning title=GitHub API token fallback::Authenticated PR files API failed; retrying without token."
-              fi
-              curl "${curl_args[@]}" "${api_url}" > "${response_body}"
-            fi
+            curl \
+              -fsSL \
+              --connect-timeout 10 \
+              --max-time 30 \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -H "Authorization: Bearer ${GITHUB_READ_TOKEN}" \
+              "${api_base_url}&page=${page}" \
+              > "${response_body}"
             jq -r '.[].filename' "${response_body}" >> "${changed_files}"
-            api_url="$(
-              awk -F'[<>]' '/rel="next"/ { print $2 }' "${response_headers}" | tail -n 1
-            )"
+            if [ "$(jq 'length' "${response_body}")" -lt 100 ]; then
+              break
+            fi
+            page=$((page + 1))
           done
 
           python3 tools/ci/comment-jacoco-summary.py \

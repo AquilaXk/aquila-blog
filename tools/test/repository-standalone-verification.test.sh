@@ -2,7 +2,6 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
-web_script="${repo_root}/tools/repo-split/verify-web-standalone.sh"
 platform_script="${repo_root}/tools/repo-split/verify-platform-standalone.sh"
 materializer_script="${repo_root}/tools/repo-split/materialize-compose-test-env.mjs"
 materializer_test="${repo_root}/tools/test/materialize-compose-test-env.test.mjs"
@@ -52,13 +51,11 @@ assert_actions_only() {
     || fail "${script#"${repo_root}/"} must fail closed with exit 2 outside GitHub Actions (got ${status})"
 }
 
-for file in "${web_script}" "${platform_script}" "${materializer_script}" "${materializer_test}" "${workflow}"; do
+for file in "${platform_script}" "${materializer_script}" "${materializer_test}" "${workflow}"; do
   assert_file "${file}"
 done
-for script in "${web_script}" "${platform_script}"; do
-  bash -n "${script}" || fail "bash syntax error: ${script#"${repo_root}/"}"
-  assert_actions_only "${script}"
-done
+bash -n "${platform_script}" || fail "bash syntax error: ${platform_script#"${repo_root}/"}"
+assert_actions_only "${platform_script}"
 node --check "${materializer_script}" || fail "Node syntax error: ${materializer_script#"${repo_root}/"}"
 node --test "${materializer_test}" || fail "Compose test env materializer regression failed"
 
@@ -70,7 +67,6 @@ ruby -e '
   document = YAML.load_file(ARGV.fetch(0))
   jobs = document.fetch("jobs")
   expected = {
-    "web-standalone" => ["Web Standalone", "Run Web archive standalone gate", "Upload Web standalone evidence"],
     "platform-standalone" => ["Platform Standalone", "Run Platform archive standalone gate", "Upload Platform standalone evidence"],
   }
   expected.each do |job_id, (name, gate_step, upload_step)|
@@ -89,8 +85,6 @@ ruby -e '
     raise "#{job_id} gate step missing" unless gate
     raise "#{job_id} evidence step missing" unless upload
 
-    next unless job_id == "platform-standalone"
-
     raise "platform-standalone must not expose secrets at job scope" if job.key?("env")
     # 기대값은 ci.yml의 raw GitHub secret 표현식 원문이다. 기본값 선택은 Gradle
     # provider chokepoint 한 곳만 담당한다.
@@ -106,56 +100,31 @@ ruby -e '
 
 # Heavy gates must fail closed outside Actions. No local or test-only bypass may
 # unlock Yarn, Gradle, Playwright, or Docker execution.
-assert_contains "${web_script}" 'GITHUB_ACTIONS:-}'
 assert_contains "${platform_script}" 'GITHUB_ACTIONS:-}'
-assert_not_contains "${web_script}" 'STANDALONE_TEST_MODE'
 assert_not_contains "${platform_script}" 'STANDALONE_TEST_MODE'
 
 # Evidence paths must remain valid after the scripts enter extracted roots.
-assert_contains "${web_script}" 'artifact_dir="$(cd "${artifact_dir}" && pwd -P)"'
 assert_contains "${platform_script}" 'artifact_dir="$(cd "${artifact_dir}" && pwd -P)"'
 
 # Downloaded evidence must be independently verifiable without recreating the
 # ephemeral GitHub runner path. Both gates write relative names and fail closed
 # if an absolute path is ever reintroduced into SHA256SUMS.
-for script in "${web_script}" "${platform_script}"; do
+for script in "${platform_script}"; do
   assert_contains "${script}" 'write_evidence_checksums()'
   assert_contains "${script}" 'sha256sum "$@" > SHA256SUMS'
   assert_contains "${script}" "grep -Eq '^[0-9a-f]{64}  /' SHA256SUMS"
   assert_contains "${script}" 'sha256sum -c --strict SHA256SUMS'
 done
-assert_contains "${web_script}" 'write_evidence_checksums \'
-assert_contains "${web_script}" '  archive-manifest.txt \'
-assert_contains "${web_script}" '  workflow-presence.txt \'
-assert_contains "${web_script}" '  web-standalone.log'
 assert_contains "${platform_script}" 'write_evidence_checksums \'
 assert_contains "${platform_script}" '  archive-manifest.txt \'
 assert_contains "${platform_script}" '  platform-standalone.log'
 
-# Web archive and all required standalone checks.
-assert_contains "${web_script}" 'archive --format=tar "${source_sha}" front'
-assert_contains "${web_script}" 'git init --quiet'
-assert_contains "${web_script}" 'git update-ref refs/remotes/origin/main HEAD'
-assert_contains "${web_script}" '.github/workflows/ci.yml'
-assert_contains "${web_script}" '.github/workflows/security.yml'
-assert_contains "${web_script}" '.github/workflows/sonarcloud.yml'
-assert_contains "${web_script}" 'yarn install --frozen-lockfile'
-assert_contains "${web_script}" 'yarn contracts:check'
-assert_contains "${web_script}" 'yarn legal:check'
-assert_contains "${web_script}" 'yarn lint'
-assert_contains "${web_script}" 'yarn build'
-assert_contains "${web_script}" 'yarn test:unit'
-assert_contains "${web_script}" 'STORYBOOK_GATE_ENFORCEMENT=strict yarn storybook:gate'
-assert_contains "${web_script}" 'npx playwright install --with-deps chromium'
-assert_contains "${web_script}" 'yarn test:e2e:smoke'
-assert_contains "${web_script}" 'yarn test:e2e:a11y'
-assert_not_contains "${web_script}" 'git clone'
-
-# Platform archive must physically remove Web and retain all required gates.
-assert_contains "${platform_script}" 'rm -rf "${platform_root}/front"'
+# Platform archive starts from a Platform-only tree and retains all required gates.
+assert_not_contains "${platform_script}" 'rm -rf "${platform_root}/front"'
 assert_contains "${platform_script}" 'git init --quiet'
 assert_contains "${platform_script}" 'git update-ref refs/remotes/origin/main HEAD'
-assert_contains "${platform_script}" 'check-platform-boundary.mjs --report-only'
+assert_contains "${platform_script}" 'check-platform-boundary.mjs'
+assert_not_contains "${platform_script}" 'check-platform-boundary.mjs --report-only'
 assert_contains "${platform_script}" 'tools/contracts/check-public-contracts.mjs'
 assert_contains "${platform_script}" 'tools/privacy/ci-privacy-gate.mjs'
 assert_contains "${platform_script}" './gradlew check --rerun-tasks'
@@ -180,15 +149,16 @@ assert_not_contains "${materializer_script}" 'ALERTMANAGER_IMAGE'
 assert_not_contains "${materializer_script}" 'POSTGRES_EXPORTER_IMAGE'
 assert_not_contains "${materializer_script}" 'BACK_BLUE_IMAGE'
 
-# The workflow publishes exactly the two temporary required check names and
-# their evidence artifacts from the same checked-out SHA.
-assert_contains "${workflow}" 'name: Web Standalone'
+# The workflow publishes only the Platform standalone check and its evidence
+# artifact from the same checked-out SHA.
 assert_contains "${workflow}" 'name: Platform Standalone'
 assert_contains "${workflow}" 'repository-standalone-verification.test.sh'
-assert_contains "${workflow}" 'verify-web-standalone.sh "${GITHUB_SHA}"'
 assert_contains "${workflow}" 'verify-platform-standalone.sh "${GITHUB_SHA}"'
-assert_contains "${workflow}" 'web-standalone-${{ github.sha }}'
 assert_contains "${workflow}" 'platform-standalone-${{ github.sha }}'
+assert_not_contains "${workflow}" 'Web Standalone'
+assert_not_contains "${workflow}" 'verify-web-standalone.sh'
+legacy_web_workflow='reusable-frontend''-verify.yml'
+assert_not_contains "${workflow}" "${legacy_web_workflow}"
 assert_contains "${workflow}" 'persist-credentials: false'
 assert_contains "${workflow}" 'fetch-depth: 0'
 

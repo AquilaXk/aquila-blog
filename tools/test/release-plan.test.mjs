@@ -8,8 +8,6 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const scriptPath = path.join(repoRoot, "tools/ci/classify-release.mjs")
 const backendWorkflowPath = path.join(repoRoot, ".github/workflows/reusable-backend-quality.yml")
-const frontendWorkflowPath = path.join(repoRoot, ".github/workflows/reusable-frontend-verify.yml")
-const webWorkflowPath = path.join(repoRoot, "front/.github/workflows/ci.yml")
 
 const runClassifier = (files, args = []) => {
   const result = spawnSync(process.execPath, [scriptPath, "--json", ...args], {
@@ -134,10 +132,8 @@ test("destructive migration safety result blocks release", () => {
   }
 })
 
-test("reusable workflows run release planner policy checks", () => {
+test("Platform reusable workflow runs release planner and strict boundary checks", () => {
   const backendWorkflow = readFileSync(backendWorkflowPath, "utf8")
-  const frontendWorkflow = readFileSync(frontendWorkflowPath, "utf8")
-  const webWorkflow = readFileSync(webWorkflowPath, "utf8")
 
   assert.match(backendWorkflow, /Check Flyway deploy safety/)
   assert.match(backendWorkflow, /previous_filename/)
@@ -148,15 +144,16 @@ test("reusable workflows run release planner policy checks", () => {
   assert(backendWorkflow.indexOf("Check Flyway deploy safety") < backendWorkflow.indexOf("Classify release risk"))
   assert(backendWorkflow.indexOf("Classify release risk") < backendWorkflow.indexOf("Skip backend-heavy checks"))
   assert.match(backendWorkflow, /node --test tools\/test\/release-plan\.test\.mjs tools\/test\/flyway-deploy-safety\.test\.mjs/)
+  assert.match(backendWorkflow, /node tools\/repo-boundary\/check-platform-boundary\.mjs/)
+  assert.doesNotMatch(backendWorkflow, /--report-only|reusable-frontend-verify|front\/yarn\.lock/)
+})
 
-  assert.match(frontendWorkflow, /previous_filename/)
-  assert.match(frontendWorkflow, /front\/\*/)
-  assert.doesNotMatch(frontendWorkflow, /tools\/ci\/classify-release\.mjs/)
-  assert.doesNotMatch(frontendWorkflow, /Classify release risk/)
+test("Platform reusable workflow paginates PR files without an unauthenticated fallback", () => {
+  const backendWorkflow = readFileSync(backendWorkflowPath, "utf8")
 
-  for (const job of ["lint-build-contract-unit", "storybook-bundle", "playwright-smoke", "accessibility"]) {
-    assert.match(webWorkflow, new RegExp(`^  ${job}:`, "m"))
-  }
-  assert.doesNotMatch(webWorkflow, /working-directory:\s*front/)
-  assert.doesNotMatch(webWorkflow, /(?:cache-dependency-path|path):\s*front\//)
+  assert.equal(backendWorkflow.match(/^\s+page=1$/gm)?.length, 2)
+  assert.equal(backendWorkflow.match(/page=\$\(\(page \+ 1\)\)/g)?.length, 2)
+  assert.equal(backendWorkflow.match(/--connect-timeout 10/g)?.length, 2)
+  assert.equal(backendWorkflow.match(/--max-time 30/g)?.length, 2)
+  assert.doesNotMatch(backendWorkflow, /rel="next"|GitHub API token fallback|retrying without token/)
 })

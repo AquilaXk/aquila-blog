@@ -33,6 +33,13 @@ test("Platform quality configuration owns only Platform surfaces", () => {
   assert.doesNotMatch(combined, webRootPath)
 })
 
+test("Platform CI runs the boundary guard when forbidden Web paths are introduced", () => {
+  const ci = read(".github/workflows/ci.yml")
+
+  assert.match(ci, /^      - "front"$/m)
+  assert.match(ci, /^      - "front\/\*\*"$/m)
+})
+
 test("Platform boundary scanner does not follow tracked symlinks", (t) => {
   const root = mkdtempSync(path.join(tmpdir(), "platform-boundary-"))
   t.after(() => rmSync(root, { force: true, recursive: true }))

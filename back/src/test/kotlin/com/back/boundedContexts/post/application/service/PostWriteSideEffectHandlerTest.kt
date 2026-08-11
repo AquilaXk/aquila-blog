@@ -12,6 +12,7 @@ import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
+import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.annotation.TaskHandler
@@ -20,7 +21,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertDoesNotThrow
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
@@ -42,6 +42,10 @@ import java.util.UUID
 
 @DisplayName("PostWriteSideEffectHandler 테스트")
 class PostWriteSideEffectHandlerTest {
+    init {
+        AppConfig("https://api.aquilaxk.test", "https://www.aquilaxk.test")
+    }
+
     private val uploadedFileRetentionService: UploadedFileRetentionService =
         mock(UploadedFileRetentionService::class.java)
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService =
@@ -64,15 +68,15 @@ class PostWriteSideEffectHandlerTest {
         )
 
     @Test
-    @DisplayName("첨부파일 동기화 실패는 후속 작업 handler 밖으로 전파하지 않는다")
-    fun continueWhenAttachmentSyncFails() {
+    @DisplayName("첨부파일 동기화 실패는 후속 작업 handler 밖으로 전파한다")
+    fun propagateAttachmentSyncFailure() {
         // given
         doThrow(RuntimeException("storage down"))
             .`when`(uploadedFileRetentionService)
-            .syncPostContent(10L, "before", "after")
+            .syncPostAttachmentKeys(10L, emptyList(), emptyList(), emptyList(), emptyList())
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             handler.handle(
                 PostWriteAfterCommitEvent(
                     command =
@@ -85,20 +89,21 @@ class PostWriteSideEffectHandlerTest {
                     domainEvent = null,
                 ),
             )
-        }
+        }.isInstanceOf(RuntimeException::class.java)
+            .hasMessageContaining("storage down")
         verify(postRecommendFeatureStoreService).evict(10L)
     }
 
     @Test
-    @DisplayName("추천 feature store evict 실패는 후속 작업 handler 밖으로 전파하지 않는다")
-    fun continueWhenRecommendationEvictFails() {
+    @DisplayName("추천 feature store evict 실패는 후속 작업 handler 밖으로 전파한다")
+    fun propagateRecommendationEvictFailure() {
         // given
         doThrow(RuntimeException("recommendation cache down"))
             .`when`(postRecommendFeatureStoreService)
             .evict(12L)
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             handler.handle(
                 PostWriteAfterCommitEvent(
                     command =
@@ -109,7 +114,8 @@ class PostWriteSideEffectHandlerTest {
                     domainEvent = null,
                 ),
             )
-        }
+        }.isInstanceOf(RuntimeException::class.java)
+            .hasMessageContaining("recommendation cache down")
     }
 
     @Test
@@ -153,8 +159,8 @@ class PostWriteSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("외부 post write 이벤트 발행 실패는 후속 작업 handler 밖으로 전파하지 않는다")
-    fun continueWhenDomainEventPublishFails() {
+    @DisplayName("외부 post write 이벤트 발행 실패는 후속 작업 handler 밖으로 전파한다")
+    fun propagateDomainEventPublishFailure() {
         // given
         val domainEvent = mock(EventPayload::class.java)
         doThrow(RuntimeException("event bus down"))
@@ -162,7 +168,7 @@ class PostWriteSideEffectHandlerTest {
             .publish(domainEvent)
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             handler.handle(
                 PostWriteAfterCommitEvent(
                     command =
@@ -173,7 +179,8 @@ class PostWriteSideEffectHandlerTest {
                     domainEvent = domainEvent,
                 ),
             )
-        }
+        }.isInstanceOf(RuntimeException::class.java)
+            .hasMessageContaining("event bus down")
         verify(postRecommendFeatureStoreService).evict(15L)
     }
 
@@ -183,7 +190,7 @@ class PostWriteSideEffectHandlerTest {
         // given
         doThrow(RuntimeException("storage down"))
             .`when`(uploadedFileRetentionService)
-            .syncPostContent(20L, "before", "after")
+            .syncPostAttachmentKeys(20L, emptyList(), emptyList(), emptyList(), emptyList())
 
         val payload =
             postWriteSideEffectPayload(
@@ -201,24 +208,21 @@ class PostWriteSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("추천 갱신 시점에 글이 사라졌으면 feature store refresh를 건너뛴다")
-    fun skipRecommendationRefreshWhenPostIsMissing() {
+    @DisplayName("추천 갱신 시점에 글이 사라졌으면 task retry를 위해 실패한다")
+    fun failRecommendationRefreshWhenPostIsMissing() {
         // given
         `when`(postRepository.findById(11L)).thenReturn(Optional.empty())
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             handler.handle(
-                PostWriteAfterCommitEvent(
-                    command =
-                        sideEffectCommand(
-                            postId = 11L,
-                            recommendationAction = PostRecommendationSideEffect.REFRESH,
-                        ),
-                    domainEvent = null,
+                postWriteSideEffectPayload(
+                    postId = 11L,
+                    recommendationAction = PostRecommendationSideEffect.REFRESH,
                 ),
             )
-        }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("missing postId=11")
         verify(postRecommendFeatureStoreService, never()).refresh(anyPost())
     }
 
@@ -348,7 +352,9 @@ class PostWriteSideEffectHandlerTest {
         val payload =
             postWriteSideEffectPayload(
                 postId = 34L,
-                deletedContent = "deleted content",
+                deletedContent =
+                    "![image](/post/api/v1/images/posts/image.png) " +
+                        "[file](/post/api/v1/files/posts/file.pdf)",
                 recommendationAction = PostRecommendationSideEffect.REFRESH,
             )
 
@@ -356,14 +362,17 @@ class PostWriteSideEffectHandlerTest {
         handler.handle(payload)
 
         // then
-        verify(uploadedFileRetentionService).scheduleDeletedPostAttachments("deleted content")
+        verify(uploadedFileRetentionService).scheduleDeletedPostAttachmentKeys(
+            listOf("posts/image.png"),
+            listOf("posts/file.pdf"),
+        )
         verify(postRecommendFeatureStoreService).refresh(post)
         verifyNoInteractions(eventPublisher)
     }
 
     @Test
-    @DisplayName("알 수 없는 domain event type은 task 실패로 전파하지 않고 발행만 건너뛴다")
-    fun skipUnknownDomainEventTypeWhenHandlingTaskPayload() {
+    @DisplayName("알 수 없는 domain event type은 task retry를 위해 실패한다")
+    fun failUnknownDomainEventTypeWhenHandlingTaskPayload() {
         // given
         val payload =
             postWriteSideEffectPayload(
@@ -374,9 +383,10 @@ class PostWriteSideEffectHandlerTest {
             )
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             handler.handle(payload)
-        }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("Unsupported post write domain event type")
         verifyNoInteractions(eventPublisher)
     }
 
@@ -491,9 +501,7 @@ class PostWriteSideEffectHandlerTest {
             aggregateType = "Post",
             aggregateId = postId,
             postId = postId,
-            previousContent = previousContent,
-            currentContent = currentContent,
-            deletedContent = deletedContent,
+            attachmentKeys = PostAttachmentObjectKeySnapshot.fromContents(previousContent, currentContent, deletedContent),
             beforeTags = beforeTags,
             afterTags = afterTags,
             cacheInvalidationTargets = emptySet(),

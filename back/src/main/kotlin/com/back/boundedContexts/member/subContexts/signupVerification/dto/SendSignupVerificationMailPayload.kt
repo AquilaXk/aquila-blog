@@ -1,12 +1,15 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.dto
 
 import com.back.global.task.annotation.Task
-import com.back.standard.dto.TaskPayload
+import com.back.global.task.annotation.TaskPayloadSensitivity
+import com.back.standard.dto.ExpiringTaskPayload
 import java.time.Instant
 import java.util.UUID
 
 @Task(
     type = "member.signupVerification.sendMail",
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.EXPIRING_SECRET,
     label = "회원가입 메일 발송",
     maxRetries = 6,
     baseDelaySeconds = 120,
@@ -19,5 +22,5 @@ data class SendSignupVerificationMailPayload(
     override val aggregateId: Long,
     val toEmail: String,
     val verificationLink: String,
-    val expiresAt: Instant,
-) : TaskPayload
+    override val expiresAt: Instant,
+) : ExpiringTaskPayload

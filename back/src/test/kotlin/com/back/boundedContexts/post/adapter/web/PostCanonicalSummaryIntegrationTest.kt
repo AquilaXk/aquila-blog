@@ -2,8 +2,9 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.service.PostReadCacheInvalidationTarget
 import com.back.boundedContexts.post.application.service.PostSummaryResolver
+import com.back.boundedContexts.post.application.service.PostWriteSideEffectHandler
 import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
-import com.back.global.task.application.TaskFacade
+import com.back.global.task.application.TaskPayloadEnvelope
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
 import jakarta.persistence.EntityManager
@@ -27,7 +28,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
     private lateinit var jdbcTemplate: JdbcTemplate
 
     @Autowired
-    private lateinit var taskFacade: TaskFacade
+    private lateinit var postWriteSideEffectHandler: PostWriteSideEffectHandler
 
     @Autowired
     private lateinit var objectMapper: ObjectMapper
@@ -247,7 +248,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         assertThat(row["version"]).isNull()
 
         entityManager.flush()
-        taskFacade.fire(backfillTaskPayload(postId))
+        postWriteSideEffectHandler.handle(backfillTaskPayload(postId))
         entityManager.clear()
 
         mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }.andExpect {
@@ -455,6 +456,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 PostWriteSideEffectPayload.TASK_TYPE,
                 postId,
             )
-        return objectMapper.readValue(payloadJson, PostWriteSideEffectPayload::class.java)
+        val envelope = objectMapper.readValue(payloadJson, TaskPayloadEnvelope::class.java)
+        return objectMapper.readValue(envelope.payloadJson, PostWriteSideEffectPayload::class.java)
     }
 }

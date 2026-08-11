@@ -10,11 +10,16 @@ import com.back.boundedContexts.post.dto.PostSearchEngineMirrorPayload
 import com.back.boundedContexts.post.dto.PostSearchIndexSyncPayload
 import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.global.task.application.TaskFacade
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskPayloadEnvelope
+import com.back.global.task.application.TaskPayloadEnvelopeCodec
 import com.back.global.task.application.TaskRetryPolicy
+import com.back.global.task.application.port.output.TaskQueueInsertPort
+import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
@@ -24,14 +29,14 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.springframework.data.domain.Pageable
-import org.springframework.mock.env.MockEnvironment
-import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
 class PostReadModelTaskEventListenerTest {
     @Test
-    @DisplayName("같은 source event는 task type별 deterministic task UID를 enqueue한다")
+    @DisplayName("같은 source event는 task type별 deterministic UID로 한 번만 enqueue한다")
     fun `same source event enqueues deterministic task uid per task type`() {
         val repository = RecordingTaskQueueRepository()
         val listener =
@@ -43,18 +48,13 @@ class PostReadModelTaskEventListenerTest {
         listener.handle(event)
         listener.handle(event)
 
-        val firstDelivery = repository.savedTasks.take(3)
-        val secondDelivery = repository.savedTasks.drop(3)
-        assertThat(firstDelivery).hasSize(3)
-        assertThat(secondDelivery).hasSize(3)
-        assertThat(firstDelivery.map { it.taskType }).containsExactly(
+        assertThat(repository.savedTasks).hasSize(3)
+        assertThat(repository.savedTasks.map { it.taskType }).containsExactly(
             "post.search-index.sync",
             "post.search-engine.mirror",
             "post.read.prewarm",
         )
-        assertThat(secondDelivery.map { it.taskType }).containsExactlyElementsOf(firstDelivery.map { it.taskType })
-        assertThat(secondDelivery.map { it.uid }).containsExactlyElementsOf(firstDelivery.map { it.uid })
-        assertThat(firstDelivery.map { it.uid }.toSet()).hasSize(3)
+        assertThat(repository.savedTasks.map { it.uid }.toSet()).hasSize(3)
     }
 
     @Test
@@ -99,11 +99,15 @@ class PostReadModelTaskEventListenerTest {
             "post.search-index.sync",
             "post.search-engine.mirror",
         )
-        val objectMapper = ObjectMapper()
+        val objectMapper = jacksonObjectMapper()
+        val searchIndexEnvelope =
+            objectMapper.readValue(repository.savedTasks[0].payload, TaskPayloadEnvelope::class.java)
+        val mirrorEnvelope =
+            objectMapper.readValue(repository.savedTasks[1].payload, TaskPayloadEnvelope::class.java)
         val searchIndexPayload =
-            objectMapper.readValue(repository.savedTasks[0].payload, PostSearchIndexSyncPayload::class.java)
+            objectMapper.readValue(searchIndexEnvelope.payloadJson, PostSearchIndexSyncPayload::class.java)
         val mirrorPayload =
-            objectMapper.readValue(repository.savedTasks[1].payload, PostSearchEngineMirrorPayload::class.java)
+            objectMapper.readValue(mirrorEnvelope.payloadJson, PostSearchEngineMirrorPayload::class.java)
         assertThat(searchIndexPayload.postId).isEqualTo(91L)
         assertThat(searchIndexPayload.forceClear).isTrue()
         assertThat(mirrorPayload.postId).isEqualTo(91L)
@@ -128,15 +132,11 @@ class PostReadModelTaskEventListenerTest {
         )
 
     private fun createTaskFacade(repository: RecordingTaskQueueRepository): TaskFacade {
-        val objectMapper = ObjectMapper()
-        val environment = MockEnvironment()
-        environment.setActiveProfiles("test")
+        val objectMapper = jacksonObjectMapper()
         return TaskFacade(
-            taskRepository = repository,
+            taskInsertPort = repository,
             taskHandlerRegistry = createTaskHandlerRegistry(),
-            objectMapper = objectMapper,
-            environment = environment,
-            inlineWhenNotProd = false,
+            taskPayloadEnvelopeCodec = TaskPayloadEnvelopeCodec(objectMapper, Clock.systemUTC()),
         )
     }
 
@@ -157,7 +157,7 @@ class PostReadModelTaskEventListenerTest {
     ) {
         registry.register(
             taskType,
-            TaskHandlerEntry(
+            TaskHandlerEntry.withExactDecoders(
                 taskType = taskType,
                 payloadClass = payloadClass,
                 handlerMethod =
@@ -165,7 +165,9 @@ class PostReadModelTaskEventListenerTest {
                         bean = listener,
                         method = PostReadModelTaskEventListener::class.java.getDeclaredMethod("handle", payloadClass),
                     ),
-                retryPolicy = TaskRetryPolicy.fallback(taskType),
+                retryPolicy = TaskRetryPolicy(taskType, 5, 10, 2.0, 300),
+                schemaVersion = 2,
+                sensitivity = TaskPayloadSensitivity.PUBLIC,
             ),
         )
     }
@@ -205,16 +207,22 @@ class PostReadModelTaskEventListenerTest {
 
     private class RecordingTaskQueueRepository(
         private val failOnSave: Boolean = false,
-    ) : TaskQueueRepositoryPort {
+    ) : TaskQueueRepositoryPort,
+        TaskQueueInsertPort {
         val savedTasks = mutableListOf<Task>()
+
+        override fun insertIfAbsent(task: Task): TaskQueueInsertResult {
+            if (failOnSave) throw RuntimeException("enqueue down")
+            if (savedTasks.any { it.uid == task.uid }) return TaskQueueInsertResult.DUPLICATE
+            savedTasks += task
+            return TaskQueueInsertResult.INSERTED
+        }
 
         override fun save(task: Task): Task {
             if (failOnSave) throw RuntimeException("enqueue down")
             savedTasks += task
             return task
         }
-
-        override fun existsByUid(uid: UUID): Boolean = savedTasks.any { it.uid == uid }
 
         override fun countByStatus(status: TaskStatus): Long = unsupported()
 

@@ -24,7 +24,6 @@ class CdnCachePurgeEventListener(
 ) {
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostWrittenEvent) =
         enqueue(
@@ -37,7 +36,6 @@ class CdnCachePurgeEventListener(
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostModifiedEvent) =
         enqueue(
@@ -50,7 +48,6 @@ class CdnCachePurgeEventListener(
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostDeletedEvent) =
         enqueue(

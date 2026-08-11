@@ -4,11 +4,14 @@ import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.global.task.annotation.Task
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.standard.dto.TaskPayload
 import java.util.UUID
 
 @Task(
     type = PostInteractionSideEffectPayload.TASK_TYPE,
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.PERSONAL,
     label = "게시글 상호작용 후속 작업",
     maxRetries = 5,
     baseDelaySeconds = 10,

@@ -15,11 +15,16 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.global.task.application.TaskFacade
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskPayloadEnvelope
+import com.back.global.task.application.TaskPayloadEnvelopeCodec
 import com.back.global.task.application.TaskRetryPolicy
+import com.back.global.task.application.port.output.TaskQueueInsertPort
+import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
@@ -35,16 +40,15 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.cache.CacheManager
 import org.springframework.data.domain.Pageable
-import org.springframework.mock.env.MockEnvironment
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
-import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Clock
 import java.time.Instant
 import java.util.Optional
-import java.util.UUID
 
 @DisplayName("PostApplicationServiceDeleteResilience 테스트")
 class PostApplicationServiceDeleteResilienceTest {
@@ -73,7 +77,7 @@ class PostApplicationServiceDeleteResilienceTest {
         mock(PostRecommendFeatureStoreService::class.java)
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService =
         mock(PostKeywordSearchPipelineService::class.java)
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = jacksonObjectMapper()
     private val postReadCacheInvalidator = PostReadCacheInvalidator(cacheManager)
     private val postWriteSideEffectHandler =
         PostWriteSideEffectHandler(
@@ -89,11 +93,9 @@ class PostApplicationServiceDeleteResilienceTest {
     private val taskRepository = RecordingTaskQueueRepository()
     private val taskFacade: TaskFacade =
         TaskFacade(
-            taskRepository = taskRepository,
+            taskInsertPort = taskRepository,
             taskHandlerRegistry = postWriteTaskHandlerRegistry(),
-            objectMapper = objectMapper,
-            environment = MockEnvironment().also { it.setActiveProfiles("test") },
-            inlineWhenNotProd = false,
+            taskPayloadEnvelopeCodec = TaskPayloadEnvelopeCodec(objectMapper, Clock.systemUTC()),
         )
     private val postHydrationService = PostHydrationService(postAttrRepository, memberAttrRepository)
     private val postCounterService =
@@ -325,7 +327,7 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // then
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
-        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachmentKeys(emptyList(), emptyList())
         then(postRecommendFeatureStoreService).should().evict(22)
     }
 
@@ -353,7 +355,7 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // then
         verifyNoInteractions(cacheManager)
-        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachmentKeys(emptyList(), emptyList())
         then(postRecommendFeatureStoreService).should().evict(23)
     }
 
@@ -388,18 +390,23 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // then
         verifyNoInteractions(cacheManager)
-        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachmentKeys(emptyList(), emptyList())
         then(postRecommendFeatureStoreService).should().evict(24)
     }
 
     private fun capturePostWriteSideEffectPayload(): PostWriteSideEffectPayload {
         val task = postWriteSideEffectTasks().single()
-        return objectMapper.readValue(task.payload, PostWriteSideEffectPayload::class.java)
+        return decodePostWritePayload(task)
     }
 
     private fun capturePostWriteSideEffectPayloads(): List<PostWriteSideEffectPayload> =
         postWriteSideEffectTasks()
-            .map { task -> objectMapper.readValue(task.payload, PostWriteSideEffectPayload::class.java) }
+            .map(::decodePostWritePayload)
+
+    private fun decodePostWritePayload(task: Task): PostWriteSideEffectPayload {
+        val envelope = objectMapper.readValue(task.payload, TaskPayloadEnvelope::class.java)
+        return objectMapper.readValue(envelope.payloadJson, PostWriteSideEffectPayload::class.java)
+    }
 
     private fun postWriteSideEffectTasks(): List<Task> =
         taskRepository.savedTasks.filter { it.taskType == PostWriteSideEffectPayload.TASK_TYPE }
@@ -408,7 +415,7 @@ class PostApplicationServiceDeleteResilienceTest {
         val registry = TaskHandlerRegistry()
         registry.register(
             PostWriteSideEffectPayload.TASK_TYPE,
-            TaskHandlerEntry(
+            TaskHandlerEntry.withExactDecoders(
                 taskType = PostWriteSideEffectPayload.TASK_TYPE,
                 payloadClass = PostWriteSideEffectPayload::class.java,
                 handlerMethod =
@@ -420,21 +427,29 @@ class PostApplicationServiceDeleteResilienceTest {
                                 PostWriteSideEffectPayload::class.java,
                             ),
                     ),
-                retryPolicy = TaskRetryPolicy.fallback(PostWriteSideEffectPayload.TASK_TYPE),
+                retryPolicy = TaskRetryPolicy("post write", 5, 10, 2.0, 300),
+                schemaVersion = 2,
+                sensitivity = TaskPayloadSensitivity.PERSONAL,
             ),
         )
         return registry
     }
 
-    private class RecordingTaskQueueRepository : TaskQueueRepositoryPort {
+    private class RecordingTaskQueueRepository :
+        TaskQueueRepositoryPort,
+        TaskQueueInsertPort {
         val savedTasks = mutableListOf<Task>()
+
+        override fun insertIfAbsent(task: Task): TaskQueueInsertResult {
+            if (savedTasks.any { it.uid == task.uid }) return TaskQueueInsertResult.DUPLICATE
+            savedTasks += task
+            return TaskQueueInsertResult.INSERTED
+        }
 
         override fun save(task: Task): Task {
             savedTasks += task
             return task
         }
-
-        override fun existsByUid(uid: UUID): Boolean = savedTasks.any { it.uid == uid }
 
         override fun countByStatus(status: TaskStatus): Long = unsupported()
 

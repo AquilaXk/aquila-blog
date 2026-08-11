@@ -1,13 +1,13 @@
 package com.back.global.task.adapter.persistence
 
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
+import com.back.global.task.application.port.output.TaskRetentionRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import java.time.Instant
-import java.util.UUID
 
 /**
  * TaskRepository는 글로벌 모듈 영속 계층 연동을 담당하는 퍼시스턴스 어댑터입니다.
@@ -15,7 +15,8 @@ import java.util.UUID
  */
 interface TaskRepository :
     JpaRepository<Task, Long>,
-    TaskQueueRepositoryPort {
+    TaskQueueRepositoryPort,
+    TaskRetentionRepositoryPort {
     @Query(
         value = """
             SELECT *
@@ -47,7 +48,42 @@ interface TaskRepository :
         limit: Int,
     ): List<Task>
 
-    override fun existsByUid(uid: UUID): Boolean
+    @Query(
+        value = """
+            SELECT *
+            FROM task
+            WHERE status = 'FAILED'
+              AND payload_redacted_at IS NULL
+              AND payload_purge_after <= :now
+              AND execution_lease_token IS NULL
+            ORDER BY payload_purge_after ASC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+        """,
+        nativeQuery = true,
+    )
+    override fun findFailedPayloadsForRedactionWithLock(
+        now: Instant,
+        limit: Int,
+    ): List<Task>
+
+    @Query(
+        value = """
+            SELECT *
+            FROM task
+            WHERE status IN ('COMPLETED', 'FAILED', 'QUARANTINED')
+              AND row_purge_after <= :now
+              AND execution_lease_token IS NULL
+            ORDER BY row_purge_after ASC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+        """,
+        nativeQuery = true,
+    )
+    override fun findTerminalRowsForPurgeWithLock(
+        now: Instant,
+        limit: Int,
+    ): List<Task>
 
     override fun countByStatus(status: TaskStatus): Long
 

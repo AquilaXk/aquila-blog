@@ -98,10 +98,7 @@ class PostInteractionSideEffectHandler(
     private fun refreshRecommendFeatureStoreIfPublic(postId: Long) {
         val post =
             postRepository.findById(postId).getOrNull()
-                ?: run {
-                    logger.warn("interaction_recommend_feature_store_refresh_skipped_missing_post postId={}", postId)
-                    return
-                }
+                ?: error("Cannot refresh interaction recommendation features for missing postId=$postId")
         if (!post.published || !post.listed) return
         hydratePostAttrs(post)
         postRecommendFeatureStoreService.refresh(post)
@@ -114,13 +111,7 @@ class PostInteractionSideEffectHandler(
                 PostRankedCacheInvalidationSideEffect.HIT_COUNT -> listOf(PostSearchSortType1.HIT_COUNT)
                 PostRankedCacheInvalidationSideEffect.LIKES_COUNT -> listOf(PostSearchSortType1.LIKES_COUNT)
             }
-        val reason =
-            payload.rankedCacheEvictReason
-                ?: if (payload.rankedCacheInvalidation == PostRankedCacheInvalidationSideEffect.HIT_COUNT) {
-                    "hit"
-                } else {
-                    "like"
-                }
+        val reason = requireNotNull(payload.rankedCacheEvictReason) { "Ranked cache invalidation reason is required" }
         postReadCacheInvalidator.invalidateRankedSortHotPages(reason, sorts)
     }
 
@@ -131,8 +122,9 @@ class PostInteractionSideEffectHandler(
     }
 
     private fun PostInteractionSideEffectPayload.toDomainEvent(): EventPayload? {
-        val eventType = domainEventType ?: return null
-        val eventUid = domainEventUid ?: return null
+        if (domainEventType == null && domainEventUid == null) return null
+        val eventType = requireNotNull(domainEventType) { "Post interaction domain event type is required" }
+        val eventUid = requireNotNull(domainEventUid) { "Post interaction domain event uid is required" }
         return when (eventType) {
             PostCommentWrittenEvent::class.java.name ->
                 PostCommentWrittenEvent(
@@ -172,10 +164,7 @@ class PostInteractionSideEffectHandler(
                     requireNotNull(likeId),
                     requireNotNull(actorDto),
                 )
-            else -> {
-                logger.warn("post_interaction_side_effect_unknown_domain_event_type type={}", eventType)
-                null
-            }
+            else -> error("Unsupported post interaction domain event type=$eventType")
         }
     }
 

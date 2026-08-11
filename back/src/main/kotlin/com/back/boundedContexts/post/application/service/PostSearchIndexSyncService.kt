@@ -25,7 +25,6 @@ class PostSearchIndexSyncService(
     @Transactional
     fun sync(
         postId: Long,
-        fallbackTags: List<String>,
         forceClear: Boolean,
     ) {
         if (forceClear) {
@@ -33,21 +32,13 @@ class PostSearchIndexSyncService(
             return
         }
 
-        val dbTags =
-            postUseCase
-                .findById(postId)
-                ?.let { post ->
-                    normalizeTags(PostMetaExtractor.extract(post.content).tags)
-                }.orEmpty()
-        val normalizedFallbackTags = normalizeTags(fallbackTags)
-        val targetTags = if (dbTags.isNotEmpty()) dbTags else normalizedFallbackTags
+        val post = checkNotNull(postUseCase.findById(postId)) { "Cannot sync search index for missing postId=$postId" }
+        val targetTags = normalizeTags(PostMetaExtractor.extract(post.content).tags)
 
         postTagIndexRepository.replacePostTags(postId, targetTags)
         logger.debug(
-            "post_search_index_sync_done postId={} dbTags={} fallbackTags={} targetTags={}",
+            "post_search_index_sync_done postId={} targetTags={}",
             postId,
-            dbTags.size,
-            normalizedFallbackTags.size,
             targetTags.size,
         )
     }

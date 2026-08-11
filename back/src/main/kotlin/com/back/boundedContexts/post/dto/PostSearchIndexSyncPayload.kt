@@ -1,11 +1,17 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.global.task.annotation.Task
+import com.back.global.task.annotation.TaskPayloadSensitivity
+import com.back.standard.dto.LegacyTaskPayload
 import com.back.standard.dto.TaskPayload
+import com.fasterxml.jackson.annotation.JsonProperty
 import java.util.UUID
 
 @Task(
     type = "post.search-index.sync",
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.PUBLIC,
+    legacyPayloadClass = PostSearchIndexSyncPayloadV1::class,
     label = "게시글 검색 인덱스 동기화",
     maxRetries = 5,
     baseDelaySeconds = 10,
@@ -20,7 +26,28 @@ data class PostSearchIndexSyncPayload(
     override val aggregateType: String,
     override val aggregateId: Long,
     val postId: Long,
-    val fallbackTags: List<String> = emptyList(),
-    val forceClear: Boolean = false,
-    val enqueuedAtEpochMs: Long = System.currentTimeMillis(),
+    val forceClear: Boolean,
+    val enqueuedAtEpochMs: Long,
 ) : TaskPayload
+
+data class PostSearchIndexSyncPayloadV1(
+    override val uid: UUID,
+    override val aggregateType: String,
+    override val aggregateId: Long,
+    val postId: Long,
+    @param:JsonProperty("fallbackTags")
+    @get:JsonProperty("fallbackTags")
+    val legacyTags: List<String>,
+    val forceClear: Boolean,
+    val enqueuedAtEpochMs: Long,
+) : LegacyTaskPayload {
+    override fun toCurrentTaskPayload(): TaskPayload =
+        PostSearchIndexSyncPayload(
+            uid = uid,
+            aggregateType = aggregateType,
+            aggregateId = aggregateId,
+            postId = postId,
+            forceClear = forceClear,
+            enqueuedAtEpochMs = enqueuedAtEpochMs,
+        )
+}

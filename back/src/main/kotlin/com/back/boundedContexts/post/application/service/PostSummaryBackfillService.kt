@@ -141,9 +141,7 @@ class PostSummaryBackfillService(
                 aggregateType = "Post",
                 aggregateId = row.id,
                 postId = row.id,
-                previousContent = null,
-                currentContent = null,
-                deletedContent = null,
+                attachmentKeys = PostAttachmentObjectKeySnapshot.fromContents(null, null, null),
                 beforeTags = tags,
                 afterTags = tags,
                 cacheInvalidationTargets = scope.targets(),
@@ -152,7 +150,6 @@ class PostSummaryBackfillService(
                 domainEventType = null,
                 domainEventJson = null,
             ),
-            inlineWhenEnabled = false,
         )
         if (isPublic && cdnCachePurgeService.isEnabled()) {
             taskFacade.addToQueue(
@@ -164,7 +161,6 @@ class PostSummaryBackfillService(
                     beforeTags = tags,
                     afterTags = tags,
                 ),
-                inlineWhenEnabled = false,
             )
         }
     }

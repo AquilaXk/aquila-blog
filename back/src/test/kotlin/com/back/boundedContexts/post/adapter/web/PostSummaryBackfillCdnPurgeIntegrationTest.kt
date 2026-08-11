@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.global.revalidate.dto.PurgePostReadCachesPayload
 import com.back.global.task.annotation.Task
+import com.back.global.task.application.TaskPayloadEnvelope
 import com.back.support.BaseCdnPurgeEnabledControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
 import jakarta.persistence.EntityManager
@@ -86,7 +87,7 @@ class PostSummaryBackfillCdnPurgeIntegrationTest : BaseCdnPurgeEnabledController
         )!!
 
     private fun latestCdnPurgeTaskPayload(postId: Long): PurgePostReadCachesPayload {
-        val payloadJson =
+        val rawEnvelope =
             jdbcTemplate.queryForObject(
                 """
                 SELECT payload
@@ -100,7 +101,8 @@ class PostSummaryBackfillCdnPurgeIntegrationTest : BaseCdnPurgeEnabledController
                 cdnPurgeTaskType,
                 postId,
             )
-        return objectMapper.readValue(payloadJson, PurgePostReadCachesPayload::class.java)
+        val envelope = objectMapper.readValue(rawEnvelope, TaskPayloadEnvelope::class.java)
+        return objectMapper.readValue(envelope.payloadJson, PurgePostReadCachesPayload::class.java)
     }
 
     private val cdnPurgeTaskType: String

@@ -67,38 +67,40 @@ class PostInteractionSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("추천 갱신 시점에 글이 사라졌으면 interaction feature store refresh를 건너뛴다")
-    fun skipRecommendationRefreshWhenPostIsMissing() {
+    @DisplayName("추천 갱신 시점에 글이 사라졌으면 task retry를 위해 실패한다")
+    fun failRecommendationRefreshWhenPostIsMissing() {
         // given
         `when`(postRepository.findById(10L)).thenReturn(Optional.empty())
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             newHandler().handle(
                 interactionPayload(
                     postId = 10L,
                     recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
                 ),
             )
-        }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("missing postId=10")
         verify(postRecommendFeatureStoreService, never()).refresh(anyPost())
     }
 
     @Test
-    @DisplayName("알 수 없는 interaction domain event type은 task 실패로 전파하지 않고 발행만 건너뛴다")
-    fun skipUnknownDomainEventTypeWhenHandlingTaskPayload() {
+    @DisplayName("알 수 없는 interaction domain event type은 task retry를 위해 실패한다")
+    fun failUnknownDomainEventTypeWhenHandlingTaskPayload() {
         // given
         val applicationEventPublisher = RecordingApplicationEventPublisher()
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             newHandler(applicationEventPublisher).handle(
                 interactionPayload(
                     domainEventUid = UUID.randomUUID(),
                     domainEventType = "unknown.event.Type",
                 ),
             )
-        }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("Unsupported post interaction domain event type")
         assertThat(applicationEventPublisher.publishedEvent).isNull()
     }
 
@@ -116,30 +118,31 @@ class PostInteractionSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("HIT_COUNT ranked cache 무효화는 기본 reason hit으로 캐시를 축출한다")
-    fun invalidateRankedCachesForHitCountUsesDefaultReason() {
+    @DisplayName("HIT_COUNT ranked cache 무효화 reason이 없으면 task retry를 위해 실패한다")
+    fun failRankedCacheInvalidationWhenReasonIsMissing() {
         // given
         val handler = newHandler()
 
         // when
-        assertDoesNotThrow {
+        assertThatThrownBy {
             handler.handle(
                 interactionPayload(
                     rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.HIT_COUNT,
                 ),
             )
-        }
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("Ranked cache invalidation reason is required")
 
         // then
-        verify(postReadCacheInvalidator).invalidateRankedSortHotPages(
-            "hit",
-            listOf(PostSearchSortType1.HIT_COUNT),
+        verify(postReadCacheInvalidator, never()).invalidateRankedSortHotPages(
+            ArgumentMatchers.anyString(),
+            ArgumentMatchers.anyList(),
         )
     }
 
     @Test
-    @DisplayName("LIKES_COUNT ranked cache 무효화는 기본 reason like으로 캐시를 축출한다")
-    fun invalidateRankedCachesForLikesCountUsesDefaultReason() {
+    @DisplayName("LIKES_COUNT ranked cache 무효화는 명시 reason으로 캐시를 축출한다")
+    fun invalidateRankedCachesForLikesCountUsesExplicitReason() {
         // given
         val handler = newHandler()
 
@@ -148,6 +151,7 @@ class PostInteractionSideEffectHandlerTest {
             handler.handle(
                 interactionPayload(
                     rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.LIKES_COUNT,
+                    rankedCacheEvictReason = "like",
                 ),
             )
         }
@@ -160,7 +164,7 @@ class PostInteractionSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("명시 rankedCacheEvictReason이 있으면 기본 reason 대신 사용한다")
+    @DisplayName("명시 rankedCacheEvictReason을 그대로 사용한다")
     fun invalidateRankedCachesUsesExplicitEvictReason() {
         // given
         val handler = newHandler()

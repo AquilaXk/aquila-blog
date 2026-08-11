@@ -1,13 +1,18 @@
 package com.back.global.task.adapter.scheduler
 
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.StoredTaskPayloadMetadata
 import com.back.global.task.application.TaskExecutionContext
 import com.back.global.task.application.TaskExecutionContextHolder
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskPayloadEnvelopeCodec
+import com.back.global.task.application.TaskPayloadQuarantineException
+import com.back.global.task.application.TaskQuarantineReason
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
+import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.annotation.PreDestroy
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
@@ -17,7 +22,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
-import tools.jackson.databind.ObjectMapper
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -45,8 +50,9 @@ import java.util.concurrent.atomic.AtomicLong
 class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,
+    private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
+    private val clock: Clock,
     private val transactionTemplate: TransactionTemplate,
-    private val objectMapper: ObjectMapper,
     @param:Value("\${custom.task.processor.batchSize:50}")
     private val batchSize: Int,
     @param:Value("\${custom.task.processor.processingTimeoutSeconds:900}")
@@ -103,6 +109,13 @@ class TaskProcessingScheduledJob(
     private val perTypeInFlight = ConcurrentHashMap<String, AtomicInteger>()
     private val perTypeDynamicLimits = ConcurrentHashMap<String, Int>()
     private val recentHandlerDurationMs = AtomicLong(dynamicBatchTargetHandlerDurationMs.coerceIn(100, 60_000))
+    private val queueAvailable = AtomicLong(0)
+
+    init {
+        meterRegistry?.let { registry ->
+            Gauge.builder("task.processor.queue.available") { queueAvailable.get().toDouble() }.register(registry)
+        }
+    }
 
     @Volatile
     private var perTypeDynamicRefreshedAtEpochMs: Long = 0
@@ -111,6 +124,8 @@ class TaskProcessingScheduledJob(
         val taskId: Long,
         val taskUid: UUID,
         val leaseToken: UUID,
+        val aggregateType: String,
+        val aggregateId: Long,
         val taskType: String,
         val payload: String,
     )
@@ -121,21 +136,36 @@ class TaskProcessingScheduledJob(
         val taskType: String,
     )
 
+    private data class StaleTaskRecoveryResult(
+        val taskIds: List<Long>,
+        val quarantinedTaskTypes: List<String>,
+    )
+
     @Scheduled(fixedDelayString = "\${custom.task.processor.fixedDelayMs}")
     // Queue polling is short-lived; keeping the orphan lock window tight avoids multi-hour ready backlog stalls.
     @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M", lockAtMostFor = "PT2M")
     fun processTasks() {
+        try {
+            processTasksOnce()
+        } catch (exception: RuntimeException) {
+            recordQueueUnavailable(exception)
+        }
+    }
+
+    private fun processTasksOnce() {
         val safeBatchSize = batchSize.coerceIn(1, 500)
         recoverStaleProcessingTasks(safeBatchSize)
         refreshPerTypeDynamicLimitsIfNeeded()
 
         val availableWorkerSlots = resolveAvailableWorkerSlots()
         if (availableWorkerSlots <= 0) {
+            queueAvailable.set(1)
             logger.debug("Skip polling tasks because no worker slot is available")
             return
         }
 
         val fetchLimit = resolveFetchLimit(safeBatchSize, availableWorkerSlots)
+        queueAvailable.set(1)
         meterRegistry?.summary("task.processor.fetch.limit")?.record(fetchLimit.toDouble())
         val dispatchSlots =
             transactionTemplate.execute {
@@ -145,7 +175,7 @@ class TaskProcessingScheduledJob(
                     val leaseToken = it.markAsProcessing()
                     TaskDispatchSlot(it.id, leaseToken, it.taskType)
                 }
-            } ?: emptyList()
+            }
 
         var dispatchedWorkers = 0
         dispatchSlots.forEach { slot ->
@@ -209,13 +239,14 @@ class TaskProcessingScheduledJob(
         return concurrencyPolicy.availableWorkerSlots(activeWorkers) { countReadyBacklog() }
     }
 
-    private fun countReadyBacklog(): Long? =
-        runCatching {
-            taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, Instant.now())
-        }.getOrElse { exception ->
-            logger.warn("Failed to count ready task backlog for dynamic concurrency; using max concurrency", exception)
-            null
-        }
+    private fun countReadyBacklog(): Long = taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, Instant.now(clock))
+
+    private fun recordQueueUnavailable(exception: RuntimeException) {
+        queueAvailable.set(0)
+        meterRegistry?.counter("task.processor.queue.errors")?.increment()
+        val errorType = exception::class.qualifiedName ?: "TaskQueueUnavailable"
+        logger.error("Abort task poll because ready backlog is unavailable: errorType={}", errorType)
+    }
 
     private fun resolveFetchLimit(
         safeBatchSize: Int,
@@ -260,20 +291,26 @@ class TaskProcessingScheduledJob(
         return concurrencyPolicy.perTypeLimit(taskType, explicitPerTypeMaxConcurrent, perTypeDynamicLimits)
     }
 
-    private fun parsePerTypeMaxConcurrent(raw: String): Map<String, Int> =
-        raw
-            .split(",")
-            .asSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .mapNotNull { token ->
-                val parts = token.split("=", limit = 2)
-                if (parts.size != 2) return@mapNotNull null
-                val taskType = parts[0].trim()
-                val limit = parts[1].trim().toIntOrNull()?.coerceIn(1, workerConcurrency) ?: return@mapNotNull null
-                if (taskType.isBlank()) return@mapNotNull null
-                taskType to limit
-            }.toMap()
+    private fun parsePerTypeMaxConcurrent(raw: String): Map<String, Int> {
+        if (raw.isBlank()) return emptyMap()
+        val parsed = linkedMapOf<String, Int>()
+        raw.split(",").forEach { rawToken ->
+            val token = rawToken.trim()
+            val parts = token.split("=", limit = 2)
+            require(parts.size == 2) {
+                "custom.task.processor.perTypeMaxConcurrent entry must use taskType=limit: '$token'"
+            }
+            val taskType = parts[0].trim()
+            val limit = parts[1].trim().toIntOrNull()
+            require(taskType.isNotBlank() && limit != null && limit in 1..workerConcurrency) {
+                "custom.task.processor.perTypeMaxConcurrent entry is invalid: '$token'"
+            }
+            require(parsed.putIfAbsent(taskType, limit) == null) {
+                "custom.task.processor.perTypeMaxConcurrent contains duplicate taskType: '$taskType'"
+            }
+        }
+        return parsed
+    }
 
     private fun refreshPerTypeDynamicLimitsIfNeeded() {
         if (!perTypeAutoTuneEnabled) return
@@ -306,43 +343,84 @@ class TaskProcessingScheduledJob(
     }
 
     private fun recoverStaleProcessingTasks(limit: Int) {
-        val stuckBefore = Instant.now().minusSeconds(processingTimeoutSeconds)
-        val recoveredTaskIds =
-            transactionTemplate.execute {
-                val staleTasks = taskRepository.findStaleProcessingTasksWithLock(stuckBefore, limit)
-                staleTasks.forEach {
-                    it.recoverFromStuckProcessing(
-                        "Recovered stale processing task",
-                        taskHandlerRegistry.getRetryPolicy(it.taskType),
+        val now = Instant.now(clock)
+        val stuckBefore = now.minusSeconds(processingTimeoutSeconds)
+        val recoveryResult =
+            checkNotNull(
+                transactionTemplate.execute {
+                    val staleTasks = taskRepository.findStaleProcessingTasksWithLock(stuckBefore, limit)
+                    val quarantinedTaskTypes = mutableListOf<String>()
+                    staleTasks.forEach {
+                        val entry = taskHandlerRegistry.getEntry(it.taskType)
+                        if (entry == null) {
+                            it.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
+                            quarantinedTaskTypes += it.taskType
+                        } else {
+                            it.recoverFromStuckProcessing(
+                                "Recovered stale processing task",
+                                entry.retryPolicy,
+                                now,
+                            )
+                        }
+                    }
+                    StaleTaskRecoveryResult(
+                        taskIds = staleTasks.map { it.id },
+                        quarantinedTaskTypes = quarantinedTaskTypes,
                     )
-                }
-                staleTasks.map { it.id }
-            } ?: emptyList()
+                },
+            ) { "Stale task recovery transaction returned no result" }
 
-        if (recoveredTaskIds.isNotEmpty()) {
-            logger.warn("Recovered stale processing tasks: {}", recoveredTaskIds)
+        recoveryResult.quarantinedTaskTypes.forEach { taskType ->
+            recordTaskQuarantine(taskType, TaskQuarantineReason.UNKNOWN_TASK_TYPE)
+        }
+        if (recoveryResult.taskIds.isNotEmpty()) {
+            logger.warn("Recovered stale processing tasks: {}", recoveryResult.taskIds)
         }
     }
 
     private fun executeTask(
         taskId: Long,
         leaseToken: UUID,
-    ) = run {
+    ) {
         val context = loadTaskExecutionContext(taskId, leaseToken) ?: return
         val entry = taskHandlerRegistry.getEntry(context.taskType)
         val startedAtNanos = System.nanoTime()
 
         if (entry == null) {
             logger.warn("No handler found for task type: {}", context.taskType)
-            markTaskFailed(taskId, context.leaseToken, context.taskType, "No handler found")
+            markTaskQuarantined(
+                taskId,
+                context.leaseToken,
+                context.taskType,
+                TaskQuarantineReason.UNKNOWN_TASK_TYPE,
+            )
             return
         }
 
         try {
-            val payload = objectMapper.readValue(context.payload, entry.payloadClass) as TaskPayload
+            val payload =
+                taskPayloadEnvelopeCodec.decode(
+                    rawEnvelope = context.payload,
+                    storedMetadata =
+                        StoredTaskPayloadMetadata(
+                            uid = context.taskUid,
+                            aggregateType = context.aggregateType,
+                            aggregateId = context.aggregateId,
+                            taskType = context.taskType,
+                        ),
+                    entry = entry,
+                )
             invokeHandlerWithTimeout(context, entry, payload)
             markTaskCompleted(taskId, context.leaseToken, context.taskType)
             recordTaskDuration(context.taskType, startedAtNanos)
+        } catch (exception: TaskPayloadQuarantineException) {
+            logger.warn(
+                "task_payload_quarantined taskId={} taskType={} reason={}",
+                taskId,
+                context.taskType,
+                exception.reason,
+            )
+            markTaskQuarantined(taskId, context.leaseToken, context.taskType, exception.reason)
         } catch (exception: TimeoutException) {
             logger.error(
                 "Task handler timeout: {} (type={}, timeoutSeconds={})",
@@ -359,12 +437,13 @@ class TaskProcessingScheduledJob(
             recordTaskDuration(context.taskType, startedAtNanos)
         } catch (exception: Exception) {
             val rootCause = exception.cause ?: exception
-            logger.error("Task failed: {} (type={})", taskId, context.taskType, rootCause)
+            val errorType = rootCause::class.qualifiedName ?: "TaskHandlerFailure"
+            logger.error("Task failed: {} (type={}, errorType={})", taskId, context.taskType, errorType)
             markTaskFailed(
                 taskId,
                 context.leaseToken,
                 context.taskType,
-                rootCause.message ?: rootCause::class.simpleName,
+                errorType,
             )
             recordTaskDuration(context.taskType, startedAtNanos)
         }
@@ -377,8 +456,35 @@ class TaskProcessingScheduledJob(
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute null
             if (!task.isCurrentExecution(leaseToken)) return@execute null
-            LoadedTaskExecution(task.id, task.uid, leaseToken, task.taskType, task.payload)
+            LoadedTaskExecution(
+                taskId = task.id,
+                taskUid = task.uid,
+                leaseToken = leaseToken,
+                aggregateType = task.aggregateType,
+                aggregateId = task.aggregateId,
+                taskType = task.taskType,
+                payload = task.payload,
+            )
         }
+
+    private fun markTaskQuarantined(
+        taskId: Long,
+        leaseToken: UUID,
+        taskType: String,
+        reason: TaskQuarantineReason,
+    ) {
+        var quarantined = false
+        transactionTemplate.execute {
+            val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
+            if (!task.isCurrentExecution(leaseToken)) return@execute
+            task.markAsQuarantined(reason.name, Instant.now(clock))
+            quarantined = true
+        }
+        if (quarantined) {
+            recordTaskQuarantine(taskType, reason)
+            recordTaskResult(taskType, "quarantine")
+        }
+    }
 
     private fun markTaskCompleted(
         taskId: Long,
@@ -389,7 +495,7 @@ class TaskProcessingScheduledJob(
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (!task.isCurrentExecution(leaseToken)) return@execute
-            task.markAsCompleted()
+            task.markAsCompleted(Instant.now(clock))
             task.errorMessage = null
             completed = true
         }
@@ -408,7 +514,7 @@ class TaskProcessingScheduledJob(
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (!task.isCurrentExecution(leaseToken)) return@execute
             task.errorMessage = errorMessage
-            task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(taskType))
+            task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(taskType), Instant.now(clock))
             if (task.status == TaskStatus.FAILED) {
                 logger.error(
                     "task_dead_lettered taskId={} taskType={} retryCount={} maxRetries={}",
@@ -427,8 +533,22 @@ class TaskProcessingScheduledJob(
         status: String,
     ) {
         meterRegistry
-            ?.counter("task.processor.result", "taskType", safeTagValue(taskType), "status", status)
+            ?.counter("task.processor.result", "taskType", metricTaskType(taskType), "status", status)
             ?.increment()
+    }
+
+    private fun recordTaskQuarantine(
+        taskType: String,
+        reason: TaskQuarantineReason,
+    ) {
+        meterRegistry
+            ?.counter(
+                "task.payload.quarantine",
+                "taskType",
+                metricTaskType(taskType),
+                "reason",
+                reason.name,
+            )?.increment()
     }
 
     private fun recordTaskDuration(
@@ -438,7 +558,7 @@ class TaskProcessingScheduledJob(
         val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
         updateRecentHandlerDuration(elapsedMs)
         meterRegistry
-            ?.timer("task.processor.handler.duration", "taskType", safeTagValue(taskType))
+            ?.timer("task.processor.handler.duration", "taskType", metricTaskType(taskType))
             ?.record(elapsedMs, TimeUnit.MILLISECONDS)
     }
 
@@ -454,6 +574,9 @@ class TaskProcessingScheduledJob(
         val sanitized = raw.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
         return sanitized.take(80).ifBlank { "unknown" }
     }
+
+    private fun metricTaskType(taskType: String): String =
+        if (taskHandlerRegistry.getEntry(taskType) == null) "unregistered" else safeTagValue(taskType)
 
     private fun revertTaskToPending(
         taskId: Long,

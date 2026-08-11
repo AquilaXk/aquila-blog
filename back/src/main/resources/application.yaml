@@ -276,12 +276,15 @@ custom:
       perTypeAutoTuneEnabled: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_ENABLED:true}
       perTypeAutoTuneMinConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_MIN_CONCURRENT:1}
       perTypeAutoTuneRefreshMs: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_REFRESH_MS:15000}
-      inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
     diagnostics:
       cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:30}
     metrics:
       refreshEnabled: ${CUSTOM__TASK__METRICS__REFRESH_ENABLED:true}
       refreshFixedDelayMs: ${CUSTOM__TASK__METRICS__REFRESH_FIXED_DELAY_MS:60000}
+    retention:
+      cleanupBatchSize: ${CUSTOM__TASK__RETENTION__CLEANUP_BATCH_SIZE:100}
+      cleanupMaxBatches: ${CUSTOM__TASK__RETENTION__CLEANUP_MAX_BATCHES:10}
+      cleanupFixedDelayMs: ${CUSTOM__TASK__RETENTION__CLEANUP_FIXED_DELAY_MS:3600000}
   runtime:
     worker-enabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
     apiMode: ${CUSTOM__RUNTIME__API_MODE:all}

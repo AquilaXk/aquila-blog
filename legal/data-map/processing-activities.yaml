@@ -45,6 +45,7 @@ activities:
       - legalAcceptanceTimestamp
       - signupEmailRateLimitKey
       - signupIpRateLimitKey
+      - durableTaskEnvelopeMetadata
     dataSubjects:
       - signupApplicant
     purpose: 회원가입 요청자가 이메일 소유자인지 확인하고 in-flight 가입 세션을 제한
@@ -57,8 +58,8 @@ activities:
       - home_server_redis
       - smtp_provider_unconfirmed
     overseasTransfer: reviewRequired:smtp-provider-region-unconfirmed
-    retentionRule: token/session expiry plus custom.privacy.retention.signupVerificationDays default 7 days
-    destructionMethod: expireCancelConsumeThenPrivacyRetentionCleanupPurge
+    retentionRule: token/session expiry plus custom.privacy.retention.signupVerificationDays default 7 days; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days or earlier payload expiry; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
+    destructionMethod: expireCancelConsumeThenPrivacyRetentionCleanupPurge; bounded taskRetentionCleanup redaction and purge
     accessRoles:
       - signupApplicant
       - serviceAdmin
@@ -219,6 +220,8 @@ activities:
       - posts:public-cursor-disabled:v1
       - posts:runtime-endpoints:v1
       - feed.restore.*
+      - durableTaskEnvelopeMetadata
+      - postAttachmentObjectKeys
     dataSubjects:
       - registeredMember
       - publicVisitorWhenViewing
@@ -226,15 +229,15 @@ activities:
     legalBasis: contractAndUserPublishedContent
     collectionSource: admin editor, comment form, profile editor
     requiredOrOptional: optionalUserGeneratedContent
-    systemOfRecord: PostgreSQL post, post_comment, member profile columns, member_attr profile/home fields
+    systemOfRecord: PostgreSQL post, post_comment, member profile columns, member_attr profile/home fields; transient durable task queue
     processors:
       - home_server_postgresql
       - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
-    retentionRule: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* untilTabCloseOrBrowserStorageClear
-    destructionMethod: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* tabCloseOrBrowserStorageDeletion
+    retentionRule: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* untilTabCloseOrBrowserStorageClear; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
+    destructionMethod: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* tabCloseOrBrowserStorageDeletion; bounded taskRetentionCleanup redaction and purge
     accessRoles:
       - contentAuthor
       - serviceAdmin
@@ -337,6 +340,7 @@ activities:
       - secondaryTarget
       - actorMemberId
       - actionDataText
+      - durableTaskEnvelopeMetadata
     dataSubjects:
       - registeredMember
       - affectedContentOwner
@@ -344,13 +348,13 @@ activities:
     legalBasis: legitimateSecurityAndOperationalInterest
     collectionSource: domain events and member action log listener
     requiredOrOptional: requiredForAdminAudit
-    systemOfRecord: PostgreSQL member_action_log
+    systemOfRecord: PostgreSQL member_action_log; transient durable task queue
     processors:
       - home_server_postgresql
       - grafana_loki_monitoring
     overseasTransfer: noPlannedOverseasTransferForDatabase
-    retentionRule: custom.privacy.retention.memberActionLogDays default 90 days
-    destructionMethod: privacyRetentionCleanup scheduled batch purge
+    retentionRule: custom.privacy.retention.memberActionLogDays default 90 days; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
+    destructionMethod: privacyRetentionCleanup scheduled batch purge; bounded taskRetentionCleanup redaction and purge
     accessRoles:
       - serviceAdmin
       - securityOperator
@@ -373,21 +377,22 @@ activities:
       - lastNotificationId
       - notificationRelayPayload
       - unreadCount
+      - durableTaskEnvelopeMetadata
     dataSubjects:
       - registeredMember
     purpose: 댓글 등 서비스 이벤트 알림, unread count 제공, SSE 재연결 복구
     legalBasis: contractAndLegitimateOperationalInterest
     collectionSource: post/comment domain events and notification API
     requiredOrOptional: requiredForNotificationFeature
-    systemOfRecord: PostgreSQL member_notification; SSE runtime memory; Redis pub/sub relay
+    systemOfRecord: PostgreSQL member_notification; SSE runtime memory; Redis pub/sub relay; transient durable task queue
     processors:
       - home_server_postgresql
       - home_server_redis
       - vercel_frontend_hosting
       - cloudflare_dns_proxy
     overseasTransfer: possibleViaVercelOrCloudflareEdge
-    retentionRule: custom.privacy.retention.notificationDays default 60 days
-    destructionMethod: privacyRetentionCleanup scheduled batch purge; account deletion removes account-visible access
+    retentionRule: custom.privacy.retention.notificationDays default 60 days; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
+    destructionMethod: privacyRetentionCleanup scheduled batch purge; account deletion removes account-visible access; bounded taskRetentionCleanup redaction and purge
     accessRoles:
       - accountOwner
       - serviceAdmin

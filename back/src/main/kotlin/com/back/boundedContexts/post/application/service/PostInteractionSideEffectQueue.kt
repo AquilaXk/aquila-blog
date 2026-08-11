@@ -82,7 +82,6 @@ class PostInteractionSideEffectQueue(
                 rankedCacheInvalidation = rankedCacheInvalidation,
                 rankedCacheEvictReason = rankedCacheEvictReason,
             ),
-            inlineWhenEnabled = false,
         )
     }
 

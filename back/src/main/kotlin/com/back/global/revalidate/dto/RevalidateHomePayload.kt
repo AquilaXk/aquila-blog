@@ -1,11 +1,14 @@
 package com.back.global.revalidate.dto
 
 import com.back.global.task.annotation.Task
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.standard.dto.TaskPayload
 import java.util.UUID
 
 @Task(
     type = "global.revalidate.home",
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.PUBLIC,
     label = "경로 revalidate",
     maxRetries = 5,
     baseDelaySeconds = 30,

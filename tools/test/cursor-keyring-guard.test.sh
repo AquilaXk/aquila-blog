@@ -27,7 +27,7 @@ valid_env="${workdir}/valid.env"
 now_epoch="$(date +%s)"
 valid_expiry="$((now_epoch + 3600))"
 expired_expiry="$((now_epoch - 1))"
-over_window_expiry="$((now_epoch + 86401))"
+over_window_expiry="$((now_epoch + 172800))"
 printf '%s\n' \
   'PROD___CUSTOM__POST__READ__CURSOR_SIGNING_SECRET=cursor-signing-current-key-abcdefghijklmnopqrstuvwxyz012345' \
   'PROD___CUSTOM__POST__READ__CURSOR_SIGNING_KEY_VERSION=2' \

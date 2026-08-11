@@ -1,11 +1,14 @@
 package com.back.global.revalidate.dto
 
 import com.back.global.task.annotation.Task
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.standard.dto.TaskPayload
 import java.util.UUID
 
 @Task(
     type = "global.revalidate.post-cache-purge",
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.PUBLIC,
     label = "게시글 공개 캐시 purge",
     maxRetries = 5,
     baseDelaySeconds = 10,

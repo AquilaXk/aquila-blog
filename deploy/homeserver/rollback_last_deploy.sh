@@ -26,6 +26,8 @@ HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
 COMPOSE_IMAGE_METADATA_KEYS=(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
+PRESERVE_CURRENT_WORKER_IMAGE="false"
+CURRENT_WORKER_IMAGE=""
 
 normalize_bool() {
   local raw="$1"
@@ -308,6 +310,12 @@ repair_runtime_back_image_if_missing() {
   metadata_image=""
   legacy_image=""
   key="$(backend_image_key "${service}")"
+  if [[ "${service}" == "back_worker" && "${PRESERVE_CURRENT_WORKER_IMAGE}" == "true" ]]; then
+    require_digest_image_value "${key}" "${CURRENT_WORKER_IMAGE}"
+    upsert_env_key "${key}" "${CURRENT_WORKER_IMAGE}"
+    echo "rollback ${key} preserved from current schema-compatible worker: ${CURRENT_WORKER_IMAGE}"
+    return 0
+  fi
   metadata_key="$(backup_image_key_for_service "${service}" || true)"
   if [[ -n "${metadata_key}" ]]; then
     metadata_image="$(trim_quotes "$(backup_metadata_value "${metadata_key}")")"
@@ -403,6 +411,60 @@ resolve_prod_db_name() {
     db_base_name="blog"
   fi
   echo "${db_base_name}_prod"
+}
+
+is_canonical_flyway_schema_version() {
+  [[ "$1" =~ ^[1-9][0-9]*(\.[0-9]+)*$ ]]
+}
+
+query_live_flyway_schema_version() {
+  local db_name version
+  db_name="$(resolve_prod_db_name)"
+  if ! version="$(
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" \
+      exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 \
+      -c "SELECT version FROM flyway_schema_history WHERE success = true AND version IS NOT NULL ORDER BY installed_rank DESC LIMIT 1" \
+      2>/dev/null | tr -d '\r' | tail -n 1
+  )"; then
+    echo "unavailable"
+    return
+  fi
+  if ! is_canonical_flyway_schema_version "${version}"; then
+    echo "unavailable"
+    return
+  fi
+  echo "${version}"
+}
+
+worker_rollback_mode() {
+  local backup_version="$1"
+  local live_version="$2"
+  if is_canonical_flyway_schema_version "${backup_version}" &&
+    is_canonical_flyway_schema_version "${live_version}" &&
+    [[ "${backup_version}" == "${live_version}" ]]; then
+    echo "restore"
+    return
+  fi
+  echo "preserve"
+}
+
+prepare_worker_rollback_policy() {
+  local backup_version live_version mode
+  backup_version="$(trim_quotes "$(backup_metadata_value "flyway_schema_version")")"
+  live_version="$(query_live_flyway_schema_version)"
+  mode="$(worker_rollback_mode "${backup_version:-unavailable}" "${live_version}")"
+  if [[ "${mode}" == "restore" ]]; then
+    echo "rollback worker schema identity matched: flyway_version=${live_version}"
+    return 0
+  fi
+
+  CURRENT_WORKER_IMAGE="$(container_image_for_service_any_state "back_worker" || true)"
+  if ! require_digest_image_value "BACK_WORKER_IMAGE" "${CURRENT_WORKER_IMAGE}"; then
+    echo "rollback blocked: Flyway schema identity changed or is unavailable and current worker image cannot be proven" >&2
+    return 1
+  fi
+  PRESERVE_CURRENT_WORKER_IMAGE="true"
+  echo "rollback worker downgrade blocked: backup_flyway=${backup_version:-unavailable} live_flyway=${live_version}"
 }
 
 ensure_db_runtime_guards() {
@@ -817,6 +879,7 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
   exit 1
 fi
 
+prepare_worker_rollback_policy
 restore_compose_image_metadata
 
 # normalize legacy upstream tokens before rollback target is chosen
@@ -850,6 +913,18 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   services_to_boot+=(back_read back_admin back_worker)
 fi
 compose_up_with_retry "${services_to_boot[@]}"
+if [[ "${PRESERVE_CURRENT_WORKER_IMAGE}" == "true" ]]; then
+  actual_worker_image="$(container_image_for_service_any_state "back_worker" || true)"
+  if [[ "${actual_worker_image}" != "${CURRENT_WORKER_IMAGE}" ]]; then
+    echo "rollback failed: preserved worker image mismatch expected=${CURRENT_WORKER_IMAGE} actual=${actual_worker_image:-missing}" >&2
+    exit 1
+  fi
+  if ! wait_backend_ready "back_worker"; then
+    echo "rollback failed: preserved schema-compatible worker is not ready" >&2
+    exit 1
+  fi
+  echo "rollback preserved schema-compatible worker verified: image=${CURRENT_WORKER_IMAGE}"
+fi
 compose_up_no_deps_with_retry loki promtail prometheus grafana
 ensure_db_runtime_guards || true
 reload_caddy

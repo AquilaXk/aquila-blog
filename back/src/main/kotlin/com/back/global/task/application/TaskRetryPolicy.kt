@@ -31,15 +31,4 @@ data class TaskRetryPolicy(
             .coerceAtLeast(baseDelaySeconds)
             .coerceAtMost(maxDelaySeconds)
     }
-
-    companion object {
-        fun fallback(taskType: String): TaskRetryPolicy =
-            TaskRetryPolicy(
-                label = taskType,
-                maxRetries = 10,
-                baseDelaySeconds = 180,
-                backoffMultiplier = 3.0,
-                maxDelaySeconds = 21600,
-            )
-    }
 }

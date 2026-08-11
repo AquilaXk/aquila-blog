@@ -54,6 +54,9 @@ AUTO_MEMORY_TUNER_MIN_BUDGET_MB="${AUTO_MEMORY_TUNER_MIN_BUDGET_MB:-1280}"
 LAST_COMPOSE_UP_SERVICES=""
 LAST_COMPOSE_UP_OUTPUT=""
 AUTOHEAL_PAUSED="false"
+BACKUP_FLYWAY_SCHEMA_VERSION="${BACKUP_FLYWAY_SCHEMA_VERSION:-unavailable}"
+TASK_SCHEMA_WORKER_FLOOR_REQUIRED="false"
+TASK_SCHEMA_COMPATIBLE_WORKER_READY="false"
 
 # backend rollout(기본)과 front rollout을 한 스크립트가 나눠 수행한다. front 배포는 backend와
 # 독립 트리거이므로(#1539) backend 전체 시퀀스(DB role provisioning, monitoring 재생성,
@@ -1458,6 +1461,54 @@ resolve_prod_db_name() {
   echo "${db_base_name}_prod"
 }
 
+is_canonical_flyway_schema_version() {
+  [[ "$1" =~ ^[1-9][0-9]*(\.[0-9]+)*$ ]]
+}
+
+query_live_flyway_schema_version() {
+  local db_name version
+  db_name="$(resolve_prod_db_name)"
+  if ! version="$(
+    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" \
+      exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 \
+      -c "SELECT version FROM flyway_schema_history WHERE success = true AND version IS NOT NULL ORDER BY installed_rank DESC LIMIT 1" \
+      2>/dev/null | tr -d '\r' | tail -n 1
+  )"; then
+    echo "unavailable"
+    return
+  fi
+  if ! is_canonical_flyway_schema_version "${version}"; then
+    echo "unavailable"
+    return
+  fi
+  echo "${version}"
+}
+
+worker_rollback_mode() {
+  local backup_version="$1"
+  local live_version="$2"
+  if is_canonical_flyway_schema_version "${backup_version}" &&
+    is_canonical_flyway_schema_version "${live_version}" &&
+    [[ "${backup_version}" == "${live_version}" ]]; then
+    echo "restore"
+    return
+  fi
+  echo "preserve"
+}
+
+resolve_task_schema_worker_floor() {
+  local live_version mode
+  live_version="$(query_live_flyway_schema_version)"
+  mode="$(worker_rollback_mode "${BACKUP_FLYWAY_SCHEMA_VERSION}" "${live_version}")"
+  if [[ "${mode}" == "restore" ]]; then
+    TASK_SCHEMA_WORKER_FLOOR_REQUIRED="false"
+    echo "candidate worker rollback floor not required: flyway_version=${live_version}"
+    return
+  fi
+  TASK_SCHEMA_WORKER_FLOOR_REQUIRED="true"
+  echo "candidate worker rollback floor required: backup_flyway=${BACKUP_FLYWAY_SCHEMA_VERSION} live_flyway=${live_version}"
+}
+
 validate_db_runtime_role_env() {
   local runtime_user flyway_user flyway_password
   runtime_user="$(trim_quotes "$(env_value "PROD___SPRING__DATASOURCE__USERNAME")")"
@@ -2048,6 +2099,9 @@ restart_runtime_split_backends_after_candidate_ready() {
       echo "runtime helper backend unhealthy after restart: ${service}" >&2
       return 1
     fi
+    if [[ "${service}" == "back_worker" && "${TASK_SCHEMA_WORKER_FLOOR_REQUIRED}" == "true" ]]; then
+      TASK_SCHEMA_COMPATIBLE_WORKER_READY="true"
+    fi
   done
   return 0
 }
@@ -2066,11 +2120,20 @@ restore_runtime_split_helper_backends_to_active() {
   local service
   while IFS= read -r service; do
     [[ -n "${service}" ]] || continue
+    if [[ "${service}" == "back_worker" && "${TASK_SCHEMA_COMPATIBLE_WORKER_READY}" == "true" ]]; then
+      if ! check_backend_health "back_worker"; then
+        echo "schema-compatible worker preservation failed: back_worker is unhealthy" >&2
+        return 1
+      fi
+      echo "preserving schema-compatible worker image during API rollback: failed_candidate=${failed_candidate}"
+      continue
+    fi
     upsert_runtime_backend_image "${service}" "${active_image}"
     helper_services+=("${service}")
   done < <(runtime_split_helper_backends)
 
   if [[ "${#helper_services[@]}" -eq 0 ]]; then
+    write_backend_release_state "${active_backend}" "${failed_candidate}"
     return 0
   fi
 
@@ -3441,6 +3504,7 @@ if ! check_candidate_backend_health "${next_backend}"; then
   compose stop "${next_backend}" || true
   exit 1
 fi
+resolve_task_schema_worker_floor
 if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then
   echo "runtime helper backend restart failed after ${next_backend} became healthy" >&2
   restore_runtime_split_helper_backends_to_active "${active_backend}" "${next_backend}" || true

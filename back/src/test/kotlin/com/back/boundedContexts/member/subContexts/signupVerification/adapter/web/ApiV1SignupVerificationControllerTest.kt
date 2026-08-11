@@ -74,7 +74,7 @@ class ApiV1SignupVerificationControllerTest : BaseControllerIntegrationTest() {
             assertThat(mailTasks.single().aggregateId).isEqualTo(verification.id)
             assertThat(mailTasks.single().payload).doesNotContain("?token=")
             assertThat(mailTasks.single().payload).contains("#token=")
-            assertThat(mailTasks.single().status).isEqualTo(TaskStatus.COMPLETED)
+            assertThat(mailTasks.single().status).isEqualTo(TaskStatus.PENDING)
 
             val emailVerificationToken = emailVerificationTokenFromMailTask(verification.id)
             assertThat(verification.emailVerificationTokenHash).isNotBlank()

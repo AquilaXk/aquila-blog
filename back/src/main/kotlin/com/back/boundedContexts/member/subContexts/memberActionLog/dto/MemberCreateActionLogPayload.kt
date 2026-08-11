@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.subContexts.memberActionLog.dto
 
 import com.back.global.task.annotation.Task
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.standard.dto.EventPayload
 import com.back.standard.dto.TaskPayload
 import java.util.*
@@ -11,6 +12,8 @@ import java.util.*
  */
 @Task(
     type = "member.createActionLog",
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.PERSONAL,
     label = "회원 액션 로그",
     maxRetries = 4,
     baseDelaySeconds = 60,

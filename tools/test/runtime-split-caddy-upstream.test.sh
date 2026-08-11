@@ -949,6 +949,7 @@ fi
 # ---------------------------------------------------------------------------
 
 rollback_state_dir="${workdir}/rollback-state"
+worker_ready_override="false"
 
 setup_rollback_state() {
   rm -rf "${rollback_state_dir}"
@@ -1035,7 +1036,7 @@ compose_up_force_recreate_with_retry() {
 
 # 컨테이너 health는 실제로 돌고 있는 이미지의 함수다. 후보 이미지는 트래픽을 받으면 죽는다.
 check_backend_health() {
-  [[ "$(run_of "$1")" == "${GOOD_IMAGE}" ]]
+  [[ "$(run_of "$1")" == "${GOOD_IMAGE}" || ( "$1" == "back_worker" && "$(run_of "$1")" == "app:worker-v2" ) ]]
 }
 
 # edge가 서비스하는 컨테이너는 프로덕션 current_caddy_upstream_host()가 정한다.
@@ -1049,6 +1050,7 @@ probe_caddy_http_code() {
   printf '200'
 }
 ROLLBACK_STUBS
+    printf 'TASK_SCHEMA_COMPATIBLE_WORKER_READY=%q\n' "${worker_ready_override}"
     extract_function "${deploy_script}" env_value
     extract_function "${deploy_script}" trim_quotes
     extract_function "${deploy_script}" upsert_env_key
@@ -1135,6 +1137,129 @@ for entry in rollback_to_backend rollback_caddy_route_only; do
     fail "runtime-split ${entry}() rewrote the Caddyfile"
   fi
 done
+
+# candidate worker가 health를 통과한 뒤에는 API/read/admin rollback이 worker image를
+# N-1으로 내리지 않는다. 이전 API의 insert는 DB trigger가 flat v1으로 정규화하고,
+# schema-compatible worker는 v1/v2를 모두 exact decoder로 처리한다.
+split_rollback_caddy="${workdir}/rollback-worker-floor-caddyfile"
+split_rollback_env="${workdir}/rollback-worker-floor-env"
+cp "${caddy_source}" "${split_rollback_caddy}"
+write_split_env "${split_rollback_env}"
+setup_rollback_state
+printf '%s' 'app:worker-v2' > "${rollback_state_dir}/img/back_worker"
+printf '%s' 'app:worker-v2' > "${rollback_state_dir}/run/back_worker"
+worker_ready_override="true"
+run_rollback_scenario "true" "${split_rollback_caddy}" "${split_rollback_env}" \
+  rollback_caddy_route_only back_blue back_green api.example.com
+worker_ready_override="false"
+
+if [ "${harness_status}" -ne 0 ]; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "schema-compatible worker rollback scenario exited ${harness_status}"
+fi
+for helper in back_read back_admin; do
+  if [ "$(running_image "${helper}")" != "app:good" ]; then
+    fail "schema-compatible rollback must restore ${helper} to the previous API image"
+  fi
+done
+if [ "$(running_image back_worker)" != "app:worker-v2" ]; then
+  fail "schema-compatible rollback must not downgrade back_worker"
+fi
+if ! grep -q 'preserving schema-compatible worker image during API rollback' "${harness_stdout}"; then
+  fail "schema-compatible worker preservation must be visible in rollback evidence"
+fi
+
+# outer backup rollback도 DB schema identity가 같을 때만 worker downgrade를 허용한다.
+worker_policy_harness="${workdir}/worker-rollback-policy-harness.sh"
+{
+  printf '%s\n' 'set -euo pipefail'
+  extract_function "${rollback_script}" is_canonical_flyway_schema_version
+  extract_function "${rollback_script}" worker_rollback_mode
+  printf '%s\n' 'worker_rollback_mode "$1" "$2"'
+} > "${worker_policy_harness}"
+
+run_harness "${worker_policy_harness}" 20260811.01 20260811.01
+if [ "${harness_status}" -ne 0 ] || [ "$(cat "${harness_stdout}")" != "restore" ]; then
+  fail "equal backup/live Flyway versions must allow the backed-up worker image"
+fi
+run_harness "${worker_policy_harness}" 20260810.01 20260811.01
+if [ "${harness_status}" -ne 0 ] || [ "$(cat "${harness_stdout}")" != "preserve" ]; then
+  fail "advanced live Flyway version must preserve the current worker image"
+fi
+run_harness "${worker_policy_harness}" unavailable 20260811.01
+if [ "${harness_status}" -ne 0 ] || [ "$(cat "${harness_stdout}")" != "preserve" ]; then
+  fail "unproven Flyway identity must fail closed to current worker preservation"
+fi
+
+worker_policy_prepare_harness="${workdir}/worker-rollback-prepare-harness.sh"
+{
+  printf '%s\n' 'set -euo pipefail'
+  printf '%s\n' 'PRESERVE_CURRENT_WORKER_IMAGE="false"'
+  printf '%s\n' 'CURRENT_WORKER_IMAGE=""'
+  printf '%s\n' 'BACKUP_VERSION="$1"'
+  printf '%s\n' 'LIVE_VERSION="$2"'
+  printf '%s\n' 'WORKER_IMAGE="$3"'
+  cat <<'WORKER_POLICY_STUBS'
+trim_quotes() { printf '%s\n' "$1"; }
+backup_metadata_value() { printf '%s\n' "${BACKUP_VERSION}"; }
+query_live_flyway_schema_version() { printf '%s\n' "${LIVE_VERSION}"; }
+container_image_for_service_any_state() { printf '%s\n' "${WORKER_IMAGE}"; }
+require_digest_image_value() {
+  [[ "$2" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]
+}
+WORKER_POLICY_STUBS
+  extract_function "${rollback_script}" is_canonical_flyway_schema_version
+  extract_function "${rollback_script}" worker_rollback_mode
+  extract_function "${rollback_script}" prepare_worker_rollback_policy
+  printf '%s\n' 'prepare_worker_rollback_policy'
+  printf '%s\n' 'printf "%s|%s\n" "${PRESERVE_CURRENT_WORKER_IMAGE}" "${CURRENT_WORKER_IMAGE}"'
+} > "${worker_policy_prepare_harness}"
+
+schema_worker_digest="registry.example/back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+run_harness "${worker_policy_prepare_harness}" 20260810.01 20260811.01 "${schema_worker_digest}"
+if [ "${harness_status}" -ne 0 ] || ! grep -qF "true|${schema_worker_digest}" "${harness_stdout}"; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "advanced schema rollback must pin the proven current worker digest"
+fi
+
+run_harness "${worker_policy_prepare_harness}" 20260810.01 20260811.01 ""
+if [ "${harness_status}" -eq 0 ]; then
+  fail "advanced schema rollback must fail closed when the current worker digest is missing"
+fi
+if ! grep -q 'current worker image cannot be proven' "${harness_stderr}"; then
+  cat "${harness_stderr}" >&2
+  fail "worker identity failure must have a sanitized diagnostic"
+fi
+
+worker_floor_harness="${workdir}/worker-floor-harness.sh"
+{
+  printf '%s\n' 'set -euo pipefail'
+  printf '%s\n' 'BACKUP_FLYWAY_SCHEMA_VERSION="$1"'
+  printf '%s\n' 'LIVE_VERSION="$2"'
+  printf '%s\n' 'TASK_SCHEMA_WORKER_FLOOR_REQUIRED="false"'
+  printf '%s\n' 'query_live_flyway_schema_version() { printf "%s\\n" "${LIVE_VERSION}"; }'
+  extract_function "${deploy_script}" is_canonical_flyway_schema_version
+  extract_function "${deploy_script}" worker_rollback_mode
+  extract_function "${deploy_script}" resolve_task_schema_worker_floor
+  printf '%s\n' 'resolve_task_schema_worker_floor'
+  printf '%s\n' 'printf "%s\\n" "${TASK_SCHEMA_WORKER_FLOOR_REQUIRED}"'
+} > "${worker_floor_harness}"
+
+run_harness "${worker_floor_harness}" 20260811.01 20260811.01
+if [ "${harness_status}" -ne 0 ] || [ "$(tail -n 1 "${harness_stdout}")" != "false" ]; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "unchanged schema must keep normal worker rollback enabled"
+fi
+run_harness "${worker_floor_harness}" 20260810.01 20260811.01
+if [ "${harness_status}" -ne 0 ] || [ "$(tail -n 1 "${harness_stdout}")" != "true" ]; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "advanced schema must require the candidate worker floor"
+fi
+run_harness "${worker_floor_harness}" unavailable 20260811.01
+if [ "${harness_status}" -ne 0 ] || [ "$(tail -n 1 "${harness_stdout}")" != "true" ]; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "unproven backup schema must fail closed to the candidate worker floor"
+fi
 
 # 단일 런타임 helper(back_worker)는 edge 경로가 아니므로 기존 순서(verify -> 복구)를 유지한다.
 single_rollback_caddy="${workdir}/rollback-single-caddyfile"

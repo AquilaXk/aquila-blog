@@ -6,12 +6,15 @@ import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.revalidate.adapter.event.RevalidateEventListener
+import com.back.global.revalidate.dto.RevalidateHomePayload
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.TaskPayloadEnvelope
 import com.back.global.task.domain.TaskStatus
 import com.back.support.BaseSeededIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import tools.jackson.databind.ObjectMapper
 import java.util.UUID
 
 @org.junit.jupiter.api.DisplayName("RevalidateEventListener 테스트")
@@ -27,6 +30,9 @@ class RevalidateEventListenerTest : BaseSeededIntegrationTest() {
 
     @Autowired
     private lateinit var revalidateEventListener: RevalidateEventListener
+
+    @Autowired
+    private lateinit var objectMapper: ObjectMapper
 
     @Test
     fun `게시글 저장 시 홈과 상세와 사이트맵 revalidate task가 큐에 적재된다`() {
@@ -70,10 +76,12 @@ class RevalidateEventListenerTest : BaseSeededIntegrationTest() {
             Thread.sleep(100)
         }
         assertThat(revalidateTasks).hasSize(3)
-        val payloads = revalidateTasks.map { it.payload }
-        assertThat(payloads.any { it.contains("\"path\":\"/\"") }).isTrue()
-        assertThat(payloads.any { it.contains("\"path\":\"/posts/${post.id}\"") }).isTrue()
-        assertThat(payloads.any { it.contains("\"path\":\"/sitemap.xml\"") }).isTrue()
+        val paths =
+            revalidateTasks.map { task ->
+                val envelope = objectMapper.readValue(task.payload, TaskPayloadEnvelope::class.java)
+                objectMapper.readValue(envelope.payloadJson, RevalidateHomePayload::class.java).path
+            }
+        assertThat(paths).containsExactlyInAnyOrder("/", "/posts/${post.id}", "/sitemap.xml")
         assertThat(revalidateTasks.map { it.aggregateId }).containsOnly(post.id)
         assertThat(revalidateTasks.map { it.status }).allMatch { status ->
             status in listOf(TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.COMPLETED)

@@ -52,6 +52,46 @@ container_image_for_service() {
   docker inspect --format '{{.Config.Image}}' "${container_id}" 2>/dev/null | tr -d '\r' | head -n 1 || true
 }
 
+is_canonical_flyway_schema_version() {
+  [[ "$1" =~ ^[1-9][0-9]*(\.[0-9]+)*$ ]]
+}
+
+resolve_prod_db_name() {
+  local db_name
+  db_name="$(read_key_from_file "custom.prod.dbName" "${ENV_FILE}")"
+  if [[ -n "${db_name}" ]]; then
+    echo "${db_name}"
+    return
+  fi
+  db_name="$(read_key_from_file "CUSTOM_PROD_DBNAME" "${ENV_FILE}")"
+  if [[ -n "${db_name}" ]]; then
+    echo "${db_name}"
+    return
+  fi
+  local db_base_name
+  db_base_name="$(read_key_from_file "DB_BASE_NAME" "${ENV_FILE}")"
+  echo "${db_base_name:-blog}_prod"
+}
+
+query_flyway_schema_version() {
+  local db_name version
+  db_name="$(resolve_prod_db_name)"
+  if ! version="$(
+    docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/docker-compose.prod.yml" \
+      exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 \
+      -c "SELECT version FROM flyway_schema_history WHERE success = true AND version IS NOT NULL ORDER BY installed_rank DESC LIMIT 1" \
+      2>/dev/null | tr -d '\r' | tail -n 1
+  )"; then
+    echo "unavailable"
+    return
+  fi
+  if ! is_canonical_flyway_schema_version "${version}"; then
+    echo "unavailable"
+    return
+  fi
+  echo "${version}"
+}
+
 mkdir -p "${BACKUP_DIR}"
 
 # The restorable file set must describe the last deploy that passed every post-deploy
@@ -111,12 +151,17 @@ back_green_image="$(container_image_for_service "back_green" || true)"
 back_read_image="$(container_image_for_service "back_read" || true)"
 back_admin_image="$(container_image_for_service "back_admin" || true)"
 back_worker_image="$(container_image_for_service "back_worker" || true)"
+flyway_schema_version="$(query_flyway_schema_version)"
+if [[ "${flyway_schema_version}" == "unavailable" ]]; then
+  echo "deploy backup: Flyway schema version unavailable; worker rollback will preserve current image" >&2
+fi
 compose_image_keys=(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE UPTIME_KUMA_IMAGE PROMETHEUS_IMAGE ALERTMANAGER_IMAGE POSTGRES_EXPORTER_IMAGE GRAFANA_IMAGE LOKI_IMAGE PROMTAIL_IMAGE NODE_RUNTIME_IMAGE DB_IMAGE REDIS_IMAGE MINIO_IMAGE)
 
 {
   echo "created_at=${TIMESTAMP}"
-  echo "manifest_version=3"
+  echo "manifest_version=4"
   echo "secret_files_copied=false"
+  echo "flyway_schema_version=${flyway_schema_version}"
   echo "git_head=$(git -C "${SCRIPT_DIR}/../.." rev-parse --short HEAD 2>/dev/null || echo unknown)"
   # git_head is the commit currently checked out on the server, which after a failed
   # deploy is the commit that failed. restore_source/baseline_* describe the commit the

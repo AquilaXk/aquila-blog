@@ -777,6 +777,14 @@ jobs:
           chmod +x deploy/homeserver/create_deploy_backup.sh
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created (pre-checkout): ${BACKUP_DIR}"
+          BACKUP_FLYWAY_SCHEMA_VERSION="$(
+            awk -F= '$1 == "flyway_schema_version" { value = substr($0, index($0, "=") + 1); gsub(/\r/, "", value); print value }' \
+              "${BACKUP_DIR}/metadata.env" 2>/dev/null | tail -n 1
+          )"
+          if [ -z "${BACKUP_FLYWAY_SCHEMA_VERSION}" ]; then
+            BACKUP_FLYWAY_SCHEMA_VERSION="unavailable"
+          fi
+          echo "backup Flyway schema identity: ${BACKUP_FLYWAY_SCHEMA_VERSION}"
           # The script's own fallback notice goes to stderr and its stdout is the backup
           # path, so the annotation is raised here instead: a run that keeps falling back
           # would silently pin rollback to the drifting working tree.
@@ -1308,7 +1316,7 @@ jobs:
           ensure_monitoring_bind_mount_permissions
 
           RUNTIME_ENV_MATERIALIZED="true"
-          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
+          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" BACKUP_FLYWAY_SCHEMA_VERSION="${BACKUP_FLYWAY_SCHEMA_VERSION}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
             rollback_and_exit "blue_green_deploy_failed"
           fi
 

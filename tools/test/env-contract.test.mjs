@@ -2733,7 +2733,7 @@ test("rollback keeps the current materialized keyring and only arms after blue-g
   const rollbackBlock = workflow.slice(rollbackStart, rollbackEnd)
   const trapGate = workflow.slice(workflow.indexOf("rollback_from_backup_if_needed() {"), workflow.indexOf("./deploy/homeserver/prune_external_backups.sh"))
   const materializedIndex = workflow.indexOf('RUNTIME_ENV_MATERIALIZED="true"')
-  const blueGreenIndex = workflow.indexOf('if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" RUNTIME_SPLIT_ENABLED=')
+  const blueGreenIndex = workflow.indexOf("./deploy/homeserver/blue_green_deploy.sh; then", materializedIndex)
 
   for (const example of [sourceExample, backExample]) {
     assert.match(example, /remove all three previous entries from authoritative HOME_SERVER_ENV/i)
@@ -3338,7 +3338,10 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   assert.match(activeHelperStartBlock, /if ! check_backend_health "\$\{service\}"; then/)
   assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{candidate_image\}"/)
   assert.match(helperRestartBlock, /if ! check_backend_health "\$\{service\}"; then/)
+  assert.match(helperRestartBlock, /TASK_SCHEMA_COMPATIBLE_WORKER_READY="true"/)
+  assert.match(helperRestartBlock, /TASK_SCHEMA_WORKER_FLOOR_REQUIRED/)
   assert.match(helperRestartBlock, /restore_runtime_split_helper_backends_to_active\(\)/)
+  assert.match(helperRestartBlock, /preserving schema-compatible worker image during API rollback/)
   assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
   assert.match(helperRestartBlock, /write_backend_release_state "\$\{active_backend\}" "\$\{failed_candidate\}"/)
   assert.match(rollbackBlock, /if ! restore_runtime_split_helper_backends_to_active "\$\{rollback_backend\}" "\$\{inactive_backend\}"; then/)
@@ -3364,6 +3367,9 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   assert.match(deployScript, /if ! check_candidate_backend_health "\$\{next_backend\}"; then/)
   assert.match(deployScript, /candidate backend health failed before cutover: \$\{next_backend\}/)
   assert(helperRestartIndex > candidateHealthIndex, "runtime split helpers must restart after candidate health with explicit failure handling")
+  const workerFloorIndex = deployScript.indexOf("resolve_task_schema_worker_floor", candidateHealthIndex)
+  assert(workerFloorIndex > candidateHealthIndex, "worker rollback floor must resolve after candidate Flyway health")
+  assert(workerFloorIndex < helperRestartIndex, "worker rollback floor must resolve before candidate worker restart")
   assert(postRestartHelperDnsIndex > helperRestartIndex, "helper DNS checks must run after candidate-backed helper startup")
   assert(rollbackRouteIndex >= 0, "rollback must switch caddy route")
   assert(rollbackRestoreIndex > rollbackRouteIndex, "rollback helper recovery must run after route rollback")
@@ -3870,12 +3876,27 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   assert.match(backupScript, /cp -R "\$\{BASELINE_DIR\}\/caddy" "\$\{BACKUP_DIR\}\/caddy"/)
   assert.match(backupScript, /echo "restore_source=\$\{restore_source\}"/)
   assert.match(backupScript, /echo "baseline_deploy_sha=\$\(read_key_from_file "deploy_sha" "\$\{BASELINE_DIR\}\/metadata\.env"\)"/)
+  assert.match(backupScript, /query_flyway_schema_version\(\) \{/)
+  assert.match(backupScript, /WHERE success = true AND version IS NOT NULL ORDER BY installed_rank DESC LIMIT 1/)
+  assert.match(backupScript, /echo "flyway_schema_version=\$\{flyway_schema_version\}"/)
+  assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="\$\(/)
+  assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="unavailable"/)
+  assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="\$\{BACKUP_FLYWAY_SCHEMA_VERSION\}"/)
   // .active_backend는 배포 산출물이 아니라 지금 트래픽을 받는 색이므로 워크트리에서 온다.
   assert.match(backupScript, /if \[\[ -f "\$\{STATE_FILE\}" \]\]; then\s*\n\s*cp "\$\{STATE_FILE\}" "\$\{BACKUP_DIR\}\/\.active_backend"/)
   assert.doesNotMatch(backupScript, /for file in docker-compose\.prod\.yml \.active_backend; do/)
 
   // rollback은 어느 커밋으로 되돌리는지 로그로 밝힌다.
   assert.match(rollbackScript, /log_backup_restore_provenance\(\) \{/)
+  assert.match(rollbackScript, /worker_rollback_mode\(\) \{/)
+  assert.match(rollbackScript, /prepare_worker_rollback_policy\(\) \{/)
+  assert.match(rollbackScript, /PRESERVE_CURRENT_WORKER_IMAGE="true"/)
+  const workerPolicyInvocation = rollbackScript.lastIndexOf("\nprepare_worker_rollback_policy\n")
+  assert.notEqual(workerPolicyInvocation, -1, "rollback must invoke the worker schema policy")
+  assert(
+    workerPolicyInvocation < rollbackScript.indexOf("\nrestore_compose_image_metadata\n"),
+    "worker schema compatibility must be fixed before backup image metadata is restored",
+  )
   assert.match(rollbackScript, /rollback restore point: source=\$\{restore_source:-worktree\} baseline_deploy_sha=\$\{deploy_sha:-unknown\} baseline_created_at=\$\{created_at:-unknown\}/)
   assert(
     rollbackScript.indexOf('echo "rollback from backup: ${BACKUP_DIR}"') <
@@ -3927,7 +3948,11 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
     const stubDir = path.join(workDir, "bin")
     mkdirSync(stubDir)
     // 이미지 메타데이터 수집만 docker를 쓴다. 복원 기준점 로직은 순수 파일 복사다.
-    writeFileSync(path.join(stubDir, "docker"), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
+    writeFileSync(
+      path.join(stubDir, "docker"),
+      "#!/bin/sh\ncase \"$*\" in *flyway_schema_history*) printf '%s\\n' '20260810.01' ;; esac\nexit 0\n",
+      { mode: 0o755 },
+    )
 
     for (const script of ["create_deploy_backup.sh", "record_deploy_baseline.sh"]) {
       writeFileSync(
@@ -4031,6 +4056,7 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
     const metadata = withBaseline.readMetadata(backupDir)
 
     assert.equal(metadata.restore_source, "baseline")
+    assert.equal(metadata.flyway_schema_version, "20260810.01")
     assert.equal(metadata.baseline_deploy_sha, withBaseline.successSha)
     // git_head는 실패해서 rollback된 커밋이고, 복원 기준점은 그 이전 성공 배포다.
     // 둘이 같아지면 metadata만으로는 무엇을 복원하는지 알 수 없다.
@@ -4052,6 +4078,7 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
     const metadata = withoutBaseline.readMetadata(backupDir)
 
     assert.equal(metadata.restore_source, "worktree")
+    assert.equal(metadata.flyway_schema_version, "20260810.01")
     assert.equal(metadata.baseline_deploy_sha, undefined)
     assert.match(stderr, /no successful-deploy baseline at .*\.deploy-baseline; falling back to server working tree files/)
     assert.equal(readFileSync(path.join(backupDir, "docker-compose.prod.yml"), "utf8"), driftedCompose)

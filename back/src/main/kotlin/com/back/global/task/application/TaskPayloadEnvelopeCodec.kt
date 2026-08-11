@@ -2,6 +2,7 @@ package com.back.global.task.application
 
 import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.standard.dto.ExpiringTaskPayload
+import com.back.standard.dto.LegacyTaskPayload
 import com.back.standard.dto.TaskPayload
 import org.springframework.stereotype.Component
 import tools.jackson.core.StreamReadFeature
@@ -84,6 +85,9 @@ class TaskPayloadEnvelopeCodec(
             entry.decoderFor(envelope.schemaVersion)
                 ?: quarantine(TaskQuarantineReason.UNKNOWN_SCHEMA_VERSION)
         val payload = decodePayload(envelope.payloadJson, decoder)
+        if (!entry.payloadClass.isInstance(payload)) {
+            quarantine(TaskQuarantineReason.MALFORMED_PAYLOAD)
+        }
         validatePayloadMetadata(payload, storedMetadata)
         validateExpiration(envelope, payload, entry.sensitivity)
         return payload
@@ -118,11 +122,13 @@ class TaskPayloadEnvelopeCodec(
         decoder: TaskPayloadDecoder,
     ): TaskPayload =
         try {
-            objectMapper
-                .readerFor(decoder.payloadClass)
-                .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                .with(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-                .readValue(payloadJson)
+            val decoded: TaskPayload =
+                objectMapper
+                    .readerFor(decoder.payloadClass)
+                    .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .with(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                    .readValue(payloadJson)
+            if (decoded is LegacyTaskPayload) decoded.toCurrentTaskPayload() else decoded
         } catch (_: Exception) {
             quarantine(TaskQuarantineReason.MALFORMED_PAYLOAD)
         }

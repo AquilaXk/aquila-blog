@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
 import java.time.Instant
 
 data class TaskDlqReplayResult(
@@ -25,6 +26,7 @@ class TaskDlqReplayService(
     private val taskQueueRepository: TaskQueueRepositoryPort,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
+    private val clock: Clock,
     private val meterRegistry: MeterRegistry? = null,
 ) {
     @Transactional
@@ -35,7 +37,7 @@ class TaskDlqReplayService(
     ): TaskDlqReplayResult {
         val safeLimit = limit.coerceIn(1, 200)
         val normalizedTaskType = taskType?.trim()?.takeIf { it.isNotBlank() }
-        val now = Instant.now()
+        val now = Instant.now(clock)
         val failedTasks =
             if (normalizedTaskType == null) {
                 taskQueueRepository.findByStatusOrderByModifiedAtDesc(TaskStatus.FAILED, PageRequest.of(0, safeLimit))
@@ -61,7 +63,7 @@ class TaskDlqReplayService(
         failedTasks.forEach { task ->
             val entry = taskHandlerRegistry.getEntry(task.taskType)
             if (entry == null) {
-                task.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name)
+                task.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
                 taskQueueRepository.save(task)
                 return@forEach
             }
@@ -78,18 +80,11 @@ class TaskDlqReplayService(
                     entry = entry,
                 )
             } catch (exception: TaskPayloadQuarantineException) {
-                task.markAsQuarantined(exception.reason.name)
+                task.markAsQuarantined(exception.reason.name, now)
                 taskQueueRepository.save(task)
                 return@forEach
             }
-            task.status = TaskStatus.PENDING
-            task.nextRetryAt = now
-            task.errorMessage = "manual-dlq-replay@${now.epochSecond}"
-            if (resetRetryCount) {
-                task.retryCount = 0
-            } else {
-                task.retryCount = task.retryCount.coerceAtMost(task.maxRetries - 1)
-            }
+            task.replayFailed(now, resetRetryCount)
             taskQueueRepository.save(task)
             replayedIds += task.id
             val replayCounter =

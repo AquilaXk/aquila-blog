@@ -17,6 +17,7 @@ internal object TaskAtomicInsertSql {
             aggregate_id,
             task_type,
             payload,
+            payload_expires_at,
             status,
             retry_count,
             max_retries,
@@ -25,7 +26,7 @@ internal object TaskAtomicInsertSql {
             execution_lease_token,
             created_at,
             modified_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT (uid) DO NOTHING
         """
 
@@ -47,6 +48,7 @@ class TaskAtomicInsertStore(
                 task.aggregateId,
                 task.taskType,
                 task.payload,
+                task.payloadExpiresAt?.let(Timestamp::from),
                 task.status.name,
                 task.retryCount,
                 task.maxRetries,

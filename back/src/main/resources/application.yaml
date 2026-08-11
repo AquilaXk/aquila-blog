@@ -281,6 +281,10 @@ custom:
     metrics:
       refreshEnabled: ${CUSTOM__TASK__METRICS__REFRESH_ENABLED:true}
       refreshFixedDelayMs: ${CUSTOM__TASK__METRICS__REFRESH_FIXED_DELAY_MS:60000}
+    retention:
+      cleanupBatchSize: ${CUSTOM__TASK__RETENTION__CLEANUP_BATCH_SIZE:100}
+      cleanupMaxBatches: ${CUSTOM__TASK__RETENTION__CLEANUP_MAX_BATCHES:10}
+      cleanupFixedDelayMs: ${CUSTOM__TASK__RETENTION__CLEANUP_FIXED_DELAY_MS:3600000}
   runtime:
     worker-enabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
     apiMode: ${CUSTOM__RUNTIME__API_MODE:all}

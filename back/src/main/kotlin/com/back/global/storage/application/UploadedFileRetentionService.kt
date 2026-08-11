@@ -101,8 +101,31 @@ class UploadedFileRetentionService(
         )
     }
 
+    fun syncPostAttachmentKeys(
+        postId: Long,
+        currentImageObjectKeys: Collection<String>,
+        previousImageObjectKeys: Collection<String>,
+        currentFileObjectKeys: Collection<String>,
+        previousFileObjectKeys: Collection<String>,
+    ) {
+        postAttachmentRetentionService.syncPostAttachmentKeys(
+            postId = postId,
+            currentImageObjectKeys = currentImageObjectKeys,
+            previousImageObjectKeys = previousImageObjectKeys,
+            currentFileObjectKeys = currentFileObjectKeys,
+            previousFileObjectKeys = previousFileObjectKeys,
+        )
+    }
+
     fun scheduleDeletedPostAttachments(content: String) {
         postAttachmentRetentionService.scheduleDeletedPostAttachments(content)
+    }
+
+    fun scheduleDeletedPostAttachmentKeys(
+        imageObjectKeys: Collection<String>,
+        fileObjectKeys: Collection<String>,
+    ) {
+        postAttachmentRetentionService.scheduleDeletedPostAttachmentKeys(imageObjectKeys, fileObjectKeys)
     }
 
     fun restoreDeletedPostAttachments(

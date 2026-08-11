@@ -39,6 +39,28 @@ class PostAttachmentRetentionService(
     }
 
     @Transactional
+    fun syncPostAttachmentKeys(
+        postId: Long,
+        currentImageObjectKeys: Collection<String>,
+        previousImageObjectKeys: Collection<String>,
+        currentFileObjectKeys: Collection<String>,
+        previousFileObjectKeys: Collection<String>,
+    ) {
+        syncPostAttachmentKeys(
+            postId = postId,
+            currentKeys = currentImageObjectKeys.toSet(),
+            previousKeys = previousImageObjectKeys.toSet(),
+            purpose = UploadedFilePurpose.POST_IMAGE,
+        )
+        syncPostAttachmentKeys(
+            postId = postId,
+            currentKeys = currentFileObjectKeys.toSet(),
+            previousKeys = previousFileObjectKeys.toSet(),
+            purpose = UploadedFilePurpose.POST_FILE,
+        )
+    }
+
+    @Transactional
     fun scheduleDeletedPostAttachments(content: String) {
         scheduleDeletionForContent(
             purpose = UploadedFilePurpose.POST_IMAGE,
@@ -47,6 +69,21 @@ class PostAttachmentRetentionService(
         scheduleDeletionForContent(
             purpose = UploadedFilePurpose.POST_FILE,
             keys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(content),
+        )
+    }
+
+    @Transactional
+    fun scheduleDeletedPostAttachmentKeys(
+        imageObjectKeys: Collection<String>,
+        fileObjectKeys: Collection<String>,
+    ) {
+        scheduleDeletionForContent(
+            purpose = UploadedFilePurpose.POST_IMAGE,
+            keys = imageObjectKeys.toSet(),
+        )
+        scheduleDeletionForContent(
+            purpose = UploadedFilePurpose.POST_FILE,
+            keys = fileObjectKeys.toSet(),
         )
     }
 

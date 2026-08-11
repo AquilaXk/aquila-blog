@@ -7,3 +7,7 @@ interface TaskPayload : Payload
 interface ExpiringTaskPayload : TaskPayload {
     val expiresAt: Instant
 }
+
+interface LegacyTaskPayload : TaskPayload {
+    fun toCurrentTaskPayload(): TaskPayload
+}

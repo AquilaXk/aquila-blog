@@ -1,7 +1,9 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.task.annotation.Task
 import com.back.global.task.annotation.TaskPayloadSensitivity
+import com.back.standard.dto.LegacyTaskPayload
 import com.back.standard.dto.TaskPayload
 import java.util.UUID
 
@@ -9,6 +11,7 @@ import java.util.UUID
     type = PostWriteSideEffectPayload.TASK_TYPE,
     schemaVersion = 2,
     sensitivity = TaskPayloadSensitivity.PERSONAL,
+    legacyPayloadClass = PostWriteSideEffectPayloadV1::class,
     label = "게시글 쓰기 후속 작업",
     maxRetries = 5,
     baseDelaySeconds = 10,
@@ -16,6 +19,25 @@ import java.util.UUID
     maxDelaySeconds = 300,
 )
 data class PostWriteSideEffectPayload(
+    override val uid: UUID,
+    override val aggregateType: String,
+    override val aggregateId: Long,
+    val postId: Long,
+    val attachmentKeys: PostAttachmentObjectKeySnapshot,
+    val beforeTags: List<String>,
+    val afterTags: List<String>,
+    val cacheInvalidationTargets: Set<PostReadCacheInvalidationTarget>,
+    val evictReason: String,
+    val recommendationAction: PostRecommendationSideEffect,
+    val domainEventType: String?,
+    val domainEventJson: String?,
+) : TaskPayload {
+    companion object {
+        const val TASK_TYPE = "post.write.side-effect"
+    }
+}
+
+data class PostWriteSideEffectPayloadV1(
     override val uid: UUID,
     override val aggregateType: String,
     override val aggregateId: Long,
@@ -30,9 +52,69 @@ data class PostWriteSideEffectPayload(
     val recommendationAction: PostRecommendationSideEffect,
     val domainEventType: String?,
     val domainEventJson: String?,
-) : TaskPayload {
+) : LegacyTaskPayload {
+    override fun toCurrentTaskPayload(): TaskPayload =
+        PostWriteSideEffectPayload(
+            uid = uid,
+            aggregateType = aggregateType,
+            aggregateId = aggregateId,
+            postId = postId,
+            attachmentKeys = PostAttachmentObjectKeySnapshot.fromContents(previousContent, currentContent, deletedContent),
+            beforeTags = beforeTags,
+            afterTags = afterTags,
+            cacheInvalidationTargets = cacheInvalidationTargets,
+            evictReason = evictReason,
+            recommendationAction = recommendationAction,
+            domainEventType = domainEventType,
+            domainEventJson = domainEventJson,
+        )
+}
+
+enum class PostAttachmentTaskAction {
+    NONE,
+    SYNC,
+    DELETE,
+}
+
+data class PostAttachmentObjectKeySnapshot(
+    val action: PostAttachmentTaskAction,
+    val currentImageObjectKeys: List<String>,
+    val previousImageObjectKeys: List<String>,
+    val currentFileObjectKeys: List<String>,
+    val previousFileObjectKeys: List<String>,
+    val deletedImageObjectKeys: List<String>,
+    val deletedFileObjectKeys: List<String>,
+) {
     companion object {
-        const val TASK_TYPE = "post.write.side-effect"
+        fun fromContents(
+            previousContent: String?,
+            currentContent: String?,
+            deletedContent: String?,
+        ): PostAttachmentObjectKeySnapshot {
+            check(currentContent == null || deletedContent == null) {
+                "Post attachment task cannot sync and delete in one payload"
+            }
+            return PostAttachmentObjectKeySnapshot(
+                action =
+                    when {
+                        currentContent != null -> PostAttachmentTaskAction.SYNC
+                        deletedContent != null -> PostAttachmentTaskAction.DELETE
+                        else -> PostAttachmentTaskAction.NONE
+                    },
+                currentImageObjectKeys = extractImageKeys(currentContent),
+                previousImageObjectKeys = extractImageKeys(previousContent),
+                currentFileObjectKeys = extractFileKeys(currentContent),
+                previousFileObjectKeys = extractFileKeys(previousContent),
+                deletedImageObjectKeys = extractImageKeys(deletedContent),
+                deletedFileObjectKeys = extractFileKeys(deletedContent),
+            )
+        }
+
+        private fun extractImageKeys(content: String?): List<String> =
+            content?.let(UploadedFileUrlCodec::extractImageObjectKeysFromContent)?.sorted().orEmpty()
+
+        private fun extractFileKeys(content: String?): List<String> =
+            content?.let(UploadedFileUrlCodec::extractFileObjectKeysFromContent)?.sorted().orEmpty()
     }
 }
 

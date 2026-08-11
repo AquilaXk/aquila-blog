@@ -45,7 +45,7 @@ class TaskDlqReplayServiceTest {
                 PageRequest.of(0, 10),
             ),
         ).thenReturn(listOf(valid, malformed, unknown, expired))
-        val service = TaskDlqReplayService(repository, registry, codec)
+        val service = TaskDlqReplayService(repository, registry, codec, Clock.fixed(now, ZoneOffset.UTC))
 
         val result = service.replayFailedTasks(taskType = null, limit = 10, resetRetryCount = true)
 

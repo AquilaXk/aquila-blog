@@ -21,19 +21,16 @@ class RevalidateEventListener(
     // revalidate 큐 적재 실패가 본 요청 트랜잭션을 깨지 않도록 AFTER_COMMIT에서 처리한다.
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostWrittenEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostModifiedEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostDeletedEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
 

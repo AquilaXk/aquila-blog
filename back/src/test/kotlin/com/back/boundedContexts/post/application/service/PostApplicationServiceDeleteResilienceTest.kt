@@ -327,7 +327,7 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // then
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
-        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachmentKeys(emptyList(), emptyList())
         then(postRecommendFeatureStoreService).should().evict(22)
     }
 
@@ -355,7 +355,7 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // then
         verifyNoInteractions(cacheManager)
-        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachmentKeys(emptyList(), emptyList())
         then(postRecommendFeatureStoreService).should().evict(23)
     }
 
@@ -390,7 +390,7 @@ class PostApplicationServiceDeleteResilienceTest {
 
         // then
         verifyNoInteractions(cacheManager)
-        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachments(snapshot.content)
+        then(uploadedFileRetentionService).should().scheduleDeletedPostAttachmentKeys(emptyList(), emptyList())
         then(postRecommendFeatureStoreService).should().evict(24)
     }
 

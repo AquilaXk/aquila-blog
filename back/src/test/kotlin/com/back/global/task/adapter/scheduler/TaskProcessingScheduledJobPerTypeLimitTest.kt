@@ -364,6 +364,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                 taskRepository = taskRepository,
                 taskHandlerRegistry = taskHandlerRegistry,
                 taskPayloadEnvelopeCodec = payloadEnvelopeCodec(),
+                clock = Clock.systemUTC(),
                 transactionTemplate = TransactionTemplate(NoopTransactionManager()),
                 batchSize = 50,
                 processingTimeoutSeconds = 900,

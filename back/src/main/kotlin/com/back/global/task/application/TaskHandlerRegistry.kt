@@ -50,6 +50,7 @@ data class TaskHandlerEntry(
             retryPolicy: TaskRetryPolicy,
             schemaVersion: Int,
             sensitivity: TaskPayloadSensitivity,
+            legacyPayloadClass: Class<out TaskPayload> = payloadClass,
         ): TaskHandlerEntry =
             TaskHandlerEntry(
                 taskType = taskType,
@@ -61,7 +62,7 @@ data class TaskHandlerEntry(
                 decoders =
                     mapOf(
                         TaskHandlerRegistry.LEGACY_TASK_PAYLOAD_SCHEMA_VERSION to
-                            TaskPayloadDecoder(TaskHandlerRegistry.LEGACY_TASK_PAYLOAD_SCHEMA_VERSION, payloadClass),
+                            TaskPayloadDecoder(TaskHandlerRegistry.LEGACY_TASK_PAYLOAD_SCHEMA_VERSION, legacyPayloadClass),
                         schemaVersion to TaskPayloadDecoder(schemaVersion, payloadClass),
                     ),
             )

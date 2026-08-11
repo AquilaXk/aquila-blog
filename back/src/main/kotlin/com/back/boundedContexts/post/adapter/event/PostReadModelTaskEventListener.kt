@@ -44,7 +44,6 @@ class PostReadModelTaskEventListener(
 ) {
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostWrittenEvent) =
         enqueueFollowupTasks(
@@ -59,7 +58,6 @@ class PostReadModelTaskEventListener(
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostModifiedEvent) =
         enqueueFollowupTasks(
@@ -74,7 +72,6 @@ class PostReadModelTaskEventListener(
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostDeletedEvent) =
         enqueueFollowupTasks(
@@ -89,7 +86,6 @@ class PostReadModelTaskEventListener(
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
-        fallbackExecution = true,
     )
     fun handle(event: PostAccountDeletionDeletedEvent) =
         enqueueFollowupTasks(
@@ -120,7 +116,6 @@ class PostReadModelTaskEventListener(
         runCatching {
             postSearchIndexSyncService.sync(
                 postId = payload.postId,
-                fallbackTags = payload.fallbackTags,
                 forceClear = payload.forceClear,
             )
         }.onSuccess {
@@ -173,7 +168,6 @@ class PostReadModelTaskEventListener(
                         aggregateType = aggregateType,
                         aggregateId = postId,
                         postId = postId,
-                        fallbackTags = afterTags,
                         forceClear = forceClearSearchIndex,
                         enqueuedAtEpochMs = System.currentTimeMillis(),
                     ),

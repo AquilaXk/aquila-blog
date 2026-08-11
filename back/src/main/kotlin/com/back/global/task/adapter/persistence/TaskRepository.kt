@@ -46,6 +46,43 @@ interface TaskRepository :
         limit: Int,
     ): List<Task>
 
+    @Query(
+        value = """
+            SELECT *
+            FROM task
+            WHERE status = 'FAILED'
+              AND payload_redacted_at IS NULL
+              AND payload_purge_after <= :now
+              AND execution_lease_token IS NULL
+            ORDER BY payload_purge_after ASC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+        """,
+        nativeQuery = true,
+    )
+    fun findFailedPayloadsForRedactionWithLock(
+        now: Instant,
+        limit: Int,
+    ): List<Task>
+
+    @Query(
+        value = """
+            SELECT *
+            FROM task
+            WHERE status IN ('COMPLETED', 'FAILED', 'QUARANTINED')
+              AND row_purge_after <= :now
+              AND execution_lease_token IS NULL
+            ORDER BY row_purge_after ASC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+        """,
+        nativeQuery = true,
+    )
+    fun findTerminalRowsForPurgeWithLock(
+        now: Instant,
+        limit: Int,
+    ): List<Task>
+
     override fun countByStatus(status: TaskStatus): Long
 
     override fun countByStatusAndNextRetryAtLessThanEqual(

@@ -21,6 +21,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -49,6 +50,7 @@ class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
+    private val clock: Clock,
     private val transactionTemplate: TransactionTemplate,
     @param:Value("\${custom.task.processor.batchSize:50}")
     private val batchSize: Int,
@@ -311,18 +313,20 @@ class TaskProcessingScheduledJob(
     }
 
     private fun recoverStaleProcessingTasks(limit: Int) {
-        val stuckBefore = Instant.now().minusSeconds(processingTimeoutSeconds)
+        val now = Instant.now(clock)
+        val stuckBefore = now.minusSeconds(processingTimeoutSeconds)
         val recoveredTaskIds =
             transactionTemplate.execute {
                 val staleTasks = taskRepository.findStaleProcessingTasksWithLock(stuckBefore, limit)
                 staleTasks.forEach {
                     val entry = taskHandlerRegistry.getEntry(it.taskType)
                     if (entry == null) {
-                        it.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name)
+                        it.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
                     } else {
                         it.recoverFromStuckProcessing(
                             "Recovered stale processing task",
                             entry.retryPolicy,
+                            now,
                         )
                     }
                 }
@@ -393,12 +397,13 @@ class TaskProcessingScheduledJob(
             recordTaskDuration(context.taskType, startedAtNanos)
         } catch (exception: Exception) {
             val rootCause = exception.cause ?: exception
-            logger.error("Task failed: {} (type={})", taskId, context.taskType, rootCause)
+            val errorType = rootCause::class.qualifiedName ?: "TaskHandlerFailure"
+            logger.error("Task failed: {} (type={}, errorType={})", taskId, context.taskType, errorType)
             markTaskFailed(
                 taskId,
                 context.leaseToken,
                 context.taskType,
-                rootCause.message ?: rootCause::class.simpleName,
+                errorType,
             )
             recordTaskDuration(context.taskType, startedAtNanos)
         }
@@ -432,7 +437,7 @@ class TaskProcessingScheduledJob(
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (!task.isCurrentExecution(leaseToken)) return@execute
-            task.markAsQuarantined(reason.name)
+            task.markAsQuarantined(reason.name, Instant.now(clock))
             quarantined = true
         }
         if (quarantined) {
@@ -449,7 +454,7 @@ class TaskProcessingScheduledJob(
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (!task.isCurrentExecution(leaseToken)) return@execute
-            task.markAsCompleted()
+            task.markAsCompleted(Instant.now(clock))
             task.errorMessage = null
             completed = true
         }
@@ -468,7 +473,7 @@ class TaskProcessingScheduledJob(
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (!task.isCurrentExecution(leaseToken)) return@execute
             task.errorMessage = errorMessage
-            task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(taskType))
+            task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(taskType), Instant.now(clock))
             if (task.status == TaskStatus.FAILED) {
                 logger.error(
                     "task_dead_lettered taskId={} taskType={} retryCount={} maxRetries={}",

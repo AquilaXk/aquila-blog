@@ -36,7 +36,7 @@ import java.util.UUID
 
 class PostReadModelTaskEventListenerTest {
     @Test
-    @DisplayName("같은 source event는 task type별 deterministic task UID를 enqueue한다")
+    @DisplayName("같은 source event는 task type별 deterministic UID로 한 번만 enqueue한다")
     fun `same source event enqueues deterministic task uid per task type`() {
         val repository = RecordingTaskQueueRepository()
         val listener =
@@ -48,18 +48,13 @@ class PostReadModelTaskEventListenerTest {
         listener.handle(event)
         listener.handle(event)
 
-        val firstDelivery = repository.savedTasks.take(3)
-        val secondDelivery = repository.savedTasks.drop(3)
-        assertThat(firstDelivery).hasSize(3)
-        assertThat(secondDelivery).hasSize(3)
-        assertThat(firstDelivery.map { it.taskType }).containsExactly(
+        assertThat(repository.savedTasks).hasSize(3)
+        assertThat(repository.savedTasks.map { it.taskType }).containsExactly(
             "post.search-index.sync",
             "post.search-engine.mirror",
             "post.read.prewarm",
         )
-        assertThat(secondDelivery.map { it.taskType }).containsExactlyElementsOf(firstDelivery.map { it.taskType })
-        assertThat(secondDelivery.map { it.uid }).containsExactlyElementsOf(firstDelivery.map { it.uid })
-        assertThat(firstDelivery.map { it.uid }.toSet()).hasSize(3)
+        assertThat(repository.savedTasks.map { it.uid }.toSet()).hasSize(3)
     }
 
     @Test

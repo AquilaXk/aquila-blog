@@ -3,6 +3,7 @@ package com.back.global.task.application
 import com.back.global.task.application.port.output.TaskQueueInsertPort
 import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.domain.Task
+import com.back.standard.dto.ExpiringTaskPayload
 import com.back.standard.dto.TaskPayload
 import org.springframework.stereotype.Service
 
@@ -25,6 +26,7 @@ class TaskFacade(
                 entry.taskType,
                 taskPayloadEnvelopeCodec.encode(payload, entry),
                 entry.retryPolicy.maxRetries,
+                (payload as? ExpiringTaskPayload)?.expiresAt,
             ),
         )
     }

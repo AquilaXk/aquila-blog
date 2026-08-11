@@ -41,11 +41,19 @@ class PostWriteSideEffectHandler(
 
     @TaskHandler
     fun handle(payload: PostWriteSideEffectPayload) {
-        val command = payload.toCommand()
-        val failures = handle(command).toMutableList()
+        val failures =
+            handle(
+                postId = payload.postId,
+                attachmentKeys = payload.attachmentKeys,
+                beforeTags = payload.beforeTags,
+                afterTags = payload.afterTags,
+                cacheInvalidationScope = PostReadCacheInvalidationScope.fromTargets(payload.cacheInvalidationTargets),
+                evictReason = payload.evictReason,
+                recommendationAction = payload.recommendationAction,
+            ).toMutableList()
         payload.toDomainEvent()?.let { domainEvent ->
             runAfterCommitSideEffectInNewTransaction(
-                postId = command.postId,
+                postId = payload.postId,
                 failureMessage = "Failed to publish post write domain event after commit",
             ) {
                 eventPublisher.publish(domainEvent)
@@ -55,60 +63,101 @@ class PostWriteSideEffectHandler(
     }
 
     internal fun handle(event: PostWriteAfterCommitEvent) {
-        handle(event.command)
+        val command = event.command
+        val failures =
+            handle(
+                postId = command.postId,
+                attachmentKeys =
+                    PostAttachmentObjectKeySnapshot.fromContents(
+                        command.previousContent,
+                        command.currentContent,
+                        command.deletedContent,
+                    ),
+                beforeTags = command.beforeTags,
+                afterTags = command.afterTags,
+                cacheInvalidationScope = command.cacheInvalidationScope,
+                evictReason = command.evictReason,
+                recommendationAction = command.recommendationAction,
+            ).toMutableList()
         event.domainEvent?.let { domainEvent ->
             runAfterCommitSideEffectInNewTransaction(
                 postId = event.command.postId,
                 failureMessage = "Failed to publish post write domain event after commit",
             ) {
                 eventPublisher.publish(domainEvent)
-            }
+            }?.let(failures::add)
         }
+        if (failures.isNotEmpty()) throwForTaskRetry(failures)
     }
 
-    private fun handle(command: PostWriteSideEffectCommand): List<Throwable> {
+    private fun handle(
+        postId: Long,
+        attachmentKeys: PostAttachmentObjectKeySnapshot,
+        beforeTags: List<String>,
+        afterTags: List<String>,
+        cacheInvalidationScope: PostReadCacheInvalidationScope,
+        evictReason: String,
+        recommendationAction: PostRecommendationSideEffect,
+    ): List<Throwable> {
         val failures = mutableListOf<Throwable>()
 
         runCatching {
-            postReadCacheInvalidator.invalidate(command.toCacheInvalidationRequest()) {}
+            postReadCacheInvalidator.invalidate(
+                PostReadCacheInvalidationRequest(
+                    postId = postId,
+                    beforeTags = beforeTags,
+                    afterTags = afterTags,
+                    scope = cacheInvalidationScope,
+                    evictReason = evictReason,
+                ),
+            ) {}
         }.onFailure { exception ->
-            logger.warn("Failed to evict post read caches after commit: postId={}", command.postId, exception)
+            logger.warn("Failed to evict post read caches after commit: postId={}", postId, exception)
             failures += exception
         }
 
-        command.currentContent?.let { currentContent ->
-            runAfterCommitSideEffectInNewTransaction(
-                postId = command.postId,
-                failureMessage = "Failed to sync post attachments after commit",
-            ) {
-                uploadedFileRetentionService.syncPostContent(command.postId, command.previousContent, currentContent)
-            }?.let(failures::add)
+        when (attachmentKeys.action) {
+            PostAttachmentTaskAction.NONE -> Unit
+            PostAttachmentTaskAction.SYNC ->
+                runAfterCommitSideEffectInNewTransaction(
+                    postId = postId,
+                    failureMessage = "Failed to sync post attachments after commit",
+                ) {
+                    uploadedFileRetentionService.syncPostAttachmentKeys(
+                        postId = postId,
+                        currentImageObjectKeys = attachmentKeys.currentImageObjectKeys,
+                        previousImageObjectKeys = attachmentKeys.previousImageObjectKeys,
+                        currentFileObjectKeys = attachmentKeys.currentFileObjectKeys,
+                        previousFileObjectKeys = attachmentKeys.previousFileObjectKeys,
+                    )
+                }?.let(failures::add)
+            PostAttachmentTaskAction.DELETE ->
+                runAfterCommitSideEffectInNewTransaction(
+                    postId = postId,
+                    failureMessage = "Failed to schedule cleanup for deleted post after commit",
+                ) {
+                    uploadedFileRetentionService.scheduleDeletedPostAttachmentKeys(
+                        attachmentKeys.deletedImageObjectKeys,
+                        attachmentKeys.deletedFileObjectKeys,
+                    )
+                }?.let(failures::add)
         }
 
-        command.deletedContent?.let { deletedContent ->
-            runAfterCommitSideEffectInNewTransaction(
-                postId = command.postId,
-                failureMessage = "Failed to schedule cleanup for deleted post after commit",
-            ) {
-                uploadedFileRetentionService.scheduleDeletedPostAttachments(deletedContent)
-            }?.let(failures::add)
-        }
-
-        when (command.recommendationAction) {
+        when (recommendationAction) {
             PostRecommendationSideEffect.REFRESH ->
                 runAfterCommitSideEffectInNewTransaction(
-                    postId = command.postId,
+                    postId = postId,
                     failureMessage = "Failed to refresh recommend feature store after commit",
                 ) {
-                    refreshRecommendFeatureStoreAfterCommit(command.postId)
+                    refreshRecommendFeatureStoreAfterCommit(postId)
                 }?.let(failures::add)
 
             PostRecommendationSideEffect.EVICT ->
                 runAfterCommitSideEffectInNewTransaction(
-                    postId = command.postId,
+                    postId = postId,
                     failureMessage = "Failed to evict recommend feature store after commit",
                 ) {
-                    postRecommendFeatureStoreService.evict(command.postId)
+                    postRecommendFeatureStoreService.evict(postId)
                 }?.let(failures::add)
 
             PostRecommendationSideEffect.NONE -> Unit
@@ -146,29 +195,6 @@ class PostWriteSideEffectHandler(
         post.commentsCountAttr ?: postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT)?.let { post.commentsCountAttr = it }
         post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)?.let { post.hitCountAttr = it }
     }
-
-    private fun PostWriteSideEffectCommand.toCacheInvalidationRequest(): PostReadCacheInvalidationRequest =
-        PostReadCacheInvalidationRequest(
-            postId = postId,
-            beforeTags = beforeTags,
-            afterTags = afterTags,
-            scope = cacheInvalidationScope,
-            evictReason = evictReason,
-        )
-
-    private fun PostWriteSideEffectPayload.toCommand(): PostWriteSideEffectCommand =
-        PostWriteSideEffectCommand(
-            postId = postId,
-            previousContent = previousContent,
-            currentContent = currentContent,
-            deletedContent = deletedContent,
-            beforeTags = beforeTags,
-            afterTags = afterTags,
-            cacheInvalidationScope = PostReadCacheInvalidationScope.fromTargets(cacheInvalidationTargets),
-            evictReason = evictReason,
-            recommendationAction = recommendationAction,
-            operationUid = uid,
-        )
 
     private fun PostWriteSideEffectPayload.toDomainEvent(): EventPayload? {
         if (domainEventType == null && domainEventJson == null) return null

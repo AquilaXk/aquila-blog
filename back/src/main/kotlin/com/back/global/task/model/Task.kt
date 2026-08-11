@@ -63,6 +63,10 @@ class Task(
     val taskType: String,
     @field:Column(columnDefinition = "TEXT")
     var payload: String,
+    var payloadExpiresAt: Instant? = null,
+    var payloadPurgeAfter: Instant? = null,
+    var payloadRedactedAt: Instant? = null,
+    var rowPurgeAfter: Instant? = null,
     @field:Enumerated(EnumType.STRING)
     var status: TaskStatus = TaskStatus.PENDING,
     var retryCount: Int = 0,
@@ -79,39 +83,52 @@ class Task(
         taskType: String,
         payload: String,
         maxRetries: Int,
+        payloadExpiresAt: Instant? = null,
     ) : this(
-        0,
-        uid,
-        aggregateType,
-        aggregateId,
-        taskType,
-        payload,
+        id = 0,
+        uid = uid,
+        aggregateType = aggregateType,
+        aggregateId = aggregateId,
+        taskType = taskType,
+        payload = payload,
+        payloadExpiresAt = payloadExpiresAt,
         maxRetries = maxRetries,
     )
 
-    fun scheduleRetry(retryPolicy: TaskRetryPolicy) {
+    fun scheduleRetry(
+        retryPolicy: TaskRetryPolicy,
+        now: Instant,
+    ) {
         retryCount++
         executionLeaseToken = null
         if (retryCount >= maxRetries) {
             status = TaskStatus.FAILED
+            payloadPurgeAfter = earlierOf(now.plusSeconds(FAILED_PAYLOAD_RETENTION_SECONDS), payloadExpiresAt)
+            rowPurgeAfter = now.plusSeconds(FAILED_ROW_RETENTION_SECONDS)
         } else {
             status = TaskStatus.PENDING
             val delaySeconds = retryPolicy.nextDelaySeconds(retryCount)
-            nextRetryAt = Instant.now().plusSeconds(delaySeconds)
+            nextRetryAt = now.plusSeconds(delaySeconds)
         }
     }
 
-    fun markAsCompleted() {
+    fun markAsCompleted(now: Instant) {
         status = TaskStatus.COMPLETED
         executionLeaseToken = null
+        redactPayload(now)
+        rowPurgeAfter = now.plusSeconds(COMPLETED_ROW_RETENTION_SECONDS)
     }
 
-    fun markAsQuarantined(reasonCode: String) {
+    fun markAsQuarantined(
+        reasonCode: String,
+        now: Instant,
+    ) {
         require(reasonCode.isNotBlank()) { "Task quarantine reason must not be blank" }
         status = TaskStatus.QUARANTINED
-        payload = REDACTED_PAYLOAD
+        redactPayload(now)
         errorMessage = reasonCode
         executionLeaseToken = null
+        rowPurgeAfter = now.plusSeconds(QUARANTINED_ROW_RETENTION_SECONDS)
     }
 
     fun markAsProcessing(): UUID {
@@ -130,6 +147,7 @@ class Task(
     fun recoverFromStuckProcessing(
         message: String,
         retryPolicy: TaskRetryPolicy,
+        now: Instant,
     ) {
         retryCount++
         errorMessage = message
@@ -137,13 +155,58 @@ class Task(
 
         if (retryCount >= maxRetries) {
             status = TaskStatus.FAILED
+            payloadPurgeAfter = earlierOf(now.plusSeconds(FAILED_PAYLOAD_RETENTION_SECONDS), payloadExpiresAt)
+            rowPurgeAfter = now.plusSeconds(FAILED_ROW_RETENTION_SECONDS)
         } else {
             status = TaskStatus.PENDING
-            nextRetryAt = Instant.now().plusSeconds(retryPolicy.nextDelaySeconds(retryCount))
+            nextRetryAt = now.plusSeconds(retryPolicy.nextDelaySeconds(retryCount))
         }
     }
 
+    fun replayFailed(
+        now: Instant,
+        resetRetryCount: Boolean,
+    ) {
+        check(status == TaskStatus.FAILED) { "Only FAILED tasks may be replayed" }
+        check(payloadRedactedAt == null) { "Redacted FAILED task payload cannot be replayed" }
+        status = TaskStatus.PENDING
+        nextRetryAt = now
+        errorMessage = "manual-dlq-replay@${now.epochSecond}"
+        retryCount = if (resetRetryCount) 0 else retryCount.coerceAtMost(maxRetries - 1)
+        payloadPurgeAfter = null
+        rowPurgeAfter = null
+    }
+
+    fun redactExpiredFailedPayload(now: Instant): Boolean {
+        if (
+            status != TaskStatus.FAILED ||
+            executionLeaseToken != null ||
+            payloadRedactedAt != null ||
+            payloadPurgeAfter == null ||
+            payloadPurgeAfter!!.isAfter(now)
+        ) {
+            return false
+        }
+        redactPayload(now)
+        return true
+    }
+
+    private fun redactPayload(now: Instant) {
+        payload = REDACTED_PAYLOAD
+        payloadRedactedAt = now
+        payloadPurgeAfter = now
+    }
+
+    private fun earlierOf(
+        retentionLimit: Instant,
+        payloadExpiry: Instant?,
+    ): Instant = if (payloadExpiry != null && payloadExpiry.isBefore(retentionLimit)) payloadExpiry else retentionLimit
+
     companion object {
         const val REDACTED_PAYLOAD = "{\"redacted\":true}"
+        const val COMPLETED_ROW_RETENTION_SECONDS = 7 * 86_400L
+        const val FAILED_PAYLOAD_RETENTION_SECONDS = 7 * 86_400L
+        const val FAILED_ROW_RETENTION_SECONDS = 30 * 86_400L
+        const val QUARANTINED_ROW_RETENTION_SECONDS = 30 * 86_400L
     }
 }

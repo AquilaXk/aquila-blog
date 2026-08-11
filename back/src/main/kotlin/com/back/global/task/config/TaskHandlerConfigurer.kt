@@ -39,6 +39,10 @@ class TaskHandlerConfigurer(
                         check(taskAnnotation.schemaVersion == CURRENT_TASK_PAYLOAD_SCHEMA_VERSION) {
                             "@Task ${payloadClass.simpleName} must declare schemaVersion=$CURRENT_TASK_PAYLOAD_SCHEMA_VERSION"
                         }
+                        val legacyPayloadClass =
+                            taskAnnotation.legacyPayloadClass.java.let { configuredClass ->
+                                if (configuredClass == TaskPayload::class.java) payloadClass else configuredClass
+                            }
 
                         taskHandlerRegistry.register(
                             taskAnnotation.type,
@@ -56,6 +60,7 @@ class TaskHandlerConfigurer(
                                     ),
                                 schemaVersion = taskAnnotation.schemaVersion,
                                 sensitivity = taskAnnotation.sensitivity,
+                                legacyPayloadClass = legacyPayloadClass,
                             ),
                         )
                     }

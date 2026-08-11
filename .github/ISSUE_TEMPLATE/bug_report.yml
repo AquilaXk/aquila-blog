@@ -1,17 +1,24 @@
-name: "🐞 Bug"
-description: "버그, 장애, 회귀처럼 기대한 동작과 실제 동작이 어긋난 문제를 정리합니다."
+name: "🐞 Bug / Fix"
+description: "재현 가능한 결함과 기대·실제 동작의 차이를 정리합니다."
+title: "[Bug] "
 labels: ["bug"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        문제를 재현하거나 확인할 수 있는 근거와 완료 기준에 집중해 주세요.
+        구현 방법과 전체 테스트 목록은 필요한 경우에만 작성합니다.
+
   - type: dropdown
     id: severity
     attributes:
       label: Severity
-      description: 사용자와 운영 영향 기준으로 현재 심각도를 골라 주세요.
+      description: 사용자·데이터·운영 영향 기준으로 선택해 주세요.
       options:
-        - Sev 1 - 서비스 중단 / 배포 차단
-        - Sev 2 - 핵심 사용자 흐름 저하
-        - Sev 3 - 우회 가능한 문제
-        - Sev 4 - 경미한 문제
+        - Sev1 - 서비스 중단, 데이터 손실 또는 보안 사고
+        - Sev2 - 핵심 사용자 흐름 실패 또는 배포 차단
+        - Sev3 - 우회 가능한 기능·UI 회귀
+        - Sev4 - 경미한 문구·시각 문제
     validations:
       required: true
 
@@ -19,8 +26,8 @@ body:
     id: domain
     attributes:
       label: Domain
-      description: 문제가 드러난 기능, 화면, API, 배포 영역을 적어 주세요.
-      placeholder: 예) front/feed, front/editor, back/post, admin/dashboard, deploy
+      description: 문제가 발생한 모듈, 화면, API 또는 운영 영역을 적어 주세요.
+      placeholder: "예) back/post, deploy/homeserver, .github/workflows/**"
     validations:
       required: true
 
@@ -28,31 +35,35 @@ body:
     id: summary
     attributes:
       label: Summary
-      description: 어떤 문제가 발생했는지 한두 문장으로 설명해 주세요.
-      placeholder: 예) 공개 글 상세에서 hydration mismatch가 발생합니다.
+      description: 무엇이 잘못됐고 왜 고쳐야 하는지 1~3문장으로 설명해 주세요.
+      placeholder: "예) 공개 글 상세에서 canonical summary가 이전 값으로 남습니다."
     validations:
       required: true
 
   - type: textarea
-    id: steps
+    id: reproduction_evidence
     attributes:
-      label: Steps To Reproduce
-      description: 같은 현상을 다시 볼 수 있도록 재현 순서를 설명해 주세요.
+      label: Reproduction / Evidence
+      description: 재현 순서 또는 로그·스크린샷·metric·관련 코드처럼 문제를 확인할 수 있는 근거를 적어 주세요.
       placeholder: |
         1. ...
         2. ...
         3. ...
+
+        재현이 어려운 경우:
+        - 관측한 로그/metric:
+        - 발생 시각/환경:
     validations:
       required: true
 
   - type: textarea
     id: expected_actual
     attributes:
-      label: Expected Result / Actual Result
-      description: 기대했던 동작과 실제로 나타난 결과를 나란히 적어 주세요.
+      label: Expected / Actual
+      description: 기대 동작과 실제 동작을 나란히 적어 주세요.
       placeholder: |
-        - Expected: 어떤 결과를 기대했는가?
-        - Actual: 실제로는 어떤 결과가 나왔는가?
+        - Expected:
+        - Actual:
     validations:
       required: true
 
@@ -60,35 +71,69 @@ body:
     id: impact
     attributes:
       label: Impact
-      description: 사용자, 운영, 데이터, 배포에 어떤 영향이 있는지 설명해 주세요.
-      placeholder: 예) 공개 피드 UX 저하, 관리자 작성 차단, 데이터 정합성 영향 없음
+      description: 영향 받는 사용자·기능·데이터·운영 범위와 우회 가능 여부를 적어 주세요.
+      placeholder: |
+        - Affected:
+        - Frequency:
+        - Workaround:
     validations:
       required: true
 
   - type: textarea
-    id: execution_contract
+    id: scope
     attributes:
-      label: Execution Contract
-      description: Worker가 구현 결정을 추측하지 않도록 root에서 확정한 계약을 적어 주세요.
+      label: Scope
+      description: 이번 수정에 포함할 범위와 명시적으로 제외할 범위를 적어 주세요.
       placeholder: |
-        - Confirmed decisions / interfaces:
-        - Allow:
-        - Deny / Non-goals:
-        - Completion criteria / edge cases:
-        - Unresolved implementation decisions: 없음
+        In Scope
+        - ...
+
+        Out of Scope
+        - ...
     validations:
       required: true
 
   - type: textarea
-    id: verification_delivery
+    id: acceptance
     attributes:
-      label: Verification & Delivery
-      description: 실행할 검증, 남길 증거, skip 조건, 기능 단위 commit을 적어 주세요.
+      label: Acceptance Criteria
+      description: 관찰 가능한 완료 조건을 3~7개의 체크리스트로 적어 주세요.
       placeholder: |
-        - Exact commands:
-        - Expected / observed evidence:
-        - Skipped checks and rerun conditions: 없음
-        - Commit slices:
-          1. fix(scope): 작업 요약
+        - [ ] 동일 조건에서 결함이 재현되지 않음
+        - [ ] 관련 정상 경로가 유지됨
+        - [ ] focused regression test 또는 대표 확인으로 증명됨
     validations:
       required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies / Related
+      description: Parent, 관련 이슈, 외부 결정 또는 blocking dependency가 있으면 적어 주세요.
+      placeholder: |
+        - Parent / Related:
+        - Blocking:
+        - Repository owner:
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: 변경 위험에 맞는 최소 검증과 필요한 실행 환경을 적어 주세요.
+      placeholder: |
+        - Focused test:
+        - Representative manual/runtime check:
+        - Required CI:
+        - Deferred verification and rerun condition: 없음
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: ready_check
+    attributes:
+      label: Ready Check
+      options:
+        - label: "[열린 이슈](https://github.com/AquilaXk/aquila-blog/issues)에서 중복 문제를 검색했습니다."
+          required: true
+        - label: "문제 근거, 범위와 완료 조건이 구현을 시작할 수 있을 만큼 명확합니다."
+          required: true

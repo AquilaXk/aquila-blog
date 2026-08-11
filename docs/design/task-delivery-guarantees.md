@@ -22,7 +22,8 @@
 ## Delivery guarantee
 
 - Queue insert는 `Task.uid` unique constraint와 PostgreSQL `INSERT ... ON CONFLICT (uid) DO NOTHING`으로 원자 멱등성을 보장한다. duplicate는 caller transaction을 rollback-only로 만들거나 handler를 inline 실행하지 않는다.
-- 저장 payload는 `schemaVersion`, `taskType`, `sensitivity`, 생성·만료 시각과 payload JSON을 가진 v2 envelope다. migration된 row는 v1 exact decoder만 사용하며 decode 실패 뒤 다른 version/class를 시도하지 않는다.
+- 저장 payload는 `schemaVersion`, `taskType`, `sensitivity`, 생성·만료 시각과 payload JSON을 가진 v2 envelope다. migration된 v1은 metadata와 legacy payload fields를 한 object에 둔 flat exact format이며 decode 실패 뒤 다른 version/class를 시도하지 않는다.
+- blue-green candidate migration과 active N-1 runtime의 overlap에서는 PostgreSQL insert trigger가 schemaVersion 없는 legacy insert만 flat v1으로 정규화한다. v2 envelope는 변경하지 않고, terminal status trigger는 N-1 worker 전이에도 동일 retention을 적용한다.
 - Scheduler는 `PENDING` + `nextRetryAt <= now` task를 DB lock으로 가져와 `PROCESSING`으로 전이한다.
 - Worker는 task마다 `executionLeaseToken`을 발급하고, 완료/실패 전이는 현재 lease가 일치할 때만 반영한다.
 - 처리 보장은 at-least-once이다. 동일 task가 timeout, worker crash, stale PROCESSING recovery 뒤 재실행될 수 있으므로 handler는 `TaskExecutionContext.idempotencyKey` 또는 payload UID를 기준으로 idempotent해야 한다.

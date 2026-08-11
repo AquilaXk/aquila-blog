@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component
 import tools.jackson.core.StreamReadFeature
 import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.ObjectMapper
+import tools.jackson.databind.node.ObjectNode
 import java.time.Clock
 import java.time.Instant
 import java.util.UUID
@@ -52,6 +53,10 @@ class TaskPayloadEnvelopeCodec(
             .readerFor(TaskPayloadEnvelope::class.java)
             .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .with(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+    private val strictObjectReader =
+        objectMapper
+            .readerFor(ObjectNode::class.java)
+            .with(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
 
     fun encode(
         payload: TaskPayload,
@@ -93,7 +98,41 @@ class TaskPayloadEnvelopeCodec(
         return payload
     }
 
-    private fun parseEnvelope(rawEnvelope: String): TaskPayloadEnvelope =
+    private fun parseEnvelope(rawEnvelope: String): TaskPayloadEnvelope {
+        val root = parseEnvelopeObject(rawEnvelope)
+        val schemaVersionNode = root.get("schemaVersion")
+        if (schemaVersionNode == null || !schemaVersionNode.isIntegralNumber) {
+            quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+        }
+        return if (schemaVersionNode.intValue() == LEGACY_FLAT_SCHEMA_VERSION) {
+            parseFlatV1Envelope(root)
+        } else {
+            parseNestedEnvelope(rawEnvelope)
+        }
+    }
+
+    private fun parseEnvelopeObject(rawEnvelope: String): ObjectNode =
+        try {
+            strictObjectReader.readValue(rawEnvelope)
+        } catch (_: Exception) {
+            quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+        }
+
+    private fun parseFlatV1Envelope(root: ObjectNode): TaskPayloadEnvelope {
+        if (root.has("payloadJson")) {
+            quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+        }
+        val payloadRoot = root.deepCopy()
+        val metadata = linkedMapOf<String, Any?>()
+        LEGACY_FLAT_METADATA_FIELDS.forEach { field ->
+            val value = payloadRoot.remove(field) ?: quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+            metadata[field] = value
+        }
+        metadata["payloadJson"] = objectMapper.writeValueAsString(payloadRoot)
+        return parseNestedEnvelope(objectMapper.writeValueAsString(metadata))
+    }
+
+    private fun parseNestedEnvelope(rawEnvelope: String): TaskPayloadEnvelope =
         try {
             strictEnvelopeReader.readValue(rawEnvelope)
         } catch (_: Exception) {
@@ -191,4 +230,10 @@ class TaskPayloadEnvelopeCodec(
     }
 
     private fun quarantine(reason: TaskQuarantineReason): Nothing = throw TaskPayloadQuarantineException(reason)
+
+    private companion object {
+        const val LEGACY_FLAT_SCHEMA_VERSION = 1
+        val LEGACY_FLAT_METADATA_FIELDS =
+            listOf("schemaVersion", "taskType", "sensitivity", "createdAtEpochMs", "expiresAtEpochMs")
+    }
 }

@@ -31,13 +31,15 @@ class TaskPayloadEnvelopeCodecTest {
     }
 
     @Test
-    fun `v1 envelope uses only the registered v1 decoder`() {
+    fun `flat v1 envelope remains readable by N minus 1 and uses only the registered v1 decoder`() {
         val payload = StubTaskPayload(UUID.randomUUID(), "Post", 42L, "legacy")
         val entry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.INTERNAL)
-        val encoded = envelopeJson(payload, entry, schemaVersion = 1)
+        val encoded = flatV1EnvelopeJson(payload, entry)
 
+        val nMinusOneDecoded = objectMapper.readValue(encoded, StubTaskPayload::class.java)
         val decoded = codec.decode(encoded, metadata(payload, entry.taskType), entry)
 
+        assertThat(nMinusOneDecoded).isEqualTo(payload)
         assertThat(decoded).isEqualTo(payload)
         assertThat(entry.decoderFor(1)?.schemaVersion).isEqualTo(1)
     }
@@ -158,6 +160,19 @@ class TaskPayloadEnvelopeCodecTest {
                 payloadJson = objectMapper.writeValueAsString(payload),
             ),
         )
+    }
+
+    private fun flatV1EnvelopeJson(
+        payload: TaskPayload,
+        entry: TaskHandlerEntry,
+    ): String {
+        val root = objectMapper.readTree(objectMapper.writeValueAsString(payload)) as tools.jackson.databind.node.ObjectNode
+        root.put("schemaVersion", 1)
+        root.put("taskType", entry.taskType)
+        root.put("sensitivity", entry.sensitivity.name)
+        root.put("createdAtEpochMs", now.toEpochMilli())
+        root.putNull("expiresAtEpochMs")
+        return objectMapper.writeValueAsString(root)
     }
 
     private fun metadata(

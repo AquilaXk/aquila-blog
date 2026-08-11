@@ -4,9 +4,9 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.subContexts.notification.adapter.persistence.MemberNotificationRepository
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotificationType
 import com.back.boundedContexts.post.application.service.PostApplicationService
+import com.back.boundedContexts.post.application.service.PostInteractionSideEffectHandler
 import com.back.boundedContexts.post.application.service.PostInteractionSideEffectPayload
 import com.back.global.task.adapter.persistence.TaskRepository
-import com.back.global.task.application.TaskFacade
 import com.back.global.task.model.Task
 import com.back.standard.extensions.getOrThrow
 import com.back.support.BaseSeededIntegrationTest
@@ -33,7 +33,7 @@ class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
     private lateinit var taskRepository: TaskRepository
 
     @Autowired
-    private lateinit var taskFacade: TaskFacade
+    private lateinit var postInteractionSideEffectHandler: PostInteractionSideEffectHandler
 
     @Autowired
     private lateinit var objectMapper: ObjectMapper
@@ -87,8 +87,8 @@ class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
                 .single { task -> task.payload.contains("PostCommentWrittenEvent") }
         val payload = objectMapper.readValue(commentTask.payload, PostInteractionSideEffectPayload::class.java)
 
-        taskFacade.fire(payload)
-        taskFacade.fire(payload)
+        postInteractionSideEffectHandler.handle(payload)
+        postInteractionSideEffectHandler.handle(payload)
 
         entityManager.clear()
 
@@ -203,7 +203,7 @@ class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
         postInteractionSideEffectTasksSince(previousTaskIds)
             .forEach { task ->
                 val payload = objectMapper.readValue(task.payload, PostInteractionSideEffectPayload::class.java)
-                taskFacade.fire(payload)
+                postInteractionSideEffectHandler.handle(payload)
             }
     }
 
@@ -213,7 +213,7 @@ class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
             .filter { task -> task.id in taskIds }
             .forEach { task ->
                 val payload = objectMapper.readValue(task.payload, PostInteractionSideEffectPayload::class.java)
-                taskFacade.fire(payload)
+                postInteractionSideEffectHandler.handle(payload)
             }
     }
 }

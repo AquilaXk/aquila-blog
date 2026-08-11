@@ -15,6 +15,8 @@ import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.global.task.application.TaskRetryPolicy
+import com.back.global.task.application.port.output.TaskQueueInsertPort
+import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
@@ -24,7 +26,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.springframework.data.domain.Pageable
-import org.springframework.mock.env.MockEnvironment
 import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 import java.util.UUID
@@ -127,18 +128,12 @@ class PostReadModelTaskEventListenerTest {
             prewarmEnabled = true,
         )
 
-    private fun createTaskFacade(repository: RecordingTaskQueueRepository): TaskFacade {
-        val objectMapper = ObjectMapper()
-        val environment = MockEnvironment()
-        environment.setActiveProfiles("test")
-        return TaskFacade(
-            taskRepository = repository,
+    private fun createTaskFacade(repository: RecordingTaskQueueRepository): TaskFacade =
+        TaskFacade(
+            taskInsertPort = repository,
             taskHandlerRegistry = createTaskHandlerRegistry(),
-            objectMapper = objectMapper,
-            environment = environment,
-            inlineWhenNotProd = false,
+            objectMapper = ObjectMapper(),
         )
-    }
 
     private fun createTaskHandlerRegistry(): TaskHandlerRegistry {
         val registry = TaskHandlerRegistry()
@@ -205,8 +200,16 @@ class PostReadModelTaskEventListenerTest {
 
     private class RecordingTaskQueueRepository(
         private val failOnSave: Boolean = false,
-    ) : TaskQueueRepositoryPort {
+    ) : TaskQueueRepositoryPort,
+        TaskQueueInsertPort {
         val savedTasks = mutableListOf<Task>()
+
+        override fun insertIfAbsent(task: Task): TaskQueueInsertResult {
+            if (failOnSave) throw RuntimeException("enqueue down")
+            if (savedTasks.any { it.uid == task.uid }) return TaskQueueInsertResult.DUPLICATE
+            savedTasks += task
+            return TaskQueueInsertResult.INSERTED
+        }
 
         override fun save(task: Task): Task {
             if (failOnSave) throw RuntimeException("enqueue down")

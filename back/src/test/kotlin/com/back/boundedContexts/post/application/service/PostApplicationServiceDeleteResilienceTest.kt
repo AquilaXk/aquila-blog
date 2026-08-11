@@ -20,6 +20,8 @@ import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.global.task.application.TaskRetryPolicy
+import com.back.global.task.application.port.output.TaskQueueInsertPort
+import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
@@ -35,7 +37,6 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.cache.CacheManager
 import org.springframework.data.domain.Pageable
-import org.springframework.mock.env.MockEnvironment
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionException
@@ -89,11 +90,9 @@ class PostApplicationServiceDeleteResilienceTest {
     private val taskRepository = RecordingTaskQueueRepository()
     private val taskFacade: TaskFacade =
         TaskFacade(
-            taskRepository = taskRepository,
+            taskInsertPort = taskRepository,
             taskHandlerRegistry = postWriteTaskHandlerRegistry(),
             objectMapper = objectMapper,
-            environment = MockEnvironment().also { it.setActiveProfiles("test") },
-            inlineWhenNotProd = false,
         )
     private val postHydrationService = PostHydrationService(postAttrRepository, memberAttrRepository)
     private val postCounterService =
@@ -426,8 +425,16 @@ class PostApplicationServiceDeleteResilienceTest {
         return registry
     }
 
-    private class RecordingTaskQueueRepository : TaskQueueRepositoryPort {
+    private class RecordingTaskQueueRepository :
+        TaskQueueRepositoryPort,
+        TaskQueueInsertPort {
         val savedTasks = mutableListOf<Task>()
+
+        override fun insertIfAbsent(task: Task): TaskQueueInsertResult {
+            if (savedTasks.any { it.uid == task.uid }) return TaskQueueInsertResult.DUPLICATE
+            savedTasks += task
+            return TaskQueueInsertResult.INSERTED
+        }
 
         override fun save(task: Task): Task {
             savedTasks += task

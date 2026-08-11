@@ -276,7 +276,6 @@ custom:
       perTypeAutoTuneEnabled: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_ENABLED:true}
       perTypeAutoTuneMinConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_MIN_CONCURRENT:1}
       perTypeAutoTuneRefreshMs: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_REFRESH_MS:15000}
-      inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
     diagnostics:
       cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:30}
     metrics:

@@ -152,7 +152,6 @@ class PostSummaryBackfillService(
                 domainEventType = null,
                 domainEventJson = null,
             ),
-            inlineWhenEnabled = false,
         )
         if (isPublic && cdnCachePurgeService.isEnabled()) {
             taskFacade.addToQueue(
@@ -164,7 +163,6 @@ class PostSummaryBackfillService(
                     beforeTags = tags,
                     afterTags = tags,
                 ),
-                inlineWhenEnabled = false,
             )
         }
     }

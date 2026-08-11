@@ -16,7 +16,6 @@ import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.task.adapter.persistence.TaskRepository
-import com.back.global.task.application.TaskFacade
 import com.back.global.task.model.Task
 import com.back.support.BasePostApplicationServiceAfterCommitIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
@@ -49,7 +48,10 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     private lateinit var taskRepository: TaskRepository
 
     @Autowired
-    private lateinit var taskFacade: TaskFacade
+    private lateinit var postWriteSideEffectHandler: PostWriteSideEffectHandler
+
+    @Autowired
+    private lateinit var postInteractionSideEffectHandler: PostInteractionSideEffectHandler
 
     @Autowired
     private lateinit var objectMapper: ObjectMapper
@@ -194,8 +196,8 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         )
 
         // when
-        taskFacade.fire(postInteractionSideEffectPayload(eventTask))
-        taskFacade.fire(postInteractionSideEffectPayload(refreshTask))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(eventTask))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(refreshTask))
 
         // then
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
@@ -241,8 +243,8 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         )
 
         // when
-        taskFacade.fire(postInteractionSideEffectPayload(eventTask))
-        taskFacade.fire(postInteractionSideEffectPayload(refreshTask))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(eventTask))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(refreshTask))
 
         // then
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
@@ -284,7 +286,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         verifyNoInteractions(eventPublisher)
 
         // when
-        taskFacade.fire(postInteractionSideEffectPayload(interactionTasks.single()))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(interactionTasks.single()))
 
         // then
         assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostCommentModifiedEvent::class.java)
@@ -331,8 +333,8 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         )
 
         // when
-        taskFacade.fire(postInteractionSideEffectPayload(eventTask))
-        taskFacade.fire(postInteractionSideEffectPayload(refreshTask))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(eventTask))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(refreshTask))
 
         // then
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
@@ -379,8 +381,8 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         )
 
         // when
-        taskFacade.fire(postInteractionSideEffectPayload(eventTask))
-        taskFacade.fire(postInteractionSideEffectPayload(refreshTask))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(eventTask))
+        postInteractionSideEffectHandler.handle(postInteractionSideEffectPayload(refreshTask))
 
         // then
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
@@ -412,7 +414,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         clearSideEffectMocks()
 
         // and when
-        taskFacade.fire(payload)
+        postWriteSideEffectHandler.handle(payload)
 
         // then
         assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
@@ -474,7 +476,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
 
         // when
         assertThatThrownBy {
-            taskFacade.fire(payload)
+            postWriteSideEffectHandler.handle(payload)
         }.isInstanceOf(RuntimeException::class.java)
             .hasMessageContaining("cache backend down")
 
@@ -525,7 +527,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
 
         // and when
-        taskFacade.fire(payload)
+        postWriteSideEffectHandler.handle(payload)
 
         // then
         assertThat(refreshedCounters).contains(
@@ -574,7 +576,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
 
         // and when
-        taskFacade.fire(payload)
+        postWriteSideEffectHandler.handle(payload)
 
         // then
         assertThat(cacheLookupNames()).contains(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)

@@ -153,7 +153,10 @@ class TaskPayloadEnvelopeCodec(
             throw quarantineException(TaskQuarantineReason.SENSITIVITY_MISMATCH)
         }
         val nowEpochMs = Instant.now(clock).toEpochMilli()
-        if (envelope.createdAtEpochMs <= 0 || envelope.createdAtEpochMs > nowEpochMs) {
+        if (
+            envelope.createdAtEpochMs <= 0 ||
+            envelope.createdAtEpochMs > nowEpochMs + MAX_ACCEPTED_CLOCK_SKEW_MS
+        ) {
             throw quarantineException(TaskQuarantineReason.METADATA_MISMATCH)
         }
     }
@@ -240,5 +243,6 @@ class TaskPayloadEnvelopeCodec(
 
     private companion object {
         const val LEGACY_FLAT_SCHEMA_VERSION = 1
+        const val MAX_ACCEPTED_CLOCK_SKEW_MS = 5_000L
     }
 }

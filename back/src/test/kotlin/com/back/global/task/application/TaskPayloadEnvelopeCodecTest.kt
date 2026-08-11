@@ -120,7 +120,12 @@ class TaskPayloadEnvelopeCodecTest {
             codec.decode(wrongTaskType, metadata(payload, entry.taskType), entry)
         }
 
-        val futureEnvelope = envelopeJson(payload, entry, schemaVersion = 2, createdAtEpochMs = now.plusSeconds(1).toEpochMilli())
+        val toleratedClockSkewEnvelope =
+            envelopeJson(payload, entry, schemaVersion = 2, createdAtEpochMs = now.plusSeconds(5).toEpochMilli())
+        assertThat(codec.decode(toleratedClockSkewEnvelope, metadata(payload, entry.taskType), entry))
+            .isEqualTo(payload)
+
+        val futureEnvelope = envelopeJson(payload, entry, schemaVersion = 2, createdAtEpochMs = now.plusSeconds(6).toEpochMilli())
         assertQuarantined(TaskQuarantineReason.METADATA_MISMATCH) {
             codec.decode(futureEnvelope, metadata(payload, entry.taskType), entry)
         }

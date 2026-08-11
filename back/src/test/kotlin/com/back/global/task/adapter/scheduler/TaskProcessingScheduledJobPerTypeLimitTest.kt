@@ -382,6 +382,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             task(1L, taskType).apply {
                 payload = payload.replaceFirst("\"schemaVersion\":2", "\"schemaVersion\":99")
             }
+        assertThat(task.payload).contains("\"schemaVersion\":99")
         val handler = CountingBlockingHandler()
         val fixture =
             createFixture(

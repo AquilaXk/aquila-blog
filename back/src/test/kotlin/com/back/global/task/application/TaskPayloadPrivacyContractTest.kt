@@ -26,6 +26,18 @@ class TaskPayloadPrivacyContractTest {
     private val codec = TaskPayloadEnvelopeCodec(objectMapper, Clock.fixed(now, ZoneOffset.UTC))
 
     @Test
+    fun `attachment snapshot은 sync와 delete content 동시 지정을 거부한다`() {
+        assertThatThrownBy {
+            PostAttachmentObjectKeySnapshot.fromContents(
+                previousContent = null,
+                currentContent = "current",
+                deletedContent = "deleted",
+            )
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessage("Post attachment task cannot sync and delete in one payload")
+    }
+
+    @Test
     fun `post write v2 envelope은 full body 대신 attachment object key만 저장한다`() {
         val bodySentinel = "private-full-post-body"
         val attachmentKeys =

@@ -34,6 +34,8 @@ import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
+private const val MAX_CONFIGURED_PER_TYPE_CONCURRENT = 256
+
 @Component
 @ConditionalOnProperty(
     prefix = "custom.runtime",
@@ -302,7 +304,7 @@ class TaskProcessingScheduledJob(
             }
             val taskType = parts[0].trim()
             val limit = parts[1].trim().toIntOrNull()
-            require(taskType.isNotBlank() && limit != null && limit in 1..workerConcurrency) {
+            require(taskType.isNotBlank() && limit != null && limit in 1..MAX_CONFIGURED_PER_TYPE_CONCURRENT) {
                 "custom.task.processor.perTypeMaxConcurrent entry is invalid: '$token'"
             }
             require(parsed.putIfAbsent(taskType, limit) == null) {

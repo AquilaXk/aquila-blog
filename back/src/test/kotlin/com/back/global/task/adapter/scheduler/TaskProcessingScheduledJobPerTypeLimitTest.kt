@@ -53,6 +53,61 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             fixture.job.shutdownExecutor()
         }.isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("perTypeMaxConcurrent")
+
+        listOf(-1, 0, 257).forEach { invalidLimit ->
+            assertThatThrownBy {
+                val fixture =
+                    createFixture(
+                        maxConcurrent = 2,
+                        perTypeMaxConcurrentRaw = "post.search-index.sync=$invalidLimit",
+                        perTypeAutoTuneEnabled = true,
+                        perTypeAutoTuneMinConcurrent = 1,
+                    )
+                fixture.job.shutdownExecutor()
+            }.isInstanceOf(IllegalArgumentException::class.java)
+                .hasMessageContaining("perTypeMaxConcurrent")
+        }
+    }
+
+    @Test
+    @DisplayName("운영 global concurrency보다 큰 per-type ceiling은 시작되고 실제 worker 수는 global limit을 따른다")
+    fun `production per type ceiling is clamped by global worker concurrency`() {
+        val startedWorkers = AtomicInteger(0)
+        val releaseWorkers = CountDownLatch(1)
+        val taskType = "post.search-index.sync"
+        val tasks = (1L..3L).map { id -> task(id, taskType) }
+        val fixture =
+            createFixture(
+                maxConcurrent = 2,
+                perTypeMaxConcurrentRaw =
+                    "post.search-index.sync=4,post.read.prewarm=2,post.search-engine.mirror=1",
+                perTypeAutoTuneEnabled = true,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                handlerEntries = listOf(blockingTaskHandlerEntry(taskType, startedWorkers, releaseWorkers)),
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(2))
+            .thenReturn(tasks)
+        tasks.forEach { task ->
+            org.mockito.Mockito
+                .`when`(fixture.taskRepository.findById(task.id))
+                .thenReturn(Optional.of(task))
+        }
+
+        try {
+            fixture.job.processTasks()
+            waitUntilWorkerCount(startedWorkers, expected = 2)
+
+            assertThat(startedWorkers.get()).isEqualTo(2)
+            assertThat(tasks.count { it.status == TaskStatus.PENDING }).isEqualTo(1)
+        } finally {
+            releaseWorkers.countDown()
+            fixture.job.shutdownExecutor()
+        }
     }
 
     @Test

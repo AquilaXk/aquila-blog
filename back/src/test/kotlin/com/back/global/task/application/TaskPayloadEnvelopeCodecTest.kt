@@ -31,6 +31,16 @@ class TaskPayloadEnvelopeCodecTest {
     }
 
     @Test
+    fun `encode는 registered payload class mismatch를 거부한다`() {
+        val entry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.INTERNAL)
+        val payload = OtherTaskPayload(UUID.randomUUID(), "Post", 40L)
+
+        assertThatThrownBy { codec.encode(payload, entry) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("Task payload class does not match registered handler entry")
+    }
+
+    @Test
     fun `flat v1 envelope remains readable by N minus 1 and uses only the registered v1 decoder`() {
         val payload = StubTaskPayload(UUID.randomUUID(), "Post", 42L, "legacy")
         val entry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.INTERNAL)
@@ -58,6 +68,26 @@ class TaskPayloadEnvelopeCodecTest {
         assertQuarantined(TaskQuarantineReason.MALFORMED_ENVELOPE) {
             codec.decode(unknown, metadata(payload, entry.taskType), entry)
         }
+
+        assertQuarantined(TaskQuarantineReason.MALFORMED_ENVELOPE) {
+            codec.decode("{}", metadata(payload, entry.taskType), entry)
+        }
+
+        val flatWithNestedPayload =
+            objectMapper
+                .readTree(flatV1EnvelopeJson(payload, entry))
+                .also { root -> (root as tools.jackson.databind.node.ObjectNode).put("payloadJson", "{}") }
+        assertQuarantined(TaskQuarantineReason.MALFORMED_ENVELOPE) {
+            codec.decode(objectMapper.writeValueAsString(flatWithNestedPayload), metadata(payload, entry.taskType), entry)
+        }
+
+        val flatWithoutTaskType =
+            objectMapper
+                .readTree(flatV1EnvelopeJson(payload, entry))
+                .also { root -> (root as tools.jackson.databind.node.ObjectNode).remove("taskType") }
+        assertQuarantined(TaskQuarantineReason.MALFORMED_ENVELOPE) {
+            codec.decode(objectMapper.writeValueAsString(flatWithoutTaskType), metadata(payload, entry.taskType), entry)
+        }
     }
 
     @Test
@@ -83,6 +113,36 @@ class TaskPayloadEnvelopeCodecTest {
         val personalEntry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.PERSONAL)
         assertQuarantined(TaskQuarantineReason.SENSITIVITY_MISMATCH) {
             codec.decode(encoded, metadata(payload, personalEntry.taskType), personalEntry)
+        }
+
+        val wrongTaskType = envelopeJson(payload, entry, schemaVersion = 2, taskType = "test.other")
+        assertQuarantined(TaskQuarantineReason.METADATA_MISMATCH) {
+            codec.decode(wrongTaskType, metadata(payload, entry.taskType), entry)
+        }
+
+        val futureEnvelope = envelopeJson(payload, entry, schemaVersion = 2, createdAtEpochMs = now.plusSeconds(1).toEpochMilli())
+        assertQuarantined(TaskQuarantineReason.METADATA_MISMATCH) {
+            codec.decode(futureEnvelope, metadata(payload, entry.taskType), entry)
+        }
+    }
+
+    @Test
+    fun `decoder output class mismatch는 malformed payload로 quarantine한다`() {
+        val payload = OtherTaskPayload(UUID.randomUUID(), "Post", 46L)
+        val entry =
+            directEntry(
+                payloadClass = StubTaskPayload::class.java,
+                sensitivity = TaskPayloadSensitivity.INTERNAL,
+                decoders =
+                    mapOf(
+                        1 to TaskPayloadDecoder(1, StubTaskPayload::class.java),
+                        2 to TaskPayloadDecoder(2, OtherTaskPayload::class.java),
+                    ),
+            )
+        val encoded = envelopeJson(payload, entry, schemaVersion = 2)
+
+        assertQuarantined(TaskQuarantineReason.MALFORMED_PAYLOAD) {
+            codec.decode(encoded, metadata(payload, entry.taskType), entry)
         }
     }
 
@@ -117,17 +177,99 @@ class TaskPayloadEnvelopeCodecTest {
         }
     }
 
+    @Test
+    fun `expiry metadata mismatch는 schema별 exact rule로 quarantine한다`() {
+        val payload =
+            ExpiringStubTaskPayload(
+                uid = UUID.randomUUID(),
+                aggregateType = "Member",
+                aggregateId = 49L,
+                expiresAt = now.plusSeconds(300),
+            )
+        val internalEntry = entry(ExpiringStubTaskPayload::class.java, TaskPayloadSensitivity.INTERNAL)
+        assertQuarantined(TaskQuarantineReason.SENSITIVITY_MISMATCH) {
+            codec.decode(envelopeJson(payload, internalEntry, 2), metadata(payload, internalEntry.taskType), internalEntry)
+        }
+
+        val expiringEntry = entry(ExpiringStubTaskPayload::class.java, TaskPayloadSensitivity.EXPIRING_SECRET)
+        val mismatchedV2 =
+            envelopeJson(
+                payload,
+                expiringEntry,
+                schemaVersion = 2,
+                expiresAtEpochMs = payload.expiresAt.plusSeconds(1).toEpochMilli(),
+            )
+        assertQuarantined(TaskQuarantineReason.METADATA_MISMATCH) {
+            codec.decode(mismatchedV2, metadata(payload, expiringEntry.taskType), expiringEntry)
+        }
+
+        val mismatchedV1 = flatV1EnvelopeJson(payload, expiringEntry, payload.expiresAt.plusSeconds(1).toEpochMilli())
+        assertQuarantined(TaskQuarantineReason.METADATA_MISMATCH) {
+            codec.decode(mismatchedV1, metadata(payload, expiringEntry.taskType), expiringEntry)
+        }
+
+        val nonExpiringPayload = StubTaskPayload(UUID.randomUUID(), "Member", 50L, "no-expiry")
+        val secretEntry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.EXPIRING_SECRET)
+        assertQuarantined(TaskQuarantineReason.SENSITIVITY_MISMATCH) {
+            codec.decode(envelopeJson(nonExpiringPayload, secretEntry, 2), metadata(nonExpiringPayload, secretEntry.taskType), secretEntry)
+        }
+    }
+
+    @Test
+    fun `enqueue는 expiring secret expiry를 exact하게 검증하고 round trip한다`() {
+        val validPayload =
+            ExpiringStubTaskPayload(
+                uid = UUID.randomUUID(),
+                aggregateType = "Member",
+                aggregateId = 51L,
+                expiresAt = now.plusSeconds(300),
+            )
+        val secretEntry = entry(ExpiringStubTaskPayload::class.java, TaskPayloadSensitivity.EXPIRING_SECRET)
+
+        val encoded = codec.encode(validPayload, secretEntry)
+        assertThat(codec.decode(encoded, metadata(validPayload, secretEntry.taskType), secretEntry))
+            .isEqualTo(validPayload)
+
+        val internalEntry = entry(ExpiringStubTaskPayload::class.java, TaskPayloadSensitivity.INTERNAL)
+        assertThatThrownBy { codec.encode(validPayload, internalEntry) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("Only EXPIRING_SECRET task payloads may declare expiresAt")
+
+        val nonExpiringPayload = StubTaskPayload(UUID.randomUUID(), "Member", 52L, "no-expiry")
+        val nonExpiringSecretEntry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.EXPIRING_SECRET)
+        assertThatThrownBy { codec.encode(nonExpiringPayload, nonExpiringSecretEntry) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("EXPIRING_SECRET task payload must declare expiresAt")
+
+        val expiredPayload = validPayload.copy(aggregateId = 53L, expiresAt = now)
+        assertThatThrownBy { codec.encode(expiredPayload, secretEntry) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("Cannot enqueue an expired task payload")
+    }
+
     private fun <T : TaskPayload> entry(
         payloadClass: Class<T>,
         sensitivity: TaskPayloadSensitivity,
+    ): TaskHandlerEntry =
+        directEntry(
+            payloadClass = payloadClass,
+            sensitivity = sensitivity,
+            decoders =
+                mapOf(
+                    1 to TaskPayloadDecoder(1, payloadClass),
+                    2 to TaskPayloadDecoder(2, payloadClass),
+                ),
+        )
+
+    private fun directEntry(
+        payloadClass: Class<out TaskPayload>,
+        sensitivity: TaskPayloadSensitivity,
+        decoders: Map<Int, TaskPayloadDecoder>,
     ): TaskHandlerEntry {
         val handler = StubTaskHandler()
-
-        @Suppress("UNCHECKED_CAST")
-        val typedClass = payloadClass as Class<out TaskPayload>
         return TaskHandlerEntry(
             taskType = TASK_TYPE,
-            payloadClass = typedClass,
+            payloadClass = payloadClass,
             handlerMethod =
                 TaskHandlerMethod(
                     bean = handler,
@@ -136,11 +278,7 @@ class TaskPayloadEnvelopeCodecTest {
             retryPolicy = TaskRetryPolicy("test", 3, 1, 2.0, 10),
             schemaVersion = 2,
             sensitivity = sensitivity,
-            decoders =
-                mapOf(
-                    1 to TaskPayloadDecoder(1, typedClass),
-                    2 to TaskPayloadDecoder(2, typedClass),
-                ),
+            decoders = decoders,
         )
     }
 
@@ -148,30 +286,36 @@ class TaskPayloadEnvelopeCodecTest {
         payload: TaskPayload,
         entry: TaskHandlerEntry,
         schemaVersion: Int,
-    ): String {
-        val expiry = (payload as? ExpiringTaskPayload)?.expiresAt?.toEpochMilli()
-        return objectMapper.writeValueAsString(
+        taskType: String = entry.taskType,
+        createdAtEpochMs: Long = now.toEpochMilli(),
+        expiresAtEpochMs: Long? = (payload as? ExpiringTaskPayload)?.expiresAt?.toEpochMilli(),
+    ): String =
+        objectMapper.writeValueAsString(
             TaskPayloadEnvelope(
                 schemaVersion = schemaVersion,
-                taskType = entry.taskType,
+                taskType = taskType,
                 sensitivity = entry.sensitivity,
-                createdAtEpochMs = now.toEpochMilli(),
-                expiresAtEpochMs = expiry,
+                createdAtEpochMs = createdAtEpochMs,
+                expiresAtEpochMs = expiresAtEpochMs,
                 payloadJson = objectMapper.writeValueAsString(payload),
             ),
         )
-    }
 
     private fun flatV1EnvelopeJson(
         payload: TaskPayload,
         entry: TaskHandlerEntry,
+        expiresAtEpochMs: Long? = null,
     ): String {
         val root = objectMapper.readTree(objectMapper.writeValueAsString(payload)) as tools.jackson.databind.node.ObjectNode
         root.put("schemaVersion", 1)
         root.put("taskType", entry.taskType)
         root.put("sensitivity", entry.sensitivity.name)
         root.put("createdAtEpochMs", now.toEpochMilli())
-        root.putNull("expiresAtEpochMs")
+        if (expiresAtEpochMs == null) {
+            root.putNull("expiresAtEpochMs")
+        } else {
+            root.put("expiresAtEpochMs", expiresAtEpochMs)
+        }
         return objectMapper.writeValueAsString(root)
     }
 
@@ -209,6 +353,12 @@ class TaskPayloadEnvelopeCodecTest {
         override val aggregateId: Long,
         override val expiresAt: Instant,
     ) : ExpiringTaskPayload
+
+    private data class OtherTaskPayload(
+        override val uid: UUID,
+        override val aggregateType: String,
+        override val aggregateId: Long,
+    ) : TaskPayload
 
     private class StubTaskHandler {
         fun handle(payload: TaskPayload) = Unit

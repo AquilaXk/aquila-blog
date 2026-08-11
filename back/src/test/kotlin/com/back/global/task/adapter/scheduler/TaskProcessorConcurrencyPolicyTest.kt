@@ -66,6 +66,29 @@ class TaskProcessorConcurrencyPolicyTest {
     }
 
     @Test
+    @DisplayName("dynamic batch size는 느린 handler latency에 맞춰 fetch limit을 줄인다")
+    fun `dynamic batch size reduces fetch limit for slow handlers`() {
+        val policy =
+            createPolicy(
+                workerConcurrency = 8,
+                dynamicBatchBacklogPerStep = 100,
+                dynamicBatchTargetHandlerDurationMs = 900,
+                dynamicBatchMaxPrefetchMultiplier = 3,
+            )
+
+        val fetchLimit =
+            policy.fetchLimit(
+                safeBatchSize = 50,
+                availableWorkerSlots = 4,
+                recentHandlerDurationMs = 1_800,
+            ) {
+                250L
+            }
+
+        assertThat(fetchLimit).isEqualTo(6)
+    }
+
+    @Test
     @DisplayName("dynamic batch size off는 batch size와 남은 worker slot 중 작은 값을 사용한다")
     fun `fixed batch size uses lower batch size and available slots`() {
         val policy =

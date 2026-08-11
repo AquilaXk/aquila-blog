@@ -62,8 +62,8 @@ class TaskPayloadEnvelopeCodec(
         payload: TaskPayload,
         entry: TaskHandlerEntry,
     ): String {
-        require(entry.payloadClass.isInstance(payload)) {
-            "Task payload class does not match registered handler entry"
+        if (!entry.payloadClass.isInstance(payload)) {
+            throw IllegalArgumentException("Task payload class does not match registered handler entry")
         }
         val now = Instant.now(clock)
         val expiresAtEpochMs = expirationForEnqueue(payload, entry.sensitivity, now)
@@ -88,10 +88,10 @@ class TaskPayloadEnvelopeCodec(
         validateEnvelopeMetadata(envelope, storedMetadata, entry)
         val decoder =
             entry.decoderFor(envelope.schemaVersion)
-                ?: quarantine(TaskQuarantineReason.UNKNOWN_SCHEMA_VERSION)
+                ?: throw quarantineException(TaskQuarantineReason.UNKNOWN_SCHEMA_VERSION)
         val payload = decodePayload(envelope.payloadJson, decoder)
         if (!entry.payloadClass.isInstance(payload)) {
-            quarantine(TaskQuarantineReason.MALFORMED_PAYLOAD)
+            throw quarantineException(TaskQuarantineReason.MALFORMED_PAYLOAD)
         }
         validatePayloadMetadata(payload, storedMetadata)
         validateExpiration(envelope, payload, entry.sensitivity)
@@ -102,7 +102,7 @@ class TaskPayloadEnvelopeCodec(
         val root = parseEnvelopeObject(rawEnvelope)
         val schemaVersionNode = root.get("schemaVersion")
         if (schemaVersionNode == null || !schemaVersionNode.isIntegralNumber) {
-            quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+            throw quarantineException(TaskQuarantineReason.MALFORMED_ENVELOPE)
         }
         return if (schemaVersionNode.intValue() == LEGACY_FLAT_SCHEMA_VERSION) {
             parseFlatV1Envelope(root)
@@ -115,17 +115,19 @@ class TaskPayloadEnvelopeCodec(
         try {
             strictObjectReader.readValue(rawEnvelope)
         } catch (_: Exception) {
-            quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+            throw quarantineException(TaskQuarantineReason.MALFORMED_ENVELOPE)
         }
 
     private fun parseFlatV1Envelope(root: ObjectNode): TaskPayloadEnvelope {
         if (root.has("payloadJson")) {
-            quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+            throw quarantineException(TaskQuarantineReason.MALFORMED_ENVELOPE)
         }
         val payloadRoot = root.deepCopy()
         val metadata = linkedMapOf<String, Any?>()
-        LEGACY_FLAT_METADATA_FIELDS.forEach { field ->
-            val value = payloadRoot.remove(field) ?: quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+        legacyFlatMetadataFields().forEach { field ->
+            val value =
+                payloadRoot.remove(field)
+                    ?: throw quarantineException(TaskQuarantineReason.MALFORMED_ENVELOPE)
             metadata[field] = value
         }
         metadata["payloadJson"] = objectMapper.writeValueAsString(payloadRoot)
@@ -136,7 +138,7 @@ class TaskPayloadEnvelopeCodec(
         try {
             strictEnvelopeReader.readValue(rawEnvelope)
         } catch (_: Exception) {
-            quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+            throw quarantineException(TaskQuarantineReason.MALFORMED_ENVELOPE)
         }
 
     private fun validateEnvelopeMetadata(
@@ -145,14 +147,14 @@ class TaskPayloadEnvelopeCodec(
         entry: TaskHandlerEntry,
     ) {
         if (envelope.taskType != storedMetadata.taskType || envelope.taskType != entry.taskType) {
-            quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+            throw quarantineException(TaskQuarantineReason.METADATA_MISMATCH)
         }
         if (envelope.sensitivity != entry.sensitivity) {
-            quarantine(TaskQuarantineReason.SENSITIVITY_MISMATCH)
+            throw quarantineException(TaskQuarantineReason.SENSITIVITY_MISMATCH)
         }
         val nowEpochMs = Instant.now(clock).toEpochMilli()
         if (envelope.createdAtEpochMs <= 0 || envelope.createdAtEpochMs > nowEpochMs) {
-            quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+            throw quarantineException(TaskQuarantineReason.METADATA_MISMATCH)
         }
     }
 
@@ -169,7 +171,7 @@ class TaskPayloadEnvelopeCodec(
                     .readValue(payloadJson)
             if (decoded is LegacyTaskPayload) decoded.toCurrentTaskPayload() else decoded
         } catch (_: Exception) {
-            quarantine(TaskQuarantineReason.MALFORMED_PAYLOAD)
+            throw quarantineException(TaskQuarantineReason.MALFORMED_PAYLOAD)
         }
 
     private fun validatePayloadMetadata(
@@ -181,7 +183,7 @@ class TaskPayloadEnvelopeCodec(
             payload.aggregateType != storedMetadata.aggregateType ||
             payload.aggregateId != storedMetadata.aggregateId
         ) {
-            quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+            throw quarantineException(TaskQuarantineReason.METADATA_MISMATCH)
         }
     }
 
@@ -193,23 +195,25 @@ class TaskPayloadEnvelopeCodec(
         val payloadExpiry = (payload as? ExpiringTaskPayload)?.expiresAt?.toEpochMilli()
         if (sensitivity != TaskPayloadSensitivity.EXPIRING_SECRET) {
             if (payloadExpiry != null || envelope.expiresAtEpochMs != null) {
-                quarantine(TaskQuarantineReason.SENSITIVITY_MISMATCH)
+                throw quarantineException(TaskQuarantineReason.SENSITIVITY_MISMATCH)
             }
             return
         }
 
-        val exactPayloadExpiry = payloadExpiry ?: quarantine(TaskQuarantineReason.SENSITIVITY_MISMATCH)
+        val exactPayloadExpiry =
+            payloadExpiry
+                ?: throw quarantineException(TaskQuarantineReason.SENSITIVITY_MISMATCH)
         if (envelope.schemaVersion == TaskHandlerRegistry.CURRENT_TASK_PAYLOAD_SCHEMA_VERSION) {
             if (envelope.expiresAtEpochMs != exactPayloadExpiry) {
-                quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+                throw quarantineException(TaskQuarantineReason.METADATA_MISMATCH)
             }
         } else if (envelope.expiresAtEpochMs != null && envelope.expiresAtEpochMs != exactPayloadExpiry) {
-            quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+            throw quarantineException(TaskQuarantineReason.METADATA_MISMATCH)
         }
 
         val effectiveExpiry = envelope.expiresAtEpochMs ?: exactPayloadExpiry
         if (effectiveExpiry <= Instant.now(clock).toEpochMilli()) {
-            quarantine(TaskQuarantineReason.EXPIRED_PAYLOAD)
+            throw quarantineException(TaskQuarantineReason.EXPIRED_PAYLOAD)
         }
     }
 
@@ -229,11 +233,12 @@ class TaskPayloadEnvelopeCodec(
         return expiresAt.toEpochMilli()
     }
 
-    private fun quarantine(reason: TaskQuarantineReason): Nothing = throw TaskPayloadQuarantineException(reason)
+    private fun quarantineException(reason: TaskQuarantineReason): TaskPayloadQuarantineException = TaskPayloadQuarantineException(reason)
+
+    private fun legacyFlatMetadataFields(): List<String> =
+        listOf("schemaVersion", "taskType", "sensitivity", "createdAtEpochMs", "expiresAtEpochMs")
 
     private companion object {
         const val LEGACY_FLAT_SCHEMA_VERSION = 1
-        val LEGACY_FLAT_METADATA_FIELDS =
-            listOf("schemaVersion", "taskType", "sensitivity", "createdAtEpochMs", "expiresAtEpochMs")
     }
 }

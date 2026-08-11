@@ -61,6 +61,21 @@ class TaskRetentionServiceTest {
         ).isEqualTo(1.0)
     }
 
+    @Test
+    fun `cleanup은 meter registry가 없어도 empty batch를 명시적으로 완료한다`() {
+        val repository = mock(TaskRetentionRepositoryPort::class.java)
+        `when`(repository.findFailedPayloadsForRedactionWithLock(now, 1)).thenReturn(emptyList())
+        `when`(repository.findTerminalRowsForPurgeWithLock(now, 1)).thenReturn(emptyList())
+        val service =
+            TaskRetentionService(
+                taskRepository = repository,
+                clock = Clock.fixed(now, ZoneOffset.UTC),
+            )
+
+        assertThat(service.cleanupBatch(0))
+            .isEqualTo(TaskRetentionCleanupResult(redactedPayloadCount = 0, purgedRowCount = 0))
+    }
+
     private fun task(
         id: Long,
         status: TaskStatus,

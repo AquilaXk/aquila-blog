@@ -1,5 +1,6 @@
 package com.back.global.task.application
 
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.global.task.application.port.output.TaskQueueInsertPort
 import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.domain.Task
@@ -8,7 +9,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Clock
 import java.util.UUID
 
 class TaskFacadeTest {
@@ -69,10 +71,11 @@ class TaskFacadeTest {
         insertPort: TaskQueueInsertPort,
         handler: StubTaskHandler = StubTaskHandler(),
     ): TaskFacade {
+        val objectMapper = jacksonObjectMapper()
         val registry = TaskHandlerRegistry()
         registry.register(
             StubTaskPayload.TASK_TYPE,
-            TaskHandlerEntry(
+            TaskHandlerEntry.withExactDecoders(
                 taskType = StubTaskPayload.TASK_TYPE,
                 payloadClass = StubTaskPayload::class.java,
                 handlerMethod =
@@ -88,12 +91,14 @@ class TaskFacadeTest {
                         backoffMultiplier = 2.0,
                         maxDelaySeconds = 10,
                     ),
+                schemaVersion = 2,
+                sensitivity = TaskPayloadSensitivity.INTERNAL,
             ),
         )
         return TaskFacade(
             taskInsertPort = insertPort,
             taskHandlerRegistry = registry,
-            objectMapper = ObjectMapper(),
+            taskPayloadEnvelopeCodec = TaskPayloadEnvelopeCodec(objectMapper, Clock.systemUTC()),
         )
     }
 

@@ -1,7 +1,11 @@
 package com.back.infrastructure
 
 import org.flywaydb.core.Flyway
+import org.flywaydb.core.api.MigrationVersion
+import org.junit.jupiter.api.MethodOrderer
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestMethodOrder
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
@@ -19,6 +23,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @Testcontainers(disabledWithoutDocker = true)
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class TaskAtomicInsertTestcontainersIntegrationTest {
     companion object {
         @Container
@@ -33,6 +38,61 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
     }
 
     @Test
+    @Order(1)
+    fun `pre envelope task rows migrate to one exact v1 envelope`() {
+        migrateToPreviousVersion()
+        val taskUid = UUID.randomUUID()
+        val rawPayload = """{"uid":"$taskUid","aggregateType":"Post","aggregateId":77,"value":"private"}"""
+
+        postgres.createConnection("").use { connection ->
+            connection
+                .prepareStatement(
+                    """
+                    INSERT INTO task (
+                        uid, aggregate_type, aggregate_id, task_type, payload, status,
+                        retry_count, max_retries, next_retry_at, created_at, modified_at
+                    ) VALUES (?, 'Post', 77, 'post.interaction.side-effect', ?, 'FAILED', 3, 3, ?, ?, ?)
+                    """.trimIndent(),
+                ).use { statement ->
+                    val createdAt = Timestamp.from(Instant.parse("2026-08-10T00:00:00Z"))
+                    statement.setObject(1, taskUid)
+                    statement.setString(2, rawPayload)
+                    statement.setTimestamp(3, createdAt)
+                    statement.setTimestamp(4, createdAt)
+                    statement.setTimestamp(5, createdAt)
+                    assertEquals(1, statement.executeUpdate())
+                }
+        }
+
+        migrate()
+
+        postgres.createConnection("").use { connection ->
+            connection
+                .prepareStatement(
+                    """
+                    SELECT
+                        payload::jsonb ->> 'schemaVersion',
+                        payload::jsonb ->> 'taskType',
+                        payload::jsonb ->> 'sensitivity',
+                        payload::jsonb ->> 'payloadJson'
+                    FROM task
+                    WHERE uid = ?
+                    """.trimIndent(),
+                ).use { statement ->
+                    statement.setObject(1, taskUid)
+                    statement.executeQuery().use { result ->
+                        assertTrue(result.next())
+                        assertEquals("1", result.getString(1))
+                        assertEquals("post.interaction.side-effect", result.getString(2))
+                        assertEquals("PERSONAL", result.getString(3))
+                        assertEquals(rawPayload, result.getString(4))
+                    }
+                }
+        }
+    }
+
+    @Test
+    @Order(2)
     fun `same uid insert is atomic and duplicate transaction remains usable`() {
         migrate()
         val insertSql = productionAtomicInsertSql()
@@ -82,6 +142,18 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
             .configure()
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
             .locations("classpath:db/migration-test")
+            .baselineOnMigrate(true)
+            .validateOnMigrate(true)
+            .load()
+            .migrate()
+    }
+
+    private fun migrateToPreviousVersion() {
+        Flyway
+            .configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .locations("classpath:db/migration-test")
+            .target(MigrationVersion.fromVersion("20260801.01"))
             .baselineOnMigrate(true)
             .validateOnMigrate(true)
             .load()

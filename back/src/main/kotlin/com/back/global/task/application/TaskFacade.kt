@@ -5,13 +5,12 @@ import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.domain.Task
 import com.back.standard.dto.TaskPayload
 import org.springframework.stereotype.Service
-import tools.jackson.databind.ObjectMapper
 
 @Service
 class TaskFacade(
     private val taskInsertPort: TaskQueueInsertPort,
     private val taskHandlerRegistry: TaskHandlerRegistry,
-    private val objectMapper: ObjectMapper,
+    private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
 ) {
     fun addToQueue(payload: TaskPayload): TaskQueueInsertResult {
         val entry =
@@ -24,7 +23,7 @@ class TaskFacade(
                 payload.aggregateType,
                 payload.aggregateId,
                 entry.taskType,
-                objectMapper.writeValueAsString(payload),
+                taskPayloadEnvelopeCodec.encode(payload, entry),
                 entry.retryPolicy.maxRetries,
             ),
         )

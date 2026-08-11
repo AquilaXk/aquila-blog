@@ -16,6 +16,7 @@ import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.TaskPayloadEnvelope
 import com.back.global.task.model.Task
 import com.back.support.BasePostApplicationServiceAfterCommitIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
@@ -184,12 +185,16 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // then
         val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
         assertThat(interactionTasks).hasSize(2)
-        val eventTask = interactionTasks.single { task -> task.payload.contains("PostCommentWrittenEvent") }
-        val refreshTask = interactionTasks.single { task -> task.payload.contains("\"recommendationAction\":\"REFRESH\"") }
-        assertThat(eventTask.payload).contains(
-            "\"postId\":${post.id}",
-            "PostCommentWrittenEvent",
-        )
+        val eventTask =
+            interactionTasks.single { task ->
+                postInteractionSideEffectPayload(task).domainEventType == PostCommentWrittenEvent::class.java.name
+            }
+        val refreshTask =
+            interactionTasks.single { task ->
+                postInteractionSideEffectPayload(task).recommendationAction ==
+                    PostInteractionRecommendationSideEffect.REFRESH
+            }
+        assertThat(postInteractionSideEffectPayload(eventTask).postId).isEqualTo(post.id)
         verifyNoInteractions(
             postRecommendFeatureStoreService,
             eventPublisher,
@@ -231,12 +236,16 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // then
         val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
         assertThat(interactionTasks).hasSize(2)
-        val eventTask = interactionTasks.single { task -> task.payload.contains("PostLikedEvent") }
-        val refreshTask = interactionTasks.single { task -> task.payload.contains("\"recommendationAction\":\"REFRESH\"") }
-        assertThat(eventTask.payload).contains(
-            "\"postId\":${post.id}",
-            "PostLikedEvent",
-        )
+        val eventTask =
+            interactionTasks.single { task ->
+                postInteractionSideEffectPayload(task).domainEventType == PostLikedEvent::class.java.name
+            }
+        val refreshTask =
+            interactionTasks.single { task ->
+                postInteractionSideEffectPayload(task).recommendationAction ==
+                    PostInteractionRecommendationSideEffect.REFRESH
+            }
+        assertThat(postInteractionSideEffectPayload(eventTask).postId).isEqualTo(post.id)
         verifyNoInteractions(
             postRecommendFeatureStoreService,
             eventPublisher,
@@ -282,7 +291,8 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // then
         val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
         assertThat(interactionTasks).hasSize(1)
-        assertThat(interactionTasks.single().payload).contains("PostCommentModifiedEvent")
+        assertThat(postInteractionSideEffectPayload(interactionTasks.single()).domainEventType)
+            .isEqualTo(PostCommentModifiedEvent::class.java.name)
         verifyNoInteractions(eventPublisher)
 
         // when
@@ -324,9 +334,15 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // then
         val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
         assertThat(interactionTasks).hasSize(2)
-        val eventTask = interactionTasks.single { task -> task.payload.contains("PostCommentDeletedEvent") }
-        val refreshTask = interactionTasks.single { task -> task.payload.contains("\"recommendationAction\":\"REFRESH\"") }
-        assertThat(eventTask.payload).contains("PostCommentDeletedEvent")
+        val eventTask =
+            interactionTasks.single { task ->
+                postInteractionSideEffectPayload(task).domainEventType == PostCommentDeletedEvent::class.java.name
+            }
+        val refreshTask =
+            interactionTasks.single { task ->
+                postInteractionSideEffectPayload(task).recommendationAction ==
+                    PostInteractionRecommendationSideEffect.REFRESH
+            }
         verifyNoInteractions(
             postRecommendFeatureStoreService,
             eventPublisher,
@@ -372,9 +388,15 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // then
         val interactionTasks = postInteractionSideEffectTasksSince(previousTaskIds)
         assertThat(interactionTasks).hasSize(2)
-        val eventTask = interactionTasks.single { task -> task.payload.contains("PostUnlikedEvent") }
-        val refreshTask = interactionTasks.single { task -> task.payload.contains("\"recommendationAction\":\"REFRESH\"") }
-        assertThat(eventTask.payload).contains("PostUnlikedEvent")
+        val eventTask =
+            interactionTasks.single { task ->
+                postInteractionSideEffectPayload(task).domainEventType == PostUnlikedEvent::class.java.name
+            }
+        val refreshTask =
+            interactionTasks.single { task ->
+                postInteractionSideEffectPayload(task).recommendationAction ==
+                    PostInteractionRecommendationSideEffect.REFRESH
+            }
         verifyNoInteractions(
             postRecommendFeatureStoreService,
             eventPublisher,
@@ -448,7 +470,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         assertThat(sideEffectTasks).hasSize(1)
         val sideEffectTask = sideEffectTasks.single()
         assertThat(sideEffectTask.aggregateId).isEqualTo(post.id)
-        assertThat(sideEffectTask.payload).contains("\"postId\":${post.id}")
+        assertThat(postWriteSideEffectPayload(sideEffectTask).postId).isEqualTo(post.id)
     }
 
     @Test
@@ -644,7 +666,12 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     private fun singlePostWriteSideEffectPayloadSince(previousTaskIds: Set<Long>): PostWriteSideEffectPayload {
         val sideEffectTasks = postWriteSideEffectTasksSince(previousTaskIds)
         assertThat(sideEffectTasks).hasSize(1)
-        return objectMapper.readValue(sideEffectTasks.single().payload, PostWriteSideEffectPayload::class.java)
+        return postWriteSideEffectPayload(sideEffectTasks.single())
+    }
+
+    private fun postWriteSideEffectPayload(task: Task): PostWriteSideEffectPayload {
+        val envelope = objectMapper.readValue(task.payload, TaskPayloadEnvelope::class.java)
+        return objectMapper.readValue(envelope.payloadJson, PostWriteSideEffectPayload::class.java)
     }
 
     private fun postWriteSideEffectTasksSince(previousTaskIds: Set<Long>): List<Task> =
@@ -661,8 +688,10 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 task.id !in previousTaskIds && task.taskType == "post.interaction.side-effect"
             }
 
-    private fun postInteractionSideEffectPayload(task: Task): PostInteractionSideEffectPayload =
-        objectMapper.readValue(task.payload, PostInteractionSideEffectPayload::class.java)
+    private fun postInteractionSideEffectPayload(task: Task): PostInteractionSideEffectPayload {
+        val envelope = objectMapper.readValue(task.payload, TaskPayloadEnvelope::class.java)
+        return objectMapper.readValue(envelope.payloadJson, PostInteractionSideEffectPayload::class.java)
+    }
 
     private fun recordActiveTransactionDuringSideEffects(sideEffectTransactions: MutableList<Boolean>) {
         doAnswer {

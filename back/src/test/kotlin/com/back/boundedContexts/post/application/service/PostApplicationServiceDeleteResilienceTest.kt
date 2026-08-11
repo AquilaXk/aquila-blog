@@ -15,10 +15,13 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.global.task.application.TaskFacade
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskPayloadEnvelope
+import com.back.global.task.application.TaskPayloadEnvelopeCodec
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.application.port.output.TaskQueueInsertPort
 import com.back.global.task.application.port.output.TaskQueueInsertResult
@@ -42,10 +45,10 @@ import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionException
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
-import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Clock
 import java.time.Instant
 import java.util.Optional
-import java.util.UUID
 
 @DisplayName("PostApplicationServiceDeleteResilience 테스트")
 class PostApplicationServiceDeleteResilienceTest {
@@ -74,7 +77,7 @@ class PostApplicationServiceDeleteResilienceTest {
         mock(PostRecommendFeatureStoreService::class.java)
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService =
         mock(PostKeywordSearchPipelineService::class.java)
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = jacksonObjectMapper()
     private val postReadCacheInvalidator = PostReadCacheInvalidator(cacheManager)
     private val postWriteSideEffectHandler =
         PostWriteSideEffectHandler(
@@ -92,7 +95,7 @@ class PostApplicationServiceDeleteResilienceTest {
         TaskFacade(
             taskInsertPort = taskRepository,
             taskHandlerRegistry = postWriteTaskHandlerRegistry(),
-            objectMapper = objectMapper,
+            taskPayloadEnvelopeCodec = TaskPayloadEnvelopeCodec(objectMapper, Clock.systemUTC()),
         )
     private val postHydrationService = PostHydrationService(postAttrRepository, memberAttrRepository)
     private val postCounterService =
@@ -393,12 +396,17 @@ class PostApplicationServiceDeleteResilienceTest {
 
     private fun capturePostWriteSideEffectPayload(): PostWriteSideEffectPayload {
         val task = postWriteSideEffectTasks().single()
-        return objectMapper.readValue(task.payload, PostWriteSideEffectPayload::class.java)
+        return decodePostWritePayload(task)
     }
 
     private fun capturePostWriteSideEffectPayloads(): List<PostWriteSideEffectPayload> =
         postWriteSideEffectTasks()
-            .map { task -> objectMapper.readValue(task.payload, PostWriteSideEffectPayload::class.java) }
+            .map(::decodePostWritePayload)
+
+    private fun decodePostWritePayload(task: Task): PostWriteSideEffectPayload {
+        val envelope = objectMapper.readValue(task.payload, TaskPayloadEnvelope::class.java)
+        return objectMapper.readValue(envelope.payloadJson, PostWriteSideEffectPayload::class.java)
+    }
 
     private fun postWriteSideEffectTasks(): List<Task> =
         taskRepository.savedTasks.filter { it.taskType == PostWriteSideEffectPayload.TASK_TYPE }
@@ -407,7 +415,7 @@ class PostApplicationServiceDeleteResilienceTest {
         val registry = TaskHandlerRegistry()
         registry.register(
             PostWriteSideEffectPayload.TASK_TYPE,
-            TaskHandlerEntry(
+            TaskHandlerEntry.withExactDecoders(
                 taskType = PostWriteSideEffectPayload.TASK_TYPE,
                 payloadClass = PostWriteSideEffectPayload::class.java,
                 handlerMethod =
@@ -419,7 +427,9 @@ class PostApplicationServiceDeleteResilienceTest {
                                 PostWriteSideEffectPayload::class.java,
                             ),
                     ),
-                retryPolicy = TaskRetryPolicy.fallback(PostWriteSideEffectPayload.TASK_TYPE),
+                retryPolicy = TaskRetryPolicy("post write", 5, 10, 2.0, 300),
+                schemaVersion = 2,
+                sensitivity = TaskPayloadSensitivity.PERSONAL,
             ),
         )
         return registry
@@ -440,8 +450,6 @@ class PostApplicationServiceDeleteResilienceTest {
             savedTasks += task
             return task
         }
-
-        override fun existsByUid(uid: UUID): Boolean = savedTasks.any { it.uid == uid }
 
         override fun countByStatus(status: TaskStatus): Long = unsupported()
 

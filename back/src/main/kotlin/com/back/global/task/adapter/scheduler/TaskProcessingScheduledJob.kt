@@ -1,10 +1,14 @@
 package com.back.global.task.adapter.scheduler
 
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.StoredTaskPayloadMetadata
 import com.back.global.task.application.TaskExecutionContext
 import com.back.global.task.application.TaskExecutionContextHolder
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskPayloadEnvelopeCodec
+import com.back.global.task.application.TaskPayloadQuarantineException
+import com.back.global.task.application.TaskQuarantineReason
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
@@ -17,7 +21,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
-import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -45,8 +48,8 @@ import java.util.concurrent.atomic.AtomicLong
 class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,
+    private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
     private val transactionTemplate: TransactionTemplate,
-    private val objectMapper: ObjectMapper,
     @param:Value("\${custom.task.processor.batchSize:50}")
     private val batchSize: Int,
     @param:Value("\${custom.task.processor.processingTimeoutSeconds:900}")
@@ -111,6 +114,8 @@ class TaskProcessingScheduledJob(
         val taskId: Long,
         val taskUid: UUID,
         val leaseToken: UUID,
+        val aggregateType: String,
+        val aggregateId: Long,
         val taskType: String,
         val payload: String,
     )
@@ -145,7 +150,7 @@ class TaskProcessingScheduledJob(
                     val leaseToken = it.markAsProcessing()
                     TaskDispatchSlot(it.id, leaseToken, it.taskType)
                 }
-            } ?: emptyList()
+            }
 
         var dispatchedWorkers = 0
         dispatchSlots.forEach { slot ->
@@ -311,13 +316,18 @@ class TaskProcessingScheduledJob(
             transactionTemplate.execute {
                 val staleTasks = taskRepository.findStaleProcessingTasksWithLock(stuckBefore, limit)
                 staleTasks.forEach {
-                    it.recoverFromStuckProcessing(
-                        "Recovered stale processing task",
-                        taskHandlerRegistry.getRetryPolicy(it.taskType),
-                    )
+                    val entry = taskHandlerRegistry.getEntry(it.taskType)
+                    if (entry == null) {
+                        it.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name)
+                    } else {
+                        it.recoverFromStuckProcessing(
+                            "Recovered stale processing task",
+                            entry.retryPolicy,
+                        )
+                    }
                 }
                 staleTasks.map { it.id }
-            } ?: emptyList()
+            }
 
         if (recoveredTaskIds.isNotEmpty()) {
             logger.warn("Recovered stale processing tasks: {}", recoveredTaskIds)
@@ -327,22 +337,46 @@ class TaskProcessingScheduledJob(
     private fun executeTask(
         taskId: Long,
         leaseToken: UUID,
-    ) = run {
+    ) {
         val context = loadTaskExecutionContext(taskId, leaseToken) ?: return
         val entry = taskHandlerRegistry.getEntry(context.taskType)
         val startedAtNanos = System.nanoTime()
 
         if (entry == null) {
             logger.warn("No handler found for task type: {}", context.taskType)
-            markTaskFailed(taskId, context.leaseToken, context.taskType, "No handler found")
+            markTaskQuarantined(
+                taskId,
+                context.leaseToken,
+                context.taskType,
+                TaskQuarantineReason.UNKNOWN_TASK_TYPE,
+            )
             return
         }
 
         try {
-            val payload = objectMapper.readValue(context.payload, entry.payloadClass) as TaskPayload
+            val payload =
+                taskPayloadEnvelopeCodec.decode(
+                    rawEnvelope = context.payload,
+                    storedMetadata =
+                        StoredTaskPayloadMetadata(
+                            uid = context.taskUid,
+                            aggregateType = context.aggregateType,
+                            aggregateId = context.aggregateId,
+                            taskType = context.taskType,
+                        ),
+                    entry = entry,
+                )
             invokeHandlerWithTimeout(context, entry, payload)
             markTaskCompleted(taskId, context.leaseToken, context.taskType)
             recordTaskDuration(context.taskType, startedAtNanos)
+        } catch (exception: TaskPayloadQuarantineException) {
+            logger.warn(
+                "task_payload_quarantined taskId={} taskType={} reason={}",
+                taskId,
+                context.taskType,
+                exception.reason,
+            )
+            markTaskQuarantined(taskId, context.leaseToken, context.taskType, exception.reason)
         } catch (exception: TimeoutException) {
             logger.error(
                 "Task handler timeout: {} (type={}, timeoutSeconds={})",
@@ -377,8 +411,34 @@ class TaskProcessingScheduledJob(
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute null
             if (!task.isCurrentExecution(leaseToken)) return@execute null
-            LoadedTaskExecution(task.id, task.uid, leaseToken, task.taskType, task.payload)
+            LoadedTaskExecution(
+                taskId = task.id,
+                taskUid = task.uid,
+                leaseToken = leaseToken,
+                aggregateType = task.aggregateType,
+                aggregateId = task.aggregateId,
+                taskType = task.taskType,
+                payload = task.payload,
+            )
         }
+
+    private fun markTaskQuarantined(
+        taskId: Long,
+        leaseToken: UUID,
+        taskType: String,
+        reason: TaskQuarantineReason,
+    ) {
+        var quarantined = false
+        transactionTemplate.execute {
+            val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
+            if (!task.isCurrentExecution(leaseToken)) return@execute
+            task.markAsQuarantined(reason.name)
+            quarantined = true
+        }
+        if (quarantined) {
+            recordTaskResult(taskType, "quarantine")
+        }
+    }
 
     private fun markTaskCompleted(
         taskId: Long,

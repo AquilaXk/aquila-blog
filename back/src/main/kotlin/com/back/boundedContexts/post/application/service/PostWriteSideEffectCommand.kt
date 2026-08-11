@@ -1,11 +1,14 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.global.task.annotation.Task
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.standard.dto.TaskPayload
 import java.util.UUID
 
 @Task(
     type = PostWriteSideEffectPayload.TASK_TYPE,
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.PERSONAL,
     label = "게시글 쓰기 후속 작업",
     maxRetries = 5,
     baseDelaySeconds = 10,

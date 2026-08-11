@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.application.service.PostReadCacheInvalidati
 import com.back.boundedContexts.post.application.service.PostSummaryResolver
 import com.back.boundedContexts.post.application.service.PostWriteSideEffectHandler
 import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
+import com.back.global.task.application.TaskPayloadEnvelope
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
 import jakarta.persistence.EntityManager
@@ -455,6 +456,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 PostWriteSideEffectPayload.TASK_TYPE,
                 postId,
             )
-        return objectMapper.readValue(payloadJson, PostWriteSideEffectPayload::class.java)
+        val envelope = objectMapper.readValue(payloadJson, TaskPayloadEnvelope::class.java)
+        return objectMapper.readValue(envelope.payloadJson, PostWriteSideEffectPayload::class.java)
     }
 }

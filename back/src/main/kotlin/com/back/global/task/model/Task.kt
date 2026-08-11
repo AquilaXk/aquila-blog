@@ -18,6 +18,7 @@ enum class TaskStatus {
     PROCESSING,
     COMPLETED,
     FAILED,
+    QUARANTINED,
 }
 
 /**
@@ -61,7 +62,7 @@ class Task(
     val aggregateId: Long,
     val taskType: String,
     @field:Column(columnDefinition = "TEXT")
-    val payload: String,
+    var payload: String,
     @field:Enumerated(EnumType.STRING)
     var status: TaskStatus = TaskStatus.PENDING,
     var retryCount: Int = 0,
@@ -105,6 +106,14 @@ class Task(
         executionLeaseToken = null
     }
 
+    fun markAsQuarantined(reasonCode: String) {
+        require(reasonCode.isNotBlank()) { "Task quarantine reason must not be blank" }
+        status = TaskStatus.QUARANTINED
+        payload = REDACTED_PAYLOAD
+        errorMessage = reasonCode
+        executionLeaseToken = null
+    }
+
     fun markAsProcessing(): UUID {
         val leaseToken = UUID.randomUUID()
         status = TaskStatus.PROCESSING
@@ -132,5 +141,9 @@ class Task(
             status = TaskStatus.PENDING
             nextRetryAt = Instant.now().plusSeconds(retryPolicy.nextDelaySeconds(retryCount))
         }
+    }
+
+    companion object {
+        const val REDACTED_PAYLOAD = "{\"redacted\":true}"
     }
 }

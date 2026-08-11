@@ -23,6 +23,8 @@ data class TaskDlqReplayResult(
 @Service
 class TaskDlqReplayService(
     private val taskQueueRepository: TaskQueueRepositoryPort,
+    private val taskHandlerRegistry: TaskHandlerRegistry,
+    private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
     private val meterRegistry: MeterRegistry? = null,
 ) {
     @Transactional
@@ -57,6 +59,29 @@ class TaskDlqReplayService(
 
         val replayedIds = mutableListOf<Long>()
         failedTasks.forEach { task ->
+            val entry = taskHandlerRegistry.getEntry(task.taskType)
+            if (entry == null) {
+                task.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name)
+                taskQueueRepository.save(task)
+                return@forEach
+            }
+            try {
+                taskPayloadEnvelopeCodec.decode(
+                    rawEnvelope = task.payload,
+                    storedMetadata =
+                        StoredTaskPayloadMetadata(
+                            uid = task.uid,
+                            aggregateType = task.aggregateType,
+                            aggregateId = task.aggregateId,
+                            taskType = task.taskType,
+                        ),
+                    entry = entry,
+                )
+            } catch (exception: TaskPayloadQuarantineException) {
+                task.markAsQuarantined(exception.reason.name)
+                taskQueueRepository.save(task)
+                return@forEach
+            }
             task.status = TaskStatus.PENDING
             task.nextRetryAt = now
             task.errorMessage = "manual-dlq-replay@${now.epochSecond}"

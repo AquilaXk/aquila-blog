@@ -10,10 +10,13 @@ import com.back.boundedContexts.post.dto.PostSearchEngineMirrorPayload
 import com.back.boundedContexts.post.dto.PostSearchIndexSyncPayload
 import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.global.task.application.TaskFacade
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskPayloadEnvelope
+import com.back.global.task.application.TaskPayloadEnvelopeCodec
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.application.port.output.TaskQueueInsertPort
 import com.back.global.task.application.port.output.TaskQueueInsertResult
@@ -26,7 +29,8 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.springframework.data.domain.Pageable
-import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
@@ -100,11 +104,15 @@ class PostReadModelTaskEventListenerTest {
             "post.search-index.sync",
             "post.search-engine.mirror",
         )
-        val objectMapper = ObjectMapper()
+        val objectMapper = jacksonObjectMapper()
+        val searchIndexEnvelope =
+            objectMapper.readValue(repository.savedTasks[0].payload, TaskPayloadEnvelope::class.java)
+        val mirrorEnvelope =
+            objectMapper.readValue(repository.savedTasks[1].payload, TaskPayloadEnvelope::class.java)
         val searchIndexPayload =
-            objectMapper.readValue(repository.savedTasks[0].payload, PostSearchIndexSyncPayload::class.java)
+            objectMapper.readValue(searchIndexEnvelope.payloadJson, PostSearchIndexSyncPayload::class.java)
         val mirrorPayload =
-            objectMapper.readValue(repository.savedTasks[1].payload, PostSearchEngineMirrorPayload::class.java)
+            objectMapper.readValue(mirrorEnvelope.payloadJson, PostSearchEngineMirrorPayload::class.java)
         assertThat(searchIndexPayload.postId).isEqualTo(91L)
         assertThat(searchIndexPayload.forceClear).isTrue()
         assertThat(mirrorPayload.postId).isEqualTo(91L)
@@ -128,12 +136,14 @@ class PostReadModelTaskEventListenerTest {
             prewarmEnabled = true,
         )
 
-    private fun createTaskFacade(repository: RecordingTaskQueueRepository): TaskFacade =
-        TaskFacade(
+    private fun createTaskFacade(repository: RecordingTaskQueueRepository): TaskFacade {
+        val objectMapper = jacksonObjectMapper()
+        return TaskFacade(
             taskInsertPort = repository,
             taskHandlerRegistry = createTaskHandlerRegistry(),
-            objectMapper = ObjectMapper(),
+            taskPayloadEnvelopeCodec = TaskPayloadEnvelopeCodec(objectMapper, Clock.systemUTC()),
         )
+    }
 
     private fun createTaskHandlerRegistry(): TaskHandlerRegistry {
         val registry = TaskHandlerRegistry()
@@ -152,7 +162,7 @@ class PostReadModelTaskEventListenerTest {
     ) {
         registry.register(
             taskType,
-            TaskHandlerEntry(
+            TaskHandlerEntry.withExactDecoders(
                 taskType = taskType,
                 payloadClass = payloadClass,
                 handlerMethod =
@@ -160,7 +170,9 @@ class PostReadModelTaskEventListenerTest {
                         bean = listener,
                         method = PostReadModelTaskEventListener::class.java.getDeclaredMethod("handle", payloadClass),
                     ),
-                retryPolicy = TaskRetryPolicy.fallback(taskType),
+                retryPolicy = TaskRetryPolicy(taskType, 5, 10, 2.0, 300),
+                schemaVersion = 2,
+                sensitivity = TaskPayloadSensitivity.PUBLIC,
             ),
         )
     }
@@ -216,8 +228,6 @@ class PostReadModelTaskEventListenerTest {
             savedTasks += task
             return task
         }
-
-        override fun existsByUid(uid: UUID): Boolean = savedTasks.any { it.uid == uid }
 
         override fun countByStatus(status: TaskStatus): Long = unsupported()
 

@@ -1,0 +1,188 @@
+package com.back.global.task.application
+
+import com.back.global.task.annotation.TaskPayloadSensitivity
+import com.back.standard.dto.ExpiringTaskPayload
+import com.back.standard.dto.TaskPayload
+import org.springframework.stereotype.Component
+import tools.jackson.core.StreamReadFeature
+import tools.jackson.databind.DeserializationFeature
+import tools.jackson.databind.ObjectMapper
+import java.time.Clock
+import java.time.Instant
+import java.util.UUID
+
+data class TaskPayloadEnvelope(
+    val schemaVersion: Int,
+    val taskType: String,
+    val sensitivity: TaskPayloadSensitivity,
+    val createdAtEpochMs: Long,
+    val expiresAtEpochMs: Long?,
+    val payloadJson: String,
+)
+
+data class StoredTaskPayloadMetadata(
+    val uid: UUID,
+    val aggregateType: String,
+    val aggregateId: Long,
+    val taskType: String,
+)
+
+enum class TaskQuarantineReason {
+    UNKNOWN_TASK_TYPE,
+    MALFORMED_ENVELOPE,
+    UNKNOWN_SCHEMA_VERSION,
+    METADATA_MISMATCH,
+    SENSITIVITY_MISMATCH,
+    MALFORMED_PAYLOAD,
+    EXPIRED_PAYLOAD,
+}
+
+class TaskPayloadQuarantineException(
+    val reason: TaskQuarantineReason,
+) : RuntimeException("Task payload quarantined: ${reason.name}")
+
+@Component
+class TaskPayloadEnvelopeCodec(
+    private val objectMapper: ObjectMapper,
+    private val clock: Clock,
+) {
+    private val strictEnvelopeReader =
+        objectMapper
+            .readerFor(TaskPayloadEnvelope::class.java)
+            .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .with(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+
+    fun encode(
+        payload: TaskPayload,
+        entry: TaskHandlerEntry,
+    ): String {
+        require(entry.payloadClass.isInstance(payload)) {
+            "Task payload class does not match registered handler entry"
+        }
+        val now = Instant.now(clock)
+        val expiresAtEpochMs = expirationForEnqueue(payload, entry.sensitivity, now)
+        val envelope =
+            TaskPayloadEnvelope(
+                schemaVersion = entry.schemaVersion,
+                taskType = entry.taskType,
+                sensitivity = entry.sensitivity,
+                createdAtEpochMs = now.toEpochMilli(),
+                expiresAtEpochMs = expiresAtEpochMs,
+                payloadJson = objectMapper.writeValueAsString(payload),
+            )
+        return objectMapper.writeValueAsString(envelope)
+    }
+
+    fun decode(
+        rawEnvelope: String,
+        storedMetadata: StoredTaskPayloadMetadata,
+        entry: TaskHandlerEntry,
+    ): TaskPayload {
+        val envelope = parseEnvelope(rawEnvelope)
+        validateEnvelopeMetadata(envelope, storedMetadata, entry)
+        val decoder =
+            entry.decoderFor(envelope.schemaVersion)
+                ?: quarantine(TaskQuarantineReason.UNKNOWN_SCHEMA_VERSION)
+        val payload = decodePayload(envelope.payloadJson, decoder)
+        validatePayloadMetadata(payload, storedMetadata)
+        validateExpiration(envelope, payload, entry.sensitivity)
+        return payload
+    }
+
+    private fun parseEnvelope(rawEnvelope: String): TaskPayloadEnvelope =
+        try {
+            strictEnvelopeReader.readValue(rawEnvelope)
+        } catch (_: Exception) {
+            quarantine(TaskQuarantineReason.MALFORMED_ENVELOPE)
+        }
+
+    private fun validateEnvelopeMetadata(
+        envelope: TaskPayloadEnvelope,
+        storedMetadata: StoredTaskPayloadMetadata,
+        entry: TaskHandlerEntry,
+    ) {
+        if (envelope.taskType != storedMetadata.taskType || envelope.taskType != entry.taskType) {
+            quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+        }
+        if (envelope.sensitivity != entry.sensitivity) {
+            quarantine(TaskQuarantineReason.SENSITIVITY_MISMATCH)
+        }
+        val nowEpochMs = Instant.now(clock).toEpochMilli()
+        if (envelope.createdAtEpochMs <= 0 || envelope.createdAtEpochMs > nowEpochMs) {
+            quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+        }
+    }
+
+    private fun decodePayload(
+        payloadJson: String,
+        decoder: TaskPayloadDecoder,
+    ): TaskPayload =
+        try {
+            objectMapper
+                .readerFor(decoder.payloadClass)
+                .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .with(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                .readValue(payloadJson)
+        } catch (_: Exception) {
+            quarantine(TaskQuarantineReason.MALFORMED_PAYLOAD)
+        }
+
+    private fun validatePayloadMetadata(
+        payload: TaskPayload,
+        storedMetadata: StoredTaskPayloadMetadata,
+    ) {
+        if (
+            payload.uid != storedMetadata.uid ||
+            payload.aggregateType != storedMetadata.aggregateType ||
+            payload.aggregateId != storedMetadata.aggregateId
+        ) {
+            quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+        }
+    }
+
+    private fun validateExpiration(
+        envelope: TaskPayloadEnvelope,
+        payload: TaskPayload,
+        sensitivity: TaskPayloadSensitivity,
+    ) {
+        val payloadExpiry = (payload as? ExpiringTaskPayload)?.expiresAt?.toEpochMilli()
+        if (sensitivity != TaskPayloadSensitivity.EXPIRING_SECRET) {
+            if (payloadExpiry != null || envelope.expiresAtEpochMs != null) {
+                quarantine(TaskQuarantineReason.SENSITIVITY_MISMATCH)
+            }
+            return
+        }
+
+        val exactPayloadExpiry = payloadExpiry ?: quarantine(TaskQuarantineReason.SENSITIVITY_MISMATCH)
+        if (envelope.schemaVersion == TaskHandlerRegistry.CURRENT_TASK_PAYLOAD_SCHEMA_VERSION) {
+            if (envelope.expiresAtEpochMs != exactPayloadExpiry) {
+                quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+            }
+        } else if (envelope.expiresAtEpochMs != null && envelope.expiresAtEpochMs != exactPayloadExpiry) {
+            quarantine(TaskQuarantineReason.METADATA_MISMATCH)
+        }
+
+        val effectiveExpiry = envelope.expiresAtEpochMs ?: exactPayloadExpiry
+        if (effectiveExpiry <= Instant.now(clock).toEpochMilli()) {
+            quarantine(TaskQuarantineReason.EXPIRED_PAYLOAD)
+        }
+    }
+
+    private fun expirationForEnqueue(
+        payload: TaskPayload,
+        sensitivity: TaskPayloadSensitivity,
+        now: Instant,
+    ): Long? {
+        val expiringPayload = payload as? ExpiringTaskPayload
+        if (sensitivity != TaskPayloadSensitivity.EXPIRING_SECRET) {
+            require(expiringPayload == null) { "Only EXPIRING_SECRET task payloads may declare expiresAt" }
+            return null
+        }
+
+        val expiresAt = requireNotNull(expiringPayload) { "EXPIRING_SECRET task payload must declare expiresAt" }.expiresAt
+        require(expiresAt.isAfter(now)) { "Cannot enqueue an expired task payload" }
+        return expiresAt.toEpochMilli()
+    }
+
+    private fun quarantine(reason: TaskQuarantineReason): Nothing = throw TaskPayloadQuarantineException(reason)
+}

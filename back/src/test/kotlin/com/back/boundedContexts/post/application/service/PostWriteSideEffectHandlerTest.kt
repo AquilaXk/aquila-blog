@@ -201,24 +201,21 @@ class PostWriteSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("추천 갱신 시점에 글이 사라졌으면 feature store refresh를 건너뛴다")
-    fun skipRecommendationRefreshWhenPostIsMissing() {
+    @DisplayName("추천 갱신 시점에 글이 사라졌으면 task retry를 위해 실패한다")
+    fun failRecommendationRefreshWhenPostIsMissing() {
         // given
         `when`(postRepository.findById(11L)).thenReturn(Optional.empty())
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             handler.handle(
-                PostWriteAfterCommitEvent(
-                    command =
-                        sideEffectCommand(
-                            postId = 11L,
-                            recommendationAction = PostRecommendationSideEffect.REFRESH,
-                        ),
-                    domainEvent = null,
+                postWriteSideEffectPayload(
+                    postId = 11L,
+                    recommendationAction = PostRecommendationSideEffect.REFRESH,
                 ),
             )
-        }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("missing postId=11")
         verify(postRecommendFeatureStoreService, never()).refresh(anyPost())
     }
 
@@ -362,8 +359,8 @@ class PostWriteSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("알 수 없는 domain event type은 task 실패로 전파하지 않고 발행만 건너뛴다")
-    fun skipUnknownDomainEventTypeWhenHandlingTaskPayload() {
+    @DisplayName("알 수 없는 domain event type은 task retry를 위해 실패한다")
+    fun failUnknownDomainEventTypeWhenHandlingTaskPayload() {
         // given
         val payload =
             postWriteSideEffectPayload(
@@ -374,9 +371,10 @@ class PostWriteSideEffectHandlerTest {
             )
 
         // when & then
-        assertDoesNotThrow {
+        assertThatThrownBy {
             handler.handle(payload)
-        }
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("Unsupported post write domain event type")
         verifyNoInteractions(eventPublisher)
     }
 

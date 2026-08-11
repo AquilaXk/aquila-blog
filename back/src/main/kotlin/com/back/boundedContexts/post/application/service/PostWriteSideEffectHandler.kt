@@ -136,10 +136,7 @@ class PostWriteSideEffectHandler(
     private fun refreshRecommendFeatureStoreAfterCommit(postId: Long) {
         val post =
             postRepository.findById(postId).getOrNull()
-                ?: run {
-                    logger.warn("recommend_feature_store_refresh_skipped_missing_post postId={}", postId)
-                    return
-                }
+                ?: error("Cannot refresh recommendation features for missing postId=$postId")
         hydratePostAttrs(post)
         postRecommendFeatureStoreService.refresh(post)
     }
@@ -174,18 +171,16 @@ class PostWriteSideEffectHandler(
         )
 
     private fun PostWriteSideEffectPayload.toDomainEvent(): EventPayload? {
-        val eventType = domainEventType ?: return null
-        val eventJson = domainEventJson ?: return null
+        if (domainEventType == null && domainEventJson == null) return null
+        val eventType = requireNotNull(domainEventType) { "Post write domain event type is required" }
+        val eventJson = requireNotNull(domainEventJson) { "Post write domain event payload is required" }
         return when (eventType) {
             PostAccountDeletionDeletedEvent::class.java.name ->
                 objectMapper.readValue(eventJson, PostAccountDeletionDeletedEvent::class.java)
             PostWrittenEvent::class.java.name -> objectMapper.readValue(eventJson, PostWrittenEvent::class.java)
             PostModifiedEvent::class.java.name -> objectMapper.readValue(eventJson, PostModifiedEvent::class.java)
             PostDeletedEvent::class.java.name -> objectMapper.readValue(eventJson, PostDeletedEvent::class.java)
-            else -> {
-                logger.warn("post_write_side_effect_unknown_domain_event_type type={}", eventType)
-                null
-            }
+            else -> error("Unsupported post write domain event type=$eventType")
         }
     }
 

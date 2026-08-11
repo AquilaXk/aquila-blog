@@ -5,6 +5,7 @@ import com.back.global.task.annotation.TaskHandler
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskHandlerRegistry.Companion.CURRENT_TASK_PAYLOAD_SCHEMA_VERSION
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.standard.dto.TaskPayload
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory
@@ -35,10 +36,13 @@ class TaskHandlerConfigurer(
                         val taskAnnotation =
                             payloadClass.getAnnotation(Task::class.java)
                                 ?: error("No @Task annotation on ${payloadClass.simpleName}")
+                        check(taskAnnotation.schemaVersion == CURRENT_TASK_PAYLOAD_SCHEMA_VERSION) {
+                            "@Task ${payloadClass.simpleName} must declare schemaVersion=$CURRENT_TASK_PAYLOAD_SCHEMA_VERSION"
+                        }
 
                         taskHandlerRegistry.register(
                             taskAnnotation.type,
-                            TaskHandlerEntry(
+                            TaskHandlerEntry.withExactDecoders(
                                 taskType = taskAnnotation.type,
                                 payloadClass = payloadClass,
                                 handlerMethod = TaskHandlerMethod(bean, method),
@@ -50,6 +54,8 @@ class TaskHandlerConfigurer(
                                         backoffMultiplier = taskAnnotation.backoffMultiplier,
                                         maxDelaySeconds = taskAnnotation.maxDelaySeconds,
                                     ),
+                                schemaVersion = taskAnnotation.schemaVersion,
+                                sensitivity = taskAnnotation.sensitivity,
                             ),
                         )
                     }

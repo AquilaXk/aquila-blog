@@ -1,10 +1,12 @@
 package com.back.global.task.adapter.scheduler
 
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.global.task.application.TaskExecutionContextHolder
 import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskPayloadEnvelopeCodec
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
@@ -21,8 +23,10 @@ import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
 import org.springframework.transaction.support.TransactionTemplate
-import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -37,18 +41,8 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         val startedWorkers = AtomicInteger(0)
         val releaseWorkers = CountDownLatch(1)
         val taskType = "test.dynamic-prefetch"
-        val payload = ObjectMapper().writeValueAsString(StubPayload())
         val tasks =
-            (1L..10L).map { id ->
-                Task(
-                    id = id,
-                    uid = UUID.randomUUID(),
-                    aggregateType = "test",
-                    aggregateId = id,
-                    taskType = taskType,
-                    payload = payload,
-                )
-            }
+            (1L..10L).map { id -> task(id, taskType) }
         val fixture =
             createFixture(
                 maxConcurrent = 8,
@@ -94,16 +88,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     @DisplayName("stale 실행은 retry 실행의 PROCESSING 상태를 완료로 확정하지 못한다")
     fun `stale execution cannot complete retried processing task`() {
         val taskType = "test.timeout-fencing"
-        val payload = ObjectMapper().writeValueAsString(StubPayload())
-        val task =
-            Task(
-                id = 1L,
-                uid = UUID.randomUUID(),
-                aggregateType = "test",
-                aggregateId = 1L,
-                taskType = taskType,
-                payload = payload,
-            )
+        val task = task(1L, taskType)
         val handler = AttemptBlockingHandler()
         val fixture =
             createFixture(
@@ -151,16 +136,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     @DisplayName("지연 시작 stale worker는 retry lease를 대신 실행하지 않는다")
     fun `delayed stale worker cannot adopt retry lease`() {
         val taskType = "test.delayed-timeout-fencing"
-        val payload = ObjectMapper().writeValueAsString(StubPayload())
-        val task =
-            Task(
-                id = 1L,
-                uid = UUID.randomUUID(),
-                aggregateType = "test",
-                aggregateId = 1L,
-                taskType = taskType,
-                payload = payload,
-            )
+        val task = task(1L, taskType)
         val handler = CountingBlockingHandler()
         val firstFindStarted = CountDownLatch(1)
         val releaseFirstFind = CountDownLatch(1)
@@ -216,16 +192,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     fun `handler can read task uid idempotency key from execution context`() {
         val taskType = "test.execution-context"
         val taskUid = UUID.randomUUID()
-        val payload = ObjectMapper().writeValueAsString(StubPayload(uid = taskUid))
-        val task =
-            Task(
-                id = 1L,
-                uid = taskUid,
-                aggregateType = "test",
-                aggregateId = 1L,
-                taskType = taskType,
-                payload = payload,
-            )
+        val task = task(1L, taskType, taskUid)
         val handler = ContextCapturingHandler()
         val fixture =
             createFixture(
@@ -257,6 +224,79 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         }
     }
 
+    @Test
+    @DisplayName("등록되지 않은 task type은 handler 없이 quarantine하고 payload를 지운다")
+    fun `unknown task type is quarantined without handler execution`() {
+        val task = task(1L, "test.unknown-task-type")
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenReturn(listOf(task), emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findById(task.id))
+            .thenReturn(Optional.of(task))
+
+        try {
+            fixture.job.processTasks()
+            waitUntilStatus(task, TaskStatus.QUARANTINED)
+
+            assertThat(task.status).isEqualTo(TaskStatus.QUARANTINED)
+            assertThat(task.payload).isEqualTo(Task.REDACTED_PAYLOAD)
+            assertThat(task.errorMessage).isEqualTo("UNKNOWN_TASK_TYPE")
+            assertThat(task.retryCount).isZero()
+        } finally {
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    @Test
+    @DisplayName("malformed envelope은 등록 handler를 호출하지 않고 quarantine한다")
+    fun `malformed envelope is quarantined without registered handler execution`() {
+        val taskType = "test.malformed-envelope"
+        val task = task(1L, taskType).apply { payload = "not-an-envelope" }
+        val handler = CountingBlockingHandler()
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                handlerEntries = listOf(countingBlockingTaskHandlerEntry(taskType, handler)),
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenReturn(listOf(task), emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findById(task.id))
+            .thenReturn(Optional.of(task))
+
+        try {
+            fixture.job.processTasks()
+            waitUntilStatus(task, TaskStatus.QUARANTINED)
+
+            assertThat(handler.invocations).hasValue(0)
+            assertThat(task.payload).isEqualTo(Task.REDACTED_PAYLOAD)
+            assertThat(task.errorMessage).isEqualTo("MALFORMED_ENVELOPE")
+        } finally {
+            handler.release.countDown()
+            fixture.job.shutdownExecutor()
+        }
+    }
+
     private data class JobFixture(
         val job: TaskProcessingScheduledJob,
         val taskRepository: TaskRepository,
@@ -267,6 +307,28 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         override val aggregateType: String = "test",
         override val aggregateId: Long = 1,
     ) : TaskPayload
+
+    private fun task(
+        id: Long,
+        taskType: String,
+        uid: UUID = UUID.randomUUID(),
+    ): Task {
+        val payload = StubPayload(uid = uid, aggregateId = id)
+        return Task(
+            id = id,
+            uid = uid,
+            aggregateType = payload.aggregateType,
+            aggregateId = payload.aggregateId,
+            taskType = taskType,
+            payload = payloadEnvelopeCodec().encode(payload, taskHandlerEntry(taskType)),
+        )
+    }
+
+    private fun payloadEnvelopeCodec(): TaskPayloadEnvelopeCodec =
+        TaskPayloadEnvelopeCodec(
+            jacksonObjectMapper(),
+            Clock.fixed(Instant.parse("2026-08-11T00:00:00Z"), ZoneOffset.UTC),
+        )
 
     private fun createFixture(
         maxConcurrent: Int,
@@ -301,8 +363,8 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             TaskProcessingScheduledJob(
                 taskRepository = taskRepository,
                 taskHandlerRegistry = taskHandlerRegistry,
+                taskPayloadEnvelopeCodec = payloadEnvelopeCodec(),
                 transactionTemplate = TransactionTemplate(NoopTransactionManager()),
-                objectMapper = ObjectMapper(),
                 batchSize = 50,
                 processingTimeoutSeconds = 900,
                 maxConcurrent = maxConcurrent,
@@ -326,7 +388,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     }
 
     private fun taskHandlerEntry(taskType: String): TaskHandlerEntry =
-        TaskHandlerEntry(
+        TaskHandlerEntry.withExactDecoders(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -338,7 +400,9 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                             StubPayload::class.java,
                         ),
                 ),
-            retryPolicy = TaskRetryPolicy.fallback(taskType),
+            retryPolicy = taskRetryPolicy(taskType),
+            schemaVersion = 2,
+            sensitivity = TaskPayloadSensitivity.INTERNAL,
         )
 
     private fun blockingTaskHandlerEntry(
@@ -347,7 +411,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         releaseWorkers: CountDownLatch,
     ): TaskHandlerEntry {
         val handler = BlockingHandler(startedWorkers, releaseWorkers)
-        return TaskHandlerEntry(
+        return TaskHandlerEntry.withExactDecoders(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -359,7 +423,9 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                             StubPayload::class.java,
                         ),
                 ),
-            retryPolicy = TaskRetryPolicy.fallback(taskType),
+            retryPolicy = taskRetryPolicy(taskType),
+            schemaVersion = 2,
+            sensitivity = TaskPayloadSensitivity.INTERNAL,
         )
     }
 
@@ -367,7 +433,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         taskType: String,
         handler: AttemptBlockingHandler,
     ): TaskHandlerEntry =
-        TaskHandlerEntry(
+        TaskHandlerEntry.withExactDecoders(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -379,14 +445,16 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                             StubPayload::class.java,
                         ),
                 ),
-            retryPolicy = TaskRetryPolicy.fallback(taskType),
+            retryPolicy = taskRetryPolicy(taskType),
+            schemaVersion = 2,
+            sensitivity = TaskPayloadSensitivity.INTERNAL,
         )
 
     private fun contextCapturingTaskHandlerEntry(
         taskType: String,
         handler: ContextCapturingHandler,
     ): TaskHandlerEntry =
-        TaskHandlerEntry(
+        TaskHandlerEntry.withExactDecoders(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -398,14 +466,16 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                             StubPayload::class.java,
                         ),
                 ),
-            retryPolicy = TaskRetryPolicy.fallback(taskType),
+            retryPolicy = taskRetryPolicy(taskType),
+            schemaVersion = 2,
+            sensitivity = TaskPayloadSensitivity.INTERNAL,
         )
 
     private fun countingBlockingTaskHandlerEntry(
         taskType: String,
         handler: CountingBlockingHandler,
     ): TaskHandlerEntry =
-        TaskHandlerEntry(
+        TaskHandlerEntry.withExactDecoders(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -417,7 +487,18 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                             StubPayload::class.java,
                         ),
                 ),
-            retryPolicy = TaskRetryPolicy.fallback(taskType),
+            retryPolicy = taskRetryPolicy(taskType),
+            schemaVersion = 2,
+            sensitivity = TaskPayloadSensitivity.INTERNAL,
+        )
+
+    private fun taskRetryPolicy(taskType: String): TaskRetryPolicy =
+        TaskRetryPolicy(
+            label = taskType,
+            maxRetries = 10,
+            baseDelaySeconds = 180,
+            backoffMultiplier = 3.0,
+            maxDelaySeconds = 21_600,
         )
 
     private class BlockingHandler(

@@ -6,7 +6,9 @@ import com.back.boundedContexts.member.subContexts.notification.domain.MemberNot
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostInteractionSideEffectHandler
 import com.back.boundedContexts.post.application.service.PostInteractionSideEffectPayload
+import com.back.boundedContexts.post.event.PostCommentWrittenEvent
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.TaskPayloadEnvelope
 import com.back.global.task.model.Task
 import com.back.standard.extensions.getOrThrow
 import com.back.support.BaseSeededIntegrationTest
@@ -84,8 +86,10 @@ class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
         postApplicationService.writeComment(commenter, post, "한 번만 보여야 하는 댓글")
         val commentTask =
             postInteractionSideEffectTasksSince(previousTaskIds)
-                .single { task -> task.payload.contains("PostCommentWrittenEvent") }
-        val payload = objectMapper.readValue(commentTask.payload, PostInteractionSideEffectPayload::class.java)
+                .single { task ->
+                    postInteractionPayload(task).domainEventType == PostCommentWrittenEvent::class.java.name
+                }
+        val payload = postInteractionPayload(commentTask)
 
         postInteractionSideEffectHandler.handle(payload)
         postInteractionSideEffectHandler.handle(payload)
@@ -139,11 +143,12 @@ class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
 
         val previousTaskIds = postInteractionSideEffectTaskIds()
         postApplicationService.writeComment(replier, post, "늦게 처리되는 답글", parentComment)
-        val replyTaskIds =
+        val replyTasks =
             postInteractionSideEffectTasksSince(previousTaskIds)
-                .filter { task -> task.payload.contains("PostCommentWrittenEvent") }
-                .map { task -> task.id }
-                .toSet()
+                .filter { task ->
+                    postInteractionPayload(task).domainEventType == PostCommentWrittenEvent::class.java.name
+                }
+        val replyTaskIds = replyTasks.map { task -> task.id }.toSet()
         postApplicationService.deleteComment(post, parentComment, author)
         firePostInteractionSideEffectTaskIds(replyTaskIds)
 
@@ -202,8 +207,7 @@ class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
     private fun firePostInteractionSideEffectsSince(previousTaskIds: Set<Long>) {
         postInteractionSideEffectTasksSince(previousTaskIds)
             .forEach { task ->
-                val payload = objectMapper.readValue(task.payload, PostInteractionSideEffectPayload::class.java)
-                postInteractionSideEffectHandler.handle(payload)
+                postInteractionSideEffectHandler.handle(postInteractionPayload(task))
             }
     }
 
@@ -212,8 +216,12 @@ class MemberNotificationEventListenerTest : BaseSeededIntegrationTest() {
             .findAll()
             .filter { task -> task.id in taskIds }
             .forEach { task ->
-                val payload = objectMapper.readValue(task.payload, PostInteractionSideEffectPayload::class.java)
-                postInteractionSideEffectHandler.handle(payload)
+                postInteractionSideEffectHandler.handle(postInteractionPayload(task))
             }
+    }
+
+    private fun postInteractionPayload(task: Task): PostInteractionSideEffectPayload {
+        val envelope = objectMapper.readValue(task.payload, TaskPayloadEnvelope::class.java)
+        return objectMapper.readValue(envelope.payloadJson, PostInteractionSideEffectPayload::class.java)
     }
 }

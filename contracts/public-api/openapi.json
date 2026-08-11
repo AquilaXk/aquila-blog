@@ -5786,7 +5786,8 @@
               "PENDING",
               "PROCESSING",
               "COMPLETED",
-              "FAILED"
+              "FAILED",
+              "QUARANTINED"
             ]
           },
           "retryCount": {

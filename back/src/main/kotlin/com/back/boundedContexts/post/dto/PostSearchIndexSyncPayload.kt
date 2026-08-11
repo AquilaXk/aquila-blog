@@ -1,11 +1,14 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.global.task.annotation.Task
+import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.standard.dto.TaskPayload
 import java.util.UUID
 
 @Task(
     type = "post.search-index.sync",
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.PUBLIC,
     label = "게시글 검색 인덱스 동기화",
     maxRetries = 5,
     baseDelaySeconds = 10,

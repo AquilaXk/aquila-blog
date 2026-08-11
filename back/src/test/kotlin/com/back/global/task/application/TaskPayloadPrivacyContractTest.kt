@@ -176,17 +176,15 @@ class TaskPayloadPrivacyContractTest {
     private fun v1EnvelopeJson(
         payloadJson: String,
         entry: TaskHandlerEntry,
-    ): String =
-        objectMapper.writeValueAsString(
-            TaskPayloadEnvelope(
-                schemaVersion = 1,
-                taskType = entry.taskType,
-                sensitivity = entry.sensitivity,
-                createdAtEpochMs = now.toEpochMilli(),
-                expiresAtEpochMs = null,
-                payloadJson = payloadJson,
-            ),
-        )
+    ): String {
+        val flatEnvelope = objectMapper.readTree(payloadJson) as ObjectNode
+        flatEnvelope.put("schemaVersion", 1)
+        flatEnvelope.put("taskType", entry.taskType)
+        flatEnvelope.put("sensitivity", entry.sensitivity.name)
+        flatEnvelope.put("createdAtEpochMs", now.toEpochMilli())
+        flatEnvelope.putNull("expiresAtEpochMs")
+        return objectMapper.writeValueAsString(flatEnvelope)
+    }
 
     private fun metadata(
         payload: TaskPayload,

@@ -439,7 +439,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         postWriteSideEffectHandler.handle(payload)
 
         // then
-        assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
+        assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostAttachmentKeys")
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
         assertThat(sideEffectTransactions).containsOnly(true)
         assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostWrittenEvent::class.java)
@@ -503,7 +503,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
             .hasMessageContaining("cache backend down")
 
         // then
-        assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostContent")
+        assertThat(invokedMethodNames(uploadedFileRetentionService)).contains("syncPostAttachmentKeys")
         assertThat(invokedMethodNames(postRecommendFeatureStoreService)).contains("refresh")
     }
 
@@ -697,10 +697,12 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         doAnswer {
             sideEffectTransactions += TransactionSynchronizationManager.isActualTransactionActive()
             null
-        }.`when`(uploadedFileRetentionService).syncPostContent(
+        }.`when`(uploadedFileRetentionService).syncPostAttachmentKeys(
             ArgumentMatchers.anyLong(),
-            ArgumentMatchers.nullable(String::class.java),
-            ArgumentMatchers.anyString(),
+            ArgumentMatchers.anyCollection(),
+            ArgumentMatchers.anyCollection(),
+            ArgumentMatchers.anyCollection(),
+            ArgumentMatchers.anyCollection(),
         )
     }
 

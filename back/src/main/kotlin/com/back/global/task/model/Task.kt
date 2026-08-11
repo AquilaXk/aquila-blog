@@ -191,6 +191,11 @@ class Task(
         return true
     }
 
+    fun isTerminalRowPurgeEligible(now: Instant): Boolean =
+        status in TERMINAL_STATUSES &&
+            executionLeaseToken == null &&
+            rowPurgeAfter?.let { deadline -> !deadline.isAfter(now) } == true
+
     private fun redactPayload(now: Instant) {
         payload = REDACTED_PAYLOAD
         payloadRedactedAt = now
@@ -208,5 +213,6 @@ class Task(
         const val FAILED_PAYLOAD_RETENTION_SECONDS = 7 * 86_400L
         const val FAILED_ROW_RETENTION_SECONDS = 30 * 86_400L
         const val QUARANTINED_ROW_RETENTION_SECONDS = 30 * 86_400L
+        private val TERMINAL_STATUSES = setOf(TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.QUARANTINED)
     }
 }

@@ -12,6 +12,7 @@ import com.back.global.task.application.TaskQuarantineReason
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
+import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.annotation.PreDestroy
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
@@ -108,6 +109,13 @@ class TaskProcessingScheduledJob(
     private val perTypeInFlight = ConcurrentHashMap<String, AtomicInteger>()
     private val perTypeDynamicLimits = ConcurrentHashMap<String, Int>()
     private val recentHandlerDurationMs = AtomicLong(dynamicBatchTargetHandlerDurationMs.coerceIn(100, 60_000))
+    private val queueAvailable = AtomicLong(0)
+
+    init {
+        meterRegistry?.let { registry ->
+            Gauge.builder("task.processor.queue.available") { queueAvailable.get().toDouble() }.register(registry)
+        }
+    }
 
     @Volatile
     private var perTypeDynamicRefreshedAtEpochMs: Long = 0
@@ -128,21 +136,36 @@ class TaskProcessingScheduledJob(
         val taskType: String,
     )
 
+    private data class StaleTaskRecoveryResult(
+        val taskIds: List<Long>,
+        val quarantinedTaskTypes: List<String>,
+    )
+
     @Scheduled(fixedDelayString = "\${custom.task.processor.fixedDelayMs}")
     // Queue polling is short-lived; keeping the orphan lock window tight avoids multi-hour ready backlog stalls.
     @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M", lockAtMostFor = "PT2M")
     fun processTasks() {
+        try {
+            processTasksOnce()
+        } catch (exception: RuntimeException) {
+            recordQueueUnavailable(exception)
+        }
+    }
+
+    private fun processTasksOnce() {
         val safeBatchSize = batchSize.coerceIn(1, 500)
         recoverStaleProcessingTasks(safeBatchSize)
         refreshPerTypeDynamicLimitsIfNeeded()
 
         val availableWorkerSlots = resolveAvailableWorkerSlots()
         if (availableWorkerSlots <= 0) {
+            queueAvailable.set(1)
             logger.debug("Skip polling tasks because no worker slot is available")
             return
         }
 
         val fetchLimit = resolveFetchLimit(safeBatchSize, availableWorkerSlots)
+        queueAvailable.set(1)
         meterRegistry?.summary("task.processor.fetch.limit")?.record(fetchLimit.toDouble())
         val dispatchSlots =
             transactionTemplate.execute {
@@ -216,13 +239,14 @@ class TaskProcessingScheduledJob(
         return concurrencyPolicy.availableWorkerSlots(activeWorkers) { countReadyBacklog() }
     }
 
-    private fun countReadyBacklog(): Long? =
-        runCatching {
-            taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, Instant.now())
-        }.getOrElse { exception ->
-            logger.warn("Failed to count ready task backlog for dynamic concurrency; using max concurrency", exception)
-            null
-        }
+    private fun countReadyBacklog(): Long = taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, Instant.now(clock))
+
+    private fun recordQueueUnavailable(exception: RuntimeException) {
+        queueAvailable.set(0)
+        meterRegistry?.counter("task.processor.queue.errors")?.increment()
+        val errorType = exception::class.qualifiedName ?: "TaskQueueUnavailable"
+        logger.error("Abort task poll because ready backlog is unavailable: errorType={}", errorType)
+    }
 
     private fun resolveFetchLimit(
         safeBatchSize: Int,
@@ -267,20 +291,26 @@ class TaskProcessingScheduledJob(
         return concurrencyPolicy.perTypeLimit(taskType, explicitPerTypeMaxConcurrent, perTypeDynamicLimits)
     }
 
-    private fun parsePerTypeMaxConcurrent(raw: String): Map<String, Int> =
-        raw
-            .split(",")
-            .asSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .mapNotNull { token ->
-                val parts = token.split("=", limit = 2)
-                if (parts.size != 2) return@mapNotNull null
-                val taskType = parts[0].trim()
-                val limit = parts[1].trim().toIntOrNull()?.coerceIn(1, workerConcurrency) ?: return@mapNotNull null
-                if (taskType.isBlank()) return@mapNotNull null
-                taskType to limit
-            }.toMap()
+    private fun parsePerTypeMaxConcurrent(raw: String): Map<String, Int> {
+        if (raw.isBlank()) return emptyMap()
+        val parsed = linkedMapOf<String, Int>()
+        raw.split(",").forEach { rawToken ->
+            val token = rawToken.trim()
+            val parts = token.split("=", limit = 2)
+            require(parts.size == 2) {
+                "custom.task.processor.perTypeMaxConcurrent entry must use taskType=limit: '$token'"
+            }
+            val taskType = parts[0].trim()
+            val limit = parts[1].trim().toIntOrNull()
+            require(taskType.isNotBlank() && limit != null && limit in 1..workerConcurrency) {
+                "custom.task.processor.perTypeMaxConcurrent entry is invalid: '$token'"
+            }
+            require(parsed.putIfAbsent(taskType, limit) == null) {
+                "custom.task.processor.perTypeMaxConcurrent contains duplicate taskType: '$taskType'"
+            }
+        }
+        return parsed
+    }
 
     private fun refreshPerTypeDynamicLimitsIfNeeded() {
         if (!perTypeAutoTuneEnabled) return
@@ -315,26 +345,36 @@ class TaskProcessingScheduledJob(
     private fun recoverStaleProcessingTasks(limit: Int) {
         val now = Instant.now(clock)
         val stuckBefore = now.minusSeconds(processingTimeoutSeconds)
-        val recoveredTaskIds =
-            transactionTemplate.execute {
-                val staleTasks = taskRepository.findStaleProcessingTasksWithLock(stuckBefore, limit)
-                staleTasks.forEach {
-                    val entry = taskHandlerRegistry.getEntry(it.taskType)
-                    if (entry == null) {
-                        it.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
-                    } else {
-                        it.recoverFromStuckProcessing(
-                            "Recovered stale processing task",
-                            entry.retryPolicy,
-                            now,
-                        )
+        val recoveryResult =
+            checkNotNull(
+                transactionTemplate.execute {
+                    val staleTasks = taskRepository.findStaleProcessingTasksWithLock(stuckBefore, limit)
+                    val quarantinedTaskTypes = mutableListOf<String>()
+                    staleTasks.forEach {
+                        val entry = taskHandlerRegistry.getEntry(it.taskType)
+                        if (entry == null) {
+                            it.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
+                            quarantinedTaskTypes += it.taskType
+                        } else {
+                            it.recoverFromStuckProcessing(
+                                "Recovered stale processing task",
+                                entry.retryPolicy,
+                                now,
+                            )
+                        }
                     }
-                }
-                staleTasks.map { it.id }
-            }
+                    StaleTaskRecoveryResult(
+                        taskIds = staleTasks.map { it.id },
+                        quarantinedTaskTypes = quarantinedTaskTypes,
+                    )
+                },
+            ) { "Stale task recovery transaction returned no result" }
 
-        if (recoveredTaskIds.isNotEmpty()) {
-            logger.warn("Recovered stale processing tasks: {}", recoveredTaskIds)
+        recoveryResult.quarantinedTaskTypes.forEach { taskType ->
+            recordTaskQuarantine(taskType, TaskQuarantineReason.UNKNOWN_TASK_TYPE)
+        }
+        if (recoveryResult.taskIds.isNotEmpty()) {
+            logger.warn("Recovered stale processing tasks: {}", recoveryResult.taskIds)
         }
     }
 
@@ -441,6 +481,7 @@ class TaskProcessingScheduledJob(
             quarantined = true
         }
         if (quarantined) {
+            recordTaskQuarantine(taskType, reason)
             recordTaskResult(taskType, "quarantine")
         }
     }
@@ -492,8 +533,22 @@ class TaskProcessingScheduledJob(
         status: String,
     ) {
         meterRegistry
-            ?.counter("task.processor.result", "taskType", safeTagValue(taskType), "status", status)
+            ?.counter("task.processor.result", "taskType", metricTaskType(taskType), "status", status)
             ?.increment()
+    }
+
+    private fun recordTaskQuarantine(
+        taskType: String,
+        reason: TaskQuarantineReason,
+    ) {
+        meterRegistry
+            ?.counter(
+                "task.payload.quarantine",
+                "taskType",
+                metricTaskType(taskType),
+                "reason",
+                reason.name,
+            )?.increment()
     }
 
     private fun recordTaskDuration(
@@ -503,7 +558,7 @@ class TaskProcessingScheduledJob(
         val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
         updateRecentHandlerDuration(elapsedMs)
         meterRegistry
-            ?.timer("task.processor.handler.duration", "taskType", safeTagValue(taskType))
+            ?.timer("task.processor.handler.duration", "taskType", metricTaskType(taskType))
             ?.record(elapsedMs, TimeUnit.MILLISECONDS)
     }
 
@@ -519,6 +574,9 @@ class TaskProcessingScheduledJob(
         val sanitized = raw.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
         return sanitized.take(80).ifBlank { "unknown" }
     }
+
+    private fun metricTaskType(taskType: String): String =
+        if (taskHandlerRegistry.getEntry(taskType) == null) "unregistered" else safeTagValue(taskType)
 
     private fun revertTaskToPending(
         taskId: Long,

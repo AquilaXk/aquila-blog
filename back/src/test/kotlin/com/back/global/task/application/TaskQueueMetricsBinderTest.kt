@@ -1,5 +1,6 @@
 package com.back.global.task.application
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
@@ -28,6 +29,7 @@ class TaskQueueMetricsBinderTest {
     fun `worker runtime은 diagnostics refresh를 실행한다`() {
         val diagnosticsService = mock(TaskQueueDiagnosticsService::class.java)
         given(diagnosticsService.diagnoseQueue()).willReturn(emptyDiagnostics())
+        val registry = SimpleMeterRegistry()
         val binder =
             TaskQueueMetricsBinder(
                 taskQueueDiagnosticsService = diagnosticsService,
@@ -35,9 +37,28 @@ class TaskQueueMetricsBinderTest {
                 refreshEnabled = true,
             )
 
-        binder.refreshSnapshot()
+        binder.bindTo(registry)
 
         verify(diagnosticsService).diagnoseQueue()
+        assertThat(registry.get("task.queue.diagnostics.available").gauge().value()).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `diagnostics 실패는 stale gauge를 unavailable로 표시하고 error counter를 증가시킨다`() {
+        val diagnosticsService = mock(TaskQueueDiagnosticsService::class.java)
+        given(diagnosticsService.diagnoseQueue()).willThrow(IllegalStateException("database unavailable"))
+        val registry = SimpleMeterRegistry()
+        val binder =
+            TaskQueueMetricsBinder(
+                taskQueueDiagnosticsService = diagnosticsService,
+                workerEnabled = true,
+                refreshEnabled = true,
+            )
+
+        binder.bindTo(registry)
+
+        assertThat(registry.get("task.queue.diagnostics.available").gauge().value()).isZero()
+        assertThat(registry.get("task.queue.diagnostics.errors").counter().count()).isEqualTo(1.0)
     }
 
     @Test

@@ -39,7 +39,7 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
 
     @Test
     @Order(1)
-    fun `pre envelope task rows migrate to one exact v1 envelope`() {
+    fun `pre envelope failed row migrates to exact v1 envelope and bounded retention`() {
         migrateToPreviousVersion()
         val taskUid = UUID.randomUUID()
         val rawPayload = """{"uid":"$taskUid","aggregateType":"Post","aggregateId":77,"value":"private"}"""
@@ -74,7 +74,10 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
                         payload::jsonb ->> 'schemaVersion',
                         payload::jsonb ->> 'taskType',
                         payload::jsonb ->> 'sensitivity',
-                        payload::jsonb ->> 'payloadJson'
+                        payload::jsonb ->> 'payloadJson',
+                        payload_purge_after,
+                        payload_redacted_at,
+                        row_purge_after
                     FROM task
                     WHERE uid = ?
                     """.trimIndent(),
@@ -86,6 +89,9 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
                         assertEquals("post.interaction.side-effect", result.getString(2))
                         assertEquals("PERSONAL", result.getString(3))
                         assertEquals(rawPayload, result.getString(4))
+                        assertEquals(Instant.parse("2026-08-17T00:00:00Z"), result.getTimestamp(5).toInstant())
+                        assertEquals(null, result.getTimestamp(6))
+                        assertEquals(Instant.parse("2026-09-09T00:00:00Z"), result.getTimestamp(7).toInstant())
                     }
                 }
         }

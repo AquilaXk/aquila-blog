@@ -6,6 +6,7 @@ import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.ExpiringTaskPayload
 import com.back.standard.dto.TaskPayload
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
@@ -45,7 +46,8 @@ class TaskDlqReplayServiceTest {
                 PageRequest.of(0, 10),
             ),
         ).thenReturn(listOf(valid, malformed, unknown, expired))
-        val service = TaskDlqReplayService(repository, registry, codec, Clock.fixed(now, ZoneOffset.UTC))
+        val meterRegistry = SimpleMeterRegistry()
+        val service = TaskDlqReplayService(repository, registry, codec, Clock.fixed(now, ZoneOffset.UTC), meterRegistry)
 
         val result = service.replayFailedTasks(taskType = null, limit = 10, resetRetryCount = true)
 
@@ -56,6 +58,9 @@ class TaskDlqReplayServiceTest {
         assertQuarantined(malformed, TaskQuarantineReason.MALFORMED_ENVELOPE)
         assertQuarantined(unknown, TaskQuarantineReason.UNKNOWN_TASK_TYPE)
         assertQuarantined(expired, TaskQuarantineReason.EXPIRED_PAYLOAD)
+        assertQuarantineMetric(meterRegistry, VALID_TASK_TYPE, TaskQuarantineReason.MALFORMED_ENVELOPE)
+        assertQuarantineMetric(meterRegistry, "unregistered", TaskQuarantineReason.UNKNOWN_TASK_TYPE)
+        assertQuarantineMetric(meterRegistry, EXPIRING_TASK_TYPE, TaskQuarantineReason.EXPIRED_PAYLOAD)
         verify(repository).save(valid)
         verify(repository).save(malformed)
         verify(repository).save(unknown)
@@ -131,6 +136,20 @@ class TaskDlqReplayServiceTest {
         assertThat(task.status).isEqualTo(TaskStatus.QUARANTINED)
         assertThat(task.payload).isEqualTo(Task.REDACTED_PAYLOAD)
         assertThat(task.errorMessage).isEqualTo(reason.name)
+    }
+
+    private fun assertQuarantineMetric(
+        meterRegistry: SimpleMeterRegistry,
+        taskType: String,
+        reason: TaskQuarantineReason,
+    ) {
+        assertThat(
+            meterRegistry
+                .find("task.payload.quarantine")
+                .tags("taskType", taskType, "reason", reason.name)
+                .counter()
+                ?.count(),
+        ).isEqualTo(1.0)
     }
 
     private data class StubPayload(

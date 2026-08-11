@@ -1,6 +1,7 @@
 package com.back.global.task.application
 
 import com.back.global.task.adapter.persistence.TaskRepository
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -15,6 +16,7 @@ data class TaskRetentionCleanupResult(
 class TaskRetentionService(
     private val taskRepository: TaskRepository,
     private val clock: Clock,
+    private val meterRegistry: MeterRegistry? = null,
 ) {
     @Transactional
     fun cleanupBatch(limit: Int): TaskRetentionCleanupResult {
@@ -24,13 +26,26 @@ class TaskRetentionService(
             taskRepository
                 .findFailedPayloadsForRedactionWithLock(now, safeLimit)
                 .count { task -> task.redactExpiredFailedPayload(now) }
-        val purgeCandidates = taskRepository.findTerminalRowsForPurgeWithLock(now, safeLimit)
+        val purgeCandidates =
+            taskRepository
+                .findTerminalRowsForPurgeWithLock(now, safeLimit)
+                .filter { task -> task.isTerminalRowPurgeEligible(now) }
         if (purgeCandidates.isNotEmpty()) {
             taskRepository.deleteAllInBatch(purgeCandidates)
         }
+        recordAction("payload_redacted", redactedPayloadCount)
+        recordAction("row_purged", purgeCandidates.size)
         return TaskRetentionCleanupResult(
             redactedPayloadCount = redactedPayloadCount,
             purgedRowCount = purgeCandidates.size,
         )
+    }
+
+    private fun recordAction(
+        action: String,
+        count: Int,
+    ) {
+        if (count <= 0) return
+        meterRegistry?.counter("task.retention.action", "action", action)?.increment(count.toDouble())
     }
 }

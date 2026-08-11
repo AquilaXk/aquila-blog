@@ -27,8 +27,13 @@ class TaskQueueMetricsBinder(
     private val staleProcessing = AtomicLong(0)
     private val oldestReadyPendingAgeSeconds = AtomicLong(0)
     private val oldestProcessingAgeSeconds = AtomicLong(0)
+    private val diagnosticsAvailable = AtomicLong(0)
+
+    @Volatile
+    private var boundRegistry: MeterRegistry? = null
 
     override fun bindTo(registry: MeterRegistry) {
+        boundRegistry = registry
         registerGauge(registry, "task.queue.pending", pending)
         registerGauge(registry, "task.queue.ready_pending", readyPending)
         registerGauge(registry, "task.queue.delayed_pending", delayedPending)
@@ -37,6 +42,7 @@ class TaskQueueMetricsBinder(
         registerGauge(registry, "task.queue.stale_processing", staleProcessing)
         registerGauge(registry, "task.queue.oldest_ready_pending_age_seconds", oldestReadyPendingAgeSeconds)
         registerGauge(registry, "task.queue.oldest_processing_age_seconds", oldestProcessingAgeSeconds)
+        registerGauge(registry, "task.queue.diagnostics.available", diagnosticsAvailable)
 
         refreshSnapshot()
     }
@@ -57,8 +63,12 @@ class TaskQueueMetricsBinder(
                 staleProcessing.set(diagnostics.staleProcessingCount)
                 oldestReadyPendingAgeSeconds.set(diagnostics.oldestReadyPendingAgeSeconds ?: 0L)
                 oldestProcessingAgeSeconds.set(diagnostics.oldestProcessingAgeSeconds ?: 0L)
+                diagnosticsAvailable.set(1)
             }.onFailure { exception ->
-                logger.warn("Skip task queue metrics refresh due to diagnostics error", exception)
+                diagnosticsAvailable.set(0)
+                boundRegistry?.counter("task.queue.diagnostics.errors")?.increment()
+                val errorType = exception::class.qualifiedName ?: "TaskQueueDiagnosticsFailure"
+                logger.warn("Task queue metrics refresh failed: errorType={}", errorType)
             }
     }
 

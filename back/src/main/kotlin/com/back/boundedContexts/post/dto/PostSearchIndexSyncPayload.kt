@@ -4,6 +4,7 @@ import com.back.global.task.annotation.Task
 import com.back.global.task.annotation.TaskPayloadSensitivity
 import com.back.standard.dto.LegacyTaskPayload
 import com.back.standard.dto.TaskPayload
+import com.fasterxml.jackson.annotation.JsonProperty
 import java.util.UUID
 
 @Task(
@@ -34,7 +35,9 @@ data class PostSearchIndexSyncPayloadV1(
     override val aggregateType: String,
     override val aggregateId: Long,
     val postId: Long,
-    val fallbackTags: List<String>,
+    @param:JsonProperty("fallbackTags")
+    @get:JsonProperty("fallbackTags")
+    val legacyTags: List<String>,
     val forceClear: Boolean,
     val enqueuedAtEpochMs: Long,
 ) : LegacyTaskPayload {

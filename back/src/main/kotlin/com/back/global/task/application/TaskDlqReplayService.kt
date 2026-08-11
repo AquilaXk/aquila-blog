@@ -65,6 +65,7 @@ class TaskDlqReplayService(
             if (entry == null) {
                 task.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
                 taskQueueRepository.save(task)
+                recordTaskQuarantine(task.taskType, TaskQuarantineReason.UNKNOWN_TASK_TYPE)
                 return@forEach
             }
             try {
@@ -82,6 +83,7 @@ class TaskDlqReplayService(
             } catch (exception: TaskPayloadQuarantineException) {
                 task.markAsQuarantined(exception.reason.name, now)
                 taskQueueRepository.save(task)
+                recordTaskQuarantine(task.taskType, exception.reason)
                 return@forEach
             }
             task.replayFailed(now, resetRetryCount)
@@ -104,5 +106,20 @@ class TaskDlqReplayService(
             resetRetryCount = resetRetryCount,
             replayedTaskIds = replayedIds,
         )
+    }
+
+    private fun recordTaskQuarantine(
+        taskType: String,
+        reason: TaskQuarantineReason,
+    ) {
+        val metricTaskType = taskHandlerRegistry.getEntry(taskType)?.taskType ?: "unregistered"
+        meterRegistry
+            ?.counter(
+                "task.payload.quarantine",
+                "taskType",
+                metricTaskType,
+                "reason",
+                reason.name,
+            )?.increment()
     }
 }

@@ -44,22 +44,6 @@ class TaskProcessorConcurrencyPolicyTest {
     }
 
     @Test
-    @DisplayName("dynamic concurrency는 backlog 조회 실패 시 최대 worker 동시성으로 fallback한다")
-    fun `dynamic concurrency falls back to max workers when ready backlog count fails`() {
-        val policy =
-            createPolicy(
-                workerConcurrency = 8,
-                dynamicConcurrencyEnabled = true,
-                dynamicMinConcurrent = 2,
-                dynamicBacklogPerSlot = 25,
-            )
-
-        val slots = policy.availableWorkerSlots(activeWorkers = 0) { null }
-
-        assertThat(slots).isEqualTo(8)
-    }
-
-    @Test
     @DisplayName("dynamic batch size는 backlog step과 max prefetch multiplier를 fetch limit에 반영한다")
     fun `dynamic batch size expands fetch limit by backlog prefetch multiplier`() {
         val policy =
@@ -103,27 +87,6 @@ class TaskProcessorConcurrencyPolicyTest {
 
         assertThat(fetchLimit).isEqualTo(3)
         assertThat(backlogCounted).isFalse()
-    }
-
-    @Test
-    @DisplayName("dynamic batch size는 backlog 조회 실패 시 max prefetch multiplier로 fallback한다")
-    fun `dynamic batch size falls back to max prefetch multiplier when backlog count fails`() {
-        val policy =
-            createPolicy(
-                workerConcurrency = 8,
-                dynamicBatchMaxPrefetchMultiplier = 3,
-            )
-
-        val fetchLimit =
-            policy.fetchLimit(
-                safeBatchSize = 50,
-                availableWorkerSlots = 2,
-                recentHandlerDurationMs = 3_600,
-            ) {
-                null
-            }
-
-        assertThat(fetchLimit).isEqualTo(4)
     }
 
     @Test

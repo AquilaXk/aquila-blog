@@ -11,13 +11,17 @@ import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
@@ -35,6 +39,65 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 class TaskProcessingScheduledJobPerTypeLimitTest {
+    @Test
+    @DisplayName("잘못된 per-type concurrency 설정은 startup에서 실패한다")
+    fun `invalid per type concurrency configuration fails startup`() {
+        assertThatThrownBy {
+            val fixture =
+                createFixture(
+                    maxConcurrent = 8,
+                    perTypeMaxConcurrentRaw = "post.read.prewarm=2,broken-token",
+                    perTypeAutoTuneEnabled = true,
+                    perTypeAutoTuneMinConcurrent = 1,
+                )
+            fixture.job.shutdownExecutor()
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("perTypeMaxConcurrent")
+    }
+
+    @Test
+    @DisplayName("ready backlog 조회 실패는 현재 poll을 중단하고 availability를 0으로 기록한다")
+    fun `ready backlog failure aborts current poll and records unavailability`() {
+        val fixture =
+            createFixture(
+                maxConcurrent = 8,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = true,
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(
+                fixture.taskRepository.countByStatusAndNextRetryAtLessThanEqual(
+                    pendingStatus(),
+                    anyInstant(),
+                ),
+            ).thenThrow(IllegalStateException("database unavailable"))
+
+        try {
+            fixture.job.processTasks()
+
+            verify(fixture.taskRepository, never()).findPendingTasksWithLock(anyInt())
+            assertThat(
+                fixture.meterRegistry
+                    .get("task.processor.queue.available")
+                    .gauge()
+                    .value(),
+            ).isZero()
+            assertThat(
+                fixture.meterRegistry
+                    .get("task.processor.queue.errors")
+                    .counter()
+                    .count(),
+            ).isEqualTo(1.0)
+        } finally {
+            fixture.job.shutdownExecutor()
+        }
+    }
+
     @Test
     @DisplayName("dynamic batch prefetch가 커져도 실제 시작 worker는 dynamic target을 넘지 않는다")
     fun `dynamic batch prefetch does not start more workers than dynamic target`() {
@@ -254,6 +317,13 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             assertThat(task.payload).isEqualTo(Task.REDACTED_PAYLOAD)
             assertThat(task.errorMessage).isEqualTo("UNKNOWN_TASK_TYPE")
             assertThat(task.retryCount).isZero()
+            assertThat(
+                fixture.meterRegistry
+                    .get("task.payload.quarantine")
+                    .tags("taskType", "unregistered", "reason", "UNKNOWN_TASK_TYPE")
+                    .counter()
+                    .count(),
+            ).isEqualTo(1.0)
         } finally {
             fixture.job.shutdownExecutor()
         }
@@ -291,6 +361,60 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             assertThat(handler.invocations).hasValue(0)
             assertThat(task.payload).isEqualTo(Task.REDACTED_PAYLOAD)
             assertThat(task.errorMessage).isEqualTo("MALFORMED_ENVELOPE")
+            assertThat(
+                fixture.meterRegistry
+                    .get("task.payload.quarantine")
+                    .tags("taskType", taskType, "reason", "MALFORMED_ENVELOPE")
+                    .counter()
+                    .count(),
+            ).isEqualTo(1.0)
+        } finally {
+            handler.release.countDown()
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    @Test
+    @DisplayName("unknown schema version은 handler 없이 quarantine하고 bounded reason metric을 남긴다")
+    fun `unknown schema version records bounded quarantine metric`() {
+        val taskType = "test.unknown-schema"
+        val task =
+            task(1L, taskType).apply {
+                payload = payload.replaceFirst("\"schemaVersion\":2", "\"schemaVersion\":99")
+            }
+        val handler = CountingBlockingHandler()
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                handlerEntries = listOf(countingBlockingTaskHandlerEntry(taskType, handler)),
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenReturn(listOf(task), emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findById(task.id))
+            .thenReturn(Optional.of(task))
+
+        try {
+            fixture.job.processTasks()
+            waitUntilStatus(task, TaskStatus.QUARANTINED)
+
+            assertThat(handler.invocations).hasValue(0)
+            assertThat(task.errorMessage).isEqualTo("UNKNOWN_SCHEMA_VERSION")
+            assertThat(
+                fixture.meterRegistry
+                    .get("task.payload.quarantine")
+                    .tags("taskType", taskType, "reason", "UNKNOWN_SCHEMA_VERSION")
+                    .counter()
+                    .count(),
+            ).isEqualTo(1.0)
         } finally {
             handler.release.countDown()
             fixture.job.shutdownExecutor()
@@ -300,6 +424,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     private data class JobFixture(
         val job: TaskProcessingScheduledJob,
         val taskRepository: TaskRepository,
+        val meterRegistry: SimpleMeterRegistry,
     )
 
     private data class StubPayload(
@@ -345,6 +470,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     ): JobFixture {
         val taskRepository = mock(TaskRepository::class.java)
         val taskHandlerRegistry = mock(TaskHandlerRegistry::class.java)
+        val meterRegistry = SimpleMeterRegistry()
         if (registeredTaskTypes.isNotEmpty()) {
             org.mockito.Mockito
                 .`when`(taskHandlerRegistry.getRegisteredEntries())
@@ -382,10 +508,10 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                 perTypeAutoTuneEnabled = perTypeAutoTuneEnabled,
                 perTypeAutoTuneMinConcurrent = perTypeAutoTuneMinConcurrent,
                 perTypeAutoTuneRefreshMs = 15_000,
-                meterRegistry = null,
+                meterRegistry = meterRegistry,
             )
 
-        return JobFixture(job, taskRepository)
+        return JobFixture(job, taskRepository, meterRegistry)
     }
 
     private fun taskHandlerEntry(taskType: String): TaskHandlerEntry =

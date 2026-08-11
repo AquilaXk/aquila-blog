@@ -19,7 +19,7 @@ internal class TaskProcessorConcurrencyPolicy(
 
     fun availableWorkerSlots(
         activeWorkers: Int,
-        readyBacklog: () -> Long?,
+        readyBacklog: () -> Long,
     ): Int {
         val targetConcurrency =
             if (dynamicConcurrencyEnabled) {
@@ -35,7 +35,7 @@ internal class TaskProcessorConcurrencyPolicy(
         safeBatchSize: Int,
         availableWorkerSlots: Int,
         recentHandlerDurationMs: Long,
-        readyBacklog: () -> Long?,
+        readyBacklog: () -> Long,
     ): Int {
         if (!dynamicBatchSizeEnabled) {
             return minOf(safeBatchSize, availableWorkerSlots)
@@ -103,9 +103,7 @@ internal class TaskProcessorConcurrencyPolicy(
         return desiredByType
     }
 
-    private fun dynamicTargetConcurrency(readyBacklog: Long?): Int {
-        if (readyBacklog == null) return workerConcurrency
-
+    private fun dynamicTargetConcurrency(readyBacklog: Long): Int {
         val minConcurrency = dynamicMinConcurrent.coerceIn(1, workerConcurrency)
         val backlogPerSlot = dynamicBacklogPerSlot.coerceAtLeast(1)
         val backlogConcurrency =
@@ -116,10 +114,8 @@ internal class TaskProcessorConcurrencyPolicy(
         return backlogConcurrency.coerceIn(minConcurrency, workerConcurrency)
     }
 
-    private fun dynamicBatchPrefetchMultiplier(readyBacklog: Long?): Int {
+    private fun dynamicBatchPrefetchMultiplier(readyBacklog: Long): Int {
         val maxPrefetchMultiplier = dynamicBatchMaxPrefetchMultiplier.coerceIn(1, 16)
-        if (readyBacklog == null) return maxPrefetchMultiplier
-
         val backlogPerStep = dynamicBatchBacklogPerStep.coerceAtLeast(1)
         val backlogMultiplier =
             ceil(readyBacklog.coerceAtLeast(0).toDouble() / backlogPerStep.toDouble())

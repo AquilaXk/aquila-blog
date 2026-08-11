@@ -5,6 +5,7 @@ import com.back.global.task.application.port.output.TaskQueueInsertPort
 import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.domain.Task
 import com.back.standard.dto.TaskPayload
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
@@ -31,12 +32,27 @@ class TaskFacadeTest {
     @DisplayName("addToQueue는 같은 payload UID 중복을 명시적 duplicate 결과로 반환한다")
     fun `add to queue returns explicit duplicate result for same payload uid`() {
         val insertPort = RecordingTaskQueueInsertPort()
-        val facade = createFacade(insertPort)
+        val meterRegistry = SimpleMeterRegistry()
+        val facade = createFacade(insertPort, meterRegistry = meterRegistry)
         val payload = StubTaskPayload(uid = UUID.randomUUID())
 
         assertThat(facade.addToQueue(payload)).isEqualTo(TaskQueueInsertResult.INSERTED)
         assertThat(facade.addToQueue(payload)).isEqualTo(TaskQueueInsertResult.DUPLICATE)
         assertThat(insertPort.insertedTasks).hasSize(1)
+        assertThat(
+            meterRegistry
+                .get("task.queue.enqueue.result")
+                .tags("taskType", StubTaskPayload.TASK_TYPE, "status", "inserted")
+                .counter()
+                .count(),
+        ).isEqualTo(1.0)
+        assertThat(
+            meterRegistry
+                .get("task.queue.enqueue.result")
+                .tags("taskType", StubTaskPayload.TASK_TYPE, "status", "duplicate")
+                .counter()
+                .count(),
+        ).isEqualTo(1.0)
     }
 
     @Test
@@ -70,6 +86,7 @@ class TaskFacadeTest {
     private fun createFacade(
         insertPort: TaskQueueInsertPort,
         handler: StubTaskHandler = StubTaskHandler(),
+        meterRegistry: SimpleMeterRegistry? = null,
     ): TaskFacade {
         val objectMapper = jacksonObjectMapper()
         val registry = TaskHandlerRegistry()
@@ -99,6 +116,7 @@ class TaskFacadeTest {
             taskInsertPort = insertPort,
             taskHandlerRegistry = registry,
             taskPayloadEnvelopeCodec = TaskPayloadEnvelopeCodec(objectMapper, Clock.systemUTC()),
+            meterRegistry = meterRegistry,
         )
     }
 

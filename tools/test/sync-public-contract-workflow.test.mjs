@@ -1,175 +1,295 @@
 import assert from "node:assert/strict"
-import { existsSync, readFileSync } from "node:fs"
+import crypto from "node:crypto"
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
 
-const repoRoot = path.resolve(import.meta.dirname, "../..")
-const workflowPath = path.join(repoRoot, ".github/workflows/sync-public-contract-to-web.yml")
-
-function parseWorkflow() {
-  const ruby = [
-    'require "yaml"',
-    'require "json"',
-    'puts JSON.generate(YAML.load_file(ARGV.fetch(0)))',
-  ].join("; ")
-  const result = spawnSync("ruby", ["-e", ruby, workflowPath], { encoding: "utf8" })
-  assert.equal(result.status, 0, result.stderr || "workflow YAML must parse")
-  return JSON.parse(result.stdout)
-}
+const root = path.resolve(import.meta.dirname, "../..")
+const workflowPath = path.join(root, ".github/workflows/sync-public-contract-to-web.yml")
+const payloadKeys = [
+  "schema_version",
+  "source_repository",
+  "source_commit",
+  "manifest_sha256",
+  "openapi_sha256",
+  "error_codes_sha256",
+  "target_repository",
+  "target_commit",
+  "delivery_id",
+]
 
 function workflow() {
-  assert.equal(existsSync(workflowPath), true, "sync workflow must exist")
+  assert.equal(existsSync(workflowPath), true, "public-contract producer workflow must exist")
   const source = readFileSync(workflowPath, "utf8")
-  return { document: parseWorkflow(), source }
+  const ruby = ["require 'yaml'", "require 'json'", "puts JSON.generate(YAML.load_file(ARGV.fetch(0)))"].join("; ")
+  const parsed = spawnSync("ruby", ["-e", ruby, workflowPath], { encoding: "utf8" })
+  assert.equal(parsed.status, 0, parsed.stderr || "workflow YAML must parse")
+  return { source, document: JSON.parse(parsed.stdout) }
 }
 
-function stepByName(job, name) {
-  const step = job.steps.find((candidate) => candidate.name === name)
-  assert.ok(step, `missing workflow step: ${name}`)
-  return step
+function producerJob(document) {
+  const jobs = Object.values(document.jobs).filter((job) =>
+    job.steps?.some((candidate) => String(candidate.run ?? "").includes("/dispatches")),
+  )
+  assert.equal(jobs.length, 1, "exactly one job may dispatch the public contract")
+  return jobs[0]
 }
 
-test("sync workflow has the stable trigger and serialized branch contract", () => {
-  const { document, source } = workflow()
+function matchingStep(job, predicate, description) {
+  const matches = job.steps.filter(predicate)
+  assert.equal(matches.length, 1, `expected one ${description} step`)
+  return matches[0]
+}
 
-  assert.match(source, /^  push:\n    branches:\n      - main\n    paths:\n      - "contracts\/public-api\/\*\*"/m)
-  assert.match(source, /^  workflow_dispatch:\n    inputs:\n      source_ref:/m)
-  assert.match(source, /^      mode:\n[\s\S]*?options:\n          - test-only\n          - sync/m)
-  assert.deepEqual(document.concurrency, {
-    group: "platform-public-contract-sync",
-    "cancel-in-progress": false,
+function runShell(source, cwd, env = {}) {
+  return spawnSync("bash", ["-c", source], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, ...env },
   })
-  assert.deepEqual(document.permissions, {
-    contents: "read",
-    "pull-requests": "read",
-  })
-  assert.equal(document.env.SYNC_BRANCH, "chore/platform-contract-sync")
-  assert.equal(document.env.PLATFORM_REPOSITORY, "AquilaXk/aquila-blog")
-  assert.equal(document.env.WEB_REPOSITORY, "AquilaXk/aquila-blog-web")
-})
+}
 
-test("test-only path checks out latest Web main, imports, generates, and tests without write credentials", () => {
-  const { document, source } = workflow()
-  const job = document.jobs.sync
-  assert.deepEqual(job.permissions, { contents: "read", "pull-requests": "read" })
+function output(pathname) {
+  return existsSync(pathname) ? readFileSync(pathname, "utf8") : ""
+}
 
-  const platformCheckout = stepByName(job, "Checkout immutable Platform source")
-  const webCheckout = stepByName(job, "Checkout Web main without persisted credentials")
-  for (const checkout of [platformCheckout, webCheckout]) {
-    assert.match(checkout.uses, /^actions\/checkout@[a-f0-9]{40}$/)
-    assert.equal(checkout.with["persist-credentials"], false)
-  }
-  assert.equal(webCheckout.with.repository, "AquilaXk/aquila-blog-web")
-  assert.equal(webCheckout.with.ref, "main")
-  assert.equal(webCheckout.with["fetch-depth"], 0)
+function values(pathname) {
+  return Object.fromEntries(output(pathname).trim().split("\n").filter(Boolean).map((line) => {
+    const separator = line.indexOf("=")
+    return [line.slice(0, separator), line.slice(separator + 1)]
+  }))
+}
 
-  const prepareStep = stepByName(job, "Prepare stable Web sync branch against latest main")
-  assert.match(prepareStep.run, /refs\/heads\/\$\{SYNC_BRANCH\}/)
-  assert.match(prepareStep.run, /merge --no-edit origin\/main/)
-  assert.match(prepareStep.run, /commit\.gpgsign=false/)
+function sha256(bytes) {
+  return crypto.createHash("sha256").update(bytes).digest("hex")
+}
 
-  const sourceStep = stepByName(job, "Resolve immutable Platform commit")
-  assert.equal(sourceStep.env.SOURCE_REF, "${{ steps.context.outputs.source_ref }}")
-  assert.doesNotMatch(sourceStep.run, /\$\{\{\s*steps\.context\.outputs\.source_ref/)
+function fakeGh(temp, response) {
+  const bin = path.join(temp, "bin")
+  const calls = path.join(temp, "gh-calls")
+  mkdirSync(bin, { recursive: true })
+  const executable = path.join(bin, "gh")
+  writeFileSync(executable, `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${calls}"\nprintf '%s\\n' "${response}"\n`)
+  chmodSync(executable, 0o755)
+  return { calls, path: `${bin}:${process.env.PATH}` }
+}
 
-  const importStep = stepByName(job, "Import immutable Platform contract")
-  assert.match(importStep.run, /import-platform-contracts\.mjs/)
-  assert.match(importStep.run, /--source \.\.\/platform\/contracts\/public-api/)
-  assert.match(importStep.run, /--source-repository "\$\{PLATFORM_REPOSITORY\}"/)
-  assert.match(importStep.run, /--source-commit "\$\{SOURCE_SHA\}"/)
+function writeContractBundle(platform) {
+  const directory = path.join(platform, "contracts/public-api")
+  mkdirSync(directory, { recursive: true })
+  const openapi = Buffer.from('{"openapi":"3.1.0"}\n')
+  const errorCodes = Buffer.from('[{"code":"400-1"}]\n')
+  writeFileSync(path.join(directory, "openapi.json"), openapi)
+  writeFileSync(path.join(directory, "error-codes.json"), errorCodes)
+  const manifest = Buffer.from(`${JSON.stringify({
+    version: 1,
+    contract: "aquila-public-api",
+    artifacts: {
+      openapi: { path: "openapi.json", sha256: sha256(openapi) },
+      errorCodes: { path: "error-codes.json", sha256: sha256(errorCodes) },
+    },
+  }, null, 2)}\n`)
+  writeFileSync(path.join(directory, "manifest.json"), manifest)
+  return { errorCodes, manifest, openapi }
+}
 
-  const verifyStep = stepByName(job, "Generate and verify Web contract artifacts")
-  assert.match(verifyStep.run, /yarn contracts:generate/)
-  assert.match(verifyStep.run, /^[ \t]*node --test scripts\/contracts\/platform-contracts\.test\.mjs scripts\/openapi\/check-contract-drift\.test\.mjs$/m)
-  assert.match(verifyStep.run, /^[ \t]*node scripts\/contracts\/verify-platform-contracts\.mjs$/m)
-  assert.match(verifyStep.run, /^[ \t]*git diff --check$/m)
-  assert.doesNotMatch(verifyStep.run, /yarn contracts:check/)
-
-  const readOnlyStep = stepByName(job, "Assert read-only mode cannot publish")
-  assert.match(String(readOnlyStep.if), /write_enabled != 'true'/)
-  assert.doesNotMatch(readOnlyStep.run, /git push|gh pr (?:create|edit)/)
-
-  for (const step of job.steps.filter((candidate) => candidate.run)) {
-    assert.doesNotMatch(
-      step.run,
-      /\$\{\{\s*(?:inputs\.source_ref|steps\.context\.outputs\.source_ref)/,
-      `${step.name} must receive workflow-dispatch input through env`,
-    )
-  }
-
-  assert.match(source, /sync mode requires REPO_SPLIT_SYNC_ENABLED=true/)
-})
-
-// kill switch 이름은 Task 14가 양쪽 repository에 실제로 설정하는 variable과 같아야 한다.
-// 다른 이름을 읽으면 switch를 켜도 workflow는 영원히 read-only로 남아 조용히 무동작한다.
-test("kill switch reads the repository-split variable that operations actually set", () => {
-  const { document, source } = workflow()
-  const contextStep = stepByName(document.jobs.sync, "Resolve sync context")
-
-  assert.equal(contextStep.env.SYNC_ENABLED, "${{ vars.REPO_SPLIT_SYNC_ENABLED }}")
-  assert.doesNotMatch(source, /PLATFORM_CONTRACT_SYNC_ENABLED/)
-})
-
-// 대상 Web repository는 Task 11 전까지 존재하지 않는다. automatic run이 kill switch와
-// 무관하게 실행되면 Platform main push마다 checkout 단계에서 실패한다.
-test("automatic runs stay skipped until the kill switch is on, while manual runs still validate", () => {
+test("every main push reconciles delivery while manual runs only validate", (t) => {
   const { document } = workflow()
-  const jobCondition = String(document.jobs.sync.if)
+  const triggers = document.on ?? document.true
+  const job = producerJob(document)
+  const context = matchingStep(job, (candidate) => String(candidate.run ?? "").includes("dispatch_enabled="), "producer context")
 
-  assert.match(jobCondition, /github\.event_name == 'workflow_dispatch'/)
-  assert.match(jobCondition, /vars\.REPO_SPLIT_SYNC_ENABLED == 'true'/)
-  assert.match(jobCondition, /\|\|/)
+  assert.deepEqual(triggers.push, { branches: ["main"] })
+  assert.equal(Object.hasOwn(triggers.push, "paths"), false, "every main push must produce a replacement delivery run")
+  assert.deepEqual(Object.keys(triggers.workflow_dispatch.inputs), ["source_ref"])
+  assert.equal(triggers.workflow_dispatch.inputs.source_ref.default, "main")
+  assert.deepEqual(document.permissions, { contents: "read" })
+  assert.deepEqual(document.concurrency, { group: "platform-public-contract-sync", "cancel-in-progress": false })
+  assert.match(String(job.if), /workflow_dispatch/)
+  assert.match(String(job.if), /REPO_SPLIT_SYNC_ENABLED/)
+
+  const temp = mkdtempSync(path.join(os.tmpdir(), "platform-public-context-"))
+  t.after(() => rmSync(temp, { recursive: true, force: true }))
+  const manualOutput = path.join(temp, "manual.out")
+  const manual = runShell(context.run, temp, {
+    EVENT_NAME: "workflow_dispatch",
+    EVENT_SHA: "a".repeat(40),
+    REQUESTED_SOURCE_REF: "refs/pull/1683/head",
+    SYNC_ENABLED: "true",
+    GITHUB_OUTPUT: manualOutput,
+  })
+  assert.equal(manual.status, 0, manual.stderr)
+  assert.deepEqual(values(manualOutput), { source_ref: "refs/pull/1683/head", dispatch_enabled: "false" })
+
+  const pushOutput = path.join(temp, "push.out")
+  const push = runShell(context.run, temp, {
+    EVENT_NAME: "push",
+    EVENT_SHA: "b".repeat(40),
+    REQUESTED_SOURCE_REF: "",
+    SYNC_ENABLED: "true",
+    GITHUB_OUTPUT: pushOutput,
+  })
+  assert.equal(push.status, 0, push.stderr)
+  assert.deepEqual(values(pushOutput), { source_ref: "b".repeat(40), dispatch_enabled: "true" })
 })
 
-test("sync writes require the kill switch, changed bytes, and a Web-only App token", () => {
-  const { document, source } = workflow()
-  const job = document.jobs.sync
-  const token = stepByName(job, "Create repository sync token")
+test("Platform source and canonical public bytes fail closed with raw hashes", (t) => {
+  const { document } = workflow()
+  const job = producerJob(document)
+  const sourceStep = matchingStep(job, (candidate) => String(candidate.run ?? "").includes("git -C platform rev-parse HEAD"), "source identity")
+  const identityStep = matchingStep(job, (candidate) => {
+    const run = String(candidate.run ?? "")
+    return run.includes("manifest_sha256=") && run.includes("openapi_sha256=") && run.includes("error_codes_sha256=")
+  }, "public contract identity")
+  const temp = mkdtempSync(path.join(os.tmpdir(), "platform-public-source-"))
+  t.after(() => rmSync(temp, { recursive: true, force: true }))
+  const platform = path.join(temp, "platform")
+  mkdirSync(platform)
+  assert.equal(runShell("git init -q && git config user.email test@example.com && git config user.name test && git commit --allow-empty -qm source", platform).status, 0)
+  const sourceCommit = runShell("git rev-parse HEAD", platform).stdout.trim()
 
-  assert.equal(token.uses, "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1")
-  assert.match(String(token.if), /write_enabled == 'true'/)
-  assert.match(String(token.if), /changed == 'true'/)
-  assert.equal(token.with["client-id"], "${{ vars.REPO_SYNC_APP_CLIENT_ID }}")
-  assert.equal(token.with["private-key"], "${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}")
-  assert.equal(token.with.owner, "AquilaXk")
-  assert.equal(token.with.repositories, "aquila-blog-web\n")
+  const manualOutput = path.join(temp, "source-manual.out")
+  const manual = runShell(sourceStep.run, temp, {
+    DISPATCH_ENABLED: "false",
+    EVENT_SHA: "f".repeat(40),
+    SOURCE_REF: "refs/pull/1683/head",
+    GITHUB_OUTPUT: manualOutput,
+  })
+  assert.equal(manual.status, 0, manual.stderr)
+  assert.equal(values(manualOutput).source_commit, sourceCommit)
+
+  const mismatchedPush = runShell(sourceStep.run, temp, {
+    DISPATCH_ENABLED: "true",
+    EVENT_SHA: "f".repeat(40),
+    SOURCE_REF: "f".repeat(40),
+    GITHUB_OUTPUT: path.join(temp, "source-push.out"),
+  })
+  assert.notEqual(mismatchedPush.status, 0, "automatic delivery must use the exact push commit")
+
+  const bundle = writeContractBundle(platform)
+  const identityOutput = path.join(temp, "identity.out")
+  const identity = runShell(identityStep.run, platform, { GITHUB_OUTPUT: identityOutput })
+  assert.equal(identity.status, 0, identity.stderr)
+  assert.deepEqual(values(identityOutput), {
+    manifest_sha256: sha256(bundle.manifest),
+    openapi_sha256: sha256(bundle.openapi),
+    error_codes_sha256: sha256(bundle.errorCodes),
+  })
+
+  writeFileSync(path.join(platform, "contracts/public-api/openapi.json"), `${bundle.openapi} `)
+  const rejected = runShell(identityStep.run, platform, { GITHUB_OUTPUT: path.join(temp, "rejected.out") })
+  assert.notEqual(rejected.status, 0, "artifact bytes that disagree with the manifest must fail closed")
+})
+
+test("stale Platform main is a successful no-op before the scoped Web token", (t) => {
+  const { document } = workflow()
+  const job = producerJob(document)
+  const freshness = matchingStep(job, (candidate) => {
+    const run = String(candidate.run ?? "")
+    return run.includes("commits/main") && run.includes("should_dispatch=")
+  }, "Platform main freshness")
+  const token = matchingStep(job, (candidate) => String(candidate.uses ?? "").startsWith("actions/create-github-app-token@"), "Web dispatch token")
+  const temp = mkdtempSync(path.join(os.tmpdir(), "platform-public-freshness-"))
+  t.after(() => rmSync(temp, { recursive: true, force: true }))
+  const current = "a".repeat(40)
+  const gh = fakeGh(temp, current)
+
+  const freshOutput = path.join(temp, "fresh.out")
+  const fresh = runShell(freshness.run, temp, {
+    PATH: gh.path,
+    SOURCE_COMMIT: current,
+    SOURCE_REPOSITORY: "AquilaXk/aquila-blog",
+    GITHUB_OUTPUT: freshOutput,
+    GITHUB_STEP_SUMMARY: path.join(temp, "fresh.summary"),
+  })
+  assert.equal(fresh.status, 0, fresh.stderr)
+  assert.equal(values(freshOutput).should_dispatch, "true")
+
+  const staleOutput = path.join(temp, "stale.out")
+  const stale = runShell(freshness.run, temp, {
+    PATH: gh.path,
+    SOURCE_COMMIT: "b".repeat(40),
+    SOURCE_REPOSITORY: "AquilaXk/aquila-blog",
+    GITHUB_OUTPUT: staleOutput,
+    GITHUB_STEP_SUMMARY: path.join(temp, "stale.summary"),
+  })
+  assert.equal(stale.status, 0, stale.stderr)
+  assert.equal(values(staleOutput).should_dispatch, "false")
+
+  assert.equal(token.with.repositories.trim(), "aquila-blog-web")
   assert.equal(token.with["permission-contents"], "write")
-  assert.equal(token.with["permission-pull-requests"], "write")
-  assert.doesNotMatch(source, /skip-token-revoke/)
-  assert.doesNotMatch(source, /pull_request_target|PERSONAL_ACCESS_TOKEN|\bPAT\b/)
-
-  for (const name of [
-    "Resolve repository sync App identity",
-    "Commit latest Platform snapshot",
-    "Push stable Web sync branch",
-    "Create or update the single Web compatibility PR",
-  ]) {
-    const step = stepByName(job, name)
-    assert.match(String(step.if), /write_enabled == 'true'/)
-    assert.match(String(step.if), /changed == 'true'/)
-  }
+  assert.equal(token.with["permission-pull-requests"], undefined)
+  assert.match(String(token.if), /should_dispatch == 'true'/)
+  assert.ok(job.steps.indexOf(freshness) < job.steps.indexOf(token))
 })
 
-test("publisher updates one stable branch with a normal push and reuses one open PR", () => {
+test("delivery uses the frozen nine-key payload and raw-value delivery hash", (t) => {
   const { document } = workflow()
-  const job = document.jobs.sync
-  const push = stepByName(job, "Push stable Web sync branch")
-  const pullRequest = stepByName(job, "Create or update the single Web compatibility PR")
+  const job = producerJob(document)
+  const prepare = matchingStep(job, (candidate) => {
+    const run = String(candidate.run ?? "")
+    return run.includes("commits/main") && run.includes("delivery_id=")
+  }, "delivery preparation")
+  const dispatch = matchingStep(job, (candidate) => String(candidate.run ?? "").includes("/dispatches"), "repository dispatch")
+  const temp = mkdtempSync(path.join(os.tmpdir(), "platform-public-delivery-"))
+  t.after(() => rmSync(temp, { recursive: true, force: true }))
+  const targetCommit = "e".repeat(40)
+  const fixture = {
+    SCHEMA_VERSION: "1",
+    SOURCE_REPOSITORY: "AquilaXk/aquila-blog",
+    SOURCE_COMMIT: "a".repeat(40),
+    MANIFEST_SHA256: "b".repeat(64),
+    OPENAPI_SHA256: "c".repeat(64),
+    ERROR_CODES_SHA256: "d".repeat(64),
+    TARGET_REPOSITORY: "AquilaXk/aquila-blog-web",
+  }
+  const gh = fakeGh(temp, targetCommit)
+  const preparedOutput = path.join(temp, "prepared.out")
+  const prepared = runShell(prepare.run, temp, {
+    ...fixture,
+    PATH: gh.path,
+    GITHUB_OUTPUT: preparedOutput,
+  })
+  assert.equal(prepared.status, 0, prepared.stderr)
+  const expectedDeliveryId = sha256(Buffer.from([
+    fixture.SCHEMA_VERSION,
+    fixture.SOURCE_REPOSITORY,
+    fixture.SOURCE_COMMIT,
+    fixture.MANIFEST_SHA256,
+    fixture.OPENAPI_SHA256,
+    fixture.ERROR_CODES_SHA256,
+    fixture.TARGET_REPOSITORY,
+    targetCommit,
+    "",
+  ].join("\n")))
+  assert.deepEqual(values(preparedOutput), { target_commit: targetCommit, delivery_id: expectedDeliveryId })
 
-  assert.match(push.run, /gh auth setup-git/)
-  assert.match(push.run, /git -C web push origin "HEAD:refs\/heads\/\$\{SYNC_BRANCH\}"/)
-  assert.doesNotMatch(push.run, /--force(?:-with-lease)?/)
-  assert.equal(push.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}")
+  const malformedRoot = mkdtempSync(path.join(os.tmpdir(), "platform-public-bad-target-"))
+  t.after(() => rmSync(malformedRoot, { recursive: true, force: true }))
+  const malformedGh = fakeGh(malformedRoot, "not-a-commit")
+  const malformed = runShell(prepare.run, temp, {
+    ...fixture,
+    PATH: malformedGh.path,
+    GITHUB_OUTPUT: path.join(temp, "malformed.out"),
+  })
+  assert.notEqual(malformed.status, 0, "invalid Web main identity must fail closed")
 
-  const listIndex = pullRequest.run.indexOf("gh pr list")
-  const createIndex = pullRequest.run.indexOf("gh pr create")
-  const editIndex = pullRequest.run.indexOf("gh pr edit")
-  assert.ok(listIndex >= 0 && createIndex > listIndex && editIndex > listIndex)
-  assert.match(pullRequest.run, /--head "\$\{SYNC_BRANCH\}"/)
-  assert.match(pullRequest.run, /source commit: `%s`/)
-  assert.match(pullRequest.run, /source ref: `%s`/)
-  assert.match(pullRequest.run, /"\$\{SOURCE_SHA\}"/)
-  assert.match(pullRequest.run, /"\$\{SOURCE_REF\}"/)
-  assert.equal(pullRequest.env.GH_TOKEN, "${{ steps.app-token.outputs.token }}")
+  const fields = [...dispatch.run.matchAll(/client_payload\[([^\]]+)\]/g)].map((match) => match[1])
+  assert.deepEqual(fields, payloadKeys)
+  assert.match(dispatch.run, /event_type="platform_public_contract_ready"/)
+  assert.equal((dispatch.run.match(/gh api --method POST/g) ?? []).length, 1)
+})
+
+test("producer has one dispatch mutation and no foreign Web write path", () => {
+  const { document, source } = workflow()
+  const job = producerJob(document)
+  const checkouts = job.steps.filter((candidate) => String(candidate.uses ?? "").startsWith("actions/checkout@"))
+
+  assert.equal(checkouts.length, 1)
+  assert.equal(checkouts[0].with?.repository, undefined)
+  assert.equal(checkouts[0].with?.["persist-credentials"], false)
+  assert.equal((source.match(/gh api --method POST/g) ?? []).length, 1)
+  assert.doesNotMatch(source, /SYNC_BRANCH|working-directory:\s*web|path:\s*web|repository:\s*AquilaXk\/aquila-blog-web|cache-dependency-path:\s*web|\byarn\b|import-platform-contracts|contracts:generate|git -C web|gh auth setup-git|git push|gh pr (?:list|create|edit|close)|permission-pull-requests/)
 })

@@ -109,8 +109,8 @@ function apiWrites(tokens) {
 }
 
 function webApiResource(endpoint, env) {
-  const expanded = expandScalar(endpoint, env).trim()
-  const match = expanded.match(/^repos\/([^/]+\/[^/?#]+)(\/[^?#]*)?$/i)
+  const expanded = expandScalar(endpoint, env).trim().replace(/^\//, "").replace(/[?#].*$/, "")
+  const match = expanded.match(/^repos\/([^/]+\/[^/]+)(\/.*)?$/i)
   return match?.[1].toLowerCase() === webRepositoryName ? (match[2] ?? "") : undefined
 }
 
@@ -165,12 +165,12 @@ function inspectWorkflow(file, contents) {
         || ((foreignDirectory || cdWeb) && /\bgit\s+(?:add|checkout|commit|merge|push|reset)\b/i.test(run))) {
         findings.push(`${file}:foreign-git-write`)
       }
-      if (/\bgit\s+push\s+["']?https:\/\/github\.com\/aquilaxk\/aquila-blog-web\.git(?=["'\s]|$)/i.test(run)) {
+      if (/\bgit\s+push\s+["']?(?:(?:https:\/\/(?:[^\s/"']+@)?github\.com\/)|git@github\.com:)aquilaxk\/aquila-blog-web(?:\.git)?(?=["'\s]|$)/i.test(run)) {
         findings.push(`${file}:foreign-git-write`)
       }
 
       const logicalRun = run.replace(/\\\r?\n\s*/g, " ")
-      const prCalls = logicalRun.split(/\r?\n/).filter((line) => /\bgh\s+pr\s+(?:create|edit|close|merge)\b/i.test(line))
+      const prCalls = logicalRun.split(/\r?\n/).filter((line) => /\bgh\s+pr\s+(?:close|comment|create|edit|lock|merge|ready|reopen|revert|review|unlock|update-branch)\b/i.test(line))
       const targetedWebPr = prCalls.some((call) => {
         const argument = call.match(/(?:--repo(?:=|\s+)|-R(?:=|\s+))(?:("[^"]+")|('[^']+')|([^\s;&]+))/i)
         const target = argument
@@ -180,11 +180,16 @@ function inspectWorkflow(file, contents) {
       })
       if (targetedWebPr) findings.push(`${file}:foreign-pr-write`)
 
-      const foreignApiWrite = apiCalls(run).some((call) => {
+      const webApiCalls = apiCalls(run).map((call) => {
         const tokens = shellTokens(call)
         const resource = webApiResource(apiEndpoint(tokens), env)
-        return resource !== undefined && apiWrites(tokens) && resource !== "/dispatches"
+        return { resource, tokens }
       })
+      if (!webOwnerWorkflows.has(file) && webApiCalls.some(({ resource }) => resource !== undefined)) {
+        findings.push(`${file}:foreign-web-owner`)
+      }
+      const foreignApiWrite = webApiCalls.some(({ resource, tokens }) =>
+        resource !== undefined && apiWrites(tokens) && resource !== "/dispatches")
       if (foreignApiWrite) findings.push(`${file}:foreign-api-write`)
     }
   }

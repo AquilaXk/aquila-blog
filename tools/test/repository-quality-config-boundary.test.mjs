@@ -132,6 +132,7 @@ name: Allowed Web read and dispatch
 on: workflow_dispatch
 env:
   WEB_REPOSITORY: AquilaXk/aquila-blog-web
+  GH_REPO: $WEB_REPOSITORY
 jobs:
   handoff:
     runs-on: ubuntu-latest
@@ -143,6 +144,12 @@ jobs:
       - run: |
           gh api "repos/\${WEB_REPOSITORY}/contents/contracts/public-api?ref=main"
           gh api --method POST "repos/\${WEB_REPOSITORY}/dispatches" -f event_type=platform_contract_ready
+          gh pr checks 1
+          gh pr diff 1
+          gh pr list
+          gh pr status
+          gh pr view 1
+          gh pr checkout 1
 `)
   const allowedScan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
     cwd: root,
@@ -209,6 +216,53 @@ jobs:
     steps:
       - run: gh api --method POST "repos/\${{env.WEB_REPOSITORY}}/issues" -f title=handoff
 `, "foreign-api-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Leading-slash Web cache deletion
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method DELETE "/repos/\${WEB_REPOSITORY}/actions/caches?key=x"
+`, "foreign-api-write")
+  assertWorkflowRejected("unknown-split-dispatch", `
+name: Split Web owner dispatch
+on: workflow_dispatch
+env:
+  WEB_OWNER: AquilaXk
+  WEB_NAME: aquila-blog-web
+  WEB_REPOSITORY: \${WEB_OWNER}/\${WEB_NAME}
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${WEB_REPOSITORY}/dispatches" -f event_type=handoff
+`, "foreign-web-owner")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: Alternate Web Git remotes
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          git push https://github.com/AquilaXk/aquila-blog-web HEAD:main
+          git push git@github.com:AquilaXk/aquila-blog-web.git HEAD:main
+          git push https://x-access-token:token@github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Implicit GH_REPO foreign PR reopen
+on: workflow_dispatch
+env:
+  GH_REPO: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr reopen 1
+`, "foreign-pr-write")
 
   assertWorkflowRejected("foreign-checkout", `
 name: Foreign checkout

@@ -14,117 +14,137 @@ const scopes = [".github/", ".githooks/", "tools/", "deploy/", "back/"]
 const forbidden = /working-directory:\s*["']?(?:\.?\/)?front(?:[/\\"'\s#]|$)|front\/yarn\.lock|frontLiveE2E|reusable-frontend-verify\.yml/
 const findings = []
 const webRepositoryName = "aquilaxk/aquila-blog-web"
+const webOwnerWorkflows = new Set([
+  ".github/workflows/sync-public-contract-to-web.yml",
+  ".github/workflows/sync-web-legal-policy-to-platform.yml",
+  ".github/workflows/deploy.yml",
+])
+const rubyYamlParser = [
+  "require 'psych'",
+  "require 'json'",
+  "document = Psych.safe_load(STDIN.read, aliases: true)",
+  "abort 'workflow YAML root must be a mapping' unless document.is_a?(Hash)",
+  "STDOUT.write(JSON.generate(document))",
+].join("; ")
 
-function workflowSteps(contents) {
-  const lines = [...contents.matchAll(/[^\n]*(?:\n|$)/g)]
-    .filter((match) => match[0].length > 0)
-    .map((match) => ({ offset: match.index, text: match[0].replace(/\r?\n$/, "") }))
-  const steps = []
-  for (let index = 0; index < lines.length; index += 1) {
-    const header = lines[index].text.match(/^(\s*)(?:steps|"steps"|'steps'):\s*(?:#.*)?$/)
-    if (!header) continue
-    const headerIndent = header[1].length
-    let jobStart = index - 1
-    for (; jobStart >= 0; jobStart -= 1) {
-      const line = lines[jobStart].text
-      if (line.trim() === "" || line.trimStart().startsWith("#")) continue
-      if ((line.match(/^\s*/) ?? [""])[0].length < headerIndent) break
-    }
-    const jobPrefix = contents.slice(lines[jobStart]?.offset ?? 0, lines[index].offset)
-    const defaultForeignWorkspace = /^\s*defaults:\s*\r?\n\s+run:\s*\r?\n\s+working-directory:\s*["']?(?:\.\/)?web(?:[\/"'\s#]|$)/m.test(jobPrefix)
-    let sectionEnd = index + 1
-    for (; sectionEnd < lines.length; sectionEnd += 1) {
-      const line = lines[sectionEnd].text
-      if (line.trim() === "" || line.trimStart().startsWith("#")) continue
-      if ((line.match(/^\s*/) ?? [""])[0].length <= headerIndent) break
-    }
-
-    let stepIndent
-    const starts = []
-    for (let cursor = index + 1; cursor < sectionEnd; cursor += 1) {
-      const start = lines[cursor].text.match(/^(\s*)-\s+[A-Za-z][A-Za-z0-9-]*\s*:/)
-      if (!start || start[1].length <= headerIndent) continue
-      stepIndent ??= start[1].length
-      if (start[1].length === stepIndent) starts.push(lines[cursor].offset)
-    }
-    const endOffset = lines[sectionEnd]?.offset ?? contents.length
-    for (let cursor = 0; cursor < starts.length; cursor += 1) {
-      steps.push({
-        defaultForeignWorkspace,
-        source: contents.slice(starts[cursor], starts[cursor + 1] ?? endOffset),
-      })
-    }
-    index = sectionEnd - 1
-  }
-  return steps
+function workflowDocument(contents) {
+  const parsed = execFileSync("ruby", ["-e", rubyYamlParser], {
+    encoding: "utf8",
+    input: contents,
+    maxBuffer: 4 * 1024 * 1024,
+  })
+  const document = JSON.parse(parsed)
+  if (!document || typeof document !== "object" || Array.isArray(document)) throw new Error("workflow YAML root must be a mapping")
+  return document
 }
 
-function webRepositoryPattern(contents) {
-  const aliases = new Set(["WEB_REPOSITORY"])
-  const assignments = [...contents.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*:\s*(.+?)\s*$/gm)]
-    .map((match) => [match[1], match[2].replace(/^(["'])(.*)\1$/, "$2")])
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const [name, value] of assignments) {
-      const reference = value.match(/^\$\{([A-Z][A-Z0-9_]*)\}$/)?.[1]
-        ?? value.match(/^\$\{\{\s*env\.([A-Z][A-Z0-9_]*)\s*\}\}$/)?.[1]
-      if (value.toLowerCase() === webRepositoryName || (reference && aliases.has(reference))) {
-        if (!aliases.has(name)) changed = true
-        aliases.add(name)
-      }
-    }
+function mergedEnv(...sources) {
+  const result = new Map()
+  for (const source of sources) {
+    if (!source || typeof source !== "object" || Array.isArray(source)) continue
+    for (const [name, value] of Object.entries(source)) result.set(name.toLowerCase(), String(value))
   }
-  const variables = [...aliases].flatMap((alias) => [
-    String.raw`\$\{${alias}\}`,
-    String.raw`\$\{\{\s*env\.${alias}\s*\}\}`,
-  ])
-  return String.raw`(?:AquilaXk\/aquila-blog-web|${variables.join("|")})`
+  return result
+}
+
+function repositoryIsWeb(value, env, seen = new Set()) {
+  const text = String(value ?? "").trim()
+  if (text.toLowerCase() === webRepositoryName) return true
+  const name = text.match(/^\$\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/i)?.[1]
+    ?? text.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/)?.[1]
+    ?? text.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/)?.[1]
+  if (!name || seen.has(name.toLowerCase())) return false
+  const next = env.get(name.toLowerCase())
+  if (next === undefined) return false
+  seen.add(name.toLowerCase())
+  return repositoryIsWeb(next, env, seen)
+}
+
+function webRepositoryReferences(env) {
+  const references = ["AquilaXk/aquila-blog-web"]
+  for (const [name, value] of env) {
+    if (!repositoryIsWeb(value, env, new Set([name]))) continue
+    references.push(`\${${name}}`, `$${name}`, `\${{ env.${name} }}`)
+  }
+  return references
+}
+
+function apiCalls(run) {
+  return run.replace(/\\\r?\n\s*/g, " ")
+    .split(/\r?\n/)
+    .flatMap((line) => [...line.matchAll(/\bgh\s+api\b[^;&]*/gi)].map((match) => match[0]))
 }
 
 function inspectWorkflow(file, contents) {
-  const webRepository = webRepositoryPattern(contents)
-  for (const { defaultForeignWorkspace, source: step } of workflowSteps(contents)) {
-    const categories = []
-    if (/uses:\s*actions\/checkout@/.test(step) && new RegExp(`repository:\\s*["']?${webRepository}`, "i").test(step)) {
-      categories.push("foreign-checkout")
-    }
+  let document
+  try {
+    document = workflowDocument(contents)
+  } catch {
+    findings.push(`${file}:invalid-workflow-yaml`)
+    return
+  }
 
-    const hasRun = /^\s*(?:-\s+)?run\s*:/m.test(step)
-    const hasStepWorkspace = /working-directory\s*:/.test(step)
-    const foreignWorkspace = /working-directory:\s*["']?(?:\.\/)?web(?:[\/"'\s#]|$)/.test(step)
-      || (hasRun && !hasStepWorkspace && defaultForeignWorkspace)
-    const workspaceBuild = /\b(?:yarn|npm|pnpm|bun)\b/.test(step) || /import-platform-contracts|contracts:generate|openapi-typescript/.test(step)
-    const foreignCwdBuild = /\b(?:yarn|bun)\s+--cwd\s+["']?(?:\.\/)?web(?:[\/"'\s]|$)/.test(step)
-      || /\bnpm\s+--prefix\s+["']?(?:\.\/)?web(?:[\/"'\s]|$)/.test(step)
-      || /\bpnpm\s+(?:--dir|-C)\s+["']?(?:\.\/)?web(?:[\/"'\s]|$)/.test(step)
-      || /\bcd\s+["']?(?:\.\/)?web["']?\s*(?:&&|;)\s*(?:yarn|npm|pnpm|bun)\b/.test(step)
-    if ((foreignWorkspace && workspaceBuild) || foreignCwdBuild) {
-      categories.push("foreign-workspace-build")
-    }
-    if (/git\s+-C\s+["']?(?:\.\/)?web["']?\s+(?:add|checkout|commit|merge|push|reset)\b/.test(step)
-      || (foreignWorkspace && /\bgit\s+(?:add|checkout|commit|merge|push|reset)\b/.test(step))) {
-      categories.push("foreign-git-write")
-    }
+  if (!webOwnerWorkflows.has(file) && /(?:^|[^A-Za-z0-9_.-])aquilaxk\/aquila-blog-web(?=$|[^A-Za-z0-9_.-])/i.test(contents)) {
+    findings.push(`${file}:foreign-web-owner`)
+  }
 
-    const webRepoArgument = new RegExp(`(?:--repo(?:=|\\s+)|-R(?:=|\\s+))["']?${webRepository}`, "i")
-    if (/\bgh\s+pr\s+(?:create|edit|close|merge)\b/.test(step) && webRepoArgument.test(step)) {
-      categories.push("foreign-pr-write")
+  const workflowEnv = mergedEnv(document.env)
+  const workflowDirectory = document.defaults?.run?.["working-directory"]
+  const jobs = document.jobs && typeof document.jobs === "object" && !Array.isArray(document.jobs)
+    ? Object.values(document.jobs)
+    : []
+  for (const job of jobs) {
+    if (!job || typeof job !== "object" || Array.isArray(job)) continue
+    const jobEnv = mergedEnv(Object.fromEntries(workflowEnv), job.env)
+    const jobDirectory = job.defaults?.run?.["working-directory"] ?? workflowDirectory
+    const steps = Array.isArray(job.steps) ? job.steps : []
+    for (const step of steps) {
+      if (!step || typeof step !== "object" || Array.isArray(step)) continue
+      const env = mergedEnv(Object.fromEntries(jobEnv), step.env)
+      const uses = String(step.uses ?? "")
+      const withValues = step.with && typeof step.with === "object" && !Array.isArray(step.with) ? step.with : {}
+      if (/^actions\/checkout@/i.test(uses) && repositoryIsWeb(withValues.repository, env)) {
+        findings.push(`${file}:foreign-checkout`)
+      }
+      if (String(withValues.path ?? "").match(/^(?:\.\/)?web(?:\/|$)/i)) {
+        findings.push(`${file}:foreign-checkout`)
+      }
+
+      const run = String(step.run ?? "")
+      const directory = step["working-directory"] ?? jobDirectory
+      const foreignDirectory = /^(?:\.\/)?web(?:\/|$)/i.test(String(directory ?? ""))
+      const buildOrWrite = /\b(?:yarn|npm|pnpm|bun)\b|import-platform-contracts|contracts:generate|openapi-typescript|\bgit\s+(?:add|checkout|commit|merge|push|reset)\b/i.test(run)
+      const cdWeb = /\bcd\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)/i.test(run)
+      const packageWeb = /\b(?:yarn|bun)\s+--cwd\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)|\bnpm\s+--prefix\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)|\bpnpm\s+(?:--dir|-C)\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)/i.test(run)
+      if ((foreignDirectory && buildOrWrite) || cdWeb || packageWeb) {
+        findings.push(`${file}:foreign-workspace-build`)
+      }
+      if (/\bgit\s+-C\s+["']?(?:\.\/)?web["']?\s+(?:add|checkout|commit|merge|push|reset)\b/i.test(run)
+        || ((foreignDirectory || cdWeb) && /\bgit\s+(?:add|checkout|commit|merge|push|reset)\b/i.test(run))) {
+        findings.push(`${file}:foreign-git-write`)
+      }
+
+      const logicalRun = run.replace(/\\\r?\n\s*/g, " ")
+      const prCalls = logicalRun.split(/\r?\n/).filter((line) => /\bgh\s+pr\s+(?:create|edit|close|merge)\b/i.test(line))
+      const targetedWebPr = prCalls.some((call) => {
+        const argument = call.match(/(?:--repo(?:=|\s+)|-R(?:=|\s+))(?:("[^"]+")|('[^']+')|([^\s;&]+))/i)
+        return argument && repositoryIsWeb((argument[1] ?? argument[2] ?? argument[3]).replace(/^["']|["']$/g, ""), env)
+      })
+      if (targetedWebPr) findings.push(`${file}:foreign-pr-write`)
+
+      const references = webRepositoryReferences(env)
+      const foreignApiWrite = apiCalls(run).some((call) => {
+        const target = references.find((reference) => new RegExp(`repos/${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=[/"'\\s?]|$)`, "i").test(call))
+        if (!target) return false
+        const explicitMethod = call.match(/(?:--method(?:=|\s+)|-X(?:=|\s*)?)["']?(GET|POST|PATCH|PUT|DELETE)\b/i)?.[1]?.toUpperCase()
+        const implicitWrite = /(?:^|\s)(?:-f|-F)(?:=|\s)|(?:^|\s)--(?:field|raw-field|input)(?:=|\s)/.test(call)
+        const writes = explicitMethod ? explicitMethod !== "GET" : implicitWrite
+        if (!writes) return false
+        const exactDispatch = new RegExp(`repos/${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/dispatches(?=["'\\s]|$)`, "i").test(call)
+        return !exactDispatch
+      })
+      if (foreignApiWrite) findings.push(`${file}:foreign-api-write`)
     }
-
-    const logicalStep = step.replace(/\\\r?\n\s*/g, " ")
-    const apiCalls = logicalStep.split(/\r?\n/).flatMap((line) => [...line.matchAll(/\bgh\s+api\b[^;&]*/g)].map((match) => match[0]))
-    const foreignApiWrite = apiCalls.some((call) => {
-      const explicitMethod = call.match(/(?:--method(?:=|\s+)|-X(?:=|\s*)?)["']?(GET|POST|PATCH|PUT|DELETE)\b/i)?.[1]?.toUpperCase()
-      const hasFields = /(?:^|\s)(?:-f|-F)(?:=|\s)|(?:^|\s)--(?:field|raw-field)(?:=|\s)/.test(call)
-      const writes = explicitMethod ? explicitMethod !== "GET" : hasFields
-      if (!writes) return false
-      return [...call.matchAll(new RegExp(`repos/${webRepository}(?:/([^\\s"'?\\\\]+))?(?=[\\s"'?\\\\]|$)`, "gi"))]
-        .some((match) => !match[1] || match[1].toLowerCase() !== "dispatches")
-    })
-    if (foreignApiWrite) categories.push("foreign-api-write")
-
-    for (const category of categories) findings.push(`${file}:${category}`)
   }
 }
 

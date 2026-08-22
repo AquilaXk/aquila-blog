@@ -117,9 +117,21 @@ syncBuiltinESMExports()
     removeWorkflow(relative)
   }
 
-  const allowedWebRead = writeWorkflow("allowed-web-read", `
+  assertWorkflowRejected("unknown-web-owner", `
+name: Unknown Web owner
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api "repos/AquilaXk/aquila-blog-web/contents/contracts/public-api?ref=main"
+`, "foreign-web-owner")
+
+  const allowedWebRead = writeWorkflow("sync-public-contract-to-web", `
 name: Allowed Web read and dispatch
 on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
 jobs:
   handoff:
     runs-on: ubuntu-latest
@@ -129,16 +141,8 @@ jobs:
           repositories: aquila-blog-web
           permission-contents: write
       - run: |
-          gh api "repos/AquilaXk/aquila-blog-web/contents/contracts/public-api?ref=main"
-          gh api --method POST "repos/AquilaXk/aquila-blog-web/dispatches" -f event_type=platform_contract_ready
-  local-build:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - working-directory: platform
-        run: npm ci
+          gh api "repos/\${WEB_REPOSITORY}/contents/contracts/public-api?ref=main"
+          gh api --method POST "repos/\${WEB_REPOSITORY}/dispatches" -f event_type=platform_contract_ready
 `)
   const allowedScan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
     cwd: root,
@@ -178,6 +182,29 @@ jobs:
     steps:
       - run: yarn --cwd web contracts:generate
 `, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-build-workflow-default", `
+name: Workflow-default foreign build
+on: workflow_dispatch
+defaults:
+  run: { working-directory: web }
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm ci
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-cd-write", `
+name: Multiline foreign workspace write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          cd web
+          git add generated
+          pnpm build
+`, "foreign-git-write")
   assertWorkflowRejected("foreign-git-write", `
 name: Foreign git write
 on: workflow_dispatch
@@ -247,12 +274,12 @@ name: Aliased foreign PR write
 on: workflow_dispatch
 env:
   WEB_REPOSITORY: AquilaXk/aquila-blog-web
-  TARGET_REPOSITORY: \${{ env.WEB_REPOSITORY }}
+  TARGET_REPOSITORY: $WEB_REPOSITORY
 jobs:
   handoff:
     runs-on: ubuntu-latest
     steps:
-      - run: gh pr create --repo "\${TARGET_REPOSITORY}" --title handoff --body handoff
+      - run: gh pr create --repo="\${TARGET_REPOSITORY}" --title handoff --body handoff
 `, "foreign-pr-write")
   assertWorkflowRejected("foreign-checkout-mixed-case", `
 name: Mixed-case foreign checkout
@@ -273,8 +300,7 @@ jobs:
     runs-on: ubuntu-latest
     "steps":
       - uses: actions/checkout@v4
-        with:
-          repository: AquilaXk/aquila-blog-web
+        with: { repository: AquilaXk/aquila-blog-web }
 `, "foreign-checkout")
   assertWorkflowRejected("foreign-build-job-default", `
 name: Job-default foreign build

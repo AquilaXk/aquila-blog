@@ -90,6 +90,7 @@ dependencies {
     // Sync S3Client uses UrlConnection only (#1387/#1388/#1391). Drop unused AWS HTTP clients.
     implementation("software.amazon.awssdk:s3:2.53.3") {
         exclude(group = "software.amazon.awssdk", module = "apache-client")
+        exclude(group = "software.amazon.awssdk", module = "apache5-client")
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
     }
     implementation("software.amazon.awssdk:url-connection-client:2.53.3")
@@ -139,6 +140,37 @@ tasks.register("verifyTestcontainersVersionAlignment") {
                     .joinToString(separator = ", ")
             throw GradleException(
                 "Testcontainers version alignment failed: expected $testcontainersVersion, resolved $resolvedModules",
+            )
+        }
+    }
+}
+
+tasks.register("verifyAwsSdkHttpClientBoundary") {
+    description = "Verifies the runtime uses only the explicitly configured AWS URLConnection HTTP client."
+    group = "verification"
+
+    doLast {
+        val forbiddenHttpClients = setOf("apache-client", "apache5-client", "netty-nio-client")
+        val resolvedForbiddenClients =
+            configurations
+                .getByName("runtimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+                .filter { component ->
+                    component.group == "software.amazon.awssdk" && component.module in forbiddenHttpClients
+                }
+
+        val resolvedForbiddenClientDescriptions =
+            resolvedForbiddenClients
+                .map { component -> "${component.module}:${component.version}" }
+                .sorted()
+
+        if (resolvedForbiddenClientDescriptions.isNotEmpty()) {
+            throw GradleException(
+                "AWS SDK HTTP client boundary failed: forbidden runtime modules resolved: " +
+                    resolvedForbiddenClientDescriptions.joinToString(),
             )
         }
     }

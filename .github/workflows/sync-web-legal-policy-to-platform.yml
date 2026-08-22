@@ -168,7 +168,7 @@ jobs:
           git -C "${platform}" init
           git -C "${platform}" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           gh auth setup-git
-          git -C "${platform}" fetch --no-tags --depth=1 origin "${TARGET_COMMIT}"
+          git -C "${platform}" fetch --no-tags origin "${TARGET_COMMIT}"
           [ "$(git -C "${platform}" rev-parse FETCH_HEAD)" = "${TARGET_COMMIT}" ] || {
             echo "Platform target commit mismatch" >&2
             exit 1

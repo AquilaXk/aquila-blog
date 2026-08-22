@@ -112,12 +112,15 @@ test("provenance drift and replay cannot silently write", () => {
 test("stable branch enforces a committed-range allowlist and rechecks freshness immediately before push", () => {
   const { document } = workflow()
   const job = document.jobs.receive
+  const prepare = stepByName(job, "Prepare exact Platform target")
   const branch = stepByName(job, "Prepare stable Platform sync branch against latest main")
   const commit = stepByName(job, "Commit canonical Web legal-policy identity")
   const freshness = stepByName(job, "Recheck exact current identity before writing")
   const push = stepByName(job, "Push stable Platform legal-policy branch")
   const names = job.steps.map((step) => step.name)
 
+  assert.match(prepare.run, /fetch --no-tags origin "\$\{TARGET_COMMIT\}"/)
+  assert.doesNotMatch(prepare.run, /--depth(?:=|\s)/)
   assert.match(branch.run, /origin\/main\.\.\.HEAD/)
   assert.match(branch.run, /contracts\/web\/legal-policy-manifest\.lock\.json/)
   assert.match(branch.run, /unexpected committed Platform branch diff/)

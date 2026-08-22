@@ -64,6 +64,8 @@ extracted_functions=(
   switch_caddy_web_upstream
   verify_front_edge_route
   write_front_release_state
+  front_release_state_value
+  front_release_matches_staged
   restore_front_candidate_image
   record_front_failure_state
   rollback_front_to
@@ -637,6 +639,63 @@ assert_file_contains "the deploy must record the served build" "${case_dir}/.fro
 # boot를 기다리는 동안 공개 사이트가 깨진 빌드에 머문다.
 assert_file_lacks "the previous colour must stay warm as the rollback target" "${case_dir}/call-log" '^compose stop front_blue$'
 assert_file_contains "a verified cutover must report its result" "${case_dir}/stdout" '^front_deploy_result=deployed$'
+
+# 6-1) 이미 검증된 동일 digest/build 재전달은 pull·후보 기동·cutover 없이 성공 no-op이다.
+setup_case "identical-release-noop" "runtime-split,front" "blog.aquilaxk.site"
+printf 'WEB_UPSTREAM=front_green\n' >> "${case_dir}/.env.prod"
+printf 'front_green\n' > "${case_dir}/running-front"
+printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green=%s\n' "${good_image}" > "${case_dir}/container-images"
+printf 'front_green=%s\n' "${new_sha}" > "${case_dir}/served-sha"
+cat > "${case_dir}/.front-release-state.env" <<EOF
+front_active=front_green
+front_active_image=${good_image}
+front_active_build_sha=${new_sha}
+front_switched_at=2026-08-22T00:00:00Z
+front_result=deployed
+EOF
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "an identical verified release must no-op" "0" "${status}"
+assert_file_contains "a no-op must report its result" "${case_dir}/stdout" '^front_deploy_result=noop$'
+assert_file_contains "a no-op must preserve served build evidence" "${case_dir}/stdout" "served_build_sha=${new_sha}"
+assert_file_contains "a no-op must preserve switch evidence" "${case_dir}/stdout" 'switched_at=2026-08-22T00:00:00Z'
+assert_file_contains "a no-op must restore the active Caddy literal" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
+assert_file_contains "a no-op must preserve the active Caddy environment" "${case_dir}/.env.prod" '^WEB_UPSTREAM=front_green$'
+assert_file_lacks "a no-op must not pull" "${case_dir}/call-log" '^compose pull '
+assert_file_lacks "a no-op must not boot a candidate" "${case_dir}/call-log" '^compose_up_force_recreate '
+assert_file_lacks "a no-op must not cut over Caddy" "${case_dir}/call-log" '^reload_caddy$'
+
+# release-state가 맞아도 실제 edge가 다른 색이면 duplicate로 간주하지 않는다.
+setup_case "release-state-edge-drift" "runtime-split,front" "blog.aquilaxk.site"
+printf 'WEB_UPSTREAM=front_blue\n' >> "${case_dir}/.env.prod"
+printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green=%s\n' "${good_image}" > "${case_dir}/container-images"
+printf 'front_blue=%s\n' "${new_sha}" > "${case_dir}/served-sha"
+cat > "${case_dir}/.front-release-state.env" <<EOF
+front_active=front_green
+front_active_image=${good_image}
+front_active_build_sha=${new_sha}
+front_switched_at=2026-08-22T00:00:00Z
+front_result=deployed
+EOF
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; front_release_matches_staged "front_green" "blog.aquilaxk.site"')"
+assert_equals "release-state must not override the actual edge colour" "1" "${status}"
+
+# release-state와 served SHA가 맞아도 실제 활성 컨테이너 digest가 다르면 duplicate가 아니다.
+setup_case "release-state-container-drift" "runtime-split,front" "blog.aquilaxk.site"
+printf 'WEB_UPSTREAM=front_green\n' >> "${case_dir}/.env.prod"
+printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_green=%s\n' "${new_sha}" > "${case_dir}/served-sha"
+cat > "${case_dir}/.front-release-state.env" <<EOF
+front_active=front_green
+front_active_image=${good_image}
+front_active_build_sha=${new_sha}
+front_switched_at=2026-08-22T00:00:00Z
+front_result=deployed
+EOF
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; front_release_matches_staged "front_green" "blog.aquilaxk.site"')"
+assert_equals "release-state must not override the active container digest" "1" "${status}"
 
 # ---------------------------------------------------------------------------
 # 7) backend 배포 경로: front 이미지 키가 사라져도 실행 중인 컨테이너에서 복원하고, WEB_UPSTREAM을

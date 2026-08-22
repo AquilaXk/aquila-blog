@@ -3174,6 +3174,41 @@ write_front_release_state() {
   echo "front release state: active=${active} active_image=$(runtime_front_image_value "${active}") previous=${previous} previous_image=$(runtime_front_image_value "${previous}") switched_at=${switched_at} served_build_sha=${served_sha:-none} previous_build_sha=${pre_switch_sha:-none} result=${result} reason=${reason:-none}"
 }
 
+front_release_state_value() {
+  local key="$1"
+  awk -F= -v key="${key}" '
+    $1 == key { value = substr($0, index($0, "=") + 1); count++ }
+    END { if (count != 1 || value == "") exit 1; print value }
+  ' "${FRONT_RELEASE_STATE_FILE}"
+}
+
+front_release_matches_staged() {
+  local active="$1"
+  local web_host="$2"
+  local state_active state_image state_build_sha switched_at result
+  local edge_active active_container_image served_sha
+
+  [ -f "${FRONT_RELEASE_STATE_FILE}" ] || return 1
+  state_active="$(front_release_state_value front_active)" || return 1
+  state_image="$(front_release_state_value front_active_image)" || return 1
+  state_build_sha="$(front_release_state_value front_active_build_sha)" || return 1
+  switched_at="$(front_release_state_value front_switched_at)" || return 1
+  result="$(front_release_state_value front_result)" || return 1
+  [ "${result}" = "deployed" ] || return 1
+  [ "${state_active}" = "${active}" ] || return 1
+  [ "${state_image}" = "${STAGED_FRONT_IMAGE}" ] || return 1
+  [ "${state_build_sha}" = "${STAGED_FRONT_BUILD_SHA}" ] || return 1
+
+  edge_active="$(current_caddy_web_upstream_host)"
+  [ "${edge_active}" = "${active}" ] || return 1
+  active_container_image="$(container_image_for_service_any_state "${active}")"
+  [ "${active_container_image}" = "${STAGED_FRONT_IMAGE}" ] || return 1
+  served_sha="$(served_front_build_sha "${web_host}")"
+  [ "${served_sha}" = "${STAGED_FRONT_BUILD_SHA}" ] || return 1
+  FRONT_NOOP_SWITCHED_AT="${switched_at}"
+  return 0
+}
+
 # compose 보간 때문에 후보 digest는 pull/up **전에** .env.prod에 있어야 한다. 그래서 health 검사가
 # 그 뒤에 오고, 실패해도 깨진 digest가 파일에 남는다. 그대로 두면 다음 backend 배포가 두 색을
 # 모두 기동하면서 그 digest를 다시 띄우고(autoheal 재시작 루프), 배포는 성공으로 끝난다.
@@ -3302,6 +3337,16 @@ run_front_blue_green_deploy() {
   web_host="$(front_edge_host "WEB_DOMAIN")" || return 1
   company_host="$(front_edge_host "COMPANY_DOMAIN")" || return 1
   product_host="$(front_edge_host "PRODUCT_DOMAIN")" || return 1
+
+  if front_release_matches_staged "${active_front}" "${web_host}"; then
+    # 원격 checkout이 Caddyfile을 tracked placeholder로 되돌린 직후다. 지금은 live Caddy가
+    # 이전 env로 올바른 색을 서빙해도, 리터럴을 복구하지 않으면 다음 reload에서 기본 blue로
+    # 후퇴할 수 있다. reload/cutover 없이 mount와 다음 boot의 기준만 현재 활성 색으로 고정한다.
+    pin_front_caddy_upstream "${active_front}" || return 1
+    echo "front_deploy_result=noop"
+    echo "front deploy no-op: upstream=${active_front}, image=${STAGED_FRONT_IMAGE}, served_build_sha=${STAGED_FRONT_BUILD_SHA}, switched_at=${FRONT_NOOP_SWITCHED_AT}"
+    return 0
+  fi
 
   active_image="$(resolve_preserved_front_image "${active_front}")" || return 1
   if [[ -z "${active_image}" ]]; then

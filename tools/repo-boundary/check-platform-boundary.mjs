@@ -62,10 +62,91 @@ function repositoryIsWeb(value, env) {
   return expandScalar(value, env).trim().toLowerCase() === webRepositoryName
 }
 
-function apiCalls(run) {
-  return run.replace(/\\\r?\n\s*/g, " ")
-    .split(/\r?\n/)
-    .flatMap((line) => [...line.matchAll(/\bgh\s+api\b[^;&]*/gi)].map((match) => match[0]))
+function commandPrefix(source, end) {
+  const contexts = [{ quote: undefined, start: 0 }]
+  let escaped = false
+  for (let index = 0; index < end; index += 1) {
+    const context = contexts.at(-1)
+    const character = source[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === "\\" && context.quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (context.quote === "'") {
+      if (character === "'") context.quote = undefined
+      continue
+    }
+    if (character === "$" && source[index + 1] === "(") {
+      contexts.push({ quote: undefined, start: index + 2 })
+      index += 1
+      continue
+    }
+    if (context.quote) {
+      if (character === context.quote) context.quote = undefined
+      continue
+    }
+    if (character === "'" || character === '"') {
+      context.quote = character
+      continue
+    }
+    if (character === ")" && contexts.length > 1) {
+      contexts.pop()
+      continue
+    }
+    if (character === "\n" || character === ";" || character === "&" || character === "|") {
+      context.start = index + 1
+    }
+  }
+  const context = contexts.at(-1)
+  return context.quote ? undefined : source.slice(context.start, end).trim()
+}
+
+function isCommandPrefix(prefix) {
+  if (prefix === undefined) return false
+  if (!prefix) return true
+  return shellTokens(prefix).every((token) => /^(?:if|then|do|while|until|!|[A-Za-z_][A-Za-z0-9_]*=.*)$/i.test(token))
+}
+
+function logicalInvocations(run) {
+  const source = run.replace(/\\\r?\n\s*/g, " ")
+  const prefix = /(?:^|[\s(!])((?:gh\s+[A-Za-z][A-Za-z0-9-]*|git\s+(?:clone|push))\b)/gim
+  const invocations = []
+  for (const match of source.matchAll(prefix)) {
+    const start = match.index + match[0].lastIndexOf(match[1])
+    if (!isCommandPrefix(commandPrefix(source, start))) continue
+    let quote
+    let escaped = false
+    let end = source.length
+    for (let index = start; index < source.length; index += 1) {
+      const character = source[index]
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (character === "\\" && quote !== "'") {
+        escaped = true
+        continue
+      }
+      if (quote) {
+        if (character === quote) quote = undefined
+        continue
+      }
+      if (character === "'" || character === '"') {
+        quote = character
+        continue
+      }
+      if (character === "\n" || character === ";" || character === "&" || character === "|" || character === ")") {
+        end = index
+        break
+      }
+    }
+    invocations.push(source.slice(start, end).trim())
+  }
+  return invocations
 }
 
 function shellTokens(command) {
@@ -93,7 +174,7 @@ function apiEndpoint(tokens) {
   return undefined
 }
 
-function apiWrites(tokens, env) {
+function apiMethod(tokens, env) {
   let explicitMethod
   let implicitWrite = false
   for (let index = 2; index < tokens.length; index += 1) {
@@ -105,8 +186,8 @@ function apiWrites(tokens, env) {
       || /^(?:-f|-F|--field|--raw-field|--input)=/i.test(token)
       || /^-[fF].+/i.test(token)) implicitWrite = true
   }
-  if (!explicitMethod) return implicitWrite
-  return !/^(?:GET|HEAD)$/i.test(expandScalar(explicitMethod, env).trim())
+  if (explicitMethod) return expandScalar(explicitMethod, env).trim().toUpperCase()
+  return implicitWrite ? "POST" : "GET"
 }
 
 function webApiResource(endpoint, env) {
@@ -116,6 +197,25 @@ function webApiResource(endpoint, env) {
   }
   const match = expanded.match(/^repos\/([^/]+\/[^/]+)(\/.*)?$/i)
   return match?.[1].toLowerCase() === webRepositoryName ? (match[2] ?? "") : undefined
+}
+
+function canonicalWebTarget(value, env) {
+  const expanded = expandScalar(value, env).trim().replace(/^(["'])(.*)\1$/, "$2")
+  const candidate = (expanded.includes("=") ? expanded.slice(expanded.indexOf("=") + 1) : expanded)
+    .replace(/^(["'])(.*)\1$/, "$2")
+  if (repositoryIsWeb(candidate, env) || webApiResource(candidate, env) !== undefined) return true
+  return /^(?:(?:https:\/\/(?:[^\s/"']+@)?github\.com\/)|git@github\.com:)aquilaxk\/aquila-blog-web(?:\.git)?(?:[\/#?]|$)/i.test(candidate)
+}
+
+function commandTargetsWeb(tokens, env) {
+  return repositoryIsWeb(env.get("gh_repo"), env) || tokens.some((token) => canonicalWebTarget(token, env))
+}
+
+function stepCreatesWebToken(uses, withValues, env) {
+  if (!/^actions\/create-github-app-token@/i.test(uses)) return false
+  const owner = expandScalar(withValues.owner ?? "AquilaXk", env).trim().toLowerCase()
+  const repositories = expandScalar(withValues.repositories, env).split(/[\r\n,]+/).map((value) => value.trim().toLowerCase())
+  return owner === "aquilaxk" && repositories.includes("aquila-blog-web")
 }
 
 function inspectWorkflow(file, contents) {
@@ -149,6 +249,9 @@ function inspectWorkflow(file, contents) {
       const env = mergedEnv(Object.fromEntries(jobEnv), step.env)
       const uses = String(step.uses ?? "")
       const withValues = step.with && typeof step.with === "object" && !Array.isArray(step.with) ? step.with : {}
+      if (stepCreatesWebToken(uses, withValues, env) && !webOwnerWorkflows.has(file)) {
+        findings.push(`${file}:foreign-web-token`)
+      }
       if (/^actions\/checkout@/i.test(uses) && repositoryIsWeb(withValues.repository, env)) {
         findings.push(`${file}:foreign-checkout`)
       }
@@ -169,35 +272,30 @@ function inspectWorkflow(file, contents) {
         || ((foreignDirectory || cdWeb) && /\bgit\s+(?:add|checkout|commit|merge|push|reset)\b/i.test(run))) {
         findings.push(`${file}:foreign-git-write`)
       }
-      if (/\bgit\s+push\s+["']?(?:(?:https:\/\/(?:[^\s/"']+@)?github\.com\/)|git@github\.com:)aquilaxk\/aquila-blog-web(?:\.git)?(?=["'\s]|$)/i.test(run)) {
-        findings.push(`${file}:foreign-git-write`)
-      }
-      if (/\bgit\s+clone\s+["']?(?:(?:https:\/\/(?:[^\s/"']+@)?github\.com\/)|git@github\.com:)aquilaxk\/aquila-blog-web(?:\.git)?(?=["'\s]|$)/i.test(run)) {
-        findings.push(`${file}:foreign-checkout`)
-      }
 
-      const logicalRun = run.replace(/\\\r?\n\s*/g, " ")
-      const prCalls = logicalRun.split(/\r?\n/).filter((line) => /\bgh\s+pr\s+(?:close|comment|create|edit|lock|merge|ready|reopen|revert|review|unlock|update-branch)\b/i.test(line))
-      const targetedWebPr = prCalls.some((call) => {
-        const argument = call.match(/(?:--repo(?:=|\s+)|-R(?:=|\s+))(?:("[^"]+")|('[^']+')|([^\s;&]+))/i)
-        const target = argument
-          ? (argument[1] ?? argument[2] ?? argument[3]).replace(/^["']|["']$/g, "")
-          : env.get("gh_repo")
-        return repositoryIsWeb(target, env)
-      })
-      if (targetedWebPr) findings.push(`${file}:foreign-pr-write`)
-
-      const webApiCalls = apiCalls(run).map((call) => {
-        const tokens = shellTokens(call)
-        const resource = webApiResource(apiEndpoint(tokens), env)
-        return { resource, tokens }
-      })
-      if (!webOwnerWorkflows.has(file) && webApiCalls.some(({ resource }) => resource !== undefined)) {
-        findings.push(`${file}:foreign-web-owner`)
+      for (const invocation of logicalInvocations(run)) {
+        const tokens = shellTokens(invocation)
+        const command = tokens[0]?.toLowerCase()
+        const operation = tokens[1]?.toLowerCase()
+        const targetsWeb = commandTargetsWeb(tokens, env)
+        if (command === "gh" && operation === "api") {
+          const resource = webApiResource(apiEndpoint(tokens), env)
+          if (!targetsWeb && resource === undefined) continue
+          if (!webOwnerWorkflows.has(file)) findings.push(`${file}:foreign-web-owner`)
+          const method = apiMethod(tokens, env)
+          const allowedRead = resource !== undefined && /^(?:GET|HEAD)$/.test(method)
+          const allowedDispatch = file === ".github/workflows/sync-public-contract-to-web.yml"
+            && resource === "/dispatches" && method === "POST"
+          if (!allowedRead && !allowedDispatch) findings.push(`${file}:foreign-api-write`)
+        } else if (command === "gh" && operation === "pr" && targetsWeb) {
+          const allowed = new Set(["checks", "diff", "list", "status", "view", "checkout"])
+          if (!allowed.has(tokens[2]?.toLowerCase())) findings.push(`${file}:foreign-pr-write`)
+        } else if (command === "gh" && targetsWeb) {
+          findings.push(`${file}:foreign-gh-write`)
+        } else if (command === "git" && targetsWeb) {
+          findings.push(`${file}:${operation === "clone" ? "foreign-checkout" : "foreign-git-write"}`)
+        }
       }
-      const foreignApiWrite = webApiCalls.some(({ resource, tokens }) =>
-        resource !== undefined && apiWrites(tokens, env) && resource !== "/dispatches")
-      if (foreignApiWrite) findings.push(`${file}:foreign-api-write`)
     }
   }
 }

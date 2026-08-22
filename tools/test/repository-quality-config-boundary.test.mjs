@@ -142,6 +142,7 @@ jobs:
           repositories: aquila-blog-web
           permission-contents: write
       - run: |
+          echo "documentation: gh api --method DELETE repos/AquilaXk/aquila-blog-web/issues"
           gh api "repos/\${WEB_REPOSITORY}/contents/contracts/public-api?ref=main"
           gh api --method POST "repos/\${WEB_REPOSITORY}/dispatches" -f event_type=platform_contract_ready
           gh pr checks 1
@@ -157,6 +158,81 @@ jobs:
   })
   assert.equal(allowedScan.status, 0, allowedScan.stderr)
   removeWorkflow(allowedWebRead)
+
+  const capabilityRejections = [
+    ["unknown-web-token", `
+name: Unknown Web token owner
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        with:
+          owner: AquilaXk
+          repositories: aquila-blog-web
+          permission-contents: write
+`, "foreign-web-token"],
+    ["sync-public-contract-to-web", `
+name: Quoted Web API query mutation
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method DELETE "repos/\${WEB_REPOSITORY}/actions/caches?key=x&ref=main"
+`, "foreign-api-write"],
+    ["sync-public-contract-to-web", `
+name: Web GraphQL mutation
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          gh api graphql \\
+            -f 'query=mutation { deleteRepository(input: {repositoryId: "x"}) { clientMutationId } }' \\
+            -F "repository=$WEB_REPOSITORY"
+`, "foreign-api-write"],
+    ["sync-public-contract-to-web", `
+name: Web release mutation
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release create v1.0.0 --repo "$WEB_REPOSITORY"
+`, "foreign-gh-write"],
+    ["sync-public-contract-to-web", `
+name: Positional Web pull request URL
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr close https://github.com/AquilaXk/aquila-blog-web/pull/123
+`, "foreign-pr-write"],
+    ["sync-web-legal-policy-to-platform", `
+name: Environment Web Git remote
+on: workflow_dispatch
+env:
+  WEB_REMOTE: https://github.com/AquilaXk/aquila-blog-web.git
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git push "$WEB_REMOTE" HEAD:main
+`, "foreign-git-write"],
+  ]
+  for (const [name, source, category] of capabilityRejections) {
+    assertWorkflowRejected(name, source, category)
+  }
 
   assertWorkflowRejected("sync-public-contract-to-web", `
 name: Foreign API write with dispatch field decoy

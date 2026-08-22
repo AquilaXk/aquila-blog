@@ -3057,35 +3057,32 @@ check_front_health() {
   return 1
 }
 
-resolve_caddy_web_upstream_token() {
-  local token="$1"
-
-  if [[ "${token}" =~ ^([a-zA-Z0-9_-]+):3000$ ]]; then
-    normalize_backend_name "${BASH_REMATCH[1]}"
-    return 0
-  fi
-
-  if [[ "${token}" =~ ^\{\$WEB_UPSTREAM:([a-zA-Z0-9_-]+)\}:3000$ ]]; then
-    local default_value resolved_value
-    default_value="$(normalize_backend_name "${BASH_REMATCH[1]}")"
-    resolved_value="$(normalize_backend_name "$(mounted_env_value "WEB_UPSTREAM")")"
-    if [[ -n "${resolved_value}" ]]; then
-      echo "${resolved_value}"
-      return 0
-    fi
-    echo "${default_value}"
-    return 0
-  fi
-
-  return 1
+loaded_caddy_config() {
+  compose exec -T caddy wget -qO- http://127.0.0.1:2019/config/ 2>/dev/null | tr -d '\r'
 }
 
-# 호스트 파일이 아니라 caddy가 실제로 마운트한 파일을 읽는다. placeholder가 남아 있으면 컨테이너
-# 안의 env로 해석하므로, 두 경우 모두 "지금 caddy가 프록시하는 색"을 그대로 돌려준다.
+# checkout 직후 mount의 Caddyfile은 tracked placeholder로 돌아가지만 실행 중인 Caddy는 reload 전
+# config를 계속 서빙한다. Admin API의 loaded JSON에서 모든 front reverse_proxy dial을 읽고 정확히
+# 한 색으로 수렴할 때만 현재 upstream 증거로 사용한다. 조회 실패·혼합 route는 no-op 증거가 아니다.
 current_caddy_web_upstream_host() {
-  local token
-  token="$(compose exec -T caddy awk '$1 == "reverse_proxy" && $2 ~ /^(front[-_](blue|green):3000|\{\$WEB_UPSTREAM:front[-_](blue|green)\}:3000)$/ {print $2; exit}' "${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
-  resolve_caddy_web_upstream_token "${token}" || true
+  local config front_upstreams
+  config="$(loaded_caddy_config)" || return 1
+  front_upstreams="$({
+    printf '%s' "${config}" \
+      | grep -oE '"dial"[[:space:]]*:[[:space:]]*"front[-_](blue|green):3000"' \
+      | sed -E 's/.*"(front[-_](blue|green)):3000"/\1/' \
+      | tr '-' '_' \
+      | sort -u
+  } || true)"
+
+  case "${front_upstreams}" in
+    front_blue | front_green)
+      printf '%s\n' "${front_upstreams}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 # backend의 set_caddy_upstream_backend와 같은 방식: env 키와 Caddyfile 리터럴을 함께 바꾼다.
@@ -3338,7 +3335,9 @@ run_front_blue_green_deploy() {
   company_host="$(front_edge_host "COMPANY_DOMAIN")" || return 1
   product_host="$(front_edge_host "PRODUCT_DOMAIN")" || return 1
 
-  if front_release_matches_staged "${active_front}" "${web_host}"; then
+  if front_release_matches_staged "${active_front}" "${web_host}" \
+    && check_front_health "${active_front}" "candidate" \
+    && verify_front_edge_route "${active_front}" "${web_host}" "${company_host}" "${product_host}"; then
     # 원격 checkout이 Caddyfile을 tracked placeholder로 되돌린 직후다. 지금은 live Caddy가
     # 이전 env로 올바른 색을 서빙해도, 리터럴을 복구하지 않으면 다음 reload에서 기본 blue로
     # 후퇴할 수 있다. reload/cutover 없이 mount와 다음 boot의 기준만 현재 활성 색으로 고정한다.

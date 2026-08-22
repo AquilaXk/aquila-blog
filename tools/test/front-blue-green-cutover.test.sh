@@ -33,6 +33,9 @@ fail() {
   exit 1
 }
 
+grep -q 'http://127.0.0.1:2019/config/' "${deploy_script}" \
+  || fail "front upstream evidence must come from Caddy's loaded Admin API config"
+
 # ---------------------------------------------------------------------------
 # 함수 추출 + 무결성 가드
 # ---------------------------------------------------------------------------
@@ -58,9 +61,9 @@ extracted_functions=(
   persist_front_caddy_upstream
   front_edge_host
   check_front_health
-  resolve_caddy_web_upstream_token
   write_front_caddy_upstream_literal
   pin_front_caddy_upstream
+  current_caddy_web_upstream_host
   switch_caddy_web_upstream
   verify_front_edge_route
   write_front_release_state
@@ -166,7 +169,15 @@ served_front_build_sha() {
 }
 
 resolve_in_caddy() { return 0; }
-reload_caddy() { printf 'reload_caddy\n' >> "${STUB_CALL_LOG}"; return "${STUB_RELOAD_CADDY_STATUS:-0}"; }
+reload_caddy() {
+  local colour
+  printf 'reload_caddy\n' >> "${STUB_CALL_LOG}"
+  colour="$(awk '$1 == "reverse_proxy" && $2 ~ /^front[-_](blue|green):3000$/ {print $2; exit}' "${CADDY_FILE}" | cut -d: -f1)"
+  if [ -n "${colour}" ]; then
+    printf '%s\n' "${colour}" > "${STUB_LOADED_CADDY_UPSTREAM_FILE}"
+  fi
+  return "${STUB_RELOAD_CADDY_STATUS:-0}"
+}
 ensure_caddy_mount_sync() {
   printf 'ensure_caddy_mount_sync\n' >> "${STUB_CALL_LOG}"
   return "${STUB_MOUNT_SYNC_STATUS:-0}"
@@ -179,10 +190,10 @@ mounted_env_value() {
 }
 
 # 마운트된 Caddyfile은 호스트 파일과 같은 bind mount다. 토큰 해석은 원본 함수를 그대로 쓴다.
-current_caddy_web_upstream_host() {
-  local token
-  token="$(awk '$1 == "reverse_proxy" && $2 ~ /^(front[-_](blue|green):3000|\{\$WEB_UPSTREAM:front[-_](blue|green)\}:3000)$/ {print $2; exit}' "${CADDY_FILE}")"
-  resolve_caddy_web_upstream_token "${token}" || true
+loaded_caddy_config() {
+  local colour
+  colour="$(cat "${STUB_LOADED_CADDY_UPSTREAM_FILE}")"
+  printf '{"apps":{"http":{"servers":{"srv0":{"routes":[{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"%s:3000"}]}]}]}}}}}\n' "${colour}"
 }
 
 compose() {
@@ -268,6 +279,7 @@ setup_case() {
   : > "${case_dir}/front-http"
   : > "${case_dir}/served-sha"
   rm -f "${case_dir}/served-sha-seen"
+  printf 'front_blue\n' > "${case_dir}/loaded-caddy-upstream"
   : > "${case_dir}/call-log"
 }
 
@@ -288,6 +300,7 @@ run_front_case() {
     printf 'STUB_FRONT_HTTP_FILE=%q\n' "${case_dir}/front-http"
     printf 'STUB_SERVED_SHA_FILE=%q\n' "${case_dir}/served-sha"
     printf 'STUB_SERVED_SHA_SEEN_FILE=%q\n' "${case_dir}/served-sha-seen"
+    printf 'STUB_LOADED_CADDY_UPSTREAM_FILE=%q\n' "${case_dir}/loaded-caddy-upstream"
     printf 'STUB_CALL_LOG=%q\n' "${case_dir}/call-log"
     printf '%s\n' 'COMPOSE_PROJECT_NAME=blog_home'
     # resolve_compose_profiles가 참조한다. 비어 있으면 set -u로 죽고, 그 실패가
@@ -642,10 +655,13 @@ assert_file_contains "a verified cutover must report its result" "${case_dir}/st
 
 # 6-1) 이미 검증된 동일 digest/build 재전달은 pull·후보 기동·cutover 없이 성공 no-op이다.
 setup_case "identical-release-noop" "runtime-split,front" "blog.aquilaxk.site"
-printf 'WEB_UPSTREAM=front_green\n' >> "${case_dir}/.env.prod"
+printf 'WEB_UPSTREAM=front_blue\n' >> "${case_dir}/.env.prod"
 printf 'front_green\n' > "${case_dir}/running-front"
 printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green\n' > "${case_dir}/loaded-caddy-upstream"
 printf 'front_green=%s\n' "${good_image}" > "${case_dir}/container-images"
+printf 'front_green=healthy\n' > "${case_dir}/health"
+printf 'front_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_green=%s\n' "${new_sha}" > "${case_dir}/served-sha"
 cat > "${case_dir}/.front-release-state.env" <<EOF
 front_active=front_green
@@ -664,6 +680,30 @@ assert_file_contains "a no-op must preserve the active Caddy environment" "${cas
 assert_file_lacks "a no-op must not pull" "${case_dir}/call-log" '^compose pull '
 assert_file_lacks "a no-op must not boot a candidate" "${case_dir}/call-log" '^compose_up_force_recreate '
 assert_file_lacks "a no-op must not cut over Caddy" "${case_dir}/call-log" '^reload_caddy$'
+
+# 같은 artifact라도 기존 rollout의 전체 surface health를 통과하지 못하면 no-op이 아니라 정상
+# rollout으로 복구한다. 홈의 build SHA만 맞는 상태를 성공으로 보고하면 proxy/회사/제품 열화가 숨는다.
+setup_case "identical-release-degraded-surface" "runtime-split,front" "blog.aquilaxk.site"
+printf 'WEB_UPSTREAM=front_green\n' >> "${case_dir}/.env.prod"
+printf 'front_green\n' > "${case_dir}/running-front"
+printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green\n' > "${case_dir}/loaded-caddy-upstream"
+printf 'front_green=%s\n' "${good_image}" > "${case_dir}/container-images"
+printf 'front_green=healthy\nfront_blue=healthy\n' > "${case_dir}/health"
+printf 'front_green/robots.txt=200\nfront_green/=200\nfront_green/company=404\nfront_green/easysubway=200\nfront_green/proxy=200\nfront_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_green=%s\nfront_blue=%s\n' "${new_sha}" "${new_sha}" > "${case_dir}/served-sha"
+cat > "${case_dir}/.front-release-state.env" <<EOF
+front_active=front_green
+front_active_image=${good_image}
+front_active_build_sha=${new_sha}
+front_switched_at=2026-08-22T00:00:00Z
+front_result=deployed
+EOF
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a degraded identical release must use the repair rollout" "0" "${status}"
+assert_file_lacks "a degraded identical release must not report no-op" "${case_dir}/stdout" '^front_deploy_result=noop$'
+assert_file_contains "a degraded identical release must pull a candidate" "${case_dir}/call-log" '^compose pull front_blue$'
+assert_file_contains "a degraded identical release must cut over after repair" "${case_dir}/stdout" '^front_deploy_result=deployed$'
 
 # release-state가 맞아도 실제 edge가 다른 색이면 duplicate로 간주하지 않는다.
 setup_case "release-state-edge-drift" "runtime-split,front" "blog.aquilaxk.site"
@@ -685,6 +725,7 @@ assert_equals "release-state must not override the actual edge colour" "1" "${st
 setup_case "release-state-container-drift" "runtime-split,front" "blog.aquilaxk.site"
 printf 'WEB_UPSTREAM=front_green\n' >> "${case_dir}/.env.prod"
 printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green\n' > "${case_dir}/loaded-caddy-upstream"
 printf 'front_green=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_green=%s\n' "${new_sha}" > "${case_dir}/served-sha"
 cat > "${case_dir}/.front-release-state.env" <<EOF

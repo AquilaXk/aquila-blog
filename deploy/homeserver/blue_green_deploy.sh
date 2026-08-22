@@ -67,6 +67,10 @@ DEPLOY_TARGET="${DEPLOY_TARGET:-backend}"
 FRONT_LIVENESS_PATH="${FRONT_LIVENESS_PATH:-/robots.txt}"
 # 공개 트래픽이 실제로 통과하는 렌더 경로. cutover 게이트는 여기까지 200이어야 통과한다.
 FRONT_RENDER_PATH="${FRONT_RENDER_PATH:-/}"
+# 회사·제품 host는 Caddy에서 각각 이 route로 rewrite된다. 후보 image 자체가 route를 갖고 있는지
+# edge 전환 전에 확인해야 오래된 image의 404를 공개 host로 내보내지 않는다.
+FRONT_COMPANY_PATH="${FRONT_COMPANY_PATH:-/company}"
+FRONT_PRODUCT_PATH="${FRONT_PRODUCT_PATH:-/easysubway}"
 # front -> backend 서버 사이드 경로. 실측(2026-08-02): BACKEND_INTERNAL_URL이 비어 있으면 컨테이너는
 # healthy, `/`는 빌드 타임 프리렌더라 200인데 이 경로만 502였다. 렌더 경로까지만 보는 게이트는 그
 # 상태를 통과시킨다. 공개 read GET이라 인증이 필요 없고 back_read 모드에서도 허용되는 경로를 쓴다.
@@ -2950,13 +2954,14 @@ persist_front_caddy_upstream() {
 }
 
 front_edge_host() {
+  local env_key="${1:-WEB_DOMAIN}"
   local host
-  host="$(host_env_value "WEB_DOMAIN")"
+  host="$(host_env_value "${env_key}")"
   if [[ -n "${host}" ]]; then
     printf '%s' "${host}"
     return 0
   fi
-  echo "WEB_DOMAIN is required for front edge verification" >&2
+  echo "${env_key} is required for front edge verification" >&2
   return 1
 }
 
@@ -2998,8 +3003,9 @@ served_front_build_sha() {
 
 check_front_health() {
   local service="$1"
+  local surface_mode="${2:-baseline}"
   local attempt=1
-  local health liveness_code render_code proxy_code
+  local health liveness_code render_code company_code product_code proxy_code
   # 시도 횟수만으로는 상한이 정해지지 않는다(프로브 timeout이 시도 길이를 좌우한다). job timeout에
   # 잘리면 rollback 없이 끝나므로 벽시계 예산을 함께 건다.
   local started_at deadline_at now
@@ -3021,11 +3027,23 @@ check_front_health() {
       # 렌더 경로도 부족하다. 홈은 빌드 타임 프리렌더라 BACKEND_INTERNAL_URL이 비어 있어도
       # 200이고, 그 상태에서 브라우저가 실제로 쓰는 backend 프록시만 502였다(실측).
       proxy_code="$(probe_front_http_code "${service}" "${FRONT_BACKEND_PROXY_PATH}")"
-      if is_healthy_http_code "${render_code}" && is_healthy_http_code "${proxy_code}"; then
-        echo "front healthcheck ok: ${service} (health=${health}, liveness=${liveness_code}, render=${render_code}, backend_proxy=${proxy_code})"
+      company_code="skipped"
+      product_code="skipped"
+      local public_surfaces_healthy="true"
+      if [[ "${surface_mode}" == "candidate" ]]; then
+        company_code="$(probe_front_http_code "${service}" "${FRONT_COMPANY_PATH}")"
+        product_code="$(probe_front_http_code "${service}" "${FRONT_PRODUCT_PATH}")"
+        if ! is_healthy_http_code "${company_code}" || ! is_healthy_http_code "${product_code}"; then
+          public_surfaces_healthy="false"
+        fi
+      fi
+      if is_healthy_http_code "${render_code}" \
+        && is_healthy_http_code "${proxy_code}" \
+        && [[ "${public_surfaces_healthy}" == "true" ]]; then
+        echo "front healthcheck ok: ${service} (mode=${surface_mode}, health=${health}, liveness=${liveness_code}, render=${render_code}, company=${company_code}, product=${product_code}, backend_proxy=${proxy_code})"
         return 0
       fi
-      echo "front render/proxy pending: ${service} (try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, render=${render_code:-none}, backend_proxy=${proxy_code:-none})"
+      echo "front routes/proxy pending: ${service} (mode=${surface_mode}, try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, render=${render_code:-none}, company=${company_code:-none}, product=${product_code:-none}, backend_proxy=${proxy_code:-none})"
     else
       echo "front healthcheck pending: ${service} (try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, health=${health:-none}, liveness=${liveness_code:-none})"
     fi
@@ -3097,27 +3115,33 @@ switch_caddy_web_upstream() {
 verify_front_edge_route() {
   local expected_colour="$1"
   local web_host="$2"
+  local company_host="$3"
+  local product_host="$4"
   local attempt=1
-  local current code
+  local current web_code company_code product_code
 
   while [[ "${attempt}" -le "${FRONT_ROUTE_VERIFY_RETRIES}" ]]; do
     current="$(current_caddy_web_upstream_host)"
     if [[ "${current}" != "${expected_colour}" ]]; then
       echo "front upstream pending: current=${current:-none}, expected=${expected_colour} (try ${attempt}/${FRONT_ROUTE_VERIFY_RETRIES})"
     else
-      code="$(probe_web_edge_http_code "${web_host}" "${FRONT_RENDER_PATH}")"
-      if is_healthy_http_code "${code}"; then
-        echo "front edge route verify ok: upstream=${expected_colour}, host=${web_host}, status=${code}"
+      web_code="$(probe_web_edge_http_code "${web_host}" "${FRONT_RENDER_PATH}")"
+      company_code="$(probe_web_edge_http_code "${company_host}" "/")"
+      product_code="$(probe_web_edge_http_code "${product_host}" "/")"
+      if is_healthy_http_code "${web_code}" \
+        && is_healthy_http_code "${company_code}" \
+        && is_healthy_http_code "${product_code}"; then
+        echo "front edge route verify ok: upstream=${expected_colour}, blog=${web_host}:${web_code}, company=${company_host}:${company_code}, product=${product_host}:${product_code}"
         return 0
       fi
-      echo "front edge route pending: status=${code:-none} (try ${attempt}/${FRONT_ROUTE_VERIFY_RETRIES})"
+      echo "front edge route pending: blog=${web_code:-none}, company=${company_code:-none}, product=${product_code:-none} (try ${attempt}/${FRONT_ROUTE_VERIFY_RETRIES})"
     fi
 
     sleep "${FRONT_ROUTE_VERIFY_INTERVAL_SECONDS}"
     attempt=$((attempt + 1))
   done
 
-  echo "front edge route verify failed: expected upstream=${expected_colour}, host=${web_host}" >&2
+  echo "front edge route verify failed: expected upstream=${expected_colour}, blog=${web_host}, company=${company_host}, product=${product_host}" >&2
   run_compose_diagnostic logs --no-color --tail=120 caddy >&2 || true
   return 1
 }
@@ -3193,7 +3217,9 @@ rollback_front_to() {
   local failed="$2"
   local reason="$3"
   local web_host="$4"
-  local pre_switch_sha="$5"
+  local company_host="$5"
+  local product_host="$6"
+  local pre_switch_sha="$7"
   local rolled_back_at served_sha
 
   echo "front cutover failed (${reason}); rolling back to ${previous}" >&2
@@ -3224,7 +3250,7 @@ rollback_front_to() {
 
   rolled_back_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  if ! verify_front_edge_route "${previous}" "${web_host}"; then
+  if ! verify_front_edge_route "${previous}" "${web_host}" "${company_host}" "${product_host}"; then
     fail_rollback "edge route verify failed for ${previous}"
     return 1
   fi
@@ -3251,7 +3277,7 @@ rollback_front_to() {
 
 run_front_blue_green_deploy() {
   local active_front next_front active_image previous_candidate_image
-  local web_host pre_switch_sha switched_at served_sha
+  local web_host company_host product_host pre_switch_sha switched_at served_sha
 
   if ! compose_profile_enabled "front"; then
     echo "front profile is disabled: refusing front deploy" >&2
@@ -3273,7 +3299,9 @@ run_front_blue_green_deploy() {
 
   active_front="$(detect_active_front)"
   next_front="$(other_front "${active_front}")"
-  web_host="$(front_edge_host)" || return 1
+  web_host="$(front_edge_host "WEB_DOMAIN")" || return 1
+  company_host="$(front_edge_host "COMPANY_DOMAIN")" || return 1
+  product_host="$(front_edge_host "PRODUCT_DOMAIN")" || return 1
 
   active_image="$(resolve_preserved_front_image "${active_front}")" || return 1
   if [[ -z "${active_image}" ]]; then
@@ -3310,7 +3338,7 @@ run_front_blue_green_deploy() {
     return 1
   fi
 
-  if ! check_front_health "${next_front}"; then
+  if ! check_front_health "${next_front}" "candidate"; then
     echo "front candidate health failed before cutover: ${next_front}" >&2
     compose stop "${next_front}" || true
     restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
@@ -3319,14 +3347,14 @@ run_front_blue_green_deploy() {
   fi
 
   if ! switch_caddy_web_upstream "${next_front}"; then
-    rollback_front_to "${active_front}" "${next_front}" "caddy_web_upstream_switch_failed" "${web_host}" "${pre_switch_sha}" || true
+    rollback_front_to "${active_front}" "${next_front}" "caddy_web_upstream_switch_failed" "${web_host}" "${company_host}" "${product_host}" "${pre_switch_sha}" || true
     restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi
   switched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  if ! verify_front_edge_route "${next_front}" "${web_host}"; then
-    rollback_front_to "${active_front}" "${next_front}" "front_edge_route_verify_failed" "${web_host}" "${pre_switch_sha}" || true
+  if ! verify_front_edge_route "${next_front}" "${web_host}" "${company_host}" "${product_host}"; then
+    rollback_front_to "${active_front}" "${next_front}" "front_edge_route_verify_failed" "${web_host}" "${company_host}" "${product_host}" "${pre_switch_sha}" || true
     restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi
@@ -3334,7 +3362,7 @@ run_front_blue_green_deploy() {
   served_sha="$(served_front_build_sha "${web_host}")"
   if [[ "${served_sha}" != "${STAGED_FRONT_BUILD_SHA}" ]]; then
     echo "front cutover verify failed: edge serves build sha=${served_sha:-none}, expected ${STAGED_FRONT_BUILD_SHA}" >&2
-    rollback_front_to "${active_front}" "${next_front}" "front_served_build_sha_mismatch" "${web_host}" "${pre_switch_sha}" || true
+    rollback_front_to "${active_front}" "${next_front}" "front_served_build_sha_mismatch" "${web_host}" "${company_host}" "${product_host}" "${pre_switch_sha}" || true
     restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi

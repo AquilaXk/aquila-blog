@@ -21,9 +21,17 @@ function workflowSteps(contents) {
     .map((match) => ({ offset: match.index, text: match[0].replace(/\r?\n$/, "") }))
   const steps = []
   for (let index = 0; index < lines.length; index += 1) {
-    const header = lines[index].text.match(/^(\s*)steps:\s*(?:#.*)?$/)
+    const header = lines[index].text.match(/^(\s*)(?:steps|"steps"|'steps'):\s*(?:#.*)?$/)
     if (!header) continue
     const headerIndent = header[1].length
+    let jobStart = index - 1
+    for (; jobStart >= 0; jobStart -= 1) {
+      const line = lines[jobStart].text
+      if (line.trim() === "" || line.trimStart().startsWith("#")) continue
+      if ((line.match(/^\s*/) ?? [""])[0].length < headerIndent) break
+    }
+    const jobPrefix = contents.slice(lines[jobStart]?.offset ?? 0, lines[index].offset)
+    const defaultForeignWorkspace = /^\s*defaults:\s*\r?\n\s+run:\s*\r?\n\s+working-directory:\s*["']?(?:\.\/)?web(?:[\/"'\s#]|$)/m.test(jobPrefix)
     let sectionEnd = index + 1
     for (; sectionEnd < lines.length; sectionEnd += 1) {
       const line = lines[sectionEnd].text
@@ -41,7 +49,10 @@ function workflowSteps(contents) {
     }
     const endOffset = lines[sectionEnd]?.offset ?? contents.length
     for (let cursor = 0; cursor < starts.length; cursor += 1) {
-      steps.push(contents.slice(starts[cursor], starts[cursor + 1] ?? endOffset))
+      steps.push({
+        defaultForeignWorkspace,
+        source: contents.slice(starts[cursor], starts[cursor + 1] ?? endOffset),
+      })
     }
     index = sectionEnd - 1
   }
@@ -73,13 +84,16 @@ function webRepositoryPattern(contents) {
 
 function inspectWorkflow(file, contents) {
   const webRepository = webRepositoryPattern(contents)
-  for (const step of workflowSteps(contents)) {
+  for (const { defaultForeignWorkspace, source: step } of workflowSteps(contents)) {
     const categories = []
     if (/uses:\s*actions\/checkout@/.test(step) && new RegExp(`repository:\\s*["']?${webRepository}`, "i").test(step)) {
       categories.push("foreign-checkout")
     }
 
+    const hasRun = /^\s*(?:-\s+)?run\s*:/m.test(step)
+    const hasStepWorkspace = /working-directory\s*:/.test(step)
     const foreignWorkspace = /working-directory:\s*["']?(?:\.\/)?web(?:[\/"'\s#]|$)/.test(step)
+      || (hasRun && !hasStepWorkspace && defaultForeignWorkspace)
     const workspaceBuild = /\b(?:yarn|npm|pnpm|bun)\b/.test(step) || /import-platform-contracts|contracts:generate|openapi-typescript/.test(step)
     const foreignCwdBuild = /\b(?:yarn|bun)\s+--cwd\s+["']?(?:\.\/)?web(?:[\/"'\s]|$)/.test(step)
       || /\bnpm\s+--prefix\s+["']?(?:\.\/)?web(?:[\/"'\s]|$)/.test(step)
@@ -93,7 +107,7 @@ function inspectWorkflow(file, contents) {
       categories.push("foreign-git-write")
     }
 
-    const webRepoArgument = new RegExp(`--repo\\s+["']?${webRepository}`, "i")
+    const webRepoArgument = new RegExp(`(?:--repo(?:=|\\s+)|-R(?:=|\\s+))["']?${webRepository}`, "i")
     if (/\bgh\s+pr\s+(?:create|edit|close|merge)\b/.test(step) && webRepoArgument.test(step)) {
       categories.push("foreign-pr-write")
     }
@@ -105,8 +119,8 @@ function inspectWorkflow(file, contents) {
       const hasFields = /(?:^|\s)(?:-f|-F)(?:=|\s)|(?:^|\s)--(?:field|raw-field)(?:=|\s)/.test(call)
       const writes = explicitMethod ? explicitMethod !== "GET" : hasFields
       if (!writes) return false
-      return [...call.matchAll(new RegExp(`repos/${webRepository}/([^\\s"'?\\\\]+)`, "gi"))]
-        .some((match) => match[1].toLowerCase() !== "dispatches")
+      return [...call.matchAll(new RegExp(`repos/${webRepository}(?:/([^\\s"'?\\\\]+))?(?=[\\s"'?\\\\]|$)`, "gi"))]
+        .some((match) => !match[1] || match[1].toLowerCase() !== "dispatches")
     })
     if (foreignApiWrite) categories.push("foreign-api-write")
 

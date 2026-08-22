@@ -131,6 +131,14 @@ jobs:
       - run: |
           gh api "repos/AquilaXk/aquila-blog-web/contents/contracts/public-api?ref=main"
           gh api --method POST "repos/AquilaXk/aquila-blog-web/dispatches" -f event_type=platform_contract_ready
+  local-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - working-directory: platform
+        run: npm ci
 `)
   const allowedScan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
     cwd: root,
@@ -257,6 +265,47 @@ jobs:
         with:
           repository: aQuIlAxK/AqUiLa-BlOg-WeB
 `, "foreign-checkout")
+  assertWorkflowRejected("foreign-checkout-quoted-steps", `
+name: Quoted steps foreign checkout
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    "steps":
+      - uses: actions/checkout@v4
+        with:
+          repository: AquilaXk/aquila-blog-web
+`, "foreign-checkout")
+  assertWorkflowRejected("foreign-build-job-default", `
+name: Job-default foreign build
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - run: npm ci
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-pr-short-repo", `
+name: Short-selector foreign PR write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr create -R AquilaXk/aquila-blog-web --title handoff --body handoff
+`, "foreign-pr-write")
+  assertWorkflowRejected("foreign-api-repository-root", `
+name: Repository-root foreign API write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method PATCH "repos/AquilaXk/aquila-blog-web" -f description=handoff
+`, "foreign-api-write")
 
   const reportOnly = spawnSync(
     process.execPath,

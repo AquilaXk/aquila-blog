@@ -57,7 +57,7 @@ test("public issue guidance sends vulnerability details only to the private repo
   assert.doesNotMatch(combined, /CODE_OF_CONDUCT\.md#enforcement|maintainer private contact/i)
 })
 
-test("Platform boundary scanner does not follow tracked symlinks", (t) => {
+test("Platform boundary scanner is symlink-safe and rejects foreign Web workflow ownership", (t) => {
   const root = mkdtempSync(path.join(tmpdir(), "platform-boundary-"))
   t.after(() => rmSync(root, { force: true, recursive: true }))
   mkdirSync(path.join(root, "tools/repo-boundary"), { recursive: true })
@@ -95,6 +95,519 @@ syncBuiltinESMExports()
     encoding: "utf8",
   })
   assert.equal(result.status, 0, result.stderr)
+
+  const writeWorkflow = (name, source) => {
+    const relative = `.github/workflows/${name}.yml`
+    writeFileSync(path.join(root, relative), source)
+    assert.equal(spawnSync("git", ["add", relative], { cwd: root }).status, 0)
+    return relative
+  }
+  const removeWorkflow = (relative) => {
+    assert.equal(spawnSync("git", ["rm", "--cached", "--quiet", "--", relative], { cwd: root }).status, 0)
+    rmSync(path.join(root, relative))
+  }
+  const assertWorkflowRejected = (name, source, category) => {
+    const relative = writeWorkflow(name, source)
+    const scan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    assert.equal(scan.status, 1, scan.stderr)
+    assert.match(scan.stderr, new RegExp(`${name}\\.yml.*${category}`))
+    removeWorkflow(relative)
+  }
+
+  assertWorkflowRejected("unknown-web-owner", `
+name: Unknown Web owner
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api "repos/AquilaXk/aquila-blog-web/contents/contracts/public-api?ref=main"
+`, "foreign-web-owner")
+
+  const allowedWebRead = writeWorkflow("sync-public-contract-to-web", `
+name: Allowed Web read and dispatch
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+  GH_REPO: $WEB_REPOSITORY
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        with:
+          repositories: aquila-blog-web
+          permission-contents: write
+      - run: |
+          echo "documentation: gh api --method DELETE repos/AquilaXk/aquila-blog-web/issues"
+          gh api "repos/\${WEB_REPOSITORY}/contents/contracts/public-api?ref=main"
+          gh api --method POST "repos/\${WEB_REPOSITORY}/dispatches" -f event_type=platform_contract_ready
+          gh pr checks 1
+          gh pr diff 1
+          gh pr list
+          gh pr status
+          gh pr view 1
+          gh pr checkout 1
+`)
+  const allowedScan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  assert.equal(allowedScan.status, 0, allowedScan.stderr)
+  removeWorkflow(allowedWebRead)
+
+  const capabilityRejections = [
+    ["unknown-web-token", `
+name: Unknown Web token owner
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        with:
+          owner: AquilaXk
+          repositories: aquila-blog-web
+          permission-contents: write
+`, "foreign-web-token"],
+    ["sync-public-contract-to-web", `
+name: Quoted Web API query mutation
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method DELETE "repos/\${WEB_REPOSITORY}/actions/caches?key=x&ref=main"
+`, "foreign-api-write"],
+    ["sync-public-contract-to-web", `
+name: Web GraphQL mutation
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          gh api graphql \\
+            -f 'query=mutation { deleteRepository(input: {repositoryId: "x"}) { clientMutationId } }' \\
+            -F "repository=$WEB_REPOSITORY"
+`, "foreign-api-write"],
+    ["sync-public-contract-to-web", `
+name: Web release mutation
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release create v1.0.0 --repo "$WEB_REPOSITORY"
+`, "foreign-gh-write"],
+    ["sync-public-contract-to-web", `
+name: Positional Web pull request URL
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr close https://github.com/AquilaXk/aquila-blog-web/pull/123
+`, "foreign-pr-write"],
+    ["sync-web-legal-policy-to-platform", `
+name: Environment Web Git remote
+on: workflow_dispatch
+env:
+  WEB_REMOTE: https://github.com/AquilaXk/aquila-blog-web.git
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git push "$WEB_REMOTE" HEAD:main
+`, "foreign-git-write"],
+  ]
+  for (const [name, source, category] of capabilityRejections) {
+    assertWorkflowRejected(name, source, category)
+  }
+
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Foreign API write with dispatch field decoy
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${WEB_REPOSITORY}/issues" -f body="repos/\${WEB_REPOSITORY}/dispatches"
+`, "foreign-api-write")
+  assertWorkflowRejected("foreign-web-git-url", `
+name: Foreign Web Git URL
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-web-owner")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: Allowlisted owner with foreign Web Git push
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Foreign reusable Web workflow
+on: workflow_dispatch
+jobs:
+  delegate:
+    uses: AquilaXk/aquila-blog-web/.github/workflows/build.yml@main
+`, "foreign-reusable-workflow")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Implicit GH_REPO foreign PR
+on: workflow_dispatch
+env:
+  GH_REPO: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr create --title handoff --body handoff
+`, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Compact-expression foreign API write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${{env.WEB_REPOSITORY}}/issues" -f title=handoff
+`, "foreign-api-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Leading-slash Web cache deletion
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method DELETE "/repos/\${WEB_REPOSITORY}/actions/caches?key=x"
+`, "foreign-api-write")
+  assertWorkflowRejected("unknown-split-dispatch", `
+name: Split Web owner dispatch
+on: workflow_dispatch
+env:
+  WEB_OWNER: AquilaXk
+  WEB_NAME: aquila-blog-web
+  WEB_REPOSITORY: \${WEB_OWNER}/\${WEB_NAME}
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${WEB_REPOSITORY}/dispatches" -f event_type=handoff
+`, "foreign-web-owner")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: Alternate Web Git remotes
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          git push https://github.com/AquilaXk/aquila-blog-web HEAD:main
+          git push git@github.com:AquilaXk/aquila-blog-web.git HEAD:main
+          git push https://x-access-token:token@github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Implicit GH_REPO foreign PR reopen
+on: workflow_dispatch
+env:
+  GH_REPO: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr reopen 1
+`, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: GH_REPO placeholder foreign API write
+on: workflow_dispatch
+env:
+  GH_REPO: AquilaXk/aquila-blog-web
+  METHOD: POST
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method "$METHOD" "repos/{owner}/{repo}/issues" -f title=x
+`, "foreign-api-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Compact method scalar API write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+  METHOD: POST
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api -X$METHOD "repos/\${WEB_REPOSITORY}/issues"
+`, "foreign-api-write")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: SSH Web Git remote
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git push ssh://git@github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Env wrapped Web API write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: env FOO=1 gh pr close --repo "$WEB_REPOSITORY" 1
+`, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Expanded working directory Web build
+on: workflow_dispatch
+env:
+  WEB_DIRECTORY: web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - working-directory: \${{ env.WEB_DIRECTORY }}
+        run: npm ci
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-owner-context-checkout", `
+name: GitHub owner-context foreign checkout
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: \${{ github.repository_owner }}/aquila-blog-web
+`, "foreign-checkout")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: Allowlisted owner with foreign Web clone
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git clone https://github.com/AquilaXk/aquila-blog-web.git consumer
+`, "foreign-checkout")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Alternate package Web prefixes
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          npm ci --prefix=web
+          pnpm install --dir=web
+`, "foreign-workspace-build")
+
+  assertWorkflowRejected("foreign-checkout", `
+name: Foreign checkout
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: AquilaXk/aquila-blog-web
+          path: web
+`, "foreign-checkout")
+  assertWorkflowRejected("foreign-build", `
+name: Foreign build
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - working-directory: web
+        run: yarn contracts:generate
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-build-cwd", `
+name: Foreign build cwd flag
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: yarn --cwd web contracts:generate
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-build-workflow-default", `
+name: Workflow-default foreign build
+on: workflow_dispatch
+defaults:
+  run: { working-directory: web }
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm ci
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-cd-write", `
+name: Multiline foreign workspace write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          cd web
+          git add generated
+          pnpm build
+`, "foreign-git-write")
+  assertWorkflowRejected("foreign-git-write", `
+name: Foreign git write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git -C web commit -m handoff
+`, "foreign-git-write")
+  assertWorkflowRejected("foreign-pr-write", `
+name: Foreign PR write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr create --repo "\${WEB_REPOSITORY}" --title handoff --body handoff
+`, "foreign-pr-write")
+  assertWorkflowRejected("foreign-api-write", `
+name: Foreign API write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${WEB_REPOSITORY}/issues" -f title=handoff
+`, "foreign-api-write")
+  assertWorkflowRejected("foreign-checkout-indented", `
+name: Indented foreign checkout
+on: workflow_dispatch
+jobs:
+    handoff:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            repository: AquilaXk/aquila-blog-web
+`, "foreign-checkout")
+  assertWorkflowRejected("foreign-api-implicit", `
+name: Implicit foreign API write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api "repos/AquilaXk/aquila-blog-web/issues" -f title=handoff
+`, "foreign-api-write")
+  assertWorkflowRejected("foreign-api-continuation", `
+name: Continued foreign API write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          gh api \\
+            --method POST \\
+            "repos/AquilaXk/aquila-blog-web/issues" \\
+            -f title=handoff
+`, "foreign-api-write")
+  assertWorkflowRejected("foreign-pr-target-alias", `
+name: Aliased foreign PR write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+  TARGET_REPOSITORY: $WEB_REPOSITORY
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr create --repo="\${TARGET_REPOSITORY}" --title handoff --body handoff
+`, "foreign-pr-write")
+  assertWorkflowRejected("foreign-checkout-mixed-case", `
+name: Mixed-case foreign checkout
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: aQuIlAxK/AqUiLa-BlOg-WeB
+`, "foreign-checkout")
+  assertWorkflowRejected("foreign-checkout-quoted-steps", `
+name: Quoted steps foreign checkout
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    "steps":
+      - uses: actions/checkout@v4
+        with: { repository: AquilaXk/aquila-blog-web }
+`, "foreign-checkout")
+  assertWorkflowRejected("foreign-build-job-default", `
+name: Job-default foreign build
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - run: npm ci
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-pr-short-repo", `
+name: Short-selector foreign PR write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr create -R AquilaXk/aquila-blog-web --title handoff --body handoff
+`, "foreign-pr-write")
+  assertWorkflowRejected("foreign-api-repository-root", `
+name: Repository-root foreign API write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method PATCH "repos/AquilaXk/aquila-blog-web" -f description=handoff
+`, "foreign-api-write")
 
   const reportOnly = spawnSync(
     process.execPath,

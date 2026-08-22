@@ -48,7 +48,7 @@ function mergedEnv(...sources) {
 }
 
 function expandScalar(value, env, seen = new Set()) {
-  return String(value ?? "").replace(
+  return String(value ?? "").replace(/\$\{\{\s*github\.repository_owner\s*\}\}/gi, "AquilaXk").replace(
     /\$\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}|\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)\b/gi,
     (reference, expressionName, bracedName, unbracedName) => {
       const name = (expressionName ?? bracedName ?? unbracedName).toLowerCase()
@@ -93,7 +93,7 @@ function apiEndpoint(tokens) {
   return undefined
 }
 
-function apiWrites(tokens) {
+function apiWrites(tokens, env) {
   let explicitMethod
   let implicitWrite = false
   for (let index = 2; index < tokens.length; index += 1) {
@@ -105,11 +105,15 @@ function apiWrites(tokens) {
       || /^(?:-f|-F|--field|--raw-field|--input)=/i.test(token)
       || /^-[fF].+/i.test(token)) implicitWrite = true
   }
-  return explicitMethod ? /^(?:POST|PATCH|PUT|DELETE)$/i.test(explicitMethod) : implicitWrite
+  if (!explicitMethod) return implicitWrite
+  return !/^(?:GET|HEAD)$/i.test(expandScalar(explicitMethod, env).trim())
 }
 
 function webApiResource(endpoint, env) {
-  const expanded = expandScalar(endpoint, env).trim().replace(/^\//, "").replace(/[?#].*$/, "")
+  let expanded = expandScalar(endpoint, env).trim().replace(/^\//, "").replace(/[?#].*$/, "")
+  if (repositoryIsWeb(env.get("gh_repo"), env)) {
+    expanded = expanded.replace(/^repos\/\{owner\}\/\{repo\}(?=\/|$)/i, `repos/${webRepositoryName}`)
+  }
   const match = expanded.match(/^repos\/([^/]+\/[^/]+)(\/.*)?$/i)
   return match?.[1].toLowerCase() === webRepositoryName ? (match[2] ?? "") : undefined
 }
@@ -157,7 +161,7 @@ function inspectWorkflow(file, contents) {
       const foreignDirectory = /^(?:\.\/)?web(?:\/|$)/i.test(String(directory ?? ""))
       const buildOrWrite = /\b(?:yarn|npm|pnpm|bun)\b|import-platform-contracts|contracts:generate|openapi-typescript|\bgit\s+(?:add|checkout|commit|merge|push|reset)\b/i.test(run)
       const cdWeb = /\bcd\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)/i.test(run)
-      const packageWeb = /\b(?:yarn|bun)\s+--cwd\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)|\bnpm\s+--prefix\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)|\bpnpm\s+(?:--dir|-C)\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)/i.test(run)
+      const packageWeb = /\b(?:yarn|bun)\b[^\r\n;&|]*--cwd(?:=|[ \t]+)["']?(?:\.\/)?web["']?(?=[/"' \t;\r\n&|]|$)|\bnpm\b[^\r\n;&|]*--prefix(?:=|[ \t]+)["']?(?:\.\/)?web["']?(?=[/"' \t;\r\n&|]|$)|\bpnpm\b[^\r\n;&|]*(?:--dir|-C)(?:=|[ \t]+)["']?(?:\.\/)?web["']?(?=[/"' \t;\r\n&|]|$)/i.test(run)
       if ((foreignDirectory && buildOrWrite) || cdWeb || packageWeb) {
         findings.push(`${file}:foreign-workspace-build`)
       }
@@ -167,6 +171,9 @@ function inspectWorkflow(file, contents) {
       }
       if (/\bgit\s+push\s+["']?(?:(?:https:\/\/(?:[^\s/"']+@)?github\.com\/)|git@github\.com:)aquilaxk\/aquila-blog-web(?:\.git)?(?=["'\s]|$)/i.test(run)) {
         findings.push(`${file}:foreign-git-write`)
+      }
+      if (/\bgit\s+clone\s+["']?(?:(?:https:\/\/(?:[^\s/"']+@)?github\.com\/)|git@github\.com:)aquilaxk\/aquila-blog-web(?:\.git)?(?=["'\s]|$)/i.test(run)) {
+        findings.push(`${file}:foreign-checkout`)
       }
 
       const logicalRun = run.replace(/\\\r?\n\s*/g, " ")
@@ -189,7 +196,7 @@ function inspectWorkflow(file, contents) {
         findings.push(`${file}:foreign-web-owner`)
       }
       const foreignApiWrite = webApiCalls.some(({ resource, tokens }) =>
-        resource !== undefined && apiWrites(tokens) && resource !== "/dispatches")
+        resource !== undefined && apiWrites(tokens, env) && resource !== "/dispatches")
       if (foreignApiWrite) findings.push(`${file}:foreign-api-write`)
     }
   }

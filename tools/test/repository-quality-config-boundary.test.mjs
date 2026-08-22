@@ -263,6 +263,49 @@ jobs:
     steps:
       - run: gh pr reopen 1
 `, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: GH_REPO placeholder foreign API write
+on: workflow_dispatch
+env:
+  GH_REPO: AquilaXk/aquila-blog-web
+  METHOD: POST
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method "$METHOD" "repos/{owner}/{repo}/issues" -f title=x
+`, "foreign-api-write")
+  assertWorkflowRejected("foreign-owner-context-checkout", `
+name: GitHub owner-context foreign checkout
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: \${{ github.repository_owner }}/aquila-blog-web
+`, "foreign-checkout")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: Allowlisted owner with foreign Web clone
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git clone https://github.com/AquilaXk/aquila-blog-web.git consumer
+`, "foreign-checkout")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Alternate package Web prefixes
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          npm ci --prefix=web
+          pnpm install --dir=web
+`, "foreign-workspace-build")
 
   assertWorkflowRejected("foreign-checkout", `
 name: Foreign checkout

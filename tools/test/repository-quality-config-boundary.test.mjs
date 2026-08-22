@@ -8,6 +8,7 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8")
 const webRootPath = /(?:^|["'\s:=,])\/?front(?:\/|["'\s,]|$)/m
+const privateReportUrl = "https://github.com/AquilaXk/aquila-blog/security/advisories/new"
 
 test("Platform quality configuration owns only Platform surfaces", () => {
   const security = read(".github/workflows/security.yml")
@@ -38,6 +39,22 @@ test("Platform CI runs the boundary guard when forbidden Web paths are introduce
 
   assert.match(ci, /^      - "front"$/m)
   assert.match(ci, /^      - "front\/\*\*"$/m)
+})
+
+test("public issue guidance sends vulnerability details only to the private report form", () => {
+  const chooser = read(".github/ISSUE_TEMPLATE/config.yml")
+  const operations = read(".github/ISSUE_TEMPLATE/ops_security_data.yml")
+  const workflow = read("docs/design/issue-pr-workflow.md")
+  const combined = [chooser, operations, workflow].join("\n")
+
+  assert.match(chooser, /blank_issues_enabled: false/)
+  assert.match(chooser, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
+  for (const guidance of [operations, workflow]) {
+    assert.match(guidance, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
+    assert.match(guidance, /취약점 세부사항.*PoC.*secret/s)
+  }
+  assert.match(operations, /토큰.*쿠키.*개인정보.*내부 URL/s)
+  assert.doesNotMatch(combined, /CODE_OF_CONDUCT\.md#enforcement|maintainer private contact/i)
 })
 
 test("Platform boundary scanner does not follow tracked symlinks", (t) => {

@@ -172,7 +172,7 @@ function invocationEnv(env, prefix) {
 }
 
 function shellTokens(command) {
-  return [...command.matchAll(/"(?:\\.|[^"\\])*"|'[^']*'|[^\s]+/g)]
+  return [...command.matchAll(/"(?:\\.|[^"\\])*"|'[^']*'|(?:(?:\$\{\{\s*env\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}|[^\s]))+/g)]
     .map((match) => match[0].replace(/^(["'])(.*)\1$/, "$2"))
 }
 
@@ -243,7 +243,7 @@ function ghOperation(tokens) {
 
 function gitOperation(tokens) {
   let index = 1
-  while (tokens[index] === "-c" || /^-c[^=]+=/.test(tokens[index] ?? "") || tokens[index] === "-C") {
+  while (tokens[index] === "-c" || /^-c[^=]+=/.test(tokens[index] ?? "") || tokens[index] === "-C" || tokens[index] === "--no-pager") {
     if (tokens[index] === "-c" && !/^[^=\s]+=.+$/.test(tokens[index + 1] ?? "")) return undefined
     if (tokens[index] === "-C" && !/^(?:\.|(?:\.{1,2}\/)?[A-Za-z0-9][A-Za-z0-9._/-]*|\/[A-Za-z0-9][A-Za-z0-9._/-]*)$/.test(tokens[index + 1] ?? "")) return undefined
     index += tokens[index] === "-c" || tokens[index] === "-C" ? 2 : 1
@@ -261,7 +261,7 @@ function stepCreatesWebToken(uses, withValues, env) {
   const repositoryInput = expandScalar(withValues.repositories, env).trim()
   if (!repositoryInput) return hasOwner
   const repositories = repositoryInput.split(/[\r\n,]+/).map((value) => value.trim().toLowerCase())
-  return owner === "aquilaxk" && repositories.includes("aquila-blog-web")
+  return repositories.includes("aquila-blog-web")
 }
 
 function inspectWorkflow(file, contents) {

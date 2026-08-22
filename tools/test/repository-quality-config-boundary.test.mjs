@@ -466,6 +466,15 @@ jobs:
     steps:
       - run: git -C platform push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
 `, "foreign-git-write")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: No pager before Web push
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git --no-pager push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
   assertWorkflowRejected("sync-public-contract-to-web", `
 name: Runner owner Web API write
 on: workflow_dispatch
@@ -483,6 +492,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: GH_REPO="AquilaXk/aquila-blog-web" gh pr close 1
+`, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Whitespace Actions expression Web target
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: GH_REPO=\${{ env.WEB_REPOSITORY }} gh pr close 1
 `, "foreign-pr-write")
   assertWorkflowRejected("sync-public-contract-to-web", `
 name: Expanded working directory Web build

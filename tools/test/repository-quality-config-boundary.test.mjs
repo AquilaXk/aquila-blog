@@ -201,6 +201,62 @@ jobs:
     steps:
       - run: gh api --method POST "repos/\${WEB_REPOSITORY}/issues" -f title=handoff
 `, "foreign-api-write")
+  assertWorkflowRejected("foreign-checkout-indented", `
+name: Indented foreign checkout
+on: workflow_dispatch
+jobs:
+    handoff:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            repository: AquilaXk/aquila-blog-web
+`, "foreign-checkout")
+  assertWorkflowRejected("foreign-api-implicit", `
+name: Implicit foreign API write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api "repos/AquilaXk/aquila-blog-web/issues" -f title=handoff
+`, "foreign-api-write")
+  assertWorkflowRejected("foreign-api-continuation", `
+name: Continued foreign API write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          gh api \\
+            --method POST \\
+            "repos/AquilaXk/aquila-blog-web/issues" \\
+            -f title=handoff
+`, "foreign-api-write")
+  assertWorkflowRejected("foreign-pr-target-alias", `
+name: Aliased foreign PR write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+  TARGET_REPOSITORY: \${{ env.WEB_REPOSITORY }}
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr create --repo "\${TARGET_REPOSITORY}" --title handoff --body handoff
+`, "foreign-pr-write")
+  assertWorkflowRejected("foreign-checkout-mixed-case", `
+name: Mixed-case foreign checkout
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: aQuIlAxK/AqUiLa-BlOg-WeB
+`, "foreign-checkout")
 
   const reportOnly = spawnSync(
     process.execPath,

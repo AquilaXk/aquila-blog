@@ -13,14 +13,69 @@ const self = "tools/repo-boundary/check-platform-boundary.mjs"
 const scopes = [".github/", ".githooks/", "tools/", "deploy/", "back/"]
 const forbidden = /working-directory:\s*["']?(?:\.?\/)?front(?:[/\\"'\s#]|$)|front\/yarn\.lock|frontLiveE2E|reusable-frontend-verify\.yml/
 const findings = []
-const webRepository = String.raw`(?:AquilaXk\/aquila-blog-web|\$\{WEB_REPOSITORY\}|\$\{\{\s*env\.WEB_REPOSITORY\s*\}\})`
+const webRepositoryName = "aquilaxk/aquila-blog-web"
+
+function workflowSteps(contents) {
+  const lines = [...contents.matchAll(/[^\n]*(?:\n|$)/g)]
+    .filter((match) => match[0].length > 0)
+    .map((match) => ({ offset: match.index, text: match[0].replace(/\r?\n$/, "") }))
+  const steps = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const header = lines[index].text.match(/^(\s*)steps:\s*(?:#.*)?$/)
+    if (!header) continue
+    const headerIndent = header[1].length
+    let sectionEnd = index + 1
+    for (; sectionEnd < lines.length; sectionEnd += 1) {
+      const line = lines[sectionEnd].text
+      if (line.trim() === "" || line.trimStart().startsWith("#")) continue
+      if ((line.match(/^\s*/) ?? [""])[0].length <= headerIndent) break
+    }
+
+    let stepIndent
+    const starts = []
+    for (let cursor = index + 1; cursor < sectionEnd; cursor += 1) {
+      const start = lines[cursor].text.match(/^(\s*)-\s+[A-Za-z][A-Za-z0-9-]*\s*:/)
+      if (!start || start[1].length <= headerIndent) continue
+      stepIndent ??= start[1].length
+      if (start[1].length === stepIndent) starts.push(lines[cursor].offset)
+    }
+    const endOffset = lines[sectionEnd]?.offset ?? contents.length
+    for (let cursor = 0; cursor < starts.length; cursor += 1) {
+      steps.push(contents.slice(starts[cursor], starts[cursor + 1] ?? endOffset))
+    }
+    index = sectionEnd - 1
+  }
+  return steps
+}
+
+function webRepositoryPattern(contents) {
+  const aliases = new Set(["WEB_REPOSITORY"])
+  const assignments = [...contents.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*:\s*(.+?)\s*$/gm)]
+    .map((match) => [match[1], match[2].replace(/^(["'])(.*)\1$/, "$2")])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const [name, value] of assignments) {
+      const reference = value.match(/^\$\{([A-Z][A-Z0-9_]*)\}$/)?.[1]
+        ?? value.match(/^\$\{\{\s*env\.([A-Z][A-Z0-9_]*)\s*\}\}$/)?.[1]
+      if (value.toLowerCase() === webRepositoryName || (reference && aliases.has(reference))) {
+        if (!aliases.has(name)) changed = true
+        aliases.add(name)
+      }
+    }
+  }
+  const variables = [...aliases].flatMap((alias) => [
+    String.raw`\$\{${alias}\}`,
+    String.raw`\$\{\{\s*env\.${alias}\s*\}\}`,
+  ])
+  return String.raw`(?:AquilaXk\/aquila-blog-web|${variables.join("|")})`
+}
 
 function inspectWorkflow(file, contents) {
-  const starts = [...contents.matchAll(/^\s{6}-\s+/gm)].map((match) => match.index)
-  for (let index = 0; index < starts.length; index += 1) {
-    const step = contents.slice(starts[index], starts[index + 1] ?? contents.length)
+  const webRepository = webRepositoryPattern(contents)
+  for (const step of workflowSteps(contents)) {
     const categories = []
-    if (/uses:\s*actions\/checkout@/.test(step) && new RegExp(`repository:\\s*["']?${webRepository}`).test(step)) {
+    if (/uses:\s*actions\/checkout@/.test(step) && new RegExp(`repository:\\s*["']?${webRepository}`, "i").test(step)) {
       categories.push("foreign-checkout")
     }
 
@@ -38,17 +93,21 @@ function inspectWorkflow(file, contents) {
       categories.push("foreign-git-write")
     }
 
-    const webRepoArgument = new RegExp(`--repo\\s+["']?${webRepository}`)
+    const webRepoArgument = new RegExp(`--repo\\s+["']?${webRepository}`, "i")
     if (/\bgh\s+pr\s+(?:create|edit|close|merge)\b/.test(step) && webRepoArgument.test(step)) {
       categories.push("foreign-pr-write")
     }
 
-    const foreignApiWrite = step.split(/\r?\n/).some((line) =>
-      /\bgh\s+api\b/.test(line)
-      && /(?:--method|-X)\s+(?:POST|PATCH|PUT|DELETE)\b/.test(line)
-      && [...line.matchAll(new RegExp(`repos/${webRepository}/([^\\s"'?\\\\]+)`, "g"))]
-        .some((match) => match[1] !== "dispatches"),
-    )
+    const logicalStep = step.replace(/\\\r?\n\s*/g, " ")
+    const apiCalls = logicalStep.split(/\r?\n/).flatMap((line) => [...line.matchAll(/\bgh\s+api\b[^;&]*/g)].map((match) => match[0]))
+    const foreignApiWrite = apiCalls.some((call) => {
+      const explicitMethod = call.match(/(?:--method(?:=|\s+)|-X(?:=|\s*)?)["']?(GET|POST|PATCH|PUT|DELETE)\b/i)?.[1]?.toUpperCase()
+      const hasFields = /(?:^|\s)(?:-f|-F)(?:=|\s)|(?:^|\s)--(?:field|raw-field)(?:=|\s)/.test(call)
+      const writes = explicitMethod ? explicitMethod !== "GET" : hasFields
+      if (!writes) return false
+      return [...call.matchAll(new RegExp(`repos/${webRepository}/([^\\s"'?\\\\]+)`, "gi"))]
+        .some((match) => match[1].toLowerCase() !== "dispatches")
+    })
     if (foreignApiWrite) categories.push("foreign-api-write")
 
     for (const category of categories) findings.push(`${file}:${category}`)

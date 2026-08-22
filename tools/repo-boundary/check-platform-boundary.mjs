@@ -48,7 +48,8 @@ function mergedEnv(...sources) {
 }
 
 function expandScalar(value, env, seen = new Set()) {
-  return String(value ?? "").replace(/\$\{\{\s*github\.repository_owner\s*\}\}/gi, "AquilaXk").replace(
+  return String(value ?? "").replace(/\$\{\{\s*github\.repository_owner\s*\}\}/gi, "AquilaXk")
+    .replace(/\$\{GITHUB_REPOSITORY_OWNER\}|\$GITHUB_REPOSITORY_OWNER\b/gi, "AquilaXk").replace(
     /\$\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}|\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)\b/gi,
     (reference, expressionName, bracedName, unbracedName) => {
       const name = (expressionName ?? bracedName ?? unbracedName).toLowerCase()
@@ -161,7 +162,11 @@ function invocationEnv(env, prefix) {
   const values = new Map(env)
   for (const assignment of assignments) {
     const separator = assignment.indexOf("=")
-    if (separator > 0) values.set(assignment.slice(0, separator).toLowerCase(), assignment.slice(separator + 1))
+    if (separator > 0) {
+      const value = assignment.slice(separator + 1)
+      const quoted = value.match(/^(["'])(.*)\1$/)
+      values.set(assignment.slice(0, separator).toLowerCase(), quoted ? quoted[2] : value)
+    }
   }
   return values
 }
@@ -238,20 +243,24 @@ function ghOperation(tokens) {
 
 function gitOperation(tokens) {
   let index = 1
-  while (tokens[index] === "-c" || /^-c[^=]+=/.test(tokens[index] ?? "")) {
+  while (tokens[index] === "-c" || /^-c[^=]+=/.test(tokens[index] ?? "") || tokens[index] === "-C") {
     if (tokens[index] === "-c" && !/^[^=\s]+=.+$/.test(tokens[index + 1] ?? "")) return undefined
-    index += tokens[index] === "-c" ? 2 : 1
+    if (tokens[index] === "-C" && !/^(?:\.|(?:\.{1,2}\/)?[A-Za-z0-9][A-Za-z0-9._/-]*|\/[A-Za-z0-9][A-Za-z0-9._/-]*)$/.test(tokens[index + 1] ?? "")) return undefined
+    index += tokens[index] === "-c" || tokens[index] === "-C" ? 2 : 1
   }
   return tokens[index]?.toLowerCase()
 }
 
 function stepCreatesWebToken(uses, withValues, env) {
   if (!/^actions\/create-github-app-token@/i.test(uses)) return false
-  if (!Object.hasOwn(withValues, "owner")) return false
-  const owner = expandScalar(withValues.owner, env).trim().toLowerCase()
+  const hasOwner = Object.hasOwn(withValues, "owner")
+  const hasRepositories = Object.hasOwn(withValues, "repositories")
+  if (!hasOwner && !hasRepositories) return false
+  const owner = expandScalar(withValues.owner ?? "AquilaXk", env).trim().toLowerCase()
   if (owner !== "aquilaxk") return false
-  if (!Object.hasOwn(withValues, "repositories") || !expandScalar(withValues.repositories, env).trim()) return true
-  const repositories = expandScalar(withValues.repositories, env).split(/[\r\n,]+/).map((value) => value.trim().toLowerCase())
+  const repositoryInput = expandScalar(withValues.repositories, env).trim()
+  if (!repositoryInput) return hasOwner
+  const repositories = repositoryInput.split(/[\r\n,]+/).map((value) => value.trim().toLowerCase())
   return owner === "aquilaxk" && repositories.includes("aquila-blog-web")
 }
 

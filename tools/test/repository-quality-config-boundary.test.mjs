@@ -159,7 +159,41 @@ jobs:
   assert.equal(allowedScan.status, 0, allowedScan.stderr)
   removeWorkflow(allowedWebRead)
 
+  const currentRepositoryToken = writeWorkflow("current-repository-token", `
+name: Current repository token
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        with:
+          permission-contents: write
+      - uses: actions/create-github-app-token@v3
+        with:
+          repositories: ""
+          permission-contents: write
+`)
+  const currentRepositoryScan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  assert.equal(currentRepositoryScan.status, 0, currentRepositoryScan.stderr)
+  removeWorkflow(currentRepositoryToken)
+
   const capabilityRejections = [
+    ["unknown-web-token-implicit-owner", `
+name: Implicit current owner Web token
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        with:
+          repositories: aquila-blog-web
+          permission-contents: write
+`, "foreign-web-token"],
     ["unknown-web-token-default-repositories", `
 name: Explicit Web owner token without repositories
 on: workflow_dispatch
@@ -423,6 +457,33 @@ jobs:
     steps:
       - run: git -c user.name=ci -c user.email=ci@example.invalid push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
 `, "foreign-git-write")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: Static Git directory before Web push
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git -C platform push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Runner owner Web API write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${GITHUB_REPOSITORY_OWNER}/aquila-blog-web/issues" -f title=handoff
+`, "foreign-api-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Quoted invocation-local Web target
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: GH_REPO="AquilaXk/aquila-blog-web" gh pr close 1
+`, "foreign-pr-write")
   assertWorkflowRejected("sync-public-contract-to-web", `
 name: Expanded working directory Web build
 on: workflow_dispatch

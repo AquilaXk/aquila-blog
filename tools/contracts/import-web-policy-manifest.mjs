@@ -6,11 +6,9 @@ import path from "node:path"
 const args = process.argv.slice(2)
 const fail = (message) => { console.error(`[web-policy-lock] ${message}`); process.exit(1) }
 const values = {}
-let allowMonorepo = false
 const known = new Set(["--source", "--output", "--source-repository", "--source-commit"])
 for (let index = 0; index < args.length; index += 1) {
   const argument = args[index]
-  if (argument === "--allow-monorepo-source" && !allowMonorepo) { allowMonorepo = true; continue }
   if (!known.has(argument) || values[argument] || !args[index + 1] || args[index + 1].startsWith("--")) fail("invalid arguments")
   values[argument] = args[++index]
 }
@@ -21,7 +19,7 @@ const sourceCommit = values["--source-commit"]
 if (!source || !output || !sourceRepository || !sourceCommit) fail("--source, --output, --source-repository, and --source-commit are required")
 if (path.resolve(source) === path.resolve(output)) fail("source and output must be different paths")
 if (!/^[a-f0-9]{40}$/.test(sourceCommit)) fail("sourceCommit must be 40 lowercase hex")
-if (sourceRepository !== "AquilaXk/aquila-blog-web" && !(allowMonorepo && sourceRepository === "AquilaXk/aquila-blog")) fail("sourceRepository must be AquilaXk/aquila-blog-web")
+if (sourceRepository !== "AquilaXk/aquila-blog-web") fail("sourceRepository must be AquilaXk/aquila-blog-web")
 const bytes = fs.readFileSync(source)
 let manifest
 try { manifest = JSON.parse(bytes) } catch { fail("source is not JSON") }

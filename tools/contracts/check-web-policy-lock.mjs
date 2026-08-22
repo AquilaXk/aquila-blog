@@ -13,7 +13,7 @@ try { lock = JSON.parse(bytes) } catch { fail("lock is not JSON") }
 if (bytes.toString("utf8") !== `${JSON.stringify(lock, null, 2)}\n`) fail("lock bytes are not canonical JSON")
 const exactKeys = (value, keys) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
 if (!exactKeys(lock, ["version", "contract", "active", "sourceRepository", "sourceCommit", "manifestSha256"]) || lock.version !== 1 || lock.contract !== "aquila-public-legal-policies" || !exactKeys(lock.active, ["terms", "privacy", "cookies"])) fail("invalid lock shape")
-if (lock.sourceRepository !== "AquilaXk/aquila-blog-web" && lock.sourceRepository !== "AquilaXk/aquila-blog") fail("unauthorized sourceRepository")
+if (lock.sourceRepository !== "AquilaXk/aquila-blog-web") fail("unauthorized sourceRepository")
 if (!/^[a-f0-9]{40}$/.test(lock.sourceCommit)) fail("sourceCommit must be 40 lowercase hex")
 if (!/^[a-f0-9]{64}$/.test(lock.manifestSha256)) fail("manifestSha256 must be 64 lowercase hex")
 const manifest = { version: lock.version, contract: lock.contract, active: lock.active }

@@ -1,0 +1,426 @@
+name: Sync Web legal policy to Platform
+
+"on":
+  repository_dispatch:
+    types:
+      - web_legal_policy_ready
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: web-legal-policy-sync
+  cancel-in-progress: false
+
+env:
+  PLATFORM_REPOSITORY: AquilaXk/aquila-blog
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+  SYNC_BRANCH: chore/web-legal-policy-sync
+
+jobs:
+  receive:
+    name: Receive exact Web legal-policy identity
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Create Web read token
+        id: web-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.REPO_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}
+          owner: AquilaXk
+          repositories: |
+            aquila-blog-web
+          permission-contents: read
+
+      - name: Admit Web legal-policy dispatch
+        id: admission
+        env:
+          GH_TOKEN: ${{ steps.web-token.outputs.token }}
+          PLATFORM_GH_TOKEN: ${{ github.token }}
+          REPO_SYNC_APP_BOT_LOGIN: ${{ vars.REPO_SYNC_APP_BOT_LOGIN }}
+          LEGAL_POLICY_DISPATCH_SENDER: ${{ github.event.sender.login || '' }}
+          INPUT_SCHEMA_VERSION: ${{ github.event.client_payload.schema_version || '' }}
+          INPUT_SOURCE_REPOSITORY: ${{ github.event.client_payload.source_repository || '' }}
+          INPUT_SOURCE_COMMIT: ${{ github.event.client_payload.source_commit || '' }}
+          INPUT_MANIFEST_SHA256: ${{ github.event.client_payload.manifest_sha256 || '' }}
+          INPUT_TARGET_REPOSITORY: ${{ github.event.client_payload.target_repository || '' }}
+          INPUT_TARGET_COMMIT: ${{ github.event.client_payload.target_commit || '' }}
+          INPUT_DELIVERY_ID: ${{ github.event.client_payload.delivery_id || '' }}
+        run: |
+          set -euo pipefail
+
+          fail_dispatch() {
+            echo "Web legal-policy dispatch rejected: $1" >&2
+            exit 1
+          }
+
+          LEGAL_POLICY_SCHEMA_VERSION="${INPUT_SCHEMA_VERSION}"
+          LEGAL_POLICY_SOURCE_REPOSITORY="${INPUT_SOURCE_REPOSITORY}"
+          LEGAL_POLICY_SOURCE_COMMIT="${INPUT_SOURCE_COMMIT}"
+          LEGAL_POLICY_MANIFEST_SHA256="${INPUT_MANIFEST_SHA256}"
+          LEGAL_POLICY_TARGET_REPOSITORY="${INPUT_TARGET_REPOSITORY}"
+          LEGAL_POLICY_TARGET_COMMIT="${INPUT_TARGET_COMMIT}"
+          LEGAL_POLICY_DELIVERY_ID="${INPUT_DELIVERY_ID}"
+
+          # Canonical payload order: schema_version, source_repository, source_commit,
+          # manifest_sha256, target_repository, target_commit, delivery_id.
+          payload_keys="$(jq -c '.client_payload | keys_unsorted | sort' "${GITHUB_EVENT_PATH}")"
+          expected_keys='["delivery_id","manifest_sha256","schema_version","source_commit","source_repository","target_commit","target_repository"]'
+          [ "${payload_keys}" = "${expected_keys}" ] || fail_dispatch "client_payload must contain exactly seven payload keys"
+          [ "${LEGAL_POLICY_SCHEMA_VERSION}" = "1" ] || fail_dispatch "unsupported schema version"
+          [ -n "${REPO_SYNC_APP_BOT_LOGIN}" ] && \
+            [ "${LEGAL_POLICY_DISPATCH_SENDER}" = "${REPO_SYNC_APP_BOT_LOGIN}" ] || \
+            fail_dispatch "sender is not the configured repository sync App"
+          [ "${LEGAL_POLICY_SOURCE_REPOSITORY}" = "AquilaXk/aquila-blog-web" ] || \
+            fail_dispatch "source repository mismatch"
+          [ "${LEGAL_POLICY_TARGET_REPOSITORY}" = "${GITHUB_REPOSITORY}" ] || \
+            fail_dispatch "target repository mismatch"
+          [[ "${LEGAL_POLICY_SOURCE_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid source commit"
+          [[ "${LEGAL_POLICY_TARGET_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid target commit"
+          [[ "${LEGAL_POLICY_MANIFEST_SHA256}" =~ ^[0-9a-f]{64}$ ]] || fail_dispatch "invalid manifest sha256"
+          [[ "${LEGAL_POLICY_DELIVERY_ID}" =~ ^[0-9a-f]{64}$ ]] || fail_dispatch "invalid delivery id"
+
+          expected_delivery_id="$(
+            printf '%s\n' \
+              "${LEGAL_POLICY_SCHEMA_VERSION}" \
+              "${LEGAL_POLICY_SOURCE_REPOSITORY}" \
+              "${LEGAL_POLICY_SOURCE_COMMIT}" \
+              "${LEGAL_POLICY_MANIFEST_SHA256}" \
+              "${LEGAL_POLICY_TARGET_REPOSITORY}" \
+              "${LEGAL_POLICY_TARGET_COMMIT}" \
+              | sha256sum | awk '{print $1}'
+          )"
+          [ "${LEGAL_POLICY_DELIVERY_ID}" = "${expected_delivery_id}" ] || fail_dispatch "delivery id mismatch"
+
+          web_current_main="$(gh api "repos/${LEGAL_POLICY_SOURCE_REPOSITORY}/commits/main" --jq '.sha')" || \
+            fail_dispatch "Web main lookup failed"
+          platform_current_main="$(GH_TOKEN="${PLATFORM_GH_TOKEN}" gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')" || \
+            fail_dispatch "Platform main lookup failed"
+          [[ "${web_current_main}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid current Web main sha"
+          [[ "${platform_current_main}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid current Platform main sha"
+
+          ADMISSION_RESULT="proceed"
+          ADMISSION_REASON="exact-current-identity"
+          if [ "${LEGAL_POLICY_SOURCE_COMMIT}" != "${web_current_main}" ]; then
+            ADMISSION_RESULT="noop"
+            ADMISSION_REASON="stale-web-source"
+          elif [ "${LEGAL_POLICY_TARGET_COMMIT}" != "${platform_current_main}" ]; then
+            ADMISSION_RESULT="noop"
+            ADMISSION_REASON="stale-platform-target"
+          fi
+
+          {
+            echo "dispatch_admission=${ADMISSION_RESULT}"
+            echo "result=${ADMISSION_RESULT}"
+            echo "source_commit=${LEGAL_POLICY_SOURCE_COMMIT}"
+            echo "target_commit=${LEGAL_POLICY_TARGET_COMMIT}"
+            echo "manifest_sha256=${LEGAL_POLICY_MANIFEST_SHA256}"
+            echo "delivery_id=${LEGAL_POLICY_DELIVERY_ID}"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Web legal-policy admission"
+            echo "- result: ${ADMISSION_RESULT}"
+            echo "- reason: ${ADMISSION_REASON}"
+            echo "- source: ${LEGAL_POLICY_SOURCE_REPOSITORY}@${LEGAL_POLICY_SOURCE_COMMIT}"
+            echo "- target: ${LEGAL_POLICY_TARGET_REPOSITORY}@${LEGAL_POLICY_TARGET_COMMIT}"
+            echo "- manifest SHA-256: ${LEGAL_POLICY_MANIFEST_SHA256}"
+            echo "- delivery ID: ${LEGAL_POLICY_DELIVERY_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Fetch exact Web legal-policy manifest
+        if: steps.admission.outputs.dispatch_admission == 'proceed'
+        env:
+          GH_TOKEN: ${{ steps.web-token.outputs.token }}
+          LEGAL_POLICY_SOURCE_REPOSITORY: ${{ github.event.client_payload.source_repository }}
+          LEGAL_POLICY_SOURCE_COMMIT: ${{ steps.admission.outputs.source_commit }}
+          EXPECTED_MANIFEST_SHA256: ${{ steps.admission.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          response="${RUNNER_TEMP}/web-legal-policy-response.json"
+          manifest="${RUNNER_TEMP}/web-legal-policy-manifest.json"
+          gh api \
+            "repos/${LEGAL_POLICY_SOURCE_REPOSITORY}/contents/contracts/export/legal-policy-manifest.json?ref=${LEGAL_POLICY_SOURCE_COMMIT}" \
+            > "${response}"
+          jq -e '.type == "file" and (.content | type == "string")' "${response}" >/dev/null
+          jq -r '.content' "${response}" | tr -d '\n' | base64 --decode > "${manifest}"
+          actual_manifest_sha256="$(sha256sum "${manifest}" | awk '{print $1}')"
+          [ "${actual_manifest_sha256}" = "${EXPECTED_MANIFEST_SHA256}" ] || {
+            echo "Web legal-policy manifest hash mismatch" >&2
+            exit 1
+          }
+
+      - name: Prepare exact Platform target
+        if: steps.admission.outputs.dispatch_admission == 'proceed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_COMMIT: ${{ steps.admission.outputs.target_commit }}
+        run: |
+          set -euo pipefail
+          platform="${RUNNER_TEMP}/platform"
+          mkdir -p "${platform}"
+          git -C "${platform}" init
+          git -C "${platform}" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          gh auth setup-git
+          git -C "${platform}" fetch --no-tags --depth=1 origin "${TARGET_COMMIT}"
+          [ "$(git -C "${platform}" rev-parse FETCH_HEAD)" = "${TARGET_COMMIT}" ] || {
+            echo "Platform target commit mismatch" >&2
+            exit 1
+          }
+          git -C "${platform}" checkout --detach FETCH_HEAD
+
+      - name: Set up Node.js 20
+        if: steps.admission.outputs.dispatch_admission == 'proceed'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+
+      - name: Build and verify canonical Web provenance lock
+        if: steps.admission.outputs.dispatch_admission == 'proceed'
+        env:
+          SOURCE_COMMIT: ${{ steps.admission.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          platform="${RUNNER_TEMP}/platform"
+          manifest="${RUNNER_TEMP}/web-legal-policy-manifest.json"
+          candidate="${RUNNER_TEMP}/legal-policy-manifest.lock.json"
+          node "${platform}/tools/contracts/import-web-policy-manifest.mjs" \
+            --source "${manifest}" \
+            --output "${candidate}" \
+            --source-repository "${WEB_REPOSITORY}" \
+            --source-commit "${SOURCE_COMMIT}"
+          node "${platform}/tools/contracts/check-web-policy-lock.mjs" --lock "${candidate}"
+
+      - name: Detect canonical provenance-only lock drift
+        id: changes
+        if: steps.admission.outputs.dispatch_admission == 'proceed'
+        run: |
+          set -euo pipefail
+          platform="${RUNNER_TEMP}/platform"
+          candidate="${RUNNER_TEMP}/legal-policy-manifest.lock.json"
+          node -e '
+            const fs = require("node:fs");
+            const lock = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            console.log("candidate identity: " + lock.sourceRepository + "@" + lock.sourceCommit + " manifest=" + lock.manifestSha256);
+          ' "${candidate}"
+          if cmp -s "${candidate}" "${platform}/contracts/web/legal-policy-manifest.lock.json"; then
+            changed=false
+          else
+            changed=true
+          fi
+          echo "changed=${changed}" >> "${GITHUB_OUTPUT}"
+
+      - name: Assert replay does not create a write token
+        if: steps.admission.outputs.dispatch_admission == 'proceed' && steps.changes.outputs.changed != 'true'
+        run: echo "::notice::Exact legal-policy replay completed without a write token, commit, push, or pull request"
+
+      - name: Create Platform write token
+        id: platform-token
+        if: steps.admission.outputs.dispatch_admission == 'proceed' && steps.changes.outputs.changed == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.REPO_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}
+          owner: AquilaXk
+          repositories: |
+            aquila-blog
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Prepare stable Platform sync branch against latest main
+        id: branch
+        if: steps.admission.outputs.dispatch_admission == 'proceed' && steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.platform-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          platform="${RUNNER_TEMP}/platform"
+          candidate="${RUNNER_TEMP}/legal-policy-manifest.lock.json"
+          gh auth setup-git
+          git -C "${platform}" fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          if git -C "${platform}" ls-remote --exit-code --heads origin "refs/heads/${SYNC_BRANCH}" >/dev/null 2>&1; then
+            git -C "${platform}" fetch --no-tags origin "+refs/heads/${SYNC_BRANCH}:refs/remotes/origin/${SYNC_BRANCH}"
+            git -C "${platform}" checkout -B "${SYNC_BRANCH}" "origin/${SYNC_BRANCH}"
+          else
+            git -C "${platform}" checkout -B "${SYNC_BRANCH}" origin/main
+          fi
+          cd "${platform}"
+          git \
+            -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            -c commit.gpgsign=false \
+            merge --no-edit origin/main
+          committed_paths="$(git diff --name-only origin/main...HEAD)"
+          if [ -n "${committed_paths}" ] && [ "${committed_paths}" != "contracts/web/legal-policy-manifest.lock.json" ]; then
+            echo "unexpected committed Platform branch diff: ${committed_paths}" >&2
+            exit 1
+          fi
+          cp "${candidate}" contracts/web/legal-policy-manifest.lock.json
+          unexpected="$(git diff --name-only -- . ':(exclude)contracts/web/legal-policy-manifest.lock.json')"
+          [ -z "${unexpected}" ] || {
+            echo "unexpected Platform-local diff: ${unexpected}" >&2
+            exit 1
+          }
+          if git diff --quiet -- contracts/web/legal-policy-manifest.lock.json; then
+            branch_changed=false
+          else
+            branch_changed=true
+          fi
+          {
+            echo "changed=${branch_changed}"
+            echo "ready=true"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve repository sync App identity
+        id: app-user
+        if: steps.branch.outputs.changed == 'true'
+        env:
+          APP_SLUG: ${{ steps.platform-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.platform-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          app_user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          echo "name=${APP_SLUG}[bot]" >> "${GITHUB_OUTPUT}"
+          echo "email=${app_user_id}+${APP_SLUG}[bot]@users.noreply.github.com" >> "${GITHUB_OUTPUT}"
+
+      - name: Commit canonical Web legal-policy identity
+        id: commit
+        if: steps.branch.outputs.changed == 'true'
+        env:
+          APP_NAME: ${{ steps.app-user.outputs.name }}
+          APP_EMAIL: ${{ steps.app-user.outputs.email }}
+          SOURCE_COMMIT: ${{ steps.admission.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          platform="${RUNNER_TEMP}/platform"
+          cd "${platform}"
+          git config user.name "${APP_NAME}"
+          git config user.email "${APP_EMAIL}"
+          git config commit.gpgsign false
+          git add contracts/web/legal-policy-manifest.lock.json
+          git commit -m "chore(contracts): sync Web policy ${SOURCE_COMMIT:0:12}"
+          echo "committed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Recheck exact current identity before writing
+        id: freshness
+        if: steps.branch.outputs.ready == 'true'
+        env:
+          WEB_GH_TOKEN: ${{ steps.web-token.outputs.token }}
+          GH_TOKEN: ${{ steps.platform-token.outputs.token }}
+          SOURCE_COMMIT: ${{ steps.admission.outputs.source_commit }}
+          TARGET_COMMIT: ${{ steps.admission.outputs.target_commit }}
+        run: |
+          set -euo pipefail
+          web_current_main="$(GH_TOKEN="${WEB_GH_TOKEN}" gh api "repos/${WEB_REPOSITORY}/commits/main" --jq '.sha')" || exit 1
+          platform_current_main="$(gh api "repos/${PLATFORM_REPOSITORY}/commits/main" --jq '.sha')" || exit 1
+          WRITE_RESULT="proceed"
+          WRITE_REASON="exact-current-identity"
+          if [ "${SOURCE_COMMIT}" != "${web_current_main}" ]; then
+            WRITE_RESULT="noop"
+            WRITE_REASON="stale-web-source"
+          elif [ "${TARGET_COMMIT}" != "${platform_current_main}" ]; then
+            WRITE_RESULT="noop"
+            WRITE_REASON="stale-platform-target"
+          fi
+          echo "dispatch_admission=${WRITE_RESULT}" >> "${GITHUB_OUTPUT}"
+          echo "write freshness: ${WRITE_REASON}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Push stable Platform legal-policy branch
+        id: push
+        if: steps.commit.outputs.committed == 'true' && steps.freshness.outputs.dispatch_admission == 'proceed'
+        env:
+          GH_TOKEN: ${{ steps.platform-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          git -C "${RUNNER_TEMP}/platform" push origin "HEAD:refs/heads/${SYNC_BRANCH}"
+          echo "pushed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Create or update the single Platform legal-policy PR
+        if: >-
+          steps.branch.outputs.ready == 'true' &&
+          steps.freshness.outputs.dispatch_admission == 'proceed' &&
+          (steps.branch.outputs.changed != 'true' || steps.push.outputs.pushed == 'true')
+        env:
+          GH_TOKEN: ${{ steps.platform-token.outputs.token }}
+          SOURCE_COMMIT: ${{ steps.admission.outputs.source_commit }}
+          MANIFEST_SHA256: ${{ steps.admission.outputs.manifest_sha256 }}
+          DELIVERY_ID: ${{ steps.admission.outputs.delivery_id }}
+        run: |
+          set -euo pipefail
+          body_file="${RUNNER_TEMP}/web-legal-policy-sync-pr.md"
+          {
+            echo "## 🔗 Related Issue"
+            echo "- Refs #1683"
+            echo
+            echo "## 📝 Summary"
+            echo "- Web canonical legal-policy identity를 exact commit에서 검증해 Platform-local lock으로 동기화합니다."
+            echo
+            echo "## 🔄 Contract Sync"
+            echo "- source: ${WEB_REPOSITORY}@${SOURCE_COMMIT}"
+            echo "- manifest SHA-256: ${MANIFEST_SHA256}"
+            echo "- delivery ID: ${DELIVERY_ID}"
+            echo "- Commit plan ↔ 실제 commit: legal-policy lock 동기화 1개"
+            echo "- 미확정 구현 결정: 없음"
+            echo
+            echo "## 🛠 Changes"
+            echo "- Platform-owned stable branch의 canonical Web provenance lock만 갱신합니다."
+            echo
+            echo "## 🎯 Scope"
+            echo "- [x] Infra / CI / Ops"
+            echo
+            echo "## ✅ Validation"
+            echo "- [x] canonical manifest hash와 lock checker를 통과했습니다."
+            echo "- [x] push 직전 Web/Platform current main identity를 재확인했습니다."
+            echo
+            echo "## ⚠️ Risk & Rollback"
+            echo "- 예상 리스크: stale identity 또는 provenance mismatch"
+            echo "- 롤백 방법: 이 PR을 merge하지 않고 producer dispatch를 중단합니다."
+            echo "- 승인 후 post-delivery 확인: required CI와 exact-head Review"
+            echo
+            echo "## 📸 Screenshot / API Example"
+            echo "- UI 변경 없음. source repository/commit, manifest hash, delivery ID는 위 Contract Sync에 기록했습니다."
+            echo
+            echo "## ☑️ Checklist"
+            echo "- [x] 관련 이슈와 exact source identity를 연결했습니다."
+            echo "- [x] Platform-local lock 외 변경이 없음을 검증했습니다."
+            echo "- [x] stale identity는 write 없는 no-op으로 처리합니다."
+          } > "${body_file}"
+
+          existing="$(gh pr list \
+            --repo "${PLATFORM_REPOSITORY}" \
+            --state open \
+            --head "${SYNC_BRANCH}" \
+            --limit 2 \
+            --json number,isDraft)"
+          count="$(jq 'length' <<<"${existing}")"
+          [ "${count}" -le 1 ] || {
+            echo "multiple open legal-policy sync pull requests" >&2
+            exit 1
+          }
+          if [ "${count}" -eq 1 ]; then
+            is_draft="$(jq -r '.[0].isDraft' <<<"${existing}")"
+            [ "${is_draft}" = "true" ] || {
+              echo "existing legal-policy sync pull request is not Draft" >&2
+              exit 1
+            }
+            pr_number="$(jq -r '.[0].number' <<<"${existing}")"
+            gh pr edit "${pr_number}" \
+              --repo "${PLATFORM_REPOSITORY}" \
+              --title "[CI] Web legal-policy provenance lock 동기화" \
+              --body-file "${body_file}"
+          else
+            gh pr create \
+              --repo "${PLATFORM_REPOSITORY}" \
+              --base main \
+              --head "${SYNC_BRANCH}" \
+              --draft \
+              --title "[CI] Web legal-policy provenance lock 동기화" \
+              --body-file "${body_file}"
+          fi

@@ -151,6 +151,65 @@ jobs:
   assert.equal(allowedScan.status, 0, allowedScan.stderr)
   removeWorkflow(allowedWebRead)
 
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Foreign API write with dispatch field decoy
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${WEB_REPOSITORY}/issues" -f body="repos/\${WEB_REPOSITORY}/dispatches"
+`, "foreign-api-write")
+  assertWorkflowRejected("foreign-web-git-url", `
+name: Foreign Web Git URL
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-web-owner")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: Allowlisted owner with foreign Web Git push
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Foreign reusable Web workflow
+on: workflow_dispatch
+jobs:
+  delegate:
+    uses: AquilaXk/aquila-blog-web/.github/workflows/build.yml@main
+`, "foreign-reusable-workflow")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Implicit GH_REPO foreign PR
+on: workflow_dispatch
+env:
+  GH_REPO: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr create --title handoff --body handoff
+`, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Compact-expression foreign API write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${{env.WEB_REPOSITORY}}/issues" -f title=handoff
+`, "foreign-api-write")
+
   assertWorkflowRejected("foreign-checkout", `
 name: Foreign checkout
 on: workflow_dispatch

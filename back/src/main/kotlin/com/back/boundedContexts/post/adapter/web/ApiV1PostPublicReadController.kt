@@ -52,7 +52,10 @@ class ApiV1PostPublicReadController(
         val startedAtNanos = System.nanoTime()
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val data = postPublicReadQueryUseCase.getPublicFeed(validPage, validPageSize, sort)
+        val data =
+            PublicPostUrlCanonicalizer.canonicalizeFeedPage(
+                postPublicReadQueryUseCase.getPublicFeed(validPage, validPageSize, sort),
+            )
         val etagSeed = postPublicReadResponseFactory.buildFeedPageEtagSeed("feed", validPage, validPageSize, sort, data = data)
         return postPublicReadResponseFactory.respondWithEtag(
             request = request,
@@ -76,7 +79,10 @@ class ApiV1PostPublicReadController(
         val startedAtNanos = System.nanoTime()
         val validPageSize = pageSize.coerceIn(1, 30)
         val validSort = normalizeCursorSort(sort)
-        val data = postPublicReadQueryUseCase.getPublicFeedByCursor(cursor, validPageSize, validSort)
+        val data =
+            PublicPostUrlCanonicalizer.canonicalizeCursorFeedPage(
+                postPublicReadQueryUseCase.getPublicFeedByCursor(cursor, validPageSize, validSort),
+            )
         val etagSeed = postPublicReadResponseFactory.buildCursorFeedEtagSeed("feed-cursor", validPageSize, validSort, cursor, data = data)
         return postPublicReadResponseFactory.respondWithEtag(
             request = request,
@@ -105,7 +111,10 @@ class ApiV1PostPublicReadController(
         val searchIntent = postSearchIntentResolver.resolve(kw, tag)
         val normalizedKw = searchIntent.keyword
         val normalizedTag = searchIntent.tag
-        val data = postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
+        val data =
+            PublicPostUrlCanonicalizer.canonicalizeFeedPage(
+                postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort),
+            )
         val etagSeed =
             postPublicReadResponseFactory.buildFeedPageEtagSeed(
                 "explore",
@@ -147,7 +156,10 @@ class ApiV1PostPublicReadController(
         val validPageSize = pageSize.coerceIn(1, 30)
         val normalizedTag = postSearchIntentResolver.normalizeTag(tag)
         val validSort = normalizeCursorSort(sort)
-        val data = postPublicReadQueryUseCase.getPublicExploreByCursor(cursor, validPageSize, normalizedTag, validSort)
+        val data =
+            PublicPostUrlCanonicalizer.canonicalizeCursorFeedPage(
+                postPublicReadQueryUseCase.getPublicExploreByCursor(cursor, validPageSize, normalizedTag, validSort),
+            )
         val etagSeed =
             postPublicReadResponseFactory.buildCursorFeedEtagSeed("explore-cursor", validPageSize, validSort, cursor, normalizedTag, data)
         return postPublicReadResponseFactory.respondWithEtag(
@@ -173,10 +185,12 @@ class ApiV1PostPublicReadController(
         val safeLimit = limit.coerceIn(1, MAX_RELATED_AUTHOR_LIMIT)
         val safeExcludePostId = excludePostId?.takeIf { it > 0L }
         val data =
-            postPublicReadQueryUseCase.getPublicRelatedByAuthor(
-                authorId = authorId,
-                excludePostId = safeExcludePostId,
-                limit = safeLimit,
+            PublicPostUrlCanonicalizer.canonicalizeFeedPosts(
+                postPublicReadQueryUseCase.getPublicRelatedByAuthor(
+                    authorId = authorId,
+                    excludePostId = safeExcludePostId,
+                    limit = safeLimit,
+                ),
             )
         val etagSeed = postPublicReadResponseFactory.buildRelatedAuthorEtagSeed(authorId, safeExcludePostId, safeLimit, data)
         return postPublicReadResponseFactory.respondWithEtag(
@@ -205,12 +219,13 @@ class ApiV1PostPublicReadController(
         val searchIntent = postSearchIntentResolver.resolve(kw, "")
         val normalizedKw = searchIntent.keyword
         val normalizedTag = searchIntent.tag
-        val data =
+        val searchData =
             if (normalizedTag.isBlank()) {
                 postPublicReadQueryUseCase.getPublicSearch(validPage, validPageSize, normalizedKw, sort)
             } else {
                 postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
             }
+        val data = PublicPostUrlCanonicalizer.canonicalizeFeedPage(searchData)
         val etagSeed =
             postPublicReadResponseFactory.buildFeedPageEtagSeed(
                 if (normalizedTag.isBlank()) "search" else "search-tag-intent",
@@ -282,7 +297,10 @@ class ApiV1PostPublicReadController(
         val normalizedTag = postSearchIntentResolver.normalizeTag(tag)
         val validPageSize = pageSize.coerceIn(1, 30)
         val validSort = normalizeCursorSort(sort)
-        val data = postPublicReadQueryUseCase.getPublicBootstrap(normalizedTag, validPageSize, validSort)
+        val data =
+            PublicPostUrlCanonicalizer.canonicalizeBootstrap(
+                postPublicReadQueryUseCase.getPublicBootstrap(normalizedTag, validPageSize, validSort),
+            )
         val etagSeed =
             postPublicReadResponseFactory.buildBootstrapEtagSeed(
                 pageSize = validPageSize,
@@ -325,7 +343,9 @@ class ApiV1PostPublicReadController(
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
         val postPage = postUseCase.findPagedByKw(postSearchIntentResolver.normalizeKeyword(kw), sort, validPage, validPageSize)
-        return postWebDtoAssembler.makePostDtoPage(postPage)
+        return PublicPostUrlCanonicalizer.canonicalizePostPage(
+            postWebDtoAssembler.makePostDtoPage(postPage),
+        )
     }
 
     @GetMapping("/{id}")
@@ -337,7 +357,10 @@ class ApiV1PostPublicReadController(
     ): ResponseEntity<PostWithContentDto> {
         val startedAtNanos = System.nanoTime()
         if (rq.actorOrNull == null) {
-            val data = postPublicReadQueryUseCase.getPublicPostDetail(id)
+            val data =
+                PublicPostUrlCanonicalizer.canonicalizePostWithContent(
+                    postPublicReadQueryUseCase.getPublicPostDetail(id),
+                )
             val etagSeed = postPublicReadResponseFactory.buildPublicDetailEtagSeed(data)
             return postPublicReadResponseFactory.respondWithEtag(
                 request = request,

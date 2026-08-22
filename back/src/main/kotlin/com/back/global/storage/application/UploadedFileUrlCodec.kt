@@ -6,6 +6,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 object UploadedFileUrlCodec {
+    private const val RETIRED_PUBLIC_HOST = "https://api.aquilaxk.site"
     private const val IMAGE_PATH_PREFIX = "/post/api/v1/images/"
     private const val FILE_PATH_PREFIX = "/post/api/v1/files/"
 
@@ -26,6 +27,16 @@ object UploadedFileUrlCodec {
         val encodedKey = encodeObjectKey(objectKey)
         return "$FILE_PATH_PREFIX$encodedKey"
     }
+
+    fun canonicalizePublicStorageUrl(url: String): String =
+        canonicalizePublicStorageUrl(url, IMAGE_PATH_PREFIX)
+            ?: canonicalizePublicStorageUrl(url, FILE_PATH_PREFIX)
+            ?: url
+
+    fun canonicalizePublicStorageContent(content: String): String =
+        retiredPublicStorageUrlRegex.replace(content) { match ->
+            canonicalizePublicStorageUrl(match.value)
+        }
 
     private fun encodeObjectKey(objectKey: String): String {
         val encodedKey =
@@ -57,11 +68,13 @@ object UploadedFileUrlCodec {
                 ?: return null
 
         val absolutePrefix = "${AppConfig.siteBackUrl}$pathPrefix"
+        val retiredAbsolutePrefix = "$RETIRED_PUBLIC_HOST$pathPrefix"
         val relativePrefix = pathPrefix
 
         val encodedKey =
             when {
                 normalizedUrl.startsWith(absolutePrefix) -> normalizedUrl.removePrefix(absolutePrefix)
+                normalizedUrl.startsWith(retiredAbsolutePrefix) -> normalizedUrl.removePrefix(retiredAbsolutePrefix)
                 normalizedUrl.startsWith(relativePrefix) -> normalizedUrl.removePrefix(relativePrefix)
                 else -> return null
             }
@@ -92,4 +105,24 @@ object UploadedFileUrlCodec {
             }
         }
     }
+
+    private fun canonicalizePublicStorageUrl(
+        url: String,
+        pathPrefix: String,
+    ): String? {
+        val retiredPrefix = "$RETIRED_PUBLIC_HOST$pathPrefix"
+        if (!url.startsWith(retiredPrefix)) return null
+
+        val encodedObjectKey =
+            url
+                .removePrefix(retiredPrefix)
+                .substringBefore("?")
+                .substringBefore("#")
+        if (encodedObjectKey.isBlank() || decodeOrNull(encodedObjectKey) == null) return null
+
+        return "${AppConfig.siteBackUrl}${url.removePrefix(RETIRED_PUBLIC_HOST)}"
+    }
+
+    private val retiredPublicStorageUrlRegex =
+        Regex("${Regex.escape(RETIRED_PUBLIC_HOST)}${Regex.escape("/post/api/v1/")}(?:images|files)/[^\\s)\"'<>]+")
 }

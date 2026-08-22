@@ -57,7 +57,7 @@ test("public issue guidance sends vulnerability details only to the private repo
   assert.doesNotMatch(combined, /CODE_OF_CONDUCT\.md#enforcement|maintainer private contact/i)
 })
 
-test("Platform boundary scanner does not follow tracked symlinks", (t) => {
+test("Platform boundary scanner is symlink-safe and rejects foreign Web workflow ownership", (t) => {
   const root = mkdtempSync(path.join(tmpdir(), "platform-boundary-"))
   t.after(() => rmSync(root, { force: true, recursive: true }))
   mkdirSync(path.join(root, "tools/repo-boundary"), { recursive: true })
@@ -95,6 +95,112 @@ syncBuiltinESMExports()
     encoding: "utf8",
   })
   assert.equal(result.status, 0, result.stderr)
+
+  const writeWorkflow = (name, source) => {
+    const relative = `.github/workflows/${name}.yml`
+    writeFileSync(path.join(root, relative), source)
+    assert.equal(spawnSync("git", ["add", relative], { cwd: root }).status, 0)
+    return relative
+  }
+  const removeWorkflow = (relative) => {
+    assert.equal(spawnSync("git", ["rm", "--cached", "--quiet", "--", relative], { cwd: root }).status, 0)
+    rmSync(path.join(root, relative))
+  }
+  const assertWorkflowRejected = (name, source, category) => {
+    const relative = writeWorkflow(name, source)
+    const scan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    assert.equal(scan.status, 1, scan.stderr)
+    assert.match(scan.stderr, new RegExp(`${name}\\.yml.*${category}`))
+    removeWorkflow(relative)
+  }
+
+  const allowedWebRead = writeWorkflow("allowed-web-read", `
+name: Allowed Web read and dispatch
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        with:
+          repositories: aquila-blog-web
+          permission-contents: write
+      - run: |
+          gh api "repos/AquilaXk/aquila-blog-web/contents/contracts/public-api?ref=main"
+          gh api --method POST "repos/AquilaXk/aquila-blog-web/dispatches" -f event_type=platform_contract_ready
+`)
+  const allowedScan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  assert.equal(allowedScan.status, 0, allowedScan.stderr)
+  removeWorkflow(allowedWebRead)
+
+  assertWorkflowRejected("foreign-checkout", `
+name: Foreign checkout
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: AquilaXk/aquila-blog-web
+          path: web
+`, "foreign-checkout")
+  assertWorkflowRejected("foreign-build", `
+name: Foreign build
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - working-directory: web
+        run: yarn contracts:generate
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-build-cwd", `
+name: Foreign build cwd flag
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: yarn --cwd web contracts:generate
+`, "foreign-workspace-build")
+  assertWorkflowRejected("foreign-git-write", `
+name: Foreign git write
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git -C web commit -m handoff
+`, "foreign-git-write")
+  assertWorkflowRejected("foreign-pr-write", `
+name: Foreign PR write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr create --repo "\${WEB_REPOSITORY}" --title handoff --body handoff
+`, "foreign-pr-write")
+  assertWorkflowRejected("foreign-api-write", `
+name: Foreign API write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/\${WEB_REPOSITORY}/issues" -f title=handoff
+`, "foreign-api-write")
 
   const reportOnly = spawnSync(
     process.execPath,

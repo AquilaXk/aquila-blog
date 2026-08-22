@@ -393,19 +393,29 @@ jobs:
             echo "- [x] stale identity는 write 없는 no-op으로 처리합니다."
           } > "${body_file}"
 
-          existing="$(gh pr list \
-            --repo "${PLATFORM_REPOSITORY}" \
-            --state open \
-            --head "${SYNC_BRANCH}" \
-            --limit 2 \
-            --json number,isDraft)"
+          existing="$(gh api \
+            --method GET \
+            "repos/${PLATFORM_REPOSITORY}/pulls" \
+            -f state=open \
+            -f head="${GITHUB_REPOSITORY_OWNER}:${SYNC_BRANCH}" \
+            -f base=main \
+            -F per_page=2)"
+          unexpected="$(jq \
+            --arg repository "${PLATFORM_REPOSITORY}" \
+            --arg branch "${SYNC_BRANCH}" \
+            '[.[] | select(.head.repo.full_name != $repository or .head.ref != $branch or .base.ref != "main")] | length' \
+            <<<"${existing}")"
+          [ "${unexpected}" -eq 0 ] || {
+            echo "unexpected legal-policy pull request identity" >&2
+            exit 1
+          }
           count="$(jq 'length' <<<"${existing}")"
           [ "${count}" -le 1 ] || {
             echo "multiple open legal-policy sync pull requests" >&2
             exit 1
           }
           if [ "${count}" -eq 1 ]; then
-            is_draft="$(jq -r '.[0].isDraft' <<<"${existing}")"
+            is_draft="$(jq -r '.[0].draft' <<<"${existing}")"
             [ "${is_draft}" = "true" ] || {
               echo "existing legal-policy sync pull request is not Draft" >&2
               exit 1

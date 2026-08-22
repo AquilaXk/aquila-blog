@@ -6,15 +6,20 @@ import test from "node:test"
 
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const workflowPath = path.join(repoRoot, ".github/workflows/sync-web-legal-policy-to-platform.yml")
+const ciWorkflowPath = path.join(repoRoot, ".github/workflows/ci.yml")
 const payloadKeys = ["schema_version", "source_repository", "source_commit", "manifest_sha256", "target_repository", "target_commit", "delivery_id"]
 
-function workflow() {
-  assert.equal(existsSync(workflowPath), true, "Platform-local Web legal-policy receiver must exist")
-  const source = readFileSync(workflowPath, "utf8")
+function loadWorkflow(file) {
+  assert.equal(existsSync(file), true, `workflow must exist: ${file}`)
+  const source = readFileSync(file, "utf8")
   const ruby = ["require 'yaml'", "require 'json'", "puts JSON.generate(YAML.load_file(ARGV.fetch(0)))"].join("; ")
-  const parsed = spawnSync("ruby", ["-e", ruby, workflowPath], { encoding: "utf8" })
+  const parsed = spawnSync("ruby", ["-e", ruby, file], { encoding: "utf8" })
   assert.equal(parsed.status, 0, parsed.stderr || "workflow YAML must parse")
   return { document: JSON.parse(parsed.stdout), source }
+}
+
+function workflow() {
+  return loadWorkflow(workflowPath)
 }
 
 function stepByName(job, name) {
@@ -71,6 +76,12 @@ test("receiver reads one exact Web manifest without checking out, building, or w
   assert.doesNotMatch(source, /repository:\s*AquilaXk\/aquila-blog-web/)
   assert.doesNotMatch(source, /\byarn\b|\bnpm\b|\bpnpm\b|codegen|git -C .*web|git clone/)
   assert.doesNotMatch(source, /gh api .*aquila-blog-web.*(?:-X POST|-X PUT|-f |--method (?:POST|PUT))/)
+})
+
+test("Platform CI admits generated Web legal-policy lock pull requests", () => {
+  const { document } = loadWorkflow(ciWorkflowPath)
+  const triggers = document.on || document.true
+  assert.ok(triggers.pull_request.paths.includes("contracts/web/**"))
 })
 
 test("write path uses separate least-privilege tokens and one Platform-local draft PR", () => {

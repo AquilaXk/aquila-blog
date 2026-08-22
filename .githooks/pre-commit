@@ -38,6 +38,9 @@ while IFS= read -r file; do
     tools/test/test-execution-inventory.json|tools/ci/verify-test-execution-inventory.mjs|tools/test/test-execution-inventory.test.mjs)
       needs_test_inventory_check="true"
       ;;
+    .github/workflows/ci.yml|.github/workflows/backend-ci.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/standalone-evidence-replay.yml|.github/workflows/security.yml|.github/workflows/backup-restore-drill.yml)
+      needs_test_inventory_check="true"
+      ;;
     .githooks/pre-commit|tools/test/hook-drift-guard.test.sh)
       needs_precommit_route_check="true"
       ;;

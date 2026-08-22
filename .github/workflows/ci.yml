@@ -9,6 +9,7 @@ on:
       - "front/**"
       - "back/**"
       - "contracts/public-api/**"
+      - "contracts/web/**"
       - "tools/contracts/**"
       - "tools/test/**"
       - "tools/test/public-contract-manifest.test.mjs"

@@ -67,6 +67,10 @@ DEPLOY_TARGET="${DEPLOY_TARGET:-backend}"
 FRONT_LIVENESS_PATH="${FRONT_LIVENESS_PATH:-/robots.txt}"
 # 공개 트래픽이 실제로 통과하는 렌더 경로. cutover 게이트는 여기까지 200이어야 통과한다.
 FRONT_RENDER_PATH="${FRONT_RENDER_PATH:-/}"
+# 회사·제품 host는 Caddy에서 각각 이 route로 rewrite된다. 후보 image 자체가 route를 갖고 있는지
+# edge 전환 전에 확인해야 오래된 image의 404를 공개 host로 내보내지 않는다.
+FRONT_COMPANY_PATH="${FRONT_COMPANY_PATH:-/company}"
+FRONT_PRODUCT_PATH="${FRONT_PRODUCT_PATH:-/easysubway}"
 # front -> backend 서버 사이드 경로. 실측(2026-08-02): BACKEND_INTERNAL_URL이 비어 있으면 컨테이너는
 # healthy, `/`는 빌드 타임 프리렌더라 200인데 이 경로만 502였다. 렌더 경로까지만 보는 게이트는 그
 # 상태를 통과시킨다. 공개 read GET이라 인증이 필요 없고 back_read 모드에서도 허용되는 경로를 쓴다.
@@ -2950,13 +2954,14 @@ persist_front_caddy_upstream() {
 }
 
 front_edge_host() {
+  local env_key="${1:-WEB_DOMAIN}"
   local host
-  host="$(host_env_value "WEB_DOMAIN")"
+  host="$(host_env_value "${env_key}")"
   if [[ -n "${host}" ]]; then
     printf '%s' "${host}"
     return 0
   fi
-  echo "WEB_DOMAIN is required for front edge verification" >&2
+  echo "${env_key} is required for front edge verification" >&2
   return 1
 }
 
@@ -2998,8 +3003,9 @@ served_front_build_sha() {
 
 check_front_health() {
   local service="$1"
+  local surface_mode="${2:-baseline}"
   local attempt=1
-  local health liveness_code render_code proxy_code
+  local health liveness_code render_code company_code product_code proxy_code
   # 시도 횟수만으로는 상한이 정해지지 않는다(프로브 timeout이 시도 길이를 좌우한다). job timeout에
   # 잘리면 rollback 없이 끝나므로 벽시계 예산을 함께 건다.
   local started_at deadline_at now
@@ -3021,11 +3027,23 @@ check_front_health() {
       # 렌더 경로도 부족하다. 홈은 빌드 타임 프리렌더라 BACKEND_INTERNAL_URL이 비어 있어도
       # 200이고, 그 상태에서 브라우저가 실제로 쓰는 backend 프록시만 502였다(실측).
       proxy_code="$(probe_front_http_code "${service}" "${FRONT_BACKEND_PROXY_PATH}")"
-      if is_healthy_http_code "${render_code}" && is_healthy_http_code "${proxy_code}"; then
-        echo "front healthcheck ok: ${service} (health=${health}, liveness=${liveness_code}, render=${render_code}, backend_proxy=${proxy_code})"
+      company_code="skipped"
+      product_code="skipped"
+      local public_surfaces_healthy="true"
+      if [[ "${surface_mode}" == "candidate" ]]; then
+        company_code="$(probe_front_http_code "${service}" "${FRONT_COMPANY_PATH}")"
+        product_code="$(probe_front_http_code "${service}" "${FRONT_PRODUCT_PATH}")"
+        if ! is_healthy_http_code "${company_code}" || ! is_healthy_http_code "${product_code}"; then
+          public_surfaces_healthy="false"
+        fi
+      fi
+      if is_healthy_http_code "${render_code}" \
+        && is_healthy_http_code "${proxy_code}" \
+        && [[ "${public_surfaces_healthy}" == "true" ]]; then
+        echo "front healthcheck ok: ${service} (mode=${surface_mode}, health=${health}, liveness=${liveness_code}, render=${render_code}, company=${company_code}, product=${product_code}, backend_proxy=${proxy_code})"
         return 0
       fi
-      echo "front render/proxy pending: ${service} (try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, render=${render_code:-none}, backend_proxy=${proxy_code:-none})"
+      echo "front routes/proxy pending: ${service} (mode=${surface_mode}, try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, render=${render_code:-none}, company=${company_code:-none}, product=${product_code:-none}, backend_proxy=${proxy_code:-none})"
     else
       echo "front healthcheck pending: ${service} (try ${attempt}/${FRONT_HEALTHCHECK_RETRIES}, health=${health:-none}, liveness=${liveness_code:-none})"
     fi
@@ -3039,35 +3057,32 @@ check_front_health() {
   return 1
 }
 
-resolve_caddy_web_upstream_token() {
-  local token="$1"
-
-  if [[ "${token}" =~ ^([a-zA-Z0-9_-]+):3000$ ]]; then
-    normalize_backend_name "${BASH_REMATCH[1]}"
-    return 0
-  fi
-
-  if [[ "${token}" =~ ^\{\$WEB_UPSTREAM:([a-zA-Z0-9_-]+)\}:3000$ ]]; then
-    local default_value resolved_value
-    default_value="$(normalize_backend_name "${BASH_REMATCH[1]}")"
-    resolved_value="$(normalize_backend_name "$(mounted_env_value "WEB_UPSTREAM")")"
-    if [[ -n "${resolved_value}" ]]; then
-      echo "${resolved_value}"
-      return 0
-    fi
-    echo "${default_value}"
-    return 0
-  fi
-
-  return 1
+loaded_caddy_config() {
+  compose exec -T caddy wget -qO- http://127.0.0.1:2019/config/ 2>/dev/null | tr -d '\r'
 }
 
-# 호스트 파일이 아니라 caddy가 실제로 마운트한 파일을 읽는다. placeholder가 남아 있으면 컨테이너
-# 안의 env로 해석하므로, 두 경우 모두 "지금 caddy가 프록시하는 색"을 그대로 돌려준다.
+# checkout 직후 mount의 Caddyfile은 tracked placeholder로 돌아가지만 실행 중인 Caddy는 reload 전
+# config를 계속 서빙한다. Admin API의 loaded JSON에서 모든 front reverse_proxy dial을 읽고 정확히
+# 한 색으로 수렴할 때만 현재 upstream 증거로 사용한다. 조회 실패·혼합 route는 no-op 증거가 아니다.
 current_caddy_web_upstream_host() {
-  local token
-  token="$(compose exec -T caddy awk '$1 == "reverse_proxy" && $2 ~ /^(front[-_](blue|green):3000|\{\$WEB_UPSTREAM:front[-_](blue|green)\}:3000)$/ {print $2; exit}' "${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
-  resolve_caddy_web_upstream_token "${token}" || true
+  local config front_upstreams
+  config="$(loaded_caddy_config)" || return 1
+  front_upstreams="$({
+    printf '%s' "${config}" \
+      | grep -oE '"dial"[[:space:]]*:[[:space:]]*"front[-_](blue|green):3000"' \
+      | sed -E 's/.*"(front[-_](blue|green)):3000"/\1/' \
+      | tr '-' '_' \
+      | sort -u
+  } || true)"
+
+  case "${front_upstreams}" in
+    front_blue | front_green)
+      printf '%s\n' "${front_upstreams}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 # backend의 set_caddy_upstream_backend와 같은 방식: env 키와 Caddyfile 리터럴을 함께 바꾼다.
@@ -3097,27 +3112,33 @@ switch_caddy_web_upstream() {
 verify_front_edge_route() {
   local expected_colour="$1"
   local web_host="$2"
+  local company_host="$3"
+  local product_host="$4"
   local attempt=1
-  local current code
+  local current web_code company_code product_code
 
   while [[ "${attempt}" -le "${FRONT_ROUTE_VERIFY_RETRIES}" ]]; do
     current="$(current_caddy_web_upstream_host)"
     if [[ "${current}" != "${expected_colour}" ]]; then
       echo "front upstream pending: current=${current:-none}, expected=${expected_colour} (try ${attempt}/${FRONT_ROUTE_VERIFY_RETRIES})"
     else
-      code="$(probe_web_edge_http_code "${web_host}" "${FRONT_RENDER_PATH}")"
-      if is_healthy_http_code "${code}"; then
-        echo "front edge route verify ok: upstream=${expected_colour}, host=${web_host}, status=${code}"
+      web_code="$(probe_web_edge_http_code "${web_host}" "${FRONT_RENDER_PATH}")"
+      company_code="$(probe_web_edge_http_code "${company_host}" "/")"
+      product_code="$(probe_web_edge_http_code "${product_host}" "/")"
+      if is_healthy_http_code "${web_code}" \
+        && is_healthy_http_code "${company_code}" \
+        && is_healthy_http_code "${product_code}"; then
+        echo "front edge route verify ok: upstream=${expected_colour}, blog=${web_host}:${web_code}, company=${company_host}:${company_code}, product=${product_host}:${product_code}"
         return 0
       fi
-      echo "front edge route pending: status=${code:-none} (try ${attempt}/${FRONT_ROUTE_VERIFY_RETRIES})"
+      echo "front edge route pending: blog=${web_code:-none}, company=${company_code:-none}, product=${product_code:-none} (try ${attempt}/${FRONT_ROUTE_VERIFY_RETRIES})"
     fi
 
     sleep "${FRONT_ROUTE_VERIFY_INTERVAL_SECONDS}"
     attempt=$((attempt + 1))
   done
 
-  echo "front edge route verify failed: expected upstream=${expected_colour}, host=${web_host}" >&2
+  echo "front edge route verify failed: expected upstream=${expected_colour}, blog=${web_host}, company=${company_host}, product=${product_host}" >&2
   run_compose_diagnostic logs --no-color --tail=120 caddy >&2 || true
   return 1
 }
@@ -3148,6 +3169,41 @@ write_front_release_state() {
   fi
 
   echo "front release state: active=${active} active_image=$(runtime_front_image_value "${active}") previous=${previous} previous_image=$(runtime_front_image_value "${previous}") switched_at=${switched_at} served_build_sha=${served_sha:-none} previous_build_sha=${pre_switch_sha:-none} result=${result} reason=${reason:-none}"
+}
+
+front_release_state_value() {
+  local key="$1"
+  awk -F= -v key="${key}" '
+    $1 == key { value = substr($0, index($0, "=") + 1); count++ }
+    END { if (count != 1 || value == "") exit 1; print value }
+  ' "${FRONT_RELEASE_STATE_FILE}"
+}
+
+front_release_matches_staged() {
+  local active="$1"
+  local web_host="$2"
+  local state_active state_image state_build_sha switched_at result
+  local edge_active active_container_image served_sha
+
+  [ -f "${FRONT_RELEASE_STATE_FILE}" ] || return 1
+  state_active="$(front_release_state_value front_active)" || return 1
+  state_image="$(front_release_state_value front_active_image)" || return 1
+  state_build_sha="$(front_release_state_value front_active_build_sha)" || return 1
+  switched_at="$(front_release_state_value front_switched_at)" || return 1
+  result="$(front_release_state_value front_result)" || return 1
+  [ "${result}" = "deployed" ] || return 1
+  [ "${state_active}" = "${active}" ] || return 1
+  [ "${state_image}" = "${STAGED_FRONT_IMAGE}" ] || return 1
+  [ "${state_build_sha}" = "${STAGED_FRONT_BUILD_SHA}" ] || return 1
+
+  edge_active="$(current_caddy_web_upstream_host)"
+  [ "${edge_active}" = "${active}" ] || return 1
+  active_container_image="$(container_image_for_service_any_state "${active}")"
+  [ "${active_container_image}" = "${STAGED_FRONT_IMAGE}" ] || return 1
+  served_sha="$(served_front_build_sha "${web_host}")"
+  [ "${served_sha}" = "${STAGED_FRONT_BUILD_SHA}" ] || return 1
+  FRONT_NOOP_SWITCHED_AT="${switched_at}"
+  return 0
 }
 
 # compose 보간 때문에 후보 digest는 pull/up **전에** .env.prod에 있어야 한다. 그래서 health 검사가
@@ -3193,7 +3249,9 @@ rollback_front_to() {
   local failed="$2"
   local reason="$3"
   local web_host="$4"
-  local pre_switch_sha="$5"
+  local company_host="$5"
+  local product_host="$6"
+  local pre_switch_sha="$7"
   local rolled_back_at served_sha
 
   echo "front cutover failed (${reason}); rolling back to ${previous}" >&2
@@ -3224,7 +3282,7 @@ rollback_front_to() {
 
   rolled_back_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  if ! verify_front_edge_route "${previous}" "${web_host}"; then
+  if ! verify_front_edge_route "${previous}" "${web_host}" "${company_host}" "${product_host}"; then
     fail_rollback "edge route verify failed for ${previous}"
     return 1
   fi
@@ -3251,7 +3309,7 @@ rollback_front_to() {
 
 run_front_blue_green_deploy() {
   local active_front next_front active_image previous_candidate_image
-  local web_host pre_switch_sha switched_at served_sha
+  local web_host company_host product_host pre_switch_sha switched_at served_sha
 
   if ! compose_profile_enabled "front"; then
     echo "front profile is disabled: refusing front deploy" >&2
@@ -3273,7 +3331,21 @@ run_front_blue_green_deploy() {
 
   active_front="$(detect_active_front)"
   next_front="$(other_front "${active_front}")"
-  web_host="$(front_edge_host)" || return 1
+  web_host="$(front_edge_host "WEB_DOMAIN")" || return 1
+  company_host="$(front_edge_host "COMPANY_DOMAIN")" || return 1
+  product_host="$(front_edge_host "PRODUCT_DOMAIN")" || return 1
+
+  if front_release_matches_staged "${active_front}" "${web_host}" \
+    && check_front_health "${active_front}" "candidate" \
+    && verify_front_edge_route "${active_front}" "${web_host}" "${company_host}" "${product_host}"; then
+    # 원격 checkout이 Caddyfile을 tracked placeholder로 되돌린 직후다. 지금은 live Caddy가
+    # 이전 env로 올바른 색을 서빙해도, 리터럴을 복구하지 않으면 다음 reload에서 기본 blue로
+    # 후퇴할 수 있다. reload/cutover 없이 mount와 다음 boot의 기준만 현재 활성 색으로 고정한다.
+    pin_front_caddy_upstream "${active_front}" || return 1
+    echo "front_deploy_result=noop"
+    echo "front deploy no-op: upstream=${active_front}, image=${STAGED_FRONT_IMAGE}, served_build_sha=${STAGED_FRONT_BUILD_SHA}, switched_at=${FRONT_NOOP_SWITCHED_AT}"
+    return 0
+  fi
 
   active_image="$(resolve_preserved_front_image "${active_front}")" || return 1
   if [[ -z "${active_image}" ]]; then
@@ -3310,7 +3382,7 @@ run_front_blue_green_deploy() {
     return 1
   fi
 
-  if ! check_front_health "${next_front}"; then
+  if ! check_front_health "${next_front}" "candidate"; then
     echo "front candidate health failed before cutover: ${next_front}" >&2
     compose stop "${next_front}" || true
     restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
@@ -3319,14 +3391,14 @@ run_front_blue_green_deploy() {
   fi
 
   if ! switch_caddy_web_upstream "${next_front}"; then
-    rollback_front_to "${active_front}" "${next_front}" "caddy_web_upstream_switch_failed" "${web_host}" "${pre_switch_sha}" || true
+    rollback_front_to "${active_front}" "${next_front}" "caddy_web_upstream_switch_failed" "${web_host}" "${company_host}" "${product_host}" "${pre_switch_sha}" || true
     restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi
   switched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  if ! verify_front_edge_route "${next_front}" "${web_host}"; then
-    rollback_front_to "${active_front}" "${next_front}" "front_edge_route_verify_failed" "${web_host}" "${pre_switch_sha}" || true
+  if ! verify_front_edge_route "${next_front}" "${web_host}" "${company_host}" "${product_host}"; then
+    rollback_front_to "${active_front}" "${next_front}" "front_edge_route_verify_failed" "${web_host}" "${company_host}" "${product_host}" "${pre_switch_sha}" || true
     restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi
@@ -3334,7 +3406,7 @@ run_front_blue_green_deploy() {
   served_sha="$(served_front_build_sha "${web_host}")"
   if [[ "${served_sha}" != "${STAGED_FRONT_BUILD_SHA}" ]]; then
     echo "front cutover verify failed: edge serves build sha=${served_sha:-none}, expected ${STAGED_FRONT_BUILD_SHA}" >&2
-    rollback_front_to "${active_front}" "${next_front}" "front_served_build_sha_mismatch" "${web_host}" "${pre_switch_sha}" || true
+    rollback_front_to "${active_front}" "${next_front}" "front_served_build_sha_mismatch" "${web_host}" "${company_host}" "${product_host}" "${pre_switch_sha}" || true
     restore_front_candidate_image "${next_front}" "${previous_candidate_image}" "${active_image}" || true
     return 1
   fi

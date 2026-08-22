@@ -33,6 +33,9 @@ fail() {
   exit 1
 }
 
+grep -q 'http://127.0.0.1:2019/config/' "${deploy_script}" \
+  || fail "front upstream evidence must come from Caddy's loaded Admin API config"
+
 # ---------------------------------------------------------------------------
 # 함수 추출 + 무결성 가드
 # ---------------------------------------------------------------------------
@@ -58,12 +61,14 @@ extracted_functions=(
   persist_front_caddy_upstream
   front_edge_host
   check_front_health
-  resolve_caddy_web_upstream_token
   write_front_caddy_upstream_literal
   pin_front_caddy_upstream
+  current_caddy_web_upstream_host
   switch_caddy_web_upstream
   verify_front_edge_route
   write_front_release_state
+  front_release_state_value
+  front_release_matches_staged
   restore_front_candidate_image
   record_front_failure_state
   rollback_front_to
@@ -133,6 +138,12 @@ probe_front_http_code() {
 }
 
 probe_web_edge_http_code() {
+  local host="$1"
+  if [ "${host}" = "${STUB_EDGE_FAIL_HOST:-}" ] \
+    && [ "$(current_caddy_web_upstream_host)" = "${STUB_EDGE_FAIL_COLOUR:-}" ]; then
+    printf '404'
+    return 0
+  fi
   printf '%s' "${STUB_EDGE_HTTP_CODE:-200}"
 }
 
@@ -158,7 +169,15 @@ served_front_build_sha() {
 }
 
 resolve_in_caddy() { return 0; }
-reload_caddy() { printf 'reload_caddy\n' >> "${STUB_CALL_LOG}"; return "${STUB_RELOAD_CADDY_STATUS:-0}"; }
+reload_caddy() {
+  local colour
+  printf 'reload_caddy\n' >> "${STUB_CALL_LOG}"
+  colour="$(awk '$1 == "reverse_proxy" && $2 ~ /^front[-_](blue|green):3000$/ {print $2; exit}' "${CADDY_FILE}" | cut -d: -f1)"
+  if [ -n "${colour}" ]; then
+    printf '%s\n' "${colour}" > "${STUB_LOADED_CADDY_UPSTREAM_FILE}"
+  fi
+  return "${STUB_RELOAD_CADDY_STATUS:-0}"
+}
 ensure_caddy_mount_sync() {
   printf 'ensure_caddy_mount_sync\n' >> "${STUB_CALL_LOG}"
   return "${STUB_MOUNT_SYNC_STATUS:-0}"
@@ -171,10 +190,10 @@ mounted_env_value() {
 }
 
 # 마운트된 Caddyfile은 호스트 파일과 같은 bind mount다. 토큰 해석은 원본 함수를 그대로 쓴다.
-current_caddy_web_upstream_host() {
-  local token
-  token="$(awk '$1 == "reverse_proxy" && $2 ~ /^(front[-_](blue|green):3000|\{\$WEB_UPSTREAM:front[-_](blue|green)\}:3000)$/ {print $2; exit}' "${CADDY_FILE}")"
-  resolve_caddy_web_upstream_token "${token}" || true
+loaded_caddy_config() {
+  local colour
+  colour="$(cat "${STUB_LOADED_CADDY_UPSTREAM_FILE}")"
+  printf '{"apps":{"http":{"servers":{"srv0":{"routes":[{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"%s:3000"}]}]}]}}}}}\n' "${colour}"
 }
 
 compose() {
@@ -232,6 +251,8 @@ setup_case() {
     fi
     if [ -n "${web_domain}" ]; then
       printf 'WEB_DOMAIN=%s\n' "${web_domain}"
+      printf 'COMPANY_DOMAIN=www.aquilaxk.site\n'
+      printf 'PRODUCT_DOMAIN=easysubway.aquilaxk.site\n'
     fi
   } > "${case_dir}/.env.prod"
 
@@ -258,6 +279,7 @@ setup_case() {
   : > "${case_dir}/front-http"
   : > "${case_dir}/served-sha"
   rm -f "${case_dir}/served-sha-seen"
+  printf 'front_blue\n' > "${case_dir}/loaded-caddy-upstream"
   : > "${case_dir}/call-log"
 }
 
@@ -278,6 +300,7 @@ run_front_case() {
     printf 'STUB_FRONT_HTTP_FILE=%q\n' "${case_dir}/front-http"
     printf 'STUB_SERVED_SHA_FILE=%q\n' "${case_dir}/served-sha"
     printf 'STUB_SERVED_SHA_SEEN_FILE=%q\n' "${case_dir}/served-sha-seen"
+    printf 'STUB_LOADED_CADDY_UPSTREAM_FILE=%q\n' "${case_dir}/loaded-caddy-upstream"
     printf 'STUB_CALL_LOG=%q\n' "${case_dir}/call-log"
     printf '%s\n' 'COMPOSE_PROJECT_NAME=blog_home'
     # resolve_compose_profiles가 참조한다. 비어 있으면 set -u로 죽고, 그 실패가
@@ -288,6 +311,8 @@ run_front_case() {
     printf '%s\n' 'EDGE_NETWORK_NAME=blog_home_edge'
     printf '%s\n' 'FRONT_LIVENESS_PATH=/robots.txt'
     printf '%s\n' 'FRONT_RENDER_PATH=/'
+    printf '%s\n' 'FRONT_COMPANY_PATH=/company'
+    printf '%s\n' 'FRONT_PRODUCT_PATH=/easysubway'
     printf '%s\n' 'FRONT_BACKEND_PROXY_PATH=/proxy'
     printf '%s\n' 'FRONT_HEALTHCHECK_RETRIES=2'
     printf '%s\n' 'FRONT_HEALTHCHECK_DEADLINE_SECONDS=600'
@@ -399,7 +424,7 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=unhealthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=500\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=500\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "an unhealthy candidate must fail the front deploy" "1" "${status}"
@@ -428,7 +453,7 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'FRONT_HEALTHCHECK_DEADLINE_SECONDS=0; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "an exhausted health budget must fail the deploy even with retries left" "1" "${status}"
@@ -445,13 +470,40 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=502\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=502\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "a healthy container whose backend proxy is broken must fail the front deploy" "1" "${status}"
 assert_file_lacks "a broken backend proxy must never receive the edge upstream" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
 assert_file_contains "WEB_UPSTREAM must stay pinned to the live colour" "${case_dir}/.env.prod" '^WEB_UPSTREAM=front_blue$'
 assert_file_lacks "a failed front deploy must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
+
+# ---------------------------------------------------------------------------
+# 4-3) 블로그 root와 backend proxy가 정상이더라도 회사 route가 이미지에 없으면 cutover 전에
+#      막아야 한다. 같은 gate가 `/easysubway`도 함께 검사하는지는 정상 성공 케이스가 증명한다.
+# ---------------------------------------------------------------------------
+setup_case "candidate-company-route-missing" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=404\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a candidate without the company route must fail before cutover" "1" "${status}"
+assert_file_lacks "a candidate missing a public surface must not receive the edge upstream" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
+
+# 제품 route도 root 응답과 독립적으로 검증한다.
+setup_case "candidate-product-route-missing" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=404\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a candidate without the product route must fail before cutover" "1" "${status}"
+assert_file_lacks "a candidate missing the product surface must not receive the edge upstream" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
 
 # ---------------------------------------------------------------------------
 # 5) 렌더 경로가 200이어도 edge가 기대한 빌드를 서빙하지 않으면 rollback한다. rollback은 이전
@@ -462,7 +514,7 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 # green은 뜨지만 edge에서 관측되는 빌드는 여전히 예전 것이다(예: 캐시된 라우팅, 잘못된 digest).
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${old_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
@@ -477,6 +529,21 @@ assert_file_contains "rollback must record the build the edge serves again" "${c
 assert_file_contains "the failed candidate must be stopped after rollback" "${case_dir}/call-log" '^compose stop front_green$'
 assert_file_lacks "a rolled back front deploy must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
 
+# 현재 구 image처럼 회사·제품 route가 없더라도 rollback baseline health는 먼저 이전 색으로
+# upstream을 되돌려야 한다. 세 edge surface 검증은 그 뒤에 실패를 기록한다.
+setup_case "rollback-old-image-missing-public-routes" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=404\nfront_blue/easysubway=404\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${old_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'STUB_EDGE_FAIL_HOST=www.aquilaxk.site; STUB_EDGE_FAIL_COLOUR=front_blue; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a mismatch must fail even when the old image lacks new public routes" "1" "${status}"
+assert_file_contains "rollback must switch traffic back before old surface verification" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_blue:3000'
+assert_file_contains "old surface 404 after rollback must be recorded" "${case_dir}/.front-release-state.env" '^front_result=rollback_failed$'
+assert_file_contains "the rollback failure must name the edge route" "${case_dir}/.front-release-state.env" '^front_reason=.*edge route verify failed'
+
 # ---------------------------------------------------------------------------
 # 5-1) rollback도 게이트다. 이전 색 health가 통과하지 못하면 rollback은 성공이 아니며, 그 사실이
 #      증거 파일에 남아야 한다. 게이트가 없으면 rollback이 "성공"으로 끝나 실패한 배포가
@@ -488,7 +555,7 @@ printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 # 후보는 뜨지만 서빙 빌드가 어긋나 rollback이 걸린다. 그 시점에 이전 색은 이미 망가져 있다.
 printf 'front_blue=unhealthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=500\nfront_blue/=500\nfront_blue/proxy=500\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=500\nfront_blue/=500\nfront_blue/company=500\nfront_blue/easysubway=500\nfront_blue/proxy=500\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${old_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "a rollback that cannot restore the previous colour must fail the deploy" "1" "${status}"
@@ -505,13 +572,29 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STUB_EDGE_HTTP_CODE=502; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "an edge that never returns 200 must fail the deploy" "1" "${status}"
 assert_file_contains "the failed rollback must be recorded" "${case_dir}/.front-release-state.env" '^front_result=rollback_failed$'
 assert_file_contains "the recorded reason must name the edge verify" "${case_dir}/.front-release-state.env" '^front_reason=.*edge route verify failed'
 assert_file_lacks "a deploy that never verified the edge must not emit a success marker" "${case_dir}/stdout" '^front_deploy_result='
+
+# ---------------------------------------------------------------------------
+# 5-5) blog host만 200이어도 product host가 404면 cutover 성공이 아니다. 후보 색에서만 product
+#      host를 실패시켜 이전 색으로 되돌린 뒤 세 host 검증이 다시 통과하는지 확인한다.
+# ---------------------------------------------------------------------------
+setup_case "product-edge-route-missing" "runtime-split,front" "blog.aquilaxk.site"
+printf 'front_blue\n' > "${case_dir}/running-front"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'STUB_EDGE_FAIL_HOST=easysubway.aquilaxk.site; STUB_EDGE_FAIL_COLOUR=front_green; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a product edge 404 must fail the cutover" "1" "${status}"
+assert_file_contains "a product edge failure must restore the previous colour" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_blue:3000'
+assert_file_contains "a product edge failure must be recorded as rolled back" "${case_dir}/.front-release-state.env" '^front_result=rolled_back$'
 
 # ---------------------------------------------------------------------------
 # 5-3) 색을 되돌려도 edge가 여전히 새 빌드를 서빙하면 rollback은 완료된 것이 아니다. 컨테이너
@@ -522,7 +605,7 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 # cutover 직전에는 이전 빌드(old_sha)가 관측되지만, 그 뒤로 edge가 제3의 빌드에 고착된다.
 # cutover 대조가 먼저 실패하고, 색을 되돌린 뒤에도 pre-cutover 빌드로 돌아오지 않는다.
@@ -540,7 +623,7 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STUB_MOUNT_SYNC_STATUS=1; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "a caddy config sync failure must fail the front deploy" "1" "${status}"
@@ -554,7 +637,7 @@ printf 'front_blue\n' > "${case_dir}/running-front"
 printf 'front_blue\n' > "${case_dir}/.active_front"
 printf 'front_blue=%s\n' "${old_image}" > "${case_dir}/container-images"
 printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
-printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\nfront_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
 printf 'front_blue=%s\nfront_green=%s\n' "${old_sha}" "${new_sha}" > "${case_dir}/served-sha"
 status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "a verified cutover must succeed" "0" "${status}"
@@ -569,6 +652,91 @@ assert_file_contains "the deploy must record the served build" "${case_dir}/.fro
 # boot를 기다리는 동안 공개 사이트가 깨진 빌드에 머문다.
 assert_file_lacks "the previous colour must stay warm as the rollback target" "${case_dir}/call-log" '^compose stop front_blue$'
 assert_file_contains "a verified cutover must report its result" "${case_dir}/stdout" '^front_deploy_result=deployed$'
+
+# 6-1) 이미 검증된 동일 digest/build 재전달은 pull·후보 기동·cutover 없이 성공 no-op이다.
+setup_case "identical-release-noop" "runtime-split,front" "blog.aquilaxk.site"
+printf 'WEB_UPSTREAM=front_blue\n' >> "${case_dir}/.env.prod"
+printf 'front_green\n' > "${case_dir}/running-front"
+printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green\n' > "${case_dir}/loaded-caddy-upstream"
+printf 'front_green=%s\n' "${good_image}" > "${case_dir}/container-images"
+printf 'front_green=healthy\n' > "${case_dir}/health"
+printf 'front_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_green=%s\n' "${new_sha}" > "${case_dir}/served-sha"
+cat > "${case_dir}/.front-release-state.env" <<EOF
+front_active=front_green
+front_active_image=${good_image}
+front_active_build_sha=${new_sha}
+front_switched_at=2026-08-22T00:00:00Z
+front_result=deployed
+EOF
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "an identical verified release must no-op" "0" "${status}"
+assert_file_contains "a no-op must report its result" "${case_dir}/stdout" '^front_deploy_result=noop$'
+assert_file_contains "a no-op must preserve served build evidence" "${case_dir}/stdout" "served_build_sha=${new_sha}"
+assert_file_contains "a no-op must preserve switch evidence" "${case_dir}/stdout" 'switched_at=2026-08-22T00:00:00Z'
+assert_file_contains "a no-op must restore the active Caddy literal" "${case_dir}/caddy/Caddyfile" 'reverse_proxy front_green:3000'
+assert_file_contains "a no-op must preserve the active Caddy environment" "${case_dir}/.env.prod" '^WEB_UPSTREAM=front_green$'
+assert_file_lacks "a no-op must not pull" "${case_dir}/call-log" '^compose pull '
+assert_file_lacks "a no-op must not boot a candidate" "${case_dir}/call-log" '^compose_up_force_recreate '
+assert_file_lacks "a no-op must not cut over Caddy" "${case_dir}/call-log" '^reload_caddy$'
+
+# 같은 artifact라도 기존 rollout의 전체 surface health를 통과하지 못하면 no-op이 아니라 정상
+# rollout으로 복구한다. 홈의 build SHA만 맞는 상태를 성공으로 보고하면 proxy/회사/제품 열화가 숨는다.
+setup_case "identical-release-degraded-surface" "runtime-split,front" "blog.aquilaxk.site"
+printf 'WEB_UPSTREAM=front_green\n' >> "${case_dir}/.env.prod"
+printf 'front_green\n' > "${case_dir}/running-front"
+printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green\n' > "${case_dir}/loaded-caddy-upstream"
+printf 'front_green=%s\n' "${good_image}" > "${case_dir}/container-images"
+printf 'front_green=healthy\nfront_blue=healthy\n' > "${case_dir}/health"
+printf 'front_green/robots.txt=200\nfront_green/=200\nfront_green/company=404\nfront_green/easysubway=200\nfront_green/proxy=200\nfront_blue/robots.txt=200\nfront_blue/=200\nfront_blue/company=200\nfront_blue/easysubway=200\nfront_blue/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_green=%s\nfront_blue=%s\n' "${new_sha}" "${new_sha}" > "${case_dir}/served-sha"
+cat > "${case_dir}/.front-release-state.env" <<EOF
+front_active=front_green
+front_active_image=${good_image}
+front_active_build_sha=${new_sha}
+front_switched_at=2026-08-22T00:00:00Z
+front_result=deployed
+EOF
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "a degraded identical release must use the repair rollout" "0" "${status}"
+assert_file_lacks "a degraded identical release must not report no-op" "${case_dir}/stdout" '^front_deploy_result=noop$'
+assert_file_contains "a degraded identical release must pull a candidate" "${case_dir}/call-log" '^compose pull front_blue$'
+assert_file_contains "a degraded identical release must cut over after repair" "${case_dir}/stdout" '^front_deploy_result=deployed$'
+
+# release-state가 맞아도 실제 edge가 다른 색이면 duplicate로 간주하지 않는다.
+setup_case "release-state-edge-drift" "runtime-split,front" "blog.aquilaxk.site"
+printf 'WEB_UPSTREAM=front_blue\n' >> "${case_dir}/.env.prod"
+printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green=%s\n' "${good_image}" > "${case_dir}/container-images"
+printf 'front_blue=%s\n' "${new_sha}" > "${case_dir}/served-sha"
+cat > "${case_dir}/.front-release-state.env" <<EOF
+front_active=front_green
+front_active_image=${good_image}
+front_active_build_sha=${new_sha}
+front_switched_at=2026-08-22T00:00:00Z
+front_result=deployed
+EOF
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; front_release_matches_staged "front_green" "blog.aquilaxk.site"')"
+assert_equals "release-state must not override the actual edge colour" "1" "${status}"
+
+# release-state와 served SHA가 맞아도 실제 활성 컨테이너 digest가 다르면 duplicate가 아니다.
+setup_case "release-state-container-drift" "runtime-split,front" "blog.aquilaxk.site"
+printf 'WEB_UPSTREAM=front_green\n' >> "${case_dir}/.env.prod"
+printf 'front_green\n' > "${case_dir}/.active_front"
+printf 'front_green\n' > "${case_dir}/loaded-caddy-upstream"
+printf 'front_green=%s\n' "${old_image}" > "${case_dir}/container-images"
+printf 'front_green=%s\n' "${new_sha}" > "${case_dir}/served-sha"
+cat > "${case_dir}/.front-release-state.env" <<EOF
+front_active=front_green
+front_active_image=${good_image}
+front_active_build_sha=${new_sha}
+front_switched_at=2026-08-22T00:00:00Z
+front_result=deployed
+EOF
+status="$(run_front_case 'STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; front_release_matches_staged "front_green" "blog.aquilaxk.site"')"
+assert_equals "release-state must not override the active container digest" "1" "${status}"
 
 # ---------------------------------------------------------------------------
 # 7) backend 배포 경로: front 이미지 키가 사라져도 실행 중인 컨테이너에서 복원하고, WEB_UPSTREAM을

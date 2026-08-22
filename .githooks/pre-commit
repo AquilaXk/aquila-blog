@@ -19,23 +19,60 @@ bash tools/guards/check-current-task-state.sh
 bash tools/guards/check-current-task-scope.sh --staged
 node tools/repo-boundary/check-platform-boundary.mjs
 
-needs_platform_contract_check="false"
+needs_public_contract_check="false"
+needs_web_policy_check="false"
+needs_web_legal_receiver_check="false"
+needs_test_inventory_check="false"
+needs_precommit_route_check="false"
 while IFS= read -r file; do
   case "${file}" in
-    .githooks/pre-commit|back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*|back/src/test/kotlin/com/back/global/contracts/*|contracts/public-api/**|tools/contracts/**|tools/test/public-contract-manifest.test.mjs)
-      needs_platform_contract_check="true"
+    back/build.gradle.kts|back/settings.gradle.kts|back/gradle/backend-test-infra.gradle.kts|back/src/main/*|back/src/test/kotlin/com/back/global/springDoc/*|back/src/test/kotlin/com/back/global/contracts/*|contracts/public-api/*|tools/contracts/sync-public-contracts.mjs|tools/contracts/write-public-manifest.mjs|tools/test/public-contract-manifest.test.mjs)
+      needs_public_contract_check="true"
       ;;
-    .github/workflows/ci.yml|.github/workflows/reusable-backend-quality.yml)
-      needs_platform_contract_check="true"
+    contracts/web/legal-policy-manifest.lock.json|tools/contracts/check-web-policy-lock.mjs|tools/contracts/import-web-policy-manifest.mjs|tools/test/web-policy-contract.test.mjs)
+      needs_web_policy_check="true"
+      ;;
+    .github/workflows/sync-web-legal-policy-to-platform.yml|tools/test/web-legal-policy-workflow.test.mjs)
+      needs_web_legal_receiver_check="true"
+      ;;
+    tools/test/test-execution-inventory.json|tools/ci/verify-test-execution-inventory.mjs|tools/test/test-execution-inventory.test.mjs)
+      needs_test_inventory_check="true"
+      ;;
+    .github/workflows/ci.yml)
+      needs_web_legal_receiver_check="true"
+      needs_test_inventory_check="true"
+      ;;
+    .github/workflows/backend-ci.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/standalone-evidence-replay.yml|.github/workflows/security.yml|.github/workflows/backup-restore-drill.yml)
+      needs_test_inventory_check="true"
+      ;;
+    .githooks/pre-commit|tools/test/hook-drift-guard.test.sh)
+      needs_precommit_route_check="true"
       ;;
   esac
 done <<< "${staged_files}"
 
-if [[ "${needs_platform_contract_check}" != "true" ]]; then
-  exit 0
+if [[ "${needs_web_policy_check}" == "true" ]]; then
+  echo "[pre-commit] Web legal-policy 계약 검사 실행"
+  node --test tools/test/web-policy-contract.test.mjs
+  node tools/contracts/check-web-policy-lock.mjs
 fi
 
-if [[ "${needs_platform_contract_check}" == "true" ]]; then
+if [[ "${needs_web_legal_receiver_check}" == "true" ]]; then
+  echo "[pre-commit] Web legal-policy receiver 검사 실행"
+  node --test tools/test/web-legal-policy-workflow.test.mjs
+fi
+
+if [[ "${needs_test_inventory_check}" == "true" ]]; then
+  echo "[pre-commit] test execution inventory 검사 실행"
+  node tools/ci/verify-test-execution-inventory.mjs
+fi
+
+if [[ "${needs_precommit_route_check}" == "true" ]]; then
+  echo "[pre-commit] pre-commit 변경 경계 검사 실행"
+  bash tools/test/hook-drift-guard.test.sh
+fi
+
+if [[ "${needs_public_contract_check}" == "true" ]]; then
   if [[ ! -x "back/gradlew" ]]; then
     echo "[pre-commit] back/gradlew 실행 파일을 찾지 못해 Platform 계약 검사를 실행할 수 없습니다." >&2
     exit 1

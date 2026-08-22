@@ -167,10 +167,6 @@ const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = 
     path.join(stubDir, "gh"),
     `#!/bin/sh
 printf '%s\\n' "$*" >> "$GH_CALL_LOG"
-if [ "$#" -eq 4 ] && [ "$1" = "api" ] && [ "$2" = "repos/AquilaXk/aquila-blog-web/commits/main" ] && [ "$3" = "--jq" ] && [ "$4" = ".sha" ]; then
-  printf '%s\\n' "$WEB_FRONTEND_SOURCE_SHA"
-  exit 0
-fi
 exit 1
 `,
     { mode: 0o755 },
@@ -190,10 +186,6 @@ exit 1
       GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
       DEPLOY_SHA_INPUT: deploySha,
       FORCE_BACKEND_DEPLOY_INPUT: "false",
-      FORCE_FRONT_DEPLOY_INPUT: "false",
-      REPO_SYNC_APP_BOT_LOGIN: "aquila-sync[bot]",
-      WEB_FRONTEND_DISPATCH_SENDER: "aquila-sync[bot]",
-      WEB_FRONTEND_SOURCE_REPOSITORY: "AquilaXk/aquila-blog-web",
       WEB_FRONTEND_SOURCE_SHA: "a".repeat(40),
       WEB_FRONTEND_IMAGE_REF: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"b".repeat(64)}`,
       PATH: `${stubDir}:${process.env.PATH}`,
@@ -205,9 +197,7 @@ exit 1
   })
 
   const ghCalls = existsSync(ghCallLog) ? readFileSync(ghCallLog, "utf8").trim().split("\n") : []
-  const expectedGhCalls =
-    eventName === "repository_dispatch" ? ["api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha"] : []
-  assert.deepEqual(ghCalls, expectedGhCalls, `unexpected gh calls for ${eventName}`)
+  assert.deepEqual(ghCalls, [], `calculateTag must not repeat admission API calls for ${eventName}`)
 
   return { output, ghCallCount: ghCalls.length }
 }
@@ -2479,19 +2469,19 @@ test("deploy calculateTag는 deploy-time env 검증 입력 후속 변경이면 s
   }
 })
 
-test("dispatch calculateTag는 더 새로운 deploy 영향 main 변경을 차단한다", () => {
+test("dispatch calculateTag는 admission 후 main 전진을 late failure로 바꾸지 않는다", () => {
   const fixture = createDeployStaleFixture()
   try {
-    assert.throws(
-      () => runDeployCalculateScript({ cwd: fixture.workDir, deploySha: fixture.docsSha, currentMainSha: fixture.backendAfterDocsSha, eventName: "repository_dispatch" }),
-      /stale deploy blocked by backend-impacting newer main changes/,
-    )
+    runDeployCalculateScript({ cwd: fixture.workDir, deploySha: fixture.docsSha, currentMainSha: fixture.backendAfterDocsSha, eventName: "repository_dispatch" })
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+    assert.match(output, /front_deploy=true/)
+    assert.match(output, /backend_deploy=false/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }
 })
 
-test("dispatch calculateTag는 current main에서 immutable front payload를 출력한다", () => {
+test("dispatch calculateTag는 admission API 재조회 없이 immutable front payload를 출력한다", () => {
   const fixture = createDeployStaleFixture()
   try {
     runDeployCalculateScript({ cwd: fixture.workDir, deploySha: fixture.docsSha, currentMainSha: fixture.docsSha, eventName: "repository_dispatch" })

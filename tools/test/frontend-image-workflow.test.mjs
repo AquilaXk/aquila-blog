@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -116,6 +117,7 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "front/**",
     "back/**",
     "contracts/public-api/**",
+    "contracts/web/**",
     "tools/contracts/**",
     "tools/test/**",
     "tools/test/public-contract-manifest.test.mjs",
@@ -177,7 +179,7 @@ test("deploy trigger guard permits only valid Security workflow runs", () => {
 test("calculateTag requires the trigger guard for every allowed event group", () => {
   assert.equal(
     deployDocument().jobs.calculateTag.if.replace(/\s+/g, ""),
-    "needs.triggerGuard.result=='success'&&((github.event_name=='workflow_run'&&github.event.workflow_run.conclusion=='success'&&github.event.workflow_run.event=='push'&&github.event.workflow_run.head_branch=='main'&&github.event.workflow_run.head_repository.full_name==github.repository)||(github.event_name=='workflow_dispatch'&&github.ref=='refs/heads/main')||(github.event_name=='repository_dispatch'&&github.event.action=='web_frontend_image_ready'))",
+    "needs.triggerGuard.result=='success'&&((github.event_name=='workflow_run'&&github.event.workflow_run.conclusion=='success'&&github.event.workflow_run.event=='push'&&github.event.workflow_run.head_branch=='main'&&github.event.workflow_run.head_repository.full_name==github.repository)||(github.event_name=='workflow_dispatch'&&github.ref=='refs/heads/main')||(github.event_name=='repository_dispatch'&&github.event.action=='web_frontend_image_ready'&&needs.triggerGuard.outputs.dispatch_admission=='proceed'))",
   )
 })
 
@@ -319,110 +321,138 @@ test("Platform consumes only the Web digest handoff", () => {
   assert.match(source, /github\.event\.client_payload\.source_sha/)
   assert.match(source, /github\.event\.client_payload\.image_ref/)
   assert.match(source, /\^\[0-9a-f\]\{40\}\$/)
-  assert.match(source, /WEB_FRONTEND_IMAGE_REF}" =~ \^ghcr\\\.io\/aquilaxk\/aquila-blog-web-front@sha256:\[0-9a-f\]\{64\}\$/)
+  assert.match(source, /WEB_FRONTEND_IMAGE_DIGEST}" =~ \^sha256:\[0-9a-f\]\{64\}\$/)
+  assert.match(source, /WEB_FRONTEND_IMAGE_REF}" = "ghcr\.io\/aquilaxk\/aquila-blog-web-front@\$\{WEB_FRONTEND_IMAGE_DIGEST\}"/)
   assert.match(source, /HOME_FRONT_IMAGE: \$\{\{ needs\.calculateTag\.outputs\.front_image_ref \}\}/)
   assert.match(source, /HOME_FRONT_BUILD_SHA: \$\{\{ needs\.calculateTag\.outputs\.front_source_sha \}\}/)
 })
 
-function runDispatch(payload) {
-  const source = deploy()
-  const start = source.indexOf("      - name: Calculate deploy targets and image tags")
-  const end = source.indexOf("\n\n  buildAndPush:", start)
-  assert.notEqual(start, -1)
-  assert.notEqual(end, -1)
-  const run = source.slice(start, end).match(/        run: \|\n([\s\S]*)$/)
-  assert.ok(run)
-  const script = run[1].replace(/^          /gm, "")
+function dispatchPayload(overrides = {}) {
+  const payload = {
+    schemaVersion: "1",
+    sender: "aquila-sync[bot]",
+    sourceRepository: "AquilaXk/aquila-blog-web",
+    sourceSha: "a".repeat(40),
+    imageDigest: `sha256:${"b".repeat(64)}`,
+    targetRepository: "AquilaXk/aquila-blog",
+    targetSha: "c".repeat(40),
+    producerRunId: "12345",
+    producerRunAttempt: "1",
+    ...overrides,
+  }
+  payload.imageRef ??= `ghcr.io/aquilaxk/aquila-blog-web-front@${payload.imageDigest}`
+  payload.deliveryId ??= createHash("sha256").update([
+    `schema_version=${payload.schemaVersion}`,
+    `source_repository=${payload.sourceRepository}`,
+    `source_sha=${payload.sourceSha}`,
+    `image_digest=${payload.imageDigest}`,
+    `target_repository=${payload.targetRepository}`,
+    `target_sha=${payload.targetSha}`,
+    "",
+  ].join("\n")).digest("hex")
+  return payload
+}
+
+function runDispatchAdmission(payload) {
+  const guard = deployDocument().jobs.triggerGuard
+  const step = guard.steps.find((item) => item.name === "Admit Web image-ready dispatch")
+  assert.ok(step, "dispatch admission step must exist")
   const directory = mkdtempSync(path.join(tmpdir(), "aquila-dispatch-"))
   const output = path.join(directory, "output")
+  const summary = path.join(directory, "summary")
   const ghCallsOutput = path.join(directory, "gh-calls")
-  const git = path.join(directory, "git")
   const gh = path.join(directory, "gh")
   writeFileSync(output, "")
+  writeFileSync(summary, "")
   writeFileSync(ghCallsOutput, "")
   writeFileSync(
-    git,
-    `#!/usr/bin/env bash\ncase "$1" in\n  ls-remote|rev-parse) printf '%s\\n' "\${DEPLOY_SHA_INPUT}" ;;\n  fetch|merge-base) exit 0 ;;\n  *) echo "unexpected git args: $*" >&2; exit 1 ;;\nesac\n`,
-  )
-  chmodSync(git, 0o755)
-  writeFileSync(
     gh,
-    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "\${GH_CALLS_OUTPUT}"\nif [ "$1" = "api" ] && [ "$2" = "repos/AquilaXk/aquila-blog-web/commits/main" ] && [ "$3" = "--jq" ] && [ "$4" = ".sha" ] && [ "$#" = 4 ]; then\n  if [ "\${WEB_FRONTEND_GH_API_EXIT_CODE}" != "0" ]; then\n    exit "\${WEB_FRONTEND_GH_API_EXIT_CODE}"\n  fi\n  printf '%s\\n' "\${WEB_FRONTEND_CURRENT_MAIN_SHA}"\nelse\n  echo "unexpected gh args: $*" >&2\n  exit 1\nfi\n`,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "\${GH_CALLS_OUTPUT}"\nif [ "\${WEB_FRONTEND_GH_API_EXIT_CODE}" != "0" ]; then exit "\${WEB_FRONTEND_GH_API_EXIT_CODE}"; fi\ncase "$2" in\n  repos/AquilaXk/aquila-blog-web/commits/main) printf '%s\\n' "\${WEB_FRONTEND_CURRENT_MAIN_SHA}" ;;\n  repos/AquilaXk/aquila-blog/commits/main) printf '%s\\n' "\${PLATFORM_CURRENT_MAIN_SHA}" ;;\n  *) echo "unexpected gh args: $*" >&2; exit 1 ;;\nesac\n`,
   )
   chmodSync(gh, 0o755)
-  const result = spawnSync("bash", ["-c", script], {
+  const result = spawnSync("bash", ["-c", step.run], {
     encoding: "utf8",
     env: {
       ...process.env,
       GITHUB_EVENT_NAME: "repository_dispatch",
-      GITHUB_REPOSITORY_OWNER: "AquilaXk",
       GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
-      DEPLOY_SHA_INPUT: "a".repeat(40),
+      GITHUB_SHA: payload.eventTargetSha ?? payload.targetSha,
       REPO_SYNC_APP_BOT_LOGIN: "aquila-sync[bot]",
+      WEB_FRONTEND_SCHEMA_VERSION: payload.schemaVersion,
       WEB_FRONTEND_DISPATCH_SENDER: payload.sender,
-      WEB_FRONTEND_SOURCE_REPOSITORY: payload.repository,
-      WEB_FRONTEND_SOURCE_SHA: payload.sha,
-      WEB_FRONTEND_CURRENT_MAIN_SHA: payload.currentWebMainSha ?? payload.sha,
+      WEB_FRONTEND_SOURCE_REPOSITORY: payload.sourceRepository,
+      WEB_FRONTEND_SOURCE_SHA: payload.sourceSha,
+      WEB_FRONTEND_IMAGE_REF: payload.imageRef,
+      WEB_FRONTEND_IMAGE_DIGEST: payload.imageDigest,
+      WEB_FRONTEND_TARGET_REPOSITORY: payload.targetRepository,
+      WEB_FRONTEND_TARGET_SHA: payload.targetSha,
+      WEB_FRONTEND_DELIVERY_ID: payload.deliveryId,
+      WEB_FRONTEND_PRODUCER_RUN_ID: payload.producerRunId,
+      WEB_FRONTEND_PRODUCER_RUN_ATTEMPT: payload.producerRunAttempt,
+      WEB_FRONTEND_CURRENT_MAIN_SHA: payload.currentSourceMainSha ?? payload.sourceSha,
+      PLATFORM_CURRENT_MAIN_SHA: payload.currentTargetMainSha ?? payload.targetSha,
       WEB_FRONTEND_GH_API_EXIT_CODE: String(payload.ghApiExitCode ?? 0),
-      WEB_FRONTEND_IMAGE_REF: payload.image,
       GITHUB_OUTPUT: output,
+      GITHUB_STEP_SUMMARY: summary,
       GH_CALLS_OUTPUT: ghCallsOutput,
       PATH: `${directory}:${process.env.PATH}`,
     },
   })
   const outputs = readFileSync(output, "utf8")
+  const summaryText = readFileSync(summary, "utf8")
   const ghCalls = readFileSync(ghCallsOutput, "utf8").trim().split("\n").filter(Boolean).length
   rmSync(directory, { recursive: true, force: true })
-  return { ...result, outputs, ghCalls }
+  return { ...result, outputs, summaryText, ghCalls }
 }
 
-test("dispatch payload validation executes fail-closed", () => {
-  const valid = {
-    sender: "aquila-sync[bot]",
-    repository: "AquilaXk/aquila-blog-web",
-    sha: "a".repeat(40),
-    image: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"b".repeat(64)}`,
-  }
-  const accepted = runDispatch(valid)
+test("dispatch admission validates the signed Web image handoff before deploy gates", () => {
+  const valid = dispatchPayload()
+  const accepted = runDispatchAdmission(valid)
   assert.equal(accepted.status, 0, accepted.stderr)
-  assert.match(accepted.outputs, /^front_deploy=true$/m)
-  assert.match(accepted.outputs, /^front_source_sha=a{40}$/m)
-  assert.match(accepted.outputs, new RegExp(`^front_image_ref=${valid.image}$`, "m"))
-  assert.equal(accepted.ghCalls, 1)
-
-  const stale = runDispatch({ ...valid, currentWebMainSha: "c".repeat(40) })
-  assert.notEqual(stale.status, 0)
-  assert.match(stale.stderr, /repository dispatch source sha is stale/)
-  assert.equal(stale.ghCalls, 1)
+  assert.match(accepted.outputs, /^result=proceed$/m)
+  assert.match(accepted.summaryText, /result: proceed/)
+  assert.equal(accepted.ghCalls, 2)
 
   for (const payload of [
-    { ...valid, currentWebMainSha: "" },
-    { ...valid, currentWebMainSha: "not-a-sha" },
-    { ...valid, ghApiExitCode: 1 },
-  ]) {
-    const blocked = runDispatch(payload)
-    assert.notEqual(blocked.status, 0, JSON.stringify(payload))
-    assert.equal(blocked.ghCalls, 1, JSON.stringify(payload))
-  }
+    dispatchPayload({ schemaVersion: "2" }),
+    dispatchPayload({ sender: "other[bot]" }),
+    dispatchPayload({ sourceRepository: "AquilaXk/aquila-blog-web.evil" }),
+    dispatchPayload({ sourceSha: "A".repeat(40) }),
+    dispatchPayload({ imageDigest: `sha256:${"B".repeat(64)}` }),
+    dispatchPayload({ targetRepository: "AquilaXk/other" }),
+    dispatchPayload({ targetSha: "d".repeat(40), eventTargetSha: "c".repeat(40) }),
+    dispatchPayload({ deliveryId: "0".repeat(64) }),
+    dispatchPayload({ producerRunId: "0" }),
+    dispatchPayload({ producerRunAttempt: "not-a-number" }),
+    dispatchPayload({ imageRef: "ghcr.io/aquilaxk/aquila-blog-web-front:latest" }),
+  ]) assert.notEqual(runDispatchAdmission(payload).status, 0, JSON.stringify(payload))
 
   for (const payload of [
-    { ...valid, sender: "" },
-    { ...valid, sender: "other[bot]" },
-    { ...valid, repository: "AquilaXk/aquila-blog-web.evil" },
-    { ...valid, sha: "A".repeat(40) },
-    { ...valid, sha: "a".repeat(39) },
-    { ...valid, sha: `${"a".repeat(39)} ` },
-    { ...valid, sha: `${"a".repeat(40)}\nattacker=true` },
-    { ...valid, image: "ghcr.io/aquilaxk/aquila-blog-web-front:latest" },
-    { ...valid, image: `ghcr.io/aquilaxk/aquila-blog-web-front:latest@sha256:${"b".repeat(64)}` },
-    { ...valid, image: `ghcr.io.evil/aquilaxk/aquila-blog-web-front@sha256:${"b".repeat(64)}` },
-    { ...valid, image: `ghcr.io/aquilaxk/aquila-blog-web-front-evil@sha256:${"b".repeat(64)}` },
-    { ...valid, image: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"B".repeat(64)}` },
-    { ...valid, image: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"b".repeat(63)}` },
-    { ...valid, image: `${valid.image}\nattacker=true` },
+    dispatchPayload({ currentSourceMainSha: "" }),
+    dispatchPayload({ currentTargetMainSha: "not-a-sha" }),
+    dispatchPayload({ ghApiExitCode: 1 }),
+  ]) assert.notEqual(runDispatchAdmission(payload).status, 0, JSON.stringify(payload))
+})
+
+test("stale dispatch admission is a credential-safe no-op before deploy gates", () => {
+  for (const payload of [
+    dispatchPayload({ currentSourceMainSha: "d".repeat(40) }),
+    dispatchPayload({ currentTargetMainSha: "d".repeat(40) }),
   ]) {
-    assert.notEqual(runDispatch(payload).status, 0, JSON.stringify(payload))
+    const result = runDispatchAdmission(payload)
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.outputs, /^result=noop$/m)
+    assert.match(result.summaryText, /result: noop/)
+    assert.equal(result.ghCalls, 2)
   }
+})
+
+test("dispatch no-op skips calculateTag and every deploy gate", () => {
+  const document = deployDocument()
+
+  assert.equal(document.jobs.triggerGuard.outputs.dispatch_admission, "${{ steps.dispatch_admission.outputs.result }}")
+  assert.match(document.jobs.calculateTag.if, /needs\.triggerGuard\.outputs\.dispatch_admission == 'proceed'/)
+  assert.deepEqual(document.jobs.calculateTag.needs, ["triggerGuard"])
 })
 
 test("handoff keeps deployment ordering and the existing SSH cutover gates", () => {
@@ -459,7 +489,10 @@ test("handoff keeps deployment ordering and the existing SSH cutover gates", () 
   assert.match(source, /DEPLOY_TARGET=front/)
   assert.match(source, /STAGED_FRONT_IMAGE="\$\{HOME_FRONT_IMAGE\}"/)
   assert.match(source, /STAGED_FRONT_BUILD_SHA="\$\{HOME_FRONT_BUILD_SHA\}"/)
-  assert.match(source, /front deploy finished without reporting a result marker/)
+  assert.match(source, /deployed \| noop\) ;;/)
+  assert.match(source, /front deploy finished without reporting a supported result marker/)
+  assert.doesNotMatch(source, /if \[ "\$\{FRONT_DEPLOY_RESULT\}" = "deployed" \] && \[ "\$\{FRONT_SERVED_BUILD_SHA\}"/)
+  assert.match(source, /if \[ "\$\{FRONT_SERVED_BUILD_SHA\}" != "\$\{HOME_FRONT_BUILD_SHA\}" \]; then/)
   assert.match(source, /front deploy reported success but the edge served build sha=/)
 })
 
@@ -488,8 +521,10 @@ function runFrontQueueFreshnessGate(input) {
   const git = path.join(directory, "git")
   const grep = path.join(directory, "grep")
   const changedFiles = path.join(directory, "changed-files")
+  const output = path.join(directory, "output")
   writeFileSync(calls, "")
   writeFileSync(changedFiles, input.changedFiles ?? "")
+  writeFileSync(output, "")
   writeFileSync(
     gh,
     `#!/usr/bin/env bash\nprintf 'gh %s\\n' "$*" >> "${calls}"\nif [ "$1" = api ] && [ "$2" = repos/AquilaXk/aquila-blog-web/commits/main ] && [ "$3" = --jq ] && [ "$4" = .sha ] && [ "$#" = 4 ]; then\n  [ "${input.webApiExitCode ?? 0}" = 0 ] || exit "${input.webApiExitCode}"\n  printf '%s\\n' '${input.webMainSha}'\n  exit 0\nfi\necho "unexpected gh args: $*" >&2\nexit 1\n`,
@@ -509,12 +544,14 @@ function runFrontQueueFreshnessGate(input) {
       GITHUB_EVENT_NAME: "repository_dispatch",
       FRONT_SOURCE_SHA: input.frontSourceSha,
       DEPLOY_SHA: input.deploySha,
+      GITHUB_OUTPUT: output,
       PATH: `${input.grepExitCode === undefined ? "" : `${directory}:`}${directory}:${process.env.PATH}`,
     },
   })
   const callLog = readFileSync(calls, "utf8").trim().split("\n").filter(Boolean)
+  const outputs = readFileSync(output, "utf8")
   rmSync(directory, { recursive: true, force: true })
-  return { ...result, callLog }
+  return { ...result, outputs, callLog }
 }
 
 test("front deployment revalidates the queued dispatch against exact Web and Platform main", () => {
@@ -527,6 +564,7 @@ test("front deployment revalidates the queued dispatch against exact Web and Pla
   const result = runFrontQueueFreshnessGate(input)
 
   assert.equal(result.status, 0, result.stderr)
+  assert.match(result.outputs, /^result=proceed$/m)
   assert.deepEqual(result.callLog, [
     "gh api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha",
     `git ls-remote --exit-code origin refs/heads/main`,
@@ -537,10 +575,8 @@ test("front deployment revalidates the queued dispatch against exact Web and Pla
 })
 
 for (const [label, overrides, expected] of [
-  ["Web main has advanced", { webMainSha: "c".repeat(40) }, /front dispatch source sha is stale/],
   ["Web API fails", { webApiExitCode: 1 }, /front dispatch Web main sha lookup failed/],
   ["Web API returns malformed SHA", { webMainSha: "not-a-sha" }, /front dispatch current Web main sha is invalid/],
-  ["Platform main contains a deployment-impacting change", { platformMainSha: "c".repeat(40), changedFiles: "deploy/homeserver/compose.yml" }, /front dispatch blocked by backend-impacting newer main changes/],
   ["Platform deploy SHA is no longer an ancestor", { platformMainSha: "c".repeat(40), platformAncestor: false }, /front dispatch deploy sha is not reachable from origin\/main/],
 ]) {
   test(`front deployment fails closed when ${label}`, () => {
@@ -557,6 +593,32 @@ for (const [label, overrides, expected] of [
   })
 }
 
+test("front deployment no-ops when Web main advances while queued", () => {
+  const result = runFrontQueueFreshnessGate({
+    frontSourceSha: "a".repeat(40),
+    webMainSha: "c".repeat(40),
+    deploySha: "b".repeat(40),
+    platformMainSha: "b".repeat(40),
+  })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.outputs, /^result=noop$/m)
+  assert.deepEqual(result.callLog, ["gh api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha"])
+})
+
+test("front deployment no-ops when queued Platform changes affect deployment", () => {
+  const result = runFrontQueueFreshnessGate({
+    frontSourceSha: "a".repeat(40),
+    webMainSha: "a".repeat(40),
+    deploySha: "b".repeat(40),
+    platformMainSha: "c".repeat(40),
+    changedFiles: "deploy/homeserver/compose.yml",
+  })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.outputs, /^result=noop$/m)
+})
+
 test("front deployment permits a queue-delayed Platform main advance with neutral paths only", () => {
   const result = runFrontQueueFreshnessGate({
     frontSourceSha: "a".repeat(40),
@@ -567,6 +629,7 @@ test("front deployment permits a queue-delayed Platform main advance with neutra
   })
 
   assert.equal(result.status, 0, result.stderr)
+  assert.match(result.outputs, /^result=proceed$/m)
 })
 
 test("front deployment rejects a fetched Platform main SHA that differs from ls-remote", () => {
@@ -598,7 +661,7 @@ test("front deployment fails closed when the stale path matcher errors", () => {
   assert.match(result.stderr, /front dispatch stale path matcher failed: status=2/)
 })
 
-test("front deployment blocks a long changed-file list that begins with a deployment-impacting path", () => {
+test("front deployment no-ops a long changed-file list that begins with a deployment-impacting path", () => {
   const result = runFrontQueueFreshnessGate({
     frontSourceSha: "a".repeat(40),
     webMainSha: "a".repeat(40),
@@ -607,8 +670,8 @@ test("front deployment blocks a long changed-file list that begins with a deploy
     changedFiles: `deploy/homeserver/compose.yml\n${"docs/neutral.md\n".repeat(100_000)}`,
   })
 
-  assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /front dispatch blocked by backend-impacting newer main changes/)
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.outputs, /^result=noop$/m)
 })
 
 for (const command of ["ls-remote", "fetch", "rev-parse", "diff"]) {
@@ -635,6 +698,20 @@ test("front queue freshness uses calculateTag's exact stale deployment path patt
   assert.ok(step)
   assert.match(step.run, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}" <<< "\$\{STALE_CHANGED_FILES\}"/)
   assert.doesNotMatch(step.run, /echo "\$\{STALE_CHANGED_FILES\}" \| grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
+})
+
+test("front queue no-op stops before secrets and activation", () => {
+  const steps = deployDocument().jobs.frontBlueGreenDeploy.steps
+  const freshness = steps.find((item) => item.name === "Verify dispatch freshness after queue")
+  const condition = "github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'"
+
+  assert.equal(freshness.id, "freshness")
+  for (const name of [
+    "Verify required secrets",
+    "Connect to Tailscale",
+    "Configure SSH key",
+    "Deploy front over SSH (pull image + blue/green switch)",
+  ]) assert.equal(steps.find((item) => item.name === name).if, condition, `${name} must skip after a queue no-op`)
 })
 
 test("Platform no longer resolves a front tag or classifies front history", () => {

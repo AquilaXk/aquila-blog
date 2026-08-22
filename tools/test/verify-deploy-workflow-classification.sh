@@ -233,7 +233,15 @@ reject_pattern 'STALE_WORKFLOW_RUN' "stale workflow_run payloads must not bypass
 require_pattern 'back_image_ref:[[:space:]]*\$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}' "build job must expose immutable backend digest ref"
 require_pattern 'HOME_BACK_IMAGE:[[:space:]]*\$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}' "deploy job must use immutable backend digest ref"
 require_pattern 'Require successful Security for deploy SHA' "dispatches must pass the existing Security success gate"
-reject_pattern "if: github\.event_name != 'repository_dispatch'" "Security success gate must not skip repository_dispatch"
+if awk '
+  /^      - name: Require successful Security for deploy SHA$/ { in_security_gate = 1; next }
+  in_security_gate && /^      - name:/ { exit }
+  in_security_gate && /^        if:/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' "${workflow}"; then
+  echo "unexpected: Security success gate must not skip repository_dispatch" >&2
+  exit 1
+fi
 reject_pattern 'image_latest_ref' "deploy workflow must not calculate or push latest image refs"
 reject_pattern 'IMAGE_LATEST_REF="\$\{IMAGE_NAME\}:latest"' "deploy workflow must not create latest image refs"
 
@@ -249,8 +257,8 @@ require_pattern 'WEB_FRONTEND_SOURCE_REPOSITORY.*github\.event\.client_payload\.
 require_pattern 'WEB_FRONTEND_SOURCE_SHA.*github\.event\.client_payload\.source_sha' "source sha must come from the dispatch payload"
 require_pattern 'WEB_FRONTEND_IMAGE_REF.*github\.event\.client_payload\.image_ref' "image ref must come from the dispatch payload"
 require_pattern 'WEB_FRONTEND_SOURCE_REPOSITORY.*AquilaXk/aquila-blog-web' "only the Web repository may trigger a front deploy"
-require_pattern "repository dispatch source sha is invalid" "source sha must fail closed"
-require_pattern "repository dispatch image ref is not the immutable Web digest" "front image ref must fail closed"
+require_pattern 'fail_dispatch "invalid source sha"' "source sha must fail closed"
+require_pattern 'fail_dispatch "image ref does not match the immutable digest"' "front image ref must fail closed"
 require_pattern 'front_image_ref=\$\{FRONT_IMAGE_REF\}' "payload digest must be the sole front image output"
 require_pattern 'front_source_sha=\$\{FRONT_SOURCE_SHA\}' "payload source sha must be the sole front build sha output"
 reject_pattern 'FRONT_DEPLOY_PATHS_PATTERN' "Platform must not classify front paths"
@@ -271,7 +279,7 @@ require_pattern 'HOME_FRONT_IMAGE:[[:space:]]*\$\{\{ needs\.calculateTag\.output
 require_pattern 'front image must be pinned by sha256 digest' "remote front deploy must reject a front image that is not digest pinned"
 require_pattern 'DEPLOY_TARGET=front' "front rollout must run through the shared blue/green script"
 require_pattern 'STAGED_FRONT_BUILD_SHA=' "front deploy must pass the build sha that the cutover verification compares the served build against"
-require_pattern 'front deploy finished without reporting a result marker' "front deploy must fail when the remote rollout reports no result"
+require_pattern 'front deploy finished without reporting a supported result marker' "front deploy must fail when the remote rollout reports no supported result"
 # 결과 요약은 ssh 성공 후에만 실행된다. 시도한 이미지·커밋은 그 앞에서 적어야 실패한 run에도
 # "무엇을 배포하려 했는지"가 남는다.
 require_pattern 'echo "- deploy sha: \$\{HOME_DEPLOY_SHA\}"' "front deploy must record the attempted image and sha before the remote rollout runs"

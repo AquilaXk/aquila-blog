@@ -44,6 +44,8 @@ permissions:
 jobs:
   triggerGuard:
     runs-on: ubuntu-latest
+    outputs:
+      dispatch_admission: ${{ steps.dispatch_admission.outputs.result }}
     steps:
       - name: Validate deploy trigger
         env:
@@ -70,6 +72,91 @@ jobs:
             exit 1
           fi
 
+      - name: Admit Web image-ready dispatch
+        id: dispatch_admission
+        if: github.event_name == 'repository_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO_SYNC_APP_BOT_LOGIN: ${{ vars.REPO_SYNC_APP_BOT_LOGIN }}
+          WEB_FRONTEND_SCHEMA_VERSION: ${{ github.event.client_payload.schema_version || '' }}
+          WEB_FRONTEND_DISPATCH_SENDER: ${{ github.event.sender.login || '' }}
+          WEB_FRONTEND_SOURCE_REPOSITORY: ${{ github.event.client_payload.source_repository || '' }}
+          WEB_FRONTEND_SOURCE_SHA: ${{ github.event.client_payload.source_sha || '' }}
+          WEB_FRONTEND_IMAGE_REF: ${{ github.event.client_payload.image_ref || '' }}
+          WEB_FRONTEND_IMAGE_DIGEST: ${{ github.event.client_payload.image_digest || '' }}
+          WEB_FRONTEND_TARGET_REPOSITORY: ${{ github.event.client_payload.target_repository || '' }}
+          WEB_FRONTEND_TARGET_SHA: ${{ github.event.client_payload.target_sha || '' }}
+          WEB_FRONTEND_DELIVERY_ID: ${{ github.event.client_payload.delivery_id || '' }}
+          WEB_FRONTEND_PRODUCER_RUN_ID: ${{ github.event.client_payload.producer_run_id || '' }}
+          WEB_FRONTEND_PRODUCER_RUN_ATTEMPT: ${{ github.event.client_payload.producer_run_attempt || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fail_dispatch() {
+            echo "Web image-ready dispatch rejected: $1" >&2
+            exit 1
+          }
+
+          [ "${WEB_FRONTEND_SCHEMA_VERSION}" = "1" ] || fail_dispatch "unsupported schema version"
+          [ -n "${REPO_SYNC_APP_BOT_LOGIN}" ] && \
+            [ "${WEB_FRONTEND_DISPATCH_SENDER}" = "${REPO_SYNC_APP_BOT_LOGIN}" ] || \
+            fail_dispatch "sender is not the configured Web App"
+          [ "${WEB_FRONTEND_SOURCE_REPOSITORY}" = "AquilaXk/aquila-blog-web" ] || \
+            fail_dispatch "source repository mismatch"
+          [ "${WEB_FRONTEND_TARGET_REPOSITORY}" = "${GITHUB_REPOSITORY}" ] || \
+            fail_dispatch "target repository mismatch"
+          [[ "${WEB_FRONTEND_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid source sha"
+          [[ "${WEB_FRONTEND_TARGET_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid target sha"
+          [ "${WEB_FRONTEND_TARGET_SHA}" = "${GITHUB_SHA}" ] || fail_dispatch "event target sha mismatch"
+          [[ "${WEB_FRONTEND_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail_dispatch "invalid image digest"
+          [ "${WEB_FRONTEND_IMAGE_REF}" = "ghcr.io/aquilaxk/aquila-blog-web-front@${WEB_FRONTEND_IMAGE_DIGEST}" ] || \
+            fail_dispatch "image ref does not match the immutable digest"
+          [[ "${WEB_FRONTEND_DELIVERY_ID}" =~ ^[0-9a-f]{64}$ ]] || fail_dispatch "invalid delivery id"
+          [[ "${WEB_FRONTEND_PRODUCER_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || fail_dispatch "invalid producer run id"
+          [[ "${WEB_FRONTEND_PRODUCER_RUN_ATTEMPT}" =~ ^[1-9][0-9]*$ ]] || fail_dispatch "invalid producer run attempt"
+
+          EXPECTED_DELIVERY_ID="$(
+            printf '%s\n' \
+              "schema_version=${WEB_FRONTEND_SCHEMA_VERSION}" \
+              "source_repository=${WEB_FRONTEND_SOURCE_REPOSITORY}" \
+              "source_sha=${WEB_FRONTEND_SOURCE_SHA}" \
+              "image_digest=${WEB_FRONTEND_IMAGE_DIGEST}" \
+              "target_repository=${WEB_FRONTEND_TARGET_REPOSITORY}" \
+              "target_sha=${WEB_FRONTEND_TARGET_SHA}" \
+              | sha256sum | awk '{print $1}'
+          )"
+          [ "${WEB_FRONTEND_DELIVERY_ID}" = "${EXPECTED_DELIVERY_ID}" ] || fail_dispatch "delivery id mismatch"
+
+          WEB_CURRENT_MAIN_SHA="$(gh api "repos/${WEB_FRONTEND_SOURCE_REPOSITORY}/commits/main" --jq '.sha')" || \
+            fail_dispatch "Web main lookup failed"
+          PLATFORM_CURRENT_MAIN_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')" || \
+            fail_dispatch "Platform main lookup failed"
+          [[ "${WEB_CURRENT_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid current Web main sha"
+          [[ "${PLATFORM_CURRENT_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid current Platform main sha"
+
+          ADMISSION_RESULT="proceed"
+          ADMISSION_REASON="exact-current-identity"
+          if [ "${WEB_FRONTEND_SOURCE_SHA}" != "${WEB_CURRENT_MAIN_SHA}" ]; then
+            ADMISSION_RESULT="noop"
+            ADMISSION_REASON="stale-web-source"
+          elif [ "${WEB_FRONTEND_TARGET_SHA}" != "${PLATFORM_CURRENT_MAIN_SHA}" ]; then
+            ADMISSION_RESULT="noop"
+            ADMISSION_REASON="stale-platform-target"
+          fi
+
+          echo "result=${ADMISSION_RESULT}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Web image-ready admission"
+            echo "- result: ${ADMISSION_RESULT}"
+            echo "- reason: ${ADMISSION_REASON}"
+            echo "- delivery id: ${WEB_FRONTEND_DELIVERY_ID}"
+            echo "- source: ${WEB_FRONTEND_SOURCE_REPOSITORY}@${WEB_FRONTEND_SOURCE_SHA}"
+            echo "- target: ${WEB_FRONTEND_TARGET_REPOSITORY}@${WEB_FRONTEND_TARGET_SHA}"
+            echo "- image digest: ${WEB_FRONTEND_IMAGE_DIGEST}"
+            echo "- producer run: ${WEB_FRONTEND_PRODUCER_RUN_ID} attempt ${WEB_FRONTEND_PRODUCER_RUN_ATTEMPT}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   calculateTag:
     needs:
       - triggerGuard
@@ -92,7 +179,8 @@ jobs:
       ) ||
       (
         github.event_name == 'repository_dispatch' &&
-        github.event.action == 'web_frontend_image_ready'
+        github.event.action == 'web_frontend_image_ready' &&
+        needs.triggerGuard.outputs.dispatch_admission == 'proceed'
       )
       )
     outputs:
@@ -254,12 +342,8 @@ jobs:
         env:
           DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
           FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
-          REPO_SYNC_APP_BOT_LOGIN: ${{ vars.REPO_SYNC_APP_BOT_LOGIN }}
-          WEB_FRONTEND_DISPATCH_SENDER: ${{ github.event.sender.login || '' }}
-          WEB_FRONTEND_SOURCE_REPOSITORY: ${{ github.event.client_payload.source_repository || '' }}
           WEB_FRONTEND_SOURCE_SHA: ${{ github.event.client_payload.source_sha || '' }}
           WEB_FRONTEND_IMAGE_REF: ${{ github.event.client_payload.image_ref || '' }}
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -284,35 +368,21 @@ jobs:
           STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
 
           if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
-            if [ -z "${REPO_SYNC_APP_BOT_LOGIN}" ] || [ "${WEB_FRONTEND_DISPATCH_SENDER}" != "${REPO_SYNC_APP_BOT_LOGIN}" ]; then
-              echo "repository dispatch sender is not the configured Web App" >&2
-              exit 1
-            fi
-            if [ "${WEB_FRONTEND_SOURCE_REPOSITORY}" != "AquilaXk/aquila-blog-web" ]; then
-              echo "repository dispatch source repository is invalid: ${WEB_FRONTEND_SOURCE_REPOSITORY}" >&2
-              exit 1
-            fi
-            if [[ ! "${WEB_FRONTEND_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "repository dispatch source sha is invalid" >&2
-              exit 1
-            fi
-            WEB_FRONTEND_CURRENT_MAIN_SHA="$(gh api "repos/AquilaXk/aquila-blog-web/commits/main" --jq '.sha')"
-            if [[ ! "${WEB_FRONTEND_CURRENT_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "repository dispatch current Web main sha is invalid" >&2
-              exit 1
-            fi
-            if [ "${WEB_FRONTEND_SOURCE_SHA}" != "${WEB_FRONTEND_CURRENT_MAIN_SHA}" ]; then
-              echo "repository dispatch source sha is stale: source=${WEB_FRONTEND_SOURCE_SHA} current_main=${WEB_FRONTEND_CURRENT_MAIN_SHA}" >&2
-              exit 1
-            fi
-            if [[ ! "${WEB_FRONTEND_IMAGE_REF}" =~ ^ghcr\.io/aquilaxk/aquila-blog-web-front@sha256:[0-9a-f]{64}$ ]]; then
-              echo "repository dispatch image ref is not the immutable Web digest" >&2
-              exit 1
-            fi
             FRONT_DEPLOY="true"
             FRONT_IMAGE_REF="${WEB_FRONTEND_IMAGE_REF}"
             FRONT_SOURCE_SHA="${WEB_FRONTEND_SOURCE_SHA}"
             CHANGE_SOURCE="web-frontend-image-ready"
+            {
+              echo "image_tag=${IMAGE_TAG}"
+              echo "image_name=${IMAGE_NAME}"
+              echo "image_ref=${IMAGE_REF}"
+              echo "deploy_sha=${DEPLOY_SHA}"
+              echo "backend_deploy=false"
+              echo "front_deploy=true"
+              echo "front_image_ref=${FRONT_IMAGE_REF}"
+              echo "front_source_sha=${FRONT_SOURCE_SHA}"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           CHANGED_FILES=""
           if [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]; then
@@ -341,19 +411,6 @@ jobs:
               echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
               CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
             fi
-          fi
-          if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
-            {
-              echo "image_tag=${IMAGE_TAG}"
-              echo "image_name=${IMAGE_NAME}"
-              echo "image_ref=${IMAGE_REF}"
-              echo "deploy_sha=${DEPLOY_SHA}"
-              echo "backend_deploy=false"
-              echo "front_deploy=true"
-              echo "front_image_ref=${FRONT_IMAGE_REF}"
-              echo "front_source_sha=${FRONT_SOURCE_SHA}"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
           fi
           CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
           if [ -z "${CHANGED_FILES}" ]; then
@@ -1701,6 +1758,7 @@ jobs:
           ref: ${{ needs.calculateTag.outputs.deploy_sha }}
 
       - name: Verify dispatch freshness after queue
+        id: freshness
         if: github.event_name == 'repository_dispatch'
         env:
           FRONT_SOURCE_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
@@ -1719,8 +1777,9 @@ jobs:
             exit 1
           fi
           if [ "${FRONT_SOURCE_SHA}" != "${WEB_FRONTEND_CURRENT_MAIN_SHA}" ]; then
-            echo "front dispatch source sha is stale: source=${FRONT_SOURCE_SHA} current_main=${WEB_FRONTEND_CURRENT_MAIN_SHA}" >&2
-            exit 1
+            echo "front dispatch no-op: source sha is stale: source=${FRONT_SOURCE_SHA} current_main=${WEB_FRONTEND_CURRENT_MAIN_SHA}"
+            echo "result=noop" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
 
           STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
@@ -1742,9 +1801,9 @@ jobs:
           if [ "${DEPLOY_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
             STALE_CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}")"
             if grep -Eq "${STALE_DEPLOY_BLOCK_PATHS_PATTERN}" <<< "${STALE_CHANGED_FILES}"; then
-              echo "front dispatch blocked by backend-impacting newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
-              echo "${STALE_CHANGED_FILES}" >&2
-              exit 1
+              echo "front dispatch no-op after deployment-impacting newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+              echo "result=noop" >> "${GITHUB_OUTPUT}"
+              exit 0
             else
               STALE_PATH_MATCH_STATUS=$?
               if [ "${STALE_PATH_MATCH_STATUS}" -ne 1 ]; then
@@ -1754,8 +1813,10 @@ jobs:
             fi
             echo "front dispatch allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
           fi
+          echo "result=proceed" >> "${GITHUB_OUTPUT}"
 
       - name: Verify required secrets
+        if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
         env:
           TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
@@ -1795,6 +1856,7 @@ jobs:
           fi
 
       - name: Connect to Tailscale
+        if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
         uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -1802,6 +1864,7 @@ jobs:
           tags: ${{ vars.TS_OAUTH_TAGS || secrets.TS_OAUTH_TAGS || 'tag:ci' }}
 
       - name: Configure SSH key
+        if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
         env:
           HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
           HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
@@ -1824,6 +1887,7 @@ jobs:
           echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
 
       - name: Deploy front over SSH (pull image + blue/green switch)
+        if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
         env:
           HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
           HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
@@ -1986,9 +2050,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           case "${FRONT_DEPLOY_RESULT}" in
-            deployed) ;;
+            deployed | noop) ;;
             *)
-              echo "front deploy finished without reporting a result marker" >&2
+              echo "front deploy finished without reporting a supported result marker" >&2
               exit 1
               ;;
           esac
@@ -1996,7 +2060,7 @@ jobs:
           # 원격이 이미 같은 대조를 하고 실패 시 rollback까지 한다. 여기서 다시 보는 이유는 그
           # 대조가 실제로 일어났는지를 러너가 독립적으로 확인하기 위해서다 - 원격 스크립트가
           # 검증을 건너뛰면서 성공 마커만 남기는 회귀가 여기서 걸린다.
-          if [ "${FRONT_DEPLOY_RESULT}" = "deployed" ] && [ "${FRONT_SERVED_BUILD_SHA}" != "${HOME_FRONT_BUILD_SHA}" ]; then
+          if [ "${FRONT_SERVED_BUILD_SHA}" != "${HOME_FRONT_BUILD_SHA}" ]; then
             echo "front deploy reported success but the edge served build sha=${FRONT_SERVED_BUILD_SHA:-none}, expected ${HOME_FRONT_BUILD_SHA}" >&2
             exit 1
           fi

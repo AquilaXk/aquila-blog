@@ -26,6 +26,7 @@
     { "path": "tools/test/check-r-migration-no-ddl.test.sh", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test repeatable migration DDL guard" },
     { "path": "tools/test/repository-standalone-verification.test.sh", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify standalone harness contracts" },
     { "path": "tools/test/sync-public-contract-workflow.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify public contract sync workflow contract" },
+    { "path": "tools/test/web-legal-policy-workflow.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify Web legal-policy receiver workflow contract" },
     { "path": "tools/test/setup-node-pin-parity.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify setup-node pin parity contract" },
     { "path": "tools/test/frontend-image-workflow.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify front image workflow contract" },
     { "path": "tools/test/dockerfile-supply-chain.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify Dockerfile supply-chain contracts" },

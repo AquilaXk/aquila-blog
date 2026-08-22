@@ -9,6 +9,7 @@ on:
       - "front/**"
       - "back/**"
       - "contracts/public-api/**"
+      - "contracts/web/**"
       - "tools/contracts/**"
       - "tools/test/**"
       - "tools/test/public-contract-manifest.test.mjs"
@@ -91,6 +92,9 @@ jobs:
 
       - name: Verify public contract sync workflow contract
         run: node --test tools/test/sync-public-contract-workflow.test.mjs
+
+      - name: Verify Web legal-policy receiver workflow contract
+        run: node --test tools/test/web-legal-policy-workflow.test.mjs
 
       - name: Verify setup-node pin parity contract
         run: node --test tools/test/setup-node-pin-parity.test.mjs

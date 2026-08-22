@@ -195,6 +195,7 @@ restore_route_fixture 'tools/test/test-execution-inventory.json'
 # General CI wiring verifies its execution inventory without invoking the public exporter.
 stage_and_run_hook '.github/workflows/ci.yml'
 assert_route_marker 'inventory-test'
+assert_route_marker 'receiver-test'
 assert_no_route_marker 'public-gradle'
 assert_no_route_marker 'public-sync'
 restore_route_fixture '.github/workflows/ci.yml'

@@ -5,7 +5,9 @@ import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.application.support.PostCacheTags
+import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
+import com.back.global.app.AppConfig
 import com.back.global.security.config.AuthCookieNames
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
@@ -1873,6 +1875,69 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 .andExpect {
                     status { isNotFound() }
                     jsonPath("$.resultCode") { value("404-1") }
+                }
+        }
+    }
+
+    @Nested
+    inner class PublicStorageUrlCanonicalization {
+        @Test
+        fun `익명 공개 상세 cache snapshot은 raw로 유지하고 canonical body와 ETag를 만든다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val retiredUrl = "https://api.aquilaxk.site/post/api/v1/images/folder%2Fcover.png?version=1#preview"
+            val post = postFacade.write(actor, "retired storage public", "stored content", true, true)
+            val snapshotCache =
+                cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                    ?: error("detail public snapshot cache is missing")
+            val rawDetail =
+                PostWithContentDto(post).copy(
+                    authorProfileImageDirectUrl = retiredUrl,
+                    content = "![cover]($retiredUrl)",
+                )
+            val rawSnapshot = PublicPostDetailSnapshotCacheDto.from(rawDetail)
+            snapshotCache.put(post.id, rawSnapshot)
+            val responseFactory = PostPublicReadResponseFactory()
+            val rawEtag =
+                PostPublicReadEtagSupport().toWeakEtag(
+                    responseFactory.buildPublicDetailEtagSeed(rawDetail),
+                )
+            val canonicalDetail = PublicPostUrlCanonicalizer.canonicalizePostWithContent(rawDetail)
+            val canonicalEtag =
+                PostPublicReadEtagSupport().toWeakEtag(
+                    responseFactory.buildPublicDetailEtagSeed(canonicalDetail),
+                )
+
+            val response =
+                mvc
+                    .get("/post/api/v1/posts/${post.id}")
+                    .andExpect {
+                        status { isOk() }
+                        header { string(HttpHeaders.ETAG, canonicalEtag) }
+                        jsonPath("$.content") {
+                            value(
+                                "![cover](${AppConfig.siteBackUrl}/post/api/v1/images/folder%2Fcover.png?version=1#preview)",
+                            )
+                        }
+                    }.andReturn()
+                    .response
+
+            assertThat(response.getHeader(HttpHeaders.ETAG)).isNotEqualTo(rawEtag)
+            assertThat(snapshotCache.get(post.id, PublicPostDetailSnapshotCacheDto::class.java)?.content)
+                .isEqualTo(rawSnapshot.content)
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `인증 상세는 retired storage URL을 저장값 그대로 반환한다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val retiredUrl = "https://api.aquilaxk.site/post/api/v1/images/folder%2Fprivate.png"
+            val post = postFacade.write(actor, "retired storage authenticated", "![cover]($retiredUrl)", true, true)
+
+            mvc
+                .get("/post/api/v1/posts/${post.id}")
+                .andExpect {
+                    status { isOk() }
+                    jsonPath("$.content") { value("![cover]($retiredUrl)") }
                 }
         }
     }

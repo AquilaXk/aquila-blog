@@ -93,7 +93,7 @@ dependencies {
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
     }
     implementation("software.amazon.awssdk:url-connection-client:2.33.13")
-    implementation("org.jsoup:jsoup:1.21.2")
+    implementation("org.jsoup:jsoup:1.23.1")
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")

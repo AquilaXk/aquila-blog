@@ -27,6 +27,7 @@ extra["tomcat.version"] = "11.0.24"
 extra["netty.version"] = "4.2.16.Final"
 extra["postgresql.version"] = "42.7.13"
 
+val awsSdkVersion = "2.53.3"
 val testcontainersVersion = "1.21.4"
 
 java {
@@ -88,11 +89,12 @@ dependencies {
     // Database
     runtimeOnly("org.postgresql:postgresql")
     // Sync S3Client uses UrlConnection only (#1387/#1388/#1391). Drop unused AWS HTTP clients.
-    implementation("software.amazon.awssdk:s3:2.33.13") {
+    implementation("software.amazon.awssdk:s3:$awsSdkVersion") {
         exclude(group = "software.amazon.awssdk", module = "apache-client")
+        exclude(group = "software.amazon.awssdk", module = "apache5-client")
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
     }
-    implementation("software.amazon.awssdk:url-connection-client:2.33.13")
+    implementation("software.amazon.awssdk:url-connection-client:$awsSdkVersion")
     implementation("org.jsoup:jsoup:1.23.1")
 
     // Test
@@ -139,6 +141,39 @@ tasks.register("verifyTestcontainersVersionAlignment") {
                     .joinToString(separator = ", ")
             throw GradleException(
                 "Testcontainers version alignment failed: expected $testcontainersVersion, resolved $resolvedModules",
+            )
+        }
+    }
+}
+
+tasks.register("verifyAwsSdkHttpClientBoundary") {
+    description = "Verifies the runtime uses only the explicitly configured AWS URLConnection HTTP client."
+    group = "verification"
+
+    doLast {
+        val knownHttpClientModules =
+            setOf("apache-client", "apache5-client", "aws-crt-client", "netty-nio-client", "url-connection-client")
+        val resolvedHttpClients =
+            configurations
+                .getByName("runtimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+                .filter { component ->
+                    component.group == "software.amazon.awssdk" && component.module in knownHttpClientModules
+                }
+
+        val resolvedHttpClientDescriptions =
+            resolvedHttpClients
+                .map { component -> "${component.module}:${component.version}" }
+                .sorted()
+        val expectedHttpClients = listOf("url-connection-client:$awsSdkVersion")
+
+        if (resolvedHttpClientDescriptions != expectedHttpClients) {
+            throw GradleException(
+                "AWS SDK HTTP client boundary failed: expected ${expectedHttpClients.joinToString()}, " +
+                    "resolved ${resolvedHttpClientDescriptions.joinToString()}",
             )
         }
     }

@@ -12,6 +12,8 @@
 | [Ops / Security / Data](https://github.com/AquilaXk/aquila-blog/issues/new?template=ops_security_data.yml) | 배포, 운영 안정성, 보안·개인정보, 데이터 전환, 성능 위험 |
 | [Epic / Tracker](https://github.com/AquilaXk/aquila-blog/issues/new?template=epic_tracker.yml) | 여러 child issue의 owner, 순서와 종료 상태 관리 |
 
+취약점 세부사항, 재현 절차, PoC 또는 secret은 공개 Issue에 작성하지 말고 [GitHub Private vulnerability report](https://github.com/AquilaXk/aquila-blog/security/advisories/new)를 사용합니다.
+
 이슈를 만들기 전에 [열린 이슈](https://github.com/AquilaXk/aquila-blog/issues)를 검색해 중복 owner를 확인합니다.
 
 ## Definition of Ready

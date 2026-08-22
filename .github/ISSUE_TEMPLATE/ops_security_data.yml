@@ -8,6 +8,8 @@ body:
       value: |
         위험 작업은 전체 경우의 수보다 핵심 불변식, 실패 경계와 복구 방법을 명확히 적어 주세요.
         검증은 변경 위험에 비례하며, dry-run·canary·runtime evidence는 필요한 경우에만 사용합니다.
+        취약점 세부사항, 재현 절차, PoC 또는 secret은 공개 Issue에 작성하지 말고 [GitHub Private vulnerability report](https://github.com/AquilaXk/aquila-blog/security/advisories/new)를 사용하세요.
+        공개 evidence에는 토큰, 쿠키, 개인정보와 내부 URL을 제거하거나 마스킹한 정보만 포함하세요.
 
   - type: dropdown
     id: change_type

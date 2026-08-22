@@ -10,18 +10,18 @@
 
 ## Changes
 
-- 
-- 
+-
+-
 
 ## Scope
 
 ### Included
 
-- 
+-
 
 ### Excluded
 
-- 
+-
 
 ## Verification
 

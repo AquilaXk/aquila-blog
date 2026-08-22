@@ -111,18 +111,19 @@ function isCommandPrefix(prefix) {
   const tokens = shellTokens(prefix)
   const isAssignment = (token) => /^[A-Za-z_][A-Za-z0-9_]*=.*$/i.test(token)
   if (tokens[0]?.toLowerCase() === "env") {
-    return tokens.slice(1).every(isAssignment)
+    return tokens.length > 1 && tokens.slice(1).every(isAssignment)
   }
   return tokens.every((token) => /^(?:if|then|do|while|until|!|[A-Za-z_][A-Za-z0-9_]*=.*)$/i.test(token))
 }
 
 function logicalInvocations(run) {
   const source = run.replace(/\\\r?\n\s*/g, " ")
-  const prefix = /(?:^|[\s(!])((?:gh\s+[A-Za-z][A-Za-z0-9-]*|git\s+(?:clone|push))\b)/gim
+  const prefix = /(?:^|[\s(!])((?:gh|git)\b)/gim
   const invocations = []
   for (const match of source.matchAll(prefix)) {
     const start = match.index + match[0].lastIndexOf(match[1])
-    if (!isCommandPrefix(commandPrefix(source, start))) continue
+    const commandPrefixValue = commandPrefix(source, start)
+    if (!isCommandPrefix(commandPrefixValue)) continue
     let quote
     let escaped = false
     let end = source.length
@@ -149,9 +150,20 @@ function logicalInvocations(run) {
         break
       }
     }
-    invocations.push(source.slice(start, end).trim())
+    invocations.push({ command: source.slice(start, end).trim(), prefix: commandPrefixValue })
   }
   return invocations
+}
+
+function invocationEnv(env, prefix) {
+  const tokens = shellTokens(prefix)
+  const assignments = tokens[0]?.toLowerCase() === "env" ? tokens.slice(1) : tokens
+  const values = new Map(env)
+  for (const assignment of assignments) {
+    const separator = assignment.indexOf("=")
+    if (separator > 0) values.set(assignment.slice(0, separator).toLowerCase(), assignment.slice(separator + 1))
+  }
+  return values
 }
 
 function shellTokens(command) {
@@ -216,9 +228,29 @@ function commandTargetsWeb(tokens, env) {
   return repositoryIsWeb(env.get("gh_repo"), env) || tokens.some((token) => canonicalWebTarget(token, env))
 }
 
+function ghOperation(tokens) {
+  let index = 1
+  while (tokens[index] === "-R" || tokens[index] === "--repo" || /^--repo=.+/i.test(tokens[index] ?? "")) {
+    index += tokens[index].includes("=") ? 1 : 2
+  }
+  return { operation: tokens[index]?.toLowerCase(), index }
+}
+
+function gitOperation(tokens) {
+  let index = 1
+  while (tokens[index] === "-c" || /^-c[^=]+=/.test(tokens[index] ?? "")) {
+    if (tokens[index] === "-c" && !/^[^=\s]+=.+$/.test(tokens[index + 1] ?? "")) return undefined
+    index += tokens[index] === "-c" ? 2 : 1
+  }
+  return tokens[index]?.toLowerCase()
+}
+
 function stepCreatesWebToken(uses, withValues, env) {
   if (!/^actions\/create-github-app-token@/i.test(uses)) return false
-  const owner = expandScalar(withValues.owner ?? "AquilaXk", env).trim().toLowerCase()
+  if (!Object.hasOwn(withValues, "owner")) return false
+  const owner = expandScalar(withValues.owner, env).trim().toLowerCase()
+  if (owner !== "aquilaxk") return false
+  if (!Object.hasOwn(withValues, "repositories") || !expandScalar(withValues.repositories, env).trim()) return true
   const repositories = expandScalar(withValues.repositories, env).split(/[\r\n,]+/).map((value) => value.trim().toLowerCase())
   return owner === "aquilaxk" && repositories.includes("aquila-blog-web")
 }
@@ -278,23 +310,26 @@ function inspectWorkflow(file, contents) {
         findings.push(`${file}:foreign-git-write`)
       }
 
-      for (const invocation of logicalInvocations(run)) {
+      for (const { command: invocation, prefix } of logicalInvocations(run)) {
+        const commandEnv = invocationEnv(env, prefix)
         const tokens = shellTokens(invocation)
         const command = tokens[0]?.toLowerCase()
-        const operation = tokens[1]?.toLowerCase()
-        const targetsWeb = commandTargetsWeb(tokens, env)
+        const gh = command === "gh" ? ghOperation(tokens) : undefined
+        const operation = command === "git" ? gitOperation(tokens) : gh?.operation
+        if (command === "git" && !["clone", "push"].includes(operation)) continue
+        const targetsWeb = commandTargetsWeb(tokens, commandEnv)
         if (command === "gh" && operation === "api") {
-          const resource = webApiResource(apiEndpoint(tokens), env)
+          const resource = webApiResource(apiEndpoint(tokens), commandEnv)
           if (!targetsWeb && resource === undefined) continue
           if (!webOwnerWorkflows.has(file)) findings.push(`${file}:foreign-web-owner`)
-          const method = apiMethod(tokens, env)
+          const method = apiMethod(tokens, commandEnv)
           const allowedRead = resource !== undefined && /^(?:GET|HEAD)$/.test(method)
           const allowedDispatch = file === ".github/workflows/sync-public-contract-to-web.yml"
             && resource === "/dispatches" && method === "POST"
           if (!allowedRead && !allowedDispatch) findings.push(`${file}:foreign-api-write`)
         } else if (command === "gh" && operation === "pr" && targetsWeb) {
           const allowed = new Set(["checks", "diff", "list", "status", "view", "checkout"])
-          if (!allowed.has(tokens[2]?.toLowerCase())) findings.push(`${file}:foreign-pr-write`)
+          if (!allowed.has(tokens[gh.index + 1]?.toLowerCase())) findings.push(`${file}:foreign-pr-write`)
         } else if (command === "gh" && targetsWeb) {
           findings.push(`${file}:foreign-gh-write`)
         } else if (command === "git" && targetsWeb) {

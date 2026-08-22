@@ -160,6 +160,18 @@ jobs:
   removeWorkflow(allowedWebRead)
 
   const capabilityRejections = [
+    ["unknown-web-token-default-repositories", `
+name: Explicit Web owner token without repositories
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        with:
+          owner: AquilaXk
+          permission-contents: write
+`, "foreign-web-token"],
     ["unknown-web-token", `
 name: Unknown Web token owner
 on: workflow_dispatch
@@ -383,6 +395,34 @@ jobs:
     steps:
       - run: env FOO=1 gh pr close --repo "$WEB_REPOSITORY" 1
 `, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Invocation-local Web target
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          GH_REPO=AquilaXk/aquila-blog-web gh pr close 1
+`, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: GitHub repository option before Web operation
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh -R AquilaXk/aquila-blog-web pr close 1
+`, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Repeated Git configuration before Web push
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git -c user.name=ci -c user.email=ci@example.invalid push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
   assertWorkflowRejected("sync-public-contract-to-web", `
 name: Expanded working directory Web build
 on: workflow_dispatch

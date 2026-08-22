@@ -108,7 +108,12 @@ function commandPrefix(source, end) {
 function isCommandPrefix(prefix) {
   if (prefix === undefined) return false
   if (!prefix) return true
-  return shellTokens(prefix).every((token) => /^(?:if|then|do|while|until|!|[A-Za-z_][A-Za-z0-9_]*=.*)$/i.test(token))
+  const tokens = shellTokens(prefix)
+  const isAssignment = (token) => /^[A-Za-z_][A-Za-z0-9_]*=.*$/i.test(token)
+  if (tokens[0]?.toLowerCase() === "env") {
+    return tokens.slice(1).every(isAssignment)
+  }
+  return tokens.every((token) => /^(?:if|then|do|while|until|!|[A-Za-z_][A-Za-z0-9_]*=.*)$/i.test(token))
 }
 
 function logicalInvocations(run) {
@@ -181,7 +186,7 @@ function apiMethod(tokens, env) {
     const token = tokens[index]
     if (token === "--method" || token === "-X") explicitMethod = tokens[index + 1]
     else if (/^--method=/i.test(token)) explicitMethod = token.slice(token.indexOf("=") + 1)
-    else if (/^-X=?[A-Za-z]+$/i.test(token)) explicitMethod = token.replace(/^-X=?/i, "")
+    else if (/^-X(?:=)?.+$/i.test(token)) explicitMethod = token.replace(/^-X=?/i, "")
     if (/^(?:-f|-F|--field|--raw-field|--input)$/i.test(token)
       || /^(?:-f|-F|--field|--raw-field|--input)=/i.test(token)
       || /^-[fF].+/i.test(token)) implicitWrite = true
@@ -204,7 +209,7 @@ function canonicalWebTarget(value, env) {
   const candidate = (expanded.includes("=") ? expanded.slice(expanded.indexOf("=") + 1) : expanded)
     .replace(/^(["'])(.*)\1$/, "$2")
   if (repositoryIsWeb(candidate, env) || webApiResource(candidate, env) !== undefined) return true
-  return /^(?:(?:https:\/\/(?:[^\s/"']+@)?github\.com\/)|git@github\.com:)aquilaxk\/aquila-blog-web(?:\.git)?(?:[\/#?]|$)/i.test(candidate)
+  return /^(?:(?:https:\/\/(?:[^\s/"']+@)?github\.com\/)|git@github\.com:|ssh:\/\/git@github\.com\/)aquilaxk\/aquila-blog-web(?:\.git)?(?:[\/#?]|$)/i.test(candidate)
 }
 
 function commandTargetsWeb(tokens, env) {
@@ -260,7 +265,7 @@ function inspectWorkflow(file, contents) {
       }
 
       const run = String(step.run ?? "")
-      const directory = step["working-directory"] ?? jobDirectory
+      const directory = expandScalar(step["working-directory"] ?? jobDirectory, env)
       const foreignDirectory = /^(?:\.\/)?web(?:\/|$)/i.test(String(directory ?? ""))
       const buildOrWrite = /\b(?:yarn|npm|pnpm|bun)\b|import-platform-contracts|contracts:generate|openapi-typescript|\bgit\s+(?:add|checkout|commit|merge|push|reset)\b/i.test(run)
       const cdWeb = /\bcd\s+["']?(?:\.\/)?web["']?(?=[/\s;&|]|$)/i.test(run)

@@ -351,6 +351,50 @@ jobs:
     steps:
       - run: gh api --method "$METHOD" "repos/{owner}/{repo}/issues" -f title=x
 `, "foreign-api-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Compact method scalar API write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+  METHOD: POST
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api -X$METHOD "repos/\${WEB_REPOSITORY}/issues"
+`, "foreign-api-write")
+  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+name: SSH Web Git remote
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: git push ssh://git@github.com/AquilaXk/aquila-blog-web.git HEAD:main
+`, "foreign-git-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Env wrapped Web API write
+on: workflow_dispatch
+env:
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: env FOO=1 gh pr close --repo "$WEB_REPOSITORY" 1
+`, "foreign-pr-write")
+  assertWorkflowRejected("sync-public-contract-to-web", `
+name: Expanded working directory Web build
+on: workflow_dispatch
+env:
+  WEB_DIRECTORY: web
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - working-directory: \${{ env.WEB_DIRECTORY }}
+        run: npm ci
+`, "foreign-workspace-build")
   assertWorkflowRejected("foreign-owner-context-checkout", `
 name: GitHub owner-context foreign checkout
 on: workflow_dispatch

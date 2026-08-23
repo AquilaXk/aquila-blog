@@ -39,6 +39,7 @@ class PostSummaryBackfillService(
     @Transactional
     fun backfillBatch(
         afterId: Long,
+        maxId: Long,
         limit: Int,
         dryRun: Boolean,
     ): BatchResult {
@@ -49,6 +50,7 @@ class PostSummaryBackfillService(
                 SELECT id, title, content, version, published, listed, deleted_at
                 FROM post
                 WHERE id > ?
+                  AND id <= ?
                   AND summary_algorithm_version IS NULL
                 ORDER BY id ASC
                 LIMIT ?
@@ -65,6 +67,7 @@ class PostSummaryBackfillService(
                     )
                 },
                 afterId.coerceAtLeast(0),
+                maxId,
                 safeLimit,
             )
         if (rows.isEmpty()) {

@@ -29,13 +29,13 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 canonical summary backfill을 실행할 수 있다`() {
-        given(postUseCase.backfillSummaries(10, 20, true))
+        given(postUseCase.backfillSummaries(10, 30, 20, true))
             .willReturn(PostUseCase.SummaryBackfillResult(3, 0, 0, 10, true, true))
 
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":10,"limit":20,"dryRun":true}"""
+                content = """{"afterId":10,"maxId":30,"limit":20,"dryRun":true}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.scanned") { value(3) }
@@ -45,21 +45,51 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
 
     @Test
     @WithMockUser(roles = ["ADMIN"])
-    fun `백필 요청 본문이 비면 안전한 기본 checkpoint와 dry-run으로 실행한다`() {
-        given(postUseCase.backfillSummaries(0, 100, true))
+    fun `maxId만 지정한 백필 요청은 안전한 기본 checkpoint와 dry-run을 사용한다`() {
+        given(postUseCase.backfillSummaries(0, 30, 100, true))
             .willReturn(PostUseCase.SummaryBackfillResult(0, 0, 0, 0, false, true))
 
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = "{}"
+                content = """{"maxId":30}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.dryRun") { value(true) }
                 jsonPath("$.nextAfterId") { value(0) }
             }
 
-        then(postUseCase).should().backfillSummaries(0, 100, true)
+        then(postUseCase).should().backfillSummaries(0, 30, 100, true)
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `maxId 없는 백필 요청은 use case 호출 전에 거절한다`() {
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = "{}"
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.resultCode") { value("400-1") }
+            }
+
+        then(postUseCase).shouldHaveNoInteractions()
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `afterId가 maxId보다 큰 백필 요청은 use case 호출 전에 거절한다`() {
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":11,"maxId":10,"limit":20,"dryRun":true}"""
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.resultCode") { value("400-1") }
+            }
+
+        then(postUseCase).shouldHaveNoInteractions()
     }
 
     @Test
@@ -109,7 +139,7 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":0,"limit":20,"dryRun":true}"""
+                content = """{"afterId":0,"maxId":20,"limit":20,"dryRun":true}"""
             }.andExpect {
                 status { isForbidden() }
             }

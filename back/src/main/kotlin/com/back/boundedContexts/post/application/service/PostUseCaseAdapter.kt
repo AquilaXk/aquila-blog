@@ -34,10 +34,11 @@ class PostUseCaseAdapter(
 
     override fun backfillSummaries(
         afterId: Long,
+        maxId: Long,
         limit: Int,
         dryRun: Boolean,
     ): PostUseCase.SummaryBackfillResult =
-        postSummaryBackfillService.backfillBatch(afterId, limit, dryRun).let {
+        postSummaryBackfillService.backfillBatch(afterId, maxId, limit, dryRun).let {
             PostUseCase.SummaryBackfillResult(it.scanned, it.updated, it.skipped, it.nextAfterId, it.hasMore, it.dryRun)
         }
 

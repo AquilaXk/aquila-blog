@@ -40,6 +40,7 @@ interface PostUseCase {
 
     fun backfillSummaries(
         afterId: Long,
+        maxId: Long,
         limit: Int,
         dryRun: Boolean,
     ): SummaryBackfillResult

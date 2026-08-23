@@ -68,6 +68,13 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val summaryMode = propertySchema(openApiNode, "PostModifyRequest", "summaryMode")
         assertTypeSet(summaryMode, "string", "null")
         assertNullableEnum(summaryMode, "AUTO", "MANUAL")
+        val maxId = propertySchema(openApiNode, "PostSummaryBackfillRequest", "maxId")
+        assertThat(maxId.path("type").asText()).isEqualTo("integer")
+        assertThat(maxId.path("format").asText()).isEqualTo("int64")
+        assertThat(maxId.path("minimum").asInt()).isEqualTo(1)
+        val backfillRequestSchema = openApiNode.path("components").path("schemas").path("PostSummaryBackfillRequest")
+        assertThat(backfillRequestSchema.path("required").values().map { it.asText() }).contains("maxId")
+        assertThat(backfillRequestSchema.path("properties").has("checkpointWithinMaxId")).isFalse()
         assertTypeSet(propertySchema(openApiNode, "PostWithContentDto", "contentHtmlHash"), "string", "null")
         val contentHtmlSanitizerPolicyVersion =
             propertySchema(openApiNode, "PostWithContentDto", "contentHtmlSanitizerPolicyVersion")

@@ -115,7 +115,7 @@ modify:
 Backfill 안전성:
 
 - startup runner를 두지 않고 인증된 explicit admin task에서만 실행한다.
-- dry-run, 최대 batch size, 마지막 처리 id checkpoint를 입력으로 받고 다음 checkpoint를 응답한다.
+- dry-run은 `afterId <= maxId` request guard와 `id <= maxId` query guard가 강제된 approved window 안에서만 최대 batch size와 마지막 처리 id checkpoint를 입력으로 받고 다음 checkpoint를 응답한다.
 - skip이 있으면 `nextAfterId`를 첫 skip 행 직전(`firstSkippedId - 1`, 하한은 요청 `afterId`)으로 되돌려 skip된 행이 checkpoint 뒤에 남지 않게 한다. 이때 `hasMore`는 항상 참이다.
 - update는 id/nullable version/content/visibility/deleted 상태/canonical 미설정 조건을 함께 확인하며 concurrent edit나 restore는 skip한다.
 - `modified_at`과 post version은 변경하지 않고 summary/content 원문은 log·event·metric label에 남기지 않는다.
@@ -123,9 +123,9 @@ Backfill 안전성:
 
 Backfill 운영·중단 절차:
 
-1. 작업 시작 전 별도 exact 승인을 받아 `afterId`, approved maximum ID, `limit`, batch ceiling/window와 `dryRun=false` mutation 권한을 고정한다. 현재 endpoint request/query는 approved maximum ID를 강제하지 않으므로, 상한 contract와 candidate eligibility 변화 회귀 검증이 merge되기 전에는 mutation을 금지한다.
-2. 고정된 window 전체에 `dryRun=true`를 먼저 수행하고, 각 응답의 sanitized tuple `{afterId, limit, dryRun, scanned, updated, skipped, nextAfterId, hasMore}`와 최종 checkpoint를 기록한다.
-3. approved maximum ID가 request/query에서 강제된 뒤에만 `afterId < id <= approved maximum ID` 범위에 `dryRun=false`를 배치별로 수행하고, 동일한 fields의 mutation tuple `{afterId, limit, dryRun, scanned, updated, skipped, nextAfterId, hasMore}` 및 생성 task와 CDN invalidation evidence를 기록한다.
+1. 작업 시작 전 별도 exact 승인을 받아 `afterId`, `maxId`, `limit`, batch ceiling/window와 `dryRun=false` mutation 권한을 고정한다. `maxId` request/query guard가 deploy되기 전에는 mutation을 금지한다.
+2. 고정된 window 전체에 `dryRun=true`를 먼저 수행하고, 각 sanitized request/response tuple `{afterId, maxId, limit, dryRun, scanned, updated, skipped, nextAfterId, hasMore}`와 최종 checkpoint를 기록한다.
+3. deployed request/query guard와 별도 exact authority가 모두 확인된 뒤에만 `afterId < id <= maxId` 범위에 `dryRun=false`를 배치별로 수행하고, 동일한 fields의 mutation tuple 및 생성 task와 CDN invalidation evidence를 기록한다.
 4. `skipped`, tuple mismatch, provider/runtime 오류, task 또는 CDN invalidation 실패가 하나라도 발생하면 즉시 중지하고 마지막 확인 checkpoint를 기록한다. 해당 window에서 추가 mutation이나 자동 재시도는 하지 않는다.
 5. 재개에는 기록된 checkpoint와 새 별도 resume authority가 필요하다. DB 직접 조작, shell/script 실행, 수동 deploy 또는 rollback, previous image 사용, dual-read fallback은 이 절차의 대안이 아니며 금지한다.
 

@@ -185,7 +185,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${postId - 1},"limit":1,"dryRun":true}"""
+                content = """{"afterId":${postId - 1},"maxId":$postId,"limit":1,"dryRun":true}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.scanned") { value(1) }
@@ -197,7 +197,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${postId - 1},"limit":1,"dryRun":false}"""
+                content = """{"afterId":${postId - 1},"maxId":$postId,"limit":1,"dryRun":false}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.scanned") { value(1) }
@@ -272,7 +272,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${firstId - 1},"limit":1,"dryRun":true}"""
+                content = """{"afterId":${firstId - 1},"maxId":$secondId,"limit":1,"dryRun":true}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.scanned") { value(1) }
@@ -286,7 +286,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":$firstId,"limit":1,"dryRun":true}"""
+                content = """{"afterId":$firstId,"maxId":$secondId,"limit":1,"dryRun":true}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.scanned") { value(1) }
@@ -300,7 +300,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":$secondId,"limit":1,"dryRun":true}"""
+                content = """{"afterId":$secondId,"maxId":$secondId,"limit":1,"dryRun":true}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.scanned") { value(0) }
@@ -328,6 +328,141 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 secondId,
             )
         assertThat(unchangedSummaryRows).isEqualTo(2L)
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `dry run approved maximum prevents a newly eligible higher post from mutation`() {
+        val fixture = resolvedFixture("idempotent-backfill-api", "backfill")
+        val firstCreated =
+            mvc
+                .post("/post/api/v1/posts") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = postPayload(fixture)
+                }.andReturn()
+                .response.contentAsString
+        val firstId = JsonPath.read<Int>(firstCreated, "$.data.id").toLong()
+        val secondCreated =
+            mvc
+                .post("/post/api/v1/posts") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = postPayload(fixture)
+                }.andReturn()
+                .response.contentAsString
+        val secondId = JsonPath.read<Int>(secondCreated, "$.data.id").toLong()
+        assertThat(secondId).isGreaterThan(firstId)
+
+        val firstCanonical =
+            jdbcTemplate.queryForMap(
+                """
+                SELECT summary_text, summary_source, summary_content_hash,
+                       summary_algorithm_version, summary_generated_at
+                FROM post
+                WHERE id = ?
+                """.trimIndent(),
+                firstId,
+            )
+        jdbcTemplate.update(
+            """
+            UPDATE post
+            SET summary_text = NULL,
+                summary_source = 'NONE',
+                summary_content_hash = NULL,
+                summary_algorithm_version = NULL,
+                summary_generated_at = NULL
+            WHERE id = ?
+            """.trimIndent(),
+            firstId,
+        )
+        entityManager.clear()
+
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":${firstId - 1},"maxId":$firstId,"limit":2,"dryRun":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.scanned") { value(1) }
+                jsonPath("$.updated") { value(0) }
+                jsonPath("$.skipped") { value(0) }
+                jsonPath("$.nextAfterId") { value(firstId) }
+                jsonPath("$.hasMore") { value(false) }
+                jsonPath("$.dryRun") { value(true) }
+            }
+
+        jdbcTemplate.update(
+            """
+            UPDATE post
+            SET summary_text = ?,
+                summary_source = ?,
+                summary_content_hash = ?,
+                summary_algorithm_version = ?,
+                summary_generated_at = ?
+            WHERE id = ?
+            """.trimIndent(),
+            firstCanonical["summary_text"],
+            firstCanonical["summary_source"],
+            firstCanonical["summary_content_hash"],
+            firstCanonical["summary_algorithm_version"],
+            firstCanonical["summary_generated_at"],
+            firstId,
+        )
+        jdbcTemplate.update(
+            """
+            UPDATE post
+            SET summary_text = NULL,
+                summary_source = 'NONE',
+                summary_content_hash = NULL,
+                summary_algorithm_version = NULL,
+                summary_generated_at = NULL
+            WHERE id = ?
+            """.trimIndent(),
+            secondId,
+        )
+        entityManager.clear()
+
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":${firstId - 1},"maxId":$firstId,"limit":2,"dryRun":false}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.scanned") { value(0) }
+                jsonPath("$.updated") { value(0) }
+                jsonPath("$.skipped") { value(0) }
+                jsonPath("$.nextAfterId") { value(firstId - 1) }
+                jsonPath("$.hasMore") { value(false) }
+                jsonPath("$.dryRun") { value(false) }
+            }
+
+        val preservedFirstCanonical =
+            jdbcTemplate.queryForMap(
+                """
+                SELECT summary_text, summary_source, summary_content_hash,
+                       summary_algorithm_version, summary_generated_at
+                FROM post
+                WHERE id = ?
+                """.trimIndent(),
+                firstId,
+            )
+        assertThat(preservedFirstCanonical).isEqualTo(firstCanonical)
+
+        val unchangedSecondSummary =
+            jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM post
+                WHERE id = ?
+                  AND summary_text IS NULL
+                  AND summary_source = 'NONE'
+                  AND summary_content_hash IS NULL
+                  AND summary_algorithm_version IS NULL
+                  AND summary_generated_at IS NULL
+                """.trimIndent(),
+                Long::class.java,
+                secondId,
+            )
+        assertThat(unchangedSecondSummary).isEqualTo(1L)
     }
 
     @Test
@@ -365,7 +500,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${postId - 1},"limit":1,"dryRun":false}"""
+                content = """{"afterId":${postId - 1},"maxId":$postId,"limit":1,"dryRun":false}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.updated") { value(1) }
@@ -466,7 +601,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":$maxPostId,"limit":10,"dryRun":false}"""
+                content = """{"afterId":$maxPostId,"maxId":$maxPostId,"limit":10,"dryRun":false}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.scanned") { value(0) }

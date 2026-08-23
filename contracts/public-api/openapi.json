@@ -4992,6 +4992,11 @@
             "format": "int64",
             "minimum": 0
           },
+          "maxId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
           "limit": {
             "type": "integer",
             "format": "int32",
@@ -5001,7 +5006,10 @@
           "dryRun": {
             "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "maxId"
+        ]
       },
       "PostSummaryBackfillResponse": {
         "type": "object",

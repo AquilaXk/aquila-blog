@@ -439,6 +439,7 @@
         "x": 0,
         "y": 28
       },
+      "description": "1=warm HIT match; 0=mismatch; no data=missing",
       "id": 8,
       "options": {
         "legend": {
@@ -456,13 +457,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "min by (route) (aquila_public_edge_probe_cache_state_observed)",
-          "legendFormat": "{{route}}",
+          "expr": "min by (route_class, expected_state, observed_state) (aquila_public_edge_probe_cache_state_match)",
+          "legendFormat": "{{route_class}} | expected {{expected_state}} | observed {{observed_state}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Cache State Header Observed",
+      "title": "Warm Cache State Contract",
       "type": "timeseries"
     }
   ],

@@ -13,8 +13,13 @@ class KakaoOidcConfigurationContractTest {
                 .load("application.yaml", ClassPathResource("application.yaml"))
                 .single()
 
-        assertThat(properties.getProperty("spring.security.oauth2.client.registration.kakao.scope"))
-            .isEqualTo("openid, profile_nickname, profile_image")
+        assertThat(properties.getProperty("spring.security.oauth2.client.registration.kakao.client-id"))
+            .isEqualTo("\${SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID:}")
+        assertThat(
+            (properties.getProperty("spring.security.oauth2.client.registration.kakao.scope") as String)
+                .split(",")
+                .map(String::trim),
+        ).containsExactlyInAnyOrder("openid", "profile_nickname", "profile_image")
         assertThat(properties.getProperty("spring.security.oauth2.client.registration.kakao.authorization-grant-type"))
             .isEqualTo("authorization_code")
         assertThat(properties.getProperty("spring.security.oauth2.client.registration.kakao.redirect-uri"))

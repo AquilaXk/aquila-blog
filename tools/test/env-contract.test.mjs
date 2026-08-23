@@ -325,6 +325,24 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
+test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 전에 거부한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.required, true, "Kakao client-id must be required at the HOME_SERVER_ENV source")
+
+  for (const [name, text] of [
+    ["missing", baseHomeServerEnv],
+    ["blank", `${baseHomeServerEnv}\n${key}=`],
+  ]) {
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+    assert.equal(result.ok, false, `${name} Kakao client-id must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key && error.message === "is required"), JSON.stringify(result.errors))
+  }
+})
+
 test("home-server-source cursor keyring rejects unsafe rotation states without exposing key material", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const contract = loadContract(contractPath)

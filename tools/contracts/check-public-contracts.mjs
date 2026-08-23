@@ -29,6 +29,7 @@ const trackedResult = spawnSync(
     "--",
     "contracts/public-api/openapi.json",
     "contracts/public-api/error-codes.json",
+    "contracts/public-api/summary-fixtures.json",
     "contracts/public-api/manifest.json",
   ],
   { cwd: root, stdio: "inherit" },

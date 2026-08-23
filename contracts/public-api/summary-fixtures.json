@@ -1,0 +1,225 @@
+{
+  "version": 1,
+  "contract": "aquila-canonical-summary-fixtures",
+  "fixtures": [
+    {
+      "id": "manual-create",
+      "resolve": "create",
+      "title": "수동 요약 글",
+      "content": "본문의 자동 후보 문장입니다.",
+      "request": {
+        "summaryMode": "MANUAL",
+        "summary": "작성자가 확정한 수동 요약"
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "작성자가 확정한 수동 요약",
+        "source": "MANUAL",
+        "algorithmVersion": "manual-v1"
+      }
+    },
+    {
+      "id": "leading-block",
+      "resolve": "create",
+      "title": "OAuth",
+      "content": "> **요약:** OAuth 2.0은 권한 위임을 위한 프레임워크입니다.\n> OIDC는 그 위에 인증 계층을 추가합니다.\n\n안녕하세요. 긴 도입부입니다.",
+      "request": {
+        "summaryMode": null,
+        "summary": null
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "OAuth 2.0은 권한 위임을 위한 프레임워크입니다. OIDC는 그 위에 인증 계층을 추가합니다.",
+        "source": "LEADING_BLOCK",
+        "algorithmVersion": "deterministic-v1"
+      }
+    },
+    {
+      "id": "extracted-with-exclusions",
+      "resolve": "create",
+      "title": "자동 요약",
+      "content": "# 자동 요약\n\n````kotlin\n```text\nraw code\n```\n````\n\n![diagram](https://example.com/diagram.png)\n\n| 항목 | 값 |\n| --- | --- |\n| cache | enabled |\n\n첫 번째 핵심 문장입니다. 두 번째 핵심 문장입니다. 세 번째 문장은 포함하지 않습니다.",
+      "request": {
+        "summaryMode": null,
+        "summary": null
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "첫 번째 핵심 문장입니다. 두 번째 핵심 문장입니다.",
+        "source": "EXTRACTED",
+        "algorithmVersion": "deterministic-v1"
+      }
+    },
+    {
+      "id": "none-no-fallback",
+      "resolve": "create",
+      "title": "제목",
+      "content": "~~~kotlin\nprintln(\"secret\")\n~~~\n\n![only image](https://example.com/image.png)\n\n<details><summary>접기</summary>내부</details>",
+      "request": {
+        "summaryMode": null,
+        "summary": null
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "",
+        "source": "NONE",
+        "algorithmVersion": "deterministic-v1"
+      }
+    },
+    {
+      "id": "migrated-frontmatter",
+      "resolve": "backfill",
+      "title": "JWT",
+      "content": "---\r\nsummary: \"Cache-Control과 \\\"aud\\\" 클레임을 설명합니다.\"\r\n---\r\n본문입니다.",
+      "request": {
+        "summaryMode": null,
+        "summary": null
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "Cache-Control과 \"aud\" 클레임을 설명합니다.",
+        "source": "MIGRATED",
+        "algorithmVersion": "legacy-frontmatter-v1"
+      }
+    },
+    {
+      "id": "manual-preserve-seed",
+      "resolve": "create",
+      "title": "수정 요약 글",
+      "content": "기존 본문입니다.",
+      "request": {
+        "summaryMode": "MANUAL",
+        "summary": "유지할 수동 요약"
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "유지할 수동 요약",
+        "source": "MANUAL",
+        "algorithmVersion": "manual-v1"
+      }
+    },
+    {
+      "id": "manual-preserve-omitted",
+      "resolve": "modify",
+      "title": "수정 요약 글",
+      "content": "새 본문의 첫 핵심 문장입니다. 두 번째 문장입니다.",
+      "request": {
+        "summaryMode": null,
+        "summary": null
+      },
+      "existing": {
+        "summary": "유지할 수동 요약",
+        "source": "MANUAL"
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "유지할 수동 요약",
+        "source": "MANUAL",
+        "algorithmVersion": "manual-v1"
+      }
+    },
+    {
+      "id": "blank-recompute",
+      "resolve": "modify",
+      "title": "수정 요약 글",
+      "content": "새 본문의 첫 핵심 문장입니다. 두 번째 문장입니다.",
+      "request": {
+        "summaryMode": null,
+        "summary": "   "
+      },
+      "existing": {
+        "summary": "유지할 수동 요약",
+        "source": "MANUAL"
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "새 본문의 첫 핵심 문장입니다. 두 번째 문장입니다.",
+        "source": "EXTRACTED",
+        "algorithmVersion": "deterministic-v1"
+      }
+    },
+    {
+      "id": "manual-blank-rejection",
+      "resolve": "create",
+      "title": "빈 수동 요약",
+      "content": "본문입니다.",
+      "request": {
+        "summaryMode": "MANUAL",
+        "summary": "   "
+      },
+      "outcome": "MANUAL_SUMMARY_REQUIRED"
+    },
+    {
+      "id": "auto-recompute",
+      "resolve": "modify",
+      "title": "mode 전환 글",
+      "content": "자동으로 다시 계산할 핵심 문장입니다. 두 번째 문장입니다.",
+      "request": {
+        "summaryMode": "AUTO",
+        "summary": null
+      },
+      "existing": {
+        "summary": "기존 수동 요약",
+        "source": "MANUAL"
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "자동으로 다시 계산할 핵심 문장입니다. 두 번째 문장입니다.",
+        "source": "EXTRACTED",
+        "algorithmVersion": "deterministic-v1"
+      }
+    },
+    {
+      "id": "unicode-grapheme",
+      "resolve": "create",
+      "title": "제목",
+      "content": "👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻 긴 기술 설명 문장입니다.",
+      "request": {
+        "summaryMode": null,
+        "summary": null
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻👩‍💻…",
+        "source": "EXTRACTED",
+        "algorithmVersion": "deterministic-v1"
+      }
+    },
+    {
+      "id": "idempotent-first-write",
+      "resolve": "create",
+      "title": "멱등 요약",
+      "content": "첫 본문입니다.",
+      "request": {
+        "summaryMode": "MANUAL",
+        "summary": "최초 요약"
+      },
+      "retry": {
+        "summaryMode": "MANUAL",
+        "summary": "바뀌면 안 되는 요약"
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "최초 요약",
+        "source": "MANUAL",
+        "algorithmVersion": "manual-v1"
+      }
+    },
+    {
+      "id": "idempotent-backfill-api",
+      "resolve": "backfill",
+      "title": "이전 글",
+      "content": "---\nsummary: \"이전 frontmatter 요약\"\n---\n본문입니다.",
+      "request": {
+        "summaryMode": null,
+        "summary": null
+      },
+      "outcome": "RESOLVED",
+      "expected": {
+        "summary": "이전 frontmatter 요약",
+        "source": "MIGRATED",
+        "algorithmVersion": "legacy-frontmatter-v1"
+      }
+    }
+  ]
+}

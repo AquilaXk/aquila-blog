@@ -2,7 +2,7 @@ import http from "k6/http";
 import { check } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
 
-const BASE_URL = __ENV.BASE_URL || "https://api.blog.aquilaxk.site";
+const BASE_URL = __ENV.BASE_URL || "https://blog.aquilaxk.site";
 
 const feedDuration = new Trend("post_feed_duration_ms");
 const exploreDuration = new Trend("post_explore_duration_ms");

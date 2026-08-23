@@ -111,3 +111,28 @@ test("checker rejects untracked and changed canonical contract artifacts", () =>
     fs.rmSync(root, { recursive: true, force: true })
   }
 })
+
+test("canonical OpenAPI and active k6 defaults use the current same-origin host", () => {
+  const retiredHost = "https://api.blog.aquilaxk.site"
+  const currentHost = "https://blog.aquilaxk.site"
+  const openApi = JSON.parse(fs.readFileSync(path.join(repoRoot, "contracts/public-api/openapi.json"), "utf8"))
+  const activeK6Surfaces = [
+    "perf/k6/post-read-load.js",
+    "perf/k6/post-read-chaos-smoke.js",
+    "perf/k6/run-chaos-suite.sh",
+    "perf/k6/cloud-playback-load.js",
+    "perf/k6/cloud-upload-parts-load.js",
+    "perf/k6/cloud-upload-5gb-measure.sh",
+    "perf/k6/examples/cloud-playback.example.json",
+    "perf/k6/README.md",
+  ]
+
+  assert.equal(openApi.servers[0].url, currentHost)
+  assert.equal(JSON.stringify(openApi).includes(retiredHost), false)
+
+  for (const surface of activeK6Surfaces) {
+    const contents = fs.readFileSync(path.join(repoRoot, surface), "utf8")
+    assert.equal(contents.includes(retiredHost), false, surface)
+    assert.equal(contents.includes(currentHost), true, surface)
+  }
+})

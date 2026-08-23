@@ -135,6 +135,13 @@ upstream은 peer 주소를 받고, 같은 위조를 공개 호스트로 보내�
 `CUSTOM_PROD_BACKURL`을 바꾸는 순간 애플리케이션은 새 URI를 보낸다. 콘솔 등록을 확인하기 전에는
 아래 전환 순서 3단계를 시작하지 않는다.
 
+### Kakao OIDC current-state checklist (#1547)
+
+- 오너는 Kakao 콘솔에서 OpenID Connect 사용 상태와 `openid`, `profile_nickname`, `profile_image` 동의 항목을 확인하고, callback이 정확히 `https://blog.aquilaxk.site/login/oauth2/code/kakao`인지 확인한다.
+- `HOME_SERVER_ENV`의 `SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID`는 required nonblank 계약으로만 검증한다. 값은 저장소·로그·이슈·PR에 기록하지 않는다.
+- #1547 close 전에는 OIDC ON, exact callback, real login 성공을 각각 별도 sanitized evidence로 남긴다. 각 evidence에는 timestamp와 credential이 아닌 app identifier만 남기고, client_id·state·code·token·cookie는 남기지 않는다.
+- 공개 discovery 응답이나 `/oauth2/authorization/kakao`의 302은 콘솔 설정이나 callback에서 실제로 완료되는 로그인을 증명하지 않으며 close evidence를 대체하지 않는다. 위 세 evidence 전에는 #1547을 닫지 않는다.
+
 ### 2. front 이미지 산출물 게이트
 
 `NEXT_PUBLIC_*`는 **빌드 시점에 번들로 인라인**된다. `ENV`는 builder 스테이지를 넘지 않아
@@ -475,21 +482,24 @@ curl -sSI https://blog.aquilaxk.site/actuator/health/readiness \
   fi
 ) || exit $?
 
-# OAuth 시작 URL이 같은 호스트로 나가는지 (redirect_uri 파라미터 확인)
-curl -sSI https://blog.aquilaxk.site/oauth2/authorization/kakao | grep -i '^location'
-
 # 로그인 왕복: Set-Cookie 스코프를 **실제 로그인 응답에서** 본다. 아래처럼 미인증 GET을 찔러
 # 보는 것으로는 Set-Cookie 자체가 안 나와 `|| true`로 조용히 통과한다 - 검사가 아니라 소음이다.
 # 브라우저로 카카오 로그인을 완료한 뒤 DevTools > Network에서 콜백 응답의 Set-Cookie를 읽거나,
 # 아래처럼 관리자 로그인 왕복으로 받는다.
 # 비밀번호를 명령행 인자로 넘기지 않는다: 셸 history와 프로세스 목록에 그대로 남는다.
 # read -s로 받아 stdin으로만 전달하고, 끝나면 변수를 지운다.
+# raw Set-Cookie 출력은 0이어야 한다. 첫 `;` 앞의 cookie 값만 `<redacted>`로 바꾸고
+# Domain/Path/SameSite/Secure/HttpOnly 속성만 확인한다.
 read -rp 'admin email: ' ADMIN_EMAIL
 read -rsp 'admin password: ' ADMIN_PASSWORD; echo
-printf '{"email":"%s","password":"%s"}' "${ADMIN_EMAIL}" "${ADMIN_PASSWORD}" \
-  | curl -sS -i -X POST https://blog.aquilaxk.site/member/api/v1/auth/login \
-      -H 'Content-Type: application/json' --data-binary @- \
-  | grep -i '^set-cookie' \
+(
+  set -o pipefail
+  printf '{"email":"%s","password":"%s"}' "${ADMIN_EMAIL}" "${ADMIN_PASSWORD}" \
+    | curl -sS -i -X POST https://blog.aquilaxk.site/member/api/v1/auth/login \
+        -H 'Content-Type: application/json' --data-binary @- \
+    | grep -i '^set-cookie' \
+    | sed -E 's/^([^:]+:[^=]+=)[^;]*/\1<redacted>/'
+) \
   || { echo "FAIL: no Set-Cookie in the login response"; false; }
 unset ADMIN_PASSWORD ADMIN_EMAIL
 # 판정: Domain 속성이 없거나 Domain=blog.aquilaxk.site 여야 한다.

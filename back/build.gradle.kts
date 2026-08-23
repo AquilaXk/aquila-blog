@@ -27,7 +27,7 @@ extra["tomcat.version"] = "11.0.24"
 extra["netty.version"] = "4.2.16.Final"
 extra["postgresql.version"] = "42.7.13"
 
-val awsSdkVersion = "2.53.3"
+val awsSdkVersion = "2.54.0"
 val testcontainersVersion = "1.21.4"
 
 java {

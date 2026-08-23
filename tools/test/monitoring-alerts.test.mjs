@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
 
@@ -12,6 +11,7 @@ const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const alertmanagerPath = path.join(repoRoot, "deploy/homeserver/monitoring/alertmanager.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
+const publicEdgeDashboardPath = path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-public-edge.json")
 
 const read = (filePath) => readFileSync(filePath, "utf8")
 
@@ -320,24 +320,17 @@ test("autoheal and its docker socket proxy stay under continuous restart observa
   }
 })
 
-// The activation gate is what keeps this alert silent through the domain transition window, where
-// deploy.yml deliberately points the probe at the host the previous platform still serves. PromQL
-// binds `and` tighter than `or`, so dropping the parentheses around the `or` branch lets the
-// `min < 1` side escape the gate entirely - measured: the alert then fires on a transition-window
-// series. Substring assertions do not see either mutation, so this pins the whole shape.
-//
-// This runs with no external tooling, which makes it the gate that is always in effect. The
-// promtool tests below are the semantic superset.
-test("cache-state alert keeps its activation gate structure", () => {
-  const expr = alertExpr(read(taskAlertsPath), CACHE_STATE_ALERT)
+test("cache-state alert uses the non-decaying home HIT contract", () => {
+  const alerts = read(taskAlertsPath)
+  const expr = alertExpr(alerts, CACHE_STATE_ALERT)
 
   assert.equal(
     collapseWhitespace(expr.text),
-    '( min(aquila_public_edge_probe_cache_state_observed{route="/"}) < 1' +
-      ' or absent(aquila_public_edge_probe_cache_state_observed{route="/"}) )' +
-      " and on()" +
-      ' (max(max_over_time(aquila_public_edge_probe_cache_state_observed{route="/"}[24h])) > 0)',
+    '( min by (route_class, expected_state, observed_state)' +
+      ' ( aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT"} ) < 1' +
+      ' or absent(aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT"}) )',
   )
+  assert.match(alerts.slice(expr.end), /^\n\s{8}for: 30m(?:\n|$)/)
 
   // The promtool cases are skipped where promtool is absent, so nothing else notices if the file
   // is deleted or unhooked from the rules it is supposed to cover.
@@ -346,21 +339,30 @@ test("cache-state alert keeps its activation gate structure", () => {
   assert.match(promtoolTest, new RegExp(`alertname: ${CACHE_STATE_ALERT}`))
 })
 
-// The decay note next to the alert states that front-render-gate has no automated caller and that
-// wiring it belongs to #1602. That sentence was wrong once already - it claimed the gate ran on
-// every front deploy when nothing invoked it. This pins the claim to the tree: wiring a caller
-// makes the sentence false, and this test fails until the comment is corrected.
-test("the cache-state decay note matches how front-render-gate is actually invoked", () => {
-  const alerts = read(taskAlertsPath)
-  const workflow = read(workflowPath)
+const invokesFrontRenderGate = (source) =>
+  source
+    .split("\n")
+    .some((line) => /^\s*(?:(?:-\s*)?run:\s*)?node\s+deploy\/homeserver\/front-render-gate\.mjs(?:\s|$)/.test(line))
 
-  const gateIsWired = workflow.includes("front-render-gate")
+test("front-render audit only recognizes an executable node invocation", () => {
+  assert.equal(invokesFrontRenderGate("# node deploy/homeserver/front-render-gate.mjs"), false)
+  assert.equal(invokesFrontRenderGate("node deploy/homeserver/front-render-gate.mjs --check"), true)
+  assert.equal(invokesFrontRenderGate("run: node deploy/homeserver/front-render-gate.mjs --check"), true)
+  assert.equal(invokesFrontRenderGate(read(workflowPath)), false)
+})
+
+test("public-edge dashboard renders the bounded warm cache state contract without a zero fallback", () => {
+  const dashboard = JSON.parse(read(publicEdgeDashboardPath))
+  const panel = dashboard.panels.find(({ title }) => title === "Warm Cache State Contract")
+
+  assert(panel, "Warm Cache State Contract panel is missing")
   assert.equal(
-    gateIsWired,
-    false,
-    "deploy.yml now invokes front-render-gate: update the decay note in task-alerts.yml, which states it has no automated caller",
+    panel.targets[0].expr,
+    "min by (route_class, expected_state, observed_state) (aquila_public_edge_probe_cache_state_match)",
   )
-  assert.match(alerts, /#1602/, "the decay note must point at the issue that owns the real fix")
+  assert.equal(panel.targets[0].legendFormat, "{{route_class}} | expected {{expected_state}} | observed {{observed_state}}")
+  assert.equal(panel.description, "1=warm HIT match; 0=mismatch; no data=missing")
+  assert.doesNotMatch(panel.targets[0].expr, /\bvector\s*\(\s*0\s*\)/)
 })
 
 // One malformed expr makes Prometheus reject the whole file, and all 45 alerts in it go silent
@@ -379,68 +381,5 @@ test(
     const result = runPromtoolTest(promtoolTestPath)
 
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
-  },
-)
-
-// Mutation coverage: proves the promtool cases above actually discriminate. Without this, the unit
-// tests could be passing for a reason unrelated to the gate.
-test(
-  "promtool unit tests reject a broken activation gate",
-  { skip: promtoolAvailable() ? false : "promtool is not installed" },
-  () => {
-    const alerts = read(taskAlertsPath)
-    const expr = alertExpr(alerts, CACHE_STATE_ALERT)
-    const shipped = expr.text
-
-    const withoutParentheses = shipped
-      .replace(/^(\n[ \t]*)\(\n[ \t]*/, "$1")
-      .replace(/\n[ \t]*\)\n([ \t]*)and on\(\)/, "\n$1and on()")
-    const withOrJoin = shipped.replace("and on()", "or on()")
-
-    assert.notEqual(withoutParentheses, shipped, "parenthesis mutation did not change the expr")
-    assert.notEqual(withOrJoin, shipped, "join mutation did not change the expr")
-
-    const workdir = mkdtempSync(path.join(tmpdir(), "task-alerts-mutation-"))
-    try {
-      for (const [name, mutatedExpr] of [
-        ["unparenthesized or branch", withoutParentheses],
-        ["or join instead of and join", withOrJoin],
-      ]) {
-        const rulesPath = path.join(workdir, "rules.yml")
-        const testPath = path.join(workdir, "test.yml")
-        writeFileSync(rulesPath, alerts.slice(0, expr.start) + "expr: |" + mutatedExpr + alerts.slice(expr.end))
-        writeFileSync(
-          testPath,
-          [
-            "rule_files:",
-            "  - rules.yml",
-            "evaluation_interval: 1m",
-            "tests:",
-            "  - name: transition window must stay silent",
-            "    interval: 5m",
-            "    input_series:",
-            `      - series: 'aquila_public_edge_probe_cache_state_observed{route="/",request_index="1"}'`,
-            '        values: "0+0x300"',
-            "    alert_rule_test:",
-            "      - eval_time: 3h",
-            `        alertname: ${CACHE_STATE_ALERT}`,
-            "        exp_alerts: []",
-            "",
-          ].join("\n"),
-        )
-
-        const syntax = spawnSync("promtool", ["check", "rules", rulesPath], { encoding: "utf8" })
-        assert.equal(
-          syntax.status,
-          0,
-          `mutation "${name}" must remain syntactically valid:\n${syntax.stdout}\n${syntax.stderr}`,
-        )
-
-        const result = runPromtoolTest(testPath)
-        assert.notEqual(result.status, 0, `mutation "${name}" was not caught:\n${result.stdout}\n${result.stderr}`)
-      }
-    } finally {
-      rmSync(workdir, { recursive: true, force: true })
-    }
   },
 )

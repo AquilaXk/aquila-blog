@@ -14,44 +14,44 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
-  # 전환 창: deploy.yml이 PUBLIC_EDGE_PROBE_BASE_URL을 이전 플랫폼이 서빙하는 호스트로 핀해 둔
-  # 구간이다. 그 호스트는 x-nextjs-cache를 내지 않으므로 관측값이 계속 0이지만, 홈서버에는
-  # 아무 문제가 없다. 여기서 발화하면 활성화 게이트가 깨진 것이다.
-  - name: cache state never observed (transition window) must not alert
+  - name: home warm cache HIT match must not alert
     interval: 5m
     input_series:
-      - series: 'aquila_public_edge_probe_cache_state_observed{route="/",request_index="1"}'
-        values: "0+0x300"
+      - series: 'aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT",observed_state="HIT"}'
+        values: "1+0x400"
     alert_rule_test:
-      - eval_time: 3h
+      - eval_time: 35m
         alertname: AquilaPublicEdgeCacheStateUnobserved
         exp_alerts: []
 
-  # 전환 후 정상 동작하던 관측이 끊긴 경우. 이것이 알람의 존재 이유다.
-  - name: cache state observed then lost must alert
+  - name: home warm cache MISS mismatch must alert persistently
     interval: 5m
     input_series:
-      - series: 'aquila_public_edge_probe_cache_state_observed{route="/",request_index="1"}'
-        values: "1+0x24 0+0x300"
-    alert_rule_test:
-      - eval_time: 3h
-        alertname: AquilaPublicEdgeCacheStateUnobserved
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-            exp_annotations:
-              summary: "Public edge cache state is no longer observable"
-              description: "The home route reported the Next.js ISR cache-state header within the last 24h but has stopped for 30m. Cache observability is dead until this is fixed. Check the front container, the Caddy web vhost header handling, and the probe route set."
-
-  # 활성화 게이트의 알려진 한계를 계약으로 고정한다. 24h를 넘겨 계속 미관측이면 알람이 스스로
-  # 해제된다 - 장애가 사라져서가 아니라 게이트가 풀려서다. 이 동작이 바뀌면(예: 윈도우 연장,
-  # 게이트 제거) 이 테스트가 먼저 깨져서 결정이 드러난다. 대응은 task-alerts.yml 주석 참조.
-  - name: gate decays after 24h of continuous non-observation
-    interval: 5m
-    input_series:
-      - series: 'aquila_public_edge_probe_cache_state_observed{route="/",request_index="1"}'
-        values: "1+0x24 0+0x400"
+      - series: 'aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT",observed_state="MISS"}'
+        values: "0+0x400"
     alert_rule_test:
       - eval_time: 27h
         alertname: AquilaPublicEdgeCacheStateUnobserved
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              expected_state: HIT
+              observed_state: MISS
+              route_class: home
+              severity: warning
+            exp_annotations:
+              summary: "Public edge cache state is no longer observable"
+              description: "The home route's warm cache state has mismatched HIT for 30m or is missing. Check the front container, the Caddy web vhost header handling, and the probe route set."
+
+  - name: home warm cache state absent must alert
+    interval: 5m
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: AquilaPublicEdgeCacheStateUnobserved
+        exp_alerts:
+          - exp_labels:
+              expected_state: HIT
+              route_class: home
+              severity: warning
+            exp_annotations:
+              summary: "Public edge cache state is no longer observable"
+              description: "The home route's warm cache state has mismatched HIT for 30m or is missing. Check the front container, the Caddy web vhost header handling, and the probe route set."

@@ -333,6 +333,7 @@ test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 
   const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
 
   assert.equal(definition?.required, true, "Kakao client-id must be required at the HOME_SERVER_ENV source")
+  assert.equal(definition?.secret, true, "Kakao client-id must be marked secret so diagnostics cannot disclose it")
 
   for (const [name, text] of [
     ["missing", baseHomeServerEnv.replace(new RegExp(`^${key}=.*\\n`, "m"), "")],

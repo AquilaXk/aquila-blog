@@ -95,19 +95,6 @@ main() {
   echo "[POST_PRECHECK_ENV] checkpoint=after_minio_service_identity_guard"
   echo "[POST_PRECHECK_ENV] checkpoint=after_pgroonga_precheck"
 
-  enabled_value="$(trim_quotes "$(env_value "CUSTOM__AI__SUMMARY__ENABLED")")"
-  enabled_value="$(printf '%s' "${enabled_value}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-  api_key_value="$(env_value "CUSTOM__AI__SUMMARY__GEMINI__API_KEY")"
-  if [[ -n "${api_key_value}" ]]; then
-    api_key_present="true"
-  fi
-
-  echo "[POST_PRECHECK_ENV] ai_summary_guard enabled=${enabled_value:-false} api_key_present=${api_key_present}"
-  if [[ "${enabled_value}" == "true" && -z "${api_key_value}" ]]; then
-    post_precheck_env_fail "ai_summary_missing_api_key" "CUSTOM__AI__SUMMARY__ENABLED=true but CUSTOM__AI__SUMMARY__GEMINI__API_KEY is empty"
-  fi
-
-  echo "[POST_PRECHECK_ENV] checkpoint=after_ai_summary_guard"
   echo "[POST_PRECHECK_ENV] checkpoint=staged_back_image_validated image=${staged_back_image}"
   echo "[POST_PRECHECK_ENV] passed"
 }

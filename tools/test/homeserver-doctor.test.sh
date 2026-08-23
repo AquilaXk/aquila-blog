@@ -104,7 +104,7 @@ run_probe_snippet() {
 env_full="${workdir}/env.full"
 env_minimal="${workdir}/env.minimal"
 env_crlf="${workdir}/env.crlf"
-# 운영 .env.prod처럼 optional 키(CUSTOM__AI__SUMMARY__GEMINI__API_KEY)가 없는 상태를 재현한다.
+# 운영 .env.prod처럼 optional 키가 없는 상태를 재현한다.
 {
   printf '%s\n' 'WEB_DOMAIN=web.example.com'
   printf '%s\n' 'ADMIN_EMBED_ORIGINS=https://admin.example.com'
@@ -192,7 +192,7 @@ done
 ENV_FILE="${env_full}"
 
 set +e
-optional_value="$(env_value "CUSTOM__AI__SUMMARY__GEMINI__API_KEY")"
+optional_value="$(env_value "OPTIONAL_ABSENT_KEY")"
 optional_status=$?
 set -e
 if [ "${optional_status}" -ne 0 ]; then
@@ -360,8 +360,7 @@ fi
 # .env.prod는 값에 따옴표를 붙여 적을 수 있다. host 추출과 URL 조립에 쓰는 값을 trim_quotes 없이
 # 읽으면 Host 헤더가 -H 'Host: "api..."'가 되고 public URL도 https://"api..."/...로 조립돼, 라우트는
 # 정상인데 점검만 상시 실패로 보고한다. 실패가 || true에 삼켜져 000/none으로만 보이므로 눈에
-# 띄지도 않는다. Env AI Summary Sanity 값들은 표시와 공백검사에만 쓰여 따옴표가 결과를 바꾸지
-# 않으므로 대상이 아니다.
+# 띄지도 않는다.
 host_url_env_keys="${workdir}/host-url-env-keys.txt"
 {
   printf '%s\n' 'LEGACY_API_DOMAIN'
@@ -429,7 +428,7 @@ trim_quotes_guard_fixture="${workdir}/env-value-trim-quotes.sh"
   printf '%s\n' '#!/usr/bin/env bash'
   printf '%s\n' 'wrapped="$(trim_quotes "$(env_value "WEB_DOMAIN")")"'
   printf '%s\n' 'unwrapped="$(env_value "CUSTOM_PROD_FRONTURL")"'
-  printf '%s\n' 'display_only="$(env_value "CUSTOM__AI__SUMMARY__GEMINI__MODEL")"'
+  printf '%s\n' 'display_only="$(env_value "OPTIONAL_DISPLAY_KEY")"'
 } > "${trim_quotes_guard_fixture}"
 trim_quotes_fixture_raw_keys="${workdir}/fixture-env-raw-keys.txt"
 env_value_keys "${trim_quotes_guard_fixture}" raw > "${trim_quotes_fixture_raw_keys}"

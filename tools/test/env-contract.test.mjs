@@ -412,7 +412,13 @@ test("active product contracts do not retain the unimplemented AI summary seam",
   ]
 
   for (const relativePath of activeProductPaths) {
-    assert.doesNotMatch(readFileSync(path.join(repoRoot, relativePath), "utf8"), /CUSTOM__AI__SUMMARY|gemini/i, relativePath)
+    const source = readFileSync(path.join(repoRoot, relativePath), "utf8")
+    if (relativePath === ".github/workflows/deploy.yml") {
+      assert.equal((source.match(/CUSTOM__AI__SUMMARY__/g) ?? []).length, 1, relativePath)
+      assert.match(source, /sed '\/\^CUSTOM__AI__SUMMARY__\[\^=\]\*=\/d' "\$\{LOCAL_ENV_FILE\}" > "\$\{LOCAL_ENV_FILE\}\.sanitized"/)
+      continue
+    }
+    assert.doesNotMatch(source, /CUSTOM__AI__SUMMARY|gemini/i, relativePath)
   }
 })
 
@@ -2150,7 +2156,6 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
   assert.match(workflow, /printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
   assert.match(workflow, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}" "deploy\/homeserver\/\.env\.prod"/)
-  assert.doesNotMatch(workflow, /CUSTOM__AI__SUMMARY|gemini/i)
   assert.doesNotMatch(workflow, /HOME_NEXT_PUBLIC_/)
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_SIGNUP_ENABLED/)
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_RUM_SAMPLE_RATE/)
@@ -2170,6 +2175,20 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert(workflow.indexOf('rollback_from_backup_if_needed "unexpected_exit_status_${status}"') < workflow.indexOf("EXTERNAL_BACKUP_DIR="))
   assert(workflow.indexOf("run_backup_rollback") < workflow.indexOf("restart_external_backup_legacy_minio_if_needed", workflow.indexOf("run_backup_rollback")))
   assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
+})
+
+test("deploy workflow purges retired AI summary lines from the transport env before scp", () => {
+  const workflow = readFileSync(workflowPath, "utf8")
+  const writeIndex = workflow.indexOf('printf \'%s\\n\' "${HOME_SERVER_ENV}" > "${LOCAL_ENV_FILE}"')
+  const purgeIndex = workflow.indexOf("sed '/^CUSTOM__AI__SUMMARY__[^=]*=/d' \"${LOCAL_ENV_FILE}\" > \"${LOCAL_ENV_FILE}.sanitized\"")
+  const replaceIndex = workflow.indexOf('mv "${LOCAL_ENV_FILE}.sanitized" "${LOCAL_ENV_FILE}"')
+  const scpIndex = workflow.indexOf('"${LOCAL_ENV_FILE}" "${LOCAL_REMOTE_VARS_FILE}"')
+
+  assert(writeIndex > -1, "HOME_SERVER_ENV must first be materialized into the runner temp file")
+  assert(purgeIndex > writeIndex, "retired prefix must be purged after materialization")
+  assert(replaceIndex > purgeIndex, "sanitized temp file must replace the transport source")
+  assert(scpIndex > replaceIndex, "scp must receive the sanitized transport file")
+  assert.equal((workflow.match(/CUSTOM__AI__SUMMARY__/g) ?? []).length, 1)
 })
 
 test("deploy workflow derives the pinned prod site scope from the switch instead of hard-coding it", () => {

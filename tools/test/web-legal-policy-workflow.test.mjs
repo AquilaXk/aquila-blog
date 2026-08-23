@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
@@ -26,6 +27,10 @@ function stepByName(job, name) {
   const step = job.steps.find((candidate) => candidate.name === name)
   assert.ok(step, `missing workflow step: ${name}`)
   return step
+}
+
+function changedOutput(file) {
+  return readFileSync(file, "utf8").trim().split("\n").at(-1)
 }
 
 test("receiver accepts only the exact seven-key Web legal-policy dispatch contract", () => {
@@ -95,6 +100,7 @@ test("write path uses separate least-privilege tokens and one Platform-local dra
   assert.equal(writeToken.with["permission-contents"], "write")
   assert.equal(writeToken.with["permission-pull-requests"], "write")
   assert.match(String(writeToken.if), /changed == 'true'/)
+  assert.match(String(writeToken.if), /existing-pr\.outputs\.exists == 'true'/)
   assert.match(String(writeToken.if), /dispatch_admission == 'proceed'/)
   assert.match(source, /SYNC_BRANCH:\s*chore\/web-legal-policy-sync/)
   const branch = stepByName(job, "Prepare stable Platform sync branch against latest main")
@@ -117,11 +123,79 @@ test("provenance drift and replay cannot silently write", () => {
   const verify = stepByName(job, "Recheck exact current identity before writing")
   assert.match(verify.run, /stale-web-source/)
   assert.match(verify.run, /stale-platform-target/)
-  const changes = stepByName(job, "Detect canonical provenance-only lock drift")
+  const changes = stepByName(job, "Detect canonical legal-policy changes")
   assert.match(changes.run, /sourceRepository|sourceCommit|manifestSha256/)
   const noChange = stepByName(job, "Assert replay does not create a write token")
   assert.match(noChange.run, /write token|commit|push|pull request/i)
   assert.match(String(noChange.if), /changed != 'true'/)
+  assert.match(String(noChange.if), /existing-pr\.outputs\.exists != 'true'/)
+})
+
+test("sourceCommit-only legal provenance drift is a write-free semantic replay", (t) => {
+  const { document } = workflow()
+  const changes = stepByName(document.jobs.receive, "Detect canonical legal-policy changes")
+  const temp = mkdtempSync(path.join(os.tmpdir(), "web-legal-semantic-replay-"))
+  t.after(() => rmSync(temp, { recursive: true, force: true }))
+  const platformLockDirectory = path.join(temp, "platform", "contracts", "web")
+  mkdirSync(platformLockDirectory, { recursive: true })
+  const current = {
+    version: 1,
+    contract: "aquila-public-legal-policies",
+    active: {
+      terms: { version: "1.0.2", contentSha256: "a".repeat(64) },
+      privacy: { version: "1.0.3", contentSha256: "b".repeat(64) },
+      cookies: { version: "1.0.3", contentSha256: "c".repeat(64) },
+    },
+    sourceRepository: "AquilaXk/aquila-blog-web",
+    sourceCommit: "1".repeat(40),
+    manifestSha256: "d".repeat(64),
+  }
+  const candidate = { ...current, sourceCommit: "2".repeat(40) }
+  writeFileSync(path.join(platformLockDirectory, "legal-policy-manifest.lock.json"), `${JSON.stringify(current, null, 2)}\n`)
+  writeFileSync(path.join(temp, "legal-policy-manifest.lock.json"), `${JSON.stringify(candidate, null, 2)}\n`)
+
+  const replayOutput = path.join(temp, "replay.out")
+  const replay = spawnSync("bash", ["-c", changes.run], {
+    encoding: "utf8",
+    env: { ...process.env, RUNNER_TEMP: temp, GITHUB_OUTPUT: replayOutput },
+  })
+  assert.equal(replay.status, 0, replay.stderr)
+  assert.equal(changedOutput(replayOutput), "changed=false")
+
+  writeFileSync(path.join(temp, "legal-policy-manifest.lock.json"), `${JSON.stringify({ ...candidate, manifestSha256: "e".repeat(64) }, null, 2)}\n`)
+  const changedFile = path.join(temp, "changed.out")
+  const semanticChange = spawnSync("bash", ["-c", changes.run], {
+    encoding: "utf8",
+    env: { ...process.env, RUNNER_TEMP: temp, GITHUB_OUTPUT: changedFile },
+  })
+  assert.equal(semanticChange.status, 0, semanticChange.stderr)
+  assert.equal(changedOutput(changedFile), "changed=true")
+})
+
+test("semantic replay closes only one exact obsolete Platform Draft PR", () => {
+  const { document, source } = workflow()
+  const job = document.jobs.receive
+  const discovery = stepByName(job, "Discover exact existing Platform legal-policy Draft PR")
+  assert.equal(discovery.env.GH_TOKEN, "${{ github.token }}")
+  assert.match(discovery.run, /state=open/)
+  assert.match(discovery.run, /head="\$\{GITHUB_REPOSITORY_OWNER\}:\$\{SYNC_BRANCH\}"/)
+  assert.match(discovery.run, /base=main/)
+  assert.match(discovery.run, /prs\.length > 1/)
+  assert.match(discovery.run, /pr\.draft/)
+  assert.match(discovery.run, /pr\.head\?\.repo\?\.full_name !== process\.env\.PLATFORM_REPOSITORY/)
+  assert.match(discovery.run, /exists=false/)
+  assert.match(discovery.run, /exists=true/)
+
+  const freshness = stepByName(job, "Recheck exact current identity before writing")
+  assert.match(String(freshness.if), /existing-pr\.outputs\.exists == 'true'/)
+  const close = stepByName(job, "Close obsolete Platform legal-policy Draft PR")
+  assert.match(String(close.if), /changes\.outputs\.changed != 'true'/)
+  assert.match(String(close.if), /existing-pr\.outputs\.exists == 'true'/)
+  assert.match(String(close.if), /freshness\.outputs\.dispatch_admission == 'proceed'/)
+  assert.match(close.run, /pr\.state === "closed"/)
+  assert.match(close.run, /pr\.head\?\.repo\?\.full_name !== process\.env\.PLATFORM_REPOSITORY/)
+  assert.match(close.run, /gh pr close/)
+  assert.doesNotMatch(source, /git branch -[dD]|git reset|git push[^\n]*(?:--force|--force-with-lease)/)
 })
 
 test("stable branch enforces a committed-range allowlist and rechecks freshness immediately before push", () => {

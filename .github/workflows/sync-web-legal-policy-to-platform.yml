@@ -197,7 +197,7 @@ jobs:
             --source-commit "${SOURCE_COMMIT}"
           node "${platform}/tools/contracts/check-web-policy-lock.mjs" --lock "${candidate}"
 
-      - name: Detect canonical provenance-only lock drift
+      - name: Detect canonical legal-policy changes
         id: changes
         if: steps.admission.outputs.dispatch_admission == 'proceed'
         run: |
@@ -209,20 +209,56 @@ jobs:
             const lock = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
             console.log("candidate identity: " + lock.sourceRepository + "@" + lock.sourceCommit + " manifest=" + lock.manifestSha256);
           ' "${candidate}"
-          if cmp -s "${candidate}" "${platform}/contracts/web/legal-policy-manifest.lock.json"; then
+          if node - "${candidate}" "${platform}/contracts/web/legal-policy-manifest.lock.json" <<'NODE'
+          const fs = require("node:fs")
+          const { isDeepStrictEqual } = require("node:util")
+          const semanticLock = (pathname) => {
+            const { sourceCommit, ...lock } = JSON.parse(fs.readFileSync(pathname, "utf8"))
+            return lock
+          }
+          process.exit(isDeepStrictEqual(semanticLock(process.argv[2]), semanticLock(process.argv[3])) ? 0 : 1)
+          NODE
+          then
             changed=false
           else
             changed=true
           fi
           echo "changed=${changed}" >> "${GITHUB_OUTPUT}"
 
+      - name: Discover exact existing Platform legal-policy Draft PR
+        id: existing-pr
+        if: steps.admission.outputs.dispatch_admission == 'proceed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prs="$(gh api \
+            --method GET \
+            "repos/${PLATFORM_REPOSITORY}/pulls" \
+            -f state=open \
+            -f head="${GITHUB_REPOSITORY_OWNER}:${SYNC_BRANCH}" \
+            -f base=main \
+            -F per_page=2)"
+          PRS="${prs}" node - <<'NODE'
+          const fs = require("node:fs")
+          const prs = JSON.parse(process.env.PRS)
+          if (!Array.isArray(prs) || prs.length > 1) throw new Error("expected at most one generated Platform Draft PR")
+          if (!prs.length) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, "exists=false\npr_number=\n")
+            process.exit(0)
+          }
+          const pr = prs[0]
+          if (!Number.isInteger(pr.number) || pr.number < 1 || pr.state !== "open" || !pr.draft || pr.base?.ref !== "main" || pr.head?.ref !== process.env.SYNC_BRANCH || pr.head?.repo?.full_name !== process.env.PLATFORM_REPOSITORY) throw new Error("generated Platform Draft PR identity is invalid")
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `exists=true\npr_number=${pr.number}\n`)
+          NODE
+
       - name: Assert replay does not create a write token
-        if: steps.admission.outputs.dispatch_admission == 'proceed' && steps.changes.outputs.changed != 'true'
+        if: steps.admission.outputs.dispatch_admission == 'proceed' && steps.changes.outputs.changed != 'true' && steps.existing-pr.outputs.exists != 'true'
         run: echo "::notice::Exact legal-policy replay completed without a write token, commit, push, or pull request"
 
       - name: Create Platform write token
         id: platform-token
-        if: steps.admission.outputs.dispatch_admission == 'proceed' && steps.changes.outputs.changed == 'true'
+        if: steps.admission.outputs.dispatch_admission == 'proceed' && (steps.changes.outputs.changed == 'true' || steps.existing-pr.outputs.exists == 'true')
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.REPO_SYNC_APP_CLIENT_ID }}
@@ -309,7 +345,7 @@ jobs:
 
       - name: Recheck exact current identity before writing
         id: freshness
-        if: steps.branch.outputs.ready == 'true'
+        if: steps.branch.outputs.ready == 'true' || (steps.changes.outputs.changed != 'true' && steps.existing-pr.outputs.exists == 'true')
         env:
           WEB_GH_TOKEN: ${{ steps.web-token.outputs.token }}
           GH_TOKEN: ${{ steps.platform-token.outputs.token }}
@@ -330,6 +366,26 @@ jobs:
           fi
           echo "dispatch_admission=${WRITE_RESULT}" >> "${GITHUB_OUTPUT}"
           echo "write freshness: ${WRITE_REASON}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Close obsolete Platform legal-policy Draft PR
+        id: close-stale-pr
+        if: steps.changes.outputs.changed != 'true' && steps.existing-pr.outputs.exists == 'true' && steps.freshness.outputs.dispatch_admission == 'proceed'
+        env:
+          GH_TOKEN: ${{ steps.platform-token.outputs.token }}
+          PR_NUMBER: ${{ steps.existing-pr.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/${PLATFORM_REPOSITORY}/pulls/${PR_NUMBER}")"
+          should_close="$(PR="${pr}" node - <<'NODE'
+          const pr = JSON.parse(process.env.PR)
+          if (pr.state === "closed") { process.stdout.write("false"); process.exit(0) }
+          if (!Number.isInteger(pr.number) || pr.number < 1 || pr.state !== "open" || !pr.draft || pr.base?.ref !== "main" || pr.head?.ref !== process.env.SYNC_BRANCH || pr.head?.repo?.full_name !== process.env.PLATFORM_REPOSITORY) throw new Error("obsolete Platform Draft PR identity is invalid")
+          process.stdout.write("true")
+          NODE
+          )"
+          if [[ "${should_close}" == "true" ]]; then
+            gh pr close "${PR_NUMBER}" --repo "${PLATFORM_REPOSITORY}" --comment "자동 receiver가 current semantic identity와 동일함을 확인해 obsolete Draft PR을 종료합니다."
+          fi
 
       - name: Push stable Platform legal-policy branch
         id: push

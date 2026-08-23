@@ -4898,6 +4898,10 @@
             "type": [
               "string",
               "null"
+            ],
+            "enum": [
+              "content-html-v1",
+              null
             ]
           },
           "contentHtmlTrustState": {

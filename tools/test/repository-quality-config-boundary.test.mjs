@@ -159,6 +159,22 @@ jobs:
   assert.equal(allowedScan.status, 0, allowedScan.stderr)
   removeWorkflow(allowedWebRead)
 
+  const allowedDeployDispatch = writeWorkflow("deploy", `
+name: Allowed verified deployment dispatch
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api --method POST "repos/AquilaXk/aquila-blog-web/dispatches" --input payload.json
+`)
+  const allowedDeployScan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  assert.equal(allowedDeployScan.status, 0, allowedDeployScan.stderr)
+  removeWorkflow(allowedDeployDispatch)
+
   const currentRepositoryToken = writeWorkflow("current-repository-token", `
 name: Current repository token
 on: workflow_dispatch
@@ -755,28 +771,12 @@ jobs:
   assert.match(trackedWeb.stderr, /front\/package\.json/)
 })
 
-test("backend dependency suppression scopes the Tomcat examples CVE to embedded 11.0.24", () => {
+test("backend dependency policy upgrades Tomcat and removes expired CVE suppression", () => {
   const suppressions = read("back/config/dependency-check-suppressions.xml")
   const build = read("back/build.gradle.kts")
-  const blocks = [...suppressions.matchAll(/<suppress until="([^"]+)">([\s\S]*?)<\/suppress>/g)]
-    .filter(([, , body]) => body.includes("CVE-2026-66299"))
 
-  assert.equal(blocks.length, 1)
-  const [block, expiry] = blocks[0]
-  const selectors = [...block.matchAll(/<([A-Za-z][\w-]*)(?:\s[^>]*)?>/g)]
-    .map(([, tag]) => tag)
-    .filter((tag) => tag !== "suppress" && tag !== "notes")
-  const noteLines = block.split("\n").map((line) => line.trim())
-
-  assert.equal(expiry, "2026-08-23")
-  assert.deepEqual(selectors, ["packageUrl", "cve"])
-  assert.match(
-    block,
-    /<packageUrl regex="true">\^pkg:maven\/org\\\.apache\\\.tomcat\\\.embed\/tomcat-embed-\(\?:core\|websocket\)@11\\\.0\\\.24\$<\/packageUrl>/,
-  )
-  assert.match(block, /<cve>CVE-2026-66299<\/cve>/)
-  assert.ok(noteLines.includes("Apache guidance: https://tomcat.apache.org/security-11.html"))
-  assert.ok(noteLines.includes("Tracked: https://github.com/AquilaXk/aquila-blog/issues/1647"))
+  assert.match(build, /extra\["tomcat\.version"\] = "11\.0\.25"/)
+  assert.doesNotMatch(suppressions, /CVE-2026-66299/)
   assert.match(build, /failBuildOnCVSS = 7\.0f/)
   assert.match(build, /failOnError = true/)
   assert.match(

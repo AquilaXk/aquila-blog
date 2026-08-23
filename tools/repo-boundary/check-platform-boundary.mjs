@@ -333,7 +333,10 @@ function inspectWorkflow(file, contents) {
           if (!webOwnerWorkflows.has(file)) findings.push(`${file}:foreign-web-owner`)
           const method = apiMethod(tokens, commandEnv)
           const allowedRead = resource !== undefined && /^(?:GET|HEAD)$/.test(method)
-          const allowedDispatch = file === ".github/workflows/sync-public-contract-to-web.yml"
+          const allowedDispatch = [
+            ".github/workflows/sync-public-contract-to-web.yml",
+            ".github/workflows/deploy.yml",
+          ].includes(file)
             && resource === "/dispatches" && method === "POST"
           if (!allowedRead && !allowedDispatch) findings.push(`${file}:foreign-api-write`)
         } else if (command === "gh" && operation === "pr" && targetsWeb) {

@@ -475,7 +475,7 @@ jobs:
           ref: ${{ needs.calculateTag.outputs.deploy_sha }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - name: Login to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -1887,6 +1887,7 @@ jobs:
           echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
 
       - name: Deploy front over SSH (pull image + blue/green switch)
+        id: front-deploy
         if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
         env:
           HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
@@ -2064,3 +2065,133 @@ jobs:
             echo "front deploy reported success but the edge served build sha=${FRONT_SERVED_BUILD_SHA:-none}, expected ${HOME_FRONT_BUILD_SHA}" >&2
             exit 1
           fi
+
+          {
+            echo "verified=true"
+            echo "result=${FRONT_DEPLOY_RESULT}"
+            echo "served_build_sha=${FRONT_SERVED_BUILD_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Create Web repository dispatch token
+        id: web-dispatch-token
+        if: github.event_name == 'repository_dispatch' && steps.front-deploy.outputs.verified == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.REPO_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}
+          owner: AquilaXk
+          repositories: aquila-blog-web
+          permission-contents: write
+
+      - name: Dispatch verified Platform deployment
+        id: verified-event
+        if: github.event_name == 'repository_dispatch' && steps.front-deploy.outputs.verified == 'true'
+        env:
+          GH_TOKEN: ${{ steps.web-dispatch-token.outputs.token }}
+          PLATFORM_REPOSITORY: ${{ github.repository }}
+          PLATFORM_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          WEB_REPOSITORY: AquilaXk/aquila-blog-web
+          WEB_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          IMAGE_REF: ${{ needs.calculateTag.outputs.front_image_ref }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+          DOMAIN: https://blog.aquilaxk.site
+          SERVED_BUILD_SHA: ${{ steps.front-deploy.outputs.served_build_sha }}
+          DISPATCH_PAYLOAD_FILE: ${{ runner.temp }}/platform-web-deployment-ready.json
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const { createHash } = require("node:crypto")
+          const { appendFileSync, writeFileSync } = require("node:fs")
+
+          const values = {
+            schema_version: "1",
+            platform_repository: process.env.PLATFORM_REPOSITORY,
+            platform_sha: process.env.PLATFORM_SHA,
+            web_repository: process.env.WEB_REPOSITORY,
+            web_sha: process.env.WEB_SHA,
+            deploy_run_id: process.env.DEPLOY_RUN_ID,
+            domain: process.env.DOMAIN,
+            served_build_sha: process.env.SERVED_BUILD_SHA,
+          }
+          if (
+            values.platform_repository !== "AquilaXk/aquila-blog" ||
+            values.web_repository !== "AquilaXk/aquila-blog-web" ||
+            values.domain !== "https://blog.aquilaxk.site"
+          ) {
+            throw new Error("deployment repository or domain identity is invalid")
+          }
+          for (const key of ["platform_sha", "web_sha", "served_build_sha"]) {
+            if (!/^[a-f0-9]{40}$/.test(values[key] || "")) throw new Error(`${key} is invalid`)
+          }
+          if (!/^[1-9][0-9]*$/.test(values.deploy_run_id || "")) {
+            throw new Error("deploy_run_id is invalid")
+          }
+          if (values.served_build_sha !== values.web_sha) {
+            throw new Error("served_build_sha does not match web_sha")
+          }
+
+          const imageRef = process.env.IMAGE_REF || ""
+          if (!/^[^\s@]+@sha256:[a-f0-9]{64}$/.test(imageRef)) {
+            throw new Error("front image ref is not an immutable digest")
+          }
+          const imageDigest = imageRef.slice(imageRef.indexOf("@") + 1)
+          const keys = [
+            "schema_version",
+            "platform_repository",
+            "platform_sha",
+            "web_repository",
+            "web_sha",
+            "image_digest",
+            "deploy_run_id",
+            "domain",
+            "served_build_sha",
+          ]
+          const clientPayload = {
+            schema_version: values.schema_version,
+            platform_repository: values.platform_repository,
+            platform_sha: values.platform_sha,
+            web_repository: values.web_repository,
+            web_sha: values.web_sha,
+            image_digest: imageDigest,
+            deploy_run_id: values.deploy_run_id,
+            domain: values.domain,
+            served_build_sha: values.served_build_sha,
+          }
+          const canonical = keys.map((key) => `${key}=${clientPayload[key]}\n`).join("")
+          const deploymentIdentity = createHash("sha256").update(canonical).digest("hex")
+          clientPayload.deployment_identity = deploymentIdentity
+
+          writeFileSync(
+            process.env.DISPATCH_PAYLOAD_FILE,
+            JSON.stringify({ event_type: "platform_web_deployment_ready", client_payload: clientPayload }),
+          )
+          appendFileSync(process.env.GITHUB_OUTPUT, `deployment_identity=${deploymentIdentity}\nimage_digest=${imageDigest}\n`)
+          NODE
+
+          gh api --method POST "repos/${WEB_REPOSITORY}/dispatches" --input "${DISPATCH_PAYLOAD_FILE}" --silent
+
+      - name: Record verified Platform deployment event
+        if: github.event_name == 'repository_dispatch' && steps.front-deploy.outputs.verified == 'true' && steps.verified-event.outcome == 'success'
+        env:
+          PLATFORM_REPOSITORY: ${{ github.repository }}
+          PLATFORM_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          WEB_REPOSITORY: AquilaXk/aquila-blog-web
+          WEB_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          IMAGE_DIGEST: ${{ steps.verified-event.outputs.image_digest }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+          DEPLOYMENT_IDENTITY: ${{ steps.verified-event.outputs.deployment_identity }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Verified Platform Web deployment event"
+            echo
+            echo "- Platform run: ${GITHUB_SERVER_URL}/${PLATFORM_REPOSITORY}/actions/runs/${DEPLOY_RUN_ID}"
+            echo "- Platform SHA: \`${PLATFORM_SHA}\`"
+            echo "- Web receiver: \`${WEB_REPOSITORY}\`"
+            echo "- Web SHA: \`${WEB_SHA}\`"
+            echo "- Image digest: \`${IMAGE_DIGEST}\`"
+            echo "- Deployment identity: \`${DEPLOYMENT_IDENTITY}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

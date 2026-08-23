@@ -135,6 +135,12 @@ upstream은 peer 주소를 받고, 같은 위조를 공개 호스트로 보내�
 `CUSTOM_PROD_BACKURL`을 바꾸는 순간 애플리케이션은 새 URI를 보낸다. 콘솔 등록을 확인하기 전에는
 아래 전환 순서 3단계를 시작하지 않는다.
 
+### Kakao OIDC current-state checklist (#1547)
+
+- 오너는 Kakao 콘솔에서 OpenID Connect 사용 상태와 `openid`, `profile_nickname`, `profile_image` 동의 항목을 확인하고, callback이 정확히 `https://blog.aquilaxk.site/login/oauth2/code/kakao`인지 확인한다.
+- `HOME_SERVER_ENV`의 `SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID`는 required nonblank 계약으로만 검증한다. 값은 저장소·로그·이슈·PR에 기록하지 않는다.
+- 공개 discovery 응답이나 `/oauth2/authorization/kakao`의 302은 콘솔 설정이나 callback에서 실제로 완료되는 로그인을 증명하지 않는다. 오너가 브라우저에서 실제 Kakao 로그인과 callback 왕복을 별도 확인해야 하며, 이 evidence 전에는 #1547을 닫지 않는다.
+
 ### 2. front 이미지 산출물 게이트
 
 `NEXT_PUBLIC_*`는 **빌드 시점에 번들로 인라인**된다. `ENV`는 builder 스테이지를 넘지 않아

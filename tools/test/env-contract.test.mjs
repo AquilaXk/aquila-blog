@@ -276,6 +276,7 @@ const baseHomeServerEnv = [
   "CUSTOM__REVALIDATE__TOKEN=valid-revalidate-token",
   "CUSTOM__AI__SUMMARY__ENABLED=false",
   "CUSTOM__AI__SUMMARY__GEMINI__MODEL=gemini-2.5-flash",
+  "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID=configured-for-contract-test",
   "SPRING__MAIL__HOST=smtp.mail.example",
   "SPRING__MAIL__PORT=587",
   "SPRING__MAIL__USERNAME=mailer@aquilaxk.site",
@@ -334,8 +335,8 @@ test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 
   assert.equal(definition?.required, true, "Kakao client-id must be required at the HOME_SERVER_ENV source")
 
   for (const [name, text] of [
-    ["missing", baseHomeServerEnv],
-    ["blank", `${baseHomeServerEnv}\n${key}=`],
+    ["missing", baseHomeServerEnv.replace(new RegExp(`^${key}=.*\\n`, "m"), "")],
+    ["blank", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=`)],
   ]) {
     const result = validateEnvText({ contract, target: "home-server-source", text })
     assert.equal(result.ok, false, `${name} Kakao client-id must fail before deployment`)

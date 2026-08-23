@@ -327,6 +327,109 @@ test("Platform consumes only the Web digest handoff", () => {
   assert.match(source, /HOME_FRONT_BUILD_SHA: \$\{\{ needs\.calculateTag\.outputs\.front_source_sha \}\}/)
 })
 
+function runVerifiedDeploymentDispatch(input) {
+  const steps = deployDocument().jobs.frontBlueGreenDeploy.steps
+  const step = steps.find((item) => item.name === "Dispatch verified Platform deployment")
+  assert.ok(step, "verified deployment dispatch step must exist")
+  const directory = mkdtempSync(path.join(tmpdir(), "aquila-verified-deployment-dispatch-"))
+  const calls = path.join(directory, "calls")
+  const output = path.join(directory, "output")
+  const payload = path.join(directory, "payload.json")
+  const gh = path.join(directory, "gh")
+  writeFileSync(calls, "")
+  writeFileSync(output, "")
+  writeFileSync(
+    gh,
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${calls}"\n[ "$1" = api ] && [ "$2" = --method ] && [ "$3" = POST ] && [ "$4" = repos/AquilaXk/aquila-blog-web/dispatches ] && [ "$5" = --input ] && [ "$7" = --silent ] && [ "$#" = 7 ] || exit 1\ncp "$6" "${payload}"\n`,
+  )
+  chmodSync(gh, 0o755)
+  const result = spawnSync("bash", ["-c", step.run], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PLATFORM_REPOSITORY: "AquilaXk/aquila-blog",
+      PLATFORM_SHA: "a".repeat(40),
+      WEB_REPOSITORY: "AquilaXk/aquila-blog-web",
+      WEB_SHA: "b".repeat(40),
+      IMAGE_REF: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"c".repeat(64)}`,
+      DEPLOY_RUN_ID: "12345",
+      DOMAIN: "https://blog.aquilaxk.site",
+      SERVED_BUILD_SHA: input.servedBuildSha ?? "b".repeat(40),
+      DISPATCH_PAYLOAD_FILE: path.join(directory, "dispatch.json"),
+      GITHUB_OUTPUT: output,
+      PATH: `${directory}:${process.env.PATH}`,
+    },
+  })
+  const callLog = readFileSync(calls, "utf8").trim().split("\n").filter(Boolean)
+  const outputText = readFileSync(output, "utf8")
+  const payloadDocument = existsSync(payload) ? JSON.parse(readFileSync(payload, "utf8")) : null
+  rmSync(directory, { recursive: true, force: true })
+  return { ...result, callLog, outputText, payloadDocument }
+}
+
+test("verified front result dispatches one exact Web receiver event with least privilege", () => {
+  const steps = deployDocument().jobs.frontBlueGreenDeploy.steps
+  const deployStep = steps.find((item) => item.name === "Deploy front over SSH (pull image + blue/green switch)")
+  const token = steps.find((item) => item.name === "Create Web repository dispatch token")
+  const dispatch = steps.find((item) => item.name === "Dispatch verified Platform deployment")
+  const summary = steps.find((item) => item.name === "Record verified Platform deployment event")
+  const verifiedCondition = "github.event_name == 'repository_dispatch' && steps.front-deploy.outputs.verified == 'true'"
+
+  assert.equal(deployStep.id, "front-deploy")
+  assert.match(deployStep.run, /FRONT_DEPLOY_RESULT[\s\S]*deployed \| noop\) ;;/)
+  assert.match(deployStep.run, /FRONT_SERVED_BUILD_SHA[\s\S]*HOME_FRONT_BUILD_SHA/)
+  assert.match(deployStep.run, /verified=true/)
+  assert.equal(token.if, verifiedCondition)
+  assert.equal(token.uses, "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1")
+  assert.deepEqual(token.with, {
+    "client-id": "${{ vars.REPO_SYNC_APP_CLIENT_ID }}",
+    "private-key": "${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}",
+    owner: "AquilaXk",
+    repositories: "aquila-blog-web",
+    "permission-contents": "write",
+  })
+  assert.ok(dispatch, "verified deployment dispatch step must exist")
+  assert.equal(dispatch.if, verifiedCondition)
+  assert.equal(dispatch.env.GH_TOKEN, "${{ steps.web-dispatch-token.outputs.token }}")
+  assert.match(dispatch.run, /platform_web_deployment_ready/)
+  assert.match(dispatch.run, /repos\/\$\{WEB_REPOSITORY\}\/dispatches/)
+  assert.doesNotMatch(dispatch.run, /retry|sleep|callback/i)
+  assert.equal(summary.if, `${verifiedCondition} && steps.verified-event.outcome == 'success'`)
+  assert.equal(summary.env.DEPLOYMENT_IDENTITY, "${{ steps.verified-event.outputs.deployment_identity }}")
+  assert.doesNotMatch(JSON.stringify(summary), /GH_TOKEN|PRIVATE_KEY|CLIENT_ID/)
+
+  const valid = runVerifiedDeploymentDispatch({})
+  assert.equal(valid.status, 0, valid.stderr)
+  assert.equal(valid.callLog.length, 1)
+  assert.equal(valid.payloadDocument.event_type, "platform_web_deployment_ready")
+  const payloadKeys = [
+    "schema_version", "platform_repository", "platform_sha", "web_repository", "web_sha",
+    "image_digest", "deploy_run_id", "domain", "served_build_sha", "deployment_identity",
+  ]
+  assert.deepEqual(Object.keys(valid.payloadDocument.client_payload), payloadKeys)
+  const clientPayload = valid.payloadDocument.client_payload
+  const expected = {
+    schema_version: "1",
+    platform_repository: "AquilaXk/aquila-blog",
+    platform_sha: "a".repeat(40),
+    web_repository: "AquilaXk/aquila-blog-web",
+    web_sha: "b".repeat(40),
+    image_digest: `sha256:${"c".repeat(64)}`,
+    deploy_run_id: "12345",
+    domain: "https://blog.aquilaxk.site",
+    served_build_sha: "b".repeat(40),
+  }
+  for (const [key, value] of Object.entries(expected)) assert.equal(clientPayload[key], value)
+  const canonical = payloadKeys.slice(0, -1).map((key) => `${key}=${clientPayload[key]}\n`).join("")
+  assert.equal(clientPayload.deployment_identity, createHash("sha256").update(canonical).digest("hex"))
+  assert.match(valid.outputText, new RegExp(`^deployment_identity=${clientPayload.deployment_identity}$`, "m"))
+
+  const mismatch = runVerifiedDeploymentDispatch({ servedBuildSha: "d".repeat(40) })
+  assert.notEqual(mismatch.status, 0)
+  assert.deepEqual(mismatch.callLog, [])
+  assert.equal(mismatch.payloadDocument, null)
+})
+
 function dispatchPayload(overrides = {}) {
   const payload = {
     schemaVersion: "1",

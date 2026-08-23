@@ -153,16 +153,16 @@ object HtmlContentSanitizer {
         when (contentHtmlTrustState) {
             null,
             ContentHtmlTrustState.UNKNOWN,
-            -> unknown(contentHtmlSanitizerPolicyVersion)
+            -> unknown()
 
             ContentHtmlTrustState.REJECTED ->
-                ContentHtmlTrustResult(null, null, contentHtmlSanitizerPolicyVersion, ContentHtmlTrustState.REJECTED)
+                ContentHtmlTrustResult(null, null, null, ContentHtmlTrustState.REJECTED)
 
             ContentHtmlTrustState.TRUSTED_CURRENT -> {
                 if (contentHtmlHash.isNullOrBlank() || contentHtmlSanitizerPolicyVersion != CURRENT_POLICY_VERSION) {
-                    unknown(contentHtmlSanitizerPolicyVersion)
+                    unknown()
                 } else if (contentHtml == null || sha256Utf8(contentHtml) != contentHtmlHash) {
-                    ContentHtmlTrustResult(null, null, contentHtmlSanitizerPolicyVersion, ContentHtmlTrustState.REJECTED)
+                    ContentHtmlTrustResult(null, null, null, ContentHtmlTrustState.REJECTED)
                 } else {
                     ContentHtmlTrustResult(
                         contentHtml = contentHtml,
@@ -180,6 +180,5 @@ object HtmlContentSanitizer {
             .digest(value.toByteArray(StandardCharsets.UTF_8))
             .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
-    private fun unknown(policyVersion: String? = null): ContentHtmlTrustResult =
-        ContentHtmlTrustResult(null, null, policyVersion, ContentHtmlTrustState.UNKNOWN)
+    private fun unknown(): ContentHtmlTrustResult = ContentHtmlTrustResult(null, null, null, ContentHtmlTrustState.UNKNOWN)
 }

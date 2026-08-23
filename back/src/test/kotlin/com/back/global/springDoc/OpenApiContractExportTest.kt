@@ -72,7 +72,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val contentHtmlSanitizerPolicyVersion =
             propertySchema(openApiNode, "PostWithContentDto", "contentHtmlSanitizerPolicyVersion")
         assertTypeSet(contentHtmlSanitizerPolicyVersion, "string", "null")
-        assertThat(contentHtmlSanitizerPolicyVersion.has("enum")).isFalse()
+        assertNullableEnum(contentHtmlSanitizerPolicyVersion, "content-html-v1")
         val contentHtmlTrustState = propertySchema(openApiNode, "PostWithContentDto", "contentHtmlTrustState")
         assertThat(contentHtmlTrustState.path("type").asText()).isEqualTo("string")
         assertThat(contentHtmlTrustState.path("enum").values().map { it.asText() })

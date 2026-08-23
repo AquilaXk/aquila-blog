@@ -72,10 +72,16 @@ class HtmlContentSanitizerTest {
             )
 
         assertThat(outdatedPolicy.contentHtml).isNull()
+        assertThat(outdatedPolicy.contentHtmlHash).isNull()
+        assertThat(outdatedPolicy.contentHtmlSanitizerPolicyVersion).isNull()
         assertThat(outdatedPolicy.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.UNKNOWN)
         assertThat(wrongHash.contentHtml).isNull()
+        assertThat(wrongHash.contentHtmlHash).isNull()
+        assertThat(wrongHash.contentHtmlSanitizerPolicyVersion).isNull()
         assertThat(wrongHash.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
         assertThat(rejected.contentHtml).isNull()
+        assertThat(rejected.contentHtmlHash).isNull()
+        assertThat(rejected.contentHtmlSanitizerPolicyVersion).isNull()
         assertThat(rejected.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
         assertThat(verified).isEqualTo(trusted)
     }

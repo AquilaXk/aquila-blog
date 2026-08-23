@@ -38,7 +38,7 @@ const runProbeFixture = async (baseUrl, route, options = {}) => {
       baseUrl,
       routes: [route],
       latestPosts: 0,
-      requestsPerRoute: 1,
+      requestsPerRoute: options.requests || 1,
       timeoutMs: options.timeoutMs || 1000,
       statePath: path.join(stateDir, "state.json"),
       outputJson: "",
@@ -58,7 +58,7 @@ test("public edge probe marks 200 route healthy", async () => {
     response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "HIT" })
     response.end("<html><head></head><body>ok</body></html>")
   }, async (baseUrl) => {
-    const result = await runProbeFixture(baseUrl, "/")
+    const result = await runProbeFixture(baseUrl, "/", { requests: 2 })
 
     assert.equal(result.report.overall.ok, true)
     assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/"\} 1/)
@@ -72,19 +72,33 @@ test("public edge probe marks 200 route healthy", async () => {
       result.prometheus,
       /aquila_public_edge_probe_cache_state_observed\{route="\/",request_index="1"\} 1/,
     )
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_match\{route_class="home",expected_state="HIT",observed_state="HIT"\} 1/,
+    )
   })
 })
 
 test("public edge probe reads the cache state from the Next.js header", async () => {
+  let requestCount = 0
   await withServer((request, response) => {
-    response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "stale" })
-    response.end("<html><head></head><body>ok</body></html>")
+    requestCount += 1
+    response.writeHead(200, {
+      "content-type": "text/html",
+      [CACHE_STATE_HEADER]: requestCount === 1 ? "HIT" : "MISS",
+    })
+    response.end(`<html><head><link rel="canonical" href="http://${request.headers.host}/" /></head><body>ok</body></html>`)
   }, async (baseUrl) => {
-    const result = await runProbeFixture(baseUrl, "/")
+    const result = await runProbeFixture(baseUrl, "/posts/cache", { requests: 2 })
 
-    assert.equal(result.report.routes[0].samples[0].cacheState, "STALE")
-    assert.equal(result.report.routes[0].samples[0].cacheStateObserved, true)
-    assert.deepEqual(result.report.overall.firstRequestCache.counts, { STALE: 1 })
+    assert.equal(result.report.routes[0].route, "/")
+    assert.equal(result.report.routes[0].samples[1].cacheState, "MISS")
+    assert.equal(result.report.routes[0].samples[1].cacheStateObserved, true)
+    assert.deepEqual(result.report.overall.firstRequestCache.counts, { HIT: 1 })
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_match\{route_class="post",expected_state="HIT",observed_state="MISS"\} 0/,
+    )
   })
 })
 
@@ -96,7 +110,7 @@ test("public edge probe ignores the Vercel cache header and flags the missing st
     response.writeHead(200, { "content-type": "text/html", "x-vercel-cache": "HIT" })
     response.end("<html><head></head><body>ok</body></html>")
   }, async (baseUrl) => {
-    const result = await runProbeFixture(baseUrl, "/")
+    const result = await runProbeFixture(baseUrl, "/", { requests: 2 })
 
     assert.equal(result.report.routes[0].samples[0].cacheState, CACHE_STATE_ABSENT)
     assert.equal(result.report.routes[0].samples[0].cacheStateObserved, false)
@@ -109,6 +123,10 @@ test("public edge probe ignores the Vercel cache header and flags the missing st
     // 집계 경로에서도 부재가 사라지지 않아야 한다. 여기서 빈 counts가 나오면 대시보드는
     // "관측 대상이 없다"와 "헤더가 사라졌다"를 구분하지 못한다.
     assert.deepEqual(result.report.overall.firstRequestCache.counts, { [CACHE_STATE_ABSENT]: 1 })
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_match\{route_class="home",expected_state="HIT",observed_state="NO_CACHE_HEADER"\} 0/,
+    )
   })
 })
 
@@ -134,6 +152,7 @@ test("public edge probe allows the explicit 404 route policy", async () => {
     assert.equal(result.report.overall.ok, true)
     assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/404"\} 1/)
     assert.match(result.prometheus, /aquila_public_edge_probe_status_code\{route="\/404",request_index="1"\} 404/)
+    assert.doesNotMatch(result.prometheus, /^aquila_public_edge_probe_cache_state_match\{/m)
   })
 })
 
@@ -167,12 +186,16 @@ test("public edge probe exposes 5xx as route and overall failure", async () => {
 
 test("public edge probe exposes timeout as route and overall failure", async () => {
   await withServer(() => {}, async (baseUrl) => {
-    const result = await runProbeFixture(baseUrl, "/", { timeoutMs: 1000 })
+    const result = await runProbeFixture(baseUrl, "/", { timeoutMs: 1000, requests: 2 })
 
     assert.equal(result.report.overall.ok, false)
     assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/"\} 0/)
     assert.match(result.prometheus, /aquila_public_edge_probe_status_code\{route="\/",request_index="1"\} 0/)
     assert.match(result.report.routes[0].failureReason, /timeout/i)
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_match\{route_class="home",expected_state="HIT",observed_state="ERROR"\} 0/,
+    )
   })
 })
 

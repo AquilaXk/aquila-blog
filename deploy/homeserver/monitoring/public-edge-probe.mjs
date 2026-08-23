@@ -42,6 +42,23 @@ const CACHE_STATE_HEADER = "x-nextjs-cache"
 // `UNKNOWN`.
 const CACHE_STATE_ABSENT = "NO_CACHE_HEADER"
 const CACHE_STATE_ERROR = "ERROR"
+const CACHE_STATE_MATCH_EXPECTED_STATE = "HIT"
+const CACHE_STATE_MATCH_PRIORITIES = {
+  ERROR: 8,
+  NO_WARM_SAMPLE: 7,
+  NO_CACHE_HEADER: 6,
+  OTHER: 5,
+  MISS: 4,
+  STALE: 3,
+  REVALIDATED: 2,
+  HIT: 1,
+}
+
+const classifyCacheRoute = (route) => {
+  if (route === "/") return "home"
+  if (/^\/posts\/[^/]+$/.test(route)) return "post"
+  return null
+}
 
 const readCacheState = (headerValue) => {
   const value = String(headerValue ?? "").trim()
@@ -364,7 +381,11 @@ const toPrometheusText = (report) => {
     "# TYPE aquila_public_edge_probe_first_probe_after_publish gauge",
     `# HELP aquila_public_edge_probe_cache_state_observed Indicates whether the response carried the ${CACHE_STATE_HEADER} cache-state header.`,
     "# TYPE aquila_public_edge_probe_cache_state_observed gauge",
+    "# HELP aquila_public_edge_probe_cache_state_match Indicates whether the warm cache-state observation matches the expected state.",
+    "# TYPE aquila_public_edge_probe_cache_state_match gauge",
   ]
+
+  const cacheStateMatchByRouteClass = new Map()
 
   for (const route of report.routes) {
     lines.push(`aquila_public_edge_probe_route_up{route="${slugifyMetricLabel(route.route)}"} ${route.ok ? 1 : 0}`)
@@ -381,6 +402,30 @@ const toPrometheusText = (report) => {
     }
     lines.push(
       `aquila_public_edge_probe_first_probe_after_publish{route="${slugifyMetricLabel(route.route)}",build_id="${slugifyMetricLabel(route.buildId || "unknown")}",published_at="${slugifyMetricLabel(route.publishedAt || "none")}"} ${route.firstProbeAfterPublish ? 1 : 0}`
+    )
+
+    const routeClass = route.cacheRouteClass
+    if (!routeClass) continue
+
+    let observedState = route.samples.some((sample) => sample.cacheState === CACHE_STATE_ERROR)
+      ? CACHE_STATE_ERROR
+      : route.samples[1]?.cacheState ?? "NO_WARM_SAMPLE"
+    if (!Object.prototype.hasOwnProperty.call(CACHE_STATE_MATCH_PRIORITIES, observedState)) {
+      observedState = "OTHER"
+    }
+
+    const currentObservedState = cacheStateMatchByRouteClass.get(routeClass)
+    if (
+      !currentObservedState ||
+      CACHE_STATE_MATCH_PRIORITIES[observedState] > CACHE_STATE_MATCH_PRIORITIES[currentObservedState]
+    ) {
+      cacheStateMatchByRouteClass.set(routeClass, observedState)
+    }
+  }
+
+  for (const [routeClass, observedState] of cacheStateMatchByRouteClass) {
+    lines.push(
+      `aquila_public_edge_probe_cache_state_match{route_class="${routeClass}",expected_state="${CACHE_STATE_MATCH_EXPECTED_STATE}",observed_state="${observedState}"} ${observedState === CACHE_STATE_MATCH_EXPECTED_STATE ? 1 : 0}`
     )
   }
 
@@ -503,6 +548,7 @@ const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }
 
   return {
     route: routeKey,
+    cacheRouteClass: classifyCacheRoute(route),
     ok,
     failureReason,
     allowedStatuses,

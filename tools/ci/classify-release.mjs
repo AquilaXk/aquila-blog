@@ -61,7 +61,22 @@ const extendedRules = [
 
 const loadMigrationSafety = (path) => {
   if (!path) return null
-  return JSON.parse(readFileSync(path, "utf8"))
+  const report = JSON.parse(readFileSync(path, "utf8"))
+  const valid =
+    report !== null &&
+    typeof report === "object" &&
+    !Array.isArray(report) &&
+    report.version === 2 &&
+    typeof report.ok === "boolean" &&
+    typeof report.blocked === "boolean" &&
+    report.ok === !report.blocked &&
+    Array.isArray(report.checkedFiles) &&
+    Array.isArray(report.findings) &&
+    Array.isArray(report.classifications) &&
+    typeof report.runNMinusOne === "boolean" &&
+    typeof report.frameworkChanged === "boolean"
+  if (!valid) throw new Error("Invalid migration safety report")
+  return report
 }
 
 const classifyScope = (files) => {
@@ -86,6 +101,8 @@ const classify = ({ files, migrationSafety }) => {
       riskProfile: "standard",
       deployBackend: false,
       reasons: ["docs-only"],
+      runNMinusOne: migrationSafety?.runNMinusOne === true,
+      frameworkChanged: migrationSafety?.frameworkChanged === true,
     }
   }
   if (platformFiles.some(isBackendFile)) reasons.push("backend")
@@ -118,6 +135,8 @@ const classify = ({ files, migrationSafety }) => {
     riskProfile,
     deployBackend: platformFiles.some(isBackendFile),
     reasons,
+    runNMinusOne: migrationSafety?.runNMinusOne === true,
+    frameworkChanged: migrationSafety?.frameworkChanged === true,
   }
 }
 
@@ -129,6 +148,8 @@ const writeGithubOutput = (path, result) => {
       `release_change_scope=${result.changeScope}`,
       `release_risk_profile=${result.riskProfile}`,
       `release_deploy_backend=${result.deployBackend}`,
+      `release_run_n_minus_one=${result.runNMinusOne}`,
+      `release_framework_changed=${result.frameworkChanged}`,
       "",
     ].join("\n"),
   )

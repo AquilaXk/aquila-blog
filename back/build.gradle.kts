@@ -23,11 +23,11 @@ version = "0.0.1-SNAPSHOT"
 description = "back"
 
 // Pin above Spring Boot 4.1.0 BOM for NVD High CVEs blocking Deploy (#1387).
-extra["tomcat.version"] = "11.0.24"
+extra["tomcat.version"] = "11.0.25"
 extra["netty.version"] = "4.2.16.Final"
 extra["postgresql.version"] = "42.7.13"
 
-val awsSdkVersion = "2.53.3"
+val awsSdkVersion = "2.54.0"
 val testcontainersVersion = "1.21.4"
 
 java {
@@ -79,12 +79,12 @@ dependencies {
 
     // SpringDoc
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0")
-    implementation("org.webjars:swagger-ui:5.32.11") // DOMPurify 3.4.12; fixes CVE-2026-65898 (#1451).
+    implementation("org.webjars:swagger-ui:5.32.14") // DOMPurify 3.4.12; fixes CVE-2026-65898 (#1451).
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
     // ShedLock
-    implementation("net.javacrumbs.shedlock:shedlock-spring:7.7.0")
-    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.7.0")
+    implementation("net.javacrumbs.shedlock:shedlock-spring:7.9.0")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.9.0")
 
     // Database
     runtimeOnly("org.postgresql:postgresql")

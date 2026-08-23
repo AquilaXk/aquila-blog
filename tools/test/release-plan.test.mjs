@@ -8,6 +8,22 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const scriptPath = path.join(repoRoot, "tools/ci/classify-release.mjs")
 const backendWorkflowPath = path.join(repoRoot, ".github/workflows/reusable-backend-quality.yml")
+const nMinusOneTestPath = path.join(
+  repoRoot,
+  "back/src/test/kotlin/com/back/infrastructure/FlywayNMinusOneCompatibilityTestcontainersIntegrationTest.kt",
+)
+
+const migrationSafetyReport = (overrides = {}) => ({
+  version: 2,
+  ok: true,
+  blocked: false,
+  checkedFiles: [],
+  findings: [],
+  classifications: [],
+  runNMinusOne: false,
+  frameworkChanged: false,
+  ...overrides,
+})
 
 const runClassifier = (files, args = []) => {
   const result = spawnSync(process.execPath, [scriptPath, "--json", ...args], {
@@ -111,11 +127,11 @@ test("destructive migration safety result blocks release", () => {
   try {
     writeFileSync(
       safetyPath,
-      JSON.stringify({
+      JSON.stringify(migrationSafetyReport({
         ok: false,
         blocked: true,
         findings: [{ file: "back/src/main/resources/db/migration/V20260619_99__drop_table.sql", rule: "drop-table" }],
-      }),
+      })),
     )
 
     const result = runClassifier(
@@ -132,8 +148,52 @@ test("destructive migration safety result blocks release", () => {
   }
 })
 
+test("migration compatibility report routes the representative N-1 lane", () => {
+  const workDir = mkdtempSync(path.join(tmpdir(), "release-plan-"))
+  const safetyPath = path.join(workDir, "migration-safety.json")
+
+  try {
+    writeFileSync(
+      safetyPath,
+      JSON.stringify(migrationSafetyReport({
+        runNMinusOne: true,
+      })),
+    )
+
+    const result = runClassifier(
+      ["back/src/main/resources/db/migration/V20260619_18__requires_n_minus_1.sql"],
+      ["--migration-safety-json", safetyPath],
+    )
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.json.riskProfile, "extended")
+    assert.equal(result.json.runNMinusOne, true)
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("invalid migration safety report fails closed", () => {
+  const workDir = mkdtempSync(path.join(tmpdir(), "release-plan-"))
+  const safetyPath = path.join(workDir, "migration-safety.json")
+
+  try {
+    writeFileSync(safetyPath, JSON.stringify({}))
+    const result = runClassifier(["back/src/main/kotlin/com/back/PostController.kt"], [
+      "--migration-safety-json",
+      safetyPath,
+    ])
+
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /invalid migration safety report/i)
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
 test("Platform reusable workflow runs release planner and strict boundary checks", () => {
   const backendWorkflow = readFileSync(backendWorkflowPath, "utf8")
+  const nMinusOneTest = readFileSync(nMinusOneTestPath, "utf8")
 
   assert.match(backendWorkflow, /Check Flyway deploy safety/)
   assert.match(backendWorkflow, /previous_filename/)
@@ -141,6 +201,9 @@ test("Platform reusable workflow runs release planner and strict boundary checks
   assert.match(backendWorkflow, /Classify release risk/)
   assert.match(backendWorkflow, /tools\/ci\/classify-release\.mjs/)
   assert.match(backendWorkflow, /--migration-safety-json "\$\{RUNNER_TEMP\}\/flyway-deploy-safety\.json"/)
+  assert.match(backendWorkflow, /--policy "\$\{policy_path\}"[\s\S]*--base-policy "\$\{base_policy\}"[\s\S]*Run Flyway N-1 compatibility test[\s\S]*\.\/gradlew testcontainersTest --tests com\.back\.infrastructure\.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest --rerun-tasks/)
+  assert.match(backendWorkflow, /steps\.flyway_safety\.outputs\.status != '0'/)
+  assert.doesNotMatch(nMinusOneTest, /disabledWithoutDocker\s*=\s*true/)
   assert(backendWorkflow.indexOf("Check Flyway deploy safety") < backendWorkflow.indexOf("Classify release risk"))
   assert(backendWorkflow.indexOf("Classify release risk") < backendWorkflow.indexOf("Skip backend-heavy checks"))
   assert.match(backendWorkflow, /node --test tools\/test\/release-plan\.test\.mjs tools\/test\/flyway-deploy-safety\.test\.mjs/)

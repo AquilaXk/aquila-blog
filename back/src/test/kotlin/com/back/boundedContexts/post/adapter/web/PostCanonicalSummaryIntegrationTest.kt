@@ -1,7 +1,9 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.post.CanonicalSummaryFixture
+import com.back.boundedContexts.post.CanonicalSummaryFixture.Fixture
+import com.back.boundedContexts.post.CanonicalSummaryFixture.Request
 import com.back.boundedContexts.post.application.service.PostReadCacheInvalidationTarget
-import com.back.boundedContexts.post.application.service.PostSummaryResolver
 import com.back.boundedContexts.post.application.service.PostWriteSideEffectHandler
 import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
 import com.back.global.task.application.TaskPayloadEnvelope
@@ -39,61 +41,55 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
     @Test
     @WithUserDetails("admin@test.com")
     fun `manual summary is persisted and returned as canonical source`() {
+        val fixture = resolvedFixture("manual-create", "create")
+        val expected = requireNotNull(fixture.expected)
         mvc
             .post("/post/api/v1/posts") {
                 contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "수동 요약 글",
-                      "content": "본문의 자동 후보 문장입니다.",
-                      "summaryMode": "MANUAL",
-                      "summary": "작성자가 확정한 수동 요약"
-                    }
-                    """.trimIndent()
+                content = postPayload(fixture)
             }.andExpect {
                 status { isCreated() }
-                jsonPath("$.data.summary") { value("작성자가 확정한 수동 요약") }
-                jsonPath("$.data.summarySource") { value("MANUAL") }
+                jsonPath("$.data.summary") { value(expected.summary) }
+                jsonPath("$.data.summarySource") { value(expected.source) }
             }
     }
 
     @Test
     @WithUserDetails("admin@test.com")
     fun `missing summary is deterministically extracted during write`() {
+        val fixture = resolvedFixture("extracted-with-exclusions", "create")
+        val expected = requireNotNull(fixture.expected)
         mvc
             .post("/post/api/v1/posts") {
                 contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "자동 발췌 글",
-                      "content": "첫 번째 핵심 문장입니다. 두 번째 핵심 문장입니다. 세 번째 문장입니다."
-                    }
-                    """.trimIndent()
+                content = postPayload(fixture)
             }.andExpect {
                 status { isCreated() }
-                jsonPath("$.data.summary") { value("첫 번째 핵심 문장입니다. 두 번째 핵심 문장입니다.") }
-                jsonPath("$.data.summarySource") { value("EXTRACTED") }
+                jsonPath("$.data.summary") { value(expected.summary) }
+                jsonPath("$.data.summarySource") { value(expected.source) }
             }
     }
 
     @Test
     @WithUserDetails("admin@test.com")
     fun `omitted summary preserves manual value while blank summary recomputes`() {
+        val seed = resolvedFixture("manual-preserve-seed", "create")
+        val preservedFixture = resolvedFixture("manual-preserve-omitted", "modify")
+        val seedExpected = requireNotNull(seed.expected)
+        val preservedExpected = requireNotNull(preservedFixture.expected)
+        val recomputeFixture = resolvedFixture("blank-recompute", "modify")
+        val recomputeExpected = requireNotNull(recomputeFixture.expected)
+        val existing = requireNotNull(preservedFixture.existing)
+        val recomputeExisting = requireNotNull(recomputeFixture.existing)
+        assertThat(existing.summary).isEqualTo(seedExpected.summary)
+        assertThat(existing.source).isEqualTo(seedExpected.source)
+        assertThat(recomputeExisting.summary).isEqualTo(preservedExpected.summary)
+        assertThat(recomputeExisting.source).isEqualTo(preservedExpected.source)
         val created =
             mvc
                 .post("/post/api/v1/posts") {
                     contentType = MediaType.APPLICATION_JSON
-                    content =
-                        """
-                        {
-                          "title": "수정 요약 글",
-                          "content": "기존 본문입니다.",
-                          "summaryMode": "MANUAL",
-                          "summary": "유지할 수동 요약"
-                        }
-                        """.trimIndent()
+                    content = postPayload(seed)
                 }.andReturn()
                 .response.contentAsString
         val postId = JsonPath.read<Int>(created, "$.data.id").toLong()
@@ -103,18 +99,11 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
             mvc
                 .put("/post/api/v1/posts/$postId") {
                     contentType = MediaType.APPLICATION_JSON
-                    content =
-                        """
-                        {
-                          "title": "수정 요약 글",
-                          "content": "새 본문의 첫 핵심 문장입니다. 두 번째 문장입니다.",
-                          "version": $version
-                        }
-                        """.trimIndent()
+                    content = postPayload(preservedFixture, version = version)
                 }.andExpect {
                     status { isOk() }
-                    jsonPath("$.data.summary") { value("유지할 수동 요약") }
-                    jsonPath("$.data.summarySource") { value("MANUAL") }
+                    jsonPath("$.data.summary") { value(preservedExpected.summary) }
+                    jsonPath("$.data.summarySource") { value(preservedExpected.source) }
                 }.andReturn()
                 .response.contentAsString
         val preservedVersion = JsonPath.read<Int>(preserved, "$.data.version").toLong()
@@ -122,43 +111,31 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .put("/post/api/v1/posts/$postId") {
                 contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "수정 요약 글",
-                      "content": "새 본문의 첫 핵심 문장입니다. 두 번째 문장입니다.",
-                      "summary": "   ",
-                      "version": $preservedVersion
-                    }
-                    """.trimIndent()
+                content = postPayload(recomputeFixture, version = preservedVersion)
             }.andExpect {
                 status { isOk() }
-                jsonPath("$.data.summary") { value("새 본문의 첫 핵심 문장입니다. 두 번째 문장입니다.") }
-                jsonPath("$.data.summarySource") { value("EXTRACTED") }
+                jsonPath("$.data.summary") { value(recomputeExpected.summary) }
+                jsonPath("$.data.summarySource") { value(recomputeExpected.source) }
             }
     }
 
     @Test
     @WithUserDetails("admin@test.com")
     fun `admin preview endpoint returns deterministic result without persisting`() {
+        val fixture = resolvedFixture("extracted-with-exclusions", "create")
+        val expected = requireNotNull(fixture.expected)
         val beforeCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM post", Long::class.java)
 
         mvc
             .post("/post/api/v1/adm/posts/preview-summary") {
                 contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "미리보기",
-                      "content": "미리보기의 첫 핵심 문장입니다. 두 번째 문장입니다."
-                    }
-                    """.trimIndent()
+                content = postPayload(fixture)
             }.andExpect {
                 status { isOk() }
-                jsonPath("$.summary") { value("미리보기의 첫 핵심 문장입니다. 두 번째 문장입니다.") }
-                jsonPath("$.source") { value("EXTRACTED") }
+                jsonPath("$.summary") { value(expected.summary) }
+                jsonPath("$.source") { value(expected.source) }
                 jsonPath("$.contentHash") { isNotEmpty() }
-                jsonPath("$.algorithmVersion") { value(PostSummaryResolver.ALGORITHM_VERSION) }
+                jsonPath("$.algorithmVersion") { value(expected.algorithmVersion) }
             }
 
         val afterCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM post", Long::class.java)
@@ -168,19 +145,16 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
     @Test
     @WithUserDetails("admin@test.com")
     fun `idempotent backfill populates legacy summary without changing modified at`() {
+        val fixture = resolvedFixture("idempotent-backfill-api", "backfill")
+        val expected = requireNotNull(fixture.expected)
         val created =
             mvc
                 .post("/post/api/v1/posts") {
                     contentType = MediaType.APPLICATION_JSON
                     content =
-                        """
-                        {
-                          "title": "이전 글",
-                          "content": "---\nsummary: \"이전 frontmatter 요약\"\n---\n본문입니다.",
-                          "published": true,
-                          "listed": true
-                        }
-                        """.trimIndent()
+                        objectMapper.writeValueAsString(
+                            mapOf("title" to fixture.title, "content" to fixture.content, "published" to true, "listed" to true),
+                        )
                 }.andReturn()
                 .response.contentAsString
         val postId = JsonPath.read<Int>(created, "$.data.id").toLong()
@@ -241,9 +215,9 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 """.trimIndent(),
                 postId,
             )
-        assertThat(row["summary_text"]).isEqualTo("이전 frontmatter 요약")
-        assertThat(row["summary_source"]).isEqualTo("MIGRATED")
-        assertThat(row["summary_algorithm_version"]).isEqualTo("legacy-frontmatter-v1")
+        assertThat(row["summary_text"]).isEqualTo(expected.summary)
+        assertThat(row["summary_source"]).isEqualTo(expected.source)
+        assertThat(row["summary_algorithm_version"]).isEqualTo(expected.algorithmVersion)
         assertThat((row["modified_at"] as Timestamp).toInstant()).isEqualTo(originalModifiedAt)
         assertThat(row["version"]).isNull()
 
@@ -253,8 +227,8 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
 
         mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }.andExpect {
             status { isOk() }
-            jsonPath("$.summary") { value("이전 frontmatter 요약") }
-            jsonPath("$.summarySource") { value("MIGRATED") }
+            jsonPath("$.summary") { value(expected.summary) }
+            jsonPath("$.summarySource") { value(expected.source) }
         }
     }
 
@@ -310,18 +284,11 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
     @Test
     @WithUserDetails("admin@test.com")
     fun `manual mode rejects blank summary`() {
+        val fixture = rejectedFixture("manual-blank-rejection", "create")
         mvc
             .post("/post/api/v1/posts") {
                 contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "빈 수동 요약",
-                      "content": "본문입니다.",
-                      "summaryMode": "MANUAL",
-                      "summary": "   "
-                    }
-                    """.trimIndent()
+                content = postPayload(fixture)
             }.andExpect {
                 status { isBadRequest() }
             }
@@ -330,19 +297,13 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
     @Test
     @WithUserDetails("admin@test.com")
     fun `auto mode clears manual summary and recomputes`() {
+        val fixture = resolvedFixture("auto-recompute", "modify")
+        val expected = requireNotNull(fixture.expected)
         val created =
             mvc
                 .post("/post/api/v1/posts") {
                     contentType = MediaType.APPLICATION_JSON
-                    content =
-                        """
-                        {
-                          "title": "mode 전환 글",
-                          "content": "기존 본문입니다.",
-                          "summaryMode": "MANUAL",
-                          "summary": "기존 수동 요약"
-                        }
-                        """.trimIndent()
+                    content = postPayload(fixture, requireNotNull(fixture.existing).toRequest())
                 }.andReturn()
                 .response.contentAsString
         val postId = JsonPath.read<Int>(created, "$.data.id")
@@ -351,40 +312,26 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .put("/post/api/v1/posts/$postId") {
                 contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "mode 전환 글",
-                      "content": "자동으로 다시 계산할 핵심 문장입니다. 두 번째 문장입니다.",
-                      "summaryMode": "AUTO",
-                      "version": $version
-                    }
-                    """.trimIndent()
+                content = postPayload(fixture, fixture.request, version)
             }.andExpect {
                 status { isOk() }
-                jsonPath("$.data.summary") { value("자동으로 다시 계산할 핵심 문장입니다. 두 번째 문장입니다.") }
-                jsonPath("$.data.summarySource") { value("EXTRACTED") }
+                jsonPath("$.data.summary") { value(expected.summary) }
+                jsonPath("$.data.summarySource") { value(expected.source) }
             }
     }
 
     @Test
     @WithUserDetails("admin@test.com")
     fun `idempotency retry keeps the first canonical summary`() {
+        val fixture = resolvedFixture("idempotent-first-write", "create")
+        val expected = requireNotNull(fixture.expected)
         val key = "summary-idempotency-${System.nanoTime()}"
         val first =
             mvc
                 .post("/post/api/v1/posts") {
                     header("Idempotency-Key", key)
                     contentType = MediaType.APPLICATION_JSON
-                    content =
-                        """
-                        {
-                          "title": "멱등 요약",
-                          "content": "첫 본문입니다.",
-                          "summaryMode": "MANUAL",
-                          "summary": "최초 요약"
-                        }
-                        """.trimIndent()
+                    content = postPayload(fixture)
                 }.andReturn()
                 .response.contentAsString
         val postId = JsonPath.read<Int>(first, "$.data.id")
@@ -393,20 +340,12 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
             .post("/post/api/v1/posts") {
                 header("Idempotency-Key", key)
                 contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "다른 제목",
-                      "content": "다른 본문입니다.",
-                      "summaryMode": "MANUAL",
-                      "summary": "바뀌면 안 되는 요약"
-                    }
-                    """.trimIndent()
+                content = postPayload(fixture, requireNotNull(fixture.retry))
             }.andExpect {
                 status { isCreated() }
                 jsonPath("$.data.id") { value(postId) }
-                jsonPath("$.data.summary") { value("최초 요약") }
-                jsonPath("$.data.summarySource") { value("MANUAL") }
+                jsonPath("$.data.summary") { value(expected.summary) }
+                jsonPath("$.data.summarySource") { value(expected.source) }
             }
     }
 
@@ -459,4 +398,40 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         val envelope = objectMapper.readValue(payloadJson, TaskPayloadEnvelope::class.java)
         return objectMapper.readValue(envelope.payloadJson, PostWriteSideEffectPayload::class.java)
     }
+
+    private fun postPayload(
+        fixture: Fixture,
+        request: Request = fixture.request,
+        version: Number? = null,
+    ): String {
+        val body = linkedMapOf<String, Any>("title" to fixture.title, "content" to fixture.content)
+        request.summaryMode?.let { body["summaryMode"] = it }
+        request.summary?.let { body["summary"] = it }
+        version?.let { body["version"] = it }
+        return objectMapper.writeValueAsString(body)
+    }
+
+    private fun CanonicalSummaryFixture.Existing.toRequest(): Request {
+        check(source == "MANUAL") { "existing summary source must be MANUAL for AUTO recompute setup" }
+        return Request(summaryMode = source, summary = summary)
+    }
+
+    private fun resolvedFixture(
+        id: String,
+        resolve: String,
+    ): Fixture =
+        CanonicalSummaryFixture.fixture(id).also {
+            assertThat(it.resolve).isEqualTo(resolve)
+            assertThat(it.outcome).isEqualTo("RESOLVED")
+        }
+
+    private fun rejectedFixture(
+        id: String,
+        resolve: String,
+    ): Fixture =
+        CanonicalSummaryFixture.fixture(id).also {
+            assertThat(it.resolve).isEqualTo(resolve)
+            assertThat(it.outcome).isEqualTo("MANUAL_SUMMARY_REQUIRED")
+            assertThat(it.expected).isNull()
+        }
 }

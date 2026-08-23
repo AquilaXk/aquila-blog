@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url"
 import { writePublicManifest } from "./write-public-manifest.mjs"
 
 const errorCodeKeys = ["code", "httpStatus", "defaultUserMessage", "kind"]
+const summaryResolveKinds = new Set(["create", "modify", "backfill"])
+const summaryOutcomes = new Set(["RESOLVED", "MANUAL_SUMMARY_REQUIRED"])
+const summaryModes = new Set(["MANUAL", "AUTO"])
+const summarySources = new Set(["MANUAL", "LEADING_BLOCK", "EXTRACTED", "NONE", "MIGRATED"])
 
 function resolveRoot(args) {
   if (args.length === 0) {
@@ -65,11 +69,60 @@ function validateErrorCodes(value) {
   }
 }
 
+function isObject(value) {
+  return value !== null && !Array.isArray(value) && typeof value === "object"
+}
+
+function exactKeys(value, expected) {
+  return isObject(value) && Object.keys(value).sort().join("\n") === [...expected].sort().join("\n")
+}
+
+function validateSummaryRequest(value) {
+  if (!exactKeys(value, ["summaryMode", "summary"]) || (value.summaryMode !== null && !summaryModes.has(value.summaryMode)) || (value.summary !== null && typeof value.summary !== "string")) {
+    throw new Error("Canonical summary fixture request has an invalid shape")
+  }
+}
+
+function validateSummaryFixtures(value) {
+  if (!exactKeys(value, ["version", "contract", "fixtures"]) || value.version !== 1 || value.contract !== "aquila-canonical-summary-fixtures" || !Array.isArray(value.fixtures)) {
+    throw new Error("Canonical summary fixture identity is invalid")
+  }
+  const ids = new Set()
+  for (const fixture of value.fixtures) {
+    const expectedKeys = ["id", "resolve", "title", "content", "request", "outcome"]
+    if (fixture?.expected !== undefined) expectedKeys.push("expected")
+    if (fixture?.existing !== undefined) expectedKeys.push("existing")
+    if (fixture?.retry !== undefined) expectedKeys.push("retry")
+    if (!exactKeys(fixture, expectedKeys) || typeof fixture.id !== "string" || fixture.id.length === 0 || ids.has(fixture.id) || !summaryResolveKinds.has(fixture.resolve) || typeof fixture.title !== "string" || typeof fixture.content !== "string" || !summaryOutcomes.has(fixture.outcome)) {
+      throw new Error("Canonical summary fixture has an invalid shape")
+    }
+    validateSummaryRequest(fixture.request)
+    if (fixture.existing !== undefined && (fixture.resolve !== "modify" || !exactKeys(fixture.existing, ["summary", "source"]) || typeof fixture.existing.summary !== "string" || !summarySources.has(fixture.existing.source))) {
+      throw new Error("Canonical summary fixture existing value is invalid")
+    }
+    if (fixture.retry !== undefined) {
+      if (fixture.resolve !== "create") throw new Error("Canonical summary fixture retry is incompatible with resolve")
+      validateSummaryRequest(fixture.retry)
+    }
+    if (fixture.outcome === "RESOLVED") {
+      if (!exactKeys(fixture.expected, ["summary", "source", "algorithmVersion"]) || typeof fixture.expected.summary !== "string" || !summarySources.has(fixture.expected.source) || typeof fixture.expected.algorithmVersion !== "string" || fixture.expected.algorithmVersion.length === 0) {
+        throw new Error("Canonical summary fixture expected value is invalid")
+      }
+    } else if (fixture.expected !== undefined) {
+      throw new Error("Rejected canonical summary fixture must not define an expected value")
+    }
+    if (fixture.resolve === "modify" && fixture.existing === undefined) throw new Error("Modified canonical summary fixture requires an existing value")
+    ids.add(fixture.id)
+  }
+}
+
 export function syncPublicContracts(root) {
   const openapi = readJson(path.join(root, "back", "build", "openapi", "openapi.json"), "OpenAPI")
   const errorCodes = readJson(path.join(root, "back", "build", "public-api", "error-codes.json"), "ErrorCode contract")
+  const summaryFixtures = readJson(path.join(root, "contracts", "public-api", "summary-fixtures.json"), "Canonical summary fixture")
   validateOpenApi(openapi)
   validateErrorCodes(errorCodes)
+  validateSummaryFixtures(summaryFixtures)
 
   const contractsDir = path.join(root, "contracts", "public-api")
   fs.mkdirSync(contractsDir, { recursive: true })
@@ -78,6 +131,7 @@ export function syncPublicContracts(root) {
     path.join(contractsDir, "error-codes.json"),
     canonicalJson([...errorCodes].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))),
   )
+  fs.writeFileSync(path.join(contractsDir, "summary-fixtures.json"), canonicalJson(summaryFixtures))
   writePublicManifest(contractsDir)
 }
 

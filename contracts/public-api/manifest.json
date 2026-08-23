@@ -9,6 +9,10 @@
     "errorCodes": {
       "path": "error-codes.json",
       "sha256": "23ac23f2348ec3939c2cec51ce81d1087301af2a3b07240b5b8d2b9d98145249"
+    },
+    "summaryFixtures": {
+      "path": "summary-fixtures.json",
+      "sha256": "81847b0032022c0fd5df21989ce69c21eee2f7ac156bc9fe6c76f4450cae8a95"
     }
   }
 }

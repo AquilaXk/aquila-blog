@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.post.CanonicalSummaryFixture
 import com.back.boundedContexts.post.model.PostSummarySource
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
@@ -16,32 +17,32 @@ class PostSummaryResolverTest {
 
     @Test
     fun `manual summary wins without rewriting author wording`() {
+        val fixture = resolvedFixture("manual-create", "create")
+        val expected = requireNotNull(fixture.expected)
         val resolved =
             PostSummaryResolver.resolveForCreate(
-                title = "캐시 정책",
-                content = "본문입니다.",
-                submittedSummary = "이 글은 stale-if-error와 Cache-Control을 설명합니다.",
+                title = fixture.title,
+                content = fixture.content,
+                submittedSummary = fixture.request.summary,
                 now = fixedNow,
             )
 
-        assertThat(resolved.source).isEqualTo(PostSummarySource.MANUAL)
-        assertThat(resolved.text).isEqualTo("이 글은 stale-if-error와 Cache-Control을 설명합니다.")
+        assertThat(resolved.source.name).isEqualTo(expected.source)
+        assertThat(resolved.text).isEqualTo(expected.summary)
+        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
         assertThat(resolved.generatedAt).isNull()
     }
 
     @Test
     fun `legacy frontmatter summary is migrated with CRLF and escaped quotes`() {
-        val content =
-            "---\r\n" +
-                "summary: \"Cache-Control과 \\\"aud\\\" 클레임을 설명합니다.\"\r\n" +
-                "---\r\n" +
-                "본문입니다."
+        val fixture = resolvedFixture("migrated-frontmatter", "backfill")
+        val expected = requireNotNull(fixture.expected)
 
-        val resolved = PostSummaryResolver.resolveForBackfill("JWT", content, fixedNow)
+        val resolved = PostSummaryResolver.resolveForBackfill(fixture.title, fixture.content, fixedNow)
 
-        assertThat(resolved.source).isEqualTo(PostSummarySource.MIGRATED)
-        assertThat(resolved.text).isEqualTo("Cache-Control과 \"aud\" 클레임을 설명합니다.")
-        assertThat(resolved.algorithmVersion).isEqualTo("legacy-frontmatter-v1")
+        assertThat(resolved.source.name).isEqualTo(expected.source)
+        assertThat(resolved.text).isEqualTo(expected.summary)
+        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
     }
 
     @Test
@@ -59,65 +60,39 @@ summary: "이전 frontmatter 요약"
 
     @Test
     fun `leading explicit summary block wins over ordinary prose`() {
-        val content =
-            """
-            > **요약:** OAuth 2.0은 권한 위임을 위한 프레임워크입니다.
-            > OIDC는 그 위에 인증 계층을 추가합니다.
+        val fixture = resolvedFixture("leading-block", "create")
+        val expected = requireNotNull(fixture.expected)
 
-            안녕하세요. 긴 도입부입니다.
-            """.trimIndent()
+        val resolved = PostSummaryResolver.resolveForCreate(fixture.title, fixture.content, fixture.request.summary, fixedNow)
 
-        val resolved = PostSummaryResolver.resolveForCreate("OAuth", content, null, fixedNow)
-
-        assertThat(resolved.source).isEqualTo(PostSummarySource.LEADING_BLOCK)
-        assertThat(resolved.text).isEqualTo("OAuth 2.0은 권한 위임을 위한 프레임워크입니다. OIDC는 그 위에 인증 계층을 추가합니다.")
+        assertThat(resolved.source.name).isEqualTo(expected.source)
+        assertThat(resolved.text).isEqualTo(expected.summary)
+        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
     }
 
     @Test
     fun `extractor skips title code image table and uses first two complete sentences`() {
-        val content =
-            """
-            # 자동 요약
+        val fixture = resolvedFixture("extracted-with-exclusions", "create")
+        val expected = requireNotNull(fixture.expected)
 
-            ````kotlin
-            ```text
-            raw code
-            ```
-            ````
+        val resolved = PostSummaryResolver.resolveForCreate(fixture.title, fixture.content, fixture.request.summary, fixedNow)
 
-            ![diagram](https://example.com/diagram.png)
-
-            | 항목 | 값 |
-            | --- | --- |
-            | cache | enabled |
-
-            첫 번째 핵심 문장입니다. 두 번째 핵심 문장입니다. 세 번째 문장은 포함하지 않습니다.
-            """.trimIndent()
-
-        val resolved = PostSummaryResolver.resolveForCreate("자동 요약", content, null, fixedNow)
-
-        assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
-        assertThat(resolved.text).isEqualTo("첫 번째 핵심 문장입니다. 두 번째 핵심 문장입니다.")
+        assertThat(resolved.source.name).isEqualTo(expected.source)
+        assertThat(resolved.text).isEqualTo(expected.summary)
+        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
         assertThat(resolved.text).doesNotContain("raw code", "diagram", "cache")
     }
 
     @Test
     fun `code image and html only content resolves to none without raw markdown fallback`() {
-        val content =
-            """
-            ~~~kotlin
-            println("secret")
-            ~~~
+        val fixture = resolvedFixture("none-no-fallback", "create")
+        val expected = requireNotNull(fixture.expected)
 
-            ![only image](https://example.com/image.png)
+        val resolved = PostSummaryResolver.resolveForCreate(fixture.title, fixture.content, fixture.request.summary, fixedNow)
 
-            <details><summary>접기</summary>내부</details>
-            """.trimIndent()
-
-        val resolved = PostSummaryResolver.resolveForCreate("제목", content, null, fixedNow)
-
-        assertThat(resolved.source).isEqualTo(PostSummarySource.NONE)
-        assertThat(resolved.text).isEmpty()
+        assertThat(resolved.source.name).isEqualTo(expected.source)
+        assertThat(resolved.text).isEqualTo(expected.summary)
+        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
     }
 
     @Test
@@ -134,42 +109,54 @@ summary: "이전 frontmatter 요약"
 
     @Test
     fun `existing manual summary survives content edits when request omits summary`() {
+        val fixture = resolvedFixture("manual-preserve-omitted", "modify")
+        val existing = requireNotNull(fixture.existing)
+        val expected = requireNotNull(fixture.expected)
         val resolved =
             PostSummaryResolver.resolveForModify(
-                title = "제목",
-                content = "완전히 바뀐 본문입니다.",
-                submittedSummary = null,
-                existingText = "작성자가 확정한 요약",
-                existingSource = PostSummarySource.MANUAL,
+                title = fixture.title,
+                content = fixture.content,
+                submittedSummary = fixture.request.summary,
+                existingText = existing.summary,
+                existingSource = PostSummarySource.valueOf(existing.source),
                 now = fixedNow,
             )
 
-        assertThat(resolved.source).isEqualTo(PostSummarySource.MANUAL)
-        assertThat(resolved.text).isEqualTo("작성자가 확정한 요약")
+        assertThat(resolved.source.name).isEqualTo(expected.source)
+        assertThat(resolved.text).isEqualTo(expected.summary)
+        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
     }
 
     @Test
     fun `blank submitted summary clears manual mode and recomputes deterministically`() {
+        val fixture = resolvedFixture("blank-recompute", "modify")
+        val existing = requireNotNull(fixture.existing)
+        val expected = requireNotNull(fixture.expected)
         val resolved =
             PostSummaryResolver.resolveForModify(
-                title = "제목",
-                content = "새 본문의 핵심 문장입니다. 두 번째 문장입니다.",
-                submittedSummary = "   ",
-                existingText = "이전 수동 요약",
-                existingSource = PostSummarySource.MANUAL,
+                title = fixture.title,
+                content = fixture.content,
+                submittedSummary = fixture.request.summary,
+                existingText = existing.summary,
+                existingSource = PostSummarySource.valueOf(existing.source),
                 now = fixedNow,
             )
 
-        assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
-        assertThat(resolved.text).isEqualTo("새 본문의 핵심 문장입니다. 두 번째 문장입니다.")
+        assertThat(resolved.source.name).isEqualTo(expected.source)
+        assertThat(resolved.text).isEqualTo(expected.summary)
+        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
     }
 
     @Test
     fun `ellipsis is included inside the 150 grapheme limit without splitting zwj emoji`() {
-        val content = "👩‍💻".repeat(160) + " 긴 기술 설명 문장입니다."
+        val fixture = resolvedFixture("unicode-grapheme", "create")
+        val expected = requireNotNull(fixture.expected)
 
-        val resolved = PostSummaryResolver.resolveForCreate("제목", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveForCreate(fixture.title, fixture.content, fixture.request.summary, fixedNow)
 
+        assertThat(resolved.source.name).isEqualTo(expected.source)
+        assertThat(resolved.text).isEqualTo(expected.summary)
+        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
         assertThat(graphemeCount(resolved.text)).isLessThanOrEqualTo(PostSummaryResolver.MAX_GRAPHEMES)
         assertThat(resolved.text).endsWith("…")
         assertThat(resolved.text.dropLast(1)).endsWith("👩‍💻")
@@ -323,4 +310,13 @@ summary: "경로 C:\\temp 안내\n다음 문장입니다."
         while (iterator.next() != BreakIterator.DONE) count += 1
         return count
     }
+
+    private fun resolvedFixture(
+        id: String,
+        resolve: String,
+    ): CanonicalSummaryFixture.Fixture =
+        CanonicalSummaryFixture.fixture(id).also {
+            assertThat(it.resolve).isEqualTo(resolve)
+            assertThat(it.outcome).isEqualTo("RESOLVED")
+        }
 }

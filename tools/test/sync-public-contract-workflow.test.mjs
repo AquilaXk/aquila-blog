@@ -81,18 +81,21 @@ function writeContractBundle(platform) {
   mkdirSync(directory, { recursive: true })
   const openapi = Buffer.from('{"openapi":"3.1.0"}\n')
   const errorCodes = Buffer.from('[{"code":"400-1"}]\n')
+  const summaryFixtures = Buffer.from('{"version":1,"contract":"aquila-canonical-summary-fixtures","fixtures":[]}\n')
   writeFileSync(path.join(directory, "openapi.json"), openapi)
   writeFileSync(path.join(directory, "error-codes.json"), errorCodes)
+  writeFileSync(path.join(directory, "summary-fixtures.json"), summaryFixtures)
   const manifest = Buffer.from(`${JSON.stringify({
     version: 1,
     contract: "aquila-public-api",
     artifacts: {
       openapi: { path: "openapi.json", sha256: sha256(openapi) },
       errorCodes: { path: "error-codes.json", sha256: sha256(errorCodes) },
+      summaryFixtures: { path: "summary-fixtures.json", sha256: sha256(summaryFixtures) },
     },
   }, null, 2)}\n`)
   writeFileSync(path.join(directory, "manifest.json"), manifest)
-  return { errorCodes, manifest, openapi }
+  return { errorCodes, manifest, openapi, summaryFixtures }
 }
 
 test("every main push reconciles delivery while manual runs only validate", (t) => {
@@ -135,13 +138,13 @@ test("every main push reconciles delivery while manual runs only validate", (t) 
   assert.deepEqual(values(pushOutput), { source_ref: "b".repeat(40), dispatch_enabled: "true" })
 })
 
-test("Platform source and canonical public bytes fail closed with raw hashes", (t) => {
+test("Platform source and exact three canonical public artifacts fail closed with raw hashes", (t) => {
   const { document } = workflow()
   const job = producerJob(document)
   const sourceStep = matchingStep(job, (candidate) => String(candidate.run ?? "").includes("git -C platform rev-parse HEAD"), "source identity")
   const identityStep = matchingStep(job, (candidate) => {
     const run = String(candidate.run ?? "")
-    return run.includes("manifest_sha256=") && run.includes("openapi_sha256=") && run.includes("error_codes_sha256=")
+    return run.includes("summary-fixtures.json") && run.includes("manifest_sha256=") && run.includes("openapi_sha256=") && run.includes("error_codes_sha256=")
   }, "public contract identity")
   const temp = mkdtempSync(path.join(os.tmpdir(), "platform-public-source-"))
   t.after(() => rmSync(temp, { recursive: true, force: true }))
@@ -181,6 +184,11 @@ test("Platform source and canonical public bytes fail closed with raw hashes", (
   writeFileSync(path.join(platform, "contracts/public-api/openapi.json"), `${bundle.openapi} `)
   const rejected = runShell(identityStep.run, platform, { GITHUB_OUTPUT: path.join(temp, "rejected.out") })
   assert.notEqual(rejected.status, 0, "artifact bytes that disagree with the manifest must fail closed")
+
+  writeFileSync(path.join(platform, "contracts/public-api/openapi.json"), bundle.openapi)
+  writeFileSync(path.join(platform, "contracts/public-api/summary-fixtures.json"), `${bundle.summaryFixtures} `)
+  const rejectedSummaryFixtures = runShell(identityStep.run, platform, { GITHUB_OUTPUT: path.join(temp, "rejected-summary-fixtures.out") })
+  assert.notEqual(rejectedSummaryFixtures.status, 0, "summary-fixture bytes that disagree with the manifest must fail closed")
 })
 
 test("stale Platform main is a successful no-op before the scoped Web token", (t) => {

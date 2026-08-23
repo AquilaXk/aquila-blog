@@ -27,6 +27,7 @@ export function writePublicManifest(contractsDir) {
   const artifacts = {
     openapi: { path: "openapi.json", sha256: sha256(path.join(contractsDir, "openapi.json")) },
     errorCodes: { path: "error-codes.json", sha256: sha256(path.join(contractsDir, "error-codes.json")) },
+    summaryFixtures: { path: "summary-fixtures.json", sha256: sha256(path.join(contractsDir, "summary-fixtures.json")) },
   }
   for (const artifact of Object.values(artifacts)) {
     if (!sha256Pattern.test(artifact.sha256)) {

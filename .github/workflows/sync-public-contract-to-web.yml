@@ -110,17 +110,20 @@ jobs:
             manifest: fs.readFileSync(`${directory}/manifest.json`),
             openapi: fs.readFileSync(`${directory}/openapi.json`),
             errorCodes: fs.readFileSync(`${directory}/error-codes.json`),
+            summaryFixtures: fs.readFileSync(`${directory}/summary-fixtures.json`),
           }
           const manifest = JSON.parse(bytes.manifest)
           const openapi = JSON.parse(bytes.openapi)
           const errorCodes = JSON.parse(bytes.errorCodes)
+          const summaryFixtures = JSON.parse(bytes.summaryFixtures)
           const hash = (value) => crypto.createHash("sha256").update(value).digest("hex")
           const exactKeys = (value, expected) => Object.keys(value).sort().join("\n") === [...expected].sort().join("\n")
           if (!manifest || typeof manifest !== "object" || Array.isArray(manifest) || !exactKeys(manifest, ["version", "contract", "artifacts"])) throw new Error("manifest shape is invalid")
-          if (manifest.version !== 1 || manifest.contract !== "aquila-public-api" || !manifest.artifacts || !exactKeys(manifest.artifacts, ["openapi", "errorCodes"])) throw new Error("manifest identity is invalid")
+          if (manifest.version !== 1 || manifest.contract !== "aquila-public-api" || !manifest.artifacts || !exactKeys(manifest.artifacts, ["openapi", "errorCodes", "summaryFixtures"])) throw new Error("manifest identity is invalid")
           if (!exactKeys(manifest.artifacts.openapi, ["path", "sha256"]) || manifest.artifacts.openapi.path !== "openapi.json" || manifest.artifacts.openapi.sha256 !== hash(bytes.openapi)) throw new Error("OpenAPI bytes do not match the manifest")
           if (!exactKeys(manifest.artifacts.errorCodes, ["path", "sha256"]) || manifest.artifacts.errorCodes.path !== "error-codes.json" || manifest.artifacts.errorCodes.sha256 !== hash(bytes.errorCodes)) throw new Error("error-code bytes do not match the manifest")
-          if (!openapi || typeof openapi !== "object" || Array.isArray(openapi) || !Array.isArray(errorCodes)) throw new Error("public contract JSON is invalid")
+          if (!exactKeys(manifest.artifacts.summaryFixtures, ["path", "sha256"]) || manifest.artifacts.summaryFixtures.path !== "summary-fixtures.json" || manifest.artifacts.summaryFixtures.sha256 !== hash(bytes.summaryFixtures)) throw new Error("summary fixture bytes do not match the manifest")
+          if (!openapi || typeof openapi !== "object" || Array.isArray(openapi) || !Array.isArray(errorCodes) || !summaryFixtures || typeof summaryFixtures !== "object" || Array.isArray(summaryFixtures) || summaryFixtures.version !== 1 || summaryFixtures.contract !== "aquila-canonical-summary-fixtures" || !Array.isArray(summaryFixtures.fixtures)) throw new Error("public contract JSON is invalid")
           fs.appendFileSync(process.env.GITHUB_OUTPUT, [
             `manifest_sha256=${hash(bytes.manifest)}`,
             `openapi_sha256=${hash(bytes.openapi)}`,

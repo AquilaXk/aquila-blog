@@ -100,6 +100,7 @@ test("write path uses separate least-privilege tokens and one Platform-local dra
   assert.equal(writeToken.with["permission-contents"], "write")
   assert.equal(writeToken.with["permission-pull-requests"], "write")
   assert.match(String(writeToken.if), /changed == 'true'/)
+  assert.match(String(writeToken.if), /existing-pr\.outputs\.exists == 'true'/)
   assert.match(String(writeToken.if), /dispatch_admission == 'proceed'/)
   assert.match(source, /SYNC_BRANCH:\s*chore\/web-legal-policy-sync/)
   const branch = stepByName(job, "Prepare stable Platform sync branch against latest main")
@@ -127,6 +128,7 @@ test("provenance drift and replay cannot silently write", () => {
   const noChange = stepByName(job, "Assert replay does not create a write token")
   assert.match(noChange.run, /write token|commit|push|pull request/i)
   assert.match(String(noChange.if), /changed != 'true'/)
+  assert.match(String(noChange.if), /existing-pr\.outputs\.exists != 'true'/)
 })
 
 test("sourceCommit-only legal provenance drift is a write-free semantic replay", (t) => {
@@ -168,6 +170,32 @@ test("sourceCommit-only legal provenance drift is a write-free semantic replay",
   })
   assert.equal(semanticChange.status, 0, semanticChange.stderr)
   assert.equal(changedOutput(changedFile), "changed=true")
+})
+
+test("semantic replay closes only one exact obsolete Platform Draft PR", () => {
+  const { document, source } = workflow()
+  const job = document.jobs.receive
+  const discovery = stepByName(job, "Discover exact existing Platform legal-policy Draft PR")
+  assert.equal(discovery.env.GH_TOKEN, "${{ github.token }}")
+  assert.match(discovery.run, /state=open/)
+  assert.match(discovery.run, /head="\$\{GITHUB_REPOSITORY_OWNER\}:\$\{SYNC_BRANCH\}"/)
+  assert.match(discovery.run, /base=main/)
+  assert.match(discovery.run, /prs\.length > 1/)
+  assert.match(discovery.run, /pr\.draft/)
+  assert.match(discovery.run, /pr\.head\?\.repo\?\.full_name !== process\.env\.PLATFORM_REPOSITORY/)
+  assert.match(discovery.run, /exists=false/)
+  assert.match(discovery.run, /exists=true/)
+
+  const freshness = stepByName(job, "Recheck exact current identity before writing")
+  assert.match(String(freshness.if), /existing-pr\.outputs\.exists == 'true'/)
+  const close = stepByName(job, "Close obsolete Platform legal-policy Draft PR")
+  assert.match(String(close.if), /changes\.outputs\.changed != 'true'/)
+  assert.match(String(close.if), /existing-pr\.outputs\.exists == 'true'/)
+  assert.match(String(close.if), /freshness\.outputs\.dispatch_admission == 'proceed'/)
+  assert.match(close.run, /pr\.state === "closed"/)
+  assert.match(close.run, /pr\.head\?\.repo\?\.full_name !== process\.env\.PLATFORM_REPOSITORY/)
+  assert.match(close.run, /gh pr close/)
+  assert.doesNotMatch(source, /git branch -[dD]|git reset|git push[^\n]*(?:--force|--force-with-lease)/)
 })
 
 test("stable branch enforces a committed-range allowlist and rechecks freshness immediately before push", () => {

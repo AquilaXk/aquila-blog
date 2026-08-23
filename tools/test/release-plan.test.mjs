@@ -194,6 +194,7 @@ test("invalid migration safety report fails closed", () => {
 test("Platform reusable workflow runs release planner and strict boundary checks", () => {
   const backendWorkflow = readFileSync(backendWorkflowPath, "utf8")
   const nMinusOneTest = readFileSync(nMinusOneTestPath, "utf8")
+  const backendDetection = backendWorkflow.match(/case "\$\{file\}" in([\s\S]*?)esac/)?.[1] ?? ""
 
   assert.match(backendWorkflow, /Check Flyway deploy safety/)
   assert.match(backendWorkflow, /previous_filename/)
@@ -203,6 +204,7 @@ test("Platform reusable workflow runs release planner and strict boundary checks
   assert.match(backendWorkflow, /--migration-safety-json "\$\{RUNNER_TEMP\}\/flyway-deploy-safety\.json"/)
   assert.match(backendWorkflow, /--policy "\$\{policy_path\}"[\s\S]*--base-policy "\$\{base_policy\}"[\s\S]*Run Flyway N-1 compatibility test[\s\S]*\.\/gradlew testcontainersTest --tests com\.back\.infrastructure\.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest --rerun-tasks/)
   assert.match(backendWorkflow, /steps\.flyway_safety\.outputs\.status != '0'/)
+  assert.match(backendDetection, /tools\/test\/flyway-deploy-safety\.test\.mjs/)
   assert.doesNotMatch(nMinusOneTest, /disabledWithoutDocker\s*=\s*true/)
   assert(backendWorkflow.indexOf("Check Flyway deploy safety") < backendWorkflow.indexOf("Classify release risk"))
   assert(backendWorkflow.indexOf("Classify release risk") < backendWorkflow.indexOf("Skip backend-heavy checks"))

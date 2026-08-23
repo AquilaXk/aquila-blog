@@ -1,6 +1,5 @@
 package com.back.global.springDoc
 
-import com.back.global.security.application.HtmlContentSanitizer
 import com.back.support.BaseControllerIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -73,7 +72,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val contentHtmlSanitizerPolicyVersion =
             propertySchema(openApiNode, "PostWithContentDto", "contentHtmlSanitizerPolicyVersion")
         assertTypeSet(contentHtmlSanitizerPolicyVersion, "string", "null")
-        assertNullableEnum(contentHtmlSanitizerPolicyVersion, HtmlContentSanitizer.CURRENT_POLICY_VERSION)
+        assertThat(contentHtmlSanitizerPolicyVersion.has("enum")).isFalse()
         val contentHtmlTrustState = propertySchema(openApiNode, "PostWithContentDto", "contentHtmlTrustState")
         assertThat(contentHtmlTrustState.path("type").asText()).isEqualTo("string")
         assertThat(contentHtmlTrustState.path("enum").values().map { it.asText() })

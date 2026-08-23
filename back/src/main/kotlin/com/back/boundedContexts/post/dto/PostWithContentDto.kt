@@ -5,7 +5,6 @@ import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.security.application.ContentHtmlTrustResult
 import com.back.global.security.application.ContentHtmlTrustState
 import com.back.global.security.application.HtmlContentSanitizer
-import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
 
 data class PostWithContentDto(
@@ -33,7 +32,6 @@ data class PostWithContentDto(
     val summary: String = "",
     val summarySource: PostSummarySource = PostSummarySource.NONE,
     val contentHtmlHash: String? = null,
-    @field:Schema(allowableValues = [HtmlContentSanitizer.CURRENT_POLICY_VERSION])
     val contentHtmlSanitizerPolicyVersion: String? = null,
     val contentHtmlTrustState: ContentHtmlTrustState = ContentHtmlTrustState.UNKNOWN,
 ) {

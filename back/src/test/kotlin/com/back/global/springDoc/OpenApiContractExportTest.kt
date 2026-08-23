@@ -35,7 +35,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .first()
                 .path("url")
                 .asText(),
-        ).isEqualTo("https://api.blog.aquilaxk.site")
+        ).isEqualTo("https://blog.aquilaxk.site")
         assertThat(
             openApiNode
                 .path("components")

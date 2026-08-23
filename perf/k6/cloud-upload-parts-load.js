@@ -10,7 +10,7 @@
  *   CLOUD_AUTH_HEADER="Bearer <jwt>"
  *
  * 실행 예:
- *   BASE_URL="https://api.blog.aquilaxk.site" \
+ *   BASE_URL="https://blog.aquilaxk.site" \
  *   CLOUD_AUTH_COOKIE="accessToken=..." \
  *   PART_SIZE_BYTES="1048576" \
  *   PARTS_PER_SESSION="3" \
@@ -21,7 +21,7 @@ import http from "k6/http";
 import { check, sleep } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
 
-const BASE_URL = (__ENV.BASE_URL || "https://api.blog.aquilaxk.site").replace(/\/$/, "");
+const BASE_URL = (__ENV.BASE_URL || "https://blog.aquilaxk.site").replace(/\/$/, "");
 const CLOUD_API = `${BASE_URL}/system/api/v1/adm/cloud`;
 const PART_SIZE_BYTES = Number(__ENV.PART_SIZE_BYTES || "1048576");
 const PARTS_PER_SESSION = Number(__ENV.PARTS_PER_SESSION || "3");

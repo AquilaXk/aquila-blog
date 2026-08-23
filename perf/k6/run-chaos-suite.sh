@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K6_BIN="${K6_BIN:-k6}"
-BASE_URL="${BASE_URL:-https://api.blog.aquilaxk.site}"
+BASE_URL="${BASE_URL:-https://blog.aquilaxk.site}"
 DETAIL_ID="${DETAIL_ID:-503}"
 OUT_DIR="${OUT_DIR:-$SCRIPT_DIR/results/chaos-$(date +%Y%m%d-%H%M%S)}"
 CHAOS_FAILURE_PATHS="${CHAOS_FAILURE_PATHS:-/post/api/v1/posts/feed?page=99999&pageSize=1000,/post/api/v1/posts/explore?page=99999&pageSize=1000&sort=CREATED_AT&kw=&tag=,/post/api/v1/posts/999999999}"

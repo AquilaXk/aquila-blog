@@ -190,7 +190,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 status { isOk() }
                 jsonPath("$.scanned") { value(1) }
                 jsonPath("$.updated") { value(0) }
-                jsonPath("$.nextAfterId") { value(postId - 1) }
+                jsonPath("$.nextAfterId") { value(postId) }
                 jsonPath("$.dryRun") { value(true) }
             }
 
@@ -230,6 +230,104 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
             jsonPath("$.summary") { value(expected.summary) }
             jsonPath("$.summarySource") { value(expected.source) }
         }
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `dry run backfill advances checkpoints without persisting summaries`() {
+        val fixture = resolvedFixture("idempotent-backfill-api", "backfill")
+        val firstCreated =
+            mvc
+                .post("/post/api/v1/posts") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = postPayload(fixture)
+                }.andReturn()
+                .response.contentAsString
+        val firstId = JsonPath.read<Int>(firstCreated, "$.data.id").toLong()
+        val secondCreated =
+            mvc
+                .post("/post/api/v1/posts") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = postPayload(fixture)
+                }.andReturn()
+                .response.contentAsString
+        val secondId = JsonPath.read<Int>(secondCreated, "$.data.id").toLong()
+
+        listOf(firstId, secondId).forEach { postId ->
+            jdbcTemplate.update(
+                """
+                UPDATE post
+                SET summary_text = NULL,
+                    summary_source = 'NONE',
+                    summary_content_hash = NULL,
+                    summary_algorithm_version = NULL,
+                    summary_generated_at = NULL
+                WHERE id = ?
+                """.trimIndent(),
+                postId,
+            )
+        }
+        entityManager.clear()
+
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":${firstId - 1},"limit":1,"dryRun":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.scanned") { value(1) }
+                jsonPath("$.updated") { value(0) }
+                jsonPath("$.skipped") { value(0) }
+                jsonPath("$.nextAfterId") { value(firstId) }
+                jsonPath("$.hasMore") { value(true) }
+                jsonPath("$.dryRun") { value(true) }
+            }
+
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":$firstId,"limit":1,"dryRun":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.scanned") { value(1) }
+                jsonPath("$.updated") { value(0) }
+                jsonPath("$.skipped") { value(0) }
+                jsonPath("$.nextAfterId") { value(secondId) }
+                jsonPath("$.hasMore") { value(true) }
+                jsonPath("$.dryRun") { value(true) }
+            }
+
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"afterId":$secondId,"limit":1,"dryRun":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.scanned") { value(0) }
+                jsonPath("$.updated") { value(0) }
+                jsonPath("$.skipped") { value(0) }
+                jsonPath("$.nextAfterId") { value(secondId) }
+                jsonPath("$.hasMore") { value(false) }
+                jsonPath("$.dryRun") { value(true) }
+            }
+
+        val unchangedSummaryRows =
+            jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM post
+                WHERE id IN (?, ?)
+                  AND summary_text IS NULL
+                  AND summary_source = 'NONE'
+                  AND summary_content_hash IS NULL
+                  AND summary_algorithm_version IS NULL
+                  AND summary_generated_at IS NULL
+                """.trimIndent(),
+                Long::class.java,
+                firstId,
+                secondId,
+            )
+        assertThat(unchangedSummaryRows).isEqualTo(2L)
     }
 
     @Test

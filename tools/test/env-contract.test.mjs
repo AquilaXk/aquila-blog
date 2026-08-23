@@ -274,8 +274,6 @@ const baseHomeServerEnv = [
   "CUSTOM_PROD_REDISDATABASE=0",
   "CUSTOM__REVALIDATE__URL=https://blog.aquilaxk.site/api/revalidate",
   "CUSTOM__REVALIDATE__TOKEN=valid-revalidate-token",
-  "CUSTOM__AI__SUMMARY__ENABLED=false",
-  "CUSTOM__AI__SUMMARY__GEMINI__MODEL=gemini-2.5-flash",
   "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID=configured-for-contract-test",
   "SPRING__MAIL__HOST=smtp.mail.example",
   "SPRING__MAIL__PORT=587",
@@ -402,20 +400,20 @@ test("home-server-source requires admin embed origins before SSH deployment", as
   )
 })
 
-test("home-server-source contract rejects enabled AI summary before SSH deployment", async () => {
-  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+test("active product contracts do not retain the unimplemented AI summary seam", () => {
+  const activeProductPaths = [
+    ".github/workflows/deploy.yml",
+    "deploy/env/env.contract.json",
+    "deploy/homeserver/.env.prod.example",
+    "deploy/homeserver/.env.back.prod.example",
+    "back/.env.default",
+    "deploy/homeserver/doctor.sh",
+    "deploy/homeserver/post_precheck_env_guard.sh",
+  ]
 
-  const result = validateEnvText({
-    contract: loadContract(contractPath),
-    target: "home-server-source",
-    text: baseHomeServerEnv.replace("CUSTOM__AI__SUMMARY__ENABLED=false", "CUSTOM__AI__SUMMARY__ENABLED=true"),
-  })
-
-  assert.equal(result.ok, false)
-  assert(
-    result.errors.some((error) => error.key === "CUSTOM__AI__SUMMARY__ENABLED" && error.message.includes("must be one of: false")),
-    result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
-  )
+  for (const relativePath of activeProductPaths) {
+    assert.doesNotMatch(readFileSync(path.join(repoRoot, relativePath), "utf8"), /CUSTOM__AI__SUMMARY|gemini/i, relativePath)
+  }
 })
 
 test("Caddy access logs skip signup verification endpoint before proxying", () => {
@@ -674,7 +672,7 @@ test("keys where an empty value is never meaningful reject it even before their 
   }
 })
 
-test("an absent optional key stays valid and a disabled feature may keep an empty value", async () => {
+test("an absent optional key stays valid", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const contract = loadContract(contractPath)
 
@@ -683,14 +681,6 @@ test("an absent optional key stays valid and a disabled feature may keep an empt
   const absentResult = validateEnvText({ contract, target: "home-server-source", text: absent })
   assert.equal(absentResult.ok, true, absentResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
 
-  // requiredWhen 게이트가 꺼진 키의 빈 값은 "기능 꺼짐"이라는 문서화된 상태다.
-  const disabled = withEnvKeys(baseHomeServerEnv, [["CUSTOM__AI__SUMMARY__GEMINI__API_KEY", ""]])
-  const disabledResult = validateEnvText({ contract, target: "home-server-source", text: disabled })
-  assert.equal(
-    disabledResult.ok,
-    true,
-    disabledResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"),
-  )
 })
 
 test("LEGACY_API_DOMAIN must be removed, not blanked, because an empty value deletes the backend vhost", async () => {
@@ -2160,18 +2150,11 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.match(workflow, /printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
   assert.match(workflow, /printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
   assert.match(workflow, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}" "deploy\/homeserver\/\.env\.prod"/)
-  assert.match(workflow, /HOME_AI_SUMMARY_ENABLED: \$\{\{ secrets\.CUSTOM__AI__SUMMARY__ENABLED \|\| vars\.CUSTOM__AI__SUMMARY__ENABLED \|\| 'false' \}\}/)
-  assert.match(workflow, /printf 'CUSTOM__AI__SUMMARY__ENABLED=%s\\n' "\$\{HOME_AI_SUMMARY_ENABLED:-false\}"/)
-  assert.match(workflow, /upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "\$\{HOME_AI_SUMMARY_ENABLED:-\}" "deploy\/homeserver\/\.env\.prod"/)
-  assert.match(workflow, /require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED" "\$\{HOME_AI_SUMMARY_ENABLED:-false\}" "false"/)
+  assert.doesNotMatch(workflow, /CUSTOM__AI__SUMMARY|gemini/i)
   assert.doesNotMatch(workflow, /HOME_NEXT_PUBLIC_/)
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_SIGNUP_ENABLED/)
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_RUM_SAMPLE_RATE/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
-  assert(
-    workflow.indexOf('upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED"') <
-      workflow.indexOf('require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED"'),
-  )
   assert.match(workflow, /export HOME_SERVER_ENV/)
   assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
   assert.match(workflow, /restart_external_backup_legacy_minio_if_needed/)
@@ -2790,7 +2773,6 @@ test("deploy workflow transfers secret env through temporary files instead of ss
   assert.doesNotMatch(workflow, /REMOTE_TMP_DIR='\$\{REMOTE_TMP_DIR\}' bash -s/)
   assert.doesNotMatch(workflow, /HOME_SERVER_ENV_B64=/)
   assert.doesNotMatch(workflow, /HOME_GHCR_TOKEN_B64=/)
-  assert.doesNotMatch(workflow, /HOME_AI_SUMMARY_GEMINI_API_KEY_B64=/)
 })
 
 test("runtime contract accounts for every compose env interpolation", async () => {

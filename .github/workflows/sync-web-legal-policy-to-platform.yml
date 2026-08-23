@@ -197,7 +197,7 @@ jobs:
             --source-commit "${SOURCE_COMMIT}"
           node "${platform}/tools/contracts/check-web-policy-lock.mjs" --lock "${candidate}"
 
-      - name: Detect canonical provenance-only lock drift
+      - name: Detect canonical legal-policy changes
         id: changes
         if: steps.admission.outputs.dispatch_admission == 'proceed'
         run: |
@@ -209,7 +209,16 @@ jobs:
             const lock = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
             console.log("candidate identity: " + lock.sourceRepository + "@" + lock.sourceCommit + " manifest=" + lock.manifestSha256);
           ' "${candidate}"
-          if cmp -s "${candidate}" "${platform}/contracts/web/legal-policy-manifest.lock.json"; then
+          if node - "${candidate}" "${platform}/contracts/web/legal-policy-manifest.lock.json" <<'NODE'
+          const fs = require("node:fs")
+          const { isDeepStrictEqual } = require("node:util")
+          const semanticLock = (pathname) => {
+            const { sourceCommit, ...lock } = JSON.parse(fs.readFileSync(pathname, "utf8"))
+            return lock
+          }
+          process.exit(isDeepStrictEqual(semanticLock(process.argv[2]), semanticLock(process.argv[3])) ? 0 : 1)
+          NODE
+          then
             changed=false
           else
             changed=true

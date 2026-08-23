@@ -45,6 +45,25 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
 
     @Test
     @WithMockUser(roles = ["ADMIN"])
+    fun `maxId만 지정한 백필 요청은 안전한 기본 checkpoint와 dry-run을 사용한다`() {
+        given(postUseCase.backfillSummaries(0, 30, 100, true))
+            .willReturn(PostUseCase.SummaryBackfillResult(0, 0, 0, 0, false, true))
+
+        mvc
+            .post("/post/api/v1/adm/posts/summary-backfill") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"maxId":30}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.dryRun") { value(true) }
+                jsonPath("$.nextAfterId") { value(0) }
+            }
+
+        then(postUseCase).should().backfillSummaries(0, 30, 100, true)
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
     fun `maxId 없는 백필 요청은 use case 호출 전에 거절한다`() {
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {

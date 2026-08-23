@@ -1,6 +1,8 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.model.PostSummarySource
+import com.back.global.security.application.ContentHtmlTrustState
+import com.back.global.security.application.HtmlContentSanitizer
 import java.time.Instant
 
 /**
@@ -26,8 +28,9 @@ data class PublicPostDetailMetaCacheDto(
     var summary: String = "",
     var summarySource: PostSummarySource = PostSummarySource.NONE,
 ) {
-    fun merge(content: PublicPostDetailContentCacheDto): PostWithContentDto =
-        PostWithContentDto(
+    fun merge(content: PublicPostDetailContentCacheDto): PostWithContentDto {
+        val contentHtmlTrust = content.verifyContentHtmlTrust()
+        return PostWithContentDto(
             id = id,
             createdAt = createdAt,
             modifiedAt = modifiedAt,
@@ -38,7 +41,7 @@ data class PublicPostDetailMetaCacheDto(
             authorProfileImageDirectUrl = authorProfileImageDirectUrl,
             title = title,
             content = content.content,
-            contentHtml = content.contentHtml,
+            contentHtml = contentHtmlTrust.contentHtml,
             version = version,
             published = published,
             listed = listed,
@@ -47,7 +50,11 @@ data class PublicPostDetailMetaCacheDto(
             hitCount = hitCount,
             summary = summary,
             summarySource = summarySource,
+            contentHtmlHash = contentHtmlTrust.contentHtmlHash,
+            contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
+            contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
         )
+    }
 
     companion object {
         fun from(detail: PostWithContentDto): PublicPostDetailMetaCacheDto =
@@ -76,12 +83,26 @@ data class PublicPostDetailMetaCacheDto(
 data class PublicPostDetailContentCacheDto(
     var content: String = "",
     var contentHtml: String? = null,
+    var contentHtmlHash: String? = null,
+    var contentHtmlSanitizerPolicyVersion: String? = null,
+    var contentHtmlTrustState: ContentHtmlTrustState = ContentHtmlTrustState.UNKNOWN,
 ) {
+    fun verifyContentHtmlTrust() =
+        HtmlContentSanitizer.verifyStored(
+            contentHtml,
+            contentHtmlHash,
+            contentHtmlSanitizerPolicyVersion,
+            contentHtmlTrustState,
+        )
+
     companion object {
         fun from(detail: PostWithContentDto): PublicPostDetailContentCacheDto =
             PublicPostDetailContentCacheDto(
                 content = detail.content,
                 contentHtml = detail.contentHtml,
+                contentHtmlHash = detail.contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion = detail.contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState = detail.contentHtmlTrustState,
             )
     }
 }
@@ -98,6 +119,9 @@ data class PublicPostDetailSnapshotCacheDto(
     var title: String = "",
     var content: String = "",
     var contentHtml: String? = null,
+    var contentHtmlHash: String? = null,
+    var contentHtmlSanitizerPolicyVersion: String? = null,
+    var contentHtmlTrustState: ContentHtmlTrustState = ContentHtmlTrustState.UNKNOWN,
     var version: Long = 0L,
     var published: Boolean = false,
     var listed: Boolean = false,
@@ -107,8 +131,15 @@ data class PublicPostDetailSnapshotCacheDto(
     var summary: String = "",
     var summarySource: PostSummarySource = PostSummarySource.NONE,
 ) {
-    fun toPostWithContentDto(): PostWithContentDto =
-        PostWithContentDto(
+    fun toPostWithContentDto(): PostWithContentDto {
+        val contentHtmlTrust =
+            HtmlContentSanitizer.verifyStored(
+                contentHtml,
+                contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState,
+            )
+        return PostWithContentDto(
             id = id,
             createdAt = createdAt,
             modifiedAt = modifiedAt,
@@ -119,7 +150,7 @@ data class PublicPostDetailSnapshotCacheDto(
             authorProfileImageDirectUrl = authorProfileImageDirectUrl,
             title = title,
             content = content,
-            contentHtml = contentHtml,
+            contentHtml = contentHtmlTrust.contentHtml,
             version = version,
             published = published,
             listed = listed,
@@ -128,7 +159,11 @@ data class PublicPostDetailSnapshotCacheDto(
             hitCount = hitCount,
             summary = summary,
             summarySource = summarySource,
+            contentHtmlHash = contentHtmlTrust.contentHtmlHash,
+            contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
+            contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
         )
+    }
 
     companion object {
         fun from(detail: PostWithContentDto): PublicPostDetailSnapshotCacheDto =
@@ -144,6 +179,9 @@ data class PublicPostDetailSnapshotCacheDto(
                 title = detail.title,
                 content = detail.content,
                 contentHtml = detail.contentHtml,
+                contentHtmlHash = detail.contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion = detail.contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState = detail.contentHtmlTrustState,
                 version = detail.version,
                 published = detail.published,
                 listed = detail.listed,

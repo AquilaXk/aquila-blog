@@ -1,5 +1,10 @@
 {
   "version": 1,
-  "migrations": [],
+  "migrations": [
+    {
+      "file": "back/src/main/resources/db/migration/V20260823_01__add_post_content_html_trust.sql",
+      "class": "EXPAND_SAFE"
+    }
+  ],
   "cutovers": []
 }

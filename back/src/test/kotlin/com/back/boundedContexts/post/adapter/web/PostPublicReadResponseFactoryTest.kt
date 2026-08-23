@@ -5,6 +5,8 @@ import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.global.security.application.ContentHtmlTrustState
+import com.back.global.security.application.HtmlContentSanitizer
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PageableDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -336,7 +338,8 @@ class PostPublicReadResponseFactoryTest {
                 "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(detailSeed).isEqualTo(
-            "9|1767398400000|7|8|9|10|content=5:Title,7:content,14:<p>content</p>,0:,4:NONE|author=1:1,6:Author,6:author," +
+            "9|1767398400000|7|8|9|10|content=5:Title,7:content,14:<p>content</p>,null,null,7:UNKNOWN,0:,4:NONE|" +
+                "author=1:1,6:Author,6:author," +
                 "31:https://example.com/profile.png,38:https://example.com/profile-direct.png",
         )
         assertThat(responseFactory.buildTagsEtagSeed(tags)).isEqualTo("Kotlin:3|Spring:2")
@@ -483,6 +486,33 @@ class PostPublicReadResponseFactoryTest {
         assertThat(
             responseFactory.buildPublicDetailEtagSeed(baseDetail.copy(contentHtml = "")),
         ).isNotEqualTo(baseDetailSeed)
+    }
+
+    @Test
+    @DisplayName("공개 상세 ETag seed는 contentHtml trust 표현 필드를 반영한다")
+    fun buildPublicDetailEtagSeedWithContentHtmlTrustFields() {
+        val trustedContent = HtmlContentSanitizer.sanitizeForPersistence("<p>safe</p>")
+        val trusted =
+            detailPost().copy(
+                contentHtml = trustedContent.contentHtml,
+                contentHtmlHash = trustedContent.contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion = trustedContent.contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState = trustedContent.contentHtmlTrustState,
+            )
+        val trustedSeed = responseFactory.buildPublicDetailEtagSeed(trusted)
+
+        assertThat(responseFactory.buildPublicDetailEtagSeed(trusted.copy(contentHtmlHash = "0".repeat(64))))
+            .isNotEqualTo(trustedSeed)
+        assertThat(
+            responseFactory.buildPublicDetailEtagSeed(
+                trusted.copy(contentHtmlSanitizerPolicyVersion = "outdated-policy"),
+            ),
+        ).isNotEqualTo(trustedSeed)
+        assertThat(
+            responseFactory.buildPublicDetailEtagSeed(
+                trusted.copy(contentHtmlTrustState = ContentHtmlTrustState.REJECTED),
+            ),
+        ).isNotEqualTo(trustedSeed)
     }
 
     @Test

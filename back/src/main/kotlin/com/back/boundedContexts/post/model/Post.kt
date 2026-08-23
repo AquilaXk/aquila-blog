@@ -7,6 +7,7 @@ import com.back.boundedContexts.post.domain.postMixin.PostHasLikes
 import com.back.boundedContexts.post.domain.postMixin.PostHasPolicy
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
+import com.back.global.security.application.ContentHtmlTrustState
 import jakarta.persistence.*
 import jakarta.persistence.GenerationType.SEQUENCE
 import org.hibernate.annotations.DynamicUpdate
@@ -86,6 +87,13 @@ class Post(
     @field:Basic(fetch = FetchType.LAZY)
     @field:Column(name = "content_html", columnDefinition = "TEXT")
     var contentHtml: String? = null,
+    @field:Column(name = "content_html_hash", length = 64)
+    var contentHtmlHash: String? = null,
+    @field:Column(name = "content_html_sanitizer_policy_version", length = 64)
+    var contentHtmlSanitizerPolicyVersion: String? = null,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "content_html_trust_state", length = 32)
+    var contentHtmlTrustState: ContentHtmlTrustState? = ContentHtmlTrustState.UNKNOWN,
     @field:Column(name = "summary_text", columnDefinition = "TEXT")
     var summaryText: String? = null,
     @field:Enumerated(EnumType.STRING)
@@ -126,10 +134,16 @@ class Post(
         published: Boolean? = null,
         listed: Boolean? = null,
         contentHtml: String? = this.contentHtml,
+        contentHtmlHash: String? = this.contentHtmlHash,
+        contentHtmlSanitizerPolicyVersion: String? = this.contentHtmlSanitizerPolicyVersion,
+        contentHtmlTrustState: ContentHtmlTrustState? = this.contentHtmlTrustState,
     ) {
         this.title = title
         this.content = content
         this.contentHtml = contentHtml
+        this.contentHtmlHash = contentHtmlHash
+        this.contentHtmlSanitizerPolicyVersion = contentHtmlSanitizerPolicyVersion
+        this.contentHtmlTrustState = contentHtmlTrustState
         published?.let { this.published = it }
         listed?.let { this.listed = it }
         if (!this.published) this.listed = false

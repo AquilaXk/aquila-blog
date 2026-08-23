@@ -67,6 +67,6 @@ class SpringDocConfig {
         }
 
         @Suppress("UNCHECKED_CAST")
-        (schema as Schema<Any?>).addEnumItemObject(null)
+        (schema as Schema<Any?>).enum = schema.enum + null
     }
 }

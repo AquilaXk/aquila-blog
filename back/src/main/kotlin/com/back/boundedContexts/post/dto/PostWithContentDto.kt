@@ -2,6 +2,9 @@ package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.model.PostSummarySource
+import com.back.global.security.application.ContentHtmlTrustResult
+import com.back.global.security.application.ContentHtmlTrustState
+import com.back.global.security.application.HtmlContentSanitizer
 import java.time.Instant
 
 data class PostWithContentDto(
@@ -28,8 +31,11 @@ data class PostWithContentDto(
     var actorCanDelete: Boolean = false,
     val summary: String = "",
     val summarySource: PostSummarySource = PostSummarySource.NONE,
+    val contentHtmlHash: String? = null,
+    val contentHtmlSanitizerPolicyVersion: String? = null,
+    val contentHtmlTrustState: ContentHtmlTrustState = ContentHtmlTrustState.UNKNOWN,
 ) {
-    constructor(post: Post) : this(
+    private constructor(post: Post, contentHtmlTrust: ContentHtmlTrustResult) : this(
         post.id,
         post.createdAt,
         post.modifiedAt,
@@ -40,7 +46,7 @@ data class PostWithContentDto(
         post.author.profileImgUrlVersionedOrDefault,
         post.title,
         post.content,
-        post.contentHtml,
+        contentHtmlTrust.contentHtml,
         post.version ?: 0L,
         post.published,
         post.listed,
@@ -50,5 +56,18 @@ data class PostWithContentDto(
         post.hitCount,
         summary = post.summaryText.orEmpty(),
         summarySource = post.summarySource,
+        contentHtmlHash = contentHtmlTrust.contentHtmlHash,
+        contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
+        contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
+    )
+
+    constructor(post: Post) : this(
+        post,
+        HtmlContentSanitizer.verifyStored(
+            post.contentHtml,
+            post.contentHtmlHash,
+            post.contentHtmlSanitizerPolicyVersion,
+            post.contentHtmlTrustState,
+        ),
     )
 }

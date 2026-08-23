@@ -3,6 +3,21 @@ package com.back.global.security.application
 import org.jsoup.Jsoup
 import org.jsoup.safety.Cleaner
 import org.jsoup.safety.Safelist
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+
+enum class ContentHtmlTrustState {
+    TRUSTED_CURRENT,
+    UNKNOWN,
+    REJECTED,
+}
+
+data class ContentHtmlTrustResult(
+    val contentHtml: String?,
+    val contentHtmlHash: String?,
+    val contentHtmlSanitizerPolicyVersion: String?,
+    val contentHtmlTrustState: ContentHtmlTrustState,
+)
 
 /**
  * 게시글 contentHtml 렌더링 전 XSS 위험을 줄이기 위한 HTML 정제 유틸입니다.
@@ -11,6 +26,8 @@ import org.jsoup.safety.Safelist
  * target="_blank" 링크에는 opener 참조를 막기 위한 rel 값을 보강합니다.
  */
 object HtmlContentSanitizer {
+    const val CURRENT_POLICY_VERSION = "content-html-v1"
+
     private const val SANITIZER_BASE_URI = "https://aquilaxk.local/"
 
     private val safelist =
@@ -111,4 +128,58 @@ object HtmlContentSanitizer {
         val sanitized = body.html().trim()
         return sanitized.ifBlank { null }
     }
+
+    fun sanitizeForPersistence(rawHtml: String?): ContentHtmlTrustResult {
+        if (rawHtml == null) return unknown()
+
+        val sanitized =
+            sanitizeRichHtmlOrNull(rawHtml)
+                ?: return ContentHtmlTrustResult(null, null, CURRENT_POLICY_VERSION, ContentHtmlTrustState.REJECTED)
+
+        return ContentHtmlTrustResult(
+            contentHtml = sanitized,
+            contentHtmlHash = sha256Utf8(sanitized),
+            contentHtmlSanitizerPolicyVersion = CURRENT_POLICY_VERSION,
+            contentHtmlTrustState = ContentHtmlTrustState.TRUSTED_CURRENT,
+        )
+    }
+
+    fun verifyStored(
+        contentHtml: String?,
+        contentHtmlHash: String?,
+        contentHtmlSanitizerPolicyVersion: String?,
+        contentHtmlTrustState: ContentHtmlTrustState?,
+    ): ContentHtmlTrustResult =
+        when (contentHtmlTrustState) {
+            null,
+            ContentHtmlTrustState.UNKNOWN,
+            -> unknown(contentHtmlSanitizerPolicyVersion)
+
+            ContentHtmlTrustState.REJECTED ->
+                ContentHtmlTrustResult(null, null, contentHtmlSanitizerPolicyVersion, ContentHtmlTrustState.REJECTED)
+
+            ContentHtmlTrustState.TRUSTED_CURRENT -> {
+                if (contentHtmlHash.isNullOrBlank() || contentHtmlSanitizerPolicyVersion != CURRENT_POLICY_VERSION) {
+                    unknown(contentHtmlSanitizerPolicyVersion)
+                } else if (contentHtml == null || sha256Utf8(contentHtml) != contentHtmlHash) {
+                    ContentHtmlTrustResult(null, null, contentHtmlSanitizerPolicyVersion, ContentHtmlTrustState.REJECTED)
+                } else {
+                    ContentHtmlTrustResult(
+                        contentHtml = contentHtml,
+                        contentHtmlHash = contentHtmlHash,
+                        contentHtmlSanitizerPolicyVersion = contentHtmlSanitizerPolicyVersion,
+                        contentHtmlTrustState = ContentHtmlTrustState.TRUSTED_CURRENT,
+                    )
+                }
+            }
+        }
+
+    fun sha256Utf8(value: String): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(value.toByteArray(StandardCharsets.UTF_8))
+            .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+    private fun unknown(policyVersion: String? = null): ContentHtmlTrustResult =
+        ContentHtmlTrustResult(null, null, policyVersion, ContentHtmlTrustState.UNKNOWN)
 }

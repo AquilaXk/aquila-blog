@@ -232,6 +232,9 @@ class PostApplicationService(
         val previousTitle = post.title
         val previousContent = post.content
         val previousContentHtml = post.contentHtml
+        val previousContentHtmlHash = post.contentHtmlHash
+        val previousContentHtmlSanitizerPolicyVersion = post.contentHtmlSanitizerPolicyVersion
+        val previousContentHtmlTrustState = post.contentHtmlTrustState
         val previousSummaryText = post.summaryText
         val previousSummarySource = post.summarySource
         val previousSummaryVersion = post.summaryAlgorithmVersion
@@ -239,13 +242,26 @@ class PostApplicationService(
         val wasPublic = isPubliclyListed(post)
         val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
         try {
-            val sanitizedContentHtml =
+            val contentHtmlTrust =
                 if (contentHtml == null) {
-                    post.contentHtml
+                    null
                 } else {
-                    HtmlContentSanitizer.sanitizeRichHtmlOrNull(contentHtml)
+                    HtmlContentSanitizer.sanitizeForPersistence(contentHtml)
                 }
-            post.modify(title, content, published, listed, sanitizedContentHtml)
+            if (contentHtmlTrust == null) {
+                post.modify(title, content, published, listed)
+            } else {
+                post.modify(
+                    title = title,
+                    content = content,
+                    published = published,
+                    listed = listed,
+                    contentHtml = contentHtmlTrust.contentHtml,
+                    contentHtmlHash = contentHtmlTrust.contentHtmlHash,
+                    contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
+                    contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
+                )
+            }
             post.applyResolvedSummary(
                 resolveModifiedSummary(
                     title = title,
@@ -277,7 +293,11 @@ class PostApplicationService(
         val isPublic = isPubliclyListed(post)
         val listingVisibilityChanged = wasPublic != isPublic
         val contentChanged = previousContent != post.content
-        val contentHtmlChanged = previousContentHtml != post.contentHtml
+        val contentHtmlChanged =
+            previousContentHtml != post.contentHtml ||
+                previousContentHtmlHash != post.contentHtmlHash ||
+                previousContentHtmlSanitizerPolicyVersion != post.contentHtmlSanitizerPolicyVersion ||
+                previousContentHtmlTrustState != post.contentHtmlTrustState
         val titleChanged = previousTitle != post.title
         val summaryChanged = previousSummaryText != post.summaryText || previousSummarySource != post.summarySource
         val tagChanged = previousTags != afterTags
@@ -330,16 +350,18 @@ class PostApplicationService(
         summaryMode: PostSummaryMode?,
     ): Post {
         val resolvedSummary = resolveCreatedSummary(title, content, summary, summaryMode)
+        val contentHtmlTrust = HtmlContentSanitizer.sanitizeForPersistence(contentHtml)
         val post =
             Post(
-                0,
-                persistenceAuthor,
-                title,
-                content,
-                null,
-                published,
-                listed,
-                HtmlContentSanitizer.sanitizeRichHtmlOrNull(contentHtml),
+                author = persistenceAuthor,
+                title = title,
+                content = content,
+                published = published,
+                listed = listed,
+                contentHtml = contentHtmlTrust.contentHtml,
+                contentHtmlHash = contentHtmlTrust.contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
             ).also { it.applyResolvedSummary(resolvedSummary) }
         val savedPost = postRepository.saveAndFlush(post)
         postTagIndexService.syncMetaTagIndexAttr(savedPost)

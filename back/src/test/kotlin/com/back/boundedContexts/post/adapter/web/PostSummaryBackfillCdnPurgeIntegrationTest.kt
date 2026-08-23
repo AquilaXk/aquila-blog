@@ -63,7 +63,7 @@ class PostSummaryBackfillCdnPurgeIntegrationTest : BaseCdnPurgeEnabledController
         mvc
             .post("/post/api/v1/adm/posts/summary-backfill") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${postId - 1},"limit":1,"dryRun":false}"""
+                content = """{"afterId":${postId - 1},"maxId":$postId,"limit":1,"dryRun":false}"""
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.updated") { value(1) }

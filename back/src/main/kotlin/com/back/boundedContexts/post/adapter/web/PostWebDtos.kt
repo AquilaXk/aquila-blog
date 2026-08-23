@@ -2,6 +2,9 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.boundedContexts.post.model.PostSummarySource
+import com.fasterxml.jackson.annotation.JsonIgnore
+import io.swagger.v3.oas.annotations.media.Schema
+import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
@@ -58,11 +61,19 @@ data class PostSummaryPreviewResponse(
 data class PostSummaryBackfillRequest(
     @field:Min(0)
     val afterId: Long = 0,
+    @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+    @field:Min(1)
+    val maxId: Long,
     @field:Min(1)
     @field:Max(500)
     val limit: Int = 100,
     val dryRun: Boolean = true,
-)
+) {
+    @get:AssertTrue(message = "maxId must be greater than or equal to afterId")
+    @get:JsonIgnore
+    val isCheckpointWithinMaxId: Boolean
+        get() = maxId >= afterId
+}
 
 data class PostSummaryBackfillResponse(
     val scanned: Int,

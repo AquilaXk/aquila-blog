@@ -77,7 +77,7 @@ class ApiV1AdmPostController(
     fun backfillSummary(
         @Valid @RequestBody request: PostSummaryBackfillRequest,
     ): PostSummaryBackfillResponse {
-        val result = postUseCase.backfillSummaries(request.afterId, request.limit, request.dryRun)
+        val result = postUseCase.backfillSummaries(request.afterId, request.maxId, request.limit, request.dryRun)
         return PostSummaryBackfillResponse(
             scanned = result.scanned,
             updated = result.updated,

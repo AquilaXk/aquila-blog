@@ -36,8 +36,8 @@ class HtmlContentSanitizerTest {
     }
 
     @Test
-    @DisplayName("저장 metadata의 policy 또는 hash가 현재 trusted HTML과 다르면 raw를 반환하지 않는다")
-    fun rejectsStoredHtmlWhenPolicyOrHashDoesNotMatch() {
+    @DisplayName("저장 HTML은 state, policy, hash가 모두 유효할 때만 trusted로 반환한다")
+    fun verifiesStoredHtmlTrustMetadata() {
         val trusted = HtmlContentSanitizer.sanitizeForPersistence("<p>safe</p>")
         val contentHtml = requireNotNull(trusted.contentHtml)
         val contentHtmlHash = requireNotNull(trusted.contentHtmlHash)
@@ -56,11 +56,28 @@ class HtmlContentSanitizerTest {
                 HtmlContentSanitizer.CURRENT_POLICY_VERSION,
                 ContentHtmlTrustState.TRUSTED_CURRENT,
             )
+        val rejected =
+            HtmlContentSanitizer.verifyStored(
+                null,
+                null,
+                HtmlContentSanitizer.CURRENT_POLICY_VERSION,
+                ContentHtmlTrustState.REJECTED,
+            )
+        val verified =
+            HtmlContentSanitizer.verifyStored(
+                contentHtml,
+                contentHtmlHash,
+                HtmlContentSanitizer.CURRENT_POLICY_VERSION,
+                ContentHtmlTrustState.TRUSTED_CURRENT,
+            )
 
         assertThat(outdatedPolicy.contentHtml).isNull()
         assertThat(outdatedPolicy.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.UNKNOWN)
         assertThat(wrongHash.contentHtml).isNull()
         assertThat(wrongHash.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
+        assertThat(rejected.contentHtml).isNull()
+        assertThat(rejected.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
+        assertThat(verified).isEqualTo(trusted)
     }
 
     @Test

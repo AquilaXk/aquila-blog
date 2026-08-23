@@ -65,6 +65,9 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val completedFileId = propertySchema(openApiNode, "CloudVideoUploadSessionDto", "completedFileId")
         assertTypeSet(completedFileId, "integer", "null")
         assertThat(completedFileId.path("format").asText()).isEqualTo("int64")
+        val summaryMode = propertySchema(openApiNode, "PostModifyRequest", "summaryMode")
+        assertTypeSet(summaryMode, "string", "null")
+        assertNullableEnum(summaryMode, "AUTO", "MANUAL")
         assertNullableReference(
             propertySchema(openApiNode, "AuthSessionMemberDto", "legalReconsent"),
             "#/components/schemas/LegalReconsentStatus",
@@ -115,5 +118,15 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         assertThat(variants).hasSize(2)
         assertThat(variants.values().map { it.path("\$ref").asText() to it.path("type").asText() })
             .containsExactlyInAnyOrderElementsOf(listOf(expectedReference to "", "" to "null"))
+    }
+
+    private fun assertNullableEnum(
+        schema: JsonNode,
+        vararg expectedValues: String,
+    ) {
+        val actualValues = schema.path("enum").values().map { if (it.isNull) null else it.asText() }
+        val expected = expectedValues.map<String, String?> { it } + null
+
+        assertThat(actualValues).containsExactlyInAnyOrderElementsOf(expected)
     }
 }

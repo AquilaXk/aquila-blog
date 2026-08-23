@@ -3809,7 +3809,8 @@
             ],
             "enum": [
               "AUTO",
-              "MANUAL"
+              "MANUAL",
+              null
             ]
           },
           "summary": {
@@ -4563,7 +4564,8 @@
             ],
             "enum": [
               "AUTO",
-              "MANUAL"
+              "MANUAL",
+              null
             ]
           },
           "summary": {

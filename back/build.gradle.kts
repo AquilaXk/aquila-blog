@@ -83,8 +83,8 @@ dependencies {
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
     // ShedLock
-    implementation("net.javacrumbs.shedlock:shedlock-spring:7.7.0")
-    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.7.0")
+    implementation("net.javacrumbs.shedlock:shedlock-spring:7.9.0")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.9.0")
 
     // Database
     runtimeOnly("org.postgresql:postgresql")

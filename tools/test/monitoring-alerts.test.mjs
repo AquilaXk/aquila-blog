@@ -326,7 +326,7 @@ test("cache-state alert uses the non-decaying home HIT contract", () => {
 
   assert.equal(
     collapseWhitespace(expr.text),
-    '( min by (route_class, expected_state, observed_state)' +
+    '( min by (route_class, expected_state)' +
       ' ( aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT"} ) < 1' +
       ' or absent(aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT"}) )',
   )

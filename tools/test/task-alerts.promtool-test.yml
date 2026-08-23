@@ -24,18 +24,29 @@ tests:
         alertname: AquilaPublicEdgeCacheStateUnobserved
         exp_alerts: []
 
-  - name: home warm cache MISS mismatch must alert persistently
+  - name: home warm cache mismatch transitions must share one persistent alert
     interval: 5m
     input_series:
       - series: 'aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT",observed_state="MISS"}'
-        values: "0+0x400"
+        values: "0+0x2 stale"
+      - series: 'aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT",observed_state="STALE"}'
+        values: "_ _ _ 0+0x400"
     alert_rule_test:
+      - eval_time: 35m
+        alertname: AquilaPublicEdgeCacheStateUnobserved
+        exp_alerts:
+          - exp_labels:
+              expected_state: HIT
+              route_class: home
+              severity: warning
+            exp_annotations:
+              summary: "Public edge cache state is no longer observable"
+              description: "The home route's warm cache state has mismatched HIT for 30m or is missing. Check the front container, the Caddy web vhost header handling, and the probe route set."
       - eval_time: 27h
         alertname: AquilaPublicEdgeCacheStateUnobserved
         exp_alerts:
           - exp_labels:
               expected_state: HIT
-              observed_state: MISS
               route_class: home
               severity: warning
             exp_annotations:

@@ -89,15 +89,31 @@ jobs:
       - name: Check Flyway deploy safety
         if: github.event_name == 'pull_request'
         id: flyway_safety
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         shell: bash
         run: |
           set -euo pipefail
 
           report="${RUNNER_TEMP}/flyway-deploy-safety.json"
+          policy_path="back/config/flyway-compatibility-policy.json"
+          base_policy="${RUNNER_TEMP}/base-flyway-compatibility-policy.json"
+          git fetch --depth=1 origin "${BASE_SHA}"
+          base_policy_paths="$(git ls-tree -r --name-only "${BASE_SHA}" -- "${policy_path}")"
+          if [ "${base_policy_paths}" = "${policy_path}" ]; then
+            git show "${BASE_SHA}:${policy_path}" > "${base_policy}"
+          elif [ -z "${base_policy_paths}" ]; then
+            printf '{"version":1,"migrations":[],"cutovers":[]}\n' > "${base_policy}"
+          else
+            echo "::error title=Flyway compatibility policy blocked::Could not resolve the exact base policy."
+            exit 1
+          fi
           set +e
           node tools/ci/check-flyway-deploy-safety.mjs \
             --json \
             --changed-files "${RUNNER_TEMP}/changed-files.txt" \
+            --policy "${policy_path}" \
+            --base-policy "${base_policy}" \
             --output "${report}" \
             > "${RUNNER_TEMP}/flyway-deploy-safety.stdout"
           status=$?
@@ -114,6 +130,8 @@ jobs:
               `- checked files: ${report.checkedFiles.length}`,
               `- blocked: ${report.blocked}`,
               `- findings: ${report.findings.length}`,
+              `- N-1 compatibility test: ${report.runNMinusOne}`,
+              `- compatibility framework changed: ${report.frameworkChanged}`,
               "",
             ].join("\n"),
           )
@@ -143,6 +161,8 @@ jobs:
               `- change scope: ${report.changeScope}`,
               `- risk profile: ${report.riskProfile}`,
               `- deploy backend: ${report.deployBackend}`,
+              `- N-1 compatibility test: ${report.runNMinusOne}`,
+              `- compatibility framework changed: ${report.frameworkChanged}`,
               `- reasons: ${report.reasons.join(", ") || "none"}`,
               "",
             ].join("\n"),
@@ -150,9 +170,9 @@ jobs:
           NODE
 
       - name: Enforce blocked release policy
-        if: github.event_name == 'pull_request' && steps.release_policy.outputs.release_risk_profile == 'blocked'
+        if: github.event_name == 'pull_request' && (steps.flyway_safety.outputs.status != '0' || steps.release_policy.outputs.release_risk_profile == 'blocked')
         run: |
-          echo "Release policy blocked this change. Destructive migrations must be redesigned as expand-only changes." >&2
+          echo "Release policy blocked this change. Flyway compatibility evidence is required before deployment." >&2
           exit 1
 
       - name: Test release planner guards
@@ -298,6 +318,11 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: gradle
+
+      - name: Run Flyway N-1 compatibility test
+        if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request' && (steps.release_policy.outputs.release_run_n_minus_one == 'true' || steps.release_policy.outputs.release_framework_changed == 'true')
+        working-directory: back
+        run: ./gradlew testcontainersTest --tests com.back.infrastructure.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest --rerun-tasks
 
       - name: Validate Flyway migration naming
         if: steps.changes.outputs.backend == 'true'

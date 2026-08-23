@@ -18,7 +18,7 @@
 - public contract 방향에서 Platform은 canonical bytes와 immutable identity 검증·dispatch만 소유하고, Web은 Web-local import·codegen·branch·PR을 소유한다.
 - legal policy 방향에서 Web은 canonical manifest와 immutable identity dispatch만 소유하고, Platform은 Platform-local lock·branch·PR을 소유한다. 이 경계는 [Platform #1683](https://github.com/AquilaXk/aquila-blog/issues/1683)과 [Web #70](https://github.com/AquilaXk/aquila-blog-web/issues/70)에서 완료됐다.
 - foreign write, dual write, fallback은 모두 0이다. 각 receiver는 source repository, 40자리 source commit SHA, artifact SHA-256을 검증한 canonical handoff만 수용한다.
-- 최종 Platform main은 [`6e1957de8f792aeec89f7c8da715fb6065e6e99d`](https://github.com/AquilaXk/aquila-blog/commit/6e1957de8f792aeec89f7c8da715fb6065e6e99d), Web main은 [`08344e943f8d5beba9a77e46ab1bc805ab5e7d60`](https://github.com/AquilaXk/aquila-blog-web/commit/08344e943f8d5beba9a77e46ab1bc805ab5e7d60)이다.
+- 이 문서가 집계한 handoff 완료 기준 commit은 Platform [`6e1957de8f792aeec89f7c8da715fb6065e6e99d`](https://github.com/AquilaXk/aquila-blog/commit/6e1957de8f792aeec89f7c8da715fb6065e6e99d), Web [`08344e943f8d5beba9a77e46ab1bc805ab5e7d60`](https://github.com/AquilaXk/aquila-blog-web/commit/08344e943f8d5beba9a77e46ab1bc805ab5e7d60)이다.
 - 완료 근거는 [Platform PR #1689](https://github.com/AquilaXk/aquila-blog/pull/1689), [Web PR #76](https://github.com/AquilaXk/aquila-blog-web/pull/76), [Platform PR #1702](https://github.com/AquilaXk/aquila-blog/pull/1702), [Platform PR #1703](https://github.com/AquilaXk/aquila-blog/pull/1703), [Web PR #78](https://github.com/AquilaXk/aquila-blog-web/pull/78)이다.
 
 ## Active Cross-Repository Relationships

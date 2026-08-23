@@ -572,7 +572,6 @@ jobs:
         env:
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
           HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
-          HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || 'false' }}
           HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
           HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
         shell: bash
@@ -583,7 +582,6 @@ jobs:
           {
             printf '%s\n' "${HOME_SERVER_ENV}"
             printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
-            printf 'CUSTOM__AI__SUMMARY__ENABLED=%s\n' "${HOME_AI_SUMMARY_ENABLED:-false}"
             printf 'CUSTOM__MEMBER__SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
             printf 'CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
           } > "${home_server_env_file}"
@@ -660,9 +658,6 @@ jobs:
           HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
           HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
           HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
-          HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || 'false' }}
-          HOME_AI_SUMMARY_GEMINI_API_KEY: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || vars.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || '' }}
-          HOME_AI_SUMMARY_GEMINI_MODEL: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__MODEL || vars.CUSTOM__AI__SUMMARY__GEMINI__MODEL || '' }}
           HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
           HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
         run: |
@@ -679,9 +674,6 @@ jobs:
             printf 'HOME_DEPLOY_SHA=%q\n' "${HOME_DEPLOY_SHA}"
             printf 'HOME_GHCR_USERNAME=%q\n' "${HOME_GHCR_USERNAME}"
             printf 'HOME_GHCR_TOKEN=%q\n' "${HOME_GHCR_TOKEN}"
-            printf 'HOME_AI_SUMMARY_ENABLED=%q\n' "${HOME_AI_SUMMARY_ENABLED:-}"
-            printf 'HOME_AI_SUMMARY_GEMINI_API_KEY=%q\n' "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}"
-            printf 'HOME_AI_SUMMARY_GEMINI_MODEL=%q\n' "${HOME_AI_SUMMARY_GEMINI_MODEL:-}"
             printf 'HOME_MEMBER_SIGNUP_ENABLED=%q\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
             printf 'HOME_MEMBER_OAUTH_SIGNUP_ENABLED=%q\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
             printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
@@ -957,9 +949,6 @@ jobs:
             exit 1
           fi
 
-          upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-}" "deploy/homeserver/.env.prod"
-          upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__API_KEY" "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}" "deploy/homeserver/.env.prod"
-          upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__MODEL" "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" "deploy/homeserver/.env.prod"
           upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}" "deploy/homeserver/.env.prod"
 
           require_privacy_freeze_value() {
@@ -974,7 +963,6 @@ jobs:
 
           require_privacy_freeze_value "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "false"
           require_privacy_freeze_value "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "false"
-          require_privacy_freeze_value "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-false}" "false"
           upsert_env_key "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
 

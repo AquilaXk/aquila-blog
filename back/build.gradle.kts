@@ -23,7 +23,7 @@ version = "0.0.1-SNAPSHOT"
 description = "back"
 
 // Pin above Spring Boot 4.1.0 BOM for NVD High CVEs blocking Deploy (#1387).
-extra["tomcat.version"] = "11.0.24"
+extra["tomcat.version"] = "11.0.25"
 extra["netty.version"] = "4.2.16.Final"
 extra["postgresql.version"] = "42.7.13"
 

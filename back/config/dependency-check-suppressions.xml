@@ -64,20 +64,4 @@
     <packageUrl regex="true">^pkg:maven/io\.netty/.*@4\.2\.16\.Final$</packageUrl>
     <cve>CVE-2026-55833</cve>
   </suppress>
-
-  <!--
-    CVE-2026-66299 affects only Tomcat's WebSocket chat example, which this Spring Boot
-    embedded runtime does not package. Apache rates it Low; 11.0.25 is not yet released.
-  -->
-  <suppress until="2026-08-23">
-    <notes><![CDATA[
-      Not applicable: the vulnerable WebSocket chat example is absent from the embedded runtime.
-      Apache guidance: https://tomcat.apache.org/security-11.html
-      Tracked: https://github.com/AquilaXk/aquila-blog/issues/1647
-      Owner: @AquilaXk
-      Remove this suppression when Tomcat 11.0.25 or newer is available.
-    ]]></notes>
-    <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat\.embed/tomcat-embed-(?:core|websocket)@11\.0\.24$</packageUrl>
-    <cve>CVE-2026-66299</cve>
-  </suppress>
 </suppressions>

@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
+import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.standard.dto.page.PageDto
 
@@ -32,10 +33,13 @@ object PublicPostUrlCanonicalizer {
             thumbnail = post.thumbnail?.let(UploadedFileUrlCodec::canonicalizePublicStorageUrl),
         )
 
-    fun canonicalizePostWithContent(post: PostWithContentDto): PostWithContentDto =
-        post.copy(
+    fun canonicalizePostWithContent(post: PostWithContentDto): PostWithContentDto {
+        val contentHtml = post.contentHtml?.let(UploadedFileUrlCodec::canonicalizePublicStorageContent)
+        return post.copy(
             authorProfileImageDirectUrl = UploadedFileUrlCodec.canonicalizePublicStorageUrl(post.authorProfileImageDirectUrl),
             content = UploadedFileUrlCodec.canonicalizePublicStorageContent(post.content),
-            contentHtml = post.contentHtml?.let(UploadedFileUrlCodec::canonicalizePublicStorageContent),
+            contentHtml = contentHtml,
+            contentHtmlHash = contentHtml?.let(HtmlContentSanitizer::sha256Utf8),
         )
+    }
 }

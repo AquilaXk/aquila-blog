@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.model.QPost.post
 import com.back.boundedContexts.post.model.QPostAttr.postAttr
+import com.back.global.security.application.ContentHtmlTrustState
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.util.QueryDslUtil
 import com.querydsl.core.BooleanBuilder
@@ -123,8 +124,13 @@ class PostRepositoryImpl(
 
     override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? =
         queryFactory
-            .select(post.content, post.contentHtml)
-            .from(post)
+            .select(
+                post.content,
+                post.contentHtml,
+                post.contentHtmlHash,
+                post.contentHtmlSanitizerPolicyVersion,
+                post.contentHtmlTrustState,
+            ).from(post)
             .where(
                 post.id
                     .eq(id)
@@ -135,6 +141,9 @@ class PostRepositoryImpl(
                 PublicPostDetailContentCacheDto(
                     content = content,
                     contentHtml = tuple.get(post.contentHtml),
+                    contentHtmlHash = tuple.get(post.contentHtmlHash),
+                    contentHtmlSanitizerPolicyVersion = tuple.get(post.contentHtmlSanitizerPolicyVersion),
+                    contentHtmlTrustState = tuple.get(post.contentHtmlTrustState) ?: ContentHtmlTrustState.UNKNOWN,
                 )
             }
 

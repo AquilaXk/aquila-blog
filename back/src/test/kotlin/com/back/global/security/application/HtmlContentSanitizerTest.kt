@@ -7,6 +7,63 @@ import org.junit.jupiter.api.Test
 @DisplayName("HtmlContentSanitizer XSS 회귀 테스트")
 class HtmlContentSanitizerTest {
     @Test
+    @DisplayName("정제된 HTML은 저장 bytes hash와 현재 policy의 trusted metadata를 함께 만든다")
+    fun createsTrustedPersistenceMetadataForSanitizedHtml() {
+        // when
+        val result = HtmlContentSanitizer.sanitizeForPersistence("<p onclick=\"alert(1)\">safe</p>")
+
+        // then
+        assertThat(result.contentHtml).isEqualTo("<p>safe</p>")
+        assertThat(result.contentHtmlHash)
+            .isEqualTo(HtmlContentSanitizer.sha256Utf8(requireNotNull(result.contentHtml)))
+        assertThat(result.contentHtmlSanitizerPolicyVersion)
+            .isEqualTo(HtmlContentSanitizer.CURRENT_POLICY_VERSION)
+        assertThat(result.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.TRUSTED_CURRENT)
+    }
+
+    @Test
+    @DisplayName("blank HTML은 raw와 hash 없이 현재 policy의 rejected metadata가 된다")
+    fun rejectsBlankHtmlForPersistence() {
+        // when
+        val result = HtmlContentSanitizer.sanitizeForPersistence("   ")
+
+        // then
+        assertThat(result.contentHtml).isNull()
+        assertThat(result.contentHtmlHash).isNull()
+        assertThat(result.contentHtmlSanitizerPolicyVersion)
+            .isEqualTo(HtmlContentSanitizer.CURRENT_POLICY_VERSION)
+        assertThat(result.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
+    }
+
+    @Test
+    @DisplayName("저장 metadata의 policy 또는 hash가 현재 trusted HTML과 다르면 raw를 반환하지 않는다")
+    fun rejectsStoredHtmlWhenPolicyOrHashDoesNotMatch() {
+        val trusted = HtmlContentSanitizer.sanitizeForPersistence("<p>safe</p>")
+        val contentHtml = requireNotNull(trusted.contentHtml)
+        val contentHtmlHash = requireNotNull(trusted.contentHtmlHash)
+
+        val outdatedPolicy =
+            HtmlContentSanitizer.verifyStored(
+                contentHtml,
+                contentHtmlHash,
+                "${HtmlContentSanitizer.CURRENT_POLICY_VERSION}-old",
+                ContentHtmlTrustState.TRUSTED_CURRENT,
+            )
+        val wrongHash =
+            HtmlContentSanitizer.verifyStored(
+                contentHtml,
+                "0".repeat(64),
+                HtmlContentSanitizer.CURRENT_POLICY_VERSION,
+                ContentHtmlTrustState.TRUSTED_CURRENT,
+            )
+
+        assertThat(outdatedPolicy.contentHtml).isNull()
+        assertThat(outdatedPolicy.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.UNKNOWN)
+        assertThat(wrongHash.contentHtml).isNull()
+        assertThat(wrongHash.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
+    }
+
+    @Test
     @DisplayName("이벤트 속성, srcdoc, 비허용 active content 태그를 제거한다")
     fun removesExecutableHtmlPayloads() {
         // given

@@ -4887,6 +4887,30 @@
               "MIGRATED",
               "NONE"
             ]
+          },
+          "contentHtmlHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contentHtmlSanitizerPolicyVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "content-html-v1",
+              null
+            ]
+          },
+          "contentHtmlTrustState": {
+            "type": "string",
+            "enum": [
+              "TRUSTED_CURRENT",
+              "UNKNOWN",
+              "REJECTED"
+            ]
           }
         }
       },

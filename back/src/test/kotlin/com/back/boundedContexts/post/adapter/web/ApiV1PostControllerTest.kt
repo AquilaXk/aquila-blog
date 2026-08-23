@@ -8,6 +8,8 @@ import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
 import com.back.global.app.AppConfig
+import com.back.global.security.application.ContentHtmlTrustState
+import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.security.config.AuthCookieNames
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
@@ -197,6 +199,34 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             assertThat(post.contentHtml).contains("<p>safe</p>")
             assertThat(post.contentHtml).doesNotContain("onclick")
             assertThat(post.contentHtml).doesNotContain("<script")
+            assertThat(post.contentHtmlHash)
+                .isEqualTo(HtmlContentSanitizer.sha256Utf8(requireNotNull(post.contentHtml)))
+            assertThat(post.contentHtmlSanitizerPolicyVersion)
+                .isEqualTo(HtmlContentSanitizer.CURRENT_POLICY_VERSION)
+            assertThat(post.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.TRUSTED_CURRENT)
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `blank contentHtml 작성은 raw와 hash 없이 rejected로 저장된다`() {
+            val responseBody =
+                mvc
+                    .post("/post/api/v1/posts") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content = """{"title": "빈 HTML", "content": "본문", "contentHtml": "   "}"""
+                    }.andExpect {
+                        status { isCreated() }
+                    }.andReturn()
+                    .response
+                    .contentAsString
+
+            val post = postFacade.findById(JsonPath.read<Int>(responseBody, "$.data.id").toLong()).getOrThrow()
+
+            assertThat(post.contentHtml).isNull()
+            assertThat(post.contentHtmlHash).isNull()
+            assertThat(post.contentHtmlSanitizerPolicyVersion)
+                .isEqualTo(HtmlContentSanitizer.CURRENT_POLICY_VERSION)
+            assertThat(post.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
         }
     }
 
@@ -1318,6 +1348,33 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             assertThat(modified.contentHtml).doesNotContain("onerror")
             assertThat(modified.contentHtml).contains("<a>link</a>")
             assertThat(modified.contentHtml).contains("""<img src="https://example.com/a.png">""")
+            assertThat(modified.contentHtmlHash)
+                .isEqualTo(HtmlContentSanitizer.sha256Utf8(requireNotNull(modified.contentHtml)))
+            assertThat(modified.contentHtmlSanitizerPolicyVersion)
+                .isEqualTo(HtmlContentSanitizer.CURRENT_POLICY_VERSION)
+            assertThat(modified.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.TRUSTED_CURRENT)
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                          "title": "수정 제목 2",
+                          "content": "수정 본문 2",
+                          "version": ${requireNotNull(modified.version)}
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                }
+
+            val preserved = postFacade.findById(post.id).getOrThrow()
+            assertThat(preserved.contentHtml).isEqualTo(modified.contentHtml)
+            assertThat(preserved.contentHtmlHash).isEqualTo(modified.contentHtmlHash)
+            assertThat(preserved.contentHtmlSanitizerPolicyVersion)
+                .isEqualTo(modified.contentHtmlSanitizerPolicyVersion)
+            assertThat(preserved.contentHtmlTrustState).isEqualTo(modified.contentHtmlTrustState)
         }
     }
 
@@ -1889,14 +1946,18 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val snapshotCache =
                 cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
                     ?: error("detail public snapshot cache is missing")
-            val rawDetail =
+            val cachedDetail =
                 PostWithContentDto(post).copy(
                     authorProfileImageDirectUrl = retiredUrl,
                     content = "![cover]($retiredUrl)",
                 )
-            val rawSnapshot = PublicPostDetailSnapshotCacheDto.from(rawDetail)
+            val rawSnapshot =
+                PublicPostDetailSnapshotCacheDto
+                    .from(cachedDetail)
+                    .copy(contentHtml = "<img src=\"$retiredUrl\">")
             snapshotCache.put(post.id, rawSnapshot)
             val responseFactory = PostPublicReadResponseFactory()
+            val rawDetail = rawSnapshot.toPostWithContentDto()
             val rawEtag =
                 PostPublicReadEtagSupport().toWeakEtag(
                     responseFactory.buildPublicDetailEtagSeed(rawDetail),
@@ -1918,12 +1979,18 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                                 "![cover](${AppConfig.siteBackUrl}/post/api/v1/images/folder%2Fcover.png?version=1#preview)",
                             )
                         }
+                        jsonPath("$.contentHtml") { value(Matchers.nullValue()) }
+                        jsonPath("$.contentHtmlHash") { value(Matchers.nullValue()) }
+                        jsonPath("$.contentHtmlSanitizerPolicyVersion") { value(Matchers.nullValue()) }
+                        jsonPath("$.contentHtmlTrustState") { value("UNKNOWN") }
                     }.andReturn()
                     .response
 
             assertThat(response.getHeader(HttpHeaders.ETAG)).isNotEqualTo(rawEtag)
             assertThat(snapshotCache.get(post.id, PublicPostDetailSnapshotCacheDto::class.java)?.content)
                 .isEqualTo(rawSnapshot.content)
+            assertThat(snapshotCache.get(post.id, PublicPostDetailSnapshotCacheDto::class.java)?.contentHtml)
+                .isEqualTo(rawSnapshot.contentHtml)
         }
 
         @Test

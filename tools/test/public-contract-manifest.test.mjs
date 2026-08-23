@@ -10,6 +10,25 @@ import { fileURLToPath } from "node:url"
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const syncScript = path.join(repoRoot, "tools", "contracts", "sync-public-contracts.mjs")
 const checkScript = path.join(repoRoot, "tools", "contracts", "check-public-contracts.mjs")
+const summaryFixture = {
+  version: 1,
+  contract: "aquila-canonical-summary-fixtures",
+  fixtures: [
+    {
+      id: "synthetic-contract-case",
+      resolve: "create",
+      title: "계약 테스트",
+      content: "synthetic input",
+      request: { summaryMode: "MANUAL", summary: "synthetic expected" },
+      expected: {
+        summary: "synthetic expected",
+        source: "MANUAL",
+        algorithmVersion: "manual-v1",
+      },
+      outcome: "RESOLVED",
+    },
+  ],
+}
 
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
@@ -27,6 +46,7 @@ function createFixture() {
     { code: "500-1", httpStatus: 500, defaultUserMessage: "서버 오류", kind: "DEVELOPER" },
     { code: "400-1", httpStatus: 400, defaultUserMessage: "잘못된 요청", kind: "USER" },
   ])
+  writeJson(path.join(root, "contracts/public-api/summary-fixtures.json"), summaryFixture)
   return root
 }
 
@@ -46,6 +66,7 @@ test("sync writes 2-space newline artifacts and raw-byte manifest hashes", () =>
 
     const openapiPath = path.join(root, "contracts/public-api/openapi.json")
     const errorCodesPath = path.join(root, "contracts/public-api/error-codes.json")
+    const summaryFixturesPath = path.join(root, "contracts/public-api/summary-fixtures.json")
     const manifestPath = path.join(root, "contracts/public-api/manifest.json")
     assert.match(fs.readFileSync(openapiPath, "utf8"), /^\{\n  "paths":/)
     assert.match(fs.readFileSync(openapiPath, "utf8"), /\n$/)
@@ -58,9 +79,11 @@ test("sync writes 2-space newline artifacts and raw-byte manifest hashes", () =>
       artifacts: {
         openapi: { path: "openapi.json", sha256: sha256(openapiPath) },
         errorCodes: { path: "error-codes.json", sha256: sha256(errorCodesPath) },
+        summaryFixtures: { path: "summary-fixtures.json", sha256: sha256(summaryFixturesPath) },
       },
     })
     assert.match(manifest.artifacts.openapi.sha256, /^[a-f0-9]{64}$/)
+    assert.deepEqual(JSON.parse(fs.readFileSync(summaryFixturesPath, "utf8")), summaryFixture)
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
@@ -86,6 +109,20 @@ test("sync rejects missing or malformed OpenAPI and invalid ErrorCode input", ()
     writeJson(path.join(root, "back/build/public-api/error-codes.json"), [
       { code: "400-1", httpStatus: "400", defaultUserMessage: "bad", kind: "USER" },
     ])
+    assert.notEqual(run(syncScript, root).status, 0)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("sync rejects an invalid canonical summary fixture before writing the manifest", () => {
+  const root = createFixture()
+  try {
+    writeJson(path.join(root, "contracts/public-api/summary-fixtures.json"), {
+      version: 1,
+      contract: "aquila-canonical-summary-fixtures",
+      fixtures: {},
+    })
     assert.notEqual(run(syncScript, root).status, 0)
   } finally {
     fs.rmSync(root, { recursive: true, force: true })

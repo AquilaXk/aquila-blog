@@ -121,13 +121,13 @@ Backfill 안전성:
 - `modified_at`과 post version은 변경하지 않고 summary/content 원문은 log·event·metric label에 남기지 않는다.
 - summary 변경과 공개 글 backfill 반영 후 공개 feed/search/tag/detail cache와 CDN tag를 무효화한다. 비공개·삭제 글은 raw tag를 task에 넣지 않고 관리자 목록 cache만 무효화한다.
 
-Backfill/rollback 절차:
+Backfill 운영·중단 절차:
 
-1. `afterId=0`, bounded `limit`, `dryRun=true`로 대상 수만 확인한다.
-2. 같은 `afterId`/`limit`에 `dryRun=false`를 보내고 응답의 `nextAfterId`로 다음 batch를 재개한다.
-3. `skipped > 0`이면 응답 `nextAfterId`가 첫 skip 행 직전으로 되돌아가 있으므로 같은 값으로 재요청하면 skip된 행을 다시 조회한다. concurrent edit가 끝나기 전에는 그 행이 계속 skip되며 checkpoint는 전진하지 않는다.
-4. 배포 rollback은 application을 이전 버전으로 되돌리고 expand-only 컬럼은 보존한다. versioned migration을 되감거나 컬럼을 즉시 drop하지 않는다.
-5. backfill 결과를 되돌려야 하면 application rollback 후 canonical 컬럼을 그대로 두고 후속 migration에서만 정리한다.
+1. 작업 시작 전 별도 exact 승인을 받아 `afterId`, `limit`, batch ceiling/window와 `dryRun=false` mutation 권한을 고정한다. 모든 작업은 인증된 admin backfill endpoint 호출만으로 수행한다.
+2. 고정된 window 전체에 `dryRun=true`를 먼저 수행하고, 각 응답의 sanitized tuple `{afterId, limit, dryRun, scanned, updated, skipped, nextAfterId, hasMore}`와 최종 checkpoint를 기록한다.
+3. dry-run tuple이 승인한 window와 일치한 경우에만 고정된 동일 window에 `dryRun=false`를 배치별로 수행하고, 동일한 fields의 mutation tuple `{afterId, limit, dryRun, scanned, updated, skipped, nextAfterId, hasMore}` 및 생성 task와 CDN invalidation evidence를 기록한다.
+4. `skipped`, tuple mismatch, provider/runtime 오류, task 또는 CDN invalidation 실패가 하나라도 발생하면 즉시 중지하고 마지막 확인 checkpoint를 기록한다. 해당 window에서 추가 mutation이나 자동 재시도는 하지 않는다.
+5. 재개에는 기록된 checkpoint와 새 별도 resume authority가 필요하다. DB 직접 조작, shell/script 실행, 수동 deploy 또는 rollback, previous image 사용, dual-read fallback은 이 절차의 대안이 아니며 금지한다.
 
 완료 조건:
 

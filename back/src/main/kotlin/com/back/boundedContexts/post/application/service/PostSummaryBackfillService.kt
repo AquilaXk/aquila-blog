@@ -71,7 +71,7 @@ class PostSummaryBackfillService(
             return BatchResult(0, 0, 0, afterId, hasMore = false, dryRun = dryRun)
         }
         if (dryRun) {
-            return BatchResult(rows.size, 0, 0, afterId, hasMore = rows.size == safeLimit, dryRun = true)
+            return BatchResult(rows.size, 0, 0, rows.last().id, hasMore = rows.size == safeLimit, dryRun = true)
         }
 
         var updated = 0

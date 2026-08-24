@@ -1,5 +1,7 @@
 package com.back.global.system.application
 
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.system.application.port.output.AdminOperationReceiptPort
 import com.back.global.system.model.AdminOperationAction
 import com.back.global.system.model.AdminOperationReceipt
@@ -8,8 +10,10 @@ import com.back.global.system.model.AdminOperationStatus
 import com.back.global.task.application.TaskDlqReplayResult
 import com.back.global.task.application.TaskDlqReplayService
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import java.time.Instant
 import java.util.UUID
@@ -51,14 +55,51 @@ class AdminOperationExecutionServiceTest {
         assertThat(result.quarantinedCount).isEqualTo(1)
     }
 
-    private fun receipt() =
+    @Test
+    fun `missing receipt returns typed not found`() {
+        val operationId = UUID.randomUUID()
+        `when`(receiptRepository.findByOperationIdWithLock(operationId)).thenReturn(null)
+
+        assertThatThrownBy { service.execute(operationId) }
+            .isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.ADMIN_OPERATION_NOT_FOUND)
+    }
+
+    @Test
+    fun `zero selected tasks succeeds with no matching code`() {
+        val receipt = receipt()
+        `when`(receiptRepository.findByOperationIdWithLock(receipt.operationId)).thenReturn(receipt)
+        `when`(taskDlqReplayService.replayFailedTasksWithLock(null, 50, true)).thenReturn(replay(0, 0, 0))
+
+        val result = service.execute(receipt.operationId)
+
+        assertThat(result.status).isEqualTo(AdminOperationStatus.SUCCEEDED)
+        assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.NO_MATCHING_TASKS)
+    }
+
+    @Test
+    fun `replayed tasks succeed and forward normalized task type`() {
+        val receipt = receipt(taskType = "member.mail")
+        `when`(receiptRepository.findByOperationIdWithLock(receipt.operationId)).thenReturn(receipt)
+        `when`(taskDlqReplayService.replayFailedTasksWithLock("member.mail", 50, true)).thenReturn(replay(1, 1, 0))
+
+        val result = service.execute(receipt.operationId)
+
+        assertThat(result.status).isEqualTo(AdminOperationStatus.SUCCEEDED)
+        assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.TASKS_REPLAYED)
+        assertThat(result.target).isEqualTo("member.mail")
+        verify(taskDlqReplayService).replayFailedTasksWithLock("member.mail", 50, true)
+    }
+
+    private fun receipt(taskType: String = "") =
         AdminOperationReceipt(
             operationId = UUID.randomUUID(),
             actorId = 7L,
             sessionRowId = 41L,
             fingerprint = "a".repeat(64),
             action = AdminOperationAction.TASK_DLQ_REPLAY,
-            taskType = "",
+            taskType = taskType,
             requestedLimit = 50,
             resetRetryCount = true,
             reason = "incident recovery",

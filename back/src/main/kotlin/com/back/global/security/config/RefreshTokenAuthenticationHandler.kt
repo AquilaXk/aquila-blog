@@ -72,6 +72,6 @@ class RefreshTokenAuthenticationHandler(
         )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
 
-        securityContextAuthenticationWriter.write(member)
+        securityContextAuthenticationWriter.write(member, memberSession.id)
     }
 }

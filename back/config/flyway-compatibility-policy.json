@@ -4,6 +4,10 @@
     {
       "file": "back/src/main/resources/db/migration/V20260823_01__add_post_content_html_trust.sql",
       "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260824_01__create_admin_operation_receipt.sql",
+      "class": "EXPAND_SAFE"
     }
   ],
   "cutovers": []

@@ -19,6 +19,23 @@ interface TaskRepository :
     TaskRetentionRepositoryPort {
     @Query(
         value = """
+            SELECT * FROM task
+            WHERE status = 'FAILED'
+              AND payload_redacted_at IS NULL
+              AND (:taskType IS NULL OR task_type = :taskType)
+            ORDER BY modified_at DESC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+        """,
+        nativeQuery = true,
+    )
+    override fun findFailedTasksWithLock(
+        taskType: String?,
+        limit: Int,
+    ): List<Task>
+
+    @Query(
+        value = """
             SELECT *
             FROM task
             WHERE status = 'PENDING'

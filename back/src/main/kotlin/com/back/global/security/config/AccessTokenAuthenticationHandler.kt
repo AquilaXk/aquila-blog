@@ -75,7 +75,7 @@ class AccessTokenAuthenticationHandler(
 
         sessionContext.session?.let { memberSessionUseCase.touchAuthenticated(it) }
         val payloadMember = persistedMember ?: payload.toTransientMember()
-        securityContextAuthenticationWriter.write(payloadMember)
+        securityContextAuthenticationWriter.write(payloadMember, sessionContext.session?.id)
         return true
     }
 

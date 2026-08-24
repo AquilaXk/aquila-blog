@@ -12,7 +12,10 @@ import org.springframework.stereotype.Component
  */
 @Component
 class SecurityContextAuthenticationWriter {
-    fun write(member: Member) {
+    fun write(
+        member: Member,
+        sessionRowId: Long? = null,
+    ) {
         val user =
             SecurityUser(
                 member.id,
@@ -20,6 +23,7 @@ class SecurityContextAuthenticationWriter {
                 "",
                 member.name,
                 member.toGrantedAuthorities(),
+                sessionRowId,
             )
         val authentication =
             UsernamePasswordAuthenticationToken(user, user.password, user.authorities)

@@ -38,7 +38,7 @@ class LegacyPayloadRecoveryHandler(
         )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
         sessionContext.session?.let { memberSessionUseCase.touchAuthenticated(it) }
-        securityContextAuthenticationWriter.write(persistedMember)
+        securityContextAuthenticationWriter.write(persistedMember, sessionContext.session?.id)
         return true
     }
 }

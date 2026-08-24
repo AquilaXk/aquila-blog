@@ -50,7 +50,7 @@
 ## 실패 후 수동 복구
 
 1. post write side effect task가 FAILED이면 `GET /system/api/v1/adm/tasks`에서 `post.write.side-effect` 상태를 확인한다.
-2. `POST /system/api/v1/adm/tasks/replay-failed`로 `post.write.side-effect`만 replay한다.
+2. `POST /system/api/v1/adm/operations/task-dlq-replay`에 새 UUID `operationId`, 필수 bounded `reason`, `taskType=post.write.side-effect`를 보내 replay operation을 접수하고 같은 actor의 `GET /system/api/v1/adm/operations/{operationId}`로 현재 결과를 확인한다.
 3. author representation stale이 의심되면 해당 member update 이후 post read caches가 clear됐는지 `post.read.cache.evict` metric의 `reason=author-representation`을 확인한다.
 4. CDN stale이 의심되면 response의 cache tag와 `PostCacheTags` token이 같은지 확인하고, 해당 post/tag/list/detail tag를 purge한다.
 5. Redis 장애 또는 cache miss는 공개 read path가 DB/source fallback을 사용하므로 데이터 정합성보다 응답 지연을 먼저 점검한다.

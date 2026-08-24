@@ -88,6 +88,49 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             propertySchema(openApiNode, "AuthSessionMemberDto", "legalReconsent"),
             "#/components/schemas/LegalReconsentStatus",
         )
+        val paths = openApiNode.path("paths")
+        assertThat(paths.has("/system/api/v1/adm/operations/task-dlq-replay")).isTrue()
+        assertThat(paths.has("/system/api/v1/adm/operations/{operationId}")).isTrue()
+        assertThat(paths.has("/system/api/v1/adm/tasks/replay-failed")).isFalse()
+        val replayRequest = openApiNode.path("components").path("schemas").path("TaskDlqReplayOperationRequest")
+        assertThat(replayRequest.path("required").values().map { it.asText() })
+            .containsExactlyInAnyOrder("operationId", "reason")
+        assertThat(replayRequest.path("properties").has("actorId")).isFalse()
+        assertThat(replayRequest.path("properties").has("sessionRowId")).isFalse()
+        assertThat(
+            replayRequest
+                .path("properties")
+                .path("operationId")
+                .path("format")
+                .asText(),
+        ).isEqualTo("uuid")
+        assertThat(
+            replayRequest
+                .path("properties")
+                .path("operationId")
+                .path("type")
+                .asText(),
+        ).isEqualTo("string")
+        val replayReason = replayRequest.path("properties").path("reason")
+        assertThat(replayReason.path("minLength").asInt()).isEqualTo(1)
+        assertThat(replayReason.path("maxLength").asInt()).isEqualTo(200)
+        assertEnum(openApiNode, propertySchema(openApiNode, "AdminOperationResBody", "action"), "TASK_DLQ_REPLAY")
+        assertEnum(
+            openApiNode,
+            propertySchema(openApiNode, "AdminOperationResBody", "status"),
+            "ACCEPTED",
+            "SUCCEEDED",
+            "PARTIAL",
+            "FAILED",
+        )
+        assertNullableEnum(
+            openApiNode,
+            propertySchema(openApiNode, "AdminOperationResBody", "resultCode"),
+            "NO_MATCHING_TASKS",
+            "ALL_TASKS_QUARANTINED",
+            "TASKS_REPLAYED",
+            "TASKS_PARTIALLY_REPLAYED",
+        )
 
         val outputPath = Path.of("build/openapi/openapi.json")
         Files.createDirectories(outputPath.parent)
@@ -144,5 +187,48 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val expected = expectedValues.map<String, String?> { it } + null
 
         assertThat(actualValues).containsExactlyInAnyOrderElementsOf(expected)
+    }
+
+    private fun assertNullableEnum(
+        openApiNode: JsonNode,
+        schema: JsonNode,
+        vararg expectedValues: String,
+    ) {
+        val resolved = resolveSchema(openApiNode, schema)
+        val actualValues = resolved.path("enum").values().map { if (it.isNull) null else it.asText() }
+        val expected = expectedValues.map<String, String?> { it } + null
+
+        assertThat(actualValues).containsExactlyInAnyOrderElementsOf(expected)
+    }
+
+    private fun assertEnum(
+        openApiNode: JsonNode,
+        schema: JsonNode,
+        vararg expectedValues: String,
+    ) {
+        val resolved = resolveSchema(openApiNode, schema)
+
+        assertThat(resolved.path("enum").values().map { it.asText() })
+            .containsExactlyInAnyOrderElementsOf(expectedValues.toList())
+    }
+
+    private fun resolveSchema(
+        openApiNode: JsonNode,
+        schema: JsonNode,
+    ): JsonNode {
+        val reference =
+            schema.path("\$ref").asText().ifBlank {
+                schema
+                    .path("oneOf")
+                    .firstOrNull { !it.path("\$ref").asText().isBlank() }
+                    ?.path("\$ref")
+                    ?.asText()
+                    .orEmpty()
+            }
+        return if (reference.isBlank()) {
+            schema
+        } else {
+            openApiNode.path("components").path("schemas").path(reference.substringAfterLast('/'))
+        }
     }
 }

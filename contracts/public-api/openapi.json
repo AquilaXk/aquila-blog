@@ -406,36 +406,6 @@
         }
       }
     },
-    "/system/api/v1/adm/tasks/replay-failed": {
-      "post": {
-        "tags": [
-          "api-v-1-adm-system-controller"
-        ],
-        "operationId": "replayFailedTasks",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TaskDlqReplayRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/RsDataTaskDlqReplayResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/system/api/v1/adm/search/pipeline/force-control": {
       "post": {
         "tags": [
@@ -489,6 +459,36 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/RsDataSearchRuntimeFlags"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/operations/task-dlq-replay": {
+      "post": {
+        "tags": [
+          "api-v-1-adm-system-controller"
+        ],
+        "operationId": "submitTaskDlqReplay",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskDlqReplayOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataAdminOperationResBody"
                 }
               }
             }
@@ -1883,6 +1883,37 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/SearchRuntimeFlags"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/operations/{operationId}": {
+      "get": {
+        "tags": [
+          "api-v-1-adm-system-controller"
+        ],
+        "operationId": "getOperation",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataAdminOperationResBody"
                 }
               }
             }
@@ -4240,67 +4271,6 @@
           }
         }
       },
-      "TaskDlqReplayRequest": {
-        "type": "object",
-        "properties": {
-          "taskType": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "limit": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "resetRetryCount": {
-            "type": "boolean"
-          }
-        }
-      },
-      "RsDataTaskDlqReplayResult": {
-        "type": "object",
-        "properties": {
-          "resultCode": {
-            "type": "string"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/TaskDlqReplayResult"
-          }
-        }
-      },
-      "TaskDlqReplayResult": {
-        "type": "object",
-        "properties": {
-          "taskType": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "requestedLimit": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "replayedCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "resetRetryCount": {
-            "type": "boolean"
-          },
-          "replayedTaskIds": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        }
-      },
       "SearchPipelineForceControlRequest": {
         "type": "object",
         "properties": {
@@ -4360,6 +4330,129 @@
         "properties": {
           "forceDisabled": {
             "type": "boolean"
+          }
+        }
+      },
+      "TaskDlqReplayOperationRequest": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1
+          },
+          "taskType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 200,
+            "minimum": 1
+          },
+          "resetRetryCount": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "operationId",
+          "reason"
+        ]
+      },
+      "AdminOperationResBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actorId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sessionRowId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "TASK_DLQ_REPLAY"
+            ]
+          },
+          "target": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "SUCCEEDED",
+              "PARTIAL",
+              "FAILED"
+            ]
+          },
+          "resultCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "NO_MATCHING_TASKS",
+              "ALL_TASKS_QUARANTINED",
+              "TASKS_REPLAYED",
+              "TASKS_PARTIALLY_REPLAYED",
+              null
+            ]
+          },
+          "selectedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "replayedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quarantinedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RsDataAdminOperationResBody": {
+        "type": "object",
+        "properties": {
+          "resultCode": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AdminOperationResBody"
           }
         }
       },

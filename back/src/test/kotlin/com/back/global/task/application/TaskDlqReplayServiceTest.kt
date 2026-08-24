@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
-import org.springframework.data.domain.PageRequest
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.time.Clock
 import java.time.Instant
@@ -41,18 +40,17 @@ class TaskDlqReplayServiceTest {
                 rawEnvelope = expiredEnvelope(expiredPayload),
             )
         `when`(
-            repository.findByStatusOrderByModifiedAtDesc(
-                TaskStatus.FAILED,
-                PageRequest.of(0, 10),
-            ),
+            repository.findFailedTasksWithLock(null, 10),
         ).thenReturn(listOf(valid, malformed, unknown, expired))
         val meterRegistry = SimpleMeterRegistry()
         val service = TaskDlqReplayService(repository, registry, codec, Clock.fixed(now, ZoneOffset.UTC), meterRegistry)
 
-        val result = service.replayFailedTasks(taskType = null, limit = 10, resetRetryCount = true)
+        val result = service.replayFailedTasksWithLock(taskType = null, limit = 10, resetRetryCount = true)
 
         assertThat(result.replayedTaskIds).containsExactly(101L)
         assertThat(result.replayedCount).isEqualTo(1)
+        assertThat(result.selectedCount).isEqualTo(4)
+        assertThat(result.quarantinedCount).isEqualTo(3)
         assertThat(valid.status).isEqualTo(TaskStatus.PENDING)
         assertThat(valid.retryCount).isZero()
         assertQuarantined(malformed, TaskQuarantineReason.MALFORMED_ENVELOPE)

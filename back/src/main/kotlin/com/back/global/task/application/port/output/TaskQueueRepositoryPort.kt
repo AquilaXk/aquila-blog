@@ -8,6 +8,11 @@ import java.time.Instant
 interface TaskQueueRepositoryPort {
     fun save(task: Task): Task
 
+    fun findFailedTasksWithLock(
+        taskType: String?,
+        limit: Int,
+    ): List<Task> = throw UnsupportedOperationException("DLQ replay claim query must be implemented by the queue adapter")
+
     fun countByStatus(status: TaskStatus): Long
 
     fun countByStatusAndNextRetryAtLessThanEqual(

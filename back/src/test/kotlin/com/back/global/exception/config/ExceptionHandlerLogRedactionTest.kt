@@ -9,6 +9,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.core.MethodParameter
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
@@ -211,6 +213,56 @@ class ExceptionHandlerLogRedactionTest {
         assertThat(event.throwableProxy.suppressed[0].message)
             .contains("token=[REDACTED]")
             .doesNotContain("LEAK_TEST_123")
+    }
+
+    @Test
+    @DisplayName("data integrity 충돌 로그는 PostgreSQL detail 값을 남기지 않는다")
+    fun `data integrity log omits postgres detail throwable`() {
+        val handler = newHandler()
+        val appender = ExceptionHandlerListAppenderSupport.attach()
+        val rawEmail = "raw-data-canary@example.com"
+
+        try {
+            handler.handleDataIntegrityViolationException(
+                DataIntegrityViolationException(
+                    "write failed",
+                    IllegalStateException("Detail: Key (email)=($rawEmail) already exists"),
+                ),
+            )
+        } finally {
+            ExceptionHandlerListAppenderSupport.detach(appender)
+        }
+
+        val event = appender.list.single()
+        assertThat(event.formattedMessage)
+            .contains("data_integrity_violation")
+            .contains("exceptionClass=org.springframework.dao.DataIntegrityViolationException")
+            .contains("repaired=false")
+            .doesNotContain(rawEmail)
+        assertThat(event.throwableProxy).isNull()
+    }
+
+    @Test
+    @DisplayName("optimistic lock 충돌 로그는 raw throwable을 남기지 않는다")
+    fun `optimistic lock log omits raw throwable`() {
+        val handler = newHandler()
+        val appender = ExceptionHandlerListAppenderSupport.attach()
+        val rawEmail = "raw-lock-canary@example.com"
+
+        try {
+            handler.handleOptimisticLockException(
+                OptimisticLockingFailureException("update failed for $rawEmail"),
+            )
+        } finally {
+            ExceptionHandlerListAppenderSupport.detach(appender)
+        }
+
+        val event = appender.list.single()
+        assertThat(event.formattedMessage)
+            .contains("optimistic_lock_conflict")
+            .contains("exceptionClass=org.springframework.dao.OptimisticLockingFailureException")
+            .doesNotContain(rawEmail)
+        assertThat(event.throwableProxy).isNull()
     }
 
     @Test

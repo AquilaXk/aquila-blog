@@ -1,5 +1,8 @@
 package com.back.global.security.config
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.back.boundedContexts.cloud.config.CloudSecurityConfigurer
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
@@ -25,6 +28,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.mock.env.MockEnvironment
 import org.springframework.mock.web.MockFilterChain
@@ -301,14 +305,28 @@ class CustomAuthenticationFilterTest {
         fixture.givenEmptyAuthorizationHeader()
         fixture.givenCookieTokens(accessToken = "broken-access-token")
         fixture.givenClientIp(request, "203.0.113.11")
-        given(fixture.actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
+        given(fixture.actorApplicationService.payload("broken-access-token"))
+            .willThrow(RuntimeException("auth token=RAW_AUTH_CANARY"))
 
         val response = MockHttpServletResponse()
         val filterChain = fixture.noContentFilterChain()
+        val appender = attachListAppender()
 
-        fixture.authenticationFilter().doFilter(request, response, filterChain)
+        try {
+            fixture.authenticationFilter().doFilter(request, response, filterChain)
+        } finally {
+            detachListAppender(appender)
+        }
 
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+        val event = appender.list.single()
+        assertThat(event.formattedMessage)
+            .contains("authentication_filter_fallback")
+            .contains("path=/post/api/v1/posts")
+            .contains("publicApi=true")
+            .contains("reason=RuntimeException")
+            .doesNotContain("RAW_AUTH_CANARY")
+        assertThat(event.throwableProxy).isNull()
     }
 
     @Test
@@ -628,6 +646,20 @@ class CustomAuthenticationFilterTest {
             siteBackUrl = "https://api.blog.aquilaxk.site",
             siteFrontUrl = "https://blog.aquilaxk.site",
         )
+    }
+
+    private fun attachListAppender(): ListAppender<ILoggingEvent> {
+        val logger = LoggerFactory.getLogger(CustomAuthenticationFilter::class.java) as Logger
+        return ListAppender<ILoggingEvent>().also {
+            it.start()
+            logger.addAppender(it)
+        }
+    }
+
+    private fun detachListAppender(appender: ListAppender<ILoggingEvent>) {
+        val logger = LoggerFactory.getLogger(CustomAuthenticationFilter::class.java) as Logger
+        logger.detachAppender(appender)
+        appender.stop()
     }
 
     private class CustomAuthenticationFilterFixture(

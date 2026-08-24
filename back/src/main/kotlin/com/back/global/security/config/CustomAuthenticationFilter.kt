@@ -68,7 +68,6 @@ class CustomAuthenticationFilter(
                     path,
                     isPublicApi,
                     e::class.java.simpleName,
-                    e,
                 )
                 if (!isPublicApi) {
                     throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")

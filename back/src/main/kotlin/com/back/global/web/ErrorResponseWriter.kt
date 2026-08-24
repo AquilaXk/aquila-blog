@@ -34,11 +34,11 @@ class ErrorResponseWriter(
         if (response.isCommitted) {
             val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
             logger.warn(
-                "error_response_committed path={} code={} source={}",
+                "error_response_committed path={} code={} source={} exceptionClass={}",
                 path,
                 errorCode.code,
                 source.tag,
-                cause,
+                cause?.let { it::class.qualifiedName } ?: "-",
             )
             return
         }
@@ -96,7 +96,6 @@ class ErrorResponseWriter(
                     source.tag,
                     cause?.let { it::class.qualifiedName } ?: "-",
                     exceptionMessage,
-                    cause,
                 )
         }
     }

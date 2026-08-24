@@ -3,7 +3,6 @@ package com.back.global.web.config
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
-import com.back.global.web.application.ClientIpResolver
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ServletRequest
 import jakarta.servlet.ServletResponse
@@ -17,12 +16,10 @@ import org.springframework.mock.web.MockHttpServletResponse
 
 @DisplayName("RequestCorrelationFilter 테스트")
 class RequestCorrelationFilterTest {
-    private val clientIpResolver = ClientIpResolver()
-
     @Test
     @DisplayName("slow request 로그는 민감 query value를 남기지 않는다")
     fun `slow request log redacts sensitive query values`() {
-        val filter = RequestCorrelationFilter(clientIpResolver, slowRequestThresholdMs = 0)
+        val filter = RequestCorrelationFilter(slowRequestThresholdMs = 0)
         val request =
             MockHttpServletRequest("GET", "/post/api/v1/posts/search").apply {
                 queryString = "token=LEAK_TEST_123&kw=private&page=1"
@@ -54,7 +51,7 @@ class RequestCorrelationFilterTest {
     @Test
     @DisplayName("slow request 로그는 client network identity를 남기지 않고 safe diagnostic을 유지한다")
     fun `slow request log omits client network identity and keeps safe diagnostics`() {
-        val filter = RequestCorrelationFilter(clientIpResolver, slowRequestThresholdMs = 0)
+        val filter = RequestCorrelationFilter(slowRequestThresholdMs = 0)
         val request =
             MockHttpServletRequest("GET", "/post/api/v1/posts/search").apply {
                 remoteAddr = "203.0.113.10"

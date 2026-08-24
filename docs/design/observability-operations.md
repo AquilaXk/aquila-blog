@@ -3,7 +3,7 @@
 홈서버 Loki + Grafana + Prometheus + Alertmanager 기준 에러 조회·알림 대응 단일 운영 문서다.
 
 - Epic: #1288 / Issue: #1300
-- 기준 tip: `feat/error-metrics-alerts` (ErrorCode + `ErrorResponseWriter` + `app_exception_total` + error alerts)
+- 기준 구현: §5의 현재 코드 경로 (ErrorCode + `ErrorResponseWriter` + `app_exception_total` + error alerts)
 - 코드표: [`docs/design/error-codes.md`](./error-codes.md)
 - Alert rules: `deploy/homeserver/monitoring/rules/*.yml` (`task-alerts.yml` + `error-alerts.yml` + `cloud-media-alerts.yml`)
 - 로그 대시보드: Grafana **Aquila Logs Overview** (`blog-logs-overview.json`)
@@ -30,7 +30,7 @@
 | **prod** | `LogstashEncoder` (`includeMdc=true`) | JSON 필드 `requestId` (MDC). plain `rid=` 접두는 **없다** |
 | **!prod** | plain pattern | `rid=%X{requestId}` + 메시지 본문의 `resultCode=` / `requestId=` |
 
-구조화 메시지(`app_exception` / `error_response` / `api_error`)에는 양쪽 모두 `resultCode=…`가 찍힌다. **홈서버(prod) Loki 조회는 JSON `requestId`가 정본**이다.
+`app_exception`과 `error_response`는 `resultCode=…`를 기록하고, `api_error`는 `requestId`와 HTTP `status`로 상관한다. **홈서버(prod) Loki 조회는 JSON `requestId`가 정본**이다.
 
 ### 1.1 requestId로 단일 요청 추적
 
@@ -149,7 +149,7 @@ topk(10, sum by (code) (rate(app_exception_total[5m])))
 
 ## 2. Alert → 대응 매핑 표
 
-소스: `deploy/homeserver/monitoring/rules/task-alerts.yml` (41) + `error-alerts.yml` (2) + `cloud-media-alerts.yml` (10) = **53 rules**.  
+소스: `deploy/homeserver/monitoring/rules/task-alerts.yml` (45) + `error-alerts.yml` (2) + `cloud-media-alerts.yml` (10) = **57 rules**.
 cloud-media 검증·패널 매핑은 [`docs/ops/cloud-media-metrics-verify.md`](../ops/cloud-media-metrics-verify.md)와 Grafana **Blog Cloud Media** (`blog-cloud-media.json`)를 본다.
 
 | Alert | 의미 | 첫 확인 대시보드·쿼리 | 1차 조치 |
@@ -303,7 +303,7 @@ doctor.sh의 `Steady Guard Cron` / `Monitoring Stack` 섹션과 guard 로그(`.s
 
 ## 5. 에러 처리 아키텍처 개요
 
-이 브랜치 실제 경로: `RequestCorrelationFilter` → (`ExceptionHandler` \| `ErrorResponseWriter`) → `ErrorCode` / `ErrorMetrics` → 로그(Loki) · 메트릭(Prometheus).
+현재 구현 경로: `RequestCorrelationFilter` → (`ExceptionHandler` \| `ErrorResponseWriter`) → `ErrorCode` / `ErrorMetrics` → 로그(Loki) · 메트릭(Prometheus).
 
 ```mermaid
 flowchart LR
@@ -357,3 +357,21 @@ flowchart LR
 ### 운영자가 기억하는 한 줄
 
 **메트릭(`code`)으로 무엇을, 로그(`resultCode`+prod JSON `requestId` / !prod `rid=`)로 왜를 보고, 알림 메일은 앱/데이터면 장애에만 쓰고 probe scrape-down은 steady_state_guard에 맡긴다.**
+
+---
+
+## 6. Telemetry·운영 데이터 보존 owner
+
+아래 값은 tracked default/config 정본이다. 배포 env override의 실제 값은 이 문서에서 추정하지 않는다.
+
+| 대상 | 목적 | tracked 보존 상한 | cleanup owner | 현재 경계 |
+| --- | --- | --- | --- | --- |
+| Docker `json-file` stdout/stderr | Promtail 전달 전 source log buffer | 컨테이너별 `max-size: 10m`, `max-file: 3` | Docker log rotation (`deploy/homeserver/docker-compose.prod.yml`) | 시간 TTL이 아닌 크기 상한 |
+| Loki application/security logs | requestId 기반 장애·보안 조사 | `336h` (14일) | Loki compactor `retention_enabled: true` | tracked config 기준 gap 없음 |
+| Prometheus TSDB | bounded operational metrics/alerts | `PROMETHEUS_RETENTION_TIME`, 미설정 시 `15d` | Prometheus TSDB retention | 실제 override 값은 deploy env 정본 |
+| durable task payload/row | async side-effect retry·진단 | COMPLETED/QUARANTINED payload 즉시 redaction, FAILED payload 최대 7일; row는 COMPLETED 7일, FAILED/QUARANTINED 30일 | `TaskRetentionCleanupScheduledJob` → `TaskRetentionService` | #1628 owner 완료, 중복 구현 금지 |
+| revoked member session | session revoke/security | `custom.privacy.retention.revokedSessionDays`, 기본 30일 | `MemberSessionCleanupScheduledJob` → `MemberSessionService.purgeExpiredRevokedSessions` | 기존 owner 유지 |
+| auth security event | login/security incident evidence | `custom.privacy.retention.authSecurityEventDays`, 기본 30일 | `AuthSecurityEventCleanupScheduledJob` → `AuthSecurityEventService.purgeExpired` | 기존 owner 유지 |
+| signup verification / member action log / notification / closed privacy request | privacy lifecycle | 기본 7/90/60/30일 | `PrivacyRetentionCleanupScheduledJob` bounded batch purge | 기존 owner 유지 |
+
+GitHub Actions workflow log·security artifact retention gap은 Platform #1714, Web local RUM은 Web #46이 소유한다. 이 표는 durable delete·new scheduler·production setting mutation을 승인하지 않는다.

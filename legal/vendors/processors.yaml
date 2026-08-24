@@ -222,13 +222,12 @@ processors:
     overseasTransfer: false
     enabledByEnv: deploy homeserver monitoring compose and Grafana credentials
     contractStatus: internalSelfHosted
-    retentionControl: Loki retention configuration review required
+    retentionControl: Docker json-file source rotation max-size 10m and max-file 3; Loki filesystem TSDB retention 336h with compactor retention enabled; Prometheus TSDB defaults 15d unless PROMETHEUS_RETENTION_TIME overrides
     securityControls:
       - adminPasswordSecret
       - restrictedNetworkAccess
       - dashboardAccessControl
-    reviewRequired:
-      - Retention configuration still requires review; DB-backed auth/action logs minimize identifiers and content before Loki ingestion.
+    reviewRequired: []
 
   - id: github_actions
     name: GitHub Actions

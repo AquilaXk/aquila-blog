@@ -1,6 +1,5 @@
 package com.back.global.web.config
 
-import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.logging.SensitiveQueryRedactor
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -16,12 +15,10 @@ import java.util.UUID
 
 /**
  * RequestCorrelationFilter는 요청 단위 상관키를 부여하고 운영 로그 상관분석을 돕는다.
- * remoteIp는 [ClientIpResolver] 단일 SoT만 사용한다 (raw XFF trust 금지).
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class RequestCorrelationFilter(
-    private val clientIpResolver: ClientIpResolver,
     @param:Value("\${custom.observability.request.slowMs:1200}")
     private val slowRequestThresholdMs: Long,
 ) : OncePerRequestFilter() {
@@ -47,29 +44,25 @@ class RequestCorrelationFilter(
             val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
             val query = SensitiveQueryRedactor.redactQuery(request.queryString, MAX_QUERY_LENGTH)
             val status = response.status
-            val remoteIp = sanitizeLogValue(clientIpResolver.resolve(request), MAX_REMOTE_IP_LENGTH)
-
             if (status >= 500) {
                 log.error(
-                    "api_error requestId={} method={} path={} query={} status={} latencyMs={} remoteIp={}",
+                    "api_error requestId={} method={} path={} query={} status={} latencyMs={}",
                     requestId,
                     method,
                     path,
                     query,
                     status,
                     elapsedMs,
-                    remoteIp,
                 )
             } else if (elapsedMs >= slowRequestThresholdMs) {
                 log.warn(
-                    "slow_request requestId={} method={} path={} query={} status={} latencyMs={} remoteIp={}",
+                    "slow_request requestId={} method={} path={} query={} status={} latencyMs={}",
                     requestId,
                     method,
                     path,
                     query,
                     status,
                     elapsedMs,
-                    remoteIp,
                 )
             }
 
@@ -113,7 +106,6 @@ class RequestCorrelationFilter(
         private const val MAX_METHOD_LENGTH = 16
         private const val MAX_PATH_LENGTH = 512
         private const val MAX_QUERY_LENGTH = 512
-        private const val MAX_REMOTE_IP_LENGTH = 120
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
     }
 }

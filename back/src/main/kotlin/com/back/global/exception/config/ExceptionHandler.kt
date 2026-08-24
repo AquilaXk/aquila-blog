@@ -286,7 +286,11 @@ class ExceptionHandler(
     @SpringExceptionHandler(DataIntegrityViolationException::class)
     fun handleDataIntegrityViolationException(ex: DataIntegrityViolationException): ResponseEntity<RsData<Void>> {
         val repaired = prodSequenceGuardService?.repairIfSequenceDrift(ex) == true
-        logger.warn("Data integrity violation", ex)
+        logger.warn(
+            "data_integrity_violation exceptionClass={} repaired={}",
+            ex::class.qualifiedName,
+            repaired,
+        )
         return respond(
             ErrorCode.DB_CONFLICT,
             if (repaired) {
@@ -302,7 +306,10 @@ class ExceptionHandler(
         OptimisticLockException::class,
     )
     fun handleOptimisticLockException(ex: Exception): ResponseEntity<RsData<Void>> {
-        logger.warn("Optimistic lock conflict", ex)
+        logger.warn(
+            "optimistic_lock_conflict exceptionClass={}",
+            ex::class.qualifiedName,
+        )
         return respond(
             ErrorCode.DB_CONFLICT,
             "다른 요청이 먼저 반영되어 충돌이 발생했습니다. 최신 상태를 확인 후 다시 시도해주세요.",

@@ -48,7 +48,7 @@ class MemberProdInitData(
 
         if (adminEmail.isBlank()) return
         if (adminPassword.isBlank()) return
-        logger.info("Configured admin identity bootstrap started. email={} nickname={}", adminEmail, adminNickname)
+        logger.info("Configured admin identity bootstrap started")
         val existingAdmin =
             memberUseCase.findByEmail(adminEmail)
         if (existingAdmin != null) {
@@ -71,7 +71,7 @@ class MemberProdInitData(
             } else {
                 throw AppException(
                     ErrorCode.RESOURCE_CONFLICT,
-                    "관리자 이메일($adminEmail)이 다른 계정(memberId=${owner.id})에 이미 연결되어 있습니다. 기존 계정을 정리한 뒤 다시 기동해주세요.",
+                    "구성된 관리자 이메일이 다른 계정에 이미 연결되어 있습니다. 기존 계정을 정리한 뒤 다시 기동해주세요.",
                 )
             }
             if (existingAdmin.nickname != adminNickname) {

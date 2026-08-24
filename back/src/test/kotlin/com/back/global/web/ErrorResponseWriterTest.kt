@@ -123,7 +123,7 @@ class ErrorResponseWriterTest {
                 response = response,
                 errorCode = ErrorCode.UNAUTHORIZED,
                 source = ErrorResponseSource.SECURITY,
-                cause = IllegalStateException("already written"),
+                cause = IllegalStateException("request token=RAW_COMMITTED_CANARY"),
             )
         } finally {
             detachListAppender(appender)
@@ -131,11 +131,15 @@ class ErrorResponseWriterTest {
 
         assertThat(response.contentAsString).isEmpty()
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
-        assertThat(appender.list.single().formattedMessage)
+        val event = appender.list.single()
+        assertThat(event.formattedMessage)
             .contains("error_response_committed")
             .contains("path=/member/api/v1/members/me")
             .contains("code=401-1")
             .contains("source=security")
+            .contains("exceptionClass=java.lang.IllegalStateException")
+            .doesNotContain("RAW_COMMITTED_CANARY")
+        assertThat(event.throwableProxy).isNull()
         assertThat(meterRegistry.find(ErrorMetrics.METRIC_NAME).counter()).isNull()
     }
 
@@ -151,16 +155,19 @@ class ErrorResponseWriterTest {
                 response = MockHttpServletResponse(),
                 errorCode = ErrorCode.INTERNAL_ERROR,
                 source = ErrorResponseSource.FILTER,
-                cause = IllegalStateException("boom"),
+                cause = IllegalStateException("request token=RAW_DEVELOPER_CANARY"),
             )
         } finally {
             detachListAppender(withCauseAppender)
         }
 
-        assertThat(withCauseAppender.list.single().formattedMessage)
+        val withCauseEvent = withCauseAppender.list.single()
+        assertThat(withCauseEvent.formattedMessage)
             .contains("kind=DEVELOPER")
             .contains("exceptionClass=java.lang.IllegalStateException")
-            .contains("exceptionMessage=boom")
+            .contains("exceptionMessage=request token=[REDACTED]")
+            .doesNotContain("RAW_DEVELOPER_CANARY")
+        assertThat(withCauseEvent.throwableProxy).isNull()
 
         val withoutCauseAppender = attachListAppender()
         try {

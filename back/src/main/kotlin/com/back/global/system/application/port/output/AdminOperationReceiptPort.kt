@@ -4,7 +4,7 @@ import com.back.global.system.model.AdminOperationReceipt
 import java.util.UUID
 
 interface AdminOperationReceiptPort {
-    fun flush()
+    fun synchronizeTerminal(receipt: AdminOperationReceipt)
 
     fun findByOperationIdWithLock(operationId: UUID): AdminOperationReceipt?
 

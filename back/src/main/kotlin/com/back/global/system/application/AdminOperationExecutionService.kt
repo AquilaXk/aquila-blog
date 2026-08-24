@@ -30,7 +30,7 @@ class AdminOperationExecutionService(
                     resetRetryCount = receipt.resetRetryCount,
                 )
             applyTerminal(receipt, replay)
-            receiptRepository.flush()
+            receiptRepository.synchronizeTerminal(receipt)
         }
         return receipt.toResult()
     }

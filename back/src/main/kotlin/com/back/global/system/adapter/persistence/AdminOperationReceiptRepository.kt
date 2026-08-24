@@ -12,6 +12,7 @@ import java.util.UUID
 
 interface AdminOperationReceiptRepository :
     JpaRepository<AdminOperationReceipt, Long>,
+    AdminOperationReceiptRepositoryCustom,
     AdminOperationReceiptPort {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select receipt from AdminOperationReceipt receipt where receipt.operationId = :operationId")
@@ -50,4 +51,8 @@ interface AdminOperationReceiptRepository :
         @Param("resetRetryCount") resetRetryCount: Boolean,
         @Param("reason") reason: String,
     ): Int
+}
+
+interface AdminOperationReceiptRepositoryCustom {
+    fun synchronizeTerminal(receipt: AdminOperationReceipt)
 }

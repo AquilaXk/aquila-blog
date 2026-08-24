@@ -2,6 +2,9 @@ package com.back.global.system.application
 
 import com.back.global.system.model.AdminOperationAction
 import com.back.global.system.model.AdminOperationReceipt
+import com.back.global.system.model.AdminOperationResultCode
+import com.back.global.system.model.AdminOperationStatus
+import com.back.global.task.application.TaskDlqReplayResult
 import com.back.support.BaseAdminOperationExecutionTransactionIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -65,6 +68,38 @@ class AdminOperationExecutionTransactionIntegrationTest : BaseAdminOperationExec
         assertThat(stored["selected_count"]).isEqualTo(0)
         assertThat(stored["replayed_count"]).isEqualTo(0)
         assertThat(stored["quarantined_count"]).isEqualTo(0)
+    }
+
+    @Test
+    fun `terminal response exposes persisted audit timestamp`() {
+        val operationId = UUID.randomUUID().also(operationIds::add)
+        admissionService.admit(receipt(operationId))
+        `when`(taskDlqReplayService.replayFailedTasksWithLock(null, 50, true))
+            .thenReturn(
+                TaskDlqReplayResult(
+                    taskType = null,
+                    requestedLimit = 50,
+                    selectedCount = 1,
+                    replayedCount = 1,
+                    quarantinedCount = 0,
+                    resetRetryCount = true,
+                    replayedTaskIds = listOf(1L),
+                ),
+            )
+
+        val result = executionService.execute(operationId)
+        val storedModifiedAt =
+            jdbcTemplate
+                .queryForObject(
+                    "SELECT modified_at FROM admin_operation_receipt WHERE operation_id = ?",
+                    java.sql.Timestamp::class.java,
+                    operationId,
+                )!!
+                .toInstant()
+
+        assertThat(result.status).isEqualTo(AdminOperationStatus.SUCCEEDED)
+        assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.TASKS_REPLAYED)
+        assertThat(result.modifiedAt).isEqualTo(storedModifiedAt)
     }
 
     private fun receipt(operationId: UUID) =

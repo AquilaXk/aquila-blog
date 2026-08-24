@@ -4,6 +4,8 @@ import com.back.global.system.model.AdminOperationReceipt
 import java.util.UUID
 
 interface AdminOperationReceiptPort {
+    fun flush()
+
     fun findByOperationIdWithLock(operationId: UUID): AdminOperationReceipt?
 
     fun findByOperationIdAndActorId(

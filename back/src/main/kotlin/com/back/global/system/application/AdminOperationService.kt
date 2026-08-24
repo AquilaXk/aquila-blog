@@ -2,7 +2,7 @@ package com.back.global.system.application
 
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
-import com.back.global.system.adapter.persistence.AdminOperationReceiptRepository
+import com.back.global.system.application.port.output.AdminOperationReceiptPort
 import com.back.global.system.model.AdminOperationAction
 import com.back.global.system.model.AdminOperationReceipt
 import com.back.global.system.model.AdminOperationResultCode
@@ -16,7 +16,7 @@ import java.util.UUID
 @Service
 class AdminOperationService(
     private val admissionService: AdminOperationAdmissionService,
-    private val receiptRepository: AdminOperationReceiptRepository,
+    private val receiptRepository: AdminOperationReceiptPort,
     private val executionService: AdminOperationExecutionService,
 ) {
     data class DlqReplayCommand(

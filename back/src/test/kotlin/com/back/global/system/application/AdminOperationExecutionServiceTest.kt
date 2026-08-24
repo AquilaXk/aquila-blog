@@ -1,6 +1,6 @@
 package com.back.global.system.application
 
-import com.back.global.system.adapter.persistence.AdminOperationReceiptRepository
+import com.back.global.system.application.port.output.AdminOperationReceiptPort
 import com.back.global.system.model.AdminOperationAction
 import com.back.global.system.model.AdminOperationReceipt
 import com.back.global.system.model.AdminOperationResultCode
@@ -15,7 +15,7 @@ import java.time.Instant
 import java.util.UUID
 
 class AdminOperationExecutionServiceTest {
-    private val receiptRepository = mock(AdminOperationReceiptRepository::class.java)
+    private val receiptRepository = mock(AdminOperationReceiptPort::class.java)
     private val taskDlqReplayService = mock(TaskDlqReplayService::class.java)
     private val service = AdminOperationExecutionService(receiptRepository, taskDlqReplayService)
 

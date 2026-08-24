@@ -1,6 +1,6 @@
 package com.back.global.system.application
 
-import com.back.global.system.adapter.persistence.AdminOperationReceiptRepository
+import com.back.global.system.application.port.output.AdminOperationReceiptPort
 import com.back.global.system.model.AdminOperationReceipt
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional
 
 @Service
 class AdminOperationAdmissionService(
-    private val receiptRepository: AdminOperationReceiptRepository,
+    private val receiptRepository: AdminOperationReceiptPort,
 ) {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun admit(receipt: AdminOperationReceipt): AdminOperationReceipt {

@@ -1,7 +1,7 @@
 package com.back.global.system.application
 
 import com.back.global.exception.application.AppException
-import com.back.global.system.adapter.persistence.AdminOperationReceiptRepository
+import com.back.global.system.application.port.output.AdminOperationReceiptPort
 import com.back.global.system.model.AdminOperationAction
 import com.back.global.system.model.AdminOperationReceipt
 import com.back.global.system.model.AdminOperationResultCode
@@ -19,7 +19,7 @@ import java.util.UUID
 
 class AdminOperationServiceTest {
     private val admission = mock(AdminOperationAdmissionService::class.java)
-    private val receiptRepository = mock(AdminOperationReceiptRepository::class.java)
+    private val receiptRepository = mock(AdminOperationReceiptPort::class.java)
     private val execution = mock(AdminOperationExecutionService::class.java)
     private val service = AdminOperationService(admission, receiptRepository, execution)
 

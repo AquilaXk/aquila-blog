@@ -1,5 +1,6 @@
 package com.back.global.system.adapter.persistence
 
+import com.back.global.system.application.port.output.AdminOperationReceiptPort
 import com.back.global.system.model.AdminOperationReceipt
 import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
@@ -9,19 +10,21 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
 
-interface AdminOperationReceiptRepository : JpaRepository<AdminOperationReceipt, Long> {
+interface AdminOperationReceiptRepository :
+    JpaRepository<AdminOperationReceipt, Long>,
+    AdminOperationReceiptPort {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select receipt from AdminOperationReceipt receipt where receipt.operationId = :operationId")
-    fun findByOperationIdWithLock(
+    override fun findByOperationIdWithLock(
         @Param("operationId") operationId: UUID,
     ): AdminOperationReceipt?
 
-    fun findByOperationIdAndActorId(
+    override fun findByOperationIdAndActorId(
         operationId: UUID,
         actorId: Long,
     ): AdminOperationReceipt?
 
-    fun findByOperationId(operationId: UUID): AdminOperationReceipt?
+    override fun findByOperationId(operationId: UUID): AdminOperationReceipt?
 
     @Modifying
     @Query(
@@ -36,7 +39,7 @@ interface AdminOperationReceiptRepository : JpaRepository<AdminOperationReceipt,
         """,
         nativeQuery = true,
     )
-    fun insertIfAbsent(
+    override fun insertIfAbsent(
         @Param("operationId") operationId: UUID,
         @Param("actorId") actorId: Long,
         @Param("sessionRowId") sessionRowId: Long?,

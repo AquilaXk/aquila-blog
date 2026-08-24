@@ -168,6 +168,11 @@ class ApiV1PostImageController(
                 "잘못된 이미지 경로입니다.",
                 "이미지를 찾을 수 없습니다.",
             )
+        ensurePublicPostUpload(
+            objectKey = objectKey,
+            purpose = UploadedFilePurpose.POST_IMAGE,
+            notFound = ::postImageNotFound,
+        )
         val etag =
             "\"" +
                 Base64
@@ -271,7 +276,11 @@ class ApiV1PostImageController(
                 "잘못된 첨부 파일 경로입니다.",
                 "첨부 파일을 찾을 수 없습니다.",
             )
-        ensurePublicPostFile(objectKey)
+        ensurePublicPostUpload(
+            objectKey = objectKey,
+            purpose = UploadedFilePurpose.POST_FILE,
+            notFound = ::postFileNotFound,
+        )
 
         val etag =
             "\"" +
@@ -319,19 +328,25 @@ class ApiV1PostImageController(
         return finalizedBuilder.body(InputStreamResource(storedFile.inputStream))
     }
 
-    private fun ensurePublicPostFile(objectKey: String) {
-        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: throw postFileNotFound()
+    private fun ensurePublicPostUpload(
+        objectKey: String,
+        purpose: UploadedFilePurpose,
+        notFound: () -> AppException,
+    ) {
+        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: throw notFound()
         if (
-            uploadedFile.purpose != UploadedFilePurpose.POST_FILE ||
+            uploadedFile.purpose != purpose ||
             uploadedFile.status != UploadedFileStatus.ACTIVE ||
             uploadedFile.ownerType != UploadedFileOwnerType.POST
         ) {
-            throw postFileNotFound()
+            throw notFound()
         }
 
-        val postId = uploadedFile.ownerId?.takeIf { it > 0L } ?: throw postFileNotFound()
-        if (postRepository.findPublicDetailById(postId) == null) throw postFileNotFound()
+        val postId = uploadedFile.ownerId?.takeIf { it > 0L } ?: throw notFound()
+        if (postRepository.findPublicDetailById(postId) == null) throw notFound()
     }
+
+    private fun postImageNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "이미지를 찾을 수 없습니다.")
 
     private fun postFileNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "첨부 파일을 찾을 수 없습니다.")
 

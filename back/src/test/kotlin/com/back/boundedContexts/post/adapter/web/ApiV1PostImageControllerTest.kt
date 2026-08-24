@@ -195,6 +195,61 @@ class ApiV1PostImageControllerTest {
         }
     }
 
+    @Test
+    @DisplayName("게시글 이미지는 공개 ACTIVE POST_IMAGE만 반환한다")
+    fun `images 조회는 공개 ACTIVE POST_IMAGE를 반환한다`() {
+        val objectKey = "posts/2026/03/public.png"
+        val storedBytes = pngBytes()
+        val uploadedFile = postImage(objectKey).apply { attachToPost(30L, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(postRepository.findPublicDetailById(30L)).thenReturn(publicPost(30L))
+        postImageStorageService.images[objectKey] =
+            PostImageStoragePort.StoredObject(
+                inputStream = ByteArrayInputStream(storedBytes),
+                contentType = "image/png",
+                contentLength = storedBytes.size.toLong(),
+                originalFilename = "public.png",
+            )
+
+        val response = controller.getPostImage(imageRequest(objectKey))
+
+        assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(response.headers.contentType.toString()).isEqualTo("image/png")
+        assertThat(postImageStorageService.imageDownloads).containsExactly(objectKey)
+    }
+
+    @Test
+    @DisplayName("TEMP 이미지는 조건부 요청에서도 storage 접근 없이 숨긴다")
+    fun `images 조건부 조회는 TEMP 이미지를 storage 접근 없이 숨긴다`() {
+        val objectKey = "posts/2026/03/temp.png"
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(postImage(objectKey))
+
+        assertThatThrownBy {
+            controller.getPostImage(
+                imageRequest(objectKey).apply { addHeader(HttpHeaders.IF_NONE_MATCH, "*") },
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("이미지를 찾을 수 없습니다.")
+
+        assertThat(postImageStorageService.imageDownloads).isEmpty()
+        verifyNoInteractions(postRepository)
+    }
+
+    @Test
+    @DisplayName("비공개 게시글 이미지는 storage 접근 없이 숨긴다")
+    fun `images 조회는 비공개 게시글 연결 이미지를 storage 접근 없이 숨긴다`() {
+        val objectKey = "posts/2026/03/private.png"
+        val uploadedFile = postImage(objectKey).apply { attachToPost(40L, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(postRepository.findPublicDetailById(40L)).thenReturn(null)
+
+        assertThatThrownBy { controller.getPostImage(imageRequest(objectKey)) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("이미지를 찾을 수 없습니다.")
+
+        assertThat(postImageStorageService.imageDownloads).isEmpty()
+    }
+
     private fun assertPostFileNotFound(objectKey: String) {
         assertThatThrownBy { controller.getPostFile(fileRequest(objectKey)) }
             .isInstanceOf(AppException::class.java)
@@ -225,6 +280,8 @@ class ApiV1PostImageControllerTest {
 
     private fun fileRequest(objectKey: String): MockHttpServletRequest = MockHttpServletRequest("GET", "/post/api/v1/files/$objectKey")
 
+    private fun imageRequest(objectKey: String): MockHttpServletRequest = MockHttpServletRequest("GET", "/post/api/v1/images/$objectKey")
+
     private fun postFile(objectKey: String): UploadedFile =
         UploadedFile(
             objectKey = objectKey,
@@ -232,6 +289,15 @@ class ApiV1PostImageControllerTest {
             contentType = "application/pdf",
             fileSize = 3L,
             purpose = UploadedFilePurpose.POST_FILE,
+        )
+
+    private fun postImage(objectKey: String): UploadedFile =
+        UploadedFile(
+            objectKey = objectKey,
+            bucket = "blog-images",
+            contentType = "image/png",
+            fileSize = pngBytes().size.toLong(),
+            purpose = UploadedFilePurpose.POST_IMAGE,
         )
 
     private fun publicPost(id: Long): Post =
@@ -252,7 +318,9 @@ class ApiV1PostImageControllerTest {
         var lastImageBytes: ByteArray = ByteArray(0)
         var lastFileBytes: ByteArray = ByteArray(0)
         val files = mutableMapOf<String, PostImageStoragePort.StoredObject>()
+        val images = mutableMapOf<String, PostImageStoragePort.StoredObject>()
         val fileDownloads = mutableListOf<String>()
+        val imageDownloads = mutableListOf<String>()
 
         override fun uploadPostImage(request: PostImageStoragePort.UploadImageRequest): String {
             lastImageContentLength = request.contentLength
@@ -266,7 +334,10 @@ class ApiV1PostImageControllerTest {
             return nextFileKey
         }
 
-        override fun getPostImage(objectKey: String): PostImageStoragePort.StoredObject? = null
+        override fun getPostImage(objectKey: String): PostImageStoragePort.StoredObject? {
+            imageDownloads += objectKey
+            return images[objectKey]
+        }
 
         override fun getPostFile(objectKey: String): PostImageStoragePort.StoredObject? {
             fileDownloads += objectKey

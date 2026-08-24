@@ -1,6 +1,7 @@
 package com.back.global.task.application
 
 import com.back.global.task.annotation.TaskPayloadSensitivity
+import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
@@ -26,6 +27,7 @@ class TaskDlqReplayServiceTest {
     @Test
     fun `only an exact valid failed envelope is replayed and invalid rows are quarantined`() {
         val repository = mock(TaskQueueRepositoryPort::class.java)
+        val replayRepository = mock(TaskDlqReplayRepositoryPort::class.java)
         val registry = registry()
         val validPayload = StubPayload(UUID.randomUUID(), "Post", 101L)
         val valid = failedTask(101L, VALID_TASK_TYPE, validPayload, codec.encode(validPayload, registry.getEntry(VALID_TASK_TYPE)!!))
@@ -40,10 +42,10 @@ class TaskDlqReplayServiceTest {
                 rawEnvelope = expiredEnvelope(expiredPayload),
             )
         `when`(
-            repository.findFailedTasksWithLock(null, 10),
+            replayRepository.findFailedTasksWithLock(null, 10),
         ).thenReturn(listOf(valid, malformed, unknown, expired))
         val meterRegistry = SimpleMeterRegistry()
-        val service = TaskDlqReplayService(repository, registry, codec, Clock.fixed(now, ZoneOffset.UTC), meterRegistry)
+        val service = TaskDlqReplayService(repository, replayRepository, registry, codec, Clock.fixed(now, ZoneOffset.UTC), meterRegistry)
 
         val result = service.replayFailedTasksWithLock(taskType = null, limit = 10, resetRetryCount = true)
 

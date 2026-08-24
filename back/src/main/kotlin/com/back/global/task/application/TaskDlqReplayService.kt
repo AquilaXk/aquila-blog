@@ -1,5 +1,6 @@
 package com.back.global.task.application
 
+import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
@@ -23,6 +24,7 @@ data class TaskDlqReplayResult(
 @Service
 class TaskDlqReplayService(
     private val taskQueueRepository: TaskQueueRepositoryPort,
+    private val taskDlqReplayRepository: TaskDlqReplayRepositoryPort,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
     private val clock: Clock,
@@ -39,9 +41,9 @@ class TaskDlqReplayService(
         val now = Instant.now(clock)
         val failedTasks =
             if (normalizedTaskType == null) {
-                taskQueueRepository.findFailedTasksWithLock(null, safeLimit)
+                taskDlqReplayRepository.findFailedTasksWithLock(null, safeLimit)
             } else {
-                taskQueueRepository.findFailedTasksWithLock(normalizedTaskType, safeLimit)
+                taskDlqReplayRepository.findFailedTasksWithLock(normalizedTaskType, safeLimit)
             }
 
         if (failedTasks.isEmpty()) {

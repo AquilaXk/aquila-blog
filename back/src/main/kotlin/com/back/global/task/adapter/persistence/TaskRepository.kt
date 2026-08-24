@@ -1,5 +1,6 @@
 package com.back.global.task.adapter.persistence
 
+import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.application.port.output.TaskRetentionRepositoryPort
 import com.back.global.task.domain.Task
@@ -16,6 +17,7 @@ import java.time.Instant
 interface TaskRepository :
     JpaRepository<Task, Long>,
     TaskQueueRepositoryPort,
+    TaskDlqReplayRepositoryPort,
     TaskRetentionRepositoryPort {
     @Query(
         value = """

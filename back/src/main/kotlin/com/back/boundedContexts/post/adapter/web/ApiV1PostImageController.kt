@@ -34,7 +34,6 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Base64
-import java.util.concurrent.TimeUnit
 
 @RestController
 @RequestMapping("/post/api/v1")
@@ -184,12 +183,8 @@ class ApiV1PostImageController(
             return ResponseEntity
                 .status(HttpStatus.NOT_MODIFIED)
                 .eTag(etag)
-                .cacheControl(
-                    CacheControl
-                        .maxAge(30, TimeUnit.DAYS)
-                        .cachePublic()
-                        .immutable(),
-                ).build()
+                .cacheControl(imageCacheControl())
+                .build()
         }
 
         val image =
@@ -205,12 +200,8 @@ class ApiV1PostImageController(
                     .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
                     .header(HttpHeaders.CONTENT_RANGE, "bytes */*")
                     .eTag(etag)
-                    .cacheControl(
-                        CacheControl
-                            .maxAge(30, TimeUnit.DAYS)
-                            .cachePublic()
-                            .immutable(),
-                    ).build()
+                    .cacheControl(imageCacheControl())
+                    .build()
             }
             val range = parseSingleRange(rangeHeader, totalLength)
             if (range == null) {
@@ -219,12 +210,8 @@ class ApiV1PostImageController(
                     .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
                     .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength")
                     .eTag(etag)
-                    .cacheControl(
-                        CacheControl
-                            .maxAge(30, TimeUnit.DAYS)
-                            .cachePublic()
-                            .immutable(),
-                    ).build()
+                    .cacheControl(imageCacheControl())
+                    .build()
             }
 
             val body = InputStreamResource(sliceStream(image.inputStream, range))
@@ -236,12 +223,8 @@ class ApiV1PostImageController(
                 .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
                 .contentLength(range.last - range.first + 1)
                 .eTag(etag)
-                .cacheControl(
-                    CacheControl
-                        .maxAge(30, TimeUnit.DAYS)
-                        .cachePublic()
-                        .immutable(),
-                ).body(body)
+                .cacheControl(imageCacheControl())
+                .body(body)
         }
 
         val responseBuilder =
@@ -250,12 +233,7 @@ class ApiV1PostImageController(
                 .contentType(MediaType.parseMediaType(image.contentType))
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .eTag(etag)
-                .cacheControl(
-                    CacheControl
-                        .maxAge(30, TimeUnit.DAYS)
-                        .cachePublic()
-                        .immutable(),
-                )
+                .cacheControl(imageCacheControl())
 
         val finalizedBuilder =
             image.contentLength
@@ -349,6 +327,8 @@ class ApiV1PostImageController(
     private fun postImageNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "이미지를 찾을 수 없습니다.")
 
     private fun postFileNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "첨부 파일을 찾을 수 없습니다.")
+
+    private fun imageCacheControl(): CacheControl = CacheControl.noCache().cachePublic()
 
     private fun extractObjectKey(
         request: HttpServletRequest,

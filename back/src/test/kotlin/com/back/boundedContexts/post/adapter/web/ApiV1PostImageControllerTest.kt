@@ -196,8 +196,8 @@ class ApiV1PostImageControllerTest {
     }
 
     @Test
-    @DisplayName("게시글 이미지는 공개 ACTIVE POST_IMAGE만 반환한다")
-    fun `images 조회는 공개 ACTIVE POST_IMAGE를 반환한다`() {
+    @DisplayName("게시글 이미지는 공개 ACTIVE POST_IMAGE만 재검증 가능한 캐시 정책으로 반환한다")
+    fun `images 조회는 공개 ACTIVE POST_IMAGE를 재검증 가능한 캐시 정책으로 반환한다`() {
         val objectKey = "posts/2026/03/public.png"
         val storedBytes = pngBytes()
         val uploadedFile = postImage(objectKey).apply { attachToPost(30L, UploadedFilePurpose.POST_IMAGE) }
@@ -215,6 +215,19 @@ class ApiV1PostImageControllerTest {
 
         assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
         assertThat(response.headers.contentType.toString()).isEqualTo("image/png")
+        assertThat(response.headers.eTag).isNotBlank()
+        assertThat(response.headers.cacheControl).contains("no-cache").contains("public").doesNotContain("immutable")
+        assertThat(postImageStorageService.imageDownloads).containsExactly(objectKey)
+
+        `when`(postRepository.findPublicDetailById(30L)).thenReturn(null)
+
+        assertThatThrownBy {
+            controller.getPostImage(
+                imageRequest(objectKey).apply { addHeader(HttpHeaders.IF_NONE_MATCH, requireNotNull(response.headers.eTag)) },
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("이미지를 찾을 수 없습니다.")
+
         assertThat(postImageStorageService.imageDownloads).containsExactly(objectKey)
     }
 

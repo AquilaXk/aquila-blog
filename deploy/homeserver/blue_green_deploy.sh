@@ -2027,6 +2027,47 @@ runtime_split_helper_backends() {
   printf '%s\n' "${services[@]}"
 }
 
+snapshot_running_runtime_split_helpers() {
+  local running_services service running_service
+  local helper_services=("$@")
+
+  if ! running_services="$(compose ps --status running --services)"; then
+    echo "runtime helper snapshot failed: cannot query running services" >&2
+    return 1
+  fi
+
+  while IFS= read -r running_service; do
+    [[ -n "${running_service}" ]] || continue
+    for service in "${helper_services[@]}"; do
+      if [[ "${running_service}" == "${service}" ]]; then
+        printf '%s\n' "${service}"
+        break
+      fi
+    done
+  done <<< "${running_services}"
+}
+
+restore_running_runtime_split_helpers() {
+  local services=("$@")
+  local service
+  if [[ "${#services[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  echo "restoring previously running runtime helpers after termination failure: services=${services[*]}" >&2
+  if ! compose start "${services[@]}"; then
+    echo "runtime helper recovery failed: cannot restart previously running services=${services[*]}" >&2
+    return 1
+  fi
+  for service in "${services[@]}"; do
+    if ! check_backend_health "${service}"; then
+      echo "runtime helper recovery failed: restarted service unhealthy=${service}" >&2
+      return 1
+    fi
+  done
+  return 0
+}
+
 start_runtime_split_helper_backends_on_active() {
   local active_backend="$1"
   local active_image
@@ -2036,11 +2077,9 @@ start_runtime_split_helper_backends_on_active() {
     return 1
   fi
 
-  local helper_services=()
-  local service
+  local helper_services=() running_helper_services=() running_helpers_snapshot service
   while IFS= read -r service; do
     [[ -n "${service}" ]] || continue
-    upsert_runtime_backend_image "${service}" "${active_image}"
     helper_services+=("${service}")
   done < <(runtime_split_helper_backends)
 
@@ -2048,11 +2087,25 @@ start_runtime_split_helper_backends_on_active() {
     return 0
   fi
 
+  if ! running_helpers_snapshot="$(snapshot_running_runtime_split_helpers "${helper_services[@]}")"; then
+    return 1
+  fi
+  while IFS= read -r service; do
+    [[ -n "${service}" ]] && running_helper_services+=("${service}")
+  done <<< "${running_helpers_snapshot}"
+
+  for service in "${helper_services[@]}"; do
+    upsert_runtime_backend_image "${service}" "${active_image}"
+  done
+
   echo "starting runtime helper backends on active image before edge boot: active=${active_backend}, services=${helper_services[*]}"
   compose pull "${helper_services[@]}" || true
   for service in "${helper_services[@]}"; do
     if ! checked_stop_backend_service_if_running "${service}"; then
       echo "runtime helper startup failed: termination evidence failed for ${service}" >&2
+      if ! restore_running_runtime_split_helpers "${running_helper_services[@]}"; then
+        echo "runtime helper startup failed: previously running helper recovery failed" >&2
+      fi
       return 1
     fi
   done
@@ -2081,11 +2134,9 @@ restart_runtime_split_backends_after_candidate_ready() {
     return 1
   fi
 
-  local helper_services=()
-  local service
+  local helper_services=() running_helper_services=() running_helpers_snapshot service
   while IFS= read -r service; do
     [[ -n "${service}" ]] || continue
-    upsert_runtime_backend_image "${service}" "${candidate_image}"
     helper_services+=("${service}")
   done < <(runtime_split_helper_backends)
 
@@ -2093,11 +2144,25 @@ restart_runtime_split_backends_after_candidate_ready() {
     return 0
   fi
 
+  if ! running_helpers_snapshot="$(snapshot_running_runtime_split_helpers "${helper_services[@]}")"; then
+    return 1
+  fi
+  while IFS= read -r service; do
+    [[ -n "${service}" ]] && running_helper_services+=("${service}")
+  done <<< "${running_helpers_snapshot}"
+
+  for service in "${helper_services[@]}"; do
+    upsert_runtime_backend_image "${service}" "${candidate_image}"
+  done
+
   echo "restarting runtime helper backends after candidate health: candidate=${candidate_backend}, services=${helper_services[*]}"
   compose pull "${helper_services[@]}"
   for service in "${helper_services[@]}"; do
     if ! checked_stop_backend_service_if_running "${service}"; then
       echo "runtime helper restart failed: termination evidence failed for ${service}" >&2
+      if ! restore_running_runtime_split_helpers "${running_helper_services[@]}"; then
+        echo "runtime helper restart failed: previously running helper recovery failed" >&2
+      fi
       return 1
     fi
   done
@@ -2130,8 +2195,7 @@ restore_runtime_split_helper_backends_to_active() {
     return 1
   fi
 
-  local helper_services=()
-  local service
+  local helper_services=() running_helper_services=() running_helpers_snapshot service
   while IFS= read -r service; do
     [[ -n "${service}" ]] || continue
     if [[ "${service}" == "back_worker" && "${TASK_SCHEMA_COMPATIBLE_WORKER_READY}" == "true" ]]; then
@@ -2142,7 +2206,6 @@ restore_runtime_split_helper_backends_to_active() {
       echo "preserving schema-compatible worker image during API rollback: failed_candidate=${failed_candidate}"
       continue
     fi
-    upsert_runtime_backend_image "${service}" "${active_image}"
     helper_services+=("${service}")
   done < <(runtime_split_helper_backends)
 
@@ -2150,11 +2213,25 @@ restore_runtime_split_helper_backends_to_active() {
     return 0
   fi
 
+  if ! running_helpers_snapshot="$(snapshot_running_runtime_split_helpers "${helper_services[@]}")"; then
+    return 1
+  fi
+  while IFS= read -r service; do
+    [[ -n "${service}" ]] && running_helper_services+=("${service}")
+  done <<< "${running_helpers_snapshot}"
+
+  for service in "${helper_services[@]}"; do
+    upsert_runtime_backend_image "${service}" "${active_image}"
+  done
+
   echo "recovering runtime helper backends to active image: active=${active_backend}, failed_candidate=${failed_candidate}, services=${helper_services[*]}"
   compose pull "${helper_services[@]}" || true
   for service in "${helper_services[@]}"; do
     if ! checked_stop_backend_service_if_running "${service}"; then
       echo "runtime helper recovery failed: termination evidence failed for ${service}" >&2
+      if ! restore_running_runtime_split_helpers "${running_helper_services[@]}"; then
+        echo "runtime helper recovery failed: previously running helper recovery failed" >&2
+      fi
       return 1
     fi
   done

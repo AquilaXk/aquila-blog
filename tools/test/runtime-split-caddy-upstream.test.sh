@@ -950,10 +950,13 @@ fi
 
 rollback_state_dir="${workdir}/rollback-state"
 worker_ready_override="false"
+checked_stop_failure_service=""
+snapshot_query_failure="false"
 
 setup_rollback_state() {
   rm -rf "${rollback_state_dir}"
-  mkdir -p "${rollback_state_dir}/img" "${rollback_state_dir}/run"
+  mkdir -p "${rollback_state_dir}/img" "${rollback_state_dir}/run" "${rollback_state_dir}/stopped"
+  : > "${rollback_state_dir}/checked-stop"
   printf '%s' 'app:good' > "${rollback_state_dir}/img/back_blue"
   printf '%s' 'app:good' > "${rollback_state_dir}/run/back_blue"
   local service
@@ -985,6 +988,8 @@ run_rollback_scenario() {
     printf 'RUNTIME_SPLIT_ENABLED=%q\n' "${split}"
     printf 'STATE_DIR=%q\n' "${rollback_state_dir}"
     printf 'STATE_FILE=%q\n' "${rollback_state_dir}/active-backend"
+    printf 'CHECKED_STOP_FAILURE_SERVICE=%q\n' "${checked_stop_failure_service}"
+    printf 'SNAPSHOT_QUERY_FAILURE=%q\n' "${snapshot_query_failure}"
     cat <<'ROLLBACK_STUBS'
 GOOD_IMAGE="app:good"
 img_of() { cat "${STATE_DIR}/img/$1" 2>/dev/null || true; }
@@ -1001,7 +1006,14 @@ emit_backend_diagnostics() { return 0; }
 runtime_backend_image_value() { img_of "$1"; }
 upsert_runtime_backend_image() { printf '%s' "$2" > "${STATE_DIR}/img/$1"; }
 is_backend_running() { [[ -n "$(run_of "$1")" ]]; }
-checked_stop_backend_service_if_running() { : > "${STATE_DIR}/run/$1"; return 0; }
+checked_stop_backend_service_if_running() {
+  printf '%s\n' "$1" >> "${STATE_DIR}/checked-stop"
+  if [[ -n "$(run_of "$1")" ]]; then
+    printf '%s' "$(run_of "$1")" > "${STATE_DIR}/stopped/$1"
+    : > "${STATE_DIR}/run/$1"
+  fi
+  [[ "$1" != "${CHECKED_STOP_FAILURE_SERVICE}" ]]
+}
 write_backend_release_state() { printf 'release state active=%s previous=%s\n' "$1" "$2"; }
 
 compose() {
@@ -1009,9 +1021,24 @@ compose() {
   shift
   local service
   case "${action}" in
+    ps)
+      if [[ "${SNAPSHOT_QUERY_FAILURE}" == "true" ]]; then
+        return 1
+      fi
+      for service in back_read back_admin back_worker; do
+        if [[ -n "$(run_of "${service}")" ]]; then
+          printf '%s\n' "${service}"
+        fi
+      done
+      ;;
     stop)
       for service in "$@"; do
         : > "${STATE_DIR}/run/${service}"
+      done
+      ;;
+    start)
+      for service in "$@"; do
+        printf '%s' "$(cat "${STATE_DIR}/stopped/${service}" 2>/dev/null || true)" > "${STATE_DIR}/run/${service}"
       done
       ;;
     up)
@@ -1067,6 +1094,8 @@ ROLLBACK_STUBS
     extract_function "${deploy_script}" switch_caddy_upstream
     extract_function "${deploy_script}" verify_caddy_route
     extract_function "${deploy_script}" runtime_split_helper_backends
+    extract_function "${deploy_script}" snapshot_running_runtime_split_helpers
+    extract_function "${deploy_script}" restore_running_runtime_split_helpers
     extract_function "${deploy_script}" restore_runtime_split_helper_backends_to_active
     extract_function "${deploy_script}" other_backend
     extract_function "${deploy_script}" rollback_caddy_route_only
@@ -1135,6 +1164,64 @@ for entry in rollback_to_backend rollback_caddy_route_only; do
   assert_recovery_before_verify "runtime-split ${entry}()"
   if ! cmp -s "${caddy_source}" "${split_rollback_caddy}"; then
     fail "runtime-split ${entry}() rewrote the Caddyfile"
+  fi
+done
+
+# running helper snapshot 조회가 실패하면 stop/recreate 전에 실패해야 하며, 이미 실행 중이던
+# helper 상태를 건드리면 안 된다.
+split_rollback_caddy="${workdir}/rollback-snapshot-failure-caddyfile"
+split_rollback_env="${workdir}/rollback-snapshot-failure-env"
+cp "${caddy_source}" "${split_rollback_caddy}"
+write_split_env "${split_rollback_env}"
+setup_rollback_state
+for helper in back_read back_admin back_worker; do
+  printf '%s' 'app:good' > "${rollback_state_dir}/img/${helper}"
+  printf '%s' 'app:good' > "${rollback_state_dir}/run/${helper}"
+done
+snapshot_query_failure="true"
+run_rollback_scenario "true" "${split_rollback_caddy}" "${split_rollback_env}" \
+  rollback_to_backend back_blue api.example.com
+snapshot_query_failure="false"
+
+if [ "${harness_status}" -eq 0 ]; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "helper snapshot query failure must keep rollback nonzero"
+fi
+if [ -s "${rollback_state_dir}/checked-stop" ]; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "helper snapshot query failure must not call checked stop"
+fi
+for helper in back_read back_admin back_worker; do
+  if [ "$(running_image "${helper}")" != "app:good" ]; then
+    cat "${harness_stdout}" "${harness_stderr}" >&2
+    fail "helper snapshot query failure must preserve running ${helper}"
+  fi
+done
+
+# 뒤 helper의 checked-stop evidence가 실패하면 앞서 정지된 기존 helper도 같은 컨테이너 이미지로
+# 다시 시작해 healthy 상태로 복구해야 한다. 원 rollback은 실패로 유지한다.
+split_rollback_caddy="${workdir}/rollback-partial-stop-caddyfile"
+split_rollback_env="${workdir}/rollback-partial-stop-env"
+cp "${caddy_source}" "${split_rollback_caddy}"
+write_split_env "${split_rollback_env}"
+setup_rollback_state
+for helper in back_read back_admin back_worker; do
+  printf '%s' 'app:good' > "${rollback_state_dir}/img/${helper}"
+  printf '%s' 'app:good' > "${rollback_state_dir}/run/${helper}"
+done
+checked_stop_failure_service="back_admin"
+run_rollback_scenario "true" "${split_rollback_caddy}" "${split_rollback_env}" \
+  rollback_to_backend back_blue api.example.com
+checked_stop_failure_service=""
+
+if [ "${harness_status}" -eq 0 ]; then
+  cat "${harness_stdout}" "${harness_stderr}" >&2
+  fail "partial helper checked-stop failure must keep rollback nonzero"
+fi
+for helper in back_read back_admin back_worker; do
+  if [ "$(running_image "${helper}")" != "app:good" ]; then
+    cat "${harness_stdout}" "${harness_stderr}" >&2
+    fail "partial helper checked-stop failure must restore running healthy ${helper}"
   fi
 done
 

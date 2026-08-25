@@ -13,11 +13,13 @@ const caddyPath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
 const alertmanagerPath = path.join(repoRoot, "deploy/homeserver/monitoring/alertmanager.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 const publicEdgeDashboardPath = path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-public-edge.json")
+const webRuntimeDashboardPath = path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-web-runtime.json")
 
 const read = (filePath) => readFileSync(filePath, "utf8")
 
 const promtoolTestPath = path.join(repoRoot, "tools/test/task-alerts.promtool-test.yml")
 const CACHE_STATE_ALERT = "AquilaPublicEdgeCacheStateUnobserved"
+const WEB_RUNTIME_SCRAPE_ALERT = "AquilaFrontRuntimeMetricsScrapeDown"
 
 // Block-scalar expr of a single alert, located by name. Every index is asserted so a rename or a
 // reformat reports what moved instead of throwing on a -1 slice.
@@ -40,6 +42,13 @@ const alertExpr = (alertsText, alertName) => {
 }
 
 const collapseWhitespace = (text) => text.replace(/\s+/g, " ").trim()
+
+const collapsePromql = (text) =>
+  collapseWhitespace(text)
+    .replace(/\b(label_replace|by|on)\s+\(/g, "$1(")
+    .replace(/\)\s+\(/g, ")(")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
 
 const promtoolAvailable = () => {
   const probe = spawnSync("promtool", ["--version"], { stdio: "ignore" })
@@ -343,6 +352,23 @@ test("front runtime metrics stay on the internal scrape path and off the public 
   assert(webVhost.indexOf("handle @denyFrontRuntimeMetrics") < webVhost.indexOf("# Blue/Green cutover"))
 })
 
+test("front runtime metrics scrape alerts only for running colors without current scrape evidence", () => {
+  const alerts = read(taskAlertsPath)
+  const expr = alertExpr(alerts, WEB_RUNTIME_SCRAPE_ALERT)
+
+  assert.equal(
+    collapsePromql(expr.text),
+    'label_replace(max by(service)(docker_container_running{job="docker_runtime_probe",service=~"front_(blue|green)"} == 1), "deploy_color", "$1", "service", "front_(blue|green)") unless on(deploy_color) max by(deploy_color)(up{job="front",service="aquila-front"} == 1)',
+  )
+  assert.match(alerts.slice(expr.end), /^\n\s{8}for: 3m(?:\n|$)/)
+  assert.match(alerts.slice(expr.end), /severity: warning/)
+
+  const promtoolTest = read(promtoolTestPath)
+  for (const caseName of ["front runtime scrape is healthy", "front blue scrape is down", "front blue scrape is absent", "front profile is off"]) {
+    assert.match(promtoolTest, new RegExp(`name: ${caseName}`))
+  }
+})
+
 test("cache-state alert uses the non-decaying home HIT contract", () => {
   const alerts = read(taskAlertsPath)
   const expr = alertExpr(alerts, CACHE_STATE_ALERT)
@@ -386,6 +412,49 @@ test("public-edge dashboard renders the bounded warm cache state contract withou
   assert.equal(panel.targets[0].legendFormat, "{{route_class}} | expected {{expected_state}} | observed {{observed_state}}")
   assert.equal(panel.description, "1=warm HIT match; 0=mismatch; no data=missing")
   assert.doesNotMatch(panel.targets[0].expr, /\bvector\s*\(\s*0\s*\)/)
+})
+
+test("web runtime dashboard keeps only raw current producer signals", () => {
+  const dashboard = JSON.parse(read(webRuntimeDashboardPath))
+  const expectedPanels = [
+    [
+      "Web runtime scrape health",
+      "min by (deploy_color) (up{job=\"front\",service=\"aquila-front\"})",
+      "{{deploy_color}}",
+      "1=reachable scrape; 0=down; no data=missing.",
+    ],
+    [
+      "Web process uptime",
+      "max by (deploy_color) (aquila_web_process_uptime_seconds{job=\"front\",service=\"aquila-front\"})",
+      "{{deploy_color}}",
+      "Raw process uptime; no data=missing.",
+    ],
+    [
+      "SSR outcomes (cumulative)",
+      "sum by (deploy_color, route_class, result) (aquila_web_ssr_request_duration_seconds_count{job=\"front\",service=\"aquila-front\"})",
+      "{{deploy_color}} | {{route_class}} | {{result}}",
+      "Raw cumulative SSR observations since process start; no data=missing.",
+    ],
+    [
+      "Backend fetch outcomes (cumulative)",
+      "sum by (deploy_color, source, route_class, result) (aquila_web_backend_fetch_duration_seconds_count{job=\"front\",service=\"aquila-front\"})",
+      "{{deploy_color}} | {{source}} | {{route_class}} | {{result}}",
+      "Raw cumulative backend-fetch observations since process start; no data=missing.",
+    ],
+  ]
+
+  assert.equal(dashboard.uid, "blog-web-runtime")
+  assert.deepEqual(dashboard.templating.list, [])
+  assert.equal(dashboard.panels.length, expectedPanels.length)
+  for (const [title, expr, legendFormat, description] of expectedPanels) {
+    const panel = dashboard.panels.find((candidate) => candidate.title === title)
+    assert(panel, `${title} panel is missing`)
+    assert.equal(panel.targets[0].expr, expr)
+    assert.equal(panel.targets[0].legendFormat, legendFormat)
+    assert.equal(panel.description, description)
+    assert.doesNotMatch(panel.targets[0].expr, /\b(?:vector|rate|increase|histogram_quantile)\s*\(/)
+    assert.doesNotMatch(panel.targets[0].expr, /\bor\b/)
+  }
 })
 
 // One malformed expr makes Prometheus reject the whole file, and all 45 alerts in it go silent

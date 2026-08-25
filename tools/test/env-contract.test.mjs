@@ -3112,7 +3112,7 @@ test("blue-green deploy pauses autoheal while staging a candidate backend", () =
 test("blue-green deploy keeps old backend running during burn-in rollback window", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const burnInIndex = deployScript.indexOf('run_blue_green_burn_in "${next_backend}" "${active_backend}" "${web_domain}"')
-  const stopOldIndex = deployScript.indexOf('drain_and_stop_backend_if_running "${active_backend}"')
+  const stopOldIndex = deployScript.indexOf('checked_stop_backend_service_if_running "${active_backend}"')
   const stateWriteIndex = deployScript.indexOf('write_backend_release_state "${next_backend}" "${active_backend}"')
 
   assert.match(deployScript, /BLUE_GREEN_BURN_IN_STANDARD_SECONDS=/)
@@ -3128,6 +3128,109 @@ test("blue-green deploy keeps old backend running during burn-in rollback window
   assert(stateWriteIndex > 0, "deploy script must write release state after burn-in")
   assert(burnInIndex < stopOldIndex, "old backend must not stop before burn-in completes")
   assert(burnInIndex < stateWriteIndex, "release state must not mark candidate active before burn-in completes")
+})
+
+test("backend termination is bounded, evidenced, and completes before deploy success", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const application = readFileSync(path.join(repoRoot, "back/src/main/resources/application.yaml"), "utf8")
+  const taskWorkerSource = readFileSync(
+    path.join(repoRoot, "back/src/main/kotlin/com/back/global/task/adapter/scheduler/TaskProcessingScheduledJob.kt"),
+    "utf8",
+  )
+  const backendServices = ["back_blue", "back_green", "back_read", "back_admin", "back_worker"]
+  const lifecycleBudget = Number(application.match(/timeout-per-shutdown-phase:\s*(\d+)s/)?.[1])
+
+  assert(Number.isFinite(lifecycleBudget), "application lifecycle budget must be parseable")
+
+  const serviceBlock = (service) => {
+    const marker = `  ${service}:\n`
+    const start = compose.indexOf(marker)
+    assert.notEqual(start, -1, `${service} block must exist`)
+    const tail = compose.slice(start + marker.length)
+    const next = tail.search(/\n  [a-zA-Z0-9_]+:\n/)
+    return compose.slice(start, next === -1 ? compose.length : start + marker.length + next)
+  }
+
+  for (const service of backendServices) {
+    const grace = Number(serviceBlock(service).match(/stop_grace_period:\s*(\d+)s/)?.[1])
+    assert(Number.isFinite(grace), `${service} must declare a stop grace period`)
+    assert(grace > 2 * lifecycleBudget, `${service} grace must exceed both lifecycle phases`)
+  }
+
+  const stopHelper = extractTopLevelShellFunction(deployScript, "checked_stop_backend_service_if_running")
+  assert.doesNotMatch(deployScript, /STREAM_DRAIN_SECONDS/)
+  assert.match(stopHelper, /if ! container_id="\$\(compose ps -q "\$\{service\}"\)"; then/)
+  assert.match(stopHelper, /pre_stop_container_query_failed/)
+  assert.match(stopHelper, /if \[\[ -z "\$\{container_id\}" \]\]; then/)
+  assert.match(stopHelper, /date -u \+%Y-%m-%dT%H:%M:%SZ/)
+  assert.match(stopHelper, /compose stop "\$\{service\}"/)
+  assert.doesNotMatch(stopHelper, /compose stop[^\n]*\|\| true/)
+  assert.match(stopHelper, /if ! compose stop "\$\{service\}"; then[\s\S]*return 1/)
+  assert.match(stopHelper, /docker logs --since "\$\{stop_started_at\}" "\$\{container_id\}"/)
+  assert.match(stopHelper, /drain_log_query_failed/)
+  assert(taskWorkerSource.includes("Task worker drain timed out after") && stopHelper.includes("Task worker drain timed out after"))
+  assert(taskWorkerSource.includes("Task worker drain interrupted; interrupting active workers") && stopHelper.includes("Task worker drain interrupted; interrupting active workers"))
+  assert.match(stopHelper, /worker_drain_timeout/)
+  assert.match(stopHelper, /worker_drain_interrupted/)
+  assert.match(stopHelper, /docker inspect --format/)
+  assert.match(stopHelper, /\{\{\.State\.Running\}\}/)
+  assert.match(stopHelper, /\{\{\.State\.ExitCode\}\}/)
+  assert.match(stopHelper, /\{\{\.State\.OOMKilled\}\}/)
+  assert.match(stopHelper, /\$\{status\}" != "exited"/)
+  assert.match(stopHelper, /\$\{oom_killed\}" != "false"/)
+  assert.match(stopHelper, /exit_code != 0 && exit_code != 143/)
+  assert.match(stopHelper, /still running/)
+  const timestampIndex = stopHelper.indexOf('date -u +%Y-%m-%dT%H:%M:%SZ')
+  const stopIndex = stopHelper.indexOf('compose stop "${service}"')
+  const logsIndex = stopHelper.indexOf('docker logs --since "${stop_started_at}" "${container_id}"')
+  assert(timestampIndex >= 0 && stopIndex >= 0 && logsIndex >= 0, "stop evidence markers must exist")
+  assert(timestampIndex < stopIndex && stopIndex < logsIndex, "timestamp, stop, then exact-container logs is required")
+
+  const mainBurnIn = deployScript.indexOf('run_blue_green_burn_in "${next_backend}" "${active_backend}" "${web_domain}"')
+  const mainStop = deployScript.indexOf('checked_stop_backend_service_if_running "${active_backend}"')
+  const mainState = deployScript.indexOf('echo "${next_backend}" > "${STATE_FILE}"')
+  const mainSuccess = deployScript.indexOf('post-switch verify ok (status=${post_code}); burn-in complete; inactive backend stopped')
+  assert(mainBurnIn >= 0 && mainState >= 0 && mainStop >= 0 && mainSuccess >= 0, "main deploy lifecycle markers must exist")
+  assert(mainBurnIn < mainState && mainState < mainStop && mainStop < mainSuccess, "route state must precede checked termination and final success")
+  assert.match(deployScript, /if ! checked_stop_backend_service_if_running "\$\{active_backend\}"; then[\s\S]*exit 1/)
+
+  const rollback = extractTopLevelShellFunction(deployScript, "rollback_to_backend")
+  const rollbackState = rollback.indexOf('printf \'%s\\n\' "${rollback_backend}" > "${STATE_FILE}"')
+  const rollbackStop = rollback.indexOf('checked_stop_backend_service_if_running "${inactive_backend}"')
+  assert(rollbackState >= 0 && rollbackStop >= 0, "rollback state and termination markers must exist")
+  assert(rollbackState < rollbackStop, "rollback route metadata must precede termination")
+  assert.match(rollback, /if ! printf '%s\\n' "\$\{rollback_backend\}" > "\$\{STATE_FILE\}"; then[\s\S]*return 1/)
+  assert.match(rollback, /if ! write_backend_release_state "\$\{rollback_backend\}" "\$\{inactive_backend\}"; then[\s\S]*return 1/)
+  assert.match(rollback, /if ! checked_stop_backend_service_if_running "\$\{inactive_backend\}"; then[\s\S]*return 1/)
+
+  const burnInRollback = extractTopLevelShellFunction(deployScript, "rollback_caddy_route_only")
+  const burnInRollbackState = burnInRollback.indexOf('printf \'%s\\n\' "${previous_backend}" > "${STATE_FILE}"')
+  const burnInRollbackStop = burnInRollback.lastIndexOf('checked_stop_backend_service_if_running "${candidate_backend}"')
+  assert(burnInRollbackState >= 0 && burnInRollbackStop >= 0, "burn-in rollback state and termination markers must exist")
+  assert(burnInRollbackState < burnInRollbackStop, "burn-in rollback state must precede termination")
+  assert.match(burnInRollback, /if ! printf '%s\\n' "\$\{previous_backend\}" > "\$\{STATE_FILE\}"; then[\s\S]*return 1/)
+  assert.match(burnInRollback, /if ! write_backend_release_state "\$\{previous_backend\}" "\$\{candidate_backend\}"; then[\s\S]*return 1/)
+  assert.match(burnInRollback, /if ! checked_stop_backend_service_if_running "\$\{candidate_backend\}"; then[\s\S]*return 1/)
+
+  for (const functionName of [
+    "start_runtime_split_helper_backends_on_active",
+    "restart_runtime_split_backends_after_candidate_ready",
+    "restore_runtime_split_helper_backends_to_active",
+  ]) {
+    const block = extractTopLevelShellFunction(deployScript, functionName)
+    const stopLoop = block.indexOf('for service in "${helper_services[@]}"; do')
+    const recreate = block.indexOf('compose_up_force_recreate_with_retry "${helper_services[@]}"')
+    assert(stopLoop >= 0 && recreate >= 0, `${functionName} must define helper termination and replacement`)
+    assert(stopLoop < recreate, `${functionName} must check every replaced helper before recreation`)
+    assert.match(block.slice(stopLoop, recreate), /checked_stop_backend_service_if_running "\$\{service\}"/)
+    assert.match(block.slice(stopLoop, recreate), /return 1/)
+  }
+
+  const restoreHelpers = extractTopLevelShellFunction(deployScript, "restore_runtime_split_helper_backends_to_active")
+  assert.match(restoreHelpers, /back_worker" && "\$\{TASK_SCHEMA_COMPATIBLE_WORKER_READY\}" == "true"/)
+  assert(restoreHelpers.indexOf('continue') < restoreHelpers.indexOf('helper_services+=("${service}")'), "preserved worker must not enter the replacement stop list")
+  assert.doesNotMatch(deployScript, /compose stop "\$\{(?:next_backend|candidate_backend)\}" \|\| true/)
 })
 
 test("blue-green deploy waits longer for candidate Flyway startup only", () => {
@@ -3338,13 +3441,13 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const rollbackRouteIndex = rollbackBlock.indexOf('switch_caddy_upstream "${rollback_backend}"')
   const rollbackRestoreIndex = rollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"')
   const rollbackHelperFailIndex = rollbackBlock.indexOf("rollback failed: helper recovery failed after route rollback")
-  const rollbackStateWriteIndex = rollbackBlock.indexOf('echo "${rollback_backend}" > "${STATE_FILE}"')
+  const rollbackStateWriteIndex = rollbackBlock.indexOf('printf \'%s\\n\' "${rollback_backend}" > "${STATE_FILE}"')
   const burnInRollbackRouteIndex = burnInRollbackBlock.indexOf('switch_caddy_upstream "${previous_backend}"')
   const burnInRollbackRestoreIndex = burnInRollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"')
   const burnInRollbackHelperFailIndex = burnInRollbackBlock.indexOf(
     "burn-in rollback failed: helper recovery failed after route rollback",
   )
-  const burnInRollbackStateWriteIndex = burnInRollbackBlock.indexOf('echo "${previous_backend}" > "${STATE_FILE}"')
+  const burnInRollbackStateWriteIndex = burnInRollbackBlock.indexOf('printf \'%s\\n\' "${previous_backend}" > "${STATE_FILE}"')
 
   assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
   assert.match(backendDnsBlock, /host="\$\(backend_http_host "\$\{backend\}"\)"/)
@@ -3359,7 +3462,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   assert.match(helperRestartBlock, /restore_runtime_split_helper_backends_to_active\(\)/)
   assert.match(helperRestartBlock, /preserving schema-compatible worker image during API rollback/)
   assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
-  assert.match(helperRestartBlock, /write_backend_release_state "\$\{active_backend\}" "\$\{failed_candidate\}"/)
+  assert.doesNotMatch(helperRestartBlock, /write_backend_release_state/)
   assert.match(rollbackBlock, /if ! restore_runtime_split_helper_backends_to_active "\$\{rollback_backend\}" "\$\{inactive_backend\}"; then/)
   assert.match(burnInRollbackBlock, /if ! restore_runtime_split_helper_backends_to_active "\$\{previous_backend\}" "\$\{candidate_backend\}"; then/)
   assert.match(deployScript, /skip active-image helper preboot: active backend is not running/)
@@ -3407,7 +3510,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
     deployScript,
     /restore_runtime_split_helper_backends_to_active "\$\{active_backend\}" "\$\{next_backend\}" \|\| true/,
   )
-  assert.match(deployScript, /compose stop "\$\{next_backend\}" \|\| true/)
+  assert.doesNotMatch(deployScript, /compose stop "\$\{next_backend\}" \|\| true/)
 
   const preCandidateBoot = deployScript.slice(preCandidateBootStart, preCandidateBootEnd)
   for (const service of helperServices) {

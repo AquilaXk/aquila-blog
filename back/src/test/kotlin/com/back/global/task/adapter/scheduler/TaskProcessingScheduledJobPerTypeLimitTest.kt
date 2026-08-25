@@ -22,6 +22,7 @@ import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.springframework.context.event.ContextClosedEvent
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
@@ -29,6 +30,7 @@ import org.springframework.transaction.support.SimpleTransactionStatus
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.Optional
@@ -198,6 +200,267 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             assertThat(tasks.count { it.status == TaskStatus.PENDING }).isEqualTo(5)
         } finally {
             releaseWorkers.countDown()
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    @Test
+    @DisplayName("context close listener는 pending query를 기다리지 않고 claim을 차단한다")
+    fun `context close listener returns before pending query release and prevents claims`() {
+        val taskType = "test.context-close-claim"
+        val task = task(1L, taskType)
+        val queryStarted = CountDownLatch(1)
+        val releaseQuery = CountDownLatch(1)
+        val handler = CountingBlockingHandler()
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                handlerEntries = listOf(countingBlockingTaskHandlerEntry(taskType, handler)),
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenAnswer {
+                queryStarted.countDown()
+                releaseQuery.await(5, TimeUnit.SECONDS)
+                listOf(task)
+            }
+
+        val contextClosedEvent = mock(ContextClosedEvent::class.java)
+        val poll = Thread { fixture.job.processTasks() }
+        val contextClose = Thread { fixture.job.onApplicationEvent(contextClosedEvent) }
+
+        try {
+            poll.start()
+            assertThat(queryStarted.await(1, TimeUnit.SECONDS)).isTrue()
+            contextClose.start()
+            contextClose.join(1_000)
+
+            assertThat(contextClose.isAlive).isFalse()
+            releaseQuery.countDown()
+            poll.join(1_000)
+
+            assertThat(poll.isAlive).isFalse()
+            assertThat(task.status).isEqualTo(TaskStatus.PENDING)
+            assertThat(handler.invocations).hasValue(0)
+        } finally {
+            releaseQuery.countDown()
+            handler.release.countDown()
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    @Test
+    @DisplayName("drain 시작 중인 poll은 조회 반환 뒤 task를 claim하지 않는다")
+    fun `drain start prevents claim after pending query returns`() {
+        val taskType = "test.shutdown-claim-race"
+        val task = task(1L, taskType)
+        val queryStarted = CountDownLatch(1)
+        val releaseQuery = CountDownLatch(1)
+        val callback = CountDownLatch(1)
+        val handler = CountingBlockingHandler()
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                workerShutdownTimeoutSeconds = 1,
+                lifecycleShutdownPhaseTimeout = Duration.ofSeconds(2),
+                handlerEntries = listOf(countingBlockingTaskHandlerEntry(taskType, handler)),
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenAnswer {
+                queryStarted.countDown()
+                releaseQuery.await(5, TimeUnit.SECONDS)
+                listOf(task)
+            }
+
+        val poll = Thread { fixture.job.processTasks() }
+        try {
+            poll.start()
+            assertThat(queryStarted.await(1, TimeUnit.SECONDS)).isTrue()
+
+            fixture.job.stop(Runnable { callback.countDown() })
+            waitUntilNotRunning(fixture.job)
+
+            assertThat(callback.await(1_500, TimeUnit.MILLISECONDS)).isFalse()
+            assertThat(
+                fixture.meterRegistry
+                    .get("task.processor.shutdown.timeouts")
+                    .counter()
+                    .count(),
+            ).isEqualTo(1.0)
+            releaseQuery.countDown()
+            poll.join(1_000)
+
+            assertThat(poll.isAlive).isFalse()
+            assertThat(callback.await(50, TimeUnit.MILLISECONDS)).isFalse()
+            assertThat(task.status).isEqualTo(TaskStatus.PENDING)
+            assertThat(handler.invocations).hasValue(0)
+        } finally {
+            releaseQuery.countDown()
+            handler.release.countDown()
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    @Test
+    @DisplayName("drain 중 이미 claim된 worker는 nested handler submit을 완료한다")
+    fun `shutdown drain preserves already claimed worker before nested handler submit`() {
+        val taskType = "test.shutdown-nested-submit"
+        val task = task(1L, taskType)
+        val reachedHandlerLookup = CountDownLatch(1)
+        val releaseHandlerLookup = CountDownLatch(1)
+        val handler = CountingBlockingHandler()
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                workerShutdownTimeoutSeconds = 3,
+                handlerEntries = listOf(countingBlockingTaskHandlerEntry(taskType, handler)),
+            )
+        val entry = fixture.taskHandlerRegistry.getEntry(taskType)
+        org.mockito.Mockito
+            .`when`(fixture.taskHandlerRegistry.getEntry(taskType))
+            .thenAnswer {
+                reachedHandlerLookup.countDown()
+                releaseHandlerLookup.await(1, TimeUnit.SECONDS)
+                entry
+            }
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenReturn(listOf(task))
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findById(task.id))
+            .thenReturn(Optional.of(task))
+
+        try {
+            fixture.job.processTasks()
+            assertThat(reachedHandlerLookup.await(1, TimeUnit.SECONDS)).isTrue()
+
+            val shutdown = Thread { fixture.job.stop() }
+            shutdown.start()
+            waitUntilNotRunning(fixture.job)
+            releaseHandlerLookup.countDown()
+
+            assertThat(handler.started.await(1, TimeUnit.SECONDS)).isTrue()
+            handler.release.countDown()
+            shutdown.join(1_000)
+
+            assertThat(shutdown.isAlive).isFalse()
+            assertThat(handler.invocations).hasValue(1)
+            assertThat(task.status).isEqualTo(TaskStatus.COMPLETED)
+        } finally {
+            releaseHandlerLookup.countDown()
+            handler.release.countDown()
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    @Test
+    @DisplayName("lifecycle stop callback은 active worker 종료 뒤에만 호출된다")
+    fun `lifecycle stop callback waits for worker termination`() {
+        val taskType = "test.shutdown-callback"
+        val task = task(1L, taskType)
+        val startedWorkers = AtomicInteger(0)
+        val releaseWorkers = CountDownLatch(1)
+        val callback = CountDownLatch(1)
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                workerShutdownTimeoutSeconds = 3,
+                handlerEntries = listOf(blockingTaskHandlerEntry(taskType, startedWorkers, releaseWorkers)),
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenReturn(listOf(task))
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findById(task.id))
+            .thenReturn(Optional.of(task))
+
+        try {
+            fixture.job.processTasks()
+            waitUntilWorkerCount(startedWorkers, expected = 1)
+
+            fixture.job.stop(Runnable { callback.countDown() })
+            assertThat(callback.await(50, TimeUnit.MILLISECONDS)).isFalse()
+
+            releaseWorkers.countDown()
+            assertThat(callback.await(1, TimeUnit.SECONDS)).isTrue()
+            assertThat(task.status).isEqualTo(TaskStatus.COMPLETED)
+        } finally {
+            releaseWorkers.countDown()
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    @Test
+    @DisplayName("shutdown drain timeout은 counter를 남기고 active handler를 interrupt한다")
+    fun `shutdown drain timeout records counter and interrupts active handler`() {
+        val taskType = "test.shutdown-timeout"
+        val task = task(1L, taskType)
+        val handler = InterruptAwareHandler()
+        val callback = CountDownLatch(1)
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                workerShutdownTimeoutSeconds = 1,
+                handlerEntries = listOf(interruptAwareTaskHandlerEntry(taskType, handler)),
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenReturn(listOf(task))
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findById(task.id))
+            .thenReturn(Optional.of(task))
+
+        try {
+            fixture.job.processTasks()
+            assertThat(handler.started.await(1, TimeUnit.SECONDS)).isTrue()
+
+            fixture.job.stop(Runnable { callback.countDown() })
+            assertThat(handler.interrupted.await(1_500, TimeUnit.MILLISECONDS)).isTrue()
+            assertThat(
+                fixture.meterRegistry
+                    .get("task.processor.shutdown.timeouts")
+                    .counter()
+                    .count(),
+            ).isEqualTo(1.0)
+            assertThat(task.status).isNotEqualTo(TaskStatus.COMPLETED)
+            assertThat(callback.await(50, TimeUnit.MILLISECONDS)).isFalse()
+        } finally {
             fixture.job.shutdownExecutor()
         }
     }
@@ -480,6 +743,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     private data class JobFixture(
         val job: TaskProcessingScheduledJob,
         val taskRepository: TaskRepository,
+        val taskHandlerRegistry: TaskHandlerRegistry,
         val meterRegistry: SimpleMeterRegistry,
     )
 
@@ -522,6 +786,8 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         dynamicBacklogPerSlot: Int = 25,
         dynamicBatchBacklogPerStep: Int = 120,
         dynamicBatchMaxPrefetchMultiplier: Int = 2,
+        workerShutdownTimeoutSeconds: Long = 5,
+        lifecycleShutdownPhaseTimeout: Duration = Duration.ofSeconds(30),
         handlerEntries: List<TaskHandlerEntry> = emptyList(),
     ): JobFixture {
         val taskRepository = mock(TaskRepository::class.java)
@@ -564,10 +830,12 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                 perTypeAutoTuneEnabled = perTypeAutoTuneEnabled,
                 perTypeAutoTuneMinConcurrent = perTypeAutoTuneMinConcurrent,
                 perTypeAutoTuneRefreshMs = 15_000,
+                workerShutdownTimeoutSeconds = workerShutdownTimeoutSeconds,
+                lifecycleShutdownPhaseTimeout = lifecycleShutdownPhaseTimeout,
                 meterRegistry = meterRegistry,
             )
 
-        return JobFixture(job, taskRepository, meterRegistry)
+        return JobFixture(job, taskRepository, taskHandlerRegistry, meterRegistry)
     }
 
     private fun taskHandlerEntry(taskType: String): TaskHandlerEntry =
@@ -675,6 +943,27 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             sensitivity = TaskPayloadSensitivity.INTERNAL,
         )
 
+    private fun interruptAwareTaskHandlerEntry(
+        taskType: String,
+        handler: InterruptAwareHandler,
+    ): TaskHandlerEntry =
+        TaskHandlerEntry.withExactDecoders(
+            taskType = taskType,
+            payloadClass = StubPayload::class.java,
+            handlerMethod =
+                TaskHandlerMethod(
+                    bean = handler,
+                    method =
+                        InterruptAwareHandler::class.java.getDeclaredMethod(
+                            "handle",
+                            StubPayload::class.java,
+                        ),
+                ),
+            retryPolicy = taskRetryPolicy(taskType),
+            schemaVersion = 2,
+            sensitivity = TaskPayloadSensitivity.INTERNAL,
+        )
+
     private fun taskRetryPolicy(taskType: String): TaskRetryPolicy =
         TaskRetryPolicy(
             label = taskType,
@@ -730,6 +1019,21 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         }
     }
 
+    private class InterruptAwareHandler {
+        val started = CountDownLatch(1)
+        val interrupted = CountDownLatch(1)
+
+        fun handle(payload: StubPayload) {
+            started.countDown()
+            try {
+                Thread.sleep(Long.MAX_VALUE)
+            } catch (exception: InterruptedException) {
+                interrupted.countDown()
+                throw exception
+            }
+        }
+    }
+
     private class ContextCapturingHandler {
         val handled = CountDownLatch(1)
         val capturedIdempotencyKey = AtomicReference<String?>()
@@ -767,6 +1071,13 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     ) {
         repeat(40) {
             if (task.status == expected) return
+            Thread.sleep(25)
+        }
+    }
+
+    private fun waitUntilNotRunning(job: TaskProcessingScheduledJob) {
+        repeat(40) {
+            if (!job.isRunning) return
             Thread.sleep(25)
         }
     }

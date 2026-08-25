@@ -9,6 +9,7 @@ const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.y
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
+const caddyPath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
 const alertmanagerPath = path.join(repoRoot, "deploy/homeserver/monitoring/alertmanager.yml")
 const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
 const publicEdgeDashboardPath = path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-public-edge.json")
@@ -318,6 +319,28 @@ test("autoheal and its docker socket proxy stay under continuous restart observa
     assert(probedServices.includes(service), `${service} must be exported by docker_runtime_probe`)
     assert(alertedAlternatives.includes(service), `${service} must be covered by AquilaContainerRestarted`)
   }
+})
+
+test("front runtime metrics stay on the internal scrape path and off the public edge", () => {
+  const prometheus = read(prometheusPath)
+  const caddy = read(caddyPath)
+  const webVhost = caddy.slice(caddy.indexOf("http://{$WEB_DOMAIN:web.localhost} {"), caddy.indexOf("(front_surface_vhost) {"))
+  const frontJobStart = prometheus.indexOf("  - job_name: front\n")
+  const frontJobEnd = prometheus.indexOf("\n  - job_name:", frontJobStart + 1)
+  const frontJob = prometheus.slice(frontJobStart, frontJobEnd)
+
+  assert.notEqual(frontJobStart, -1, "front metrics scrape job is missing")
+  assert.notEqual(frontJobEnd, -1, "front metrics scrape job must end before the next job")
+  assert.match(frontJob, /metrics_path: \/api\/internal\/metrics/)
+  assert.match(frontJob, /authorization:\n\s+type: Bearer\n\s+credentials_file: \/etc\/prometheus\/credentials\/web-metrics-token/)
+  assert.match(frontJob, /- targets:\n\s+- front_blue:3000\n\s+labels:\n\s+service: aquila-front\n\s+deploy_color: blue/)
+  assert.match(frontJob, /- targets:\n\s+- front_green:3000\n\s+labels:\n\s+service: aquila-front\n\s+deploy_color: green/)
+  assert.doesNotMatch(frontJob, /\n\s*scrape_interval:/)
+  assert.doesNotMatch(frontJob, /\n\s*bearer_token:/)
+  assert.doesNotMatch(frontJob, /\n\s*credentials:/)
+
+  assert.match(webVhost, /@denyFrontRuntimeMetrics path \/api\/internal\/metrics\n\s+handle @denyFrontRuntimeMetrics \{\n\s+respond 403\n\s+\}/)
+  assert(webVhost.indexOf("handle @denyFrontRuntimeMetrics") < webVhost.indexOf("# Blue/Green cutover"))
 })
 
 test("cache-state alert uses the non-decaying home HIT contract", () => {

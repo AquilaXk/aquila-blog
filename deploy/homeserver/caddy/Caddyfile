@@ -346,6 +346,13 @@ http://{$WEB_DOMAIN:web.localhost} {
     ?Cache-Control "public, max-age=31536000, immutable"
   }
 
+  # Runtime metrics are scraped directly over the internal app network. The public edge must not
+  # forward this endpoint to the front container even when it carries a valid bearer token.
+  @denyFrontRuntimeMetrics path /api/internal/metrics
+  handle @denyFrontRuntimeMetrics {
+    respond 403
+  }
+
   # Same-origin public API (#1575). The public API host was going to be api.blog.aquilaxk.site,
   # but a two-label subdomain sits outside Cloudflare Universal SSL and fails the TLS handshake
   # (alert 40, measured), so the API is served from this host by path instead.

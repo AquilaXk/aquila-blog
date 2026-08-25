@@ -4,8 +4,11 @@ import com.back.boundedContexts.member.adapter.persistence.MemberRepository
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
+import com.back.boundedContexts.post.model.PostTagIndex
+import com.back.boundedContexts.post.model.PostTagIndexId
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.support.BaseRepositoryIntegrationTest
+import jakarta.persistence.EntityManager
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -25,6 +28,24 @@ class PostTagCanonicalReadIntegrationTest : BaseRepositoryIntegrationTest() {
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
+
+    @Autowired
+    private lateinit var entityManager: EntityManager
+
+    @Test
+    fun `post tag index JPA mapping은 composite key로 저장하고 조회한다`() {
+        val post = post("jpa-mapping", true, true)
+
+        entityManager.persist(PostTagIndex(post.id, "kotlin"))
+        entityManager.flush()
+        entityManager.clear()
+
+        val found = entityManager.find(PostTagIndex::class.java, PostTagIndexId(post.id, "kotlin"))
+
+        assertThat(found).isNotNull
+        assertThat(found.postId).isEqualTo(post.id)
+        assertThat(found.tag).isEqualTo("kotlin")
+    }
 
     @Test
     fun `태그 페이지는 post_tag_index만 읽고 공개 listed 결과와 추정 total을 반환한다`() {

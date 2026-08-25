@@ -60,7 +60,7 @@ class PostTagIndexCutoverTestcontainersIntegrationTest {
 
         jdbcTemplate.execute("TRUNCATE TABLE post_tag_index, post, member CASCADE")
         jdbcTemplate.update(
-            "INSERT INTO member (id, username, nickname, api_key) VALUES (?, ?, ?, ?)",
+            "INSERT INTO member (id, login_id, nickname, api_key) VALUES (?, ?, ?, ?)",
             1L,
             "tag-cutover",
             "tag-cutover",

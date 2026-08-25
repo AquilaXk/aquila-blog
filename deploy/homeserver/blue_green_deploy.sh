@@ -35,7 +35,6 @@ PREWARM_MAX_TIME_SECONDS="${PREWARM_MAX_TIME_SECONDS:-6}"
 PREWARM_RETRIES="${PREWARM_RETRIES:-2}"
 PREWARM_BACKOFF_SECONDS="${PREWARM_BACKOFF_SECONDS:-1}"
 PREWARM_PUBLIC_ROUTE_POST_LIMIT="${PREWARM_PUBLIC_ROUTE_POST_LIMIT:-5}"
-STREAM_DRAIN_SECONDS="${STREAM_DRAIN_SECONDS:-15}"
 BLUE_GREEN_BURN_IN_PROFILE="${BLUE_GREEN_BURN_IN_PROFILE:-standard}"
 BLUE_GREEN_BURN_IN_SECONDS="${BLUE_GREEN_BURN_IN_SECONDS:-}"
 BLUE_GREEN_BURN_IN_STANDARD_SECONDS="${BLUE_GREEN_BURN_IN_STANDARD_SECONDS:-180}"
@@ -168,7 +167,6 @@ RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED}")"
 RUNTIME_SPLIT_STAGE="$(normalize_runtime_split_stage "${RUNTIME_SPLIT_STAGE}")"
 HEALTHCHECK_RETRIES="$(normalize_positive_int "${HEALTHCHECK_RETRIES}" "120")"
 CANDIDATE_HEALTHCHECK_RETRIES="$(normalize_positive_int "${CANDIDATE_HEALTHCHECK_RETRIES}" "450")"
-STREAM_DRAIN_SECONDS="$(normalize_non_negative_int "${STREAM_DRAIN_SECONDS}" "15")"
 BLUE_GREEN_BURN_IN_STANDARD_SECONDS="$(normalize_non_negative_int "${BLUE_GREEN_BURN_IN_STANDARD_SECONDS}" "180")"
 BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS="$(normalize_non_negative_int "${BLUE_GREEN_BURN_IN_HIGH_RISK_SECONDS}" "600")"
 BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS="$(normalize_positive_int "${BLUE_GREEN_BURN_IN_PROBE_INTERVAL_SECONDS}" "15")"
@@ -2052,6 +2050,12 @@ start_runtime_split_helper_backends_on_active() {
 
   echo "starting runtime helper backends on active image before edge boot: active=${active_backend}, services=${helper_services[*]}"
   compose pull "${helper_services[@]}" || true
+  for service in "${helper_services[@]}"; do
+    if ! checked_stop_backend_service_if_running "${service}"; then
+      echo "runtime helper startup failed: termination evidence failed for ${service}" >&2
+      return 1
+    fi
+  done
   if ! compose_up_force_recreate_with_retry "${helper_services[@]}"; then
     for service in "${helper_services[@]}"; do
       emit_backend_diagnostics "${service}" >&2 || true
@@ -2091,6 +2095,12 @@ restart_runtime_split_backends_after_candidate_ready() {
 
   echo "restarting runtime helper backends after candidate health: candidate=${candidate_backend}, services=${helper_services[*]}"
   compose pull "${helper_services[@]}"
+  for service in "${helper_services[@]}"; do
+    if ! checked_stop_backend_service_if_running "${service}"; then
+      echo "runtime helper restart failed: termination evidence failed for ${service}" >&2
+      return 1
+    fi
+  done
   if ! compose_up_force_recreate_with_retry "${helper_services[@]}"; then
     for service in "${helper_services[@]}"; do
       emit_backend_diagnostics "${service}" >&2 || true
@@ -2137,12 +2147,17 @@ restore_runtime_split_helper_backends_to_active() {
   done < <(runtime_split_helper_backends)
 
   if [[ "${#helper_services[@]}" -eq 0 ]]; then
-    write_backend_release_state "${active_backend}" "${failed_candidate}"
     return 0
   fi
 
   echo "recovering runtime helper backends to active image: active=${active_backend}, failed_candidate=${failed_candidate}, services=${helper_services[*]}"
   compose pull "${helper_services[@]}" || true
+  for service in "${helper_services[@]}"; do
+    if ! checked_stop_backend_service_if_running "${service}"; then
+      echo "runtime helper recovery failed: termination evidence failed for ${service}" >&2
+      return 1
+    fi
+  done
   if ! compose_up_force_recreate_with_retry "${helper_services[@]}"; then
     for service in "${helper_services[@]}"; do
       emit_backend_diagnostics "${service}" >&2 || true
@@ -2156,7 +2171,6 @@ restore_runtime_split_helper_backends_to_active() {
       return 1
     fi
   done
-  write_backend_release_state "${active_backend}" "${failed_candidate}"
   return 0
 }
 
@@ -2528,30 +2542,76 @@ other_backend() {
   echo "back_blue"
 }
 
-stop_backend_if_running() {
-  local backend="$1"
-  if is_backend_running "${backend}"; then
-    compose stop "${backend}" || true
-    echo "stopped inactive backend: ${backend}"
-    return
-  fi
-  echo "inactive backend already stopped: ${backend}"
-}
+checked_stop_backend_service_if_running() {
+  local service="$1"
+  local container_id stop_started_at drain_logs terminal_state running status exit_code oom_killed
 
-drain_and_stop_backend_if_running() {
-  local backend="$1"
-  if ! is_backend_running "${backend}"; then
-    echo "inactive backend already stopped: ${backend}"
-    return
+  if ! container_id="$(compose ps -q "${service}")"; then
+    echo "backend stop evidence unavailable: service=${service} pre_stop_container_query_failed" >&2
+    return 1
   fi
-
-  if (( STREAM_DRAIN_SECONDS > 0 )); then
-    echo "draining old backend connections: ${backend} wait=${STREAM_DRAIN_SECONDS}s"
-    sleep "${STREAM_DRAIN_SECONDS}"
+  if [[ -z "${container_id}" ]]; then
+    echo "backend service already stopped: ${service}"
+    return 0
+  fi
+  if [[ "${container_id}" == *$'\n'* ]]; then
+    echo "backend stop evidence unreadable: service=${service} pre_stop_container_id=multiple" >&2
+    return 1
   fi
 
-  compose stop "${backend}" || true
-  echo "stopped inactive backend after drain: ${backend}"
+  if ! stop_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; then
+    echo "backend stop evidence unavailable: service=${service} container_id=${container_id} failure_kind=stop_timestamp_unavailable" >&2
+    return 1
+  fi
+  if [[ ! "${stop_started_at}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+    echo "backend stop evidence unreadable: service=${service} container_id=${container_id} failure_kind=stop_timestamp_unreadable" >&2
+    return 1
+  fi
+
+  if ! compose stop "${service}"; then
+    echo "backend stop command failed: service=${service} container_id=${container_id}" >&2
+    return 1
+  fi
+
+  if ! drain_logs="$(docker logs --since "${stop_started_at}" "${container_id}" 2>&1)"; then
+    echo "backend stop evidence unavailable: service=${service} container_id=${container_id} failure_kind=drain_log_query_failed" >&2
+    return 1
+  fi
+  if [[ "${drain_logs}" == *"Task worker drain timed out after"* ]]; then
+    echo "backend stop failed: service=${service} container_id=${container_id} failure_kind=worker_drain_timeout" >&2
+    return 1
+  fi
+  if [[ "${drain_logs}" == *"Task worker drain interrupted; interrupting active workers"* ]]; then
+    echo "backend stop failed: service=${service} container_id=${container_id} failure_kind=worker_drain_interrupted" >&2
+    return 1
+  fi
+
+  if ! terminal_state="$(docker inspect --format '{{.State.Running}}|{{.State.Status}}|{{.State.ExitCode}}|{{.State.OOMKilled}}' "${container_id}" 2>/dev/null)"; then
+    echo "backend stop evidence unavailable: service=${service} container_id=${container_id}" >&2
+    return 1
+  fi
+  IFS='|' read -r running status exit_code oom_killed <<< "${terminal_state}"
+  if [[ ! "${running}" =~ ^(true|false)$ || -z "${status}" || ! "${exit_code}" =~ ^[0-9]+$ || ! "${oom_killed}" =~ ^(true|false)$ ]]; then
+    echo "backend stop evidence unreadable: service=${service} container_id=${container_id}" >&2
+    return 1
+  fi
+  echo "backend stop result: service=${service} container_id=${container_id} status=${status} exit_code=${exit_code} oom_killed=${oom_killed}"
+  if [[ "${running}" == "true" ]]; then
+    echo "backend stop failed: service=${service} container_id=${container_id} still running" >&2
+    return 1
+  fi
+  if [[ "${status}" != "exited" ]]; then
+    echo "backend stop evidence is not terminal: service=${service} container_id=${container_id} status=${status}" >&2
+    return 1
+  fi
+  if [[ "${oom_killed}" != "false" ]]; then
+    echo "backend stop failed: service=${service} container_id=${container_id} oom_killed=${oom_killed}" >&2
+    return 1
+  fi
+  if (( exit_code != 0 && exit_code != 143 )); then
+    echo "backend stop failed: service=${service} container_id=${container_id} exit_code=${exit_code}" >&2
+    return 1
+  fi
 }
 
 ensure_steady_state_guard() {
@@ -2623,7 +2683,9 @@ rollback_caddy_route_only() {
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
       echo "burn-in rollback failed: helper recovery failed before route verify" >&2
-      compose stop "${candidate_backend}" || true
+      if ! checked_stop_backend_service_if_running "${candidate_backend}"; then
+        emit_backend_diagnostics "${candidate_backend}" >&2 || true
+      fi
       return 1
     fi
   fi
@@ -2636,14 +2698,25 @@ rollback_caddy_route_only() {
   if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
     if ! restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"; then
       echo "burn-in rollback failed: helper recovery failed after route rollback" >&2
-      compose stop "${candidate_backend}" || true
+      if ! checked_stop_backend_service_if_running "${candidate_backend}"; then
+        emit_backend_diagnostics "${candidate_backend}" >&2 || true
+      fi
       return 1
     fi
   fi
 
-  echo "${previous_backend}" > "${STATE_FILE}"
-  write_backend_release_state "${previous_backend}" "${candidate_backend}"
-  compose stop "${candidate_backend}" || true
+  if ! printf '%s\n' "${previous_backend}" > "${STATE_FILE}"; then
+    echo "burn-in rollback failed: cannot write active backend state" >&2
+    return 1
+  fi
+  if ! write_backend_release_state "${previous_backend}" "${candidate_backend}"; then
+    echo "burn-in rollback failed: cannot write backend release state" >&2
+    return 1
+  fi
+  if ! checked_stop_backend_service_if_running "${candidate_backend}"; then
+    emit_backend_diagnostics "${candidate_backend}" >&2 || true
+    return 1
+  fi
   echo "burn-in rollback ok: route=${previous_backend}, stopped_candidate=${candidate_backend}"
   return 0
 }
@@ -2755,9 +2828,18 @@ rollback_to_backend() {
     fi
   fi
 
-  echo "${rollback_backend}" > "${STATE_FILE}"
-  write_backend_release_state "${rollback_backend}" "${inactive_backend}"
-  drain_and_stop_backend_if_running "${inactive_backend}"
+  if ! printf '%s\n' "${rollback_backend}" > "${STATE_FILE}"; then
+    echo "rollback failed: cannot write active backend state" >&2
+    return 1
+  fi
+  if ! write_backend_release_state "${rollback_backend}" "${inactive_backend}"; then
+    echo "rollback failed: cannot write backend release state" >&2
+    return 1
+  fi
+  if ! checked_stop_backend_service_if_running "${inactive_backend}"; then
+    emit_backend_diagnostics "${inactive_backend}" >&2 || true
+    return 1
+  fi
   return 0
 }
 
@@ -3573,14 +3655,18 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
 fi
 if ! check_candidate_backend_health "${next_backend}"; then
   echo "candidate backend health failed before cutover: ${next_backend}" >&2
-  compose stop "${next_backend}" || true
+  if ! checked_stop_backend_service_if_running "${next_backend}"; then
+    emit_backend_diagnostics "${next_backend}" >&2 || true
+  fi
   exit 1
 fi
 resolve_task_schema_worker_floor
 if ! restart_runtime_split_backends_after_candidate_ready "${next_backend}"; then
   echo "runtime helper backend restart failed after ${next_backend} became healthy" >&2
   restore_runtime_split_helper_backends_to_active "${active_backend}" "${next_backend}" || true
-  compose stop "${next_backend}" || true
+  if ! checked_stop_backend_service_if_running "${next_backend}"; then
+    emit_backend_diagnostics "${next_backend}" >&2 || true
+  fi
   exit 1
 fi
 if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
@@ -3592,7 +3678,9 @@ switch_caddy_upstream "${next_backend}"
 
 if ! verify_caddy_route "${next_backend}" "${web_domain}"; then
   rollback_to_backend "${active_backend}" "${web_domain}" || true
-  compose stop "${next_backend}" || true
+  if ! checked_stop_backend_service_if_running "${next_backend}"; then
+    emit_backend_diagnostics "${next_backend}" >&2 || true
+  fi
   exit 1
 fi
 
@@ -3600,7 +3688,9 @@ post_code="$(probe_caddy_http_code "${web_domain}")"
 if ! is_healthy_http_code "${post_code}"; then
   echo "post-switch verify failed (status=${post_code:-none})" >&2
   rollback_to_backend "${active_backend}" "${web_domain}" || true
-  compose stop "${next_backend}" || true
+  if ! checked_stop_backend_service_if_running "${next_backend}"; then
+    emit_backend_diagnostics "${next_backend}" >&2 || true
+  fi
   exit 1
 fi
 
@@ -3608,7 +3698,9 @@ echo "post-switch phase: notification sse verify"
 if ! check_notification_sse_route "${web_domain}"; then
   echo "post-switch notification sse verify failed" >&2
   rollback_to_backend "${active_backend}" "${web_domain}" || true
-  compose stop "${next_backend}" || true
+  if ! checked_stop_backend_service_if_running "${next_backend}"; then
+    emit_backend_diagnostics "${next_backend}" >&2 || true
+  fi
   exit 1
 fi
 
@@ -3619,7 +3711,10 @@ fi
 
 echo "${next_backend}" > "${STATE_FILE}"
 write_backend_release_state "${next_backend}" "${active_backend}"
-drain_and_stop_backend_if_running "${active_backend}"
+if ! checked_stop_backend_service_if_running "${active_backend}"; then
+  emit_backend_diagnostics "${active_backend}" >&2 || true
+  exit 1
+fi
 
 echo "post-switch phase: install steady-state guard"
 ensure_steady_state_guard || true
@@ -3628,7 +3723,9 @@ echo "post-switch phase: cloudflared runtime verify"
 if ! check_cloudflared_runtime "${web_domain}"; then
   echo "post-switch cloudflared runtime verify failed" >&2
   rollback_to_backend "${active_backend}" "${web_domain}" || true
-  compose stop "${next_backend}" || true
+  if ! checked_stop_backend_service_if_running "${next_backend}"; then
+    emit_backend_diagnostics "${next_backend}" >&2 || true
+  fi
   exit 1
 fi
 

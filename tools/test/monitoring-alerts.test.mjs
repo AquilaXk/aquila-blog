@@ -341,7 +341,7 @@ test("front runtime metrics stay on the internal scrape path and off the public 
   assert.notEqual(frontJobStart, -1, "front metrics scrape job is missing")
   assert.notEqual(frontJobEnd, -1, "front metrics scrape job must end before the next job")
   assert.match(frontJob, /metrics_path: \/api\/internal\/metrics/)
-  assert.match(frontJob, /authorization:\n\s+type: Bearer\n\s+credentials_file: \/etc\/prometheus\/credentials\/web-metrics-token/)
+  assert.match(frontJob, /authorization:\n\s+type: Bearer\n\s+credentials_file: \/run\/secrets\/web-metrics-token/)
   assert.match(frontJob, /- targets:\n\s+- front_blue:3000\n\s+labels:\n\s+service: aquila-front\n\s+deploy_color: blue/)
   assert.match(frontJob, /- targets:\n\s+- front_green:3000\n\s+labels:\n\s+service: aquila-front\n\s+deploy_color: green/)
   assert.doesNotMatch(frontJob, /\n\s*scrape_interval:/)

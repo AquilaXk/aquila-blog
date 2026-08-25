@@ -54,7 +54,7 @@ scrape_configs:
     metrics_path: /api/internal/metrics
     authorization:
       type: Bearer
-      credentials_file: /etc/prometheus/credentials/web-metrics-token
+      credentials_file: /run/secrets/web-metrics-token
     static_configs:
       - targets:
           - front_blue:3000

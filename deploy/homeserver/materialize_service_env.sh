@@ -12,7 +12,10 @@ BACK_OUT="${SCRIPT_DIR}/.env.back.prod"
 CADDY_OUT="${SCRIPT_DIR}/.env.caddy.prod"
 FRONT_OUT="${SCRIPT_DIR}/.env.front.prod"
 FRONT_METRICS_OUT="${SCRIPT_DIR}/.env.front.metrics.prod"
-WEB_METRICS_TOKEN_OUT="${SCRIPT_DIR}/.web-metrics-token"
+WEB_METRICS_CREDENTIAL_ROOT="${SCRIPT_DIR}/.web-metrics-credentials"
+WEB_METRICS_CREDENTIAL_DIR="${WEB_METRICS_CREDENTIAL_ROOT}/runtime"
+WEB_METRICS_TOKEN_OUT="${WEB_METRICS_CREDENTIAL_DIR}/web-metrics-token"
+LEGACY_WEB_METRICS_TOKEN_OUT="${SCRIPT_DIR}/.web-metrics-token"
 WEB_METRICS_TOKEN_VALUE=""
 
 if [[ ! -f "${SOURCE_ENV}" ]]; then
@@ -102,10 +105,11 @@ normalize_web_metrics_token() {
 write_web_metrics_output() {
   local dest="$1"
   local content="$2"
+  local mode="$3"
   local tmp
 
   tmp="$(mktemp "${dest}.XXXXXX")"
-  if ! printf '%s\n' "${content}" > "${tmp}" || ! chmod 600 "${tmp}"; then
+  if ! printf '%s\n' "${content}" > "${tmp}" || ! chmod "${mode}" "${tmp}"; then
     rm -f "${tmp}"
     return 1
   fi
@@ -115,21 +119,33 @@ write_web_metrics_output() {
   fi
 }
 
+remove_web_metrics_outputs() {
+  rm -f "${WEB_METRICS_TOKEN_OUT}" "${FRONT_METRICS_OUT}" "${LEGACY_WEB_METRICS_TOKEN_OUT}"
+}
+
 materialize_web_metrics_token() {
   local value
   normalize_web_metrics_token
   value="${WEB_METRICS_TOKEN_VALUE}"
   if [[ -z "${value}" || ${#value} -lt 32 ]]; then
-    rm -f "${WEB_METRICS_TOKEN_OUT}" "${FRONT_METRICS_OUT}"
+    remove_web_metrics_outputs
     echo "materialize_service_env: WEB_METRICS_TOKEN is required and must be at least 32 characters" >&2
     exit 1
   fi
 
   umask 077
-  if ! write_web_metrics_output "${WEB_METRICS_TOKEN_OUT}" "${value}" ||
-    ! write_web_metrics_output "${FRONT_METRICS_OUT}" "WEB_METRICS_TOKEN=${value}"; then
-    rm -f "${WEB_METRICS_TOKEN_OUT}" "${FRONT_METRICS_OUT}"
-    echo "materialize_service_env: failed to write Web metrics credential" >&2
+  if ! mkdir -p "${WEB_METRICS_CREDENTIAL_DIR}" ||
+    ! chmod 700 "${WEB_METRICS_CREDENTIAL_ROOT}" ||
+    ! chmod 755 "${WEB_METRICS_CREDENTIAL_DIR}" ||
+    ! write_web_metrics_output "${WEB_METRICS_TOKEN_OUT}" "${value}" 0444 ||
+    ! write_web_metrics_output "${FRONT_METRICS_OUT}" "WEB_METRICS_TOKEN=${value}" 0600; then
+    remove_web_metrics_outputs
+    echo "materialize_service_env: failed to write Web metrics credentials" >&2
+    exit 1
+  fi
+  if ! rm -f "${LEGACY_WEB_METRICS_TOKEN_OUT}"; then
+    remove_web_metrics_outputs
+    echo "materialize_service_env: failed to remove retired Web metrics credential" >&2
     exit 1
   fi
 }

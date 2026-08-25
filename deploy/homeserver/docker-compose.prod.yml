@@ -98,7 +98,7 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/rules:/etc/prometheus/rules:ro
-      - ./.web-metrics-token:/etc/prometheus/credentials/web-metrics-token:ro
+      - ./.web-metrics-credentials/runtime:/run/secrets:ro
       - prometheus_data:/prometheus
     depends_on:
       - alertmanager

@@ -7,6 +7,17 @@ import test from "node:test"
 
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const read = (file) => readFileSync(path.join(repoRoot, file), "utf8")
+const parseWorkflow = (file) => {
+  const workflowPath = path.join(repoRoot, file)
+  const ruby = [
+    "require 'yaml'",
+    "require 'json'",
+    "puts JSON.generate(YAML.load_file(ARGV.fetch(0)))",
+  ].join("; ")
+  const parsed = spawnSync("ruby", ["-e", ruby, workflowPath], { encoding: "utf8" })
+  assert.equal(parsed.status, 0, parsed.stderr)
+  return JSON.parse(parsed.stdout)
+}
 const webRootPath = /(?:^|["'\s:=,])\/?front(?:\/|["'\s,]|$)/m
 const privateReportUrl = "https://github.com/AquilaXk/aquila-blog/security/advisories/new"
 
@@ -39,6 +50,19 @@ test("Platform CI runs the boundary guard when forbidden Web paths are introduce
 
   assert.match(ci, /^      - "front"$/m)
   assert.match(ci, /^      - "front\/\*\*"$/m)
+})
+
+test("security artifacts keep explicit fourteen-day retention", () => {
+  const security = parseWorkflow(".github/workflows/security.yml")
+  const uploadSteps = Object.values(security.jobs)
+    .flatMap((job) => job.steps ?? [])
+    .filter((step) => String(step.uses ?? "").startsWith("actions/upload-artifact@"))
+
+  for (const artifactName of ["backend-dependency-check-reports", "sbom-cyclonedx"]) {
+    const artifacts = uploadSteps.filter((step) => step.with?.name === artifactName)
+    assert.equal(artifacts.length, 1, `${artifactName} must have one upload owner`)
+    assert.equal(artifacts[0].with["retention-days"], 14, `${artifactName} must expire after 14 days`)
+  }
 })
 
 test("public issue guidance sends vulnerability details only to the private report form", () => {

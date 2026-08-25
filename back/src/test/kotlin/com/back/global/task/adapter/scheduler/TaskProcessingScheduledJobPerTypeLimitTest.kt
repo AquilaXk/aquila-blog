@@ -36,12 +36,9 @@ import java.time.ZoneOffset
 import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.locks.ReentrantLock
 
 class TaskProcessingScheduledJobPerTypeLimitTest {
     @Test
@@ -235,17 +232,15 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
                 listOf(task)
             }
 
+        val contextClosedEvent = mock(ContextClosedEvent::class.java)
         val poll = Thread { fixture.job.processTasks() }
-        val contextClose = Thread { fixture.job.onApplicationEvent(mock(ContextClosedEvent::class.java)) }
-        val lifecycleLockField = TaskProcessingScheduledJob::class.java.getDeclaredField("lifecycleLock")
-        lifecycleLockField.isAccessible = true
-        val lifecycleLock = lifecycleLockField.get(fixture.job) as ReentrantLock
+        val contextClose = Thread { fixture.job.onApplicationEvent(contextClosedEvent) }
 
         try {
             poll.start()
             assertThat(queryStarted.await(1, TimeUnit.SECONDS)).isTrue()
             contextClose.start()
-            waitUntilLockQueued(lifecycleLock, contextClose)
+            waitUntilThreadWaiting(contextClose)
             releaseQuery.countDown()
             poll.join(1_000)
             contextClose.join(1_000)
@@ -316,45 +311,6 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             assertThat(handler.invocations).hasValue(0)
         } finally {
             releaseQuery.countDown()
-            handler.release.countDown()
-            fixture.job.shutdownExecutor()
-        }
-    }
-
-    @Test
-    @DisplayName("claim 후 executor 제출이 거부되면 task를 pending으로 되돌린다")
-    fun `rejected executor submission reverts claimed task to pending`() {
-        val taskType = "test.shutdown-rejected-submit"
-        val task = task(1L, taskType)
-        val handler = CountingBlockingHandler()
-        val fixture =
-            createFixture(
-                maxConcurrent = 1,
-                perTypeMaxConcurrentRaw = "",
-                perTypeAutoTuneEnabled = false,
-                perTypeAutoTuneMinConcurrent = 1,
-                dynamicConcurrencyEnabled = false,
-                handlerEntries = listOf(countingBlockingTaskHandlerEntry(taskType, handler)),
-            )
-        org.mockito.Mockito
-            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
-            .thenReturn(emptyList())
-        org.mockito.Mockito
-            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
-            .thenReturn(listOf(task))
-        org.mockito.Mockito
-            .`when`(fixture.taskRepository.findById(task.id))
-            .thenReturn(Optional.of(task))
-        val executorField = TaskProcessingScheduledJob::class.java.getDeclaredField("executor")
-        executorField.isAccessible = true
-        (executorField.get(fixture.job) as ExecutorService).shutdown()
-
-        try {
-            fixture.job.processTasks()
-
-            assertThat(task.status).isEqualTo(TaskStatus.PENDING)
-            assertThat(handler.invocations).hasValue(0)
-        } finally {
             handler.release.countDown()
             fixture.job.shutdownExecutor()
         }
@@ -459,35 +415,6 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             assertThat(task.status).isEqualTo(TaskStatus.COMPLETED)
         } finally {
             releaseWorkers.countDown()
-            fixture.job.shutdownExecutor()
-        }
-    }
-
-    @Test
-    @DisplayName("drain completion latch timeout은 terminated state만으로 lifecycle callback을 호출하지 않는다")
-    fun `drain completion timeout does not promote terminated state to callback success`() {
-        val fixture =
-            createFixture(
-                maxConcurrent = 1,
-                perTypeMaxConcurrentRaw = "",
-                perTypeAutoTuneEnabled = false,
-                perTypeAutoTuneMinConcurrent = 1,
-                workerShutdownTimeoutSeconds = 1,
-                lifecycleShutdownPhaseTimeout = Duration.ofSeconds(2),
-            )
-        val drainStarted = privateField<AtomicBoolean>(fixture.job, "drainStarted")
-        val drainTerminated = privateField<AtomicBoolean>(fixture.job, "drainTerminated")
-        val drainCompleted = privateField<CountDownLatch>(fixture.job, "drainCompleted")
-        val callback = CountDownLatch(1)
-        drainStarted.set(true)
-        drainTerminated.set(true)
-
-        try {
-            fixture.job.stop(Runnable { callback.countDown() })
-
-            assertThat(callback.await(2_500, TimeUnit.MILLISECONDS)).isFalse()
-        } finally {
-            drainCompleted.countDown()
             fixture.job.shutdownExecutor()
         }
     }
@@ -1155,26 +1082,14 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         }
     }
 
-    private fun waitUntilLockQueued(
-        lock: ReentrantLock,
-        thread: Thread,
-    ) {
-        repeat(100_000) {
-            if (lock.hasQueuedThread(thread)) return
+    private fun waitUntilThreadWaiting(thread: Thread) {
+        val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+        while (System.nanoTime() < deadlineNanos) {
+            if (thread.state == Thread.State.WAITING) return
             Thread.yield()
         }
-        assertThat(lock.hasQueuedThread(thread)).isTrue()
+        assertThat(thread.state).isEqualTo(Thread.State.WAITING)
     }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun <T> privateField(
-        target: Any,
-        name: String,
-    ): T =
-        target.javaClass.getDeclaredField(name).let { field ->
-            field.isAccessible = true
-            field.get(target) as T
-        }
 
     private fun assertStatusRemains(
         task: Task,

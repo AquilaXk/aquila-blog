@@ -107,10 +107,8 @@ class PostApplicationServiceDeleteResilienceTest {
         )
     private val postTagIndexService =
         PostTagIndexService(
-            postRepository = postRepository,
             postTagIndexRepository = postTagIndexRepository,
             postAttrRepository = postAttrRepository,
-            tagsLocalCacheTtlSeconds = 180,
         )
     private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository)
     private val postInteractionSideEffectQueue = PostInteractionSideEffectQueue(taskFacade)

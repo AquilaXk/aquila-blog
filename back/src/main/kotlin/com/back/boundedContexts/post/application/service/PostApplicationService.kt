@@ -1028,9 +1028,6 @@ class PostApplicationService(
         command: PostWriteSideEffectCommand,
         domainEvent: EventPayload? = null,
     ) {
-        if (command.cacheInvalidationScope.evictsPublicTags()) {
-            postTagIndexService.evictPublicTagCountsCache()
-        }
         taskFacade.addToQueue(command.toTaskPayload(domainEvent))
     }
 

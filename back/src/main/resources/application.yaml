@@ -435,7 +435,6 @@ custom:
       tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:6}
       detail-content-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_CONTENT_CACHE_MAX_CHARS:120000}
       detail-snapshot-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_SNAPSHOT_CACHE_MAX_CHARS:180000}
-      tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
     idempotency:
       retentionDays: ${CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS:30}
       cleanup:

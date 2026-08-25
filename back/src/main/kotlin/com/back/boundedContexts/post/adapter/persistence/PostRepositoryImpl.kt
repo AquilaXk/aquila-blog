@@ -4,7 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.model.QPost.post
-import com.back.boundedContexts.post.model.QPostAttr.postAttr
+import com.back.boundedContexts.post.model.QPostTagIndex.postTagIndex
 import com.back.global.security.application.ContentHtmlTrustState
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.util.QueryDslUtil
@@ -15,12 +15,10 @@ import com.querydsl.core.types.dsl.NumberExpression
 import com.querydsl.jpa.JPAExpressions
 import com.querydsl.jpa.impl.JPAQuery
 import com.querydsl.jpa.impl.JPAQueryFactory
-import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.data.support.PageableExecutionUtils
-import java.sql.SQLException
 import java.time.Instant
 
 /**
@@ -35,11 +33,6 @@ class PostRepositoryImpl(
         val tag: Int,
         val content: Int,
     )
-
-    companion object {
-        private const val META_TAGS_INDEX_ATTR_NAME = "metaTagsIndex"
-        private val logger = LoggerFactory.getLogger(PostRepositoryImpl::class.java)
-    }
 
     override fun findQPagedByKw(
         kw: String,
@@ -154,20 +147,6 @@ class PostRepositoryImpl(
             .where(post.published.isTrue.and(post.listed.isTrue))
             .fetch()
 
-    override fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String> =
-        queryFactory
-            .select(postAttr.strValue)
-            .from(postAttr)
-            .join(postAttr.subject, post)
-            .where(
-                post.published
-                    .isTrue
-                    .and(post.listed.isTrue)
-                    .and(postAttr.name.eq(tagIndexAttrName))
-                    .and(postAttr.strValue.isNotNull),
-            ).fetch()
-            .filterNotNull()
-
     override fun findActiveByAuthorIdOrderByIdAsc(authorId: Long): List<Post> =
         queryFactory
             .selectFrom(post)
@@ -184,14 +163,10 @@ class PostRepositoryImpl(
         pageable: Pageable,
         publicOnly: Boolean = false,
         tag: String? = null,
-        usePostTagIndexTable: Boolean = false,
         adminStatus: String = "all",
     ): Page<Post> {
-        // Keep legacy metaTagsIndex as the default path to avoid rollback-only commits
-        // when post_tag_index probing fails on partially migrated runtime nodes.
         val builder = BooleanBuilder()
         val safeTagToken = buildSafeTagToken(tag)
-        val tagLikeToken = safeTagToken?.let { "%|$it|%" }
         if (tag != null && tag.isNotBlank() && safeTagToken == null) {
             return PageImpl(emptyList(), pageable, 0)
         }
@@ -214,40 +189,19 @@ class PostRepositoryImpl(
         }
         author?.let { builder.and(post.author.eq(it)) }
         if (kw.isNotBlank()) builder.and(buildKwPredicate(kw))
-        if (safeTagToken != null && tagLikeToken != null) {
-            builder.and(
-                buildTagFilterPredicate(
-                    normalizedTag = safeTagToken,
-                    tagLikeToken = tagLikeToken,
-                    usePostTagIndexTable = usePostTagIndexTable,
-                ),
-            )
+        if (safeTagToken != null) {
+            builder.and(buildPostTagIndexPredicate(safeTagToken))
         }
 
-        return try {
-            val postIds = fetchPagedPostIds(builder, pageable, kw)
-            val posts = fetchPostsByIds(postIds)
-            if (shouldSkipCountQuery(publicOnly)) {
-                return PageImpl(posts, pageable, estimateTotalElements(pageable, posts.size))
-            }
-
-            // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
-            val countQuery = createCountQuery(builder)
-            PageableExecutionUtils.getPage(posts, pageable) { countQuery.fetchOne() ?: 0L }
-        } catch (exception: RuntimeException) {
-            if (safeTagToken != null && usePostTagIndexTable && shouldFallbackToLegacyTagPath(exception)) {
-                logger.warn("post_tag_index path failed in findPosts; fallback to metaTagsIndex", exception)
-                return findPosts(
-                    author = author,
-                    kw = kw,
-                    pageable = pageable,
-                    publicOnly = publicOnly,
-                    tag = tag,
-                    usePostTagIndexTable = false,
-                )
-            }
-            throw exception
+        val postIds = fetchPagedPostIds(builder, pageable, kw)
+        val posts = fetchPostsByIds(postIds)
+        if (shouldSkipCountQuery(publicOnly)) {
+            return PageImpl(posts, pageable, estimateTotalElements(pageable, posts.size))
         }
+
+        // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
+        val countQuery = createCountQuery(builder)
+        return PageableExecutionUtils.getPage(posts, pageable) { countQuery.fetchOne() ?: 0L }
     }
 
     private fun findPublicPostsByCursor(
@@ -256,10 +210,7 @@ class PostRepositoryImpl(
         limit: Int,
         sort: PostSearchSortType1,
         tag: String?,
-        usePostTagIndexTable: Boolean = false,
     ): List<Post> {
-        // Keep legacy metaTagsIndex as the default path to avoid rollback-only commits
-        // when post_tag_index probing fails on partially migrated runtime nodes.
         val safeLimit = limit.coerceIn(1, 100)
         val builder =
             BooleanBuilder()
@@ -267,73 +218,47 @@ class PostRepositoryImpl(
                 .and(post.listed.isTrue)
 
         val safeTagToken = buildSafeTagToken(tag)
-        val tagLikeToken = safeTagToken?.let { "%|$it|%" }
         if (tag != null && tag.isNotBlank() && safeTagToken == null) {
             return emptyList()
         }
-        if (safeTagToken != null && tagLikeToken != null) {
-            builder.and(
-                buildTagFilterPredicate(
-                    normalizedTag = safeTagToken,
-                    tagLikeToken = tagLikeToken,
-                    usePostTagIndexTable = usePostTagIndexTable,
-                ),
-            )
+        if (safeTagToken != null) {
+            builder.and(buildPostTagIndexPredicate(safeTagToken))
         }
         buildCursorPredicate(cursorSortValue, cursorId, sort)?.let(builder::and)
 
-        return try {
-            val idQuery =
-                queryFactory
-                    .select(post.id)
-                    .from(post)
+        val idQuery =
+            queryFactory
+                .select(post.id)
+                .from(post)
 
-            when (sort) {
-                PostSearchSortType1.HIT_COUNT -> idQuery.leftJoin(post.hitCountAttr)
-                PostSearchSortType1.LIKES_COUNT -> idQuery.leftJoin(post.likesCountAttr)
-                else -> Unit
-            }
-
-            idQuery.where(builder)
-
-            when (sort) {
-                PostSearchSortType1.HIT_COUNT -> {
-                    val countExpr = post.hitCountAttr.intValue.coalesce(0)
-                    idQuery.orderBy(countExpr.desc(), post.id.desc())
-                }
-                PostSearchSortType1.LIKES_COUNT -> {
-                    val countExpr = post.likesCountAttr.intValue.coalesce(0)
-                    idQuery.orderBy(countExpr.desc(), post.id.desc())
-                }
-                PostSearchSortType1.CREATED_AT_ASC -> {
-                    idQuery.orderBy(post.createdAt.asc(), post.id.asc())
-                }
-                else -> {
-                    idQuery.orderBy(post.createdAt.desc(), post.id.desc())
-                }
-            }
-
-            val ids =
-                idQuery
-                    .limit(safeLimit.toLong())
-                    .fetch()
-                    .filterNotNull()
-
-            fetchPostsByIds(ids)
-        } catch (exception: RuntimeException) {
-            if (safeTagToken != null && usePostTagIndexTable && shouldFallbackToLegacyTagPath(exception)) {
-                logger.warn("post_tag_index path failed in cursor feed; fallback to metaTagsIndex", exception)
-                return findPublicPostsByCursor(
-                    cursorSortValue = cursorSortValue,
-                    cursorId = cursorId,
-                    limit = limit,
-                    sort = sort,
-                    tag = tag,
-                    usePostTagIndexTable = false,
-                )
-            }
-            throw exception
+        when (sort) {
+            PostSearchSortType1.HIT_COUNT -> idQuery.leftJoin(post.hitCountAttr)
+            PostSearchSortType1.LIKES_COUNT -> idQuery.leftJoin(post.likesCountAttr)
+            else -> Unit
         }
+
+        idQuery.where(builder)
+
+        when (sort) {
+            PostSearchSortType1.HIT_COUNT -> {
+                val countExpr = post.hitCountAttr.intValue.coalesce(0)
+                idQuery.orderBy(countExpr.desc(), post.id.desc())
+            }
+            PostSearchSortType1.LIKES_COUNT -> {
+                val countExpr = post.likesCountAttr.intValue.coalesce(0)
+                idQuery.orderBy(countExpr.desc(), post.id.desc())
+            }
+            PostSearchSortType1.CREATED_AT_ASC -> idQuery.orderBy(post.createdAt.asc(), post.id.asc())
+            else -> idQuery.orderBy(post.createdAt.desc(), post.id.desc())
+        }
+
+        val ids =
+            idQuery
+                .limit(safeLimit.toLong())
+                .fetch()
+                .filterNotNull()
+
+        return fetchPostsByIds(ids)
     }
 
     private fun buildKwPredicate(kw: String): BooleanExpression {
@@ -347,12 +272,12 @@ class PostRepositoryImpl(
     }
 
     private fun buildKeywordTokenPredicate(token: String): BooleanExpression {
-        val tagLikeToken = buildTagLikeToken(token)
+        val normalizedTag = buildSafeTagToken(token)
         val tagPredicate =
-            if (tagLikeToken == null) {
+            if (normalizedTag == null) {
                 Expressions.booleanTemplate("1 = 0")
             } else {
-                buildTagIndexPredicate(tagLikeToken)
+                buildPostTagIndexPredicate(normalizedTag)
             }
 
         return buildPGroongaMatchPredicate(token).or(tagPredicate)
@@ -366,31 +291,15 @@ class PostRepositoryImpl(
             Expressions.constant(token),
         )
 
-    private fun buildTagIndexPredicate(tagLikeToken: String): BooleanExpression =
-        post.id.`in`(
-            JPAExpressions
-                .select(postAttr.subject.id)
-                .from(postAttr)
-                .where(
-                    postAttr.name
-                        .eq(META_TAGS_INDEX_ATTR_NAME)
-                        .and(postAttr.strValue.isNotNull)
-                        .and(postAttr.strValue.lower().like(tagLikeToken)),
-                ),
-        )
-
     private fun buildPostTagIndexPredicate(normalizedTag: String): BooleanExpression =
-        Expressions.booleanTemplate(
-            "exists (select 1 from post_tag_index pti where pti.post_id = {0} and lower(pti.tag) = {1})",
-            post.id,
-            Expressions.constant(normalizedTag),
-        )
-
-    private fun buildTagFilterPredicate(
-        normalizedTag: String,
-        tagLikeToken: String,
-        usePostTagIndexTable: Boolean,
-    ): BooleanExpression = if (usePostTagIndexTable) buildPostTagIndexPredicate(normalizedTag) else buildTagIndexPredicate(tagLikeToken)
+        JPAExpressions
+            .selectOne()
+            .from(postTagIndex)
+            .where(
+                postTagIndex.postId
+                    .eq(post.id)
+                    .and(postTagIndex.tag.lower().eq(normalizedTag)),
+            ).exists()
 
     private fun buildCursorPredicate(
         cursorSortValue: Long?,
@@ -442,34 +351,6 @@ class PostRepositoryImpl(
                 .replace("\\", "")
         if (safeTagToken.isBlank()) return null
         return safeTagToken
-    }
-
-    private fun buildTagLikeToken(tag: String?): String? {
-        val safeTagToken = buildSafeTagToken(tag) ?: return null
-        return "%|$safeTagToken|%"
-    }
-
-    private fun shouldFallbackToLegacyTagPath(exception: RuntimeException): Boolean {
-        val chain = generateSequence(exception as Throwable?) { it?.cause }.toList()
-        val sqlException = chain.filterIsInstance<SQLException>().firstOrNull()
-        val sqlState = sqlException?.sqlState?.uppercase()
-        val unsupportedPostTagIndexState =
-            sqlState in
-                setOf(
-                    "42P01", // postgres: undefined table
-                    "42703", // postgres: undefined column
-                    "42S02", // h2/mysql: table not found
-                    "42S22", // h2/mysql: column not found
-                    "42102", // h2: table or view not found
-                    "42122", // h2: column not found
-                )
-        if (unsupportedPostTagIndexState) return true
-
-        val mentionsPostTagIndex =
-            chain.any { throwable ->
-                throwable.message?.contains("post_tag_index", ignoreCase = true) == true
-            }
-        return mentionsPostTagIndex && (sqlState == null || sqlState.startsWith("42"))
     }
 
     /**
@@ -580,7 +461,7 @@ class PostRepositoryImpl(
 
     /**
      * Velog의 검색 랭킹 전략(제목 우선 + 보조 신호)을 반영해
-     * title > tags(metaTagsIndex) > content 순서로 점수를 부여한다.
+     * title > tags(post_tag_index) > content 순서로 점수를 부여한다.
      * 멀티 토큰 검색은 exact phrase와 token hit를 함께 반영해 후보 풀이 recency로 과도하게 쏠리지 않게 유지한다.
      */
     private fun buildKeywordRelevanceExpression(keyword: String): NumberExpression<Int> {
@@ -637,18 +518,10 @@ class PostRepositoryImpl(
         term: String,
         weight: Int,
     ): NumberExpression<Int> {
-        val tagToken = buildTagLikeToken(term) ?: "||"
         val hasTagMatch =
-            JPAExpressions
-                .selectOne()
-                .from(postAttr)
-                .where(
-                    postAttr.subject.id
-                        .eq(post.id)
-                        .and(postAttr.name.eq(META_TAGS_INDEX_ATTR_NAME))
-                        .and(postAttr.strValue.isNotNull)
-                        .and(postAttr.strValue.lower().like(tagToken)),
-                ).exists()
+            buildSafeTagToken(term)
+                ?.let(::buildPostTagIndexPredicate)
+                ?: Expressions.booleanTemplate("1 = 0")
 
         return Expressions.numberTemplate(
             Int::class.java,

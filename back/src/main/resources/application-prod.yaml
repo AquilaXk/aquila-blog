@@ -107,7 +107,6 @@ custom:
         searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:10}
         detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:24}
         tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:8}
-      tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
   task:
     processor:
       # API/worker 단일 프로세스 기본 운영에서 DB 경쟁을 완화한다.

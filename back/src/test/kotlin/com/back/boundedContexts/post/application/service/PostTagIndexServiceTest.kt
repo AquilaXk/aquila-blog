@@ -2,7 +2,6 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
-import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
@@ -10,29 +9,26 @@ import com.back.boundedContexts.post.domain.postMixin.META_TAGS_INDEX
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.BDDMockito.willThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
-import org.mockito.Mockito.times
 
 @DisplayName("PostTagIndexService 테스트")
 class PostTagIndexServiceTest {
-    private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postTagIndexRepository: PostTagIndexRepositoryPort = mock(PostTagIndexRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
     private val service =
         PostTagIndexService(
-            postRepository = postRepository,
             postTagIndexRepository = postTagIndexRepository,
             postAttrRepository = postAttrRepository,
-            tagsLocalCacheTtlSeconds = 180,
         )
 
     @Test
-    @DisplayName("공개 태그 집계는 repository 결과를 캐시하고 명시 evict 뒤 다시 조회한다")
-    fun cachePublicTagCountsUntilEvicted() {
+    @DisplayName("공개 태그 집계는 매 요청 canonical repository 결과를 반환한다")
+    fun loadPublicTagCountsFromCanonicalRepositoryOnEachRequest() {
         // given
         given(postTagIndexRepository.findAllPublicTagCounts())
             .willReturn(
@@ -44,45 +40,23 @@ class PostTagIndexServiceTest {
 
         // when
         val first = service.getPublicTagCounts()
-        val cached = service.getPublicTagCounts()
-        service.evictPublicTagCountsCache()
-        val refreshed = service.getPublicTagCounts()
+        val second = service.getPublicTagCounts()
 
         // then
         assertThat(first.map { it.tag }).containsExactly("spring", "kotlin")
-        assertThat(cached).isSameAs(first)
-        assertThat(refreshed.map { it.count }).containsExactly(3, 2)
-        then(postTagIndexRepository).should(times(2)).findAllPublicTagCounts()
+        assertThat(second.map { it.count }).containsExactly(3, 2)
+        then(postTagIndexRepository).should(org.mockito.Mockito.times(2)).findAllPublicTagCounts()
     }
 
     @Test
-    @DisplayName("집계 repository 실패 시 legacy metaTagsIndex 값으로 fallback한다")
-    fun fallbackToLegacyTagIndexRows() {
+    @DisplayName("집계 repository 실패는 legacy 조회 없이 전파한다")
+    fun propagateCanonicalTagCountFailure() {
         // given
-        given(postTagIndexRepository.findAllPublicTagCounts()).willThrow(RuntimeException("aggregate unavailable"))
-        given(postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX))
-            .willReturn(listOf("|spring|kotlin|", "|spring|", "| kotlin |spring|"))
-
-        // when
-        val result = service.getPublicTagCounts()
+        val failure = RuntimeException("aggregate unavailable")
+        given(postTagIndexRepository.findAllPublicTagCounts()).willThrow(failure)
 
         // then
-        assertThat(result.map { it.tag to it.count })
-            .containsExactly("spring" to 3, "kotlin" to 2)
-    }
-
-    @Test
-    @DisplayName("legacy index도 비어 있으면 빈 태그 집계를 반환한다")
-    fun fallbackEmptyLegacyRows() {
-        // given
-        given(postTagIndexRepository.findAllPublicTagCounts()).willThrow(RuntimeException("aggregate unavailable"))
-        given(postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX)).willReturn(emptyList())
-
-        // when
-        val result = service.getPublicTagCounts()
-
-        // then
-        assertThat(result).isEmpty()
+        assertThat(assertThrows<RuntimeException> { service.getPublicTagCounts() }).isSameAs(failure)
     }
 
     @Test

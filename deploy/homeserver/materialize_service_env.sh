@@ -20,6 +20,26 @@ if [[ ! -f "${SOURCE_ENV}" ]]; then
   exit 1
 fi
 
+require_docker_compose_version() {
+  local version major minor patch
+
+  if ! version="$(docker compose version --short 2>/dev/null)" ||
+    ! [[ "${version}" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)([-+][0-9A-Za-z._-]+)?$ ]]; then
+    echo "materialize_service_env: Docker Compose 2.30.0 or newer is required" >&2
+    exit 1
+  fi
+
+  major="${BASH_REMATCH[1]}"
+  minor="${BASH_REMATCH[2]}"
+  patch="${BASH_REMATCH[3]}"
+  if (( 10#${major} < 2 || (10#${major} == 2 && 10#${minor} < 30) )); then
+    echo "materialize_service_env: Docker Compose 2.30.0 or newer is required" >&2
+    exit 1
+  fi
+}
+
+require_docker_compose_version
+
 is_caddy_key() {
   case "$1" in
     LEGACY_API_DOMAIN|WEB_DOMAIN|COMPANY_DOMAIN|PRODUCT_DOMAIN|APEX_DOMAIN|\

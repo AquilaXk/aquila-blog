@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -4880,6 +4880,39 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
         else writeFileSync(file, preexisting[name])
       }
     }
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("materialize_service_env.sh는 Docker Compose 2.30.0 미만을 산출물 생성 전에 차단한다", () => {
+  const workDir = mkdtempSync(path.join(tmpdir(), "materialize-compose-version-"))
+  try {
+    const script = path.join(workDir, "materialize_service_env.sh")
+    const sourceEnv = path.join(workDir, ".env.prod")
+    const fakeBin = path.join(workDir, "bin")
+    const fakeDocker = path.join(fakeBin, "docker")
+    const outputs = [".env.caddy.prod", ".env.back.prod", ".env.front.prod", ".env.front.metrics.prod", ".web-metrics-token"]
+
+    copyFileSync(path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"), script)
+    chmodSync(script, 0o755)
+    mkdirSync(fakeBin)
+    writeFileSync(sourceEnv, `WEB_METRICS_TOKEN=${webMetricsTokenFixture}\n`)
+    writeFileSync(fakeDocker, "#!/usr/bin/env bash\nprintf '%s\\n' \"$FAKE_DOCKER_COMPOSE_VERSION\"\n")
+    chmodSync(fakeDocker, 0o755)
+
+    const run = (version) =>
+      execFileSync("bash", [script, sourceEnv], {
+        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_DOCKER_COMPOSE_VERSION: version },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+
+    assert.throws(() => run("v2.29.9"), /Docker Compose 2\.30\.0 or newer is required/)
+    for (const output of outputs) assert.equal(existsSync(path.join(workDir, output)), false)
+
+    run("2.30.0-desktop.1")
+    for (const output of outputs) assert.equal(existsSync(path.join(workDir, output)), true)
   } finally {
     rmSync(workDir, { force: true, recursive: true })
   }

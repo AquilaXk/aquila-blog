@@ -19,20 +19,28 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.ApplicationListener
+import org.springframework.context.SmartLifecycle
+import org.springframework.context.event.ContextClosedEvent
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
 
 private const val MAX_CONFIGURED_PER_TYPE_CONCURRENT = 256
 
@@ -87,8 +95,13 @@ class TaskProcessingScheduledJob(
     private val perTypeAutoTuneMinConcurrent: Int,
     @param:Value("\${custom.task.processor.perTypeAutoTuneRefreshMs:15000}")
     private val perTypeAutoTuneRefreshMs: Long,
+    @param:Value("\${custom.task.processor.shutdownTimeoutSeconds}")
+    private val workerShutdownTimeoutSeconds: Long,
+    @param:Value("\${spring.lifecycle.timeout-per-shutdown-phase}")
+    private val lifecycleShutdownPhaseTimeout: Duration,
     private val meterRegistry: MeterRegistry? = null,
-) {
+) : SmartLifecycle,
+    ApplicationListener<ContextClosedEvent> {
     private val logger = LoggerFactory.getLogger(TaskProcessingScheduledJob::class.java)
     private val concurrencyPolicy =
         TaskProcessorConcurrencyPolicy(
@@ -112,8 +125,18 @@ class TaskProcessingScheduledJob(
     private val perTypeDynamicLimits = ConcurrentHashMap<String, Int>()
     private val recentHandlerDurationMs = AtomicLong(dynamicBatchTargetHandlerDurationMs.coerceIn(100, 60_000))
     private val queueAvailable = AtomicLong(0)
+    private val lifecycleLock = ReentrantLock()
+
+    private val running = AtomicBoolean(true)
+    private val acceptingClaims = AtomicBoolean(true)
+    private val drainStarted = AtomicBoolean(false)
+    private val drainCompleted = CountDownLatch(1)
+    private val drainTerminated = AtomicBoolean(false)
 
     init {
+        require(workerShutdownTimeoutSeconds > 0 && lifecycleShutdownPhaseTimeout > Duration.ofSeconds(workerShutdownTimeoutSeconds)) {
+            "custom.task.processor.shutdownTimeoutSeconds must be positive and shorter than spring.lifecycle.timeout-per-shutdown-phase"
+        }
         meterRegistry?.let { registry ->
             Gauge.builder("task.processor.queue.available") { queueAvailable.get().toDouble() }.register(registry)
         }
@@ -147,10 +170,16 @@ class TaskProcessingScheduledJob(
     // Queue polling is short-lived; keeping the orphan lock window tight avoids multi-hour ready backlog stalls.
     @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M", lockAtMostFor = "PT2M")
     fun processTasks() {
+        lifecycleLock.lock()
         try {
-            processTasksOnce()
-        } catch (exception: RuntimeException) {
-            recordQueueUnavailable(exception)
+            if (!canClaimTasks()) return
+            try {
+                processTasksOnce()
+            } catch (exception: RuntimeException) {
+                recordQueueUnavailable(exception)
+            }
+        } finally {
+            lifecycleLock.unlock()
         }
     }
 
@@ -172,6 +201,7 @@ class TaskProcessingScheduledJob(
         val dispatchSlots =
             transactionTemplate.execute {
                 val pendingTasks = taskRepository.findPendingTasksWithLock(fetchLimit)
+                if (!canClaimTasks()) return@execute emptyList()
                 val dispatchableTasks = selectDispatchableTasks(pendingTasks, availableWorkerSlots)
                 dispatchableTasks.map {
                     val leaseToken = it.markAsProcessing()
@@ -181,6 +211,10 @@ class TaskProcessingScheduledJob(
 
         var dispatchedWorkers = 0
         dispatchSlots.forEach { slot ->
+            if (!canClaimTasks()) {
+                revertTaskToPending(slot.taskId, slot.leaseToken)
+                return@forEach
+            }
             if (dispatchedWorkers >= availableWorkerSlots) {
                 revertTaskToPending(slot.taskId, slot.leaseToken)
                 return@forEach
@@ -195,14 +229,20 @@ class TaskProcessingScheduledJob(
                 return@forEach
             }
 
-            dispatchedWorkers++
-            executor.submit {
-                try {
-                    executeTask(slot.taskId, slot.leaseToken)
-                } finally {
-                    releasePerTypePermit(slot.taskType)
-                    concurrencyGate.release()
+            try {
+                executor.submit {
+                    try {
+                        executeTask(slot.taskId, slot.leaseToken)
+                    } finally {
+                        releasePerTypePermit(slot.taskType)
+                        concurrencyGate.release()
+                    }
                 }
+                dispatchedWorkers++
+            } catch (exception: RejectedExecutionException) {
+                releasePerTypePermit(slot.taskType)
+                concurrencyGate.release()
+                revertTaskToPending(slot.taskId, slot.leaseToken)
             }
         }
     }
@@ -639,11 +679,126 @@ class TaskProcessingScheduledJob(
         }
     }
 
-    @PreDestroy
-    fun shutdownExecutor() {
-        executor.shutdown()
-        if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-            executor.shutdownNow()
+    override fun start() = Unit
+
+    override fun onApplicationEvent(event: ContextClosedEvent) {
+        acceptingClaims.set(false)
+        lifecycleLock.lock()
+        lifecycleLock.unlock()
+    }
+
+    override fun stop() {
+        val deadlines =
+            beginDrain()
+                ?: run {
+                    awaitDrainCompletion()
+                    return
+                }
+        completeDrain(deadlines)
+    }
+
+    override fun stop(callback: Runnable) {
+        val deadlines = beginDrain()
+        Thread.ofVirtual().start {
+            val terminated = deadlines?.let(::completeDrain) ?: awaitDrainCompletion()
+            if (terminated) callback.run()
         }
     }
+
+    private fun beginDrain(): DrainDeadlines? {
+        if (!drainStarted.compareAndSet(false, true)) return null
+        running.set(false)
+        return DrainDeadlines(
+            workerDeadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(workerShutdownTimeoutSeconds),
+            phaseDeadlineNanos = System.nanoTime() + lifecycleShutdownPhaseTimeout.toNanos(),
+        )
+    }
+
+    private fun completeDrain(deadlines: DrainDeadlines): Boolean {
+        val pollReleased = awaitInFlightPoll(deadlines.workerDeadlineNanos)
+        val terminated = awaitWorkerTermination(deadlines.workerDeadlineNanos, deadlines.phaseDeadlineNanos, pollReleased)
+        drainTerminated.set(terminated)
+        drainCompleted.countDown()
+        return terminated
+    }
+
+    override fun isRunning(): Boolean = running.get()
+
+    override fun isAutoStartup(): Boolean = true
+
+    override fun getPhase(): Int = 0
+
+    @PreDestroy
+    fun shutdownExecutor() = stop()
+
+    private fun canClaimTasks(): Boolean = running.get() && acceptingClaims.get()
+
+    private fun awaitDrainCompletion(): Boolean =
+        try {
+            drainCompleted.await(lifecycleShutdownPhaseTimeout.toNanos(), TimeUnit.NANOSECONDS)
+            drainTerminated.get()
+        } catch (interruptedException: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+
+    private fun awaitWorkerTermination(
+        workerDeadlineNanos: Long,
+        phaseDeadlineNanos: Long,
+        pollReleased: Boolean,
+    ): Boolean {
+        val timeoutSeconds = workerShutdownTimeoutSeconds
+        try {
+            if (pollReleased && awaitActiveWorkers(workerDeadlineNanos)) {
+                executor.shutdown()
+                val remainingNanos = (workerDeadlineNanos - System.nanoTime()).coerceAtLeast(0)
+                if (executor.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS)) {
+                    logger.info("Task worker drain completed within {}s", timeoutSeconds)
+                    return true
+                }
+            }
+            meterRegistry?.counter("task.processor.shutdown.timeouts")?.increment()
+            logger.error("Task worker drain timed out after {}s; interrupting active workers", timeoutSeconds)
+            executor.shutdownNow()
+            val remainingPhaseNanos = (phaseDeadlineNanos - System.nanoTime()).coerceAtLeast(0)
+            if (executor.awaitTermination(remainingPhaseNanos, TimeUnit.NANOSECONDS)) {
+                logger.error("Task worker forced cleanup completed without graceful drain")
+                return false
+            }
+            logger.error("Task worker did not terminate before lifecycle phase timeout")
+            return false
+        } catch (interruptedException: InterruptedException) {
+            Thread.currentThread().interrupt()
+            logger.error("Task worker drain interrupted; interrupting active workers")
+            executor.shutdownNow()
+            return false
+        }
+    }
+
+    private fun awaitActiveWorkers(deadlineNanos: Long): Boolean {
+        while (concurrencyGate.availablePermits() != workerConcurrency) {
+            val remainingNanos = deadlineNanos - System.nanoTime()
+            if (remainingNanos <= 0) return false
+            TimeUnit.NANOSECONDS.sleep(remainingNanos.coerceAtMost(TimeUnit.MILLISECONDS.toNanos(25)))
+        }
+        return true
+    }
+
+    private fun awaitInFlightPoll(deadlineNanos: Long): Boolean {
+        val remainingNanos = deadlineNanos - System.nanoTime()
+        if (remainingNanos <= 0) return false
+        return try {
+            lifecycleLock.tryLock(remainingNanos, TimeUnit.NANOSECONDS).also { acquired ->
+                if (acquired) lifecycleLock.unlock()
+            }
+        } catch (interruptedException: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+    }
+
+    private data class DrainDeadlines(
+        val workerDeadlineNanos: Long,
+        val phaseDeadlineNanos: Long,
+    )
 }

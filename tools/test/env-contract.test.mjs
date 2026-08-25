@@ -210,7 +210,7 @@ const targetKeyNames = (contract, targetName) => {
   ]
 }
 
-const webMetricsTokenFixture = "web-metrics-token-abcdefghijklmnopqrstuvwxyz012345"
+const webMetricsTokenFixture = "web-metrics-runtime-token-0123456789-${UNSET} # \\\"'\\\\"
 
 const baseHomeServerEnv = [
   // 스위치가 same-origin topology면 #1557/#1575의 requiredWhen이 이 둘을 필수로 만든다.
@@ -4794,6 +4794,7 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       caddy: path.join(scriptDir, ".env.caddy.prod"),
       back: path.join(scriptDir, ".env.back.prod"),
       front: path.join(scriptDir, ".env.front.prod"),
+      frontMetrics: path.join(scriptDir, ".env.front.metrics.prod"),
       webMetricsToken: path.join(scriptDir, ".web-metrics-token"),
     }
     const preexisting = Object.fromEntries(
@@ -4805,6 +4806,7 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       const caddyEnv = readFileSync(outputs.caddy, "utf8")
       const backEnv = readFileSync(outputs.back, "utf8")
       const frontEnv = readFileSync(outputs.front, "utf8")
+      const frontMetricsEnv = readFileSync(outputs.frontMetrics, "utf8")
       const webMetricsToken = readFileSync(outputs.webMetricsToken, "utf8")
 
       assert.match(caddyEnv, /^WEB_DOMAIN=blog\.example\.com$/m)
@@ -4823,12 +4825,32 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       // 별도 키로 두면 어긋나도 아무도 실패하지 않고 revalidate만 401이 된다.
       assert.match(frontEnv, /^TOKEN_FOR_REVALIDATE=revalidate_secret_value$/m)
       assert.doesNotMatch(frontEnv, /^CUSTOM__REVALIDATE__TOKEN=/m)
-      assert.match(frontEnv, new RegExp(`^WEB_METRICS_TOKEN=${webMetricsTokenFixture}$`, "m"))
-      assert.equal((frontEnv.match(/^WEB_METRICS_TOKEN=/gm) || []).length, 1)
+      assert.doesNotMatch(frontEnv, /^WEB_METRICS_TOKEN=/m)
       assert.doesNotMatch(backEnv, /^WEB_METRICS_TOKEN=/m)
       assert.doesNotMatch(caddyEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.equal(frontMetricsEnv, `WEB_METRICS_TOKEN=${webMetricsTokenFixture}\n`)
       assert.equal(webMetricsToken, `${webMetricsTokenFixture}\n`)
+      assert.equal(statSync(outputs.frontMetrics).mode & 0o777, 0o600)
       assert.equal(statSync(outputs.webMetricsToken).mode & 0o777, 0o600)
+
+      const composeEnvCheck = path.join(workDir, "compose-env-check.yml")
+      writeFileSync(
+        composeEnvCheck,
+        [
+          "services:",
+          "  env_check:",
+          "    image: alpine:3.20",
+          "    env_file:",
+          `      - path: ${outputs.front}`,
+          `      - path: ${outputs.frontMetrics}`,
+          "        format: raw",
+          "",
+        ].join("\n"),
+      )
+      const rendered = JSON.parse(
+        execFileSync("docker", ["compose", "-f", composeEnvCheck, "config", "--format", "json"], { encoding: "utf8" }),
+      )
+      assert(Object.hasOwn(rendered.services.env_check.environment, "WEB_METRICS_TOKEN"))
       // BACKEND_PROXY_*는 front 전용이다 (`git grep BACKEND_PROXY -- back/`는 0건).
       assert.match(frontEnv, /^BACKEND_PROXY_MAX_BODY_BYTES=1048576$/m)
       assert.doesNotMatch(backEnv, /^BACKEND_PROXY_/m)
@@ -4842,6 +4864,16 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
         () => execFileSync("bash", [path.join(scriptDir, "materialize_service_env.sh"), missingTokenEnv], { stdio: "pipe" }),
       )
       assert.equal(existsSync(outputs.webMetricsToken), false, "missing token must not preserve a stale Prometheus credential")
+      assert.equal(existsSync(outputs.frontMetrics), false, "missing token must not preserve a stale front credential")
+
+      const shortTokenEnv = path.join(workDir, "short-web-metrics-token.env")
+      writeFileSync(shortTokenEnv, "WEB_METRICS_TOKEN=too-short\n")
+      assert.throws(
+        () => execFileSync("bash", [path.join(scriptDir, "materialize_service_env.sh"), shortTokenEnv], { stdio: "pipe" }),
+      )
+      assert.equal(existsSync(outputs.webMetricsToken), false, "short token must never materialize a Prometheus credential")
+      assert.equal(existsSync(outputs.frontMetrics), false, "short token must never materialize a front credential")
+      assert.doesNotMatch(readFileSync(outputs.front, "utf8"), /WEB_METRICS_TOKEN=too-short/)
     } finally {
       for (const [name, file] of Object.entries(outputs)) {
         if (preexisting[name] === null) rmSync(file, { force: true })
@@ -4861,6 +4893,18 @@ test("Prometheus receives only the Web metrics credential file", () => {
   assert.match(prometheus, new RegExp(`- ${credentialMount.replaceAll("/", "\\/")}$`, "m"))
   for (const serviceName of ["front_blue", "front_green", "back_blue", "caddy"]) {
     assert.doesNotMatch(extractComposeService(compose, serviceName), /web-metrics-token/)
+  }
+})
+
+test("front services alone consume the raw Web metrics env file", () => {
+  const compose = readFileSync(composePath, "utf8")
+
+  for (const colour of ["blue", "green"]) {
+    const service = extractComposeService(compose, `front_${colour}`)
+    assert.match(service, /env_file:\n(?:\s+#.*\n)*\s+- \.\/\.env\.front\.prod\n\s+- path: \.\/\.env\.front\.metrics\.prod\n\s+format: raw/)
+  }
+  for (const serviceName of ["back_blue", "caddy", "prometheus"]) {
+    assert.doesNotMatch(extractComposeService(compose, serviceName), /\.env\.front\.metrics\.prod/)
   }
 })
 

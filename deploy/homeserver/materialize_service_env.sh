@@ -11,6 +11,7 @@ SOURCE_ENV="${1:-${SCRIPT_DIR}/.env.prod}"
 BACK_OUT="${SCRIPT_DIR}/.env.back.prod"
 CADDY_OUT="${SCRIPT_DIR}/.env.caddy.prod"
 FRONT_OUT="${SCRIPT_DIR}/.env.front.prod"
+FRONT_METRICS_OUT="${SCRIPT_DIR}/.env.front.metrics.prod"
 WEB_METRICS_TOKEN_OUT="${SCRIPT_DIR}/.web-metrics-token"
 WEB_METRICS_TOKEN_VALUE=""
 
@@ -71,30 +72,43 @@ normalize_web_metrics_token() {
           value="${value:1:${#value}-2}"
         fi
       fi
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
       WEB_METRICS_TOKEN_VALUE="${value}"
     fi
   done < "${SOURCE_ENV}"
 }
 
+write_web_metrics_output() {
+  local dest="$1"
+  local content="$2"
+  local tmp
+
+  tmp="$(mktemp "${dest}.XXXXXX")"
+  if ! printf '%s\n' "${content}" > "${tmp}" || ! chmod 600 "${tmp}"; then
+    rm -f "${tmp}"
+    return 1
+  fi
+  if ! mv -f "${tmp}" "${dest}"; then
+    rm -f "${tmp}"
+    return 1
+  fi
+}
+
 materialize_web_metrics_token() {
-  local value tmp
+  local value
   normalize_web_metrics_token
   value="${WEB_METRICS_TOKEN_VALUE}"
-  if [[ -z "${value}" ]]; then
-    rm -f "${WEB_METRICS_TOKEN_OUT}"
-    echo "materialize_service_env: WEB_METRICS_TOKEN is required" >&2
+  if [[ -z "${value}" || ${#value} -lt 32 ]]; then
+    rm -f "${WEB_METRICS_TOKEN_OUT}" "${FRONT_METRICS_OUT}"
+    echo "materialize_service_env: WEB_METRICS_TOKEN is required and must be at least 32 characters" >&2
     exit 1
   fi
 
   umask 077
-  tmp="$(mktemp "${WEB_METRICS_TOKEN_OUT}.XXXXXX")"
-  if ! printf '%s\n' "${value}" > "${tmp}" || ! chmod 600 "${tmp}"; then
-    rm -f "${tmp}"
-    echo "materialize_service_env: failed to write Web metrics credential" >&2
-    exit 1
-  fi
-  if ! mv -f "${tmp}" "${WEB_METRICS_TOKEN_OUT}"; then
-    rm -f "${tmp}"
+  if ! write_web_metrics_output "${WEB_METRICS_TOKEN_OUT}" "${value}" ||
+    ! write_web_metrics_output "${FRONT_METRICS_OUT}" "WEB_METRICS_TOKEN=${value}"; then
+    rm -f "${WEB_METRICS_TOKEN_OUT}" "${FRONT_METRICS_OUT}"
     echo "materialize_service_env: failed to write Web metrics credential" >&2
     exit 1
   fi
@@ -166,7 +180,6 @@ write_filtered_env() {
 write_filtered_env "${CADDY_OUT}" "caddy"
 write_filtered_env "${BACK_OUT}" "back"
 write_filtered_env "${FRONT_OUT}" "front"
-printf 'WEB_METRICS_TOKEN=%s\n' "${WEB_METRICS_TOKEN_VALUE}" >> "${FRONT_OUT}"
 
 # front가 읽는 TOKEN_FOR_REVALIDATE와 backend가 보내는 CUSTOM__REVALIDATE__TOKEN은 같은 공유
 # 비밀이다(RevalidateService.kt:53이 x-revalidate-token 헤더로 보내고, revalidate.ts:18이 그 값과

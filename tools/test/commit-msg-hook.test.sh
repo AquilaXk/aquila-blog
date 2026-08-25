@@ -19,12 +19,12 @@ hook_path="${repo_root}/${hook}"
 
 base_locale=C
 validation_locale=C
-for candidate in C.UTF-8 C.utf8; do
-  if locale -a 2>/dev/null | grep -qxF "${candidate}"; then
-    validation_locale="${candidate}"
-    break
-  fi
-done
+available_locales=$'\n'"$(locale -a 2>/dev/null)"$'\n'
+if [[ "${available_locales}" == *$'\nC.UTF-8\n'* ]]; then
+  validation_locale=C.UTF-8
+elif [[ "${available_locales}" == *$'\nC.utf8\n'* ]]; then
+  validation_locale=C.utf8
+fi
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "${workdir}"' EXIT
@@ -140,7 +140,7 @@ expect_rejected() {
   expect_rejected_message "${label}" "${reason}" "$@"
 }
 
-reason_format="[commit-msg] 커밋 메시지 규칙 위반"
+reason_format="[commit-msg] commit message format violation"
 reason_english="[commit-msg] summary must use printable ASCII and include an English letter"
 
 english_subject="fix(hooks): allow concise English commit subjects"
@@ -151,7 +151,7 @@ expect_accepted "English conventional subject" "${english_subject}" LANG="${base
 expect_rejected "non-ASCII conventional subject" "${reason_english}" \
   "fix(hooks): 커밋 메시지 검사 강화" LANG="${validation_locale}"
 expect_rejected "subject without conventional type" "${reason_format}" \
-  "커밋 메시지 locale guard 수정" LANG="${base_locale}"
+  "missing conventional type" LANG="${base_locale}"
 
 expect_accepted "merge commit subject" "Merge pull request #1 from AquilaXk/topic" LANG="${base_locale}"
 expect_accepted "revert commit subject" "Revert \"${english_subject}\"" LANG="${base_locale}"
@@ -163,7 +163,10 @@ expect_accepted "amend commit subject" "amend! ${english_subject}" LANG="${base_
 printf '%s\n' "" "   " "# comment lines are not subjects" "${english_subject}" > "${msg_file}"
 expect_accepted_message "subject after blank and comment lines" LANG="${base_locale}"
 
-printf '%s\n' "" "# 주석 줄은 제목이 아니다" "커밋 메시지 locale guard 수정" > "${msg_file}"
+printf '%s\n' $'\u2003' "${english_subject}" > "${msg_file}"
+expect_rejected_message "UTF-8 whitespace is not treated as a blank subject line" "${reason_format}" LANG="${validation_locale}"
+
+printf '%s\n' "" "# comment lines are not subjects" "missing conventional type" > "${msg_file}"
 expect_rejected_message "invalid subject after blank and comment lines" "${reason_format}" LANG="${base_locale}"
 
 git -C "${sandbox}" config core.commentChar ";"

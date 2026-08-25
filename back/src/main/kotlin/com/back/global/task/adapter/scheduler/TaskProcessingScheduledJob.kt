@@ -683,8 +683,6 @@ class TaskProcessingScheduledJob(
 
     override fun onApplicationEvent(event: ContextClosedEvent) {
         acceptingClaims.set(false)
-        lifecycleLock.lock()
-        lifecycleLock.unlock()
     }
 
     override fun stop() {

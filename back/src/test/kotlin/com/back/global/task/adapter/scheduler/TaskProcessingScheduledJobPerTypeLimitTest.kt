@@ -205,8 +205,8 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     }
 
     @Test
-    @DisplayName("context close listener 반환 뒤에는 진행 중 query가 task를 claim하지 않는다")
-    fun `context close listener linearizes pending query before claims`() {
+    @DisplayName("context close listener는 pending query를 기다리지 않고 claim을 차단한다")
+    fun `context close listener returns before pending query release and prevents claims`() {
         val taskType = "test.context-close-claim"
         val task = task(1L, taskType)
         val queryStarted = CountDownLatch(1)
@@ -228,7 +228,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
             .thenAnswer {
                 queryStarted.countDown()
-                releaseQuery.await(1, TimeUnit.SECONDS)
+                releaseQuery.await(5, TimeUnit.SECONDS)
                 listOf(task)
             }
 
@@ -240,13 +240,13 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             poll.start()
             assertThat(queryStarted.await(1, TimeUnit.SECONDS)).isTrue()
             contextClose.start()
-            waitUntilThreadWaiting(contextClose)
-            releaseQuery.countDown()
-            poll.join(1_000)
             contextClose.join(1_000)
 
-            assertThat(poll.isAlive).isFalse()
             assertThat(contextClose.isAlive).isFalse()
+            releaseQuery.countDown()
+            poll.join(1_000)
+
+            assertThat(poll.isAlive).isFalse()
             assertThat(task.status).isEqualTo(TaskStatus.PENDING)
             assertThat(handler.invocations).hasValue(0)
         } finally {
@@ -1080,15 +1080,6 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             if (!job.isRunning) return
             Thread.sleep(25)
         }
-    }
-
-    private fun waitUntilThreadWaiting(thread: Thread) {
-        val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
-        while (System.nanoTime() < deadlineNanos) {
-            if (thread.state == Thread.State.WAITING) return
-            Thread.yield()
-        }
-        assertThat(thread.state).isEqualTo(Thread.State.WAITING)
     }
 
     private fun assertStatusRemains(

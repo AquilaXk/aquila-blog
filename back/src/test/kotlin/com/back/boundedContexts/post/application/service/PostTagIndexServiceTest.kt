@@ -3,7 +3,10 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
 import com.back.boundedContexts.post.domain.Post
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -73,6 +76,30 @@ class PostTagIndexServiceTest {
 
         // then
         assertThat(assertThrows<RuntimeException> { service.syncPostTags(post) }).isSameAs(failure)
+    }
+
+    @Test
+    @DisplayName("trim 정규화 뒤 정확히 80자인 태그는 canonical repository에 전달한다")
+    fun syncsNormalizedTagAtMaximumLength() {
+        val tag = "k".repeat(80)
+        val post = testPost(content = "tags:  $tag  \n\n본문")
+
+        service.syncPostTags(post)
+
+        then(postTagIndexRepository).should().replacePostTags(post.id, listOf(tag))
+    }
+
+    @Test
+    @DisplayName("trim 정규화 뒤 81자인 태그는 repository 호출 전 BAD_REQUEST로 거절한다")
+    fun rejectsNormalizedTagOverMaximumLengthBeforeRepositoryCall() {
+        val post = testPost(content = "tags: ${"k".repeat(81)}\n\n본문")
+
+        assertThatThrownBy { service.syncPostTags(post) }
+            .isInstanceOfSatisfying(AppException::class.java) { exception ->
+                assertThat(exception.errorCode).isEqualTo(ErrorCode.BAD_REQUEST)
+            }
+
+        then(postTagIndexRepository).shouldHaveNoInteractions()
     }
 
     private fun testPost(content: String): Post =

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -210,6 +210,8 @@ const targetKeyNames = (contract, targetName) => {
   ]
 }
 
+const webMetricsTokenFixture = "web-metrics-token-abcdefghijklmnopqrstuvwxyz012345"
+
 const baseHomeServerEnv = [
   // 스위치가 same-origin topology면 #1557/#1575의 requiredWhen이 이 둘을 필수로 만든다.
   "WEB_DOMAIN=blog.aquilaxk.site",
@@ -274,6 +276,7 @@ const baseHomeServerEnv = [
   "CUSTOM_PROD_REDISDATABASE=0",
   "CUSTOM__REVALIDATE__URL=https://blog.aquilaxk.site/api/revalidate",
   "CUSTOM__REVALIDATE__TOKEN=valid-revalidate-token",
+  `WEB_METRICS_TOKEN=${webMetricsTokenFixture}`,
   "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID=configured-for-contract-test",
   "SPRING__MAIL__HOST=smtp.mail.example",
   "SPRING__MAIL__PORT=587",
@@ -340,6 +343,27 @@ test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 
     const result = validateEnvText({ contract, target: "home-server-source", text })
     assert.equal(result.ok, false, `${name} Kakao client-id must fail before deployment`)
     assert(result.errors.some((error) => error.key === key && error.message === "is required"), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source는 Web runtime metrics token의 누락·빈 값·짧은 값을 배포 전에 거부한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "WEB_METRICS_TOKEN"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.required, true, "Web runtime metrics token must be required at the HOME_SERVER_ENV source")
+  assert.equal(definition?.secret, true, "Web runtime metrics token must stay secret in diagnostics")
+  assert.equal(definition?.minLength, 32, "Web runtime metrics token must reject short values")
+
+  for (const [name, text] of [
+    ["missing", baseHomeServerEnv.replace(new RegExp(`^${key}=.*\\n`, "m"), "")],
+    ["blank", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=`)],
+    ["short", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${"a".repeat(31)}`)],
+  ]) {
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+    assert.equal(result.ok, false, `${name} Web runtime metrics token must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
   }
 })
 
@@ -4758,6 +4782,8 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
         "MONITOR_DOMAIN=",
         "BACKEND_INTERNAL_URL=http://caddy",
         "CUSTOM__REVALIDATE__TOKEN=revalidate_secret_value",
+        " export WEB_METRICS_TOKEN = 'stale-web-metrics-token-abcdefghijklmnopqrstuvwxyz012345' \r",
+        ` WEB_METRICS_TOKEN = "${webMetricsTokenFixture}"  \r`,
         "BACKEND_PROXY_MAX_BODY_BYTES=1048576",
         "CUSTOM_PROD_DBNAME=blog_prod",
         "",
@@ -4768,6 +4794,7 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       caddy: path.join(scriptDir, ".env.caddy.prod"),
       back: path.join(scriptDir, ".env.back.prod"),
       front: path.join(scriptDir, ".env.front.prod"),
+      webMetricsToken: path.join(scriptDir, ".web-metrics-token"),
     }
     const preexisting = Object.fromEntries(
       Object.entries(outputs).map(([name, file]) => [name, existsSync(file) ? readFileSync(file, "utf8") : null]),
@@ -4778,6 +4805,7 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       const caddyEnv = readFileSync(outputs.caddy, "utf8")
       const backEnv = readFileSync(outputs.back, "utf8")
       const frontEnv = readFileSync(outputs.front, "utf8")
+      const webMetricsToken = readFileSync(outputs.webMetricsToken, "utf8")
 
       assert.match(caddyEnv, /^WEB_DOMAIN=blog\.example\.com$/m)
       assert.match(caddyEnv, /^WEB_UPSTREAM=front_green$/m)
@@ -4795,12 +4823,25 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       // 별도 키로 두면 어긋나도 아무도 실패하지 않고 revalidate만 401이 된다.
       assert.match(frontEnv, /^TOKEN_FOR_REVALIDATE=revalidate_secret_value$/m)
       assert.doesNotMatch(frontEnv, /^CUSTOM__REVALIDATE__TOKEN=/m)
+      assert.match(frontEnv, new RegExp(`^WEB_METRICS_TOKEN=${webMetricsTokenFixture}$`, "m"))
+      assert.equal((frontEnv.match(/^WEB_METRICS_TOKEN=/gm) || []).length, 1)
+      assert.doesNotMatch(backEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.doesNotMatch(caddyEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.equal(webMetricsToken, `${webMetricsTokenFixture}\n`)
+      assert.equal(statSync(outputs.webMetricsToken).mode & 0o777, 0o600)
       // BACKEND_PROXY_*는 front 전용이다 (`git grep BACKEND_PROXY -- back/`는 0건).
       assert.match(frontEnv, /^BACKEND_PROXY_MAX_BODY_BYTES=1048576$/m)
       assert.doesNotMatch(backEnv, /^BACKEND_PROXY_/m)
       // 서비스별 env는 서로의 비밀을 담지 않는다 (blast radius / HR-56).
       assert.doesNotMatch(frontEnv, /^CUSTOM_PROD_DBNAME=/m)
       assert.doesNotMatch(caddyEnv, /^BACKEND_INTERNAL_URL=/m)
+
+      const missingTokenEnv = path.join(workDir, "missing-web-metrics-token.env")
+      writeFileSync(missingTokenEnv, "BACKEND_INTERNAL_URL=http://caddy\n")
+      assert.throws(
+        () => execFileSync("bash", [path.join(scriptDir, "materialize_service_env.sh"), missingTokenEnv], { stdio: "pipe" }),
+      )
+      assert.equal(existsSync(outputs.webMetricsToken), false, "missing token must not preserve a stale Prometheus credential")
     } finally {
       for (const [name, file] of Object.entries(outputs)) {
         if (preexisting[name] === null) rmSync(file, { force: true })
@@ -4809,6 +4850,17 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
     }
   } finally {
     rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("Prometheus receives only the Web metrics credential file", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const prometheus = extractComposeService(compose, "prometheus")
+  const credentialMount = "./.web-metrics-token:/etc/prometheus/credentials/web-metrics-token:ro"
+
+  assert.match(prometheus, new RegExp(`- ${credentialMount.replaceAll("/", "\\/")}$`, "m"))
+  for (const serviceName of ["front_blue", "front_green", "back_blue", "caddy"]) {
+    assert.doesNotMatch(extractComposeService(compose, serviceName), /web-metrics-token/)
   }
 })
 

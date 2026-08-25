@@ -11,6 +11,8 @@ SOURCE_ENV="${1:-${SCRIPT_DIR}/.env.prod}"
 BACK_OUT="${SCRIPT_DIR}/.env.back.prod"
 CADDY_OUT="${SCRIPT_DIR}/.env.caddy.prod"
 FRONT_OUT="${SCRIPT_DIR}/.env.front.prod"
+WEB_METRICS_TOKEN_OUT="${SCRIPT_DIR}/.web-metrics-token"
+WEB_METRICS_TOKEN_VALUE=""
 
 if [[ ! -f "${SOURCE_ENV}" ]]; then
   echo "materialize_service_env: missing source env file=${SOURCE_ENV}" >&2
@@ -49,6 +51,56 @@ is_front_key() {
       ;;
   esac
 }
+
+normalize_web_metrics_token() {
+  local line key value quote
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" || "${line}" =~ ^[[:space:]]*# ]] && continue
+    if [[ "${line}" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[2]}"
+      [[ "${key}" == "WEB_METRICS_TOKEN" ]] || continue
+      value="${BASH_REMATCH[3]}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+      quote="${value:0:1}"
+      if [[ ( "${quote}" == '"' || "${quote}" == "'" ) && "${value: -1}" == "${quote}" ]]; then
+        if (( ${#value} <= 2 )); then
+          value=""
+        else
+          value="${value:1:${#value}-2}"
+        fi
+      fi
+      WEB_METRICS_TOKEN_VALUE="${value}"
+    fi
+  done < "${SOURCE_ENV}"
+}
+
+materialize_web_metrics_token() {
+  local value tmp
+  normalize_web_metrics_token
+  value="${WEB_METRICS_TOKEN_VALUE}"
+  if [[ -z "${value}" ]]; then
+    rm -f "${WEB_METRICS_TOKEN_OUT}"
+    echo "materialize_service_env: WEB_METRICS_TOKEN is required" >&2
+    exit 1
+  fi
+
+  umask 077
+  tmp="$(mktemp "${WEB_METRICS_TOKEN_OUT}.XXXXXX")"
+  if ! printf '%s\n' "${value}" > "${tmp}" || ! chmod 600 "${tmp}"; then
+    rm -f "${tmp}"
+    echo "materialize_service_env: failed to write Web metrics credential" >&2
+    exit 1
+  fi
+  if ! mv -f "${tmp}" "${WEB_METRICS_TOKEN_OUT}"; then
+    rm -f "${tmp}"
+    echo "materialize_service_env: failed to write Web metrics credential" >&2
+    exit 1
+  fi
+}
+
+materialize_web_metrics_token
 
 is_back_key() {
   local key="$1"
@@ -114,6 +166,7 @@ write_filtered_env() {
 write_filtered_env "${CADDY_OUT}" "caddy"
 write_filtered_env "${BACK_OUT}" "back"
 write_filtered_env "${FRONT_OUT}" "front"
+printf 'WEB_METRICS_TOKEN=%s\n' "${WEB_METRICS_TOKEN_VALUE}" >> "${FRONT_OUT}"
 
 # front가 읽는 TOKEN_FOR_REVALIDATE와 backend가 보내는 CUSTOM__REVALIDATE__TOKEN은 같은 공유
 # 비밀이다(RevalidateService.kt:53이 x-revalidate-token 헤더로 보내고, revalidate.ts:18이 그 값과

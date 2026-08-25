@@ -733,14 +733,15 @@ class TaskProcessingScheduledJob(
 
     private fun canClaimTasks(): Boolean = running.get() && acceptingClaims.get()
 
-    private fun awaitDrainCompletion(): Boolean =
-        try {
-            drainCompleted.await(lifecycleShutdownPhaseTimeout.toNanos(), TimeUnit.NANOSECONDS)
+    private fun awaitDrainCompletion(): Boolean {
+        return try {
+            if (!drainCompleted.await(lifecycleShutdownPhaseTimeout.toNanos(), TimeUnit.NANOSECONDS)) return false
             drainTerminated.get()
         } catch (interruptedException: InterruptedException) {
             Thread.currentThread().interrupt()
             false
         }
+    }
 
     private fun awaitWorkerTermination(
         workerDeadlineNanos: Long,

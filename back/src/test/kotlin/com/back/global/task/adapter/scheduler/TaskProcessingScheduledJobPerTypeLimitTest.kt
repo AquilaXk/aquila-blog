@@ -38,6 +38,7 @@ import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
@@ -458,6 +459,35 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             assertThat(task.status).isEqualTo(TaskStatus.COMPLETED)
         } finally {
             releaseWorkers.countDown()
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    @Test
+    @DisplayName("drain completion latch timeout은 terminated state만으로 lifecycle callback을 호출하지 않는다")
+    fun `drain completion timeout does not promote terminated state to callback success`() {
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                workerShutdownTimeoutSeconds = 1,
+                lifecycleShutdownPhaseTimeout = Duration.ofSeconds(2),
+            )
+        val drainStarted = privateField<AtomicBoolean>(fixture.job, "drainStarted")
+        val drainTerminated = privateField<AtomicBoolean>(fixture.job, "drainTerminated")
+        val drainCompleted = privateField<CountDownLatch>(fixture.job, "drainCompleted")
+        val callback = CountDownLatch(1)
+        drainStarted.set(true)
+        drainTerminated.set(true)
+
+        try {
+            fixture.job.stop(Runnable { callback.countDown() })
+
+            assertThat(callback.await(2_500, TimeUnit.MILLISECONDS)).isFalse()
+        } finally {
+            drainCompleted.countDown()
             fixture.job.shutdownExecutor()
         }
     }
@@ -1135,6 +1165,16 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         }
         assertThat(lock.hasQueuedThread(thread)).isTrue()
     }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> privateField(
+        target: Any,
+        name: String,
+    ): T =
+        target.javaClass.getDeclaredField(name).let { field ->
+            field.isAccessible = true
+            field.get(target) as T
+        }
 
     private fun assertStatusRemains(
         task: Task,

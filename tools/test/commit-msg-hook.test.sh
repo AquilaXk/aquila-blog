@@ -18,6 +18,13 @@ fi
 hook_path="${repo_root}/${hook}"
 
 base_locale=C
+validation_locale=C
+for candidate in C.UTF-8 C.utf8; do
+  if locale -a 2>/dev/null | grep -qxF "${candidate}"; then
+    validation_locale="${candidate}"
+    break
+  fi
+done
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "${workdir}"' EXIT
@@ -134,14 +141,15 @@ expect_rejected() {
 }
 
 reason_format="[commit-msg] 커밋 메시지 규칙 위반"
+reason_english="[commit-msg] summary must use printable ASCII and include an English letter"
 
 english_subject="fix(hooks): allow concise English commit subjects"
 
 clear_filter
 
 expect_accepted "English conventional subject" "${english_subject}" LANG="${base_locale}"
-expect_accepted "Korean conventional subject" \
-  "fix(hooks): 커밋 메시지 검사 강화" LANG="${base_locale}"
+expect_rejected "non-ASCII conventional subject" "${reason_english}" \
+  "fix(hooks): 커밋 메시지 검사 강화" LANG="${validation_locale}"
 expect_rejected "subject without conventional type" "${reason_format}" \
   "커밋 메시지 locale guard 수정" LANG="${base_locale}"
 
@@ -194,7 +202,7 @@ if [ "$(sed -n '1p' "${filter_marker}")" != "${msg_file}" ]; then
   echo "[test] expected the filter to receive the commit message file" >&2
   exit 1
 fi
-# The filter must not inherit the hook's LC_ALL=C pin, which exists only for the rule checks.
+# The filter must not receive a locale override from the hook.
 if ! grep -qxF "LC_ALL=unset" "${filter_marker}"; then
   echo "[test] expected the filter to run without the hook's LC_ALL pin" >&2
   cat "${filter_marker}" >&2

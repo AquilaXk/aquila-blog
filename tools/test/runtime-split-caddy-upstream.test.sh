@@ -1001,7 +1001,7 @@ emit_backend_diagnostics() { return 0; }
 runtime_backend_image_value() { img_of "$1"; }
 upsert_runtime_backend_image() { printf '%s' "$2" > "${STATE_DIR}/img/$1"; }
 is_backend_running() { [[ -n "$(run_of "$1")" ]]; }
-drain_and_stop_backend_if_running() { : > "${STATE_DIR}/run/$1"; }
+checked_stop_backend_service_if_running() { : > "${STATE_DIR}/run/$1"; return 0; }
 write_backend_release_state() { printf 'release state active=%s previous=%s\n' "$1" "$2"; }
 
 compose() {

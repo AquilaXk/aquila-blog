@@ -1,11 +1,8 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
 import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.PostAttr
-import com.back.boundedContexts.post.domain.postMixin.META_TAGS_INDEX
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -14,17 +11,11 @@ import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.BDDMockito.willThrow
 import org.mockito.Mockito.mock
-import org.mockito.Mockito.never
 
 @DisplayName("PostTagIndexService 테스트")
 class PostTagIndexServiceTest {
     private val postTagIndexRepository: PostTagIndexRepositoryPort = mock(PostTagIndexRepositoryPort::class.java)
-    private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
-    private val service =
-        PostTagIndexService(
-            postTagIndexRepository = postTagIndexRepository,
-            postAttrRepository = postAttrRepository,
-        )
+    private val service = PostTagIndexService(postTagIndexRepository)
 
     @Test
     @DisplayName("공개 태그 집계는 매 요청 canonical repository 결과를 반환한다")
@@ -60,42 +51,28 @@ class PostTagIndexServiceTest {
     }
 
     @Test
-    @DisplayName("본문 태그를 attr와 정규화 테이블에 동기화하고 replace 실패는 전파하지 않는다")
-    fun syncMetaTagIndexAttrAndSuppressReplaceFailure() {
+    @DisplayName("본문 태그를 canonical 정규화 테이블에만 동기화한다")
+    fun syncPostTagsToCanonicalIndexOnly() {
         // given
         val post = testPost(content = "tags: kotlin, spring, kotlin\n\n본문")
-        val attr = PostAttr(1, post, META_TAGS_INDEX, "")
-        given(postAttrRepository.findBySubjectAndName(post, META_TAGS_INDEX)).willReturn(attr)
-        given(postAttrRepository.save(attr)).willReturn(attr)
-        willThrow(RuntimeException("tag table unavailable"))
-            .given(postTagIndexRepository)
-            .replacePostTags(post.id, listOf("kotlin", "spring"))
 
         // when
-        service.syncMetaTagIndexAttr(post)
+        service.syncPostTags(post)
 
         // then
-        assertThat(attr.strValue).isEqualTo("|kotlin|spring|")
-        then(postAttrRepository).should().save(attr)
         then(postTagIndexRepository).should().replacePostTags(post.id, listOf("kotlin", "spring"))
     }
 
     @Test
-    @DisplayName("태그가 없고 기존 attr 값이 같으면 attr 저장 없이 정규화 테이블만 갱신한다")
-    fun syncEmptyTagsWithoutSavingSameAttr() {
+    @DisplayName("canonical replace 실패는 억제하지 않고 전파한다")
+    fun propagateCanonicalTagWriteFailure() {
         // given
-        val post = testPost(content = "본문만 있음")
-        val attr = PostAttr(1, post, META_TAGS_INDEX, "")
-        given(postAttrRepository.findBySubjectAndName(post, META_TAGS_INDEX)).willReturn(attr)
-
-        // when
-        service.syncMetaTagIndexAttr(post)
+        val post = testPost(content = "tags: kotlin\n\n본문")
+        val failure = RuntimeException("tag table unavailable")
+        willThrow(failure).given(postTagIndexRepository).replacePostTags(post.id, listOf("kotlin"))
 
         // then
-        assertThat(attr.strValue).isEqualTo("")
-        then(postAttrRepository).should().findBySubjectAndName(post, META_TAGS_INDEX)
-        then(postAttrRepository).should(never()).save(attr)
-        then(postTagIndexRepository).should().replacePostTags(post.id, emptyList())
+        assertThat(assertThrows<RuntimeException> { service.syncPostTags(post) }).isSameAs(failure)
     }
 
     private fun testPost(content: String): Post =

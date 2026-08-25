@@ -1,10 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
-import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
-import com.back.boundedContexts.post.dto.PostMetaExtractor
-import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -14,42 +10,17 @@ import org.springframework.transaction.annotation.Transactional
  */
 @Service
 class PostSearchIndexSyncService(
-    private val postUseCase: PostUseCase,
     private val postTagIndexRepository: PostTagIndexRepositoryPort,
-    @Value("\${custom.post.search-index.max-tags:32}")
-    maxTags: Int,
+    private val postTagIndexService: PostTagIndexService,
 ) {
-    private val logger = LoggerFactory.getLogger(PostSearchIndexSyncService::class.java)
-    private val safeMaxTags = maxTags.coerceIn(1, 128)
-
     @Transactional
-    fun sync(
-        postId: Long,
-        forceClear: Boolean,
-    ) {
-        if (forceClear) {
-            postTagIndexRepository.replacePostTags(postId, emptyList())
-            return
-        }
-
-        val post = checkNotNull(postUseCase.findById(postId)) { "Cannot sync search index for missing postId=$postId" }
-        val targetTags = normalizeTags(PostMetaExtractor.extract(post.content).tags)
-
+    fun sync(postId: Long) {
+        val source = postTagIndexRepository.findPostSourceForUpdate(postId)
+        val targetTags =
+            source
+                ?.takeUnless { it.deleted }
+                ?.let { postTagIndexService.extractNormalizedTags(it.content) }
+                ?: emptyList()
         postTagIndexRepository.replacePostTags(postId, targetTags)
-        logger.debug(
-            "post_search_index_sync_done postId={} targetTags={}",
-            postId,
-            targetTags.size,
-        )
     }
-
-    private fun normalizeTags(tags: Collection<String>): List<String> =
-        tags
-            .asSequence()
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .map { it.take(64) }
-            .distinct()
-            .take(safeMaxTags)
-            .toList()
 }

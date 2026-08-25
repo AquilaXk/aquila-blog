@@ -35,9 +35,10 @@ class PostTagCanonicalReadIntegrationTest : BaseRepositoryIntegrationTest() {
         val legacyOnly = post("legacy-only", true, true)
         postAttrRepository.saveAndFlush(PostAttr(0, legacyOnly, "metaTagsIndex", "|kotlin|"))
         val deletedPost =
-            post("deleted", true, true).apply {
-                softDelete()
-            }.also(postRepository::saveAndFlush)
+            post("deleted", true, true)
+                .apply {
+                    softDelete()
+                }.also(postRepository::saveAndFlush)
 
         listOf(publicNewest, publicOlder, privatePost, unlistedPost, deletedPost).forEach(::insertKotlinTag)
 

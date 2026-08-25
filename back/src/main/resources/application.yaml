@@ -406,7 +406,6 @@ custom:
             requestTimeoutMs: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__REQUEST_TIMEOUT_MS:800}
     search-index:
       async-sync-enabled: ${CUSTOM__POST__SEARCH_INDEX__ASYNC_SYNC_ENABLED:true}
-      max-tags: ${CUSTOM__POST__SEARCH_INDEX__MAX_TAGS:32}
       sla:
         maxLagSeconds: ${CUSTOM__POST__SEARCH_INDEX__SLA__MAX_LAG_SECONDS:120}
     search-engine:

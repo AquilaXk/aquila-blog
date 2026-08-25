@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -210,6 +210,9 @@ const targetKeyNames = (contract, targetName) => {
   ]
 }
 
+const webMetricsTokenFixture = "web-metrics-runtime-token-0123456789-${UNSET} # \\\"'\\\\"
+const rotatedWebMetricsTokenFixture = `rotated-${webMetricsTokenFixture}`
+
 const baseHomeServerEnv = [
   // 스위치가 same-origin topology면 #1557/#1575의 requiredWhen이 이 둘을 필수로 만든다.
   "WEB_DOMAIN=blog.aquilaxk.site",
@@ -274,6 +277,7 @@ const baseHomeServerEnv = [
   "CUSTOM_PROD_REDISDATABASE=0",
   "CUSTOM__REVALIDATE__URL=https://blog.aquilaxk.site/api/revalidate",
   "CUSTOM__REVALIDATE__TOKEN=valid-revalidate-token",
+  `WEB_METRICS_TOKEN=${webMetricsTokenFixture}`,
   "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID=configured-for-contract-test",
   "SPRING__MAIL__HOST=smtp.mail.example",
   "SPRING__MAIL__PORT=587",
@@ -340,6 +344,27 @@ test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 
     const result = validateEnvText({ contract, target: "home-server-source", text })
     assert.equal(result.ok, false, `${name} Kakao client-id must fail before deployment`)
     assert(result.errors.some((error) => error.key === key && error.message === "is required"), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source는 Web runtime metrics token의 누락·빈 값·짧은 값을 배포 전에 거부한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "WEB_METRICS_TOKEN"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.required, true, "Web runtime metrics token must be required at the HOME_SERVER_ENV source")
+  assert.equal(definition?.secret, true, "Web runtime metrics token must stay secret in diagnostics")
+  assert.equal(definition?.minLength, 32, "Web runtime metrics token must reject short values")
+
+  for (const [name, text] of [
+    ["missing", baseHomeServerEnv.replace(new RegExp(`^${key}=.*\\n`, "m"), "")],
+    ["blank", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=`)],
+    ["short", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${"a".repeat(31)}`)],
+  ]) {
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+    assert.equal(result.ok, false, `${name} Web runtime metrics token must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
   }
 })
 
@@ -4280,6 +4305,20 @@ const extractComposeService = (compose, serviceName) => {
   return `${body.join("\n")}\n`
 }
 
+const extractComposeServiceNames = (compose) => {
+  const lines = compose.split("\n")
+  const start = lines.findIndex((line) => line === "services:")
+  if (start === -1) return []
+
+  const names = []
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() !== "" && !line.startsWith("  ")) break
+    const match = line.match(/^  ([a-zA-Z0-9_-]+):$/)
+    if (match) names.push(match[1])
+  }
+  return names
+}
+
 const frontColours = ["blue", "green"]
 
 test("front 서비스는 compose 프로필 뒤에서 env 기반 digest 이미지로만 기동한다", () => {
@@ -4747,8 +4786,10 @@ test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과
 test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분배한다", () => {
   const workDir = mkdtempSync(path.join(tmpdir(), "materialize-front-"))
   try {
-    const scriptDir = path.join(repoRoot, "deploy/homeserver")
+    const script = path.join(workDir, "materialize_service_env.sh")
     const sourceEnv = path.join(workDir, "source.env")
+    copyFileSync(path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"), script)
+    chmodSync(script, 0o755)
     writeFileSync(
       sourceEnv,
       [
@@ -4758,6 +4799,8 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
         "MONITOR_DOMAIN=",
         "BACKEND_INTERNAL_URL=http://caddy",
         "CUSTOM__REVALIDATE__TOKEN=revalidate_secret_value",
+        " export WEB_METRICS_TOKEN = 'stale-web-metrics-token-abcdefghijklmnopqrstuvwxyz012345' \r",
+        ` WEB_METRICS_TOKEN = "${webMetricsTokenFixture}"  \r`,
         "BACKEND_PROXY_MAX_BODY_BYTES=1048576",
         "CUSTOM_PROD_DBNAME=blog_prod",
         "",
@@ -4765,19 +4808,24 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
     )
 
     const outputs = {
-      caddy: path.join(scriptDir, ".env.caddy.prod"),
-      back: path.join(scriptDir, ".env.back.prod"),
-      front: path.join(scriptDir, ".env.front.prod"),
+      caddy: path.join(workDir, ".env.caddy.prod"),
+      back: path.join(workDir, ".env.back.prod"),
+      front: path.join(workDir, ".env.front.prod"),
+      frontMetrics: path.join(workDir, ".env.front.metrics.prod"),
+      prometheusCredentialRoot: path.join(workDir, ".web-metrics-credentials"),
+      prometheusCredentialDir: path.join(workDir, ".web-metrics-credentials", "runtime"),
+      prometheusCredential: path.join(workDir, ".web-metrics-credentials", "runtime", "web-metrics-token"),
+      legacyPrometheusCredential: path.join(workDir, ".web-metrics-token"),
     }
-    const preexisting = Object.fromEntries(
-      Object.entries(outputs).map(([name, file]) => [name, existsSync(file) ? readFileSync(file, "utf8") : null]),
-    )
 
-    try {
-      execFileSync("bash", [path.join(scriptDir, "materialize_service_env.sh"), sourceEnv], { stdio: "pipe" })
+    {
+      writeFileSync(outputs.legacyPrometheusCredential, "retired-credential\n", { mode: 0o600 })
+      execFileSync("bash", [script, sourceEnv], { stdio: "pipe" })
       const caddyEnv = readFileSync(outputs.caddy, "utf8")
       const backEnv = readFileSync(outputs.back, "utf8")
       const frontEnv = readFileSync(outputs.front, "utf8")
+      const frontMetricsEnv = readFileSync(outputs.frontMetrics, "utf8")
+      const prometheusCredential = readFileSync(outputs.prometheusCredential, "utf8")
 
       assert.match(caddyEnv, /^WEB_DOMAIN=blog\.example\.com$/m)
       assert.match(caddyEnv, /^WEB_UPSTREAM=front_green$/m)
@@ -4795,20 +4843,138 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       // 별도 키로 두면 어긋나도 아무도 실패하지 않고 revalidate만 401이 된다.
       assert.match(frontEnv, /^TOKEN_FOR_REVALIDATE=revalidate_secret_value$/m)
       assert.doesNotMatch(frontEnv, /^CUSTOM__REVALIDATE__TOKEN=/m)
+      assert.doesNotMatch(frontEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.doesNotMatch(backEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.doesNotMatch(caddyEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.equal(frontMetricsEnv, `WEB_METRICS_TOKEN=${webMetricsTokenFixture}\n`)
+      assert.equal(prometheusCredential, `${webMetricsTokenFixture}\n`)
+      assert.equal(statSync(outputs.frontMetrics).mode & 0o777, 0o600)
+      assert.equal(statSync(outputs.prometheusCredentialRoot).mode & 0o777, 0o700)
+      assert.equal(statSync(outputs.prometheusCredentialDir).mode & 0o777, 0o755)
+      assert.equal(statSync(outputs.prometheusCredential).mode & 0o777, 0o444)
+      assert.equal(existsSync(outputs.legacyPrometheusCredential), false, "retired single-file credential must be removed")
+
+      const credentialRootInode = statSync(outputs.prometheusCredentialRoot).ino
+      const credentialDirInode = statSync(outputs.prometheusCredentialDir).ino
+      const credentialInode = statSync(outputs.prometheusCredential).ino
+      const rotatedSourceEnv = path.join(workDir, "rotated-web-metrics-token.env")
+      writeFileSync(rotatedSourceEnv, `WEB_METRICS_TOKEN=${rotatedWebMetricsTokenFixture}\n`)
+      execFileSync("bash", [script, rotatedSourceEnv], { stdio: "pipe" })
+      assert.equal(statSync(outputs.prometheusCredentialRoot).ino, credentialRootInode)
+      assert.equal(statSync(outputs.prometheusCredentialDir).ino, credentialDirInode)
+      assert.notEqual(statSync(outputs.prometheusCredential).ino, credentialInode)
+      assert.equal(readFileSync(outputs.prometheusCredential, "utf8"), `${rotatedWebMetricsTokenFixture}\n`)
+      assert.equal(readFileSync(outputs.frontMetrics, "utf8"), `WEB_METRICS_TOKEN=${rotatedWebMetricsTokenFixture}\n`)
+
+      const composeEnvCheck = path.join(workDir, "compose-env-check.yml")
+      writeFileSync(
+        composeEnvCheck,
+        [
+          "services:",
+          "  env_check:",
+          "    image: alpine:3.20",
+          "    env_file:",
+          `      - path: ${outputs.front}`,
+          `      - path: ${outputs.frontMetrics}`,
+          "        format: raw",
+          "",
+        ].join("\n"),
+      )
+      const rendered = JSON.parse(
+        execFileSync("docker", ["compose", "-f", composeEnvCheck, "config", "--format", "json"], { encoding: "utf8" }),
+      )
+      assert(Object.hasOwn(rendered.services.env_check.environment, "WEB_METRICS_TOKEN"))
       // BACKEND_PROXY_*는 front 전용이다 (`git grep BACKEND_PROXY -- back/`는 0건).
       assert.match(frontEnv, /^BACKEND_PROXY_MAX_BODY_BYTES=1048576$/m)
       assert.doesNotMatch(backEnv, /^BACKEND_PROXY_/m)
       // 서비스별 env는 서로의 비밀을 담지 않는다 (blast radius / HR-56).
       assert.doesNotMatch(frontEnv, /^CUSTOM_PROD_DBNAME=/m)
       assert.doesNotMatch(caddyEnv, /^BACKEND_INTERNAL_URL=/m)
-    } finally {
-      for (const [name, file] of Object.entries(outputs)) {
-        if (preexisting[name] === null) rmSync(file, { force: true })
-        else writeFileSync(file, preexisting[name])
-      }
+
+      const missingTokenEnv = path.join(workDir, "missing-web-metrics-token.env")
+      writeFileSync(missingTokenEnv, "BACKEND_INTERNAL_URL=http://caddy\n")
+      assert.throws(
+        () => execFileSync("bash", [script, missingTokenEnv], { stdio: "pipe" }),
+      )
+      assert.equal(existsSync(outputs.prometheusCredential), false, "missing token must not preserve a stale Prometheus credential")
+      assert.equal(existsSync(outputs.frontMetrics), false, "missing token must not preserve a stale front credential")
+
+      const shortTokenEnv = path.join(workDir, "short-web-metrics-token.env")
+      writeFileSync(outputs.legacyPrometheusCredential, "retired-credential\n", { mode: 0o600 })
+      writeFileSync(shortTokenEnv, "WEB_METRICS_TOKEN=too-short\n")
+      assert.throws(
+        () => execFileSync("bash", [script, shortTokenEnv], { stdio: "pipe" }),
+      )
+      assert.equal(existsSync(outputs.prometheusCredential), false, "short token must never materialize a Prometheus credential")
+      assert.equal(existsSync(outputs.frontMetrics), false, "short token must never materialize a front credential")
+      assert.equal(existsSync(outputs.legacyPrometheusCredential), false, "invalid input must remove the retired credential")
+      assert.doesNotMatch(readFileSync(outputs.front, "utf8"), /WEB_METRICS_TOKEN=too-short/)
     }
   } finally {
     rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("materialize_service_env.sh는 Docker Compose 2.30.0 미만을 산출물 생성 전에 차단한다", () => {
+  const workDir = mkdtempSync(path.join(tmpdir(), "materialize-compose-version-"))
+  try {
+    const script = path.join(workDir, "materialize_service_env.sh")
+    const sourceEnv = path.join(workDir, ".env.prod")
+    const fakeBin = path.join(workDir, "bin")
+    const fakeDocker = path.join(fakeBin, "docker")
+    const outputs = [
+      ".env.caddy.prod",
+      ".env.back.prod",
+      ".env.front.prod",
+      ".env.front.metrics.prod",
+      ".web-metrics-credentials/runtime/web-metrics-token",
+    ]
+
+    copyFileSync(path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"), script)
+    chmodSync(script, 0o755)
+    mkdirSync(fakeBin)
+    writeFileSync(sourceEnv, `WEB_METRICS_TOKEN=${webMetricsTokenFixture}\n`)
+    writeFileSync(fakeDocker, "#!/usr/bin/env bash\nprintf '%s\\n' \"$FAKE_DOCKER_COMPOSE_VERSION\"\n")
+    chmodSync(fakeDocker, 0o755)
+
+    const run = (version) =>
+      execFileSync("bash", [script, sourceEnv], {
+        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_DOCKER_COMPOSE_VERSION: version },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+
+    assert.throws(() => run("v2.29.9"), /Docker Compose 2\.30\.0 or newer is required/)
+    for (const output of outputs) assert.equal(existsSync(path.join(workDir, output)), false)
+
+    run("2.30.0-desktop.1")
+    for (const output of outputs) assert.equal(existsSync(path.join(workDir, output)), true)
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("Prometheus alone receives the host-private Web metrics credential directory", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const prometheus = extractComposeService(compose, "prometheus")
+
+  assert.match(prometheus, /- \.\/\.web-metrics-credentials\/runtime:\/run\/secrets:ro$/m)
+  assert.doesNotMatch(compose, /^secrets:/m)
+  assert.doesNotMatch(compose, /\.\/\.web-metrics-token:/)
+  for (const serviceName of extractComposeServiceNames(compose).filter((name) => name !== "prometheus")) {
+    assert.doesNotMatch(extractComposeService(compose, serviceName), /\.web-metrics-credentials|web-metrics-token/)
+  }
+})
+
+test("front services alone consume the raw Web metrics env file", () => {
+  const compose = readFileSync(composePath, "utf8")
+
+  for (const colour of ["blue", "green"]) {
+    const service = extractComposeService(compose, `front_${colour}`)
+    assert.match(service, /env_file:\n(?:\s+#.*\n)*\s+- \.\/\.env\.front\.prod\n\s+- path: \.\/\.env\.front\.metrics\.prod\n\s+format: raw/)
+  }
+  for (const serviceName of ["back_blue", "caddy", "prometheus"]) {
+    assert.doesNotMatch(extractComposeService(compose, serviceName), /\.env\.front\.metrics\.prod/)
   }
 })
 

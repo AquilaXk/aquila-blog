@@ -50,6 +50,23 @@ scrape_configs:
           component: worker
           deploy_color: worker
 
+  - job_name: front
+    metrics_path: /api/internal/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/web-metrics-token
+    static_configs:
+      - targets:
+          - front_blue:3000
+        labels:
+          service: aquila-front
+          deploy_color: blue
+      - targets:
+          - front_green:3000
+        labels:
+          service: aquila-front
+          deploy_color: green
+
   - job_name: loki
     scrape_interval: 15s
     static_configs:

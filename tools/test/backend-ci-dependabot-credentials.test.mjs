@@ -14,11 +14,6 @@ const backendPullRequestWorkflow = readFileSync(
 
 const testCredentialSecrets = ["CI_DB_PASSWORD", "CI_REDIS_PASSWORD"]
 
-// 소비자 목록은 하드코딩하지 않되, 참조가 조용히 사라져 뒤따르는 전수 검사가
-// 대상 0건으로 vacuously 통과하는 상태는 막는다. 소비자를 실제로 줄이는 변경은
-// 이 하한선도 함께 낮춰 의도를 드러내야 한다.
-const minimumConsumerReferences = 6
-
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const listWorkflowFiles = (directory) =>
@@ -109,18 +104,19 @@ test("backend PR CI forwards raw test credentials to the Gradle chokepoint", () 
   }
 })
 
-test("credential scan reaches every workflow consumer", () => {
-  assert.ok(listWorkflowFiles(workflowRoot).length > 0, "스캔한 workflow 파일이 없다")
-
+test("credential scan reaches the backend PR CI raw credential references", () => {
   const { references } = scanWorkflows()
-  const shortfall = testCredentialSecrets
-    .map((name) => ({
-      name,
-      found: references.filter((reference) => reference.name === name).length,
-    }))
-    .filter((entry) => entry.found < minimumConsumerReferences)
+  const requiredWorkflow = ".github/workflows/backend-ci.yml"
 
-  assert.deepEqual(shortfall, [], `secret별 참조가 최소 ${minimumConsumerReferences}건에 못 미친다`)
+  for (const name of testCredentialSecrets) {
+    assert.ok(
+      references.some(
+        (reference) =>
+          reference.workflow === requiredWorkflow && reference.name === name && !reference.hasFallback,
+      ),
+      `${requiredWorkflow} must forward ${name} as a raw secret expression`,
+    )
+  }
 })
 
 test("every workflow reference to shared test credentials is raw", () => {

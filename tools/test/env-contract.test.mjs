@@ -1292,6 +1292,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_GREEN"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_WORKER"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "WEB_METRICS_TOKEN"/)
 
   const composeReadyBody = externalBackupScript.slice(
     externalBackupScript.indexOf("ensure_backup_compose_ready() {"),
@@ -1347,6 +1348,7 @@ test("external backup stages HOME_SERVER_ENV values with compose-safe quoting", 
   const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
   const workDir = mkdtempSync(path.join(tmpdir(), "aquila-compose-env-"))
   const envFile = path.join(workDir, ".env.prod")
+  const webMetricsToken = `test-web-metrics-${"m".repeat(32)}`
   writeFileSync(envFile, "ALERTMANAGER_SMTP_AUTH_PASSWORD='stale'\n")
 
   try {
@@ -1365,9 +1367,7 @@ COMPOSE_ENV_FILE="${envFile}"
 COMPOSE_ENV_FILE_TMP=""
 fail() { printf '%s\\n' "$*" >&2; exit 1; }
 ${functionSnippet}
-stage_home_server_env_key "PROD___POSTGRES__PASSWORD"
-stage_home_server_env_key "GRAFANA_ADMIN_PASSWORD"
-stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_PASSWORD"
+stage_home_server_env_compose_values
 cat "$COMPOSE_ENV_FILE"
 rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
 `,
@@ -1380,6 +1380,7 @@ rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
             "PROD___POSTGRES__PASSWORD=pa$word",
             "GRAFANA_ADMIN_PASSWORD=let's$secret\\path",
             "ALERTMANAGER_SMTP_AUTH_PASSWORD=",
+            `WEB_METRICS_TOKEN=${webMetricsToken}`,
           ].join("\n"),
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -1389,6 +1390,7 @@ rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
     assert.match(output, /^PROD___POSTGRES__PASSWORD='pa\$word'$/m)
     assert.match(output, /^GRAFANA_ADMIN_PASSWORD='let\\'s\$secret\\path'$/m)
     assert.match(output, /^ALERTMANAGER_SMTP_AUTH_PASSWORD=''$/m)
+    assert.match(output, new RegExp(`^WEB_METRICS_TOKEN='${webMetricsToken}'$`, "m"))
     assert.doesNotMatch(output, /ALERTMANAGER_SMTP_AUTH_PASSWORD='stale'/)
   } finally {
     rmSync(workDir, { force: true, recursive: true })

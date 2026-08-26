@@ -245,6 +245,7 @@ stage_home_server_env_compose_values() {
   stage_home_server_env_key "SPRING__MAIL__HOST"
   stage_home_server_env_key "SPRING__MAIL__PORT"
   stage_home_server_env_key "SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE"
+  stage_home_server_env_key "WEB_METRICS_TOKEN"
 }
 
 stage_backend_runtime_image_env_key() {

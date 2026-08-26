@@ -12,6 +12,13 @@ import org.springframework.data.repository.query.Param
 interface SearchRuntimeControlStateRepository :
     JpaRepository<SearchRuntimeControlState, SearchRuntimeControlKey>,
     SearchRuntimeControlStatePort {
+    override fun findByControlKey(controlKey: SearchRuntimeControlKey): SearchRuntimeControlState?
+
+    @Query("select state from SearchRuntimeControlState state where state.controlKey in :controlKeys")
+    override fun findAllByControlKeyIn(
+        @Param("controlKeys") controlKeys: Set<SearchRuntimeControlKey>,
+    ): List<SearchRuntimeControlState>
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select state from SearchRuntimeControlState state where state.controlKey = :controlKey")
     override fun findByControlKeyWithLock(

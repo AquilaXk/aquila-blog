@@ -23,12 +23,13 @@ class AdminOperationExecutionService(
 ) {
     @Transactional
     fun execute(operationId: UUID): AdminOperationService.OperationResult {
-        val receipt = try {
-            receiptRepository.findByOperationIdWithLock(operationId)
-                ?: throw AppException(ErrorCode.ADMIN_OPERATION_NOT_FOUND)
-        } catch (error: DataAccessException) {
-            throw AppException(ErrorCode.SERVICE_UNAVAILABLE, cause = error)
-        }
+        val receipt =
+            try {
+                receiptRepository.findByOperationIdWithLock(operationId)
+                    ?: throw AppException(ErrorCode.ADMIN_OPERATION_NOT_FOUND)
+            } catch (error: DataAccessException) {
+                throw AppException(ErrorCode.SERVICE_UNAVAILABLE, cause = error)
+            }
         if (receipt.status == AdminOperationStatus.ACCEPTED) {
             try {
                 when (receipt.action) {
@@ -46,26 +47,30 @@ class AdminOperationExecutionService(
     }
 
     private fun executeDlqReplay(receipt: AdminOperationReceipt) {
-        val replay = taskDlqReplayService.replayFailedTasksWithLock(
-            taskType = receipt.taskType?.ifBlank { null },
-            limit = requireNotNull(receipt.requestedLimit),
-            resetRetryCount = requireNotNull(receipt.resetRetryCount),
-        )
+        val replay =
+            taskDlqReplayService.replayFailedTasksWithLock(
+                taskType = receipt.taskType?.ifBlank { null },
+                limit = requireNotNull(receipt.requestedLimit),
+                resetRetryCount = requireNotNull(receipt.resetRetryCount),
+            )
         applyTerminal(receipt, replay)
     }
 
     private fun executeSearchControl(receipt: AdminOperationReceipt) {
         val key = requireNotNull(receipt.controlKey)
         val value = requireNotNull(receipt.controlValue)
-        val state = controlStateRepository.findByControlKeyWithLock(key)
-            ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE)
+        val state =
+            controlStateRepository.findByControlKeyWithLock(key)
+                ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE)
         state.apply(value, receipt.operationId)
         receipt.status = AdminOperationStatus.SUCCEEDED
-        receipt.resultCode = when (receipt.action) {
-            AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL -> AdminOperationResultCode.SEARCH_PIPELINE_FORCE_CONTROL_UPDATED
-            AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE -> AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED
-            AdminOperationAction.TASK_DLQ_REPLAY -> error("DLQ receipt cannot update search runtime control")
-        }
+        receipt.resultCode =
+            when (receipt.action) {
+                AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL -> AdminOperationResultCode.SEARCH_PIPELINE_FORCE_CONTROL_UPDATED
+                AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE ->
+                    AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED
+                AdminOperationAction.TASK_DLQ_REPLAY -> error("DLQ receipt cannot update search runtime control")
+            }
         receipt.controlVersion = state.version
     }
 

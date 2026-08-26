@@ -203,7 +203,7 @@ class AdminOperationServiceTest {
     private fun pipelineCommand(
         forceControl: Boolean? = null,
         reason: String = "search control",
-    ) =
+    ): AdminOperationService.SearchPipelineForceControlCommand =
         AdminOperationService.SearchPipelineForceControlCommand(
             operationId = UUID.fromString("f4791e0e-3857-4ef1-9fe7-2a9654a2208f"),
             actorId = 7L,

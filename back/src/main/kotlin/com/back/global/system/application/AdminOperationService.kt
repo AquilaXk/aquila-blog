@@ -90,11 +90,12 @@ class AdminOperationService(
 
     fun submitPipelineForceControl(command: SearchPipelineForceControlCommand): OperationResult {
         val reason = normalizeReason(command.reason)
-        val value = when (command.forceControl) {
-            null -> SearchRuntimeControlValue.UNSET
-            true -> SearchRuntimeControlValue.ENABLED
-            false -> SearchRuntimeControlValue.DISABLED
-        }
+        val value =
+            when (command.forceControl) {
+                null -> SearchRuntimeControlValue.UNSET
+                true -> SearchRuntimeControlValue.ENABLED
+                false -> SearchRuntimeControlValue.DISABLED
+            }
         val fingerprint =
             searchFingerprint(
                 AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
@@ -104,17 +105,17 @@ class AdminOperationService(
             )
         val receipt =
             admissionService.admit(
-                    AdminOperationReceipt(
-                        operationId = command.operationId,
-                        actorId = command.actorId,
-                        sessionRowId = command.sessionRowId,
-                        fingerprint = fingerprint,
-                        action = AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
-                        reason = reason,
-                        controlKey = SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
-                        controlValue = value,
-                    ),
-                )
+                AdminOperationReceipt(
+                    operationId = command.operationId,
+                    actorId = command.actorId,
+                    sessionRowId = command.sessionRowId,
+                    fingerprint = fingerprint,
+                    action = AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
+                    reason = reason,
+                    controlKey = SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
+                    controlValue = value,
+                ),
+            )
         ensureSameCommand(receipt, command.actorId, fingerprint)
         return if (receipt.status == AdminOperationStatus.ACCEPTED) executeAccepted(command.operationId) else receipt.toResult()
     }
@@ -131,17 +132,17 @@ class AdminOperationService(
             )
         val receipt =
             admissionService.admit(
-                    AdminOperationReceipt(
-                        operationId = command.operationId,
-                        actorId = command.actorId,
-                        sessionRowId = command.sessionRowId,
-                        fingerprint = fingerprint,
-                        action = AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
-                        reason = reason,
-                        controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
-                        controlValue = value,
-                    ),
-                )
+                AdminOperationReceipt(
+                    operationId = command.operationId,
+                    actorId = command.actorId,
+                    sessionRowId = command.sessionRowId,
+                    fingerprint = fingerprint,
+                    action = AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
+                    reason = reason,
+                    controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+                    controlValue = value,
+                ),
+            )
         ensureSameCommand(receipt, command.actorId, fingerprint)
         return if (receipt.status == AdminOperationStatus.ACCEPTED) executeAccepted(command.operationId) else receipt.toResult()
     }

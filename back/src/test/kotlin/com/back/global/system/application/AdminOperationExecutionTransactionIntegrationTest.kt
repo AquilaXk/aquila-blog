@@ -113,7 +113,10 @@ class AdminOperationExecutionTransactionIntegrationTest : BaseAdminOperationExec
         val operationId = UUID.randomUUID().also(operationIds::add)
         try {
             admissionService.admit(searchReceipt(operationId, SearchRuntimeControlValue.ENABLED))
-            jdbcTemplate.update("DELETE FROM search_runtime_control_state WHERE control_key = ?", SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL.name)
+            jdbcTemplate.update(
+                "DELETE FROM search_runtime_control_state WHERE control_key = ?",
+                SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL.name,
+            )
 
             assertThatThrownBy { executionService.execute(operationId) }
                 .extracting("errorCode")
@@ -179,7 +182,7 @@ class AdminOperationExecutionTransactionIntegrationTest : BaseAdminOperationExec
     private fun searchReceipt(
         operationId: UUID,
         value: SearchRuntimeControlValue,
-    ) =
+    ): AdminOperationReceipt =
         AdminOperationReceipt(
             operationId = operationId,
             actorId = 7L,

@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.global.system.application.SearchRuntimeControlQueryService
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -13,7 +14,6 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
@@ -40,6 +40,7 @@ class PostSearchEngineMirrorService(
     @param:Value("\${custom.post.search-engine.mirror.circuit.openSeconds:60}")
     circuitOpenSeconds: Long,
     private val objectMapper: ObjectMapper,
+    private val searchRuntimeControlQueryService: SearchRuntimeControlQueryService,
     private val meterRegistry: MeterRegistry? = null,
 ) {
     data class MirrorCircuitStatus(
@@ -58,13 +59,8 @@ class PostSearchEngineMirrorService(
     private val httpClient = sharedHttpClient(normalizedConnectTimeoutMs)
     private val consecutiveFailureCount = AtomicInteger(0)
     private val circuitOpenUntilEpochMs = AtomicLong(0L)
-    private val runtimeForceDisabled = AtomicBoolean(false)
 
-    fun setRuntimeForceDisabled(forceDisabled: Boolean) {
-        runtimeForceDisabled.set(forceDisabled)
-    }
-
-    fun isRuntimeForceDisabled(): Boolean = runtimeForceDisabled.get()
+    fun isRuntimeForceDisabled(): Boolean = searchRuntimeControlQueryService.isMirrorForceDisabled()
 
     fun getCircuitStatus(): MirrorCircuitStatus {
         val now = System.currentTimeMillis()

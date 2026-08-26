@@ -27,15 +27,15 @@ class SearchRuntimeControlTestcontainersIntegrationTest {
                 withPassword("postgres")
             }
 
-        private const val pipelineControlKey = "PIPELINE_FORCE_CONTROL"
-        private const val mirrorControlKey = "MIRROR_FORCE_DISABLE"
-        private const val unset = "UNSET"
-        private const val enabled = "ENABLED"
-        private const val disabled = "DISABLED"
-        private const val pipelineAction = "SEARCH_PIPELINE_FORCE_CONTROL"
-        private const val mirrorAction = "SEARCH_ENGINE_MIRROR_FORCE_DISABLE"
-        private const val pipelineResult = "SEARCH_PIPELINE_FORCE_CONTROL_UPDATED"
-        private const val mirrorResult = "SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED"
+        private const val PIPELINE_CONTROL_KEY = "PIPELINE_FORCE_CONTROL"
+        private const val MIRROR_CONTROL_KEY = "MIRROR_FORCE_DISABLE"
+        private const val UNSET = "UNSET"
+        private const val ENABLED = "ENABLED"
+        private const val DISABLED = "DISABLED"
+        private const val PIPELINE_ACTION = "SEARCH_PIPELINE_FORCE_CONTROL"
+        private const val MIRROR_ACTION = "SEARCH_ENGINE_MIRROR_FORCE_DISABLE"
+        private const val PIPELINE_RESULT = "SEARCH_PIPELINE_FORCE_CONTROL_UPDATED"
+        private const val MIRROR_RESULT = "SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED"
     }
 
     @Test
@@ -45,8 +45,8 @@ class SearchRuntimeControlTestcontainersIntegrationTest {
 
         assertEquals(
             listOf(
-                ControlState(mirrorControlKey, enabled, 0, null),
-                ControlState(pipelineControlKey, unset, 0, null),
+                ControlState(MIRROR_CONTROL_KEY, ENABLED, 0, null),
+                ControlState(PIPELINE_CONTROL_KEY, UNSET, 0, null),
             ),
             states(jdbcTemplate),
         )
@@ -56,26 +56,26 @@ class SearchRuntimeControlTestcontainersIntegrationTest {
         insertReceipt(
             jdbcTemplate,
             pipelineOperationId,
-            pipelineAction,
+            PIPELINE_ACTION,
             null,
             null,
             null,
-            pipelineControlKey,
-            enabled,
+            PIPELINE_CONTROL_KEY,
+            ENABLED,
             null,
             null,
         )
         insertReceipt(
             jdbcTemplate,
             mirrorOperationId,
-            mirrorAction,
+            MIRROR_ACTION,
             null,
             null,
             null,
-            mirrorControlKey,
-            disabled,
+            MIRROR_CONTROL_KEY,
+            DISABLED,
             1,
-            mirrorResult,
+            MIRROR_RESULT,
             "SUCCEEDED",
         )
         insertReceipt(
@@ -95,46 +95,46 @@ class SearchRuntimeControlTestcontainersIntegrationTest {
             jdbcTemplate.update(
                 "INSERT INTO search_runtime_control_state (control_key, control_value, version) VALUES (?, ?, 0)",
                 "UNKNOWN",
-                enabled,
+                ENABLED,
             )
         }
         assertRejected {
             jdbcTemplate.update(
                 "INSERT INTO search_runtime_control_state (control_key, control_value, version) VALUES (?, ?, 0)",
-                pipelineControlKey,
+                PIPELINE_CONTROL_KEY,
                 "UNKNOWN",
             )
         }
         assertRejected {
             jdbcTemplate.update(
                 "INSERT INTO search_runtime_control_state (control_key, control_value, version) VALUES (?, ?, 0)",
-                mirrorControlKey,
-                unset,
+                MIRROR_CONTROL_KEY,
+                UNSET,
             )
         }
         assertRejected {
             jdbcTemplate.update(
                 "UPDATE search_runtime_control_state SET version = -1 WHERE control_key = ?",
-                pipelineControlKey,
+                PIPELINE_CONTROL_KEY,
             )
         }
         assertRejected {
             jdbcTemplate.update(
                 "UPDATE search_runtime_control_state SET applied_operation_id = ? WHERE control_key = ?",
                 UUID.randomUUID(),
-                pipelineControlKey,
+                PIPELINE_CONTROL_KEY,
             )
         }
         assertRejected {
             insertReceipt(
                 jdbcTemplate,
                 UUID.randomUUID(),
-                pipelineAction,
+                PIPELINE_ACTION,
                 null,
                 null,
                 null,
-                mirrorControlKey,
-                enabled,
+                MIRROR_CONTROL_KEY,
+                ENABLED,
                 null,
                 null,
             )
@@ -143,12 +143,12 @@ class SearchRuntimeControlTestcontainersIntegrationTest {
             insertReceipt(
                 jdbcTemplate,
                 UUID.randomUUID(),
-                pipelineAction,
+                PIPELINE_ACTION,
                 "MAIL_SIGNUP",
                 1,
                 false,
-                pipelineControlKey,
-                enabled,
+                PIPELINE_CONTROL_KEY,
+                ENABLED,
                 null,
                 null,
             )
@@ -156,61 +156,66 @@ class SearchRuntimeControlTestcontainersIntegrationTest {
 
         postgres.createConnection("").use { connection ->
             connection.autoCommit = false
-            val locked = stateForUpdate(connection, pipelineControlKey)
-            assertEquals(ControlState(pipelineControlKey, unset, 0, null), locked)
+            val locked = stateForUpdate(connection, PIPELINE_CONTROL_KEY)
+            assertEquals(ControlState(PIPELINE_CONTROL_KEY, UNSET, 0, null), locked)
             assertEquals(
                 1,
-                connection.prepareStatement(
-                    """
-                    UPDATE search_runtime_control_state
-                    SET control_value = ?, version = version + 1, applied_operation_id = ?, modified_at = CURRENT_TIMESTAMP
-                    WHERE control_key = ?
-                    """.trimIndent(),
-                ).use { statement ->
-                    statement.setString(1, enabled)
-                    statement.setObject(2, pipelineOperationId)
-                    statement.setString(3, pipelineControlKey)
-                    statement.executeUpdate()
-                },
+                connection
+                    .prepareStatement(
+                        """
+                        UPDATE search_runtime_control_state
+                        SET control_value = ?, version = version + 1,
+                        applied_operation_id = ?, modified_at = CURRENT_TIMESTAMP
+                        WHERE control_key = ?
+                        """.trimIndent(),
+                    ).use { statement ->
+                        statement.setString(1, ENABLED)
+                        statement.setObject(2, pipelineOperationId)
+                        statement.setString(3, PIPELINE_CONTROL_KEY)
+                        statement.executeUpdate()
+                    },
             )
             assertEquals(
                 1,
-                connection.prepareStatement(
-                    "UPDATE admin_operation_receipt SET status = ?, result_code = ?, control_version = ? WHERE operation_id = ?",
-                ).use { statement ->
-                    statement.setString(1, "SUCCEEDED")
-                    statement.setString(2, pipelineResult)
-                    statement.setInt(3, 1)
-                    statement.setObject(4, pipelineOperationId)
-                    statement.executeUpdate()
-                },
+                connection
+                    .prepareStatement(
+                        "UPDATE admin_operation_receipt SET status = ?, result_code = ?, " +
+                            "control_version = ? WHERE operation_id = ?",
+                    ).use { statement ->
+                        statement.setString(1, "SUCCEEDED")
+                        statement.setString(2, PIPELINE_RESULT)
+                        statement.setInt(3, 1)
+                        statement.setObject(4, pipelineOperationId)
+                        statement.executeUpdate()
+                    },
             )
             connection.commit()
         }
 
         postgres.createConnection("").use { connection ->
             assertEquals(
-                ControlState(pipelineControlKey, enabled, 1, pipelineOperationId),
-                state(connection, pipelineControlKey),
+                ControlState(PIPELINE_CONTROL_KEY, ENABLED, 1, pipelineOperationId),
+                state(connection, PIPELINE_CONTROL_KEY),
             )
-            connection.prepareStatement(
-                "SELECT status, result_code, control_key, control_value, control_version FROM admin_operation_receipt WHERE operation_id = ?",
-            ).use { statement ->
-                statement.setObject(1, pipelineOperationId)
-                statement.executeQuery().use { result ->
-                    assertEquals(true, result.next())
-                    assertEquals("SUCCEEDED", result.getString("status"))
-                    assertEquals(pipelineResult, result.getString("result_code"))
-                    assertEquals(pipelineControlKey, result.getString("control_key"))
-                    assertEquals(enabled, result.getString("control_value"))
-                    assertEquals(1, result.getInt("control_version"))
+            connection
+                .prepareStatement(
+                    "SELECT status, result_code, control_key, control_value, " +
+                        "control_version FROM admin_operation_receipt WHERE operation_id = ?",
+                ).use { statement ->
+                    statement.setObject(1, pipelineOperationId)
+                    statement.executeQuery().use { result ->
+                        assertEquals(true, result.next())
+                        assertEquals("SUCCEEDED", result.getString("status"))
+                        assertEquals(PIPELINE_RESULT, result.getString("result_code"))
+                        assertEquals(PIPELINE_CONTROL_KEY, result.getString("control_key"))
+                        assertEquals(ENABLED, result.getString("control_value"))
+                        assertEquals(1, result.getInt("control_version"))
+                    }
                 }
-            }
         }
     }
 
-    private fun dataSource() =
-        DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+    private fun dataSource(): DriverManagerDataSource = DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
 
     private fun migrate() {
         Flyway
@@ -276,39 +281,43 @@ class SearchRuntimeControlTestcontainersIntegrationTest {
         connection: Connection,
         controlKey: String,
     ): ControlState =
-        connection.prepareStatement(
-            "SELECT control_key, control_value, version, applied_operation_id FROM search_runtime_control_state WHERE control_key = ? FOR UPDATE",
-        ).use { statement ->
-            statement.setString(1, controlKey)
-            statement.executeQuery().use { result ->
-                assertEquals(true, result.next())
-                ControlState(
-                    result.getString("control_key"),
-                    result.getString("control_value"),
-                    result.getLong("version"),
-                    result.getObject("applied_operation_id", UUID::class.java),
-                )
+        connection
+            .prepareStatement(
+                "SELECT control_key, control_value, version, applied_operation_id " +
+                    "FROM search_runtime_control_state WHERE control_key = ? FOR UPDATE",
+            ).use { statement ->
+                statement.setString(1, controlKey)
+                statement.executeQuery().use { result ->
+                    assertEquals(true, result.next())
+                    ControlState(
+                        result.getString("control_key"),
+                        result.getString("control_value"),
+                        result.getLong("version"),
+                        result.getObject("applied_operation_id", UUID::class.java),
+                    )
+                }
             }
-        }
 
     private fun state(
         connection: Connection,
         controlKey: String,
     ): ControlState =
-        connection.prepareStatement(
-            "SELECT control_key, control_value, version, applied_operation_id FROM search_runtime_control_state WHERE control_key = ?",
-        ).use { statement ->
-            statement.setString(1, controlKey)
-            statement.executeQuery().use { result ->
-                assertEquals(true, result.next())
-                ControlState(
-                    result.getString("control_key"),
-                    result.getString("control_value"),
-                    result.getLong("version"),
-                    result.getObject("applied_operation_id", UUID::class.java),
-                )
+        connection
+            .prepareStatement(
+                "SELECT control_key, control_value, version, applied_operation_id " +
+                    "FROM search_runtime_control_state WHERE control_key = ?",
+            ).use { statement ->
+                statement.setString(1, controlKey)
+                statement.executeQuery().use { result ->
+                    assertEquals(true, result.next())
+                    ControlState(
+                        result.getString("control_key"),
+                        result.getString("control_value"),
+                        result.getLong("version"),
+                        result.getObject("applied_operation_id", UUID::class.java),
+                    )
+                }
             }
-        }
 
     private fun java.sql.PreparedStatement.setNullableString(
         index: Int,

@@ -28,6 +28,7 @@ import org.assertj.core.api.Assertions.catchThrowable
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.springframework.data.domain.Pageable
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.time.Clock
@@ -118,10 +119,37 @@ class PostReadModelTaskEventListenerTest {
             .doesNotContain("actorDto")
     }
 
-    private fun createListener(taskFacade: TaskFacade): PostReadModelTaskEventListener =
+    @Test
+    @DisplayName("search index task는 legacy forceClear payload 값 대신 current post sync만 호출한다")
+    fun `search index task ignores legacy force clear payload field`() {
+        val searchIndexSyncService = mock(PostSearchIndexSyncService::class.java)
+        val listener =
+            createListener(
+                taskFacade = mock(TaskFacade::class.java),
+                postSearchIndexSyncService = searchIndexSyncService,
+            )
+        val payload =
+            PostSearchIndexSyncPayload(
+                uid = UUID.randomUUID(),
+                aggregateType = "Post",
+                aggregateId = 92L,
+                postId = 92L,
+                forceClear = true,
+                enqueuedAtEpochMs = System.currentTimeMillis(),
+            )
+
+        listener.handle(payload)
+
+        verify(searchIndexSyncService).sync(92L)
+    }
+
+    private fun createListener(
+        taskFacade: TaskFacade,
+        postSearchIndexSyncService: PostSearchIndexSyncService = mock(PostSearchIndexSyncService::class.java),
+    ): PostReadModelTaskEventListener =
         PostReadModelTaskEventListener(
             taskFacade = taskFacade,
-            postSearchIndexSyncService = mock(PostSearchIndexSyncService::class.java),
+            postSearchIndexSyncService = postSearchIndexSyncService,
             postSearchEngineMirrorService = mock(PostSearchEngineMirrorService::class.java),
             postReadPrewarmService = mock(PostReadPrewarmService::class.java),
             meterRegistry = null,

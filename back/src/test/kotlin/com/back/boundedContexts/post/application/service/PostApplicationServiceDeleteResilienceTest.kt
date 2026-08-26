@@ -107,10 +107,7 @@ class PostApplicationServiceDeleteResilienceTest {
         )
     private val postTagIndexService =
         PostTagIndexService(
-            postRepository = postRepository,
             postTagIndexRepository = postTagIndexRepository,
-            postAttrRepository = postAttrRepository,
-            tagsLocalCacheTtlSeconds = 180,
         )
     private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository)
     private val postInteractionSideEffectQueue = PostInteractionSideEffectQueue(taskFacade)
@@ -214,7 +211,7 @@ class PostApplicationServiceDeleteResilienceTest {
             AdmDeletedPostSnapshotDto(
                 id = 21,
                 title = "복구 대상",
-                content = "복구 본문 #tag",
+                content = "tags: tag\n\n복구 본문",
                 authorId = 3,
                 published = true,
                 listed = true,
@@ -232,7 +229,7 @@ class PostApplicationServiceDeleteResilienceTest {
                         apiKey = "restored-author-api-key",
                     ),
                 title = "복구 대상",
-                content = "복구 본문 #tag",
+                content = "tags: tag\n\n복구 본문",
                 published = true,
                 listed = true,
             )
@@ -253,6 +250,7 @@ class PostApplicationServiceDeleteResilienceTest {
         // then
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
         then(postRecommendFeatureStoreService).should().refresh(restoredPost)
+        then(postTagIndexRepository).should().replacePostTags(21, listOf("tag"))
     }
 
     @Test

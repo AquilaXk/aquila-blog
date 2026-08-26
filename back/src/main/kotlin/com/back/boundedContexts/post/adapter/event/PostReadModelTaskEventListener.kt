@@ -114,10 +114,7 @@ class PostReadModelTaskEventListener(
 
         val startedAtNanos = System.nanoTime()
         runCatching {
-            postSearchIndexSyncService.sync(
-                postId = payload.postId,
-                forceClear = payload.forceClear,
-            )
+            postSearchIndexSyncService.sync(payload.postId)
         }.onSuccess {
             meterRegistry?.counter("post.search_index.task.result", "status", "success")?.increment()
             val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000

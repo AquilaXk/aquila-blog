@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.persistence
 
-import org.assertj.core.api.Assertions.assertThat
+import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.any
@@ -16,25 +17,21 @@ import org.mockito.Mockito.`when`
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.ParameterizedPreparedStatementSetter
-import org.springframework.transaction.PlatformTransactionManager
-import org.springframework.transaction.TransactionDefinition
-import org.springframework.transaction.TransactionException
-import org.springframework.transaction.TransactionStatus
-import org.springframework.transaction.support.SimpleTransactionStatus
+import org.springframework.jdbc.core.RowMapper
 
 @DisplayName("PostTagIndexJdbcRepository replace 트랜잭션")
 class PostTagIndexJdbcRepositoryTest {
     @Test
-    @DisplayName("insert 실패 시 트랜잭션을 rollback 하고 wipe 상태를 남기지 않는다")
-    fun rollsBackWhenInsertFailsAfterDelete() {
+    @DisplayName("insert 실패는 caller transaction으로 전파하고 이후 호출도 숨기지 않는다")
+    fun propagatesInsertFailureWithoutDisablingCanonicalPath() {
         val jdbcTemplate = mock(JdbcTemplate::class.java)
-        val transactionManager = TrackingTransactionManager()
         `when`(
-            jdbcTemplate.queryForObject(
-                "SELECT to_regclass('public.post_tag_index') IS NOT NULL",
-                Boolean::class.java,
+            jdbcTemplate.query(
+                anyString(),
+                any<RowMapper<PostTagIndexRepositoryPort.LockedPostSource>>(),
+                eq(10L),
             ),
-        ).thenReturn(true)
+        ).thenReturn(listOf(PostTagIndexRepositoryPort.LockedPostSource("content", deleted = false)))
         `when`(jdbcTemplate.update(anyString(), eq(10L))).thenReturn(1)
         doThrow(DataAccessResourceFailureException("insert failed"))
             .`when`(jdbcTemplate)
@@ -45,13 +42,11 @@ class PostTagIndexJdbcRepositoryTest {
                 any<ParameterizedPreparedStatementSetter<String>>(),
             )
 
-        val repository = PostTagIndexJdbcRepository(jdbcTemplate, transactionManager)
+        val repository = PostTagIndexJdbcRepository(jdbcTemplate)
 
-        repository.replacePostTags(10L, listOf("kotlin"))
+        assertThatThrownBy { repository.replacePostTags(10L, listOf("kotlin")) }
+            .isInstanceOf(DataAccessResourceFailureException::class.java)
 
-        assertThat(transactionManager.rollbackCount).isEqualTo(1)
-        assertThat(transactionManager.commitCount).isEqualTo(0)
-        assertThat(transactionManager.lastPropagation).isEqualTo(TransactionDefinition.PROPAGATION_REQUIRES_NEW)
         verify(jdbcTemplate, times(1)).update(anyString(), eq(10L))
         verify(jdbcTemplate, times(1)).batchUpdate(
             anyString(),
@@ -60,35 +55,33 @@ class PostTagIndexJdbcRepositoryTest {
             any<ParameterizedPreparedStatementSetter<String>>(),
         )
 
-        // marked unavailable after failure; subsequent replace is a no-op
-        repository.replacePostTags(10L, listOf("spring"))
-        verify(jdbcTemplate, times(1)).update(anyString(), eq(10L))
-        verify(jdbcTemplate, times(1)).batchUpdate(
-            anyString(),
-            anyList(),
-            anyInt(),
-            any<ParameterizedPreparedStatementSetter<String>>(),
-        )
+        assertThatThrownBy { repository.replacePostTags(10L, listOf("spring")) }
+            .isInstanceOf(DataAccessResourceFailureException::class.java)
+        verify(jdbcTemplate, times(2)).update(anyString(), eq(10L))
     }
 
-    private class TrackingTransactionManager : PlatformTransactionManager {
-        var commitCount = 0
-        var rollbackCount = 0
-        var lastPropagation: Int? = null
+    @Test
+    @DisplayName("missing post는 empty replace만 idempotent하게 허용한다")
+    fun allowsOnlyEmptyReplaceForMissingPost() {
+        val jdbcTemplate = mock(JdbcTemplate::class.java)
+        `when`(
+            jdbcTemplate.query(
+                anyString(),
+                any<RowMapper<PostTagIndexRepositoryPort.LockedPostSource>>(),
+                eq(11L),
+            ),
+        ).thenReturn(emptyList())
+        val repository = PostTagIndexJdbcRepository(jdbcTemplate)
 
-        override fun getTransaction(definition: TransactionDefinition?): TransactionStatus {
-            lastPropagation = definition?.propagationBehavior
-            return SimpleTransactionStatus()
-        }
+        repository.replacePostTags(11L, emptyList())
 
-        @Throws(TransactionException::class)
-        override fun commit(status: TransactionStatus) {
-            commitCount += 1
-        }
-
-        @Throws(TransactionException::class)
-        override fun rollback(status: TransactionStatus) {
-            rollbackCount += 1
-        }
+        assertThatThrownBy { repository.replacePostTags(11L, listOf("unexpected")) }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("missing postId=11")
+        verify(jdbcTemplate, times(2)).query(
+            anyString(),
+            any<RowMapper<PostTagIndexRepositoryPort.LockedPostSource>>(),
+            eq(11L),
+        )
     }
 }

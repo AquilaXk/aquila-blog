@@ -275,7 +275,7 @@ class PostApplicationService(
                 ),
             )
             postRepository.flush()
-            postTagIndexService.syncMetaTagIndexAttr(post)
+            postTagIndexService.syncPostTags(post)
             if (wasTempDraft) {
                 postTempDraftService.updateTempDraftMarker(post.author, null)
             }
@@ -364,7 +364,7 @@ class PostApplicationService(
                 contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
             ).also { it.applyResolvedSummary(resolvedSummary) }
         val savedPost = postRepository.saveAndFlush(post)
-        postTagIndexService.syncMetaTagIndexAttr(savedPost)
+        postTagIndexService.syncPostTags(savedPost)
         postCounterService.incrementMemberPostsCount(persistenceAuthor)
         return savedPost
     }
@@ -837,6 +837,7 @@ class PostApplicationService(
         val restoredPost =
             postRepository.findById(id).getOrNull()
                 ?: throw AppException(ErrorCode.NOT_FOUND, "복구된 글을 확인할 수 없습니다.")
+        postTagIndexService.syncPostTags(restoredPost)
         val restoredTags = postTagIndexService.extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
         publishPostWriteAfterCommitEvent(
@@ -1028,9 +1029,6 @@ class PostApplicationService(
         command: PostWriteSideEffectCommand,
         domainEvent: EventPayload? = null,
     ) {
-        if (command.cacheInvalidationScope.evictsPublicTags()) {
-            postTagIndexService.evictPublicTagCountsCache()
-        }
         taskFacade.addToQueue(command.toTaskPayload(domainEvent))
     }
 

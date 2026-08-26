@@ -406,7 +406,6 @@ custom:
             requestTimeoutMs: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__REQUEST_TIMEOUT_MS:800}
     search-index:
       async-sync-enabled: ${CUSTOM__POST__SEARCH_INDEX__ASYNC_SYNC_ENABLED:true}
-      max-tags: ${CUSTOM__POST__SEARCH_INDEX__MAX_TAGS:32}
       sla:
         maxLagSeconds: ${CUSTOM__POST__SEARCH_INDEX__SLA__MAX_LAG_SECONDS:120}
     search-engine:
@@ -435,7 +434,6 @@ custom:
       tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:6}
       detail-content-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_CONTENT_CACHE_MAX_CHARS:120000}
       detail-snapshot-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_SNAPSHOT_CACHE_MAX_CHARS:180000}
-      tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
     idempotency:
       retentionDays: ${CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS:30}
       cleanup:

@@ -1,38 +1,28 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
-import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
 import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.PostAttr
-import com.back.boundedContexts.post.domain.postMixin.META_TAGS_INDEX
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.BDDMockito.willThrow
 import org.mockito.Mockito.mock
-import org.mockito.Mockito.never
-import org.mockito.Mockito.times
 
 @DisplayName("PostTagIndexService 테스트")
 class PostTagIndexServiceTest {
-    private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postTagIndexRepository: PostTagIndexRepositoryPort = mock(PostTagIndexRepositoryPort::class.java)
-    private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
-    private val service =
-        PostTagIndexService(
-            postRepository = postRepository,
-            postTagIndexRepository = postTagIndexRepository,
-            postAttrRepository = postAttrRepository,
-            tagsLocalCacheTtlSeconds = 180,
-        )
+    private val service = PostTagIndexService(postTagIndexRepository)
 
     @Test
-    @DisplayName("공개 태그 집계는 repository 결과를 캐시하고 명시 evict 뒤 다시 조회한다")
-    fun cachePublicTagCountsUntilEvicted() {
+    @DisplayName("공개 태그 집계는 매 요청 canonical repository 결과를 반환한다")
+    fun loadPublicTagCountsFromCanonicalRepositoryOnEachRequest() {
         // given
         given(postTagIndexRepository.findAllPublicTagCounts())
             .willReturn(
@@ -44,84 +34,72 @@ class PostTagIndexServiceTest {
 
         // when
         val first = service.getPublicTagCounts()
-        val cached = service.getPublicTagCounts()
-        service.evictPublicTagCountsCache()
-        val refreshed = service.getPublicTagCounts()
+        val second = service.getPublicTagCounts()
 
         // then
         assertThat(first.map { it.tag }).containsExactly("spring", "kotlin")
-        assertThat(cached).isSameAs(first)
-        assertThat(refreshed.map { it.count }).containsExactly(3, 2)
-        then(postTagIndexRepository).should(times(2)).findAllPublicTagCounts()
+        assertThat(second.map { it.count }).containsExactly(3, 2)
+        then(postTagIndexRepository).should(org.mockito.Mockito.times(2)).findAllPublicTagCounts()
     }
 
     @Test
-    @DisplayName("집계 repository 실패 시 legacy metaTagsIndex 값으로 fallback한다")
-    fun fallbackToLegacyTagIndexRows() {
+    @DisplayName("집계 repository 실패는 legacy 조회 없이 전파한다")
+    fun propagateCanonicalTagCountFailure() {
         // given
-        given(postTagIndexRepository.findAllPublicTagCounts()).willThrow(RuntimeException("aggregate unavailable"))
-        given(postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX))
-            .willReturn(listOf("|spring|kotlin|", "|spring|", "| kotlin |spring|"))
-
-        // when
-        val result = service.getPublicTagCounts()
+        val failure = RuntimeException("aggregate unavailable")
+        given(postTagIndexRepository.findAllPublicTagCounts()).willThrow(failure)
 
         // then
-        assertThat(result.map { it.tag to it.count })
-            .containsExactly("spring" to 3, "kotlin" to 2)
+        assertThat(assertThrows<RuntimeException> { service.getPublicTagCounts() }).isSameAs(failure)
     }
 
     @Test
-    @DisplayName("legacy index도 비어 있으면 빈 태그 집계를 반환한다")
-    fun fallbackEmptyLegacyRows() {
-        // given
-        given(postTagIndexRepository.findAllPublicTagCounts()).willThrow(RuntimeException("aggregate unavailable"))
-        given(postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX)).willReturn(emptyList())
-
-        // when
-        val result = service.getPublicTagCounts()
-
-        // then
-        assertThat(result).isEmpty()
-    }
-
-    @Test
-    @DisplayName("본문 태그를 attr와 정규화 테이블에 동기화하고 replace 실패는 전파하지 않는다")
-    fun syncMetaTagIndexAttrAndSuppressReplaceFailure() {
+    @DisplayName("본문 태그를 canonical 정규화 테이블에만 동기화한다")
+    fun syncPostTagsToCanonicalIndexOnly() {
         // given
         val post = testPost(content = "tags: kotlin, spring, kotlin\n\n본문")
-        val attr = PostAttr(1, post, META_TAGS_INDEX, "")
-        given(postAttrRepository.findBySubjectAndName(post, META_TAGS_INDEX)).willReturn(attr)
-        given(postAttrRepository.save(attr)).willReturn(attr)
-        willThrow(RuntimeException("tag table unavailable"))
-            .given(postTagIndexRepository)
-            .replacePostTags(post.id, listOf("kotlin", "spring"))
 
         // when
-        service.syncMetaTagIndexAttr(post)
+        service.syncPostTags(post)
 
         // then
-        assertThat(attr.strValue).isEqualTo("|kotlin|spring|")
-        then(postAttrRepository).should().save(attr)
         then(postTagIndexRepository).should().replacePostTags(post.id, listOf("kotlin", "spring"))
     }
 
     @Test
-    @DisplayName("태그가 없고 기존 attr 값이 같으면 attr 저장 없이 정규화 테이블만 갱신한다")
-    fun syncEmptyTagsWithoutSavingSameAttr() {
+    @DisplayName("canonical replace 실패는 억제하지 않고 전파한다")
+    fun propagateCanonicalTagWriteFailure() {
         // given
-        val post = testPost(content = "본문만 있음")
-        val attr = PostAttr(1, post, META_TAGS_INDEX, "")
-        given(postAttrRepository.findBySubjectAndName(post, META_TAGS_INDEX)).willReturn(attr)
-
-        // when
-        service.syncMetaTagIndexAttr(post)
+        val post = testPost(content = "tags: kotlin\n\n본문")
+        val failure = RuntimeException("tag table unavailable")
+        willThrow(failure).given(postTagIndexRepository).replacePostTags(post.id, listOf("kotlin"))
 
         // then
-        assertThat(attr.strValue).isEqualTo("")
-        then(postAttrRepository).should().findBySubjectAndName(post, META_TAGS_INDEX)
-        then(postAttrRepository).should(never()).save(attr)
-        then(postTagIndexRepository).should().replacePostTags(post.id, emptyList())
+        assertThat(assertThrows<RuntimeException> { service.syncPostTags(post) }).isSameAs(failure)
+    }
+
+    @Test
+    @DisplayName("trim 정규화 뒤 정확히 80 code point인 태그는 canonical repository에 전달한다")
+    fun syncsNormalizedTagAtMaximumLength() {
+        val tag = "\uD83D\uDE00".repeat(80)
+        val post = testPost(content = "tags:  $tag  \n\n본문")
+
+        service.syncPostTags(post)
+
+        then(postTagIndexRepository).should().replacePostTags(post.id, listOf(tag))
+    }
+
+    @Test
+    @DisplayName("trim 정규화 뒤 81 code point인 태그는 repository 호출 전 BAD_REQUEST로 거절한다")
+    fun rejectsNormalizedTagOverMaximumLengthBeforeRepositoryCall() {
+        val post = testPost(content = "tags: ${"\uD83D\uDE00".repeat(81)}\n\n본문")
+
+        assertThatThrownBy { service.syncPostTags(post) }
+            .isInstanceOfSatisfying(AppException::class.java) { exception ->
+                assertThat(exception.errorCode).isEqualTo(ErrorCode.BAD_REQUEST)
+            }
+
+        then(postTagIndexRepository).shouldHaveNoInteractions()
     }
 
     private fun testPost(content: String): Post =

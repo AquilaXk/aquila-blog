@@ -183,8 +183,6 @@ internal sealed class PostReadCacheInvalidationScope(
 
     fun evicts(target: PostReadCacheInvalidationTarget): Boolean = target in targetSet
 
-    fun evictsPublicTags(): Boolean = evicts(PostReadCacheInvalidationTarget.PUBLIC_TAGS)
-
     fun isEmpty(): Boolean = targetSet.isEmpty()
 
     companion object {

@@ -454,6 +454,27 @@ const appendExporterMetrics = (prometheus, { exporterUp, lastSuccessAt, lastErro
   return `${lines.join("\n")}\n`
 }
 
+export const createRefreshFailureState = (latest, error, baseUrl) => {
+  const lastError = error instanceof Error ? error.message : String(error)
+  const report = {
+    baseUrl: baseUrl || latest.report?.baseUrl || "",
+    probedAt: new Date().toISOString(),
+    routes: [],
+    overall: {
+      ok: false,
+      failureReason: lastError,
+      firstRequestCache: { total: 0, counts: {} },
+    },
+  }
+  const markdown = toMarkdownReport(report)
+  const prometheus = appendExporterMetrics(toPrometheusText(report), {
+    exporterUp: false,
+    lastSuccessAt: latest.lastSuccessAt,
+    lastError,
+  })
+  return { report, markdown, prometheus, lastError, lastSuccessAt: latest.lastSuccessAt }
+}
+
 const probeRoute = async ({ baseUrl, route, requestsPerRoute, timeoutMs, state }) => {
   const samples = []
   let buildId = ""
@@ -678,27 +699,7 @@ const startServer = async (args) => {
         lastSuccessAt,
       }
     } catch (error) {
-      const lastError = error instanceof Error ? error.message : String(error)
-      const fallbackReport = latest.report || {
-        baseUrl: args.baseUrl,
-        probedAt: new Date().toISOString(),
-        routes: [],
-        overall: {
-          ok: false,
-          failureReason: lastError,
-          firstRequestCache: { total: 0, counts: {} },
-        },
-      }
-      latest = {
-        ...latest,
-        report: fallbackReport,
-        lastError,
-        prometheus: appendExporterMetrics(toPrometheusText(fallbackReport), {
-          exporterUp: false,
-          lastSuccessAt: latest.lastSuccessAt,
-          lastError,
-        }),
-      }
+      latest = createRefreshFailureState(latest, error, args.baseUrl)
       console.error(`[public-edge-probe] refresh failed: ${latest.lastError}`)
     } finally {
       refreshing = false

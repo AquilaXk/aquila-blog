@@ -12,6 +12,7 @@ import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.system.adapter.web.ApiV1AdmSystemController
 import com.back.global.system.application.AdminDashboardSnapshotService
+import com.back.global.system.application.AdminOperationService
 import com.back.global.system.application.AdminSystemHealthSnapshotService
 import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskQueueDiagnosticsService
@@ -70,6 +71,9 @@ abstract class BaseAdmSystemControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean
     protected lateinit var taskDlqReplayService: TaskDlqReplayService
+
+    @MockitoBean
+    protected lateinit var adminOperationService: AdminOperationService
 
     @MockitoBean
     protected lateinit var uploadedFileRetentionService: UploadedFileRetentionService

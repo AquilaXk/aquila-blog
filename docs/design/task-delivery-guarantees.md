@@ -13,7 +13,7 @@
 | Scheduler/worker | `back/src/main/kotlin/com/back/global/task/adapter/scheduler/TaskProcessingScheduledJob.kt` |
 | Retry policy | `back/src/main/kotlin/com/back/global/task/application/TaskRetryPolicy.kt` |
 | Handler context | `back/src/main/kotlin/com/back/global/task/application/TaskExecutionContextHolder.kt` |
-| DLQ replay | `back/src/main/kotlin/com/back/global/task/application/TaskDlqReplayService.kt` |
+| DLQ replay | `POST /system/api/v1/adm/operations/task-dlq-replay` + durable `admin_operation_receipt` |
 | Retention cleanup | `back/src/main/kotlin/com/back/global/task/application/TaskRetentionService.kt` |
 | 운영 API | `back/src/main/kotlin/com/back/global/system/adapter/web/ApiV1AdmSystemController.kt` |
 | Post write task | `back/src/main/kotlin/com/back/boundedContexts/post/application/service/PostWriteSideEffectCommand.kt` |
@@ -61,8 +61,8 @@
 ## 실패 후 수동 복구
 
 1. 운영 API `GET /system/api/v1/adm/tasks`로 pending/processing/failed/stale 상태를 확인한다.
-2. payload가 아직 redact되지 않은 FAILED task만 `POST /system/api/v1/adm/tasks/replay-failed`로 재투입한다.
-3. replay 요청에서 `taskType`을 지정하면 특정 handler만 재시도한다.
+2. payload가 아직 redact되지 않은 FAILED task만 새 UUID `operationId`와 bounded `reason`을 포함한 `POST /system/api/v1/adm/operations/task-dlq-replay`로 재투입한다.
+3. replay 요청에서 `taskType`을 지정하면 특정 handler만 재시도하고, 같은 actor는 `GET /system/api/v1/adm/operations/{operationId}`로 현재 결과를 조회한다.
 4. `resetRetryCount=true`는 retry count를 0으로 되돌리고, `false`는 `maxRetries - 1` 이하로 보정한다.
 5. replay된 task는 `PENDING`, `nextRetryAt=now`, `errorMessage=manual-dlq-replay@...`로 저장된다.
 
@@ -82,5 +82,5 @@
 
 - handler 내부에서 payload UID를 무시하고 non-idempotent external side effect를 직접 수행하면 안 된다.
 - timeout 이후 동일 side effect가 다시 실행될 수 있으므로 외부 시스템 호출은 task UID, aggregate ID, event UID 중 하나로 중복 방지되어야 한다.
-- `PROCESSING` row를 DB에서 직접 수정해 lease를 우회하지 않는다. 수동 복구는 DLQ replay API 또는 stale recovery 경로를 사용한다.
+- `PROCESSING` row를 DB에서 직접 수정해 lease를 우회하지 않는다. DLQ replay는 stable operation ID, server actor, bounded reason으로 접수되며 `FAILED` row를 `FOR UPDATE SKIP LOCKED`로 claim한다. receipt terminal 결과는 row 전이 결과이며 downstream handler 완료를 뜻하지 않는다.
 - queue/diagnostics/handler 장애를 inline 실행, alternate transport/provider, legacy/raw/default decoder, search tag fallback, unknown-event success로 우회하지 않는다.

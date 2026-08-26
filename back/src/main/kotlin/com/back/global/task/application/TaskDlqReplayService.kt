@@ -1,18 +1,18 @@
 package com.back.global.task.application
 
+import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
-import com.back.global.task.domain.TaskStatus
 import io.micrometer.core.instrument.MeterRegistry
-import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Instant
 
 data class TaskDlqReplayResult(
     val taskType: String?,
     val requestedLimit: Int,
+    val selectedCount: Int,
     val replayedCount: Int,
+    val quarantinedCount: Int,
     val resetRetryCount: Boolean,
     val replayedTaskIds: List<Long>,
 )
@@ -24,47 +24,48 @@ data class TaskDlqReplayResult(
 @Service
 class TaskDlqReplayService(
     private val taskQueueRepository: TaskQueueRepositoryPort,
+    private val taskDlqReplayRepository: TaskDlqReplayRepositoryPort,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
     private val clock: Clock,
     private val meterRegistry: MeterRegistry? = null,
 ) {
-    @Transactional
-    fun replayFailedTasks(
+    fun replayFailedTasksWithLock(
         taskType: String?,
         limit: Int,
         resetRetryCount: Boolean,
     ): TaskDlqReplayResult {
-        val safeLimit = limit.coerceIn(1, 200)
+        require(limit in 1..200) { "DLQ replay limit must be between 1 and 200" }
+        val safeLimit = limit
         val normalizedTaskType = taskType?.trim()?.takeIf { it.isNotBlank() }
         val now = Instant.now(clock)
         val failedTasks =
             if (normalizedTaskType == null) {
-                taskQueueRepository.findByStatusOrderByModifiedAtDesc(TaskStatus.FAILED, PageRequest.of(0, safeLimit))
+                taskDlqReplayRepository.findFailedTasksWithLock(null, safeLimit)
             } else {
-                taskQueueRepository.findByTaskTypeAndStatusOrderByModifiedAtDesc(
-                    normalizedTaskType,
-                    TaskStatus.FAILED,
-                    PageRequest.of(0, safeLimit),
-                )
+                taskDlqReplayRepository.findFailedTasksWithLock(normalizedTaskType, safeLimit)
             }
 
         if (failedTasks.isEmpty()) {
             return TaskDlqReplayResult(
                 taskType = normalizedTaskType,
                 requestedLimit = safeLimit,
+                selectedCount = 0,
                 replayedCount = 0,
+                quarantinedCount = 0,
                 resetRetryCount = resetRetryCount,
                 replayedTaskIds = emptyList(),
             )
         }
 
         val replayedIds = mutableListOf<Long>()
+        var quarantinedCount = 0
         failedTasks.forEach { task ->
             val entry = taskHandlerRegistry.getEntry(task.taskType)
             if (entry == null) {
                 task.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
                 taskQueueRepository.save(task)
+                quarantinedCount++
                 recordTaskQuarantine(task.taskType, TaskQuarantineReason.UNKNOWN_TASK_TYPE)
                 return@forEach
             }
@@ -83,6 +84,7 @@ class TaskDlqReplayService(
             } catch (exception: TaskPayloadQuarantineException) {
                 task.markAsQuarantined(exception.reason.name, now)
                 taskQueueRepository.save(task)
+                quarantinedCount++
                 recordTaskQuarantine(task.taskType, exception.reason)
                 return@forEach
             }
@@ -102,7 +104,9 @@ class TaskDlqReplayService(
         return TaskDlqReplayResult(
             taskType = normalizedTaskType,
             requestedLimit = safeLimit,
+            selectedCount = failedTasks.size,
             replayedCount = replayedIds.size,
+            quarantinedCount = quarantinedCount,
             resetRetryCount = resetRetryCount,
             replayedTaskIds = replayedIds,
         )

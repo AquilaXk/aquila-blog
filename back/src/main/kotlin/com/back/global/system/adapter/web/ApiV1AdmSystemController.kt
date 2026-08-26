@@ -14,14 +14,20 @@ import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.system.application.AdminDashboardSnapshot
 import com.back.global.system.application.AdminDashboardSnapshotService
+import com.back.global.system.application.AdminOperationService
 import com.back.global.system.application.AdminSystemHealthSnapshotService
-import com.back.global.task.application.TaskDlqReplayResult
-import com.back.global.task.application.TaskDlqReplayService
+import com.back.global.system.model.AdminOperationAction
+import com.back.global.system.model.AdminOperationResultCode
+import com.back.global.system.model.AdminOperationStatus
 import com.back.global.task.application.TaskQueueDiagnostics
 import com.back.global.task.application.TaskQueueDiagnosticsService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Size
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -34,6 +40,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
 
 /**
  * ApiV1AdmSystemController는 글로벌 운영 API 요청을 처리하는 웹 어댑터입니다.
@@ -46,7 +53,7 @@ class ApiV1AdmSystemController(
     private val signupMailDiagnosticsService: SignupMailDiagnosticsService,
     private val memberNotificationSseService: MemberNotificationSseService,
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
-    private val taskDlqReplayService: TaskDlqReplayService,
+    private val adminOperationService: AdminOperationService,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
     private val postSearchEngineMirrorService: PostSearchEngineMirrorService,
@@ -79,10 +86,34 @@ class ApiV1AdmSystemController(
         val email: String,
     )
 
-    data class TaskDlqReplayRequest(
+    data class TaskDlqReplayOperationRequest(
+        @field:NotNull
+        val operationId: UUID,
+        @field:NotBlank
+        @field:Size(min = 1, max = 200)
+        val reason: String,
+        @field:Size(max = 120)
         val taskType: String? = null,
+        @field:Min(1)
+        @field:Max(200)
         val limit: Int = 50,
         val resetRetryCount: Boolean = true,
+    )
+
+    data class AdminOperationResBody(
+        val operationId: UUID,
+        val actorId: Long,
+        val sessionRowId: Long?,
+        val action: AdminOperationAction,
+        val target: String,
+        val reason: String,
+        val status: AdminOperationStatus,
+        val resultCode: AdminOperationResultCode?,
+        val selectedCount: Int,
+        val replayedCount: Int,
+        val quarantinedCount: Int,
+        val createdAt: java.time.Instant,
+        val modifiedAt: java.time.Instant,
     )
 
     data class SearchPipelineForceControlRequest(
@@ -162,24 +193,58 @@ class ApiV1AdmSystemController(
     @Transactional(readOnly = true)
     fun notificationStreamDiagnostics(): MemberNotificationSseService.StreamDiagnostics = memberNotificationSseService.diagnostics()
 
-    @PostMapping("/tasks/replay-failed")
-    @Transactional
-    fun replayFailedTasks(
-        @RequestBody reqBody: TaskDlqReplayRequest,
-    ): RsData<TaskDlqReplayResult> {
+    @PostMapping("/operations/task-dlq-replay")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun submitTaskDlqReplay(
+        @RequestBody @Valid reqBody: TaskDlqReplayOperationRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<AdminOperationResBody> {
         val result =
-            taskDlqReplayService.replayFailedTasks(
-                taskType = reqBody.taskType,
-                limit = reqBody.limit,
-                resetRetryCount = reqBody.resetRetryCount,
+            adminOperationService.submit(
+                AdminOperationService.DlqReplayCommand(
+                    operationId = reqBody.operationId,
+                    actorId = securityUser.id,
+                    sessionRowId = securityUser.sessionRowId,
+                    taskType = reqBody.taskType,
+                    limit = reqBody.limit,
+                    resetRetryCount = reqBody.resetRetryCount,
+                    reason = reqBody.reason,
+                ),
             )
-
         return RsData(
-            "200-10",
-            "DLQ 재실행 요청을 처리했습니다.",
-            result,
+            "202-40",
+            "DLQ 재실행 작업을 접수했습니다.",
+            result.toResponse(),
         )
     }
+
+    @GetMapping("/operations/{operationId}")
+    fun getOperation(
+        @org.springframework.web.bind.annotation.PathVariable operationId: UUID,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<AdminOperationResBody> =
+        RsData(
+            "200-40",
+            "DLQ 재실행 작업 상태입니다.",
+            adminOperationService.get(operationId, securityUser.id).toResponse(),
+        )
+
+    private fun AdminOperationService.OperationResult.toResponse() =
+        AdminOperationResBody(
+            operationId,
+            actorId,
+            sessionRowId,
+            action,
+            target,
+            reason,
+            status,
+            resultCode,
+            selectedCount,
+            replayedCount,
+            quarantinedCount,
+            createdAt,
+            modifiedAt,
+        )
 
     @GetMapping("/search/runtime-flags")
     @Transactional(readOnly = true)

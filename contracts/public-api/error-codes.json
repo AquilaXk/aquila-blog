@@ -18,6 +18,12 @@
     "kind": "USER"
   },
   {
+    "code": "400-40",
+    "httpStatus": 400,
+    "defaultUserMessage": "운영 작업 요청이 올바르지 않습니다.",
+    "kind": "USER"
+  },
+  {
     "code": "401-1",
     "httpStatus": 401,
     "defaultUserMessage": "로그인 후 이용해주세요.",
@@ -120,6 +126,12 @@
     "kind": "USER"
   },
   {
+    "code": "404-40",
+    "httpStatus": 404,
+    "defaultUserMessage": "운영 작업을 찾을 수 없습니다.",
+    "kind": "USER"
+  },
+  {
     "code": "409-1",
     "httpStatus": 409,
     "defaultUserMessage": "동시에 처리된 요청 충돌이 발생했습니다. 잠시 후 다시 시도해주세요.",
@@ -165,6 +177,12 @@
     "code": "409-4",
     "httpStatus": 409,
     "defaultUserMessage": "약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요.",
+    "kind": "USER"
+  },
+  {
+    "code": "409-40",
+    "httpStatus": 409,
+    "defaultUserMessage": "운영 작업 ID가 다른 요청과 충돌합니다.",
     "kind": "USER"
   },
   {

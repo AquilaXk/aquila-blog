@@ -74,7 +74,7 @@ class ApiKeyAuthorityRefreshHandler(
         )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
         sessionContext.session?.let { memberSessionUseCase.touchAuthenticated(it) }
-        securityContextAuthenticationWriter.write(apiKeyMember)
+        securityContextAuthenticationWriter.write(apiKeyMember, sessionContext.session?.id)
         return true
     }
 }

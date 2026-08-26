@@ -153,6 +153,35 @@ class SearchRuntimeControlTestcontainersIntegrationTest {
                 null,
             )
         }
+        assertRejected {
+            insertReceipt(
+                jdbcTemplate,
+                UUID.randomUUID(),
+                PIPELINE_ACTION,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+            )
+        }
+        assertRejected {
+            insertReceipt(
+                jdbcTemplate,
+                UUID.randomUUID(),
+                PIPELINE_ACTION,
+                null,
+                null,
+                null,
+                PIPELINE_CONTROL_KEY,
+                ENABLED,
+                null,
+                null,
+                "SUCCEEDED",
+            )
+        }
 
         postgres.createConnection("").use { connection ->
             connection.autoCommit = false

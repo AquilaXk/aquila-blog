@@ -25,7 +25,7 @@ ALTER TABLE admin_operation_receipt
             'SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED'
         )),
     ADD CONSTRAINT admin_operation_receipt_command_shape_check
-        CHECK (
+        CHECK ((
             (
                 action = 'TASK_DLQ_REPLAY' AND
                 task_type IS NOT NULL AND requested_limit IS NOT NULL AND reset_retry_count IS NOT NULL AND
@@ -45,7 +45,7 @@ ALTER TABLE admin_operation_receipt
                 ((status = 'ACCEPTED' AND result_code IS NULL AND control_version IS NULL) OR
                  (status = 'SUCCEEDED' AND result_code = 'SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED' AND control_version >= 1))
             )
-        );
+        ) IS TRUE);
 
 CREATE TABLE search_runtime_control_state (
     control_key VARCHAR(80) PRIMARY KEY,

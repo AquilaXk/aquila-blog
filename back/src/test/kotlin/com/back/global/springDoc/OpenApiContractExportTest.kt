@@ -114,7 +114,13 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val replayReason = replayRequest.path("properties").path("reason")
         assertThat(replayReason.path("minLength").asInt()).isEqualTo(1)
         assertThat(replayReason.path("maxLength").asInt()).isEqualTo(200)
-        assertEnum(openApiNode, propertySchema(openApiNode, "AdminOperationResBody", "action"), "TASK_DLQ_REPLAY")
+        assertEnum(
+            openApiNode,
+            propertySchema(openApiNode, "AdminOperationResBody", "action"),
+            "TASK_DLQ_REPLAY",
+            "SEARCH_PIPELINE_FORCE_CONTROL",
+            "SEARCH_ENGINE_MIRROR_FORCE_DISABLE",
+        )
         assertEnum(
             openApiNode,
             propertySchema(openApiNode, "AdminOperationResBody", "status"),
@@ -130,6 +136,8 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             "ALL_TASKS_QUARANTINED",
             "TASKS_REPLAYED",
             "TASKS_PARTIALLY_REPLAYED",
+            "SEARCH_PIPELINE_FORCE_CONTROL_UPDATED",
+            "SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED",
         )
 
         val outputPath = Path.of("build/openapi/openapi.json")

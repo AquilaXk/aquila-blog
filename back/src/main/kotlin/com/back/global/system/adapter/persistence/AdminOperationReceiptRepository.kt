@@ -32,10 +32,10 @@ interface AdminOperationReceiptRepository :
         value = """
         INSERT INTO admin_operation_receipt
             (operation_id, actor_id, session_row_id, fingerprint, action, task_type, requested_limit, reset_retry_count, reason,
-             status, selected_count, replayed_count, quarantined_count, created_at, modified_at)
+             status, selected_count, replayed_count, quarantined_count, control_key, control_value, control_version, created_at, modified_at)
         VALUES
             (:operationId, :actorId, :sessionRowId, :fingerprint, :action, :taskType, :requestedLimit, :resetRetryCount, :reason,
-             'ACCEPTED', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             'ACCEPTED', 0, 0, 0, :controlKey, :controlValue, :controlVersion, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT (operation_id) DO NOTHING
         """,
         nativeQuery = true,
@@ -46,10 +46,13 @@ interface AdminOperationReceiptRepository :
         @Param("sessionRowId") sessionRowId: Long?,
         @Param("fingerprint") fingerprint: String,
         @Param("action") action: String,
-        @Param("taskType") taskType: String,
-        @Param("requestedLimit") requestedLimit: Int,
-        @Param("resetRetryCount") resetRetryCount: Boolean,
+        @Param("taskType") taskType: String?,
+        @Param("requestedLimit") requestedLimit: Int?,
+        @Param("resetRetryCount") resetRetryCount: Boolean?,
         @Param("reason") reason: String,
+        @Param("controlKey") controlKey: String?,
+        @Param("controlValue") controlValue: String?,
+        @Param("controlVersion") controlVersion: Long?,
     ): Int
 }
 

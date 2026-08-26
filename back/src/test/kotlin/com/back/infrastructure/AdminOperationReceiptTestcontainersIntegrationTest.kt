@@ -143,6 +143,9 @@ class AdminOperationReceiptTestcontainersIntegrationTest {
             statement.setInt(7, 1)
             statement.setBoolean(8, true)
             statement.setString(9, "incident recovery")
+            statement.setNull(10, Types.VARCHAR)
+            statement.setNull(11, Types.VARCHAR)
+            statement.setNull(12, Types.BIGINT)
             statement.executeUpdate()
         }
 
@@ -190,6 +193,9 @@ class AdminOperationReceiptTestcontainersIntegrationTest {
             .replace(":requestedLimit", "?")
             .replace(":resetRetryCount", "?")
             .replace(":reason", "?")
+            .replace(":controlKey", "?")
+            .replace(":controlValue", "?")
+            .replace(":controlVersion", "?")
 
     private fun jdbcFailedTaskClaimSql(): String =
         repositoryQuery(TaskRepository::class.java, "findFailedTasksWithLock")

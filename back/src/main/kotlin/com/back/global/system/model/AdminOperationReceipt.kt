@@ -21,6 +21,8 @@ enum class AdminOperationStatus {
 
 enum class AdminOperationAction {
     TASK_DLQ_REPLAY,
+    SEARCH_PIPELINE_FORCE_CONTROL,
+    SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
 }
 
 enum class AdminOperationResultCode {
@@ -28,6 +30,8 @@ enum class AdminOperationResultCode {
     ALL_TASKS_QUARANTINED,
     TASKS_REPLAYED,
     TASKS_PARTIALLY_REPLAYED,
+    SEARCH_PIPELINE_FORCE_CONTROL_UPDATED,
+    SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED,
 }
 
 @Entity
@@ -48,12 +52,12 @@ class AdminOperationReceipt(
     @Column(nullable = false, length = 80)
     @Enumerated(EnumType.STRING)
     val action: AdminOperationAction,
-    @Column(nullable = false, length = 120)
-    val taskType: String,
-    @Column(nullable = false)
-    val requestedLimit: Int,
-    @Column(nullable = false)
-    val resetRetryCount: Boolean,
+    @Column(length = 120)
+    val taskType: String? = null,
+    @Column
+    val requestedLimit: Int? = null,
+    @Column
+    val resetRetryCount: Boolean? = null,
     @Column(nullable = false, length = 200)
     val reason: String,
     @Enumerated(EnumType.STRING)
@@ -65,4 +69,11 @@ class AdminOperationReceipt(
     @Column(length = 80)
     @Enumerated(EnumType.STRING)
     var resultCode: AdminOperationResultCode? = null,
+    @Column(length = 80)
+    @Enumerated(EnumType.STRING)
+    val controlKey: SearchRuntimeControlKey? = null,
+    @Column(length = 16)
+    @Enumerated(EnumType.STRING)
+    val controlValue: SearchRuntimeControlValue? = null,
+    var controlVersion: Long? = null,
 ) : BaseTime(id)

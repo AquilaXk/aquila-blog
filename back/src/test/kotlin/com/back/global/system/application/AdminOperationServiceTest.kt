@@ -102,6 +102,50 @@ class AdminOperationServiceTest {
         assertThatThrownBy { service.get(command.operationId, 99L) }.isInstanceOf(AppException::class.java)
     }
 
+    @Test
+    fun `same UUID and normalized pipeline command returns terminal receipt without execution`() {
+        val command = pipelineCommand(reason = "  search   control ")
+        admitFirstPipelineReceipt()
+
+        val first = service.submitPipelineForceControl(command)
+        val second = service.submitPipelineForceControl(command.copy(reason = "search control"))
+
+        assertThat(second.operationId).isEqualTo(first.operationId)
+        assertThat(second.controlVersion).isEqualTo(1)
+        verify(execution, never()).execute(command.operationId)
+    }
+
+    @Test
+    fun `same UUID and different pipeline value conflicts before execution`() {
+        val command = pipelineCommand(forceControl = true)
+        admitFirstPipelineReceipt()
+        service.submitPipelineForceControl(command)
+
+        assertThatThrownBy { service.submitPipelineForceControl(command.copy(forceControl = false)) }
+            .isInstanceOf(AppException::class.java)
+        verify(execution, never()).execute(command.operationId)
+    }
+
+    @Test
+    fun `same UUID and different search action conflicts before execution`() {
+        val command = pipelineCommand(forceControl = true)
+        admitFirstPipelineReceipt()
+        service.submitPipelineForceControl(command)
+
+        assertThatThrownBy {
+            service.submitSearchEngineMirrorForceDisable(
+                AdminOperationService.SearchEngineMirrorForceDisableCommand(
+                    operationId = command.operationId,
+                    actorId = command.actorId,
+                    sessionRowId = command.sessionRowId,
+                    forceDisabled = true,
+                    reason = command.reason,
+                ),
+            )
+        }.isInstanceOf(AppException::class.java)
+        verify(execution, never()).execute(command.operationId)
+    }
+
     private fun command(
         actorId: Long = 7L,
         reason: String = "incident recovery",
@@ -155,6 +199,32 @@ class AdminOperationServiceTest {
             createdAt = Instant.parse("2026-08-24T00:00:00Z"),
             modifiedAt = Instant.parse("2026-08-24T00:00:01Z"),
         )
+
+    private fun pipelineCommand(
+        forceControl: Boolean? = null,
+        reason: String = "search control",
+    ) =
+        AdminOperationService.SearchPipelineForceControlCommand(
+            operationId = UUID.fromString("f4791e0e-3857-4ef1-9fe7-2a9654a2208f"),
+            actorId = 7L,
+            sessionRowId = 41L,
+            forceControl = forceControl,
+            reason = reason,
+        )
+
+    private fun admitFirstPipelineReceipt() {
+        var stored: AdminOperationReceipt? = null
+        `when`(admission.admit(anyReceipt())).thenAnswer { invocation ->
+            stored ?: invocation.getArgument<AdminOperationReceipt>(0).also {
+                it.status = AdminOperationStatus.SUCCEEDED
+                it.resultCode = AdminOperationResultCode.SEARCH_PIPELINE_FORCE_CONTROL_UPDATED
+                it.controlVersion = 1
+                it.createdAt = Instant.parse("2026-08-24T00:00:00Z")
+                it.modifiedAt = Instant.parse("2026-08-24T00:00:01Z")
+                stored = it
+            }
+        }
+    }
 
     private fun fingerprint(command: AdminOperationService.DlqReplayCommand): String {
         val method = AdminOperationService::class.java.getDeclaredMethod("fingerprint", AdminOperationService.DlqReplayCommand::class.java)

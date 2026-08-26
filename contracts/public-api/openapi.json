@@ -423,12 +423,12 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "202": {
+            "description": "Accepted",
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/RsDataSearchRuntimeFlags"
+                  "$ref": "#/components/schemas/RsDataAdminOperationResBody"
                 }
               }
             }
@@ -453,12 +453,12 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "202": {
+            "description": "Accepted",
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/RsDataSearchRuntimeFlags"
+                  "$ref": "#/components/schemas/RsDataAdminOperationResBody"
                 }
               }
             }
@@ -4274,15 +4274,139 @@
       "SearchPipelineForceControlRequest": {
         "type": "object",
         "properties": {
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1
+          },
           "forceControl": {
             "type": [
               "boolean",
               "null"
             ]
           }
+        },
+        "required": [
+          "operationId",
+          "reason"
+        ]
+      },
+      "AdminOperationResBody": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actorId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sessionRowId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "TASK_DLQ_REPLAY",
+              "SEARCH_PIPELINE_FORCE_CONTROL",
+              "SEARCH_ENGINE_MIRROR_FORCE_DISABLE"
+            ]
+          },
+          "target": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "SUCCEEDED",
+              "PARTIAL",
+              "FAILED"
+            ]
+          },
+          "resultCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "NO_MATCHING_TASKS",
+              "ALL_TASKS_QUARANTINED",
+              "TASKS_REPLAYED",
+              "TASKS_PARTIALLY_REPLAYED",
+              "SEARCH_PIPELINE_FORCE_CONTROL_UPDATED",
+              "SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED",
+              null
+            ]
+          },
+          "selectedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "replayedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quarantinedCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "controlKey": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "PIPELINE_FORCE_CONTROL",
+              "MIRROR_FORCE_DISABLE",
+              null
+            ]
+          },
+          "controlValue": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "UNSET",
+              "ENABLED",
+              "DISABLED",
+              null
+            ]
+          },
+          "controlVersion": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
         }
       },
-      "RsDataSearchRuntimeFlags": {
+      "RsDataAdminOperationResBody": {
         "type": "object",
         "properties": {
           "resultCode": {
@@ -4292,46 +4416,33 @@
             "type": "string"
           },
           "data": {
-            "$ref": "#/components/schemas/SearchRuntimeFlags"
-          }
-        }
-      },
-      "SearchRuntimeFlags": {
-        "type": "object",
-        "properties": {
-          "searchPipelineForceControlEnabled": {
-            "type": "boolean"
-          },
-          "searchPipelineRuntimeOverride": {
-            "type": "boolean"
-          },
-          "searchEngineMirrorForceDisabled": {
-            "type": "boolean"
-          },
-          "searchEngineMirrorCircuitOpen": {
-            "type": "boolean"
-          },
-          "searchEngineMirrorCircuitRemainingSeconds": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "searchEngineMirrorConsecutiveFailures": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "searchEngineMirrorFailureThreshold": {
-            "type": "integer",
-            "format": "int32"
+            "$ref": "#/components/schemas/AdminOperationResBody"
           }
         }
       },
       "SearchEngineMirrorForceDisableRequest": {
         "type": "object",
         "properties": {
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1
+          },
           "forceDisabled": {
             "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "operationId",
+          "reason"
+        ]
       },
       "TaskDlqReplayOperationRequest": {
         "type": "object",
@@ -4367,94 +4478,6 @@
           "operationId",
           "reason"
         ]
-      },
-      "AdminOperationResBody": {
-        "type": "object",
-        "properties": {
-          "operationId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "actorId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "sessionRowId": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          },
-          "action": {
-            "type": "string",
-            "enum": [
-              "TASK_DLQ_REPLAY"
-            ]
-          },
-          "target": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "ACCEPTED",
-              "SUCCEEDED",
-              "PARTIAL",
-              "FAILED"
-            ]
-          },
-          "resultCode": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "NO_MATCHING_TASKS",
-              "ALL_TASKS_QUARANTINED",
-              "TASKS_REPLAYED",
-              "TASKS_PARTIALLY_REPLAYED",
-              null
-            ]
-          },
-          "selectedCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "replayedCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "quarantinedCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "modifiedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "RsDataAdminOperationResBody": {
-        "type": "object",
-        "properties": {
-          "resultCode": {
-            "type": "string"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AdminOperationResBody"
-          }
-        }
       },
       "SignupMailTestRequest": {
         "type": "object",
@@ -6350,6 +6373,66 @@
           },
           "repairMode": {
             "type": "string"
+          }
+        }
+      },
+      "SearchRuntimeControlStateResBody": {
+        "type": "object",
+        "properties": {
+          "controlKey": {
+            "type": "string",
+            "enum": [
+              "PIPELINE_FORCE_CONTROL",
+              "MIRROR_FORCE_DISABLE"
+            ]
+          },
+          "controlValue": {
+            "type": "string",
+            "enum": [
+              "UNSET",
+              "ENABLED",
+              "DISABLED"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SearchRuntimeFlags": {
+        "type": "object",
+        "properties": {
+          "searchPipeline": {
+            "$ref": "#/components/schemas/SearchRuntimeControlStateResBody"
+          },
+          "searchPipelineForceControlEnabled": {
+            "type": "boolean"
+          },
+          "searchEngineMirror": {
+            "$ref": "#/components/schemas/SearchRuntimeControlStateResBody"
+          },
+          "searchEngineMirrorForceDisabled": {
+            "type": "boolean"
+          },
+          "searchEngineMirrorCircuitOpen": {
+            "type": "boolean"
+          },
+          "searchEngineMirrorCircuitRemainingSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "searchEngineMirrorConsecutiveFailures": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "searchEngineMirrorFailureThreshold": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

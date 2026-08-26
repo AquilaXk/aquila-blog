@@ -114,7 +114,13 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val replayReason = replayRequest.path("properties").path("reason")
         assertThat(replayReason.path("minLength").asInt()).isEqualTo(1)
         assertThat(replayReason.path("maxLength").asInt()).isEqualTo(200)
-        assertEnum(openApiNode, propertySchema(openApiNode, "AdminOperationResBody", "action"), "TASK_DLQ_REPLAY")
+        assertEnum(
+            openApiNode,
+            propertySchema(openApiNode, "AdminOperationResBody", "action"),
+            "TASK_DLQ_REPLAY",
+            "SEARCH_PIPELINE_FORCE_CONTROL",
+            "SEARCH_ENGINE_MIRROR_FORCE_DISABLE",
+        )
         assertEnum(
             openApiNode,
             propertySchema(openApiNode, "AdminOperationResBody", "status"),
@@ -130,6 +136,94 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             "ALL_TASKS_QUARANTINED",
             "TASKS_REPLAYED",
             "TASKS_PARTIALLY_REPLAYED",
+            "SEARCH_PIPELINE_FORCE_CONTROL_UPDATED",
+            "SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED",
+        )
+        assertNullableEnum(
+            openApiNode,
+            propertySchema(openApiNode, "AdminOperationResBody", "controlKey"),
+            "PIPELINE_FORCE_CONTROL",
+            "MIRROR_FORCE_DISABLE",
+        )
+        assertNullableEnum(
+            openApiNode,
+            propertySchema(openApiNode, "AdminOperationResBody", "controlValue"),
+            "UNSET",
+            "ENABLED",
+            "DISABLED",
+        )
+        assertTypeSet(propertySchema(openApiNode, "AdminOperationResBody", "controlVersion"), "integer", "null")
+        assertThat(propertySchema(openApiNode, "AdminOperationResBody", "controlVersion").path("format").asText())
+            .isEqualTo("int64")
+        listOf("SearchPipelineForceControlRequest", "SearchEngineMirrorForceDisableRequest").forEach { schemaName ->
+            val request = openApiNode.path("components").path("schemas").path(schemaName)
+            assertThat(request.path("required").values().map { it.asText() })
+                .containsExactlyInAnyOrder("operationId", "reason")
+            assertThat(
+                request
+                    .path("properties")
+                    .path("operationId")
+                    .path("format")
+                    .asText(),
+            ).isEqualTo("uuid")
+            assertThat(
+                request
+                    .path("properties")
+                    .path("reason")
+                    .path("minLength")
+                    .asInt(),
+            ).isEqualTo(1)
+            assertThat(
+                request
+                    .path("properties")
+                    .path("reason")
+                    .path("maxLength")
+                    .asInt(),
+            ).isEqualTo(200)
+        }
+        listOf(
+            "/system/api/v1/adm/search/pipeline/force-control",
+            "/system/api/v1/adm/search-engine/mirror/force-disable",
+        ).forEach { path ->
+            val responses =
+                openApiNode
+                    .path("paths")
+                    .path(path)
+                    .path("post")
+                    .path("responses")
+            assertThat(responses.has("202")).isTrue()
+            assertThat(responses.has("200")).isFalse()
+            assertThat(
+                responses
+                    .path("202")
+                    .path("content")
+                    .path("*/*")
+                    .path("schema")
+                    .path("\$ref")
+                    .asText(),
+            ).isEqualTo("#/components/schemas/RsDataAdminOperationResBody")
+        }
+        val runtimeFlags = openApiNode.path("components").path("schemas").path("SearchRuntimeFlags")
+        assertThat(runtimeFlags.path("properties").has("searchPipelineRuntimeOverride")).isFalse()
+        assertThat(
+            runtimeFlags
+                .path("properties")
+                .path("searchPipeline")
+                .path("\$ref")
+                .asText(),
+        ).isEqualTo("#/components/schemas/SearchRuntimeControlStateResBody")
+        assertThat(
+            runtimeFlags
+                .path("properties")
+                .path("searchEngineMirror")
+                .path("\$ref")
+                .asText(),
+        ).isEqualTo("#/components/schemas/SearchRuntimeControlStateResBody")
+        assertEnum(
+            openApiNode,
+            propertySchema(openApiNode, "SearchRuntimeControlStateResBody", "controlKey"),
+            "PIPELINE_FORCE_CONTROL",
+            "MIRROR_FORCE_DISABLE",
         )
 
         val outputPath = Path.of("build/openapi/openapi.json")

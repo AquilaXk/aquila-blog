@@ -4,7 +4,6 @@ import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
-import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthSecurityEventDto
@@ -16,9 +15,12 @@ import com.back.global.system.application.AdminDashboardSnapshot
 import com.back.global.system.application.AdminDashboardSnapshotService
 import com.back.global.system.application.AdminOperationService
 import com.back.global.system.application.AdminSystemHealthSnapshotService
+import com.back.global.system.application.SearchRuntimeControlQueryService
 import com.back.global.system.model.AdminOperationAction
 import com.back.global.system.model.AdminOperationResultCode
 import com.back.global.system.model.AdminOperationStatus
+import com.back.global.system.model.SearchRuntimeControlKey
+import com.back.global.system.model.SearchRuntimeControlValue
 import com.back.global.task.application.TaskQueueDiagnostics
 import com.back.global.task.application.TaskQueueDiagnosticsService
 import jakarta.validation.Valid
@@ -55,7 +57,7 @@ class ApiV1AdmSystemController(
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
     private val adminOperationService: AdminOperationService,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
-    private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
+    private val searchRuntimeControlQueryService: SearchRuntimeControlQueryService,
     private val postSearchEngineMirrorService: PostSearchEngineMirrorService,
     private val adminSystemHealthSnapshotService: AdminSystemHealthSnapshotService,
     private val adminDashboardSnapshotService: AdminDashboardSnapshotService,
@@ -114,19 +116,40 @@ class ApiV1AdmSystemController(
         val quarantinedCount: Int,
         val createdAt: java.time.Instant,
         val modifiedAt: java.time.Instant,
+        val controlKey: SearchRuntimeControlKey?,
+        val controlValue: SearchRuntimeControlValue?,
+        val controlVersion: Long?,
     )
 
     data class SearchPipelineForceControlRequest(
+        @field:NotNull
+        val operationId: UUID?,
+        @field:NotBlank
+        @field:Size(min = 1, max = 200)
+        val reason: String,
         val forceControl: Boolean? = null,
     )
 
     data class SearchEngineMirrorForceDisableRequest(
+        @field:NotNull
+        val operationId: UUID?,
+        @field:NotBlank
+        @field:Size(min = 1, max = 200)
+        val reason: String,
         val forceDisabled: Boolean = false,
     )
 
+    data class SearchRuntimeControlStateResBody(
+        val controlKey: SearchRuntimeControlKey,
+        val controlValue: SearchRuntimeControlValue,
+        val version: Long,
+        val modifiedAt: java.time.Instant,
+    )
+
     data class SearchRuntimeFlags(
+        val searchPipeline: SearchRuntimeControlStateResBody,
         val searchPipelineForceControlEnabled: Boolean,
-        val searchPipelineRuntimeOverride: Boolean,
+        val searchEngineMirror: SearchRuntimeControlStateResBody,
         val searchEngineMirrorForceDisabled: Boolean,
         val searchEngineMirrorCircuitOpen: Boolean,
         val searchEngineMirrorCircuitRemainingSeconds: Long,
@@ -244,16 +267,21 @@ class ApiV1AdmSystemController(
             quarantinedCount,
             createdAt,
             modifiedAt,
+            controlKey,
+            controlValue,
+            controlVersion,
         )
 
     @GetMapping("/search/runtime-flags")
     @Transactional(readOnly = true)
     fun getSearchRuntimeFlags(): SearchRuntimeFlags {
+        val runtimeSnapshot = searchRuntimeControlQueryService.runtimeSnapshot()
         val mirrorCircuitStatus = postSearchEngineMirrorService.getCircuitStatus()
         return SearchRuntimeFlags(
-            searchPipelineForceControlEnabled = postKeywordSearchPipelineService.isForceControlEnabled(),
-            searchPipelineRuntimeOverride = postKeywordSearchPipelineService.isForceControlRuntimeOverridden(),
-            searchEngineMirrorForceDisabled = postSearchEngineMirrorService.isRuntimeForceDisabled(),
+            searchPipeline = runtimeSnapshot.searchPipeline.toResponse(),
+            searchPipelineForceControlEnabled = runtimeSnapshot.searchPipelineForceControlEnabled,
+            searchEngineMirror = runtimeSnapshot.searchEngineMirror.toResponse(),
+            searchEngineMirrorForceDisabled = runtimeSnapshot.searchEngineMirrorForceDisabled,
             searchEngineMirrorCircuitOpen = mirrorCircuitStatus.open,
             searchEngineMirrorCircuitRemainingSeconds = mirrorCircuitStatus.remainingSeconds,
             searchEngineMirrorConsecutiveFailures = mirrorCircuitStatus.consecutiveFailures,
@@ -262,30 +290,58 @@ class ApiV1AdmSystemController(
     }
 
     @PostMapping("/search/pipeline/force-control")
-    @Transactional
+    @ResponseStatus(HttpStatus.ACCEPTED)
     fun setSearchPipelineForceControl(
-        @RequestBody reqBody: SearchPipelineForceControlRequest,
-    ): RsData<SearchRuntimeFlags> {
-        postKeywordSearchPipelineService.setForceControlRuntime(reqBody.forceControl)
+        @RequestBody @Valid reqBody: SearchPipelineForceControlRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<AdminOperationResBody> {
+        val result =
+            adminOperationService.submitPipelineForceControl(
+                AdminOperationService.SearchPipelineForceControlCommand(
+                    operationId = reqBody.operationId!!,
+                    actorId = securityUser.id,
+                    sessionRowId = securityUser.sessionRowId,
+                    forceControl = reqBody.forceControl,
+                    reason = reqBody.reason,
+                ),
+            )
         return RsData(
-            "200-11",
-            "검색 파이프라인 force-control 플래그를 갱신했습니다.",
-            getSearchRuntimeFlags(),
+            "202-41",
+            "검색 파이프라인 force-control 작업을 접수했습니다.",
+            result.toResponse(),
         )
     }
 
     @PostMapping("/search-engine/mirror/force-disable")
-    @Transactional
+    @ResponseStatus(HttpStatus.ACCEPTED)
     fun setSearchEngineMirrorForceDisable(
-        @RequestBody reqBody: SearchEngineMirrorForceDisableRequest,
-    ): RsData<SearchRuntimeFlags> {
-        postSearchEngineMirrorService.setRuntimeForceDisabled(reqBody.forceDisabled)
+        @RequestBody @Valid reqBody: SearchEngineMirrorForceDisableRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<AdminOperationResBody> {
+        val result =
+            adminOperationService.submitSearchEngineMirrorForceDisable(
+                AdminOperationService.SearchEngineMirrorForceDisableCommand(
+                    operationId = reqBody.operationId!!,
+                    actorId = securityUser.id,
+                    sessionRowId = securityUser.sessionRowId,
+                    forceDisabled = reqBody.forceDisabled,
+                    reason = reqBody.reason,
+                ),
+            )
         return RsData(
-            "200-12",
-            "검색엔진 미러 force-disable 플래그를 갱신했습니다.",
-            getSearchRuntimeFlags(),
+            "202-42",
+            "검색엔진 미러 force-disable 작업을 접수했습니다.",
+            result.toResponse(),
         )
     }
+
+    private fun SearchRuntimeControlQueryService.ControlStateSnapshot.toResponse() =
+        SearchRuntimeControlStateResBody(
+            controlKey = controlKey,
+            controlValue = controlValue,
+            version = version,
+            modifiedAt = modifiedAt,
+        )
 
     @GetMapping("/storage/cleanup")
     @Transactional(readOnly = true)

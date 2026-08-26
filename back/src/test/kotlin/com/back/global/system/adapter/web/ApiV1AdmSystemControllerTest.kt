@@ -3,6 +3,8 @@ package com.back.global.system.adapter.web
 import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.AuthSecurityEventDto
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
@@ -13,9 +15,12 @@ import com.back.global.system.application.AdminDashboardSnapshot
 import com.back.global.system.application.AdminDashboardStorageCleanupSnapshot
 import com.back.global.system.application.AdminDashboardTaskQueueSnapshot
 import com.back.global.system.application.AdminOperationService
+import com.back.global.system.application.SearchRuntimeControlQueryService
 import com.back.global.system.model.AdminOperationAction
 import com.back.global.system.model.AdminOperationResultCode
 import com.back.global.system.model.AdminOperationStatus
+import com.back.global.system.model.SearchRuntimeControlKey
+import com.back.global.system.model.SearchRuntimeControlValue
 import com.back.global.task.application.TaskExecutionSample
 import com.back.global.task.application.TaskProcessingLockDiagnostics
 import com.back.global.task.application.TaskQueueDiagnostics
@@ -472,9 +477,8 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 검색 런타임 플래그를 조회할 수 있다`() {
-        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(true)
-        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(true)
-        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(false)
+        given(searchRuntimeControlQueryService.runtimeSnapshot())
+            .willReturn(runtimeSnapshot())
         given(postSearchEngineMirrorService.getCircuitStatus())
             .willReturn(
                 PostSearchEngineMirrorService.MirrorCircuitStatus(
@@ -488,8 +492,14 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
 
         mvc.get("/system/api/v1/adm/search/runtime-flags").andExpect {
             status { isOk() }
+            jsonPath("$.searchPipeline.controlKey") { value("PIPELINE_FORCE_CONTROL") }
+            jsonPath("$.searchPipeline.controlValue") { value("ENABLED") }
+            jsonPath("$.searchPipeline.version") { value(3) }
+            jsonPath("$.searchPipeline.modifiedAt") { value("2026-08-26T00:00:00Z") }
             jsonPath("$.searchPipelineForceControlEnabled") { value(true) }
-            jsonPath("$.searchPipelineRuntimeOverride") { value(true) }
+            jsonPath("$.searchEngineMirror.controlKey") { value("MIRROR_FORCE_DISABLE") }
+            jsonPath("$.searchEngineMirror.controlValue") { value("ENABLED") }
+            jsonPath("$.searchEngineMirror.version") { value(4) }
             jsonPath("$.searchEngineMirrorForceDisabled") { value(false) }
             jsonPath("$.searchEngineMirrorCircuitOpen") { value(true) }
             jsonPath("$.searchEngineMirrorCircuitRemainingSeconds") { value(52) }
@@ -499,58 +509,145 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
     }
 
     @Test
-    @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 검색 파이프라인 force-control 플래그를 갱신할 수 있다`() {
-        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(true)
-        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(true)
-        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(false)
-        given(postSearchEngineMirrorService.getCircuitStatus())
+        val securityUser = adminSecurityUser()
+        val operationId = UUID.fromString("2390fddf-efb7-4e7a-97eb-3af3943770bc")
+        val command =
+            AdminOperationService.SearchPipelineForceControlCommand(
+                operationId = operationId,
+                actorId = 7L,
+                sessionRowId = 41L,
+                forceControl = true,
+                reason = "pipeline incident",
+            )
+        given(adminOperationService.submitPipelineForceControl(command))
             .willReturn(
-                PostSearchEngineMirrorService.MirrorCircuitStatus(
-                    open = false,
-                    openUntilEpochMs = 0,
-                    remainingSeconds = 0,
-                    consecutiveFailures = 0,
-                    failureThreshold = 5,
+                operationResult(operationId, 41L).copy(
+                    action = AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
+                    target = "PIPELINE_FORCE_CONTROL",
+                    resultCode = AdminOperationResultCode.SEARCH_PIPELINE_FORCE_CONTROL_UPDATED,
+                    controlKey = SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
+                    controlValue = SearchRuntimeControlValue.ENABLED,
+                    controlVersion = 1,
                 ),
             )
 
         mvc
             .post("/system/api/v1/adm/search/pipeline/force-control") {
+                with(user(securityUser))
                 contentType = org.springframework.http.MediaType.APPLICATION_JSON
-                content = """{"forceControl":true}"""
+                content =
+                    """{"operationId":"$operationId","reason":"pipeline incident","forceControl":true,""" +
+                    """"actorId":999,"sessionRowId":999}"""
             }.andExpect {
-                status { isOk() }
-                jsonPath("$.resultCode") { value("200-11") }
-                jsonPath("$.data.searchPipelineForceControlEnabled") { value(true) }
+                status { isAccepted() }
+                jsonPath("$.resultCode") { value("202-41") }
+                jsonPath("$.data.controlKey") { value("PIPELINE_FORCE_CONTROL") }
+                jsonPath("$.data.controlValue") { value("ENABLED") }
+                jsonPath("$.data.controlVersion") { value(1) }
             }
+        verify(adminOperationService).submitPipelineForceControl(command)
     }
 
     @Test
-    @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 검색엔진 미러 force-disable 플래그를 갱신할 수 있다`() {
-        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(false)
-        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(false)
-        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(true)
-        given(postSearchEngineMirrorService.getCircuitStatus())
+        val securityUser = adminSecurityUser()
+        val operationId = UUID.fromString("0cb362ec-906a-471d-967d-8d35a8e07b25")
+        val command =
+            AdminOperationService.SearchEngineMirrorForceDisableCommand(
+                operationId = operationId,
+                actorId = 7L,
+                sessionRowId = 41L,
+                forceDisabled = true,
+                reason = "mirror incident",
+            )
+        given(adminOperationService.submitSearchEngineMirrorForceDisable(command))
             .willReturn(
-                PostSearchEngineMirrorService.MirrorCircuitStatus(
-                    open = false,
-                    openUntilEpochMs = 0,
-                    remainingSeconds = 0,
-                    consecutiveFailures = 0,
-                    failureThreshold = 5,
+                operationResult(operationId, 41L).copy(
+                    action = AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
+                    target = "MIRROR_FORCE_DISABLE",
+                    resultCode = AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED,
+                    controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+                    controlValue = SearchRuntimeControlValue.DISABLED,
+                    controlVersion = 1,
                 ),
             )
 
         mvc
             .post("/system/api/v1/adm/search-engine/mirror/force-disable") {
+                with(user(securityUser))
                 contentType = org.springframework.http.MediaType.APPLICATION_JSON
-                content = """{"forceDisabled":true}"""
+                content =
+                    """{"operationId":"$operationId","reason":"mirror incident","forceDisabled":true,""" +
+                    """"actorId":999,"sessionRowId":999}"""
             }.andExpect {
-                status { isOk() }
-                jsonPath("$.resultCode") { value("200-12") }
-                jsonPath("$.data.searchEngineMirrorForceDisabled") { value(true) }
+                status { isAccepted() }
+                jsonPath("$.resultCode") { value("202-42") }
+                jsonPath("$.data.controlKey") { value("MIRROR_FORCE_DISABLE") }
+                jsonPath("$.data.controlValue") { value("DISABLED") }
+                jsonPath("$.data.controlVersion") { value(1) }
+            }
+        verify(adminOperationService).submitSearchEngineMirrorForceDisable(command)
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `invalid search control operation requests are rejected before service`() {
+        listOf(
+            """{"reason":"incident"}""",
+            """{"operationId":null,"reason":"incident"}""",
+            """{"operationId":"${UUID.randomUUID()}","reason":" "}""",
+            """{"operationId":"${UUID.randomUUID()}","reason":"${"x".repeat(201)}"}""",
+        ).forEach { request ->
+            mvc
+                .post("/system/api/v1/adm/search/pipeline/force-control") {
+                    contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                    content = request
+                }.andExpect {
+                    status { isBadRequest() }
+                }
+        }
+        verifyNoInteractions(adminOperationService)
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `search control service unavailability returns retryable 503`() {
+        given(searchRuntimeControlQueryService.runtimeSnapshot())
+            .willThrow(AppException(ErrorCode.SERVICE_UNAVAILABLE))
+
+        mvc.get("/system/api/v1/adm/search/runtime-flags").andExpect {
+            status { isServiceUnavailable() }
+            jsonPath("$.resultCode") { value("503-1") }
+            header { string("Retry-After", "1") }
+        }
+    }
+
+    @Test
+    fun `search control admission unavailability returns retryable 503`() {
+        val securityUser = adminSecurityUser()
+        val operationId = UUID.fromString("783459dc-3353-4d57-8fed-1b84b0c0f021")
+        given(
+            adminOperationService.submitPipelineForceControl(
+                AdminOperationService.SearchPipelineForceControlCommand(
+                    operationId = operationId,
+                    actorId = 7L,
+                    sessionRowId = 41L,
+                    forceControl = null,
+                    reason = "incident",
+                ),
+            ),
+        ).willThrow(AppException(ErrorCode.SERVICE_UNAVAILABLE))
+
+        mvc
+            .post("/system/api/v1/adm/search/pipeline/force-control") {
+                with(user(securityUser))
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"operationId":"$operationId","reason":"incident"}"""
+            }.andExpect {
+                status { isServiceUnavailable() }
+                jsonPath("$.resultCode") { value("503-1") }
+                header { string("Retry-After", "1") }
             }
     }
 
@@ -620,6 +717,36 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
         createdAt = Instant.parse("2026-08-24T00:00:00Z"),
         modifiedAt = Instant.parse("2026-08-24T00:00:01Z"),
     )
+
+    private fun runtimeSnapshot() =
+        SearchRuntimeControlQueryService.RuntimeSnapshot(
+            searchPipeline =
+                SearchRuntimeControlQueryService.ControlStateSnapshot(
+                    controlKey = SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
+                    controlValue = SearchRuntimeControlValue.ENABLED,
+                    version = 3,
+                    modifiedAt = Instant.parse("2026-08-26T00:00:00Z"),
+                ),
+            searchPipelineForceControlEnabled = true,
+            searchEngineMirror =
+                SearchRuntimeControlQueryService.ControlStateSnapshot(
+                    controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+                    controlValue = SearchRuntimeControlValue.ENABLED,
+                    version = 4,
+                    modifiedAt = Instant.parse("2026-08-26T00:00:01Z"),
+                ),
+            searchEngineMirrorForceDisabled = false,
+        )
+
+    private fun adminSecurityUser() =
+        SecurityUser(
+            id = 7L,
+            username = "admin@example.com",
+            password = "",
+            nickname = "관리자",
+            authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            sessionRowId = 41L,
+        )
 
     private fun taskQueueDiagnostics(): TaskQueueDiagnostics =
         TaskQueueDiagnostics(

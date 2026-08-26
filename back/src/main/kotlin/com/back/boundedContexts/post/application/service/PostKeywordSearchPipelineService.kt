@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PostMetaExtractor
+import com.back.global.system.application.SearchRuntimeControlQueryService
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.MeterRegistry
@@ -18,7 +19,6 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 
 /**
@@ -33,8 +33,6 @@ class PostKeywordSearchPipelineService(
     candidatePoolSize: Int,
     @Value("\${custom.post.search.pipeline.maxRerankPages:4}")
     maxRerankPages: Int,
-    @Value("\${custom.post.search.pipeline.rollback.forceControl:false}")
-    private val forceControlProfile: Boolean,
     @Value("\${custom.post.search.pipeline.ab.enabled:true}")
     private val abEnabled: Boolean,
     @Value("\${custom.post.search.pipeline.ab.variantTrafficPercent:25}")
@@ -72,6 +70,7 @@ class PostKeywordSearchPipelineService(
     @Value("\${custom.post.search.pipeline.shadow-read.external.requestTimeoutMs:800}")
     private val requestTimeoutMs: Long,
     private val objectMapper: ObjectMapper,
+    private val searchRuntimeControlQueryService: SearchRuntimeControlQueryService,
     private val meterRegistry: MeterRegistry? = null,
 ) {
     private data class SearchWeights(
@@ -118,15 +117,8 @@ class PostKeywordSearchPipelineService(
             freshnessWeight = variantFreshnessWeight.coerceAtLeast(0.0),
         )
     private val shadowHttpClient = sharedHttpClient(connectTimeoutMs.coerceIn(100, 5_000))
-    private val runtimeForceControlOverride = AtomicReference<Boolean?>(null)
 
-    fun setForceControlRuntime(forceControl: Boolean?) {
-        runtimeForceControlOverride.set(forceControl)
-    }
-
-    fun isForceControlRuntimeOverridden(): Boolean = runtimeForceControlOverride.get() != null
-
-    fun isForceControlEnabled(): Boolean = runtimeForceControlOverride.get() ?: forceControlProfile
+    fun isForceControlEnabled(): Boolean = searchRuntimeControlQueryService.isPipelineForceControlEnabled()
 
     fun shouldApply(
         keyword: String,

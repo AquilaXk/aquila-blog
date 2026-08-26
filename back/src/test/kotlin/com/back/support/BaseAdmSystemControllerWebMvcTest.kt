@@ -2,7 +2,6 @@ package com.back.support
 
 import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
-import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.AuthSecurityEventService
@@ -14,6 +13,7 @@ import com.back.global.system.adapter.web.ApiV1AdmSystemController
 import com.back.global.system.application.AdminDashboardSnapshotService
 import com.back.global.system.application.AdminOperationService
 import com.back.global.system.application.AdminSystemHealthSnapshotService
+import com.back.global.system.application.SearchRuntimeControlQueryService
 import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskQueueDiagnosticsService
 import com.back.global.web.application.ClientIpResolver
@@ -79,7 +79,7 @@ abstract class BaseAdmSystemControllerWebMvcTest : BaseIntegrationTest() {
     protected lateinit var uploadedFileRetentionService: UploadedFileRetentionService
 
     @MockitoBean
-    protected lateinit var postKeywordSearchPipelineService: PostKeywordSearchPipelineService
+    protected lateinit var searchRuntimeControlQueryService: SearchRuntimeControlQueryService
 
     @MockitoBean
     protected lateinit var postSearchEngineMirrorService: PostSearchEngineMirrorService

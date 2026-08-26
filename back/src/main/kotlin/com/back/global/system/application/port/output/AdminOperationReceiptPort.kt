@@ -21,9 +21,12 @@ interface AdminOperationReceiptPort {
         sessionRowId: Long?,
         fingerprint: String,
         action: String,
-        taskType: String,
-        requestedLimit: Int,
-        resetRetryCount: Boolean,
+        taskType: String?,
+        requestedLimit: Int?,
+        resetRetryCount: Boolean?,
         reason: String,
+        controlKey: String?,
+        controlValue: String?,
+        controlVersion: Long?,
     ): Int
 }

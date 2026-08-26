@@ -1,13 +1,13 @@
 name: "⚡ Performance"
-description: "렌더링, 번들, 대량 조회, 병목처럼 성능 개선이 필요한 작업을 정리합니다."
+description: "Plan performance work for rendering, bundles, large queries, and bottlenecks."
 labels: ["performance"]
 body:
   - type: input
     id: target
     attributes:
       label: Target
-      description: 어느 페이지, API, 렌더 경로를 개선하려는지 적어 주세요.
-      placeholder: 예) /posts/[id], GET /post/api/v1/posts/search, front build bundle
+      description: Name the page, API, or rendering path to improve.
+      placeholder: "Example: /posts/[id], GET /post/api/v1/posts/search, front build bundle"
     validations:
       required: true
 
@@ -15,8 +15,8 @@ body:
     id: scenario
     attributes:
       label: Scenario
-      description: 어떤 트래픽, 데이터 규모, 사용 시나리오에서 문제가 드러나는지 설명해 주세요.
-      placeholder: 예) 공개 글 상세 새로고침 시 hydration mismatch와 CLS 급등이 함께 발생
+      description: Explain the traffic, data scale, or user scenario where the problem appears.
+      placeholder: "Example: Refreshing a public post detail triggers both hydration mismatch and a CLS spike."
     validations:
       required: true
 
@@ -24,8 +24,8 @@ body:
     id: current
     attributes:
       label: Current Metric
-      description: 현재 확인한 성능 지표나 체감 문제를 적어 주세요.
-      placeholder: 예) p95 3.1s, JS 420KB, CLS 0.38
+      description: Provide the observed performance metrics or perceived problem.
+      placeholder: "Example: p95 3.1s, JS 420KB, CLS 0.38"
     validations:
       required: true
 
@@ -33,8 +33,8 @@ body:
     id: target_metric
     attributes:
       label: Target Metric
-      description: 개선 후 어느 수준까지 맞추고 싶은지 적어 주세요.
-      placeholder: 예) p95 1.2s 이하, JS 300KB 이하, CLS 0.1 이하
+      description: State the target level after improvement.
+      placeholder: "Example: p95 at most 1.2s, JS at most 300KB, CLS at most 0.1"
     validations:
       required: true
 
@@ -42,8 +42,8 @@ body:
     id: hypothesis
     attributes:
       label: Bottleneck / Hypothesis
-      description: 병목 원인 추정이나 먼저 확인해야 할 포인트를 설명해 주세요.
-      placeholder: 예) 초기 hydration 후 DOM 변형, 검색 쿼리 candidate pool 과다, 이미지 레이아웃 시프트
+      description: Describe the suspected bottleneck or the first point to investigate.
+      placeholder: "Example: DOM mutation after initial hydration, oversized search candidate pool, image layout shift"
     validations:
       required: true
 
@@ -51,11 +51,11 @@ body:
     id: validation
     attributes:
       label: Validation Plan
-      description: 개선 후 어떤 방식으로 확인할지 `...했는가?` 형태로 적어 주세요.
+      description: Describe how to verify the improvement as a checklist.
       placeholder: |
-        - [ ] 같은 시나리오에서 다시 계측했는가?
-        - [ ] 로컬 검증과 실페이지 검증을 모두 수행했는가?
-        - [ ] 이전 지표와 개선 후 지표를 비교했는가?
+        - [ ] Did we remeasure the same scenario?
+        - [ ] Did we run both local and live-page verification?
+        - [ ] Did we compare the before and after metrics?
     validations:
       required: true
 
@@ -63,13 +63,13 @@ body:
     id: execution_contract
     attributes:
       label: Execution Contract
-      description: Worker가 구현 결정을 추측하지 않도록 root에서 확정한 계약을 적어 주세요.
+      description: Record the contract fixed by root so the worker does not infer implementation decisions.
       placeholder: |
         - Confirmed decisions / interfaces:
         - Allow:
         - Deny / Non-goals:
         - Completion criteria / edge cases:
-        - Unresolved implementation decisions: 없음
+        - Unresolved implementation decisions: None
     validations:
       required: true
 
@@ -77,12 +77,12 @@ body:
     id: verification_delivery
     attributes:
       label: Verification & Delivery
-      description: 실행할 검증, 남길 증거, skip 조건, 기능 단위 commit을 적어 주세요.
+      description: List verification to run, evidence to retain, skip conditions, and feature-sized commits.
       placeholder: |
         - Exact commands:
         - Expected / observed evidence:
-        - Skipped checks and rerun conditions: 없음
+        - Skipped checks and rerun conditions: None
         - Commit slices:
-          1. perf(scope): 작업 요약
+          1. perf(scope): work summary
     validations:
       required: true

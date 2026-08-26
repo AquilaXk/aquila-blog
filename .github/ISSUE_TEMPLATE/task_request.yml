@@ -1,13 +1,13 @@
 name: "🛠 Task / Feature / Refactor"
-description: "기능, 리팩터링, 테스트, 문서와 일반 유지보수 작업을 정리합니다."
+description: "Plan feature, refactor, test, documentation, and routine maintenance work."
 title: "[Task] "
 labels: ["task"]
 body:
   - type: markdown
     attributes:
       value: |
-        문제와 목표를 먼저 명확히 하고, 구현 방법은 확정된 결정만 기록해 주세요.
-        모든 edge case·명령·commit 계획을 선행 작성할 필요는 없습니다.
+        Clarify the problem and goal first, and record only implementation decisions that are already fixed.
+        You do not need to prewrite every edge case, command, or commit plan.
 
   - type: dropdown
     id: work_type
@@ -27,8 +27,8 @@ body:
     id: domain
     attributes:
       label: Domain
-      description: 관련 모듈, 화면, API 또는 파일 영역을 적어 주세요.
-      placeholder: "예) back/post, tools/contracts, deploy/homeserver, docs/**"
+      description: Name the related module, screen, API, or file area.
+      placeholder: "Example: back/post, tools/contracts, deploy/homeserver, docs/**"
     validations:
       required: true
 
@@ -36,8 +36,8 @@ body:
     id: summary
     attributes:
       label: Summary
-      description: 무엇을 왜 하는지 1~3문장으로 설명해 주세요.
-      placeholder: "예) summary selector를 한 곳으로 통합해 공개 표면의 결과를 일치시킵니다."
+      description: In one to three sentences, explain what will change and why.
+      placeholder: "Example: Consolidate the summary selector so public surfaces show consistent results."
     validations:
       required: true
 
@@ -45,7 +45,7 @@ body:
     id: problem_evidence
     attributes:
       label: Problem / Evidence
-      description: 현재 구조의 문제, 사용자 불편, 운영 비용 또는 변경 필요성을 뒷받침하는 근거를 적어 주세요.
+      description: Provide evidence for the current structural problem, user friction, operational cost, or need for change.
       placeholder: |
         - Current:
         - Problem:
@@ -57,10 +57,10 @@ body:
     id: goal
     attributes:
       label: Goal
-      description: 이 이슈가 완료됐을 때 달라져 있어야 하는 결과를 적어 주세요.
+      description: Describe the outcome that must be different when this issue is complete.
       placeholder: |
         - Intended outcome:
-        - Success metric: 정량 지표가 유효한 경우만
+        - Success metric: only when a quantitative metric is meaningful
     validations:
       required: true
 
@@ -68,7 +68,7 @@ body:
     id: scope
     attributes:
       label: Scope
-      description: 포함할 작업과 의도적으로 제외할 작업을 구분해 주세요.
+      description: Separate work to include from work intentionally excluded.
       placeholder: |
         In Scope
         - ...
@@ -82,11 +82,11 @@ body:
     id: acceptance
     attributes:
       label: Acceptance Criteria
-      description: 구현 방법이 아니라 관찰 가능한 완료 조건을 3~7개로 적어 주세요.
+      description: List three to seven observable completion criteria, not implementation steps.
       placeholder: |
-        - [ ] 사용자 또는 시스템 결과가 기대대로 동작함
-        - [ ] 기존 핵심 경로가 유지됨
-        - [ ] 필요한 문서·계약이 같은 변경에 반영됨
+        - [ ] User or system outcomes behave as expected
+        - [ ] Existing critical paths remain intact
+        - [ ] Required documentation and contracts are updated in the same change
     validations:
       required: true
 
@@ -94,7 +94,7 @@ body:
     id: approach
     attributes:
       label: Approach / Decisions
-      description: 이미 합의된 방향, 주요 제약, 트레이드오프 또는 아직 열린 질문이 있을 때만 적어 주세요.
+      description: Include only agreed direction, key constraints, trade-offs, or still-open questions.
       placeholder: |
         - Selected direction:
         - Constraints:
@@ -105,7 +105,7 @@ body:
     id: dependencies
     attributes:
       label: Dependencies / Related
-      description: Parent, 관련 이슈, 외부 결정 또는 저장소 owner를 적어 주세요.
+      description: List the parent, related issues, external decisions, or repository owner.
       placeholder: |
         - Parent / Related:
         - Blocking:
@@ -115,12 +115,12 @@ body:
     id: verification
     attributes:
       label: Verification
-      description: 변경한 계층의 focused 검증과 필요한 대표 확인만 적어 주세요.
+      description: List focused verification for the changed layer and only the representative checks required.
       placeholder: |
         - Focused unit/integration:
         - Representative E2E/manual check:
         - Required CI:
-        - Before/after metric: 성능 작업인 경우만
+        - Before/after metric: only for performance work
     validations:
       required: true
 
@@ -129,7 +129,7 @@ body:
     attributes:
       label: Ready Check
       options:
-        - label: "[열린 이슈](https://github.com/AquilaXk/aquila-blog/issues)에서 중복 작업을 검색했습니다."
+        - label: "I searched [open issues](https://github.com/AquilaXk/aquila-blog/issues) for duplicate work."
           required: true
-        - label: "범위, 완료 조건과 owner가 구현을 시작할 수 있을 만큼 명확합니다."
+        - label: "The scope, completion criteria, and owner are clear enough to begin implementation."
           required: true

@@ -384,7 +384,7 @@ jobs:
           NODE
           )"
           if [[ "${should_close}" == "true" ]]; then
-            gh pr close "${PR_NUMBER}" --repo "${PLATFORM_REPOSITORY}" --comment "자동 receiver가 current semantic identity와 동일함을 확인해 obsolete Draft PR을 종료합니다."
+            gh pr close "${PR_NUMBER}" --repo "${PLATFORM_REPOSITORY}" --comment "The current semantic identity already matches, so the automated receiver is closing this obsolete Draft PR."
           fi
 
       - name: Push stable Platform legal-policy branch
@@ -412,41 +412,41 @@ jobs:
           set -euo pipefail
           body_file="${RUNNER_TEMP}/web-legal-policy-sync-pr.md"
           {
-            echo "## 🔗 Related Issue"
+            echo "## Related Issue"
             echo "- Refs #1683"
             echo
-            echo "## 📝 Summary"
-            echo "- Web canonical legal-policy identity를 exact commit에서 검증해 Platform-local lock으로 동기화합니다."
+            echo "## Summary"
+            echo "- Verify the Web canonical legal-policy identity at the exact commit and sync it to the Platform-local lock."
             echo
-            echo "## 🔄 Contract Sync"
+            echo "## Contract Sync"
             echo "- source: ${WEB_REPOSITORY}@${SOURCE_COMMIT}"
             echo "- manifest SHA-256: ${MANIFEST_SHA256}"
             echo "- delivery ID: ${DELIVERY_ID}"
-            echo "- Commit plan ↔ 실제 commit: legal-policy lock 동기화 1개"
-            echo "- 미확정 구현 결정: 없음"
+            echo "- Commit plan ↔ actual commits: one legal-policy lock synchronization"
+            echo "- Open implementation decisions: none"
             echo
-            echo "## 🛠 Changes"
-            echo "- Platform-owned stable branch의 canonical Web provenance lock만 갱신합니다."
+            echo "## Changes"
+            echo "- Update only the canonical Web provenance lock on the Platform-owned stable branch."
             echo
-            echo "## 🎯 Scope"
+            echo "## Scope"
             echo "- [x] Infra / CI / Ops"
             echo
-            echo "## ✅ Validation"
-            echo "- [x] canonical manifest hash와 lock checker를 통과했습니다."
-            echo "- [x] push 직전 Web/Platform current main identity를 재확인했습니다."
+            echo "## Validation"
+            echo "- [x] Passed the canonical manifest hash and lock checker."
+            echo "- [x] Rechecked the current Web and Platform main identities immediately before push."
             echo
-            echo "## ⚠️ Risk & Rollback"
-            echo "- 예상 리스크: stale identity 또는 provenance mismatch"
-            echo "- 롤백 방법: 이 PR을 merge하지 않고 producer dispatch를 중단합니다."
-            echo "- 승인 후 post-delivery 확인: required CI와 exact-head Review"
+            echo "## Risk & Rollback"
+            echo "- Expected risk: stale identity or provenance mismatch."
+            echo "- Rollback: do not merge this PR and stop producer dispatches."
+            echo "- Post-delivery verification after approval: required CI and exact-head Review."
             echo
-            echo "## 📸 Screenshot / API Example"
-            echo "- UI 변경 없음. source repository/commit, manifest hash, delivery ID는 위 Contract Sync에 기록했습니다."
+            echo "## Screenshot / API Example"
+            echo "- No UI changes. The source repository/commit, manifest hash, and delivery ID are recorded above in Contract Sync."
             echo
-            echo "## ☑️ Checklist"
-            echo "- [x] 관련 이슈와 exact source identity를 연결했습니다."
-            echo "- [x] Platform-local lock 외 변경이 없음을 검증했습니다."
-            echo "- [x] stale identity는 write 없는 no-op으로 처리합니다."
+            echo "## Checklist"
+            echo "- [x] Linked the related issue and exact source identity."
+            echo "- [x] Verified that only the Platform-local lock changed."
+            echo "- [x] Treat stale identity as a write-free no-op."
           } > "${body_file}"
 
           existing="$(gh api \
@@ -479,7 +479,7 @@ jobs:
             pr_number="$(jq -r '.[0].number' <<<"${existing}")"
             gh pr edit "${pr_number}" \
               --repo "${PLATFORM_REPOSITORY}" \
-              --title "[CI] Web legal-policy provenance lock 동기화" \
+              --title "[CI] Sync Web legal-policy provenance lock" \
               --body-file "${body_file}"
           else
             gh pr create \
@@ -487,6 +487,6 @@ jobs:
               --base main \
               --head "${SYNC_BRANCH}" \
               --draft \
-              --title "[CI] Web legal-policy provenance lock 동기화" \
+              --title "[CI] Sync Web legal-policy provenance lock" \
               --body-file "${body_file}"
           fi

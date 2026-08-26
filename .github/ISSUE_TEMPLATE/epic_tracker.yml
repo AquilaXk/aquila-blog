@@ -1,20 +1,20 @@
 name: "🧭 Epic / Tracker"
-description: "여러 child issue의 목표, owner, 순서와 종료 상태만 관리합니다."
+description: "Track goals, owners, sequencing, and completion status across child issues."
 title: "[Epic] "
 labels: ["task"]
 body:
   - type: markdown
     attributes:
       value: |
-        Epic은 child의 구현·전체 검증을 다시 수행하지 않습니다.
-        각 child가 자기 PR과 evidence를 소유하고, Parent는 상태와 링크만 집계합니다.
+        An Epic does not repeat child implementation or full verification.
+        Each child owns its PR and evidence; the parent aggregates only status and links.
 
   - type: input
     id: domain
     attributes:
       label: Domain
-      description: Epic이 다루는 제품·플랫폼 영역을 적어 주세요.
-      placeholder: "예) canonical-summary, repository-boundary, task-platform"
+      description: Name the product or platform area covered by this Epic.
+      placeholder: "Example: canonical-summary, repository-boundary, task-platform"
     validations:
       required: true
 
@@ -22,7 +22,7 @@ body:
     id: goal
     attributes:
       label: Goal
-      description: Epic 종료 시 달라져 있어야 하는 상태를 설명해 주세요.
+      description: Describe the state that must be different when the Epic closes.
     validations:
       required: true
 
@@ -30,7 +30,7 @@ body:
     id: ownership
     attributes:
       label: Ownership
-      description: 영역별 canonical repository와 issue owner를 적어 주세요.
+      description: List the canonical repository and issue owner for each area.
       placeholder: |
         | Area | Repository / Canonical Issue |
         |---|---|
@@ -44,7 +44,7 @@ body:
     id: child_issues
     attributes:
       label: Child Issues
-      description: 우선순위와 상태를 포함해 child issue를 연결해 주세요.
+      description: Link child issues with their priority and status.
       placeholder: |
         P0
         - [ ] #
@@ -61,11 +61,11 @@ body:
     id: dependency_order
     attributes:
       label: Dependency Order
-      description: 실제 선행 관계와 병행 가능한 작업을 간단히 적어 주세요.
+      description: Briefly describe the real dependency order and work that can proceed in parallel.
       placeholder: |
         #A → #B
-        #C와 #D 병행
-        같은 파일의 대형 PR만 직렬화
+        #C and #D in parallel
+        Serialize only large PRs that touch the same files
     validations:
       required: true
 
@@ -73,12 +73,12 @@ body:
     id: exit_criteria
     attributes:
       label: Epic Exit Criteria
-      description: Parent 자체의 종료 조건만 적고 child 테스트를 중복하지 마세요.
+      description: List only parent completion criteria; do not duplicate child tests.
       placeholder: |
-        - [ ] 필수 child가 completed
-        - [ ] deferred child의 이유와 재개 조건이 기록됨
-        - [ ] 중복 owner가 없음
-        - [ ] 각 child의 PR·CI·운영 evidence가 연결됨
+        - [ ] Required children are complete
+        - [ ] Deferred children record their reason and resume condition
+        - [ ] No duplicate owner exists
+        - [ ] Each child's PR, CI, and operational evidence is linked
     validations:
       required: true
 
@@ -86,7 +86,7 @@ body:
     id: evidence
     attributes:
       label: Evidence Aggregation
-      description: Parent에 집계할 PR, CI, 운영 evidence 위치를 적어 주세요.
+      description: List the PR, CI, and operational evidence to aggregate in the parent.
       placeholder: |
         - Child PR / CI links:
         - Runtime / rollout evidence:
@@ -99,7 +99,7 @@ body:
     attributes:
       label: Ready Check
       options:
-        - label: "[열린 이슈](https://github.com/AquilaXk/aquila-blog/issues)에서 중복 Epic과 구현 owner를 확인했습니다."
+        - label: "I checked [open issues](https://github.com/AquilaXk/aquila-blog/issues) for duplicate Epics and implementation owners."
           required: true
-        - label: "Parent가 child 구현·검증을 중복 소유하지 않습니다."
+        - label: "The parent does not duplicate ownership of child implementation or verification."
           required: true

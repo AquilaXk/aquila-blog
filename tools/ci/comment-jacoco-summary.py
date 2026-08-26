@@ -99,7 +99,7 @@ def append_file_section(lines, title, rows, empty_message):
         return
     lines.extend(
         [
-            "| 파일 | Line | 미커버 Line | Branch | 미커버 Branch | 그래프 |",
+            "| File | Line | Uncovered Line | Branch | Uncovered Branch | Graph |",
             "| --- | ---: | ---: | ---: | ---: | --- |",
         ],
     )
@@ -109,7 +109,7 @@ def append_file_section(lines, title, rows, empty_message):
 def build_summary(report_path, baseline_path, changed_files_path=None, full_report_path=None):
     root = ET.parse(report_path).getroot()
     line_missed, line_covered, line_ratio = read_counter(root, "LINE")
-    status = "통과" if line_missed == 0 and line_ratio >= 100.0 else "미달"
+    status = "Passed" if line_missed == 0 and line_ratio >= 100.0 else "Below target"
     baseline_count = count_baseline_exclusions(baseline_path)
     full_root = ET.parse(full_report_path).getroot() if full_report_path is not None and full_report_path.exists() else None
     sha = os.environ.get("GITHUB_SHA", "")
@@ -137,19 +137,19 @@ def build_summary(report_path, baseline_path, changed_files_path=None, full_repo
 
     lines = [
         MARKER,
-        "## Jacoco 테스트 커버리지 요약",
+        "## JaCoCo coverage summary",
         "",
-        f"- 상태: **{status}**",
-        f"- Baseline 제외 후 Line coverage: **{line_ratio:.2f}%**",
-        "- Gate 기준: static/baseline 제외 후 신규 코드 line coverage 100%",
-        f"- Baseline 제외 클래스: `{baseline_count}`개",
+        f"- Status: **{status}**",
+        f"- Line coverage after baseline exclusions: **{line_ratio:.2f}%**",
+        "- Gate: new-code line coverage after static/baseline exclusions must be 100%",
+        f"- Baseline-excluded classes: `{baseline_count}`",
     ]
     if full_root is not None:
         lines.extend(
             [
                 f"- Full report Line coverage: **{full_line_ratio:.2f}%**",
                 f"- Full report Branch coverage: **{full_branch_ratio:.2f}%**",
-                f"- Baseline 제외 class ratio: **{excluded_class_ratio:.2f}%**",
+                f"- Baseline-excluded class ratio: **{excluded_class_ratio:.2f}%**",
             ],
         )
     if sha_line:
@@ -157,27 +157,27 @@ def build_summary(report_path, baseline_path, changed_files_path=None, full_repo
     lines.extend(
         [
             "",
-            "| 유형 | 커버 | 전체 | 미커버 | 비율 | 그래프 |",
+            "| Type | Covered | Total | Uncovered | Ratio | Graph |",
             "| --- | ---: | ---: | ---: | ---: | --- |",
         ],
     )
     lines.extend(format_counter(*item) for item in counters)
     append_file_section(
         lines,
-        "변경 파일 커버리지",
+        "Changed file coverage",
         changed_rows[:MAX_CHANGED_FILES],
-        "- 변경된 production Kotlin 파일이 없거나 baseline 제외 대상입니다",
+        "- No changed production Kotlin files, or all are baseline-excluded.",
     )
     append_file_section(
         lines,
-        "Top 미커버 파일",
+        "Top uncovered files",
         worst_rows,
-        "- 미커버 source file 없음",
+        "- No uncovered source files.",
     )
     lines.extend(
         [
             "",
-            "## 상세 report",
+            "## Detailed report",
             "",
             "- Actions artifact: `jacoco-pr-report`",
             f"- Baseline-filtered XML path: `{report_path}`",

@@ -79,9 +79,9 @@ class PostTagIndexServiceTest {
     }
 
     @Test
-    @DisplayName("trim 정규화 뒤 정확히 80자인 태그는 canonical repository에 전달한다")
+    @DisplayName("trim 정규화 뒤 정확히 80 code point인 태그는 canonical repository에 전달한다")
     fun syncsNormalizedTagAtMaximumLength() {
-        val tag = "k".repeat(80)
+        val tag = "\uD83D\uDE00".repeat(80)
         val post = testPost(content = "tags:  $tag  \n\n본문")
 
         service.syncPostTags(post)
@@ -90,9 +90,9 @@ class PostTagIndexServiceTest {
     }
 
     @Test
-    @DisplayName("trim 정규화 뒤 81자인 태그는 repository 호출 전 BAD_REQUEST로 거절한다")
+    @DisplayName("trim 정규화 뒤 81 code point인 태그는 repository 호출 전 BAD_REQUEST로 거절한다")
     fun rejectsNormalizedTagOverMaximumLengthBeforeRepositoryCall() {
-        val post = testPost(content = "tags: ${"k".repeat(81)}\n\n본문")
+        val post = testPost(content = "tags: ${"\uD83D\uDE00".repeat(81)}\n\n본문")
 
         assertThatThrownBy { service.syncPostTags(post) }
             .isInstanceOfSatisfying(AppException::class.java) { exception ->

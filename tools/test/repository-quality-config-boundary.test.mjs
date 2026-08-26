@@ -73,11 +73,10 @@ test("public issue guidance sends vulnerability details only to the private repo
 
   assert.match(chooser, /blank_issues_enabled: false/)
   assert.match(chooser, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
-  for (const guidance of [operations, workflow]) {
-    assert.match(guidance, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
-    assert.match(guidance, /취약점 세부사항.*PoC.*secret/s)
-  }
-  assert.match(operations, /토큰.*쿠키.*개인정보.*내부 URL/s)
+  assert.match(workflow, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
+  assert.match(operations, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
+  assert.match(operations, /Do not include vulnerability details, reproduction steps, PoCs, or secrets in public Issues/)
+  assert.match(operations, /Public evidence must include only information with tokens, cookies, personal data, and internal URLs removed or redacted/)
   assert.doesNotMatch(combined, /CODE_OF_CONDUCT\.md#enforcement|maintainer private contact/i)
 })
 

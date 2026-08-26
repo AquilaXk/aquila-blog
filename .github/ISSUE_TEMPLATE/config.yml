@@ -2,4 +2,4 @@ blank_issues_enabled: false
 contact_links:
   - name: "🔒 Private vulnerability report"
     url: https://github.com/AquilaXk/aquila-blog/security/advisories/new
-    about: 취약점 세부사항은 공개 Issue 대신 GitHub의 비공개 신고 양식으로 보내 주세요.
+    about: Send vulnerability details through GitHub's private reporting form instead of a public Issue.

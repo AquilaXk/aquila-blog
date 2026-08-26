@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -30,12 +32,19 @@ class AdminOperationExecutionTransactionIntegrationTest : BaseAdminOperationExec
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
 
+    @Autowired
+    private lateinit var transactionManager: PlatformTransactionManager
+
     private val operationIds = mutableListOf<UUID>()
 
     @AfterEach
     fun cleanup() {
-        operationIds.forEach { operationId ->
-            jdbcTemplate.update("DELETE FROM admin_operation_receipt WHERE operation_id = ?", operationId)
+        inTransaction {
+            val deleted =
+                operationIds.sumOf { operationId ->
+                    jdbcTemplate.update("DELETE FROM admin_operation_receipt WHERE operation_id = ?", operationId)
+                }
+            assertThat(deleted).isEqualTo(operationIds.size)
         }
     }
 
@@ -113,10 +122,14 @@ class AdminOperationExecutionTransactionIntegrationTest : BaseAdminOperationExec
         val operationId = UUID.randomUUID().also(operationIds::add)
         try {
             admissionService.admit(searchReceipt(operationId, SearchRuntimeControlValue.ENABLED))
-            jdbcTemplate.update(
-                "DELETE FROM search_runtime_control_state WHERE control_key = ?",
-                SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL.name,
-            )
+            val deleted =
+                inTransaction {
+                    jdbcTemplate.update(
+                        "DELETE FROM search_runtime_control_state WHERE control_key = ?",
+                        SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL.name,
+                    )
+                }
+            assertThat(deleted).isEqualTo(1)
 
             assertThatThrownBy { executionService.execute(operationId) }
                 .extracting("errorCode")
@@ -210,25 +223,29 @@ class AdminOperationExecutionTransactionIntegrationTest : BaseAdminOperationExec
         )!!
 
     private fun restorePipelineState(snapshot: PipelineState) {
-        jdbcTemplate.update(
-            """
-            INSERT INTO search_runtime_control_state (control_key, control_value, version, applied_operation_id, created_at, modified_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT (control_key) DO UPDATE SET
-                control_value = EXCLUDED.control_value,
-                version = EXCLUDED.version,
-                applied_operation_id = EXCLUDED.applied_operation_id,
-                created_at = EXCLUDED.created_at,
-                modified_at = EXCLUDED.modified_at
-            """.trimIndent(),
-            SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL.name,
-            snapshot.value,
-            snapshot.version,
-            snapshot.appliedOperationId,
-            java.sql.Timestamp.from(snapshot.createdAt),
-            java.sql.Timestamp.from(snapshot.modifiedAt),
-        )
+        inTransaction {
+            jdbcTemplate.update(
+                """
+                INSERT INTO search_runtime_control_state (control_key, control_value, version, applied_operation_id, created_at, modified_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (control_key) DO UPDATE SET
+                    control_value = EXCLUDED.control_value,
+                    version = EXCLUDED.version,
+                    applied_operation_id = EXCLUDED.applied_operation_id,
+                    created_at = EXCLUDED.created_at,
+                    modified_at = EXCLUDED.modified_at
+                """.trimIndent(),
+                SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL.name,
+                snapshot.value,
+                snapshot.version,
+                snapshot.appliedOperationId,
+                java.sql.Timestamp.from(snapshot.createdAt),
+                java.sql.Timestamp.from(snapshot.modifiedAt),
+            )
+        }
     }
+
+    private fun <T> inTransaction(block: () -> T): T = requireNotNull(TransactionTemplate(transactionManager).execute { block() })
 
     private data class PipelineState(
         val value: String,

@@ -61,9 +61,13 @@ test("Jacoco summary exposes baseline-filtered and full coverage", () => {
     { encoding: "utf8" },
   )
 
-  assert.match(output, /Baseline 제외 후 Line coverage: \*\*100\.00%\*\*/)
+  assert.match(output, /<!-- aquila-blog:jacoco-coverage-summary -->/)
+  assert.match(output, /## JaCoCo coverage summary/)
+  assert.match(output, /Status: \*\*Passed\*\*/)
+  assert.match(output, /Line coverage after baseline exclusions: \*\*100\.00%\*\*/)
+  assert.match(output, /Gate: new-code line coverage after static\/baseline exclusions must be 100%/)
+  assert.match(output, /Baseline-excluded classes: `1`/)
   assert.match(output, /Full report Line coverage: \*\*50\.00%\*\*/)
   assert.match(output, /Full report Branch coverage: \*\*75\.00%\*\*/)
-  assert.match(output, /Baseline 제외 클래스: `1`개/)
-  assert.match(output, /Baseline 제외 class ratio: \*\*50\.00%\*\*/)
+  assert.match(output, /Baseline-excluded class ratio: \*\*50\.00%\*\*/)
 })

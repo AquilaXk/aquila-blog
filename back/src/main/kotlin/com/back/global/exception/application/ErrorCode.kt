@@ -35,6 +35,12 @@ enum class ErrorCode(
         "IP 보안 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.",
         ErrorKind.USER,
     ),
+    ADMIN_OPERATION_INVALID_COMMAND(
+        "400-40",
+        HttpStatus.BAD_REQUEST,
+        "운영 작업 요청이 올바르지 않습니다.",
+        ErrorKind.USER,
+    ),
 
     // --- 401 ---
     UNAUTHORIZED(
@@ -143,6 +149,12 @@ enum class ErrorCode(
         "유효하지 않은 세션입니다.",
         ErrorKind.USER,
     ),
+    ADMIN_OPERATION_NOT_FOUND(
+        "404-40",
+        HttpStatus.NOT_FOUND,
+        "운영 작업을 찾을 수 없습니다.",
+        ErrorKind.USER,
+    ),
 
     // --- 409 ---
     DB_CONFLICT(
@@ -191,6 +203,12 @@ enum class ErrorCode(
         "409-30",
         HttpStatus.CONFLICT,
         "대용량 업로드 세션 상태가 변경되었습니다.",
+        ErrorKind.USER,
+    ),
+    ADMIN_OPERATION_CONFLICT(
+        "409-40",
+        HttpStatus.CONFLICT,
+        "운영 작업 ID가 다른 요청과 충돌합니다.",
         ErrorKind.USER,
     ),
 

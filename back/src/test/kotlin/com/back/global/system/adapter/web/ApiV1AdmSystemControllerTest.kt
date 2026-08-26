@@ -12,7 +12,10 @@ import com.back.global.system.application.AdminDashboardSignupMailSnapshot
 import com.back.global.system.application.AdminDashboardSnapshot
 import com.back.global.system.application.AdminDashboardStorageCleanupSnapshot
 import com.back.global.system.application.AdminDashboardTaskQueueSnapshot
-import com.back.global.task.application.TaskDlqReplayResult
+import com.back.global.system.application.AdminOperationService
+import com.back.global.system.model.AdminOperationAction
+import com.back.global.system.model.AdminOperationResultCode
+import com.back.global.system.model.AdminOperationStatus
 import com.back.global.task.application.TaskExecutionSample
 import com.back.global.task.application.TaskProcessingLockDiagnostics
 import com.back.global.task.application.TaskQueueDiagnostics
@@ -24,12 +27,15 @@ import org.hamcrest.Matchers.anyOf
 import org.hamcrest.Matchers.equalTo
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import java.time.Instant
+import java.util.UUID
 
 @org.junit.jupiter.api.DisplayName("ApiV1AdmSystemController 테스트")
 class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
@@ -332,28 +338,116 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
     }
 
     @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `관리자는 FAILED task를 replay할 수 있다`() {
-        given(taskDlqReplayService.replayFailedTasks(null, 50, true))
-            .willReturn(
-                TaskDlqReplayResult(
-                    taskType = null,
-                    requestedLimit = 50,
-                    replayedCount = 2,
-                    resetRetryCount = true,
-                    replayedTaskIds = listOf(101, 102),
-                ),
+    fun `관리자는 stable operation ID로 FAILED task replay를 제출할 수 있다`() {
+        val securityUser =
+            SecurityUser(
+                id = 7L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+                sessionRowId = 41L,
             )
+        val operationId = UUID.fromString("f4791e0e-3857-4ef1-9fe7-2a9654a2208f")
+        val expectedCommand =
+            AdminOperationService.DlqReplayCommand(
+                operationId = operationId,
+                actorId = 7L,
+                sessionRowId = 41L,
+                taskType = null,
+                limit = 50,
+                resetRetryCount = true,
+                reason = "incident recovery",
+            )
+        given(adminOperationService.submit(expectedCommand))
+            .willReturn(operationResult(operationId, sessionRowId = 41L, replayedCount = 2))
 
+        mvc
+            .post("/system/api/v1/adm/operations/task-dlq-replay") {
+                with(user(securityUser))
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "operationId":"$operationId",
+                      "reason":"incident recovery",
+                      "limit":50,
+                      "resetRetryCount":true,
+                      "actorId":999,
+                      "sessionRowId":999
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isAccepted() }
+                jsonPath("$.resultCode") { value("202-40") }
+                jsonPath("$.data.replayedCount") { value(2) }
+                jsonPath("$.data.operationId") { value(operationId.toString()) }
+                jsonPath("$.data.sessionRowId") { value(41) }
+            }
+
+        verify(adminOperationService).submit(expectedCommand)
+    }
+
+    @Test
+    fun `관리자는 현재 operation 상태를 조회할 수 있다`() {
+        val securityUser =
+            SecurityUser(
+                id = 7L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+                sessionRowId = 41L,
+            )
+        val operationId = UUID.fromString("f4791e0e-3857-4ef1-9fe7-2a9654a2208f")
+        given(adminOperationService.get(operationId, 7L)).willReturn(operationResult(operationId, sessionRowId = 41L))
+
+        mvc
+            .get("/system/api/v1/adm/operations/$operationId") {
+                with(user(securityUser))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-40") }
+                jsonPath("$.data.action") { value("TASK_DLQ_REPLAY") }
+                jsonPath("$.data.status") { value("SUCCEEDED") }
+                jsonPath("$.data.resultCode") { value("TASKS_REPLAYED") }
+                jsonPath("$.data.sessionRowId") { value(41) }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `invalid replay operation request is rejected before service`() {
+        val operationId = UUID.fromString("f4791e0e-3857-4ef1-9fe7-2a9654a2208f")
+
+        listOf(
+            """{"reason":"incident recovery"}""",
+            """{"operationId":null,"reason":"incident recovery"}""",
+            """{"operationId":"$operationId","reason":" "}""",
+            """{"operationId":"$operationId","reason":"${"x".repeat(201)}"}""",
+            """{"operationId":"$operationId","reason":"incident recovery","limit":201}""",
+        ).forEach { request ->
+            mvc
+                .post("/system/api/v1/adm/operations/task-dlq-replay") {
+                    contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                    content = request
+                }.andExpect {
+                    status { isBadRequest() }
+                }
+        }
+
+        verifyNoInteractions(adminOperationService)
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `legacy unaudited replay route is absent`() {
         mvc
             .post("/system/api/v1/adm/tasks/replay-failed") {
                 contentType = org.springframework.http.MediaType.APPLICATION_JSON
-                content = """{"taskType":null,"limit":50,"resetRetryCount":true}"""
+                content = "{}"
             }.andExpect {
-                status { isOk() }
-                jsonPath("$.resultCode") { value("200-10") }
-                jsonPath("$.data.replayedCount") { value(2) }
-                jsonPath("$.data.replayedTaskIds[0]") { value(101) }
+                status { isNotFound() }
             }
     }
 
@@ -506,6 +600,26 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
                     legacyOrphanLikely = false,
                 ),
         )
+
+    private fun operationResult(
+        operationId: UUID,
+        sessionRowId: Long?,
+        replayedCount: Int = 1,
+    ) = AdminOperationService.OperationResult(
+        operationId = operationId,
+        actorId = 7L,
+        sessionRowId = sessionRowId,
+        action = AdminOperationAction.TASK_DLQ_REPLAY,
+        target = "ALL_FAILED_TASKS",
+        reason = "incident recovery",
+        status = AdminOperationStatus.SUCCEEDED,
+        resultCode = AdminOperationResultCode.TASKS_REPLAYED,
+        selectedCount = replayedCount,
+        replayedCount = replayedCount,
+        quarantinedCount = 0,
+        createdAt = Instant.parse("2026-08-24T00:00:00Z"),
+        modifiedAt = Instant.parse("2026-08-24T00:00:01Z"),
+    )
 
     private fun taskQueueDiagnostics(): TaskQueueDiagnostics =
         TaskQueueDiagnostics(

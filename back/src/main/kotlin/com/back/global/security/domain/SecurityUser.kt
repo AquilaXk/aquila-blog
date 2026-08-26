@@ -14,6 +14,7 @@ open class SecurityUser(
     password: String,
     val nickname: String,
     authorities: Collection<GrantedAuthority>,
+    val sessionRowId: Long? = null,
 ) : User(username, password, authorities),
     OAuth2User {
     open override fun getAttributes(): Map<String, Any> = emptyMap()

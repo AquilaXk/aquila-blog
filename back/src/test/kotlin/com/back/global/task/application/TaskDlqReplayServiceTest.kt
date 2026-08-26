@@ -1,6 +1,7 @@
 package com.back.global.task.application
 
 import com.back.global.task.annotation.TaskPayloadSensitivity
+import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
@@ -12,7 +13,6 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
-import org.springframework.data.domain.PageRequest
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.time.Clock
 import java.time.Instant
@@ -27,6 +27,7 @@ class TaskDlqReplayServiceTest {
     @Test
     fun `only an exact valid failed envelope is replayed and invalid rows are quarantined`() {
         val repository = mock(TaskQueueRepositoryPort::class.java)
+        val replayRepository = mock(TaskDlqReplayRepositoryPort::class.java)
         val registry = registry()
         val validPayload = StubPayload(UUID.randomUUID(), "Post", 101L)
         val valid = failedTask(101L, VALID_TASK_TYPE, validPayload, codec.encode(validPayload, registry.getEntry(VALID_TASK_TYPE)!!))
@@ -41,18 +42,17 @@ class TaskDlqReplayServiceTest {
                 rawEnvelope = expiredEnvelope(expiredPayload),
             )
         `when`(
-            repository.findByStatusOrderByModifiedAtDesc(
-                TaskStatus.FAILED,
-                PageRequest.of(0, 10),
-            ),
+            replayRepository.findFailedTasksWithLock(null, 10),
         ).thenReturn(listOf(valid, malformed, unknown, expired))
         val meterRegistry = SimpleMeterRegistry()
-        val service = TaskDlqReplayService(repository, registry, codec, Clock.fixed(now, ZoneOffset.UTC), meterRegistry)
+        val service = TaskDlqReplayService(repository, replayRepository, registry, codec, Clock.fixed(now, ZoneOffset.UTC), meterRegistry)
 
-        val result = service.replayFailedTasks(taskType = null, limit = 10, resetRetryCount = true)
+        val result = service.replayFailedTasksWithLock(taskType = null, limit = 10, resetRetryCount = true)
 
         assertThat(result.replayedTaskIds).containsExactly(101L)
         assertThat(result.replayedCount).isEqualTo(1)
+        assertThat(result.selectedCount).isEqualTo(4)
+        assertThat(result.quarantinedCount).isEqualTo(3)
         assertThat(valid.status).isEqualTo(TaskStatus.PENDING)
         assertThat(valid.retryCount).isZero()
         assertQuarantined(malformed, TaskQuarantineReason.MALFORMED_ENVELOPE)

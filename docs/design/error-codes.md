@@ -15,6 +15,7 @@
 | 400-1 | 400 | USER | validation / bad request 일반 | 잘못된 요청입니다. |
 | 400-2 | 400 | USER | member/oauth signup 입력 검증 | 요청이 올바르지 않습니다. |
 | 400-3 | 400 | USER | AuthIpSecurityVerifier IP 정보 부재 | IP 보안 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요. |
+| 400-40 | 400 | USER | AdminOperationService DLQ operation 검증 | 운영 작업 요청이 올바르지 않습니다. |
 | 401-1 | 401 | USER | Security entryPoint / 미인증 | 로그인 후 이용해주세요. |
 | 401-2 | 401 | USER | AuthTokenExtractor Bearer 형식 | Authorization 헤더가 Bearer 형식이 아닙니다. |
 | 401-4 | 401 | USER | email 미인증 로그인 | 이메일 인증이 완료되지 않았습니다. |
@@ -32,6 +33,7 @@
 | 403-30 | 403 | USER | CloudExternalPlaybackTokenService | 외부 재생 token이 올바르지 않거나 만료되었습니다. |
 | 404-1 | 404 | USER | 일반 not found / ExceptionHandler | 해당 데이터가 존재하지 않습니다. |
 | 404-2 | 404 | USER | member/oauth signup session not found | 유효하지 않은 세션입니다. |
+| 404-40 | 404 | USER | AdminOperationService actor-scoped receipt 조회 | 운영 작업을 찾을 수 없습니다. |
 | 409-1 | 409 | USER | DB integrity / optimistic lock only | 동시에 처리된 요청 충돌이 발생했습니다. 잠시 후 다시 시도해주세요. |
 | 409-2 | 409 | USER | resource conflict (email 등) | 이미 사용 중인 리소스입니다. |
 | 409-3 | 409 | USER | member signup race | 동시에 처리된 회원가입 요청입니다. 다시 시도해주세요. |
@@ -40,6 +42,7 @@
 | 409-20 | 409 | USER | MemberApplicationService duplicate | 이미 존재하는 회원 아이디입니다. |
 | 409-21 | 409 | USER | withdrawn member / privacy delete | 이미 탈퇴 처리된 계정입니다. |
 | 409-30 | 409 | USER | cloud upload session conflict | 대용량 업로드 세션 상태가 변경되었습니다. |
+| 409-40 | 409 | USER | AdminOperationService operation ID actor/fingerprint 충돌 | 운영 작업 ID가 다른 요청과 충돌합니다. |
 | 410-1 | 410 | USER | gone (oauth pending session 등) | 요청한 리소스가 더 이상 유효하지 않습니다. |
 | 413-1 | 413 | USER | upload payload too large | 업로드 가능한 파일 용량을 초과했습니다. 허용 크기 이내 파일로 다시 시도해주세요. |
 | 429-1 | 429 | USER | login rate limit | 로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요. |

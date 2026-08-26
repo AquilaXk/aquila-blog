@@ -3,6 +3,8 @@ server:
   shutdown: graceful
   forward-headers-strategy: native
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
     name: back
   config:
@@ -264,6 +266,7 @@ custom:
       processingTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS:900}
       maxConcurrent: ${CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT:8}
       handlerTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__HANDLER_TIMEOUT_SECONDS:120}
+      shutdownTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__SHUTDOWN_TIMEOUT_SECONDS:20}
       dynamicConcurrencyEnabled: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_CONCURRENCY_ENABLED:true}
       dynamicMinConcurrent: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_MIN_CONCURRENT:2}
       dynamicBacklogPerSlot: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BACKLOG_PER_SLOT:25}

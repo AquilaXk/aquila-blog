@@ -14,6 +14,60 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
+  - name: front runtime scrape is healthy
+    input_series:
+      - series: 'docker_container_running{job="docker_runtime_probe",service="front_blue"}'
+        values: "1+0x4"
+      - series: 'up{job="front",service="aquila-front",deploy_color="blue"}'
+        values: "1+0x4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AquilaFrontRuntimeMetricsScrapeDown
+        exp_alerts: []
+
+  - name: front blue scrape is down
+    input_series:
+      - series: 'docker_container_running{job="docker_runtime_probe",service="front_blue"}'
+        values: "1+0x4"
+      - series: 'up{job="front",service="aquila-front",deploy_color="blue"}'
+        values: "0+0x4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AquilaFrontRuntimeMetricsScrapeDown
+        exp_alerts:
+          - exp_labels:
+              deploy_color: blue
+              service: front_blue
+              severity: warning
+            exp_annotations:
+              summary: "Web runtime metrics scrape is down"
+              description: "Prometheus has no successful metrics scrape for the running blue front target for 3m."
+
+  - name: front blue scrape is absent
+    input_series:
+      - series: 'docker_container_running{job="docker_runtime_probe",service="front_blue"}'
+        values: "1+0x4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AquilaFrontRuntimeMetricsScrapeDown
+        exp_alerts:
+          - exp_labels:
+              deploy_color: blue
+              service: front_blue
+              severity: warning
+            exp_annotations:
+              summary: "Web runtime metrics scrape is down"
+              description: "Prometheus has no successful metrics scrape for the running blue front target for 3m."
+
+  - name: front profile is off
+    input_series:
+      - series: 'docker_container_running{job="docker_runtime_probe",service="front_blue"}'
+        values: "0+0x4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AquilaFrontRuntimeMetricsScrapeDown
+        exp_alerts: []
+
   - name: home warm cache HIT match must not alert
     interval: 5m
     input_series:

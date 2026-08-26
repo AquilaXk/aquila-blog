@@ -37,6 +37,7 @@ const pinnedNodeImage = "node@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a0463
 const rootSecret = "root-secret-for-contract-tests"
 const firstSecret = "first-generated-storage-secret-value"
 const secondSecret = "second-generated-storage-secret-val"
+const webMetricsToken = "web-metrics-token-for-minio-contract-0123456789"
 
 const requiredText = (filePath) => {
   assert(existsSync(filePath), `${path.relative(repoRoot, filePath)} must exist`)
@@ -60,6 +61,7 @@ const envText = ({ currentAccess = "storage-app-v1", currentSecret = firstSecret
     "CUSTOM_STORAGE_PATHSTYLEACCESS=true",
     "CUSTOM_STORAGE_KEYPREFIX=posts",
     "CUSTOM_STORAGE_CLOUD_KEY_PREFIX=cloud",
+    `WEB_METRICS_TOKEN=${webMetricsToken}`,
   ].join("\n")
 
 const runNode = (args, options = {}) =>

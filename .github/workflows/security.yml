@@ -110,6 +110,7 @@ jobs:
             back/build/reports/dependency-check/
           # Cancelled/timeout mid-scan may leave no report; upload itself stays non-blocking (#1385).
           if-no-files-found: warn
+          retention-days: 14
 
       # Fail-closed when analyze succeeded but produced no reports (upload warn must not greenwash).
       - name: Require dependency-check reports after successful scan
@@ -294,3 +295,4 @@ jobs:
           name: sbom-cyclonedx
           path: ${{ runner.temp }}/sbom/*.cdx.json
           if-no-files-found: error
+          retention-days: 14

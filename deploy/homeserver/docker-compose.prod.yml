@@ -98,6 +98,7 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/rules:/etc/prometheus/rules:ro
+      - ./.web-metrics-credentials/runtime:/run/secrets:ro
       - prometheus_data:/prometheus
     depends_on:
       - alertmanager
@@ -394,6 +395,7 @@ services:
   back_blue:
     image: ${BACK_BLUE_IMAGE:?BACK_BLUE_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    stop_grace_period: 75s
     logging: *default-logging
     mem_limit: ${BACK_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_MEM_RESERVATION:-256m}
@@ -431,6 +433,7 @@ services:
   back_green:
     image: ${BACK_GREEN_IMAGE:?BACK_GREEN_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    stop_grace_period: 75s
     logging: *default-logging
     mem_limit: ${BACK_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_MEM_RESERVATION:-256m}
@@ -467,6 +470,7 @@ services:
     profiles: ["runtime-split"]
     image: ${BACK_READ_IMAGE:?BACK_READ_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    stop_grace_period: 75s
     logging: *default-logging
     mem_limit: ${BACK_READ_MEM_LIMIT:-640m}
     mem_reservation: ${BACK_READ_MEM_RESERVATION:-320m}
@@ -504,6 +508,7 @@ services:
     profiles: ["runtime-split"]
     image: ${BACK_ADMIN_IMAGE:?BACK_ADMIN_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    stop_grace_period: 75s
     logging: *default-logging
     mem_limit: ${BACK_ADMIN_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-256m}
@@ -540,6 +545,7 @@ services:
   back_worker:
     image: ${BACK_WORKER_IMAGE:?BACK_WORKER_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
+    stop_grace_period: 75s
     logging: *default-logging
     mem_limit: ${BACK_WORKER_MEM_LIMIT:-768m}
     mem_reservation: ${BACK_WORKER_MEM_RESERVATION:-768m}
@@ -613,6 +619,8 @@ services:
       # Next.js 서버 전용 키(BACKEND_INTERNAL_URL 등). 빌드 타임에 인라인되는 NEXT_PUBLIC_*과 달리
       # 요청 시점에 process.env로 읽히므로 이 파일이 없으면 SSR이 전부 500이다.
       - ./.env.front.prod
+      - path: ./.env.front.metrics.prod
+        format: raw
     volumes:
       # 이 볼륨이 실제로 보존하는 것은 이미지 최적화 캐시(.next/cache/images)다. 이 앱은 Pages
       # Router라 ISR 산출물은 .next/server/pages에 쓰여 여기 들어오지 않는다(Next 15.5.21
@@ -644,6 +652,8 @@ services:
       start_period: 30s
     env_file:
       - ./.env.front.prod
+      - path: ./.env.front.metrics.prod
+        format: raw
     volumes:
       - front_green_next_cache:/app/.next/cache
     security_opt: *no-new-privileges

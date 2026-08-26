@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -210,6 +210,9 @@ const targetKeyNames = (contract, targetName) => {
   ]
 }
 
+const webMetricsTokenFixture = "web-metrics-runtime-token-0123456789-${UNSET} # \\\"'\\\\"
+const rotatedWebMetricsTokenFixture = `rotated-${webMetricsTokenFixture}`
+
 const baseHomeServerEnv = [
   // 스위치가 same-origin topology면 #1557/#1575의 requiredWhen이 이 둘을 필수로 만든다.
   "WEB_DOMAIN=blog.aquilaxk.site",
@@ -274,6 +277,7 @@ const baseHomeServerEnv = [
   "CUSTOM_PROD_REDISDATABASE=0",
   "CUSTOM__REVALIDATE__URL=https://blog.aquilaxk.site/api/revalidate",
   "CUSTOM__REVALIDATE__TOKEN=valid-revalidate-token",
+  `WEB_METRICS_TOKEN=${webMetricsTokenFixture}`,
   "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID=configured-for-contract-test",
   "SPRING__MAIL__HOST=smtp.mail.example",
   "SPRING__MAIL__PORT=587",
@@ -340,6 +344,27 @@ test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 
     const result = validateEnvText({ contract, target: "home-server-source", text })
     assert.equal(result.ok, false, `${name} Kakao client-id must fail before deployment`)
     assert(result.errors.some((error) => error.key === key && error.message === "is required"), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source는 Web runtime metrics token의 누락·빈 값·짧은 값을 배포 전에 거부한다", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "WEB_METRICS_TOKEN"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.required, true, "Web runtime metrics token must be required at the HOME_SERVER_ENV source")
+  assert.equal(definition?.secret, true, "Web runtime metrics token must stay secret in diagnostics")
+  assert.equal(definition?.minLength, 32, "Web runtime metrics token must reject short values")
+
+  for (const [name, text] of [
+    ["missing", baseHomeServerEnv.replace(new RegExp(`^${key}=.*\\n`, "m"), "")],
+    ["blank", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=`)],
+    ["short", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${"a".repeat(31)}`)],
+  ]) {
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+    assert.equal(result.ok, false, `${name} Web runtime metrics token must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
   }
 })
 
@@ -1267,6 +1292,7 @@ test("외부 백업은 compose 평가 전에 누락된 runtime image env를 보�
   assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_GREEN"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_WORKER"/)
   assert.match(externalBackupScript, /stage_home_server_env_key "SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE"/)
+  assert.match(externalBackupScript, /stage_home_server_env_key "WEB_METRICS_TOKEN"/)
 
   const composeReadyBody = externalBackupScript.slice(
     externalBackupScript.indexOf("ensure_backup_compose_ready() {"),
@@ -1322,6 +1348,7 @@ test("external backup stages HOME_SERVER_ENV values with compose-safe quoting", 
   const externalBackupScript = readFileSync(externalBackupScriptPath, "utf8")
   const workDir = mkdtempSync(path.join(tmpdir(), "aquila-compose-env-"))
   const envFile = path.join(workDir, ".env.prod")
+  const webMetricsToken = `test-web-metrics-${"m".repeat(32)}`
   writeFileSync(envFile, "ALERTMANAGER_SMTP_AUTH_PASSWORD='stale'\n")
 
   try {
@@ -1340,9 +1367,7 @@ COMPOSE_ENV_FILE="${envFile}"
 COMPOSE_ENV_FILE_TMP=""
 fail() { printf '%s\\n' "$*" >&2; exit 1; }
 ${functionSnippet}
-stage_home_server_env_key "PROD___POSTGRES__PASSWORD"
-stage_home_server_env_key "GRAFANA_ADMIN_PASSWORD"
-stage_home_server_env_key "ALERTMANAGER_SMTP_AUTH_PASSWORD"
+stage_home_server_env_compose_values
 cat "$COMPOSE_ENV_FILE"
 rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
 `,
@@ -1355,6 +1380,7 @@ rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
             "PROD___POSTGRES__PASSWORD=pa$word",
             "GRAFANA_ADMIN_PASSWORD=let's$secret\\path",
             "ALERTMANAGER_SMTP_AUTH_PASSWORD=",
+            `WEB_METRICS_TOKEN=${webMetricsToken}`,
           ].join("\n"),
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -1364,6 +1390,7 @@ rm -f -- "$COMPOSE_ENV_FILE_TMP" "$COMPOSE_ENV_FILE_TMP.tmp"
     assert.match(output, /^PROD___POSTGRES__PASSWORD='pa\$word'$/m)
     assert.match(output, /^GRAFANA_ADMIN_PASSWORD='let\\'s\$secret\\path'$/m)
     assert.match(output, /^ALERTMANAGER_SMTP_AUTH_PASSWORD=''$/m)
+    assert.match(output, new RegExp(`^WEB_METRICS_TOKEN='${webMetricsToken}'$`, "m"))
     assert.doesNotMatch(output, /ALERTMANAGER_SMTP_AUTH_PASSWORD='stale'/)
   } finally {
     rmSync(workDir, { force: true, recursive: true })
@@ -3112,7 +3139,7 @@ test("blue-green deploy pauses autoheal while staging a candidate backend", () =
 test("blue-green deploy keeps old backend running during burn-in rollback window", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const burnInIndex = deployScript.indexOf('run_blue_green_burn_in "${next_backend}" "${active_backend}" "${web_domain}"')
-  const stopOldIndex = deployScript.indexOf('drain_and_stop_backend_if_running "${active_backend}"')
+  const stopOldIndex = deployScript.indexOf('checked_stop_backend_service_if_running "${active_backend}"')
   const stateWriteIndex = deployScript.indexOf('write_backend_release_state "${next_backend}" "${active_backend}"')
 
   assert.match(deployScript, /BLUE_GREEN_BURN_IN_STANDARD_SECONDS=/)
@@ -3128,6 +3155,109 @@ test("blue-green deploy keeps old backend running during burn-in rollback window
   assert(stateWriteIndex > 0, "deploy script must write release state after burn-in")
   assert(burnInIndex < stopOldIndex, "old backend must not stop before burn-in completes")
   assert(burnInIndex < stateWriteIndex, "release state must not mark candidate active before burn-in completes")
+})
+
+test("backend termination is bounded, evidenced, and completes before deploy success", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const application = readFileSync(path.join(repoRoot, "back/src/main/resources/application.yaml"), "utf8")
+  const taskWorkerSource = readFileSync(
+    path.join(repoRoot, "back/src/main/kotlin/com/back/global/task/adapter/scheduler/TaskProcessingScheduledJob.kt"),
+    "utf8",
+  )
+  const backendServices = ["back_blue", "back_green", "back_read", "back_admin", "back_worker"]
+  const lifecycleBudget = Number(application.match(/timeout-per-shutdown-phase:\s*(\d+)s/)?.[1])
+
+  assert(Number.isFinite(lifecycleBudget), "application lifecycle budget must be parseable")
+
+  const serviceBlock = (service) => {
+    const marker = `  ${service}:\n`
+    const start = compose.indexOf(marker)
+    assert.notEqual(start, -1, `${service} block must exist`)
+    const tail = compose.slice(start + marker.length)
+    const next = tail.search(/\n  [a-zA-Z0-9_]+:\n/)
+    return compose.slice(start, next === -1 ? compose.length : start + marker.length + next)
+  }
+
+  for (const service of backendServices) {
+    const grace = Number(serviceBlock(service).match(/stop_grace_period:\s*(\d+)s/)?.[1])
+    assert(Number.isFinite(grace), `${service} must declare a stop grace period`)
+    assert(grace > 2 * lifecycleBudget, `${service} grace must exceed both lifecycle phases`)
+  }
+
+  const stopHelper = extractTopLevelShellFunction(deployScript, "checked_stop_backend_service_if_running")
+  assert.doesNotMatch(deployScript, /STREAM_DRAIN_SECONDS/)
+  assert.match(stopHelper, /if ! container_id="\$\(compose ps -q "\$\{service\}"\)"; then/)
+  assert.match(stopHelper, /pre_stop_container_query_failed/)
+  assert.match(stopHelper, /if \[\[ -z "\$\{container_id\}" \]\]; then/)
+  assert.match(stopHelper, /date -u \+%Y-%m-%dT%H:%M:%SZ/)
+  assert.match(stopHelper, /compose stop "\$\{service\}"/)
+  assert.doesNotMatch(stopHelper, /compose stop[^\n]*\|\| true/)
+  assert.match(stopHelper, /if ! compose stop "\$\{service\}"; then[\s\S]*return 1/)
+  assert.match(stopHelper, /docker logs --since "\$\{stop_started_at\}" "\$\{container_id\}"/)
+  assert.match(stopHelper, /drain_log_query_failed/)
+  assert(taskWorkerSource.includes("Task worker drain timed out after") && stopHelper.includes("Task worker drain timed out after"))
+  assert(taskWorkerSource.includes("Task worker drain interrupted; interrupting active workers") && stopHelper.includes("Task worker drain interrupted; interrupting active workers"))
+  assert.match(stopHelper, /worker_drain_timeout/)
+  assert.match(stopHelper, /worker_drain_interrupted/)
+  assert.match(stopHelper, /docker inspect --format/)
+  assert.match(stopHelper, /\{\{\.State\.Running\}\}/)
+  assert.match(stopHelper, /\{\{\.State\.ExitCode\}\}/)
+  assert.match(stopHelper, /\{\{\.State\.OOMKilled\}\}/)
+  assert.match(stopHelper, /\$\{status\}" != "exited"/)
+  assert.match(stopHelper, /\$\{oom_killed\}" != "false"/)
+  assert.match(stopHelper, /exit_code != 0 && exit_code != 143/)
+  assert.match(stopHelper, /still running/)
+  const timestampIndex = stopHelper.indexOf('date -u +%Y-%m-%dT%H:%M:%SZ')
+  const stopIndex = stopHelper.indexOf('compose stop "${service}"')
+  const logsIndex = stopHelper.indexOf('docker logs --since "${stop_started_at}" "${container_id}"')
+  assert(timestampIndex >= 0 && stopIndex >= 0 && logsIndex >= 0, "stop evidence markers must exist")
+  assert(timestampIndex < stopIndex && stopIndex < logsIndex, "timestamp, stop, then exact-container logs is required")
+
+  const mainBurnIn = deployScript.indexOf('run_blue_green_burn_in "${next_backend}" "${active_backend}" "${web_domain}"')
+  const mainStop = deployScript.indexOf('checked_stop_backend_service_if_running "${active_backend}"')
+  const mainState = deployScript.indexOf('echo "${next_backend}" > "${STATE_FILE}"')
+  const mainSuccess = deployScript.indexOf('post-switch verify ok (status=${post_code}); burn-in complete; inactive backend stopped')
+  assert(mainBurnIn >= 0 && mainState >= 0 && mainStop >= 0 && mainSuccess >= 0, "main deploy lifecycle markers must exist")
+  assert(mainBurnIn < mainState && mainState < mainStop && mainStop < mainSuccess, "route state must precede checked termination and final success")
+  assert.match(deployScript, /if ! checked_stop_backend_service_if_running "\$\{active_backend\}"; then[\s\S]*exit 1/)
+
+  const rollback = extractTopLevelShellFunction(deployScript, "rollback_to_backend")
+  const rollbackState = rollback.indexOf('printf \'%s\\n\' "${rollback_backend}" > "${STATE_FILE}"')
+  const rollbackStop = rollback.indexOf('checked_stop_backend_service_if_running "${inactive_backend}"')
+  assert(rollbackState >= 0 && rollbackStop >= 0, "rollback state and termination markers must exist")
+  assert(rollbackState < rollbackStop, "rollback route metadata must precede termination")
+  assert.match(rollback, /if ! printf '%s\\n' "\$\{rollback_backend\}" > "\$\{STATE_FILE\}"; then[\s\S]*return 1/)
+  assert.match(rollback, /if ! write_backend_release_state "\$\{rollback_backend\}" "\$\{inactive_backend\}"; then[\s\S]*return 1/)
+  assert.match(rollback, /if ! checked_stop_backend_service_if_running "\$\{inactive_backend\}"; then[\s\S]*return 1/)
+
+  const burnInRollback = extractTopLevelShellFunction(deployScript, "rollback_caddy_route_only")
+  const burnInRollbackState = burnInRollback.indexOf('printf \'%s\\n\' "${previous_backend}" > "${STATE_FILE}"')
+  const burnInRollbackStop = burnInRollback.lastIndexOf('checked_stop_backend_service_if_running "${candidate_backend}"')
+  assert(burnInRollbackState >= 0 && burnInRollbackStop >= 0, "burn-in rollback state and termination markers must exist")
+  assert(burnInRollbackState < burnInRollbackStop, "burn-in rollback state must precede termination")
+  assert.match(burnInRollback, /if ! printf '%s\\n' "\$\{previous_backend\}" > "\$\{STATE_FILE\}"; then[\s\S]*return 1/)
+  assert.match(burnInRollback, /if ! write_backend_release_state "\$\{previous_backend\}" "\$\{candidate_backend\}"; then[\s\S]*return 1/)
+  assert.match(burnInRollback, /if ! checked_stop_backend_service_if_running "\$\{candidate_backend\}"; then[\s\S]*return 1/)
+
+  for (const functionName of [
+    "start_runtime_split_helper_backends_on_active",
+    "restart_runtime_split_backends_after_candidate_ready",
+    "restore_runtime_split_helper_backends_to_active",
+  ]) {
+    const block = extractTopLevelShellFunction(deployScript, functionName)
+    const stopLoop = block.indexOf('for service in "${helper_services[@]}"; do')
+    const recreate = block.indexOf('compose_up_force_recreate_with_retry "${helper_services[@]}"')
+    assert(stopLoop >= 0 && recreate >= 0, `${functionName} must define helper termination and replacement`)
+    assert(stopLoop < recreate, `${functionName} must check every replaced helper before recreation`)
+    assert.match(block.slice(stopLoop, recreate), /checked_stop_backend_service_if_running "\$\{service\}"/)
+    assert.match(block.slice(stopLoop, recreate), /return 1/)
+  }
+
+  const restoreHelpers = extractTopLevelShellFunction(deployScript, "restore_runtime_split_helper_backends_to_active")
+  assert.match(restoreHelpers, /back_worker" && "\$\{TASK_SCHEMA_COMPATIBLE_WORKER_READY\}" == "true"/)
+  assert(restoreHelpers.indexOf('continue') < restoreHelpers.indexOf('helper_services+=("${service}")'), "preserved worker must not enter the replacement stop list")
+  assert.doesNotMatch(deployScript, /compose stop "\$\{(?:next_backend|candidate_backend)\}" \|\| true/)
 })
 
 test("blue-green deploy waits longer for candidate Flyway startup only", () => {
@@ -3338,13 +3468,13 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   const rollbackRouteIndex = rollbackBlock.indexOf('switch_caddy_upstream "${rollback_backend}"')
   const rollbackRestoreIndex = rollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${rollback_backend}" "${inactive_backend}"')
   const rollbackHelperFailIndex = rollbackBlock.indexOf("rollback failed: helper recovery failed after route rollback")
-  const rollbackStateWriteIndex = rollbackBlock.indexOf('echo "${rollback_backend}" > "${STATE_FILE}"')
+  const rollbackStateWriteIndex = rollbackBlock.indexOf('printf \'%s\\n\' "${rollback_backend}" > "${STATE_FILE}"')
   const burnInRollbackRouteIndex = burnInRollbackBlock.indexOf('switch_caddy_upstream "${previous_backend}"')
   const burnInRollbackRestoreIndex = burnInRollbackBlock.indexOf('restore_runtime_split_helper_backends_to_active "${previous_backend}" "${candidate_backend}"')
   const burnInRollbackHelperFailIndex = burnInRollbackBlock.indexOf(
     "burn-in rollback failed: helper recovery failed after route rollback",
   )
-  const burnInRollbackStateWriteIndex = burnInRollbackBlock.indexOf('echo "${previous_backend}" > "${STATE_FILE}"')
+  const burnInRollbackStateWriteIndex = burnInRollbackBlock.indexOf('printf \'%s\\n\' "${previous_backend}" > "${STATE_FILE}"')
 
   assert.match(backendHttpHostBlock, /back_blue\|back_green\|back_read\|back_admin\|back_worker/)
   assert.match(backendDnsBlock, /host="\$\(backend_http_host "\$\{backend\}"\)"/)
@@ -3359,7 +3489,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
   assert.match(helperRestartBlock, /restore_runtime_split_helper_backends_to_active\(\)/)
   assert.match(helperRestartBlock, /preserving schema-compatible worker image during API rollback/)
   assert.match(helperRestartBlock, /upsert_runtime_backend_image "\$\{service\}" "\$\{active_image\}"/)
-  assert.match(helperRestartBlock, /write_backend_release_state "\$\{active_backend\}" "\$\{failed_candidate\}"/)
+  assert.doesNotMatch(helperRestartBlock, /write_backend_release_state/)
   assert.match(rollbackBlock, /if ! restore_runtime_split_helper_backends_to_active "\$\{rollback_backend\}" "\$\{inactive_backend\}"; then/)
   assert.match(burnInRollbackBlock, /if ! restore_runtime_split_helper_backends_to_active "\$\{previous_backend\}" "\$\{candidate_backend\}"; then/)
   assert.match(deployScript, /skip active-image helper preboot: active backend is not running/)
@@ -3407,7 +3537,7 @@ test("runtime-split helper backends do not compete with candidate Flyway migrati
     deployScript,
     /restore_runtime_split_helper_backends_to_active "\$\{active_backend\}" "\$\{next_backend\}" \|\| true/,
   )
-  assert.match(deployScript, /compose stop "\$\{next_backend\}" \|\| true/)
+  assert.doesNotMatch(deployScript, /compose stop "\$\{next_backend\}" \|\| true/)
 
   const preCandidateBoot = deployScript.slice(preCandidateBootStart, preCandidateBootEnd)
   for (const service of helperServices) {
@@ -4177,6 +4307,20 @@ const extractComposeService = (compose, serviceName) => {
   return `${body.join("\n")}\n`
 }
 
+const extractComposeServiceNames = (compose) => {
+  const lines = compose.split("\n")
+  const start = lines.findIndex((line) => line === "services:")
+  if (start === -1) return []
+
+  const names = []
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() !== "" && !line.startsWith("  ")) break
+    const match = line.match(/^  ([a-zA-Z0-9_-]+):$/)
+    if (match) names.push(match[1])
+  }
+  return names
+}
+
 const frontColours = ["blue", "green"]
 
 test("front 서비스는 compose 프로필 뒤에서 env 기반 digest 이미지로만 기동한다", () => {
@@ -4644,8 +4788,10 @@ test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과
 test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분배한다", () => {
   const workDir = mkdtempSync(path.join(tmpdir(), "materialize-front-"))
   try {
-    const scriptDir = path.join(repoRoot, "deploy/homeserver")
+    const script = path.join(workDir, "materialize_service_env.sh")
     const sourceEnv = path.join(workDir, "source.env")
+    copyFileSync(path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"), script)
+    chmodSync(script, 0o755)
     writeFileSync(
       sourceEnv,
       [
@@ -4655,6 +4801,8 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
         "MONITOR_DOMAIN=",
         "BACKEND_INTERNAL_URL=http://caddy",
         "CUSTOM__REVALIDATE__TOKEN=revalidate_secret_value",
+        " export WEB_METRICS_TOKEN = 'stale-web-metrics-token-abcdefghijklmnopqrstuvwxyz012345' \r",
+        ` WEB_METRICS_TOKEN = "${webMetricsTokenFixture}"  \r`,
         "BACKEND_PROXY_MAX_BODY_BYTES=1048576",
         "CUSTOM_PROD_DBNAME=blog_prod",
         "",
@@ -4662,19 +4810,24 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
     )
 
     const outputs = {
-      caddy: path.join(scriptDir, ".env.caddy.prod"),
-      back: path.join(scriptDir, ".env.back.prod"),
-      front: path.join(scriptDir, ".env.front.prod"),
+      caddy: path.join(workDir, ".env.caddy.prod"),
+      back: path.join(workDir, ".env.back.prod"),
+      front: path.join(workDir, ".env.front.prod"),
+      frontMetrics: path.join(workDir, ".env.front.metrics.prod"),
+      prometheusCredentialRoot: path.join(workDir, ".web-metrics-credentials"),
+      prometheusCredentialDir: path.join(workDir, ".web-metrics-credentials", "runtime"),
+      prometheusCredential: path.join(workDir, ".web-metrics-credentials", "runtime", "web-metrics-token"),
+      legacyPrometheusCredential: path.join(workDir, ".web-metrics-token"),
     }
-    const preexisting = Object.fromEntries(
-      Object.entries(outputs).map(([name, file]) => [name, existsSync(file) ? readFileSync(file, "utf8") : null]),
-    )
 
-    try {
-      execFileSync("bash", [path.join(scriptDir, "materialize_service_env.sh"), sourceEnv], { stdio: "pipe" })
+    {
+      writeFileSync(outputs.legacyPrometheusCredential, "retired-credential\n", { mode: 0o600 })
+      execFileSync("bash", [script, sourceEnv], { stdio: "pipe" })
       const caddyEnv = readFileSync(outputs.caddy, "utf8")
       const backEnv = readFileSync(outputs.back, "utf8")
       const frontEnv = readFileSync(outputs.front, "utf8")
+      const frontMetricsEnv = readFileSync(outputs.frontMetrics, "utf8")
+      const prometheusCredential = readFileSync(outputs.prometheusCredential, "utf8")
 
       assert.match(caddyEnv, /^WEB_DOMAIN=blog\.example\.com$/m)
       assert.match(caddyEnv, /^WEB_UPSTREAM=front_green$/m)
@@ -4692,20 +4845,138 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       // 별도 키로 두면 어긋나도 아무도 실패하지 않고 revalidate만 401이 된다.
       assert.match(frontEnv, /^TOKEN_FOR_REVALIDATE=revalidate_secret_value$/m)
       assert.doesNotMatch(frontEnv, /^CUSTOM__REVALIDATE__TOKEN=/m)
+      assert.doesNotMatch(frontEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.doesNotMatch(backEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.doesNotMatch(caddyEnv, /^WEB_METRICS_TOKEN=/m)
+      assert.equal(frontMetricsEnv, `WEB_METRICS_TOKEN=${webMetricsTokenFixture}\n`)
+      assert.equal(prometheusCredential, `${webMetricsTokenFixture}\n`)
+      assert.equal(statSync(outputs.frontMetrics).mode & 0o777, 0o600)
+      assert.equal(statSync(outputs.prometheusCredentialRoot).mode & 0o777, 0o700)
+      assert.equal(statSync(outputs.prometheusCredentialDir).mode & 0o777, 0o755)
+      assert.equal(statSync(outputs.prometheusCredential).mode & 0o777, 0o444)
+      assert.equal(existsSync(outputs.legacyPrometheusCredential), false, "retired single-file credential must be removed")
+
+      const credentialRootInode = statSync(outputs.prometheusCredentialRoot).ino
+      const credentialDirInode = statSync(outputs.prometheusCredentialDir).ino
+      const credentialInode = statSync(outputs.prometheusCredential).ino
+      const rotatedSourceEnv = path.join(workDir, "rotated-web-metrics-token.env")
+      writeFileSync(rotatedSourceEnv, `WEB_METRICS_TOKEN=${rotatedWebMetricsTokenFixture}\n`)
+      execFileSync("bash", [script, rotatedSourceEnv], { stdio: "pipe" })
+      assert.equal(statSync(outputs.prometheusCredentialRoot).ino, credentialRootInode)
+      assert.equal(statSync(outputs.prometheusCredentialDir).ino, credentialDirInode)
+      assert.notEqual(statSync(outputs.prometheusCredential).ino, credentialInode)
+      assert.equal(readFileSync(outputs.prometheusCredential, "utf8"), `${rotatedWebMetricsTokenFixture}\n`)
+      assert.equal(readFileSync(outputs.frontMetrics, "utf8"), `WEB_METRICS_TOKEN=${rotatedWebMetricsTokenFixture}\n`)
+
+      const composeEnvCheck = path.join(workDir, "compose-env-check.yml")
+      writeFileSync(
+        composeEnvCheck,
+        [
+          "services:",
+          "  env_check:",
+          "    image: alpine:3.20",
+          "    env_file:",
+          `      - path: ${outputs.front}`,
+          `      - path: ${outputs.frontMetrics}`,
+          "        format: raw",
+          "",
+        ].join("\n"),
+      )
+      const rendered = JSON.parse(
+        execFileSync("docker", ["compose", "-f", composeEnvCheck, "config", "--format", "json"], { encoding: "utf8" }),
+      )
+      assert(Object.hasOwn(rendered.services.env_check.environment, "WEB_METRICS_TOKEN"))
       // BACKEND_PROXY_*는 front 전용이다 (`git grep BACKEND_PROXY -- back/`는 0건).
       assert.match(frontEnv, /^BACKEND_PROXY_MAX_BODY_BYTES=1048576$/m)
       assert.doesNotMatch(backEnv, /^BACKEND_PROXY_/m)
       // 서비스별 env는 서로의 비밀을 담지 않는다 (blast radius / HR-56).
       assert.doesNotMatch(frontEnv, /^CUSTOM_PROD_DBNAME=/m)
       assert.doesNotMatch(caddyEnv, /^BACKEND_INTERNAL_URL=/m)
-    } finally {
-      for (const [name, file] of Object.entries(outputs)) {
-        if (preexisting[name] === null) rmSync(file, { force: true })
-        else writeFileSync(file, preexisting[name])
-      }
+
+      const missingTokenEnv = path.join(workDir, "missing-web-metrics-token.env")
+      writeFileSync(missingTokenEnv, "BACKEND_INTERNAL_URL=http://caddy\n")
+      assert.throws(
+        () => execFileSync("bash", [script, missingTokenEnv], { stdio: "pipe" }),
+      )
+      assert.equal(existsSync(outputs.prometheusCredential), false, "missing token must not preserve a stale Prometheus credential")
+      assert.equal(existsSync(outputs.frontMetrics), false, "missing token must not preserve a stale front credential")
+
+      const shortTokenEnv = path.join(workDir, "short-web-metrics-token.env")
+      writeFileSync(outputs.legacyPrometheusCredential, "retired-credential\n", { mode: 0o600 })
+      writeFileSync(shortTokenEnv, "WEB_METRICS_TOKEN=too-short\n")
+      assert.throws(
+        () => execFileSync("bash", [script, shortTokenEnv], { stdio: "pipe" }),
+      )
+      assert.equal(existsSync(outputs.prometheusCredential), false, "short token must never materialize a Prometheus credential")
+      assert.equal(existsSync(outputs.frontMetrics), false, "short token must never materialize a front credential")
+      assert.equal(existsSync(outputs.legacyPrometheusCredential), false, "invalid input must remove the retired credential")
+      assert.doesNotMatch(readFileSync(outputs.front, "utf8"), /WEB_METRICS_TOKEN=too-short/)
     }
   } finally {
     rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("materialize_service_env.sh는 Docker Compose 2.30.0 미만을 산출물 생성 전에 차단한다", () => {
+  const workDir = mkdtempSync(path.join(tmpdir(), "materialize-compose-version-"))
+  try {
+    const script = path.join(workDir, "materialize_service_env.sh")
+    const sourceEnv = path.join(workDir, ".env.prod")
+    const fakeBin = path.join(workDir, "bin")
+    const fakeDocker = path.join(fakeBin, "docker")
+    const outputs = [
+      ".env.caddy.prod",
+      ".env.back.prod",
+      ".env.front.prod",
+      ".env.front.metrics.prod",
+      ".web-metrics-credentials/runtime/web-metrics-token",
+    ]
+
+    copyFileSync(path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"), script)
+    chmodSync(script, 0o755)
+    mkdirSync(fakeBin)
+    writeFileSync(sourceEnv, `WEB_METRICS_TOKEN=${webMetricsTokenFixture}\n`)
+    writeFileSync(fakeDocker, "#!/usr/bin/env bash\nprintf '%s\\n' \"$FAKE_DOCKER_COMPOSE_VERSION\"\n")
+    chmodSync(fakeDocker, 0o755)
+
+    const run = (version) =>
+      execFileSync("bash", [script, sourceEnv], {
+        env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_DOCKER_COMPOSE_VERSION: version },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+
+    assert.throws(() => run("v2.29.9"), /Docker Compose 2\.30\.0 or newer is required/)
+    for (const output of outputs) assert.equal(existsSync(path.join(workDir, output)), false)
+
+    run("2.30.0-desktop.1")
+    for (const output of outputs) assert.equal(existsSync(path.join(workDir, output)), true)
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
+
+test("Prometheus alone receives the host-private Web metrics credential directory", () => {
+  const compose = readFileSync(composePath, "utf8")
+  const prometheus = extractComposeService(compose, "prometheus")
+
+  assert.match(prometheus, /- \.\/\.web-metrics-credentials\/runtime:\/run\/secrets:ro$/m)
+  assert.doesNotMatch(compose, /^secrets:/m)
+  assert.doesNotMatch(compose, /\.\/\.web-metrics-token:/)
+  for (const serviceName of extractComposeServiceNames(compose).filter((name) => name !== "prometheus")) {
+    assert.doesNotMatch(extractComposeService(compose, serviceName), /\.web-metrics-credentials|web-metrics-token/)
+  }
+})
+
+test("front services alone consume the raw Web metrics env file", () => {
+  const compose = readFileSync(composePath, "utf8")
+
+  for (const colour of ["blue", "green"]) {
+    const service = extractComposeService(compose, `front_${colour}`)
+    assert.match(service, /env_file:\n(?:\s+#.*\n)*\s+- \.\/\.env\.front\.prod\n\s+- path: \.\/\.env\.front\.metrics\.prod\n\s+format: raw/)
+  }
+  for (const serviceName of ["back_blue", "caddy", "prometheus"]) {
+    assert.doesNotMatch(extractComposeService(compose, serviceName), /\.env\.front\.metrics\.prod/)
   }
 })
 

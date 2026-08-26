@@ -208,6 +208,27 @@ groups:
           summary: "Front backend-proxy readiness path is unavailable"
           description: "A front container is running but no blue/green front readiness probe has returned 200 for 5m. Check BACKEND_INTERNAL_URL, the Caddy internal site address, and backend health."
 
+      - alert: AquilaFrontRuntimeMetricsScrapeDown
+        expr: |
+          label_replace(
+            max by (service) (
+              docker_container_running{job="docker_runtime_probe",service=~"front_(blue|green)"} == 1
+            ),
+            "deploy_color",
+            "$1",
+            "service",
+            "front_(blue|green)"
+          ) unless on (deploy_color)
+          max by (deploy_color) (
+            up{job="front",service="aquila-front"} == 1
+          )
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Web runtime metrics scrape is down"
+          description: "Prometheus has no successful metrics scrape for the running {{ $labels.deploy_color }} front target for 3m."
+
       - alert: AquilaBackWorkerScrapeDown
         expr: max(up{job="back",service="aquila-back",component="worker"}) < 1
         for: 3m

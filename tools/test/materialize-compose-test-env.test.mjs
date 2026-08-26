@@ -16,7 +16,7 @@ function occurrenceCount(text, prefix) {
   return text.split(/\r?\n/).filter((line) => line.startsWith(prefix)).length
 }
 
-test("materializer resolves runtime inheritance, replaces stale examples, and adds every digest image", (t) => {
+test("materializer resolves runtime inheritance, replaces stale examples, and adds explicit Compose test values", (t) => {
   const root = mkdtempSync(path.join(os.tmpdir(), "compose-test-env-"))
   t.after(() => rmSync(root, { force: true, recursive: true }))
   const source = path.join(root, "source.env")
@@ -30,6 +30,7 @@ test("materializer resolves runtime inheritance, replaces stale examples, and ad
       "BACK_BLUE_IMAGE=ghcr.io/example/back:sha-<commit7>",
       "CADDY_IMAGE=caddy@sha256:<digest>",
       "ALERTMANAGER_IMAGE=prom/alertmanager@sha256:<digest>",
+      "PUBLIC_EDGE_PROBE_BASE_URL=https://stale.example",
       "",
     ].join("\n"),
   )
@@ -42,6 +43,12 @@ test("materializer resolves runtime inheritance, replaces stale examples, and ad
             { name: "CADDY_IMAGE", kind: "digest-image" },
             { name: "ALERTMANAGER_IMAGE", kind: "digest-image", required: false },
             { name: "POSTGRES_EXPORTER_IMAGE", kind: "digest-image", required: false },
+            {
+              name: "PUBLIC_EDGE_PROBE_BASE_URL",
+              kind: "https-url",
+              required: false,
+              composeTestValue: "https://public-edge-probe.invalid",
+            },
             { name: "IGNORED_VALUE" },
           ],
         },
@@ -84,8 +91,11 @@ test("materializer resolves runtime inheritance, replaces stale examples, and ad
     new RegExp(`^POSTGRES_EXPORTER_IMAGE=registry\\.invalid/aquila-standalone/postgres-exporter-image@sha256:${digest}$`, "m"),
   )
   assert.doesNotMatch(generated, /<digest>|<commit7>|IGNORED_VALUE=/)
+  assert.equal(occurrenceCount(generated, "PUBLIC_EDGE_PROBE_BASE_URL="), 1)
+  assert.match(generated, /^PUBLIC_EDGE_PROBE_BASE_URL=https:\/\/public-edge-probe\.invalid$/m)
+  assert.doesNotMatch(generated, /stale\.example/)
 
-  const syntheticBlock = generated.split("# Standalone Compose validation images\n")[1].trim().split("\n")
+  const syntheticBlock = generated.split("# Standalone Compose validation values\n")[1].trim().split("\n")
   assert.deepEqual(syntheticBlock, [...syntheticBlock].sort())
 })
 

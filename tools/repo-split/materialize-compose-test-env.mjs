@@ -62,15 +62,23 @@ function materialize({ contract: contractPath, output, source }) {
   const digest = "0".repeat(64)
   const overrides = new Map()
   for (const key of collectTargetKeys(contract, RUNTIME_TARGET)) {
-    if (key?.kind !== "digest-image") continue
+    const hasComposeTestValue = Object.hasOwn(key || {}, "composeTestValue")
+    if (key?.kind !== "digest-image" && !hasComposeTestValue) continue
     if (typeof key.name !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(key.name)) {
-      throw new Error("digest-image contract keys must use uppercase environment variable names")
+      throw new Error("Compose test override keys must use uppercase environment variable names")
+    }
+    if (hasComposeTestValue) {
+      if (typeof key.composeTestValue !== "string" || !key.composeTestValue.trim()) {
+        throw new Error("composeTestValue must be a non-empty string")
+      }
+      overrides.set(key.name, key.composeTestValue)
+      continue
     }
     const slug = key.name.toLowerCase().replaceAll("_", "-")
     overrides.set(key.name, `registry.invalid/aquila-standalone/${slug}@sha256:${digest}`)
   }
   if (overrides.size === 0) {
-    throw new Error(`${RUNTIME_TARGET} must define at least one digest-image key`)
+    throw new Error(`${RUNTIME_TARGET} must define at least one Compose test override`)
   }
 
   const retained = readFileSync(source, "utf8")
@@ -83,11 +91,11 @@ function materialize({ contract: contractPath, output, source }) {
   const syntheticLines = [...overrides.entries()]
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
-  const content = `${retained.join("\n").replace(/\n*$/, "")}\n\n# Standalone Compose validation images\n${syntheticLines.join("\n")}\n`
+  const content = `${retained.join("\n").replace(/\n*$/, "")}\n\n# Standalone Compose validation values\n${syntheticLines.join("\n")}\n`
 
   writeFileSync(output, content, { mode: 0o600 })
   chmodSync(output, 0o600)
-  process.stdout.write(`materialize-compose-test-env: wrote ${output} with ${overrides.size} synthetic image values\n`)
+  process.stdout.write(`materialize-compose-test-env: wrote ${output} with ${overrides.size} synthetic values\n`)
 }
 
 try {

@@ -2274,6 +2274,32 @@ test("deploy workflow derives the pinned prod site scope from the switch instead
   )
 })
 
+test("public edge probe runtime target requires materialized topology input", () => {
+  const contract = JSON.parse(readFileSync(contractPath, "utf8"))
+  const definition = contract.targets["home-server-source"].keys.find(
+    (key) => key.name === "PUBLIC_EDGE_PROBE_BASE_URL",
+  )
+  const compose = readFileSync(composePath, "utf8")
+  const workflow = readFileSync(workflowPath, "utf8")
+
+  assert.equal(definition?.required, false)
+  assert.match(
+    compose,
+    /\$\{PUBLIC_EDGE_PROBE_BASE_URL:\?PUBLIC_EDGE_PROBE_BASE_URL is required\}/,
+  )
+  assert.doesNotMatch(compose, /\$\{PUBLIC_EDGE_PROBE_BASE_URL:-/)
+  for (const topology of Object.values(siteTopologies(contract))) {
+    assert(
+      workflow.includes(`PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="${topology.publicEdgeProbeBaseUrl}"`),
+      `deploy must derive ${topology.publicEdgeProbeBaseUrl}`,
+    )
+  }
+  assert.match(
+    workflow,
+    /upsert_env_key "PUBLIC_EDGE_PROBE_BASE_URL" "\$\{PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL\}" "deploy\/homeserver\/\.env\.prod"/,
+  )
+})
+
 test("deploy.yml의 host 파싱이 validate-env와 같은 host를 낸다", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 

@@ -9,6 +9,7 @@ import test from "node:test"
 import {
   CACHE_STATE_ABSENT,
   CACHE_STATE_HEADER,
+  createRefreshFailureState,
   createHealthPayload,
   readCacheState,
   runProbe,
@@ -75,6 +76,47 @@ test("public edge probe marks 200 route healthy", async () => {
     assert.match(
       result.prometheus,
       /aquila_public_edge_probe_cache_state_match\{route_class="home",expected_state="HIT",observed_state="HIT"\} 1/,
+    )
+  })
+})
+
+test("public edge probe clears route evidence after a global refresh failure", async () => {
+  await withServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "HIT" })
+    response.end("<html><head></head><body>ok</body></html>")
+  }, async (baseUrl) => {
+    const healthy = await runProbeFixture(baseUrl, "/", { requests: 2 })
+    const failed = createRefreshFailureState(
+      {
+        report: healthy.report,
+        markdown: healthy.markdown,
+        prometheus: healthy.prometheus,
+        lastError: "",
+        lastSuccessAt: healthy.report.probedAt,
+      },
+      new Error("global refresh failed"),
+      baseUrl,
+    )
+
+    assert.equal(failed.report.baseUrl, baseUrl)
+    assert.equal(failed.report.overall.ok, false)
+    assert.equal(failed.report.overall.failureReason, "global refresh failed")
+    assert.deepEqual(failed.report.routes, [])
+    assert.equal(failed.lastSuccessAt, healthy.report.probedAt)
+    assert.doesNotMatch(failed.markdown, new RegExp(`## ${healthy.report.routes[0].route}`))
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_route_up\{/m)
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_request_ttfb_seconds\{/m)
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_status_code\{/m)
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_cache_state_observed\{/m)
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_cache_state_match\{/m)
+    assert.match(failed.prometheus, /^aquila_public_edge_probe_up 0$/m)
+    assert.match(failed.prometheus, /^aquila_public_edge_probe_last_refresh_error 1$/m)
+    assert.match(
+      failed.prometheus,
+      new RegExp(
+        `^aquila_public_edge_probe_last_success_timestamp_seconds ${Math.floor(Date.parse(healthy.report.probedAt) / 1000)}$`,
+        "m",
+      ),
     )
   })
 })

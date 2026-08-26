@@ -34,9 +34,10 @@ class AdminOperationExecutionService(
             try {
                 when (receipt.action) {
                     AdminOperationAction.TASK_DLQ_REPLAY -> executeDlqReplay(receipt)
-                    AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
-                    AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
-                    -> executeSearchControl(receipt)
+                    AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL ->
+                        executeSearchControl(receipt, AdminOperationResultCode.SEARCH_PIPELINE_FORCE_CONTROL_UPDATED)
+                    AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE ->
+                        executeSearchControl(receipt, AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED)
                 }
                 receiptRepository.synchronizeTerminal(receipt)
             } catch (error: DataAccessException) {
@@ -56,7 +57,10 @@ class AdminOperationExecutionService(
         applyTerminal(receipt, replay)
     }
 
-    private fun executeSearchControl(receipt: AdminOperationReceipt) {
+    private fun executeSearchControl(
+        receipt: AdminOperationReceipt,
+        resultCode: AdminOperationResultCode,
+    ) {
         val key = requireNotNull(receipt.controlKey)
         val value = requireNotNull(receipt.controlValue)
         val state =
@@ -64,13 +68,7 @@ class AdminOperationExecutionService(
                 ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE)
         state.apply(value, receipt.operationId)
         receipt.status = AdminOperationStatus.SUCCEEDED
-        receipt.resultCode =
-            when (receipt.action) {
-                AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL -> AdminOperationResultCode.SEARCH_PIPELINE_FORCE_CONTROL_UPDATED
-                AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE ->
-                    AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED
-                AdminOperationAction.TASK_DLQ_REPLAY -> error("DLQ receipt cannot update search runtime control")
-            }
+        receipt.resultCode = resultCode
         receipt.controlVersion = state.version
     }
 

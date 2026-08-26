@@ -18,6 +18,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
+import org.springframework.dao.DataAccessResourceFailureException
 import java.time.Instant
 import java.util.UUID
 
@@ -107,6 +108,24 @@ class AdminOperationServiceTest {
     }
 
     @Test
+    fun `receipt reads map data access failure to service unavailable`() {
+        val command = command()
+        `when`(receiptRepository.findByOperationIdAndActorId(command.operationId, command.actorId))
+            .thenThrow(DataAccessResourceFailureException("database unavailable"))
+
+        assertThatThrownBy { service.get(command.operationId, command.actorId) }
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
+
+        val pipeline = pipelineCommand()
+        `when`(receiptRepository.findByOperationId(pipeline.operationId))
+            .thenThrow(DataAccessResourceFailureException("database unavailable"))
+        assertThatThrownBy { service.submitPipelineForceControl(pipeline) }
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
+    }
+
+    @Test
     fun `same UUID and normalized pipeline command returns terminal receipt without execution`() {
         val command = pipelineCommand(reason = "  search   control ")
         `when`(receiptRepository.findByOperationId(command.operationId))
@@ -190,6 +209,18 @@ class AdminOperationServiceTest {
         verifyNoInteractions(admission)
     }
 
+    @Test
+    fun `terminal mirror receipt returns stored result without admission or execution`() {
+        val command = mirrorCommand()
+        `when`(receiptRepository.findByOperationId(command.operationId)).thenReturn(mirrorReceipt(command))
+
+        val result = service.submitSearchEngineMirrorForceDisable(command)
+
+        assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED)
+        assertThat(result.controlVersion).isEqualTo(1)
+        verifyNoInteractions(admission, execution)
+    }
+
     private fun command(
         actorId: Long = 7L,
         reason: String = "incident recovery",
@@ -271,7 +302,13 @@ class AdminOperationServiceTest {
             operationId = command.operationId,
             actorId = command.actorId,
             sessionRowId = command.sessionRowId,
-            fingerprint = searchFingerprint(controlValue, reason),
+            fingerprint =
+                searchFingerprint(
+                    AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
+                    SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
+                    controlValue,
+                    reason,
+                ),
             action = AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
             reason = reason,
             status = status,
@@ -310,7 +347,42 @@ class AdminOperationServiceTest {
             controlVersion = 1,
         )
 
+    private fun mirrorCommand() =
+        AdminOperationService.SearchEngineMirrorForceDisableCommand(
+            operationId = UUID.fromString("6dfe57f8-29de-49ee-a2bd-b5d9b8218a8a"),
+            actorId = 7L,
+            sessionRowId = 41L,
+            forceDisabled = true,
+            reason = "search control",
+        )
+
+    private fun mirrorReceipt(command: AdminOperationService.SearchEngineMirrorForceDisableCommand) =
+        AdminOperationReceipt(
+            operationId = command.operationId,
+            actorId = command.actorId,
+            sessionRowId = command.sessionRowId,
+            fingerprint =
+                searchFingerprint(
+                    AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
+                    SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+                    SearchRuntimeControlValue.DISABLED,
+                    command.reason,
+                ),
+            action = AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
+            reason = command.reason,
+            status = AdminOperationStatus.SUCCEEDED,
+            resultCode = AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED,
+            controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+            controlValue = SearchRuntimeControlValue.DISABLED,
+            controlVersion = 1,
+        ).also {
+            it.createdAt = Instant.parse("2026-08-24T00:00:00Z")
+            it.modifiedAt = Instant.parse("2026-08-24T00:00:01Z")
+        }
+
     private fun searchFingerprint(
+        action: AdminOperationAction,
+        key: SearchRuntimeControlKey,
         value: SearchRuntimeControlValue,
         reason: String,
     ): String {
@@ -325,8 +397,8 @@ class AdminOperationServiceTest {
         method.isAccessible = true
         return method.invoke(
             service,
-            AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
-            SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
+            action,
+            key,
             value,
             reason,
         ) as String

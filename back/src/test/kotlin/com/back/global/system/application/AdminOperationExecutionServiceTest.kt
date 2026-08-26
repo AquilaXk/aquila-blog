@@ -73,6 +73,17 @@ class AdminOperationExecutionServiceTest {
     }
 
     @Test
+    fun `receipt lock data access failure returns service unavailable`() {
+        val operationId = UUID.randomUUID()
+        `when`(receiptRepository.findByOperationIdWithLock(operationId))
+            .thenThrow(DataAccessResourceFailureException("database unavailable"))
+
+        assertThatThrownBy { service.execute(operationId) }
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
+    }
+
+    @Test
     fun `zero selected tasks succeeds with no matching code`() {
         val receipt = receipt()
         `when`(receiptRepository.findByOperationIdWithLock(receipt.operationId)).thenReturn(receipt)
@@ -110,6 +121,26 @@ class AdminOperationExecutionServiceTest {
         assertThat(state.version).isEqualTo(1)
         assertThat(state.appliedOperationId).isEqualTo(receipt.operationId)
         assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.SEARCH_PIPELINE_FORCE_CONTROL_UPDATED)
+        assertThat(result.controlVersion).isEqualTo(1)
+        verify(taskDlqReplayService, org.mockito.Mockito.never())
+            .replayFailedTasksWithLock(org.mockito.Mockito.any(), org.mockito.Mockito.anyInt(), org.mockito.Mockito.anyBoolean())
+    }
+
+    @Test
+    fun `mirror control terminalizes matching result and version without DLQ replay`() {
+        val receipt =
+            searchReceipt(
+                action = AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
+                controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+                controlValue = SearchRuntimeControlValue.DISABLED,
+            )
+        val state = SearchRuntimeControlState(SearchRuntimeControlKey.MIRROR_FORCE_DISABLE, SearchRuntimeControlValue.ENABLED)
+        `when`(receiptRepository.findByOperationIdWithLock(receipt.operationId)).thenReturn(receipt)
+        `when`(controlStateRepository.findByControlKeyWithLock(SearchRuntimeControlKey.MIRROR_FORCE_DISABLE)).thenReturn(state)
+
+        val result = service.execute(receipt.operationId)
+
+        assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED)
         assertThat(result.controlVersion).isEqualTo(1)
         verify(taskDlqReplayService, org.mockito.Mockito.never())
             .replayFailedTasksWithLock(org.mockito.Mockito.any(), org.mockito.Mockito.anyInt(), org.mockito.Mockito.anyBoolean())
@@ -182,18 +213,21 @@ class AdminOperationExecutionServiceTest {
         replayedTaskIds = (1L..replayed.toLong()).toList(),
     )
 
-    private fun searchReceipt() =
-        AdminOperationReceipt(
-            operationId = UUID.randomUUID(),
-            actorId = 7L,
-            sessionRowId = 41L,
-            fingerprint = "a".repeat(64),
-            action = AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
-            reason = "search control",
-            controlKey = SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
-            controlValue = SearchRuntimeControlValue.ENABLED,
-        ).also {
-            it.createdAt = Instant.parse("2026-08-24T00:00:00Z")
-            it.modifiedAt = Instant.parse("2026-08-24T00:00:01Z")
-        }
+    private fun searchReceipt(
+        action: AdminOperationAction = AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
+        controlKey: SearchRuntimeControlKey = SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
+        controlValue: SearchRuntimeControlValue = SearchRuntimeControlValue.ENABLED,
+    ) = AdminOperationReceipt(
+        operationId = UUID.randomUUID(),
+        actorId = 7L,
+        sessionRowId = 41L,
+        fingerprint = "a".repeat(64),
+        action = action,
+        reason = "search control",
+        controlKey = controlKey,
+        controlValue = controlValue,
+    ).also {
+        it.createdAt = Instant.parse("2026-08-24T00:00:00Z")
+        it.modifiedAt = Instant.parse("2026-08-24T00:00:01Z")
+    }
 }

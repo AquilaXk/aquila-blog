@@ -17,6 +17,12 @@ class SearchRuntimeControlQueryService(
     @Value("\${custom.post.search.pipeline.rollback.forceControl:false}")
     private val pipelineForceControlBaseline: Boolean,
 ) {
+    private val requiredKeys =
+        setOf(
+            SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
+            SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+        )
+
     data class ControlStateSnapshot(
         val controlKey: SearchRuntimeControlKey,
         val controlValue: SearchRuntimeControlValue,
@@ -33,9 +39,9 @@ class SearchRuntimeControlQueryService(
 
     fun runtimeSnapshot(): RuntimeSnapshot =
         try {
-            val states = controlStatePort.findAllByControlKeyIn(REQUIRED_KEYS)
+            val states = controlStatePort.findAllByControlKeyIn(requiredKeys)
             val statesByKey = states.groupBy(SearchRuntimeControlState::controlKey)
-            if (statesByKey.keys != REQUIRED_KEYS || statesByKey.values.any { it.size != 1 }) unavailable()
+            if (statesByKey.keys != requiredKeys || statesByKey.values.any { it.size != 1 }) unavailable()
 
             val pipeline = statesByKey.getValue(SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL).single().toSnapshot()
             val mirror = statesByKey.getValue(SearchRuntimeControlKey.MIRROR_FORCE_DISABLE).single().toSnapshot()
@@ -93,12 +99,4 @@ class SearchRuntimeControlQueryService(
         }
 
     private fun unavailable(): Nothing = throw AppException(ErrorCode.SERVICE_UNAVAILABLE)
-
-    private companion object {
-        val REQUIRED_KEYS =
-            setOf(
-                SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
-                SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
-            )
-    }
 }

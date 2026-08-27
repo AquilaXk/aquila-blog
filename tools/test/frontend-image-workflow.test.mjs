@@ -327,6 +327,80 @@ test("Platform consumes only the Web digest handoff", () => {
   assert.match(source, /HOME_FRONT_BUILD_SHA: \$\{\{ needs\.calculateTag\.outputs\.front_source_sha \}\}/)
 })
 
+test("backend image producer publishes only verified native-image evidence", () => {
+  const job = deployDocument().jobs.buildAndPush
+  const steps = job.steps
+  const digest = steps.find((step) => step.id === "backend_image")
+  const trivyInstall = steps.find((step) => step.name === "Install Trivy for backend image evidence")
+  const scan = steps.find((step) => step.name === "Pull and scan immutable backend image")
+  const attestations = [
+    steps.find((step) => step.name === "Attest backend image provenance"),
+    steps.find((step) => step.name === "Attest backend image SPDX SBOM"),
+    steps.find((step) => step.name === "Attest backend image vulnerability scan"),
+  ]
+  const verify = steps.find((step) => step.name === "Verify backend native image attestations")
+
+  assert.deepEqual(job.permissions, {
+    contents: "read",
+    packages: "write",
+    attestations: "write",
+    "id-token": "write",
+  })
+  assert.match(digest.run, /\[\[ ! "\$\{BACKEND_IMAGE_DIGEST\}" =~ \^sha256:\[a-f0-9\]\{64\}\$ \]\]/)
+  assert.match(digest.run, /back_image_ref=\$\{IMAGE_NAME\}@\$\{BACKEND_IMAGE_DIGEST\}/)
+  assert.equal(trivyInstall.env.TRIVY_VERSION, "0.72.0")
+  assert.equal(trivyInstall.env.TRIVY_SHA256, "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea")
+  assert.equal(scan.env.IMAGE_REF, "${{ steps.backend_image.outputs.back_image_ref }}")
+  assert.match(scan.run, /docker pull "\$\{IMAGE_REF\}"/)
+  assert.match(scan.run, /trivy image --ignorefile \.trivyignore\.yaml --severity HIGH,CRITICAL --exit-code 1[\s\S]*?--format cosign-vuln --output "\$\{RUNNER_TEMP\}\/backend-image-vulnerability\.json" "\$\{IMAGE_REF\}"/)
+  assert.match(scan.run, /trivy image --ignorefile \.trivyignore\.yaml[\s\S]*?--format spdx-json --output "\$\{RUNNER_TEMP\}\/backend-image\.spdx\.json" "\$\{IMAGE_REF\}"/)
+  assert.doesNotMatch(scan.run, /--format spdx-json[\s\S]*--(?:severity|exit-code)/)
+  assert.match(scan.run, /backend-image-vulnerability\.json/)
+  assert.match(scan.run, /backend-image\.spdx\.json/)
+
+  for (const step of attestations) {
+    assert.equal(step.uses, "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6")
+    assert.equal(step.with["subject-name"], "ghcr.io/aquilaxk/aquila-blog-back")
+    assert.equal(step.with["subject-digest"], "${{ steps.build_backend_image.outputs.digest }}")
+    assert.equal(step.with["push-to-registry"], true)
+  }
+  assert.equal(attestations[0].with["predicate-type"], undefined)
+  assert.equal(attestations[0].with["predicate-path"], undefined)
+  assert.equal(attestations[1].with["predicate-type"], "https://spdx.dev/Document/v2.3")
+  assert.match(attestations[1].with["predicate-path"], /backend-image\.spdx\.json$/)
+  assert.equal(attestations[2].with["predicate-type"], "https://cosign.sigstore.dev/attestation/vuln/v1")
+  assert.match(attestations[2].with["predicate-path"], /backend-image-vulnerability\.json$/)
+
+  assert.equal(verify.env.GH_TOKEN, "${{ github.token }}")
+  assert.equal(verify.env.SOURCE_REPOSITORY, "AquilaXk/aquila-blog")
+  assert.equal(verify.env.SOURCE_SHA, "${{ needs.calculateTag.outputs.deploy_sha }}")
+  assert.equal(verify.env.IMAGE_SUBJECT, "ghcr.io/aquilaxk/aquila-blog-back")
+  assert.equal(verify.env.IMAGE_DIGEST, "${{ steps.build_backend_image.outputs.digest }}")
+  assert.equal(verify.env.SIGNER_WORKFLOW, "https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main")
+  assert.equal(verify.env.EXPECTED_RUN_URI, "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}")
+  for (const [predicate, output] of [
+    ["https://slsa.dev/provenance/v1", "backend-image-provenance.json"],
+    ["https://spdx.dev/Document/v2.3", "backend-image-spdx.json"],
+    ["https://cosign.sigstore.dev/attestation/vuln/v1", "backend-image-vulnerability-attestation.json"],
+  ]) {
+    assert.match(verify.run, new RegExp(`gh attestation verify "oci:\\/\\/\\$\\{IMAGE_REF\\}"[\\s\\S]*--repo "AquilaXk/aquila-blog"[\\s\\S]*--source-digest "\\$\\{SOURCE_SHA\\}"[\\s\\S]*--source-ref "refs/heads/main"[\\s\\S]*--signer-workflow "AquilaXk\\/aquila-blog\\/.github\\/workflows\\/deploy\\.yml"[\\s\\S]*--deny-self-hosted-runners[\\s\\S]*--predicate-type "${predicate.replaceAll("/", "\\/")}"[\\s\\S]*--format json > "\\$\\{RUNNER_TEMP\\}\/${output}"`))
+  }
+  assert.match(verify.run, /node tools\/security\/native-image-evidence\.mjs verify-attestation-set[\s\S]*backend-image-provenance\.json[\s\S]*backend-image-spdx\.json[\s\S]*backend-image-vulnerability-attestation\.json/)
+  const verifierIndex = verify.run.indexOf("node tools/security/native-image-evidence.mjs verify-attestation-set")
+  const summaryIndex = verify.run.indexOf('>> "${GITHUB_STEP_SUMMARY}"')
+  assert.ok(summaryIndex > verifierIndex, "summary must be written only after local attestation verification")
+  for (const value of [
+    "aquila-native-image-evidence-v1",
+    "${SOURCE_SHA}",
+    "${IMAGE_DIGEST}",
+    "https://slsa.dev/provenance/v1",
+    "https://spdx.dev/Document/v2.3",
+    "https://cosign.sigstore.dev/attestation/vuln/v1",
+    "${SIGNER_WORKFLOW}",
+    "${EXPECTED_RUN_URI}",
+  ]) assert.match(verify.run, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+})
+
 function runVerifiedDeploymentDispatch(input) {
   const steps = deployDocument().jobs.frontBlueGreenDeploy.steps
   const step = steps.find((item) => item.name === "Dispatch verified Platform deployment")

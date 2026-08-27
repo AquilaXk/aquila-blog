@@ -465,6 +465,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
+      id-token: write
     outputs:
       back_image_ref: ${{ steps.backend_image.outputs.back_image_ref }}
 
@@ -503,12 +505,109 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${BACKEND_IMAGE_DIGEST}" ]; then
-            echo "backend image digest is empty" >&2
+          if [[ ! "${BACKEND_IMAGE_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "backend image digest must be immutable lowercase sha256" >&2
             exit 1
           fi
           echo "back_image_ref=${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
           echo "backend image ref: ${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Trivy for backend image evidence
+        env:
+          TRIVY_VERSION: "0.72.0"
+          TRIVY_SHA256: "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/trivy.tgz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          printf '%s  %s\n' "${TRIVY_SHA256}" /tmp/trivy.tgz | sha256sum --check -
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+
+      - name: Pull and scan immutable backend image
+        env:
+          IMAGE_REF: ${{ steps.backend_image.outputs.back_image_ref }}
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE_REF}"
+          trivy image --ignorefile .trivyignore.yaml --severity HIGH,CRITICAL --exit-code 1 \
+            --format cosign-vuln --output "${RUNNER_TEMP}/backend-image-vulnerability.json" "${IMAGE_REF}"
+          trivy image --ignorefile .trivyignore.yaml \
+            --format spdx-json --output "${RUNNER_TEMP}/backend-image.spdx.json" "${IMAGE_REF}"
+
+      - name: Attest backend image provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest backend image SPDX SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          predicate-type: https://spdx.dev/Document/v2.3
+          predicate-path: ${{ runner.temp }}/backend-image.spdx.json
+          push-to-registry: true
+
+      - name: Attest backend image vulnerability scan
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          predicate-type: https://cosign.sigstore.dev/attestation/vuln/v1
+          predicate-path: ${{ runner.temp }}/backend-image-vulnerability.json
+          push-to-registry: true
+
+      - name: Verify backend native image attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ steps.backend_image.outputs.back_image_ref }}
+          SOURCE_REPOSITORY: AquilaXk/aquila-blog
+          SOURCE_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          IMAGE_SUBJECT: ghcr.io/aquilaxk/aquila-blog-back
+          IMAGE_DIGEST: ${{ steps.build_backend_image.outputs.digest }}
+          SIGNER_WORKFLOW: https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main
+          EXPECTED_RUN_URI: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --format json > "${RUNNER_TEMP}/backend-image-provenance.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://spdx.dev/Document/v2.3" \
+            --format json > "${RUNNER_TEMP}/backend-image-spdx.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://cosign.sigstore.dev/attestation/vuln/v1" \
+            --format json > "${RUNNER_TEMP}/backend-image-vulnerability-attestation.json"
+          node tools/security/native-image-evidence.mjs verify-attestation-set \
+            "${RUNNER_TEMP}/backend-image-provenance.json" \
+            "${RUNNER_TEMP}/backend-image-spdx.json" \
+            "${RUNNER_TEMP}/backend-image-vulnerability-attestation.json"
+          {
+            echo "## Backend native image evidence"
+            echo "- policy: aquila-native-image-evidence-v1"
+            echo "- source SHA: ${SOURCE_SHA}"
+            echo "- image digest: ${IMAGE_DIGEST}"
+            echo "- predicates: https://slsa.dev/provenance/v1, https://spdx.dev/Document/v2.3, https://cosign.sigstore.dev/attestation/vuln/v1"
+            echo "- signer workflow: ${SIGNER_WORKFLOW}"
+            echo "- run: ${EXPECTED_RUN_URI}"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   blueGreenDeploy:
     runs-on: ubuntu-latest

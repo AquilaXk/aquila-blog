@@ -17,7 +17,7 @@ SELECT 'flyway_version' AS key, (
     FROM (
         SELECT version
         FROM public.flyway_schema_history
-        WHERE success
+        WHERE success AND version IS NOT NULL
         ORDER BY installed_rank DESC
         LIMIT 1
     ) AS latest_successful_flyway

@@ -49,9 +49,9 @@ const extractCaddySiteBlock = (caddyfile, siteMarker) => {
 
 // 공개 API 게이트는 backend 전용 vhost와 same-origin web vhost가 공유하는 snippet 하나에 있다.
 const backendGatesSnippet = "(backend_edge_gates) {"
-// #1596이 구 API 호스트 주소를 지운 뒤, backend 전용 vhost의 첫 주소는 host 이전 창 전용
-// LEGACY 슬롯이고 두 번째 주소 `http://caddy`가 영구 컨테이너 내부 진입점이다.
-const backendVhostMarker = "http://{$LEGACY_API_DOMAIN:"
+const retiredLegacyApiDomain = ["LEGACY", "API", "DOMAIN"].join("_")
+// The backend-only vhost has one permanent, container-internal entry point.
+const backendVhostMarker = "http://caddy {"
 // client IP 신뢰 경계도 같은 이유로 한 곳에만 있다.
 const clientIpCaptureSnippet = "(edge_client_ip_capture) {"
 
@@ -552,25 +552,17 @@ test("Caddy routes tokenized cloud external content through public read upstream
   assert(readProxyIndex < adminMatcherIndex, "public read proxy must be declared before admin API matcher")
 })
 
-test("backend vhost drops the retired API host but keeps the migration slot and the internal entry point", () => {
+test("backend vhost keeps only the internal entry point after legacy API domain retirement", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const addressLine = caddyfile.split("\n").find((line) => line.startsWith(backendVhostMarker))
 
   assert(addressLine, "backend vhost address line must exist")
-  // #1596: 구 API 호스트 주소는 사라졌지만 vhost는 남는다. 주소가 둘이어야 하는 이유는
-  // 하나로 줄이면 다음 host 이전에서 구·신 주소가 동시에 살 수 없기 때문이다.
-  assert.match(
-    addressLine,
-    /^http:\/\/\{\$LEGACY_API_DOMAIN:[^}]+\}, http:\/\/[a-z0-9-]+ \{$/,
-    addressLine,
-  )
+  assert.equal(addressLine, "http://caddy {", addressLine)
   // 접힌 호스트가 주소로 되살아나면 Cloudflare 콘솔에서 지운 hostname이 다시 백엔드를 노출한다.
   assert.doesNotMatch(caddyfile, /\{\$API_DOMAIN\}/, "the retired API host address must not come back")
-  // 기본값이 비면 주소가 `http://`가 되어 host matcher 없는 :80 catch-all이 된다.
-  assert.match(addressLine, /\{\$LEGACY_API_DOMAIN:[a-z0-9-]+\.localhost\}/, addressLine)
   // 두 번째 주소는 front 서버 사이드 호출용 컨테이너 내부 진입점이다(#1539). env placeholder면
   // 값이 비는 순간 `http://`로 붕괴해 host matcher 없는 :80 catch-all이 되므로 리터럴만 허용한다.
-  const internalAddress = addressLine.split(", ")[1].replace(/ \{$/, "")
+  const internalAddress = addressLine.replace(/ \{$/, "")
   assert.equal(internalAddress, "http://caddy", addressLine)
   assert.doesNotMatch(internalAddress, /\{\$/, "the internal API address must not be env-interpolated")
   // 공개 호스트를 내부 주소로 쓰면 front 호출이 공개 인터넷을 왕복한다.
@@ -604,47 +596,23 @@ test("BACKEND_INTERNAL_URL은 색깔에 묶이지 않는 Caddy 내부 주소로 
   assert.doesNotMatch(example, /BACKEND_INTERNAL_URL=http:\/\/back[-_](blue|green|read|admin)/)
 })
 
-test("LEGACY_API_DOMAIN is declared as an optional transition-only key and reaches Caddy", async () => {
-  const { loadContract } = await import("../env/validate-env.mjs")
-  const contract = loadContract(contractPath)
-  const definition = contract.targets["home-server-source"].keys.find((key) => key.name === "LEGACY_API_DOMAIN")
-
-  assert(definition, "LEGACY_API_DOMAIN must be declared")
-  assert.equal(definition.required, false)
-  assert.equal(definition.kind, "hostname")
-
-  // Caddy service env에 실리지 않으면 vhost 주소가 기본값(.localhost)으로 남아 무의미해진다.
-  const materialize = readFileSync(path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"), "utf8")
-  assert.match(materialize, /LEGACY_API_DOMAIN/)
-})
-
-test("LEGACY_API_DOMAIN warns while set and is rejected for another service host", async () => {
-  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const contract = loadContract(contractPath)
-
-  const open = validateEnvText({
-    contract,
-    target: "home-server-source",
-    // WEB_DOMAIN(blog.aquilaxk.site)과 달라야 한다. 같으면 두 site block이 한 주소를 공유해
-    // edge 전체가 기동하지 못하고, 계약이 그것을 error로 막는다.
-    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=legacy-api.aquilaxk.site`,
-  })
-  assert.equal(open.ok, true, open.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
-  // 조용히 영구 잔존하면 apex 소유가 바뀐 뒤에도 구 호스트가 백엔드를 계속 노출한다.
-  assert(open.warnings.some((warning) => warning.key === "LEGACY_API_DOMAIN"))
-
-  for (const forbidden of ["aquilaxk.site", "www.aquilaxk.site"]) {
-    const result = validateEnvText({
-      contract,
-      target: "home-server-source",
-      text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=${forbidden}`,
-    })
-    assert.equal(result.ok, false, `${forbidden} must not become a backend vhost address`)
-    assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
+test("legacy API domain is absent from active environment, runtime, and deploy surfaces", () => {
+  const activePaths = [
+    contractPath,
+    envExamplePath,
+    caddyfilePath,
+    path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh"),
+    doctorScriptPath,
+  ]
+  for (const activePath of activePaths) {
+    assert.doesNotMatch(readFileSync(activePath, "utf8"), new RegExp(retiredLegacyApiDomain), activePath)
   }
 
-  const closed = validateEnvText({ contract, target: "home-server-source", text: baseHomeServerEnv })
-  assert.equal(closed.warnings.some((warning) => warning.key === "LEGACY_API_DOMAIN"), false)
+  const workflow = readFileSync(workflowPath, "utf8")
+  const copyIndex = workflow.indexOf('printf \'%s\\n\' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod')
+  const deletionIndex = workflow.indexOf(`remove_env_key "${retiredLegacyApiDomain}" "deploy/homeserver/.env.prod"`)
+  assert(copyIndex !== -1, "HOME_SERVER_ENV must be copied to the deploy env file")
+  assert(deletionIndex > copyIndex, "the retired key must be deleted after HOME_SERVER_ENV is copied")
 })
 
 test("a required key that is present but empty is still rejected", async () => {
@@ -714,21 +682,6 @@ test("an absent optional key stays valid", async () => {
 
 })
 
-test("LEGACY_API_DOMAIN must be removed, not blanked, because an empty value deletes the backend vhost", async () => {
-  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  // 실측: `caddy adapt`에서 LEGACY_API_DOMAIN= (present but empty)이면 첫 주소가
-  // `http://`가 되어 site 전체가 host matcher 없는 :80 catch-all이 되고, 내부 진입점을 포함한
-  // host matcher가 출력에서 통째로 사라진다.
-  // 창을 닫을 때 줄을 지우지 않고 비우는 것이 가장 자연스러운 실수라 여기서 막는다.
-  const result = validateEnvText({
-    contract: loadContract(contractPath),
-    target: "home-server-source",
-    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=`,
-  })
-
-  assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
-})
 
 test("edge에는 CORS가 없다 - 공개 API가 web 호스트의 경로이기 때문이다", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
@@ -866,7 +819,7 @@ test("컨테이너 내부 진입점은 backend 전용 vhost에 있어 front로 �
   // front upstream을 가진 vhost로 옮겨가면 front -> caddy -> front 무한 루프가 된다.
   const apiAddressLine = caddyfile.split("\n").find((line) => line.startsWith(backendVhostMarker))
   assert(apiAddressLine, "backend vhost address line must exist")
-  assert(apiAddressLine.includes(", http://caddy"), apiAddressLine)
+  assert.equal(apiAddressLine, "http://caddy {", apiAddressLine)
 
   assert.doesNotMatch(apiBlock, /reverse_proxy [^\n]*:3000/, "the internal entry point vhost must have no front upstream")
   assert.doesNotMatch(webBlock, /^\s*http:\/\/caddy/m, "the internal entry point must not move onto the web vhost")
@@ -1772,14 +1725,6 @@ test("topology invariants compare hosts case-insensitively", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
 
   // Caddy는 host를 소문자로 정규화한다. 대문자로 적힌 apex가 통과하면 그대로 API vhost가 된다.
-  const upper = validateEnvText({
-    contract: loadContract(contractPath),
-    target: "home-server-source",
-    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=AQUILAXK.SITE`,
-  })
-  assert.equal(upper.ok, false, "uppercase apex must not slip past forbiddenValues")
-  assert(upper.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
-
   const poisoned = poisonTopology(loadContract(contractPath), SAME_ORIGIN_TOPOLOGY, {
     cookieDomain: "AQUILAXK.SITE",
     frontHost: "AQUILAXK.SITE",
@@ -1787,22 +1732,6 @@ test("topology invariants compare hosts case-insensitively", async () => {
   })
   const result = validateEnvText({ contract: poisoned, target: "home-server-source", text: baseHomeServerEnv })
   assert.equal(result.ok, false, "uppercase apex cookieDomain must still hit forbiddenCookieDomains")
-})
-
-test("LEGACY_API_DOMAIN may not duplicate WEB_DOMAIN", async () => {
-  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-
-  // 두 site block이 같은 주소를 선언하면 caddy는 그 설정을 거부하고 edge 전체가 기동하지 못한다.
-  // #1596 이후 backend 전용 vhost에 남은 host 기반 주소는 이 키 하나뿐이라, 충돌 상대는
-  // 사라진 API_DOMAIN이 아니라 공개 web 호스트다.
-  const result = validateEnvText({
-    contract: loadContract(contractPath),
-    target: "home-server-source",
-    text: `${baseHomeServerEnv}\nLEGACY_API_DOMAIN=blog.aquilaxk.site`,
-  })
-
-  assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "LEGACY_API_DOMAIN"))
 })
 
 test("표의 키는 그 항목의 backHost와 묶여 있다", async () => {
@@ -2375,7 +2304,7 @@ test("배포 후 게이트가 same-origin 공개 표면도 검증한다", () => 
 
   // 공개 HTTPS 게이트는 구 API 호스트가 아니라 실제로 서비스되는 web 호스트를 때린다.
   assert.match(workflow, /wait_public_api_health "\$\{WEB_DOMAIN\}"/)
-  assert.doesNotMatch(workflow, /API_DOMAIN/)
+  assert.doesNotMatch(workflow, /\bAPI_DOMAIN\b/)
 })
 
 // 매치되는 vhost가 없는 Host에도 Caddy는 404가 아니라 `200` + 빈 본문을 준다. 실측(이 트리의
@@ -3664,6 +3593,33 @@ const extractDeployRemoteFunctions = (functionNames) => {
     .join("\n\n")
 }
 
+test("remove_env_key removes every validator-accepted retired assignment without printing values", () => {
+  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-retired-env-key-"))
+  try {
+    const envFile = path.join(workDir, "home-server.env")
+    const preserved = ["# keep this comment", "", "UNRELATED_KEY=preserved"]
+    writeFileSync(
+      envFile,
+      [
+        `${retiredLegacyApiDomain}=canonical-secret`,
+        ` export ${retiredLegacyApiDomain} = exported-secret`,
+        `  ${retiredLegacyApiDomain} = spaced-secret`,
+        ...preserved,
+        "",
+      ].join("\n"),
+    )
+    const script = ["set -euo pipefail", extractDeployRemoteFunctions(["remove_env_key"]), `remove_env_key ${retiredLegacyApiDomain} ${envFile}`].join("\n")
+    const output = execFileSync("bash", ["-c", script], { encoding: "utf8" })
+
+    assert.equal(output, "", "retired assignment values must not be logged")
+    const result = readFileSync(envFile, "utf8")
+    assert.doesNotMatch(result, new RegExp(`^\\s*(?:export\\s+)?${retiredLegacyApiDomain}\\s*=`, "m"))
+    assert.equal(result, `${preserved.join("\n")}\n`)
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
 test("HOME_SERVER_ENV image digest는 pre-deploy 보존값보다 우선한다", () => {
   const workflow = readFileSync(workflowPath, "utf8")
   const staleDigest = "willfarrell/autoheal@sha256:31f580ef0279eaced5b38d631b08c474d70d8403c1c2fdd6ddcf2e879d5f3f7c"
@@ -4589,7 +4545,7 @@ test("표면 도메인 키는 caddy env까지 전달되고 site address 유일�
   )
   assert.ok(siteAddressCheck, "Caddy site address keys must be checked for uniqueness as a set")
   assert.equal(siteAddressCheck.asHost, true, "duplicates that differ only in case are still duplicates")
-  for (const name of ["LEGACY_API_DOMAIN", "WEB_DOMAIN", "COMPANY_DOMAIN", "PRODUCT_DOMAIN", "APEX_DOMAIN"]) {
+  for (const name of ["WEB_DOMAIN", "COMPANY_DOMAIN", "PRODUCT_DOMAIN", "APEX_DOMAIN"]) {
     assert(siteAddressCheck.keys.includes(name), `${name} is a Caddy site address and must be in the set`)
   }
 
@@ -4798,11 +4754,6 @@ test("web 도메인 env 키는 caddy 컨테이너까지 전달되고 FRONTURL과
   // host 비교여야 한다. raw 비교면 후행 슬래시 하나로 게이트가 조용히 닫히고, WEB_DOMAIN이
   // optional로 통과해 공개 사이트와 공개 API가 함께 404가 된다.
   assert.deepEqual(webDomain.requiredWhen, { key: "CUSTOM_PROD_BACKURL", hostEquals: "blog.aquilaxk.site" })
-  // #1596 이후 web 호스트와 주소가 겹칠 수 있는 키는 host 이전 창 전용 LEGACY 슬롯 하나뿐이다.
-  // 두 값이 같으면 Caddy site address가 중복돼 caddy가 기동하지 못하고 edge 전체가 내려간다.
-  const legacyApiDomain = sourceKeys.find((key) => key.name === "LEGACY_API_DOMAIN")
-  assert.ok(legacyApiDomain, "LEGACY_API_DOMAIN must stay declared for the next host migration")
-  assert.equal(legacyApiDomain.mustDifferFrom, "WEB_DOMAIN")
   // 접힌 구 API 호스트 키가 계약으로 되살아나면 Caddy가 더 이상 읽지 않는 값을 오너가 계속
   // 유지보수하게 되고, 그 키를 요구하는 게이트가 다시 붙을 여지가 남는다.
   assert.equal(sourceKeys.some((key) => key.name === "API_DOMAIN"), false)
@@ -4821,7 +4772,6 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
     writeFileSync(
       sourceEnv,
       [
-        "LEGACY_API_DOMAIN=legacy-api.blog.example.com",
         "WEB_DOMAIN=blog.example.com",
         "WEB_UPSTREAM=front_green",
         "MONITOR_DOMAIN=",
@@ -4857,8 +4807,6 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
 
       assert.match(caddyEnv, /^WEB_DOMAIN=blog\.example\.com$/m)
       assert.match(caddyEnv, /^WEB_UPSTREAM=front_green$/m)
-      // host 이전 창 슬롯이 caddy env에 실리지 않으면 vhost 주소가 .localhost 기본값에 머문다.
-      assert.match(caddyEnv, /^LEGACY_API_DOMAIN=legacy-api\.blog\.example\.com$/m)
       // 값이 빈 키는 caddy env로 내보내지 않는다. Caddy의 `{$VAR:default}`는 변수가 **unset**일
       // 때만 기본값을 쓰고, 존재하되 비어 있으면 빈 문자열을 그대로 쓴다. 그러면 site address가
       // `http://`가 되어 host matcher 없는 :80 catch-all 라우트가 되고, 다른 vhost가 잡지 않는

@@ -363,7 +363,6 @@ fi
 # 띄지도 않는다.
 host_url_env_keys="${workdir}/host-url-env-keys.txt"
 {
-  printf '%s\n' 'LEGACY_API_DOMAIN'
   printf '%s\n' 'WEB_DOMAIN'
   printf '%s\n' 'CUSTOM_PROD_BACKURL'
   printf '%s\n' 'CUSTOM_PROD_COOKIEDOMAIN'
@@ -693,7 +692,7 @@ if [ -z "${env_domain_consistency_block}" ]; then
 fi
 
 run_env_domain_consistency() {
-  local cookie="$1" front="$2" back="$3" web="$4" legacy="${5:-}"
+  local cookie="$1" front="$2" back="$3" web="$4"
   (
     set -uo pipefail
     trim_quotes() { printf '%s' "$1"; }
@@ -703,7 +702,6 @@ run_env_domain_consistency() {
         CUSTOM_PROD_FRONTURL) printf '%s' "${front}" ;;
         CUSTOM_PROD_BACKURL) printf '%s' "${back}" ;;
         WEB_DOMAIN) printf '%s' "${web}" ;;
-        LEGACY_API_DOMAIN) printf '%s' "${legacy}" ;;
         *) printf '' ;;
       esac
     }
@@ -722,35 +720,6 @@ if [[ "${healthy_domain_output}" == *"WARN:"* ]]; then
   fail "expected the same-origin blog domain contract to produce no domain WARN, got: ${healthy_domain_output}"
 fi
 
-# host 이전 창 전용 LEGACY_API_DOMAIN이 web 호스트와 겹치면 두 site block이 한 주소를 공유해
-# edge가 통째로 기동하지 못한다.
-duplicate_address_output="$(run_env_domain_consistency \
-  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "blog.aquilaxk.site" "blog.aquilaxk.site")"
-if [[ "${duplicate_address_output}" != *"LEGACY_API_DOMAIN duplicates WEB_DOMAIN"* ]]; then
-  fail "expected a duplicated Caddy site address to be reported, got: ${duplicate_address_output}"
-fi
-
-# 실제 site address가 되는 값은 WEB_DOMAIN이다. FRONTURL host만 보면 손으로 편집한 .env.prod에서
-# WEB_DOMAIN == LEGACY_API_DOMAIN인 조합(= edge가 기동하지 못하는 조합)을 놓친다.
-# 두 값을 일부러 갈라 놓아야 FRONTURL 비교와 WEB_DOMAIN 비교를 구분할 수 있다.
-web_only_duplicate_output="$(run_env_domain_consistency \
-  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "legacy-api.aquilaxk.site" "legacy-api.aquilaxk.site")"
-if [[ "${web_only_duplicate_output}" != *"LEGACY_API_DOMAIN duplicates WEB_DOMAIN"* ]]; then
-  fail "expected the duplicate check to read WEB_DOMAIN (not FRONTURL host), got: ${web_only_duplicate_output}"
-fi
-# WEB_DOMAIN이 없으면 겹칠 주소 자체가 없다.
-missing_web_no_dup_output="$(run_env_domain_consistency \
-  "blog.aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "" "legacy-api.aquilaxk.site")"
-if [[ "${missing_web_no_dup_output}" == *"duplicates WEB_DOMAIN"* ]]; then
-  fail "expected no duplicate-address warning while WEB_DOMAIN is unset, got: ${missing_web_no_dup_output}"
-fi
-# 열린 이전 창은 조용히 영구 잔존하면 안 된다. 설정돼 있다는 사실 자체가 임시 상태다.
-if [[ "${web_only_duplicate_output}" != *"LEGACY_API_DOMAIN is set"* ]]; then
-  fail "expected an open host migration window to be reported, got: ${web_only_duplicate_output}"
-fi
-if [[ "${healthy_domain_output}" == *"LEGACY_API_DOMAIN is set"* ]]; then
-  fail "expected no migration-window warning while LEGACY_API_DOMAIN is unset, got: ${healthy_domain_output}"
-fi
 
 apex_cookie_output="$(run_env_domain_consistency \
   "aquilaxk.site" "https://blog.aquilaxk.site" "https://blog.aquilaxk.site" "blog.aquilaxk.site")"

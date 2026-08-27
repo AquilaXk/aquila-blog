@@ -769,10 +769,9 @@ jobs:
             local key="$1"
             local file="$2"
 
-            if grep -qE "^${key}=" "${file}"; then
-              grep -vE "^${key}=" "${file}" > "${file}.tmp"
-              mv "${file}.tmp" "${file}"
-            fi
+            [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+            awk -v key="${key}" '$0 !~ "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=" { print }' "${file}" > "${file}.tmp"
+            mv "${file}.tmp" "${file}"
           }
 
           restart_external_backup_legacy_minio_if_needed() {
@@ -945,6 +944,7 @@ jobs:
 
           if [ -n "${HOME_SERVER_ENV:-}" ]; then
             printf '%s\n' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod
+            remove_env_key "LEGACY_API_DOMAIN" "deploy/homeserver/.env.prod"
           elif [ ! -f deploy/homeserver/.env.prod ]; then
             cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
             echo "deploy/homeserver/.env.prod created from example. Fill required values." >&2

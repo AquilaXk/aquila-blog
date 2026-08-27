@@ -260,7 +260,7 @@ setup_case() {
   grep -n 'reverse_proxy {\$WEB_UPSTREAM:front_blue}:3000' "${caddy_source}" >/dev/null \
     || fail "tracked Caddyfile no longer carries the {\$WEB_UPSTREAM:front_blue}:3000 token this test pins"
   {
-    printf 'http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {\n'
+    printf 'http://caddy {\n'
     printf '  handle {\n'
     printf '    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080\n'
     printf '  }\n'

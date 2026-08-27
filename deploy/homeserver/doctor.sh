@@ -692,21 +692,6 @@ if [[ -n "${cookie_domain}" && -n "${back_host}" ]] \
   echo "WARN: BACKURL host must be the COOKIEDOMAIN host or sit strictly under it (${back_host} vs ${cookie_domain})"
 fi
 
-# LEGACY_API_DOMAIN은 host 이전 창에만 설정하는 두 번째 site address다(#1596 이후 유일하게
-# 남은 host 기반 주소). WEB_DOMAIN과 같은 값이면 두 site block이 한 주소를 공유해 edge 전체가
-# 기동하지 못한다. 계약이 이미 막지만 doctor는 손으로 편집된 .env.prod를 보는 도구다.
-#
-# 비교 대상은 FRONTURL host가 아니라 WEB_DOMAIN이다. 실제로 Caddy site address로 보간되는 값이
-# WEB_DOMAIN이라, FRONTURL만 보면 정확히 그 충돌 조합을 놓친다.
-legacy_api_domain="$(trim_quotes "$(env_value "LEGACY_API_DOMAIN")")"
-echo "LEGACY_API_DOMAIN:         ${legacy_api_domain:-<empty>}"
-if [[ -n "${legacy_api_domain}" && -n "${web_domain}" && "${legacy_api_domain}" == "${web_domain}" ]]; then
-  echo "WARN: LEGACY_API_DOMAIN duplicates WEB_DOMAIN (${web_domain}) - two Caddy site blocks would share one address and the edge would fail to start"
-fi
-if [[ -n "${legacy_api_domain}" ]]; then
-  echo "WARN: LEGACY_API_DOMAIN is set - a host migration window is open and an extra host-based backend address is being served"
-fi
-
 print_section "Grafana Embed Route"
 print_grafana_origin_status
 print_grafana_embed_status "$(monitoring_embed_candidate_url)"

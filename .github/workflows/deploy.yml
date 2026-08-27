@@ -365,27 +365,18 @@ jobs:
           FRONT_SOURCE_SHA=""
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
-          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
 
           if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ] && [ "${DEPLOY_SHA}" != "${GITHUB_SHA}" ]; then
             {
-              echo "image_tag=${IMAGE_TAG}"
-              echo "image_name=${IMAGE_NAME}"
-              echo "image_ref=${IMAGE_REF}"
-              echo "deploy_sha=${DEPLOY_SHA}"
-              echo "backend_deploy=false"
-              echo "front_deploy=false"
-              echo "front_image_ref="
-              echo "front_source_sha="
-            } >> "$GITHUB_OUTPUT"
-            {
               echo "## Deploy Boundary"
-              echo "- result: noop"
+              echo "- result: blocked"
               echo "- reason: attestation-source-sha-mismatch"
               echo "- deploy SHA: ${DEPLOY_SHA}"
               echo "- attestation source SHA: ${GITHUB_SHA}"
             } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "deploy blocked: workflow_run deploy sha differs from attestation source sha" >&2
+            exit 1
           fi
 
           if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
@@ -1909,7 +1900,7 @@ jobs:
             exit 0
           fi
 
-          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
           REMOTE_MAIN_SHA="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
           if [[ ! "${REMOTE_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "front dispatch origin/main sha lookup failed" >&2

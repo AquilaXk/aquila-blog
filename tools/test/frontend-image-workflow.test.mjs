@@ -125,6 +125,7 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "tools/test/setup-node-pin-parity.test.mjs",
     "tools/test/frontend-image-workflow.test.mjs",
     "tools/test/dockerfile-supply-chain.test.mjs",
+    "tools/security/native-image-evidence.mjs",
     "deploy/**",
     "restore-privacy-gate.sh",
     "AGENTS.md",
@@ -822,7 +823,7 @@ test("front deployment revalidates the queued dispatch against exact Web and Pla
   ])
 })
 
-test("workflow_run deploy no-ops before remote work when its attestation source differs", () => {
+test("workflow_run deploy fails closed before remote work when its attestation source differs", () => {
   const step = deployDocument().jobs.calculateTag.steps.find((item) => item.name === "Calculate deploy targets and image tags")
 
   assert.ok(step)
@@ -830,13 +831,17 @@ test("workflow_run deploy no-ops before remote work when its attestation source 
   const remoteLookupIndex = step.run.indexOf('git ls-remote --exit-code origin refs/heads/main')
   assert.ok(mismatchIndex >= 0, "workflow_run must compare the deployment SHA to the OIDC attestation source SHA")
   assert.ok(remoteLookupIndex > mismatchIndex, "attestation-source mismatch must stop before remote stale checks")
-  assert.match(step.run, /echo "backend_deploy=false"/)
-  assert.match(step.run, /echo "front_deploy=false"/)
   assert.match(step.run, /## Deploy Boundary/)
-  assert.match(step.run, /- result: noop/)
+  assert.match(step.run, /- result: blocked/)
   assert.match(step.run, /- reason: attestation-source-sha-mismatch/)
   assert.match(step.run, /- deploy SHA: \$\{DEPLOY_SHA\}/)
   assert.match(step.run, /- attestation source SHA: \$\{GITHUB_SHA\}/)
+  const mismatchEndIndex = step.run.indexOf('\nif [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]', mismatchIndex)
+  assert.ok(mismatchEndIndex > mismatchIndex)
+  const mismatchBlock = step.run.slice(mismatchIndex, mismatchEndIndex)
+  assert.ok(!mismatchBlock.includes('echo "backend_deploy=false"'), "mismatch must not emit successful deploy outputs")
+  assert.ok(!mismatchBlock.includes('echo "front_deploy=false"'), "mismatch must not emit successful deploy outputs")
+  assert.match(mismatchBlock, /exit 1/)
 })
 
 for (const [label, overrides, expected] of [

@@ -17,6 +17,7 @@ on:
       - "tools/test/setup-node-pin-parity.test.mjs"
       - "tools/test/frontend-image-workflow.test.mjs"
       - "tools/test/dockerfile-supply-chain.test.mjs"
+      - "tools/security/native-image-evidence.mjs"
       - "deploy/**"
       - "restore-privacy-gate.sh"
       - "AGENTS.md"

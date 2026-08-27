@@ -156,7 +156,7 @@ const createDeployStaleFixture = () => {
   }
 }
 
-const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = "workflow_run" }) => {
+const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = "workflow_run", githubSha = deploySha }) => {
   git(cwd, ["update-ref", "refs/heads/main", currentMainSha])
   git(cwd, ["checkout", "--detach", deploySha])
 
@@ -184,6 +184,7 @@ exit 1
       GITHUB_EVENT_NAME: eventName,
       GITHUB_REPOSITORY_OWNER: "AquilaXk",
       GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
+      GITHUB_SHA: githubSha,
       DEPLOY_SHA_INPUT: deploySha,
       FORCE_BACKEND_DEPLOY_INPUT: "false",
       WEB_FRONTEND_SOURCE_SHA: "a".repeat(40),
@@ -2432,6 +2433,7 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*restore-privacy-gate/)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy\/env\//)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools\/env\//)
+  assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools\/security\/native-image-evidence\\\.mjs/)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*restore-privacy-gate/)
   assert.match(ciWorkflow, /- "restore-privacy-gate\.sh"/)
   assert.match(workflow, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
@@ -2457,6 +2459,36 @@ test("deploy calculateTag는 docs-only 후속 main 변경이면 기존 backend d
 
     assert.match(output, /backend_deploy=true/)
     assert.match(summary, /path-aware-stale-neutral/)
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag fails closed before remote work when workflow_run SHA differs", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    assert.throws(
+      () =>
+        runDeployCalculateScript({
+          cwd: fixture.workDir,
+          deploySha: fixture.backendSha,
+          githubSha: fixture.docsSha,
+          currentMainSha: fixture.docsSha,
+        }),
+      (error) => {
+        assert.equal(error.status, 1)
+        return true
+      },
+    )
+
+    const output = existsSync(path.join(fixture.workDir, "github-output.txt"))
+      ? readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+      : ""
+    const summary = readFileSync(path.join(fixture.workDir, "github-summary.md"), "utf8")
+    assert.equal(output, "")
+    assert.match(summary, /## Deploy Boundary/)
+    assert.match(summary, /- result: blocked/)
+    assert.match(summary, /- reason: attestation-source-sha-mismatch/)
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }

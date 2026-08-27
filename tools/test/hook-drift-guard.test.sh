@@ -3,6 +3,19 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 guard_path="${repo_root}/tools/guards/check-hook-drift.sh"
+
+# Keep the inventory routes in the real hook synchronized with tracked workflow files.
+while IFS= read -r workflow_path; do
+  if [[ ! -f "${repo_root}/${workflow_path}" ]]; then
+    echo "[test] pre-commit references missing workflow: ${workflow_path}" >&2
+    exit 1
+  fi
+  if ! git -C "${repo_root}" ls-files --error-unmatch -- "${workflow_path}" >/dev/null 2>&1; then
+    echo "[test] pre-commit references untracked workflow: ${workflow_path}" >&2
+    exit 1
+  fi
+done < <(LC_ALL=C grep -oE '\.github/workflows/[[:alnum:]_./-]+\.yml' "${repo_root}/.githooks/pre-commit" | sort -u)
+
 # A commit hook supplies a temporary index for the owner repository. Fixture repositories
 # must use their own indexes or Git attempts to build their trees from the owner's index.
 unset GIT_INDEX_FILE

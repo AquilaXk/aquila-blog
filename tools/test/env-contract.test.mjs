@@ -440,11 +440,6 @@ test("active product contracts do not retain the unimplemented AI summary seam",
 
   for (const relativePath of activeProductPaths) {
     const source = readFileSync(path.join(repoRoot, relativePath), "utf8")
-    if (relativePath === ".github/workflows/deploy.yml") {
-      assert.equal((source.match(/CUSTOM__AI__SUMMARY__/g) ?? []).length, 1, relativePath)
-      assert.match(source, /sed -E '\/\^\[\[:space:\]\]\*\(export\[\[:space:\]\]\+\)\?CUSTOM__AI__SUMMARY__\[A-Za-z0-9_\]\*\[\[:space:\]\]\*=\/d' "\$\{LOCAL_ENV_FILE\}" > "\$\{LOCAL_ENV_FILE\}\.sanitized"/)
-      continue
-    }
     assert.doesNotMatch(source, /CUSTOM__AI__SUMMARY|gemini/i, relativePath)
   }
 })
@@ -2133,43 +2128,6 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert(workflow.indexOf('rollback_from_backup_if_needed "unexpected_exit_status_${status}"') < workflow.indexOf("EXTERNAL_BACKUP_DIR="))
   assert(workflow.indexOf("run_backup_rollback") < workflow.indexOf("restart_external_backup_legacy_minio_if_needed", workflow.indexOf("run_backup_rollback")))
   assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
-})
-
-test("deploy workflow purges every accepted retired AI summary assignment from the transport env before scp", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
-  const writeIndex = workflow.indexOf('printf \'%s\\n\' "${HOME_SERVER_ENV}" > "${LOCAL_ENV_FILE}"')
-  const purgeCommand = "sed -E '/^[[:space:]]*(export[[:space:]]+)?CUSTOM__AI__SUMMARY__[A-Za-z0-9_]*[[:space:]]*=/d'"
-  const purgeIndex = workflow.indexOf(`${purgeCommand} "\${LOCAL_ENV_FILE}" > "\${LOCAL_ENV_FILE}.sanitized"`)
-  const replaceIndex = workflow.indexOf('mv "${LOCAL_ENV_FILE}.sanitized" "${LOCAL_ENV_FILE}"')
-  const scpIndex = workflow.indexOf('"${LOCAL_ENV_FILE}" "${LOCAL_REMOTE_VARS_FILE}"')
-  const transportInput = [
-    "# CUSTOM__AI__SUMMARY__MODEL=comment",
-    "UNRELATED_VALUE=CUSTOM__AI__SUMMARY__MODEL=literal",
-    "  CUSTOM__AI__SUMMARY__MODEL=retired-plain",
-    "\texport CUSTOM__AI__SUMMARY__GEMINI__API_KEY=retired-export",
-    "export    CUSTOM__AI__SUMMARY__MODEL = retired-spaced",
-    "CUSTOM__AI__SUMMARY__=retired-prefix-only",
-    "CUSTOM__AI__SUMMARYX=similar-key",
-    "CUSTOM__AI__SUMMARY__BAD-KEY=invalid-key",
-    "exportCUSTOM__AI__SUMMARY__MODEL=not-an-export-assignment",
-    "EXPORT CUSTOM__AI__SUMMARY__MODEL=uppercase-export",
-    "UNRELATED_KEY=kept",
-    "",
-  ].join("\n")
-  const sanitized = execFileSync("sed", ["-E", "/^[[:space:]]*(export[[:space:]]+)?CUSTOM__AI__SUMMARY__[A-Za-z0-9_]*[[:space:]]*=/d"], {
-    encoding: "utf8",
-    input: transportInput,
-  })
-
-  assert(writeIndex > -1, "HOME_SERVER_ENV must first be materialized into the runner temp file")
-  assert(purgeIndex > writeIndex, "retired prefix must be purged after materialization")
-  assert(replaceIndex > purgeIndex, "sanitized temp file must replace the transport source")
-  assert(scpIndex > replaceIndex, "scp must receive the sanitized transport file")
-  assert.equal((workflow.match(/CUSTOM__AI__SUMMARY__/g) ?? []).length, 1)
-  assert.equal(
-    sanitized,
-    "# CUSTOM__AI__SUMMARY__MODEL=comment\nUNRELATED_VALUE=CUSTOM__AI__SUMMARY__MODEL=literal\nCUSTOM__AI__SUMMARYX=similar-key\nCUSTOM__AI__SUMMARY__BAD-KEY=invalid-key\nexportCUSTOM__AI__SUMMARY__MODEL=not-an-export-assignment\nEXPORT CUSTOM__AI__SUMMARY__MODEL=uppercase-export\nUNRELATED_KEY=kept\n",
-  )
 })
 
 test("deploy workflow derives the pinned prod site scope from the switch instead of hard-coding it", () => {

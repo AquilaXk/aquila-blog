@@ -551,6 +551,7 @@ jobs:
           SOURCE_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
           IMAGE_SUBJECT: ghcr.io/aquilaxk/aquila-blog-back
           IMAGE_DIGEST: ${{ steps.build_backend_image.outputs.digest }}
+          EXPECTED_BUILD_TRIGGER: ${{ github.event_name }}
           SIGNER_WORKFLOW: https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main
           EXPECTED_RUN_URI: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
         run: |
@@ -1928,6 +1929,7 @@ jobs:
           SOURCE_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
           IMAGE_SUBJECT: ghcr.io/aquilaxk/aquila-blog-web-front
           IMAGE_DIGEST: ${{ github.event.client_payload.image_digest }}
+          EXPECTED_BUILD_TRIGGER: push
           SIGNER_WORKFLOW: https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main
           EXPECTED_RUN_URI: https://github.com/AquilaXk/aquila-blog-web/actions/runs/${{ github.event.client_payload.producer_run_id }}/attempts/${{ github.event.client_payload.producer_run_attempt }}
         shell: bash

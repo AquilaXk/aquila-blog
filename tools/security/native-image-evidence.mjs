@@ -14,13 +14,18 @@ const PREDICATE_TYPES = [
 const POLICY = {
   "AquilaXk/aquila-blog": {
     subject: "ghcr.io/aquilaxk/aquila-blog-back",
-    buildConfigWorkflow: "https://github.com/AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main",
     signerWorkflow: "https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main",
+    buildConfigWorkflows: {
+      push: "https://github.com/AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main",
+      workflow_dispatch: "https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main",
+    },
   },
   "AquilaXk/aquila-blog-web": {
     subject: "ghcr.io/aquilaxk/aquila-blog-web-front",
-    buildConfigWorkflow: "https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main",
     signerWorkflow: "https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main",
+    buildConfigWorkflows: {
+      push: "https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main",
+    },
   },
 }
 
@@ -46,16 +51,19 @@ function assertEnvironment(environment) {
   const sha = environment.SOURCE_SHA
   const subject = environment.IMAGE_SUBJECT
   const digest = environment.IMAGE_DIGEST
+  const buildTrigger = environment.EXPECTED_BUILD_TRIGGER
   const signerWorkflow = environment.SIGNER_WORKFLOW
   const runUri = environment.EXPECTED_RUN_URI
+  const buildConfigWorkflow = policy?.buildConfigWorkflows?.[buildTrigger]
 
   if (!policy || !/^[a-f0-9]{40}$/.test(sha ?? "")) fail()
+  if (!buildConfigWorkflow) fail()
   if (subject !== policy.subject || signerWorkflow !== policy.signerWorkflow) fail()
   if (!/^sha256:[a-f0-9]{64}$/.test(digest ?? "")) fail()
   if (runUri !== `https://github.com/${repo}/actions/runs/${runUri?.split("/").at(-3)}/attempts/${runUri?.split("/").at(-1)}`
     || !new RegExp(`^https://github\\.com/${repo}/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$`).test(runUri ?? "")) fail()
 
-  return { repo, sha, subject, digest, buildConfigWorkflow: policy.buildConfigWorkflow, signerWorkflow, runUri }
+  return { repo, sha, subject, digest, buildConfigWorkflow, buildTrigger, signerWorkflow, runUri }
 }
 
 function assertPredicate(predicateType, predicate, expected, exceptions) {
@@ -124,12 +132,12 @@ function parseAttestation(filePath, predicateType, expected, exceptions) {
   if (certificate.buildConfigDigest !== expected.sha) fail()
   if (certificate.buildSignerURI !== expected.signerWorkflow) fail()
   if (certificate.buildSignerDigest !== expected.sha) fail()
-  if (certificate.buildTrigger !== "push") fail()
+  if (certificate.buildTrigger !== expected.buildTrigger) fail()
   if (certificate.runInvocationURI !== expected.runUri) fail()
   if (certificate.githubWorkflowRepository !== expected.repo) fail()
   if (certificate.githubWorkflowSHA !== expected.sha) fail()
   if (certificate.githubWorkflowRef !== "refs/heads/main") fail()
-  if (certificate.githubWorkflowTrigger !== "push") fail()
+  if (certificate.githubWorkflowTrigger !== expected.buildTrigger) fail()
   if (certificate.runnerEnvironment !== "github-hosted") fail()
   assertPredicate(predicateType, statement.predicate, expected, exceptions)
 }

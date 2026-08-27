@@ -102,6 +102,7 @@ function verify(input, environment = {}) {
       SOURCE_SHA: sha,
       IMAGE_SUBJECT: subject,
       IMAGE_DIGEST: digest,
+      EXPECTED_BUILD_TRIGGER: "push",
       SIGNER_WORKFLOW: signerWorkflow,
       EXPECTED_RUN_URI: runUri,
       ...environment,
@@ -125,6 +126,19 @@ test("verifies one exact attestation for each required predicate", () => {
     signer_workflow: signerWorkflow,
     run_uri: runUri,
   })
+})
+
+test("verifies the explicit direct workflow-dispatch certificate mode", () => {
+  const input = predicateTypes.map((predicateType) => [attestation(predicateType, {
+    certificate: {
+      buildConfigURI: signerWorkflow,
+      buildTrigger: "workflow_dispatch",
+      githubWorkflowTrigger: "workflow_dispatch",
+    },
+  })])
+
+  const result = verify(input, { EXPECTED_BUILD_TRIGGER: "workflow_dispatch" })
+  assert.equal(result.status, 0, result.stderr)
 })
 
 test("selects exactly one matching producer run from accumulated attestations", () => {
@@ -169,6 +183,7 @@ test("rejects Trivy results that contain vulnerabilities", () => {
               Target: subject,
               Class: "os-pkgs",
               Type: "alpine",
+              Packages: [{}],
               Vulnerabilities: [{
                 VulnerabilityID: "CVE-2026-0001",
                 PkgName: "openssl",
@@ -218,7 +233,11 @@ test("requires a zero-vulnerability Trivy report for Web", () => {
   finding.verificationResult.statement.predicate.scanner.result.Results[0].Vulnerabilities = [{
     VulnerabilityID: "CVE-2026-0002", PkgName: "openssl", Severity: "LOW",
   }]
-  const result = verify([null, null, [finding]], {
+  const result = verify([
+    [webEntry(predicateTypes[0])],
+    [webEntry(predicateTypes[1])],
+    [finding],
+  ], {
     SOURCE_REPOSITORY: webRepo,
     IMAGE_SUBJECT: webSubject,
     SIGNER_WORKFLOW: webSigner,

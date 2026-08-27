@@ -1,13 +1,7 @@
 name: Deploy to Home Server
 
 on:
-  workflow_run:
-    workflows:
-      - Security
-    types:
-      - completed
-    branches:
-      - main
+  workflow_call: {}
   repository_dispatch:
     types:
       - web_frontend_image_ready
@@ -45,32 +39,24 @@ jobs:
   triggerGuard:
     runs-on: ubuntu-latest
     outputs:
+      security_caller_admission: ${{ steps.security_caller_admission.outputs.result }}
       dispatch_admission: ${{ steps.dispatch_admission.outputs.result }}
     steps:
-      - name: Validate deploy trigger
+      - name: Admit automatic Security caller
+        id: security_caller_admission
+        if: github.event_name != 'workflow_dispatch' && github.event_name != 'repository_dispatch'
         env:
-          TRIGGER_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
-          TRIGGER_WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          TRIGGER_WORKFLOW_EVENT: ${{ github.event.workflow_run.event }}
-          TRIGGER_WORKFLOW_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          TRIGGER_WORKFLOW_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
-          CURRENT_REPOSITORY: ${{ github.repository }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          EXPECTED_CALLER_WORKFLOW_REF: AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main
         shell: bash
         run: |
           set -euo pipefail
-
-          if [ "${GITHUB_EVENT_NAME}" != "workflow_run" ]; then
-            exit 0
-          fi
-
-          if [ "${TRIGGER_WORKFLOW_NAME}" != "Security" ] || \
-            [ "${TRIGGER_WORKFLOW_CONCLUSION}" != "success" ] || \
-            [ "${TRIGGER_WORKFLOW_EVENT}" != "push" ] || \
-            [ "${TRIGGER_WORKFLOW_BRANCH}" != "main" ] || \
-            [ "${TRIGGER_WORKFLOW_REPOSITORY}" != "${CURRENT_REPOSITORY}" ]; then
-            echo "deploy blocked: workflow_run must be a successful Security push from this repository's main branch" >&2
+          if [ "${CALLER_WORKFLOW_REF}" != "${EXPECTED_CALLER_WORKFLOW_REF}" ] || \
+            [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "automatic deploy rejected: expected the exact Security main caller" >&2
             exit 1
           fi
+          echo "result=proceed" >> "${GITHUB_OUTPUT}"
 
       - name: Admit Web image-ready dispatch
         id: dispatch_admission
@@ -167,11 +153,8 @@ jobs:
     if: >
       needs.triggerGuard.result == 'success' && (
         (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.head_repository.full_name == github.repository
+        needs.triggerGuard.outputs.security_caller_admission == 'proceed' &&
+        github.ref == 'refs/heads/main'
       ) ||
       (
         github.event_name == 'workflow_dispatch' &&
@@ -197,17 +180,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Require successful CI for workflow_dispatch or Security trigger
+      - name: Require successful CI for deployment SHA
         if: >
+          needs.triggerGuard.outputs.security_caller_admission == 'proceed' ||
           github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'repository_dispatch' ||
-          (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Security')
+          github.event_name == 'repository_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEPLOY_SHA: ${{ github.sha }}
           ALLOW_DEPLOY_WITHOUT_CI_SUCCESS: ${{ github.event.inputs.allow_deploy_without_ci_success || 'false' }}
         shell: bash
         run: |
@@ -250,14 +233,20 @@ jobs:
           exit 1
 
       - name: Require successful Security for deploy SHA
+        if: github.event_name != 'repository_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          TRIGGER_WORKFLOW_NAME: ${{ github.event.workflow_run.name || '' }}
+          DEPLOY_SHA: ${{ github.sha }}
+          SECURITY_CALLER_ADMISSION: ${{ needs.triggerGuard.outputs.security_caller_admission }}
           ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS: ${{ github.event.inputs.allow_deploy_without_security_success || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
+
+          if [ "${SECURITY_CALLER_ADMISSION}" = "proceed" ]; then
+            echo "Security gate satisfied by the exact same-SHA caller DAG: deploy_sha=${DEPLOY_SHA}"
+            exit 0
+          fi
 
           if [ "${ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS}" = "true" ]; then
             echo "WARNING: skipping Security success gate (allow_deploy_without_security_success=true) deploy_sha=${DEPLOY_SHA}" >&2
@@ -267,12 +256,6 @@ jobs:
           if [ -z "${DEPLOY_SHA}" ]; then
             echo "deploy sha is empty; cannot verify Security success" >&2
             exit 1
-          fi
-
-          # Triggering Security workflow_run already proved success for this SHA.
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ] && [ "${TRIGGER_WORKFLOW_NAME}" = "Security" ]; then
-            echo "Security gate satisfied by triggering workflow_run deploy_sha=${DEPLOY_SHA}"
-            exit 0
           fi
 
           for ATTEMPT in $(seq 1 250); do
@@ -301,7 +284,7 @@ jobs:
           echo "deploy blocked: timed out waiting for successful Security push run for deploy_sha=${DEPLOY_SHA}" >&2
           exit 1
 
-      - name: Require successful Deploy workflow for dispatch SHA
+      - name: Require successful automatic Security delivery for dispatch SHA
         if: github.event_name == 'repository_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -311,36 +294,36 @@ jobs:
           set -euo pipefail
 
           if [ -z "${DEPLOY_SHA}" ]; then
-            echo "deploy sha is empty; cannot verify Deploy workflow success" >&2
+            echo "deploy sha is empty; cannot verify automatic Security delivery" >&2
             exit 1
           fi
 
           for ATTEMPT in $(seq 1 250); do
             RUN_STATES="$(
               gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
                 --paginate \
-                --jq '.workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
             )" || {
-              echo "Deploy workflow API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
+              echo "automatic Security delivery API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
               exit 1
             }
 
             SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
             if [ -n "${SUCCESS_RUN_ID}" ]; then
-              echo "Deploy workflow success gate passed: deploy_sha=${DEPLOY_SHA} deploy_run_id=${SUCCESS_RUN_ID}"
+              echo "automatic Security delivery gate passed: deploy_sha=${DEPLOY_SHA} security_run_id=${SUCCESS_RUN_ID}"
               exit 0
             fi
             if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
           done
 
-          echo "repository dispatch blocked: timed out waiting for successful Deploy workflow run for deploy_sha=${DEPLOY_SHA}" >&2
+          echo "repository dispatch blocked: timed out waiting for successful automatic Security delivery for deploy_sha=${DEPLOY_SHA}" >&2
           exit 1
 
       - name: Calculate deploy targets and image tags
         id: meta
         env:
-          DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEPLOY_SHA_INPUT: ${{ github.sha }}
           FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
           WEB_FRONTEND_SOURCE_SHA: ${{ github.event.client_payload.source_sha || '' }}
           WEB_FRONTEND_IMAGE_REF: ${{ github.event.client_payload.image_ref || '' }}
@@ -365,7 +348,7 @@ jobs:
           FRONT_SOURCE_SHA=""
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
-          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
 
           if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
             FRONT_DEPLOY="true"
@@ -408,7 +391,7 @@ jobs:
                 echo "${STALE_CHANGED_FILES}" >&2
                 exit 1
               fi
-              echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+              echo "stale automatic caller allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
               CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
             fi
           fi
@@ -465,6 +448,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
+      id-token: write
     outputs:
       back_image_ref: ${{ steps.backend_image.outputs.back_image_ref }}
 
@@ -503,12 +488,109 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${BACKEND_IMAGE_DIGEST}" ]; then
-            echo "backend image digest is empty" >&2
+          if [[ ! "${BACKEND_IMAGE_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "backend image digest must be immutable lowercase sha256" >&2
             exit 1
           fi
           echo "back_image_ref=${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
           echo "backend image ref: ${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Trivy for backend image evidence
+        env:
+          TRIVY_VERSION: "0.72.0"
+          TRIVY_SHA256: "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/trivy.tgz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          printf '%s  %s\n' "${TRIVY_SHA256}" /tmp/trivy.tgz | sha256sum --check -
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+
+      - name: Pull and scan immutable backend image
+        env:
+          IMAGE_REF: ${{ steps.backend_image.outputs.back_image_ref }}
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE_REF}"
+          trivy image --severity HIGH,CRITICAL --exit-code 1 \
+            --format cosign-vuln --output "${RUNNER_TEMP}/backend-image-vulnerability.json" "${IMAGE_REF}"
+          trivy image \
+            --format spdx-json --output "${RUNNER_TEMP}/backend-image.spdx.json" "${IMAGE_REF}"
+
+      - name: Attest backend image provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest backend image SPDX SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          predicate-type: https://spdx.dev/Document/v2.3
+          predicate-path: ${{ runner.temp }}/backend-image.spdx.json
+          push-to-registry: true
+
+      - name: Attest backend image vulnerability scan
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          predicate-type: https://cosign.sigstore.dev/attestation/vuln/v1
+          predicate-path: ${{ runner.temp }}/backend-image-vulnerability.json
+          push-to-registry: true
+
+      - name: Verify backend native image attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ steps.backend_image.outputs.back_image_ref }}
+          SOURCE_REPOSITORY: AquilaXk/aquila-blog
+          SOURCE_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          IMAGE_SUBJECT: ghcr.io/aquilaxk/aquila-blog-back
+          IMAGE_DIGEST: ${{ steps.build_backend_image.outputs.digest }}
+          SIGNER_WORKFLOW: https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main
+          EXPECTED_RUN_URI: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --format json > "${RUNNER_TEMP}/backend-image-provenance.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://spdx.dev/Document/v2.3" \
+            --format json > "${RUNNER_TEMP}/backend-image-spdx.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://cosign.sigstore.dev/attestation/vuln/v1" \
+            --format json > "${RUNNER_TEMP}/backend-image-vulnerability-attestation.json"
+          node tools/security/native-image-evidence.mjs verify-attestation-set \
+            "${RUNNER_TEMP}/backend-image-provenance.json" \
+            "${RUNNER_TEMP}/backend-image-spdx.json" \
+            "${RUNNER_TEMP}/backend-image-vulnerability-attestation.json"
+          {
+            echo "## Backend native image evidence"
+            echo "- policy: aquila-native-image-evidence-v1"
+            echo "- source SHA: ${SOURCE_SHA}"
+            echo "- image digest: ${IMAGE_DIGEST}"
+            echo "- predicates: https://slsa.dev/provenance/v1, https://spdx.dev/Document/v2.3, https://cosign.sigstore.dev/attestation/vuln/v1"
+            echo "- signer workflow: ${SIGNER_WORKFLOW}"
+            echo "- run: ${EXPECTED_RUN_URI}"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   blueGreenDeploy:
     runs-on: ubuntu-latest
@@ -1740,6 +1822,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      attestations: read
 
     steps:
       - name: Checkout
@@ -1758,6 +1841,21 @@ jobs:
         run: |
           set -euo pipefail
 
+          PLATFORM_CURRENT_MAIN_SHA="unavailable"
+          write_freshness_summary() {
+            local result="$1"
+            local reason="$2"
+            {
+              echo "## Web dispatch queue freshness"
+              echo "- result: ${result}"
+              echo "- reason: ${reason}"
+              echo "- source Web SHA: ${FRONT_SOURCE_SHA}"
+              echo "- current Web SHA: ${WEB_FRONTEND_CURRENT_MAIN_SHA}"
+              echo "- deploy Platform SHA: ${DEPLOY_SHA}"
+              echo "- current Platform SHA: ${PLATFORM_CURRENT_MAIN_SHA}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          }
+
           if ! WEB_FRONTEND_CURRENT_MAIN_SHA="$(gh api "repos/AquilaXk/aquila-blog-web/commits/main" --jq '.sha')"; then
             echo "front dispatch Web main sha lookup failed" >&2
             exit 1
@@ -1769,15 +1867,17 @@ jobs:
           if [ "${FRONT_SOURCE_SHA}" != "${WEB_FRONTEND_CURRENT_MAIN_SHA}" ]; then
             echo "front dispatch no-op: source sha is stale: source=${FRONT_SOURCE_SHA} current_main=${WEB_FRONTEND_CURRENT_MAIN_SHA}"
             echo "result=noop" >> "${GITHUB_OUTPUT}"
+            write_freshness_summary "noop" "stale-web-source"
             exit 0
           fi
 
-          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
           REMOTE_MAIN_SHA="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
           if [[ ! "${REMOTE_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "front dispatch origin/main sha lookup failed" >&2
             exit 1
           fi
+          PLATFORM_CURRENT_MAIN_SHA="${REMOTE_MAIN_SHA}"
           git fetch --no-tags --prune origin "+refs/heads/main:refs/remotes/origin/main"
           FETCHED_MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
           if [ "${FETCHED_MAIN_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
@@ -1793,6 +1893,7 @@ jobs:
             if grep -Eq "${STALE_DEPLOY_BLOCK_PATHS_PATTERN}" <<< "${STALE_CHANGED_FILES}"; then
               echo "front dispatch no-op after deployment-impacting newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
               echo "result=noop" >> "${GITHUB_OUTPUT}"
+              write_freshness_summary "noop" "newer-platform-deployment-change"
               exit 0
             else
               STALE_PATH_MATCH_STATUS=$?
@@ -1804,6 +1905,67 @@ jobs:
             echo "front dispatch allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
           fi
           echo "result=proceed" >> "${GITHUB_OUTPUT}"
+          write_freshness_summary "proceed" "current"
+
+      - name: Login to GHCR for Web native admission
+        if: github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify Web native image attestations
+        if: github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ needs.calculateTag.outputs.front_image_ref }}
+          SOURCE_REPOSITORY: AquilaXk/aquila-blog-web
+          SOURCE_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          IMAGE_SUBJECT: ghcr.io/aquilaxk/aquila-blog-web-front
+          IMAGE_DIGEST: ${{ github.event.client_payload.image_digest }}
+          SIGNER_WORKFLOW: https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main
+          EXPECTED_RUN_URI: https://github.com/AquilaXk/aquila-blog-web/actions/runs/${{ github.event.client_payload.producer_run_id }}/attempts/${{ github.event.client_payload.producer_run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog-web" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --format json > "${RUNNER_TEMP}/web-image-provenance.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog-web" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://spdx.dev/Document/v2.3" \
+            --format json > "${RUNNER_TEMP}/web-image-spdx.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog-web" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://cosign.sigstore.dev/attestation/vuln/v1" \
+            --format json > "${RUNNER_TEMP}/web-image-vulnerability-attestation.json"
+          node tools/security/native-image-evidence.mjs verify-attestation-set \
+            "${RUNNER_TEMP}/web-image-provenance.json" \
+            "${RUNNER_TEMP}/web-image-spdx.json" \
+            "${RUNNER_TEMP}/web-image-vulnerability-attestation.json"
+          {
+            echo "## Web native image evidence"
+            echo "- policy: aquila-native-image-evidence-v1"
+            echo "- source: ${SOURCE_REPOSITORY}@${SOURCE_SHA}"
+            echo "- image digest: ${IMAGE_DIGEST}"
+            echo "- predicates: https://slsa.dev/provenance/v1, https://spdx.dev/Document/v2.3, https://cosign.sigstore.dev/attestation/vuln/v1"
+            echo "- signer workflow: ${SIGNER_WORKFLOW}"
+            echo "- run: ${EXPECTED_RUN_URI}"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Verify required secrets
         if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'

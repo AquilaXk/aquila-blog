@@ -34,22 +34,23 @@ function securityDocument() {
 function runDeployTriggerGuard(input) {
   const guard = deployDocument().jobs.triggerGuard
   assert.ok(guard, "deploy trigger guard job must exist")
-  const step = guard.steps.find((item) => item.name === "Validate deploy trigger")
+  const step = guard.steps.find((item) => item.name === "Admit automatic Security caller")
   assert.ok(step, "deploy trigger guard step must exist")
-  return spawnSync("bash", ["-c", step.run], {
+  const directory = mkdtempSync(path.join(tmpdir(), "aquila-trigger-guard-"))
+  const output = path.join(directory, "output")
+  const result = spawnSync("bash", ["-c", step.run], {
     encoding: "utf8",
     env: {
       ...process.env,
       GITHUB_EVENT_NAME: input.eventName,
-      GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
-      TRIGGER_WORKFLOW_NAME: input.workflowName ?? "Security",
-      TRIGGER_WORKFLOW_CONCLUSION: input.conclusion ?? "success",
-      TRIGGER_WORKFLOW_EVENT: input.workflowEvent ?? "push",
-      TRIGGER_WORKFLOW_BRANCH: input.branch ?? "main",
-      TRIGGER_WORKFLOW_REPOSITORY: input.workflowRepository ?? "AquilaXk/aquila-blog",
-      CURRENT_REPOSITORY: "AquilaXk/aquila-blog",
+      GITHUB_REF: input.ref ?? "refs/heads/main",
+      CALLER_WORKFLOW_REF: input.workflowRef ?? "AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main",
+      EXPECTED_CALLER_WORKFLOW_REF: "AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main",
+      GITHUB_OUTPUT: output,
     },
   })
+  rmSync(directory, { recursive: true, force: true })
+  return result
 }
 
 function runWorkflowGate(stepName, responses, options = {}) {
@@ -78,6 +79,7 @@ function runWorkflowGate(stepName, responses, options = {}) {
       DEPLOY_SHA: "a".repeat(40),
       ALLOW_DEPLOY_WITHOUT_CI_SUCCESS: "false",
       ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS: "false",
+      SECURITY_CALLER_ADMISSION: "",
       PAGINATED_SUCCESS_FIXTURE: options.paginatedSuccessFixture ? "true" : "false",
       TRIGGER_WORKFLOW_NAME: "",
       PATH: `${directory}:${process.env.PATH}`,
@@ -125,6 +127,7 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "tools/test/setup-node-pin-parity.test.mjs",
     "tools/test/frontend-image-workflow.test.mjs",
     "tools/test/dockerfile-supply-chain.test.mjs",
+    "tools/security/native-image-evidence.mjs",
     "deploy/**",
     "restore-privacy-gate.sh",
     "AGENTS.md",
@@ -152,22 +155,75 @@ test("Security leaves exact-SHA runs independent", () => {
   assert.equal(securityDocument().concurrency, undefined)
 })
 
-test("deploy trigger guard permits only valid Security workflow runs", () => {
-  for (const input of [
-    { eventName: "workflow_run" },
-    { eventName: "repository_dispatch" },
-  ]) {
-    const result = runDeployTriggerGuard(input)
-    assert.equal(result.status, 0, result.stderr)
-  }
+test("Security calls Deploy only after every push security gate with minimum reusable permissions", () => {
+  const security = securityDocument()
+  const deploy = security.jobs.deploy
 
+  assert.deepEqual(deploy.needs, [
+    "privacy-drift-gate",
+    "backend-dependency-check",
+    "codeql",
+    "vulnerability-exception-schema",
+    "container-image-scan",
+    "sbom",
+  ])
+  assert.equal(deploy.if, "github.event_name == 'push'")
+  assert.equal(deploy.uses, "./.github/workflows/deploy.yml")
+  assert.equal(deploy.secrets, "inherit")
+  assert.deepEqual(deploy.permissions, {
+    actions: "read",
+    attestations: "write",
+    contents: "read",
+    "id-token": "write",
+    packages: "write",
+  })
+
+  const workflow = deployDocument()
+  assert.deepEqual(workflow.on.workflow_call, {})
+  assert.equal(workflow.on.workflow_run, undefined)
+  assert.equal(workflow.on.push, undefined)
+
+  const triggerGuard = workflow.jobs.triggerGuard
+  assert.equal(
+    triggerGuard.outputs.security_caller_admission,
+    "${{ steps.security_caller_admission.outputs.result }}",
+  )
+  const callerAdmission = triggerGuard.steps.find((step) => step.name === "Admit automatic Security caller")
+  assert.ok(callerAdmission)
+  assert.equal(callerAdmission.env.CALLER_WORKFLOW_REF, "${{ github.workflow_ref }}")
+  assert.equal(
+    callerAdmission.env.EXPECTED_CALLER_WORKFLOW_REF,
+    "AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main",
+  )
+  assert.match(workflow.jobs.calculateTag.if, /needs\.triggerGuard\.outputs\.security_caller_admission == 'proceed'/)
+
+  const calculateSteps = workflow.jobs.calculateTag.steps
+  const checkout = calculateSteps.find((step) => step.name === "Checkout")
+  const ciGate = calculateSteps.find((step) => step.name === "Require successful CI for deployment SHA")
+  const securityGate = calculateSteps.find((step) => step.name === "Require successful Security for deploy SHA")
+  const dispatchDelivery = calculateSteps.find((step) => step.name === "Require successful automatic Security delivery for dispatch SHA")
+  const meta = calculateSteps.find((step) => step.name === "Calculate deploy targets and image tags")
+  assert.equal(checkout.with.ref, "${{ github.sha }}")
+  assert.equal(ciGate.env.DEPLOY_SHA, "${{ github.sha }}")
+  assert.equal(securityGate.env.DEPLOY_SHA, "${{ github.sha }}")
+  assert.equal(securityGate.env.SECURITY_CALLER_ADMISSION, "${{ needs.triggerGuard.outputs.security_caller_admission }}")
+  assert.match(securityGate.run, /Security gate satisfied by the exact same-SHA caller DAG/)
+  assert.equal(meta.env.DEPLOY_SHA_INPUT, "${{ github.sha }}")
+  assert.match(dispatchDelivery.run, /actions\/workflows\/security\.yml\/runs\?head_sha=\$\{DEPLOY_SHA\}/)
+  assert.match(dispatchDelivery.run, /\.event == "push" and \.head_branch == "main"/)
+  assert.doesNotMatch(dispatchDelivery.run, /deploy\.yml\/runs|\.event == "workflow_run"/)
+  assert.doesNotMatch(meta.run, /attestation-source-sha-mismatch/)
+
+  const scan = workflow.jobs.buildAndPush.steps.find((step) => step.name === "Pull and scan immutable backend image")
+  assert.doesNotMatch(scan.run, /--ignorefile|\.trivyignore\.yaml/)
+})
+
+test("deploy trigger guard permits only the exact Security main caller", () => {
+  const result = runDeployTriggerGuard({ eventName: "workflow_call" })
+  assert.equal(result.status, 0, result.stderr)
   for (const input of [
-    { eventName: "workflow_run", workflowName: "CI" },
-    { eventName: "workflow_run", conclusion: "failure" },
-    { eventName: "workflow_run", workflowEvent: "schedule" },
-    { eventName: "workflow_run", workflowEvent: "workflow_dispatch" },
-    { eventName: "workflow_run", branch: "release" },
-    { eventName: "workflow_run", workflowRepository: "AquilaXk/fork" },
+    { eventName: "workflow_call", workflowRef: "AquilaXk/aquila-blog/.github/workflows/ci.yml@refs/heads/main" },
+    { eventName: "workflow_call", ref: "refs/heads/release" },
   ]) {
     const result = runDeployTriggerGuard(input)
     assert.notEqual(result.status, 0)
@@ -179,12 +235,12 @@ test("deploy trigger guard permits only valid Security workflow runs", () => {
 test("calculateTag requires the trigger guard for every allowed event group", () => {
   assert.equal(
     deployDocument().jobs.calculateTag.if.replace(/\s+/g, ""),
-    "needs.triggerGuard.result=='success'&&((github.event_name=='workflow_run'&&github.event.workflow_run.conclusion=='success'&&github.event.workflow_run.event=='push'&&github.event.workflow_run.head_branch=='main'&&github.event.workflow_run.head_repository.full_name==github.repository)||(github.event_name=='workflow_dispatch'&&github.ref=='refs/heads/main')||(github.event_name=='repository_dispatch'&&github.event.action=='web_frontend_image_ready'&&needs.triggerGuard.outputs.dispatch_admission=='proceed'))",
+    "needs.triggerGuard.result=='success'&&((needs.triggerGuard.outputs.security_caller_admission=='proceed'&&github.ref=='refs/heads/main')||(github.event_name=='workflow_dispatch'&&github.ref=='refs/heads/main')||(github.event_name=='repository_dispatch'&&github.event.action=='web_frontend_image_ready'&&needs.triggerGuard.outputs.dispatch_admission=='proceed'))",
   )
 })
 
 test("CI gate waits for an active matching run to succeed", () => {
-  const result = runWorkflowGate("Require successful CI for workflow_dispatch or Security trigger", ["active:1", "success:1"])
+  const result = runWorkflowGate("Require successful CI for deployment SHA", ["active:1", "success:1"])
 
   assert.equal(result.status, 0, result.stderr)
   assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
@@ -200,7 +256,7 @@ test("Security gate fails immediately when matching runs are terminal non-succes
 })
 
 test("CI gate fails immediately when the workflow API errors", () => {
-  const result = runWorkflowGate("Require successful CI for workflow_dispatch or Security trigger", ["error"])
+  const result = runWorkflowGate("Require successful CI for deployment SHA", ["error"])
 
   assert.notEqual(result.status, 0)
   assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 1)
@@ -217,7 +273,7 @@ test("dispatch gate selectors classify every nonterminal GitHub status as active
     ],
   })
   for (const stepName of [
-    "Require successful CI for workflow_dispatch or Security trigger",
+    "Require successful CI for deployment SHA",
     "Require successful Security for deploy SHA",
   ]) {
     const result = spawnSync("jq", ["-r", gateJq(stepName)], { encoding: "utf8", input })
@@ -235,31 +291,32 @@ test("Security gate fails closed after its bounded wait", () => {
   assert.equal(result.callLog.filter((call) => call.startsWith("sleep ")).length, 249)
 })
 
-test("workflow_run deploy trigger is Security-only and dispatches use an isolated workflow queue", () => {
+test("reusable Deploy keeps dispatches on an isolated workflow queue", () => {
   const document = deployDocument()
 
-  assert.deepEqual(document.on.workflow_run.workflows, ["Security"])
+  assert.deepEqual(document.on.workflow_call, {})
+  assert.equal(document.on.workflow_run, undefined)
   assert.equal(document.concurrency.group, "${{ github.event_name == 'repository_dispatch' && format('homeserver-deploy-dispatch-{0}', github.run_id) || 'homeserver-deploy-main' }}")
   assert.equal(document.concurrency.queue, "max")
 })
 
-test("dispatch waits for the exact deploy workflow run to succeed", () => {
-  const result = runWorkflowGate("Require successful Deploy workflow for dispatch SHA", ["active:1", "success:1"])
+test("dispatch waits for the exact Platform Security delivery to succeed", () => {
+  const result = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", ["active:1", "success:1"])
 
   assert.equal(result.status, 0, result.stderr)
   assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60"])
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [
-    `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
-    `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
   ])
 })
 
 test("dispatch gates paginate past terminal first pages to find the exact workflow success", () => {
   for (const stepName of [
-    "Require successful CI for workflow_dispatch or Security trigger",
+    "Require successful CI for deployment SHA",
     "Require successful Security for deploy SHA",
-    "Require successful Deploy workflow for dispatch SHA",
+    "Require successful automatic Security delivery for dispatch SHA",
   ]) {
     const result = runWorkflowGate(stepName, [], { paginatedSuccessFixture: true })
     const apiCalls = result.callLog.filter((call) => call.startsWith("api "))
@@ -271,9 +328,9 @@ test("dispatch gates paginate past terminal first pages to find the exact workfl
   }
 })
 
-test("dispatch ignores terminal invalid-trigger runs until the valid Deploy run succeeds", () => {
-  const result = runWorkflowGate("Require successful Deploy workflow for dispatch SHA", ["terminal:1", "active:2", "success:3"])
-  const apiCall = `api repos/AquilaXk/aquila-blog/actions/workflows/deploy.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`
+test("dispatch ignores terminal Security runs until the exact main push succeeds", () => {
+  const result = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", ["terminal:1", "active:2", "success:3"])
+  const apiCall = `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`
 
   assert.equal(result.status, 0, result.stderr)
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [apiCall, apiCall, apiCall])
@@ -285,8 +342,8 @@ for (const [label, responses, expectedApiCalls, expectedSleeps] of [
   ["API failure", ["error"], 1, 0],
   ["bounded timeout", Array(250).fill(""), 250, 249],
 ]) {
-  test(`dispatch Deploy workflow gate fails closed on ${label}`, () => {
-    const result = runWorkflowGate("Require successful Deploy workflow for dispatch SHA", responses)
+  test(`dispatch automatic Security delivery gate fails closed on ${label}`, () => {
+    const result = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", responses)
 
     assert.notEqual(result.status, 0)
     assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, expectedApiCalls)
@@ -296,8 +353,9 @@ for (const [label, responses, expectedApiCalls, expectedSleeps] of [
 
 test("dispatch gates query only their exact workflow paths", () => {
   for (const [stepName, workflowPath] of [
-    ["Require successful CI for workflow_dispatch or Security trigger", "ci.yml"],
+    ["Require successful CI for deployment SHA", "ci.yml"],
     ["Require successful Security for deploy SHA", "security.yml"],
+    ["Require successful automatic Security delivery for dispatch SHA", "security.yml"],
   ]) {
     const result = runWorkflowGate(stepName, ["success:3"])
     assert.equal(result.status, 0, result.stderr)
@@ -325,6 +383,141 @@ test("Platform consumes only the Web digest handoff", () => {
   assert.match(source, /WEB_FRONTEND_IMAGE_REF}" = "ghcr\.io\/aquilaxk\/aquila-blog-web-front@\$\{WEB_FRONTEND_IMAGE_DIGEST\}"/)
   assert.match(source, /HOME_FRONT_IMAGE: \$\{\{ needs\.calculateTag\.outputs\.front_image_ref \}\}/)
   assert.match(source, /HOME_FRONT_BUILD_SHA: \$\{\{ needs\.calculateTag\.outputs\.front_source_sha \}\}/)
+})
+
+test("backend image producer publishes only verified native-image evidence", () => {
+  const job = deployDocument().jobs.buildAndPush
+  const steps = job.steps
+  const digest = steps.find((step) => step.id === "backend_image")
+  const trivyInstall = steps.find((step) => step.name === "Install Trivy for backend image evidence")
+  const scan = steps.find((step) => step.name === "Pull and scan immutable backend image")
+  const attestations = [
+    steps.find((step) => step.name === "Attest backend image provenance"),
+    steps.find((step) => step.name === "Attest backend image SPDX SBOM"),
+    steps.find((step) => step.name === "Attest backend image vulnerability scan"),
+  ]
+  const verify = steps.find((step) => step.name === "Verify backend native image attestations")
+
+  assert.deepEqual(job.permissions, {
+    contents: "read",
+    packages: "write",
+    attestations: "write",
+    "id-token": "write",
+  })
+  assert.match(digest.run, /\[\[ ! "\$\{BACKEND_IMAGE_DIGEST\}" =~ \^sha256:\[a-f0-9\]\{64\}\$ \]\]/)
+  assert.match(digest.run, /back_image_ref=\$\{IMAGE_NAME\}@\$\{BACKEND_IMAGE_DIGEST\}/)
+  assert.equal(trivyInstall.env.TRIVY_VERSION, "0.72.0")
+  assert.equal(trivyInstall.env.TRIVY_SHA256, "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea")
+  assert.equal(scan.env.IMAGE_REF, "${{ steps.backend_image.outputs.back_image_ref }}")
+  assert.match(scan.run, /docker pull "\$\{IMAGE_REF\}"/)
+  assert.match(scan.run, /trivy image --severity HIGH,CRITICAL --exit-code 1[\s\S]*?--format cosign-vuln --output "\$\{RUNNER_TEMP\}\/backend-image-vulnerability\.json" "\$\{IMAGE_REF\}"/)
+  assert.match(scan.run, /trivy image[\s\S]*?--format spdx-json --output "\$\{RUNNER_TEMP\}\/backend-image\.spdx\.json" "\$\{IMAGE_REF\}"/)
+  assert.doesNotMatch(scan.run, /--ignorefile|\.trivyignore\.yaml/)
+  assert.doesNotMatch(scan.run, /--format spdx-json[\s\S]*--(?:severity|exit-code)/)
+  assert.match(scan.run, /backend-image-vulnerability\.json/)
+  assert.match(scan.run, /backend-image\.spdx\.json/)
+
+  for (const step of attestations) {
+    assert.equal(step.uses, "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6")
+    assert.equal(step.with["subject-name"], "ghcr.io/aquilaxk/aquila-blog-back")
+    assert.equal(step.with["subject-digest"], "${{ steps.build_backend_image.outputs.digest }}")
+    assert.equal(step.with["push-to-registry"], true)
+  }
+  assert.equal(attestations[0].with["predicate-type"], undefined)
+  assert.equal(attestations[0].with["predicate-path"], undefined)
+  assert.equal(attestations[1].with["predicate-type"], "https://spdx.dev/Document/v2.3")
+  assert.match(attestations[1].with["predicate-path"], /backend-image\.spdx\.json$/)
+  assert.equal(attestations[2].with["predicate-type"], "https://cosign.sigstore.dev/attestation/vuln/v1")
+  assert.match(attestations[2].with["predicate-path"], /backend-image-vulnerability\.json$/)
+
+  assert.equal(verify.env.GH_TOKEN, "${{ github.token }}")
+  assert.equal(verify.env.SOURCE_REPOSITORY, "AquilaXk/aquila-blog")
+  assert.equal(verify.env.SOURCE_SHA, "${{ needs.calculateTag.outputs.deploy_sha }}")
+  assert.equal(verify.env.IMAGE_SUBJECT, "ghcr.io/aquilaxk/aquila-blog-back")
+  assert.equal(verify.env.IMAGE_DIGEST, "${{ steps.build_backend_image.outputs.digest }}")
+  assert.equal(verify.env.SIGNER_WORKFLOW, "https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main")
+  assert.equal(verify.env.EXPECTED_RUN_URI, "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}")
+  for (const [predicate, output] of [
+    ["https://slsa.dev/provenance/v1", "backend-image-provenance.json"],
+    ["https://spdx.dev/Document/v2.3", "backend-image-spdx.json"],
+    ["https://cosign.sigstore.dev/attestation/vuln/v1", "backend-image-vulnerability-attestation.json"],
+  ]) {
+    assert.match(verify.run, new RegExp(`gh attestation verify "oci:\\/\\/\\$\\{IMAGE_REF\\}"[\\s\\S]*--repo "AquilaXk/aquila-blog"[\\s\\S]*--source-digest "\\$\\{SOURCE_SHA\\}"[\\s\\S]*--source-ref "refs/heads/main"[\\s\\S]*--signer-workflow "AquilaXk\\/aquila-blog\\/.github\\/workflows\\/deploy\\.yml"[\\s\\S]*--deny-self-hosted-runners[\\s\\S]*--predicate-type "${predicate.replaceAll("/", "\\/")}"[\\s\\S]*--format json > "\\$\\{RUNNER_TEMP\\}\/${output}"`))
+  }
+  assert.match(verify.run, /node tools\/security\/native-image-evidence\.mjs verify-attestation-set[\s\S]*backend-image-provenance\.json[\s\S]*backend-image-spdx\.json[\s\S]*backend-image-vulnerability-attestation\.json/)
+  const verifierIndex = verify.run.indexOf("node tools/security/native-image-evidence.mjs verify-attestation-set")
+  const summaryIndex = verify.run.indexOf('>> "${GITHUB_STEP_SUMMARY}"')
+  assert.ok(summaryIndex > verifierIndex, "summary must be written only after local attestation verification")
+  for (const value of [
+    "aquila-native-image-evidence-v1",
+    "${SOURCE_SHA}",
+    "${IMAGE_DIGEST}",
+    "https://slsa.dev/provenance/v1",
+    "https://spdx.dev/Document/v2.3",
+    "https://cosign.sigstore.dev/attestation/vuln/v1",
+    "${SIGNER_WORKFLOW}",
+    "${EXPECTED_RUN_URI}",
+  ]) assert.match(verify.run, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+})
+
+test("dispatch front deployment admits only native Web image evidence after freshness", () => {
+  const job = deployDocument().jobs.frontBlueGreenDeploy
+  const steps = job.steps
+  const freshnessIndex = steps.findIndex((step) => step.name === "Verify dispatch freshness after queue")
+  const loginIndex = steps.findIndex((step) => step.name === "Login to GHCR for Web native admission")
+  const verifyIndex = steps.findIndex((step) => step.name === "Verify Web native image attestations")
+  const secretsIndex = steps.findIndex((step) => step.name === "Verify required secrets")
+  const login = steps[loginIndex]
+  const verify = steps[verifyIndex]
+  const proceedOnly = "github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'"
+
+  assert.deepEqual(job.permissions, {
+    contents: "read",
+    packages: "read",
+    attestations: "read",
+  })
+  assert.equal(loginIndex, freshnessIndex + 1)
+  assert.equal(verifyIndex, loginIndex + 1)
+  assert.equal(secretsIndex, verifyIndex + 1)
+  assert.equal(login.if, proceedOnly)
+  assert.equal(login.uses, "docker/login-action@dbcb813823bdd20940b903addbd779551569679f")
+  assert.deepEqual(login.with, {
+    registry: "ghcr.io",
+    username: "${{ github.actor }}",
+    password: "${{ github.token }}",
+  })
+  assert.equal(verify.if, proceedOnly)
+  assert.equal(verify.env.GH_TOKEN, "${{ github.token }}")
+  assert.equal(verify.env.IMAGE_REF, "${{ needs.calculateTag.outputs.front_image_ref }}")
+  assert.equal(verify.env.SOURCE_REPOSITORY, "AquilaXk/aquila-blog-web")
+  assert.equal(verify.env.SOURCE_SHA, "${{ needs.calculateTag.outputs.front_source_sha }}")
+  assert.equal(verify.env.IMAGE_SUBJECT, "ghcr.io/aquilaxk/aquila-blog-web-front")
+  assert.equal(verify.env.IMAGE_DIGEST, "${{ github.event.client_payload.image_digest }}")
+  assert.equal(verify.env.SIGNER_WORKFLOW, "https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main")
+  assert.equal(verify.env.EXPECTED_RUN_URI, "https://github.com/AquilaXk/aquila-blog-web/actions/runs/${{ github.event.client_payload.producer_run_id }}/attempts/${{ github.event.client_payload.producer_run_attempt }}")
+  assert.doesNotMatch(verify.run, /secrets\.|app token|tailscale|ssh/i)
+
+  for (const [predicate, output] of [
+    ["https://slsa.dev/provenance/v1", "web-image-provenance.json"],
+    ["https://spdx.dev/Document/v2.3", "web-image-spdx.json"],
+    ["https://cosign.sigstore.dev/attestation/vuln/v1", "web-image-vulnerability-attestation.json"],
+  ]) {
+    assert.match(verify.run, new RegExp(`gh attestation verify "oci:\\/\\/\\$\\{IMAGE_REF\\}"[\\s\\S]*--repo "AquilaXk/aquila-blog-web"[\\s\\S]*--source-digest "\\$\\{SOURCE_SHA\\}"[\\s\\S]*--source-ref "refs/heads/main"[\\s\\S]*--signer-workflow "AquilaXk\\/aquila-blog-web\\/.github\\/workflows\\/frontend-image\\.yml"[\\s\\S]*--deny-self-hosted-runners[\\s\\S]*--predicate-type "${predicate.replaceAll("/", "\\/")}"[\\s\\S]*--format json > "\\$\\{RUNNER_TEMP\\}\\/${output}"`))
+  }
+  assert.match(verify.run, /node tools\/security\/native-image-evidence\.mjs verify-attestation-set[\s\S]*web-image-provenance\.json[\s\S]*web-image-spdx\.json[\s\S]*web-image-vulnerability-attestation\.json/)
+  const verifierIndex = verify.run.indexOf("node tools/security/native-image-evidence.mjs verify-attestation-set")
+  const summaryIndex = verify.run.indexOf('>> "${GITHUB_STEP_SUMMARY}"')
+  assert.ok(summaryIndex > verifierIndex, "summary must be written only after local attestation verification")
+  for (const value of [
+    "aquila-native-image-evidence-v1",
+    "${SOURCE_SHA}",
+    "${IMAGE_DIGEST}",
+    "https://slsa.dev/provenance/v1",
+    "https://spdx.dev/Document/v2.3",
+    "https://cosign.sigstore.dev/attestation/vuln/v1",
+    "${SIGNER_WORKFLOW}",
+    "${EXPECTED_RUN_URI}",
+  ]) assert.match(verify.run, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
 })
 
 function runVerifiedDeploymentDispatch(input) {
@@ -568,9 +761,10 @@ test("handoff keeps deployment ordering and the existing SSH cutover gates", () 
   assert.match(source, /needs\.calculateTag\.outputs\.backend_deploy != 'true' \|\| needs\.blueGreenDeploy\.result == 'success'/)
   assert.match(source, /back_image_ref: \$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}/)
   assert.match(source, /HOME_BACK_IMAGE: \$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}/)
-  const securityStep = source.match(/      - name: Require successful Security for deploy SHA\n([\s\S]*?)(?=\n      - name: Require successful Deploy workflow for dispatch SHA)/)
+  const securityStep = source.match(/      - name: Require successful Security for deploy SHA\n([\s\S]*?)(?=\n      - name: Require successful automatic Security delivery for dispatch SHA)/)
   assert.ok(securityStep, "Security gate step must exist")
-  assert.doesNotMatch(securityStep[1], /repository_dispatch/, "Security gate must also run for dispatches")
+  assert.match(securityStep[1], /if: github\.event_name != 'repository_dispatch'/)
+  assert.match(source, /Require successful automatic Security delivery for dispatch SHA/)
   assert.equal((source.match(/docker\/build-push-action@/g) || []).length, 1, "only the backend build may publish")
   assert.equal((source.match(/^\s+packages: write$/gm) || []).length, 1, "only the backend build keeps package write")
   for (const forbidden of [
@@ -625,9 +819,11 @@ function runFrontQueueFreshnessGate(input) {
   const grep = path.join(directory, "grep")
   const changedFiles = path.join(directory, "changed-files")
   const output = path.join(directory, "output")
+  const summary = path.join(directory, "summary")
   writeFileSync(calls, "")
   writeFileSync(changedFiles, input.changedFiles ?? "")
   writeFileSync(output, "")
+  writeFileSync(summary, "")
   writeFileSync(
     gh,
     `#!/usr/bin/env bash\nprintf 'gh %s\\n' "$*" >> "${calls}"\nif [ "$1" = api ] && [ "$2" = repos/AquilaXk/aquila-blog-web/commits/main ] && [ "$3" = --jq ] && [ "$4" = .sha ] && [ "$#" = 4 ]; then\n  [ "${input.webApiExitCode ?? 0}" = 0 ] || exit "${input.webApiExitCode}"\n  printf '%s\\n' '${input.webMainSha}'\n  exit 0\nfi\necho "unexpected gh args: $*" >&2\nexit 1\n`,
@@ -648,13 +844,15 @@ function runFrontQueueFreshnessGate(input) {
       FRONT_SOURCE_SHA: input.frontSourceSha,
       DEPLOY_SHA: input.deploySha,
       GITHUB_OUTPUT: output,
+      GITHUB_STEP_SUMMARY: summary,
       PATH: `${input.grepExitCode === undefined ? "" : `${directory}:`}${directory}:${process.env.PATH}`,
     },
   })
   const callLog = readFileSync(calls, "utf8").trim().split("\n").filter(Boolean)
   const outputs = readFileSync(output, "utf8")
+  const summaryOutput = readFileSync(summary, "utf8")
   rmSync(directory, { recursive: true, force: true })
-  return { ...result, outputs, callLog }
+  return { ...result, outputs, summaryOutput, callLog }
 }
 
 test("front deployment revalidates the queued dispatch against exact Web and Platform main", () => {
@@ -668,6 +866,13 @@ test("front deployment revalidates the queued dispatch against exact Web and Pla
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.outputs, /^result=proceed$/m)
+  assert.match(result.summaryOutput, /## Web dispatch queue freshness/)
+  assert.match(result.summaryOutput, /- result: proceed/)
+  assert.match(result.summaryOutput, /- reason: current/)
+  assert.match(result.summaryOutput, new RegExp(`- source Web SHA: ${input.frontSourceSha}`))
+  assert.match(result.summaryOutput, new RegExp(`- current Web SHA: ${input.webMainSha}`))
+  assert.match(result.summaryOutput, new RegExp(`- deploy Platform SHA: ${input.deploySha}`))
+  assert.match(result.summaryOutput, new RegExp(`- current Platform SHA: ${input.platformMainSha}`))
   assert.deepEqual(result.callLog, [
     "gh api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha",
     `git ls-remote --exit-code origin refs/heads/main`,
@@ -675,6 +880,17 @@ test("front deployment revalidates the queued dispatch against exact Web and Pla
     `git rev-parse refs/remotes/origin/main`,
     `git merge-base --is-ancestor ${input.deploySha} ${input.platformMainSha}`,
   ])
+})
+
+test("repository dispatch keeps the Platform deploy SHA separate from the Web source SHA", () => {
+  const step = deployDocument().jobs.calculateTag.steps.find((item) => item.name === "Calculate deploy targets and image tags")
+
+  assert.ok(step)
+  assert.equal(step.env.DEPLOY_SHA_INPUT, "${{ github.sha }}")
+  assert.equal(step.env.WEB_FRONTEND_SOURCE_SHA, "${{ github.event.client_payload.source_sha || '' }}")
+  assert.match(step.run, /DEPLOY_SHA="\$\{DEPLOY_SHA_INPUT:-\}"/)
+  assert.match(step.run, /FRONT_SOURCE_SHA="\$\{WEB_FRONTEND_SOURCE_SHA\}"/)
+  assert.doesNotMatch(step.run, /workflow_run|attestation-source-sha-mismatch/)
 })
 
 for (const [label, overrides, expected] of [
@@ -706,6 +922,10 @@ test("front deployment no-ops when Web main advances while queued", () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.outputs, /^result=noop$/m)
+  assert.match(result.summaryOutput, /## Web dispatch queue freshness/)
+  assert.match(result.summaryOutput, /- result: noop/)
+  assert.match(result.summaryOutput, /- reason: stale-web-source/)
+  assert.match(result.summaryOutput, /- current Platform SHA: unavailable/)
   assert.deepEqual(result.callLog, ["gh api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha"])
 })
 
@@ -720,6 +940,10 @@ test("front deployment no-ops when queued Platform changes affect deployment", (
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.outputs, /^result=noop$/m)
+  assert.match(result.summaryOutput, /## Web dispatch queue freshness/)
+  assert.match(result.summaryOutput, /- result: noop/)
+  assert.match(result.summaryOutput, /- reason: newer-platform-deployment-change/)
+  assert.match(result.summaryOutput, new RegExp(`- current Platform SHA: ${"c".repeat(40)}`))
 })
 
 test("front deployment permits a queue-delayed Platform main advance with neutral paths only", () => {
@@ -806,9 +1030,13 @@ test("front queue freshness uses calculateTag's exact stale deployment path patt
 test("front queue no-op stops before secrets and activation", () => {
   const steps = deployDocument().jobs.frontBlueGreenDeploy.steps
   const freshness = steps.find((item) => item.name === "Verify dispatch freshness after queue")
+  const nativeLogin = steps.find((item) => item.name === "Login to GHCR for Web native admission")
+  const nativeVerification = steps.find((item) => item.name === "Verify Web native image attestations")
   const condition = "github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'"
 
   assert.equal(freshness.id, "freshness")
+  assert.equal(nativeLogin.if, "github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'", "native admission login must skip after a queue no-op")
+  assert.equal(nativeVerification.if, "github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'", "native verification must skip after a queue no-op")
   for (const name of [
     "Verify required secrets",
     "Connect to Tailscale",
@@ -837,9 +1065,9 @@ test("Platform has no structural path to check out, build, or push Web", () => {
   const steps = Object.values(deployDocument().jobs).flatMap((job) => job.steps || [])
   const securityGate = steps.find((step) => step.name === "Require successful Security for deploy SHA")
   assert.ok(securityGate, "Security gate step must exist")
-  assert.equal(securityGate.if, undefined, "Security gate must not allowlist event types")
-  assert.equal(securityGate.env.DEPLOY_SHA, "${{ github.event.workflow_run.head_sha || github.sha }}")
-  const ciGate = steps.find((step) => step.name === "Require successful CI for workflow_dispatch or Security trigger")
+  assert.equal(securityGate.if, "github.event_name != 'repository_dispatch'")
+  assert.equal(securityGate.env.DEPLOY_SHA, "${{ github.sha }}")
+  const ciGate = steps.find((step) => step.name === "Require successful CI for deployment SHA")
   assert.ok(ciGate, "CI gate step must exist")
   assert.match(ciGate.if, /github\.event_name == 'repository_dispatch'/, "CI gate must run for dispatches")
   const checkouts = steps.filter((step) => typeof step.uses === "string" && step.uses.startsWith("actions/checkout@"))

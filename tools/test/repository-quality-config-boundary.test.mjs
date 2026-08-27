@@ -198,6 +198,22 @@ jobs:
   assert.equal(allowedDeployScan.status, 0, allowedDeployScan.stderr)
   removeWorkflow(allowedDeployDispatch)
 
+  const allowedDeployAttestationRead = writeWorkflow("deploy", `
+name: Allowed Web image attestation verification
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh attestation verify "oci://ghcr.io/aquilaxk/aquila-blog-web@sha256:deadbeef" --repo AquilaXk/aquila-blog-web
+`)
+  const allowedDeployAttestationScan = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  assert.equal(allowedDeployAttestationScan.status, 0, allowedDeployAttestationScan.stderr)
+  removeWorkflow(allowedDeployAttestationRead)
+
   const currentRepositoryToken = writeWorkflow("current-repository-token", `
 name: Current repository token
 on: workflow_dispatch
@@ -293,6 +309,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: gh release create v1.0.0 --repo "$WEB_REPOSITORY"
+`, "foreign-gh-write"],
+    ["deploy", `
+name: Web image attestation mutation
+on: workflow_dispatch
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh attestation download "oci://ghcr.io/aquilaxk/aquila-blog-web@sha256:deadbeef" --repo AquilaXk/aquila-blog-web
 `, "foreign-gh-write"],
     ["sync-public-contract-to-web", `
 name: Positional Web pull request URL

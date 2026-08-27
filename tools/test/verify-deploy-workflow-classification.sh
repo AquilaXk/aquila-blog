@@ -2,9 +2,10 @@
 set -euo pipefail
 
 workflow=".github/workflows/deploy.yml"
+security_workflow=".github/workflows/security.yml"
 
-if [[ ! -f "${workflow}" ]]; then
-  echo "missing workflow: ${workflow}" >&2
+if [[ ! -f "${workflow}" || ! -f "${security_workflow}" ]]; then
+  echo "missing deploy or Security workflow" >&2
   exit 1
 fi
 
@@ -34,6 +35,16 @@ reject_pattern() {
 
   if grep -Eq "${pattern}" "${workflow}"; then
     echo "unexpected: ${message}" >&2
+    exit 1
+  fi
+}
+
+require_security_pattern() {
+  local pattern="$1"
+  local message="$2"
+
+  if ! grep -Eq "${pattern}" "${security_workflow}"; then
+    echo "missing: ${message}" >&2
     exit 1
   fi
 }
@@ -212,7 +223,21 @@ reject_pattern 'repository:[[:space:]]*.*aquila-blog-web' "Platform must not che
 reject_pattern 'Dockerfile\.runtime' "Platform must not reference the Web runtime Dockerfile"
 reject_pattern '(^|[^[:alnum:]_])[Yy][Aa][Rr][Nn]([^[:alnum:]_]|$)' "Platform deploy must not use Yarn"
 reject_pattern 'playwright' "Platform deploy must not install or run Playwright"
-require_pattern 'DEPLOY_SHA_INPUT:[[:space:]]*\$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}' "workflow_run deploy target must stay tied to the CI-validated sha"
+require_pattern 'workflow_call:[[:space:]]*\{\}' "Deploy must be reusable from the Security push DAG"
+reject_pattern '^[[:space:]]{2}workflow_run:' "Deploy must not retain the legacy workflow_run trigger"
+reject_pattern 'select\(\.event == "workflow_run"' "Deploy must not query legacy workflow_run delivery evidence"
+require_pattern 'DEPLOY_SHA_INPUT:[[:space:]]*\$\{\{ github\.sha \}\}' "Platform deploy identity must be github.sha"
+require_pattern 'security_caller_admission:[[:space:]]*\$\{\{ steps\.security_caller_admission\.outputs\.result \}\}' "Deploy must expose exact Security caller admission"
+require_pattern 'CALLER_WORKFLOW_REF:[[:space:]]*\$\{\{ github\.workflow_ref \}\}' "automatic caller admission must read the reusable caller identity"
+require_pattern 'EXPECTED_CALLER_WORKFLOW_REF: AquilaXk/aquila-blog/\.github/workflows/security\.yml@refs/heads/main' "automatic caller admission must pin Security main"
+require_pattern '\[ "\$\{GITHUB_REF\}" != "refs/heads/main" \]' "automatic caller admission must require main"
+require_pattern 'Security gate satisfied by the exact same-SHA caller DAG' "automatic Security caller must satisfy its own Security gate"
+require_security_pattern 'uses:[[:space:]]*\.\/\.github\/workflows\/deploy\.yml' "Security must call reusable Deploy"
+require_security_pattern 'if:[[:space:]]*github\.event_name == '\''push'\''' "Security caller job must be limited to push"
+require_pattern 'actions/workflows/security\.yml/runs\?head_sha=\$\{DEPLOY_SHA\}' "dispatch must verify the exact Platform SHA through Security"
+require_pattern 'select\(\.event == "push" and \.head_branch == "main"\)' "dispatch Security evidence must be a main push run"
+reject_pattern 'actions/workflows/deploy\.yml/runs' "dispatch must not wait for removed Deploy workflow_run evidence"
+reject_pattern '\.trivyignore' "Deploy must not reference a nonexistent Trivy ignore file"
 require_pattern 'REMOTE_MAIN_SHA="\$\(git ls-remote --exit-code origin refs/heads/main \| awk '\''\{print \$1\}'\''\)"' "stale detection must read the current remote main sha"
 require_pattern 'origin/main sha lookup failed' "stale detection must fail closed when remote main lookup fails"
 require_pattern 'git fetch --no-tags --prune origin "\+refs/heads/main:refs/remotes/origin/main"' "stale detection must fetch current main for path-aware ancestry and diff checks"
@@ -223,25 +248,16 @@ require_pattern 'BACKEND_DEPLOY_PATHS_PATTERN=.*deploy/env/' "backend deploy tri
 require_pattern 'BACKEND_DEPLOY_PATHS_PATTERN=.*tools/env/' "backend deploy trigger must include deploy env validator changes"
 require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy/env/' "stale detection must block newer deploy env contract changes"
 require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools/env/' "stale detection must block newer deploy env validator changes"
+require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools/security/native-image-evidence\\.mjs' "stale detection must block newer native image evidence verifier changes"
 require_pattern 'grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"' "stale detection must use the deploy safety path pattern"
-require_pattern 'stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=' "backend-neutral newer main changes must not block a pending backend deploy"
+require_pattern 'stale automatic caller allowed after backend-neutral newer main changes: deploy_sha=' "backend-neutral newer main changes must not block a pending backend deploy"
 require_pattern 'stale deploy blocked by backend-impacting newer main changes: deploy_sha=' "backend-impacting newer main changes must block stale deploys"
 reject_pattern 'git fetch --depth=1 origin main' "stale detection must not make the checkout shallow before changed-file detection"
 reject_pattern 'git rev-parse origin/main' "stale detection must not depend on a locally mutated origin/main ref"
-reject_pattern 'stale workflow_run payload: deploy_sha=' "stale workflow_run payloads must not continue after log-only detection"
-reject_pattern 'STALE_WORKFLOW_RUN' "stale workflow_run payloads must not bypass deploy safety checks"
 require_pattern 'back_image_ref:[[:space:]]*\$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}' "build job must expose immutable backend digest ref"
 require_pattern 'HOME_BACK_IMAGE:[[:space:]]*\$\{\{ needs\.buildAndPush\.outputs\.back_image_ref \}\}' "deploy job must use immutable backend digest ref"
-require_pattern 'Require successful Security for deploy SHA' "dispatches must pass the existing Security success gate"
-if awk '
-  /^      - name: Require successful Security for deploy SHA$/ { in_security_gate = 1; next }
-  in_security_gate && /^      - name:/ { exit }
-  in_security_gate && /^        if:/ { found = 1 }
-  END { exit found ? 0 : 1 }
-' "${workflow}"; then
-  echo "unexpected: Security success gate must not skip repository_dispatch" >&2
-  exit 1
-fi
+require_pattern 'Require successful Security for deploy SHA' "automatic callers must retain the Security success gate"
+require_pattern 'Require successful automatic Security delivery for dispatch SHA' "dispatches must verify completed automatic Security delivery"
 reject_pattern 'image_latest_ref' "deploy workflow must not calculate or push latest image refs"
 reject_pattern 'IMAGE_LATEST_REF="\$\{IMAGE_NAME\}:latest"' "deploy workflow must not create latest image refs"
 

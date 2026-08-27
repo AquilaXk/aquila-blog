@@ -9,6 +9,7 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
 const ciWorkflowPath = path.join(repoRoot, ".github/workflows/ci.yml")
+const securityWorkflowPath = path.join(repoRoot, ".github/workflows/security.yml")
 const backupRestoreWorkflowPath = path.join(repoRoot, ".github/workflows/backup-restore-drill.yml")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const caddyfilePath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
@@ -156,9 +157,9 @@ const createDeployStaleFixture = () => {
   }
 }
 
-const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = "workflow_run" }) => {
+const runDeployCalculateScript = ({ cwd, deploySha, currentMainSha, eventName = "push", githubSha = deploySha }) => {
   git(cwd, ["update-ref", "refs/heads/main", currentMainSha])
-  git(cwd, ["checkout", "--detach", deploySha])
+  git(cwd, ["checkout", "--detach", githubSha])
 
   const stubDir = path.join(cwd, "bin")
   mkdirSync(stubDir)
@@ -184,7 +185,8 @@ exit 1
       GITHUB_EVENT_NAME: eventName,
       GITHUB_REPOSITORY_OWNER: "AquilaXk",
       GITHUB_REPOSITORY: "AquilaXk/aquila-blog",
-      DEPLOY_SHA_INPUT: deploySha,
+      GITHUB_SHA: githubSha,
+      DEPLOY_SHA_INPUT: githubSha,
       FORCE_BACKEND_DEPLOY_INPUT: "false",
       WEB_FRONTEND_SOURCE_SHA: "a".repeat(40),
       WEB_FRONTEND_IMAGE_REF: `ghcr.io/aquilaxk/aquila-blog-web-front@sha256:${"b".repeat(64)}`,
@@ -2419,9 +2421,20 @@ test("required secret check does not inject multi-line HOME_SERVER_ENV into shel
 test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경만 차단한다", () => {
   const workflow = readFileSync(workflowPath, "utf8")
   const ciWorkflow = readFileSync(ciWorkflowPath, "utf8")
+  const securityWorkflow = readFileSync(securityWorkflowPath, "utf8")
 
-  assert.match(workflow, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
-  assert.match(workflow, /DEPLOY_SHA_INPUT: \$\{\{ github\.event\.workflow_run\.head_sha \|\| github\.sha \}\}/)
+  assert.match(workflow, /workflow_call: \{\}/)
+  assert.doesNotMatch(workflow, /^  workflow_run:/m)
+  assert.doesNotMatch(workflow, /select\(\.event == "workflow_run"/)
+  assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/)
+  assert.match(workflow, /DEPLOY_SHA_INPUT: \$\{\{ github\.sha \}\}/)
+  assert.match(workflow, /security_caller_admission: \$\{\{ steps\.security_caller_admission\.outputs\.result \}\}/)
+  assert.match(workflow, /CALLER_WORKFLOW_REF: \$\{\{ github\.workflow_ref \}\}/)
+  assert.match(workflow, /EXPECTED_CALLER_WORKFLOW_REF: AquilaXk\/aquila-blog\/\.github\/workflows\/security\.yml@refs\/heads\/main/)
+  assert.match(workflow, /\[ "\$\{GITHUB_REF\}" != "refs\/heads\/main" \]/)
+  assert.match(workflow, /Security gate satisfied by the exact same-SHA caller DAG/)
+  assert.match(securityWorkflow, /uses: \.\/\.github\/workflows\/deploy\.yml/)
+  assert.match(securityWorkflow, /if: github\.event_name == 'push'/)
   assert.match(workflow, /REMOTE_MAIN_SHA="\$\(git ls-remote --exit-code origin refs\/heads\/main \| awk '\{print \$1\}'\)"/)
   assert.match(workflow, /origin\/main sha lookup failed/)
   assert.match(workflow, /git fetch --no-tags --prune origin "\+refs\/heads\/main:refs\/remotes\/origin\/main"/)
@@ -2432,15 +2445,15 @@ test("deploy workflow는 path-aware stale gate로 backend 영향 후속 변경�
   assert.match(workflow, /BACKEND_DEPLOY_PATHS_PATTERN=.*restore-privacy-gate/)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy\/env\//)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools\/env\//)
+  assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools\/security\/native-image-evidence\\\.mjs/)
   assert.match(workflow, /STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*restore-privacy-gate/)
   assert.match(ciWorkflow, /- "restore-privacy-gate\.sh"/)
   assert.match(workflow, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)
   assert.doesNotMatch(workflow, /git fetch --depth=1 origin main/)
   assert.doesNotMatch(workflow, /git rev-parse origin\/main/)
   assert.match(workflow, /stale deploy blocked by backend-impacting newer main changes: deploy_sha=/)
-  assert.match(workflow, /stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=/)
-  assert.doesNotMatch(workflow, /stale workflow_run payload: deploy_sha=/)
-  assert.doesNotMatch(workflow, /STALE_WORKFLOW_RUN/)
+  assert.match(workflow, /stale automatic caller allowed after backend-neutral newer main changes: deploy_sha=/)
+  assert.doesNotMatch(workflow, /\.trivyignore/)
 })
 
 test("deploy calculateTag는 docs-only 후속 main 변경이면 기존 backend deploy를 계속 허용한다", () => {
@@ -2457,6 +2470,23 @@ test("deploy calculateTag는 docs-only 후속 main 변경이면 기존 backend d
 
     assert.match(output, /backend_deploy=true/)
     assert.match(summary, /path-aware-stale-neutral/)
+  } finally {
+    rmSync(fixture.workDir, { recursive: true, force: true })
+  }
+})
+
+test("deploy calculateTag uses the current Platform github.sha for automatic callers", () => {
+  const fixture = createDeployStaleFixture()
+  try {
+    runDeployCalculateScript({
+      cwd: fixture.workDir,
+      deploySha: fixture.backendSha,
+      githubSha: fixture.docsSha,
+      currentMainSha: fixture.docsSha,
+    })
+
+    const output = readFileSync(path.join(fixture.workDir, "github-output.txt"), "utf8")
+    assert.match(output, new RegExp(`deploy_sha=${fixture.docsSha}`))
   } finally {
     rmSync(fixture.workDir, { recursive: true, force: true })
   }

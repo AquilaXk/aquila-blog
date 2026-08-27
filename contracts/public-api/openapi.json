@@ -7000,6 +7000,16 @@
           "summary": {
             "type": "string"
           },
+          "summarySource": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "LEADING_BLOCK",
+              "EXTRACTED",
+              "MIGRATED",
+              "NONE"
+            ]
+          },
           "tags": {
             "type": "array",
             "items": {
@@ -7030,7 +7040,11 @@
             "type": "integer",
             "format": "int32"
           }
-        }
+        },
+        "required": [
+          "summary",
+          "summarySource"
+        ]
       },
       "PageDtoFeedPostDto": {
         "type": "object",

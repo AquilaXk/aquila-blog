@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.security.application.ContentHtmlTrustState
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.standard.dto.page.PageDto
@@ -329,13 +330,13 @@ class PostPublicReadResponseFactoryTest {
         // then
         assertThat(pageSeed).isEqualTo(
             "search|page=2|size=10|sort=CREATED_AT|kw=kotlin|tag=spring|total=22|pages=3|" +
-                "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1:" +
+                "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1,9:EXTRACTED:" +
                 "author=1:1,6:Author,6:author,31:https://example.com/profile.png|" +
-                "2:1767312000000:11:12:13:content=7:Title 2,null,9:Summary 2:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "2:1767312000000:11:12:13:content=7:Title 2,null,9:Summary 2,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(cursorSeed).isEqualTo(
             "feed-cursor|size=10|sort=CREATED_AT|cursor=cursor-1|tag=backend|hasNext=true|nextCursor=next-1|" +
-                "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(detailSeed).isEqualTo(
             "9|1767398400000|7|8|9|10|content=5:Title,7:content,14:<p>content</p>,null,null,7:UNKNOWN,0:,4:NONE|" +
@@ -345,7 +346,7 @@ class PostPublicReadResponseFactoryTest {
         assertThat(responseFactory.buildTagsEtagSeed(tags)).isEqualTo("Kotlin:3|Spring:2")
         assertThat(relatedSeed).isEqualTo(
             "related-author|authorId=3|excludePostId=0|limit=4|" +
-                "items=2:1767312000000:11:12:13:content=7:Title 2,null,9:Summary 2:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=2:1767312000000:11:12:13:content=7:Title 2,null,9:Summary 2,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(bootstrapFeedSeed).startsWith("bootstrap-feed-cursor|")
         assertThat(bootstrapExploreSeed).startsWith("bootstrap-explore-cursor|")
@@ -452,6 +453,7 @@ class PostPublicReadResponseFactoryTest {
 
         val titleChangedFeed = basePost.copy(title = "Title v2")
         val summaryChangedFeed = basePost.copy(summary = "Summary v2")
+        val summarySourceChangedFeed = basePost.copy(summarySource = PostSummarySource.MANUAL)
         assertThat(
             responseFactory.buildFeedPageEtagSeed(
                 "feed",
@@ -459,6 +461,15 @@ class PostPublicReadResponseFactoryTest {
                 10,
                 PostSearchSortType1.CREATED_AT,
                 data = pageOf(titleChangedFeed),
+            ),
+        ).isNotEqualTo(baseFeedSeed)
+        assertThat(
+            responseFactory.buildFeedPageEtagSeed(
+                "feed",
+                0,
+                10,
+                PostSearchSortType1.CREATED_AT,
+                data = pageOf(summarySourceChangedFeed),
             ),
         ).isNotEqualTo(baseFeedSeed)
         assertThat(
@@ -605,6 +616,7 @@ class PostPublicReadResponseFactoryTest {
             title = "Title $id",
             thumbnail = null,
             summary = "Summary $id",
+            summarySource = PostSummarySource.EXTRACTED,
             tags = listOf("kotlin"),
             category = listOf("backend"),
             published = true,

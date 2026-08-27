@@ -302,7 +302,24 @@ reject_pattern 'EXPECTED_FRONT_COMMIT_SHA' "Platform deploy must not calculate f
 # 구 API 호스트 접기 (#1596). 배포 후 공개 검증은 실제로 서비스되는 호스트를 때려야 한다.
 # 구 호스트를 남겨 두면 Tunnel public hostname을 지우는 순간 다음 배포가 이 게이트에서 깨지고,
 # 검증만 먼저 지우면 아무도 안 보는 사이 배포가 green으로 통과한다.
-reject_pattern 'API_DOMAIN' "Platform deploy must not read or probe the retired host-based API domain"
+legacy_api_domain_deletion='remove_env_key "LEGACY_API_DOMAIN" "deploy/homeserver/.env.prod"'
+require_fixed "${legacy_api_domain_deletion}" "deploy must delete the retired legacy API domain after HOME_SERVER_ENV copy"
+if ! awk -v allowed="${legacy_api_domain_deletion}" '
+  index($0, "LEGACY_API_DOMAIN") {
+    line = $0
+    sub(/^[[:space:]]+/, "", line)
+    sub(/[[:space:]]+$/, "", line)
+    if (line != allowed) {
+      print
+      found = 1
+    }
+  }
+  END { exit found ? 1 : 0 }
+' "${workflow}"; then
+  echo "unexpected: Platform deploy must not retain another LEGACY_API_DOMAIN use" >&2
+  exit 1
+fi
+reject_pattern '(^|[^[:alnum:]_])API_DOMAIN([^[:alnum:]_]|$)' "Platform deploy must not read or probe the retired host-based API domain"
 require_pattern 'rollback_and_exit "missing_web_domain"' "post-deploy verification must fail closed when WEB_DOMAIN is absent"
 require_pattern 'wait_public_api_health "\$\{WEB_DOMAIN\}"' "public API health must be probed on the public web host"
 require_pattern 'https://\$\{WEB_DOMAIN\}/post/api/v1/posts/feed' "public read canary must run on the public web host"

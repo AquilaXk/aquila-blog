@@ -84,9 +84,7 @@ front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스�
 ### 내부 진입점 `http://caddy`
 
 front 서버 사이드(SSR helper와 `/api/backend/*` proxy)는 `BACKEND_INTERNAL_URL=http://caddy`로
-백엔드를 부른다(#1539). 그 주소는 **공개 web vhost가 아니라 backend 전용 vhost**에 있다 — 같은
-site block이 `{$LEGACY_API_DOMAIN:legacy-api.localhost}`(host 이전 창 전용 슬롯, #1596으로 구
-API 호스트 주소가 빠진 뒤 남은 유일한 host 기반 주소)와 `http://caddy`를 함께 갖고, 그 안에는
+백엔드를 부른다(#1539). 그 주소는 **공개 web vhost가 아니라 backend 전용 vhost**에 있고, 그 안에는
 front upstream이 없다.
 그래서 `Host: caddy` 요청이 front로 되돌아가는 무한 루프(front → caddy → front)가 구조적으로
 불가능하다. 실측(`caddy run` + stub upstream):
@@ -241,8 +239,8 @@ blue/green 전환이 호스트 수만큼 늘어난다.
   호스트도 공개되지 않는다. 대신 **빈 값은 계약이 거부한다** — Caddy의 `{$VAR:default}`는 변수가
   unset일 때만 기본값을 쓰므로, `KEY=`는 주소를 `http://`로 붕괴시켜 host matcher 없는 :80
   catch-all을 만든다.
-- 세 키는 서로, 그리고 나머지 Caddy site address 키(`WEB_DOMAIN`, 전환 창 전용
-  `LEGACY_API_DOMAIN`, 모니터링 세 호스트)와 **달라야 한다.** site address가 겹치면 404가
+- 세 키는 서로, 그리고 나머지 Caddy site address 키(`WEB_DOMAIN`, 모니터링 세 호스트)와
+  **달라야 한다.** site address가 겹치면 404가
   아니라 caddy가 기동하지 못하고 edge 전체가 내려간다. 계약의 `allDistinct` crossCheck가 집합으로
   막는다(`mustDifferFrom`은 쌍 비교라 집합을 닫지 못한다).
 - `APEX_DOMAIN`만 있고 `COMPANY_DOMAIN`이 없으면 apex가 `company.localhost`로 308한다 — 설정은
@@ -360,7 +358,7 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    같은 경고).
 
    1. `HOME_SERVER_ENV`에 세 값을 넣고 배포한다. 세 값은 서로, 그리고 나머지 site address
-      키(`WEB_DOMAIN`, 전환 창 전용 `LEGACY_API_DOMAIN`, 모니터링 세 호스트)와 달라야 하며,
+      키(`WEB_DOMAIN`, 모니터링 세 호스트)와 달라야 하며,
       `APEX_DOMAIN`은 `COMPANY_DOMAIN` 없이 넣을 수 없다(계약이 둘 다 막는다).
 
       - `COMPANY_DOMAIN=www.aquilaxk.site`
@@ -411,18 +409,6 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    갈라진다**는 점이다. blog cutover가 이미 끝나 구 호스트를 부르는 정상 소비자는 없으므로 이
    상태를 수용하고, 3단계에서 hostname 자체를 없앤다.
 
-   `LEGACY_API_DOMAIN`은 **이 전환의 공개 DNS/Tunnel 작업에는 쓰지 않는다** — 떠나는 구 API
-   호스트가 `API_DOMAIN`이고 두 번째 주소로 남길 대상이 없기 때문이다. 그러나 **키 자체는
-   계약(`deploy/env/env.contract.json`), Caddyfile의 site address 슬롯, `materialize_service_env.sh`
-   의 caddy allowlist에 그대로 유지한다.** 다음 host 이전 때 구·신 주소를 동시에 살려 두는 수단이
-   그것뿐이므로, 지우면 안 된다. 운영값(`HOME_SERVER_ENV`)에서 unset인 것이 정상 상태다.
-
-   > ⚠️ 전환 창 키를 닫을 때는 **줄을 비우지 말고 지운다.** `KEY=`(빈 값)은 unset이 아니라 빈
-   > 문자열로 보간돼 vhost 주소가 `http://`가 되고, `caddy adapt` 실측 결과 그 site의 host
-   > matcher가 통째로 사라져 :80 catch-all이 된다. env 계약이
-   > `must be removed entirely rather than set to an empty value`로 막지만, 그 전에 알고 있어야
-   > 한다.
-   >
    > ⚠️ #1596 이후 **`WEB_DOMAIN`이 없는 위상은 배포되지 않는다.** `blue_green_deploy.sh`의
    > `require_nonempty_env_key "WEB_DOMAIN"`이 먼저 막고, `deploy.yml`도 `missing_web_domain`으로
    > 멈춘다. 배포 후 공개 검증이 때릴 호스트가 그 값 하나뿐이라, 없으면 검증 없이 green이 된다.
@@ -760,7 +746,7 @@ echo "exit=${status}"
   `WEB_UPSTREAM`은 `reverse_proxy :3000`을 만든다. 두 층이 막는다: env 계약이
   `must be removed entirely rather than set to an empty value`로 실패시키고,
   `materialize_service_env.sh`가 빈 값 caddy 키를 아예 내보내지 않는다.
-- `WEB_DOMAIN`·`LEGACY_API_DOMAIN`·`COMPANY_DOMAIN`·`PRODUCT_DOMAIN`·`APEX_DOMAIN`은
+- `WEB_DOMAIN`·`COMPANY_DOMAIN`·`PRODUCT_DOMAIN`·`APEX_DOMAIN`은
   `materialize_service_env.sh`의 caddy 키 allowlist에 있어야 `.env.caddy.prod`로 전달된다. 빠지면
   vhost가 조용히 기본값으로 내려앉는다.
 - **배포 후 공개 검증은 `WEB_DOMAIN` 하나에 걸려 있다**(#1596). 그래서 그 값이 비면 검증을 건너뛰는

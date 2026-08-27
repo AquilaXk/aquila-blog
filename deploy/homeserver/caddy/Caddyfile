@@ -262,19 +262,10 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
 #
 # Backend-only vhost. Since #1575 the *public* API is same-origin under {$WEB_DOMAIN}, and #1596
 # retired the pre-transition public API host, so no live public address is left here. The vhost
-# stays because `http://caddy` below is permanent and because the transition-only
-# `{$LEGACY_API_DOMAIN}` slot is what makes a future host-based migration possible
-# (see docs/ops/homeserver-front-domain-cutover.md).
+# stays because `http://caddy` below is permanent.
 #
 # Nothing in this block proxies to the front tier, which is what makes the internal entry point
 # loop-free: a front server-side call to `http://caddy` can only ever land on the backend.
-#
-# LEGACY_API_DOMAIN is transition-only and unset outside a migration window. It exists so an old
-# and a new host-based address can be live at the same time - with a single address every cutover
-# order breaks one side of the switch for a while. Its `.localhost` default is required: an empty
-# value collapses the address to `http://`, which Caddy adapts into a host-matcher-less :80
-# catch-all. It must also differ from WEB_DOMAIN, because two site blocks sharing one address take
-# the whole edge down on the next caddy recreate (the env contract enforces both).
 #
 # There is deliberately no CORS anywhere in this file. The public API is a path on the web host,
 # so browser calls to it are same-origin and a cross-origin allowlist would only widen what this
@@ -293,7 +284,7 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
 # address the note above warns about. Reachability is unchanged: the only listeners are the
 # compose networks caddy joins plus a 127.0.0.1-only host bind, and Cloudflare Tunnel forwards
 # the original public Host, so no external request can arrive with `Host: caddy`.
-http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {
+http://caddy {
   log {
     output stdout
     format json
@@ -303,8 +294,7 @@ http://{$LEGACY_API_DOMAIN:legacy-api.localhost}, http://caddy {
 
   # This vhost only. The web vhost must NOT get this: there front/public/robots.txt is the real
   # robots.txt and it advertises the sitemap, so a `Disallow: /` here would deindex the blog.
-  # A host-based backend address has no crawlable content, so it keeps refusing crawlers even
-  # while a migration window has LEGACY_API_DOMAIN publicly resolvable.
+  # The backend-only address has no crawlable content, so it keeps refusing crawlers.
   # It shares the handle group with the imported gates below, and their matchers are disjoint.
   @apiRobots path /robots.txt
   handle @apiRobots {

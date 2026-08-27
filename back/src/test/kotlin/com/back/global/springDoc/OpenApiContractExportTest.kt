@@ -84,6 +84,18 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         assertThat(contentHtmlTrustState.path("type").asText()).isEqualTo("string")
         assertThat(contentHtmlTrustState.path("enum").values().map { it.asText() })
             .containsExactlyInAnyOrder("TRUSTED_CURRENT", "UNKNOWN", "REJECTED")
+        val feedPostSchema = openApiNode.path("components").path("schemas").path("FeedPostDto")
+        assertThat(feedPostSchema.path("required").values().map { it.asText() })
+            .containsExactlyInAnyOrder("summary", "summarySource")
+        assertEnum(
+            openApiNode,
+            propertySchema(openApiNode, "FeedPostDto", "summarySource"),
+            "MANUAL",
+            "LEADING_BLOCK",
+            "EXTRACTED",
+            "MIGRATED",
+            "NONE",
+        )
         assertNullableReference(
             propertySchema(openApiNode, "AuthSessionMemberDto", "legalReconsent"),
             "#/components/schemas/LegalReconsentStatus",

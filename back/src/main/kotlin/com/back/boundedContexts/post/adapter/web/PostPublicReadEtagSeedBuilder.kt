@@ -153,7 +153,7 @@ class PostPublicReadEtagSeedBuilder {
     private fun buildFeedItemsToken(posts: List<FeedPostDto>): String =
         posts.joinToString(separator = "|") {
             "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}:" +
-                "content=${buildNullableLengthPrefixedToken(it.title, it.thumbnail, it.summary)}:" +
+                "content=${buildNullableLengthPrefixedToken(it.title, it.thumbnail, it.summary, it.summarySource.name)}:" +
                 "author=${
                     buildLengthPrefixedToken(
                         it.authorId.toString(),

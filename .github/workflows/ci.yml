@@ -102,6 +102,9 @@ jobs:
       - name: Verify front image workflow contract
         run: node --test tools/test/frontend-image-workflow.test.mjs
 
+      - name: Verify native image evidence contract
+        run: node --test tools/test/native-image-evidence.test.mjs
+
       - name: Verify Dockerfile supply-chain contracts
         run: node --test tools/test/dockerfile-supply-chain.test.mjs
 

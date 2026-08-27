@@ -43,10 +43,6 @@ retentionRules:
     retention: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 JSON record untilConsentChangeOrBrowserStorageClear
     destruction: providerRetentionControlsAndLocalLogExpiry; privacy.optionalTrackingConsent.v1 preferenceDeletion
     followUp: providerRetentionReview
-  - activityId: ai_summary_gemini
-    retention: noRawPromptRetentionIntended; providerRetentionRequiresContractReview
-    destruction: noLocalPersistence; providerDeletionControlsReviewRequired
-    followUp: issue1003
   - activityId: backup_and_restore
     retention: backupClassRetentionPolicyInDeployScripts; privacyTombstoneFutureWork
     destruction: pruneExternalBackupsAndDeployBackupRotation; encryptedDeletionFutureWork
@@ -55,4 +51,4 @@ retentionRules:
 principles:
   - Security or legal hold data must be separated from account-visible data during deletion handling.
   - Backup retention can outlive database deletion, so restore must replay deletion tombstones before traffic opens.
-  - Analytics, RUM, and AI external processing must prefer aggregate or transient handling that does not require user identification.
+  - Analytics and RUM processing must prefer aggregate handling that does not require user identification.

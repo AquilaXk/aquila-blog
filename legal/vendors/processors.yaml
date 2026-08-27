@@ -188,27 +188,6 @@ processors:
     reviewRequired:
       - Consent manager and opt-out are tracked by issue1002.
 
-  - id: google_gemini
-    name: Google Gemini API
-    role: aiExternalProcessingProvider
-    serviceType: generativeAiApi
-    dataCategories:
-      - postTitle
-      - postContent
-      - generatedSummary
-    region: globalGoogleInfrastructure
-    overseasTransfer: true
-    enabledByEnv: custom.ai.summary.enabled defaults false via CUSTOM__AI__SUMMARY__ENABLED; custom.ai.summary.gemini.*
-    contractStatus: paidPlanAndDpaReviewRequired
-    retentionControl: providerDataRetentionAndTrainingOptOutReviewRequired
-    securityControls:
-      - serverSideApiKey
-      - HTTPS
-      - explicitAdminActionRequired
-      - prodActivationPolicyGuard
-    reviewRequired:
-      - Production default-off, PII block, and DPA/region/retention/training opt-out startup checks are enforced by issue1003.
-
   - id: grafana_loki_monitoring
     name: Grafana and Loki monitoring stack
     role: monitoringAndLogProcessor

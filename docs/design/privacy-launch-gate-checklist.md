@@ -6,7 +6,7 @@ Follow-up matrix의 source of truth는 `legal/privacy-launch-controls.json`이�
 
 ## Soft-launch Scope (Locked — #1127 / epic #1256)
 
-이번 출시 Soft-launch의 **제품 범위 목표**는 관리자 글 발행 + 비로그인 공개 열람이다. 이 issue(#1127) freeze gate가 강제하는 것은 아래 5개 키뿐이며, 켜려면 별도 issue + privacy/법무 evidence gate가 필요하다.
+이번 출시 Soft-launch의 **제품 범위 목표**는 관리자 글 발행 + 비로그인 공개 열람이다. 이 issue(#1127) freeze gate는 세 개의 논리 제어(signup, OAuth signup, RUM)를 아래 네 개의 설정 키로 강제한다. 켜려면 별도 issue + privacy/법무 evidence gate가 필요하다.
 
 | 키 | Soft-launch 값 | 비고 |
 | --- | --- | --- |
@@ -14,7 +14,6 @@ Follow-up matrix의 source of truth는 `legal/privacy-launch-controls.json`이�
 | `CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED` | `false` | OAuth 신규가입 |
 | `NEXT_PUBLIC_SIGNUP_ENABLED` | `false` | 프론트 회원가입 UI |
 | `NEXT_PUBLIC_RUM_SAMPLE_RATE` | `0` | 클라이언트 RUM |
-| `CUSTOM__AI__SUMMARY__ENABLED` | `false` | AI 요약(실키는 **SUMMARY**, TAG 아님) |
 
 Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues + `.github/workflows/deploy.yml` `require_privacy_freeze_value` → homeserver `.env.prod` / Next 번들.
 프론트 운영 배포 경로는 homeserver compose 하나뿐이다. `NEXT_PUBLIC_*` freeze 값은 front 이미지 빌드 인자로 구워지므로, 이 gate가 보는 `.env.prod`와 Next 번들 외에 별도 호스팅 provider env 경로는 없다.
@@ -22,14 +21,14 @@ Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues +
 명시적 예외(이 gate 범위 밖):
 
 - 관리자 로그인/발행은 Soft-launch 운영에 필수다.
-- 기존 회원 로그인·댓글 쓰기 등 authenticated 상호작용은 이 5-key freeze로 차단하지 않는다. 비관리자 쓰기 전면 동결이 필요하면 별도 issue로 계약을 추가한다.
+- 기존 회원 로그인·댓글 쓰기 등 authenticated 상호작용은 이 freeze로 차단하지 않는다. 비관리자 쓰기 전면 동결이 필요하면 별도 issue로 계약을 추가한다.
 
 ## Current Decision
 
 | 항목 | 현재 판정 | 근거 | 다음 조치 |
 | --- | --- | --- | --- |
-| Soft-launch feature freeze | `pass` | #1127 Locked decision. signup/OAuth signup/RUM/AI SUMMARY 5-key는 deploy·env.contract에서 false/0 강제. 기존 회원 로그인·쓰기는 이 gate 예외(별도 issue) | enable 요청·비관리자 쓰기 동결은 별도 issue로만 처리한다. |
-| Production launch | `block` | #998, #1000, #1001, #1003, #1004, #1006, #1008이 open | 각 issue 완료 후 이 문서의 matrix와 evidence를 갱신한다. |
+| Soft-launch feature freeze | `pass` | #1127 Locked decision. Three signup/OAuth signup/RUM controls across four settings keys are enforced as false/0 in deploy and env.contract. Existing member login and writing remain outside this gate under separate issues. | Track enable requests or a non-admin writing freeze in a separate issue. |
+| Production launch | `block` | #998, #1000, #1001, #1004, #1006, #1008이 open | 각 issue 완료 후 이 문서의 matrix와 evidence를 갱신한다. |
 | Public policy gate | `pass` | #1024, #1025, #1026, #1027, #1028 closed. Web은 `status: effective` 정책의 public-ready를 검증하고 Platform은 pinned policy lock만 acceptance evidence로 사용한다. | Web `yarn legal:check`, Platform `node tools/contracts/check-web-policy-lock.mjs`를 PR마다 실행한다. |
 | Legal sign-off | `block` | 실제 사업자 요건, processor 계약, 국외이전, 최종 정책 문구는 전문가 확인 전이다. | 출시 승인 전 법무/운영 owner가 evidence와 결정을 남긴다. |
 | Operations readiness | `block` | 보유기간 자동 파기와 백업 암호화/복구 privacy guard가 open issue다. | #1000, #1004 완료 후 재판정한다. |
@@ -56,12 +55,11 @@ Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues +
 | #1000 | Open | 필수 출시 전 완료 | 보유기간 설정과 자동 파기 job | retention config, scheduled deletion test, dry-run log | 차단 |
 | #1001 | Open | 필수 출시 전 완료 | 로그 최소화와 민감정보 redaction | request/application log redaction test, sample log | 차단 |
 | #1002 | Closed | 필수 출시 전 완료 | analytics/cookie consent manager와 opt-out | `/settings/privacy` consent UI, `privacy.optionalTrackingConsent.v1` structured storage, tracking pre-consent/withdrawal e2e | 완료 |
-| #1003 | Open | 필수 출시 전 완료 | Gemini optional AI 외부 처리 안전화 | default disabled config, redaction/cache regression test | 차단 |
 | #1004 | Open | 필수 출시 전 완료 | backup 암호화, deletion tombstone, restore privacy guard | backup artifact encryption, restore drill, deletion tombstone evidence | 차단 |
 | #1005 | Closed | 필수 출시 전 완료 | 침해사고 대응 runbook | `docs/legal/*.md`, tabletop exercise template, owner/contact/evidence 절차 | 완료 |
 | #1006 | Open | 필수 출시 전 완료 | 정책·코드 privacy drift gate | CI command, failing fixture example, passing workflow link | 차단 |
 | #1007 | Closed | 필수 출시 전 완료 | 신규 개인정보 수집 feature flag 동결 | `back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, Web repository `yarn build` 2회 exit 0, privacy data-map/env contract validator exit 0 | 완료 |
-| #1127 | Closed | 필수 출시 전 완료 | Soft-launch 출시 범위와 privacy freeze 키 계약 고정 | Soft-launch 제품 목표=admin publish+anonymous public read; gate=5-key signup/OAuth signup/RUM/`CUSTOM__AI__SUMMARY__ENABLED` false/0; 기존 회원 로그인·쓰기는 예외; live smoke | 완료 |
+| #1127 | Closed | 필수 출시 전 완료 | Soft-launch 출시 범위와 privacy freeze 키 계약 고정 | Soft-launch 제품 목표=admin publish+anonymous public read; gate=three signup/OAuth signup/RUM controls across four settings keys, enforced as false/0; 기존 회원 로그인·쓰기는 예외; live smoke | 완료 |
 | #1008 | Open | 필수 출시 전 완료 | 기존 사용자 재동의와 legacy 고지 migration | legacy account migration, re-consent prompt, audit log evidence | 차단 |
 | #1024 | Closed | 필수 출시 전 완료 | 공개 정책과 legal acceptance version/hash 단일화 | pinned Web policy lock과 `ActiveLegalDocumentMetadata` terms/privacy hash evidence | 완료 |
 | #1025 | Closed | 필수 출시 전 완료 | effective 정책의 내부 검토 문구 제거 | `reviewRequired=0`, internal phrase validator, page e2e | 완료 |
@@ -80,7 +78,7 @@ Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues +
 | 정책-코드 대조 | 개인정보처리방침, 이용약관, 쿠키 정책이 data map, processor registry, retention matrix, backend legal metadata와 일치한다. | 정책 본문과 실제 수집/저장/전송/보유 동작이 다르다. |
 | Signup/OAuth consent | email signup과 Kakao OAuth 신규 가입 모두 현재 정책 version/hash와 필수 동의를 저장한다. | 기존 동의 버전이 계속 acceptance로 인정되거나 신규 가입자가 정책을 보지 않고 가입된다. |
 | Optional tracking | analytics/RUM/cookie tracking이 opt-in 또는 명시적 설정에 따라 비활성화 가능하다. | 비필수 tracking이 동의 전 실행되거나 opt-out 뒤에도 계속 전송된다. |
-| External processing | Gemini, analytics, backup, email, hosting processor가 registry와 정책에 반영되고 기본 비활성/최소전송 원칙을 지킨다. | processor 누락, secret/PII 전송 가능성, 비활성화 불가 상태가 남아 있다. |
+| External processing | analytics, backup, email, hosting processor가 registry와 정책에 반영되고 최소전송 원칙을 지킨다. | processor 누락, secret/PII 전송 가능성이 남아 있다. |
 | 운영 대응 | 문의 메일, 권리 요청, incident response, 삭제/복구 절차 owner가 있고 dry-run 또는 command evidence가 있다. | 운영 owner가 없거나 실제 처리 경로가 문서뿐이다. |
 
 ## Legal Review Handoff
@@ -103,13 +101,13 @@ Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues +
 2. `legal/data-map/processing-activities.yaml`, `legal/data-map/retention-matrix.yaml`, `legal/vendors/processors.yaml`를 공개 정책의 수집 항목, 보유기간, processor 항목과 대조한다.
 3. Platform에서는 `node tools/contracts/check-web-policy-lock.mjs`와 `WebLegalPolicyManifestContractTest`로 pinned lock의 terms/privacy version/hash와 backend metadata를 확인한다. cookies는 lock integrity만 확인하며 signup acceptance metadata에는 포함하지 않는다.
 4. `AquilaXk/aquila-blog-web:src/libs/legal/serverPolicySource.ts`와 `/privacy`, `/terms`, `/cookies`, `/legal/history`가 current URL, 이전 버전 URL, hash/download evidence를 노출하는지 확인한다.
-5. signup, Kakao OAuth, analytics/RUM, Gemini, logs, backup, deletion/export 관련 issue의 PR evidence를 matrix에 연결한다.
+5. signup, Kakao OAuth, analytics/RUM, logs, backup, deletion/export 관련 issue의 PR evidence를 matrix에 연결한다.
 
 ## Post-Launch Monitoring
 
 | 시점 | 확인 항목 | Evidence |
 | --- | --- | --- |
-| 출시 후 7일 | 개인정보 문의 메일 수신 여부, signup/OAuth 동의 저장 오류, privacy request queue, analytics opt-out 오류, Gemini 외부 전송 로그, redaction 누락 로그 | 운영 메일 확인 note, backend/application log sample, workflow or dashboard link |
+| 출시 후 7일 | 개인정보 문의 메일 수신 여부, signup/OAuth 동의 저장 오류, privacy request queue, analytics opt-out 오류, redaction 누락 로그 | 운영 메일 확인 note, backend/application log sample, workflow or dashboard link |
 | 출시 후 30일 | 권리 요청 처리 SLA, retention job 실행 결과, deletion tombstone/backup restore drill, processor 변경 여부, policy-code drift CI 결과 | retention/deletion job log, backup restore artifact, issue/PR link |
 
 Monitoring에서 개인정보 누락, 외부 전송, 동의 없는 tracking, 삭제 실패가 확인되면 같은 issue 계열에 follow-up을 만들고 launch gate를 `block`으로 되돌린다.

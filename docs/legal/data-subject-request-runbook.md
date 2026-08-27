@@ -33,7 +33,7 @@
 | 열람 | account, legal acceptance, privacy request, 공개 content, session summary를 export snapshot으로 제공 | 다른 사용자의 정보 포함, 보안상 session secret 원문 포함 요청 |
 | 정정 | 사용자가 직접 수정 가능한 profile/content 경로 안내, 직접 수정 불가 데이터는 운영 변경 기록 작성 | 감사/보안 로그처럼 정정 대신 보존 사유가 있는 데이터 |
 | 삭제 | `docs/legal/account-deletion-runbook.md`를 따른다 | 법적 보존, 분쟁 대응, 보안 abuse 조사 기간 |
-| 처리정지 | optional tracking, Gemini, analytics, marketing-like processing을 중단하거나 비활성 상태 확인 | 서비스 제공에 필수인 인증/session 처리 |
+| 처리정지 | optional tracking, analytics, marketing-like processing을 중단하거나 비활성 상태 확인 | 서비스 제공에 필수인 인증/session 처리 |
 | 동의 철회 | optional consent를 철회하고 향후 processing 중단 | 필수 약관/개인정보 처리 동의 철회는 계정 제한 또는 삭제 안내 |
 | export | machine-readable snapshot 생성, 민감 token 원문 제외 | 본인확인 실패, 타인 정보 포함 |
 

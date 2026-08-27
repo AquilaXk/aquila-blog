@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
 import com.back.global.security.application.HtmlContentSanitizer
 import org.assertj.core.api.Assertions.assertThat
@@ -116,6 +117,7 @@ class PublicPostUrlCanonicalizerTest {
             title = "title",
             thumbnail = thumbnail,
             summary = "summary",
+            summarySource = PostSummarySource.EXTRACTED,
             tags = emptyList(),
             category = emptyList(),
             published = true,

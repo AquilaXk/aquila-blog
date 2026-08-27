@@ -1,6 +1,8 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.model.PostSummarySource
+import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
 
 data class FeedPostDto(
@@ -13,7 +15,10 @@ data class FeedPostDto(
     val authorProfileImgUrl: String,
     val title: String,
     val thumbnail: String? = null,
+    @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
     val summary: String,
+    @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+    val summarySource: PostSummarySource,
     val tags: List<String>,
     val category: List<String>,
     val published: Boolean,
@@ -43,6 +48,7 @@ data class FeedPostDto(
                 title = post.title,
                 thumbnail = thumbnail,
                 summary = post.summaryText.orEmpty(),
+                summarySource = post.summarySource,
                 tags = meta.tags,
                 category = meta.categories,
                 published = post.published,

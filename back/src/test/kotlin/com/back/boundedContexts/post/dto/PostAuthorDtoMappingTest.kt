@@ -34,6 +34,7 @@ class PostAuthorDtoMappingTest {
         assertThat(dto.authorName).isEqualTo("아퀼라")
         assertThat(dto.authorUsername).isEqualTo("아퀼라")
         assertThat(dto.summary).isEqualTo("저장된 canonical 요약")
+        assertThat(dto.summarySource).isEqualTo(PostSummarySource.EXTRACTED)
     }
 
     @Test

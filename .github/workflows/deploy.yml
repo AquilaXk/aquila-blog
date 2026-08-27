@@ -755,8 +755,6 @@ jobs:
           LOCAL_ENV_FILE="${RUNNER_TEMP}/home-server.env"
           LOCAL_REMOTE_VARS_FILE="${RUNNER_TEMP}/home-remote-vars.env"
           printf '%s\n' "${HOME_SERVER_ENV}" > "${LOCAL_ENV_FILE}"
-          sed -E '/^[[:space:]]*(export[[:space:]]+)?CUSTOM__AI__SUMMARY__[A-Za-z0-9_]*[[:space:]]*=/d' "${LOCAL_ENV_FILE}" > "${LOCAL_ENV_FILE}.sanitized"
-          mv "${LOCAL_ENV_FILE}.sanitized" "${LOCAL_ENV_FILE}"
           chmod 600 "${LOCAL_ENV_FILE}"
           {
             printf 'HOME_BACK_IMAGE=%q\n' "${HOME_BACK_IMAGE}"

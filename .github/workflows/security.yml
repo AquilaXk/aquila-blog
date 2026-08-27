@@ -296,3 +296,21 @@ jobs:
           path: ${{ runner.temp }}/sbom/*.cdx.json
           if-no-files-found: error
           retention-days: 14
+
+  deploy:
+    if: github.event_name == 'push'
+    needs:
+      - privacy-drift-gate
+      - backend-dependency-check
+      - codeql
+      - vulnerability-exception-schema
+      - container-image-scan
+      - sbom
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

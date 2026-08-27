@@ -1,13 +1,7 @@
 name: Deploy to Home Server
 
 on:
-  workflow_run:
-    workflows:
-      - Security
-    types:
-      - completed
-    branches:
-      - main
+  workflow_call: {}
   repository_dispatch:
     types:
       - web_frontend_image_ready
@@ -45,32 +39,24 @@ jobs:
   triggerGuard:
     runs-on: ubuntu-latest
     outputs:
+      security_caller_admission: ${{ steps.security_caller_admission.outputs.result }}
       dispatch_admission: ${{ steps.dispatch_admission.outputs.result }}
     steps:
-      - name: Validate deploy trigger
+      - name: Admit automatic Security caller
+        id: security_caller_admission
+        if: github.event_name != 'workflow_dispatch' && github.event_name != 'repository_dispatch'
         env:
-          TRIGGER_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
-          TRIGGER_WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          TRIGGER_WORKFLOW_EVENT: ${{ github.event.workflow_run.event }}
-          TRIGGER_WORKFLOW_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          TRIGGER_WORKFLOW_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
-          CURRENT_REPOSITORY: ${{ github.repository }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          EXPECTED_CALLER_WORKFLOW_REF: AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main
         shell: bash
         run: |
           set -euo pipefail
-
-          if [ "${GITHUB_EVENT_NAME}" != "workflow_run" ]; then
-            exit 0
-          fi
-
-          if [ "${TRIGGER_WORKFLOW_NAME}" != "Security" ] || \
-            [ "${TRIGGER_WORKFLOW_CONCLUSION}" != "success" ] || \
-            [ "${TRIGGER_WORKFLOW_EVENT}" != "push" ] || \
-            [ "${TRIGGER_WORKFLOW_BRANCH}" != "main" ] || \
-            [ "${TRIGGER_WORKFLOW_REPOSITORY}" != "${CURRENT_REPOSITORY}" ]; then
-            echo "deploy blocked: workflow_run must be a successful Security push from this repository's main branch" >&2
+          if [ "${CALLER_WORKFLOW_REF}" != "${EXPECTED_CALLER_WORKFLOW_REF}" ] || \
+            [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "automatic deploy rejected: expected the exact Security main caller" >&2
             exit 1
           fi
+          echo "result=proceed" >> "${GITHUB_OUTPUT}"
 
       - name: Admit Web image-ready dispatch
         id: dispatch_admission
@@ -167,11 +153,8 @@ jobs:
     if: >
       needs.triggerGuard.result == 'success' && (
         (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.head_repository.full_name == github.repository
+        needs.triggerGuard.outputs.security_caller_admission == 'proceed' &&
+        github.ref == 'refs/heads/main'
       ) ||
       (
         github.event_name == 'workflow_dispatch' &&
@@ -197,17 +180,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Require successful CI for workflow_dispatch or Security trigger
+      - name: Require successful CI for deployment SHA
         if: >
+          needs.triggerGuard.outputs.security_caller_admission == 'proceed' ||
           github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'repository_dispatch' ||
-          (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Security')
+          github.event_name == 'repository_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEPLOY_SHA: ${{ github.sha }}
           ALLOW_DEPLOY_WITHOUT_CI_SUCCESS: ${{ github.event.inputs.allow_deploy_without_ci_success || 'false' }}
         shell: bash
         run: |
@@ -250,14 +233,20 @@ jobs:
           exit 1
 
       - name: Require successful Security for deploy SHA
+        if: github.event_name != 'repository_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          TRIGGER_WORKFLOW_NAME: ${{ github.event.workflow_run.name || '' }}
+          DEPLOY_SHA: ${{ github.sha }}
+          SECURITY_CALLER_ADMISSION: ${{ needs.triggerGuard.outputs.security_caller_admission }}
           ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS: ${{ github.event.inputs.allow_deploy_without_security_success || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
+
+          if [ "${SECURITY_CALLER_ADMISSION}" = "proceed" ]; then
+            echo "Security gate satisfied by the exact same-SHA caller DAG: deploy_sha=${DEPLOY_SHA}"
+            exit 0
+          fi
 
           if [ "${ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS}" = "true" ]; then
             echo "WARNING: skipping Security success gate (allow_deploy_without_security_success=true) deploy_sha=${DEPLOY_SHA}" >&2
@@ -267,12 +256,6 @@ jobs:
           if [ -z "${DEPLOY_SHA}" ]; then
             echo "deploy sha is empty; cannot verify Security success" >&2
             exit 1
-          fi
-
-          # Triggering Security workflow_run already proved success for this SHA.
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ] && [ "${TRIGGER_WORKFLOW_NAME}" = "Security" ]; then
-            echo "Security gate satisfied by triggering workflow_run deploy_sha=${DEPLOY_SHA}"
-            exit 0
           fi
 
           for ATTEMPT in $(seq 1 250); do
@@ -301,7 +284,7 @@ jobs:
           echo "deploy blocked: timed out waiting for successful Security push run for deploy_sha=${DEPLOY_SHA}" >&2
           exit 1
 
-      - name: Require successful Deploy workflow for dispatch SHA
+      - name: Require successful automatic Security delivery for dispatch SHA
         if: github.event_name == 'repository_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -311,36 +294,36 @@ jobs:
           set -euo pipefail
 
           if [ -z "${DEPLOY_SHA}" ]; then
-            echo "deploy sha is empty; cannot verify Deploy workflow success" >&2
+            echo "deploy sha is empty; cannot verify automatic Security delivery" >&2
             exit 1
           fi
 
           for ATTEMPT in $(seq 1 250); do
             RUN_STATES="$(
               gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
                 --paginate \
-                --jq '.workflow_runs[] | select(.event == "workflow_run" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
             )" || {
-              echo "Deploy workflow API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
+              echo "automatic Security delivery API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
               exit 1
             }
 
             SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
             if [ -n "${SUCCESS_RUN_ID}" ]; then
-              echo "Deploy workflow success gate passed: deploy_sha=${DEPLOY_SHA} deploy_run_id=${SUCCESS_RUN_ID}"
+              echo "automatic Security delivery gate passed: deploy_sha=${DEPLOY_SHA} security_run_id=${SUCCESS_RUN_ID}"
               exit 0
             fi
             if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
           done
 
-          echo "repository dispatch blocked: timed out waiting for successful Deploy workflow run for deploy_sha=${DEPLOY_SHA}" >&2
+          echo "repository dispatch blocked: timed out waiting for successful automatic Security delivery for deploy_sha=${DEPLOY_SHA}" >&2
           exit 1
 
       - name: Calculate deploy targets and image tags
         id: meta
         env:
-          DEPLOY_SHA_INPUT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEPLOY_SHA_INPUT: ${{ github.sha }}
           FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
           WEB_FRONTEND_SOURCE_SHA: ${{ github.event.client_payload.source_sha || '' }}
           WEB_FRONTEND_IMAGE_REF: ${{ github.event.client_payload.image_ref || '' }}
@@ -366,18 +349,6 @@ jobs:
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
-
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ] && [ "${DEPLOY_SHA}" != "${GITHUB_SHA}" ]; then
-            {
-              echo "## Deploy Boundary"
-              echo "- result: blocked"
-              echo "- reason: attestation-source-sha-mismatch"
-              echo "- deploy SHA: ${DEPLOY_SHA}"
-              echo "- attestation source SHA: ${GITHUB_SHA}"
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "deploy blocked: workflow_run deploy sha differs from attestation source sha" >&2
-            exit 1
-          fi
 
           if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
             FRONT_DEPLOY="true"
@@ -420,7 +391,7 @@ jobs:
                 echo "${STALE_CHANGED_FILES}" >&2
                 exit 1
               fi
-              echo "stale workflow_run allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+              echo "stale automatic caller allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
               CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
             fi
           fi
@@ -541,9 +512,9 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "${IMAGE_REF}"
-          trivy image --ignorefile .trivyignore.yaml --severity HIGH,CRITICAL --exit-code 1 \
+          trivy image --severity HIGH,CRITICAL --exit-code 1 \
             --format cosign-vuln --output "${RUNNER_TEMP}/backend-image-vulnerability.json" "${IMAGE_REF}"
-          trivy image --ignorefile .trivyignore.yaml \
+          trivy image \
             --format spdx-json --output "${RUNNER_TEMP}/backend-image.spdx.json" "${IMAGE_REF}"
 
       - name: Attest backend image provenance

@@ -348,7 +348,7 @@ jobs:
           FRONT_SOURCE_SHA=""
           CHANGE_SOURCE="first-parent-diff"
           BACKEND_DEPLOY_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
-          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/security/vulnerability-exceptions\.yml|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
 
           if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
             FRONT_DEPLOY="true"
@@ -512,8 +512,9 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "${IMAGE_REF}"
-          trivy image --severity HIGH,CRITICAL --exit-code 1 \
+          trivy image --severity HIGH,CRITICAL \
             --format cosign-vuln --output "${RUNNER_TEMP}/backend-image-vulnerability.json" "${IMAGE_REF}"
+          node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy-cosign "${RUNNER_TEMP}/backend-image-vulnerability.json" --expected-artifact "${IMAGE_REF}"
           trivy image \
             --format spdx-json --output "${RUNNER_TEMP}/backend-image.spdx.json" "${IMAGE_REF}"
 
@@ -559,6 +560,7 @@ jobs:
             --source-digest "${SOURCE_SHA}" \
             --source-ref "refs/heads/main" \
             --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --signer-digest "${SOURCE_SHA}" \
             --deny-self-hosted-runners \
             --predicate-type "https://slsa.dev/provenance/v1" \
             --format json > "${RUNNER_TEMP}/backend-image-provenance.json"
@@ -567,6 +569,7 @@ jobs:
             --source-digest "${SOURCE_SHA}" \
             --source-ref "refs/heads/main" \
             --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --signer-digest "${SOURCE_SHA}" \
             --deny-self-hosted-runners \
             --predicate-type "https://spdx.dev/Document/v2.3" \
             --format json > "${RUNNER_TEMP}/backend-image-spdx.json"
@@ -575,6 +578,7 @@ jobs:
             --source-digest "${SOURCE_SHA}" \
             --source-ref "refs/heads/main" \
             --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --signer-digest "${SOURCE_SHA}" \
             --deny-self-hosted-runners \
             --predicate-type "https://cosign.sigstore.dev/attestation/vuln/v1" \
             --format json > "${RUNNER_TEMP}/backend-image-vulnerability-attestation.json"
@@ -1871,7 +1875,7 @@ jobs:
             exit 0
           fi
 
-          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/security/vulnerability-exceptions\.yml|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
           REMOTE_MAIN_SHA="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
           if [[ ! "${REMOTE_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "front dispatch origin/main sha lookup failed" >&2
@@ -1934,6 +1938,7 @@ jobs:
             --source-digest "${SOURCE_SHA}" \
             --source-ref "refs/heads/main" \
             --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --signer-digest "${SOURCE_SHA}" \
             --deny-self-hosted-runners \
             --predicate-type "https://slsa.dev/provenance/v1" \
             --format json > "${RUNNER_TEMP}/web-image-provenance.json"
@@ -1942,6 +1947,7 @@ jobs:
             --source-digest "${SOURCE_SHA}" \
             --source-ref "refs/heads/main" \
             --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --signer-digest "${SOURCE_SHA}" \
             --deny-self-hosted-runners \
             --predicate-type "https://spdx.dev/Document/v2.3" \
             --format json > "${RUNNER_TEMP}/web-image-spdx.json"
@@ -1950,6 +1956,7 @@ jobs:
             --source-digest "${SOURCE_SHA}" \
             --source-ref "refs/heads/main" \
             --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --signer-digest "${SOURCE_SHA}" \
             --deny-self-hosted-runners \
             --predicate-type "https://cosign.sigstore.dev/attestation/vuln/v1" \
             --format json > "${RUNNER_TEMP}/web-image-vulnerability-attestation.json"

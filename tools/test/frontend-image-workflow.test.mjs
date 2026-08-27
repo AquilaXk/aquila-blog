@@ -31,6 +31,10 @@ function securityDocument() {
   return workflowDocument(securityPath)
 }
 
+function attestationVerifyCommands(run) {
+  return run.match(/gh attestation verify[\s\S]*?--format json > "[^"\n]+"/g) ?? []
+}
+
 function runDeployTriggerGuard(input) {
   const guard = deployDocument().jobs.triggerGuard
   assert.ok(guard, "deploy trigger guard job must exist")
@@ -410,7 +414,9 @@ test("backend image producer publishes only verified native-image evidence", () 
   assert.equal(trivyInstall.env.TRIVY_SHA256, "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea")
   assert.equal(scan.env.IMAGE_REF, "${{ steps.backend_image.outputs.back_image_ref }}")
   assert.match(scan.run, /docker pull "\$\{IMAGE_REF\}"/)
-  assert.match(scan.run, /trivy image --severity HIGH,CRITICAL --exit-code 1[\s\S]*?--format cosign-vuln --output "\$\{RUNNER_TEMP\}\/backend-image-vulnerability\.json" "\$\{IMAGE_REF\}"/)
+  assert.match(scan.run, /trivy image --severity HIGH,CRITICAL[\s\S]*?--format cosign-vuln --output "\$\{RUNNER_TEMP\}\/backend-image-vulnerability\.json" "\$\{IMAGE_REF\}"/)
+  assert.doesNotMatch(scan.run, /--exit-code/)
+  assert.match(scan.run, /node tools\/guards\/check-vulnerability-exceptions\.mjs --filter-trivy-cosign "\$\{RUNNER_TEMP\}\/backend-image-vulnerability\.json" --expected-artifact "\$\{IMAGE_REF\}"/)
   assert.match(scan.run, /trivy image[\s\S]*?--format spdx-json --output "\$\{RUNNER_TEMP\}\/backend-image\.spdx\.json" "\$\{IMAGE_REF\}"/)
   assert.doesNotMatch(scan.run, /--ignorefile|\.trivyignore\.yaml/)
   assert.doesNotMatch(scan.run, /--format spdx-json[\s\S]*--(?:severity|exit-code)/)
@@ -437,12 +443,24 @@ test("backend image producer publishes only verified native-image evidence", () 
   assert.equal(verify.env.IMAGE_DIGEST, "${{ steps.build_backend_image.outputs.digest }}")
   assert.equal(verify.env.SIGNER_WORKFLOW, "https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main")
   assert.equal(verify.env.EXPECTED_RUN_URI, "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}")
-  for (const [predicate, output] of [
+  const verifyCommands = attestationVerifyCommands(verify.run)
+  const expectedVerifications = [
     ["https://slsa.dev/provenance/v1", "backend-image-provenance.json"],
     ["https://spdx.dev/Document/v2.3", "backend-image-spdx.json"],
     ["https://cosign.sigstore.dev/attestation/vuln/v1", "backend-image-vulnerability-attestation.json"],
-  ]) {
-    assert.match(verify.run, new RegExp(`gh attestation verify "oci:\\/\\/\\$\\{IMAGE_REF\\}"[\\s\\S]*--repo "AquilaXk/aquila-blog"[\\s\\S]*--source-digest "\\$\\{SOURCE_SHA\\}"[\\s\\S]*--source-ref "refs/heads/main"[\\s\\S]*--signer-workflow "AquilaXk\\/aquila-blog\\/.github\\/workflows\\/deploy\\.yml"[\\s\\S]*--deny-self-hosted-runners[\\s\\S]*--predicate-type "${predicate.replaceAll("/", "\\/")}"[\\s\\S]*--format json > "\\$\\{RUNNER_TEMP\\}\/${output}"`))
+  ]
+  assert.equal(verifyCommands.length, expectedVerifications.length)
+  for (const [index, [predicate, output]] of expectedVerifications.entries()) {
+    const command = verifyCommands[index]
+    assert.match(command, /^gh attestation verify "oci:\/\/\$\{IMAGE_REF\}"/)
+    assert.match(command, /--repo "AquilaXk\/aquila-blog"/)
+    assert.match(command, /--source-digest "\$\{SOURCE_SHA\}"/)
+    assert.match(command, /--source-ref "refs\/heads\/main"/)
+    assert.match(command, /--signer-workflow "AquilaXk\/aquila-blog\/\.github\/workflows\/deploy\.yml"/)
+    assert.match(command, /--signer-digest "\$\{SOURCE_SHA\}"/)
+    assert.match(command, /--deny-self-hosted-runners/)
+    assert.match(command, new RegExp(`--predicate-type "${predicate.replaceAll("/", "\\/")}"`))
+    assert.match(command, new RegExp(`--format json > "\\$\\{RUNNER_TEMP\\}\/${output}"$`))
   }
   assert.match(verify.run, /node tools\/security\/native-image-evidence\.mjs verify-attestation-set[\s\S]*backend-image-provenance\.json[\s\S]*backend-image-spdx\.json[\s\S]*backend-image-vulnerability-attestation\.json/)
   const verifierIndex = verify.run.indexOf("node tools/security/native-image-evidence.mjs verify-attestation-set")
@@ -497,12 +515,24 @@ test("dispatch front deployment admits only native Web image evidence after fres
   assert.equal(verify.env.EXPECTED_RUN_URI, "https://github.com/AquilaXk/aquila-blog-web/actions/runs/${{ github.event.client_payload.producer_run_id }}/attempts/${{ github.event.client_payload.producer_run_attempt }}")
   assert.doesNotMatch(verify.run, /secrets\.|app token|tailscale|ssh/i)
 
-  for (const [predicate, output] of [
+  const verifyCommands = attestationVerifyCommands(verify.run)
+  const expectedVerifications = [
     ["https://slsa.dev/provenance/v1", "web-image-provenance.json"],
     ["https://spdx.dev/Document/v2.3", "web-image-spdx.json"],
     ["https://cosign.sigstore.dev/attestation/vuln/v1", "web-image-vulnerability-attestation.json"],
-  ]) {
-    assert.match(verify.run, new RegExp(`gh attestation verify "oci:\\/\\/\\$\\{IMAGE_REF\\}"[\\s\\S]*--repo "AquilaXk/aquila-blog-web"[\\s\\S]*--source-digest "\\$\\{SOURCE_SHA\\}"[\\s\\S]*--source-ref "refs/heads/main"[\\s\\S]*--signer-workflow "AquilaXk\\/aquila-blog-web\\/.github\\/workflows\\/frontend-image\\.yml"[\\s\\S]*--deny-self-hosted-runners[\\s\\S]*--predicate-type "${predicate.replaceAll("/", "\\/")}"[\\s\\S]*--format json > "\\$\\{RUNNER_TEMP\\}\\/${output}"`))
+  ]
+  assert.equal(verifyCommands.length, expectedVerifications.length)
+  for (const [index, [predicate, output]] of expectedVerifications.entries()) {
+    const command = verifyCommands[index]
+    assert.match(command, /^gh attestation verify "oci:\/\/\$\{IMAGE_REF\}"/)
+    assert.match(command, /--repo "AquilaXk\/aquila-blog-web"/)
+    assert.match(command, /--source-digest "\$\{SOURCE_SHA\}"/)
+    assert.match(command, /--source-ref "refs\/heads\/main"/)
+    assert.match(command, /--signer-workflow "AquilaXk\/aquila-blog-web\/\.github\/workflows\/frontend-image\.yml"/)
+    assert.match(command, /--signer-digest "\$\{SOURCE_SHA\}"/)
+    assert.match(command, /--deny-self-hosted-runners/)
+    assert.match(command, new RegExp(`--predicate-type "${predicate.replaceAll("/", "\\/")}"`))
+    assert.match(command, new RegExp(`--format json > "\\$\\{RUNNER_TEMP\\}\\/${output}"$`))
   }
   assert.match(verify.run, /node tools\/security\/native-image-evidence\.mjs verify-attestation-set[\s\S]*web-image-provenance\.json[\s\S]*web-image-spdx\.json[\s\S]*web-image-vulnerability-attestation\.json/)
   const verifierIndex = verify.run.indexOf("node tools/security/native-image-evidence.mjs verify-attestation-set")
@@ -1022,6 +1052,7 @@ test("front queue freshness uses calculateTag's exact stale deployment path patt
 
   assert.equal(patterns.length, 2)
   assert.equal(patterns[1], patterns[0])
+  assert.match(patterns[0], /\\\.github\/security\/vulnerability-exceptions\\\.yml/)
   assert.ok(step)
   assert.match(step.run, /grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}" <<< "\$\{STALE_CHANGED_FILES\}"/)
   assert.doesNotMatch(step.run, /echo "\$\{STALE_CHANGED_FILES\}" \| grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"/)

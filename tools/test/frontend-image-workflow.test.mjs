@@ -401,6 +401,66 @@ test("backend image producer publishes only verified native-image evidence", () 
   ]) assert.match(verify.run, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
 })
 
+test("dispatch front deployment admits only native Web image evidence after freshness", () => {
+  const job = deployDocument().jobs.frontBlueGreenDeploy
+  const steps = job.steps
+  const freshnessIndex = steps.findIndex((step) => step.name === "Verify dispatch freshness after queue")
+  const loginIndex = steps.findIndex((step) => step.name === "Login to GHCR for Web native admission")
+  const verifyIndex = steps.findIndex((step) => step.name === "Verify Web native image attestations")
+  const secretsIndex = steps.findIndex((step) => step.name === "Verify required secrets")
+  const login = steps[loginIndex]
+  const verify = steps[verifyIndex]
+  const proceedOnly = "github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'"
+
+  assert.deepEqual(job.permissions, {
+    contents: "read",
+    packages: "read",
+    attestations: "read",
+  })
+  assert.equal(loginIndex, freshnessIndex + 1)
+  assert.equal(verifyIndex, loginIndex + 1)
+  assert.equal(secretsIndex, verifyIndex + 1)
+  assert.equal(login.if, proceedOnly)
+  assert.equal(login.uses, "docker/login-action@dbcb813823bdd20940b903addbd779551569679f")
+  assert.deepEqual(login.with, {
+    registry: "ghcr.io",
+    username: "${{ github.actor }}",
+    password: "${{ github.token }}",
+  })
+  assert.equal(verify.if, proceedOnly)
+  assert.equal(verify.env.GH_TOKEN, "${{ github.token }}")
+  assert.equal(verify.env.IMAGE_REF, "${{ needs.calculateTag.outputs.front_image_ref }}")
+  assert.equal(verify.env.SOURCE_REPOSITORY, "AquilaXk/aquila-blog-web")
+  assert.equal(verify.env.SOURCE_SHA, "${{ needs.calculateTag.outputs.front_source_sha }}")
+  assert.equal(verify.env.IMAGE_SUBJECT, "ghcr.io/aquilaxk/aquila-blog-web-front")
+  assert.equal(verify.env.IMAGE_DIGEST, "${{ github.event.client_payload.image_digest }}")
+  assert.equal(verify.env.SIGNER_WORKFLOW, "https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main")
+  assert.equal(verify.env.EXPECTED_RUN_URI, "https://github.com/AquilaXk/aquila-blog-web/actions/runs/${{ github.event.client_payload.producer_run_id }}/attempts/${{ github.event.client_payload.producer_run_attempt }}")
+  assert.doesNotMatch(verify.run, /secrets\.|app token|tailscale|ssh/i)
+
+  for (const [predicate, output] of [
+    ["https://slsa.dev/provenance/v1", "web-image-provenance.json"],
+    ["https://spdx.dev/Document/v2.3", "web-image-spdx.json"],
+    ["https://cosign.sigstore.dev/attestation/vuln/v1", "web-image-vulnerability-attestation.json"],
+  ]) {
+    assert.match(verify.run, new RegExp(`gh attestation verify "oci:\\/\\/\\$\\{IMAGE_REF\\}"[\\s\\S]*--repo "AquilaXk/aquila-blog-web"[\\s\\S]*--source-digest "\\$\\{SOURCE_SHA\\}"[\\s\\S]*--source-ref "refs/heads/main"[\\s\\S]*--signer-workflow "AquilaXk\\/aquila-blog-web\\/.github\\/workflows\\/frontend-image\\.yml"[\\s\\S]*--deny-self-hosted-runners[\\s\\S]*--predicate-type "${predicate.replaceAll("/", "\\/")}"[\\s\\S]*--format json > "\\$\\{RUNNER_TEMP\\}\\/${output}"`))
+  }
+  assert.match(verify.run, /node tools\/security\/native-image-evidence\.mjs verify-attestation-set[\s\S]*web-image-provenance\.json[\s\S]*web-image-spdx\.json[\s\S]*web-image-vulnerability-attestation\.json/)
+  const verifierIndex = verify.run.indexOf("node tools/security/native-image-evidence.mjs verify-attestation-set")
+  const summaryIndex = verify.run.indexOf('>> "${GITHUB_STEP_SUMMARY}"')
+  assert.ok(summaryIndex > verifierIndex, "summary must be written only after local attestation verification")
+  for (const value of [
+    "aquila-native-image-evidence-v1",
+    "${SOURCE_SHA}",
+    "${IMAGE_DIGEST}",
+    "https://slsa.dev/provenance/v1",
+    "https://spdx.dev/Document/v2.3",
+    "https://cosign.sigstore.dev/attestation/vuln/v1",
+    "${SIGNER_WORKFLOW}",
+    "${EXPECTED_RUN_URI}",
+  ]) assert.match(verify.run, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+})
+
 function runVerifiedDeploymentDispatch(input) {
   const steps = deployDocument().jobs.frontBlueGreenDeploy.steps
   const step = steps.find((item) => item.name === "Dispatch verified Platform deployment")
@@ -699,9 +759,11 @@ function runFrontQueueFreshnessGate(input) {
   const grep = path.join(directory, "grep")
   const changedFiles = path.join(directory, "changed-files")
   const output = path.join(directory, "output")
+  const summary = path.join(directory, "summary")
   writeFileSync(calls, "")
   writeFileSync(changedFiles, input.changedFiles ?? "")
   writeFileSync(output, "")
+  writeFileSync(summary, "")
   writeFileSync(
     gh,
     `#!/usr/bin/env bash\nprintf 'gh %s\\n' "$*" >> "${calls}"\nif [ "$1" = api ] && [ "$2" = repos/AquilaXk/aquila-blog-web/commits/main ] && [ "$3" = --jq ] && [ "$4" = .sha ] && [ "$#" = 4 ]; then\n  [ "${input.webApiExitCode ?? 0}" = 0 ] || exit "${input.webApiExitCode}"\n  printf '%s\\n' '${input.webMainSha}'\n  exit 0\nfi\necho "unexpected gh args: $*" >&2\nexit 1\n`,
@@ -722,13 +784,15 @@ function runFrontQueueFreshnessGate(input) {
       FRONT_SOURCE_SHA: input.frontSourceSha,
       DEPLOY_SHA: input.deploySha,
       GITHUB_OUTPUT: output,
+      GITHUB_STEP_SUMMARY: summary,
       PATH: `${input.grepExitCode === undefined ? "" : `${directory}:`}${directory}:${process.env.PATH}`,
     },
   })
   const callLog = readFileSync(calls, "utf8").trim().split("\n").filter(Boolean)
   const outputs = readFileSync(output, "utf8")
+  const summaryOutput = readFileSync(summary, "utf8")
   rmSync(directory, { recursive: true, force: true })
-  return { ...result, outputs, callLog }
+  return { ...result, outputs, summaryOutput, callLog }
 }
 
 test("front deployment revalidates the queued dispatch against exact Web and Platform main", () => {
@@ -742,6 +806,13 @@ test("front deployment revalidates the queued dispatch against exact Web and Pla
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.outputs, /^result=proceed$/m)
+  assert.match(result.summaryOutput, /## Web dispatch queue freshness/)
+  assert.match(result.summaryOutput, /- result: proceed/)
+  assert.match(result.summaryOutput, /- reason: current/)
+  assert.match(result.summaryOutput, new RegExp(`- source Web SHA: ${input.frontSourceSha}`))
+  assert.match(result.summaryOutput, new RegExp(`- current Web SHA: ${input.webMainSha}`))
+  assert.match(result.summaryOutput, new RegExp(`- deploy Platform SHA: ${input.deploySha}`))
+  assert.match(result.summaryOutput, new RegExp(`- current Platform SHA: ${input.platformMainSha}`))
   assert.deepEqual(result.callLog, [
     "gh api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha",
     `git ls-remote --exit-code origin refs/heads/main`,
@@ -749,6 +820,23 @@ test("front deployment revalidates the queued dispatch against exact Web and Pla
     `git rev-parse refs/remotes/origin/main`,
     `git merge-base --is-ancestor ${input.deploySha} ${input.platformMainSha}`,
   ])
+})
+
+test("workflow_run deploy no-ops before remote work when its attestation source differs", () => {
+  const step = deployDocument().jobs.calculateTag.steps.find((item) => item.name === "Calculate deploy targets and image tags")
+
+  assert.ok(step)
+  const mismatchIndex = step.run.indexOf('[ "${GITHUB_EVENT_NAME}" = "workflow_run" ] && [ "${DEPLOY_SHA}" != "${GITHUB_SHA}" ]')
+  const remoteLookupIndex = step.run.indexOf('git ls-remote --exit-code origin refs/heads/main')
+  assert.ok(mismatchIndex >= 0, "workflow_run must compare the deployment SHA to the OIDC attestation source SHA")
+  assert.ok(remoteLookupIndex > mismatchIndex, "attestation-source mismatch must stop before remote stale checks")
+  assert.match(step.run, /echo "backend_deploy=false"/)
+  assert.match(step.run, /echo "front_deploy=false"/)
+  assert.match(step.run, /## Deploy Boundary/)
+  assert.match(step.run, /- result: noop/)
+  assert.match(step.run, /- reason: attestation-source-sha-mismatch/)
+  assert.match(step.run, /- deploy SHA: \$\{DEPLOY_SHA\}/)
+  assert.match(step.run, /- attestation source SHA: \$\{GITHUB_SHA\}/)
 })
 
 for (const [label, overrides, expected] of [
@@ -780,6 +868,10 @@ test("front deployment no-ops when Web main advances while queued", () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.outputs, /^result=noop$/m)
+  assert.match(result.summaryOutput, /## Web dispatch queue freshness/)
+  assert.match(result.summaryOutput, /- result: noop/)
+  assert.match(result.summaryOutput, /- reason: stale-web-source/)
+  assert.match(result.summaryOutput, /- current Platform SHA: unavailable/)
   assert.deepEqual(result.callLog, ["gh api repos/AquilaXk/aquila-blog-web/commits/main --jq .sha"])
 })
 
@@ -794,6 +886,10 @@ test("front deployment no-ops when queued Platform changes affect deployment", (
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.outputs, /^result=noop$/m)
+  assert.match(result.summaryOutput, /## Web dispatch queue freshness/)
+  assert.match(result.summaryOutput, /- result: noop/)
+  assert.match(result.summaryOutput, /- reason: newer-platform-deployment-change/)
+  assert.match(result.summaryOutput, new RegExp(`- current Platform SHA: ${"c".repeat(40)}`))
 })
 
 test("front deployment permits a queue-delayed Platform main advance with neutral paths only", () => {
@@ -880,9 +976,13 @@ test("front queue freshness uses calculateTag's exact stale deployment path patt
 test("front queue no-op stops before secrets and activation", () => {
   const steps = deployDocument().jobs.frontBlueGreenDeploy.steps
   const freshness = steps.find((item) => item.name === "Verify dispatch freshness after queue")
+  const nativeLogin = steps.find((item) => item.name === "Login to GHCR for Web native admission")
+  const nativeVerification = steps.find((item) => item.name === "Verify Web native image attestations")
   const condition = "github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'"
 
   assert.equal(freshness.id, "freshness")
+  assert.equal(nativeLogin.if, "github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'", "native admission login must skip after a queue no-op")
+  assert.equal(nativeVerification.if, "github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'", "native verification must skip after a queue no-op")
   for (const name of [
     "Verify required secrets",
     "Connect to Tailscale",

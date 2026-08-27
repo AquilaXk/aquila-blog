@@ -342,6 +342,8 @@ function inspectWorkflow(file, contents) {
         } else if (command === "gh" && operation === "pr" && targetsWeb) {
           const allowed = new Set(["checks", "diff", "list", "status", "view", "checkout"])
           if (!allowed.has(tokens[gh.index + 1]?.toLowerCase())) findings.push(`${file}:foreign-pr-write`)
+        } else if (command === "gh" && operation === "attestation" && targetsWeb) {
+          if (tokens[gh.index + 1]?.toLowerCase() !== "verify") findings.push(`${file}:foreign-gh-write`)
         } else if (command === "gh" && targetsWeb) {
           findings.push(`${file}:foreign-gh-write`)
         } else if (command === "git" && targetsWeb) {

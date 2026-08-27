@@ -109,6 +109,17 @@ test("verifies one exact attestation for each required predicate", () => {
   })
 })
 
+test("selects exactly one matching producer run from accumulated attestations", () => {
+  const previousRun = `https://github.com/${repo}/actions/runs/122/attempts/1`
+  const input = predicateTypes.map((predicateType) => [
+    attestation(predicateType, { certificate: { runInvocationURI: previousRun } }),
+    attestation(predicateType),
+  ])
+
+  const result = verify(input)
+  assert.equal(result.status, 0, result.stderr)
+})
+
 test("rejects malformed inputs and an unexpected predicate", () => {
   const malformed = verify([[{}]])
   assert.notEqual(malformed.status, 0)

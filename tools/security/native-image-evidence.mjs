@@ -98,9 +98,14 @@ function parseAttestation(filePath, predicateType, expected) {
   } catch {
     fail()
   }
-  if (!Array.isArray(entries) || entries.length !== 1) fail()
+  if (!Array.isArray(entries) || entries.length === 0) fail()
 
-  const result = entries[0]?.verificationResult
+  const matchingEntries = entries.filter((entry) => (
+    entry?.verificationResult?.signature?.certificate?.runInvocationURI === expected.runUri
+  ))
+  if (matchingEntries.length !== 1) fail()
+
+  const result = matchingEntries[0]?.verificationResult
   const statement = result?.statement
   const certificate = result?.signature?.certificate
   const digestHex = expected.digest.slice("sha256:".length)

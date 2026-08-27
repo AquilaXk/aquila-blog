@@ -6,7 +6,7 @@ Follow-up matrix의 source of truth는 `legal/privacy-launch-controls.json`이�
 
 ## Soft-launch Scope (Locked — #1127 / epic #1256)
 
-이번 출시 Soft-launch의 **제품 범위 목표**는 관리자 글 발행 + 비로그인 공개 열람이다. 이 issue(#1127) freeze gate가 강제하는 것은 아래 5개 키뿐이며, 켜려면 별도 issue + privacy/법무 evidence gate가 필요하다.
+이번 출시 Soft-launch의 **제품 범위 목표**는 관리자 글 발행 + 비로그인 공개 열람이다. 이 issue(#1127) freeze gate는 세 개의 논리 제어(signup, OAuth signup, RUM)를 아래 네 개의 설정 키로 강제한다. 켜려면 별도 issue + privacy/법무 evidence gate가 필요하다.
 
 | 키 | Soft-launch 값 | 비고 |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues +
 
 | 항목 | 현재 판정 | 근거 | 다음 조치 |
 | --- | --- | --- | --- |
-| Soft-launch feature freeze | `pass` | #1127 Locked decision. signup/OAuth signup/RUM freeze values are enforced as false/0 in deploy and env.contract. Existing member login and writing remain outside this gate under separate issues. | Track enable requests or a non-admin writing freeze in a separate issue. |
+| Soft-launch feature freeze | `pass` | #1127 Locked decision. Three signup/OAuth signup/RUM controls across four settings keys are enforced as false/0 in deploy and env.contract. Existing member login and writing remain outside this gate under separate issues. | Track enable requests or a non-admin writing freeze in a separate issue. |
 | Production launch | `block` | #998, #1000, #1001, #1004, #1006, #1008이 open | 각 issue 완료 후 이 문서의 matrix와 evidence를 갱신한다. |
 | Public policy gate | `pass` | #1024, #1025, #1026, #1027, #1028 closed. Web은 `status: effective` 정책의 public-ready를 검증하고 Platform은 pinned policy lock만 acceptance evidence로 사용한다. | Web `yarn legal:check`, Platform `node tools/contracts/check-web-policy-lock.mjs`를 PR마다 실행한다. |
 | Legal sign-off | `block` | 실제 사업자 요건, processor 계약, 국외이전, 최종 정책 문구는 전문가 확인 전이다. | 출시 승인 전 법무/운영 owner가 evidence와 결정을 남긴다. |
@@ -59,7 +59,7 @@ Freeze 강제 경로(운영 SoT): `deploy/env/env.contract.json` allowedValues +
 | #1005 | Closed | 필수 출시 전 완료 | 침해사고 대응 runbook | `docs/legal/*.md`, tabletop exercise template, owner/contact/evidence 절차 | 완료 |
 | #1006 | Open | 필수 출시 전 완료 | 정책·코드 privacy drift gate | CI command, failing fixture example, passing workflow link | 차단 |
 | #1007 | Closed | 필수 출시 전 완료 | 신규 개인정보 수집 feature flag 동결 | `back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, Web repository `yarn build` 2회 exit 0, privacy data-map/env contract validator exit 0 | 완료 |
-| #1127 | Closed | 필수 출시 전 완료 | Soft-launch 출시 범위와 privacy freeze 키 계약 고정 | Soft-launch 제품 목표=admin publish+anonymous public read; gate=signup/OAuth signup/RUM freeze values false/0; 기존 회원 로그인·쓰기는 예외; live smoke | 완료 |
+| #1127 | Closed | 필수 출시 전 완료 | Soft-launch 출시 범위와 privacy freeze 키 계약 고정 | Soft-launch 제품 목표=admin publish+anonymous public read; gate=three signup/OAuth signup/RUM controls across four settings keys, enforced as false/0; 기존 회원 로그인·쓰기는 예외; live smoke | 완료 |
 | #1008 | Open | 필수 출시 전 완료 | 기존 사용자 재동의와 legacy 고지 migration | legacy account migration, re-consent prompt, audit log evidence | 차단 |
 | #1024 | Closed | 필수 출시 전 완료 | 공개 정책과 legal acceptance version/hash 단일화 | pinned Web policy lock과 `ActiveLegalDocumentMetadata` terms/privacy hash evidence | 완료 |
 | #1025 | Closed | 필수 출시 전 완료 | effective 정책의 내부 검토 문구 제거 | `reviewRequired=0`, internal phrase validator, page e2e | 완료 |

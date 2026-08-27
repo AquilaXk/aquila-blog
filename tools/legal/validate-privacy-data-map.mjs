@@ -171,6 +171,7 @@ const activeLegalSources = [
   ...activeDataMapSources,
   "legal/data-map/retention-matrix.yaml",
   "legal/data-map/legal-basis-matrix.yaml",
+  "legal/privacy-launch-controls.json",
   "legal/vendors/processors.yaml",
 ]
 for (const relativePath of activeLegalSources) {

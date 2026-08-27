@@ -75,6 +75,7 @@ ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.en
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends wget \
+ && rm /usr/bin/pebble \
  && groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
  && rm -rf /var/lib/apt/lists/*

@@ -93,17 +93,6 @@
       "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts", "AquilaXk/aquila-blog-web:e2e/browser-storage-registry.spec.ts"]
     },
     {
-      "issue": 1003,
-      "status": "Open",
-      "category": "필수 출시 전 완료",
-      "target": "Gemini optional AI 외부 처리 안전화",
-      "evidenceRequirement": "default disabled config, redaction/cache regression test",
-      "launchDecision": "차단",
-      "disabledByFlag": true,
-      "disabledEvidence": ["deploy/env/env.contract.json", ".github/workflows/deploy.yml"],
-      "evidenceArtifacts": ["issue #1003"]
-    },
-    {
       "issue": 1004,
       "status": "Open",
       "category": "필수 출시 전 완료",
@@ -200,7 +189,7 @@
       "status": "Closed",
       "category": "필수 출시 전 완료",
       "target": "Soft-launch 출시 범위와 privacy freeze 키 계약 고정",
-      "evidenceRequirement": "Soft-launch 제품 목표=admin publish+anonymous public read; gate=5-key signup/OAuth signup/RUM/`CUSTOM__AI__SUMMARY__ENABLED` false/0; 기존 회원 로그인·쓰기는 예외; live smoke",
+      "evidenceRequirement": "Soft-launch 제품 목표=admin publish+anonymous public read; gate=signup/OAuth signup/RUM freeze values false/0; 기존 회원 로그인·쓰기는 예외; live smoke",
       "launchDecision": "완료",
       "disabledByFlag": true,
       "disabledEvidence": [

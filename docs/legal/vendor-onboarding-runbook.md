@@ -15,7 +15,7 @@
 
 - `legal/vendors/processors.yaml`에 processor를 추가 또는 변경
 - `legal/data-map/processing-activities.yaml`의 processors, overseasTransfer, retentionRule 변경
-- Gemini, analytics/RUM, SMTP, Vercel, Cloudflare, backup storage, monitoring provider의 데이터 범위 변경
+- analytics/RUM, SMTP, Vercel, Cloudflare, backup storage, monitoring provider의 데이터 범위 변경
 
 ## Review Steps
 

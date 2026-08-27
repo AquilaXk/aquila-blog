@@ -33,7 +33,7 @@
 | token/session 노출 | 관련 session revoke, cookie/token rotation, auth log 보존 |
 | 공개 페이지 노출 | page 또는 route disable, cache purge, Cloudflare invalidation, Next ISR revalidate |
 | GitHub artifact 노출 | artifact 다운로드 중단, retention 축소, secret rotation 검토 |
-| vendor 전송 의심 | optional tracking/Gemini/vendor integration disable, processor contact |
+| vendor 전송 의심 | optional tracking/vendor integration disable, processor contact |
 | backup/restore 오복원 | traffic open 중단, tombstone replay, restore target 격리 |
 
 ## Impact Assessment

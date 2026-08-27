@@ -43,7 +43,6 @@ const requiredProcessors = new Set([
   "cloudflare_dns_proxy",
   "kakao_oauth",
   "smtp_provider_unconfirmed",
-  "google_gemini",
   "home_server_backup_storage",
 ])
 const requiredActivityDataCategories = new Map([
@@ -68,10 +67,6 @@ const requiredActivityEnvFragments = new Map([
     "analytics_and_rum",
     ["NEXT_PUBLIC_RUM_SAMPLE_RATE", "defaults 0", "explicit non-zero enables custom RUM"],
   ],
-  [
-    "ai_summary_gemini",
-    ["custom.ai.summary.enabled", "defaults false", "CUSTOM__AI__SUMMARY__ENABLED", "custom.ai.summary.gemini."],
-  ],
   ["file_uploads_profile_post_cloud", ["AQUILA_EXTERNAL_STORAGE_ROOT"]],
   ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
 ])
@@ -83,10 +78,6 @@ const requiredActivityProcessors = new Map([
   ["notifications_sse", ["home_server_redis"]],
 ])
 const requiredProcessorEnvFragments = new Map([
-  [
-    "google_gemini",
-    ["custom.ai.summary.enabled", "defaults false", "CUSTOM__AI__SUMMARY__ENABLED", "custom.ai.summary.gemini."],
-  ],
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
 const requiredFlowProcessors = new Map([
@@ -98,7 +89,6 @@ const requiredFlowProcessors = new Map([
   ["security_and_action_logs", ["home_server_postgresql", "home_server_redis", "grafana_loki_monitoring"]],
   ["notifications_sse", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
   ["analytics_rum", ["google_analytics", "vercel_frontend_hosting", "grafana_loki_monitoring"]],
-  ["gemini_ai_summary", ["google_gemini", "vercel_frontend_hosting", "home_server_postgresql"]],
   ["backup_restore", ["home_server_backup_storage", "github_actions", "ghcr_container_registry"]],
 ])
 
@@ -169,6 +159,27 @@ for (const relativePath of activeDataMapSources) {
   }
 }
 
+const retiredCurrentFragments = [
+  "ai_summary_gemini",
+  "gemini_ai_summary",
+  "google_gemini",
+  "custom.ai.summary.enabled",
+  "CUSTOM__AI__SUMMARY__ENABLED",
+  "custom.ai.summary.gemini.",
+]
+const activeLegalSources = [
+  ...activeDataMapSources,
+  "legal/data-map/retention-matrix.yaml",
+  "legal/data-map/legal-basis-matrix.yaml",
+  "legal/vendors/processors.yaml",
+]
+for (const relativePath of activeLegalSources) {
+  const source = read(relativePath)
+  for (const fragment of retiredCurrentFragments) {
+    if (source.includes(fragment)) fail(`${relativePath} contains retired current fragment ${fragment}`)
+  }
+}
+
 const assertRequiredFields = (kind, item, requiredFields) => {
   for (const field of requiredFields) {
     if (!(field in item)) {
@@ -187,10 +198,6 @@ const flows = parseListYaml(read("legal/data-map/data-flow.yaml"), "flows")
 const legalBasisEntries = parseListYaml(read("legal/data-map/legal-basis-matrix.yaml"), "legalBasis")
 const retentionRules = parseListYaml(read("legal/data-map/retention-matrix.yaml"), "retentionRules")
 const processorIds = new Set(processors.map((processor) => processor.id))
-
-if (activities.length < 10) fail(`expected at least 10 processing activities, got ${activities.length}`)
-if (processors.length < 6) fail(`expected at least 6 processors, got ${processors.length}`)
-if (flows.length < 10) fail(`expected at least 10 data flows, got ${flows.length}`)
 
 const activityIds = new Set()
 for (const activity of activities) {

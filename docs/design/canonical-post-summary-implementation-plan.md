@@ -5,7 +5,7 @@ Execution: #1495 → #1496 → #1497 → #1498
 
 ## 목표
 
-현재 frontend/backend에 중복된 read-time Lead-N 발췌를 backend-owned canonical summary로 전환하고, 충돌 가능한 preview cache와 미구현 AI/Gemini summary 계약을 제거한다.
+현재 frontend/backend에 중복된 read-time Lead-N 발췌를 backend-owned canonical summary로 전환하고, 충돌 가능한 preview cache와 retired unpublished summary 계약을 제거한다.
 
 ## 공통 실행 게이트
 
@@ -203,36 +203,25 @@ yarn test:e2e:smoke
 
 required CI green과 browser smoke 후 merge한다.
 
-## #1498 — AI/Gemini summary residue removal
+## #1498 — Retired unpublished summary residue removal
 
 제거:
 
-- `CUSTOM__AI__SUMMARY__*`
-- Gemini summary key/model/rate/cache/retry/circuit 설정
-- backend binding/guard
-- deploy env injection/freeze
-- homeserver precheck/doctor
-- active legal/data-map/processor의 current external AI summary 처리 표현
+- retired unpublished summary configuration, bindings, deployment, and doctor guidance
+- active legal/data-map, processor, and flow의 current external summary 처리 표현
 
 보강:
 
-- deprecated AI summary key 재도입 guard와 실패 fixture
+- active legal sources의 narrow retired-current fragment guard
 - #1256 freeze 목록 정합화
-- active legal manifest/Web lock 재생성
+- active legal manifest/Web lock validation
 - 과거 immutable policy 이력은 runtime 비참조 상태로 유지
 
 검증:
 
 ```bash
-rg 'CUSTOM__AI__SUMMARY|AI Summary|AI 요약|Gemini.*summary|summary.*Gemini' .
-node tools/legal/validate-privacy-data-map.mjs
-node tools/test/env-contract.test.mjs
-bash tools/test/homeserver-doctor.test.sh
-bash tools/test/check-forbidden-tracked-files.test.sh
-./gradlew -p back ciFastCheck --no-daemon
-# https://github.com/AquilaXk/aquila-blog-web checkout root
-yarn legal:check
-yarn build
+node tools/privacy/ci-privacy-gate.mjs
+git diff --check
 ```
 
 ## 최종 CD 검증

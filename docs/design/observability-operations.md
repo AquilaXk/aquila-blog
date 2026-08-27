@@ -254,7 +254,6 @@ cd /path/to/deploy/homeserver
 | Grafana Embed Route | embed·origin auth 정상 | Grafana/Caddy auth proxy 점검 |
 | Monitoring Stack (Loki/Promtail) | 스택 ready | 컨테이너·마운트·datasource |
 | Notification SSE | `OK (connected+heartbeat)` | `FAIL` + probe 출력 확인 |
-| Env AI Summary Sanity | enabled 시 API key 존재 | enabled인데 key empty WARN |
 | Compose PS / Container Health | 핵심 서비스 running/healthy | `MISSING` / restartCount·oomKilled |
 | Caddy Upstream / Mount Sync | host·mounted upstream·sha 일치 | mismatch / legacy `back_active` WARN |
 | Robots / Notification Snapshot | origin vs public 코드 기대값 | edge/origin 불일치 |

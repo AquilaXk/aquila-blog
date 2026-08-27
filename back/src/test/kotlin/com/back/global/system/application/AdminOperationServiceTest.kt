@@ -108,7 +108,7 @@ class AdminOperationServiceTest {
     }
 
     @Test
-    fun `receipt reads map data access failure to service unavailable`() {
+    fun `get receipt data access failure maps to service unavailable`() {
         val command = command()
         `when`(receiptRepository.findByOperationIdAndActorId(command.operationId, command.actorId))
             .thenThrow(DataAccessResourceFailureException("database unavailable"))
@@ -116,20 +116,23 @@ class AdminOperationServiceTest {
         assertThatThrownBy { service.get(command.operationId, command.actorId) }
             .extracting("errorCode")
             .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
+    }
 
+    @Test
+    fun `search admission service unavailable propagates without execution`() {
         val pipeline = pipelineCommand()
-        `when`(receiptRepository.findByOperationId(pipeline.operationId))
-            .thenThrow(DataAccessResourceFailureException("database unavailable"))
+        `when`(admission.admit(anyReceipt())).thenThrow(AppException(ErrorCode.SERVICE_UNAVAILABLE))
+
         assertThatThrownBy { service.submitPipelineForceControl(pipeline) }
             .extracting("errorCode")
             .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
+        verify(execution, never()).execute(pipeline.operationId)
     }
 
     @Test
     fun `same UUID and normalized pipeline command returns terminal receipt without execution`() {
         val command = pipelineCommand(reason = "  search   control ")
-        `when`(receiptRepository.findByOperationId(command.operationId))
-            .thenReturn(pipelineReceipt(command))
+        `when`(admission.admit(anyReceipt())).thenReturn(pipelineReceipt(command))
 
         val first = service.submitPipelineForceControl(command)
         val second = service.submitPipelineForceControl(command.copy(reason = "search control"))
@@ -142,8 +145,7 @@ class AdminOperationServiceTest {
     @Test
     fun `same UUID and different pipeline value conflicts before execution`() {
         val command = pipelineCommand(forceControl = true)
-        `when`(receiptRepository.findByOperationId(command.operationId))
-            .thenReturn(pipelineReceipt(command))
+        `when`(admission.admit(anyReceipt())).thenReturn(pipelineReceipt(command))
         service.submitPipelineForceControl(command)
 
         assertThatThrownBy { service.submitPipelineForceControl(command.copy(forceControl = false)) }
@@ -154,8 +156,7 @@ class AdminOperationServiceTest {
     @Test
     fun `same UUID and different search action conflicts before execution`() {
         val command = pipelineCommand(forceControl = true)
-        `when`(receiptRepository.findByOperationId(command.operationId))
-            .thenReturn(pipelineReceipt(command))
+        `when`(admission.admit(anyReceipt())).thenReturn(pipelineReceipt(command))
         service.submitPipelineForceControl(command)
 
         assertThatThrownBy {
@@ -173,52 +174,65 @@ class AdminOperationServiceTest {
     }
 
     @Test
-    fun `new search operation IDs fail unavailable without admission or execution`() {
+    fun `new pipeline operation ID is admitted and accepted receipt executes`() {
         val pipeline = pipelineCommand()
-        val mirror =
-            AdminOperationService.SearchEngineMirrorForceDisableCommand(
-                operationId = UUID.fromString("a4c48810-a3b6-47a6-8ca2-4f7c14b0d0fd"),
-                actorId = 7L,
-                sessionRowId = 41L,
-                forceDisabled = true,
-                reason = "search control",
-            )
-        `when`(receiptRepository.findByOperationId(pipeline.operationId)).thenReturn(null)
-        `when`(receiptRepository.findByOperationId(mirror.operationId)).thenReturn(null)
+        val receipt = pipelineReceipt(pipeline, status = AdminOperationStatus.ACCEPTED)
+        `when`(admission.admit(anyReceipt())).thenReturn(receipt)
+        `when`(execution.execute(pipeline.operationId)).thenReturn(searchResult(receipt))
 
-        assertThatThrownBy { service.submitPipelineForceControl(pipeline) }
-            .extracting("errorCode")
-            .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
-        assertThatThrownBy { service.submitSearchEngineMirrorForceDisable(mirror) }
-            .extracting("errorCode")
-            .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE)
+        val result = service.submitPipelineForceControl(pipeline)
 
-        verifyNoInteractions(admission, execution)
+        assertThat(result.status).isEqualTo(AdminOperationStatus.SUCCEEDED)
+        assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.SEARCH_PIPELINE_FORCE_CONTROL_UPDATED)
+        assertThat(result.controlKey).isEqualTo(SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL)
+        verify(execution).execute(pipeline.operationId)
+        verifyNoInteractions(receiptRepository)
     }
 
     @Test
-    fun `existing accepted search receipt resumes execution`() {
+    fun `new mirror operation ID is admitted and accepted receipt executes`() {
+        val command = mirrorCommand()
+        val receipt = mirrorReceipt(command, status = AdminOperationStatus.ACCEPTED)
+        val expected =
+            searchResult(receipt).copy(
+                resultCode = AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED,
+            )
+        `when`(admission.admit(anyReceipt())).thenReturn(receipt)
+        `when`(execution.execute(command.operationId)).thenReturn(expected)
+
+        val result = service.submitSearchEngineMirrorForceDisable(command)
+
+        assertThat(result.status).isEqualTo(AdminOperationStatus.SUCCEEDED)
+        assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED)
+        assertThat(result.controlKey).isEqualTo(SearchRuntimeControlKey.MIRROR_FORCE_DISABLE)
+        verify(execution).execute(command.operationId)
+        verifyNoInteractions(receiptRepository)
+    }
+
+    @Test
+    fun `admitted accepted search receipt resumes execution`() {
         val command = pipelineCommand(forceControl = true)
         val receipt = pipelineReceipt(command, status = AdminOperationStatus.ACCEPTED)
-        `when`(receiptRepository.findByOperationId(command.operationId)).thenReturn(receipt)
+        `when`(admission.admit(anyReceipt())).thenReturn(receipt)
         `when`(execution.execute(command.operationId)).thenReturn(searchResult(receipt))
 
         assertThat(service.submitPipelineForceControl(command).controlVersion).isEqualTo(1)
 
         verify(execution).execute(command.operationId)
-        verifyNoInteractions(admission)
+        verify(admission).admit(anyReceipt())
     }
 
     @Test
-    fun `terminal mirror receipt returns stored result without admission or execution`() {
+    fun `admitted terminal mirror receipt returns stored result without execution`() {
         val command = mirrorCommand()
-        `when`(receiptRepository.findByOperationId(command.operationId)).thenReturn(mirrorReceipt(command))
+        `when`(admission.admit(anyReceipt())).thenReturn(mirrorReceipt(command))
 
         val result = service.submitSearchEngineMirrorForceDisable(command)
 
         assertThat(result.resultCode).isEqualTo(AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED)
         assertThat(result.controlVersion).isEqualTo(1)
-        verifyNoInteractions(admission, execution)
+        verify(admission).admit(anyReceipt())
+        verify(execution, never()).execute(command.operationId)
     }
 
     private fun command(
@@ -356,29 +370,36 @@ class AdminOperationServiceTest {
             reason = "search control",
         )
 
-    private fun mirrorReceipt(command: AdminOperationService.SearchEngineMirrorForceDisableCommand) =
-        AdminOperationReceipt(
-            operationId = command.operationId,
-            actorId = command.actorId,
-            sessionRowId = command.sessionRowId,
-            fingerprint =
-                searchFingerprint(
-                    AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
-                    SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
-                    SearchRuntimeControlValue.DISABLED,
-                    command.reason,
-                ),
-            action = AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
-            reason = command.reason,
-            status = AdminOperationStatus.SUCCEEDED,
-            resultCode = AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED,
-            controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
-            controlValue = SearchRuntimeControlValue.DISABLED,
-            controlVersion = 1,
-        ).also {
-            it.createdAt = Instant.parse("2026-08-24T00:00:00Z")
-            it.modifiedAt = Instant.parse("2026-08-24T00:00:01Z")
-        }
+    private fun mirrorReceipt(
+        command: AdminOperationService.SearchEngineMirrorForceDisableCommand,
+        status: AdminOperationStatus = AdminOperationStatus.SUCCEEDED,
+    ) = AdminOperationReceipt(
+        operationId = command.operationId,
+        actorId = command.actorId,
+        sessionRowId = command.sessionRowId,
+        fingerprint =
+            searchFingerprint(
+                AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
+                SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+                SearchRuntimeControlValue.DISABLED,
+                command.reason,
+            ),
+        action = AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
+        reason = command.reason,
+        status = status,
+        resultCode =
+            if (status == AdminOperationStatus.ACCEPTED) {
+                null
+            } else {
+                AdminOperationResultCode.SEARCH_ENGINE_MIRROR_FORCE_DISABLE_UPDATED
+            },
+        controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+        controlValue = SearchRuntimeControlValue.DISABLED,
+        controlVersion = if (status == AdminOperationStatus.ACCEPTED) null else 1,
+    ).also {
+        it.createdAt = Instant.parse("2026-08-24T00:00:00Z")
+        it.modifiedAt = Instant.parse("2026-08-24T00:00:01Z")
+    }
 
     private fun searchFingerprint(
         action: AdminOperationAction,

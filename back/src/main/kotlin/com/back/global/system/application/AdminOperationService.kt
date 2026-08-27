@@ -103,7 +103,19 @@ class AdminOperationService(
                 value,
                 reason,
             )
-        val receipt = findExistingSearchReceipt(command.operationId)
+        val receipt =
+            admissionService.admit(
+                AdminOperationReceipt(
+                    operationId = command.operationId,
+                    actorId = command.actorId,
+                    sessionRowId = command.sessionRowId,
+                    fingerprint = fingerprint,
+                    action = AdminOperationAction.SEARCH_PIPELINE_FORCE_CONTROL,
+                    reason = reason,
+                    controlKey = SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL,
+                    controlValue = value,
+                ),
+            )
         ensureSameCommand(receipt, command.actorId, fingerprint)
         return if (receipt.status == AdminOperationStatus.ACCEPTED) executeAccepted(command.operationId) else receipt.toResult()
     }
@@ -118,7 +130,19 @@ class AdminOperationService(
                 value,
                 reason,
             )
-        val receipt = findExistingSearchReceipt(command.operationId)
+        val receipt =
+            admissionService.admit(
+                AdminOperationReceipt(
+                    operationId = command.operationId,
+                    actorId = command.actorId,
+                    sessionRowId = command.sessionRowId,
+                    fingerprint = fingerprint,
+                    action = AdminOperationAction.SEARCH_ENGINE_MIRROR_FORCE_DISABLE,
+                    reason = reason,
+                    controlKey = SearchRuntimeControlKey.MIRROR_FORCE_DISABLE,
+                    controlValue = value,
+                ),
+            )
         ensureSameCommand(receipt, command.actorId, fingerprint)
         return if (receipt.status == AdminOperationStatus.ACCEPTED) executeAccepted(command.operationId) else receipt.toResult()
     }
@@ -136,15 +160,6 @@ class AdminOperationService(
         }
 
     private fun executeAccepted(operationId: UUID): OperationResult = executionService.execute(operationId)
-
-    // Search receipt creation remains unavailable until the compatibility floor is lifted.
-    private fun findExistingSearchReceipt(operationId: UUID): AdminOperationReceipt =
-        try {
-            receiptRepository.findByOperationId(operationId)
-                ?: throw AppException(ErrorCode.SERVICE_UNAVAILABLE)
-        } catch (error: DataAccessException) {
-            throw AppException(ErrorCode.SERVICE_UNAVAILABLE, cause = error)
-        }
 
     private fun normalize(command: DlqReplayCommand): DlqReplayCommand {
         val taskType = command.taskType?.trim()?.takeIf { it.isNotEmpty() }

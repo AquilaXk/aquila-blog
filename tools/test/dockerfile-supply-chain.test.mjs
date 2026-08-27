@@ -35,6 +35,17 @@ test("backend runtime image contains the compose healthcheck client", () => {
   assert.match(runtimeStage, /apt-get install -y --no-install-recommends wget\b/)
 })
 
+test("backend runtime image removes the inherited Pebble binary", () => {
+  const dockerfile = readFileSync(backendDockerfilePath, "utf8")
+  const runtimeStage = runtimeStageOf(dockerfile)
+  const strictRemoval = runtimeStage.match(/^\s*&& rm \/usr\/bin\/pebble \\$/m)
+  const nonRootUserIndex = runtimeStage.search(/^USER app$/m)
+
+  assert.notEqual(strictRemoval, null)
+  assert.notEqual(nonRootUserIndex, -1)
+  assert.ok(strictRemoval.index < nonRootUserIndex)
+})
+
 test("runtime stage extraction is not fooled by a lowercase final FROM", () => {
   const dockerfile = [
     "FROM base@sha256:aaa AS builder",

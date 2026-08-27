@@ -11,6 +11,7 @@ const repo = "AquilaXk/aquila-blog"
 const sha = "a".repeat(40)
 const subject = "ghcr.io/aquilaxk/aquila-blog-back"
 const digest = `sha256:${"b".repeat(64)}`
+const buildConfigWorkflow = `https://github.com/${repo}/.github/workflows/security.yml@refs/heads/main`
 const signerWorkflow = `https://github.com/${repo}/.github/workflows/deploy.yml@refs/heads/main`
 const runUri = `https://github.com/${repo}/actions/runs/123/attempts/1`
 
@@ -33,15 +34,23 @@ function predicate(predicateType) {
     }
   }
   return {
-    _type: predicateTypes[2],
+    invocation: { "builder.id": "", event_id: "", parameters: null, uri: "" },
     scanner: {
-      uri: "https://trivy.dev",
+      uri: "pkg:github/aquasecurity/trivy@0.72.0",
       version: "0.72.0",
-      db: { uri: "ghcr.io/aquasecurity/trivy-db", version: "2026-08-27" },
+      db: { uri: "", version: "" },
+      result: {
+        SchemaVersion: 2,
+        Trivy: { Version: "0.72.0" },
+        CreatedAt: "2026-08-27T00:00:00Z",
+        ArtifactName: `${subject}@${digest}`,
+        ArtifactType: "container_image",
+        ArtifactID: digest,
+        Metadata: { ImageID: digest, Reference: `${subject}@${digest}`, RepoDigests: [`${subject}@${digest}`] },
+        Results: [{ Target: subject, Class: "os-pkgs", Type: "alpine", Packages: [{}] }],
+      },
     },
-    metadata: {},
-    invocation: {},
-    results: [{ vulnerabilities: [] }],
+    metadata: { scanStartedOn: "2026-08-27T00:00:00Z", scanFinishedOn: "2026-08-27T00:00:01Z" },
   }
 }
 
@@ -57,11 +66,20 @@ function attestation(predicateType, overrides = {}) {
       signature: {
         certificate: {
           sourceRepositoryURI: `https://github.com/${repo}`,
-          sourceRepositoryDigest: { sha1: sha },
+          sourceRepositoryDigest: sha,
           sourceRepositoryRef: "refs/heads/main",
           subjectAlternativeName: signerWorkflow,
+          buildConfigURI: buildConfigWorkflow,
+          buildConfigDigest: sha,
           buildSignerURI: signerWorkflow,
+          buildSignerDigest: sha,
+          buildTrigger: "push",
           runInvocationURI: runUri,
+          githubWorkflowRepository: repo,
+          githubWorkflowSHA: sha,
+          githubWorkflowRef: "refs/heads/main",
+          githubWorkflowTrigger: "push",
+          runnerEnvironment: "github-hosted",
           ...overrides.certificate,
         },
       },
@@ -84,6 +102,7 @@ function verify(input, environment = {}) {
       SOURCE_SHA: sha,
       IMAGE_SUBJECT: subject,
       IMAGE_DIGEST: digest,
+      EXPECTED_BUILD_TRIGGER: "push",
       SIGNER_WORKFLOW: signerWorkflow,
       EXPECTED_RUN_URI: runUri,
       ...environment,
@@ -107,6 +126,19 @@ test("verifies one exact attestation for each required predicate", () => {
     signer_workflow: signerWorkflow,
     run_uri: runUri,
   })
+})
+
+test("verifies the explicit direct workflow-dispatch certificate mode", () => {
+  const input = predicateTypes.map((predicateType) => [attestation(predicateType, {
+    certificate: {
+      buildConfigURI: signerWorkflow,
+      buildTrigger: "workflow_dispatch",
+      githubWorkflowTrigger: "workflow_dispatch",
+    },
+  })])
+
+  const result = verify(input, { EXPECTED_BUILD_TRIGGER: "workflow_dispatch" })
+  assert.equal(result.status, 0, result.stderr)
 })
 
 test("selects exactly one matching producer run from accumulated attestations", () => {
@@ -143,10 +175,74 @@ test("rejects Trivy results that contain vulnerabilities", () => {
     statement: {
       predicate: {
         ...predicate(predicateTypes[2]),
-        results: [{ vulnerabilities: [{ vulnerabilityID: "CVE-2026-0001" }] }],
+        scanner: {
+          ...predicate(predicateTypes[2]).scanner,
+          result: {
+            ...predicate(predicateTypes[2]).scanner.result,
+            Results: [{
+              Target: subject,
+              Class: "os-pkgs",
+              Type: "alpine",
+              Packages: [{}],
+              Vulnerabilities: [{
+                VulnerabilityID: "CVE-2026-0001",
+                PkgName: "openssl",
+                Severity: "HIGH",
+              }],
+            }],
+          },
+        },
       },
     },
   })]])
+  assert.notEqual(result.status, 0)
+})
+
+test("requires a zero-vulnerability Trivy report for Web", () => {
+  const webRepo = "AquilaXk/aquila-blog-web"
+  const webSubject = "ghcr.io/aquilaxk/aquila-blog-web-front"
+  const webSigner = `https://github.com/${webRepo}/.github/workflows/frontend-image.yml@refs/heads/main`
+  const webRun = `https://github.com/${webRepo}/actions/runs/123/attempts/1`
+  const webEntry = (predicateType) => {
+    const entry = attestation(predicateType)
+    entry.verificationResult.statement.subject[0].name = webSubject
+    Object.assign(entry.verificationResult.signature.certificate, {
+      sourceRepositoryURI: `https://github.com/${webRepo}`,
+      subjectAlternativeName: webSigner,
+      buildConfigURI: webSigner,
+      buildSignerURI: webSigner,
+      runInvocationURI: webRun,
+      githubWorkflowRepository: webRepo,
+    })
+    if (predicateType === predicateTypes[2]) {
+      entry.verificationResult.statement.predicate.scanner.result.ArtifactName = `${webSubject}@${digest}`
+      entry.verificationResult.statement.predicate.scanner.result.Metadata.Reference = `${webSubject}@${digest}`
+      entry.verificationResult.statement.predicate.scanner.result.Metadata.RepoDigests = [`${webSubject}@${digest}`]
+    }
+    return entry
+  }
+  const clean = verify(predicateTypes.map((predicateType) => [webEntry(predicateType)]), {
+    SOURCE_REPOSITORY: webRepo,
+    IMAGE_SUBJECT: webSubject,
+    SIGNER_WORKFLOW: webSigner,
+    EXPECTED_RUN_URI: webRun,
+  })
+  assert.equal(clean.status, 0, clean.stderr)
+
+  const finding = webEntry(predicateTypes[2])
+  finding.verificationResult.statement.predicate.scanner.result.Results[0].Vulnerabilities = [{
+    VulnerabilityID: "CVE-2026-0002", PkgName: "openssl", Severity: "LOW",
+  }]
+  const result = verify([
+    [webEntry(predicateTypes[0])],
+    [webEntry(predicateTypes[1])],
+    [finding],
+  ], {
+    SOURCE_REPOSITORY: webRepo,
+    IMAGE_SUBJECT: webSubject,
+    SIGNER_WORKFLOW: webSigner,
+    EXPECTED_RUN_URI: webRun,
+  })
   assert.notEqual(result.status, 0)
 })
 
@@ -183,6 +279,33 @@ test("rejects extra attestations and any subject or certificate mismatch", () =>
     certificate: { runInvocationURI: `https://github.com/${repo}/actions/runs/999/attempts/1` },
   })]])
   assert.notEqual(wrongRun.status, 0)
+
+  const invalidCertificateFields = {
+    sourceRepositoryURI: "https://github.com/AquilaXk/other",
+    sourceRepositoryDigest: "c".repeat(40),
+    sourceRepositoryRef: "refs/heads/other",
+    subjectAlternativeName: "https://github.com/AquilaXk/other/.github/workflows/deploy.yml@refs/heads/main",
+    buildConfigURI: "https://github.com/AquilaXk/other/.github/workflows/deploy.yml@refs/heads/main",
+    buildConfigDigest: "c".repeat(40),
+    buildSignerURI: "https://github.com/AquilaXk/other/.github/workflows/deploy.yml@refs/heads/main",
+    buildSignerDigest: "c".repeat(40),
+    buildTrigger: "workflow_dispatch",
+    githubWorkflowRepository: "AquilaXk/other",
+    githubWorkflowSHA: "c".repeat(40),
+    githubWorkflowRef: "refs/heads/other",
+    githubWorkflowTrigger: "workflow_dispatch",
+    runnerEnvironment: "self-hosted",
+  }
+  for (const [field, value] of Object.entries(invalidCertificateFields)) {
+    assert.notEqual(verify([[attestation(predicateTypes[0], {
+      certificate: { [field]: value },
+    })]]).status, 0, `accepted invalid certificate field ${field}`)
+  }
+  for (const legacyDigest of [`sha1:${sha}`, { sha1: sha }]) {
+    assert.notEqual(verify([[attestation(predicateTypes[0], {
+      certificate: { sourceRepositoryDigest: legacyDigest },
+    })]]).status, 0, "accepted legacy source digest encoding")
+  }
 })
 
 test("rejects unsupported repositories, source SHAs, subjects, and signer workflows", () => {

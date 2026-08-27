@@ -249,6 +249,7 @@ require_pattern 'BACKEND_DEPLOY_PATHS_PATTERN=.*tools/env/' "backend deploy trig
 require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*deploy/env/' "stale detection must block newer deploy env contract changes"
 require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools/env/' "stale detection must block newer deploy env validator changes"
 require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*tools/security/native-image-evidence\\.mjs' "stale detection must block newer native image evidence verifier changes"
+require_pattern 'STALE_DEPLOY_BLOCK_PATHS_PATTERN=.*\\.github/security/vulnerability-exceptions\\.yml' "stale detection must block newer vulnerability exception policy changes"
 require_pattern 'grep -Eq "\$\{STALE_DEPLOY_BLOCK_PATHS_PATTERN\}"' "stale detection must use the deploy safety path pattern"
 require_pattern 'stale automatic caller allowed after backend-neutral newer main changes: deploy_sha=' "backend-neutral newer main changes must not block a pending backend deploy"
 require_pattern 'stale deploy blocked by backend-impacting newer main changes: deploy_sha=' "backend-impacting newer main changes must block stale deploys"

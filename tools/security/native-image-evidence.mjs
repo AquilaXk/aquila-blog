@@ -1,4 +1,9 @@
 import { readFileSync } from "node:fs"
+import {
+  extractTrivyCosignReport,
+  filterTrivyReport,
+  loadAllowlistForImport,
+} from "../guards/check-vulnerability-exceptions.mjs"
 
 const POLICY_ID = "aquila-native-image-evidence-v1"
 const PREDICATE_TYPES = [
@@ -10,10 +15,17 @@ const POLICY = {
   "AquilaXk/aquila-blog": {
     subject: "ghcr.io/aquilaxk/aquila-blog-back",
     signerWorkflow: "https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main",
+    buildConfigWorkflows: {
+      push: "https://github.com/AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main",
+      workflow_dispatch: "https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main",
+    },
   },
   "AquilaXk/aquila-blog-web": {
     subject: "ghcr.io/aquilaxk/aquila-blog-web-front",
     signerWorkflow: "https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main",
+    buildConfigWorkflows: {
+      push: "https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main",
+    },
   },
 }
 
@@ -30,11 +42,7 @@ function object(value) {
 }
 
 function sourceDigestMatches(value, sha) {
-  if (value === `sha1:${sha}`) return true
-  return value !== null
-    && typeof value === "object"
-    && Object.keys(value).length === 1
-    && value.sha1 === sha
+  return value === sha
 }
 
 function assertEnvironment(environment) {
@@ -43,19 +51,22 @@ function assertEnvironment(environment) {
   const sha = environment.SOURCE_SHA
   const subject = environment.IMAGE_SUBJECT
   const digest = environment.IMAGE_DIGEST
+  const buildTrigger = environment.EXPECTED_BUILD_TRIGGER
   const signerWorkflow = environment.SIGNER_WORKFLOW
   const runUri = environment.EXPECTED_RUN_URI
+  const buildConfigWorkflow = policy?.buildConfigWorkflows?.[buildTrigger]
 
   if (!policy || !/^[a-f0-9]{40}$/.test(sha ?? "")) fail()
+  if (!buildConfigWorkflow) fail()
   if (subject !== policy.subject || signerWorkflow !== policy.signerWorkflow) fail()
   if (!/^sha256:[a-f0-9]{64}$/.test(digest ?? "")) fail()
   if (runUri !== `https://github.com/${repo}/actions/runs/${runUri?.split("/").at(-3)}/attempts/${runUri?.split("/").at(-1)}`
     || !new RegExp(`^https://github\\.com/${repo}/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$`).test(runUri ?? "")) fail()
 
-  return { repo, sha, subject, digest, signerWorkflow, runUri }
+  return { repo, sha, subject, digest, buildConfigWorkflow, buildTrigger, signerWorkflow, runUri }
 }
 
-function assertPredicate(predicateType, predicate) {
+function assertPredicate(predicateType, predicate, expected, exceptions) {
   if (!object(predicate)) fail()
 
   if (predicateType === PREDICATE_TYPES[0]) {
@@ -72,26 +83,24 @@ function assertPredicate(predicateType, predicate) {
     return
   }
 
-  if (predicate._type !== PREDICATE_TYPES[2]
-    || !object(predicate.scanner)
-    || !exactString(predicate.scanner.uri)
-    || predicate.scanner.version !== "0.72.0"
-    || !object(predicate.scanner.db)
-    || !exactString(predicate.scanner.db.uri)
-    || !exactString(predicate.scanner.db.version)
-    || !object(predicate.metadata)
-    || !object(predicate.invocation)
-    || !Array.isArray(predicate.results)) fail()
-
-  for (const result of predicate.results) {
-    if (!object(result)) fail()
-    const vulnerabilities = result.vulnerabilities
-    if (vulnerabilities !== undefined && vulnerabilities !== null
-      && (!Array.isArray(vulnerabilities) || vulnerabilities.length !== 0)) fail()
+  let report
+  try {
+    report = extractTrivyCosignReport(predicate, {
+      expectedArtifactName: `${expected.subject}@${expected.digest}`,
+    })
+  } catch {
+    fail()
   }
+  if (expected.repo === "AquilaXk/aquila-blog") {
+    if (filterTrivyReport(report, exceptions).length > 0) fail()
+    return
+  }
+  if (report.Results.some((result) => (
+    Object.hasOwn(result, "Vulnerabilities") && result.Vulnerabilities.length !== 0
+  ))) fail()
 }
 
-function parseAttestation(filePath, predicateType, expected) {
+function parseAttestation(filePath, predicateType, expected, exceptions) {
   let entries
   try {
     entries = JSON.parse(readFileSync(filePath, "utf8"))
@@ -110,7 +119,6 @@ function parseAttestation(filePath, predicateType, expected) {
   const certificate = result?.signature?.certificate
   const digestHex = expected.digest.slice("sha256:".length)
   if (!statement || !certificate || statement.predicateType !== predicateType) fail()
-  assertPredicate(predicateType, statement.predicate)
   if (!Array.isArray(statement.subject) || statement.subject.length !== 1) fail()
 
   const [subject] = statement.subject
@@ -120,14 +128,25 @@ function parseAttestation(filePath, predicateType, expected) {
   if (!sourceDigestMatches(certificate.sourceRepositoryDigest, expected.sha)) fail()
   if (certificate.sourceRepositoryRef !== "refs/heads/main") fail()
   if (certificate.subjectAlternativeName !== expected.signerWorkflow) fail()
+  if (certificate.buildConfigURI !== expected.buildConfigWorkflow) fail()
+  if (certificate.buildConfigDigest !== expected.sha) fail()
   if (certificate.buildSignerURI !== expected.signerWorkflow) fail()
+  if (certificate.buildSignerDigest !== expected.sha) fail()
+  if (certificate.buildTrigger !== expected.buildTrigger) fail()
   if (certificate.runInvocationURI !== expected.runUri) fail()
+  if (certificate.githubWorkflowRepository !== expected.repo) fail()
+  if (certificate.githubWorkflowSHA !== expected.sha) fail()
+  if (certificate.githubWorkflowRef !== "refs/heads/main") fail()
+  if (certificate.githubWorkflowTrigger !== expected.buildTrigger) fail()
+  if (certificate.runnerEnvironment !== "github-hosted") fail()
+  assertPredicate(predicateType, statement.predicate, expected, exceptions)
 }
 
 function verifyAttestationSet(paths, environment) {
   if (!Array.isArray(paths) || paths.length !== PREDICATE_TYPES.length || paths.some((value) => !exactString(value))) fail()
   const expected = assertEnvironment(environment)
-  paths.forEach((filePath, index) => parseAttestation(filePath, PREDICATE_TYPES[index], expected))
+  const exceptions = expected.repo === "AquilaXk/aquila-blog" ? loadAllowlistForImport() : []
+  paths.forEach((filePath, index) => parseAttestation(filePath, PREDICATE_TYPES[index], expected, exceptions))
 
   return {
     policy_id: POLICY_ID,

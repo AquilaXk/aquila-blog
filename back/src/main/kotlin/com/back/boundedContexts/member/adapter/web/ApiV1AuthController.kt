@@ -4,7 +4,6 @@ import com.back.boundedContexts.member.application.port.input.ActorQueryUseCase
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.LoginAttemptPolicyUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
-import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberDto
@@ -45,7 +44,6 @@ class ApiV1AuthController(
     private val clientIpResolver: ClientIpResolver,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
     private val memberSessionUseCase: MemberSessionUseCase,
-    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) {
     companion object {
         private const val MAX_EMAIL_LENGTH = 320
@@ -85,7 +83,7 @@ class ApiV1AuthController(
         val authCandidate =
             actorQueryUseCase
                 .findByEmail(loginIdentifier)
-                ?.takeIf { isPasswordValid(it, reqBody.password) && canonicalAdminPolicy.canAuthenticate(it) }
+                ?.takeIf { isPasswordValid(it, reqBody.password) && actorQueryUseCase.canAuthenticate(it) }
                 ?: run {
                     val blocked = loginAttemptPolicyUseCase.recordFailure(loginAttemptKey, clientIp)
                     if (blocked) throw AppException(ErrorCode.LOGIN_RATE_LIMITED, "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")

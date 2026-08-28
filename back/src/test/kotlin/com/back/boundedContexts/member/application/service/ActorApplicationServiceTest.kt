@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberProxy
+import com.back.global.app.AdminProperties
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -30,6 +31,7 @@ class ActorApplicationServiceTest {
             ActorApplicationService(
                 authTokenService = AuthTokenService("12345678901234567890123456789012", 3600),
                 memberRepository = FakeMemberRepository(user1),
+                canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = "admin@test.com")),
             )
     }
 

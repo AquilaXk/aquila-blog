@@ -6,4 +6,6 @@ interface ActorQueryUseCase {
     fun findByLoginId(loginId: String): Member?
 
     fun findByEmail(email: String): Member?
+
+    fun canAuthenticate(member: Member): Boolean
 }

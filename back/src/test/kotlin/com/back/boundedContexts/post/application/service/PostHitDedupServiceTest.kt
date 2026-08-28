@@ -38,17 +38,6 @@ class PostHitDedupServiceTest {
     }
 
     @Test
-    fun `redis SETNX 결과가 null이면 hit dedupe를 service unavailable로 거부한다`() {
-        val valueOperations = valueOperations()
-        given(redisTemplate.opsForValue()).willReturn(valueOperations)
-        given(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration::class.java)))
-            .willReturn(null)
-        val service = service(redisTemplate)
-
-        assertServiceUnavailable { service.shouldCountHit(postId = 1L, viewerKey = "viewer") }
-    }
-
-    @Test
     fun `redis SETNX가 true면 hit을 count한다`() {
         val valueOperations = valueOperations()
         given(redisTemplate.opsForValue()).willReturn(valueOperations)

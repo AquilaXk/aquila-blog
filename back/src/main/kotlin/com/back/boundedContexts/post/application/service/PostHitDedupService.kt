@@ -30,18 +30,15 @@ class PostHitDedupService(
         val normalizedKey = "$postId:${sha256(safeViewerKey)}"
         val redisTemplate = redisTemplateProvider.getIfAvailable() ?: throw serviceUnavailable()
 
-        val counted =
-            try {
-                redisTemplate
-                    .opsForValue()
-                    .setIfAbsent(redisKey(normalizedKey), "1", Duration.ofSeconds(viewerWindowSeconds))
-            } catch (exception: DataAccessException) {
-                throw serviceUnavailable(exception)
-            } catch (exception: RuntimeException) {
-                throw serviceUnavailable(exception)
-            }
-
-        return counted ?: throw serviceUnavailable()
+        return try {
+            redisTemplate
+                .opsForValue()
+                .setIfAbsent(redisKey(normalizedKey), "1", Duration.ofSeconds(viewerWindowSeconds))
+        } catch (exception: DataAccessException) {
+            throw serviceUnavailable(exception)
+        } catch (exception: RuntimeException) {
+            throw serviceUnavailable(exception)
+        }
     }
 
     fun clearAllForTest() {

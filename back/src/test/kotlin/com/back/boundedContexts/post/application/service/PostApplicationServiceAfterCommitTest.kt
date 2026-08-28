@@ -266,7 +266,6 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
             PostCounterSnapshot(
                 hitCount = 11,
                 likesCount = 7,
-                commentsCount = 3,
             ),
         )
         assertThat(publishedEvents()).hasAtLeastOneElementOfType(PostModifiedEvent::class.java)
@@ -411,7 +410,6 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 PostCounterSnapshot(
                     hitCount = post.hitCount,
                     likesCount = post.likesCount,
-                    commentsCount = post.commentsCount,
                 )
             null
         }.`when`(postRecommendFeatureStoreService).refresh(anyPost())
@@ -428,6 +426,5 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     private data class PostCounterSnapshot(
         val hitCount: Int,
         val likesCount: Int,
-        val commentsCount: Int,
     )
 }

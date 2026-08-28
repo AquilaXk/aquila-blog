@@ -44,7 +44,6 @@ class PublicPostUrlCanonicalizerTest {
                 published = true,
                 listed = true,
                 likesCount = 0,
-                commentsCount = 0,
                 hitCount = 0,
                 contentHtmlHash = storedHtml.contentHtmlHash,
                 contentHtmlSanitizerPolicyVersion = storedHtml.contentHtmlSanitizerPolicyVersion,
@@ -90,7 +89,6 @@ class PublicPostUrlCanonicalizerTest {
                 published = true,
                 listed = true,
                 likesCount = 0,
-                commentsCount = 0,
                 hitCount = 0,
             )
 
@@ -123,7 +121,6 @@ class PublicPostUrlCanonicalizerTest {
             published = true,
             listed = true,
             likesCount = 0,
-            commentsCount = 0,
             hitCount = 0,
         )
 }

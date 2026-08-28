@@ -85,11 +85,6 @@ custom:
   observability:
     request:
       slowMs: ${CUSTOM__OBSERVABILITY__REQUEST__SLOW_MS:900}
-  member:
-    notification:
-      sse:
-        heartbeatSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__HEARTBEAT_SECONDS:30}
-        replayProbeSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_PROBE_SECONDS:60}
   post:
     read:
       cursor-signing-secret: ${PROD___CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}

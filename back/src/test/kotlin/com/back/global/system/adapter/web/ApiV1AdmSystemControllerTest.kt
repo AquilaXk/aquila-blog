@@ -1,7 +1,5 @@
 package com.back.global.system.adapter.web
 
-import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
-import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -10,7 +8,6 @@ import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileReconcileDiagnostics
 import com.back.global.system.application.AdminDashboardAuthSecuritySnapshot
-import com.back.global.system.application.AdminDashboardSignupMailSnapshot
 import com.back.global.system.application.AdminDashboardSnapshot
 import com.back.global.system.application.AdminDashboardStorageCleanupSnapshot
 import com.back.global.system.application.AdminDashboardTaskQueueSnapshot
@@ -22,14 +19,11 @@ import com.back.global.system.model.AdminOperationStatus
 import com.back.global.system.model.SearchRuntimeControlKey
 import com.back.global.system.model.SearchRuntimeControlValue
 import com.back.global.task.application.TaskExecutionSample
-import com.back.global.task.application.TaskProcessingLockDiagnostics
 import com.back.global.task.application.TaskQueueDiagnostics
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.application.TaskTypeDiagnostics
 import com.back.global.task.domain.TaskStatus
 import com.back.support.BaseAdmSystemControllerWebMvcTest
-import org.hamcrest.Matchers.anyOf
-import org.hamcrest.Matchers.equalTo
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.verify
@@ -65,7 +59,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
                         ApiV1AdmSystemController.HealthChecks(
                             db = "UP",
                             redis = "DISABLED",
-                            signupMail = "READY",
                         ),
                 ),
             )
@@ -100,7 +93,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
                         ApiV1AdmSystemController.HealthChecks(
                             db = "UP",
                             redis = "DISABLED",
-                            signupMail = "READY",
                         ),
                 ),
             )
@@ -113,16 +105,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
             jsonPath("$.version") { isString() }
             jsonPath("$.checks.db") { value("UP") }
             jsonPath("$.checks.redis") { value("DISABLED") }
-            jsonPath("$.checks.signupMail") {
-                value(
-                    anyOf(
-                        equalTo("TEST_MODE"),
-                        equalTo("READY"),
-                        equalTo("MISCONFIGURED"),
-                        equalTo("QUEUE_LOCKED"),
-                    ),
-                )
-            }
         }
     }
 
@@ -140,7 +122,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
                         ApiV1AdmSystemController.HealthChecks(
                             db = "UP",
                             redis = "UP",
-                            signupMail = "READY",
                         ),
                 ),
             )
@@ -152,30 +133,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
                 status { isOk() }
                 jsonPath("$.checks.redis") { value("UP") }
             }
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `관리자는 회원가입 메일 진단 상태를 조회할 수 있다`() {
-        given(signupMailDiagnosticsService.diagnose(false)).willReturn(readySignupMailDiagnostics())
-
-        mvc.get("/system/api/v1/adm/mail/signup").andExpect {
-            status { isOk() }
-            jsonPath("$.status") {
-                value(
-                    anyOf(
-                        equalTo("TEST_MODE"),
-                        equalTo("READY"),
-                        equalTo("MISCONFIGURED"),
-                        equalTo("QUEUE_LOCKED"),
-                    ),
-                )
-            }
-            jsonPath("$.adapter") { isString() }
-            jsonPath("$.verifyPath") { value("/signup/verify") }
-            jsonPath("$.queueRuntime.processTasksLockKey") { value("job-lock:default:processTasks") }
-            jsonPath("$.queueRuntime.legacyOrphanLikely") { value(false) }
-        }
     }
 
     @Test
@@ -197,25 +154,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
                 header { string("X-WEBAUTH-USER", "admin@example.com") }
                 header { string("X-WEBAUTH-NAME", "관리자") }
                 header { string("Cache-Control", "private, no-store, max-age=0") }
-            }
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `관리자는 회원가입 테스트 메일 발송을 요청할 수 있다`() {
-        mvc
-            .post("/system/api/v1/adm/mail/signup/test") {
-                contentType = org.springframework.http.MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "email": "tester@example.com"
-                    }
-                    """.trimIndent()
-            }.andExpect {
-                status { isAccepted() }
-                jsonPath("$.resultCode") { value("202-3") }
-                jsonPath("$.data.email") { value("tester@example.com") }
             }
     }
 
@@ -253,7 +191,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
             jsonPath("$.generatedAt") { isString() }
             jsonPath("$.taskQueue.readyPendingCount") { value(2) }
             jsonPath("$.taskQueue.failedCount") { value(1) }
-            jsonPath("$.signupMail.status") { value("READY") }
             jsonPath("$.authSecurity.blockedEventCount") { value(1) }
             jsonPath("$.storageCleanup.eligibleForPurgeCount") { value(1) }
         }
@@ -287,58 +224,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
             jsonPath("$[0].loginIdentifier") { value("admin@example.com") }
             jsonPath("$[0].ipSecurityEnabled") { value(true) }
             jsonPath("$[0].requestPath") { value("/member/api/v1/auth/login") }
-        }
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `관리자는 SSE 스트림 진단 상태를 조회할 수 있다`() {
-        given(memberNotificationSseService.diagnostics())
-            .willReturn(
-                MemberNotificationSseService.StreamDiagnostics(
-                    memberEmitterCount = 1,
-                    globalEmitterCount = 3,
-                    oldestEmitterAgeSeconds = 48,
-                    maxEmittersPerMember = 3,
-                    maxGlobalEmitters = 2000,
-                    heartbeatSeconds = 20,
-                    replayProbeSeconds = 60,
-                    replayBatchSize = 50,
-                    connectedCount = 11,
-                    reconnectSubscribeCount = 4,
-                    disconnectCount = 8,
-                    replayBatchCount = 6,
-                    replayNotificationCount = 17,
-                    replayUnavailableNotificationCount = 2,
-                    replayFailureCount = 3,
-                    unreadUnavailableCount = 4,
-                    heartbeatSentCount = 31,
-                    sendFailureCount = 2,
-                    sendFailureRemovedEmitterCount = 2,
-                    emitterStateMismatchCount = 0,
-                ),
-            )
-
-        mvc.get("/system/api/v1/adm/notifications/stream").andExpect {
-            status { isOk() }
-            jsonPath("$.memberEmitterCount") { value(1) }
-            jsonPath("$.globalEmitterCount") { value(3) }
-            jsonPath("$.oldestEmitterAgeSeconds") { value(48) }
-            jsonPath("$.heartbeatSeconds") { value(20) }
-            jsonPath("$.replayProbeSeconds") { value(60) }
-            jsonPath("$.replayBatchSize") { value(50) }
-            jsonPath("$.connectedCount") { value(11) }
-            jsonPath("$.reconnectSubscribeCount") { value(4) }
-            jsonPath("$.disconnectCount") { value(8) }
-            jsonPath("$.replayBatchCount") { value(6) }
-            jsonPath("$.replayNotificationCount") { value(17) }
-            jsonPath("$.replayUnavailableNotificationCount") { value(2) }
-            jsonPath("$.replayFailureCount") { value(3) }
-            jsonPath("$.unreadUnavailableCount") { value(4) }
-            jsonPath("$.heartbeatSentCount") { value(31) }
-            jsonPath("$.sendFailureCount") { value(2) }
-            jsonPath("$.sendFailureRemovedEmitterCount") { value(2) }
-            jsonPath("$.emitterStateMismatchCount") { value(0) }
         }
     }
 
@@ -670,34 +555,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
         }
     }
 
-    private fun readySignupMailDiagnostics(): SignupMailDiagnostics =
-        SignupMailDiagnostics(
-            status = "READY",
-            adapter = "SmtpSignupVerificationMailSenderAdapter",
-            host = "smtp.gmail.com",
-            port = 587,
-            mailFrom = "aquilaxk10@gmail.com",
-            usernameConfigured = true,
-            passwordConfigured = true,
-            smtpAuth = true,
-            startTlsEnabled = true,
-            missing = emptyList(),
-            canConnect = true,
-            connectionError = null,
-            checkedAt = Instant.parse("2026-03-13T00:00:00Z"),
-            verifyPath = "/signup/verify",
-            taskQueue = sampleTaskTypeDiagnostics(),
-            queueRuntime =
-                TaskProcessingLockDiagnostics(
-                    currentNodeWorkerEnabled = false,
-                    currentNodeApiMode = "admin",
-                    processTasksLockKey = "job-lock:default:processTasks",
-                    processTasksLockExists = false,
-                    processTasksLockTtlSeconds = null,
-                    legacyOrphanLikely = false,
-                ),
-        )
-
     private fun operationResult(
         operationId: UUID,
         sessionRowId: Long?,
@@ -845,13 +702,6 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
                     failedCount = 1,
                     staleProcessingCount = 0,
                     oldestReadyPendingAgeSeconds = 30,
-                    latestFailureAt = Instant.parse("2026-03-13T00:02:00Z"),
-                    latestFailureMessage = "smtp timeout",
-                ),
-            signupMail =
-                AdminDashboardSignupMailSnapshot(
-                    status = "READY",
-                    queueLagSeconds = 30,
                     latestFailureAt = Instant.parse("2026-03-13T00:02:00Z"),
                     latestFailureMessage = "smtp timeout",
                 ),

@@ -50,7 +50,6 @@ class PostApplicationService(
     private val postTagIndexService: PostTagIndexService,
     private val postTempDraftService: PostTempDraftService,
     private val postCommentApplicationService: PostCommentApplicationService,
-    private val postLikeApplicationService: PostLikeApplicationService,
     private val postHitSideEffectQueue: PostHitSideEffectQueue,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
@@ -616,16 +615,6 @@ class PostApplicationService(
         postCounterService.incrementHit(post)
         postHitSideEffectQueue.enqueue(post.id)
     }
-
-    fun isLiked(
-        post: Post,
-        liker: Member?,
-    ): Boolean = postLikeApplicationService.isLiked(post, liker)
-
-    fun findLikedPostIds(
-        liker: Member?,
-        posts: List<Post>,
-    ): Set<Long> = postLikeApplicationService.findLikedPostIds(liker, posts)
 
     fun findPagedByKw(
         kw: String,

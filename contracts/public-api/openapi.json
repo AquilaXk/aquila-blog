@@ -308,36 +308,6 @@
         }
       }
     },
-    "/system/api/v1/adm/mail/signup/test": {
-      "post": {
-        "tags": [
-          "api-v-1-adm-system-controller"
-        ],
-        "operationId": "sendSignupTestMail",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SignupMailTestRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "description": "Accepted",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/RsDataMapStringString"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/system/api/v1/adm/cloud/files": {
       "get": {
         "tags": [
@@ -1364,57 +1334,6 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/RsDataAdminOperationResBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/system/api/v1/adm/notifications/stream": {
-      "get": {
-        "tags": [
-          "api-v-1-adm-system-controller"
-        ],
-        "operationId": "notificationStreamDiagnostics",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/StreamDiagnostics"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/system/api/v1/adm/mail/signup": {
-      "get": {
-        "tags": [
-          "api-v-1-adm-system-controller"
-        ],
-        "operationId": "signupMailDiagnostics",
-        "parameters": [
-          {
-            "name": "checkConnection",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/SignupMailDiagnostics"
                 }
               }
             }
@@ -3733,36 +3652,6 @@
           "reason"
         ]
       },
-      "SignupMailTestRequest": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "email"
-        ]
-      },
-      "RsDataMapStringString": {
-        "type": "object",
-        "properties": {
-          "resultCode": {
-            "type": "string"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "data": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        }
-      },
       "CloudFileDto": {
         "type": "object",
         "properties": {
@@ -4009,16 +3898,9 @@
             "type": "integer",
             "format": "int32"
           },
-          "commentsCount": {
-            "type": "integer",
-            "format": "int32"
-          },
           "hitCount": {
             "type": "integer",
             "format": "int32"
-          },
-          "actorHasLiked": {
-            "type": "boolean"
           },
           "tags": {
             "type": "array",
@@ -4141,16 +4023,9 @@
             "type": "integer",
             "format": "int32"
           },
-          "commentsCount": {
-            "type": "integer",
-            "format": "int32"
-          },
           "hitCount": {
             "type": "integer",
             "format": "int32"
-          },
-          "actorHasLiked": {
-            "type": "boolean"
           },
           "actorCanModify": {
             "type": "boolean"
@@ -5153,191 +5028,6 @@
           }
         }
       },
-      "StreamDiagnostics": {
-        "type": "object",
-        "properties": {
-          "memberEmitterCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "globalEmitterCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "oldestEmitterAgeSeconds": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "maxEmittersPerMember": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "maxGlobalEmitters": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "heartbeatSeconds": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "replayProbeSeconds": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "replayBatchSize": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "connectedCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "reconnectSubscribeCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "disconnectCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "replayBatchCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "replayNotificationCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "replayUnavailableNotificationCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "replayFailureCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "unreadUnavailableCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "heartbeatSentCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "sendFailureCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "sendFailureRemovedEmitterCount": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "emitterStateMismatchCount": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "SignupMailDiagnostics": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string"
-          },
-          "adapter": {
-            "type": "string"
-          },
-          "host": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "port": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32"
-          },
-          "mailFrom": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "usernameConfigured": {
-            "type": "boolean"
-          },
-          "passwordConfigured": {
-            "type": "boolean"
-          },
-          "smtpAuth": {
-            "type": "boolean"
-          },
-          "startTlsEnabled": {
-            "type": "boolean"
-          },
-          "missing": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "canConnect": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "connectionError": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "checkedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "verifyPath": {
-            "type": "string"
-          },
-          "taskQueue": {
-            "$ref": "#/components/schemas/TaskTypeDiagnostics"
-          },
-          "queueRuntime": {
-            "$ref": "#/components/schemas/TaskProcessingLockDiagnostics"
-          }
-        }
-      },
-      "TaskProcessingLockDiagnostics": {
-        "type": "object",
-        "properties": {
-          "currentNodeWorkerEnabled": {
-            "type": "boolean"
-          },
-          "currentNodeApiMode": {
-            "type": "string"
-          },
-          "processTasksLockKey": {
-            "type": "string"
-          },
-          "processTasksLockExists": {
-            "type": "boolean"
-          },
-          "processTasksLockTtlSeconds": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          },
-          "legacyOrphanLikely": {
-            "type": "boolean"
-          }
-        }
-      },
       "HealthChecks": {
         "type": "object",
         "properties": {
@@ -5345,9 +5035,6 @@
             "type": "string"
           },
           "redis": {
-            "type": "string"
-          },
-          "signupMail": {
             "type": "string"
           }
         }
@@ -5400,34 +5087,6 @@
           }
         }
       },
-      "AdminDashboardSignupMailSnapshot": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string"
-          },
-          "queueLagSeconds": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          },
-          "latestFailureAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "latestFailureMessage": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
       "AdminDashboardSnapshot": {
         "type": "object",
         "properties": {
@@ -5437,9 +5096,6 @@
           },
           "taskQueue": {
             "$ref": "#/components/schemas/AdminDashboardTaskQueueSnapshot"
-          },
-          "signupMail": {
-            "$ref": "#/components/schemas/AdminDashboardSignupMailSnapshot"
           },
           "authSecurity": {
             "$ref": "#/components/schemas/AdminDashboardAuthSecuritySnapshot"
@@ -5736,10 +5392,6 @@
             "type": "boolean"
           },
           "likesCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "commentsCount": {
             "type": "integer",
             "format": "int32"
           },

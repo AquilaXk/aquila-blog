@@ -85,16 +85,6 @@ interface PostUseCase {
 
     fun incrementHit(post: Post)
 
-    fun isLiked(
-        post: Post,
-        liker: Member?,
-    ): Boolean
-
-    fun findLikedPostIds(
-        liker: Member?,
-        posts: List<Post>,
-    ): Set<Long>
-
     fun findPagedByKw(
         kw: String,
         sort: PostSearchSortType1,

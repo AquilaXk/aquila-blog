@@ -1,6 +1,5 @@
 package com.back.global.system.application
 
-import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
 import com.back.global.system.adapter.web.ApiV1AdmSystemController
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.cache.annotation.Cacheable
@@ -14,7 +13,6 @@ import java.time.Instant
 class AdminSystemHealthSnapshotService(
     private val jdbcTemplate: JdbcTemplate,
     private val stringRedisTemplateProvider: ObjectProvider<StringRedisTemplate>,
-    private val signupMailDiagnosticsService: SignupMailDiagnosticsService,
 ) {
     @Cacheable(
         cacheNames = [SystemQueryCacheNames.ADMIN_HEALTH_SUMMARY],
@@ -28,12 +26,10 @@ class AdminSystemHealthSnapshotService(
     private fun computeHealthSummary(): ApiV1AdmSystemController.HealthResBody {
         val db = checkDb()
         val redis = checkRedis()
-        val signupMail = signupMailDiagnosticsService.diagnose(checkConnection = false).status
         val status =
             when {
                 db != "UP" -> "DOWN"
                 redis == "DOWN" -> "DEGRADED"
-                signupMail in setOf("MISCONFIGURED", "UNAVAILABLE", "CONNECTION_FAILED", "QUEUE_LOCKED") -> "DEGRADED"
                 else -> "UP"
             }
 
@@ -46,7 +42,6 @@ class AdminSystemHealthSnapshotService(
                 ApiV1AdmSystemController.HealthChecks(
                     db = db,
                     redis = redis,
-                    signupMail = signupMail,
                 ),
         )
     }

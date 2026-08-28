@@ -14,25 +14,13 @@ class PostWebDtoAssembler(
     private val postUseCase: PostUseCase,
     private val rq: Rq,
 ) {
-    fun makePostDtoPage(postPage: PagedResult<Post>): PageDto<PostDto> {
-        val actor = rq.actorOrNull
-        val likedPostIds = postUseCase.findLikedPostIds(actor, postPage.content)
-
-        return PageDto(
-            postPage.map { post ->
-                PostDto(post).apply {
-                    actorHasLiked = post.id in likedPostIds
-                }
-            },
-        )
-    }
+    fun makePostDtoPage(postPage: PagedResult<Post>): PageDto<PostDto> = PageDto(postPage.map(::PostDto))
 
     fun makePostWithContentDto(post: Post): PostWithContentDto {
         val actor = rq.actorOrNull
         val hasAdminRole = rq.hasRole("ADMIN")
         return PostWithContentDto(post).apply {
             tempDraft = postUseCase.isTempDraft(post)
-            actorHasLiked = postUseCase.isLiked(post, actor)
             actorCanModify = hasAdminRole || post.getCheckActorCanModifyRs(actor).isSuccess
             actorCanDelete = hasAdminRole || post.getCheckActorCanDeleteRs(actor).isSuccess
         }

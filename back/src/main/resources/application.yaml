@@ -195,8 +195,6 @@ custom:
       verifyPath: ${CUSTOM__MEMBER__SIGNUP__VERIFY_PATH:/signup/verify}
       emailExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__EMAIL_EXPIRATION_SECONDS:86400}
       sessionExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__SESSION_EXPIRATION_SECONDS:3600}
-      mailFrom: ${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:}
-      mailSubject: ${CUSTOM__MEMBER__SIGNUP__MAIL_SUBJECT:[AquilaXk] 회원가입 이메일 인증}
       startRateLimit:
         maxAttemptsPerEmail: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPEREMAIL:5}
         maxAttemptsPerIp: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPERIP:20}
@@ -206,16 +204,6 @@ custom:
         requireRedisInProd: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__REQUIRE_REDIS_IN_PROD:true}
     oauth-signup:
       enabled: ${CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED:false}
-    notification:
-      realtime:
-        enabled: ${CUSTOM__MEMBER__NOTIFICATION__REALTIME__ENABLED:true}
-        nodeId: ${CUSTOM__MEMBER__NOTIFICATION__REALTIME__NODE_ID:${random.uuid}}
-      sse:
-        maxEmittersPerMember: ${CUSTOM__MEMBER__NOTIFICATION__SSE__MAX_EMITTERS_PER_MEMBER:3}
-        maxGlobalEmitters: ${CUSTOM__MEMBER__NOTIFICATION__SSE__MAX_GLOBAL_EMITTERS:2000}
-        heartbeatSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__HEARTBEAT_SECONDS:20}
-        replayProbeSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_PROBE_SECONDS:60}
-        replayBatchSize: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_BATCH_SIZE:50}
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     email: "${CUSTOM__ADMIN__EMAIL:}"

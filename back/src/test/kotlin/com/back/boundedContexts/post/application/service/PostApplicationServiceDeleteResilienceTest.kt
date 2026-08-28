@@ -118,9 +118,6 @@ class PostApplicationServiceDeleteResilienceTest {
             postHydrationService = postHydrationService,
             postCounterService = postCounterService,
         )
-    private val postLikeApplicationService =
-        PostLikeApplicationService(postLikeRepository)
-
     private val service =
         PostApplicationService(
             postRepository = postRepository,
@@ -136,7 +133,6 @@ class PostApplicationServiceDeleteResilienceTest {
             postTagIndexService = postTagIndexService,
             postTempDraftService = postTempDraftService,
             postCommentApplicationService = postCommentApplicationService,
-            postLikeApplicationService = postLikeApplicationService,
             postHitSideEffectQueue = postHitSideEffectQueue,
         )
 

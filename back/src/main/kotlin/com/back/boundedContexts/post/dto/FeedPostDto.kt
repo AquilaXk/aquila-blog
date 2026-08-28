@@ -24,7 +24,6 @@ data class FeedPostDto(
     val published: Boolean,
     val listed: Boolean,
     val likesCount: Int,
-    val commentsCount: Int,
     val hitCount: Int,
 ) {
     companion object {
@@ -54,7 +53,6 @@ data class FeedPostDto(
                 published = post.published,
                 listed = post.listed,
                 likesCount = post.likesCount,
-                commentsCount = post.commentsCount,
                 hitCount = post.hitCount,
             )
         }

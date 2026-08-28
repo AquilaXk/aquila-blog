@@ -109,16 +109,6 @@ class PostUseCaseAdapter(
 
     override fun incrementHit(post: Post) = postApplicationService.incrementHit(post)
 
-    override fun isLiked(
-        post: Post,
-        liker: Member?,
-    ): Boolean = postApplicationService.isLiked(post, liker)
-
-    override fun findLikedPostIds(
-        liker: Member?,
-        posts: List<Post>,
-    ): Set<Long> = postApplicationService.findLikedPostIds(liker, posts)
-
     override fun findPagedByKw(
         kw: String,
         sort: PostSearchSortType1,

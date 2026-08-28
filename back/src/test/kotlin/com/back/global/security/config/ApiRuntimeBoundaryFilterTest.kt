@@ -12,10 +12,10 @@ import org.springframework.mock.web.MockHttpServletResponse
 @DisplayName("ApiRuntimeBoundaryFilter 테스트")
 class ApiRuntimeBoundaryFilterTest {
     @Test
-    @DisplayName("read 모드에서 댓글 조회 GET 경로는 차단하지 않는다")
-    fun `read mode allows comments get endpoint`() {
+    @DisplayName("read 모드에서 게시글 feed GET 경로는 차단하지 않는다")
+    fun `read mode allows post feed get endpoint`() {
         val filter = createFilter("read")
-        val request = MockHttpServletRequest("GET", "/post/api/v1/posts/466/comments")
+        val request = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
         val response = MockHttpServletResponse()
 
         filter.doFilter(request, response, MockFilterChain())
@@ -90,7 +90,7 @@ class ApiRuntimeBoundaryFilterTest {
     @DisplayName("런타임 경계 503 응답에도 CORS 헤더를 포함한다")
     fun `blocked runtime boundary response includes cors headers`() {
         val filter = createFilter("read")
-        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/comments")
+        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/hit")
         request.addHeader("Origin", "https://blog.aquilaxk.site")
         val response = MockHttpServletResponse()
 
@@ -108,7 +108,7 @@ class ApiRuntimeBoundaryFilterTest {
     fun `blocked runtime boundary response omits cors headers for apex and www origins`() {
         for (origin in listOf("https://aquilaxk.site", "https://www.aquilaxk.site", "https://www.blog.aquilaxk.site")) {
             val filter = createFilter("read")
-            val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/comments")
+            val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/hit")
             request.addHeader("Origin", origin)
             val response = MockHttpServletResponse()
 
@@ -121,10 +121,10 @@ class ApiRuntimeBoundaryFilterTest {
     }
 
     @Test
-    @DisplayName("admin 모드에서도 댓글 경로 OPTIONS preflight는 차단하지 않는다")
-    fun `admin mode allows comments options preflight`() {
+    @DisplayName("admin 모드에서도 hit 경로 OPTIONS preflight는 차단하지 않는다")
+    fun `admin mode allows hit options preflight`() {
         val filter = createFilter("admin")
-        val request = MockHttpServletRequest("OPTIONS", "/post/api/v1/posts/466/comments")
+        val request = MockHttpServletRequest("OPTIONS", "/post/api/v1/posts/466/hit")
         request.addHeader("Origin", "https://blog.aquilaxk.site")
         request.addHeader("Access-Control-Request-Method", "POST")
         val response = MockHttpServletResponse()
@@ -186,7 +186,7 @@ class ApiRuntimeBoundaryFilterTest {
     fun `admin mode allows member public get endpoints`() {
         val filter = createFilter("admin")
         val request =
-            MockHttpServletRequest("GET", "/member/api/v1/members/1/redirectToProfileImg")
+            MockHttpServletRequest("GET", "/member/api/v1/members/adminProfile")
         val response = MockHttpServletResponse()
 
         filter.doFilter(request, response, MockFilterChain())
@@ -199,7 +199,7 @@ class ApiRuntimeBoundaryFilterTest {
     fun `read mode blocks member public get endpoints`() {
         val filter = createFilter("read")
         val request =
-            MockHttpServletRequest("GET", "/member/api/v1/members/1/redirectToProfileImg")
+            MockHttpServletRequest("GET", "/member/api/v1/members/adminProfile")
         val response = MockHttpServletResponse()
 
         filter.doFilter(request, response, MockFilterChain())

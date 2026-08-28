@@ -46,10 +46,4 @@ interface MemberHasProfileImgUrl : MemberAware {
                 .takeIf { it.isNotBlank() }
                 ?.let(::appendProfileImgVersion)
                 ?: profileImgUrlOrDefault
-
-    val redirectToProfileImgUrlOrDefault: String
-        get() = "${AppConfig.siteBackUrl}/member/api/v1/members/${member.id}/redirectToProfileImg"
-
-    val redirectToProfileImgUrlVersionedOrDefault: String
-        get() = appendProfileImgVersion(redirectToProfileImgUrlOrDefault)
 }

@@ -28,7 +28,7 @@ data class PostCommentDto
             postComment.author.id,
             postComment.author.name,
             postComment.author.name,
-            postComment.author.redirectToProfileImgUrlVersionedOrDefault,
+            postComment.author.profileImgUrlVersionedOrDefault,
             postComment.author.profileImgUrlVersionedOrDefault,
             postComment.post.id,
             postComment.parentComment?.id,

@@ -93,12 +93,6 @@ enum class ErrorCode(
         "CSRF preflight 헤더가 필요합니다.",
         ErrorKind.USER,
     ),
-    OAUTH_SIGNUP_REQUIRED(
-        "403-4",
-        HttpStatus.FORBIDDEN,
-        "소셜 로그인 신규 가입은 현재 지원하지 않습니다.",
-        ErrorKind.USER,
-    ),
     POST_EDIT_DENIED(
         "403-10",
         HttpStatus.FORBIDDEN,
@@ -286,12 +280,6 @@ enum class ErrorCode(
         HttpStatus.SERVICE_UNAVAILABLE,
         "API 보호 시스템이 준비되지 않았습니다.",
         ErrorKind.DEVELOPER,
-    ),
-    SIGNUP_NOT_LAUNCHED(
-        "503-5",
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "회원가입은 출시 준비 중입니다.",
-        ErrorKind.USER,
     ),
     ;
 

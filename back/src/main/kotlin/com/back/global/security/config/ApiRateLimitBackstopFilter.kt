@@ -34,21 +34,15 @@ class ApiRateLimitBackstopFilter(
     private val requireRedisInProd: Boolean = true,
     @param:Value("\${custom.security.apiRateLimit.publicReadLimitPerMinute:120}")
     private val publicReadLimitPerMinute: Int = 120,
-    @param:Value("\${custom.security.apiRateLimit.authenticatedReadLimitPerMinute:120}")
-    private val authenticatedReadLimitPerMinute: Int = 120,
     @param:Value("\${custom.security.apiRateLimit.mutationLimitPerMinute:60}")
     private val mutationLimitPerMinute: Int = 60,
     @param:Value("\${custom.security.apiRateLimit.authLimitPerMinute:20}")
     private val authLimitPerMinute: Int = 20,
-    @param:Value("\${custom.security.apiRateLimit.sseLimitPerMinute:30}")
-    private val sseLimitPerMinute: Int = 30,
 ) : OncePerRequestFilter() {
     init {
         require(publicReadLimitPerMinute > 0) { "publicReadLimitPerMinute must be > 0" }
-        require(authenticatedReadLimitPerMinute > 0) { "authenticatedReadLimitPerMinute must be > 0" }
         require(mutationLimitPerMinute > 0) { "mutationLimitPerMinute must be > 0" }
         require(authLimitPerMinute > 0) { "authLimitPerMinute must be > 0" }
-        require(sseLimitPerMinute > 0) { "sseLimitPerMinute must be > 0" }
     }
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
@@ -121,17 +115,11 @@ class ApiRateLimitBackstopFilter(
     ): Bucket? {
         val method = rawMethod.uppercase()
         if (method == "OPTIONS") return null
-        if (method == "GET" && path == "/member/api/v1/notifications/stream") {
-            return Bucket("sse-open", sseLimitPerMinute)
-        }
         if (isAuthPath(path)) {
             return Bucket("auth", authLimitPerMinute)
         }
         if (method in SAFE_METHODS && publicApiRequestMatcher.isPublicReadSafe(method, path)) {
             return Bucket("public-read", publicReadLimitPerMinute)
-        }
-        if (method in SAFE_METHODS && isAuthenticatedReadPath(path)) {
-            return Bucket("authenticated-read", authenticatedReadLimitPerMinute)
         }
         if (method !in SAFE_METHODS && API_PATH_REGEX.matches(path)) {
             return Bucket("mutation", mutationLimitPerMinute)
@@ -143,8 +131,6 @@ class ApiRateLimitBackstopFilter(
         AUTH_PATHS.any { it.matches(path) } ||
             path.startsWith("/oauth2/") ||
             path.startsWith("/login/oauth2/")
-
-    private fun isAuthenticatedReadPath(path: String): Boolean = AUTHENTICATED_READ_PATHS.any { it.matches(path) }
 
     private fun shouldFailClosedWithoutRedis(): Boolean = environment.matchesProfiles("prod") && requireRedisInProd
 
@@ -213,15 +199,6 @@ class ApiRateLimitBackstopFilter(
         private val AUTH_PATHS =
             listOf(
                 Regex("^/member/api/v\\d+/auth/login$"),
-                Regex("^/member/api/v\\d+/signup/email/start$"),
-                Regex("^/member/api/v\\d+/signup/email/verify$"),
-                Regex("^/member/api/v\\d+/signup/complete$"),
-            )
-        private val AUTHENTICATED_READ_PATHS =
-            listOf(
-                Regex("^/member/api/v\\d+/notifications$"),
-                Regex("^/member/api/v\\d+/notifications/snapshot$"),
-                Regex("^/member/api/v\\d+/notifications/unread-count$"),
             )
     }
 }

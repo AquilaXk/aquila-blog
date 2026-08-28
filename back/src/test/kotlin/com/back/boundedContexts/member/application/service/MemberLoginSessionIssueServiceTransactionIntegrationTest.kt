@@ -107,8 +107,23 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
     }
 
     @Test
-    fun `ordinary active member rejects login issue without creating a session`() {
-        assertLoginIssueRejectedWithoutSession(memberIdFor("user1@test.com"))
+    fun `ordinary active member issues a privacy access session`() {
+        val memberId = memberIdFor("user1@test.com")
+        val sessionCountBefore = inTransaction { memberSessionRepository.count() }
+
+        val issued =
+            memberLoginSessionIssueService.issue(
+                memberId = memberId,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.9",
+                userAgent = "transaction-integration-test",
+            )
+
+        assertThat(issued.member.id).isEqualTo(memberId)
+        assertThat(issued.member.isAdmin).isFalse()
+        assertThat(inTransaction { memberSessionRepository.count() }).isEqualTo(sessionCountBefore + 1)
     }
 
     @Test
@@ -145,6 +160,8 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
                 userAgent = "transaction-integration-test",
             )
         }.isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.UNAUTHORIZED)
 
         assertThat(inTransaction { memberSessionRepository.count() }).isEqualTo(sessionCountBefore)
     }

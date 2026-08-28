@@ -1,13 +1,13 @@
 package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
 import com.back.global.security.domain.SecurityUser
 import com.back.global.security.domain.toGrantedAuthorities
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.authentication.InternalAuthenticationServiceException
 import org.springframework.security.core.GrantedAuthority
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest
@@ -21,7 +21,6 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser
 import org.springframework.security.oauth2.core.user.OAuth2User
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.Instant
 
 private enum class OAuth2Provider {
     KAKAO,
@@ -38,8 +37,7 @@ private enum class OAuth2Provider {
 class CustomOAuth2UserService(
     private val memberUseCase: MemberUseCase,
     private val oauthSignupUseCase: OAuthSignupUseCase,
-    @param:Value("\${custom.member.oauth-signup.enabled:false}")
-    private val oauthSignupEnabled: Boolean = false,
+    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) : OAuth2UserService<OAuth2UserRequest, OAuth2User> {
     internal var delegate: OAuth2UserService<OAuth2UserRequest, OAuth2User> = DefaultOAuth2UserService()
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -60,7 +58,7 @@ class CustomOAuth2UserService(
             profilePayload = profilePayload,
             memberUseCase = memberUseCase,
             oauthSignupUseCase = oauthSignupUseCase,
-            oauthSignupEnabled = oauthSignupEnabled,
+            canonicalAdminPolicy = canonicalAdminPolicy,
             logger = logger,
         ).toSecurityUser()
     }
@@ -70,8 +68,7 @@ class CustomOAuth2UserService(
 class CustomOidcUserService(
     private val memberUseCase: MemberUseCase,
     private val oauthSignupUseCase: OAuthSignupUseCase,
-    @param:Value("\${custom.member.oauth-signup.enabled:false}")
-    private val oauthSignupEnabled: Boolean = false,
+    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) : OAuth2UserService<OidcUserRequest, OidcUser> {
     internal var delegate: OAuth2UserService<OidcUserRequest, OidcUser> = OidcUserService()
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -92,7 +89,7 @@ class CustomOidcUserService(
                 profilePayload = profilePayload,
                 memberUseCase = memberUseCase,
                 oauthSignupUseCase = oauthSignupUseCase,
-                oauthSignupEnabled = oauthSignupEnabled,
+                canonicalAdminPolicy = canonicalAdminPolicy,
                 logger = logger,
             )
 
@@ -105,7 +102,7 @@ private fun loadExistingMemberOrStartSignup(
     profilePayload: OAuth2ProfilePayload,
     memberUseCase: MemberUseCase,
     oauthSignupUseCase: OAuthSignupUseCase,
-    oauthSignupEnabled: Boolean,
+    canonicalAdminPolicy: CanonicalAdminPolicy,
     logger: Logger,
 ): Member {
     val providerSubjectHash =
@@ -132,43 +129,14 @@ private fun loadExistingMemberOrStartSignup(
         memberUseCase.findByLoginId(memberLoginId)
             ?: memberUseCase.findByLoginId(legacyLoginId)
 
-    if (member == null) {
-        if (!oauthSignupEnabled) {
-            throw OAuthSignupDisabledAuthenticationException(provider.name)
-        }
-        throw buildPendingSignupException(provider, profilePayload, oauthSignupUseCase)
+    if (member == null || !canonicalAdminPolicy.canAuthenticate(member)) {
+        throw OAuthSignupDisabledAuthenticationException(provider.name)
     }
 
     memberUseCase.modify(member, profilePayload.nickname, profilePayload.profileImgUrl)
 
     return member
 }
-
-private fun buildPendingSignupException(
-    provider: OAuth2Provider,
-    profilePayload: OAuth2ProfilePayload,
-    oauthSignupUseCase: OAuthSignupUseCase,
-): OAuthSignupRequiredAuthenticationException {
-    val pending =
-        oauthSignupUseCase.startPending(
-            provider = provider.name,
-            providerSubject = profilePayload.oauthUserId,
-            nickname = profilePayload.nickname,
-            profileImgUrl = profilePayload.profileImgUrl,
-        )
-
-    return OAuthSignupRequiredAuthenticationException(
-        provider = pending.provider,
-        pendingToken = pending.pendingToken,
-        expiresAt = pending.expiresAt,
-    )
-}
-
-internal class OAuthSignupRequiredAuthenticationException(
-    val provider: String,
-    val pendingToken: String,
-    val expiresAt: Instant,
-) : InternalAuthenticationServiceException("OAuth signup requires local consent.")
 
 internal class OAuthSignupDisabledAuthenticationException(
     val provider: String,

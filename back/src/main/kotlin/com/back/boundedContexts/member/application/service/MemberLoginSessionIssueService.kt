@@ -15,6 +15,7 @@ class MemberLoginSessionIssueService(
     private val memberRepository: MemberRepositoryPort,
     private val memberSessionUseCase: MemberSessionUseCase,
     private val authTokenIssueUseCase: AuthTokenIssueUseCase,
+    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) {
     @Transactional
     fun issue(
@@ -29,6 +30,10 @@ class MemberLoginSessionIssueService(
             memberRepository
                 .findByIdForUpdate(memberId)
                 .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
+
+        if (!canonicalAdminPolicy.canAuthenticate(member)) {
+            throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")
+        }
 
         member.applyLoginSecurityPolicy(
             rememberLoginEnabled = rememberLoginEnabled,

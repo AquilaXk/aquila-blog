@@ -10,11 +10,9 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 import java.time.Instant
-import java.util.Optional
 
 @org.junit.jupiter.api.DisplayName("ApiV1MemberControllerWebMvc 테스트")
 class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
@@ -56,7 +54,7 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
                     jsonPath("$.homeIntroDescription") { value("welcome to my backend dev log!") }
                     jsonPath("$.blogDesign") { value("grid") }
                     jsonPath("$.legacyBlogScheme") { value("light") }
-                    jsonPath("$.profileImageUrl") { value(startsWith(adminMember.redirectToProfileImgUrlOrDefault)) }
+                    jsonPath("$.profileImageUrl") { value(startsWith(adminMember.profileImgUrlOrDefault)) }
                 }
         }
     }
@@ -64,34 +62,11 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
     @Nested
     inner class RedirectToProfileImg {
         @Test
-        fun `프로필 이미지 리다이렉트 요청이 성공하면 Location 헤더와 함께 302를 반환한다`() {
-            val member = sampleMember(id = 7, username = "user1", nickname = "user1")
-            member.profileImgUrl = "https://cdn.example.com/profile/user1.png"
-            given(memberUseCase.findById(member.id)).willReturn(Optional.of(member))
-
+        fun `프로필 이미지 리다이렉트 route는 존재하지 않는다`() {
             mvc
-                .get("/member/api/v1/members/${member.id}/redirectToProfileImg")
-                .andExpect {
-                    status { isFound() }
-                    match(handler().handlerType(ApiV1MemberController::class.java))
-                    match(handler().methodName("redirectToProfileImg"))
-                    header { exists(HttpHeaders.LOCATION) }
-                    header { string(HttpHeaders.LOCATION, member.profileImgUrlOrDefault) }
-                }
-        }
-
-        @Test
-        fun `프로필 이미지 리다이렉트 요청에서 없는 회원 id 를 보내면 404를 반환한다`() {
-            given(memberUseCase.findById(999999)).willReturn(Optional.empty())
-
-            mvc
-                .get("/member/api/v1/members/999999/redirectToProfileImg")
+                .get("/member/api/v1/members/7/redirectToProfileImg")
                 .andExpect {
                     status { isNotFound() }
-                    match(handler().handlerType(ApiV1MemberController::class.java))
-                    match(handler().methodName("redirectToProfileImg"))
-                    jsonPath("$.resultCode") { value("404-1") }
-                    jsonPath("$.msg") { value("해당 데이터가 존재하지 않습니다.") }
                 }
         }
     }
@@ -99,19 +74,11 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
     @Nested
     inner class RandomSecureTip {
         @Test
-        fun `랜덤 보안 팁 조회는 보안 안내 문구를 반환한다`() {
-            given(securityTipProvider.signupPasswordTip()).willReturn("비밀번호는 영문, 숫자, 특수문자를 조합하여 8자 이상으로 설정하세요.")
-
+        fun `회원가입 보안 팁 route는 존재하지 않는다`() {
             mvc
                 .get("/member/api/v1/members/randomSecureTip")
                 .andExpect {
-                    status { isOk() }
-                    match(handler().handlerType(ApiV1MemberController::class.java))
-                    match(handler().methodName("randomSecureTip"))
-                    header { string(HttpHeaders.CONTENT_TYPE, startsWith(MediaType.TEXT_PLAIN_VALUE)) }
-                    content {
-                        string("비밀번호는 영문, 숫자, 특수문자를 조합하여 8자 이상으로 설정하세요.")
-                    }
+                    status { isNotFound() }
                 }
         }
     }

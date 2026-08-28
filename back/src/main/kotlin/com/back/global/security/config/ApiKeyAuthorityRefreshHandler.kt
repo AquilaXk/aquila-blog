@@ -1,6 +1,7 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.web.application.AuthCookieService
@@ -18,6 +19,7 @@ class ApiKeyAuthorityRefreshHandler(
     private val securityContextAuthenticationWriter: SecurityContextAuthenticationWriter,
     private val memberSessionAuthenticationResolver: MemberSessionAuthenticationResolver,
     private val rq: Rq,
+    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) {
     fun authenticateIfPreferred(
         request: HttpServletRequest,
@@ -29,6 +31,9 @@ class ApiKeyAuthorityRefreshHandler(
         if (!AuthRequestMethodPolicy.isMutating(request) || apiKey.isBlank()) return false
 
         val apiKeyMember = actorApplicationService.findByApiKey(apiKey) ?: return false
+        if (!canonicalAdminPolicy.canAuthenticate(apiKeyMember)) {
+            memberSessionAuthenticationResolver.rejectExpiredSession()
+        }
         val sessionResolution =
             memberSessionAuthenticationResolver.resolve(
                 memberId = apiKeyMember.id,

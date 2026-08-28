@@ -106,6 +106,7 @@ class PostCommentApplicationService(
         postComment: PostComment,
         actor: Member,
         publishDomainEvent: Boolean = true,
+        enqueueSideEffect: Boolean = true,
     ) {
         postHydrationService.hydratePostAttrs(post)
         val commentsToDelete =
@@ -120,26 +121,28 @@ class PostCommentApplicationService(
             post.onCommentDeleted()
             comment.softDelete()
 
-            postInteractionSideEffectQueue.enqueue(
-                postId = comment.post.id,
-                recommendationAction =
-                    if (index == commentsToDelete.lastIndex) {
-                        PostInteractionRecommendationSideEffect.REFRESH
-                    } else {
-                        PostInteractionRecommendationSideEffect.NONE
-                    },
-                domainEvent =
-                    if (publishDomainEvent) {
-                        PostCommentDeletedEvent(
-                            UUID.randomUUID(),
-                            PostCommentDto(comment),
-                            PostDto(post),
-                            MemberDto(actor),
-                        )
-                    } else {
-                        null
-                    },
-            )
+            if (enqueueSideEffect) {
+                postInteractionSideEffectQueue.enqueue(
+                    postId = comment.post.id,
+                    recommendationAction =
+                        if (index == commentsToDelete.lastIndex) {
+                            PostInteractionRecommendationSideEffect.REFRESH
+                        } else {
+                            PostInteractionRecommendationSideEffect.NONE
+                        },
+                    domainEvent =
+                        if (publishDomainEvent) {
+                            PostCommentDeletedEvent(
+                                UUID.randomUUID(),
+                                PostCommentDto(comment),
+                                PostDto(post),
+                                MemberDto(actor),
+                            )
+                        } else {
+                            null
+                        },
+                )
+            }
         }
 
         postCounterService.savePostAttr(post.commentsCountAttr)
@@ -163,7 +166,13 @@ class PostCommentApplicationService(
             if (target.postDeleted) {
                 deleteDeletedPostCommentSubtreeForAccountDeletion(target.postId, target.comment)
             } else {
-                deleteComment(target.comment.post, target.comment, author, publishDomainEvent = false)
+                deleteComment(
+                    target.comment.post,
+                    target.comment,
+                    author,
+                    publishDomainEvent = false,
+                    enqueueSideEffect = false,
+                )
             }
         }
 
@@ -202,20 +211,10 @@ class PostCommentApplicationService(
 
         commentsToDelete.forEach { postHydrationService.hydrateMemberCounterAttrs(it.author) }
 
-        commentsToDelete.forEachIndexed { index, comment ->
+        commentsToDelete.forEach { comment ->
             comment.author.decrementPostCommentsCount()
             postCounterService.saveMemberAttr(comment.author.postCommentsCountAttr)
             comment.softDelete()
-            postInteractionSideEffectQueue.enqueue(
-                postId = postId,
-                recommendationAction =
-                    if (index == commentsToDelete.lastIndex) {
-                        PostInteractionRecommendationSideEffect.REFRESH
-                    } else {
-                        PostInteractionRecommendationSideEffect.NONE
-                    },
-                domainEvent = null,
-            )
         }
 
         postCommentRepository.decrementPostCommentsCountByPostId(postId, commentsToDelete.size)

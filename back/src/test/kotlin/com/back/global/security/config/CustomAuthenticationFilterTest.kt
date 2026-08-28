@@ -5,10 +5,14 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.back.boundedContexts.cloud.config.CloudSecurityConfigurer
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
+import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
+import com.back.boundedContexts.member.subContexts.session.model.MemberSessionWithRefreshToken
+import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -270,7 +274,7 @@ class CustomAuthenticationFilterTest {
     @DisplayName("보호 API에서 인증 처리 중 예기치 못한 예외가 발생하면 500 대신 401-1로 응답한다")
     fun `protected api unexpected auth error returns 401`() {
         val fixture = CustomAuthenticationFilterFixture()
-        val request = MockHttpServletRequest("GET", "/member/api/v1/notifications/snapshot")
+        val request = MockHttpServletRequest("GET", "/member/api/v1/privacy/export")
         request.addHeader(HttpHeaders.ORIGIN, "https://blog.aquilaxk.site")
 
         fixture.givenProtectedRequest(request)
@@ -520,6 +524,126 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("canonical email과 다른 admin의 access token은 세션 만료로 거부한다")
+    fun `access token rejects admin with noncanonical email`() {
+        val fixture = CustomAuthenticationFilterFixture()
+        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session")
+        val accessToken = "wrong-admin-access-token"
+        val sessionKey = "wrong-admin-session-key"
+        val sessionSnapshot =
+            MemberSessionAuthSnapshot(21L, 64L, sessionKey, true, false, null, Instant.now())
+        val wrongAdmin = Member(64L, "wrong-admin", null, "Wrong admin", "wrong-admin@test.com").also { it.grantAdmin() }
+
+        given(fixture.actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = wrongAdmin.id,
+                    sessionKey = sessionKey,
+                    username = wrongAdmin.username,
+                    email = wrongAdmin.email,
+                    name = wrongAdmin.nickname,
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                ),
+            )
+        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(wrongAdmin.id, sessionKey)).willReturn(sessionSnapshot)
+        given(fixture.actorApplicationService.findById(wrongAdmin.id)).willReturn(wrongAdmin)
+
+        try {
+            assertThatThrownBy {
+                fixture.accessTokenAuthenticationHandler().authenticate(
+                    request = request,
+                    tokens = ExtractedAuthTokens("", accessToken, sessionKey, ""),
+                    clientIp = "203.0.113.31",
+                )
+            }.isInstanceOf(AppException::class.java)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SESSION_EXPIRED)
+            assertThat(SecurityContextHolder.getContext().authentication).isNull()
+            verify(fixture.authCookieService).expireAuthCookies()
+            verify(fixture.memberSessionUseCase, never()).touchAuthenticated(sessionSnapshot)
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
+    @Test
+    @DisplayName("canonical email과 다른 admin의 API key 권한 갱신은 token 발급 전에 거부한다")
+    fun `api key refresh rejects admin with noncanonical email`() {
+        val fixture = CustomAuthenticationFilterFixture()
+        val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+        val apiKey = "wrong-admin-api-key"
+        val wrongAdmin = Member(65L, "wrong-admin", null, "Wrong admin", "wrong-admin@test.com", apiKey).also { it.grantAdmin() }
+        val payload =
+            AccessTokenPayload(
+                id = wrongAdmin.id,
+                sessionKey = "wrong-admin-session-key",
+                username = wrongAdmin.username,
+                email = wrongAdmin.email,
+                name = wrongAdmin.nickname,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+            )
+        given(fixture.actorApplicationService.findByApiKey(apiKey)).willReturn(wrongAdmin)
+
+        assertThatThrownBy {
+            fixture.apiKeyAuthorityRefreshHandler().authenticateIfPreferred(
+                request = request,
+                apiKey = apiKey,
+                payload = payload,
+                sessionKey = "wrong-admin-session-key",
+                clientIp = "203.0.113.32",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.SESSION_EXPIRED)
+
+        verify(fixture.authCookieService).expireAuthCookies()
+        verify(fixture.authCookieService, never()).issueAccessToken(
+            ArgumentMatchers.anyString(),
+            ArgumentMatchers.anyBoolean(),
+            ArgumentMatchers.nullable(String::class.java),
+            ArgumentMatchers.nullable(String::class.java),
+        )
+        assertThat(SecurityContextHolder.getContext().authentication).isNull()
+    }
+
+    @Test
+    @DisplayName("canonical email과 다른 admin의 refresh token은 access cookie 발급 전에 거부한다")
+    fun `refresh token rejects admin with noncanonical email`() {
+        val fixture = CustomAuthenticationFilterFixture()
+        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session")
+        val sessionKey = "wrong-admin-session-key"
+        val refreshToken = "wrong-admin-refresh-token"
+        val wrongAdmin = Member(66L, "wrong-admin", null, "Wrong admin", "wrong-admin@test.com").also { it.grantAdmin() }
+        val memberSession = MemberSession(id = 22L, member = wrongAdmin, sessionKey = sessionKey)
+        given(fixture.memberSessionUseCase.rotateRefreshToken(sessionKey, refreshToken))
+            .willReturn(MemberSessionWithRefreshToken(memberSession, "rotated-refresh-token"))
+        given(fixture.actorApplicationService.findById(wrongAdmin.id)).willReturn(wrongAdmin)
+
+        assertThatThrownBy {
+            fixture.refreshTokenAuthenticationHandler().authenticate(
+                request = request,
+                tokens = ExtractedAuthTokens("", "", sessionKey, refreshToken),
+                clientIp = "203.0.113.33",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.SESSION_EXPIRED)
+
+        verify(fixture.authCookieService).expireAuthCookies()
+        verify(fixture.authCookieService, never()).issueAccessToken(
+            ArgumentMatchers.anyString(),
+            ArgumentMatchers.anyBoolean(),
+            ArgumentMatchers.nullable(String::class.java),
+            ArgumentMatchers.nullable(String::class.java),
+        )
+        assertThat(SecurityContextHolder.getContext().authentication).isNull()
+    }
+
+    @Test
     @DisplayName("safe read 요청도 세션 snapshot이 없으면 인증 쿠키를 만료하고 401-8로 닫는다")
     fun `missing snapshot rejects safe read request`() {
         val fixture = CustomAuthenticationFilterFixture()
@@ -677,6 +801,7 @@ class CustomAuthenticationFilterTest {
             publicApiRequestMatcherOverride ?: mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy: ApiCorsPolicy = mock(ApiCorsPolicy::class.java)
         val rq: Rq = mock(Rq::class.java)
+        private val canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = "admin@test.com"))
 
         private val memberSessionAuthenticationResolver =
             MemberSessionAuthenticationResolver(
@@ -700,6 +825,7 @@ class CustomAuthenticationFilterTest {
                 securityContextAuthenticationWriter = securityContextAuthenticationWriter,
                 memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                 rq = rq,
+                canonicalAdminPolicy = canonicalAdminPolicy,
             )
         private val accessTokenAuthenticationHandler =
             AccessTokenAuthenticationHandler(
@@ -709,6 +835,7 @@ class CustomAuthenticationFilterTest {
                 securityContextAuthenticationWriter = securityContextAuthenticationWriter,
                 memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                 apiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler,
+                canonicalAdminPolicy = canonicalAdminPolicy,
             )
         private val refreshTokenAuthenticationHandler =
             RefreshTokenAuthenticationHandler(
@@ -717,7 +844,9 @@ class CustomAuthenticationFilterTest {
                 authCookieService = authCookieService,
                 authIpSecurityVerifier = authIpSecurityVerifier,
                 securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                 rq = rq,
+                canonicalAdminPolicy = canonicalAdminPolicy,
             )
 
         fun authenticationFilter(profile: String = "test"): CustomAuthenticationFilter =
@@ -733,6 +862,10 @@ class CustomAuthenticationFilterTest {
             )
 
         fun accessTokenAuthenticationHandler(): AccessTokenAuthenticationHandler = accessTokenAuthenticationHandler
+
+        fun apiKeyAuthorityRefreshHandler(): ApiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler
+
+        fun refreshTokenAuthenticationHandler(): RefreshTokenAuthenticationHandler = refreshTokenAuthenticationHandler
 
         fun givenEmptyAuthorizationHeader() {
             given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")

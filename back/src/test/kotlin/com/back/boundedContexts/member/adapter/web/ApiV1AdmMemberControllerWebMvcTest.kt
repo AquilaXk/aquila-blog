@@ -53,7 +53,7 @@ class ApiV1AdmMemberControllerWebMvcTest : BaseAdmMemberControllerWebMvcTest() {
                     jsonPath("$.content[$index].username") { value(member.name) }
                     jsonPath("$.content[$index].name") { value(member.name) }
                     jsonPath("$.content[$index].nickname") { value(member.nickname) }
-                    jsonPath("$.content[$index].profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
+                    jsonPath("$.content[$index].profileImageUrl") { value(startsWith(member.profileImgUrlOrDefault)) }
                 }
             }
         }
@@ -180,7 +180,7 @@ class ApiV1AdmMemberControllerWebMvcTest : BaseAdmMemberControllerWebMvcTest() {
                     jsonPath("$.username") { value(member.name) }
                     jsonPath("$.name") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
-                    jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
+                    jsonPath("$.profileImageUrl") { value(startsWith(member.profileImgUrlOrDefault)) }
                 }
         }
 

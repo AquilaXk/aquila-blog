@@ -1,11 +1,13 @@
 package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingDetails
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingStartResult
+import com.back.global.app.AdminProperties
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -36,7 +38,7 @@ class CustomOAuth2UserServiceTest {
         val memberUseCase = RecordingMemberUseCase(existingMemberUsername = "KAKAO__oauth-user-id")
         val oauthSignupUseCase = RecordingOAuthSignupUseCase()
         val service =
-            CustomOAuth2UserService(memberUseCase.proxy, oauthSignupUseCase).apply {
+            CustomOAuth2UserService(memberUseCase.proxy, oauthSignupUseCase, canonicalAdminPolicy()).apply {
                 delegate =
                     OAuth2UserService<OAuth2UserRequest, OAuth2User> {
                         DefaultOAuth2User(emptyList(), mapOf("id" to "oauth-user-id"), "id")
@@ -86,7 +88,7 @@ class CustomOAuth2UserServiceTest {
                 ),
             )
         val service =
-            CustomOidcUserService(memberUseCase.proxy, oauthSignupUseCase).apply {
+            CustomOidcUserService(memberUseCase.proxy, oauthSignupUseCase, canonicalAdminPolicy()).apply {
                 delegate =
                     OAuth2UserService<OidcUserRequest, OidcUser> {
                         DefaultOidcUser(emptyList(), idToken, userInfo, "sub")
@@ -118,46 +120,15 @@ class CustomOAuth2UserServiceTest {
     }
 
     @Test
-    fun `OAuth2 신규 사용자는 member를 만들지 않고 pending 동의 토큰을 발급한다`() {
+    fun `OAuth2 신규 사용자는 signup flag와 무관하게 pending row 없이 거부한다`() {
         val memberUseCase = RecordingMemberUseCase()
         val oauthSignupUseCase = RecordingOAuthSignupUseCase()
         val service =
             CustomOAuth2UserService(
                 memberUseCase.proxy,
                 oauthSignupUseCase,
-                oauthSignupEnabled = true,
+                canonicalAdminPolicy(),
             ).apply {
-                delegate =
-                    OAuth2UserService<OAuth2UserRequest, OAuth2User> {
-                        DefaultOAuth2User(emptyList(), mapOf("id" to "new-oauth-user-id"), "id")
-                    }
-            }
-
-        assertThatThrownBy {
-            service.loadUser(
-                OAuth2UserRequest(kakaoClientRegistration(userNameAttributeName = "id"), accessToken()),
-            )
-        }.isInstanceOf(OAuthSignupRequiredAuthenticationException::class.java)
-            .hasMessageNotContaining("new-oauth-user-id")
-
-        assertThat(memberUseCase.findLoginIds).containsExactly("KAKAO__subject-hash", "KAKAO__new-oauth-user-id")
-        assertThat(oauthSignupUseCase.pendingStarts)
-            .containsExactly(
-                PendingStartRequest(
-                    provider = "KAKAO",
-                    providerSubject = "new-oauth-user-id",
-                    nickname = OAuth2ProfileExtractor.DEFAULT_KAKAO_NICKNAME,
-                    profileImgUrl = null,
-                ),
-            )
-    }
-
-    @Test
-    fun `OAuth2 신규 가입 flag가 꺼져 있으면 pending 동의 토큰을 발급하지 않는다`() {
-        val memberUseCase = RecordingMemberUseCase()
-        val oauthSignupUseCase = RecordingOAuthSignupUseCase()
-        val service =
-            CustomOAuth2UserService(memberUseCase.proxy, oauthSignupUseCase).apply {
                 delegate =
                     OAuth2UserService<OAuth2UserRequest, OAuth2User> {
                         DefaultOAuth2User(emptyList(), mapOf("id" to "new-oauth-user-id"), "id")
@@ -178,7 +149,11 @@ class CustomOAuth2UserServiceTest {
     @Test
     fun `지원하지 않는 provider는 명시적으로 거부한다`() {
         val service =
-            CustomOAuth2UserService(RecordingMemberUseCase().proxy, RecordingOAuthSignupUseCase()).apply {
+            CustomOAuth2UserService(
+                RecordingMemberUseCase().proxy,
+                RecordingOAuthSignupUseCase(),
+                canonicalAdminPolicy(),
+            ).apply {
                 delegate =
                     OAuth2UserService<OAuth2UserRequest, OAuth2User> {
                         DefaultOAuth2User(emptyList(), mapOf("id" to "oauth-user-id"), "id")
@@ -199,7 +174,11 @@ class CustomOAuth2UserServiceTest {
     @Test
     fun `OAuth2 provider user가 없으면 명시적으로 거부한다`() {
         val service =
-            CustomOAuth2UserService(RecordingMemberUseCase().proxy, RecordingOAuthSignupUseCase()).apply {
+            CustomOAuth2UserService(
+                RecordingMemberUseCase().proxy,
+                RecordingOAuthSignupUseCase(),
+                canonicalAdminPolicy(),
+            ).apply {
                 delegate = OAuth2UserService<OAuth2UserRequest, OAuth2User> { null }
             }
 
@@ -221,7 +200,11 @@ class CustomOAuth2UserServiceTest {
                 mapOf("sub" to "oidc-user-id"),
             )
         val service =
-            CustomOidcUserService(RecordingMemberUseCase().proxy, RecordingOAuthSignupUseCase()).apply {
+            CustomOidcUserService(
+                RecordingMemberUseCase().proxy,
+                RecordingOAuthSignupUseCase(),
+                canonicalAdminPolicy(),
+            ).apply {
                 delegate = OAuth2UserService<OidcUserRequest, OidcUser> { null }
             }
 
@@ -232,6 +215,68 @@ class CustomOAuth2UserServiceTest {
         }.isInstanceOf(InternalAuthenticationServiceException::class.java)
             .hasMessage("OIDC provider returned no user.")
     }
+
+    @Test
+    fun `wrong-email admin은 OAuth2와 OIDC principal 생성 전에 거부하고 프로필을 변경하지 않는다`() {
+        val oauthMemberUseCase =
+            RecordingMemberUseCase(
+                existingMemberUsername = "KAKAO__oauth-user-id",
+                existingMemberEmail = "wrong-admin@example.com",
+                existingMemberIsAdmin = true,
+            )
+        val oauthService =
+            CustomOAuth2UserService(
+                oauthMemberUseCase.proxy,
+                RecordingOAuthSignupUseCase(),
+                canonicalAdminPolicy(),
+            ).apply {
+                delegate =
+                    OAuth2UserService<OAuth2UserRequest, OAuth2User> {
+                        DefaultOAuth2User(emptyList(), mapOf("id" to "oauth-user-id"), "id")
+                    }
+            }
+
+        assertThatThrownBy {
+            oauthService.loadUser(
+                OAuth2UserRequest(kakaoClientRegistration(userNameAttributeName = "id"), accessToken()),
+            )
+        }.isInstanceOf(OAuthSignupDisabledAuthenticationException::class.java)
+        assertThat(oauthMemberUseCase.lastModifyRequest).isNull()
+
+        val oidcMemberUseCase =
+            RecordingMemberUseCase(
+                existingMemberUsername = "KAKAO__oidc-user-id",
+                existingMemberEmail = "wrong-admin@example.com",
+                existingMemberIsAdmin = true,
+            )
+        val idToken =
+            OidcIdToken(
+                "id-token",
+                Instant.EPOCH,
+                Instant.EPOCH.plusSeconds(60),
+                mapOf("sub" to "oidc-user-id"),
+            )
+        val oidcService =
+            CustomOidcUserService(
+                oidcMemberUseCase.proxy,
+                RecordingOAuthSignupUseCase(),
+                canonicalAdminPolicy(),
+            ).apply {
+                delegate =
+                    OAuth2UserService<OidcUserRequest, OidcUser> {
+                        DefaultOidcUser(emptyList(), idToken, "sub")
+                    }
+            }
+
+        assertThatThrownBy {
+            oidcService.loadUser(
+                OidcUserRequest(kakaoClientRegistration(userNameAttributeName = "sub"), accessToken(), idToken),
+            )
+        }.isInstanceOf(OAuthSignupDisabledAuthenticationException::class.java)
+        assertThat(oidcMemberUseCase.lastModifyRequest).isNull()
+    }
+
+    private fun canonicalAdminPolicy(): CanonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = "admin@test.com"))
 
     private fun kakaoClientRegistration(
         registrationId: String = "kakao",
@@ -277,6 +322,8 @@ private data class PendingStartRequest(
 
 private class RecordingMemberUseCase(
     private val existingMemberUsername: String? = null,
+    private val existingMemberEmail: String? = null,
+    private val existingMemberIsAdmin: Boolean = false,
 ) {
     var lastFindLoginId: String? = null
         private set
@@ -290,7 +337,10 @@ private class RecordingMemberUseCase(
                 username = it,
                 password = "",
                 nickname = "기존닉네임",
-            )
+                email = existingMemberEmail,
+            ).also { member ->
+                if (existingMemberIsAdmin) member.grantAdmin()
+            }
         }
 
     val proxy: MemberUseCase =

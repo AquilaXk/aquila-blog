@@ -1,7 +1,6 @@
 package com.back.boundedContexts.member.subContexts.legalAcceptance.application.service
 
 import com.back.boundedContexts.member.adapter.web.ApiV1AdmMemberController
-import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalReconsentReport
 import com.back.boundedContexts.member.subContexts.legalAcceptance.application.port.output.MemberLegalAcceptanceRepositoryPort
 import com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance
@@ -31,8 +30,6 @@ class LegalAcceptanceApplicationServiceTest {
 
         assertThat(report.totalMembers).isEqualTo(0)
         assertThat(report.completionRate).isEqualTo(1.0)
-        assertThat(AuthSessionMemberDto(id = 1, isAdmin = false, username = "user", nickname = "nick").legalReconsent)
-            .isNull()
     }
 
     private class CountingLegalAcceptanceRepository(

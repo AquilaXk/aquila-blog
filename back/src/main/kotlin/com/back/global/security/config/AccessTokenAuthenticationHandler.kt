@@ -1,6 +1,7 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import jakarta.servlet.http.HttpServletRequest
@@ -14,6 +15,7 @@ class AccessTokenAuthenticationHandler(
     private val securityContextAuthenticationWriter: SecurityContextAuthenticationWriter,
     private val memberSessionAuthenticationResolver: MemberSessionAuthenticationResolver,
     private val apiKeyAuthorityRefreshHandler: ApiKeyAuthorityRefreshHandler,
+    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) {
     fun authenticate(
         request: HttpServletRequest,
@@ -45,14 +47,10 @@ class AccessTokenAuthenticationHandler(
             )
         memberSessionAuthenticationResolver.ensureUsable(sessionResolution, requireSession = true)
         val persistedMember =
-            actorApplicationService.findById(payload.id)
-                ?: run {
-                    memberSessionAuthenticationResolver.expireAuthCookies()
-                    throw com.back.global.exception.application.AppException(
-                        com.back.global.exception.application.ErrorCode.SESSION_EXPIRED,
-                        "세션이 만료되었습니다. 다시 로그인해주세요.",
-                    )
-                }
+            actorApplicationService
+                .findById(payload.id)
+                ?.takeIf(canonicalAdminPolicy::canAuthenticate)
+                ?: memberSessionAuthenticationResolver.rejectExpiredSession()
         val sessionContext =
             memberSessionAuthenticationResolver.context(
                 sessionResolution = sessionResolution,

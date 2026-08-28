@@ -26,7 +26,7 @@ class ExceptionHandlerLogRedactionTest {
     fun `app exception log redacts sensitive query values`() {
         val handler = newHandler()
         val request =
-            MockHttpServletRequest("GET", "/member/api/v1/signup/email/verify").apply {
+            MockHttpServletRequest("GET", "/member/api/v1/privacy/export").apply {
                 queryString = "token=LEAK_TEST_123&email=test@example.com"
             }
         val appender = ExceptionHandlerListAppenderSupport.attach()

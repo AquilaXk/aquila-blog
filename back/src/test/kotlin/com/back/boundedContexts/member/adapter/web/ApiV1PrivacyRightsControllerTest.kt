@@ -373,6 +373,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             countTaskPayloadsContaining("탈퇴 후 숨겨져야 하는 댓글")
         val actionLogsWithDeletingMemberProfileBeforeDeletion =
             countActionLogsContaining("탈퇴유저")
+        val retiredInteractionTasksBeforeDeletion = countTasksByType("post.interaction.side-effect")
 
         mvc
             .delete("/member/api/v1/privacy/account") {
@@ -429,6 +430,8 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             .isEqualTo(taskPayloadsWithDeletedCommentContentBeforeDeletion)
         assertThat(countActionLogsContaining("탈퇴유저"))
             .isEqualTo(actionLogsWithDeletingMemberProfileBeforeDeletion)
+        assertThat(countTasksByType("post.interaction.side-effect"))
+            .isEqualTo(retiredInteractionTasksBeforeDeletion)
         val deletion =
             memberAccountDeletionRepository
                 .findAll()
@@ -870,6 +873,13 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             """.trimIndent(),
             Int::class.java,
             "%$valueFragment%",
+        ) ?: 0
+
+    private fun countTasksByType(taskType: String): Int =
+        jdbcTemplate.queryForObject(
+            "select count(*) from task where task_type = ?",
+            Int::class.java,
+            taskType,
         ) ?: 0
 
     private fun countActionLogsContaining(valueFragment: String): Int =

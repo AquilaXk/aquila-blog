@@ -134,51 +134,14 @@ class ApiRateLimitBackstopFilterTest {
     }
 
     @Test
-    @DisplayName("SSE 신규 연결은 public read와 별도 bucket으로 제한한다")
-    fun `sse stream open is rate limited separately`() {
-        val redis = InMemoryRedisKeyValuePort()
-        val filter = createFilter(redis = redis, sseLimitPerMinute = 1)
-
-        assertThat(runFilter(filter, "GET", "/member/api/v1/notifications/stream").status).isEqualTo(HttpServletResponse.SC_OK)
-
-        val limited = runFilter(filter, "GET", "/member/api/v1/notifications/stream")
-
-        assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString)
-            .contains("\"resultCode\":\"429-10\"")
-            .doesNotContain("\"bucket\"")
-        assertThat(redis.expiredKeys()).anyMatch { it.contains("sse-open") }
-    }
-
-    @Test
-    @DisplayName("알림 polling GET은 authenticated-read bucket으로 제한한다")
-    fun `notification polling get endpoints use authenticated read bucket`() {
-        val redis = InMemoryRedisKeyValuePort()
-        val filter = createFilter(redis = redis, authenticatedReadLimitPerMinute = 2)
-
-        assertThat(runFilter(filter, "GET", "/member/api/v1/notifications/snapshot").status)
-            .isEqualTo(HttpServletResponse.SC_OK)
-        assertThat(runFilter(filter, "GET", "/member/api/v1/notifications/unread-count").status)
-            .isEqualTo(HttpServletResponse.SC_OK)
-
-        val limited = runFilter(filter, "GET", "/member/api/v1/notifications")
-
-        assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString)
-            .contains("\"resultCode\":\"429-10\"")
-            .doesNotContain("\"bucket\"")
-        assertThat(redis.expiredKeys()).anyMatch { it.contains("authenticated-read") }
-    }
-
-    @Test
-    @DisplayName("OAuth와 signup/auth 요청은 auth bucket으로 제한한다")
-    fun `oauth and signup auth paths use auth bucket`() {
+    @DisplayName("OAuth와 password login 요청은 auth bucket으로 제한한다")
+    fun `oauth and password login paths use auth bucket`() {
         val redis = InMemoryRedisKeyValuePort()
         val filter = createFilter(redis = redis, authLimitPerMinute = 1)
 
         assertThat(runFilter(filter, "GET", "/login/oauth2/code/github").status).isEqualTo(HttpServletResponse.SC_OK)
 
-        val limited = runFilter(filter, "POST", "/member/api/v1/signup/email/start")
+        val limited = runFilter(filter, "POST", "/member/api/v1/auth/login")
 
         assertThat(limited.status).isEqualTo(429)
         assertThat(limited.contentAsString)
@@ -373,11 +336,6 @@ class ApiRateLimitBackstopFilterTest {
             .hasMessageContaining("publicReadLimitPerMinute")
 
         assertThatThrownBy {
-            createFilter(redis = InMemoryRedisKeyValuePort(), authenticatedReadLimitPerMinute = 0)
-        }.isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("authenticatedReadLimitPerMinute")
-
-        assertThatThrownBy {
             createFilter(redis = InMemoryRedisKeyValuePort(), mutationLimitPerMinute = 0)
         }.isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("mutationLimitPerMinute")
@@ -386,11 +344,6 @@ class ApiRateLimitBackstopFilterTest {
             createFilter(redis = InMemoryRedisKeyValuePort(), authLimitPerMinute = 0)
         }.isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("authLimitPerMinute")
-
-        assertThatThrownBy {
-            createFilter(redis = InMemoryRedisKeyValuePort(), sseLimitPerMinute = 0)
-        }.isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("sseLimitPerMinute")
     }
 
     @Test
@@ -439,10 +392,8 @@ class ApiRateLimitBackstopFilterTest {
         enabled: Boolean = true,
         requireRedisInProd: Boolean = false,
         publicReadLimitPerMinute: Int = 120,
-        authenticatedReadLimitPerMinute: Int = 120,
         mutationLimitPerMinute: Int = 60,
         authLimitPerMinute: Int = 20,
-        sseLimitPerMinute: Int = 30,
         prodRuntime: Boolean = false,
     ) = ApiRateLimitBackstopFilter(
         redisKeyValuePortProvider = objectProvider(redis, RedisKeyValuePort::class.java),
@@ -457,10 +408,8 @@ class ApiRateLimitBackstopFilterTest {
         enabled = enabled,
         requireRedisInProd = requireRedisInProd,
         publicReadLimitPerMinute = publicReadLimitPerMinute,
-        authenticatedReadLimitPerMinute = authenticatedReadLimitPerMinute,
         mutationLimitPerMinute = mutationLimitPerMinute,
         authLimitPerMinute = authLimitPerMinute,
-        sseLimitPerMinute = sseLimitPerMinute,
     )
 
     private fun <T : Any> objectProvider(

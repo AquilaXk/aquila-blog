@@ -97,8 +97,3 @@ data class PostWriteResultDto(
 data class PostHitResBody(
     val hitCount: Int,
 )
-
-data class PostLikeToggleResBody(
-    val liked: Boolean,
-    val likesCount: Int,
-)

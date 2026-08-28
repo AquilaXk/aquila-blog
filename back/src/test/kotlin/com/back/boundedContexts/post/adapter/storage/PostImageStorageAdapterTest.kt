@@ -10,13 +10,19 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.test.util.ReflectionTestUtils
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails
+import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException
+import software.amazon.awssdk.services.s3.model.PutObjectRequest
+import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.services.s3.model.S3Exception
 import software.amazon.awssdk.services.s3.model.S3Object
+import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import javax.imageio.ImageIO
 
 @DisplayName("PostImageStorageAdapter 테스트")
 class PostImageStorageAdapterTest {
@@ -342,6 +348,54 @@ class PostImageStorageAdapterTest {
     }
 
     @Test
+    @DisplayName("signature만 있는 이미지는 storage 접근 전에 거절한다")
+    fun rejectSignatureOnlyImageBeforeStorageAccess() {
+        val adapter = disabledAdapter()
+
+        assertThatThrownBy {
+            adapter.uploadPostImage(
+                PostImageStoragePort.UploadImageRequest(
+                    inputStream = ByteArrayInputStream(pngBytes()),
+                    contentLength = pngBytes().size.toLong(),
+                    contentType = "image/png",
+                    originalFilename = "truncated.png",
+                ),
+            )
+        }.hasMessageContaining("400-1")
+            .hasMessageContaining("지원하지 않는 이미지 형식입니다.")
+    }
+
+    @Test
+    @DisplayName("이미지 object key와 content type은 decoded canonical type을 사용한다")
+    fun imageUploadUsesDecodedCanonicalType() {
+        val s3Client = RecordingPutS3Client()
+        val adapter =
+            PostImageStorageAdapter(
+                PostImageStorageProperties(
+                    enabled = true,
+                    bucket = TEST_BUCKET,
+                    keyPrefix = "posts",
+                ),
+            )
+        ReflectionTestUtils.setField(adapter, "s3Client", s3Client)
+        val png = realPngBytes()
+
+        val key =
+            adapter.uploadPostImage(
+                PostImageStoragePort.UploadImageRequest(
+                    inputStream = ByteArrayInputStream(png),
+                    contentLength = png.size.toLong(),
+                    contentType = "image/x-png",
+                    originalFilename = "spoofed.jpg",
+                ),
+            )
+
+        assertThat(key).endsWith(".png")
+        assertThat(s3Client.lastPutObjectRequest!!.key()).isEqualTo(key)
+        assertThat(s3Client.lastPutObjectRequest!!.contentType()).isEqualTo("image/png")
+    }
+
+    @Test
     @DisplayName("stream 이미지 업로드는 실제 stream 길이와 contentLength 불일치를 거절한다")
     fun rejectImageUploadWhenStreamLengthDiffersFromContentLength() {
         // given
@@ -403,6 +457,14 @@ class PostImageStorageAdapterTest {
             0x00,
         )
 
+    private fun realPngBytes(): ByteArray {
+        val image = BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB)
+        return ByteArrayOutputStream().use { output ->
+            check(ImageIO.write(image, "png", output))
+            output.toByteArray()
+        }
+    }
+
     private fun s3Object(
         key: String,
         size: Long,
@@ -439,6 +501,25 @@ class PostImageStorageAdapterTest {
         private val failure: RuntimeException,
     ) : S3Client {
         override fun listObjectsV2(listObjectsV2Request: ListObjectsV2Request): ListObjectsV2Response = throw failure
+
+        override fun serviceName(): String = "s3"
+
+        override fun close() {
+            // S3Client test double has no resources to close.
+        }
+    }
+
+    private class RecordingPutS3Client : S3Client {
+        var lastPutObjectRequest: PutObjectRequest? = null
+            private set
+
+        override fun putObject(
+            putObjectRequest: PutObjectRequest,
+            requestBody: RequestBody,
+        ): PutObjectResponse {
+            lastPutObjectRequest = putObjectRequest
+            return PutObjectResponse.builder().build()
+        }
 
         override fun serviceName(): String = "s3"
 

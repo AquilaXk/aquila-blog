@@ -2,8 +2,6 @@
 /post/api/v1/images/*
 /post/api/v1/posts
 /post/api/v1/posts/*
-/post/api/v1/posts/*/comments
-/post/api/v1/posts/*/comments/*
 /post/api/v1/posts/bootstrap
 /post/api/v1/posts/explore
 /post/api/v1/posts/explore/cursor

@@ -109,6 +109,9 @@ jobs:
       - name: Verify contentHtml trust inventory contract
         run: node --test tools/test/content-html-trust-inventory.test.mjs
 
+      - name: Verify hot-query telemetry capability contract
+        run: node --test tools/test/hot-query-telemetry-capability.test.mjs
+
       - name: Verify Dockerfile supply-chain contracts
         run: node --test tools/test/dockerfile-supply-chain.test.mjs
 

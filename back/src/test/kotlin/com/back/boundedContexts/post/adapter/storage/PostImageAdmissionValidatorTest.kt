@@ -87,8 +87,7 @@ class PostImageAdmissionValidatorTest {
     @Test
     @DisplayName("reader가 선택된 뒤 깨진 이미지를 BAD_REQUEST로 변환한다")
     fun rejectsMalformedImageAfterReaderSelection() {
-        val png = createImage("png")
-        val malformed = png.copyOf(png.size / 2)
+        val malformed = corruptPngImageData(createImage("png"))
 
         withUpload(malformed, "malformed.png") { path ->
             assertBadRequest {
@@ -218,6 +217,16 @@ class PostImageAdmissionValidatorTest {
                 output.write(png, insertAt, png.size - insertAt)
             }
             bytes.toByteArray()
+        }
+    }
+
+    private fun corruptPngImageData(png: ByteArray): ByteArray {
+        val marker = "IDAT".toByteArray(Charsets.US_ASCII)
+        val typeOffset =
+            (0..png.size - marker.size)
+                .first { offset -> marker.indices.all { index -> png[offset + index] == marker[index] } }
+        return png.copyOf().also { corrupted ->
+            corrupted[typeOffset + marker.size] = (corrupted[typeOffset + marker.size].toInt() xor 0xFF).toByte()
         }
     }
 

@@ -15,7 +15,6 @@ import com.back.global.security.config.ApiKeyAuthorityRefreshHandler
 import com.back.global.security.config.AuthIpSecurityVerifier
 import com.back.global.security.config.AuthTokenExtractor
 import com.back.global.security.config.CustomAuthenticationFilter
-import com.back.global.security.config.LegacyPayloadRecoveryHandler
 import com.back.global.security.config.MemberSessionAuthenticationResolver
 import com.back.global.security.config.PublicApiRequestMatcher
 import com.back.global.security.config.RefreshTokenAuthenticationHandler
@@ -167,7 +166,6 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                 MemberSessionAuthenticationResolver(
                     memberSessionUseCase = memberSessionUseCase,
                     authCookieService = authCookieService,
-                    freshLookupGraceSeconds = 15,
                 )
             val authIpSecurityVerifier =
                 AuthIpSecurityVerifier(
@@ -186,14 +184,6 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                     memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                     rq = rq,
                 )
-            val legacyPayloadRecoveryHandler =
-                LegacyPayloadRecoveryHandler(
-                    actorApplicationService = actorApplicationService,
-                    memberSessionUseCase = memberSessionUseCase,
-                    authCookieService = authCookieService,
-                    securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-                    rq = rq,
-                )
             val accessTokenAuthenticationHandler =
                 AccessTokenAuthenticationHandler(
                     actorApplicationService = actorApplicationService,
@@ -202,7 +192,6 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                     securityContextAuthenticationWriter = securityContextAuthenticationWriter,
                     memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                     apiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler,
-                    legacyPayloadRecoveryHandler = legacyPayloadRecoveryHandler,
                 )
             val refreshTokenAuthenticationHandler =
                 RefreshTokenAuthenticationHandler(

@@ -10,6 +10,8 @@ import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import com.back.global.app.AppConfig
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.web.ErrorResponseWriterTestSupport
@@ -21,6 +23,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatCode
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers
@@ -49,7 +52,6 @@ class CustomAuthenticationFilterTest {
                 "com.back.global.security.config.MemberSessionAuthenticationResolver",
                 "com.back.global.security.config.AccessTokenAuthenticationHandler",
                 "com.back.global.security.config.ApiKeyAuthorityRefreshHandler",
-                "com.back.global.security.config.LegacyPayloadRecoveryHandler",
                 "com.back.global.security.config.RefreshTokenAuthenticationHandler",
             ).map(Class<*>::forName)
 
@@ -58,7 +60,6 @@ class CustomAuthenticationFilterTest {
                 "MemberSessionAuthenticationResolver",
                 "AccessTokenAuthenticationHandler",
                 "ApiKeyAuthorityRefreshHandler",
-                "LegacyPayloadRecoveryHandler",
                 "RefreshTokenAuthenticationHandler",
             )
         assertThat(extractedBoundaryTypes)
@@ -108,7 +109,6 @@ class CustomAuthenticationFilterTest {
             MemberSessionAuthenticationResolver(
                 memberSessionUseCase = memberSessionUseCase,
                 authCookieService = authCookieService,
-                freshLookupGraceSeconds = 15,
             )
 
         assertThatCode {
@@ -119,15 +119,14 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("세션 resolver는 fresh token grace 구간의 read 요청을 fallback으로 허용한다")
-    fun `session resolver allows fresh token read fallback`() {
+    @DisplayName("세션 resolver는 safe read에서도 snapshot 누락을 세션 만료로 처리한다")
+    fun `session resolver rejects missing snapshot for safe read`() {
         val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
         val resolver =
             MemberSessionAuthenticationResolver(
                 memberSessionUseCase = memberSessionUseCase,
                 authCookieService = authCookieService,
-                freshLookupGraceSeconds = 15,
             )
         val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session\r\n")
         val payload =
@@ -153,12 +152,13 @@ class CustomAuthenticationFilterTest {
                 request = request,
             )
 
-        assertThat(resolution.freshTokenFallback).isTrue()
+        assertThat(resolution.session).isNull()
+        assertThat(resolution.sessionKeyProvided).isTrue()
     }
 
     @Test
-    @DisplayName("legacy payload에 email과 username이 없고 DB 회원도 없으면 member id 기반 principal로 인증한다")
-    fun `legacy payload without persisted member falls back to member id principal`() {
+    @DisplayName("persisted member가 없으면 transient principal 없이 인증 쿠키를 만료한다")
+    fun `missing persisted member expires auth cookies`() {
         val fixture = CustomAuthenticationFilterFixture()
         val accessToken = "legacy-access-token"
         val sessionKey = "legacy-session-key"
@@ -191,7 +191,7 @@ class CustomAuthenticationFilterTest {
         given(fixture.actorApplicationService.findById(54L)).willReturn(null)
 
         try {
-            val handled =
+            assertThatThrownBy {
                 fixture.accessTokenAuthenticationHandler().authenticate(
                     request = request,
                     tokens =
@@ -203,18 +203,11 @@ class CustomAuthenticationFilterTest {
                         ),
                     clientIp = "203.0.113.30",
                 )
-
-            assertThat(handled).isTrue()
-            val authentication = SecurityContextHolder.getContext().authentication
-            assertThat(authentication).isNotNull()
-            assertThat(authentication?.name).isEqualTo("member-54")
-            verify(fixture.memberSessionUseCase).touchAuthenticated(sessionSnapshot)
-            verify(fixture.authCookieService, never()).issueAccessToken(
-                ArgumentMatchers.anyString(),
-                ArgumentMatchers.anyBoolean(),
-                ArgumentMatchers.nullable(String::class.java),
-                ArgumentMatchers.nullable(String::class.java),
-            )
+            }.isInstanceOf(AppException::class.java)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SESSION_EXPIRED)
+            assertThat(SecurityContextHolder.getContext().authentication).isNull()
+            verify(fixture.authCookieService).expireAuthCookies()
         } finally {
             SecurityContextHolder.clearContext()
         }
@@ -355,11 +348,12 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("payload email 누락 토큰은 DB 회원 기준으로 권한을 복구하고 accessToken을 재발급한다")
-    fun `legacy payload without email restores admin authority from persisted member`() {
+    @DisplayName("payload email 누락 토큰은 DB 회원 권한으로 인증하지만 accessToken을 재발급하지 않는다")
+    fun `email-less token authenticates with persisted authority without reissuing token`() {
         configureProductionUrls()
         val fixture = CustomAuthenticationFilterFixture()
         val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+        val apiKey = "legacy-api-key"
         val legacyToken = "legacy-access-token"
         val sessionKey = "legacy-session-key"
         val sessionSnapshot =
@@ -372,11 +366,12 @@ class CustomAuthenticationFilterTest {
                 ipSecurityFingerprint = null,
                 lastAuthenticatedAt = Instant.now(),
             )
-        val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com")
+        val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com", apiKey)
         persistedAdmin.grantAdmin()
 
         fixture.givenProtectedRequest(request)
-        fixture.givenBearerAccessToken(legacyToken, sessionKey)
+        fixture.givenEmptyAuthorizationHeader()
+        fixture.givenCookieTokens(apiKey = apiKey, accessToken = legacyToken, sessionKey = sessionKey)
         given(fixture.actorApplicationService.payload(legacyToken))
             .willReturn(
                 AccessTokenPayload(
@@ -392,8 +387,6 @@ class CustomAuthenticationFilterTest {
             )
         given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
         given(fixture.actorApplicationService.findById(54L)).willReturn(persistedAdmin)
-        given(fixture.actorApplicationService.genAccessToken(persistedAdmin, sessionKey, true, false, null))
-            .willReturn("rotated-access-token")
         fixture.givenClientIp(request, "203.0.113.12")
 
         val response = MockHttpServletResponse()
@@ -402,6 +395,13 @@ class CustomAuthenticationFilterTest {
         try {
             fixture.authenticationFilter().doFilter(request, response, filterChain)
             assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            verify(fixture.authCookieService, never()).issueAccessToken(
+                ArgumentMatchers.anyString(),
+                ArgumentMatchers.anyBoolean(),
+                ArgumentMatchers.nullable(String::class.java),
+                ArgumentMatchers.nullable(String::class.java),
+            )
+            verify(fixture.actorApplicationService, never()).findByApiKey(apiKey)
         } finally {
             SecurityContextHolder.clearContext()
         }
@@ -520,8 +520,8 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("로그인 직후 GET read 요청은 세션 snapshot miss여도 최근 accessToken이면 1회 fallback 인증을 허용한다")
-    fun `fresh token fallback allows safe read request`() {
+    @DisplayName("safe read 요청도 세션 snapshot이 없으면 인증 쿠키를 만료하고 401-8로 닫는다")
+    fun `missing snapshot rejects safe read request`() {
         val fixture = CustomAuthenticationFilterFixture()
         val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session")
         val accessToken = "fresh-access-token"
@@ -545,24 +545,23 @@ class CustomAuthenticationFilterTest {
                 ),
             )
         given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(null)
-        given(fixture.actorApplicationService.findById(54L))
-            .willReturn(Member(54L, "internal-admin", null, "aquila", "admin@test.com"))
 
         val response = MockHttpServletResponse()
         val filterChain = fixture.noContentFilterChain()
 
         try {
             fixture.authenticationFilter().doFilter(request, response, filterChain)
-            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
-            verify(fixture.authCookieService, never()).expireAuthCookies()
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_UNAUTHORIZED)
+            assertThat(response.contentAsString).contains("\"resultCode\":\"401-8\"")
+            verify(fixture.authCookieService).expireAuthCookies()
         } finally {
             SecurityContextHolder.clearContext()
         }
     }
 
     @Test
-    @DisplayName("로그인 직후 GET read 요청도 삭제된 계정이면 fresh token fallback 인증을 거절한다")
-    fun `fresh token fallback rejects deleted account read request`() {
+    @DisplayName("세션 snapshot이 있어도 삭제된 계정은 인증 쿠키를 만료한다")
+    fun `missing persisted member rejects authenticated session`() {
         val fixture = CustomAuthenticationFilterFixture()
         val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session")
         val accessToken = "fresh-deleted-access-token"
@@ -585,7 +584,10 @@ class CustomAuthenticationFilterTest {
                     issuedAt = Instant.now(),
                 ),
             )
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(null)
+        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey))
+            .willReturn(
+                MemberSessionAuthSnapshot(11L, 54L, sessionKey, true, false, null, Instant.now()),
+            )
         given(fixture.actorApplicationService.findById(54L)).willReturn(null)
 
         val response = MockHttpServletResponse()
@@ -602,8 +604,8 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("로그인 직후라도 쓰기 요청은 세션 snapshot miss fallback을 허용하지 않는다")
-    fun `fresh token fallback does not allow mutating request`() {
+    @DisplayName("쓰기 요청도 세션 snapshot이 없으면 인증 쿠키를 만료한다")
+    fun `missing snapshot rejects mutating request`() {
         val fixture = CustomAuthenticationFilterFixture()
         val request = MockHttpServletRequest("POST", "/member/api/v1/auth/me")
         val accessToken = "fresh-access-token"
@@ -680,7 +682,6 @@ class CustomAuthenticationFilterTest {
             MemberSessionAuthenticationResolver(
                 memberSessionUseCase = memberSessionUseCase,
                 authCookieService = authCookieService,
-                freshLookupGraceSeconds = 15,
             )
         private val authIpSecurityVerifier =
             AuthIpSecurityVerifier(
@@ -700,14 +701,6 @@ class CustomAuthenticationFilterTest {
                 memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                 rq = rq,
             )
-        private val legacyPayloadRecoveryHandler =
-            LegacyPayloadRecoveryHandler(
-                actorApplicationService = actorApplicationService,
-                memberSessionUseCase = memberSessionUseCase,
-                authCookieService = authCookieService,
-                securityContextAuthenticationWriter = securityContextAuthenticationWriter,
-                rq = rq,
-            )
         private val accessTokenAuthenticationHandler =
             AccessTokenAuthenticationHandler(
                 actorApplicationService = actorApplicationService,
@@ -716,7 +709,6 @@ class CustomAuthenticationFilterTest {
                 securityContextAuthenticationWriter = securityContextAuthenticationWriter,
                 memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                 apiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler,
-                legacyPayloadRecoveryHandler = legacyPayloadRecoveryHandler,
             )
         private val refreshTokenAuthenticationHandler =
             RefreshTokenAuthenticationHandler(

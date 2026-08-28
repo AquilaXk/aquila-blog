@@ -58,7 +58,7 @@
 - header가 없으면 `AuthCookieNames`의 `apiKey`, `accessToken`, `refreshToken`, `sessionKey` cookie를 읽는다.
 - `accessToken` 경로가 먼저 실행되고, mutating 요청에서 `apiKey`가 있으면 `ApiKeyAuthorityRefreshHandler`가 apiKey 회원 기준 access token 재발급을 먼저 시도한다.
 - access token 경로가 인증을 완료하지 못하면 `RefreshTokenAuthenticationHandler`가 `sessionKey + refreshToken` 회전을 시도한다. 회전 실패나 session key 누락은 auth cookie 만료 후 `401-8`로 닫는다.
-- `MemberSessionAuthenticationResolver`는 safe read 요청에서만 짧은 fresh token fallback을 허용한다. cookie `sessionKey`와 payload `sessionKey`가 같고 `custom.auth.session.freshLookupGraceSeconds` 이내일 때만 적용된다.
+- `MemberSessionAuthenticationResolver`는 active session snapshot이 없으면 auth cookie를 만료하고 `401-8`로 인증을 닫는다.
 - 공개 API는 stale 또는 잘못된 인증 정보가 있어도 `SecurityContextHolder.clearContext()` 후 익명 요청으로 계속 처리한다. 보호 API는 `AppException`을 JSON API 응답으로 내리고, 예상 밖 인증 오류는 `401-1`로 변환한다.
 
 ### 운영 진단

@@ -235,7 +235,6 @@ custom:
     cookie:
       apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:604800}
     session:
-      freshLookupGraceSeconds: ${CUSTOM__AUTH__SESSION__FRESH_LOOKUP_GRACE_SECONDS:15}
       touchMinIntervalSeconds: ${CUSTOM__AUTH__SESSION__TOUCH_MIN_INTERVAL_SECONDS:60}
       maxActivePerMember: ${CUSTOM__AUTH__SESSION__MAX_ACTIVE_PER_MEMBER:32}
       revokedRetentionDays: ${CUSTOM__AUTH__SESSION__REVOKED_RETENTION_DAYS:30}

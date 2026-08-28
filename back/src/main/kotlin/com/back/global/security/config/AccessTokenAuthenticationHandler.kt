@@ -1,7 +1,6 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
-import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import jakarta.servlet.http.HttpServletRequest
@@ -15,7 +14,6 @@ class AccessTokenAuthenticationHandler(
     private val securityContextAuthenticationWriter: SecurityContextAuthenticationWriter,
     private val memberSessionAuthenticationResolver: MemberSessionAuthenticationResolver,
     private val apiKeyAuthorityRefreshHandler: ApiKeyAuthorityRefreshHandler,
-    private val legacyPayloadRecoveryHandler: LegacyPayloadRecoveryHandler,
 ) {
     fun authenticate(
         request: HttpServletRequest,
@@ -25,6 +23,7 @@ class AccessTokenAuthenticationHandler(
         val payload = tokens.accessToken.takeIf { it.isNotBlank() }?.let(actorApplicationService::payload) ?: return false
 
         if (
+            !payload.email.isNullOrBlank() &&
             apiKeyAuthorityRefreshHandler.authenticateIfPreferred(
                 request = request,
                 apiKey = tokens.apiKey,
@@ -45,11 +44,15 @@ class AccessTokenAuthenticationHandler(
                 request = request,
             )
         memberSessionAuthenticationResolver.ensureUsable(sessionResolution, requireSession = true)
-        val persistedMember = actorApplicationService.findById(payload.id)
-        memberSessionAuthenticationResolver.ensureFreshTokenFallbackMemberFound(
-            sessionResolution = sessionResolution,
-            persistedMemberFound = persistedMember != null,
-        )
+        val persistedMember =
+            actorApplicationService.findById(payload.id)
+                ?: run {
+                    memberSessionAuthenticationResolver.expireAuthCookies()
+                    throw com.back.global.exception.application.AppException(
+                        com.back.global.exception.application.ErrorCode.SESSION_EXPIRED,
+                        "세션이 만료되었습니다. 다시 로그인해주세요.",
+                    )
+                }
         val sessionContext =
             memberSessionAuthenticationResolver.context(
                 sessionResolution = sessionResolution,
@@ -71,11 +74,8 @@ class AccessTokenAuthenticationHandler(
             clientIp,
         )
 
-        if (legacyPayloadRecoveryHandler.recoverIfNeeded(payload, sessionContext)) return true
-
         sessionContext.session?.let { memberSessionUseCase.touchAuthenticated(it) }
-        val payloadMember = persistedMember ?: payload.toTransientMember()
-        securityContextAuthenticationWriter.write(payloadMember, sessionContext.session?.id)
+        securityContextAuthenticationWriter.write(persistedMember, sessionContext.session?.id)
         return true
     }
 
@@ -87,23 +87,4 @@ class AccessTokenAuthenticationHandler(
         if (normalizedUsername.isNotBlank()) return normalizedUsername
         return null
     }
-
-    private fun resolvePrincipalUsername(payload: AccessTokenPayload): String {
-        val normalizedUsername = payload.username?.trim().orEmpty()
-        if (normalizedUsername.isNotBlank()) return normalizedUsername
-
-        val normalizedEmail = payload.email?.trim().orEmpty()
-        if (normalizedEmail.isNotBlank()) return normalizedEmail
-
-        return "member-${payload.id}"
-    }
-
-    private fun AccessTokenPayload.toTransientMember(): Member =
-        Member(
-            id = id,
-            username = resolvePrincipalUsername(this),
-            password = null,
-            nickname = name,
-            email = email,
-        )
 }

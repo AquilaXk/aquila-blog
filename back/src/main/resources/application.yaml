@@ -426,9 +426,6 @@ custom:
         batchSize: ${CUSTOM__POST__IDEMPOTENCY__CLEANUP__BATCH_SIZE:200}
     hit:
       viewerWindowSeconds: ${CUSTOM__POST__HIT__VIEWER_WINDOW_SECONDS:86400}
-      memoryMaxEntries: ${CUSTOM__POST__HIT__MEMORY_MAX_ENTRIES:50000}
-      memoryCleanupIntervalSeconds: ${CUSTOM__POST__HIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
-      redisWarnIntervalSeconds: ${CUSTOM__POST__HIT__REDIS_WARN_INTERVAL_SECONDS:300}
     likes:
       reconciliation:
         fixedDelayMs: ${CUSTOM__POST__LIKES__RECONCILIATION__FIXED_DELAY_MS:900000}

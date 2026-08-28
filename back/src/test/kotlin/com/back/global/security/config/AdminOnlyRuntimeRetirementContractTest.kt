@@ -1,10 +1,14 @@
 package com.back.global.security.config
 
+import com.back.boundedContexts.member.subContexts.memberActionLog.adapter.event.MemberActionLogEventListener
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.service.PostRecommendFeatureStoreService
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.event.PostDeletedEvent
+import com.back.boundedContexts.post.event.PostModifiedEvent
+import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.support.BaseControllerIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
@@ -13,6 +17,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.context.ApplicationContext
 import org.springframework.http.HttpMethod
 import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
 import org.springframework.web.util.ServletRequestPathUtils
 
@@ -74,6 +79,25 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
         assertThat(PostRecommendFeatureStoreService.RecommendFeatureVector::class.java.declaredFields.map { it.name })
             .contains("likesCount")
             .doesNotContain("commentsCount")
+    }
+
+    @Test
+    fun `registers action log listeners only for retained post events`() {
+        val listenerMethods =
+            MemberActionLogEventListener::class.java.declaredMethods
+                .filter { it.isAnnotationPresent(TransactionalEventListener::class.java) }
+
+        assertThat(listenerMethods.map { it.parameterTypes.single() })
+            .containsExactlyInAnyOrder(
+                PostWrittenEvent::class.java,
+                PostModifiedEvent::class.java,
+                PostDeletedEvent::class.java,
+            )
+        assertThat(
+            MemberActionLogEventListener::class.java.declaredMethods
+                .single { it.name == "addTask" }
+                .isAnnotationPresent(TransactionalEventListener::class.java),
+        ).isFalse()
     }
 
     private fun hasHandlerMethod(

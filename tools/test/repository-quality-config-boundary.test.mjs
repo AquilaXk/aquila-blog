@@ -832,3 +832,21 @@ test("backend dependency policy upgrades Tomcat and removes expired CVE suppress
     /suppressionFiles\.add\("config\/dependency-check-suppressions\.xml"\)/,
   )
 })
+
+test("backend Netty policy pins the patched runtime version", () => {
+  const suppressions = read("back/config/dependency-check-suppressions.xml")
+  const build = read("back/build.gradle.kts")
+  const jacoco = read("back/gradle/backend-jacoco.gradle.kts")
+
+  assert.match(build, /extra\["netty\.version"\] = "4\.2\.17\.Final"/)
+  assert.match(build, /tasks\.register\("verifyNettyVersionAlignment"\)/)
+  assert.match(build, /getByName\("runtimeClasspath"\)/)
+  assert.match(build, /component\.group == "io\.netty"/)
+  assert.match(build, /No io\.netty modules resolved in runtimeClasspath\./)
+  assert.match(build, /Netty version alignment failed: expected \$nettyVersion, resolved \$resolvedModules/)
+  assert.match(jacoco, /"verifyNettyVersionAlignment"/)
+  assert.match(jacoco, /dependsOn\("verifyNettyVersionAlignment"\)/)
+  assert.doesNotMatch(suppressions, /CVE-2026-62380/)
+  assert.match(build, /failBuildOnCVSS = 7\.0f/)
+  assert.match(build, /failOnError = true/)
+})

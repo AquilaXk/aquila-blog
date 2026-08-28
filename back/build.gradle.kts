@@ -24,9 +24,10 @@ description = "back"
 
 // Pin above Spring Boot 4.1.0 BOM for NVD High CVEs blocking Deploy (#1387).
 extra["tomcat.version"] = "11.0.25"
-extra["netty.version"] = "4.2.16.Final"
+extra["netty.version"] = "4.2.17.Final"
 extra["postgresql.version"] = "42.7.13"
 
+val nettyVersion = extra["netty.version"] as String
 val awsSdkVersion = "2.54.0"
 val testcontainersVersion = "1.21.4"
 
@@ -141,6 +142,38 @@ tasks.register("verifyTestcontainersVersionAlignment") {
                     .joinToString(separator = ", ")
             throw GradleException(
                 "Testcontainers version alignment failed: expected $testcontainersVersion, resolved $resolvedModules",
+            )
+        }
+    }
+}
+
+tasks.register("verifyNettyVersionAlignment") {
+    description = "Verifies the resolved Netty modules use the approved version."
+    group = "verification"
+
+    doLast {
+        val nettyComponents =
+            configurations
+                .getByName("runtimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+                .filter { component -> component.group == "io.netty" }
+
+        if (nettyComponents.isEmpty()) {
+            throw GradleException("No io.netty modules resolved in runtimeClasspath.")
+        }
+
+        val misalignedComponents = nettyComponents.filter { component -> component.version != nettyVersion }
+        if (misalignedComponents.isNotEmpty()) {
+            val resolvedModules =
+                nettyComponents
+                    .map { component -> "${component.module}:${component.version}" }
+                    .sorted()
+                    .joinToString(separator = ", ")
+            throw GradleException(
+                "Netty version alignment failed: expected $nettyVersion, resolved $resolvedModules",
             )
         }
     }

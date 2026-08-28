@@ -156,11 +156,13 @@ class PostCommentApplicationService(
     }
 
     @Transactional
-    fun deleteCommentsByAuthorForAccountDeletion(author: Member): Int {
+    fun deleteCommentsByAuthorForAccountDeletion(author: Member): Set<Long> {
         val rootTargets =
             findAccountDeletionRootCommentTargets(
                 postCommentRepository.findActiveAccountDeletionTargetsByAuthorId(author.id),
             )
+
+        val recommendationRefreshPostIds = linkedSetOf<Long>()
 
         rootTargets.forEach { target ->
             if (target.postDeleted) {
@@ -173,10 +175,13 @@ class PostCommentApplicationService(
                     publishDomainEvent = false,
                     enqueueSideEffect = false,
                 )
+                if (target.comment.post.published && target.comment.post.listed) {
+                    recommendationRefreshPostIds += target.postId
+                }
             }
         }
 
-        return rootTargets.size
+        return recommendationRefreshPostIds
     }
 
     private fun findAccountDeletionRootCommentTargets(

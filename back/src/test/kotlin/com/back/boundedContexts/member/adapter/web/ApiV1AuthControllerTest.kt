@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.AuthTokenService
 import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
+import com.back.global.app.AdminProperties
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
 import jakarta.servlet.http.Cookie
@@ -34,6 +35,9 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var memberSessionRepository: MemberSessionRepository
+
+    @Autowired
+    private lateinit var adminProperties: AdminProperties
 
     @AfterEach
     fun clearLoginAttemptState() {
@@ -440,6 +444,101 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     status { isTooManyRequests() }
                     jsonPath("$.resultCode") { value("429-1") }
                 }
+        }
+
+        @Test
+        fun `비정규 관리자도 올바른 비밀번호에서 일반 실패 누적 후 429를 반환하고 세션을 만들지 않는다`() {
+            val wrongEmail = "wrong-admin@example.com"
+            assertThat(wrongEmail).isNotEqualTo(adminProperties.normalizedEmail)
+            val wrongAdmin =
+                memberFacade.join(
+                    username = "wrong-admin",
+                    password = "Abcd1234!",
+                    nickname = "비정규관리자",
+                    profileImgUrl = null,
+                    email = wrongEmail,
+                )
+            wrongAdmin.grantAdmin()
+            val sessionCountBefore = memberSessionRepository.count()
+
+            repeat(4) {
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "email": "$wrongEmail",
+                                "password": "Abcd1234!"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isUnauthorized() }
+                        jsonPath("$.resultCode") { value("401-1") }
+                        jsonPath("$.msg") { value("이메일 또는 비밀번호가 올바르지 않습니다.") }
+                    }.andReturn()
+                    .also { result ->
+                        assertThat(result.response.cookies.map { it.name })
+                            .doesNotContainAnyElementsOf(AuthCookieNames.AUTHENTICATION_COOKIE_NAMES)
+                    }
+            }
+
+            mvc
+                .post("/member/api/v1/auth/login") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "email": "$wrongEmail",
+                            "password": "Abcd1234!"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isTooManyRequests() }
+                    jsonPath("$.resultCode") { value("429-1") }
+                }.andReturn()
+                .also { result ->
+                    assertThat(result.response.cookies.map { it.name })
+                        .doesNotContainAnyElementsOf(AuthCookieNames.AUTHENTICATION_COOKIE_NAMES)
+                }
+
+            assertThat(memberSessionRepository.count()).isEqualTo(sessionCountBefore)
+        }
+
+        @Test
+        fun `아이피 보안 로그인은 정규화할 수 없는 클라이언트 아이피를 거부한다`() {
+            val member =
+                memberFacade.join(
+                    username = "ip-security-unavailable-user",
+                    password = "Abcd1234!",
+                    nickname = "아이피보안불가",
+                    profileImgUrl = null,
+                    email = "ip-security-unavailable-user@example.com",
+                )
+            val sessionCountBefore = memberSessionRepository.count()
+
+            val result =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        with(remoteAddr("not-an-ip"))
+                        content =
+                            """
+                            {
+                                "email": "${member.email}",
+                                "password": "Abcd1234!",
+                                "ipSecurity": true
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isBadRequest() }
+                        jsonPath("$.resultCode") { value("400-3") }
+                        jsonPath("$.msg") { value("IP 보안 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.") }
+                    }.andReturn()
+
+            assertThat(result.response.cookies.map { it.name })
+                .doesNotContainAnyElementsOf(AuthCookieNames.AUTHENTICATION_COOKIE_NAMES)
+            assertThat(memberSessionRepository.count()).isEqualTo(sessionCountBefore)
         }
     }
 

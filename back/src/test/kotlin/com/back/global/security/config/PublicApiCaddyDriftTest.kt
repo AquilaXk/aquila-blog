@@ -14,7 +14,8 @@ class PublicApiCaddyDriftTest {
         val matcher = TestPublicApiRequestMatchers.defaultMatcher()
         val exported = matcher.edgePublicReadCaddyPaths()
         val snapshot = readSnapshotPaths()
-        val caddyPaths = readCaddyPublicReadPaths()
+        val caddyPaths = readCaddyPublicReadDirectivePaths("path ")
+        val caddyExcludedPaths = readCaddyPublicReadDirectivePaths("not path ")
 
         assertThat(exported)
             .describedAs("Kotlin SoT export vs tools/guards/public-api-read-caddy-paths.sot")
@@ -22,6 +23,12 @@ class PublicApiCaddyDriftTest {
         assertThat(caddyPaths)
             .describedAs("Caddyfile @publicReadFallback vs SoT snapshot")
             .isEqualTo(snapshot)
+        assertThat(caddyExcludedPaths)
+            .describedAs("Caddyfile @publicReadFallback retired comment descendants")
+            .containsExactlyInAnyOrder(
+                "/post/api/v1/posts/*/comments",
+                "/post/api/v1/posts/*/comments/*",
+            )
     }
 
     private fun readSnapshotPaths(): Set<String> {
@@ -33,7 +40,7 @@ class PublicApiCaddyDriftTest {
             .toSortedSet()
     }
 
-    private fun readCaddyPublicReadPaths(): Set<String> {
+    private fun readCaddyPublicReadDirectivePaths(directivePrefix: String): Set<String> {
         val caddyfile = Files.readString(repoRoot().resolve("deploy/homeserver/caddy/Caddyfile"))
         val block =
             Regex(
@@ -43,14 +50,14 @@ class PublicApiCaddyDriftTest {
                 ?.groupValues
                 ?.get(1)
                 ?: error("@publicReadFallback block not found in Caddyfile")
-        val pathLine =
+        val directiveLine =
             block
                 .lineSequence()
                 .map { it.trim() }
-                .firstOrNull { it.startsWith("path ") }
-                ?: error("path directive not found in @publicReadFallback")
-        return pathLine
-            .removePrefix("path ")
+                .firstOrNull { it.startsWith(directivePrefix) }
+                ?: error("$directivePrefix directive not found in @publicReadFallback")
+        return directiveLine
+            .removePrefix(directivePrefix)
             .split(Regex("\\s+"))
             .filter { it.isNotBlank() }
             .toSortedSet()

@@ -18,6 +18,7 @@ import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDe
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.post.application.service.PostApplicationService
+import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
@@ -33,6 +34,7 @@ import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import java.time.Instant
+import java.util.UUID
 
 class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     @Autowired
@@ -289,8 +291,11 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 profileImgUrl = null,
                 email = "account-delete-user@example.com",
             )
-        val firstAuthCookies = loginAuthCookies(member.email!!)
-        val secondAuthCookies = loginAuthCookies(member.email!!)
+        val originalMemberEmail = requireNotNull(member.email)
+        val originalMemberName = member.name
+        val originalMemberNickname = member.nickname
+        val firstAuthCookies = loginAuthCookies(originalMemberEmail)
+        val secondAuthCookies = loginAuthCookies(originalMemberEmail)
         member.applyLoginSecurityPolicy(
             rememberLoginEnabled = true,
             ipSecurityEnabled = true,
@@ -342,6 +347,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 listed = true,
             )
         val authoredComment = postFacade.writeComment(member, otherPost, "탈퇴 후 숨겨져야 하는 댓글")
+        val authoredCommentContent = authoredComment.content
         val replyToAuthoredComment = postFacade.writeComment(otherAuthor, otherPost, "탈퇴 댓글의 답글", authoredComment)
         val nestedReplyToAuthoredComment =
             postFacade.writeComment(member, otherPost, "탈퇴 댓글의 중첩 답글", replyToAuthoredComment)
@@ -370,10 +376,11 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         val taskPayloadsWithDeletedPostContentBeforeDeletion =
             countTaskPayloadsContaining("탈퇴 후 공개 조회에서 빠져야 하는 글")
         val taskPayloadsWithDeletedCommentContentBeforeDeletion =
-            countTaskPayloadsContaining("탈퇴 후 숨겨져야 하는 댓글")
+            countTaskPayloadsContaining(authoredCommentContent)
         val actionLogsWithDeletingMemberProfileBeforeDeletion =
             countActionLogsContaining("탈퇴유저")
         val retiredInteractionTasksBeforeDeletion = countTasksByType("post.interaction.side-effect")
+        val postWriteTaskIdsBeforeDeletion = findTaskIdsByType(PostWriteSideEffectPayload.TASK_TYPE)
 
         mvc
             .delete("/member/api/v1/privacy/account") {
@@ -397,7 +404,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 cookie { maxAge(AuthCookieNames.SESSION_KEY, 0) }
             }
 
-        assertThat(memberFacade.findByEmail("account-delete-user@example.com")).isNull()
+        assertThat(memberFacade.findByEmail(originalMemberEmail)).isNull()
         assertThat(findMemberDeletionState(member.id).email).isNull()
         assertThat(findMemberDeletionState(member.id).username).startsWith("deleted-${member.id}-")
         assertThat(findMemberDeletionState(member.id).deletedAt).isNotNull()
@@ -426,12 +433,63 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         }
         assertThat(countTaskPayloadsContaining("탈퇴 후 공개 조회에서 빠져야 하는 글"))
             .isEqualTo(taskPayloadsWithDeletedPostContentBeforeDeletion)
-        assertThat(countTaskPayloadsContaining("탈퇴 후 숨겨져야 하는 댓글"))
+        assertThat(countTaskPayloadsContaining(authoredCommentContent))
             .isEqualTo(taskPayloadsWithDeletedCommentContentBeforeDeletion)
         assertThat(countActionLogsContaining("탈퇴유저"))
             .isEqualTo(actionLogsWithDeletingMemberProfileBeforeDeletion)
         assertThat(countTasksByType("post.interaction.side-effect"))
             .isEqualTo(retiredInteractionTasksBeforeDeletion)
+        val cleanupRefreshTasks =
+            findTaskPayloadsByType(PostWriteSideEffectPayload.TASK_TYPE)
+                .filterNot { it.uid in postWriteTaskIdsBeforeDeletion }
+                .filter { it.payload.contains("account-deletion-comment-cleanup") }
+        assertThat(cleanupRefreshTasks).hasSize(1)
+        val cleanupRefreshTask = cleanupRefreshTasks.single()
+        val payloadJson = JsonPath.read<String>(cleanupRefreshTask.payload, "$.payloadJson")
+
+        @Suppress("UNCHECKED_CAST")
+        val payload = JsonPath.parse(payloadJson).json() as Map<String, Any?>
+        assertThat(payload.keys).containsExactlyInAnyOrder(
+            "uid",
+            "aggregateType",
+            "aggregateId",
+            "postId",
+            "attachmentKeys",
+            "beforeTags",
+            "afterTags",
+            "cacheInvalidationTargets",
+            "evictReason",
+            "recommendationAction",
+            "domainEventType",
+            "domainEventJson",
+        )
+        assertThat(JsonPath.read<Long>(payloadJson, "$.postId")).isEqualTo(otherPost.id)
+        assertThat(JsonPath.read<Long>(payloadJson, "$.aggregateId")).isEqualTo(otherPost.id)
+        assertThat(JsonPath.read<String>(payloadJson, "$.attachmentKeys.action")).isEqualTo("NONE")
+        listOf(
+            "$.attachmentKeys.currentImageObjectKeys",
+            "$.attachmentKeys.previousImageObjectKeys",
+            "$.attachmentKeys.currentFileObjectKeys",
+            "$.attachmentKeys.previousFileObjectKeys",
+            "$.attachmentKeys.deletedImageObjectKeys",
+            "$.attachmentKeys.deletedFileObjectKeys",
+            "$.beforeTags",
+            "$.afterTags",
+            "$.cacheInvalidationTargets",
+        ).forEach { path ->
+            assertThat(JsonPath.read<List<*>>(payloadJson, path)).isEmpty()
+        }
+        assertThat(JsonPath.read<String>(payloadJson, "$.evictReason"))
+            .isEqualTo("account-deletion-comment-cleanup")
+        assertThat(JsonPath.read<String>(payloadJson, "$.recommendationAction")).isEqualTo("REFRESH")
+        assertThat(JsonPath.read<Any?>(payloadJson, "$.domainEventType")).isNull()
+        assertThat(JsonPath.read<Any?>(payloadJson, "$.domainEventJson")).isNull()
+        assertThat(payloadJson).doesNotContain(
+            authoredCommentContent,
+            originalMemberEmail,
+            originalMemberName,
+            originalMemberNickname,
+        )
         val deletion =
             memberAccountDeletionRepository
                 .findAll()
@@ -441,13 +499,13 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(deletion.deletedAt).isNotNull()
         val rejoinedMember =
             memberFacade.joinWithVerifiedEmail(
-                email = "account-delete-user@example.com",
+                email = originalMemberEmail,
                 password = "Abcd1234!",
                 nickname = "재가입유저",
                 profileImgUrl = null,
             )
         assertThat(rejoinedMember.id).isNotEqualTo(member.id)
-        assertThat(rejoinedMember.email).isEqualTo("account-delete-user@example.com")
+        assertThat(rejoinedMember.email).isEqualTo(originalMemberEmail)
     }
 
     @Test
@@ -881,6 +939,26 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             Int::class.java,
             taskType,
         ) ?: 0
+
+    private fun findTaskIdsByType(taskType: String): Set<UUID> =
+        jdbcTemplate
+            .queryForList(
+                "select uid from task where task_type = ?",
+                UUID::class.java,
+                taskType,
+            ).mapTo(mutableSetOf()) { requireNotNull(it) }
+
+    private fun findTaskPayloadsByType(taskType: String): List<TaskPayloadRecord> =
+        jdbcTemplate.query(
+            "select uid, payload from task where task_type = ?",
+            { rs, _ -> TaskPayloadRecord(rs.getObject("uid", UUID::class.java), rs.getString("payload")) },
+            taskType,
+        )
+
+    private data class TaskPayloadRecord(
+        val uid: UUID,
+        val payload: String,
+    )
 
     private fun countActionLogsContaining(valueFragment: String): Int =
         jdbcTemplate.queryForObject(

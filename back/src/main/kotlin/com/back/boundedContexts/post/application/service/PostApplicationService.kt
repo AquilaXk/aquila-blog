@@ -535,11 +535,31 @@ class PostApplicationService(
 
     @Transactional
     fun deleteContentByAuthorForAccountDeletion(author: Member) {
-        postCommentApplicationService.deleteCommentsByAuthorForAccountDeletion(author)
         val posts = postRepository.findByAuthorIdOrderByIdAsc(author.id)
+        val authoredPostIds = posts.mapTo(mutableSetOf()) { it.id }
+        val recommendationRefreshPostIds =
+            postCommentApplicationService
+                .deleteCommentsByAuthorForAccountDeletion(author)
+                .filterNot(authoredPostIds::contains)
 
         posts.forEach { post ->
             deleteForAccountDeletion(post)
+        }
+
+        recommendationRefreshPostIds.forEach { postId ->
+            publishPostWriteAfterCommitEvent(
+                PostWriteSideEffectCommand(
+                    postId = postId,
+                    previousContent = null,
+                    currentContent = null,
+                    deletedContent = null,
+                    beforeTags = emptyList(),
+                    afterTags = emptyList(),
+                    cacheInvalidationScope = PostReadCacheInvalidationScope.None,
+                    evictReason = "account-deletion-comment-cleanup",
+                    recommendationAction = PostRecommendationSideEffect.REFRESH,
+                ),
+            )
         }
     }
 

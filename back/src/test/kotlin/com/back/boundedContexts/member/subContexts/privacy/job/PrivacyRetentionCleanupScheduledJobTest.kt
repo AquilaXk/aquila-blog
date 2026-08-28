@@ -4,7 +4,6 @@ import com.back.boundedContexts.member.subContexts.memberActionLog.application.p
 import com.back.boundedContexts.member.subContexts.memberActionLog.domain.MemberActionLog
 import com.back.boundedContexts.member.subContexts.notification.adapter.persistence.MemberNotificationRepository
 import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
-import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
@@ -14,7 +13,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
-import java.util.UUID
 
 class PrivacyRetentionCleanupScheduledJobTest {
     @Test
@@ -160,18 +158,6 @@ class PrivacyRetentionCleanupScheduledJobTest {
     ) : MemberNotificationRepositoryPort {
         private val counts = ArrayDeque(counts.toList())
         val calls = mutableListOf<DeleteCall>()
-
-        override fun save(notification: MemberNotification): MemberNotification = notification
-
-        override fun findByReceiverIdAndIdGreaterThan(
-            receiverId: Long,
-            lastNotificationId: Long,
-            limit: Int,
-        ): List<MemberNotification> = emptyList()
-
-        override fun countUnreadByReceiverId(receiverId: Long): Long = 0
-
-        override fun existsByEventUid(eventUid: UUID): Boolean = false
 
         override fun deleteCreatedBefore(
             cutoff: Instant,

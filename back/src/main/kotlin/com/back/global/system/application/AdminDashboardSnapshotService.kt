@@ -1,6 +1,5 @@
 package com.back.global.system.application
 
-import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.AuthSecurityEventType
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -15,13 +14,6 @@ data class AdminDashboardTaskQueueSnapshot(
     val failedCount: Long,
     val staleProcessingCount: Long,
     val oldestReadyPendingAgeSeconds: Long?,
-    val latestFailureAt: Instant?,
-    val latestFailureMessage: String?,
-)
-
-data class AdminDashboardSignupMailSnapshot(
-    val status: String,
-    val queueLagSeconds: Long?,
     val latestFailureAt: Instant?,
     val latestFailureMessage: String?,
 )
@@ -42,7 +34,6 @@ data class AdminDashboardStorageCleanupSnapshot(
 data class AdminDashboardSnapshot(
     val generatedAt: Instant,
     val taskQueue: AdminDashboardTaskQueueSnapshot,
-    val signupMail: AdminDashboardSignupMailSnapshot,
     val authSecurity: AdminDashboardAuthSecuritySnapshot,
     val storageCleanup: AdminDashboardStorageCleanupSnapshot,
 )
@@ -50,14 +41,12 @@ data class AdminDashboardSnapshot(
 @Service
 class AdminDashboardSnapshotService(
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
-    private val signupMailDiagnosticsService: SignupMailDiagnosticsService,
     private val authSecurityEventService: AuthSecurityEventService,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
     fun getSnapshot(): AdminDashboardSnapshot {
         val generatedAt = Instant.now()
         val taskQueue = taskQueueDiagnosticsService.diagnoseQueue()
-        val signupMail = signupMailDiagnosticsService.diagnose(checkConnection = false)
         val authEvents = authSecurityEventService.getRecent(30)
         val cleanup = uploadedFileRetentionService.diagnoseCleanupSummary()
         val latestFailure = taskQueue.recentFailures.firstOrNull()
@@ -79,13 +68,6 @@ class AdminDashboardSnapshotService(
                     oldestReadyPendingAgeSeconds = taskQueue.oldestReadyPendingAgeSeconds,
                     latestFailureAt = latestFailure?.modifiedAt ?: latestTaskTypeFailure?.latestFailureAt,
                     latestFailureMessage = latestFailure?.errorMessage ?: latestTaskTypeFailure?.latestFailureMessage,
-                ),
-            signupMail =
-                AdminDashboardSignupMailSnapshot(
-                    status = signupMail.status,
-                    queueLagSeconds = signupMail.taskQueue.queueLagSeconds,
-                    latestFailureAt = signupMail.taskQueue.latestFailureAt,
-                    latestFailureMessage = signupMail.taskQueue.latestFailureMessage,
                 ),
             authSecurity =
                 AdminDashboardAuthSecuritySnapshot(

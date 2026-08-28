@@ -1,7 +1,5 @@
 package com.back.support
 
-import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
-import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.AuthSecurityEventService
@@ -56,12 +54,6 @@ abstract class BaseAdmSystemControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean
     protected lateinit var adminDashboardSnapshotService: AdminDashboardSnapshotService
-
-    @MockitoBean
-    protected lateinit var signupMailDiagnosticsService: SignupMailDiagnosticsService
-
-    @MockitoBean
-    protected lateinit var memberNotificationSseService: MemberNotificationSseService
 
     @MockitoBean
     protected lateinit var authSecurityEventService: AuthSecurityEventService

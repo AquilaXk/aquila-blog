@@ -1,6 +1,8 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
+import com.back.boundedContexts.member.domain.shared.MemberPolicy
+import com.back.boundedContexts.member.model.shared.Member
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -36,7 +38,7 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
         val memberId =
             inTransaction {
                 memberRepository
-                    .findByEmail("user1@test.com")!!
+                    .findByEmail("admin@test.com")!!
                     .also { member -> member.modifyApiKey(member.username) }
                     .id
             }
@@ -72,7 +74,7 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
 
         assertThat(issued.member.id).isEqualTo(memberId)
         assertThat(issued.apiKey).isEqualTo(persisted.apiKey)
-        assertThat(issued.apiKey).isNotBlank().isNotEqualTo("user1")
+        assertThat(issued.apiKey).isNotBlank().isNotEqualTo("admin")
         assertThat(persisted.memberRememberLoginEnabled).isFalse()
         assertThat(persisted.memberIpSecurityEnabled).isTrue()
         assertThat(persisted.memberIpSecurityFingerprint).isEqualTo("203.0.113.9")
@@ -100,6 +102,49 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
         }.isInstanceOfSatisfying(AppException::class.java) { exception ->
             assertThat(exception.errorCode).isEqualTo(ErrorCode.NOT_FOUND)
         }
+
+        assertThat(inTransaction { memberSessionRepository.count() }).isEqualTo(sessionCountBefore)
+    }
+
+    @Test
+    fun `ordinary active member rejects login issue without creating a session`() {
+        assertLoginIssueRejectedWithoutSession(memberIdFor("user1@test.com"))
+    }
+
+    @Test
+    fun `active admin with a noncanonical email rejects login issue without creating a session`() {
+        val memberId =
+            inTransaction {
+                memberRepository
+                    .saveAndFlush(
+                        Member(
+                            username = "wrong-admin",
+                            password = "1234",
+                            nickname = "Wrong admin",
+                            email = "wrong-admin@test.com",
+                            apiKey = MemberPolicy.genApiKey(),
+                        ).also { it.grantAdmin() },
+                    ).id
+            }
+
+        assertLoginIssueRejectedWithoutSession(memberId)
+    }
+
+    private fun memberIdFor(email: String): Long = inTransaction { memberRepository.findByEmail(email)!!.id }
+
+    private fun assertLoginIssueRejectedWithoutSession(memberId: Long) {
+        val sessionCountBefore = inTransaction { memberSessionRepository.count() }
+
+        assertThatThrownBy {
+            memberLoginSessionIssueService.issue(
+                memberId = memberId,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.9",
+                userAgent = "transaction-integration-test",
+            )
+        }.isInstanceOf(AppException::class.java)
 
         assertThat(inTransaction { memberSessionRepository.count() }).isEqualTo(sessionCountBefore)
     }

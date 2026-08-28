@@ -412,6 +412,47 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     @Test
+    @DisplayName("공개 글 조회수 증가 commit은 전용 hit 후속 작업만 durable task row로 남긴다")
+    fun incrementHitCommitCreatesDedicatedHitSideEffectTask() {
+        // given
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "hit durable source",
+                    content = "hit durable content",
+                    published = true,
+                    listed = true,
+                )
+            }!!
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+
+        // when
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.incrementHit(postApplicationService.findById(post.id)!!)
+        }
+
+        // then
+        val newTasks = taskRepository.findAll().filter { it.id !in previousTaskIds }
+        assertThat(newTasks).hasSize(1)
+        assertThat(newTasks).allSatisfy { task ->
+            assertThat(task.taskType).isEqualTo("post.hit.side-effect")
+            assertThat(task.aggregateType).isEqualTo("Post")
+            assertThat(task.aggregateId).isEqualTo(post.id)
+        }
+        assertThat(newTasks.count { it.taskType == "post.interaction.side-effect" }).isZero()
+
+        val envelope = objectMapper.readValue(newTasks.single().payload, TaskPayloadEnvelope::class.java)
+        val payload = objectMapper.readTree(envelope.payloadJson)
+        assertThat(envelope.taskType).isEqualTo("post.hit.side-effect")
+        assertThat(payload.path("postId").longValue()).isEqualTo(post.id)
+        assertThat(payload.path("aggregateType").textValue()).isEqualTo("Post")
+        assertThat(payload.path("aggregateId").longValue()).isEqualTo(post.id)
+        assertThat(payload.path("reason").textValue()).isEqualTo("hit")
+    }
+
+    @Test
     @DisplayName("글 작성 트랜잭션이 commit되면 durable task 실행으로 첨부파일·추천 후속 작업을 처리한다")
     fun writeCommitRunsSideEffects() {
         // given

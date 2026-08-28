@@ -1,7 +1,5 @@
 package com.back.boundedContexts.member.subContexts.oauthSignup.model
 
-import com.back.global.exception.application.AppException
-import com.back.global.exception.application.ErrorCode
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -54,35 +52,4 @@ class PendingOAuthSignup(
     var consumedAt: Instant? = null,
     @field:Column
     var cancelledAt: Instant? = null,
-) : BaseTime(id) {
-    fun refresh(
-        pendingTokenHash: String,
-        expiresAt: Instant,
-        nickname: String,
-        profileImgUrl: String?,
-    ) {
-        this.pendingTokenHash = pendingTokenHash
-        this.pendingTokenExpiresAt = expiresAt
-        this.nickname = nickname
-        this.profileImgUrl = profileImgUrl
-        this.cancelledAt = null
-    }
-
-    fun ensureReadable(now: Instant) {
-        if (cancelledAt != null || consumedAt != null) {
-            throw AppException(ErrorCode.GONE, "소셜 회원가입 세션이 더 이상 유효하지 않습니다.")
-        }
-        if (pendingTokenExpiresAt.isBefore(now)) {
-            throw AppException(ErrorCode.GONE, "소셜 회원가입 세션이 만료되었습니다. 다시 로그인해주세요.")
-        }
-    }
-
-    fun consume(now: Instant) {
-        ensureReadable(now)
-        consumedAt = now
-    }
-
-    fun cancel(now: Instant) {
-        cancelledAt = now
-    }
-}
+) : BaseTime(id)

@@ -3,11 +3,13 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberProxy
+import com.back.global.app.AdminProperties
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import java.time.Instant
 import java.util.Optional
 
 @org.junit.jupiter.api.DisplayName("ActorApplicationService 테스트")
@@ -30,6 +32,7 @@ class ActorApplicationServiceTest {
             ActorApplicationService(
                 authTokenService = AuthTokenService("12345678901234567890123456789012", 3600),
                 memberRepository = FakeMemberRepository(user1),
+                canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = "admin@test.com")),
             )
     }
 
@@ -138,6 +141,27 @@ class ActorApplicationServiceTest {
         assertThat(member.isAdmin).isTrue()
         assertThat(user1.isAdmin).isTrue()
     }
+
+    @Test
+    fun `인증 정책은 기존 회원과 canonical 관리자를 허용하고 탈퇴 회원과 다른 관리자를 거부한다`() {
+        val canonicalAdmin = member(email = "admin@test.com").also(Member::grantAdmin)
+        val otherAdmin = member(email = "other-admin@test.com").also(Member::grantAdmin)
+        val deletedMember = member(email = "deleted@test.com").also { it.deletedAt = Instant.now() }
+
+        assertThat(actorApplicationService.canAuthenticate(user1)).isTrue()
+        assertThat(actorApplicationService.canAuthenticate(canonicalAdmin)).isTrue()
+        assertThat(actorApplicationService.canAuthenticate(otherAdmin)).isFalse()
+        assertThat(actorApplicationService.canAuthenticate(deletedMember)).isFalse()
+    }
+
+    private fun member(email: String): Member =
+        Member(
+            id = 2,
+            username = email.substringBefore("@"),
+            password = "encoded-password",
+            nickname = "member",
+            email = email,
+        )
 
     private class FakeMemberRepository(
         private val member: Member,

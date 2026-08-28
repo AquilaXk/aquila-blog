@@ -5,7 +5,6 @@ import com.back.boundedContexts.member.application.port.input.MemberUseCase.Issu
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
-import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
 import org.springframework.stereotype.Service
@@ -106,13 +105,6 @@ class MemberUseCaseAdapter(
     ) = memberApplicationService.saveProfileWorkspaceDraft(member, content)
 
     override fun publishProfileWorkspace(member: Member) = memberApplicationService.publishProfileWorkspace(member)
-
-    override fun modifyOrJoin(
-        username: String,
-        password: String?,
-        nickname: String,
-        profileImgUrl: String?,
-    ): RsData<Member> = memberApplicationService.modifyOrJoin(username, password, nickname, profileImgUrl)
 
     override fun findPagedByKw(
         kw: String,

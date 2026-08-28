@@ -14,6 +14,7 @@ import kotlin.jvm.optionals.getOrNull
 class ActorApplicationService(
     private val authTokenService: AuthTokenService,
     private val memberRepository: MemberRepositoryPort,
+    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) : ActorQueryUseCase {
     @Transactional(readOnly = true)
     fun memberOf(securityUser: SecurityUser): Member {
@@ -31,6 +32,8 @@ class ActorApplicationService(
                 .trim()
                 .lowercase(Locale.ROOT),
         )
+
+    override fun canAuthenticate(member: Member): Boolean = canonicalAdminPolicy.canAuthenticate(member)
 
     @Transactional(readOnly = true)
     fun findByApiKey(apiKey: String): Member? = memberRepository.findByApiKey(apiKey)

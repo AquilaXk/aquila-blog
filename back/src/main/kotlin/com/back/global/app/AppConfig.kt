@@ -18,6 +18,11 @@ data class AdminProperties(
     val normalizedEmail: String
         get() = email.trim().lowercase(Locale.ROOT)
 
+    fun matchesEmail(candidate: String?): Boolean {
+        val configuredEmail = normalizedEmail
+        return configuredEmail.isNotBlank() && candidate?.trim()?.lowercase(Locale.ROOT) == configuredEmail
+    }
+
     val nickname: String
         get() = username.trim().ifBlank { "관리자" }
 }

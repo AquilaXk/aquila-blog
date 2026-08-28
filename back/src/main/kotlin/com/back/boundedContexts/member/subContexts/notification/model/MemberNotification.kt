@@ -73,12 +73,6 @@ class MemberNotification(
     @field:Column
     var readAt: Instant? = null
 
-    fun markRead(now: Instant = Instant.now()) {
-        if (readAt == null) {
-            readAt = now
-        }
-    }
-
     val isRead: Boolean
         get() = readAt != null
 }

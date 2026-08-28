@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.subContexts.memberActionLog.application.
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.output.MemberActionLogRepositoryPort
 import com.back.boundedContexts.member.subContexts.memberActionLog.domain.MemberActionLog
+import com.back.boundedContexts.member.subContexts.memberActionLog.dto.MemberCreateActionLogPayload
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.dto.PostCommentDto
@@ -24,6 +25,25 @@ import java.util.UUID
 
 @DisplayName("MemberActionLogApplicationService 테스트")
 class MemberActionLogApplicationServiceTest {
+    @Test
+    @DisplayName("retained action-log task keeps the exact event identity")
+    fun retainedTaskPayloadKeepsEventIdentity() {
+        val event = unknownEvent()
+
+        val payload =
+            MemberCreateActionLogPayload(
+                uid = event.uid,
+                aggregateType = event.aggregateType,
+                aggregateId = event.aggregateId,
+                event = event,
+            )
+
+        assertThat(payload.uid).isEqualTo(event.uid)
+        assertThat(payload.aggregateType).isEqualTo(event.aggregateType)
+        assertThat(payload.aggregateId).isEqualTo(event.aggregateId)
+        assertThat(payload.event).isSameAs(event)
+    }
+
     @Test
     @DisplayName("action log data는 댓글 본문과 게시글 제목 원문을 저장하지 않는다")
     fun saveCommentEventStoresStructuredMetadataOnly() {

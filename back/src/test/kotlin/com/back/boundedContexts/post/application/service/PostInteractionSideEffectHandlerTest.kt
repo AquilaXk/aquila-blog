@@ -5,7 +5,17 @@ import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
+import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
+import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
+import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.dto.PostCommentDto
+import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.event.PostCommentDeletedEvent
+import com.back.boundedContexts.post.event.PostCommentModifiedEvent
+import com.back.boundedContexts.post.event.PostCommentWrittenEvent
 import com.back.boundedContexts.post.event.PostLikedEvent
+import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.global.event.application.EventPublisher
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.assertj.core.api.Assertions.assertThat
@@ -38,6 +48,114 @@ class PostInteractionSideEffectHandlerTest {
     private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
     private val postReadCacheInvalidator: PostReadCacheInvalidator = mock(PostReadCacheInvalidator::class.java)
+
+    @Test
+    @DisplayName("retained interaction payloads restore every accepted domain event type")
+    fun publishAllRetainedDomainEventTypes() {
+        val commentDto = testCommentDto()
+        val postDto = testPostDto()
+        val actorDto = testMemberDto(2L)
+        val eventTypes =
+            listOf(
+                PostCommentWrittenEvent::class.java,
+                PostCommentModifiedEvent::class.java,
+                PostCommentDeletedEvent::class.java,
+                PostLikedEvent::class.java,
+                PostUnlikedEvent::class.java,
+            )
+
+        eventTypes.forEach { eventType ->
+            val publisher = RecordingApplicationEventPublisher()
+            newHandler(publisher).handle(
+                interactionPayload(
+                    domainEventUid = UUID.randomUUID(),
+                    domainEventType = eventType.name,
+                    postCommentDto = commentDto,
+                    postDto = postDto,
+                    actorDto = actorDto,
+                    replyReceiverId = 7L,
+                    postAuthorId = 1L,
+                    likeId = 3L,
+                ),
+            )
+
+            assertThat(publisher.publishedEvent).isInstanceOf(eventType)
+            if (publisher.publishedEvent is PostCommentWrittenEvent) {
+                val event = publisher.publishedEvent as PostCommentWrittenEvent
+                assertThat(event.getPostCommentDtoForJson().content).isEmpty()
+                assertThat(event.getPostDtoForJson())
+                    .extracting(PostDto::title, PostDto::summary)
+                    .containsExactly("", "")
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("retained interaction payload rejects incomplete domain event identity")
+    fun rejectIncompleteDomainEventIdentity() {
+        assertThatThrownBy {
+            newHandler().handle(interactionPayload(domainEventUid = UUID.randomUUID()))
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("domain event type is required")
+
+        assertThatThrownBy {
+            newHandler().handle(interactionPayload(domainEventType = PostLikedEvent::class.java.name))
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("domain event uid is required")
+    }
+
+    @Test
+    @DisplayName("public post recommendation refresh hydrates retained counters")
+    fun refreshPublicPostHydratesRetainedCounters() {
+        val post = testPost(10L)
+        val likesCount = PostAttr(1L, post, LIKES_COUNT, 2)
+        val commentsCount = PostAttr(2L, post, COMMENTS_COUNT, 3)
+        val hitCount = PostAttr(3L, post, HIT_COUNT, 4)
+        `when`(postRepository.findById(post.id)).thenReturn(Optional.of(post))
+        `when`(postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)).thenReturn(likesCount)
+        `when`(postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT)).thenReturn(commentsCount)
+        `when`(postAttrRepository.findBySubjectAndName(post, HIT_COUNT)).thenReturn(hitCount)
+
+        newHandler().handle(
+            interactionPayload(
+                postId = post.id,
+                recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
+            ),
+        )
+
+        assertThat(post.likesCountAttr).isSameAs(likesCount)
+        assertThat(post.commentsCountAttr).isSameAs(commentsCount)
+        assertThat(post.hitCountAttr).isSameAs(hitCount)
+        verify(postRecommendFeatureStoreService).refresh(post)
+    }
+
+    @Test
+    @DisplayName("multiple retained side-effect failures preserve every retry cause")
+    fun preserveSuppressedRetryCauses() {
+        val post = testPost(10L)
+        val refreshFailure = RuntimeException("refresh down")
+        val cacheFailure = RuntimeException("ranked cache down")
+        `when`(postRepository.findById(post.id)).thenReturn(Optional.of(post))
+        doThrow(refreshFailure).`when`(postRecommendFeatureStoreService).refresh(post)
+        doThrow(cacheFailure)
+            .`when`(postReadCacheInvalidator)
+            .invalidateRankedSortHotPages("like", listOf(PostSearchSortType1.LIKES_COUNT))
+
+        val thrown =
+            org.junit.jupiter.api.assertThrows<RuntimeException> {
+                newHandler().handle(
+                    interactionPayload(
+                        postId = post.id,
+                        recommendationAction = PostInteractionRecommendationSideEffect.REFRESH,
+                        rankedCacheInvalidation = PostRankedCacheInvalidationSideEffect.LIKES_COUNT,
+                        rankedCacheEvictReason = "like",
+                    ),
+                )
+            }
+
+        assertThat(thrown).isSameAs(refreshFailure)
+        assertThat(thrown.suppressed).containsExactly(cacheFailure)
+    }
 
     @Test
     @DisplayName("interaction domain event 발행 실패는 task retry를 위해 전파한다")
@@ -309,7 +427,10 @@ class PostInteractionSideEffectHandlerTest {
         recommendationAction: PostInteractionRecommendationSideEffect = PostInteractionRecommendationSideEffect.NONE,
         domainEventUid: UUID? = null,
         domainEventType: String? = null,
+        postCommentDto: PostCommentDto? = null,
+        postDto: PostDto? = null,
         actorDto: MemberDto? = null,
+        replyReceiverId: Long? = null,
         postAuthorId: Long? = null,
         likeId: Long? = null,
         rankedCacheInvalidation: PostRankedCacheInvalidationSideEffect = PostRankedCacheInvalidationSideEffect.NONE,
@@ -323,10 +444,10 @@ class PostInteractionSideEffectHandlerTest {
             recommendationAction = recommendationAction,
             domainEventUid = domainEventUid,
             domainEventType = domainEventType,
-            postCommentDto = null,
-            postDto = null,
+            postCommentDto = postCommentDto,
+            postDto = postDto,
             actorDto = actorDto,
-            replyReceiverId = null,
+            replyReceiverId = replyReceiverId,
             postAuthorId = postAuthorId,
             likeId = likeId,
             rankedCacheInvalidation = rankedCacheInvalidation,
@@ -341,6 +462,40 @@ class PostInteractionSideEffectHandlerTest {
             isAdmin = false,
             name = "작성자",
             profileImageUrl = "",
+        )
+
+    private fun testCommentDto(): PostCommentDto =
+        PostCommentDto(
+            id = 20L,
+            createdAt = Instant.EPOCH,
+            modifiedAt = Instant.EPOCH,
+            authorId = 2L,
+            authorName = "Commenter",
+            authorUsername = "commenter",
+            authorProfileImageUrl = "",
+            authorProfileImageDirectUrl = "",
+            postId = 10L,
+            parentCommentId = null,
+            content = "queued comment",
+        )
+
+    private fun testPostDto(): PostDto =
+        PostDto(
+            id = 10L,
+            createdAt = Instant.EPOCH,
+            modifiedAt = Instant.EPOCH,
+            authorId = 1L,
+            authorName = "Author",
+            authorUsername = "author",
+            authorProfileImgUrl = "",
+            title = "Post title",
+            summary = "Post summary",
+            version = 1L,
+            published = true,
+            listed = true,
+            likesCount = 0,
+            commentsCount = 1,
+            hitCount = 0,
         )
 
     private fun testPost(id: Long): Post =

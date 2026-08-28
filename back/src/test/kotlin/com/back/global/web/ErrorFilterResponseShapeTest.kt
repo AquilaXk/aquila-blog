@@ -118,7 +118,7 @@ class ErrorFilterResponseShapeTest {
                     ),
                 errorResponseWriter = ErrorResponseWriterTestSupport.createWriter(),
             )
-        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
+        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/hit")
         request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(HttpHeaders.ORIGIN, origin)
         if (errorCode == ErrorCode.CSRF_ORIGIN_DENIED) {

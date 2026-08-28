@@ -7,10 +7,8 @@ import com.back.global.web.application.Rq
 import com.back.standard.extensions.getOrThrow
 import jakarta.validation.constraints.Positive
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
@@ -37,46 +35,6 @@ class ApiV1PostInteractionController(
             "200-1",
             "조회수를 반영했습니다.",
             PostHitResBody(post.hitCount),
-        )
-    }
-
-    @PutMapping("/{id}/like")
-    @Transactional
-    fun like(
-        @PathVariable @Positive id: Long,
-    ): RsData<PostLikeToggleResBody> {
-        val post = postUseCase.findById(id).getOrThrow()
-        if (!rq.hasRole("ADMIN")) {
-            post.checkActorCanRead(rq.actorOrNull)
-        }
-        val likeResult = postUseCase.like(post, rq.actor)
-        return RsData(
-            "200-1",
-            "좋아요를 반영했습니다.",
-            PostLikeToggleResBody(
-                likeResult.isLiked,
-                post.likesCount,
-            ),
-        )
-    }
-
-    @DeleteMapping("/{id}/like")
-    @Transactional
-    fun unlike(
-        @PathVariable @Positive id: Long,
-    ): RsData<PostLikeToggleResBody> {
-        val post = postUseCase.findById(id).getOrThrow()
-        if (!rq.hasRole("ADMIN")) {
-            post.checkActorCanRead(rq.actorOrNull)
-        }
-        val likeResult = postUseCase.unlike(post, rq.actor)
-        return RsData(
-            "200-1",
-            "좋아요 취소를 반영했습니다.",
-            PostLikeToggleResBody(
-                likeResult.isLiked,
-                post.likesCount,
-            ),
         )
     }
 

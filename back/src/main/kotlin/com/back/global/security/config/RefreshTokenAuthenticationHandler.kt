@@ -1,9 +1,8 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
-import com.back.global.exception.application.AppException
-import com.back.global.exception.application.ErrorCode
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServletRequest
@@ -17,7 +16,9 @@ class RefreshTokenAuthenticationHandler(
     private val authCookieService: AuthCookieService,
     private val authIpSecurityVerifier: AuthIpSecurityVerifier,
     private val securityContextAuthenticationWriter: SecurityContextAuthenticationWriter,
+    private val memberSessionAuthenticationResolver: MemberSessionAuthenticationResolver,
     private val rq: Rq,
+    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) {
     fun authenticate(
         request: HttpServletRequest,
@@ -25,19 +26,19 @@ class RefreshTokenAuthenticationHandler(
         clientIp: String,
     ) {
         if (tokens.sessionKey.isBlank() || tokens.refreshToken.isBlank()) {
-            authCookieService.expireAuthCookies()
-            throw AppException(ErrorCode.SESSION_EXPIRED, "세션이 만료되었습니다. 다시 로그인해주세요.")
+            throw memberSessionAuthenticationResolver.expiredSessionException()
         }
 
         val refreshedSession =
             memberSessionUseCase.rotateRefreshToken(tokens.sessionKey, tokens.refreshToken)
-                ?: run {
-                    authCookieService.expireAuthCookies()
-                    throw AppException(ErrorCode.SESSION_EXPIRED, "세션이 만료되었습니다. 다시 로그인해주세요.")
-                }
+                ?: throw memberSessionAuthenticationResolver.expiredSessionException()
 
         val memberSession = refreshedSession.session
-        val member = memberSession.member
+        val member =
+            actorApplicationService
+                .findById(memberSession.member.id)
+                ?.takeIf(canonicalAdminPolicy::canAuthenticate)
+                ?: throw memberSessionAuthenticationResolver.expiredSessionException()
         val rememberLoginEnabled = memberSession.rememberLoginEnabled
         val ipSecurityEnabled = memberSession.ipSecurityEnabled
         val ipSecurityFingerprint = memberSession.ipSecurityFingerprint

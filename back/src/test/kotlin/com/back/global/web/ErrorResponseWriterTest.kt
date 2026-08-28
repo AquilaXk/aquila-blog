@@ -54,7 +54,7 @@ class ErrorResponseWriterTest {
         val meterRegistry = SimpleMeterRegistry()
         val writer = ErrorResponseWriterTestSupport.createWriter(meterRegistry)
         val request =
-            MockHttpServletRequest("GET", "/member/api/v1/signup/email/verify").apply {
+            MockHttpServletRequest("GET", "/member/api/v1/privacy/export").apply {
                 queryString = "token=LEAK_TEST_123&email=test@example.com"
             }
         val response = MockHttpServletResponse()

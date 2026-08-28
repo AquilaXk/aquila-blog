@@ -7,12 +7,9 @@ import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryP
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
-import com.back.boundedContexts.post.domain.POST_COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
-import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
-import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import org.springframework.stereotype.Service
 
 @Service
@@ -35,37 +32,6 @@ class PostCounterService(
         val actualLikesCount = postLikeRepository.countByPost(post).toInt()
         post.likesCount = actualLikesCount
         savePostAttr(post.likesCountAttr)
-    }
-
-    fun ensureLikesCountLoaded(post: Post) {
-        post.likesCountAttr = postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)
-    }
-
-    fun incrementLikesCount(post: Post) {
-        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT)
-        applyLikesCount(post, updatedLikesCount)
-    }
-
-    fun decrementLikesCount(post: Post) {
-        var updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1)
-        if (updatedLikesCount < 0) {
-            updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -updatedLikesCount)
-        }
-        applyLikesCount(post, updatedLikesCount)
-    }
-
-    fun incrementCommentsCount(post: Post) {
-        val updatedCommentsCount = postAttrRepository.incrementIntValue(post, COMMENTS_COUNT)
-        applyCommentsCount(post, updatedCommentsCount)
-    }
-
-    fun incrementMemberPostCommentsCount(member: Member) {
-        val updatedCount = memberAttrRepository.incrementIntValue(member, POST_COMMENTS_COUNT)
-        val refreshedAttr = member.postCommentsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POST_COMMENTS_COUNT)
-        refreshedAttr?.let {
-            it.intValue = updatedCount
-            member.postCommentsCountAttr = it
-        }
     }
 
     fun incrementMemberPostsCount(member: Member) {
@@ -96,27 +62,5 @@ class PostCounterService(
 
     fun saveMemberAttr(attr: MemberAttr?) {
         attr?.let(memberAttrRepository::save)
-    }
-
-    private fun applyLikesCount(
-        post: Post,
-        likesCount: Int,
-    ) {
-        val refreshedAttr = post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)
-        refreshedAttr?.let {
-            it.intValue = likesCount
-            post.likesCountAttr = it
-        }
-    }
-
-    private fun applyCommentsCount(
-        post: Post,
-        commentsCount: Int,
-    ) {
-        val refreshedAttr = post.commentsCountAttr ?: postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT)
-        refreshedAttr?.let {
-            it.intValue = commentsCount
-            post.commentsCountAttr = it
-        }
     }
 }

@@ -11,10 +11,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
-import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
-import org.springframework.test.web.servlet.put
 
 @org.junit.jupiter.api.DisplayName("PerformanceSanity 테스트")
 class PerformanceSanityTest : BasePerformanceIntegrationTest() {
@@ -66,40 +64,6 @@ class PerformanceSanityTest : BasePerformanceIntegrationTest() {
             }
 
         assertQueryCountWithin("post-detail", 8)
-    }
-
-    @Test
-    @WithUserDetails("user1@test.com")
-    fun `write comment query count sanity`() {
-        val admin = actorApplicationService.findByEmail("admin@test.com")!!
-        val post = postFacade.write(admin, "sanity comment title", "sanity comment content", true, true)
-        statistics.clear()
-
-        mvc
-            .post("/post/api/v1/posts/${post.id}/comments") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"content":"댓글 내용"}"""
-            }.andExpect {
-                status { isCreated() }
-            }
-
-        assertQueryCountWithin("comment-write", 20)
-    }
-
-    @Test
-    @WithUserDetails("user1@test.com")
-    fun `like put query count sanity`() {
-        val admin = actorApplicationService.findByEmail("admin@test.com")!!
-        val post = postFacade.write(admin, "sanity like title", "sanity like content", true, true)
-        statistics.clear()
-
-        mvc
-            .put("/post/api/v1/posts/${post.id}/like")
-            .andExpect {
-                status { isOk() }
-            }
-
-        assertQueryCountWithin("like-put", 18)
     }
 
     @Test

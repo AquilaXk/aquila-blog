@@ -6,7 +6,6 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
-import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
@@ -48,7 +47,7 @@ class MemberApplicationService(
         password: String?,
         nickname: String,
         profileImgUrl: String?,
-        email: String? = null,
+        email: String?,
     ): Member {
         val normalizedEmail = normalizeEmailOrNull(email)
 
@@ -236,23 +235,6 @@ class MemberApplicationService(
             )
         }
     }
-
-    @Transactional
-    fun modifyOrJoin(
-        username: String,
-        password: String?,
-        nickname: String,
-        profileImgUrl: String?,
-    ): RsData<Member> =
-        findByLoginId(username)
-            ?.let {
-                modify(it, nickname, profileImgUrl)
-                RsData("200-1", "회원 정보가 수정되었습니다.", it)
-            }
-            ?: run {
-                val joinedMember = join(username, password, nickname, profileImgUrl)
-                RsData("201-1", "회원가입이 완료되었습니다.", joinedMember)
-            }
 
     @Transactional(readOnly = true)
     fun findPagedByKw(

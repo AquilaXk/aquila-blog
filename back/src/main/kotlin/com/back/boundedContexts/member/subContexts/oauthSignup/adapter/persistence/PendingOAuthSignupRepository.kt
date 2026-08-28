@@ -6,13 +6,6 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 
 interface PendingOAuthSignupRepository : JpaRepository<PendingOAuthSignup, Long> {
-    fun findByProviderAndProviderSubjectHash(
-        provider: String,
-        providerSubjectHash: String,
-    ): PendingOAuthSignup?
-
-    fun findByPendingTokenHash(pendingTokenHash: String): PendingOAuthSignup?
-
     @Modifying(flushAutomatically = true)
     @Query(
         """

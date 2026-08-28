@@ -1,16 +1,12 @@
 package com.back.boundedContexts.member.subContexts.notification.application.service
 
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
-import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotificationType
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
-import com.back.global.exception.application.AppException
-import com.back.global.exception.application.ErrorCode
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -23,13 +19,6 @@ class MemberNotificationApplicationService(
     private val memberNotificationRepository: MemberNotificationRepositoryPort,
     private val memberNotificationRealtimeRelayService: MemberNotificationRealtimeRelayService,
 ) {
-    private val logger = LoggerFactory.getLogger(MemberNotificationApplicationService::class.java)
-
-    data class NotificationSnapshot(
-        val items: List<MemberNotificationDto>,
-        val unreadCount: Int,
-    )
-
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun createForCommentWritten(event: PostCommentWrittenEvent) {
         if (memberNotificationRepository.existsByEventUid(event.uid)) {
@@ -63,58 +52,6 @@ class MemberNotificationApplicationService(
             unreadCount = unreadCount,
         )
     }
-
-    @Transactional(readOnly = true)
-    fun getLatest(member: Member): List<MemberNotificationDto> =
-        readOrUnavailable(member.id, "latest") {
-            memberNotificationRepository
-                .findLatestByReceiverId(member.id)
-                .map(::MemberNotificationDto)
-        }
-
-    @Transactional(readOnly = true)
-    fun unreadCount(member: Member): Int =
-        readOrUnavailable(member.id, "unread-count") {
-            memberNotificationRepository.countUnreadByReceiverId(member.id).toInt()
-        }
-
-    @Transactional(readOnly = true)
-    fun getSnapshot(member: Member): NotificationSnapshot =
-        NotificationSnapshot(
-            items = getLatest(member),
-            unreadCount = unreadCount(member),
-        )
-
-    private fun <T> readOrUnavailable(
-        memberId: Long,
-        operation: String,
-        block: () -> T,
-    ): T =
-        try {
-            block()
-        } catch (exception: AppException) {
-            throw exception
-        } catch (exception: Exception) {
-            logger.warn(
-                "notification_read_unavailable memberId={} operation={} reasonType={}",
-                memberId,
-                operation,
-                exception::class.java.simpleName,
-            )
-            throw AppException(
-                errorCode = ErrorCode.SERVICE_UNAVAILABLE,
-                cause = exception,
-            )
-        }
-
-    @Transactional
-    fun markAllRead(member: Member): Int = memberNotificationRepository.markAllRead(member.id, java.time.Instant.now())
-
-    @Transactional
-    fun markRead(
-        member: Member,
-        id: Long,
-    ): Boolean = memberNotificationRepository.markRead(id, member.id, java.time.Instant.now()) > 0
 
     private fun resolveReceiver(event: PostCommentWrittenEvent): ReceiverInfo? {
         val parentCommentId = event.postCommentDto.parentCommentId

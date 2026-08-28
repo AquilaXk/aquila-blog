@@ -17,20 +17,6 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Long>
         FROM MemberNotification notification
         JOIN FETCH notification.actor actor
         WHERE notification.receiver.id = :receiverId
-        ORDER BY notification.createdAt DESC
-        """,
-    )
-    fun findLatestByReceiverId(
-        @Param("receiverId") receiverId: Long,
-        pageable: Pageable,
-    ): List<MemberNotification>
-
-    @Query(
-        """
-        SELECT notification
-        FROM MemberNotification notification
-        JOIN FETCH notification.actor actor
-        WHERE notification.receiver.id = :receiverId
           AND notification.id > :id
         ORDER BY notification.id ASC
         """,
@@ -44,37 +30,6 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Long>
     fun countByReceiverIdAndReadAtIsNull(receiverId: Long): Long
 
     fun existsByEventUid(eventUid: UUID): Boolean
-
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Transactional
-    @Query(
-        """
-        UPDATE MemberNotification notification
-        SET notification.readAt = :readAt
-        WHERE notification.receiver.id = :receiverId
-          AND notification.readAt IS NULL
-        """,
-    )
-    fun markAllRead(
-        @Param("receiverId") receiverId: Long,
-        @Param("readAt") readAt: Instant,
-    ): Int
-
-    @Modifying(clearAutomatically = false, flushAutomatically = true)
-    @Query(
-        """
-        UPDATE MemberNotification notification
-        SET notification.readAt = :readAt
-        WHERE notification.id = :id
-          AND notification.receiver.id = :receiverId
-          AND notification.readAt IS NULL
-        """,
-    )
-    fun markRead(
-        @Param("id") id: Long,
-        @Param("receiverId") receiverId: Long,
-        @Param("readAt") readAt: Instant,
-    ): Int
 
     @Modifying(clearAutomatically = false, flushAutomatically = true)
     @Transactional

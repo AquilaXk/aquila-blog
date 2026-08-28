@@ -3,9 +3,8 @@ package com.back.boundedContexts.member.adapter.web
 import com.back.boundedContexts.member.application.service.AuthTokenService
 import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.application.service.MemberApplicationService
-import com.back.boundedContexts.member.subContexts.legalAcceptance.adapter.persistence.MemberLegalAcceptanceRepository
-import com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.ActiveLegalDocumentMetadata
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
+import com.back.global.app.AdminProperties
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
 import jakarta.servlet.http.Cookie
@@ -38,7 +37,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
     private lateinit var memberSessionRepository: MemberSessionRepository
 
     @Autowired
-    private lateinit var memberLegalAcceptanceRepository: MemberLegalAcceptanceRepository
+    private lateinit var adminProperties: AdminProperties
 
     @AfterEach
     fun clearLoginAttemptState() {
@@ -81,7 +80,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                 jsonPath("$.data.item.modifiedAt") { value(startsWith("20")) }
                 jsonPath("$.data.item.isAdmin") { value(member.isAdmin) }
                 jsonPath("$.data.item.name") { value(member.name) }
-                jsonPath("$.data.item.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
+                jsonPath("$.data.item.profileImageUrl") { value(startsWith(member.profileImgUrlOrDefault)) }
             }
 
             val result = resultActions.andReturn()
@@ -446,6 +445,101 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.resultCode") { value("429-1") }
                 }
         }
+
+        @Test
+        fun `비정규 관리자도 올바른 비밀번호에서 일반 실패 누적 후 429를 반환하고 세션을 만들지 않는다`() {
+            val wrongEmail = "wrong-admin@example.com"
+            assertThat(wrongEmail).isNotEqualTo(adminProperties.normalizedEmail)
+            val wrongAdmin =
+                memberFacade.join(
+                    username = "wrong-admin",
+                    password = "Abcd1234!",
+                    nickname = "비정규관리자",
+                    profileImgUrl = null,
+                    email = wrongEmail,
+                )
+            wrongAdmin.grantAdmin()
+            val sessionCountBefore = memberSessionRepository.count()
+
+            repeat(4) {
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "email": "$wrongEmail",
+                                "password": "Abcd1234!"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isUnauthorized() }
+                        jsonPath("$.resultCode") { value("401-1") }
+                        jsonPath("$.msg") { value("이메일 또는 비밀번호가 올바르지 않습니다.") }
+                    }.andReturn()
+                    .also { result ->
+                        assertThat(result.response.cookies.map { it.name })
+                            .doesNotContainAnyElementsOf(AuthCookieNames.AUTHENTICATION_COOKIE_NAMES)
+                    }
+            }
+
+            mvc
+                .post("/member/api/v1/auth/login") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "email": "$wrongEmail",
+                            "password": "Abcd1234!"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isTooManyRequests() }
+                    jsonPath("$.resultCode") { value("429-1") }
+                }.andReturn()
+                .also { result ->
+                    assertThat(result.response.cookies.map { it.name })
+                        .doesNotContainAnyElementsOf(AuthCookieNames.AUTHENTICATION_COOKIE_NAMES)
+                }
+
+            assertThat(memberSessionRepository.count()).isEqualTo(sessionCountBefore)
+        }
+
+        @Test
+        fun `아이피 보안 로그인은 정규화할 수 없는 클라이언트 아이피를 거부한다`() {
+            val member =
+                memberFacade.join(
+                    username = "ip-security-unavailable-user",
+                    password = "Abcd1234!",
+                    nickname = "아이피보안불가",
+                    profileImgUrl = null,
+                    email = "ip-security-unavailable-user@example.com",
+                )
+            val sessionCountBefore = memberSessionRepository.count()
+
+            val result =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        with(remoteAddr("not-an-ip"))
+                        content =
+                            """
+                            {
+                                "email": "${member.email}",
+                                "password": "Abcd1234!",
+                                "ipSecurity": true
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isBadRequest() }
+                        jsonPath("$.resultCode") { value("400-3") }
+                        jsonPath("$.msg") { value("IP 보안 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.") }
+                    }.andReturn()
+
+            assertThat(result.response.cookies.map { it.name })
+                .doesNotContainAnyElementsOf(AuthCookieNames.AUTHENTICATION_COOKIE_NAMES)
+            assertThat(memberSessionRepository.count()).isEqualTo(sessionCountBefore)
+        }
     }
 
     @Nested
@@ -557,7 +651,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.username") { value(member.name) }
                     jsonPath("$.name") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
-                    jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
+                    jsonPath("$.profileImageUrl") { value(startsWith(member.profileImgUrlOrDefault)) }
                 }
         }
 
@@ -584,92 +678,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.isAdmin") { value(member.isAdmin) }
                     jsonPath("$.username") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
-                    jsonPath("$.legalReconsent.status") { value("RECONSENT_REQUIRED") }
-                    jsonPath("$.legalReconsent.required") { value(true) }
                 }
-        }
-
-        @Test
-        fun `최신 약관 재동의를 저장하면 세션 재동의 상태가 current 로 바뀐다`() {
-            val active = ActiveLegalDocumentMetadata.current()
-            val member =
-                memberFacade.join(
-                    username = "legal-reconsent-user",
-                    password = "Abcd1234!",
-                    nickname = "재동의유저",
-                    profileImgUrl = null,
-                    email = "legal-reconsent-user@example.com",
-                )
-            val authCookies = loginAuthCookies(member.email!!)
-
-            mvc
-                .post("/member/api/v1/auth/legal-reconsent") {
-                    authCookies.forEach { cookie(it) }
-                    header("X-Aquila-CSRF", "1")
-                    contentType = MediaType.APPLICATION_JSON
-                    content =
-                        """
-                        {
-                            "termsVersion": "${active.terms.version}",
-                            "termsContentSha256": "${active.terms.contentSha256}",
-                            "privacyVersion": "${active.privacy.version}",
-                            "privacyContentSha256": "${active.privacy.contentSha256}",
-                            "age14OrOlder": true,
-                            "requiredPrivacyConfirmed": true,
-                            "analyticsConsent": false,
-                            "overseasTransferAcknowledged": true
-                        }
-                        """.trimIndent()
-                }.andExpect {
-                    status { isOk() }
-                    match(handler().handlerType(ApiV1AuthController::class.java))
-                    match(handler().methodName("legalReconsent"))
-                    jsonPath("$.resultCode") { value("200-1") }
-                    jsonPath("$.data.legalReconsent.status") { value("CURRENT") }
-                    jsonPath("$.data.legalReconsent.required") { value(false) }
-                }
-
-            val saved = memberLegalAcceptanceRepository.findTopByMemberIdOrderByAcceptedAtDesc(member.id)
-            assertThat(saved).isNotNull
-            assertThat(saved!!.source).isEqualTo("RECONSENT")
-            assertThat(saved.termsVersion).isEqualTo(active.terms.version)
-            assertThat(saved.privacyVersion).isEqualTo(active.privacy.version)
-
-            mvc
-                .get("/member/api/v1/auth/session") {
-                    authCookies.forEach { cookie(it) }
-                }.andExpect {
-                    status { isOk() }
-                    jsonPath("$.legalReconsent.status") { value("CURRENT") }
-                    jsonPath("$.legalReconsent.required") { value(false) }
-                }
-        }
-
-        @Test
-        fun `재동의 요청 DTO는 모든 법적 증빙 필드를 command 로 전달한다`() {
-            val active = ActiveLegalDocumentMetadata.current()
-            val request =
-                ApiV1AuthController.LegalReconsentRequest(
-                    termsVersion = active.terms.version,
-                    termsContentSha256 = active.terms.contentSha256,
-                    privacyVersion = active.privacy.version,
-                    privacyContentSha256 = active.privacy.contentSha256,
-                    age14OrOlder = true,
-                    requiredPrivacyConfirmed = true,
-                    analyticsConsent = false,
-                    overseasTransferAcknowledged = true,
-                )
-
-            val command = request.toCommand()
-
-            assertThat(command.termsVersion).isEqualTo(request.termsVersion)
-            assertThat(command.termsContentSha256).isEqualTo(request.termsContentSha256)
-            assertThat(command.privacyVersion).isEqualTo(request.privacyVersion)
-            assertThat(command.privacyContentSha256).isEqualTo(request.privacyContentSha256)
-            assertThat(command.age14OrOlder).isEqualTo(request.age14OrOlder)
-            assertThat(command.requiredPrivacyConfirmed).isEqualTo(request.requiredPrivacyConfirmed)
-            assertThat(command.analyticsConsent).isEqualTo(request.analyticsConsent)
-            assertThat(command.overseasTransferAcknowledged).isEqualTo(request.overseasTransferAcknowledged)
         }
 
         @Test
@@ -744,7 +753,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                         jsonPath("$.username") { value(member.name) }
                         jsonPath("$.name") { value(member.name) }
                         jsonPath("$.nickname") { value(member.nickname) }
-                        jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
+                        jsonPath("$.profileImageUrl") { value(startsWith(member.profileImgUrlOrDefault)) }
                     }
 
             val result = resultActions.andReturn()
@@ -841,7 +850,7 @@ class ApiV1AuthControllerTest : BaseControllerIntegrationTest() {
                         jsonPath("$.username") { value(member.name) }
                         jsonPath("$.name") { value(member.name) }
                         jsonPath("$.nickname") { value(member.nickname) }
-                        jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
+                        jsonPath("$.profileImageUrl") { value(startsWith(member.profileImgUrlOrDefault)) }
                     }
 
             val result = resultActions.andReturn()

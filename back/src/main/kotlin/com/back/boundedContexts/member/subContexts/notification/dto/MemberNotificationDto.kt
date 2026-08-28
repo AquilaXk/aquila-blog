@@ -26,7 +26,7 @@ data class MemberNotificationDto(
         actorId = notification.actor.id,
         actorName = notification.actor.name,
         actorProfileImageDirectUrl = notification.actor.profileImgUrlVersionedOrDefault,
-        actorProfileImageUrl = notification.actor.redirectToProfileImgUrlVersionedOrDefault,
+        actorProfileImageUrl = notification.actor.profileImgUrlVersionedOrDefault,
         postId = notification.postId,
         commentId = notification.commentId,
         postTitle = notification.postTitle,

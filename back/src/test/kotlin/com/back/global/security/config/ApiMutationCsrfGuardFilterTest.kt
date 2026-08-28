@@ -19,7 +19,7 @@ class ApiMutationCsrfGuardFilterTest {
     @DisplayName("쿠키 인증 mutation은 CSRF preflight 헤더가 없으면 403으로 차단한다")
     fun `cookie authenticated mutation without csrf preflight header is forbidden`() {
         val filter = createFilter()
-        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
+        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/hit")
         request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(HttpHeaders.ORIGIN, "https://blog.aquilaxk.site")
         val response = MockHttpServletResponse()
@@ -36,7 +36,7 @@ class ApiMutationCsrfGuardFilterTest {
     fun `csrf guard does not echo cors headers for apex or www origins`() {
         for (origin in listOf("https://aquilaxk.site", "https://www.aquilaxk.site", "https://www.blog.aquilaxk.site")) {
             val filter = createFilter()
-            val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
+            val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/hit")
             request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
             request.addHeader(HttpHeaders.ORIGIN, origin)
             val response = MockHttpServletResponse()
@@ -53,7 +53,7 @@ class ApiMutationCsrfGuardFilterTest {
     @DisplayName("쿠키 인증 mutation은 CSRF preflight 헤더가 있으면 통과한다")
     fun `cookie authenticated mutation with csrf preflight header passes`() {
         val filter = createFilter()
-        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
+        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/hit")
         request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(ApiMutationCsrfGuardFilter.CSRF_PREFLIGHT_HEADER, "1")
         val response = MockHttpServletResponse()
@@ -78,7 +78,7 @@ class ApiMutationCsrfGuardFilterTest {
     @DisplayName("context path가 붙은 API mutation도 실제 API 경로로 판정한다")
     fun `api mutation with context path is matched after removing context path`() {
         val filter = createFilter()
-        val request = MockHttpServletRequest("POST", "/app/post/api/v1/posts/1/comments")
+        val request = MockHttpServletRequest("POST", "/app/post/api/v1/posts/1/hit")
         request.contextPath = "/app"
         request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(ApiMutationCsrfGuardFilter.CSRF_PREFLIGHT_HEADER, "1")
@@ -104,7 +104,7 @@ class ApiMutationCsrfGuardFilterTest {
     @DisplayName("허용되지 않은 Origin의 쿠키 인증 mutation은 CSRF 헤더가 있어도 403으로 차단한다")
     fun `cookie authenticated mutation from disallowed origin is forbidden`() {
         val filter = createFilter()
-        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/comments")
+        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/1/hit")
         request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
         request.addHeader(HttpHeaders.ORIGIN, "https://evil.example")
         request.addHeader(ApiMutationCsrfGuardFilter.CSRF_PREFLIGHT_HEADER, "1")

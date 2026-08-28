@@ -671,7 +671,7 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
                     match(handler().methodName("updateProfileImg"))
                     jsonPath("$.id") { value(member.id) }
                     jsonPath("$.profileImageUrl") {
-                        value(startsWith(member.redirectToProfileImgUrlOrDefault))
+                        value(startsWith(member.profileImgUrlOrDefault))
                     }
                 }
 

@@ -133,6 +133,6 @@ data class MemberWithUsernameDto(
                 ?.trim()
                 ?.takeIf(String::isNotBlank)
                 ?.let { appendVersion(it, workspaceModifiedAt ?: member.modifiedAt) }
-                ?: member.redirectToProfileImgUrlVersionedOrDefault
+                ?: member.profileImgUrlVersionedOrDefault
     }
 }

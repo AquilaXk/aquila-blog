@@ -4,11 +4,11 @@
   "artifacts": {
     "openapi": {
       "path": "openapi.json",
-      "sha256": "9959183e7b49dc7e3a51c08faf132223fbbfcfc3bb168d346d58128ffa2ddd0a"
+      "sha256": "708e3298bef6f6e7d65fd2d70183999803836930a96738d3064771824a5f9b25"
     },
     "errorCodes": {
       "path": "error-codes.json",
-      "sha256": "fd6b430a96c53684dded36ed17523399bf8bd5bba9b20078937632e741dd2731"
+      "sha256": "ce58fb49adbbcc709a11c563ce64ebca70d195bacd2411f63078006941fe2a1f"
     },
     "summaryFixtures": {
       "path": "summary-fixtures.json",

@@ -2,8 +2,6 @@ package com.back.boundedContexts.post.application.port.input
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.PostComment
-import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
@@ -85,46 +83,7 @@ interface PostUseCase {
 
     fun deleteContentByAuthorForAccountDeletion(author: Member)
 
-    fun writeComment(
-        author: Member,
-        post: Post,
-        content: String,
-        parentComment: PostComment? = null,
-    ): PostComment
-
-    fun modifyComment(
-        postComment: PostComment,
-        actor: Member,
-        content: String,
-    )
-
-    fun deleteComment(
-        post: Post,
-        postComment: PostComment,
-        actor: Member,
-    )
-
-    fun like(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult
-
-    fun unlike(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult
-
     fun incrementHit(post: Post)
-
-    fun getComments(
-        post: Post,
-        limit: Int = 200,
-    ): List<PostComment>
-
-    fun findCommentById(
-        post: Post,
-        id: Long,
-    ): PostComment?
 
     fun isLiked(
         post: Post,

@@ -54,6 +54,7 @@ class ErrorCodeTest {
     fun `toRsData uses default or override message`() {
         assertThat(ErrorCode.BAD_REQUEST.toRsData().resultCode).isEqualTo("400-1")
         assertThat(ErrorCode.BAD_REQUEST.toRsData().msg).isEqualTo(ErrorCode.BAD_REQUEST.defaultUserMessage)
+        assertThat(ErrorCode.BAD_REQUEST.toRsData().isFail).isTrue()
         assertThat(ErrorCode.BAD_REQUEST.toRsData("커스텀").msg).isEqualTo("커스텀")
     }
 

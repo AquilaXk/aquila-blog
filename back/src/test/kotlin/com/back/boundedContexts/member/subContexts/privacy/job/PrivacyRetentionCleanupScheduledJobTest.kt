@@ -8,7 +8,6 @@ import com.back.boundedContexts.member.subContexts.notification.domain.MemberNot
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
-import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
 import com.back.global.jpa.domain.BaseTime
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
@@ -127,14 +126,6 @@ class PrivacyRetentionCleanupScheduledJobTest {
         private val counts = ArrayDeque(counts.toList())
         val calls = mutableListOf<DeleteCall>()
 
-        override fun save(memberSignupVerification: MemberSignupVerification): MemberSignupVerification = memberSignupVerification
-
-        override fun findByEmailVerificationTokenHash(emailVerificationTokenHash: String): MemberSignupVerification? = null
-
-        override fun findBySignupSessionTokenHash(signupSessionTokenHash: String): MemberSignupVerification? = null
-
-        override fun findTopByEmail(email: String): MemberSignupVerification? = null
-
         override fun deleteRetainedBefore(
             cutoff: Instant,
             limit: Int,
@@ -172,8 +163,6 @@ class PrivacyRetentionCleanupScheduledJobTest {
 
         override fun save(notification: MemberNotification): MemberNotification = notification
 
-        override fun findLatestByReceiverId(receiverId: Long): List<MemberNotification> = emptyList()
-
         override fun findByReceiverIdAndIdGreaterThan(
             receiverId: Long,
             lastNotificationId: Long,
@@ -183,17 +172,6 @@ class PrivacyRetentionCleanupScheduledJobTest {
         override fun countUnreadByReceiverId(receiverId: Long): Long = 0
 
         override fun existsByEventUid(eventUid: UUID): Boolean = false
-
-        override fun markAllRead(
-            receiverId: Long,
-            readAt: Instant,
-        ): Int = 0
-
-        override fun markRead(
-            id: Long,
-            receiverId: Long,
-            readAt: Instant,
-        ): Int = 0
 
         override fun deleteCreatedBefore(
             cutoff: Instant,

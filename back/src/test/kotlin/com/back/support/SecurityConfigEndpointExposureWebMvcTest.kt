@@ -2,10 +2,12 @@ package com.back.support
 
 import com.back.boundedContexts.cloud.config.CloudSecurityConfigurer
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
+import com.back.global.app.AdminProperties
 import com.back.global.observability.ErrorMetrics
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
@@ -106,7 +108,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
         fun authSecurityConfigurer(): AuthSecurityConfigurer = AuthSecurityConfigurer()
 
         @Bean
-        fun memberSecurityConfigurer(): MemberSecurityConfigurer = MemberSecurityConfigurer(legacyDirectJoinEnabled = false)
+        fun memberSecurityConfigurer(): MemberSecurityConfigurer = MemberSecurityConfigurer()
 
         @Bean
         fun postSecurityConfigurer(): PostSecurityConfigurer = PostSecurityConfigurer()
@@ -162,6 +164,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
             val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
             val authCookieService = mock(AuthCookieService::class.java)
             val securityContextAuthenticationWriter = SecurityContextAuthenticationWriter()
+            val canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = "admin@test.com"))
             val memberSessionAuthenticationResolver =
                 MemberSessionAuthenticationResolver(
                     memberSessionUseCase = memberSessionUseCase,
@@ -183,6 +186,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                     securityContextAuthenticationWriter = securityContextAuthenticationWriter,
                     memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                     rq = rq,
+                    canonicalAdminPolicy = canonicalAdminPolicy,
                 )
             val accessTokenAuthenticationHandler =
                 AccessTokenAuthenticationHandler(
@@ -192,6 +196,7 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                     securityContextAuthenticationWriter = securityContextAuthenticationWriter,
                     memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                     apiKeyAuthorityRefreshHandler = apiKeyAuthorityRefreshHandler,
+                    canonicalAdminPolicy = canonicalAdminPolicy,
                 )
             val refreshTokenAuthenticationHandler =
                 RefreshTokenAuthenticationHandler(
@@ -200,7 +205,9 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
                     authCookieService = authCookieService,
                     authIpSecurityVerifier = authIpSecurityVerifier,
                     securityContextAuthenticationWriter = securityContextAuthenticationWriter,
+                    memberSessionAuthenticationResolver = memberSessionAuthenticationResolver,
                     rq = rq,
+                    canonicalAdminPolicy = canonicalAdminPolicy,
                 )
             return CustomAuthenticationFilter(
                 authTokenExtractor = AuthTokenExtractor(rq),

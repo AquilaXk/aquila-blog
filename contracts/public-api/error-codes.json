@@ -108,12 +108,6 @@
     "kind": "USER"
   },
   {
-    "code": "403-4",
-    "httpStatus": 403,
-    "defaultUserMessage": "소셜 로그인 신규 가입은 현재 지원하지 않습니다.",
-    "kind": "USER"
-  },
-  {
     "code": "404-1",
     "httpStatus": 404,
     "defaultUserMessage": "해당 데이터가 존재하지 않습니다.",
@@ -250,11 +244,5 @@
     "httpStatus": 503,
     "defaultUserMessage": "API 보호 시스템이 준비되지 않았습니다.",
     "kind": "DEVELOPER"
-  },
-  {
-    "code": "503-5",
-    "httpStatus": 503,
-    "defaultUserMessage": "회원가입은 출시 준비 중입니다.",
-    "kind": "USER"
   }
 ]

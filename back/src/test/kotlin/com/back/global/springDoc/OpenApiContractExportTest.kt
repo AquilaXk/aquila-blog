@@ -96,10 +96,8 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             "MIGRATED",
             "NONE",
         )
-        assertNullableReference(
-            propertySchema(openApiNode, "AuthSessionMemberDto", "legalReconsent"),
-            "#/components/schemas/LegalReconsentStatus",
-        )
+        val authSessionMemberSchema = openApiNode.path("components").path("schemas").path("AuthSessionMemberDto")
+        assertThat(authSessionMemberSchema.path("properties").has("legalReconsent")).isFalse()
         val paths = openApiNode.path("paths")
         assertThat(paths.has("/system/api/v1/adm/operations/task-dlq-replay")).isTrue()
         assertThat(paths.has("/system/api/v1/adm/operations/{operationId}")).isTrue()
@@ -272,17 +270,6 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
     ) {
         assertThat(schema.path("type").values().map { it.asText() })
             .containsExactlyInAnyOrderElementsOf(expectedTypes.toList())
-    }
-
-    private fun assertNullableReference(
-        schema: JsonNode,
-        expectedReference: String,
-    ) {
-        val variants = schema.path("oneOf")
-
-        assertThat(variants).hasSize(2)
-        assertThat(variants.values().map { it.path("\$ref").asText() to it.path("type").asText() })
-            .containsExactlyInAnyOrderElementsOf(listOf(expectedReference to "", "" to "null"))
     }
 
     private fun assertNullableEnum(

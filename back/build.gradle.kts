@@ -96,6 +96,7 @@ dependencies {
     }
     implementation("software.amazon.awssdk:url-connection-client:$awsSdkVersion")
     implementation("org.jsoup:jsoup:1.23.1")
+    implementation("com.twelvemonkeys.imageio:imageio-webp:3.13.1")
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")

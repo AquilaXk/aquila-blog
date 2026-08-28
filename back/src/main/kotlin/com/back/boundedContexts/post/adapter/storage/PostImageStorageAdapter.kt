@@ -22,7 +22,6 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
-import java.io.BufferedInputStream
 import java.io.InputStream
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -45,6 +44,7 @@ class PostImageStorageAdapter(
     private val logger = LoggerFactory.getLogger(javaClass)
     private val initLock = Any()
     private val dependencyDownCache = StorageDependencyDownCache()
+    private val imageAdmissionValidator = PostImageAdmissionValidator()
 
     @Volatile
     private var s3Client: S3Client? = null
@@ -82,37 +82,15 @@ class PostImageStorageAdapter(
 
         val preparedUpload = prepareRepeatableUpload(request.inputStream, request.contentLength)
         try {
-            val signature =
-                Files.newInputStream(preparedUpload.path).use { uploadStream ->
-                    uploadStream.asResettableStream().use { resettableStream ->
-                        resettableStream.mark(IMAGE_SIGNATURE_MAX_BYTES)
-                        resettableStream.readNBytes(IMAGE_SIGNATURE_MAX_BYTES)
-                    }
-                }
-
-            val declaredContentType = normalizeDeclaredContentType(request.contentType)
-            val detectedType = detectImageContentType(signature)
-            if (detectedType == null || detectedType !in allowedContentTypes) {
-                throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.")
-            }
-
-            // Browser/OS에 따라 image/x-png 등 별칭이 전달될 수 있어 선언 타입은 정규화 후 참고한다.
-            // 단, 정규화된 선언 타입이 명확히 존재하고 감지 결과와 다르면 위장 업로드로 보고 차단한다.
-            if (declaredContentType != null &&
-                declaredContentType in allowedContentTypes &&
-                declaredContentType != detectedType
-            ) {
-                throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.")
-            }
-
-            val key = buildObjectKey(request.originalFilename)
+            val validatedImage = imageAdmissionValidator.validate(preparedUpload.path, request.contentType)
+            val key = buildObjectKeyWithExtension(validatedImage.extension)
             val client = requireClient()
 
             try {
                 putObject(
                     client = client,
                     objectKey = key,
-                    contentType = detectedType,
+                    contentType = validatedImage.contentType,
                     uploadPath = preparedUpload.path,
                     contentLength = preparedUpload.contentLength,
                     originalFilename = request.originalFilename,
@@ -137,7 +115,7 @@ class PostImageStorageAdapter(
         )
 
         val key = buildObjectKey(request.originalFilename)
-        val contentType = normalizeDeclaredContentType(request.contentType) ?: "application/octet-stream"
+        val contentType = normalizePostMediaContentType(request.contentType) ?: "application/octet-stream"
 
         val preparedUpload = prepareRepeatableUpload(request.inputStream, request.contentLength)
         try {
@@ -367,8 +345,6 @@ class PostImageStorageAdapter(
         }
     }
 
-    private fun InputStream.asResettableStream(): InputStream = if (markSupported()) this else BufferedInputStream(this)
-
     private data class PreparedUpload(
         val path: Path,
         val contentLength: Long,
@@ -422,10 +398,14 @@ class PostImageStorageAdapter(
 
     private fun buildObjectKey(originalFilename: String?): String {
         val ext = extractExtension(originalFilename)
+        return buildObjectKeyWithExtension(ext)
+    }
+
+    private fun buildObjectKeyWithExtension(extension: String): String {
         val datePath = LocalDate.now().format(datePathFormatter)
         val prefix = resolvedKeyPrefix()
         val uuid = UUID.randomUUID().toString()
-        return "$prefix/$datePath/$uuid$ext"
+        return "$prefix/$datePath/$uuid$extension"
     }
 
     private fun extractExtension(originalFilename: String?): String {
@@ -480,72 +460,7 @@ class PostImageStorageAdapter(
     }
 
     companion object {
-        private val allowedContentTypes =
-            setOf(
-                "image/jpeg",
-                "image/png",
-                "image/gif",
-                "image/webp",
-            )
-
-        private val contentTypeAliases =
-            mapOf(
-                "image/jpg" to "image/jpeg",
-                "image/pjpeg" to "image/jpeg",
-                "image/x-png" to "image/png",
-                "image/x-webp" to "image/webp",
-            )
-
-        private const val IMAGE_SIGNATURE_MAX_BYTES = 16
         private const val MAX_LIST_OBJECTS = 1_000
         private const val S3_PAGE_SIZE = 1_000
-    }
-
-    private fun normalizeDeclaredContentType(raw: String?): String? {
-        val normalized =
-            raw
-                ?.substringBefore(";")
-                ?.trim()
-                ?.lowercase()
-                .orEmpty()
-
-        if (normalized.isBlank()) return null
-        return contentTypeAliases[normalized] ?: normalized
-    }
-
-    private fun detectImageContentType(signature: ByteArray): String? {
-        if (signature.size >= 3 &&
-            signature[0] == 0xFF.toByte() &&
-            signature[1] == 0xD8.toByte() &&
-            signature[2] == 0xFF.toByte()
-        ) {
-            return "image/jpeg"
-        }
-
-        if (signature.size >= 8 &&
-            signature[0] == 0x89.toByte() &&
-            signature[1] == 0x50.toByte() &&
-            signature[2] == 0x4E.toByte() &&
-            signature[3] == 0x47.toByte() &&
-            signature[4] == 0x0D.toByte() &&
-            signature[5] == 0x0A.toByte() &&
-            signature[6] == 0x1A.toByte() &&
-            signature[7] == 0x0A.toByte()
-        ) {
-            return "image/png"
-        }
-
-        if (signature.size >= 6) {
-            val header = signature.copyOfRange(0, 6).toString(Charsets.US_ASCII)
-            if (header == "GIF87a" || header == "GIF89a") return "image/gif"
-        }
-
-        if (signature.size >= 12) {
-            val riff = signature.copyOfRange(0, 4).toString(Charsets.US_ASCII)
-            val webp = signature.copyOfRange(8, 12).toString(Charsets.US_ASCII)
-            if (riff == "RIFF" && webp == "WEBP") return "image/webp"
-        }
-
-        return null
     }
 }

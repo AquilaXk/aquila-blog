@@ -17,8 +17,6 @@ class OAuthSignupHashService(
     @param:Value("\${custom.jwt.secretKey}")
     private val jwtSecretKey: String,
 ) {
-    fun pendingTokenHash(rawToken: String): String = digest("oauth-signup-pending-token", rawToken)
-
     fun providerSubjectHash(
         provider: String,
         providerSubject: String,

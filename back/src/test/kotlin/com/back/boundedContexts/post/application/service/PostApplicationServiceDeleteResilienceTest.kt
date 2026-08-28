@@ -110,7 +110,6 @@ class PostApplicationServiceDeleteResilienceTest {
             postTagIndexRepository = postTagIndexRepository,
         )
     private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository)
-    private val postInteractionSideEffectQueue = PostInteractionSideEffectQueue(taskFacade)
     private val postHitSideEffectQueue = PostHitSideEffectQueue(taskFacade)
     private val postCommentApplicationService =
         PostCommentApplicationService(
@@ -118,16 +117,9 @@ class PostApplicationServiceDeleteResilienceTest {
             postCommentRepository = postCommentRepository,
             postHydrationService = postHydrationService,
             postCounterService = postCounterService,
-            postInteractionSideEffectQueue = postInteractionSideEffectQueue,
         )
     private val postLikeApplicationService =
-        PostLikeApplicationService(
-            postRepository = postRepository,
-            postLikeRepository = postLikeRepository,
-            postHydrationService = postHydrationService,
-            postCounterService = postCounterService,
-            postInteractionSideEffectQueue = postInteractionSideEffectQueue,
-        )
+        PostLikeApplicationService(postLikeRepository)
 
     private val service =
         PostApplicationService(

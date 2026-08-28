@@ -8,11 +8,6 @@ import org.springframework.stereotype.Component
 class CanonicalAdminPolicy(
     private val adminProperties: AdminProperties,
 ) {
-    fun isCanonical(member: Member): Boolean =
-        member.deletedAt == null &&
-            member.isAdmin &&
-            adminProperties.matchesEmail(member.email)
-
     fun canAuthenticate(member: Member): Boolean =
         member.deletedAt == null &&
             (!member.isAdmin || adminProperties.matchesEmail(member.email))

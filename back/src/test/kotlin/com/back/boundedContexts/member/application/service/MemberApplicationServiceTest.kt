@@ -43,6 +43,7 @@ class MemberApplicationServiceTest : BaseMemberApplicationServiceIntegrationTest
                 "1234",
                 "프로필유저",
                 "https://example.com/profile-user.png",
+                null,
             )
 
         assertThat(member.profileImgUrl).isEqualTo("https://example.com/profile-user.png")
@@ -88,47 +89,6 @@ class MemberApplicationServiceTest : BaseMemberApplicationServiceIntegrationTest
         assertThat(events.single().currentNickname).isEqualTo("변경후")
         assertThat(events.single().previousProfileImgUrl).isEmpty()
         assertThat(events.single().currentProfileImgUrl).isEqualTo("https://example.com/author-event.png")
-    }
-
-    @Test
-    fun `modifyOrJoin 은 기존 회원이 있으면 회원 정보를 수정하고 200을 반환한다`() {
-        val existingUsername = "member-modify-or-join-target"
-        createMember(existingUsername, "유저1")
-
-        val rsData =
-            memberFacade.modifyOrJoin(
-                username = existingUsername,
-                password = "ignored-password",
-                nickname = "수정유저1",
-                profileImgUrl = "https://example.com/modify-or-join-user1.png",
-            )
-
-        val member = memberFacade.findByLoginId(existingUsername)!!
-
-        assertThat(rsData.resultCode).isEqualTo("200-1")
-        assertThat(rsData.msg).isEqualTo("회원 정보가 수정되었습니다.")
-        assertThat(rsData.data).isEqualTo(member)
-        assertThat(member.nickname).isEqualTo("수정유저1")
-        assertThat(member.profileImgUrl).isEqualTo("https://example.com/modify-or-join-user1.png")
-    }
-
-    @Test
-    fun `modifyOrJoin 은 기존 회원이 없으면 새 회원을 생성하고 201을 반환한다`() {
-        val rsData =
-            memberFacade.modifyOrJoin(
-                username = "join-or-modify-user",
-                password = "1234",
-                nickname = "신규유저",
-                profileImgUrl = "https://example.com/join-or-modify-user.png",
-            )
-
-        val member = memberFacade.findByLoginId("join-or-modify-user")!!
-
-        assertThat(rsData.resultCode).isEqualTo("201-1")
-        assertThat(rsData.msg).isEqualTo("회원가입이 완료되었습니다.")
-        assertThat(rsData.data).isEqualTo(member)
-        assertThat(member.nickname).isEqualTo("신규유저")
-        assertThat(member.profileImgUrl).isEqualTo("https://example.com/join-or-modify-user.png")
     }
 
     @Test

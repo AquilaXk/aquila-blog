@@ -3,8 +3,6 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.PostComment
-import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
@@ -17,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class PostUseCaseAdapter(
     private val postApplicationService: PostApplicationService,
-    private val postLikeConflictResolver: PostLikeConflictResolver,
     private val postSummaryBackfillService: PostSummaryBackfillService,
 ) : PostUseCase {
     override fun count(): Long = postApplicationService.count()
@@ -110,60 +107,7 @@ class PostUseCaseAdapter(
     override fun deleteContentByAuthorForAccountDeletion(author: Member) =
         postApplicationService.deleteContentByAuthorForAccountDeletion(author)
 
-    override fun writeComment(
-        author: Member,
-        post: Post,
-        content: String,
-        parentComment: PostComment?,
-    ): PostComment = postApplicationService.writeComment(author, post, content, parentComment)
-
-    override fun modifyComment(
-        postComment: PostComment,
-        actor: Member,
-        content: String,
-    ) = postApplicationService.modifyComment(postComment, actor, content)
-
-    override fun deleteComment(
-        post: Post,
-        postComment: PostComment,
-        actor: Member,
-    ) = postApplicationService.deleteComment(post, postComment, actor)
-
-    override fun like(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult =
-        postLikeConflictResolver.resolve(
-            post = post,
-            actor = actor,
-            action = { postApplicationService.like(post, actor) },
-            reconcile = { postApplicationService.reconcileLikeState(post, actor) },
-            snapshot = { postApplicationService.readLikeSnapshot(post, actor) },
-        )
-
-    override fun unlike(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult =
-        postLikeConflictResolver.resolve(
-            post = post,
-            actor = actor,
-            action = { postApplicationService.unlike(post, actor) },
-            reconcile = { postApplicationService.reconcileLikeState(post, actor) },
-            snapshot = { postApplicationService.readLikeSnapshot(post, actor) },
-        )
-
     override fun incrementHit(post: Post) = postApplicationService.incrementHit(post)
-
-    override fun getComments(
-        post: Post,
-        limit: Int,
-    ): List<PostComment> = postApplicationService.getComments(post, limit)
-
-    override fun findCommentById(
-        post: Post,
-        id: Long,
-    ): PostComment? = postApplicationService.findCommentById(post, id)
 
     override fun isLiked(
         post: Post,

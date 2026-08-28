@@ -17,8 +17,11 @@ import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.M
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
+import com.back.boundedContexts.post.adapter.persistence.PostCommentRepository
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostComment
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
@@ -57,6 +60,9 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var postFacade: PostApplicationService
+
+    @Autowired
+    private lateinit var postCommentRepository: PostCommentRepository
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
@@ -346,11 +352,11 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 published = true,
                 listed = true,
             )
-        val authoredComment = postFacade.writeComment(member, otherPost, "탈퇴 후 숨겨져야 하는 댓글")
+        val authoredComment = saveComment(member, otherPost, "탈퇴 후 숨겨져야 하는 댓글")
         val authoredCommentContent = authoredComment.content
-        val replyToAuthoredComment = postFacade.writeComment(otherAuthor, otherPost, "탈퇴 댓글의 답글", authoredComment)
+        val replyToAuthoredComment = saveComment(otherAuthor, otherPost, "탈퇴 댓글의 답글", authoredComment)
         val nestedReplyToAuthoredComment =
-            postFacade.writeComment(member, otherPost, "탈퇴 댓글의 중첩 답글", replyToAuthoredComment)
+            saveComment(member, otherPost, "탈퇴 댓글의 중첩 답글", replyToAuthoredComment)
         val deletedOtherPost =
             postFacade.write(
                 author = otherAuthor,
@@ -360,9 +366,12 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 listed = true,
             )
         val authoredCommentOnDeletedPost =
-            postFacade.writeComment(member, deletedOtherPost, "삭제된 글에 남은 탈퇴 회원 댓글")
+            saveComment(member, deletedOtherPost, "삭제된 글에 남은 탈퇴 회원 댓글")
         val replyToDeletedPostAuthoredComment =
-            postFacade.writeComment(otherAuthor, deletedOtherPost, "삭제된 글 탈퇴 댓글의 답글", authoredCommentOnDeletedPost)
+            saveComment(otherAuthor, deletedOtherPost, "삭제된 글 탈퇴 댓글의 답글", authoredCommentOnDeletedPost)
+        insertIntAttr("post_attr", "post_attr_seq", otherPost.id, "commentsCount", 3)
+        insertIntAttr("post_attr", "post_attr_seq", deletedOtherPost.id, "commentsCount", 2)
+        insertIntAttr("member_attr", "member_attr_seq", otherAuthor.id, "postCommentsCount", 2)
         deletedOtherPost.softDelete()
         val firstSessionKey = requireAuthCookie(firstAuthCookies, AuthCookieNames.SESSION_KEY)
         val secondSessionKey = requireAuthCookie(secondAuthCookies, AuthCookieNames.SESSION_KEY)
@@ -813,6 +822,30 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             memberId,
             name,
             strValue,
+        )
+    }
+
+    private fun saveComment(
+        author: Member,
+        post: Post,
+        content: String,
+        parent: PostComment? = null,
+    ): PostComment = postCommentRepository.save(PostComment(author = author, post = post, content = content, parentComment = parent))
+
+    private fun insertIntAttr(
+        table: String,
+        sequence: String,
+        subjectId: Long,
+        name: String,
+        value: Int,
+    ) {
+        require(table == "post_attr" || table == "member_attr")
+        require(sequence == "post_attr_seq" || sequence == "member_attr_seq")
+        jdbcTemplate.update(
+            "insert into $table (id, subject_id, name, int_value) values (nextval('$sequence'), ?, ?, ?)",
+            subjectId,
+            name,
+            value,
         )
     }
 

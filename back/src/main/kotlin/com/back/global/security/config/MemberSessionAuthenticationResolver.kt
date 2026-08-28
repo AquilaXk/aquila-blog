@@ -43,21 +43,17 @@ class MemberSessionAuthenticationResolver(
         requireSession: Boolean = false,
     ) {
         if (!sessionResolution.sessionKeyProvided && requireSession) {
-            rejectExpiredSession()
+            throw expiredSessionException()
         }
 
         if (sessionResolution.sessionKeyProvided && sessionResolution.session == null) {
-            rejectExpiredSession()
+            throw expiredSessionException()
         }
     }
 
-    fun rejectExpiredSession(): Nothing {
+    fun expiredSessionException(): AppException {
         authCookieService.expireAuthCookies()
-        throw AppException(ErrorCode.SESSION_EXPIRED, "세션이 만료되었습니다. 다시 로그인해주세요.")
-    }
-
-    fun expireAuthCookies() {
-        authCookieService.expireAuthCookies()
+        return AppException(ErrorCode.SESSION_EXPIRED, "세션이 만료되었습니다. 다시 로그인해주세요.")
     }
 
     fun context(

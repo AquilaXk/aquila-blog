@@ -6,9 +6,7 @@ import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostWriteRequestIdempotencyRepositoryPort
 import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
-import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
@@ -31,7 +29,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
@@ -615,66 +612,10 @@ class PostApplicationService(
     }
 
     @Transactional
-    fun writeComment(
-        author: Member,
-        post: Post,
-        content: String,
-        parentComment: PostComment? = null,
-    ): PostComment = postCommentApplicationService.writeComment(author, post, content, parentComment)
-
-    @Transactional
-    fun modifyComment(
-        postComment: PostComment,
-        actor: Member,
-        content: String,
-    ) = postCommentApplicationService.modifyComment(postComment, actor, content)
-
-    @Transactional
-    fun deleteComment(
-        post: Post,
-        postComment: PostComment,
-        actor: Member,
-    ) = postCommentApplicationService.deleteComment(post, postComment, actor)
-
-    @Transactional
-    fun like(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult = postLikeApplicationService.like(post, actor)
-
-    @Transactional
-    fun unlike(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult = postLikeApplicationService.unlike(post, actor)
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    fun reconcileLikeState(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult = postLikeApplicationService.reconcileLikeState(post, actor)
-
-    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    fun readLikeSnapshot(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult = postLikeApplicationService.readLikeSnapshot(post, actor)
-
-    @Transactional
     fun incrementHit(post: Post) {
         postCounterService.incrementHit(post)
         postHitSideEffectQueue.enqueue(post.id)
     }
-
-    fun getComments(
-        post: Post,
-        limit: Int,
-    ): List<PostComment> = postCommentApplicationService.getComments(post, limit)
-
-    fun findCommentById(
-        post: Post,
-        id: Long,
-    ): PostComment? = postCommentApplicationService.findCommentById(post, id)
 
     fun isLiked(
         post: Post,

@@ -50,7 +50,7 @@ class AccessTokenAuthenticationHandler(
             actorApplicationService
                 .findById(payload.id)
                 ?.takeIf(canonicalAdminPolicy::canAuthenticate)
-                ?: memberSessionAuthenticationResolver.rejectExpiredSession()
+                ?: throw memberSessionAuthenticationResolver.expiredSessionException()
         val sessionContext =
             memberSessionAuthenticationResolver.context(
                 sessionResolution = sessionResolution,

@@ -26,19 +26,19 @@ class RefreshTokenAuthenticationHandler(
         clientIp: String,
     ) {
         if (tokens.sessionKey.isBlank() || tokens.refreshToken.isBlank()) {
-            memberSessionAuthenticationResolver.rejectExpiredSession()
+            throw memberSessionAuthenticationResolver.expiredSessionException()
         }
 
         val refreshedSession =
             memberSessionUseCase.rotateRefreshToken(tokens.sessionKey, tokens.refreshToken)
-                ?: memberSessionAuthenticationResolver.rejectExpiredSession()
+                ?: throw memberSessionAuthenticationResolver.expiredSessionException()
 
         val memberSession = refreshedSession.session
         val member =
             actorApplicationService
                 .findById(memberSession.member.id)
                 ?.takeIf(canonicalAdminPolicy::canAuthenticate)
-                ?: memberSessionAuthenticationResolver.rejectExpiredSession()
+                ?: throw memberSessionAuthenticationResolver.expiredSessionException()
         val rememberLoginEnabled = memberSession.rememberLoginEnabled
         val ipSecurityEnabled = memberSession.ipSecurityEnabled
         val ipSecurityFingerprint = memberSession.ipSecurityFingerprint

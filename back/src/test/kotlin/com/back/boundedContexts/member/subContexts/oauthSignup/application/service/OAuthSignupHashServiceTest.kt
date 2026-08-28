@@ -8,16 +8,12 @@ import org.junit.jupiter.api.Test
 @DisplayName("OAuthSignupHashService 테스트")
 class OAuthSignupHashServiceTest {
     @Test
-    fun `pending token과 provider subject는 목적별 HMAC으로 변환한다`() {
+    fun `provider subject는 정규화된 provider별 HMAC으로 변환한다`() {
         val service = OAuthSignupHashService("oauth-secret", "signup-secret", "jwt-secret")
 
-        val tokenHash = service.pendingTokenHash(" pending-token ")
         val subjectHash = service.providerSubjectHash(" kakao ", " provider-subject ")
 
-        assertThat(tokenHash).isEqualTo(service.pendingTokenHash("pending-token"))
         assertThat(subjectHash).isEqualTo(service.providerSubjectHash("KAKAO", "provider-subject"))
-        assertThat(tokenHash).isNotEqualTo(subjectHash)
-        assertThat(tokenHash).doesNotContain("pending-token")
         assertThat(subjectHash).doesNotContain("provider-subject")
     }
 
@@ -36,21 +32,18 @@ class OAuthSignupHashServiceTest {
         val signupFallback = OAuthSignupHashService("", "signup-secret", "jwt-secret")
         val jwtFallback = OAuthSignupHashService("", "", "jwt-secret")
 
-        assertThat(signupFallback.pendingTokenHash("token"))
+        assertThat(signupFallback.providerSubjectHash("KAKAO", "subject"))
             .isNotBlank()
-        assertThat(jwtFallback.pendingTokenHash("token"))
+        assertThat(jwtFallback.providerSubjectHash("KAKAO", "subject"))
             .isNotBlank()
-        assertThat(signupFallback.pendingTokenHash("token"))
-            .isNotEqualTo(jwtFallback.pendingTokenHash("token"))
+        assertThat(signupFallback.providerSubjectHash("KAKAO", "subject"))
+            .isNotEqualTo(jwtFallback.providerSubjectHash("KAKAO", "subject"))
     }
 
     @Test
     fun `blank 입력과 secret은 거부한다`() {
         val service = OAuthSignupHashService("oauth-secret", "signup-secret", "jwt-secret")
 
-        assertThatThrownBy { service.pendingTokenHash(" ") }
-            .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("oauth-signup-pending-token")
         assertThatThrownBy { service.providerSubjectHash(" ", "subject") }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("oauth provider")
@@ -60,7 +53,7 @@ class OAuthSignupHashServiceTest {
         assertThatThrownBy { service.memberLoginId("KAKAO", " ") }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("oauth provider subject hash")
-        assertThatThrownBy { OAuthSignupHashService("", "", "").pendingTokenHash("token") }
+        assertThatThrownBy { OAuthSignupHashService("", "", "").providerSubjectHash("KAKAO", "subject") }
             .isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("custom.member.oauthSignup.tokenHashSecret")
     }

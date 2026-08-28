@@ -1,7 +1,6 @@
 package com.back.boundedContexts.post.model
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.domain.postCommentMixin.PostCommentHasPolicy
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column
@@ -52,21 +51,11 @@ class PostComment(
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(name = "parent_comment_id")
     val parentComment: PostComment? = null,
-) : BaseTime(id),
-    PostCommentHasPolicy {
+) : BaseTime(id) {
     @field:Column
     var deletedAt: Instant? = null
-
-    override val postComment get() = this
-
-    fun modify(content: String) {
-        this.content = content
-    }
 
     fun softDelete() {
         deletedAt = Instant.now()
     }
-
-    val isReply: Boolean
-        get() = parentComment != null
 }

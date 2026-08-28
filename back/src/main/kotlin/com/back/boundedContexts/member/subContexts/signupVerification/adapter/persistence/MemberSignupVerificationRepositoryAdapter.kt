@@ -1,7 +1,6 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.adapter.persistence
 
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
-import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
 import org.springframework.stereotype.Component
 import java.time.Instant
 
@@ -13,18 +12,6 @@ import java.time.Instant
 class MemberSignupVerificationRepositoryAdapter(
     private val memberSignupVerificationRepository: MemberSignupVerificationRepository,
 ) : MemberSignupVerificationRepositoryPort {
-    override fun save(memberSignupVerification: MemberSignupVerification): MemberSignupVerification =
-        memberSignupVerificationRepository.save(memberSignupVerification)
-
-    override fun findByEmailVerificationTokenHash(emailVerificationTokenHash: String): MemberSignupVerification? =
-        memberSignupVerificationRepository.findByEmailVerificationTokenHash(emailVerificationTokenHash)
-
-    override fun findBySignupSessionTokenHash(signupSessionTokenHash: String): MemberSignupVerification? =
-        memberSignupVerificationRepository.findBySignupSessionTokenHash(signupSessionTokenHash)
-
-    override fun findTopByEmail(email: String): MemberSignupVerification? =
-        memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)
-
     override fun deleteRetainedBefore(
         cutoff: Instant,
         limit: Int,

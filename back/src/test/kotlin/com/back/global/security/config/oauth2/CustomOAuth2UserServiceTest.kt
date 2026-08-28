@@ -3,10 +3,7 @@ package com.back.global.security.config.oauth2
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.subContexts.legalAcceptance.application.dto.LegalAcceptanceCommand
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
-import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingDetails
-import com.back.boundedContexts.member.subContexts.oauthSignup.application.service.OAuthSignupPendingStartResult
 import com.back.global.app.AdminProperties
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
@@ -52,7 +49,6 @@ class CustomOAuth2UserServiceTest {
 
         assertThat(memberUseCase.lastFindLoginId).isEqualTo("KAKAO__oauth-user-id")
         assertThat(memberUseCase.findLoginIds).containsExactly("KAKAO__subject-hash", "KAKAO__oauth-user-id")
-        assertThat(oauthSignupUseCase.pendingStarts).isEmpty()
         assertThat(memberUseCase.lastModifyRequest)
             .isEqualTo(
                 ModifyRequest(
@@ -103,7 +99,6 @@ class CustomOAuth2UserServiceTest {
 
         assertThat(memberUseCase.lastFindLoginId).isEqualTo("KAKAO__oidc-user-id")
         assertThat(memberUseCase.findLoginIds).containsExactly("KAKAO__subject-hash", "KAKAO__oidc-user-id")
-        assertThat(oauthSignupUseCase.pendingStarts).isEmpty()
         assertThat(memberUseCase.lastModifyRequest)
             .isEqualTo(
                 ModifyRequest(
@@ -143,7 +138,6 @@ class CustomOAuth2UserServiceTest {
             .hasMessageNotContaining("new-oauth-user-id")
 
         assertThat(memberUseCase.findLoginIds).containsExactly("KAKAO__subject-hash", "KAKAO__new-oauth-user-id")
-        assertThat(oauthSignupUseCase.pendingStarts).isEmpty()
     }
 
     @Test
@@ -313,13 +307,6 @@ private data class ModifyRequest(
     val profileImgUrl: String?,
 )
 
-private data class PendingStartRequest(
-    val provider: String,
-    val providerSubject: String,
-    val nickname: String,
-    val profileImgUrl: String?,
-)
-
 private class RecordingMemberUseCase(
     private val existingMemberUsername: String? = null,
     private val existingMemberEmail: String? = null,
@@ -377,8 +364,6 @@ private class RecordingMemberUseCase(
 }
 
 private class RecordingOAuthSignupUseCase : OAuthSignupUseCase {
-    val pendingStarts = mutableListOf<PendingStartRequest>()
-
     override fun providerSubjectHash(
         provider: String,
         providerSubject: String,
@@ -388,35 +373,6 @@ private class RecordingOAuthSignupUseCase : OAuthSignupUseCase {
         provider: String,
         providerSubjectHash: String,
     ): String = "${provider}__$providerSubjectHash"
-
-    override fun startPending(
-        provider: String,
-        providerSubject: String,
-        nickname: String,
-        profileImgUrl: String?,
-    ): OAuthSignupPendingStartResult {
-        pendingStarts +=
-            PendingStartRequest(
-                provider = provider,
-                providerSubject = providerSubject,
-                nickname = nickname,
-                profileImgUrl = profileImgUrl,
-            )
-        return OAuthSignupPendingStartResult(
-            provider = provider,
-            pendingToken = "pending-token",
-            expiresAt = Instant.EPOCH.plusSeconds(300),
-        )
-    }
-
-    override fun findPending(pendingToken: String): OAuthSignupPendingDetails =
-        error("findPending is not used in CustomOAuth2UserServiceTest")
-
-    override fun completeSignup(
-        pendingToken: String,
-        nickname: String?,
-        legalAcceptance: LegalAcceptanceCommand,
-    ): Member = error("completeSignup is not used in CustomOAuth2UserServiceTest")
 
     override fun releaseConsumedSignupForMemberLoginId(memberLoginId: String): Int =
         error("releaseConsumedSignupForMemberLoginId is not used in CustomOAuth2UserServiceTest")

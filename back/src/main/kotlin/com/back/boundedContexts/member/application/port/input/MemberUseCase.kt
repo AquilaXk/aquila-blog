@@ -3,7 +3,6 @@ package com.back.boundedContexts.member.application.port.input
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
-import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
 import java.util.Optional
@@ -16,7 +15,7 @@ interface MemberUseCase {
         password: String?,
         nickname: String,
         profileImgUrl: String?,
-        email: String? = null,
+        email: String?,
     ): Member
 
     fun joinWithVerifiedEmail(
@@ -74,13 +73,6 @@ interface MemberUseCase {
     )
 
     fun publishProfileWorkspace(member: Member)
-
-    fun modifyOrJoin(
-        username: String,
-        password: String?,
-        nickname: String,
-        profileImgUrl: String?,
-    ): RsData<Member>
 
     fun findPagedByKw(
         kw: String,

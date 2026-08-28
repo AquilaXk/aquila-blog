@@ -9,12 +9,6 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 interface MemberSignupVerificationRepository : JpaRepository<MemberSignupVerification, Long> {
-    fun findByEmailVerificationTokenHash(emailVerificationTokenHash: String): MemberSignupVerification?
-
-    fun findBySignupSessionTokenHash(signupSessionTokenHash: String): MemberSignupVerification?
-
-    fun findTopByEmailOrderByCreatedAtDesc(email: String): MemberSignupVerification?
-
     @Modifying(flushAutomatically = true, clearAutomatically = false)
     @Transactional
     @Query(

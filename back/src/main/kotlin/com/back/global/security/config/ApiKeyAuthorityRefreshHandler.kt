@@ -32,7 +32,7 @@ class ApiKeyAuthorityRefreshHandler(
 
         val apiKeyMember = actorApplicationService.findByApiKey(apiKey) ?: return false
         if (!canonicalAdminPolicy.canAuthenticate(apiKeyMember)) {
-            memberSessionAuthenticationResolver.rejectExpiredSession()
+            throw memberSessionAuthenticationResolver.expiredSessionException()
         }
         val sessionResolution =
             memberSessionAuthenticationResolver.resolve(

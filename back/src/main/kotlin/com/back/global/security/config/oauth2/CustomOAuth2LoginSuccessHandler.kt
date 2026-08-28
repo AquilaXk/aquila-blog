@@ -1,6 +1,6 @@
 package com.back.global.security.config.oauth2
 
-import com.back.boundedContexts.member.application.service.MemberLoginSessionIssueService
+import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.security.config.oauth2.application.OAuth2State
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component
 
 @Component
 class CustomOAuth2LoginSuccessHandler(
-    private val memberLoginSessionIssueService: MemberLoginSessionIssueService,
+    private val memberUseCase: MemberUseCase,
     private val authCookieService: AuthCookieService,
     private val clientIpResolver: ClientIpResolver,
 ) : AuthenticationSuccessHandler {
@@ -30,7 +30,7 @@ class CustomOAuth2LoginSuccessHandler(
         val state = OAuth2State.decode(stateParam)
         val securityUser = authentication.principal as SecurityUser
         val issued =
-            memberLoginSessionIssueService.issue(
+            memberUseCase.issueLoginSession(
                 memberId = securityUser.id,
                 rememberLoginEnabled = true,
                 ipSecurityEnabled = false,

@@ -1,8 +1,8 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.application.port.input.AuthTokenIssueUseCase
+import com.back.boundedContexts.member.application.port.input.MemberUseCase.IssuedLoginSession
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
-import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
@@ -68,12 +68,3 @@ class MemberLoginSessionIssueService(
         )
     }
 }
-
-data class IssuedLoginSession(
-    val member: Member,
-    val apiKey: String,
-    val accessToken: String,
-    val refreshToken: String,
-    val sessionKey: String,
-    val rememberLoginEnabled: Boolean,
-)

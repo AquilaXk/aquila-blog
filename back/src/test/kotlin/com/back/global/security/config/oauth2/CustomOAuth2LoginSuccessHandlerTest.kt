@@ -1,7 +1,7 @@
 package com.back.global.security.config.oauth2
 
-import com.back.boundedContexts.member.application.service.IssuedLoginSession
-import com.back.boundedContexts.member.application.service.MemberLoginSessionIssueService
+import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.application.port.input.MemberUseCase.IssuedLoginSession
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.security.config.oauth2.application.OAuth2State
 import com.back.global.security.domain.SecurityUser
@@ -20,12 +20,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 
 class CustomOAuth2LoginSuccessHandlerTest {
-    private val memberLoginSessionIssueService = mock(MemberLoginSessionIssueService::class.java)
+    private val memberUseCase = mock(MemberUseCase::class.java)
     private val authCookieService = mock(AuthCookieService::class.java)
     private val clientIpResolver = mock(ClientIpResolver::class.java)
     private val handler =
         CustomOAuth2LoginSuccessHandler(
-            memberLoginSessionIssueService,
+            memberUseCase,
             authCookieService,
             clientIpResolver,
         )
@@ -41,7 +41,7 @@ class CustomOAuth2LoginSuccessHandlerTest {
         val issued = issuedLoginSession()
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.10")
         given(
-            memberLoginSessionIssueService.issue(
+            memberUseCase.issueLoginSession(
                 memberId = 41L,
                 rememberLoginEnabled = true,
                 ipSecurityEnabled = false,
@@ -53,9 +53,9 @@ class CustomOAuth2LoginSuccessHandlerTest {
 
         handler.onAuthenticationSuccess(request, response, authentication())
 
-        then(memberLoginSessionIssueService)
+        then(memberUseCase)
             .should()
-            .issue(41L, true, false, null, "203.0.113.10", "oauth-success-handler-test")
+            .issueLoginSession(41L, true, false, null, "203.0.113.10", "oauth-success-handler-test")
         then(authCookieService)
             .should()
             .issueAuthCookies(
@@ -81,7 +81,7 @@ class CustomOAuth2LoginSuccessHandlerTest {
             handler.onAuthenticationSuccess(request, response, authentication())
         }.isInstanceOf(IllegalArgumentException::class.java)
 
-        verifyNoInteractions(memberLoginSessionIssueService, authCookieService, clientIpResolver)
+        verifyNoInteractions(memberUseCase, authCookieService, clientIpResolver)
         assertThat(response.redirectedUrl).isNull()
     }
 
@@ -94,7 +94,7 @@ class CustomOAuth2LoginSuccessHandlerTest {
         val response = MockHttpServletResponse()
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.10")
         given(
-            memberLoginSessionIssueService.issue(41L, true, false, null, "203.0.113.10", null),
+            memberUseCase.issueLoginSession(41L, true, false, null, "203.0.113.10", null),
         ).willThrow(IllegalStateException("session issue failed"))
 
         assertThatThrownBy {

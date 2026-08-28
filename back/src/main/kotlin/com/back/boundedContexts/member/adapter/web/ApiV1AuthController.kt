@@ -4,7 +4,6 @@ import com.back.boundedContexts.member.application.port.input.ActorQueryUseCase
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.LoginAttemptPolicyUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
-import com.back.boundedContexts.member.application.service.MemberLoginSessionIssueService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberDto
@@ -44,7 +43,6 @@ class ApiV1AuthController(
     private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val memberUseCase: MemberUseCase,
     private val actorQueryUseCase: ActorQueryUseCase,
-    private val memberLoginSessionIssueService: MemberLoginSessionIssueService,
     private val authIpSecurityService: AuthIpSecurityService,
     private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
@@ -148,7 +146,7 @@ class ApiV1AuthController(
             }
 
         val issued =
-            memberLoginSessionIssueService.issue(
+            memberUseCase.issueLoginSession(
                 memberId = authCandidate.id,
                 rememberLoginEnabled = reqBody.rememberMe,
                 ipSecurityEnabled = reqBody.ipSecurity,

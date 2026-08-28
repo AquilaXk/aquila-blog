@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.application.port.input.MemberUseCase.IssuedLoginSession
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
@@ -13,6 +14,7 @@ import java.util.Optional
 @Service
 class MemberUseCaseAdapter(
     private val memberApplicationService: MemberApplicationService,
+    private val memberLoginSessionIssueService: MemberLoginSessionIssueService,
 ) : MemberUseCase {
     override fun count(): Long = memberApplicationService.count()
 
@@ -36,6 +38,23 @@ class MemberUseCaseAdapter(
     override fun findByEmail(email: String): Member? = memberApplicationService.findByEmail(email)
 
     override fun findById(id: Long): Optional<Member> = memberApplicationService.findById(id)
+
+    override fun issueLoginSession(
+        memberId: Long,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+        createdIp: String?,
+        userAgent: String?,
+    ): IssuedLoginSession =
+        memberLoginSessionIssueService.issue(
+            memberId = memberId,
+            rememberLoginEnabled = rememberLoginEnabled,
+            ipSecurityEnabled = ipSecurityEnabled,
+            ipSecurityFingerprint = ipSecurityFingerprint,
+            createdIp = createdIp,
+            userAgent = userAgent,
+        )
 
     override fun checkPassword(
         member: Member,

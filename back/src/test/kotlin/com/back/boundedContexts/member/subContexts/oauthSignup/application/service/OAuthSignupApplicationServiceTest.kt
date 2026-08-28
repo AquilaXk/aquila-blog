@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.subContexts.oauthSignup.application.service
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.application.port.input.MemberUseCase.IssuedLoginSession
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
@@ -533,6 +534,15 @@ private class RecordingMemberUseCase : MemberUseCase {
     override fun findByEmail(email: String): Member? = null
 
     override fun findById(id: Long): Optional<Member> = Optional.empty()
+
+    override fun issueLoginSession(
+        memberId: Long,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+        createdIp: String?,
+        userAgent: String?,
+    ): IssuedLoginSession = error("issueLoginSession is not used")
 
     override fun checkPassword(
         member: Member,

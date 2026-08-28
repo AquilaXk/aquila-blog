@@ -315,6 +315,7 @@ test("Gradle resolves the approved Testcontainers family version in PR and main 
     /testImplementation\("org\.testcontainers:testcontainers:\$testcontainersVersion"\)/,
   )
   assert.match(alignmentTask, /testRuntimeClasspath/)
+  assert.match(alignmentTask, /testRuntimeClasspath\.resolve\(\)/)
   assert.match(alignmentTask, /ModuleComponentIdentifier/)
   assert.match(alignmentTask, /org\.testcontainers/)
   assert.match(alignmentTask, /\.isEmpty\(\)/)

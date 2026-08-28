@@ -5,9 +5,9 @@ import com.back.global.exception.application.ErrorCode
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
-import org.mockito.BDDMockito.given
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyString
+import org.mockito.BDDMockito.given
 import org.mockito.Mockito.mock
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.dao.DataAccessResourceFailureException
@@ -71,15 +71,11 @@ class PostHitDedupServiceTest {
     private fun service(redisTemplate: StringRedisTemplate?): PostHitDedupService =
         PostHitDedupService(
             viewerWindowSeconds = 60,
-            memoryMaxEntries = 10,
-            memoryCleanupIntervalSeconds = 60,
-            redisWarnIntervalSeconds = 60,
             redisTemplateProvider = objectProvider(redisTemplate),
         )
 
     @Suppress("UNCHECKED_CAST")
-    private fun valueOperations(): ValueOperations<String, String> =
-        mock(ValueOperations::class.java) as ValueOperations<String, String>
+    private fun valueOperations(): ValueOperations<String, String> = mock(ValueOperations::class.java) as ValueOperations<String, String>
 
     private fun assertServiceUnavailable(block: () -> Unit) {
         assertThatThrownBy(block)
@@ -90,15 +86,13 @@ class PostHitDedupServiceTest {
 
     private fun objectProvider(redisTemplate: StringRedisTemplate?): ObjectProvider<StringRedisTemplate> =
         object : ObjectProvider<StringRedisTemplate> {
-            override fun getObject(vararg args: Any?): StringRedisTemplate =
-                redisTemplate ?: error("No redis template")
+            override fun getObject(vararg args: Any?): StringRedisTemplate = redisTemplate ?: error("No redis template")
 
             override fun getIfAvailable(): StringRedisTemplate? = redisTemplate
 
             override fun getIfUnique(): StringRedisTemplate? = redisTemplate
 
-            override fun iterator(): MutableIterator<StringRedisTemplate> =
-                listOfNotNull(redisTemplate).toMutableList().iterator()
+            override fun iterator(): MutableIterator<StringRedisTemplate> = listOfNotNull(redisTemplate).toMutableList().iterator()
 
             override fun stream(): Stream<StringRedisTemplate> = listOfNotNull(redisTemplate).stream()
 

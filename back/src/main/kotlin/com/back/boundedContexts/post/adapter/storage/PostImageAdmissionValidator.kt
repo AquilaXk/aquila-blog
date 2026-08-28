@@ -62,7 +62,7 @@ internal class PostImageAdmissionValidator {
 
     private fun canonicalFormat(formatName: String): CanonicalImageFormat? =
         when (formatName.trim().lowercase(Locale.ROOT)) {
-            "jpeg", "jpg" -> CanonicalImageFormat("image/jpeg", ".jpg")
+            "jpeg", "jpg" -> CanonicalImageFormat(JPEG_CONTENT_TYPE, ".jpg")
             "png" -> CanonicalImageFormat("image/png", ".png")
             "gif" -> CanonicalImageFormat("image/gif", ".gif")
             "webp" -> CanonicalImageFormat("image/webp", ".webp")
@@ -101,8 +101,10 @@ internal fun normalizePostMediaContentType(raw: String?): String? {
 
 private val POST_MEDIA_CONTENT_TYPE_ALIASES =
     mapOf(
-        "image/jpg" to "image/jpeg",
-        "image/pjpeg" to "image/jpeg",
+        "image/jpg" to JPEG_CONTENT_TYPE,
+        "image/pjpeg" to JPEG_CONTENT_TYPE,
         "image/x-png" to "image/png",
         "image/x-webp" to "image/webp",
     )
+
+private const val JPEG_CONTENT_TYPE = "image/jpeg"

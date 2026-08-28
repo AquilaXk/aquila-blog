@@ -11,25 +11,25 @@ internal class PostImageAdmissionValidator {
         path: Path,
         declaredContentType: String?,
     ): ValidatedImage {
-        val imageInput = ImageIO.createImageInputStream(path.toFile()) ?: rejectImage()
+        val imageInput = ImageIO.createImageInputStream(path.toFile()) ?: throw invalidImage()
 
         imageInput.use { input ->
             val readers = ImageIO.getImageReaders(input)
-            if (!readers.hasNext()) rejectImage()
+            if (!readers.hasNext()) throw invalidImage()
 
             val reader = readers.next()
             try {
                 reader.setInput(input, false, false)
-                val canonicalFormat = canonicalFormat(reader.formatName) ?: rejectImage()
+                val canonicalFormat = canonicalFormat(reader.formatName) ?: throw invalidImage()
                 val normalizedDeclaredType = normalizePostMediaContentType(declaredContentType)
                 if (normalizedDeclaredType != null && normalizedDeclaredType != canonicalFormat.contentType) {
-                    rejectImage()
+                    throw invalidImage()
                 }
 
-                if (reader.getNumImages(true) != 1) rejectImage()
+                if (reader.getNumImages(true) != 1) throw invalidImage()
 
                 validateBounds(reader.getWidth(0), reader.getHeight(0))
-                val decodedImage = reader.read(0) ?: rejectImage()
+                val decodedImage = reader.read(0) ?: throw invalidImage()
                 validateBounds(decodedImage.width, decodedImage.height)
 
                 return ValidatedImage(
@@ -39,7 +39,7 @@ internal class PostImageAdmissionValidator {
             } catch (error: AppException) {
                 throw error
             } catch (_: Exception) {
-                rejectImage()
+                throw invalidImage()
             } finally {
                 reader.dispose()
             }
@@ -51,13 +51,13 @@ internal class PostImageAdmissionValidator {
         height: Int,
     ) {
         if (width <= 0 || height <= 0 || width > MAX_IMAGE_WIDTH || height > MAX_IMAGE_HEIGHT) {
-            rejectImage()
+            throw invalidImage()
         }
         validateDecodedPixelCount(width.toLong() * height.toLong())
     }
 
     internal fun validateDecodedPixelCount(pixelCount: Long) {
-        if (pixelCount <= 0 || pixelCount > MAX_DECODED_PIXELS) rejectImage()
+        if (pixelCount <= 0 || pixelCount > MAX_DECODED_PIXELS) throw invalidImage()
     }
 
     private fun canonicalFormat(formatName: String): CanonicalImageFormat? =
@@ -69,7 +69,7 @@ internal class PostImageAdmissionValidator {
             else -> null
         }
 
-    private fun rejectImage(): Nothing = throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.")
+    private fun invalidImage(): AppException = AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.")
 
     data class ValidatedImage(
         val contentType: String,

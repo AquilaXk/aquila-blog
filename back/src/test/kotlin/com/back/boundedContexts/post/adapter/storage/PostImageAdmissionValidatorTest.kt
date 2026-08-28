@@ -83,6 +83,29 @@ class PostImageAdmissionValidatorTest {
     }
 
     @Test
+    @DisplayName("reader가 선택된 뒤 깨진 이미지를 BAD_REQUEST로 변환한다")
+    fun rejectsMalformedImageAfterReaderSelection() {
+        val png = createImage("png")
+        val malformed = png.copyOf(png.size / 2)
+
+        withUpload(malformed, "malformed.png") { path ->
+            assertBadRequest {
+                validator.validate(path, "image/png")
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("ImageIO reader가 있어도 retained set 밖 형식은 거절한다")
+    fun rejectsDecodedFormatOutsideRetainedSet() {
+        withUpload(createImage("bmp"), "unsupported.bmp") { path ->
+            assertBadRequest {
+                validator.validate(path, "image/bmp")
+            }
+        }
+    }
+
+    @Test
     @DisplayName("두 프레임 GIF를 거절한다")
     fun rejectsAnimatedGif() {
         withUpload(createAnimatedGif(), "animated.gif") { path ->

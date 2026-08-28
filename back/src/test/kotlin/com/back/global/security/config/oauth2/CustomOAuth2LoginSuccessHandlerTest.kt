@@ -3,6 +3,8 @@ package com.back.global.security.config.oauth2
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase.IssuedLoginSession
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.config.oauth2.application.OAuth2State
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
@@ -80,6 +82,21 @@ class CustomOAuth2LoginSuccessHandlerTest {
         assertThatThrownBy {
             handler.onAuthenticationSuccess(request, response, authentication())
         }.isInstanceOf(IllegalArgumentException::class.java)
+
+        verifyNoInteractions(memberUseCase, authCookieService, clientIpResolver)
+        assertThat(response.redirectedUrl).isNull()
+    }
+
+    @Test
+    fun `missing OAuth state is rejected before a login session or cookies are issued`() {
+        val request = MockHttpServletRequest("GET", "/login/oauth2/code/kakao")
+        val response = MockHttpServletResponse()
+
+        assertThatThrownBy {
+            handler.onAuthenticationSuccess(request, response, authentication())
+        }.isInstanceOfSatisfying(AppException::class.java) { exception ->
+            assertThat(exception.errorCode).isEqualTo(ErrorCode.BAD_REQUEST)
+        }
 
         verifyNoInteractions(memberUseCase, authCookieService, clientIpResolver)
         assertThat(response.redirectedUrl).isNull()

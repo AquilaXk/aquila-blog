@@ -2,8 +2,11 @@ package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.support.BaseSeededIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.PlatformTransactionManager
@@ -79,6 +82,26 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
         assertThat(persisted.ipSecurityEnabled).isTrue()
         assertThat(persisted.ipSecurityFingerprint).isEqualTo("203.0.113.9")
         assertThat(authTokenService.payload(issued.accessToken)?.sessionKey).isEqualTo(issued.sessionKey)
+    }
+
+    @Test
+    fun `missing locked member rejects login issue without creating a session`() {
+        val sessionCountBefore = inTransaction { memberSessionRepository.count() }
+
+        assertThatThrownBy {
+            memberLoginSessionIssueService.issue(
+                memberId = Long.MAX_VALUE,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.9",
+                userAgent = "transaction-integration-test",
+            )
+        }.isInstanceOfSatisfying(AppException::class.java) { exception ->
+            assertThat(exception.errorCode).isEqualTo(ErrorCode.NOT_FOUND)
+        }
+
+        assertThat(inTransaction { memberSessionRepository.count() }).isEqualTo(sessionCountBefore)
     }
 
     private fun <T> inTransaction(block: () -> T): T = requireNotNull(TransactionTemplate(transactionManager).execute { block() })

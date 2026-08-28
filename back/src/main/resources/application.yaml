@@ -415,8 +415,8 @@ custom:
         feedMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__FEED_MAX_CONCURRENT:20}
         exploreMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__EXPLORE_MAX_CONCURRENT:10}
         searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:8}
-      detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:16}
-      tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:6}
+        detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:16}
+        tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:6}
       detail-content-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_CONTENT_CACHE_MAX_CHARS:120000}
       detail-snapshot-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_SNAPSHOT_CACHE_MAX_CHARS:180000}
     idempotency:

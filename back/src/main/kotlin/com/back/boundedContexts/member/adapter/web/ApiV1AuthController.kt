@@ -1,12 +1,10 @@
 package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.port.input.ActorQueryUseCase
-import com.back.boundedContexts.member.application.port.input.AuthTokenIssueUseCase
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.LoginAttemptPolicyUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
@@ -45,7 +43,6 @@ class ApiV1AuthController(
     private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val memberUseCase: MemberUseCase,
     private val actorQueryUseCase: ActorQueryUseCase,
-    private val authTokenIssueUseCase: AuthTokenIssueUseCase,
     private val authIpSecurityService: AuthIpSecurityService,
     private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
@@ -116,7 +113,6 @@ class ApiV1AuthController(
     )
 
     @PostMapping("/login")
-    @Transactional
     fun login(
         request: HttpServletRequest,
         @RequestBody @Valid reqBody: MemberLoginRequest,
@@ -139,11 +135,6 @@ class ApiV1AuthController(
                     throw AppException(ErrorCode.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.")
                 }
 
-        val member =
-            memberUseCase
-                .findById(authCandidate.id)
-                .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
-
         loginAttemptPolicyUseCase.clear(loginAttemptKey, clientIp)
 
         val ipSecurityFingerprint =
@@ -154,47 +145,27 @@ class ApiV1AuthController(
                 null
             }
 
-        member.applyLoginSecurityPolicy(
-            rememberLoginEnabled = reqBody.rememberMe,
-            ipSecurityEnabled = reqBody.ipSecurity,
-            ipSecurityFingerprint = ipSecurityFingerprint,
-        )
-
-        // 다중 세션 유지를 위해 로그인마다 apiKey를 회전하지 않는다.
-        // 단, 레거시/비정상 키는 1회 보정해 인증 불일치를 방지한다.
-        if (member.apiKey.isBlank() || member.apiKey == member.username) {
-            member.modifyApiKey(MemberPolicy.genApiKey())
-        }
-        val createdSession =
-            memberSessionUseCase.createSessionWithRefreshToken(
-                member = member,
+        val issued =
+            memberUseCase.issueLoginSession(
+                memberId = authCandidate.id,
                 rememberLoginEnabled = reqBody.rememberMe,
                 ipSecurityEnabled = reqBody.ipSecurity,
                 ipSecurityFingerprint = ipSecurityFingerprint,
                 createdIp = clientIp,
                 userAgent = request.getHeader("User-Agent"),
             )
-        val session = createdSession.session
 
-        val sessionBoundAccessToken =
-            authTokenIssueUseCase.genAccessToken(
-                member = member,
-                sessionKey = session.sessionKey,
-                rememberLoginEnabled = session.rememberLoginEnabled,
-                ipSecurityEnabled = session.ipSecurityEnabled,
-                ipSecurityFingerprint = session.ipSecurityFingerprint,
-            )
         authCookieService.issueAuthCookies(
-            apiKey = member.apiKey,
-            accessToken = sessionBoundAccessToken,
-            refreshToken = createdSession.refreshToken,
-            sessionKey = session.sessionKey,
-            rememberLoginEnabled = session.rememberLoginEnabled,
+            apiKey = issued.apiKey,
+            accessToken = issued.accessToken,
+            refreshToken = issued.refreshToken,
+            sessionKey = issued.sessionKey,
+            rememberLoginEnabled = issued.rememberLoginEnabled,
         )
 
         runCatching {
             authSecurityEventService.recordLoginPolicyApplied(
-                member = member,
+                member = issued.member,
                 loginIdentifier = loginIdentifier,
                 requestPath = request.requestURI,
             )
@@ -202,9 +173,9 @@ class ApiV1AuthController(
 
         return RsData(
             "200-1",
-            "${member.nickname}님 환영합니다.",
+            "${issued.member.nickname}님 환영합니다.",
             MemberLoginResBody(
-                item = MemberDto(member),
+                item = MemberDto(issued.member),
             ),
         )
     }

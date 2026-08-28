@@ -113,6 +113,8 @@ const extractDeployCalculateScript = () => {
 const createDeployStaleFixture = () => {
   const workDir = mkdtempSync(path.join(tmpdir(), "aquila-deploy-stale-"))
   git(workDir, ["init", "-b", "main"])
+  git(workDir, ["config", "gc.auto", "0"])
+  git(workDir, ["config", "maintenance.auto", "false"])
   git(workDir, ["config", "user.email", "ci@example.test"])
   git(workDir, ["config", "user.name", "CI Test"])
   git(workDir, ["remote", "add", "origin", workDir])

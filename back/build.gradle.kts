@@ -119,9 +119,10 @@ tasks.register("verifyTestcontainersVersionAlignment") {
     group = "verification"
 
     doLast {
+        val testRuntimeClasspath = configurations.getByName("testRuntimeClasspath")
+        testRuntimeClasspath.resolve()
         val testcontainersComponents =
-            configurations
-                .getByName("testRuntimeClasspath")
+            testRuntimeClasspath
                 .incoming
                 .resolutionResult
                 .allComponents

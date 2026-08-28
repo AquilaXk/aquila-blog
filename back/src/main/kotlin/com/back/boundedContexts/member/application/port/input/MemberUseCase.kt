@@ -32,6 +32,15 @@ interface MemberUseCase {
 
     fun findById(id: Long): Optional<Member>
 
+    fun issueLoginSession(
+        memberId: Long,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+        createdIp: String?,
+        userAgent: String?,
+    ): IssuedLoginSession
+
     fun checkPassword(
         member: Member,
         rawPassword: String,
@@ -79,4 +88,13 @@ interface MemberUseCase {
         page: Int,
         pageSize: Int,
     ): PagedResult<Member>
+
+    data class IssuedLoginSession(
+        val member: Member,
+        val apiKey: String,
+        val accessToken: String,
+        val refreshToken: String,
+        val sessionKey: String,
+        val rememberLoginEnabled: Boolean,
+    )
 }

@@ -377,7 +377,7 @@ class CustomAuthenticationFilterTest {
                 AccessTokenPayload(
                     id = 54L,
                     sessionKey = sessionKey,
-                    username = "internal-admin",
+                    username = null,
                     email = null,
                     name = "aquila",
                     rememberLoginEnabled = true,

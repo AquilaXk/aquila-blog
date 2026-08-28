@@ -28,7 +28,6 @@ class PostRecommendFeatureStoreService(
     data class RecommendFeatureVector(
         val hitCount: Int,
         val likesCount: Int,
-        val commentsCount: Int,
         val dwellProxySeconds: Double,
         val normalizedTags: List<String>,
     )
@@ -37,7 +36,6 @@ class PostRecommendFeatureStoreService(
         val version: Int,
         val hitCount: Int,
         val likesCount: Int,
-        val commentsCount: Int,
         val contentLength: Int,
         val contentHash: Int,
         val dwellProxySeconds: Double,
@@ -175,7 +173,6 @@ class PostRecommendFeatureStoreService(
             version = SNAPSHOT_VERSION,
             hitCount = post.hitCount.coerceAtLeast(0),
             likesCount = post.likesCount.coerceAtLeast(0),
-            commentsCount = post.commentsCount.coerceAtLeast(0),
             contentLength = content.length,
             contentHash = content.hashCode(),
             dwellProxySeconds = estimateDwellProxySeconds(content),
@@ -188,7 +185,6 @@ class PostRecommendFeatureStoreService(
         RecommendFeatureVector(
             hitCount = post.hitCount.coerceAtLeast(0),
             likesCount = post.likesCount.coerceAtLeast(0),
-            commentsCount = post.commentsCount.coerceAtLeast(0),
             dwellProxySeconds = dwellProxySeconds,
             normalizedTags = normalizedTags,
         )
@@ -201,6 +197,6 @@ class PostRecommendFeatureStoreService(
 
     companion object {
         private const val FEATURE_STORE_ATTR_NAME = "recommendFeatureStoreV1"
-        private const val SNAPSHOT_VERSION = 1
+        private const val SNAPSHOT_VERSION = 2
     }
 }

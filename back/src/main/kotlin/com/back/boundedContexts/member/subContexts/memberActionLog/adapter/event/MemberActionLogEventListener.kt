@@ -30,20 +30,6 @@ class MemberActionLogEventListener(
     fun handle(event: PostDeletedEvent) = addTask(event)
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun handle(event: PostCommentWrittenEvent) = addTask(event)
-
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun handle(event: PostCommentModifiedEvent) = addTask(event)
-
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun handle(event: PostCommentDeletedEvent) = addTask(event)
-
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun handle(event: PostLikedEvent) = addTask(event)
-
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    fun handle(event: PostUnlikedEvent) = addTask(event)
-
     /**
      * 도메인 이벤트를 작업 큐 태스크로 변환해 비동기 실행을 예약합니다.
      * 이벤트 어댑터 계층에서 트랜잭션 경계를 넘는 후속 처리를 안전하게 연결합니다.

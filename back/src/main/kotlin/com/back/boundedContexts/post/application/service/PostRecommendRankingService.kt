@@ -72,7 +72,6 @@ class PostRecommendRankingService(
                             ?: PostRecommendFeatureStoreService.RecommendFeatureVector(
                                 hitCount = post.hitCount.coerceAtLeast(0),
                                 likesCount = post.likesCount.coerceAtLeast(0),
-                                commentsCount = post.commentsCount.coerceAtLeast(0),
                                 dwellProxySeconds = 20.0,
                                 normalizedTags = emptyList(),
                             )
@@ -134,7 +133,7 @@ class PostRecommendRankingService(
             }
 
         val clickScore = ln(feature.hitCount.toDouble() + 1.0) * 22.0
-        val engagementSignal = (feature.likesCount * 2) + (feature.commentsCount * 3)
+        val engagementSignal = feature.likesCount * 2
         val engagementScore = ln(engagementSignal.toDouble() + 1.0) * 18.0
         val dwellScore = ln(feature.dwellProxySeconds + 1.0) * 9.0
 

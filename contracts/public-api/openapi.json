@@ -3898,16 +3898,9 @@
             "type": "integer",
             "format": "int32"
           },
-          "commentsCount": {
-            "type": "integer",
-            "format": "int32"
-          },
           "hitCount": {
             "type": "integer",
             "format": "int32"
-          },
-          "actorHasLiked": {
-            "type": "boolean"
           },
           "tags": {
             "type": "array",
@@ -4030,16 +4023,9 @@
             "type": "integer",
             "format": "int32"
           },
-          "commentsCount": {
-            "type": "integer",
-            "format": "int32"
-          },
           "hitCount": {
             "type": "integer",
             "format": "int32"
-          },
-          "actorHasLiked": {
-            "type": "boolean"
           },
           "actorCanModify": {
             "type": "boolean"
@@ -5406,10 +5392,6 @@
             "type": "boolean"
           },
           "likesCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "commentsCount": {
             "type": "integer",
             "format": "int32"
           },

@@ -301,7 +301,6 @@ class PostPublicReadResponseFactoryTest {
                     published = true,
                     listed = true,
                     likesCount = 8,
-                    commentsCount = 9,
                     hitCount = 10,
                 ),
             )
@@ -330,23 +329,23 @@ class PostPublicReadResponseFactoryTest {
         // then
         assertThat(pageSeed).isEqualTo(
             "search|page=2|size=10|sort=CREATED_AT|kw=kotlin|tag=spring|total=22|pages=3|" +
-                "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1,9:EXTRACTED:" +
+                "items=1:1767225600000:11:13:content=7:Title 1,null,9:Summary 1,9:EXTRACTED:" +
                 "author=1:1,6:Author,6:author,31:https://example.com/profile.png|" +
-                "2:1767312000000:11:12:13:content=7:Title 2,null,9:Summary 2,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "2:1767312000000:11:13:content=7:Title 2,null,9:Summary 2,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(cursorSeed).isEqualTo(
             "feed-cursor|size=10|sort=CREATED_AT|cursor=cursor-1|tag=backend|hasNext=true|nextCursor=next-1|" +
-                "items=1:1767225600000:11:12:13:content=7:Title 1,null,9:Summary 1,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=1:1767225600000:11:13:content=7:Title 1,null,9:Summary 1,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(detailSeed).isEqualTo(
-            "9|1767398400000|7|8|9|10|content=5:Title,7:content,14:<p>content</p>,null,null,7:UNKNOWN,0:,4:NONE|" +
+            "9|1767398400000|7|8|10|content=5:Title,7:content,14:<p>content</p>,null,null,7:UNKNOWN,0:,4:NONE|" +
                 "author=1:1,6:Author,6:author," +
                 "31:https://example.com/profile.png,38:https://example.com/profile-direct.png",
         )
         assertThat(responseFactory.buildTagsEtagSeed(tags)).isEqualTo("Kotlin:3|Spring:2")
         assertThat(relatedSeed).isEqualTo(
             "related-author|authorId=3|excludePostId=0|limit=4|" +
-                "items=2:1767312000000:11:12:13:content=7:Title 2,null,9:Summary 2,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
+                "items=2:1767312000000:11:13:content=7:Title 2,null,9:Summary 2,9:EXTRACTED:author=1:1,6:Author,6:author,31:https://example.com/profile.png",
         )
         assertThat(bootstrapFeedSeed).startsWith("bootstrap-feed-cursor|")
         assertThat(bootstrapExploreSeed).startsWith("bootstrap-explore-cursor|")
@@ -622,7 +621,6 @@ class PostPublicReadResponseFactoryTest {
             published = true,
             listed = true,
             likesCount = 11,
-            commentsCount = 12,
             hitCount = 13,
         )
 
@@ -656,7 +654,6 @@ class PostPublicReadResponseFactoryTest {
             published = true,
             listed = true,
             likesCount = 8,
-            commentsCount = 9,
             hitCount = 10,
         )
 }

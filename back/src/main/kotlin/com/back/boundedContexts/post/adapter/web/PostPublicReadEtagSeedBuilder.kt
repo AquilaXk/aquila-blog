@@ -81,8 +81,6 @@ class PostPublicReadEtagSeedBuilder {
             append("|")
             append(data.likesCount)
             append("|")
-            append(data.commentsCount)
-            append("|")
             append(data.hitCount)
             append("|content=")
             append(
@@ -152,7 +150,7 @@ class PostPublicReadEtagSeedBuilder {
 
     private fun buildFeedItemsToken(posts: List<FeedPostDto>): String =
         posts.joinToString(separator = "|") {
-            "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}:" +
+            "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.hitCount}:" +
                 "content=${buildNullableLengthPrefixedToken(it.title, it.thumbnail, it.summary, it.summarySource.name)}:" +
                 "author=${
                     buildLengthPrefixedToken(

@@ -8,8 +8,10 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.nio.file.Files
 import java.util.Base64
+import java.util.zip.CRC32
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.stream.MemoryCacheImageOutputStream
@@ -116,6 +118,42 @@ class PostImageAdmissionValidatorTest {
     }
 
     @Test
+    @DisplayName("APNG animation chunk를 단일 PNG로 허용하지 않는다")
+    fun rejectsApngAnimationChunk() {
+        val animatedPng = insertPngChunk(createImage("png"), "acTL", byteArrayOf(0, 0, 0, 2, 0, 0, 0, 0))
+
+        withUpload(animatedPng, "animated.png") { path ->
+            assertBadRequest {
+                validator.validate(path, "image/png")
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("decoder warning으로 복구되는 절단 JPEG를 거절한다")
+    fun rejectsTruncatedJpegWithDecoderWarning() {
+        val jpeg = createImage("jpeg")
+        val withoutEndOfImage = jpeg.copyOf(jpeg.size - 2)
+
+        withUpload(withoutEndOfImage, "truncated.jpg") { path ->
+            assertBadRequest {
+                validator.validate(path, "image/jpeg")
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("PNG ancillary metadata를 해제하지 않고 pixel만 검증한다")
+    fun ignoresMalformedCompressedPngMetadata() {
+        val malformedCompressedText = "Comment".toByteArray() + byteArrayOf(0, 0, 1, 2, 3, 4)
+        val png = insertPngChunk(createImage("png"), "zTXt", malformedCompressedText)
+
+        withUpload(png, "metadata.png") { path ->
+            assertThatCode { validator.validate(path, "image/png") }.doesNotThrowAnyException()
+        }
+    }
+
+    @Test
     @DisplayName("dimension과 decoded pixel 경계를 overflow 없이 검증한다")
     fun validatesDimensionAndPixelBoundaries() {
         assertThatCode { validator.validateBounds(4_096, 4_096) }.doesNotThrowAnyException()
@@ -148,6 +186,37 @@ class PostImageAdmissionValidatorTest {
                 writer.endWriteSequence()
             }
             writer.dispose()
+            bytes.toByteArray()
+        }
+    }
+
+    private fun insertPngChunk(
+        png: ByteArray,
+        type: String,
+        data: ByteArray,
+    ): ByteArray {
+        val ihdrLength =
+            ((png[8].toInt() and 0xFF) shl 24) or
+                ((png[9].toInt() and 0xFF) shl 16) or
+                ((png[10].toInt() and 0xFF) shl 8) or
+                (png[11].toInt() and 0xFF)
+        val insertAt = 8 + 12 + ihdrLength
+        val typeBytes = type.toByteArray(Charsets.US_ASCII)
+        val crc =
+            CRC32().apply {
+                update(typeBytes)
+                update(data)
+            }
+
+        return ByteArrayOutputStream().use { bytes ->
+            DataOutputStream(bytes).use { output ->
+                output.write(png, 0, insertAt)
+                output.writeInt(data.size)
+                output.write(typeBytes)
+                output.write(data)
+                output.writeInt(crc.value.toInt())
+                output.write(png, insertAt, png.size - insertAt)
+            }
             bytes.toByteArray()
         }
     }

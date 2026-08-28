@@ -5,11 +5,14 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
+import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotificationType
+import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
 import com.back.boundedContexts.post.model.PostSummarySource
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.any
@@ -21,6 +24,41 @@ import java.time.Instant
 import java.util.UUID
 
 class MemberNotificationApplicationServiceTest {
+    @Test
+    fun `retained reply notification keeps the realtime relay payload shape`() {
+        val receiver = member(id = 1, username = "author")
+        val actor = member(id = 2, username = "commenter")
+        val notification =
+            MemberNotification(
+                id = 30L,
+                receiver = receiver,
+                actor = actor,
+                type = MemberNotificationType.COMMENT_REPLY,
+                postId = 20L,
+                commentId = 10L,
+                postTitle = "Post title",
+                commentPreview = "Reply preview",
+            ).also {
+                it.createdAt = Instant.EPOCH
+                it.modifiedAt = Instant.EPOCH
+            }
+        val dto = MemberNotificationDto(notification)
+
+        val payload =
+            MemberNotificationRealtimeRelayService.Payload(
+                originNodeId = "node-a",
+                memberId = receiver.id,
+                notification = dto,
+                unreadCount = 1,
+            )
+
+        assertThat(dto.message).contains(actor.name).contains("답글")
+        assertThat(payload.originNodeId).isEqualTo("node-a")
+        assertThat(payload.memberId).isEqualTo(receiver.id)
+        assertThat(payload.notification).isSameAs(dto)
+        assertThat(payload.unreadCount).isEqualTo(1)
+    }
+
     @Test
     fun `comment event creates one notification when the same queued event is replayed`() {
         val memberRepository = mock(MemberRepositoryPort::class.java)

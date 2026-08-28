@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.TagCountDto
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
@@ -13,6 +14,32 @@ import java.time.Instant
 
 @DisplayName("PostRecommendRankingService 테스트")
 class PostRecommendRankingServiceTest {
+    @Test
+    @DisplayName("enabled feature store reuses the retained local snapshot")
+    fun enabledFeatureStoreReusesLocalSnapshot() {
+        val repository = RecordingPostAttrRepository()
+        val featureStore =
+            PostRecommendFeatureStoreService(
+                postAttrRepository = repository,
+                objectMapper = ObjectMapper(),
+                enabled = true,
+                staleSeconds = 900,
+                localCacheTtlSeconds = 120,
+            )
+        val post =
+            testPost(
+                id = 3L,
+                createdAt = Instant.parse("2026-08-28T00:00:00Z"),
+                content = "cached recommendation #kotlin",
+            )
+
+        val first = featureStore.resolveForPosts(listOf(post)).getValue(post.id)
+        val second = featureStore.resolveForPosts(listOf(post)).getValue(post.id)
+
+        assertThat(second).isEqualTo(first)
+        assertThat(repository.saveCount).isEqualTo(1)
+    }
+
     @Test
     @DisplayName("추천 후보가 있으면 feature vector를 계산해 재정렬 결과를 반환한다")
     fun rerankNonEmptyCandidates() {
@@ -78,4 +105,38 @@ class PostRecommendRankingServiceTest {
             it.createdAt = createdAt
             it.modifiedAt = createdAt
         }
+
+    private class RecordingPostAttrRepository : PostAttrRepositoryPort {
+        private var stored: PostAttr? = null
+        var saveCount: Int = 0
+            private set
+
+        override fun findBySubjectAndName(
+            subject: Post,
+            name: String,
+        ): PostAttr? = stored
+
+        override fun findBySubjectInAndNameIn(
+            subjects: List<Post>,
+            names: List<String>,
+        ): List<PostAttr> = listOfNotNull(stored)
+
+        override fun incrementIntValue(
+            subject: Post,
+            name: String,
+            delta: Int,
+        ): Int = error("not used")
+
+        override fun findRecentlyModifiedByName(
+            name: String,
+            modifiedAfter: Instant,
+            limit: Int,
+        ): List<PostAttr> = error("not used")
+
+        override fun save(attr: PostAttr): PostAttr {
+            stored = attr
+            saveCount += 1
+            return attr
+        }
+    }
 }

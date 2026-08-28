@@ -1,6 +1,5 @@
 package com.back.boundedContexts.post.dto
 
-import com.back.boundedContexts.post.domain.PostComment
 import com.fasterxml.jackson.annotation.JsonCreator
 import java.time.Instant
 
@@ -21,19 +20,5 @@ data class PostCommentDto
         var actorCanModify: Boolean = false,
         var actorCanDelete: Boolean = false,
     ) {
-        constructor(postComment: PostComment) : this(
-            postComment.id,
-            postComment.createdAt,
-            postComment.modifiedAt,
-            postComment.author.id,
-            postComment.author.name,
-            postComment.author.name,
-            postComment.author.profileImgUrlVersionedOrDefault,
-            postComment.author.profileImgUrlVersionedOrDefault,
-            postComment.post.id,
-            postComment.parentComment?.id,
-            postComment.content,
-        )
-
         fun forEventLog() = copy(content = "")
     }

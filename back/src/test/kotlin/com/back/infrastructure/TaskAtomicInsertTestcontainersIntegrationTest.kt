@@ -42,7 +42,7 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
 
     @Test
     @Order(1)
-    fun `pre envelope failed row migrates to exact v1 envelope and bounded retention`() {
+    fun `pre envelope row migrates and production task id default is restored`() {
         migrateToPreviousVersion()
         val taskUid = UUID.randomUUID()
         val rawPayload = """{"uid":"$taskUid","aggregateType":"Post","aggregateId":77,"value":"private"}"""
@@ -65,11 +65,18 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
                     statement.setTimestamp(5, createdAt)
                     assertEquals(1, statement.executeUpdate())
                 }
+            connection.createStatement().use { statement ->
+                statement.execute("ALTER TABLE task ALTER COLUMN id DROP DEFAULT")
+            }
         }
 
         migrate()
 
         postgres.createConnection("").use { connection ->
+            val generatedUid = UUID.randomUUID()
+            assertEquals(1, insert(connection, productionAtomicInsertSql(), generatedUid))
+            assertTrue(taskIdByUid(connection, generatedUid) > 0)
+
             connection
                 .prepareStatement(
                     """
@@ -285,6 +292,18 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
             statement.executeQuery().use { result ->
                 result.next()
                 result.getInt(1)
+            }
+        }
+
+    private fun taskIdByUid(
+        connection: Connection,
+        uid: UUID,
+    ): Long =
+        connection.prepareStatement("SELECT id FROM task WHERE uid = ?").use { statement ->
+            statement.setObject(1, uid)
+            statement.executeQuery().use { result ->
+                assertTrue(result.next())
+                result.getLong(1)
             }
         }
 

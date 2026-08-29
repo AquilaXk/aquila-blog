@@ -12,6 +12,10 @@
     {
       "file": "back/src/main/resources/db/migration/V20260826_01__share_search_runtime_controls.sql",
       "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260829_01__restore_task_id_sequence_default.sql",
+      "class": "EXPAND_SAFE"
     }
   ],
   "cutovers": []

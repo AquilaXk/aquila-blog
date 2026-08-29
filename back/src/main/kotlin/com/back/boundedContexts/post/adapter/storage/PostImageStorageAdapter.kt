@@ -367,18 +367,6 @@ class PostImageStorageAdapter(
         return "$prefix/$datePath/$uuid$extension"
     }
 
-    private fun extractExtension(originalFilename: String?): String {
-        val name = originalFilename?.trim().orEmpty()
-        if (!name.contains(".")) return ""
-        val ext =
-            name
-                .substringAfterLast(".")
-                .lowercase()
-                .replace(Regex("[^a-z0-9]"), "")
-                .take(10)
-        return if (ext.isBlank()) "" else ".$ext"
-    }
-
     private fun validateObjectKey(objectKey: String) {
         val prefix = resolvedKeyPrefix()
         if (

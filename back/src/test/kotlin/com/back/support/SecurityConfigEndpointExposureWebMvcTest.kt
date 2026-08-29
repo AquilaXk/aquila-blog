@@ -52,8 +52,6 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
-import org.springframework.test.web.servlet.post
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
@@ -302,35 +300,6 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
                 status { isNotFound() }
             }
         }
-    }
-
-    @Test
-    @DisplayName("prod에서 일반 사용자는 첨부 파일 업로드 보안 체인을 통과하지 못한다")
-    @WithMockUser(roles = ["USER"])
-    fun `prod protects post file upload from non admin access`() {
-        mvc.post("/post/api/v1/posts/files").andExpect {
-            status { isForbidden() }
-        }
-    }
-
-    @Test
-    @DisplayName("prod에서 관리자는 첨부 파일 업로드 보안 체인을 통과해 handler 계층까지 도달한다")
-    @WithMockUser(roles = ["ADMIN"])
-    fun `prod lets admin pass post file upload security checks to application handler layer`() {
-        mvc.post("/post/api/v1/posts/files").andExpect {
-            status { isNotFound() }
-        }
-    }
-
-    @Test
-    @DisplayName("prod에서 공개 첨부 파일 다운로드는 익명 보안 체인을 통과해 handler 계층까지 도달한다")
-    fun `prod keeps post file download public`() {
-        mvc.get("/post/api/v1/files/posts/2026/03/manual.pdf").andExpect {
-            status { isNotFound() }
-        }
-        mvc
-            .perform(head("/post/api/v1/files/posts/2026/03/manual.pdf"))
-            .andExpect(status().isNotFound)
     }
 
     @Test

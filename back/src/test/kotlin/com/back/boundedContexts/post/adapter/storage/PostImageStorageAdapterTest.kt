@@ -231,25 +231,6 @@ class PostImageStorageAdapterTest {
     }
 
     @Test
-    @DisplayName("빈 keyPrefix여도 cloud/ 파일 키는 공개 읽기 전에 거절한다")
-    fun blankKeyPrefixStillRejectsCloudFileKeysOnPublicReadPath() {
-        // given
-        val adapter =
-            PostImageStorageAdapter(
-                PostImageStorageProperties(
-                    enabled = false,
-                    keyPrefix = "",
-                ),
-            )
-
-        // when & then
-        assertThatThrownBy {
-            adapter.getPostFile("cloud/1/private/2026/06/secret.pdf")
-        }.hasMessageContaining("400-1")
-            .hasMessageContaining("유효하지 않은 이미지 경로입니다.")
-    }
-
-    @Test
     @DisplayName("빈 keyPrefix여도 listObjects의 cloud/ inventory 요청을 거절한다")
     fun blankKeyPrefixStillRejectsCloudListObjectsPrefix() {
         // given
@@ -413,26 +394,6 @@ class PostImageStorageAdapterTest {
             )
         }.hasMessageContaining("400-1")
             .hasMessageContaining("업로드 파일 크기 정보가 올바르지 않습니다.")
-    }
-
-    @Test
-    @DisplayName("stream 첨부파일 업로드는 크기 초과를 storage 접근 전에 거절한다")
-    fun rejectOversizedFileUploadBeforeStorageAccess() {
-        // given
-        val adapter = disabledAdapter(maxFileSizeBytes = 2)
-
-        // when & then
-        assertThatThrownBy {
-            adapter.uploadPostFile(
-                PostImageStoragePort.UploadFileRequest(
-                    inputStream = ByteArrayInputStream("pdf".toByteArray()),
-                    contentLength = 3,
-                    contentType = "application/pdf",
-                    originalFilename = "large.pdf",
-                ),
-            )
-        }.hasMessageContaining("400-1")
-            .hasMessageContaining("첨부 파일은 0MB 이하여야 합니다.")
     }
 
     private fun disabledAdapter(maxFileSizeBytes: Long = 10 * 1024 * 1024): PostImageStorageAdapter =

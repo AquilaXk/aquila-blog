@@ -107,43 +107,7 @@ class PostImageStorageAdapter(
         }
     }
 
-    override fun uploadPostFile(request: PostImageStoragePort.UploadFileRequest): String {
-        validateUploadContentLength(
-            contentLength = request.contentLength,
-            emptyMessage = "첨부 파일이 비어 있습니다.",
-            oversizedMessage = "첨부 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.",
-        )
-
-        val key = buildObjectKey(request.originalFilename)
-        val contentType = normalizePostMediaContentType(request.contentType) ?: "application/octet-stream"
-
-        val preparedUpload = prepareRepeatableUpload(request.inputStream, request.contentLength)
-        try {
-            val client = requireClient()
-            try {
-                putObject(
-                    client = client,
-                    objectKey = key,
-                    contentType = contentType,
-                    uploadPath = preparedUpload.path,
-                    contentLength = preparedUpload.contentLength,
-                    originalFilename = request.originalFilename,
-                )
-            } catch (e: Exception) {
-                failIfDependencyUnavailable(e)
-                logger.error("Post file upload failed", e)
-                throw AppException(ErrorCode.INTERNAL_ERROR, "첨부 파일 업로드에 실패했습니다.")
-            }
-        } finally {
-            preparedUpload.deleteQuietly()
-        }
-
-        return key
-    }
-
     override fun getPostImage(objectKey: String): PostImageStoragePort.StoredObject? = getStoredObject(objectKey, "이미지를 불러오지 못했습니다.")
-
-    override fun getPostFile(objectKey: String): PostImageStoragePort.StoredObject? = getStoredObject(objectKey, "첨부 파일을 불러오지 못했습니다.")
 
     private fun getStoredObject(
         objectKey: String,
@@ -396,28 +360,11 @@ class PostImageStorageAdapter(
             credentialVersion = properties.credentialVersion,
         )
 
-    private fun buildObjectKey(originalFilename: String?): String {
-        val ext = extractExtension(originalFilename)
-        return buildObjectKeyWithExtension(ext)
-    }
-
     private fun buildObjectKeyWithExtension(extension: String): String {
         val datePath = LocalDate.now().format(datePathFormatter)
         val prefix = resolvedKeyPrefix()
         val uuid = UUID.randomUUID().toString()
         return "$prefix/$datePath/$uuid$extension"
-    }
-
-    private fun extractExtension(originalFilename: String?): String {
-        val name = originalFilename?.trim().orEmpty()
-        if (!name.contains(".")) return ""
-        val ext =
-            name
-                .substringAfterLast(".")
-                .lowercase()
-                .replace(Regex("[^a-z0-9]"), "")
-                .take(10)
-        return if (ext.isBlank()) "" else ".$ext"
     }
 
     private fun validateObjectKey(objectKey: String) {

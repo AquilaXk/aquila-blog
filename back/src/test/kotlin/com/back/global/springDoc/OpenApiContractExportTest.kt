@@ -29,6 +29,11 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
 
         val openApiNode = objectMapper.readTree(responseBody)
         assertThat(openApiNode.path("openapi").asText()).isNotBlank()
+        assertThat(openApiNode.path("paths").has("/post/api/v1/posts/files")).isFalse()
+        assertThat(openApiNode.path("paths").has("/post/api/v1/files/**")).isFalse()
+        val schemas = openApiNode.path("components").path("schemas")
+        assertThat(schemas.has("UploadPostFileResBody")).isFalse()
+        assertThat(schemas.has("RsDataUploadPostFileResBody")).isFalse()
         assertThat(
             openApiNode
                 .path("servers")

@@ -103,10 +103,9 @@
 
 ### 업로드 retention 흐름
 
-게시글 이미지와 첨부파일 업로드는 `ApiV1PostImageController`, `PostImageStorageAdapter`, `UploadedFileRetentionService`가 나누어 처리한다.
+게시글 이미지 업로드는 `ApiV1PostImageController`, `PostImageStorageAdapter`, `UploadedFileRetentionService`가 나누어 처리한다.
 
 - `POST /post/api/v1/posts/images`는 이미지 8MB와 storage `maxFileSizeBytes` 중 작은 값을 한도로 검사하고, `UploadImageRequest(inputStream, contentLength, contentType, originalFilename)`로 storage port에 넘긴다.
-- `POST /post/api/v1/posts/files`는 첨부파일 10MB와 storage `maxFileSizeBytes` 중 작은 값을 한도로 검사하고, `UploadFileRequest(inputStream, contentLength, contentType, originalFilename)`로 넘긴다.
 - 컨트롤러는 `file.bytes`를 사용하지 않는다. `MultipartFile.inputStream`과 `file.size`를 같이 넘기고, `PostImageStorageAdapter.prepareRepeatableUpload`가 실제 read byte 수와 선언된 `contentLength`를 비교한다.
 - storage adapter는 input stream을 임시 파일로 복사해 repeatable upload를 만들고, 실제 크기가 설정 한도를 넘거나 `expectedContentLength`와 다르면 `400-1`로 중단한다. 성공/실패 후 임시 파일은 삭제한다.
 - 이미지 업로드는 signature 기반 content type 감지를 수행한다. 허용 타입은 `image/jpeg`, `image/png`, `image/gif`, `image/webp`이며 선언 타입과 감지 타입이 명확히 충돌하면 차단한다.

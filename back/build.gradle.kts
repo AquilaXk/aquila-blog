@@ -28,7 +28,7 @@ extra["netty.version"] = "4.2.17.Final"
 extra["postgresql.version"] = "42.7.13"
 
 val nettyVersion = extra["netty.version"] as String
-val awsSdkVersion = "2.54.0"
+val awsSdkVersion = "2.54.5"
 val testcontainersVersion = "1.21.4"
 
 java {

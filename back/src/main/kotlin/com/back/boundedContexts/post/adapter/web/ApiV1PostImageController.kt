@@ -16,7 +16,6 @@ import jakarta.servlet.http.HttpServletRequest
 import org.springframework.core.io.InputStreamResource
 import org.springframework.core.io.Resource
 import org.springframework.http.CacheControl
-import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -46,19 +45,12 @@ class ApiV1PostImageController(
 ) {
     companion object {
         private const val POST_IMAGE_MAX_FILE_SIZE_BYTES = 8L * 1024 * 1024
-        private const val POST_FILE_MAX_FILE_SIZE_BYTES = 10L * 1024 * 1024
     }
 
     data class UploadPostImageResBody(
         val key: String,
         val url: String,
         val markdown: String,
-    )
-
-    data class UploadPostFileResBody(
-        val key: String,
-        val url: String,
-        val name: String,
     )
 
     @PostMapping("/posts/images", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
@@ -102,57 +94,6 @@ class ApiV1PostImageController(
                 key = key,
                 url = imageUrl,
                 markdown = "![]($imageUrl)",
-            ),
-        )
-    }
-
-    @PostMapping("/posts/files", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
-    fun uploadPostFile(
-        @RequestPart("file") file: MultipartFile,
-    ): RsData<UploadPostFileResBody> {
-        if (file.isEmpty) {
-            throw AppException(ErrorCode.BAD_REQUEST, "첨부 파일이 비어 있습니다.")
-        }
-
-        val maxAllowedBytes = minOf(POST_FILE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
-        if (file.size > maxAllowedBytes) {
-            val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
-            throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "첨부 파일은 ${limitMb}MB 이하여야 합니다.")
-        }
-
-        val uploadRequest =
-            PostImageStoragePort.UploadFileRequest(
-                inputStream = file.inputStream,
-                contentLength = file.size,
-                contentType = file.contentType,
-                originalFilename = file.originalFilename,
-            )
-        val key = postImageStorageService.uploadPostFile(uploadRequest)
-        uploadedFileRetentionService.registerTempUploadWithCompensation(
-            objectKey = key,
-            contentType = file.contentType.orEmpty(),
-            fileSize = file.size,
-            purpose = UploadedFilePurpose.POST_FILE,
-        )
-        val encodedKey =
-            URLEncoder
-                .encode(key, StandardCharsets.UTF_8)
-                .replace("+", "%20")
-                .replace("%2F", "/")
-        val fileUrl = "${AppConfig.siteBackUrl}/post/api/v1/files/$encodedKey"
-        val fileName =
-            file.originalFilename
-                ?.trim()
-                ?.takeIf(String::isNotBlank)
-                ?: key.substringAfterLast("/")
-
-        return RsData(
-            "201-2",
-            "첨부 파일이 업로드되었습니다.",
-            UploadPostFileResBody(
-                key = key,
-                url = fileUrl,
-                name = fileName,
             ),
         )
     }
@@ -244,68 +185,6 @@ class ApiV1PostImageController(
         return finalizedBuilder.body(InputStreamResource(image.inputStream))
     }
 
-    @GetMapping("/files/**")
-    @Transactional(readOnly = true)
-    fun getPostFile(request: HttpServletRequest): ResponseEntity<Resource> {
-        val objectKey =
-            extractObjectKey(
-                request,
-                "/post/api/v1/files/",
-                "잘못된 첨부 파일 경로입니다.",
-                "첨부 파일을 찾을 수 없습니다.",
-            )
-        ensurePublicPostUpload(
-            objectKey = objectKey,
-            purpose = UploadedFilePurpose.POST_FILE,
-            notFound = ::postFileNotFound,
-        )
-
-        val etag =
-            "\"" +
-                Base64
-                    .getUrlEncoder()
-                    .withoutPadding()
-                    .encodeToString(objectKey.toByteArray(StandardCharsets.UTF_8)) +
-                "\""
-        if (isNotModified(request.getHeader(HttpHeaders.IF_NONE_MATCH), etag)) {
-            return ResponseEntity
-                .status(HttpStatus.NOT_MODIFIED)
-                .eTag(etag)
-                .cacheControl(CacheControl.noStore())
-                .build()
-        }
-
-        val storedFile =
-            postImageStorageService.getPostFile(objectKey)
-                ?: throw AppException(ErrorCode.NOT_FOUND, "첨부 파일을 찾을 수 없습니다.")
-
-        val fallbackFilename = objectKey.substringAfterLast("/").ifBlank { "attachment" }
-        val downloadFilename = storedFile.originalFilename?.takeIf(String::isNotBlank) ?: fallbackFilename
-        val contentDisposition =
-            ContentDisposition
-                .attachment()
-                .filename(downloadFilename, StandardCharsets.UTF_8)
-                .build()
-                .toString()
-
-        val responseBuilder =
-            ResponseEntity
-                .ok()
-                .contentType(MediaType.parseMediaType(storedFile.contentType))
-                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
-                .header("X-Content-Type-Options", "nosniff")
-                .eTag(etag)
-                .cacheControl(CacheControl.noStore())
-
-        val finalizedBuilder =
-            storedFile.contentLength
-                ?.takeIf { it >= 0 }
-                ?.let(responseBuilder::contentLength)
-                ?: responseBuilder
-
-        return finalizedBuilder.body(InputStreamResource(storedFile.inputStream))
-    }
-
     private fun ensurePublicPostUpload(
         objectKey: String,
         purpose: UploadedFilePurpose,
@@ -325,8 +204,6 @@ class ApiV1PostImageController(
     }
 
     private fun postImageNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "이미지를 찾을 수 없습니다.")
-
-    private fun postFileNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "첨부 파일을 찾을 수 없습니다.")
 
     private fun imageCacheControl(): CacheControl = CacheControl.noCache().cachePublic()
 

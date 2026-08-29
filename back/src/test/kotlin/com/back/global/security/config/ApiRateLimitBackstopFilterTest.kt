@@ -84,19 +84,6 @@ class ApiRateLimitBackstopFilterTest {
         )
     }
 
-    @Test
-    @DisplayName("게시글 첨부파일 GET HEAD는 public read bucket으로 제한한다")
-    fun `post file get and head use public read bucket`() {
-        val redis = InMemoryRedisKeyValuePort()
-        val filter = createFilter(redis = redis, publicReadLimitPerMinute = 2)
-
-        assertPublicReadBucketLimit(
-            filter = filter,
-            redis = redis,
-            path = "/post/api/v1/files/posts/2026/03/manual.pdf",
-        )
-    }
-
     private fun assertPublicReadBucketLimit(
         filter: ApiRateLimitBackstopFilter,
         redis: InMemoryRedisKeyValuePort,

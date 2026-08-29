@@ -57,21 +57,6 @@ class ApiRuntimeBoundaryFilterTest {
     }
 
     @Test
-    @DisplayName("read 모드에서 게시글 첨부파일 GET HEAD 경로는 차단하지 않는다")
-    fun `read mode allows post file get and head endpoints`() {
-        val filter = createFilter("read")
-
-        for (method in listOf("GET", "HEAD")) {
-            val request = MockHttpServletRequest(method, "/post/api/v1/files/posts/2026/03/manual.pdf")
-            val response = MockHttpServletResponse()
-
-            filter.doFilter(request, response, MockFilterChain())
-
-            assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
-        }
-    }
-
-    @Test
     @DisplayName("worker/none 모드는 API를 fail-closed로 차단한다")
     fun `worker and none modes fail closed for api`() {
         for (mode in listOf("worker", "none")) {

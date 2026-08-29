@@ -11,7 +11,6 @@ import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFilePurpose
-import com.back.global.storage.domain.UploadedFileStatus
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
@@ -66,28 +65,6 @@ class ApiV1PostImageControllerTest {
     }
 
     @Test
-    @DisplayName("게시글 첨부파일은 MultipartFile.bytes 복사 없이 stream으로 업로드한다")
-    fun `posts files 업로드는 uploaded_file purpose를 POST_FILE로 저장한다`() {
-        // given
-        val file = ByteAccessFailingMultipartFile("file", "manual.pdf", "application/pdf", "pdf".toByteArray())
-        postImageStorageService.nextFileKey = "posts/2026/03/manual.pdf"
-
-        // when
-        val response = withIsolatedAppConfig { controller.uploadPostFile(file) }
-
-        // then
-        assertThat(response.resultCode).isEqualTo("201-2")
-        assertThat(postImageStorageService.lastFileContentLength).isEqualTo(file.size)
-        assertThat(postImageStorageService.lastFileBytes).containsExactly(*"pdf".toByteArray())
-        verify(uploadedFileRetentionService).registerTempUploadWithCompensation(
-            "posts/2026/03/manual.pdf",
-            "application/pdf",
-            file.size,
-            UploadedFilePurpose.POST_FILE,
-        )
-    }
-
-    @Test
     @DisplayName("AppConfig URL 설정은 테스트 밖으로 누출되지 않는다")
     fun `AppConfig URL 설정 뒤 raw companion 상태를 복원한다`() {
         val snapshot = appConfigUrlSnapshot()
@@ -100,99 +77,6 @@ class ApiV1PostImageControllerTest {
         }
 
         assertThat(appConfigUrlSnapshot()).isEqualTo(snapshot)
-    }
-
-    @Test
-    @DisplayName("게시글 첨부파일 다운로드는 공개 ACTIVE POST_FILE만 반환한다")
-    fun `files 다운로드는 공개 ACTIVE POST_FILE만 반환한다`() {
-        val objectKey = "posts/2026/03/manual.pdf"
-        val storedBytes = "pdf".toByteArray()
-        val uploadedFile = postFile(objectKey).apply { attachToPost(10L, UploadedFilePurpose.POST_FILE) }
-        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
-        `when`(postRepository.findPublicDetailById(10L)).thenReturn(publicPost(10L))
-        postImageStorageService.files[objectKey] =
-            PostImageStoragePort.StoredObject(
-                inputStream = ByteArrayInputStream(storedBytes),
-                contentType = "application/pdf",
-                contentLength = storedBytes.size.toLong(),
-                originalFilename = "manual.pdf",
-            )
-
-        val response = controller.getPostFile(fileRequest(objectKey))
-
-        assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
-        assertThat(response.headers.contentType.toString()).isEqualTo("application/pdf")
-        assertThat(response.headers.contentLength).isEqualTo(storedBytes.size.toLong())
-        assertThat(response.headers.getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("attachment").contains("manual.pdf")
-        assertThat(response.headers.getFirst("X-Content-Type-Options")).isEqualTo("nosniff")
-        assertThat(response.headers.cacheControl).isEqualTo("no-store")
-        assertThat(postImageStorageService.fileDownloads).containsExactly(objectKey)
-    }
-
-    @Test
-    @DisplayName("게시글 첨부파일 304 응답은 재검증 가능한 캐시를 남기지 않는다")
-    fun `files 다운로드 304는 no store cache policy를 반환한다`() {
-        val objectKey = "posts/2026/03/cached.pdf"
-        val uploadedFile = postFile(objectKey).apply { attachToPost(11L, UploadedFilePurpose.POST_FILE) }
-        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
-        `when`(postRepository.findPublicDetailById(11L)).thenReturn(publicPost(11L))
-        postImageStorageService.files[objectKey] =
-            PostImageStoragePort.StoredObject(
-                inputStream = ByteArrayInputStream("pdf".toByteArray()),
-                contentType = "application/pdf",
-                contentLength = 3L,
-                originalFilename = "cached.pdf",
-            )
-        val firstResponse = controller.getPostFile(fileRequest(objectKey))
-        postImageStorageService.fileDownloads.clear()
-
-        val conditionalRequest =
-            fileRequest(objectKey).apply {
-                addHeader(HttpHeaders.IF_NONE_MATCH, requireNotNull(firstResponse.headers.eTag))
-            }
-
-        val response = controller.getPostFile(conditionalRequest)
-
-        assertThat(response.statusCode).isEqualTo(HttpStatus.NOT_MODIFIED)
-        assertThat(response.headers.cacheControl).isEqualTo("no-store")
-        assertThat(postImageStorageService.fileDownloads).isEmpty()
-    }
-
-    @Test
-    @DisplayName("게시글 첨부파일 다운로드는 비공개 게시글 연결 파일을 숨긴다")
-    fun `files 다운로드는 비공개 게시글 연결 파일을 숨긴다`() {
-        val objectKey = "posts/2026/03/private.pdf"
-        val uploadedFile = postFile(objectKey).apply { attachToPost(20L, UploadedFilePurpose.POST_FILE) }
-        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
-        `when`(postRepository.findPublicDetailById(20L)).thenReturn(null)
-
-        assertPostFileNotFound(objectKey)
-
-        assertThat(postImageStorageService.fileDownloads).isEmpty()
-    }
-
-    @Test
-    @DisplayName("게시글 첨부파일 다운로드는 TEMP PENDING_DELETE DELETED 파일을 숨긴다")
-    fun `files 다운로드는 비활성 파일을 숨긴다`() {
-        listOf(
-            UploadedFileStatus.TEMP,
-            UploadedFileStatus.PENDING_DELETE,
-            UploadedFileStatus.DELETED,
-        ).forEach { status ->
-            val objectKey = "posts/2026/03/${status.name.lowercase()}.pdf"
-            val uploadedFile =
-                postFile(objectKey).apply {
-                    attachToPost(12L, UploadedFilePurpose.POST_FILE)
-                    this.status = status
-                }
-            `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
-            `when`(postRepository.findPublicDetailById(12L)).thenReturn(publicPost(12L))
-
-            assertPostFileNotFound(objectKey)
-
-            assertThat(postImageStorageService.fileDownloads).isEmpty()
-            verifyNoInteractions(postRepository)
-        }
     }
 
     @Test
@@ -263,12 +147,6 @@ class ApiV1PostImageControllerTest {
         assertThat(postImageStorageService.imageDownloads).isEmpty()
     }
 
-    private fun assertPostFileNotFound(objectKey: String) {
-        assertThatThrownBy { controller.getPostFile(fileRequest(objectKey)) }
-            .isInstanceOf(AppException::class.java)
-            .hasMessageContaining("첨부 파일을 찾을 수 없습니다.")
-    }
-
     private fun <T> withIsolatedAppConfig(block: () -> T): T {
         val snapshot = appConfigUrlSnapshot()
         AppConfig(
@@ -291,18 +169,7 @@ class ApiV1PostImageControllerTest {
         }
     }
 
-    private fun fileRequest(objectKey: String): MockHttpServletRequest = MockHttpServletRequest("GET", "/post/api/v1/files/$objectKey")
-
     private fun imageRequest(objectKey: String): MockHttpServletRequest = MockHttpServletRequest("GET", "/post/api/v1/images/$objectKey")
-
-    private fun postFile(objectKey: String): UploadedFile =
-        UploadedFile(
-            objectKey = objectKey,
-            bucket = "blog-images",
-            contentType = "application/pdf",
-            fileSize = 3L,
-            purpose = UploadedFilePurpose.POST_FILE,
-        )
 
     private fun postImage(objectKey: String): UploadedFile =
         UploadedFile(
@@ -325,14 +192,9 @@ class ApiV1PostImageControllerTest {
 
     private class FakePostImageStoragePort : PostImageStoragePort {
         var nextImageKey: String = "posts/placeholder/image.png"
-        var nextFileKey: String = "posts/placeholder/file.bin"
         var lastImageContentLength: Long? = null
-        var lastFileContentLength: Long? = null
         var lastImageBytes: ByteArray = ByteArray(0)
-        var lastFileBytes: ByteArray = ByteArray(0)
-        val files = mutableMapOf<String, PostImageStoragePort.StoredObject>()
         val images = mutableMapOf<String, PostImageStoragePort.StoredObject>()
-        val fileDownloads = mutableListOf<String>()
         val imageDownloads = mutableListOf<String>()
 
         override fun uploadPostImage(request: PostImageStoragePort.UploadImageRequest): String {
@@ -341,20 +203,9 @@ class ApiV1PostImageControllerTest {
             return nextImageKey
         }
 
-        override fun uploadPostFile(request: PostImageStoragePort.UploadFileRequest): String {
-            lastFileContentLength = request.contentLength
-            lastFileBytes = request.inputStream.use(InputStream::readBytes)
-            return nextFileKey
-        }
-
         override fun getPostImage(objectKey: String): PostImageStoragePort.StoredObject? {
             imageDownloads += objectKey
             return images[objectKey]
-        }
-
-        override fun getPostFile(objectKey: String): PostImageStoragePort.StoredObject? {
-            fileDownloads += objectKey
-            return files[objectKey]
         }
 
         override fun deletePostImage(objectKey: String) {}

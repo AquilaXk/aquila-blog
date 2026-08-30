@@ -71,11 +71,11 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
 
     // QueryDSL
-    implementation("io.github.openfeign.querydsl:querydsl-jpa:7.5") {
+    implementation("io.github.openfeign.querydsl:querydsl-jpa:7.6") {
         exclude("jakarta.persistence", "jakarta.persistence-api")
     }
-    implementation("io.github.openfeign.querydsl:querydsl-kotlin:7.5")
-    kapt("io.github.openfeign.querydsl:querydsl-apt:7.5:jpa")
+    implementation("io.github.openfeign.querydsl:querydsl-kotlin:7.6")
+    kapt("io.github.openfeign.querydsl:querydsl-apt:7.6:jpa")
 
     // SpringDoc
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0")

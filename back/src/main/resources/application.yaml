@@ -54,8 +54,8 @@ spring:
           ssl:
             checkserveridentity: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__SSL__CHECKSERVERIDENTITY:true}
           connectiontimeout: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__CONNECTIONTIMEOUT:5000}
-          timeout: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__TIMEOUT:10000}
-          writetimeout: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__WRITETIMEOUT:10000}
+          timeout: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__TIMEOUT:8000}
+          writetimeout: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__WRITETIMEOUT:8000}
   data:
     redis:
       host: ${custom.site.redisHost}
@@ -229,7 +229,7 @@ custom:
       maxFailedAttempts: ${CUSTOM__AUTH__ADMIN_EMAIL__MAX_FAILED_ATTEMPTS:5}
       requestMaxPerWindow: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_MAX_PER_WINDOW:5}
       requestWindowSeconds: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_WINDOW_SECONDS:600}
-      requestDeadlineMillis: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS:5000}
+      requestDeadlineMillis: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS:10000}
     cookie:
       apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:604800}
     session:

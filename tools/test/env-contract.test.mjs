@@ -392,16 +392,16 @@ test("home-server-source rejects administrator email challenge expiration outsid
   }
 })
 
-test("home-server-source keeps the administrator email request deadline below the edge timeout", async () => {
+test("home-server-source keeps the administrator email deadline inside the readiness timeout", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const contract = loadContract(contractPath)
   const key = "CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS"
   const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
 
-  assert.equal(definition?.min, 1000)
-  assert.equal(definition?.max, 8000)
+  assert.equal(definition?.min, 8000)
+  assert.equal(definition?.max, 10000)
 
-  for (const value of ["999", "8001"]) {
+  for (const value of ["7999", "10001"]) {
     const result = validateEnvText({
       contract,
       target: "home-server-source",
@@ -409,6 +409,24 @@ test("home-server-source keeps the administrator email request deadline below th
     })
     assert.equal(result.ok, false, `${value} milliseconds must fail before deployment`)
     assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source keeps the shared email deadline and SMTP transport inside the readiness budget", async () => {
+  const { loadContract } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const target = contract.targets["home-server-source"]
+  const deadlineKey = "CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS"
+  const deadline = target.keys.find((candidate) => candidate.name === deadlineKey)
+
+  for (const key of [
+    "SPRING__MAIL__PROPERTIES__MAIL__SMTP__CONNECTIONTIMEOUT",
+    "SPRING__MAIL__PROPERTIES__MAIL__SMTP__TIMEOUT",
+    "SPRING__MAIL__PROPERTIES__MAIL__SMTP__WRITETIMEOUT",
+  ]) {
+    const definition = target.keys.find((candidate) => candidate.name === key)
+    assert.equal(definition?.max, 8000, `${key} must finish before the mail operation deadline`)
+    assert(definition.max <= deadline.min, `${key} must not exceed the shortest allowed shared deadline`)
   }
 })
 

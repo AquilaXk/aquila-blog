@@ -14,7 +14,7 @@ class AdminEmailRequestTimingTest {
     fun `request deadline outside the edge-safe range is rejected`() {
         assertThatThrownBy { AdminEmailRequestTiming(999) }
             .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessage("custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 8000.")
+            .hasMessage("custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 10000.")
     }
 
     @Test

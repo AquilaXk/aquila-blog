@@ -24,8 +24,10 @@ class AdminMailConfigurationContractTest {
         assertThat(properties.getProperty("spring.mail.properties.mail.smtp.connectiontimeout"))
             .isEqualTo("\${SPRING__MAIL__PROPERTIES__MAIL__SMTP__CONNECTIONTIMEOUT:5000}")
         assertThat(properties.getProperty("spring.mail.properties.mail.smtp.timeout"))
-            .isEqualTo("\${SPRING__MAIL__PROPERTIES__MAIL__SMTP__TIMEOUT:10000}")
+            .isEqualTo("\${SPRING__MAIL__PROPERTIES__MAIL__SMTP__TIMEOUT:8000}")
         assertThat(properties.getProperty("spring.mail.properties.mail.smtp.writetimeout"))
-            .isEqualTo("\${SPRING__MAIL__PROPERTIES__MAIL__SMTP__WRITETIMEOUT:10000}")
+            .isEqualTo("\${SPRING__MAIL__PROPERTIES__MAIL__SMTP__WRITETIMEOUT:8000}")
+        assertThat(properties.getProperty("custom.auth.adminEmail.requestDeadlineMillis"))
+            .isEqualTo("\${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS:10000}")
     }
 }

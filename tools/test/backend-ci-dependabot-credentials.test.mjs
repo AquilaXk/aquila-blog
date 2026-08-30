@@ -112,6 +112,19 @@ test("CI is the only reusable backend quality caller", () => {
   assert.deepEqual(listReusableBackendQualityCallers(), [".github/workflows/ci.yml"])
 })
 
+test("the sole backend caller admits backend guard paths", () => {
+  for (const workflowPath of [
+    ".githooks/**",
+    "tools/guards/check-hook-drift.sh",
+    "tools/guards/check-r-migration-no-ddl.sh",
+  ]) {
+    assert.match(
+      backendPullRequestWorkflow,
+      new RegExp(`^\\s*-\\s+"${escapeRegExp(workflowPath)}"\\s*$`, "m"),
+    )
+  }
+})
+
 test("backend PR CI forwards raw test credentials to the Gradle chokepoint", () => {
   for (const name of testCredentialSecrets) {
     assert.match(

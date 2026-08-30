@@ -2457,6 +2457,7 @@ check_candidate_admin_email_auth_readiness() {
         -o /dev/null \
         -s \
         -w '%{http_code}' \
+        -H "Host: localhost" \
         "http://${host}:8080/internal/health/admin-email-auth" 2>/dev/null || true
     )"
     if [[ "${code}" == "204" ]]; then

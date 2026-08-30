@@ -3289,6 +3289,7 @@ test("candidate administrator email readiness stops before cutover on the app ne
 
   assert.match(readiness, /host="\$\(backend_http_host "\$\{backend\}"\)"/)
   assert.match(readiness, /--network "\$\{APP_NETWORK_NAME\}"/)
+  assert.match(readiness, /-H "Host: localhost"/)
   assert.match(readiness, /http:\/\/\$\{host\}:8080\/internal\/health\/admin-email-auth/)
   assert.doesNotMatch(readiness, /--network "\$\{NETWORK_NAME\}"/)
   assert(gateStart !== -1 && gateStart < cutoverStart, "email readiness must gate cutover")

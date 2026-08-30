@@ -84,6 +84,10 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .values()
                 .map { it.asText() },
         ).contains("summaryMode")
+        val adminEmailCode = propertySchema(openApiNode, "AdminEmailCodeVerifyRequest", "code")
+        assertThat(adminEmailCode.path("minLength").asInt()).isEqualTo(8)
+        assertThat(adminEmailCode.path("maxLength").asInt()).isEqualTo(8)
+        assertThat(adminEmailCode.path("pattern").asText()).isEqualTo("\\d{8}")
         assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/preview-summary")).isFalse()
         assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/summary-backfill")).isFalse()
         assertThat(schemas.has("PostSummaryPreviewRequest")).isFalse()

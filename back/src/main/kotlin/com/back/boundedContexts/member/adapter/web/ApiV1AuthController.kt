@@ -49,6 +49,7 @@ class ApiV1AuthController(
     private val adminEmailAuthenticationUseCase: AdminEmailAuthenticationUseCase,
 ) {
     companion object {
+        private const val ADMIN_EMAIL_CODE_LENGTH = 8
         private const val MAX_EMAIL_LENGTH = 320
         private val EMAIL_FORMAT_REGEX =
             Regex(
@@ -87,6 +88,7 @@ class ApiV1AuthController(
         @field:Size(min = 20, max = 128)
         val challengeId: String,
         @field:NotBlank
+        @field:Size(min = ADMIN_EMAIL_CODE_LENGTH, max = ADMIN_EMAIL_CODE_LENGTH)
         @field:Pattern(regexp = "\\d{8}")
         val code: String,
     )

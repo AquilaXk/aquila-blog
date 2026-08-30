@@ -26,6 +26,7 @@ class AdminEmailAuthenticationServiceTest {
     private val admin = Member(1L, "admin", null, "Admin", ADMIN_EMAIL, true)
     private val memberUseCase = mock(MemberUseCase::class.java)
     private val mailSender = mock(AdminLoginMailSender::class.java)
+    private val requestTiming = mock(AdminEmailRequestTiming::class.java)
     private val challengeStore = InMemoryAdminEmailChallengeStore()
     private val redis = InMemoryRedisKeyValuePort()
     private val service =
@@ -41,6 +42,7 @@ class AdminEmailAuthenticationServiceTest {
                 adminEmailChallengeStore = challengeStore,
                 redisKeyValuePort = redis,
                 mailSender = mailSender,
+                requestTiming = requestTiming,
             )
 
         assertThat(defaultService.requestCode("someone@example.com", rememberMe = false).expiresInSeconds).isEqualTo(600)
@@ -128,6 +130,21 @@ class AdminEmailAuthenticationServiceTest {
         assertThat(challenge.challengeId).isNotBlank()
         assertThat(challengeStore.challenges).isEmpty()
         verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
+    }
+
+    @Test
+    fun `matching and unknown requests complete through the same timing boundary`() {
+        val timing = mock(AdminEmailRequestTiming::class.java)
+        `when`(timing.startedAtNanos()).thenReturn(11L, 22L)
+        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
+        doAnswer { null }.`when`(mailSender).sendCode(anyString(), anyString(), anyLong())
+        val timedService = newService(requestTiming = timing)
+
+        timedService.requestCode("someone@example.com", rememberMe = false)
+        timedService.requestCode(ADMIN_EMAIL, rememberMe = false)
+
+        verify(timing).awaitMinimum(11L)
+        verify(timing).awaitMinimum(22L)
     }
 
     @Test
@@ -285,6 +302,7 @@ class AdminEmailAuthenticationServiceTest {
         maxFailedAttempts: Int = 5,
         requestMaxPerWindow: Int = 5,
         requestWindowSeconds: Long = 600,
+        requestTiming: AdminEmailRequestTiming = this.requestTiming,
     ) = AdminEmailAuthenticationService(
         adminProperties = AdminProperties(email = ADMIN_EMAIL),
         canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = ADMIN_EMAIL)),
@@ -292,6 +310,7 @@ class AdminEmailAuthenticationServiceTest {
         adminEmailChallengeStore = challengeStore,
         redisKeyValuePort = redis,
         mailSender = mailSender,
+        requestTiming = requestTiming,
         challengeExpirationSeconds = challengeExpirationSeconds,
         maxFailedAttempts = maxFailedAttempts,
         requestMaxPerWindow = requestMaxPerWindow,

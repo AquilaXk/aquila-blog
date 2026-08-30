@@ -229,6 +229,7 @@ custom:
       maxFailedAttempts: ${CUSTOM__AUTH__ADMIN_EMAIL__MAX_FAILED_ATTEMPTS:5}
       requestMaxPerWindow: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_MAX_PER_WINDOW:5}
       requestWindowSeconds: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_WINDOW_SECONDS:600}
+      requestDeadlineMillis: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS:5000}
     cookie:
       apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:604800}
     session:

@@ -26,6 +26,7 @@ class AdminEmailAuthenticationService(
     private val adminEmailChallengeStore: AdminEmailChallengeStore,
     private val redisKeyValuePort: RedisKeyValuePort,
     private val mailSender: AdminLoginMailSender,
+    private val requestTiming: AdminEmailRequestTiming,
     @param:Value("\${custom.auth.adminEmail.challengeExpirationSeconds:600}")
     private val challengeExpirationSeconds: Long = 600,
     @param:Value("\${custom.auth.adminEmail.maxFailedAttempts:5}")
@@ -54,43 +55,48 @@ class AdminEmailAuthenticationService(
         email: String,
         rememberMe: Boolean,
     ): RequestedChallenge {
-        ensureRedisAvailable()
-        val response = RequestedChallenge(randomChallengeId(), challengeExpirationSeconds)
-        val normalizedEmail = email.trim().lowercase(Locale.ROOT)
-        if (!adminProperties.matchesEmail(normalizedEmail)) return response
-
-        val admin = memberUseCase.findByEmail(adminProperties.normalizedEmail)
-        if (admin == null || !admin.isAdmin || !canonicalAdminPolicy.canAuthenticate(admin)) return response
-
-        if (!acquireRequestSlot()) return response
-
-        val challengeId = response.challengeId
-        val code = randomCode()
+        val startedAtNanos = requestTiming.startedAtNanos()
         try {
-            adminEmailChallengeStore.issue(
-                AdminEmailChallengeStore.Challenge(
-                    challengeId = challengeId,
-                    codeHash = sha256("$challengeId:$code"),
-                    memberId = admin.id,
-                    rememberMe = rememberMe,
-                    ttl = Duration.ofSeconds(challengeExpirationSeconds),
-                ),
-            )
-        } catch (exception: RuntimeException) {
-            throw dependencyUnavailable(exception)
-        }
+            ensureRedisAvailable()
+            val response = RequestedChallenge(randomChallengeId(), challengeExpirationSeconds)
+            val normalizedEmail = email.trim().lowercase(Locale.ROOT)
+            if (!adminProperties.matchesEmail(normalizedEmail)) return response
 
-        try {
-            mailSender.sendCode(adminProperties.normalizedEmail, code, challengeExpirationSeconds)
-        } catch (exception: RuntimeException) {
+            val admin = memberUseCase.findByEmail(adminProperties.normalizedEmail)
+            if (admin == null || !admin.isAdmin || !canonicalAdminPolicy.canAuthenticate(admin)) return response
+
+            if (!acquireRequestSlot()) return response
+
+            val challengeId = response.challengeId
+            val code = randomCode()
             try {
-                adminEmailChallengeStore.discard(challengeId)
-            } catch (discardException: RuntimeException) {
-                throw dependencyUnavailable(discardException)
+                adminEmailChallengeStore.issue(
+                    AdminEmailChallengeStore.Challenge(
+                        challengeId = challengeId,
+                        codeHash = sha256("$challengeId:$code"),
+                        memberId = admin.id,
+                        rememberMe = rememberMe,
+                        ttl = Duration.ofSeconds(challengeExpirationSeconds),
+                    ),
+                )
+            } catch (exception: RuntimeException) {
+                throw dependencyUnavailable(exception)
+            }
+
+            try {
+                mailSender.sendCode(adminProperties.normalizedEmail, code, challengeExpirationSeconds)
+            } catch (exception: RuntimeException) {
+                try {
+                    adminEmailChallengeStore.discard(challengeId)
+                } catch (discardException: RuntimeException) {
+                    throw dependencyUnavailable(discardException)
+                }
+                return response
             }
             return response
+        } finally {
+            requestTiming.awaitMinimum(startedAtNanos)
         }
-        return response
     }
 
     override fun verifyCode(

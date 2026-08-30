@@ -15,6 +15,7 @@ import org.springframework.beans.factory.ObjectProvider
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.JavaMailSenderImpl
+import java.util.concurrent.TimeUnit
 import java.util.stream.Stream
 
 class AdminLoginMailSenderTest {
@@ -35,6 +36,27 @@ class AdminLoginMailSenderTest {
         assertThat(delivered!!.to).containsExactly(ADMIN_EMAIL)
         assertThat(delivered!!.subject).isEqualTo("Aquila Blog administrator sign-in code")
         assertThat(delivered!!.text).contains("12345678", "10분 안에")
+        verify(javaMailSender).send(any(SimpleMailMessage::class.java))
+    }
+
+    @Test
+    fun `stalled delivery fails within the administrator request deadline`() {
+        val javaMailSender = mock(JavaMailSender::class.java)
+        doAnswer {
+            Thread.sleep(10_000)
+            null
+        }.`when`(javaMailSender).send(any(SimpleMailMessage::class.java))
+        val sender =
+            AdminLoginMailSender(
+                mailSenderProvider = objectProvider(javaMailSender),
+                fromAddress = FROM_ADDRESS,
+                requestDeadlineMillis = 1_000,
+            )
+        val startedAt = System.nanoTime()
+
+        assertDependencyUnavailable { sender.sendCode(ADMIN_EMAIL, "12345678", 600) }
+
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)).isLessThan(2_000)
         verify(javaMailSender).send(any(SimpleMailMessage::class.java))
     }
 

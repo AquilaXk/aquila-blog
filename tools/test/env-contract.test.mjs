@@ -275,6 +275,7 @@ const baseHomeServerEnv = [
   "CUSTOM__ADMIN__EMAIL=admin@aquilaxk.site",
   "CUSTOM__ADMIN__PASSWORD=valid-admin-password",
   "CUSTOM__AUTH__ADMIN_EMAIL__CHALLENGE_EXPIRATION_SECONDS=600",
+  "CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS=5000",
   "CUSTOM_PROD_COOKIEDOMAIN=blog.aquilaxk.site",
   "CUSTOM_PROD_FRONTURL=https://blog.aquilaxk.site",
   "CUSTOM_PROD_BACKURL=https://blog.aquilaxk.site",
@@ -387,6 +388,26 @@ test("home-server-source rejects administrator email challenge expiration outsid
       text: baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${value}`),
     })
     assert.equal(result.ok, false, `${value} seconds must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source keeps the administrator email request deadline below the edge timeout", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.min, 1000)
+  assert.equal(definition?.max, 8000)
+
+  for (const value of ["999", "8001"]) {
+    const result = validateEnvText({
+      contract,
+      target: "home-server-source",
+      text: baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${value}`),
+    })
+    assert.equal(result.ok, false, `${value} milliseconds must fail before deployment`)
     assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
   }
 })

@@ -332,6 +332,42 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
+test("home-server-source rejects reused PostgreSQL role credentials", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const credentialKeys = [
+    "PROD___POSTGRES__PASSWORD",
+    "PROD___SPRING__DATASOURCE__PASSWORD",
+    "PROD___SPRING__FLYWAY__PASSWORD",
+    "PROD___POSTGRES_EXPORTER__PASSWORD",
+  ]
+  const distinctCheck = (contract.targets["home-server-source"].crossChecks || []).find(
+    (check) =>
+      check.type === "allDistinct" && credentialKeys.every((key) => check.keys?.includes(key)),
+  )
+
+  assert.ok(distinctCheck, "PostgreSQL service roles must have a closed distinct-credential set")
+  assert.deepEqual(distinctCheck.keys, credentialKeys)
+  const postgresPassword = baseHomeServerEnv.match(/^PROD___POSTGRES__PASSWORD=(.+)$/m)?.[1]
+  assert.ok(postgresPassword, "the complete deployment fixture must define the postgres password")
+
+  for (const duplicateKey of credentialKeys.slice(1)) {
+    const collided = withEnvKeys(baseHomeServerEnv, [
+      [duplicateKey, postgresPassword],
+    ])
+    const result = validateEnvText({ contract, target: "home-server-source", text: collided })
+
+    assert.equal(result.ok, false, `${duplicateKey} must not reuse the postgres superuser password`)
+    assert(
+      result.errors.some(
+        (error) =>
+          error.key === duplicateKey && error.message === "must differ from PROD___POSTGRES__PASSWORD",
+      ),
+      JSON.stringify(result.errors),
+    )
+  }
+})
+
 test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 전에 거부한다", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const contract = loadContract(contractPath)

@@ -297,8 +297,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  security-gates-complete:
-    if: github.event_name == 'push'
+  securityGatesComplete:
+    name: security-gates-complete
+    if: always() && github.event_name == 'push'
     needs:
       - privacy-drift-gate
       - backend-dependency-check
@@ -309,20 +310,59 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      statuses: write
     steps:
-      - name: Record successful Security gates
-        run: echo "All exact-SHA Security gates passed."
+      - name: Record exact-SHA Security gate result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIVACY_RESULT: ${{ needs.privacy-drift-gate.result }}
+          DEPENDENCY_RESULT: ${{ needs.backend-dependency-check.result }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          EXCEPTION_RESULT: ${{ needs.vulnerability-exception-schema.result }}
+          IMAGE_RESULT: ${{ needs.container-image-scan.result }}
+          SBOM_RESULT: ${{ needs.sbom.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATE="success"
+          DESCRIPTION="All exact-SHA Security gates passed."
+          for RESULT in \
+            "${PRIVACY_RESULT}" \
+            "${DEPENDENCY_RESULT}" \
+            "${CODEQL_RESULT}" \
+            "${EXCEPTION_RESULT}" \
+            "${IMAGE_RESULT}" \
+            "${SBOM_RESULT}"; do
+            if [ "${RESULT}" != "success" ]; then
+              STATE="failure"
+              DESCRIPTION="One or more exact-SHA Security gates did not pass."
+              break
+            fi
+          done
+
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="${STATE}" \
+            -f context="aquila/security-gates-complete" \
+            -f description="${DESCRIPTION}" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --silent
+
+          if [ "${STATE}" != "success" ]; then
+            echo "Security gate marker recorded a terminal failure for sha=${GITHUB_SHA}" >&2
+            exit 1
+          fi
 
   deploy:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.securityGatesComplete.result == 'success'
     needs:
-      - security-gates-complete
+      - securityGatesComplete
     permissions:
       actions: read
       attestations: write
-      checks: read
       contents: read
       id-token: write
       packages: write
+      statuses: read
     uses: ./.github/workflows/deploy.yml
     secrets: inherit

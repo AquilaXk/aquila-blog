@@ -149,7 +149,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-      checks: read
+      statuses: read
     runs-on: ubuntu-latest
     if: >
       needs.triggerGuard.result == 'success' && (
@@ -302,9 +302,9 @@ jobs:
           for ATTEMPT in $(seq 1 250); do
             RUN_STATES="$(
               gh api \
-                "repos/${GITHUB_REPOSITORY}/commits/${DEPLOY_SHA}/check-runs?filter=latest&per_page=100" \
+                "repos/${GITHUB_REPOSITORY}/commits/${DEPLOY_SHA}/statuses?per_page=100" \
                 --paginate \
-                --jq '.check_runs[] | select(.name == "security-gates-complete" and .app.slug == "github-actions") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+                --jq '.[] | select(.context == "aquila/security-gates-complete" and .creator.login == "github-actions[bot]" and (.target_url | startswith("https://github.com/AquilaXk/aquila-blog/actions/runs/"))) | if .state == "success" then "success:\(.id)" elif .state == "pending" then "active:\(.id)" else "terminal:\(.id)" end'
             )" || {
               echo "automatic Security delivery API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
               exit 1

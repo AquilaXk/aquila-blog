@@ -42,7 +42,7 @@ while IFS= read -r file; do
       needs_web_legal_receiver_check="true"
       needs_test_inventory_check="true"
       ;;
-    .github/workflows/backend-ci.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/security.yml|.github/workflows/backup-restore-drill.yml)
+    .github/workflows/dependabot-credential-contract.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/security.yml|.github/workflows/backup-restore-drill.yml)
       needs_test_inventory_check="true"
       ;;
     .githooks/pre-commit|tools/test/hook-drift-guard.test.sh)

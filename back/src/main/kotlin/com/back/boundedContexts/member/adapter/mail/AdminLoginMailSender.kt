@@ -4,6 +4,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import jakarta.mail.AuthenticationFailedException
 import jakarta.mail.MessagingException
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.MailSendException
@@ -29,6 +30,8 @@ class AdminLoginMailSender(
     @param:Value("\${custom.auth.adminEmail.requestDeadlineMillis:10000}")
     private val requestDeadlineMillis: Long = 10_000,
 ) {
+    private val logger = LoggerFactory.getLogger(AdminLoginMailSender::class.java)
+
     init {
         require(requestDeadlineMillis in 1_000..10_000) {
             "custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 10000."
@@ -120,12 +123,14 @@ class AdminLoginMailSender(
             else -> null
         }
 
-    private fun dependencyUnavailable(category: MailFailureCategory) =
-        AppException(
+    private fun dependencyUnavailable(category: MailFailureCategory): AppException {
+        logger.warn("admin_email_mail_failure category={}", category.logValue)
+        return AppException(
             ErrorCode.DEPENDENCY_NOT_READY,
             "이메일 인증을 사용할 수 없습니다.",
             IllegalStateException("admin_email_mail_failure category=${category.logValue}"),
         )
+    }
 
     private enum class MailFailureCategory(
         val logValue: String,

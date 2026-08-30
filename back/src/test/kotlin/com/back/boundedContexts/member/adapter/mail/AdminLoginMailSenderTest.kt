@@ -1,5 +1,8 @@
 package com.back.boundedContexts.member.adapter.mail
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import jakarta.mail.AuthenticationFailedException
@@ -13,6 +16,7 @@ import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.mail.MailSendException
 import org.springframework.mail.SimpleMailMessage
@@ -168,15 +172,24 @@ class AdminLoginMailSenderTest {
             .`when`(javaMailSender)
             .testConnection()
         val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
+        val appender = attachListAppender()
 
-        assertThatThrownBy { sender.verifyConnection() }
-            .isInstanceOfSatisfying(AppException::class.java) { exception ->
-                assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
-                assertThat(exception.cause).isInstanceOf(IllegalStateException::class.java)
-                assertThat(exception.cause!!.message).isEqualTo("admin_email_mail_failure category=authentication")
-                assertThat(exception.cause!!.message).doesNotContain("credential", "provider")
-                assertThat(exception.cause!!.cause).isNull()
-            }
+        try {
+            assertThatThrownBy { sender.verifyConnection() }
+                .isInstanceOfSatisfying(AppException::class.java) { exception ->
+                    assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
+                    assertThat(exception.cause).isInstanceOf(IllegalStateException::class.java)
+                    assertThat(exception.cause!!.message).isEqualTo("admin_email_mail_failure category=authentication")
+                    assertThat(exception.cause!!.message).doesNotContain("credential", "provider")
+                    assertThat(exception.cause!!.cause).isNull()
+                }
+
+            assertThat(appender.list.map(ILoggingEvent::getFormattedMessage))
+                .containsExactly("admin_email_mail_failure category=authentication")
+                .allSatisfy { message -> assertThat(message).doesNotContain("credential", "provider") }
+        } finally {
+            detachListAppender(appender)
+        }
     }
 
     @Test
@@ -222,6 +235,20 @@ class AdminLoginMailSenderTest {
 
             override fun orderedStream(): Stream<T> = stream()
         }
+
+    private fun attachListAppender(): ListAppender<ILoggingEvent> {
+        val logger = LoggerFactory.getLogger(AdminLoginMailSender::class.java) as Logger
+        return ListAppender<ILoggingEvent>().also {
+            it.start()
+            logger.addAppender(it)
+        }
+    }
+
+    private fun detachListAppender(appender: ListAppender<ILoggingEvent>) {
+        val logger = LoggerFactory.getLogger(AdminLoginMailSender::class.java) as Logger
+        logger.detachAppender(appender)
+        appender.stop()
+    }
 
     private companion object {
         private const val FROM_ADDRESS = "mailer@example.com"

@@ -199,6 +199,7 @@ class ApiRateLimitBackstopFilter(
         private val AUTH_PATHS =
             listOf(
                 Regex("^/member/api/v\\d+/auth/login$"),
+                Regex("^/member/api/v\\d+/auth/admin-email/(request|verify)$"),
             )
     }
 }

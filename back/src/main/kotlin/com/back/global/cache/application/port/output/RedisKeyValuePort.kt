@@ -7,6 +7,8 @@ interface RedisKeyValuePort {
 
     fun get(key: String): String?
 
+    fun getAndDelete(key: String): String?
+
     fun set(
         key: String,
         value: String,

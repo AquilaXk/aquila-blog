@@ -55,6 +55,19 @@ class MemberUseCaseAdapter(
             userAgent = userAgent,
         )
 
+    override fun issueAdminEmailLoginSession(
+        memberId: Long,
+        rememberLoginEnabled: Boolean,
+        createdIp: String?,
+        userAgent: String?,
+    ): IssuedLoginSession =
+        memberLoginSessionIssueService.issueAdminEmail(
+            memberId = memberId,
+            rememberLoginEnabled = rememberLoginEnabled,
+            createdIp = createdIp,
+            userAgent = userAgent,
+        )
+
     override fun checkPassword(
         member: Member,
         rawPassword: String,

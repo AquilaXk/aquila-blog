@@ -141,6 +141,30 @@ class CustomOAuth2UserServiceTest {
     }
 
     @Test
+    fun `administrator OAuth2 user is rejected before profile mutation`() {
+        val memberUseCase =
+            RecordingMemberUseCase(
+                existingMemberUsername = "KAKAO__oauth-user-id",
+                existingMemberEmail = "admin@test.com",
+                existingMemberIsAdmin = true,
+            )
+        val service =
+            CustomOAuth2UserService(memberUseCase.proxy, RecordingOAuthSignupUseCase(), canonicalAdminPolicy()).apply {
+                delegate =
+                    OAuth2UserService<OAuth2UserRequest, OAuth2User> {
+                        DefaultOAuth2User(emptyList(), mapOf("id" to "oauth-user-id"), "id")
+                    }
+            }
+
+        assertThatThrownBy {
+            service.loadUser(
+                OAuth2UserRequest(kakaoClientRegistration(userNameAttributeName = "id"), accessToken()),
+            )
+        }.isInstanceOf(OAuthSignupDisabledAuthenticationException::class.java)
+        assertThat(memberUseCase.lastModifyRequest).isNull()
+    }
+
+    @Test
     fun `지원하지 않는 provider는 명시적으로 거부한다`() {
         val service =
             CustomOAuth2UserService(

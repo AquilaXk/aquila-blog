@@ -274,6 +274,8 @@ const baseHomeServerEnv = [
   "CUSTOM__ADMIN__USERNAME=관리자",
   "CUSTOM__ADMIN__EMAIL=admin@aquilaxk.site",
   "CUSTOM__ADMIN__PASSWORD=valid-admin-password",
+  "CUSTOM__AUTH__ADMIN_EMAIL__CHALLENGE_EXPIRATION_SECONDS=600",
+  "CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS=5000",
   "CUSTOM_PROD_COOKIEDOMAIN=blog.aquilaxk.site",
   "CUSTOM_PROD_FRONTURL=https://blog.aquilaxk.site",
   "CUSTOM_PROD_BACKURL=https://blog.aquilaxk.site",
@@ -348,6 +350,65 @@ test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 
     const result = validateEnvText({ contract, target: "home-server-source", text })
     assert.equal(result.ok, false, `${name} Kakao client-id must fail before deployment`)
     assert(result.errors.some((error) => error.key === key && error.message === "is required"), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source requires the SMTP username used as the admin email From address", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "SPRING__MAIL__USERNAME"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.required, true, "SMTP username must be required before candidate readiness")
+  assert.equal(definition?.kind, "email", "SMTP username is the admin email From address")
+
+  for (const [name, text] of [
+    ["missing", baseHomeServerEnv.replace(new RegExp(`^${key}=.*\\n`, "m"), "")],
+    ["blank", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=`)],
+  ]) {
+    const result = validateEnvText({ contract, target: "home-server-source", text })
+    assert.equal(result.ok, false, `${name} SMTP username must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key && error.message === "is required"), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source rejects administrator email challenge expiration outside the service bounds", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "CUSTOM__AUTH__ADMIN_EMAIL__CHALLENGE_EXPIRATION_SECONDS"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.min, 60)
+  assert.equal(definition?.max, 1800)
+
+  for (const value of ["59", "1801"]) {
+    const result = validateEnvText({
+      contract,
+      target: "home-server-source",
+      text: baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${value}`),
+    })
+    assert.equal(result.ok, false, `${value} seconds must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source keeps the administrator email request deadline below the edge timeout", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.min, 1000)
+  assert.equal(definition?.max, 8000)
+
+  for (const value of ["999", "8001"]) {
+    const result = validateEnvText({
+      contract,
+      target: "home-server-source",
+      text: baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${value}`),
+    })
+    assert.equal(result.ok, false, `${value} milliseconds must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
   }
 })
 
@@ -475,6 +536,7 @@ test("공개 API 게이트는 두 vhost가 같은 snippet을 공유하고 front 
   // 게이트를 vhost마다 복사하면 한쪽에서만 조용히 사라진다. 정의는 snippet 하나뿐이어야 한다.
   for (const gate of [
     "@denyPrometheus",
+    "@denyAdminEmailAuthReadiness",
     "@notificationSse",
     "@publicReadFallback",
     "@adminApi",
@@ -528,6 +590,20 @@ test("edge의 prometheus 차단은 handle이어야 한다 (respond는 catch-all 
   const denyIndex = gates.indexOf("handle @denyPrometheus {")
   const catchAllIndex = gates.lastIndexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080")
   assert(denyIndex !== -1 && denyIndex < catchAllIndex, "deny gate must precede the catch-all backend proxy")
+})
+
+test("관리자 이메일 readiness는 public edge에서 backend로 전달하지 않는다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
+
+  assert.match(
+    gates,
+    /@denyAdminEmailAuthReadiness path \/internal\/health\/admin-email-auth\s*\n\s*handle @denyAdminEmailAuthReadiness \{\s*\n\s*respond 404\s*\n\s*\}/,
+  )
+
+  const denyIndex = gates.indexOf("handle @denyAdminEmailAuthReadiness {")
+  const catchAllIndex = gates.lastIndexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080")
+  assert(denyIndex !== -1 && denyIndex < catchAllIndex, "readiness deny gate must precede the catch-all backend proxy")
 })
 
 test("Caddy routes tokenized cloud external content through public read upstream before admin API", () => {
@@ -3203,6 +3279,23 @@ test("backend termination is bounded, evidenced, and completes before deploy suc
   assert.match(restoreHelpers, /back_worker" && "\$\{TASK_SCHEMA_COMPATIBLE_WORKER_READY\}" == "true"/)
   assert(restoreHelpers.indexOf('continue') < restoreHelpers.indexOf('helper_services+=("${service}")'), "preserved worker must not enter the replacement stop list")
   assert.doesNotMatch(deployScript, /compose stop "\$\{(?:next_backend|candidate_backend)\}" \|\| true/)
+})
+
+test("candidate administrator email readiness stops before cutover on the app network", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const readiness = extractTopLevelShellFunction(deployScript, "check_candidate_admin_email_auth_readiness")
+  const gateStart = deployScript.indexOf('if ! check_candidate_admin_email_auth_readiness "${next_backend}"; then')
+  const cutoverStart = deployScript.indexOf('switch_caddy_upstream "${next_backend}"')
+
+  assert.match(readiness, /host="\$\(backend_http_host "\$\{backend\}"\)"/)
+  assert.match(readiness, /--network "\$\{APP_NETWORK_NAME\}"/)
+  assert.match(readiness, /http:\/\/\$\{host\}:8080\/internal\/health\/admin-email-auth/)
+  assert.doesNotMatch(readiness, /--network "\$\{NETWORK_NAME\}"/)
+  assert(gateStart !== -1 && gateStart < cutoverStart, "email readiness must gate cutover")
+  const gateBody = deployScript.slice(gateStart, cutoverStart)
+  assert.match(gateBody, /checked_stop_backend_service_if_running "\$\{next_backend\}"/)
+  assert.match(gateBody, /exit 1/)
+  assert.doesNotMatch(gateBody, /rollback_to_backend/)
 })
 
 test("blue-green deploy waits longer for candidate Flyway startup only", () => {

@@ -14,6 +14,8 @@ class RedisTemplateKeyValuePortAdapter(
 
     override fun get(key: String): String? = redisTemplateProvider.getIfAvailable()?.opsForValue()?.get(key)
 
+    override fun getAndDelete(key: String): String? = redisTemplateProvider.getIfAvailable()?.opsForValue()?.getAndDelete(key)
+
     override fun set(
         key: String,
         value: String,

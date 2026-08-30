@@ -48,6 +48,9 @@ class AdminOnlyRouteExposureContractTest : BaseControllerIntegrationTest() {
 
         listOf(
             HttpMethod.POST to "/member/api/v1/auth/login",
+            HttpMethod.POST to "/member/api/v1/auth/admin-email/request",
+            HttpMethod.POST to "/member/api/v1/auth/admin-email/verify",
+            HttpMethod.GET to "/internal/health/admin-email-auth",
             HttpMethod.DELETE to "/member/api/v1/auth/logout",
             HttpMethod.GET to "/member/api/v1/auth/me",
             HttpMethod.GET to "/member/api/v1/auth/session",

@@ -2442,6 +2442,37 @@ check_candidate_backend_health() {
   return "${status}"
 }
 
+check_candidate_admin_email_auth_readiness() {
+  local backend="$1"
+  local host
+  local attempt=1
+  local code
+
+  host="$(backend_http_host "${backend}")"
+  while (( attempt <= 2 )); do
+    code="$(
+      docker run --rm --network "${APP_NETWORK_NAME}" curlimages/curl:8.7.1 \
+        --connect-timeout 3 \
+        --max-time 12 \
+        -o /dev/null \
+        -s \
+        -w '%{http_code}' \
+        "http://${host}:8080/internal/health/admin-email-auth" 2>/dev/null || true
+    )"
+    if [[ "${code}" == "204" ]]; then
+      echo "administrator email authentication readiness ok: backend=${backend}"
+      return 0
+    fi
+    if (( attempt < 2 )); then
+      sleep 3
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  echo "administrator email authentication readiness failed: backend=${backend} status=${code:-none}" >&2
+  return 1
+}
+
 check_notification_sse_route() {
   local web_domain="$1"
   local admin_email admin_password
@@ -3732,6 +3763,13 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
 fi
 if ! check_candidate_backend_health "${next_backend}"; then
   echo "candidate backend health failed before cutover: ${next_backend}" >&2
+  if ! checked_stop_backend_service_if_running "${next_backend}"; then
+    emit_backend_diagnostics "${next_backend}" >&2 || true
+  fi
+  exit 1
+fi
+if ! check_candidate_admin_email_auth_readiness "${next_backend}"; then
+  echo "candidate administrator email authentication readiness failed before cutover: ${next_backend}" >&2
   if ! checked_stop_backend_service_if_running "${next_backend}"; then
     emit_backend_diagnostics "${next_backend}" >&2 || true
   fi

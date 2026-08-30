@@ -25,14 +25,64 @@ class MemberLoginSessionIssueService(
         ipSecurityFingerprint: String?,
         createdIp: String?,
         userAgent: String?,
+    ): IssuedLoginSession =
+        issueInternal(
+            memberId = memberId,
+            rememberLoginEnabled = rememberLoginEnabled,
+            ipSecurityEnabled = ipSecurityEnabled,
+            ipSecurityFingerprint = ipSecurityFingerprint,
+            createdIp = createdIp,
+            userAgent = userAgent,
+            administratorEmailVerified = false,
+        )
+
+    @Transactional
+    fun issueAdminEmail(
+        memberId: Long,
+        rememberLoginEnabled: Boolean,
+        createdIp: String?,
+        userAgent: String?,
+    ): IssuedLoginSession =
+        issueInternal(
+            memberId = memberId,
+            rememberLoginEnabled = rememberLoginEnabled,
+            ipSecurityEnabled = false,
+            ipSecurityFingerprint = null,
+            createdIp = createdIp,
+            userAgent = userAgent,
+            administratorEmailVerified = true,
+        )
+
+    private fun issueInternal(
+        memberId: Long,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+        createdIp: String?,
+        userAgent: String?,
+        administratorEmailVerified: Boolean,
     ): IssuedLoginSession {
         val member =
             memberRepository
                 .findByIdForUpdate(memberId)
                 .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
 
-        if (!canonicalAdminPolicy.canAuthenticate(member)) {
+        val validCredentialBoundary =
+            if (administratorEmailVerified) {
+                member.isAdmin && canonicalAdminPolicy.canAuthenticate(member)
+            } else {
+                canonicalAdminPolicy.canAuthenticate(member) &&
+                    (!member.isAdmin || !member.password.isNullOrBlank())
+            }
+        if (!validCredentialBoundary) {
             throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")
+        }
+
+        if (administratorEmailVerified) {
+            if (!member.password.isNullOrBlank()) {
+                member.password = null
+            }
+            memberSessionUseCase.revokeAllActiveSessionsForMember(member.id)
         }
 
         member.applyLoginSecurityPolicy(

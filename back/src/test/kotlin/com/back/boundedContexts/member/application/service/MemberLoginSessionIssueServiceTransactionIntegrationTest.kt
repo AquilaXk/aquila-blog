@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.port.output.MemberRepositoryP
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.model.shared.Member
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
+import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.support.BaseSeededIntegrationTest
@@ -38,7 +39,7 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
         val memberId =
             inTransaction {
                 memberRepository
-                    .findByEmail("admin@test.com")!!
+                    .findByEmail("user1@test.com")!!
                     .also { member -> member.modifyApiKey(member.username) }
                     .id
             }
@@ -74,7 +75,7 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
 
         assertThat(issued.member.id).isEqualTo(memberId)
         assertThat(issued.apiKey).isEqualTo(persisted.apiKey)
-        assertThat(issued.apiKey).isNotBlank().isNotEqualTo("admin")
+        assertThat(issued.apiKey).isNotBlank().isNotEqualTo("user1")
         assertThat(persisted.memberRememberLoginEnabled).isFalse()
         assertThat(persisted.memberIpSecurityEnabled).isTrue()
         assertThat(persisted.memberIpSecurityFingerprint).isEqualTo("203.0.113.9")
@@ -84,6 +85,53 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
         assertThat(persisted.ipSecurityEnabled).isTrue()
         assertThat(persisted.ipSecurityFingerprint).isEqualTo("203.0.113.9")
         assertThat(authTokenService.payload(issued.accessToken)?.sessionKey).isEqualTo(issued.sessionKey)
+    }
+
+    @Test
+    fun `every verified admin email login retires credentials and prior sessions`() {
+        val oldSessionKey = "legacy-admin-session-${System.nanoTime()}"
+        val memberId =
+            inTransaction {
+                val member = memberRepository.findByEmail("admin@test.com")!!
+                member.password = "legacy-password"
+                member.modifyApiKey(member.username)
+                memberSessionRepository.saveAndFlush(
+                    MemberSession(
+                        member = member,
+                        sessionKey = oldSessionKey,
+                    ),
+                )
+                member.id
+            }
+
+        val firstIssued =
+            memberLoginSessionIssueService.issueAdminEmail(
+                memberId = memberId,
+                rememberLoginEnabled = true,
+                createdIp = "203.0.113.10",
+                userAgent = "transaction-integration-test",
+            )
+
+        inTransaction {
+            val member = memberRepository.findById(memberId).orElseThrow()
+            assertThat(member.password).isNull()
+            assertThat(member.apiKey).isNotBlank().isNotEqualTo(member.username)
+            assertThat(memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(oldSessionKey)).isNull()
+            assertThat(memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(firstIssued.sessionKey)).isNotNull()
+        }
+
+        val secondIssued =
+            memberLoginSessionIssueService.issueAdminEmail(
+                memberId = memberId,
+                rememberLoginEnabled = true,
+                createdIp = "203.0.113.11",
+                userAgent = "transaction-integration-test",
+            )
+
+        inTransaction {
+            assertThat(memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(firstIssued.sessionKey)).isNull()
+            assertThat(memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(secondIssued.sessionKey)).isNotNull()
+        }
     }
 
     @Test
@@ -124,6 +172,19 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
         assertThat(issued.member.id).isEqualTo(memberId)
         assertThat(issued.member.isAdmin).isFalse()
         assertThat(inTransaction { memberSessionRepository.count() }).isEqualTo(sessionCountBefore + 1)
+    }
+
+    @Test
+    fun `canonical admin with a retired password rejects generic issue without creating a session`() {
+        val memberId =
+            inTransaction {
+                memberRepository
+                    .findByEmail("admin@test.com")!!
+                    .also { member -> member.password = null }
+                    .id
+            }
+
+        assertLoginIssueRejectedWithoutSession(memberId)
     }
 
     @Test

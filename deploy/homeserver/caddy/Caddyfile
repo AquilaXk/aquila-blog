@@ -88,6 +88,12 @@
 	@publicSearchSensitive path /post/api/v1/posts/search
 	log_skip @publicSearchSensitive
 
+	# This readiness probe is reachable only from the application network during deployment.
+	@denyAdminEmailAuthReadiness path /internal/health/admin-email-auth
+	handle @denyAdminEmailAuthReadiness {
+		respond 404
+	}
+
 	# Prometheus metrics are scraped via internal Docker network only.
 	# Public access through any edge host is explicitly denied.
 	#

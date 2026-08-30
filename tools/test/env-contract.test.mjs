@@ -515,6 +515,7 @@ test("공개 API 게이트는 두 vhost가 같은 snippet을 공유하고 front 
   // 게이트를 vhost마다 복사하면 한쪽에서만 조용히 사라진다. 정의는 snippet 하나뿐이어야 한다.
   for (const gate of [
     "@denyPrometheus",
+    "@denyAdminEmailAuthReadiness",
     "@notificationSse",
     "@publicReadFallback",
     "@adminApi",
@@ -568,6 +569,20 @@ test("edge의 prometheus 차단은 handle이어야 한다 (respond는 catch-all 
   const denyIndex = gates.indexOf("handle @denyPrometheus {")
   const catchAllIndex = gates.lastIndexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080")
   assert(denyIndex !== -1 && denyIndex < catchAllIndex, "deny gate must precede the catch-all backend proxy")
+})
+
+test("관리자 이메일 readiness는 public edge에서 backend로 전달하지 않는다", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
+
+  assert.match(
+    gates,
+    /@denyAdminEmailAuthReadiness path \/internal\/health\/admin-email-auth\s*\n\s*handle @denyAdminEmailAuthReadiness \{\s*\n\s*respond 404\s*\n\s*\}/,
+  )
+
+  const denyIndex = gates.indexOf("handle @denyAdminEmailAuthReadiness {")
+  const catchAllIndex = gates.lastIndexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080")
+  assert(denyIndex !== -1 && denyIndex < catchAllIndex, "readiness deny gate must precede the catch-all backend proxy")
 })
 
 test("Caddy routes tokenized cloud external content through public read upstream before admin API", () => {

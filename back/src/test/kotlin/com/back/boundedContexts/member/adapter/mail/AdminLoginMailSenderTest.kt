@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.adapter.mail
 
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import jakarta.mail.MessagingException
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -61,6 +62,36 @@ class AdminLoginMailSenderTest {
     }
 
     @Test
+    fun `request deadline outside the edge-safe range is rejected`() {
+        assertThatThrownBy {
+            AdminLoginMailSender(
+                mailSenderProvider = objectProvider(null),
+                fromAddress = FROM_ADDRESS,
+                requestDeadlineMillis = 999,
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 8000.")
+    }
+
+    @Test
+    fun `interrupted delivery preserves interruption and fails closed`() {
+        val javaMailSender = mock(JavaMailSender::class.java)
+        doAnswer {
+            Thread.sleep(10_000)
+            null
+        }.`when`(javaMailSender).send(any(SimpleMailMessage::class.java))
+        val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
+        Thread.currentThread().interrupt()
+        try {
+            assertDependencyUnavailable { sender.sendCode(ADMIN_EMAIL, "12345678", 600) }
+
+            assertThat(Thread.currentThread().isInterrupted).isTrue()
+        } finally {
+            Thread.interrupted()
+        }
+    }
+
+    @Test
     fun `missing sender fails closed`() {
         val sender = AdminLoginMailSender(objectProvider(null), FROM_ADDRESS)
 
@@ -107,6 +138,15 @@ class AdminLoginMailSenderTest {
                 assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
                 assertThat(exception.cause).isSameAs(failure)
             }
+    }
+
+    @Test
+    fun `checked connection failure is translated to dependency not ready`() {
+        val javaMailSender = mock(JavaMailSenderImpl::class.java)
+        doThrow(MessagingException("smtp unavailable")).`when`(javaMailSender).testConnection()
+        val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
+
+        assertDependencyUnavailable { sender.verifyConnection() }
     }
 
     private fun assertDependencyUnavailable(action: () -> Unit) {

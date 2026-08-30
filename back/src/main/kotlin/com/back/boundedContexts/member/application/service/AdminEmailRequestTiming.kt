@@ -6,12 +6,12 @@ import java.util.concurrent.TimeUnit
 
 @Component
 class AdminEmailRequestTiming(
-    @param:Value("\${custom.auth.adminEmail.requestDeadlineMillis:5000}")
-    private val requestDeadlineMillis: Long = 5_000,
+    @param:Value("\${custom.auth.adminEmail.requestDeadlineMillis:10000}")
+    private val requestDeadlineMillis: Long = 10_000,
 ) {
     init {
-        require(requestDeadlineMillis in 1_000..8_000) {
-            "custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 8000."
+        require(requestDeadlineMillis in 1_000..10_000) {
+            "custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 10000."
         }
     }
 

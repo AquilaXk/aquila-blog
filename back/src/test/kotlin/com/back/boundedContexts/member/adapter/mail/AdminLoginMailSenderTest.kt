@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.adapter.mail
 
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import jakarta.mail.AuthenticationFailedException
 import jakarta.mail.MessagingException
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -13,9 +14,11 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.mail.MailSendException
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.JavaMailSenderImpl
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import java.util.stream.Stream
 
@@ -41,7 +44,7 @@ class AdminLoginMailSenderTest {
     }
 
     @Test
-    fun `stalled delivery fails within the administrator request deadline`() {
+    fun `stalled delivery fails within the shared administrator deadline`() {
         val javaMailSender = mock(JavaMailSender::class.java)
         doAnswer {
             Thread.sleep(10_000)
@@ -55,7 +58,13 @@ class AdminLoginMailSenderTest {
             )
         val startedAt = System.nanoTime()
 
-        assertDependencyUnavailable { sender.sendCode(ADMIN_EMAIL, "12345678", 600) }
+        assertThatThrownBy { sender.sendCode(ADMIN_EMAIL, "12345678", 600) }
+            .isInstanceOfSatisfying(AppException::class.java) { exception ->
+                assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
+                assertThat(exception.cause).isInstanceOf(IllegalStateException::class.java)
+                assertThat(exception.cause!!.message).isEqualTo("admin_email_mail_failure category=timeout")
+                assertThat(exception.cause!!.cause).isNull()
+            }
 
         assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)).isLessThan(2_000)
         verify(javaMailSender).send(any(SimpleMailMessage::class.java))
@@ -70,7 +79,7 @@ class AdminLoginMailSenderTest {
                 requestDeadlineMillis = 999,
             )
         }.isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessage("custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 8000.")
+            .hasMessage("custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 10000.")
     }
 
     @Test
@@ -127,7 +136,7 @@ class AdminLoginMailSenderTest {
     }
 
     @Test
-    fun `connection failure is translated to dependency not ready`() {
+    fun `connection failure is translated without retaining provider detail`() {
         val failure = IllegalStateException("smtp unavailable")
         val javaMailSender = mock(JavaMailSenderImpl::class.java)
         doThrow(failure).`when`(javaMailSender).testConnection()
@@ -136,7 +145,10 @@ class AdminLoginMailSenderTest {
         assertThatThrownBy { sender.verifyConnection() }
             .isInstanceOfSatisfying(AppException::class.java) { exception ->
                 assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
-                assertThat(exception.cause).isSameAs(failure)
+                assertThat(exception.cause).isInstanceOf(IllegalStateException::class.java)
+                assertThat(exception.cause!!.message).isEqualTo("admin_email_mail_failure category=transport")
+                assertThat(exception.cause!!.message).doesNotContain("smtp unavailable")
+                assertThat(exception.cause!!.cause).isNull()
             }
     }
 
@@ -147,6 +159,46 @@ class AdminLoginMailSenderTest {
         val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
 
         assertDependencyUnavailable { sender.verifyConnection() }
+    }
+
+    @Test
+    fun `authentication failure exposes only the safe category`() {
+        val javaMailSender = mock(JavaMailSenderImpl::class.java)
+        doThrow(AuthenticationFailedException("credential and provider detail"))
+            .`when`(javaMailSender)
+            .testConnection()
+        val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
+
+        assertThatThrownBy { sender.verifyConnection() }
+            .isInstanceOfSatisfying(AppException::class.java) { exception ->
+                assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
+                assertThat(exception.cause).isInstanceOf(IllegalStateException::class.java)
+                assertThat(exception.cause!!.message).isEqualTo("admin_email_mail_failure category=authentication")
+                assertThat(exception.cause!!.message).doesNotContain("credential", "provider")
+                assertThat(exception.cause!!.cause).isNull()
+            }
+    }
+
+    @Test
+    fun `per-message send failure exposes only the nested safe category`() {
+        val javaMailSender = mock(JavaMailSender::class.java)
+        val failure =
+            MailSendException(
+                mapOf<Any, Exception>(
+                    SimpleMailMessage() to SocketTimeoutException("provider detail"),
+                ),
+            )
+        doThrow(failure).`when`(javaMailSender).send(any(SimpleMailMessage::class.java))
+        val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
+
+        assertThatThrownBy { sender.sendCode(ADMIN_EMAIL, "12345678", 600) }
+            .isInstanceOfSatisfying(AppException::class.java) { exception ->
+                assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
+                assertThat(exception.cause).isInstanceOf(IllegalStateException::class.java)
+                assertThat(exception.cause!!.message).isEqualTo("admin_email_mail_failure category=timeout")
+                assertThat(exception.cause!!.message).doesNotContain("provider")
+                assertThat(exception.cause!!.cause).isNull()
+            }
     }
 
     private fun assertDependencyUnavailable(action: () -> Unit) {

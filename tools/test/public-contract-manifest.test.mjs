@@ -11,7 +11,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const syncScript = path.join(repoRoot, "tools", "contracts", "sync-public-contracts.mjs")
 const checkScript = path.join(repoRoot, "tools", "contracts", "check-public-contracts.mjs")
 const summaryFixture = {
-  version: 1,
+  version: 2,
   contract: "aquila-canonical-summary-fixtures",
   fixtures: [
     {
@@ -24,6 +24,23 @@ const summaryFixture = {
         summary: "synthetic expected",
         source: "MANUAL",
         algorithmVersion: "manual-v1",
+      },
+      outcome: "RESOLVED",
+    },
+    {
+      id: "synthetic-migrated-read",
+      resolve: "read",
+      title: "이전 글",
+      content: "persisted content",
+      persisted: {
+        summary: "persisted summary",
+        source: "MIGRATED",
+        algorithmVersion: "legacy-frontmatter-v1",
+      },
+      expected: {
+        summary: "persisted summary",
+        source: "MIGRATED",
+        algorithmVersion: "legacy-frontmatter-v1",
       },
       outcome: "RESOLVED",
     },
@@ -124,6 +141,26 @@ test("sync rejects an invalid canonical summary fixture before writing the manif
       fixtures: {},
     })
     assert.notEqual(run(syncScript, root).status, 0)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("sync accepts persisted read values with different property order", () => {
+  const root = createFixture()
+  try {
+    const reordered = structuredClone(summaryFixture)
+    const readFixture = reordered.fixtures.find(({ resolve }) => resolve === "read")
+    readFixture.expected = {
+      algorithmVersion: readFixture.persisted.algorithmVersion,
+      summary: readFixture.persisted.summary,
+      source: readFixture.persisted.source,
+    }
+    writeJson(path.join(root, "contracts/public-api/summary-fixtures.json"), reordered)
+
+    const result = run(syncScript, root)
+
+    assert.equal(result.status, 0, result.stderr)
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

@@ -526,7 +526,7 @@ class PostPublicReadResponseFactoryTest {
     }
 
     @Test
-    @DisplayName("canonical summary backfill 후 이전 ETag 재검증은 304가 아닌 새 본문을 반환한다")
+    @DisplayName("canonical summary 변경 후 이전 ETag 재검증은 304가 아닌 새 본문을 반환한다")
     fun revalidationWithChangedCanonicalSummaryReturnsNewBody() {
         val policy = PostPublicReadCachePolicies.DETAIL
         val base = detailPost()

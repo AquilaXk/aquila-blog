@@ -7,8 +7,7 @@ interface RedisKeyValuePort {
 
     fun get(key: String): String?
 
-    fun getAndDelete(key: String): String? =
-        throw UnsupportedOperationException("Atomic Redis get-and-delete is not supported by this adapter.")
+    fun getAndDelete(key: String): String?
 
     fun set(
         key: String,

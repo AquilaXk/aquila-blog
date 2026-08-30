@@ -223,6 +223,8 @@ class ErrorFilterResponseShapeTest {
 
         override fun get(key: String): String? = values[key]
 
+        override fun getAndDelete(key: String): String? = values.remove(key)
+
         override fun set(
             key: String,
             value: String,

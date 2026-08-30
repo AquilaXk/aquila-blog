@@ -17,6 +17,13 @@ import org.springframework.test.web.servlet.post
 import tools.jackson.databind.ObjectMapper
 
 class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthenticationFlowIntegrationTest() {
+    @Test
+    fun `email code requests default persistent login to off`() {
+        val request = ApiV1AuthController.AdminEmailCodeRequest(email = "admin@test.com")
+
+        assertThat(request.rememberMe).isFalse()
+    }
+
     @Autowired
     private lateinit var objectMapper: ObjectMapper
 

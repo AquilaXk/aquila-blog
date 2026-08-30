@@ -78,6 +78,36 @@ class RedisAdminEmailChallengeStoreIntegrationTest : BaseSeededIntegrationTest()
         assertThat(store.acquireRequestSlot(recipientHash, maxRequests = 1, window = Duration.ofMinutes(10))).isFalse()
     }
 
+    @Test
+    fun `discard removes an issued challenge`() {
+        val challengeId = "admin-email-discard-${System.nanoTime()}"
+        issue(challengeId, "discard-hash")
+
+        store.discard(challengeId)
+
+        assertThat(redisTemplate.hasKey(challengeKey(challengeId))).isFalse()
+    }
+
+    @Test
+    fun `malformed matched payload is rejected and consumed`() {
+        val challengeId = "admin-email-malformed-${System.nanoTime()}"
+        val key = challengeKey(challengeId)
+        redisTemplate.opsForHash<String, String>().putAll(
+            key,
+            mapOf(
+                "codeHash" to "correct-hash",
+                "memberId" to "not-a-number",
+                "rememberMe" to "true",
+                "failures" to "0",
+            ),
+        )
+        redisTemplate.expire(key, Duration.ofMinutes(2))
+
+        assertThat(store.consume(challengeId, "correct-hash", maxFailedAttempts = 5))
+            .isEqualTo(AdminEmailChallengeStore.ConsumeResult.Invalid)
+        assertThat(redisTemplate.hasKey(key)).isFalse()
+    }
+
     private fun issue(
         challengeId: String,
         codeHash: String,

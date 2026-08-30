@@ -29,15 +29,38 @@ class AdminEmailAuthenticationServiceTest {
     private val challengeStore = InMemoryAdminEmailChallengeStore()
     private val redis = InMemoryRedisKeyValuePort()
     private val service =
-        AdminEmailAuthenticationService(
-            adminProperties = AdminProperties(email = ADMIN_EMAIL),
-            canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = ADMIN_EMAIL)),
-            memberUseCase = memberUseCase,
-            adminEmailChallengeStore = challengeStore,
-            redisKeyValuePort = redis,
-            mailSender = mailSender,
-            challengeExpirationSeconds = 600,
-        )
+        newService(challengeExpirationSeconds = 600)
+
+    @Test
+    fun `default challenge expiration is 600 seconds`() {
+        val defaultService =
+            AdminEmailAuthenticationService(
+                adminProperties = AdminProperties(email = ADMIN_EMAIL),
+                canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = ADMIN_EMAIL)),
+                memberUseCase = memberUseCase,
+                adminEmailChallengeStore = challengeStore,
+                redisKeyValuePort = redis,
+                mailSender = mailSender,
+            )
+
+        assertThat(defaultService.requestCode("someone@example.com", rememberMe = false).expiresInSeconds).isEqualTo(600)
+    }
+
+    @Test
+    fun `invalid authentication configuration fails with its bounded property message`() {
+        assertThatThrownBy { newService(challengeExpirationSeconds = 59) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("custom.auth.adminEmail.challengeExpirationSeconds must be between 60 and 1800.")
+        assertThatThrownBy { newService(maxFailedAttempts = 1) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("custom.auth.adminEmail.maxFailedAttempts must be between 2 and 10.")
+        assertThatThrownBy { newService(requestMaxPerWindow = 0) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("custom.auth.adminEmail.requestMaxPerWindow must be between 1 and 20.")
+        assertThatThrownBy { newService(requestWindowSeconds = 59) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("custom.auth.adminEmail.requestWindowSeconds must be between 60 and 3600.")
+    }
 
     @Test
     fun `verified code is consumed once and preserves explicit persistence choice`() {
@@ -136,6 +159,52 @@ class AdminEmailAuthenticationServiceTest {
     }
 
     @Test
+    fun `challenge issue failure fails closed before mail delivery`() {
+        challengeStore.issueFailure = IllegalStateException("redis write failed")
+        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
+
+        assertDependencyUnavailable { service.requestCode(ADMIN_EMAIL, rememberMe = false) }
+
+        verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
+        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+    }
+
+    @Test
+    fun `challenge discard failure after mail failure fails closed`() {
+        challengeStore.discardFailure = IllegalStateException("redis delete failed")
+        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
+        doThrow(IllegalStateException("smtp unavailable"))
+            .`when`(mailSender)
+            .sendCode(anyString(), anyString(), anyLong())
+
+        assertDependencyUnavailable { service.requestCode(ADMIN_EMAIL, rememberMe = false) }
+
+        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+    }
+
+    @Test
+    fun `challenge consume failure fails closed without issuing a session`() {
+        challengeStore.consumeFailure = IllegalStateException("redis read failed")
+
+        assertDependencyUnavailable { service.verifyCode("challenge", "00000000", null, null) }
+
+        verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
+        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+    }
+
+    @Test
+    fun `request slot runtime failure fails closed before challenge or mail delivery`() {
+        challengeStore.requestSlotFailure = IllegalStateException("redis counter failed")
+        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
+
+        assertDependencyUnavailable { service.requestCode(ADMIN_EMAIL, rememberMe = false) }
+
+        assertThat(challengeStore.challenges).isEmpty()
+        verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
+        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+    }
+
+    @Test
     fun `request limit is opaque and does not send or store another challenge`() {
         `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
         doAnswer { null }.`when`(mailSender).sendCode(anyString(), anyString(), anyLong())
@@ -181,6 +250,61 @@ class AdminEmailAuthenticationServiceTest {
         verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
     }
 
+    @Test
+    fun `readiness fails closed when the canonical administrator is missing`() {
+        assertDependencyUnavailable { service.verifyReadiness() }
+
+        verify(mailSender, never()).verifyConnection()
+        verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
+    }
+
+    @Test
+    fun `readiness fails closed when redis round trip does not preserve the probe`() {
+        redis.getAndDeleteOverride = "mismatch"
+        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
+
+        assertDependencyUnavailable { service.verifyReadiness() }
+
+        verify(mailSender).verifyConnection()
+        verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
+    }
+
+    @Test
+    fun `readiness fails closed when redis probe throws`() {
+        redis.setFailure = IllegalStateException("redis unavailable")
+        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
+
+        assertDependencyUnavailable { service.verifyReadiness() }
+
+        verify(mailSender).verifyConnection()
+        verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
+    }
+
+    private fun newService(
+        challengeExpirationSeconds: Long = 600,
+        maxFailedAttempts: Int = 5,
+        requestMaxPerWindow: Int = 5,
+        requestWindowSeconds: Long = 600,
+    ) = AdminEmailAuthenticationService(
+        adminProperties = AdminProperties(email = ADMIN_EMAIL),
+        canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = ADMIN_EMAIL)),
+        memberUseCase = memberUseCase,
+        adminEmailChallengeStore = challengeStore,
+        redisKeyValuePort = redis,
+        mailSender = mailSender,
+        challengeExpirationSeconds = challengeExpirationSeconds,
+        maxFailedAttempts = maxFailedAttempts,
+        requestMaxPerWindow = requestMaxPerWindow,
+        requestWindowSeconds = requestWindowSeconds,
+    )
+
+    private fun assertDependencyUnavailable(action: () -> Unit) {
+        assertThatThrownBy { action() }
+            .isInstanceOfSatisfying(AppException::class.java) { exception ->
+                assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
+            }
+    }
+
     private fun issuedSession(rememberLoginEnabled: Boolean) =
         MemberUseCase.IssuedLoginSession(
             member = admin,
@@ -193,19 +317,22 @@ class AdminEmailAuthenticationServiceTest {
 
     private class InMemoryRedisKeyValuePort : RedisKeyValuePort {
         var available = true
+        var setFailure: RuntimeException? = null
+        var getAndDeleteOverride: String? = null
         val entries = mutableMapOf<String, String>()
 
         override fun isAvailable(): Boolean = available
 
         override fun get(key: String): String? = entries[key]
 
-        override fun getAndDelete(key: String): String? = entries.remove(key)
+        override fun getAndDelete(key: String): String? = getAndDeleteOverride ?: entries.remove(key)
 
         override fun set(
             key: String,
             value: String,
             ttl: Duration?,
         ) {
+            setFailure?.let { throw it }
             entries[key] = value
         }
 
@@ -226,6 +353,10 @@ class AdminEmailAuthenticationServiceTest {
 
     private class InMemoryAdminEmailChallengeStore : AdminEmailChallengeStore {
         var available = true
+        var issueFailure: RuntimeException? = null
+        var discardFailure: RuntimeException? = null
+        var consumeFailure: RuntimeException? = null
+        var requestSlotFailure: RuntimeException? = null
         val challenges = mutableMapOf<String, AdminEmailChallengeStore.Challenge>()
         private val failures = mutableMapOf<String, Int>()
         private var requestCount = 0
@@ -233,6 +364,7 @@ class AdminEmailAuthenticationServiceTest {
         override fun isAvailable(): Boolean = available
 
         override fun issue(challenge: AdminEmailChallengeStore.Challenge) {
+            issueFailure?.let { throw it }
             challenges[challenge.challengeId] = challenge
             failures[challenge.challengeId] = 0
         }
@@ -242,6 +374,7 @@ class AdminEmailAuthenticationServiceTest {
             submittedCodeHash: String,
             maxFailedAttempts: Int,
         ): AdminEmailChallengeStore.ConsumeResult {
+            consumeFailure?.let { throw it }
             val challenge = challenges[challengeId] ?: return AdminEmailChallengeStore.ConsumeResult.Invalid
             if (challenge.codeHash == submittedCodeHash) {
                 discard(challengeId)
@@ -258,6 +391,7 @@ class AdminEmailAuthenticationServiceTest {
         }
 
         override fun discard(challengeId: String) {
+            discardFailure?.let { throw it }
             challenges.remove(challengeId)
             failures.remove(challengeId)
         }
@@ -266,7 +400,10 @@ class AdminEmailAuthenticationServiceTest {
             canonicalRecipientHash: String,
             maxRequests: Int,
             window: Duration,
-        ): Boolean = ++requestCount <= maxRequests
+        ): Boolean {
+            requestSlotFailure?.let { throw it }
+            return ++requestCount <= maxRequests
+        }
     }
 
     companion object {

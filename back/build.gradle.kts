@@ -95,7 +95,7 @@ dependencies {
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
     }
     implementation("software.amazon.awssdk:url-connection-client:$awsSdkVersion")
-    implementation("org.jsoup:jsoup:1.23.1")
+    implementation("org.jsoup:jsoup:1.23.2")
     implementation("com.twelvemonkeys.imageio:imageio-webp:3.13.1")
 
     // Test

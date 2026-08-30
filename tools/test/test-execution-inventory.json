@@ -1,7 +1,7 @@
 {
   "version": 1,
   "entries": [
-    { "path": "tools/test/backend-ci-dependabot-credentials.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/backend-ci.yml", "job": "dependabot-credential-contract", "step": "Verify Dependabot test credential contract" },
+    { "path": "tools/test/backend-ci-dependabot-credentials.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/dependabot-credential-contract.yml", "job": "dependabot-credential-contract", "step": "Verify Dependabot test credential contract" },
     { "path": "tools/test/release-plan.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
     { "path": "tools/test/flyway-deploy-safety.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
     { "path": "tools/test/comment-jacoco-summary.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },

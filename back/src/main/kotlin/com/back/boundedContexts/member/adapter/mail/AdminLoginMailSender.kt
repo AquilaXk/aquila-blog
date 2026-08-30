@@ -6,6 +6,7 @@ import jakarta.mail.AuthenticationFailedException
 import jakarta.mail.MessagingException
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.mail.MailSendException
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.JavaMailSenderImpl
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.ArrayDeque
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
@@ -88,26 +90,35 @@ class AdminLoginMailSender(
     }
 
     private fun classifyFailure(initial: Throwable?): MailFailureCategory {
-        var current = initial
-        repeat(MAX_FAILURE_CAUSE_DEPTH) {
-            val failure = current ?: return MailFailureCategory.TRANSPORT
-            when (failure) {
-                is AuthenticationFailedException -> return MailFailureCategory.AUTHENTICATION
-                is TimeoutException, is SocketTimeoutException -> return MailFailureCategory.TIMEOUT
-                is InterruptedException -> return MailFailureCategory.INTERRUPTED
-                is SSLException -> return MailFailureCategory.TLS
-                is UnknownHostException -> return MailFailureCategory.DNS
-                is ConnectException -> return MailFailureCategory.CONNECTION
+        val pending = ArrayDeque<Throwable>()
+        initial?.let(pending::addLast)
+        val visited = mutableSetOf<Throwable>()
+        while (pending.isNotEmpty() && visited.size < MAX_FAILURE_NODE_COUNT) {
+            val failure = pending.removeFirst()
+            if (!visited.add(failure)) continue
+            directCategory(failure)?.let { return it }
+
+            if (failure is MailSendException) {
+                failure.messageExceptions.forEach(pending::addLast)
             }
-            current =
-                if (failure is MessagingException) {
-                    failure.nextException ?: failure.cause
-                } else {
-                    failure.cause
-                }
+            if (failure is MessagingException) {
+                failure.nextException?.let(pending::addLast)
+            }
+            failure.cause?.let(pending::addLast)
         }
         return MailFailureCategory.TRANSPORT
     }
+
+    private fun directCategory(failure: Throwable): MailFailureCategory? =
+        when (failure) {
+            is AuthenticationFailedException -> MailFailureCategory.AUTHENTICATION
+            is TimeoutException, is SocketTimeoutException -> MailFailureCategory.TIMEOUT
+            is InterruptedException -> MailFailureCategory.INTERRUPTED
+            is SSLException -> MailFailureCategory.TLS
+            is UnknownHostException -> MailFailureCategory.DNS
+            is ConnectException -> MailFailureCategory.CONNECTION
+            else -> null
+        }
 
     private fun dependencyUnavailable(category: MailFailureCategory) =
         AppException(
@@ -130,6 +141,6 @@ class AdminLoginMailSender(
     }
 
     private companion object {
-        private const val MAX_FAILURE_CAUSE_DEPTH = 8
+        private const val MAX_FAILURE_NODE_COUNT = 16
     }
 }

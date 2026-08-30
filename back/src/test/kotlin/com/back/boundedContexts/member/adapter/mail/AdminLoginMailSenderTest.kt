@@ -14,9 +14,11 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.mail.MailSendException
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.JavaMailSenderImpl
+import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import java.util.stream.Stream
 
@@ -173,6 +175,28 @@ class AdminLoginMailSenderTest {
                 assertThat(exception.cause).isInstanceOf(IllegalStateException::class.java)
                 assertThat(exception.cause!!.message).isEqualTo("admin_email_mail_failure category=authentication")
                 assertThat(exception.cause!!.message).doesNotContain("credential", "provider")
+                assertThat(exception.cause!!.cause).isNull()
+            }
+    }
+
+    @Test
+    fun `per-message send failure exposes only the nested safe category`() {
+        val javaMailSender = mock(JavaMailSender::class.java)
+        val failure =
+            MailSendException(
+                mapOf<Any, Exception>(
+                    SimpleMailMessage() to SocketTimeoutException("provider detail"),
+                ),
+            )
+        doThrow(failure).`when`(javaMailSender).send(any(SimpleMailMessage::class.java))
+        val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
+
+        assertThatThrownBy { sender.sendCode(ADMIN_EMAIL, "12345678", 600) }
+            .isInstanceOfSatisfying(AppException::class.java) { exception ->
+                assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
+                assertThat(exception.cause).isInstanceOf(IllegalStateException::class.java)
+                assertThat(exception.cause!!.message).isEqualTo("admin_email_mail_failure category=timeout")
+                assertThat(exception.cause!!.message).doesNotContain("provider")
                 assertThat(exception.cause!!.cause).isNull()
             }
     }

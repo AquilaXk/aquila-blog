@@ -87,6 +87,5 @@ class AdminLoginMailSender(
         return mailSender
     }
 
-    private fun dependencyUnavailable(cause: Exception? = null) =
-        AppException(ErrorCode.DEPENDENCY_NOT_READY, "이메일 인증을 사용할 수 없습니다.", cause)
+    private fun dependencyUnavailable(cause: Exception? = null) = AppException(ErrorCode.DEPENDENCY_NOT_READY, "이메일 인증을 사용할 수 없습니다.", cause)
 }

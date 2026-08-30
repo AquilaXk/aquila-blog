@@ -66,6 +66,7 @@ class SecurityConfig(
                 authorize("/*/api/*/**", authenticated)
                 authorize("/oauth2/**", permitAll)
                 authorize("/login/oauth2/**", permitAll)
+                authorize("/internal/health/admin-email-auth", permitAll)
                 val endpointExposurePolicy = SecurityEndpointExposurePolicy(isProd)
                 if (isProd) {
                     // 프로덕션에서는 k8s/lb health probe 외 actuator 공개를 차단한다.

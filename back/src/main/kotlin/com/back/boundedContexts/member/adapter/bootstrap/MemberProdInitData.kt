@@ -13,7 +13,6 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Lazy
 import org.springframework.context.annotation.Profile
 import org.springframework.core.annotation.Order
-import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.transaction.annotation.Transactional
 
 /**
@@ -24,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional
 @Configuration
 class MemberProdInitData(
     private val memberUseCase: MemberUseCase,
-    private val passwordEncoder: PasswordEncoder,
     private val adminProperties: AdminProperties,
 ) {
     private val logger = LoggerFactory.getLogger(MemberProdInitData::class.java)
@@ -52,19 +50,6 @@ class MemberProdInitData(
         val existingAdmin =
             memberUseCase.findByEmail(adminEmail)
         if (existingAdmin != null) {
-            val hasPassword = !existingAdmin.password.isNullOrBlank()
-            val passwordMatchesConfigured = hasPassword && passwordEncoder.matches(adminPassword, existingAdmin.password)
-
-            if (!hasPassword) {
-                existingAdmin.password = passwordEncoder.encode(adminPassword)
-            } else if (!passwordMatchesConfigured) {
-                existingAdmin.password = passwordEncoder.encode(adminPassword)
-                logger.warn("Admin password rotated to match configured custom.admin.password")
-            }
-            // 과거 배포에서 username 기반 apiKey가 남아있을 수 있어 최초 1회 회전한다.
-            if (existingAdmin.apiKey.isBlank() || existingAdmin.apiKey == existingAdmin.username) {
-                existingAdmin.modifyApiKey(MemberPolicy.genApiKey())
-            }
             val owner = memberUseCase.findByEmail(adminEmail)
             if (owner == null || owner.id == existingAdmin.id) {
                 existingAdmin.email = adminEmail

@@ -50,6 +50,12 @@ spring:
           auth: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__AUTH:true}
           starttls:
             enable: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:true}
+            required: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__REQUIRED:true}
+          ssl:
+            checkserveridentity: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__SSL__CHECKSERVERIDENTITY:true}
+          connectiontimeout: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__CONNECTIONTIMEOUT:5000}
+          timeout: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__TIMEOUT:10000}
+          writetimeout: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__WRITETIMEOUT:10000}
   data:
     redis:
       host: ${custom.site.redisHost}
@@ -218,6 +224,11 @@ custom:
       mutationLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__MUTATION_LIMIT_PER_MINUTE:60}
       authLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__AUTH_LIMIT_PER_MINUTE:20}
   auth:
+    adminEmail:
+      challengeExpirationSeconds: ${CUSTOM__AUTH__ADMIN_EMAIL__CHALLENGE_EXPIRATION_SECONDS:600}
+      maxFailedAttempts: ${CUSTOM__AUTH__ADMIN_EMAIL__MAX_FAILED_ATTEMPTS:5}
+      requestMaxPerWindow: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_MAX_PER_WINDOW:5}
+      requestWindowSeconds: ${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_WINDOW_SECONDS:600}
     cookie:
       apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:604800}
     session:

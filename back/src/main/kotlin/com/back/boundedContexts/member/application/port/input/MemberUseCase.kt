@@ -40,6 +40,13 @@ interface MemberUseCase {
         userAgent: String?,
     ): IssuedLoginSession
 
+    fun issueAdminEmailLoginSession(
+        memberId: Long,
+        rememberLoginEnabled: Boolean,
+        createdIp: String?,
+        userAgent: String?,
+    ): IssuedLoginSession
+
     fun checkPassword(
         member: Member,
         rawPassword: String,

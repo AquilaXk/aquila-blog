@@ -14,6 +14,8 @@ class AuthSecurityConfigurer : PublicApiRouteContributor {
     override fun publicApiRoutes() =
         listOf(
             PublicApiRouteSpec("/member/api/*/auth/login"),
+            PublicApiRouteSpec("/member/api/*/auth/admin-email/request"),
+            PublicApiRouteSpec("/member/api/*/auth/admin-email/verify"),
             PublicApiRouteSpec("/member/api/*/auth/logout"),
         )
 

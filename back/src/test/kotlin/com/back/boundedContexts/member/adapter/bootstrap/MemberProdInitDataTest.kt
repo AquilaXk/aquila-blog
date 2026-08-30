@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.mock
 import org.slf4j.LoggerFactory
-import org.springframework.security.crypto.password.PasswordEncoder
 
 @DisplayName("MemberProdInitData 테스트")
 class MemberProdInitDataTest {
@@ -23,7 +22,6 @@ class MemberProdInitDataTest {
     @DisplayName("관리자 email 충돌은 identity를 로그나 예외 message에 남기지 않는다")
     fun `admin email conflict omits configured identity from log and exception`() {
         val memberUseCase = mock(MemberUseCase::class.java)
-        val passwordEncoder = mock(PasswordEncoder::class.java)
         val configuredEmail = "raw-admin-canary@example.com"
         val configuredNickname = "RAW_ADMIN_NICKNAME_CANARY"
         val configuredPassword = "configured-password"
@@ -32,7 +30,6 @@ class MemberProdInitDataTest {
         val bootstrap =
             MemberProdInitData(
                 memberUseCase,
-                passwordEncoder,
                 AdminProperties(
                     username = configuredNickname,
                     email = configuredEmail,
@@ -40,7 +37,6 @@ class MemberProdInitDataTest {
                 ),
             )
         given(memberUseCase.findByEmail(configuredEmail)).willReturn(existingAdmin, conflictingOwner)
-        given(passwordEncoder.matches(configuredPassword, existingAdmin.password)).willReturn(true)
         val appender = attachListAppender()
 
         try {
@@ -60,6 +56,37 @@ class MemberProdInitDataTest {
             .contains("Configured admin identity bootstrap started")
             .doesNotContain(configuredEmail)
             .doesNotContain(configuredNickname)
+        assertThat(existingAdmin.password).isEqualTo("encoded-password")
+    }
+
+    @Test
+    fun `existing administrator bootstrap preserves credentials until verified email login`() {
+        val memberUseCase = mock(MemberUseCase::class.java)
+        val configuredEmail = "admin@example.com"
+        val existingAdmin =
+            Member(
+                id = 1L,
+                username = "admin-login",
+                password = "encoded-password",
+                nickname = "Admin",
+                email = configuredEmail,
+                apiKey = "admin-login",
+                admin = true,
+            )
+        val bootstrap =
+            MemberProdInitData(
+                memberUseCase,
+                AdminProperties(
+                    email = configuredEmail,
+                    password = "configured-password",
+                ),
+            )
+        given(memberUseCase.findByEmail(configuredEmail)).willReturn(existingAdmin, existingAdmin)
+
+        bootstrap.ensureConfiguredAdminMember()
+
+        assertThat(existingAdmin.password).isEqualTo("encoded-password")
+        assertThat(existingAdmin.apiKey).isEqualTo("admin-login")
     }
 
     private fun attachListAppender(): ListAppender<ILoggingEvent> {

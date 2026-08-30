@@ -129,7 +129,7 @@ private fun loadExistingMemberOrStartSignup(
         memberUseCase.findByLoginId(memberLoginId)
             ?: memberUseCase.findByLoginId(legacyLoginId)
 
-    if (member == null || !canonicalAdminPolicy.canAuthenticate(member)) {
+    if (member == null || member.isAdmin || !canonicalAdminPolicy.canAuthenticate(member)) {
         throw OAuthSignupDisabledAuthenticationException(provider.name)
     }
 

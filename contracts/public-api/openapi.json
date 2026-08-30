@@ -804,6 +804,66 @@
         }
       }
     },
+    "/member/api/v1/auth/admin-email/verify": {
+      "post": {
+        "tags": [
+          "api-v-1-auth-controller"
+        ],
+        "operationId": "verifyAdminEmailCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminEmailCodeVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataMemberLoginResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/auth/admin-email/request": {
+      "post": {
+        "tags": [
+          "api-v-1-auth-controller"
+        ],
+        "operationId": "requestAdminEmailCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminEmailCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataAdminEmailCodeRequestResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/adm/members/{id}/profileWorkspace/publish": {
       "post": {
         "tags": [
@@ -2615,6 +2675,19 @@
         }
       }
     },
+    "/internal/health/admin-email-auth": {
+      "get": {
+        "tags": [
+          "internal-admin-email-readiness-controller"
+        ],
+        "operationId": "verifyReadiness",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -4156,6 +4229,67 @@
           },
           "data": {
             "$ref": "#/components/schemas/MemberLoginResBody"
+          }
+        }
+      },
+      "AdminEmailCodeVerifyRequest": {
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 20
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\d{8}"
+          }
+        },
+        "required": [
+          "challengeId",
+          "code"
+        ]
+      },
+      "AdminEmailCodeRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 0
+          },
+          "rememberMe": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "AdminEmailCodeRequestResBody": {
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string"
+          },
+          "expiresInSeconds": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RsDataAdminEmailCodeRequestResBody": {
+        "type": "object",
+        "properties": {
+          "resultCode": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AdminEmailCodeRequestResBody"
           }
         }
       },

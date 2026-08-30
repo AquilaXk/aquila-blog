@@ -127,7 +127,12 @@ function validateSummaryFixtures(value) {
     }
     if (fixture.outcome === "RESOLVED") {
       validateSummaryValue(fixture.expected, "expected")
-      if (fixture.resolve === "read" && JSON.stringify(fixture.persisted) !== JSON.stringify(fixture.expected)) {
+      if (
+        fixture.resolve === "read" &&
+        (fixture.persisted.summary !== fixture.expected.summary ||
+          fixture.persisted.source !== fixture.expected.source ||
+          fixture.persisted.algorithmVersion !== fixture.expected.algorithmVersion)
+      ) {
         throw new Error("Canonical summary read fixture persisted and expected values must match")
       }
     } else if (fixture.expected !== undefined) {

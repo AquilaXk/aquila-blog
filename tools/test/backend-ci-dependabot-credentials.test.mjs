@@ -8,7 +8,7 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const workflowRoot = path.join(repoRoot, ".github/workflows")
 const backendPullRequestWorkflow = readFileSync(
-  path.join(repoRoot, ".github/workflows/backend-ci.yml"),
+  path.join(repoRoot, ".github/workflows/ci.yml"),
   "utf8",
 )
 
@@ -91,9 +91,26 @@ const scanWorkflows = () => {
   return { references, dynamicAccesses }
 }
 
+const listReusableBackendQualityCallers = () =>
+  listWorkflowFiles(workflowRoot)
+    .flatMap((filePath) => {
+      const source = readFileSync(filePath, "utf8")
+      const matches =
+        source.match(
+          /^\s*uses:\s*\.\/\.github\/workflows\/reusable-backend-quality\.yml\s*$/gm,
+        ) ?? []
+      const workflow = path.relative(repoRoot, filePath)
+      return matches.map(() => workflow)
+    })
+    .sort()
+
 const scanFixture = (source) => scanWorkflowSource("fixture.yml", source)
 
 const summarize = ({ name, location, hasFallback }) => ({ name, location, hasFallback })
+
+test("CI is the only reusable backend quality caller", () => {
+  assert.deepEqual(listReusableBackendQualityCallers(), [".github/workflows/ci.yml"])
+})
 
 test("backend PR CI forwards raw test credentials to the Gradle chokepoint", () => {
   for (const name of testCredentialSecrets) {
@@ -106,7 +123,7 @@ test("backend PR CI forwards raw test credentials to the Gradle chokepoint", () 
 
 test("credential scan reaches the backend PR CI raw credential references", () => {
   const { references } = scanWorkflows()
-  const requiredWorkflow = ".github/workflows/backend-ci.yml"
+  const requiredWorkflow = ".github/workflows/ci.yml"
 
   for (const name of testCredentialSecrets) {
     assert.ok(

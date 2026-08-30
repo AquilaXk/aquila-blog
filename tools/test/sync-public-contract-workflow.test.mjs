@@ -81,7 +81,7 @@ function writeContractBundle(platform) {
   mkdirSync(directory, { recursive: true })
   const openapi = Buffer.from('{"openapi":"3.1.0"}\n')
   const errorCodes = Buffer.from('[{"code":"400-1"}]\n')
-  const summaryFixtures = Buffer.from('{"version":1,"contract":"aquila-canonical-summary-fixtures","fixtures":[]}\n')
+  const summaryFixtures = Buffer.from('{"version":2,"contract":"aquila-canonical-summary-fixtures","fixtures":[]}\n')
   writeFileSync(path.join(directory, "openapi.json"), openapi)
   writeFileSync(path.join(directory, "error-codes.json"), errorCodes)
   writeFileSync(path.join(directory, "summary-fixtures.json"), summaryFixtures)
@@ -180,6 +180,17 @@ test("Platform source and exact three canonical public artifacts fail closed wit
     openapi_sha256: sha256(bundle.openapi),
     error_codes_sha256: sha256(bundle.errorCodes),
   })
+
+  const staleSummaryFixtures = Buffer.from('{"version":1,"contract":"aquila-canonical-summary-fixtures","fixtures":[]}\n')
+  const staleManifest = JSON.parse(bundle.manifest)
+  staleManifest.artifacts.summaryFixtures.sha256 = sha256(staleSummaryFixtures)
+  writeFileSync(path.join(platform, "contracts/public-api/summary-fixtures.json"), staleSummaryFixtures)
+  writeFileSync(path.join(platform, "contracts/public-api/manifest.json"), `${JSON.stringify(staleManifest, null, 2)}\n`)
+  const rejectedStaleSummaryFixtures = runShell(identityStep.run, platform, { GITHUB_OUTPUT: path.join(temp, "rejected-stale-summary-fixtures.out") })
+  assert.notEqual(rejectedStaleSummaryFixtures.status, 0, "manifest-consistent stale summary fixtures must fail closed")
+
+  writeFileSync(path.join(platform, "contracts/public-api/summary-fixtures.json"), bundle.summaryFixtures)
+  writeFileSync(path.join(platform, "contracts/public-api/manifest.json"), bundle.manifest)
 
   writeFileSync(path.join(platform, "contracts/public-api/openapi.json"), `${bundle.openapi} `)
   const rejected = runShell(identityStep.run, platform, { GITHUB_OUTPUT: path.join(temp, "rejected.out") })

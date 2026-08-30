@@ -1,10 +1,10 @@
 package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.port.input.ActorQueryUseCase
+import com.back.boundedContexts.member.application.port.input.AdminEmailAuthenticationUseCase
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.LoginAttemptPolicyUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
-import com.back.boundedContexts.member.application.service.AdminEmailAuthenticationService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberDto
@@ -46,7 +46,7 @@ class ApiV1AuthController(
     private val clientIpResolver: ClientIpResolver,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
     private val memberSessionUseCase: MemberSessionUseCase,
-    private val adminEmailAuthenticationService: AdminEmailAuthenticationService,
+    private val adminEmailAuthenticationUseCase: AdminEmailAuthenticationUseCase,
 ) {
     companion object {
         private const val MAX_EMAIL_LENGTH = 320
@@ -164,7 +164,7 @@ class ApiV1AuthController(
         @RequestBody @Valid reqBody: AdminEmailCodeRequest,
     ): RsData<AdminEmailCodeRequestResBody> {
         val requested =
-            adminEmailAuthenticationService.requestCode(
+            adminEmailAuthenticationUseCase.requestCode(
                 email = resolveEmail(reqBody.email),
                 rememberMe = reqBody.rememberMe,
             )
@@ -184,7 +184,7 @@ class ApiV1AuthController(
         @RequestBody @Valid reqBody: AdminEmailCodeVerifyRequest,
     ): RsData<MemberLoginResBody> {
         val issued =
-            adminEmailAuthenticationService.verifyCode(
+            adminEmailAuthenticationUseCase.verifyCode(
                 challengeId = reqBody.challengeId,
                 code = reqBody.code,
                 createdIp = extractClientIp(request),

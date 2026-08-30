@@ -1,6 +1,8 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.adapter.mail.AdminLoginMailSender
+import com.back.boundedContexts.member.application.port.input.AdminEmailAuthenticationUseCase
+import com.back.boundedContexts.member.application.port.input.AdminEmailAuthenticationUseCase.RequestedChallenge
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase.IssuedLoginSession
 import com.back.boundedContexts.member.application.port.output.AdminEmailChallengeStore
@@ -32,7 +34,7 @@ class AdminEmailAuthenticationService(
     private val requestMaxPerWindow: Int = 5,
     @param:Value("\${custom.auth.adminEmail.requestWindowSeconds:600}")
     private val requestWindowSeconds: Long = 600,
-) {
+) : AdminEmailAuthenticationUseCase {
     init {
         require(challengeExpirationSeconds in 60..1800) {
             "custom.auth.adminEmail.challengeExpirationSeconds must be between 60 and 1800."
@@ -48,12 +50,7 @@ class AdminEmailAuthenticationService(
         }
     }
 
-    data class RequestedChallenge(
-        val challengeId: String,
-        val expiresInSeconds: Long,
-    )
-
-    fun requestCode(
+    override fun requestCode(
         email: String,
         rememberMe: Boolean,
     ): RequestedChallenge {
@@ -96,7 +93,7 @@ class AdminEmailAuthenticationService(
         return response
     }
 
-    fun verifyCode(
+    override fun verifyCode(
         challengeId: String,
         code: String,
         createdIp: String?,
@@ -123,7 +120,7 @@ class AdminEmailAuthenticationService(
         )
     }
 
-    fun verifyReadiness() {
+    override fun verifyReadiness() {
         ensureRedisAvailable()
         val admin = memberUseCase.findByEmail(adminProperties.normalizedEmail)
         if (admin == null || !admin.isAdmin || !canonicalAdminPolicy.canAuthenticate(admin)) {

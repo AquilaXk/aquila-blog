@@ -1,9 +1,8 @@
 package com.back.boundedContexts.member.adapter.web
 
-import com.back.boundedContexts.member.adapter.mail.AdminLoginMailSender
 import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
 import com.back.global.security.config.AuthCookieNames
-import com.back.support.BaseControllerIntegrationTest
+import com.back.support.BaseAdminEmailAuthenticationFlowIntegrationTest
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -12,21 +11,17 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
-import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import tools.jackson.databind.ObjectMapper
 
-class AdminEmailAuthenticationFlowIntegrationTest : BaseControllerIntegrationTest() {
+class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthenticationFlowIntegrationTest() {
     @Autowired
     private lateinit var objectMapper: ObjectMapper
 
     @Autowired
     private lateinit var memberSessionRepository: MemberSessionRepository
-
-    @MockitoBean
-    private lateinit var adminLoginMailSender: AdminLoginMailSender
 
     @Test
     fun `email authentication persists and revokes the canonical admin session`() {

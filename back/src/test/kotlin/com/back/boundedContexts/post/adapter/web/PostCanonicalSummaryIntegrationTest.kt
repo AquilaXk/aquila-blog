@@ -3,10 +3,6 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.CanonicalSummaryFixture
 import com.back.boundedContexts.post.CanonicalSummaryFixture.Fixture
 import com.back.boundedContexts.post.CanonicalSummaryFixture.Request
-import com.back.boundedContexts.post.application.service.PostReadCacheInvalidationTarget
-import com.back.boundedContexts.post.application.service.PostWriteSideEffectHandler
-import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
-import com.back.global.task.application.TaskPayloadEnvelope
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
 import jakarta.persistence.EntityManager
@@ -28,9 +24,6 @@ import java.time.Instant
 class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
-
-    @Autowired
-    private lateinit var postWriteSideEffectHandler: PostWriteSideEffectHandler
 
     @Autowired
     private lateinit var objectMapper: ObjectMapper
@@ -72,19 +65,41 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
 
     @Test
     @WithUserDetails("admin@test.com")
-    fun `omitted summary preserves manual value while blank summary recomputes`() {
+    fun `create rejects missing and mismatched summary intent`() {
+        val invalidRequests =
+            listOf(
+                emptyMap(),
+                mapOf("summary" to "암묵적 수동 요약"),
+                mapOf("summaryMode" to "AUTO", "summary" to ""),
+                mapOf("summaryMode" to "AUTO", "summary" to "암묵적 값"),
+                mapOf("summaryMode" to "MANUAL"),
+                mapOf("summaryMode" to "MANUAL", "summary" to "   "),
+            )
+
+        invalidRequests.forEach { intent ->
+            mvc
+                .post("/post/api/v1/posts") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        objectMapper.writeValueAsString(
+                            linkedMapOf<String, Any?>(
+                                "title" to "명시 요약 의도",
+                                "content" to "본문입니다.",
+                                "published" to true,
+                                "listed" to true,
+                            ).apply { putAll(intent) },
+                        )
+                }.andExpect {
+                    status { isBadRequest() }
+                }
+        }
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `modify preserves omitted summary accepts manual and rejects mismatches`() {
         val seed = resolvedFixture("manual-preserve-seed", "create")
-        val preservedFixture = resolvedFixture("manual-preserve-omitted", "modify")
-        val seedExpected = requireNotNull(seed.expected)
-        val preservedExpected = requireNotNull(preservedFixture.expected)
-        val recomputeFixture = resolvedFixture("blank-recompute", "modify")
-        val recomputeExpected = requireNotNull(recomputeFixture.expected)
-        val existing = requireNotNull(preservedFixture.existing)
-        val recomputeExisting = requireNotNull(recomputeFixture.existing)
-        assertThat(existing.summary).isEqualTo(seedExpected.summary)
-        assertThat(existing.source).isEqualTo(seedExpected.source)
-        assertThat(recomputeExisting.summary).isEqualTo(preservedExpected.summary)
-        assertThat(recomputeExisting.source).isEqualTo(preservedExpected.source)
+        val unchanged = resolvedFixture("manual-preserve-omitted", "modify")
         val created =
             mvc
                 .post("/post/api/v1/posts") {
@@ -94,424 +109,119 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 .response.contentAsString
         val postId = JsonPath.read<Int>(created, "$.data.id").toLong()
         val version = JsonPath.read<Int>(created, "$.data.version").toLong()
+        val before = canonicalSummaryRow(postId)
 
-        val preserved =
+        val unchangedResponse =
             mvc
                 .put("/post/api/v1/posts/$postId") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = postPayload(preservedFixture, version = version)
+                    content = postPayload(unchanged, version = version)
                 }.andExpect {
                     status { isOk() }
-                    jsonPath("$.data.summary") { value(preservedExpected.summary) }
-                    jsonPath("$.data.summarySource") { value(preservedExpected.source) }
+                    jsonPath("$.data.summary") { value(requireNotNull(unchanged.expected).summary) }
                 }.andReturn()
                 .response.contentAsString
-        val preservedVersion = JsonPath.read<Int>(preserved, "$.data.version").toLong()
+        assertThat(canonicalSummaryRow(postId)).isEqualTo(before)
 
-        mvc
-            .put("/post/api/v1/posts/$postId") {
-                contentType = MediaType.APPLICATION_JSON
-                content = postPayload(recomputeFixture, version = preservedVersion)
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.data.summary") { value(recomputeExpected.summary) }
-                jsonPath("$.data.summarySource") { value(recomputeExpected.source) }
-            }
+        val unchangedVersion = JsonPath.read<Int>(unchangedResponse, "$.data.version").toLong()
+        val manualResponse =
+            mvc
+                .put("/post/api/v1/posts/$postId") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = postPayload(unchanged, Request("MANUAL", "새 수동 요약"), unchangedVersion)
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.summary") { value("새 수동 요약") }
+                    jsonPath("$.data.summarySource") { value("MANUAL") }
+                }.andReturn()
+                .response.contentAsString
+        val currentVersion = JsonPath.read<Int>(manualResponse, "$.data.version").toLong()
+        val currentCanonical = canonicalSummaryRow(postId)
+
+        val invalidRequests =
+            listOf(
+                Request(null, "   "),
+                Request(null, "암묵적 수동 요약"),
+                Request("AUTO", ""),
+                Request("AUTO", "암묵적 값"),
+                Request("MANUAL", null),
+                Request("MANUAL", "   "),
+            )
+        invalidRequests.forEach { request ->
+            mvc
+                .put("/post/api/v1/posts/$postId") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = postPayload(unchanged, request, currentVersion)
+                }.andExpect {
+                    status { isBadRequest() }
+                }
+            assertThat(canonicalSummaryRow(postId)).isEqualTo(currentCanonical)
+        }
     }
 
     @Test
     @WithUserDetails("admin@test.com")
-    fun `admin preview endpoint returns deterministic result without persisting`() {
-        val fixture = resolvedFixture("extracted-with-exclusions", "create")
-        val expected = requireNotNull(fixture.expected)
-        val beforeCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM post", Long::class.java)
-
-        mvc
-            .post("/post/api/v1/adm/posts/preview-summary") {
-                contentType = MediaType.APPLICATION_JSON
-                content = postPayload(fixture)
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.summary") { value(expected.summary) }
-                jsonPath("$.source") { value(expected.source) }
-                jsonPath("$.contentHash") { isNotEmpty() }
-                jsonPath("$.algorithmVersion") { value(expected.algorithmVersion) }
-            }
-
-        val afterCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM post", Long::class.java)
-        assertThat(afterCount).isEqualTo(beforeCount)
-    }
-
-    @Test
-    @WithUserDetails("admin@test.com")
-    fun `idempotent backfill populates legacy summary without changing modified at`() {
-        val fixture = resolvedFixture("idempotent-backfill-api", "backfill")
-        val expected = requireNotNull(fixture.expected)
+    fun `persisted migrated fixture is readable and omitted modify preserves canonical fields`() {
+        val fixture = resolvedFixture("migrated-persisted-read", "read")
+        val persisted = requireNotNull(fixture.persisted)
         val created =
             mvc
                 .post("/post/api/v1/posts") {
                     contentType = MediaType.APPLICATION_JSON
                     content =
                         objectMapper.writeValueAsString(
-                            mapOf("title" to fixture.title, "content" to fixture.content, "published" to true, "listed" to true),
+                            mapOf(
+                                "title" to fixture.title,
+                                "content" to fixture.content,
+                                "published" to true,
+                                "listed" to true,
+                                "summaryMode" to "AUTO",
+                            ),
                         )
                 }.andReturn()
                 .response.contentAsString
         val postId = JsonPath.read<Int>(created, "$.data.id").toLong()
-        val originalModifiedAt = Instant.parse("2026-01-02T03:04:05Z")
-
+        val version = JsonPath.read<Int>(created, "$.data.version").toLong()
         jdbcTemplate.update(
             """
             UPDATE post
-            SET summary_text = NULL,
-                summary_source = 'NONE',
-                summary_content_hash = NULL,
-                summary_algorithm_version = NULL,
-                summary_generated_at = NULL,
-                version = NULL,
-                modified_at = ?
+            SET summary_text = ?, summary_source = ?, summary_content_hash = ?,
+                summary_algorithm_version = ?, summary_generated_at = ?
             WHERE id = ?
             """.trimIndent(),
-            Timestamp.from(originalModifiedAt),
+            persisted.summary,
+            persisted.source,
+            "a".repeat(64),
+            persisted.algorithmVersion,
+            Timestamp.from(Instant.parse("2026-08-01T00:00:00Z")),
             postId,
         )
         entityManager.clear()
+        val before = canonicalSummaryRow(postId)
 
         mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }.andExpect {
             status { isOk() }
-            jsonPath("$.summary") { value("") }
+            jsonPath("$.summary") { value(persisted.summary) }
+            jsonPath("$.summarySource") { value(persisted.source) }
         }
 
         mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
+            .put("/post/api/v1/posts/$postId") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${postId - 1},"maxId":$postId,"limit":1,"dryRun":true}"""
+                content =
+                    objectMapper.writeValueAsString(
+                        mapOf(
+                            "title" to "수정된 제목",
+                            "content" to "수정된 본문입니다.",
+                            "version" to version,
+                        ),
+                    )
             }.andExpect {
                 status { isOk() }
-                jsonPath("$.scanned") { value(1) }
-                jsonPath("$.updated") { value(0) }
-                jsonPath("$.nextAfterId") { value(postId) }
-                jsonPath("$.dryRun") { value(true) }
+                jsonPath("$.data.summary") { value(persisted.summary) }
+                jsonPath("$.data.summarySource") { value(persisted.source) }
             }
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${postId - 1},"maxId":$postId,"limit":1,"dryRun":false}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.scanned") { value(1) }
-                jsonPath("$.updated") { value(1) }
-                jsonPath("$.skipped") { value(0) }
-                jsonPath("$.nextAfterId") { value(postId) }
-            }
-
-        val row =
-            jdbcTemplate.queryForMap(
-                """
-                SELECT summary_text, summary_source, summary_algorithm_version, modified_at, version
-                FROM post
-                WHERE id = ?
-                """.trimIndent(),
-                postId,
-            )
-        assertThat(row["summary_text"]).isEqualTo(expected.summary)
-        assertThat(row["summary_source"]).isEqualTo(expected.source)
-        assertThat(row["summary_algorithm_version"]).isEqualTo(expected.algorithmVersion)
-        assertThat((row["modified_at"] as Timestamp).toInstant()).isEqualTo(originalModifiedAt)
-        assertThat(row["version"]).isNull()
-
-        entityManager.flush()
-        postWriteSideEffectHandler.handle(backfillTaskPayload(postId))
-        entityManager.clear()
-
-        mvc.get("/post/api/v1/posts/$postId") { with(anonymous()) }.andExpect {
-            status { isOk() }
-            jsonPath("$.summary") { value(expected.summary) }
-            jsonPath("$.summarySource") { value(expected.source) }
-        }
-    }
-
-    @Test
-    @WithUserDetails("admin@test.com")
-    fun `dry run backfill advances checkpoints without persisting summaries`() {
-        val fixture = resolvedFixture("idempotent-backfill-api", "backfill")
-        val firstCreated =
-            mvc
-                .post("/post/api/v1/posts") {
-                    contentType = MediaType.APPLICATION_JSON
-                    content = postPayload(fixture)
-                }.andReturn()
-                .response.contentAsString
-        val firstId = JsonPath.read<Int>(firstCreated, "$.data.id").toLong()
-        val secondCreated =
-            mvc
-                .post("/post/api/v1/posts") {
-                    contentType = MediaType.APPLICATION_JSON
-                    content = postPayload(fixture)
-                }.andReturn()
-                .response.contentAsString
-        val secondId = JsonPath.read<Int>(secondCreated, "$.data.id").toLong()
-
-        listOf(firstId, secondId).forEach { postId ->
-            jdbcTemplate.update(
-                """
-                UPDATE post
-                SET summary_text = NULL,
-                    summary_source = 'NONE',
-                    summary_content_hash = NULL,
-                    summary_algorithm_version = NULL,
-                    summary_generated_at = NULL
-                WHERE id = ?
-                """.trimIndent(),
-                postId,
-            )
-        }
-        entityManager.clear()
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${firstId - 1},"maxId":$secondId,"limit":1,"dryRun":true}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.scanned") { value(1) }
-                jsonPath("$.updated") { value(0) }
-                jsonPath("$.skipped") { value(0) }
-                jsonPath("$.nextAfterId") { value(firstId) }
-                jsonPath("$.hasMore") { value(true) }
-                jsonPath("$.dryRun") { value(true) }
-            }
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":$firstId,"maxId":$secondId,"limit":1,"dryRun":true}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.scanned") { value(1) }
-                jsonPath("$.updated") { value(0) }
-                jsonPath("$.skipped") { value(0) }
-                jsonPath("$.nextAfterId") { value(secondId) }
-                jsonPath("$.hasMore") { value(true) }
-                jsonPath("$.dryRun") { value(true) }
-            }
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":$secondId,"maxId":$secondId,"limit":1,"dryRun":true}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.scanned") { value(0) }
-                jsonPath("$.updated") { value(0) }
-                jsonPath("$.skipped") { value(0) }
-                jsonPath("$.nextAfterId") { value(secondId) }
-                jsonPath("$.hasMore") { value(false) }
-                jsonPath("$.dryRun") { value(true) }
-            }
-
-        val unchangedSummaryRows =
-            jdbcTemplate.queryForObject(
-                """
-                SELECT COUNT(*)
-                FROM post
-                WHERE id IN (?, ?)
-                  AND summary_text IS NULL
-                  AND summary_source = 'NONE'
-                  AND summary_content_hash IS NULL
-                  AND summary_algorithm_version IS NULL
-                  AND summary_generated_at IS NULL
-                """.trimIndent(),
-                Long::class.java,
-                firstId,
-                secondId,
-            )
-        assertThat(unchangedSummaryRows).isEqualTo(2L)
-    }
-
-    @Test
-    @WithUserDetails("admin@test.com")
-    fun `dry run approved maximum prevents a newly eligible higher post from mutation`() {
-        val fixture = resolvedFixture("idempotent-backfill-api", "backfill")
-        val firstCreated =
-            mvc
-                .post("/post/api/v1/posts") {
-                    contentType = MediaType.APPLICATION_JSON
-                    content = postPayload(fixture)
-                }.andReturn()
-                .response.contentAsString
-        val firstId = JsonPath.read<Int>(firstCreated, "$.data.id").toLong()
-        val secondCreated =
-            mvc
-                .post("/post/api/v1/posts") {
-                    contentType = MediaType.APPLICATION_JSON
-                    content = postPayload(fixture)
-                }.andReturn()
-                .response.contentAsString
-        val secondId = JsonPath.read<Int>(secondCreated, "$.data.id").toLong()
-        assertThat(secondId).isGreaterThan(firstId)
-
-        val firstCanonical =
-            jdbcTemplate.queryForMap(
-                """
-                SELECT summary_text, summary_source, summary_content_hash,
-                       summary_algorithm_version, summary_generated_at
-                FROM post
-                WHERE id = ?
-                """.trimIndent(),
-                firstId,
-            )
-        jdbcTemplate.update(
-            """
-            UPDATE post
-            SET summary_text = NULL,
-                summary_source = 'NONE',
-                summary_content_hash = NULL,
-                summary_algorithm_version = NULL,
-                summary_generated_at = NULL
-            WHERE id = ?
-            """.trimIndent(),
-            firstId,
-        )
-        entityManager.clear()
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${firstId - 1},"maxId":$firstId,"limit":2,"dryRun":true}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.scanned") { value(1) }
-                jsonPath("$.updated") { value(0) }
-                jsonPath("$.skipped") { value(0) }
-                jsonPath("$.nextAfterId") { value(firstId) }
-                jsonPath("$.hasMore") { value(false) }
-                jsonPath("$.dryRun") { value(true) }
-            }
-
-        jdbcTemplate.update(
-            """
-            UPDATE post
-            SET summary_text = ?,
-                summary_source = ?,
-                summary_content_hash = ?,
-                summary_algorithm_version = ?,
-                summary_generated_at = ?
-            WHERE id = ?
-            """.trimIndent(),
-            firstCanonical["summary_text"],
-            firstCanonical["summary_source"],
-            firstCanonical["summary_content_hash"],
-            firstCanonical["summary_algorithm_version"],
-            firstCanonical["summary_generated_at"],
-            firstId,
-        )
-        jdbcTemplate.update(
-            """
-            UPDATE post
-            SET summary_text = NULL,
-                summary_source = 'NONE',
-                summary_content_hash = NULL,
-                summary_algorithm_version = NULL,
-                summary_generated_at = NULL
-            WHERE id = ?
-            """.trimIndent(),
-            secondId,
-        )
-        entityManager.clear()
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${firstId - 1},"maxId":$firstId,"limit":2,"dryRun":false}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.scanned") { value(0) }
-                jsonPath("$.updated") { value(0) }
-                jsonPath("$.skipped") { value(0) }
-                jsonPath("$.nextAfterId") { value(firstId - 1) }
-                jsonPath("$.hasMore") { value(false) }
-                jsonPath("$.dryRun") { value(false) }
-            }
-
-        val preservedFirstCanonical =
-            jdbcTemplate.queryForMap(
-                """
-                SELECT summary_text, summary_source, summary_content_hash,
-                       summary_algorithm_version, summary_generated_at
-                FROM post
-                WHERE id = ?
-                """.trimIndent(),
-                firstId,
-            )
-        assertThat(preservedFirstCanonical).isEqualTo(firstCanonical)
-
-        val unchangedSecondSummary =
-            jdbcTemplate.queryForObject(
-                """
-                SELECT COUNT(*)
-                FROM post
-                WHERE id = ?
-                  AND summary_text IS NULL
-                  AND summary_source = 'NONE'
-                  AND summary_content_hash IS NULL
-                  AND summary_algorithm_version IS NULL
-                  AND summary_generated_at IS NULL
-                """.trimIndent(),
-                Long::class.java,
-                secondId,
-            )
-        assertThat(unchangedSecondSummary).isEqualTo(1L)
-    }
-
-    @Test
-    @WithUserDetails("admin@test.com")
-    fun `private backfill does not put raw tags in public invalidation tasks`() {
-        val created =
-            mvc
-                .post("/post/api/v1/posts") {
-                    contentType = MediaType.APPLICATION_JSON
-                    content =
-                        """
-                        {
-                          "title": "비공개 이전 글",
-                          "content": "---\nsummary: \"이전 요약\"\ntags: [private-tag]\n---\n비공개 본문입니다.",
-                          "published": false,
-                          "listed": false
-                        }
-                        """.trimIndent()
-                }.andReturn()
-                .response.contentAsString
-        val postId = JsonPath.read<Int>(created, "$.data.id").toLong()
-        jdbcTemplate.update(
-            """
-            UPDATE post
-            SET summary_text = NULL,
-                summary_source = 'NONE',
-                summary_content_hash = NULL,
-                summary_algorithm_version = NULL,
-                summary_generated_at = NULL
-            WHERE id = ?
-            """.trimIndent(),
-            postId,
-        )
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":${postId - 1},"maxId":$postId,"limit":1,"dryRun":false}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.updated") { value(1) }
-            }
-
-        entityManager.flush()
-        val payload = backfillTaskPayload(postId)
-        assertThat(payload.beforeTags).isEmpty()
-        assertThat(payload.afterTags).isEmpty()
-        assertThat(payload.cacheInvalidationTargets)
-            .containsExactly(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE)
+        assertThat(canonicalSummaryRow(postId)).isEqualTo(before)
     }
 
     @Test
@@ -545,7 +255,7 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
         mvc
             .put("/post/api/v1/posts/$postId") {
                 contentType = MediaType.APPLICATION_JSON
-                content = postPayload(fixture, fixture.request, version)
+                content = postPayload(fixture, requireNotNull(fixture.request), version)
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.data.summary") { value(expected.summary) }
@@ -580,61 +290,33 @@ class PostCanonicalSummaryIntegrationTest : BaseControllerIntegrationTest() {
                 jsonPath("$.data.summary") { value(expected.summary) }
                 jsonPath("$.data.summarySource") { value(expected.source) }
             }
-    }
 
-    @Test
-    fun `summary preview endpoint requires authentication`() {
+        val beforeInvalidReplay = canonicalSummaryRow(postId.toLong())
         mvc
-            .post("/post/api/v1/adm/posts/preview-summary") {
+            .post("/post/api/v1/posts") {
+                header("Idempotency-Key", key)
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"title":"제목","content":"본문입니다."}"""
+                content = postPayload(fixture, Request("AUTO", "허용되지 않는 요약"))
             }.andExpect {
-                status { isUnauthorized() }
+                status { isBadRequest() }
             }
+        assertThat(canonicalSummaryRow(postId.toLong())).isEqualTo(beforeInvalidReplay)
     }
 
-    @Test
-    @WithUserDetails("admin@test.com")
-    fun `backfill beyond the last row reports an exhausted checkpoint`() {
-        val maxPostId = jdbcTemplate.queryForObject("SELECT COALESCE(MAX(id), 0) FROM post", Long::class.java)!!
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":$maxPostId,"maxId":$maxPostId,"limit":10,"dryRun":false}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.scanned") { value(0) }
-                jsonPath("$.updated") { value(0) }
-                jsonPath("$.skipped") { value(0) }
-                jsonPath("$.nextAfterId") { value(maxPostId) }
-                jsonPath("$.hasMore") { value(false) }
-            }
-    }
-
-    private fun backfillTaskPayload(postId: Long): PostWriteSideEffectPayload {
-        val payloadJson =
-            jdbcTemplate.queryForObject(
-                """
-                SELECT payload
-                FROM task
-                WHERE task_type = ?
-                  AND aggregate_id = ?
-                  AND payload LIKE '%summary-backfill%'
-                ORDER BY id DESC
-                LIMIT 1
-                """.trimIndent(),
-                String::class.java,
-                PostWriteSideEffectPayload.TASK_TYPE,
-                postId,
-            )
-        val envelope = objectMapper.readValue(payloadJson, TaskPayloadEnvelope::class.java)
-        return objectMapper.readValue(envelope.payloadJson, PostWriteSideEffectPayload::class.java)
-    }
+    private fun canonicalSummaryRow(postId: Long): Map<String, Any?> =
+        jdbcTemplate.queryForMap(
+            """
+            SELECT summary_text, summary_source, summary_content_hash,
+                   summary_algorithm_version, summary_generated_at
+            FROM post
+            WHERE id = ?
+            """.trimIndent(),
+            postId,
+        )
 
     private fun postPayload(
         fixture: Fixture,
-        request: Request = fixture.request,
+        request: Request = requireNotNull(fixture.request),
         version: Number? = null,
     ): String {
         val body = linkedMapOf<String, Any>("title" to fixture.title, "content" to fixture.content)

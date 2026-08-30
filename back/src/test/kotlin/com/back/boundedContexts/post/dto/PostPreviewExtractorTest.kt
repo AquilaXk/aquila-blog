@@ -22,49 +22,19 @@ class PostPreviewExtractorTest {
     }
 
     @Test
-    fun `makeSummary removes markdown image alt text from summary`() {
-        val content =
-            """
-            # 테스트글
-            
-            ![테스트 이미지 입니다](https://example.com/cover.png)
-            
-            도입부 IoC(Inversion of Control)는 객체의 생성과 생명주기 관리 주도권을 프레임워크에 넘기는 설계 원칙이다.
-            """.trimIndent()
-
-        val summary = PostPreviewExtractor.makeSummary(content)
-
-        assertThat(summary).doesNotContain("테스트 이미지 입니다")
-        assertThat(summary).contains("도입부 IoC(Inversion of Control)")
-    }
-
-    @Test
-    fun `makeSummary ignores persisted fallback summary metadata and rebuilds from body`() {
+    fun `frontmatter thumbnail remains authoritative when summary metadata is present`() {
         val content =
             """
             ---
-            summary: "요약을 생성할 수 없습니다."
+            summary: "저장된 요약"
+            thumbnail: "https://example.com/metadata.png"
             ---
 
-            Stateless는 서버가 요청 사이 사용자 상태를 저장하지 않고, 요청 자체만으로 인증·인가 판단에 필요한 정보를 처리하는 방식이다.
+            ![본문 이미지](https://example.com/body.png)
             """.trimIndent()
 
-        val summary = PostPreviewExtractor.makeSummary(content)
-
-        assertThat(summary).isNotEqualTo("요약을 생성할 수 없습니다.")
-        assertThat(summary).contains("Stateless는 서버가 요청 사이 사용자 상태를 저장하지 않고")
-    }
-
-    @Test
-    fun `same hash and length contents never share a summary`() {
-        val first = "FB"
-        val second = "Ea"
-
-        assertThat(first).hasSameSizeAs(second)
-        assertThat(first.hashCode()).isEqualTo(second.hashCode())
-
-        assertThat(PostPreviewExtractor.makeSummary(first)).isEqualTo(first)
-        assertThat(PostPreviewExtractor.makeSummary(second)).isEqualTo(second)
+        assertThat(PostPreviewExtractor.extractThumbnail(content))
+            .isEqualTo("https://example.com/metadata.png")
     }
 
     @Test

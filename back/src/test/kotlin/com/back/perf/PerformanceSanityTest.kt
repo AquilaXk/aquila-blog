@@ -3,6 +3,7 @@ package com.back.perf
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.post.application.service.PostApplicationService
+import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.support.BasePerformanceIntegrationTest
 import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
@@ -39,7 +40,7 @@ class PerformanceSanityTest : BasePerformanceIntegrationTest() {
     @Test
     fun `post list query count sanity`() {
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
-        postFacade.write(admin, "sanity list title", "sanity list content", true, true)
+        postFacade.write(admin, "sanity list title", "sanity list content", true, true, summaryMode = PostSummaryMode.AUTO)
         statistics.clear()
 
         mvc
@@ -54,7 +55,7 @@ class PerformanceSanityTest : BasePerformanceIntegrationTest() {
     @Test
     fun `post detail query count sanity`() {
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
-        val post = postFacade.write(admin, "sanity detail title", "sanity detail content", true, true)
+        val post = postFacade.write(admin, "sanity detail title", "sanity detail content", true, true, summaryMode = PostSummaryMode.AUTO)
         statistics.clear()
 
         mvc

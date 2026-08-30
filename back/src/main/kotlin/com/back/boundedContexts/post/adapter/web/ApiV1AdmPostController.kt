@@ -14,7 +14,6 @@ import com.back.standard.extensions.getOrThrow
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
-import jakarta.validation.Valid
 import jakarta.validation.constraints.Positive
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -57,36 +55,6 @@ class ApiV1AdmPostController(
             postUseCase.count(),
             postUseCase.randomSecureTip(),
         )
-
-    @PostMapping("/preview-summary")
-    @Operation(summary = "canonical summary 미리보기")
-    fun previewSummary(
-        @Valid @RequestBody request: PostSummaryPreviewRequest,
-    ): PostSummaryPreviewResponse {
-        val resolved = postUseCase.previewSummary(request.title, request.content)
-        return PostSummaryPreviewResponse(
-            summary = resolved.summary,
-            source = resolved.source,
-            contentHash = resolved.contentHash,
-            algorithmVersion = resolved.algorithmVersion,
-        )
-    }
-
-    @PostMapping("/summary-backfill")
-    @Operation(summary = "canonical summary bounded backfill")
-    fun backfillSummary(
-        @Valid @RequestBody request: PostSummaryBackfillRequest,
-    ): PostSummaryBackfillResponse {
-        val result = postUseCase.backfillSummaries(request.afterId, request.maxId, request.limit, request.dryRun)
-        return PostSummaryBackfillResponse(
-            scanned = result.scanned,
-            updated = result.updated,
-            skipped = result.skipped,
-            nextAfterId = result.nextAfterId,
-            hasMore = result.hasMore,
-            dryRun = result.dryRun,
-        )
-    }
 
     @GetMapping("/bootstrap")
     @Transactional(readOnly = true)

@@ -744,78 +744,6 @@
         ]
       }
     },
-    "/post/api/v1/adm/posts/summary-backfill": {
-      "post": {
-        "tags": [
-          "ApiV1AdmPostController"
-        ],
-        "summary": "canonical summary bounded backfill",
-        "operationId": "backfillSummary",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PostSummaryBackfillRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/PostSummaryBackfillResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
-    "/post/api/v1/adm/posts/preview-summary": {
-      "post": {
-        "tags": [
-          "ApiV1AdmPostController"
-        ],
-        "summary": "canonical summary 미리보기",
-        "operationId": "previewSummary",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PostSummaryPreviewRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/PostSummaryPreviewResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
     "/member/api/v1/privacy/requests": {
       "post": {
         "tags": [
@@ -3758,14 +3686,10 @@
             ]
           },
           "summaryMode": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "enum": [
               "AUTO",
-              "MANUAL",
-              null
+              "MANUAL"
             ]
           },
           "summary": {
@@ -3779,6 +3703,7 @@
         },
         "required": [
           "content",
+          "summaryMode",
           "title"
         ]
       },
@@ -4051,103 +3976,6 @@
             "type": "string"
           },
           "markdown": {
-            "type": "string"
-          }
-        }
-      },
-      "PostSummaryBackfillRequest": {
-        "type": "object",
-        "properties": {
-          "afterId": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "maxId": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 1
-          },
-          "limit": {
-            "type": "integer",
-            "format": "int32",
-            "maximum": 500,
-            "minimum": 1
-          },
-          "dryRun": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "maxId"
-        ]
-      },
-      "PostSummaryBackfillResponse": {
-        "type": "object",
-        "properties": {
-          "scanned": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "updated": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "skipped": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "nextAfterId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "hasMore": {
-            "type": "boolean"
-          },
-          "dryRun": {
-            "type": "boolean"
-          }
-        }
-      },
-      "PostSummaryPreviewRequest": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 2
-          },
-          "content": {
-            "type": "string",
-            "maxLength": 100000,
-            "minLength": 2
-          }
-        },
-        "required": [
-          "content",
-          "title"
-        ]
-      },
-      "PostSummaryPreviewResponse": {
-        "type": "object",
-        "properties": {
-          "summary": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "MANUAL",
-              "LEADING_BLOCK",
-              "EXTRACTED",
-              "MIGRATED",
-              "NONE"
-            ]
-          },
-          "contentHash": {
-            "type": "string"
-          },
-          "algorithmVersion": {
             "type": "string"
           }
         }

@@ -1,12 +1,15 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.application.support.PostCacheTags
+import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
+import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.app.AppConfig
 import com.back.global.security.application.ContentHtmlTrustState
 import com.back.global.security.application.HtmlContentSanitizer
@@ -59,6 +62,29 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         postHitDedupService.clearAllForTest()
     }
 
+    private fun writePost(
+        author: Member,
+        title: String,
+        content: String,
+        published: Boolean = false,
+        listed: Boolean = false,
+        idempotencyKey: String? = null,
+        contentHtml: String? = null,
+        summary: String? = null,
+        summaryMode: PostSummaryMode = PostSummaryMode.AUTO,
+    ): Post =
+        postFacade.write(
+            author = author,
+            title = title,
+            content = content,
+            published = published,
+            listed = listed,
+            idempotencyKey = idempotencyKey,
+            contentHtml = contentHtml,
+            summary = summary,
+            summaryMode = summaryMode,
+        )
+
     @Nested
     inner class Write {
         @Test
@@ -67,7 +93,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val resultActions =
                 mvc.post("/post/api/v1/posts") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "제목", "content": "내용"}"""
+                    content = """{"title": "제목", "content": "내용", "summaryMode": "AUTO"}"""
                 }
 
             val responseBody = resultActions.andReturn().response.contentAsString
@@ -95,7 +121,8 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             mvc
                 .post("/post/api/v1/posts") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "공개 글", "content": "내용", "published": true, "listed": true}"""
+                    content =
+                        """{"title": "공개 글", "content": "내용", "published": true, "listed": true, "summaryMode": "AUTO"}"""
                 }.andExpect {
                     match(handler().handlerType(ApiV1PostCommandController::class.java))
                     match(handler().methodName("write"))
@@ -156,7 +183,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 .post("/post/api/v1/posts") {
                     header("Idempotency-Key", idempotencyKey)
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "멱등 글", "content": "멱등 내용"}"""
+                    content = """{"title": "멱등 글", "content": "멱등 내용", "summaryMode": "AUTO"}"""
                 }.andExpect {
                     status { isCreated() }
                 }
@@ -165,7 +192,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 .post("/post/api/v1/posts") {
                     header("Idempotency-Key", idempotencyKey)
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "멱등 글", "content": "멱등 내용"}"""
+                    content = """{"title": "멱등 글", "content": "멱등 내용", "summaryMode": "AUTO"}"""
                 }.andExpect {
                     status { isCreated() }
                 }
@@ -186,6 +213,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                             {
                               "title": "보안 테스트",
                               "content": "본문",
+                              "summaryMode": "AUTO",
                               "contentHtml": "<p onclick=\"alert('x')\">safe</p><script>alert('x')</script>"
                             }
                             """.trimIndent()
@@ -213,7 +241,8 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 mvc
                     .post("/post/api/v1/posts") {
                         contentType = MediaType.APPLICATION_JSON
-                        content = """{"title": "빈 HTML", "content": "본문", "contentHtml": "   "}"""
+                        content =
+                            """{"title": "빈 HTML", "content": "본문", "contentHtml": "   ", "summaryMode": "AUTO"}"""
                     }.andExpect {
                         status { isCreated() }
                     }.andReturn()
@@ -254,7 +283,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `공개 글 저장 후 관리자 단건 조회는 코드펜스 본문을 원문 그대로 반환한다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val post = postFacade.write(actor, "코드펜스 공개", fencedMarkdown, true, true)
+            val post = writePost(actor, "코드펜스 공개", fencedMarkdown, true, true)
             entityManager.clear()
 
             val responseBody =
@@ -275,7 +304,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `비공개 글 저장·수정 왕복 후에도 관리자 조회 코드펜스 본문이 보존된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val created = postFacade.write(actor, "코드펜스 비공개", "draft body", false, false)
+            val created = writePost(actor, "코드펜스 비공개", "draft body", false, false)
             val version = created.version ?: 0L
 
             postFacade.modify(
@@ -353,7 +382,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `비로그인 상세 조회는 merged snapshot cache를 채운다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(actor, "스냅샷 캐시 테스트 글", "작은 공개 본문", true, true)
+            val post = writePost(actor, "스냅샷 캐시 테스트 글", "작은 공개 본문", true, true)
             val snapshotCache =
                 cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
                     ?: error("detail public snapshot cache is missing")
@@ -374,7 +403,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `공개지만 목록 미노출 글은 비로그인 상세 조회가 가능하다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(actor, "링크 공개 글", "공개 상세 내용", true, false)
+            val post = writePost(actor, "링크 공개 글", "공개 상세 내용", true, false)
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
                 status { isOk() }
@@ -389,7 +418,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("user1@test.com")
         fun `성공 - 미공개 글 작성자 조회`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(actor, "미공개 글", "내용", false, false)
+            val post = writePost(actor, "미공개 글", "내용", false, false)
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
                 status { isOk() }
@@ -401,7 +430,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `관리자 role 인증은 이메일 드리프트가 있어도 상세 수정 권한 플래그를 유지한다`() {
             val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(writer, "관리자 권한 확인 글", "내용", false, false)
+            val post = writePost(writer, "관리자 권한 확인 글", "내용", false, false)
             val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
 
@@ -430,7 +459,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("user3@test.com")
         fun `실패 - 미공개 글 다른 사용자`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(actor, "미공개 글", "내용", false, false)
+            val post = writePost(actor, "미공개 글", "내용", false, false)
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
                 status { isForbidden() }
@@ -489,7 +518,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `비공개 글은 공개 목록에서 조회되지 않는다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val unpublishedPost = postFacade.write(actor, "비공개 글", "비공개 내용", false, false)
+            val unpublishedPost = writePost(actor, "비공개 글", "비공개 내용", false, false)
 
             mvc.get("/post/api/v1/posts").andExpect {
                 status { isOk() }
@@ -500,7 +529,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `공개지만 목록 미노출 글은 공개 목록에서 조회되지 않는다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val unlistedPost = postFacade.write(actor, "비노출 공개 글", "비노출 내용", true, false)
+            val unlistedPost = writePost(actor, "비노출 공개 글", "비노출 내용", true, false)
 
             mvc.get("/post/api/v1/posts").andExpect {
                 status { isOk() }
@@ -569,7 +598,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `explore 커서 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            postFacade.write(
+            writePost(
                 actor,
                 "explore-cursor-public-${System.currentTimeMillis()}",
                 """
@@ -608,7 +637,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `explore 커서 조회는 tag filter가 있으면 tag cache tag를 유지한다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            postFacade.write(
+            writePost(
                 actor,
                 "explore-cursor-tag-cache-${System.currentTimeMillis()}",
                 """
@@ -727,7 +756,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `홈 bootstrap 조회는 tag와 cursor 미지원 정렬을 공개 탐색 기본 정렬로 보정한다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTag = "bootstrap-tag-${System.currentTimeMillis()}"
-            postFacade.write(
+            writePost(
                 actor,
                 "bootstrap tag post",
                 """
@@ -787,7 +816,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `같은 작성자의 관련 공개 글 조회는 제외 글과 limit 경계를 보정한다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val excludedPost =
-                postFacade.write(
+                writePost(
                     actor,
                     "related-author-excluded-${System.currentTimeMillis()}",
                     "관련 글 제외 대상",
@@ -795,7 +824,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     true,
                 )
             val relatedPost =
-                postFacade.write(
+                writePost(
                     actor,
                     "related-author-target-${System.currentTimeMillis()}",
                     "관련 글 조회 대상",
@@ -829,7 +858,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
 
                 피드 메타 테스트 본문
                 """.trimIndent()
-            val post = postFacade.write(actor, uniqueTitle, postContent, true, true)
+            val post = writePost(actor, uniqueTitle, postContent, true, true)
 
             mvc
                 .get("/post/api/v1/posts/explore") {
@@ -851,7 +880,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "search-list-${System.currentTimeMillis()}"
             val post =
-                postFacade.write(
+                writePost(
                     actor,
                     uniqueTitle,
                     """
@@ -900,7 +929,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val keyword = "rank-${System.currentTimeMillis()}"
             val titleMatchedPost =
-                postFacade.write(
+                writePost(
                     actor,
                     "제목 $keyword 매칭",
                     "제목 우선순위 검증 본문",
@@ -908,7 +937,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     true,
                 )
             val tagMatchedPost =
-                postFacade.write(
+                writePost(
                     actor,
                     "태그 매칭 글",
                     """
@@ -920,7 +949,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     true,
                 )
             val contentMatchedPost =
-                postFacade.write(
+                writePost(
                     actor,
                     "본문 매칭 글",
                     "이 글은 본문에서만 $keyword 를 포함합니다.",
@@ -948,7 +977,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val keyword = "hitsort-${System.currentTimeMillis()}"
             val titleMatchedLowHits =
-                postFacade.write(
+                writePost(
                     actor,
                     "제목 $keyword 매칭",
                     "조회수 정렬보다 관련도가 높은 글",
@@ -956,7 +985,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     true,
                 )
             val contentMatchedHighHits =
-                postFacade.write(
+                writePost(
                     actor,
                     "본문 매칭 글",
                     "이 글은 본문에서만 $keyword 를 포함합니다.",
@@ -989,7 +1018,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val tokenB = "websocket"
             val keyword = "$tokenA $tokenB"
             val titleMatchedPost =
-                postFacade.write(
+                writePost(
                     actor,
                     "$tokenA 실시간 $tokenB 설계",
                     "멀티 토큰 제목 매치 검증 본문",
@@ -997,7 +1026,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     true,
                 )
             val contentPhrasePost =
-                postFacade.write(
+                writePost(
                     actor,
                     "본문 exact phrase 매치",
                     "이 글은 본문에서만 $keyword 를 포함합니다.",
@@ -1024,7 +1053,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "search-hashtag-${System.currentTimeMillis()}"
             val post =
-                postFacade.write(
+                writePost(
                     actor,
                     uniqueTitle,
                     """
@@ -1056,7 +1085,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "search-tag-prefix-${System.currentTimeMillis()}"
             val post =
-                postFacade.write(
+                writePost(
                     actor,
                     uniqueTitle,
                     """
@@ -1088,7 +1117,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "tag-filter-${System.currentTimeMillis()}"
             val post =
-                postFacade.write(
+                writePost(
                     actor,
                     uniqueTitle,
                     """
@@ -1119,7 +1148,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @Test
         fun `태그 집계 조회는 공개 목록의 태그 카운트를 반환한다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            postFacade.write(
+            writePost(
                 actor,
                 "tags-aggregation-${System.currentTimeMillis()}",
                 """
@@ -1180,7 +1209,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `인증된 작성자가 기존 글 수정 요청 시 글이 정상 변경된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val post = writePost(actor, "원래 제목", "원래 내용", true, true)
             val version = post.version ?: 0L
 
             mvc
@@ -1200,7 +1229,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `성공 - 관리자가 다른 사람 글 수정`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val post = writePost(actor, "원래 제목", "원래 내용", true, true)
             val version = post.version ?: 0L
 
             mvc
@@ -1219,7 +1248,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `관리자 role 인증은 이메일 드리프트가 있어도 다른 사람 글 수정을 허용한다`() {
             val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(writer, "원래 제목", "원래 내용", true, true)
+            val post = writePost(writer, "원래 제목", "원래 내용", true, true)
             val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
             val version = post.version ?: 0L
@@ -1243,7 +1272,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("user3@test.com")
         fun `실패 - 권한 없음`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val post = writePost(actor, "원래 제목", "원래 내용", true, true)
             val version = post.version ?: 0L
 
             mvc
@@ -1261,7 +1290,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `published false로 수정하면 listed가 자동으로 false가 된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val post = postFacade.write(actor, "공개 글", "내용", true, true)
+            val post = writePost(actor, "공개 글", "내용", true, true)
             val version = post.version ?: 0L
 
             mvc
@@ -1292,7 +1321,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `실패 - version 없이 수정 요청하면 400`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val post = writePost(actor, "원래 제목", "원래 내용", true, true)
 
             mvc
                 .put("/post/api/v1/posts/${post.id}") {
@@ -1307,7 +1336,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `실패 - 요청 version 이 현재 version 과 다르면 409`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val post = writePost(actor, "원래 제목", "원래 내용", true, true)
             val staleVersion = (post.version ?: 0L) + 1
 
             mvc
@@ -1324,7 +1353,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `글 수정 시 contentHtml 은 sanitize 후 저장된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val post = postFacade.write(actor, "원본", "원본 본문", true, true)
+            val post = writePost(actor, "원본", "원본 본문", true, true)
             val version = post.version ?: 0L
 
             mvc
@@ -1384,7 +1413,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `작성자가 본인 글 삭제 요청 시 삭제가 성공적으로 처리된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val post = postFacade.write(actor, "삭제할 글", "내용", true, true)
+            val post = writePost(actor, "삭제할 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
                 match(handler().handlerType(ApiV1PostCommandController::class.java))
@@ -1399,7 +1428,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `legacy version null 글도 삭제 요청이 성공한다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val post = postFacade.write(actor, "legacy-version-null-${System.currentTimeMillis()}", "내용", true, true)
+            val post = writePost(actor, "legacy-version-null-${System.currentTimeMillis()}", "내용", true, true)
 
             jdbcTemplate.update("update post set version = null where id = ?", post.id)
             entityManager.clear()
@@ -1415,7 +1444,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `성공 - 관리자가 다른 사람 글 삭제`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(actor, "삭제될 글", "내용", true, true)
+            val post = writePost(actor, "삭제될 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
                 status { isOk() }
@@ -1427,7 +1456,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `관리자 role 인증은 이메일 드리프트가 있어도 다른 사람 글 삭제를 허용한다`() {
             val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(writer, "삭제될 글", "내용", true, true)
+            val post = writePost(writer, "삭제될 글", "내용", true, true)
             val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
 
@@ -1444,7 +1473,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("user3@test.com")
         fun `실패 - 권한 없음`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(actor, "다른 사람 글", "내용", true, true)
+            val post = writePost(actor, "다른 사람 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
                 status { isForbidden() }
@@ -1520,7 +1549,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `관리자 role 인증은 이메일 드리프트가 있어도 비공개 글 조회수 반영을 허용한다`() {
             val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(writer, "비공개 조회수 점검", "내용", false, false)
+            val post = writePost(writer, "비공개 조회수 점검", "내용", false, false)
             val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
             val initialHitCount = post.hitCount
@@ -1557,7 +1586,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         @WithUserDetails("admin@test.com")
         fun `성공 - 키워드 검색`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
-            val targetPost = postFacade.write(actor, "내 검색 키워드 글", "검색 검증 글")
+            val targetPost = writePost(actor, "내 검색 키워드 글", "검색 검증 글")
 
             mvc
                 .get("/post/api/v1/posts/mine") {
@@ -1662,7 +1691,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `soft delete 글은 관리자 기본 목록에서 제외되고 deleted 목록에서 조회된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val uniqueTitle = "삭제 목록 대상-${System.currentTimeMillis()}"
-            val post = postFacade.write(actor, uniqueTitle, "삭제 목록 테스트 본문", true, true)
+            val post = writePost(actor, uniqueTitle, "삭제 목록 테스트 본문", true, true)
             postFacade.delete(post, actor)
 
             mvc
@@ -1696,7 +1725,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val prefix = "삭제탭-페이지"
 
             repeat(3) { idx ->
-                val post = postFacade.write(actor, "$prefix-$idx", "페이지네이션", true, true)
+                val post = writePost(actor, "$prefix-$idx", "페이지네이션", true, true)
                 postFacade.delete(post, actor)
             }
 
@@ -1735,7 +1764,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `관리자는 deleted 글을 복구할 수 있다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val uniqueTitle = "복구 대상-${System.currentTimeMillis()}"
-            val post = postFacade.write(actor, uniqueTitle, "복구 테스트 본문", true, true)
+            val post = writePost(actor, uniqueTitle, "복구 테스트 본문", true, true)
             postFacade.delete(post, actor)
 
             mvc
@@ -1770,7 +1799,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `관리자는 deleted 글을 영구삭제할 수 있다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val uniqueTitle = "영구삭제 대상-${System.currentTimeMillis()}"
-            val post = postFacade.write(actor, uniqueTitle, "영구삭제 테스트 본문", true, true)
+            val post = writePost(actor, uniqueTitle, "영구삭제 테스트 본문", true, true)
             postFacade.delete(post, actor)
 
             mvc
@@ -1808,7 +1837,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `익명 공개 상세 cache snapshot은 raw로 유지하고 canonical body와 ETag를 만든다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val retiredUrl = "https://api.aquilaxk.site/post/api/v1/images/folder%2Fcover.png?version=1#preview"
-            val post = postFacade.write(actor, "retired storage public", "stored content", true, true)
+            val post = writePost(actor, "retired storage public", "stored content", true, true)
             val snapshotCache =
                 cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
                     ?: error("detail public snapshot cache is missing")
@@ -1864,7 +1893,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `인증 상세는 retired storage URL을 저장값 그대로 반환한다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val retiredUrl = "https://api.aquilaxk.site/post/api/v1/images/folder%2Fprivate.png"
-            val post = postFacade.write(actor, "retired storage authenticated", "![cover]($retiredUrl)", true, true)
+            val post = writePost(actor, "retired storage authenticated", "![cover]($retiredUrl)", true, true)
 
             mvc
                 .get("/post/api/v1/posts/${post.id}")

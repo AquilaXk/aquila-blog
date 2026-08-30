@@ -159,6 +159,25 @@ class PostWriteSideEffectHandlerTest {
     }
 
     @Test
+    @DisplayName("추천 후속 작업이 없으면 feature store를 변경하지 않는다")
+    fun skipRecommendationSideEffectWhenNone() {
+        // when
+        handler.handle(
+            PostWriteAfterCommitEvent(
+                command =
+                    sideEffectCommand(
+                        postId = 18L,
+                        recommendationAction = PostRecommendationSideEffect.NONE,
+                    ),
+                domainEvent = null,
+            ),
+        )
+
+        // then
+        verifyNoInteractions(postRecommendFeatureStoreService, postRepository, postAttrRepository)
+    }
+
+    @Test
     @DisplayName("외부 post write 이벤트 발행 실패는 후속 작업 handler 밖으로 전파한다")
     fun propagateDomainEventPublishFailure() {
         // given

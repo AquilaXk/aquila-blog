@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.event.PostWrittenEvent
+import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.revalidate.adapter.event.RevalidateEventListener
 import com.back.global.revalidate.dto.RevalidateHomePayload
 import com.back.global.task.adapter.persistence.TaskRepository
@@ -53,6 +54,7 @@ class RevalidateEventListenerTest : BaseSeededIntegrationTest() {
                 content = "content",
                 published = true,
                 listed = true,
+                summaryMode = PostSummaryMode.AUTO,
             )
 
         val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()

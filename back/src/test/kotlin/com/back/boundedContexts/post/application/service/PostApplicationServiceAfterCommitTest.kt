@@ -67,6 +67,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 content = "rollback content",
                 published = true,
                 listed = true,
+                summaryMode = PostSummaryMode.AUTO,
             )
             status.setRollbackOnly()
         }
@@ -93,6 +94,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                     content = "hit durable content",
                     published = true,
                     listed = true,
+                    summaryMode = PostSummaryMode.AUTO,
                 )
             }!!
         val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
@@ -139,6 +141,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 content = "commit content",
                 published = true,
                 listed = true,
+                summaryMode = PostSummaryMode.AUTO,
             )
         }
         val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
@@ -172,6 +175,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                     content = "durable side effect content",
                     published = true,
                     listed = true,
+                    summaryMode = PostSummaryMode.AUTO,
                 )
             }!!
 
@@ -202,6 +206,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                 content = "cache failure content",
                 published = true,
                 listed = true,
+                summaryMode = PostSummaryMode.AUTO,
             )
         }
         val payload = singlePostWriteSideEffectPayloadSince(previousTaskIds)
@@ -231,6 +236,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                     content = "recommend counter content",
                     published = true,
                     listed = true,
+                    summaryMode = PostSummaryMode.AUTO,
                 )
             }!!
         transactionTemplate.executeWithoutResult {
@@ -285,6 +291,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                     content = "same markdown content",
                     published = true,
                     listed = true,
+                    summaryMode = PostSummaryMode.AUTO,
                 )
             }!!
         clearSideEffectMocks()
@@ -326,6 +333,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
                     content = "private summary content",
                     published = false,
                     listed = false,
+                    summaryMode = PostSummaryMode.AUTO,
                 )
             }!!
         val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()

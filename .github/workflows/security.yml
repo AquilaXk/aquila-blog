@@ -297,7 +297,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  deploy:
+  security-gates-complete:
     if: github.event_name == 'push'
     needs:
       - privacy-drift-gate
@@ -306,9 +306,21 @@ jobs:
       - vulnerability-exception-schema
       - container-image-scan
       - sbom
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Record successful Security gates
+        run: echo "All exact-SHA Security gates passed."
+
+  deploy:
+    if: github.event_name == 'push'
+    needs:
+      - security-gates-complete
     permissions:
       actions: read
       attestations: write
+      checks: read
       contents: read
       id-token: write
       packages: write

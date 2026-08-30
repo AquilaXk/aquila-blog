@@ -164,9 +164,10 @@ test("Security leaves exact-SHA runs independent", () => {
 
 test("Security calls Deploy only after every push security gate with minimum reusable permissions", () => {
   const security = securityDocument()
+  const securityGatesComplete = security.jobs["security-gates-complete"]
   const deploy = security.jobs.deploy
 
-  assert.deepEqual(deploy.needs, [
+  assert.deepEqual(securityGatesComplete.needs, [
     "privacy-drift-gate",
     "backend-dependency-check",
     "codeql",
@@ -174,18 +175,22 @@ test("Security calls Deploy only after every push security gate with minimum reu
     "container-image-scan",
     "sbom",
   ])
+  assert.equal(securityGatesComplete.if, "github.event_name == 'push'")
+  assert.deepEqual(deploy.needs, ["security-gates-complete"])
   assert.equal(deploy.if, "github.event_name == 'push'")
   assert.equal(deploy.uses, "./.github/workflows/deploy.yml")
   assert.equal(deploy.secrets, "inherit")
   assert.deepEqual(deploy.permissions, {
     actions: "read",
     attestations: "write",
+    checks: "read",
     contents: "read",
     "id-token": "write",
     packages: "write",
   })
 
   const workflow = deployDocument()
+  assert.equal(workflow.jobs.calculateTag.permissions.checks, "read")
   assert.deepEqual(workflow.on.workflow_call, {})
   assert.equal(workflow.on.workflow_run, undefined)
   assert.equal(workflow.on.push, undefined)
@@ -216,8 +221,8 @@ test("Security calls Deploy only after every push security gate with minimum reu
   assert.equal(securityGate.env.SECURITY_CALLER_ADMISSION, "${{ needs.triggerGuard.outputs.security_caller_admission }}")
   assert.match(securityGate.run, /Security gate satisfied by the exact same-SHA caller DAG/)
   assert.equal(meta.env.DEPLOY_SHA_INPUT, "${{ github.sha }}")
-  assert.match(dispatchDelivery.run, /actions\/workflows\/security\.yml\/runs\?head_sha=\$\{DEPLOY_SHA\}/)
-  assert.match(dispatchDelivery.run, /\.event == "push" and \.head_branch == "main"/)
+  assert.match(dispatchDelivery.run, /commits\/\$\{DEPLOY_SHA\}\/check-runs\?filter=latest/)
+  assert.match(dispatchDelivery.run, /\.name == "security-gates-complete" and \.app\.slug == "github-actions"/)
   assert.doesNotMatch(dispatchDelivery.run, /deploy\.yml\/runs|\.event == "workflow_run"/)
   assert.doesNotMatch(meta.run, /attestation-source-sha-mismatch/)
 
@@ -314,8 +319,8 @@ test("dispatch waits for the exact Platform Security delivery to succeed", () =>
   assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60"])
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [
-    `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
-    `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    `api repos/AquilaXk/aquila-blog/commits/${"a".repeat(40)}/check-runs?filter=latest&per_page=100 --paginate --jq .check_runs[] | select(.name == "security-gates-complete" and .app.slug == "github-actions") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    `api repos/AquilaXk/aquila-blog/commits/${"a".repeat(40)}/check-runs?filter=latest&per_page=100 --paginate --jq .check_runs[] | select(.name == "security-gates-complete" and .app.slug == "github-actions") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
   ])
 })
 
@@ -335,17 +340,16 @@ test("dispatch gates paginate past terminal first pages to find the exact workfl
   }
 })
 
-test("dispatch ignores terminal Security runs until the exact main push succeeds", () => {
-  const result = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", ["terminal:1", "active:2", "success:3"])
-  const apiCall = `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`
+test("dispatch fails immediately when the exact Security gate marker is terminal non-success", () => {
+  const result = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", ["terminal:1"])
 
-  assert.equal(result.status, 0, result.stderr)
-  assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [apiCall, apiCall, apiCall])
-  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60", "sleep 60"])
+  assert.notEqual(result.status, 0)
+  assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 1)
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), [])
 })
 
 for (const [label, responses, expectedApiCalls, expectedSleeps] of [
-  ["terminal-only rows after its bounded wait", Array(250).fill("terminal:1"), 250, 249],
+  ["terminal-only rows", ["terminal:1"], 1, 0],
   ["API failure", ["error"], 1, 0],
   ["bounded timeout", Array(250).fill(""), 250, 249],
 ]) {
@@ -362,7 +366,6 @@ test("dispatch gates query only their exact workflow paths", () => {
   for (const [stepName, workflowPath] of [
     ["Require successful CI for deployment SHA", "ci.yml"],
     ["Require successful Security for deploy SHA", "security.yml"],
-    ["Require successful automatic Security delivery for dispatch SHA", "security.yml"],
   ]) {
     const result = runWorkflowGate(stepName, ["success:3"])
     assert.equal(result.status, 0, result.stderr)
@@ -371,6 +374,12 @@ test("dispatch gates query only their exact workflow paths", () => {
       `api repos/AquilaXk/aquila-blog/actions/workflows/${workflowPath}/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
     ])
   }
+
+  const dispatchResult = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", ["success:3"])
+  assert.equal(dispatchResult.status, 0, dispatchResult.stderr)
+  assert.deepEqual(dispatchResult.callLog.filter((call) => call.startsWith("api ")), [
+    `api repos/AquilaXk/aquila-blog/commits/${"a".repeat(40)}/check-runs?filter=latest&per_page=100 --paginate --jq .check_runs[] | select(.name == "security-gates-complete" and .app.slug == "github-actions") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+  ])
 })
 
 test("Platform consumes only the Web digest handoff", () => {

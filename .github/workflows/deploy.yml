@@ -149,6 +149,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
     runs-on: ubuntu-latest
     if: >
       needs.triggerGuard.result == 'success' && (
@@ -301,18 +302,22 @@ jobs:
           for ATTEMPT in $(seq 1 250); do
             RUN_STATES="$(
               gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                "repos/${GITHUB_REPOSITORY}/commits/${DEPLOY_SHA}/check-runs?filter=latest&per_page=100" \
                 --paginate \
-                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+                --jq '.check_runs[] | select(.name == "security-gates-complete" and .app.slug == "github-actions") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
             )" || {
               echo "automatic Security delivery API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
               exit 1
             }
 
-            SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
-            if [ -n "${SUCCESS_RUN_ID}" ]; then
-              echo "automatic Security delivery gate passed: deploy_sha=${DEPLOY_SHA} security_run_id=${SUCCESS_RUN_ID}"
+            SUCCESS_CHECK_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
+            if [ -n "${SUCCESS_CHECK_RUN_ID}" ]; then
+              echo "automatic Security delivery gate passed: deploy_sha=${DEPLOY_SHA} security_check_run_id=${SUCCESS_CHECK_RUN_ID}"
               exit 0
+            fi
+            if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
+              echo "repository dispatch blocked: exact-SHA Security gates did not succeed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
             fi
             if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
           done

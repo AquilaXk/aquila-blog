@@ -22,6 +22,7 @@ import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostWriteSideEffectPayload
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
@@ -335,6 +336,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 content = "탈퇴 후 공개 조회에서 빠져야 하는 글",
                 published = true,
                 listed = true,
+                summaryMode = PostSummaryMode.AUTO,
             )
         val otherAuthor =
             memberFacade.join(
@@ -351,6 +353,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 content = "다른 회원의 공개 글",
                 published = true,
                 listed = true,
+                summaryMode = PostSummaryMode.AUTO,
             )
         val authoredComment = saveComment(member, otherPost, "탈퇴 후 숨겨져야 하는 댓글")
         val authoredCommentContent = authoredComment.content
@@ -364,6 +367,7 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 content = "이미 삭제된 글의 댓글도 정리되어야 한다",
                 published = true,
                 listed = true,
+                summaryMode = PostSummaryMode.AUTO,
             )
         val authoredCommentOnDeletedPost =
             saveComment(member, deletedOtherPost, "삭제된 글에 남은 탈퇴 회원 댓글")

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 import { writePublicManifest } from "./write-public-manifest.mjs"
 
 const errorCodeKeys = ["code", "httpStatus", "defaultUserMessage", "kind"]
-const summaryResolveKinds = new Set(["create", "modify", "backfill"])
+const summaryResolveKinds = new Set(["create", "modify", "read"])
 const summaryOutcomes = new Set(["RESOLVED", "MANUAL_SUMMARY_REQUIRED"])
 const summaryModes = new Set(["MANUAL", "AUTO"])
 const summarySources = new Set(["MANUAL", "LEADING_BLOCK", "EXTRACTED", "NONE", "MIGRATED"])
@@ -83,20 +83,41 @@ function validateSummaryRequest(value) {
   }
 }
 
+function validateSummaryValue(value, label) {
+  if (!exactKeys(value, ["summary", "source", "algorithmVersion"]) || typeof value.summary !== "string" || !summarySources.has(value.source) || typeof value.algorithmVersion !== "string" || value.algorithmVersion.length === 0) {
+    throw new Error(`Canonical summary fixture ${label} value is invalid`)
+  }
+}
+
 function validateSummaryFixtures(value) {
-  if (!exactKeys(value, ["version", "contract", "fixtures"]) || value.version !== 1 || value.contract !== "aquila-canonical-summary-fixtures" || !Array.isArray(value.fixtures)) {
+  if (!exactKeys(value, ["version", "contract", "fixtures"]) || value.version !== 2 || value.contract !== "aquila-canonical-summary-fixtures" || !Array.isArray(value.fixtures)) {
     throw new Error("Canonical summary fixture identity is invalid")
   }
   const ids = new Set()
   for (const fixture of value.fixtures) {
-    const expectedKeys = ["id", "resolve", "title", "content", "request", "outcome"]
+    const expectedKeys = ["id", "resolve", "title", "content", "outcome"]
+    if (fixture?.request !== undefined) expectedKeys.push("request")
     if (fixture?.expected !== undefined) expectedKeys.push("expected")
     if (fixture?.existing !== undefined) expectedKeys.push("existing")
+    if (fixture?.persisted !== undefined) expectedKeys.push("persisted")
     if (fixture?.retry !== undefined) expectedKeys.push("retry")
     if (!exactKeys(fixture, expectedKeys) || typeof fixture.id !== "string" || fixture.id.length === 0 || ids.has(fixture.id) || !summaryResolveKinds.has(fixture.resolve) || typeof fixture.title !== "string" || typeof fixture.content !== "string" || !summaryOutcomes.has(fixture.outcome)) {
       throw new Error("Canonical summary fixture has an invalid shape")
     }
-    validateSummaryRequest(fixture.request)
+    if (fixture.resolve === "read") {
+      if (fixture.request !== undefined || fixture.existing !== undefined || fixture.retry !== undefined || fixture.persisted === undefined) {
+        throw new Error("Canonical summary read fixture must not define executable input")
+      }
+      validateSummaryValue(fixture.persisted, "persisted")
+      if (fixture.persisted.source !== "MIGRATED" || fixture.outcome !== "RESOLVED") {
+        throw new Error("Canonical summary read fixture must preserve MIGRATED provenance")
+      }
+    } else {
+      if (fixture.request === undefined || fixture.persisted !== undefined) {
+        throw new Error("Executable canonical summary fixture input is invalid")
+      }
+      validateSummaryRequest(fixture.request)
+    }
     if (fixture.existing !== undefined && (fixture.resolve !== "modify" || !exactKeys(fixture.existing, ["summary", "source"]) || typeof fixture.existing.summary !== "string" || !summarySources.has(fixture.existing.source))) {
       throw new Error("Canonical summary fixture existing value is invalid")
     }
@@ -105,8 +126,9 @@ function validateSummaryFixtures(value) {
       validateSummaryRequest(fixture.retry)
     }
     if (fixture.outcome === "RESOLVED") {
-      if (!exactKeys(fixture.expected, ["summary", "source", "algorithmVersion"]) || typeof fixture.expected.summary !== "string" || !summarySources.has(fixture.expected.source) || typeof fixture.expected.algorithmVersion !== "string" || fixture.expected.algorithmVersion.length === 0) {
-        throw new Error("Canonical summary fixture expected value is invalid")
+      validateSummaryValue(fixture.expected, "expected")
+      if (fixture.resolve === "read" && JSON.stringify(fixture.persisted) !== JSON.stringify(fixture.expected)) {
+        throw new Error("Canonical summary read fixture persisted and expected values must match")
       }
     } else if (fixture.expected !== undefined) {
       throw new Error("Rejected canonical summary fixture must not define an expected value")

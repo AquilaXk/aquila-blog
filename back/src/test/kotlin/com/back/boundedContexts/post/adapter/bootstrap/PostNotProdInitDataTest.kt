@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.boundedContexts.post.model.PostSummaryMode
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
@@ -34,10 +35,18 @@ class PostNotProdInitDataTest {
 
         fixture.makeBasePosts()
 
-        then(postUseCase).should().write(user2, "제목 2", "내용 2", true, true)
-        then(postUseCase).should().write(user3, "제목 3", "내용 3", true, true)
-        then(postUseCase).should(never()).write(user1, "제목 1", "내용 1", true, true)
-        then(postUseCase).should(never()).write(user1, "비공개 글", "비공개 내용", false, false)
+        then(postUseCase)
+            .should()
+            .write(user2, "제목 2", "내용 2", true, true, summaryMode = PostSummaryMode.AUTO)
+        then(postUseCase)
+            .should()
+            .write(user3, "제목 3", "내용 3", true, true, summaryMode = PostSummaryMode.AUTO)
+        then(postUseCase)
+            .should(never())
+            .write(user1, "제목 1", "내용 1", true, true, summaryMode = PostSummaryMode.AUTO)
+        then(postUseCase)
+            .should(never())
+            .write(user1, "비공개 글", "비공개 내용", false, false, summaryMode = PostSummaryMode.AUTO)
     }
 
     private fun sampleMember(

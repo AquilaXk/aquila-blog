@@ -15,29 +15,10 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class PostUseCaseAdapter(
     private val postApplicationService: PostApplicationService,
-    private val postSummaryBackfillService: PostSummaryBackfillService,
 ) : PostUseCase {
     override fun count(): Long = postApplicationService.count()
 
     override fun randomSecureTip(): String = postApplicationService.randomSecureTip()
-
-    override fun previewSummary(
-        title: String,
-        content: String,
-    ): PostUseCase.SummaryPreviewResult =
-        PostSummaryResolver.resolveAutomatic(title, content).let {
-            PostUseCase.SummaryPreviewResult(it.text, it.source, it.contentHash, it.algorithmVersion)
-        }
-
-    override fun backfillSummaries(
-        afterId: Long,
-        maxId: Long,
-        limit: Int,
-        dryRun: Boolean,
-    ): PostUseCase.SummaryBackfillResult =
-        postSummaryBackfillService.backfillBatch(afterId, maxId, limit, dryRun).let {
-            PostUseCase.SummaryBackfillResult(it.scanned, it.updated, it.skipped, it.nextAfterId, it.hasMore, it.dryRun)
-        }
 
     @Transactional
     override fun write(
@@ -49,7 +30,7 @@ class PostUseCaseAdapter(
         idempotencyKey: String?,
         contentHtml: String?,
         summary: String?,
-        summaryMode: PostSummaryMode?,
+        summaryMode: PostSummaryMode,
     ): Post =
         postApplicationService.write(
             author,

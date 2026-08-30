@@ -16,7 +16,6 @@ import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.boundedContexts.post.model.PostSummaryMode
-import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.HtmlContentSanitizer
@@ -68,8 +67,9 @@ class PostApplicationService(
         idempotencyKey: String? = null,
         contentHtml: String? = null,
         summary: String? = null,
-        summaryMode: PostSummaryMode? = null,
+        summaryMode: PostSummaryMode,
     ): Post {
+        validateCreateSummaryIntent(summary, summaryMode)
         val persistenceAuthor = author.toPersistenceMember()
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
 
@@ -233,8 +233,6 @@ class PostApplicationService(
         val previousContentHtmlTrustState = post.contentHtmlTrustState
         val previousSummaryText = post.summaryText
         val previousSummarySource = post.summarySource
-        val previousSummaryVersion = post.summaryAlgorithmVersion
-        val previousSummaryGeneratedAt = post.summaryGeneratedAt
         val wasPublic = isPubliclyListed(post)
         val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
         try {
@@ -258,18 +256,12 @@ class PostApplicationService(
                     contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
                 )
             }
-            post.applyResolvedSummary(
-                resolveModifiedSummary(
-                    title = title,
-                    content = content,
-                    submittedSummary = summary,
-                    requestedMode = summaryMode,
-                    existingText = previousSummaryText,
-                    existingSource = previousSummarySource,
-                    existingVersion = previousSummaryVersion,
-                    existingGeneratedAt = previousSummaryGeneratedAt,
-                ),
-            )
+            resolveModifiedSummary(
+                title = title,
+                content = content,
+                submittedSummary = summary,
+                requestedMode = summaryMode,
+            )?.let { resolved -> post.applyResolvedSummary(resolved) }
             postRepository.flush()
             postTagIndexService.syncPostTags(post)
             if (wasTempDraft) {
@@ -343,7 +335,7 @@ class PostApplicationService(
         listed: Boolean,
         contentHtml: String?,
         summary: String?,
-        summaryMode: PostSummaryMode?,
+        summaryMode: PostSummaryMode,
     ): Post {
         val resolvedSummary = resolveCreatedSummary(title, content, summary, summaryMode)
         val contentHtmlTrust = HtmlContentSanitizer.sanitizeForPersistence(contentHtml)
@@ -369,73 +361,52 @@ class PostApplicationService(
         title: String,
         content: String,
         submittedSummary: String?,
-        requestedMode: PostSummaryMode?,
-    ): PostSummaryResolver.ResolvedPostSummary {
-        val mode = requestedMode ?: if (submittedSummary.isNullOrBlank()) PostSummaryMode.AUTO else PostSummaryMode.MANUAL
-        requireManualSummary(mode, submittedSummary)
-        return PostSummaryResolver.resolveForCreate(
-            title = title,
-            content = content,
-            submittedSummary = submittedSummary.takeIf { mode == PostSummaryMode.MANUAL },
-        )
-    }
+        requestedMode: PostSummaryMode,
+    ): PostSummaryResolver.ResolvedPostSummary =
+        when (requestedMode) {
+            PostSummaryMode.AUTO -> {
+                PostSummaryResolver.resolveAutomatic(title, content)
+            }
+            PostSummaryMode.MANUAL -> PostSummaryResolver.resolveManual(content, checkNotNull(submittedSummary))
+        }
 
     private fun resolveModifiedSummary(
         title: String,
         content: String,
         submittedSummary: String?,
         requestedMode: PostSummaryMode?,
-        existingText: String?,
-        existingSource: PostSummarySource,
-        existingVersion: String?,
-        existingGeneratedAt: java.time.Instant?,
-    ): PostSummaryResolver.ResolvedPostSummary {
-        val mode =
-            requestedMode
-                ?: when {
-                    submittedSummary == null -> null
-                    submittedSummary.isBlank() -> PostSummaryMode.AUTO
-                    else -> PostSummaryMode.MANUAL
-                }
-        requireManualSummary(mode, submittedSummary)
+    ): PostSummaryResolver.ResolvedPostSummary? =
+        when (requestedMode) {
+            PostSummaryMode.AUTO -> {
+                requireAutomaticSummary(submittedSummary)
+                PostSummaryResolver.resolveAutomatic(title, content)
+            }
+            PostSummaryMode.MANUAL -> PostSummaryResolver.resolveManual(content, requireNonBlankManualSummary(submittedSummary))
+            null -> {
+                if (submittedSummary != null) throw AppException(ErrorCode.BAD_REQUEST, "summaryMode를 명시해야 합니다.")
+                null
+            }
+        }
 
-        if (mode == PostSummaryMode.AUTO) {
-            return PostSummaryResolver.resolveAutomatic(title, content)
-        }
-        if (mode == PostSummaryMode.MANUAL) {
-            return PostSummaryResolver.resolveForCreate(title, content, submittedSummary)
-        }
-        if (existingSource == PostSummarySource.MIGRATED && !existingText.isNullOrBlank()) {
-            return PostSummaryResolver
-                .resolveForModify(
-                    title = title,
-                    content = content,
-                    submittedSummary = null,
-                    existingText = existingText,
-                    existingSource = PostSummarySource.MANUAL,
-                ).copy(
-                    source = PostSummarySource.MIGRATED,
-                    algorithmVersion = existingVersion ?: "legacy-frontmatter-v1",
-                    generatedAt = existingGeneratedAt,
-                )
-        }
-        return PostSummaryResolver.resolveForModify(
-            title = title,
-            content = content,
-            submittedSummary = null,
-            existingText = existingText,
-            existingSource = existingSource,
-        )
-    }
-
-    private fun requireManualSummary(
-        mode: PostSummaryMode?,
+    private fun validateCreateSummaryIntent(
         summary: String?,
+        mode: PostSummaryMode,
     ) {
-        if (mode == PostSummaryMode.MANUAL && summary.isNullOrBlank()) {
-            throw AppException(ErrorCode.BAD_REQUEST, "MANUAL 요약은 비워둘 수 없습니다.")
+        when (mode) {
+            PostSummaryMode.AUTO -> requireAutomaticSummary(summary)
+            PostSummaryMode.MANUAL -> requireNonBlankManualSummary(summary)
         }
     }
+
+    private fun requireAutomaticSummary(summary: String?) {
+        if (summary != null) {
+            throw AppException(ErrorCode.BAD_REQUEST, "AUTO 요약에는 summary를 지정할 수 없습니다.")
+        }
+    }
+
+    private fun requireNonBlankManualSummary(summary: String?): String =
+        summary?.takeIf { it.isNotBlank() }
+            ?: throw AppException(ErrorCode.BAD_REQUEST, "MANUAL 요약은 비워둘 수 없습니다.")
 
     private fun Post.applyResolvedSummary(resolved: PostSummaryResolver.ResolvedPostSummary) {
         updateCanonicalSummary(

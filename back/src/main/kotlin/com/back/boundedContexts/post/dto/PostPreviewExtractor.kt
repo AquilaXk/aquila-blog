@@ -1,93 +1,26 @@
 package com.back.boundedContexts.post.dto
 
 object PostPreviewExtractor {
-    private const val SUMMARY_MAX_LENGTH = 180
-    private val ignoredSummaryPlaceholders =
-        setOf(
-            "요약을 생성할 수 없습니다.",
-            "핵심 내용을 정리 중입니다.",
-        )
-
     private val markdownImageRegex = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")
-    private val markdownLinkRegex = Regex("\\[(.*?)\\]\\((.*?)\\)")
-    private val fencedCodeRegex = Regex("```[\\s\\S]*?```")
-    private val inlineCodeRegex = Regex("`([^`]+)`")
-    private val markdownPunctuationRegex = Regex("[#>*_~-]")
-    private val whitespaceRegex = Regex("\\s+")
     private val metadataLineRegex =
         Regex(
             "^\\s*(tag|tags|category|categories|summary|thumbnail|thumb|cover|coverimage|cover_image)\\s*:\\s*(.+)\\s*$",
             RegexOption.IGNORE_CASE,
         )
 
-    /**
-     * Preview는 계층 간 데이터 전달에 사용하는 DTO입니다.
-     * 도메인 엔티티 직접 노출을 피하고 API/서비스 경계를 명확히 유지합니다.
-     */
-    data class Preview(
-        val thumbnail: String?,
-        val summary: String,
-    )
-
-    /**
-     * PreviewMetadata는 계층 간 데이터 전달에 사용하는 DTO입니다.
-     * 도메인 엔티티 직접 노출을 피하고 API/서비스 경계를 명확히 유지합니다.
-     */
     private data class PreviewMetadata(
         val body: String,
         val thumbnail: String?,
-        val summary: String?,
     )
-
-    fun extract(content: String): Preview = buildPreview(content)
 
     fun extractThumbnail(content: String): String? {
         val metadata = parsePreviewMetadata(content)
         return metadata.thumbnail ?: markdownImageRegex.find(metadata.body)?.groupValues?.getOrNull(1)
     }
 
-    fun makeSummary(content: String): String = extract(content).summary
-
-    private fun buildPreview(content: String): Preview {
-        val metadata = parsePreviewMetadata(content)
-        val thumbnail = metadata.thumbnail ?: markdownImageRegex.find(metadata.body)?.groupValues?.getOrNull(1)
-        val normalized =
-            metadata.body
-                .replace(fencedCodeRegex, " ")
-                .replace(markdownImageRegex, " ")
-                .replace(inlineCodeRegex, "$1")
-                .replace(markdownLinkRegex, "$1")
-                .replace(markdownPunctuationRegex, " ")
-                .replace(whitespaceRegex, " ")
-                .trim()
-        val compactRaw = metadata.body.replace(whitespaceRegex, " ").trim()
-        val relaxedNormalized =
-            compactRaw
-                .replace(markdownPunctuationRegex, " ")
-                .replace(whitespaceRegex, " ")
-                .trim()
-        val fallbackSummaryCandidate =
-            when {
-                normalized.isNotBlank() -> normalized
-                relaxedNormalized.isNotBlank() -> relaxedNormalized
-                compactRaw.isNotBlank() -> compactRaw
-                else -> "요약을 생성할 수 없습니다."
-            }
-
-        val summary =
-            metadata.summary?.let { truncateSummary(it) }
-                ?: truncateSummary(fallbackSummaryCandidate)
-
-        return Preview(
-            thumbnail = thumbnail,
-            summary = summary,
-        )
-    }
-
     private fun parsePreviewMetadata(content: String): PreviewMetadata {
         var remaining = content.trimStart()
         var thumbnail: String? = null
-        var summary: String? = null
 
         fun normalizeScalar(raw: String): String =
             raw
@@ -106,7 +39,6 @@ object PostPreviewExtractor {
 
             when (key) {
                 "thumbnail", "thumb", "cover", "coverimage", "cover_image" -> thumbnail = value
-                "summary" -> if (value !in ignoredSummaryPlaceholders) summary = value
             }
         }
 
@@ -145,14 +77,6 @@ object PostPreviewExtractor {
         return PreviewMetadata(
             body = remaining,
             thumbnail = thumbnail,
-            summary = summary,
         )
     }
-
-    private fun truncateSummary(value: String): String =
-        if (value.length <= SUMMARY_MAX_LENGTH) {
-            value
-        } else {
-            "${value.take(SUMMARY_MAX_LENGTH).trim()}..."
-        }
 }

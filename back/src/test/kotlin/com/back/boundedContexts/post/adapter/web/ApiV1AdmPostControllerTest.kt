@@ -1,11 +1,9 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
-import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.security.domain.SecurityUser
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
@@ -15,7 +13,6 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.never
 import org.mockito.BDDMockito.then
-import org.springframework.http.MediaType
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
@@ -26,125 +23,6 @@ import java.time.Instant
 
 @org.junit.jupiter.api.DisplayName("ApiV1AdmPostController 테스트")
 class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `관리자는 canonical summary backfill을 실행할 수 있다`() {
-        given(postUseCase.backfillSummaries(10, 30, 20, true))
-            .willReturn(PostUseCase.SummaryBackfillResult(3, 0, 0, 10, true, true))
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":10,"maxId":30,"limit":20,"dryRun":true}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.scanned") { value(3) }
-                jsonPath("$.dryRun") { value(true) }
-            }
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `maxId만 지정한 백필 요청은 안전한 기본 checkpoint와 dry-run을 사용한다`() {
-        given(postUseCase.backfillSummaries(0, 30, 100, true))
-            .willReturn(PostUseCase.SummaryBackfillResult(0, 0, 0, 0, false, true))
-
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"maxId":30}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.dryRun") { value(true) }
-                jsonPath("$.nextAfterId") { value(0) }
-            }
-
-        then(postUseCase).should().backfillSummaries(0, 30, 100, true)
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `maxId 없는 백필 요청은 use case 호출 전에 거절한다`() {
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = "{}"
-            }.andExpect {
-                status { isBadRequest() }
-                jsonPath("$.resultCode") { value("400-1") }
-            }
-
-        then(postUseCase).shouldHaveNoInteractions()
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `afterId가 maxId보다 큰 백필 요청은 use case 호출 전에 거절한다`() {
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":11,"maxId":10,"limit":20,"dryRun":true}"""
-            }.andExpect {
-                status { isBadRequest() }
-                jsonPath("$.resultCode") { value("400-1") }
-            }
-
-        then(postUseCase).shouldHaveNoInteractions()
-    }
-
-    @Test
-    @WithMockUser(roles = ["ADMIN"])
-    fun `관리자는 canonical summary preview를 실행할 수 있다`() {
-        given(postUseCase.previewSummary("캐시 정책", "첫 번째 핵심 문장입니다. 두 번째 문장입니다."))
-            .willReturn(
-                PostUseCase.SummaryPreviewResult(
-                    summary = "첫 번째 핵심 문장입니다. 두 번째 문장입니다.",
-                    source = PostSummarySource.EXTRACTED,
-                    contentHash = "a".repeat(64),
-                    algorithmVersion = "deterministic-v1",
-                ),
-            )
-
-        mvc
-            .post("/post/api/v1/adm/posts/preview-summary") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"title":"캐시 정책","content":"첫 번째 핵심 문장입니다. 두 번째 문장입니다."}"""
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.summary") { value("첫 번째 핵심 문장입니다. 두 번째 문장입니다.") }
-                jsonPath("$.source") { value("EXTRACTED") }
-                jsonPath("$.contentHash") { value("a".repeat(64)) }
-                jsonPath("$.algorithmVersion") { value("deterministic-v1") }
-            }
-    }
-
-    @Test
-    @WithMockUser(roles = ["USER"])
-    fun `일반 사용자는 canonical summary preview를 실행할 수 없다`() {
-        mvc
-            .post("/post/api/v1/adm/posts/preview-summary") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"title":"캐시 정책","content":"본문입니다."}"""
-            }.andExpect {
-                status { isForbidden() }
-                jsonPath("$.resultCode") { value("403-1") }
-            }
-
-        then(postUseCase).should(never()).previewSummary("캐시 정책", "본문입니다.")
-    }
-
-    @Test
-    @WithMockUser(roles = ["USER"])
-    fun `일반 사용자는 canonical summary backfill을 실행할 수 없다`() {
-        mvc
-            .post("/post/api/v1/adm/posts/summary-backfill") {
-                contentType = MediaType.APPLICATION_JSON
-                content = """{"afterId":0,"maxId":20,"limit":20,"dryRun":true}"""
-            }.andExpect {
-                status { isForbidden() }
-            }
-    }
-
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 글 통계를 조회할 수 있다`() {

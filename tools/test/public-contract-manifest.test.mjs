@@ -11,7 +11,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const syncScript = path.join(repoRoot, "tools", "contracts", "sync-public-contracts.mjs")
 const checkScript = path.join(repoRoot, "tools", "contracts", "check-public-contracts.mjs")
 const summaryFixture = {
-  version: 1,
+  version: 2,
   contract: "aquila-canonical-summary-fixtures",
   fixtures: [
     {
@@ -24,6 +24,23 @@ const summaryFixture = {
         summary: "synthetic expected",
         source: "MANUAL",
         algorithmVersion: "manual-v1",
+      },
+      outcome: "RESOLVED",
+    },
+    {
+      id: "synthetic-migrated-read",
+      resolve: "read",
+      title: "이전 글",
+      content: "persisted content",
+      persisted: {
+        summary: "persisted summary",
+        source: "MIGRATED",
+        algorithmVersion: "legacy-frontmatter-v1",
+      },
+      expected: {
+        summary: "persisted summary",
+        source: "MIGRATED",
+        algorithmVersion: "legacy-frontmatter-v1",
       },
       outcome: "RESOLVED",
     },

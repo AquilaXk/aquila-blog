@@ -6,42 +6,13 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.model.PostSummaryMode
-import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 
 interface PostUseCase {
-    data class SummaryPreviewResult(
-        val summary: String,
-        val source: PostSummarySource,
-        val contentHash: String,
-        val algorithmVersion: String,
-    )
-
-    data class SummaryBackfillResult(
-        val scanned: Int,
-        val updated: Int,
-        val skipped: Int,
-        val nextAfterId: Long,
-        val hasMore: Boolean,
-        val dryRun: Boolean,
-    )
-
     fun count(): Long
 
     fun randomSecureTip(): String
-
-    fun previewSummary(
-        title: String,
-        content: String,
-    ): SummaryPreviewResult
-
-    fun backfillSummaries(
-        afterId: Long,
-        maxId: Long,
-        limit: Int,
-        dryRun: Boolean,
-    ): SummaryBackfillResult
 
     fun write(
         author: Member,
@@ -52,7 +23,7 @@ interface PostUseCase {
         idempotencyKey: String? = null,
         contentHtml: String? = null,
         summary: String? = null,
-        summaryMode: PostSummaryMode? = null,
+        summaryMode: PostSummaryMode,
     ): Post
 
     fun findById(id: Long): Post?

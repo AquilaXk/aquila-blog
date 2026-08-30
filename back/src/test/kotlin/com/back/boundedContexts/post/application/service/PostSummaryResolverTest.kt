@@ -20,11 +20,9 @@ class PostSummaryResolverTest {
         val fixture = resolvedFixture("manual-create", "create")
         val expected = requireNotNull(fixture.expected)
         val resolved =
-            PostSummaryResolver.resolveForCreate(
-                title = fixture.title,
+            PostSummaryResolver.resolveManual(
                 content = fixture.content,
-                submittedSummary = fixture.request.summary,
-                now = fixedNow,
+                submittedSummary = requireNotNull(fixture.request).summary!!,
             )
 
         assertThat(resolved.source.name).isEqualTo(expected.source)
@@ -34,25 +32,13 @@ class PostSummaryResolverTest {
     }
 
     @Test
-    fun `legacy frontmatter summary is migrated with CRLF and escaped quotes`() {
-        val fixture = resolvedFixture("migrated-frontmatter", "backfill")
-        val expected = requireNotNull(fixture.expected)
-
-        val resolved = PostSummaryResolver.resolveForBackfill(fixture.title, fixture.content, fixedNow)
-
-        assertThat(resolved.source.name).isEqualTo(expected.source)
-        assertThat(resolved.text).isEqualTo(expected.summary)
-        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
-    }
-
-    @Test
     fun `new automatic writes ignore legacy frontmatter summary`() {
         val content = """---
 summary: "이전 frontmatter 요약"
 ---
 신규 본문의 핵심 문장입니다."""
 
-        val resolved = PostSummaryResolver.resolveForCreate("신규 글", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic("신규 글", content, fixedNow)
 
         assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
         assertThat(resolved.text).isEqualTo("신규 본문의 핵심 문장입니다.")
@@ -63,7 +49,7 @@ summary: "이전 frontmatter 요약"
         val fixture = resolvedFixture("leading-block", "create")
         val expected = requireNotNull(fixture.expected)
 
-        val resolved = PostSummaryResolver.resolveForCreate(fixture.title, fixture.content, fixture.request.summary, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic(fixture.title, fixture.content, fixedNow)
 
         assertThat(resolved.source.name).isEqualTo(expected.source)
         assertThat(resolved.text).isEqualTo(expected.summary)
@@ -75,7 +61,7 @@ summary: "이전 frontmatter 요약"
         val fixture = resolvedFixture("extracted-with-exclusions", "create")
         val expected = requireNotNull(fixture.expected)
 
-        val resolved = PostSummaryResolver.resolveForCreate(fixture.title, fixture.content, fixture.request.summary, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic(fixture.title, fixture.content, fixedNow)
 
         assertThat(resolved.source.name).isEqualTo(expected.source)
         assertThat(resolved.text).isEqualTo(expected.summary)
@@ -88,7 +74,7 @@ summary: "이전 frontmatter 요약"
         val fixture = resolvedFixture("none-no-fallback", "create")
         val expected = requireNotNull(fixture.expected)
 
-        val resolved = PostSummaryResolver.resolveForCreate(fixture.title, fixture.content, fixture.request.summary, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic(fixture.title, fixture.content, fixedNow)
 
         assertThat(resolved.source.name).isEqualTo(expected.source)
         assertThat(resolved.text).isEqualTo(expected.summary)
@@ -100,7 +86,7 @@ summary: "이전 frontmatter 요약"
         val content =
             "[HTTP 캐시 정책](https://example.com/cache)은 stale-if-error, Cache-Control, --dry-run을 함께 설명하는 충분히 긴 문장입니다."
 
-        val resolved = PostSummaryResolver.resolveForCreate("캐시", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic("캐시", content, fixedNow)
 
         assertThat(resolved.text).contains("HTTP 캐시 정책")
         assertThat(resolved.text).contains("stale-if-error", "Cache-Control", "--dry-run")
@@ -108,51 +94,11 @@ summary: "이전 frontmatter 요약"
     }
 
     @Test
-    fun `existing manual summary survives content edits when request omits summary`() {
-        val fixture = resolvedFixture("manual-preserve-omitted", "modify")
-        val existing = requireNotNull(fixture.existing)
-        val expected = requireNotNull(fixture.expected)
-        val resolved =
-            PostSummaryResolver.resolveForModify(
-                title = fixture.title,
-                content = fixture.content,
-                submittedSummary = fixture.request.summary,
-                existingText = existing.summary,
-                existingSource = PostSummarySource.valueOf(existing.source),
-                now = fixedNow,
-            )
-
-        assertThat(resolved.source.name).isEqualTo(expected.source)
-        assertThat(resolved.text).isEqualTo(expected.summary)
-        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
-    }
-
-    @Test
-    fun `blank submitted summary clears manual mode and recomputes deterministically`() {
-        val fixture = resolvedFixture("blank-recompute", "modify")
-        val existing = requireNotNull(fixture.existing)
-        val expected = requireNotNull(fixture.expected)
-        val resolved =
-            PostSummaryResolver.resolveForModify(
-                title = fixture.title,
-                content = fixture.content,
-                submittedSummary = fixture.request.summary,
-                existingText = existing.summary,
-                existingSource = PostSummarySource.valueOf(existing.source),
-                now = fixedNow,
-            )
-
-        assertThat(resolved.source.name).isEqualTo(expected.source)
-        assertThat(resolved.text).isEqualTo(expected.summary)
-        assertThat(resolved.algorithmVersion).isEqualTo(expected.algorithmVersion)
-    }
-
-    @Test
     fun `ellipsis is included inside the 150 grapheme limit without splitting zwj emoji`() {
         val fixture = resolvedFixture("unicode-grapheme", "create")
         val expected = requireNotNull(fixture.expected)
 
-        val resolved = PostSummaryResolver.resolveForCreate(fixture.title, fixture.content, fixture.request.summary, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic(fixture.title, fixture.content, fixedNow)
 
         assertThat(resolved.source.name).isEqualTo(expected.source)
         assertThat(resolved.text).isEqualTo(expected.summary)
@@ -172,7 +118,7 @@ summary: "이전 frontmatter 요약"
             println("뒤의 코드는 요약에 포함되지 않습니다")
             """.trimIndent()
 
-        val resolved = PostSummaryResolver.resolveForCreate("제목", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic("제목", content, fixedNow)
 
         assertThat(resolved.text).isEqualTo("도입 핵심 문장입니다.")
         assertThat(resolved.text).doesNotContain("println")
@@ -181,11 +127,9 @@ summary: "이전 frontmatter 요약"
     @Test
     fun `manual summary longer than the limit keeps the ellipsis inside 150 graphemes`() {
         val resolved =
-            PostSummaryResolver.resolveForCreate(
-                title = "제목",
+            PostSummaryResolver.resolveManual(
                 content = "본문",
                 submittedSummary = "가".repeat(200),
-                now = fixedNow,
             )
 
         assertThat(graphemeCount(resolved.text)).isEqualTo(PostSummaryResolver.MAX_GRAPHEMES)
@@ -199,7 +143,7 @@ summary: "이전 frontmatter 요약"
         val resolved =
             assertTimeoutPreemptively(
                 Duration.ofSeconds(2),
-                ThrowingSupplier { PostSummaryResolver.resolveForCreate("링크", content, null, fixedNow) },
+                ThrowingSupplier { PostSummaryResolver.resolveAutomatic("링크", content, fixedNow) },
             )
 
         assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
@@ -215,39 +159,11 @@ summary: "이전 frontmatter 요약"
             ![only image](https://example.com/image.png)
             """.trimIndent()
 
-        val resolved = PostSummaryResolver.resolveForCreate("제목", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic("제목", content, fixedNow)
 
         assertThat(resolved.source).isEqualTo(PostSummarySource.NONE)
         assertThat(resolved.text).isEmpty()
         assertThat(resolved.algorithmVersion).isEqualTo(PostSummaryResolver.ALGORITHM_VERSION)
-    }
-
-    @Test
-    fun `single quoted legacy frontmatter summary is unescaped during backfill`() {
-        val content =
-            """---
-summary: 'It''s 캐시 정책 요약입니다.'
----
-본문입니다."""
-
-        val resolved = PostSummaryResolver.resolveForBackfill("캐시", content, fixedNow)
-
-        assertThat(resolved.source).isEqualTo(PostSummarySource.MIGRATED)
-        assertThat(resolved.text).isEqualTo("It's 캐시 정책 요약입니다.")
-    }
-
-    @Test
-    fun `escaped backslash and line break in legacy frontmatter summary are decoded`() {
-        val content =
-            """---
-summary: "경로 C:\\temp 안내\n다음 문장입니다."
----
-본문입니다."""
-
-        val resolved = PostSummaryResolver.resolveForBackfill("경로", content, fixedNow)
-
-        assertThat(resolved.source).isEqualTo(PostSummarySource.MIGRATED)
-        assertThat(resolved.text).isEqualTo("""경로 C:\temp 안내 다음 문장입니다.""")
     }
 
     @Test
@@ -262,7 +178,7 @@ summary: "경로 C:\\temp 안내\n다음 문장입니다."
             |수식 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.
             """.trimMargin()
 
-        val resolved = PostSummaryResolver.resolveForCreate("수식", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic("수식", content, fixedNow)
 
         assertThat(resolved.text).isEqualTo("수식 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.")
         assertThat(resolved.text).doesNotContain("mc^2")
@@ -279,7 +195,7 @@ summary: "경로 C:\\temp 안내\n다음 문장입니다."
             HTML 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.
             """.trimIndent()
 
-        val resolved = PostSummaryResolver.resolveForCreate("HTML", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic("HTML", content, fixedNow)
 
         assertThat(resolved.text).isEqualTo("HTML 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.")
         assertThat(resolved.text).doesNotContain("HTML 블록 안의")
@@ -296,7 +212,7 @@ summary: "경로 C:\\temp 안내\n다음 문장입니다."
             |인덴트 코드 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.
             """.trimMargin()
 
-        val resolved = PostSummaryResolver.resolveForCreate("인덴트", content, null, fixedNow)
+        val resolved = PostSummaryResolver.resolveAutomatic("인덴트", content, fixedNow)
 
         assertThat(resolved.text).isEqualTo("인덴트 코드 뒤의 첫 번째 핵심 문장입니다. 두 번째 문장입니다.")
         assertThat(resolved.text).doesNotContain("indented")

@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.app.config.DemoSeedDataCondition
 import com.back.standard.extensions.getOrThrow
 import org.springframework.beans.factory.annotation.Autowired
@@ -62,6 +63,6 @@ class PostNotProdInitData(
     ) {
         if (postRepository.existsByAuthorAndTitle(author, title)) return
 
-        postUseCase.write(author, title, content, published, listed)
+        postUseCase.write(author, title, content, published, listed, summaryMode = PostSummaryMode.AUTO)
     }
 }

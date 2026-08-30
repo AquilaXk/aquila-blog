@@ -12,7 +12,6 @@ object PostSummaryResolver {
     const val ALGORITHM_VERSION = "deterministic-v1"
 
     private const val MANUAL_VERSION = "manual-v1"
-    private const val MIGRATED_VERSION = "legacy-frontmatter-v1"
     private const val ELLIPSIS = "…"
 
     private val placeholders =
@@ -53,62 +52,19 @@ object PostSummaryResolver {
         val generatedAt: Instant?,
     )
 
-    fun resolveForCreate(
-        title: String,
+    fun resolveManual(
         content: String,
-        submittedSummary: String?,
-        now: Instant = Instant.now(),
-    ): ResolvedPostSummary =
-        submittedSummary
-            ?.takeIf { it.isNotBlank() }
-            ?.let { manual(it, content) }
-            ?: resolveAutomatic(title, content, now)
-
-    fun resolveForModify(
-        title: String,
-        content: String,
-        submittedSummary: String?,
-        existingText: String?,
-        existingSource: PostSummarySource,
-        now: Instant = Instant.now(),
-    ): ResolvedPostSummary {
-        if (
-            submittedSummary == null &&
-            existingSource == PostSummarySource.MANUAL &&
-            !existingText.isNullOrBlank()
-        ) {
-            return manual(existingText, content)
-        }
-        if (!submittedSummary.isNullOrBlank()) return manual(submittedSummary, content)
-        return resolveAutomatic(title, content, now)
-    }
+        submittedSummary: String,
+    ): ResolvedPostSummary = manual(submittedSummary, content)
 
     fun resolveAutomatic(
         title: String,
         content: String,
         now: Instant = Instant.now(),
-    ): ResolvedPostSummary = resolveAutomatic(title, content, now, includeLegacyFrontmatter = false)
-
-    fun resolveForBackfill(
-        title: String,
-        content: String,
-        now: Instant = Instant.now(),
-    ): ResolvedPostSummary = resolveAutomatic(title, content, now, includeLegacyFrontmatter = true)
-
-    private fun resolveAutomatic(
-        title: String,
-        content: String,
-        now: Instant,
-        includeLegacyFrontmatter: Boolean,
     ): ResolvedPostSummary {
         val normalizedContent = normalizeLineEndings(content)
         val hash = sha256(normalizedContent)
         val split = splitFrontmatter(normalizedContent)
-        val legacy = extractLegacySummary(split.metadataLines).takeIf { includeLegacyFrontmatter }.orEmpty()
-        if (legacy.isNotBlank()) {
-            return derived(legacy, PostSummarySource.MIGRATED, hash, MIGRATED_VERSION, now)
-        }
-
         val leading = extractLeadingSummaryBlock(split.body)
         if (leading.isNotBlank()) {
             return derived(leading, PostSummarySource.LEADING_BLOCK, hash, ALGORITHM_VERSION, now)
@@ -161,62 +117,19 @@ object PostSummaryResolver {
     }
 
     private data class FrontmatterSplit(
-        val metadataLines: List<String>,
         val body: String,
     )
 
     private fun splitFrontmatter(content: String): FrontmatterSplit {
         val trimmed = content.trimStart()
         val lines = trimmed.lines()
-        if (lines.firstOrNull()?.trim() != "---") return FrontmatterSplit(emptyList(), trimmed)
+        if (lines.firstOrNull()?.trim() != "---") return FrontmatterSplit(trimmed)
         val closing = lines.drop(1).indexOfFirst { it.trim() == "---" }
-        if (closing < 0) return FrontmatterSplit(emptyList(), trimmed)
+        if (closing < 0) return FrontmatterSplit(trimmed)
         val closingIndex = closing + 1
         return FrontmatterSplit(
-            metadataLines = lines.subList(1, closingIndex),
             body = lines.drop(closingIndex + 1).joinToString("\n").trimStart(),
         )
-    }
-
-    private fun extractLegacySummary(metadataLines: List<String>): String {
-        for (line in metadataLines) {
-            val separator = line.indexOf(':')
-            if (separator <= 0) continue
-            if (!line.substring(0, separator).trim().equals("summary", ignoreCase = true)) continue
-            val decoded = decodeScalar(line.substring(separator + 1))
-            val normalized = normalizeText(decoded)
-            return normalized.takeUnless { it in placeholders }.orEmpty()
-        }
-        return ""
-    }
-
-    private fun decodeScalar(raw: String): String {
-        val value = raw.trim()
-        if (value.length < 2) return value
-        if (value.first() == '\'' && value.last() == '\'') {
-            return value.substring(1, value.lastIndex).replace("''", "'")
-        }
-        if (value.first() != '"' || value.last() != '"') return value
-
-        val body = value.substring(1, value.lastIndex)
-        val out = StringBuilder(body.length)
-        var index = 0
-        while (index < body.length) {
-            val ch = body[index]
-            if (ch != '\\' || index + 1 >= body.length) {
-                out.append(ch)
-                index += 1
-                continue
-            }
-            when (val escaped = body[index + 1]) {
-                '"' -> out.append('"')
-                '\\' -> out.append('\\')
-                'n', 'r', 't' -> out.append(' ')
-                else -> out.append(escaped)
-            }
-            index += 2
-        }
-        return out.toString()
     }
 
     private fun extractLeadingSummaryBlock(body: String): String {

@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWo
 import com.back.boundedContexts.member.domain.shared.memberMixin.convertAboutSectionsToLegacyDetails
 import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.member.domain.shared.memberMixin.parseLegacyAboutDetailsToBlocks
+import com.back.global.storage.application.UploadedFileUrlCodec
 import java.time.Instant
 
 data class MemberProfileLinkItemDto(
@@ -116,23 +117,27 @@ data class MemberWithUsernameDto(
             workspaceContent: MemberProfileWorkspaceContent?,
             workspaceModifiedAt: Instant?,
         ): String =
-            workspaceContent
-                ?.profileImageUrl
-                ?.trim()
-                ?.takeIf(String::isNotBlank)
-                ?.let { appendVersion(it, workspaceModifiedAt ?: member.modifiedAt) }
-                ?: member.profileImgUrlVersionedOrDefault
+            (
+                workspaceContent
+                    ?.profileImageUrl
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { appendVersion(it, workspaceModifiedAt ?: member.modifiedAt) }
+                    ?: member.profileImgUrlVersionedOrDefault
+            ).let(UploadedFileUrlCodec::canonicalizePublicStorageUrl)
 
         private fun resolveProfileImageUrl(
             member: Member,
             workspaceContent: MemberProfileWorkspaceContent?,
             workspaceModifiedAt: Instant?,
         ): String =
-            workspaceContent
-                ?.profileImageUrl
-                ?.trim()
-                ?.takeIf(String::isNotBlank)
-                ?.let { appendVersion(it, workspaceModifiedAt ?: member.modifiedAt) }
-                ?: member.profileImgUrlVersionedOrDefault
+            (
+                workspaceContent
+                    ?.profileImageUrl
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { appendVersion(it, workspaceModifiedAt ?: member.modifiedAt) }
+                    ?: member.profileImgUrlVersionedOrDefault
+            ).let(UploadedFileUrlCodec::canonicalizePublicStorageUrl)
     }
 }

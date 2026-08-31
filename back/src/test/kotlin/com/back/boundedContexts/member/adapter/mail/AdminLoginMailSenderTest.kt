@@ -7,6 +7,8 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import jakarta.mail.AuthenticationFailedException
 import jakarta.mail.MessagingException
+import jakarta.mail.Session
+import jakarta.mail.internet.MimeMessage
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -19,41 +21,60 @@ import org.mockito.Mockito.verify
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.mail.MailSendException
-import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.JavaMailSenderImpl
 import java.net.SocketTimeoutException
+import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.stream.Stream
 
 class AdminLoginMailSenderTest {
     @Test
-    fun `send code uses the configured sender and bounded message`() {
+    fun `send code uses a branded plain text and html alternative message`() {
         val javaMailSender = mock(JavaMailSender::class.java)
-        var delivered: SimpleMailMessage? = null
+        var delivered: MimeMessage? = null
+        stubMimeMessage(javaMailSender)
         doAnswer { invocation ->
             delivered = invocation.getArgument(0)
             null
-        }.`when`(javaMailSender).send(any(SimpleMailMessage::class.java))
+        }.`when`(javaMailSender).send(any(MimeMessage::class.java))
         val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
 
         sender.sendCode(ADMIN_EMAIL, "12345678", 600)
 
         assertThat(delivered).isNotNull
-        assertThat(delivered!!.from).isEqualTo(FROM_ADDRESS)
-        assertThat(delivered!!.to).containsExactly(ADMIN_EMAIL)
+        delivered!!.saveChanges()
+        assertThat(delivered!!.from.map { it.toString() }).containsExactly(FROM_ADDRESS)
+        assertThat(delivered!!.allRecipients.map { it.toString() }).containsExactly(ADMIN_EMAIL)
         assertThat(delivered!!.subject).isEqualTo("Aquila Blog administrator sign-in code")
-        assertThat(delivered!!.text).contains("12345678", "10분 안에")
-        verify(javaMailSender).send(any(SimpleMailMessage::class.java))
+        val parts = delivered!!.content as jakarta.mail.internet.MimeMultipart
+        assertThat(parts.count).isEqualTo(2)
+        val plainText = parts.getBodyPart(0).content as String
+        val html = parts.getBodyPart(1).content as String
+        assertThat(parts.getBodyPart(0).contentType).contains("text/plain")
+        assertThat(parts.getBodyPart(1).contentType).contains("text/html")
+        assertThat(plainText).contains("12345678", "10분", "요청하지 않았다면")
+        assertThat(html).contains("12345678", "10분", "요청하지 않았다면", "AquilaLog", "#155eef")
+        assertThat(html.lowercase()).doesNotContain(
+            "http://",
+            "https://",
+            "<script",
+            "<form",
+            "href=",
+            "src=",
+            "tracking",
+        )
+        verify(javaMailSender).send(any(MimeMessage::class.java))
     }
 
     @Test
     fun `stalled delivery fails within the shared administrator deadline`() {
         val javaMailSender = mock(JavaMailSender::class.java)
+        stubMimeMessage(javaMailSender)
         doAnswer {
             Thread.sleep(10_000)
             null
-        }.`when`(javaMailSender).send(any(SimpleMailMessage::class.java))
+        }.`when`(javaMailSender).send(any(MimeMessage::class.java))
         val sender =
             AdminLoginMailSender(
                 mailSenderProvider = objectProvider(javaMailSender),
@@ -71,7 +92,7 @@ class AdminLoginMailSenderTest {
             }
 
         assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)).isLessThan(2_000)
-        verify(javaMailSender).send(any(SimpleMailMessage::class.java))
+        verify(javaMailSender).send(any(MimeMessage::class.java))
     }
 
     @Test
@@ -89,10 +110,11 @@ class AdminLoginMailSenderTest {
     @Test
     fun `interrupted delivery preserves interruption and fails closed`() {
         val javaMailSender = mock(JavaMailSender::class.java)
+        stubMimeMessage(javaMailSender)
         doAnswer {
             Thread.sleep(10_000)
             null
-        }.`when`(javaMailSender).send(any(SimpleMailMessage::class.java))
+        }.`when`(javaMailSender).send(any(MimeMessage::class.java))
         val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
         Thread.currentThread().interrupt()
         try {
@@ -118,7 +140,7 @@ class AdminLoginMailSenderTest {
 
         assertDependencyUnavailable { sender.sendCode(ADMIN_EMAIL, "12345678", 600) }
 
-        verify(javaMailSender, never()).send(any(SimpleMailMessage::class.java))
+        verify(javaMailSender, never()).send(any(MimeMessage::class.java))
     }
 
     @Test
@@ -195,13 +217,14 @@ class AdminLoginMailSenderTest {
     @Test
     fun `per-message send failure exposes only the nested safe category`() {
         val javaMailSender = mock(JavaMailSender::class.java)
+        stubMimeMessage(javaMailSender)
         val failure =
             MailSendException(
                 mapOf<Any, Exception>(
-                    SimpleMailMessage() to SocketTimeoutException("provider detail"),
+                    MimeMessage(Session.getInstance(Properties())) to SocketTimeoutException("provider detail"),
                 ),
             )
-        doThrow(failure).`when`(javaMailSender).send(any(SimpleMailMessage::class.java))
+        doThrow(failure).`when`(javaMailSender).send(any(MimeMessage::class.java))
         val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
 
         assertThatThrownBy { sender.sendCode(ADMIN_EMAIL, "12345678", 600) }
@@ -219,6 +242,12 @@ class AdminLoginMailSenderTest {
             .isInstanceOfSatisfying(AppException::class.java) { exception ->
                 assertThat(exception.errorCode).isEqualTo(ErrorCode.DEPENDENCY_NOT_READY)
             }
+    }
+
+    private fun stubMimeMessage(javaMailSender: JavaMailSender) {
+        doAnswer { MimeMessage(Session.getInstance(Properties())) }
+            .`when`(javaMailSender)
+            .createMimeMessage()
     }
 
     private fun <T : Any> objectProvider(value: T?): ObjectProvider<T> =

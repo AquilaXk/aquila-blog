@@ -32,9 +32,22 @@ class MemberSessionAuthenticationResolver(
             return MemberSessionResolution(sessionKeyProvided = false, session = null)
         }
 
+        val activeSession = memberSessionUseCase.findActiveSession(memberId, effectiveSessionKey)
+
         return MemberSessionResolution(
             sessionKeyProvided = true,
-            session = memberSessionUseCase.findActiveSessionSnapshot(memberId, effectiveSessionKey),
+            session =
+                activeSession?.let {
+                    MemberSessionAuthSnapshot(
+                        id = it.id,
+                        memberId = memberId,
+                        sessionKey = it.sessionKey,
+                        rememberLoginEnabled = it.rememberLoginEnabled,
+                        ipSecurityEnabled = it.ipSecurityEnabled,
+                        ipSecurityFingerprint = it.ipSecurityFingerprint,
+                        lastAuthenticatedAt = it.lastAuthenticatedAt,
+                    )
+                },
         )
     }
 

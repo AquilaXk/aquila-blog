@@ -123,8 +123,8 @@ class CustomAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("세션 resolver는 safe read에서도 snapshot 누락을 세션 만료로 처리한다")
-    fun `session resolver rejects missing snapshot for safe read`() {
+    @DisplayName("세션 resolver는 DB에서 폐기된 세션의 stale cache snapshot을 거부한다")
+    fun `session resolver rejects a stale cached snapshot when the active session is gone`() {
         val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
         val resolver =
@@ -132,32 +132,34 @@ class CustomAuthenticationFilterTest {
                 memberSessionUseCase = memberSessionUseCase,
                 authCookieService = authCookieService,
             )
-        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session\r\n")
-        val payload =
-            AccessTokenPayload(
-                id = 7L,
-                sessionKey = "fresh-session-key",
-                username = "fresh-user",
-                email = "fresh-user@example.com",
-                name = "Fresh User",
-                rememberLoginEnabled = false,
+        val memberId = 7L
+        val sessionKey = "revoked-session-key"
+        val staleSnapshot =
+            MemberSessionAuthSnapshot(
+                id = 11L,
+                memberId = memberId,
+                sessionKey = sessionKey,
+                rememberLoginEnabled = true,
                 ipSecurityEnabled = false,
                 ipSecurityFingerprint = null,
-                issuedAt = Instant.now(),
-                expiresAt = Instant.now().plusSeconds(60),
+                lastAuthenticatedAt = Instant.now(),
             )
+        given(memberSessionUseCase.findActiveSessionSnapshot(memberId, sessionKey)).willReturn(staleSnapshot)
+        given(memberSessionUseCase.findActiveSession(memberId, sessionKey)).willReturn(null)
 
         val resolution =
             resolver.resolve(
-                memberId = 7L,
-                cookieSessionKey = "fresh-session-key",
+                memberId = memberId,
+                cookieSessionKey = sessionKey,
                 tokenSessionKey = null,
-                payload = payload,
-                request = request,
+                payload = null,
+                request = MockHttpServletRequest("GET", "/member/api/v1/auth/session"),
             )
 
-        assertThat(resolution.session).isNull()
-        assertThat(resolution.sessionKeyProvided).isTrue()
+        assertThat(resolution)
+            .isEqualTo(MemberSessionResolution(sessionKeyProvided = true, session = null))
+        verify(memberSessionUseCase).findActiveSession(memberId, sessionKey)
+        verify(memberSessionUseCase, never()).findActiveSessionSnapshot(memberId, sessionKey)
     }
 
     @Test
@@ -191,7 +193,7 @@ class CustomAuthenticationFilterTest {
                     ipSecurityFingerprint = null,
                 ),
             )
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(activeSession(sessionSnapshot))
         given(fixture.actorApplicationService.findById(54L)).willReturn(null)
 
         try {
@@ -389,7 +391,7 @@ class CustomAuthenticationFilterTest {
                     ipSecurityFingerprint = null,
                 ),
             )
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(activeSession(sessionSnapshot))
         given(fixture.actorApplicationService.findById(54L)).willReturn(persistedAdmin)
         fixture.givenClientIp(request, "203.0.113.12")
 
@@ -449,7 +451,7 @@ class CustomAuthenticationFilterTest {
                 ),
             )
         given(fixture.actorApplicationService.findByApiKey(apiKey)).willReturn(persistedAdmin)
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(activeSession(sessionSnapshot))
         given(fixture.actorApplicationService.genAccessToken(persistedAdmin, sessionKey, true, false, null))
             .willReturn("rotated-access-token")
         fixture.givenClientIp(request, "203.0.113.13")
@@ -501,7 +503,7 @@ class CustomAuthenticationFilterTest {
                     ipSecurityFingerprint = null,
                 ),
             )
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(sessionSnapshot)
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(activeSession(sessionSnapshot))
         given(fixture.actorApplicationService.findById(54L)).willReturn(persistedAdmin)
         fixture.givenClientIp(request, "203.0.113.16")
 
@@ -547,7 +549,7 @@ class CustomAuthenticationFilterTest {
                     ipSecurityFingerprint = null,
                 ),
             )
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(wrongAdmin.id, sessionKey)).willReturn(sessionSnapshot)
+        given(fixture.memberSessionUseCase.findActiveSession(wrongAdmin.id, sessionKey)).willReturn(activeSession(sessionSnapshot))
         given(fixture.actorApplicationService.findById(wrongAdmin.id)).willReturn(wrongAdmin)
 
         try {
@@ -668,7 +670,7 @@ class CustomAuthenticationFilterTest {
                     issuedAt = Instant.now(),
                 ),
             )
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(null)
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(null)
 
         val response = MockHttpServletResponse()
         val filterChain = fixture.noContentFilterChain()
@@ -708,9 +710,9 @@ class CustomAuthenticationFilterTest {
                     issuedAt = Instant.now(),
                 ),
             )
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey))
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey))
             .willReturn(
-                MemberSessionAuthSnapshot(11L, 54L, sessionKey, true, false, null, Instant.now()),
+                activeSession(MemberSessionAuthSnapshot(11L, 54L, sessionKey, true, false, null, Instant.now())),
             )
         given(fixture.actorApplicationService.findById(54L)).willReturn(null)
 
@@ -752,7 +754,7 @@ class CustomAuthenticationFilterTest {
                     issuedAt = Instant.now(),
                 ),
             )
-        given(fixture.memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(null)
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(null)
 
         val response = MockHttpServletResponse()
         val filterChain = MockFilterChain()
@@ -773,6 +775,19 @@ class CustomAuthenticationFilterTest {
             siteFrontUrl = "https://blog.aquilaxk.site",
         )
     }
+
+    private fun activeSession(snapshot: MemberSessionAuthSnapshot): MemberSession =
+        MemberSession(
+            id = snapshot.id,
+            member =
+                Member(snapshot.memberId, "session-${snapshot.memberId}", null, "Session member")
+                    .also { it.grantAdmin() },
+            sessionKey = snapshot.sessionKey,
+            rememberLoginEnabled = snapshot.rememberLoginEnabled,
+            ipSecurityEnabled = snapshot.ipSecurityEnabled,
+            ipSecurityFingerprint = snapshot.ipSecurityFingerprint,
+            lastAuthenticatedAt = snapshot.lastAuthenticatedAt,
+        )
 
     private fun attachListAppender(): ListAppender<ILoggingEvent> {
         val logger = LoggerFactory.getLogger(CustomAuthenticationFilter::class.java) as Logger

@@ -115,6 +115,9 @@ jobs:
       - name: Verify member administrator cutoff inventory contract
         run: node --test tools/test/member-admin-cutoff-inventory.test.mjs
 
+      - name: Verify member privacy email eligibility inventory contract
+        run: node --test tools/test/member-privacy-email-eligibility-inventory.test.mjs
+
       - name: Verify hot-query telemetry capability contract
         run: node --test tools/test/hot-query-telemetry-capability.test.mjs
 

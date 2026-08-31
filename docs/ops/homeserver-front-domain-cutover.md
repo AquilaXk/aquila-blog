@@ -237,7 +237,7 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
 구 hostname 제거는 **항상 마지막**이다. `blog.aquilaxk.site`는 이 블로그의 신규 공개 호스트이므로
 **cutover는 그 DNS 전환 한 번뿐**이고, 구 `www`·`api` 호스트는 그때까지 그대로 둔다.
 
-1. **선행 조건 두 가지를 끝낸다** (카카오 콘솔 등록, 쓸 digest의 산출물 게이트 통과).
+1. **front 이미지 산출물 게이트를 통과한다.**
 
 2. **홈서버 env에 front 키를 넣고 front를 기동한다.** `HOME_SERVER_ENV`에 추가한다.
 
@@ -310,8 +310,7 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    > (`back/.../Rq.kt`의 `builder.domain(cookieDomain)`에 호스트 조건이 없다), 브라우저는
    > RFC 6265 §5.3으로 그 쿠키를 거부한다. `blog`도 마찬가지다 — 이 시점의 blog는 아직 Vercel이
    > 서빙하고 그 프론트는 구 API 호스트를 부르므로, 쿠키 Domain이 blog로 바뀌어도 그 응답은
-   > 구 호스트에서 오기 때문에 브라우저가 거부한다. OAuth redirect-uri도 이미 blog(=Vercel)로
-   > 바뀌어 콜백이 홈서버에 닿지 않는다. 두 origin 모두 남는 것은 **공개 GET뿐**이다.
+   > 구 호스트에서 오기 때문에 브라우저가 거부한다. 두 origin 모두 남는 것은 **공개 GET뿐**이다.
    > 그래서 3단계와 4단계는 **연달아** 수행한다.
 
 4. **`blog.aquilaxk.site` DNS/Tunnel public hostname을 만든다 (오너, 콘솔).**
@@ -447,26 +446,10 @@ curl -sSI https://blog.aquilaxk.site/actuator/health/readiness \
   fi
 ) || exit $?
 
-# 로그인 왕복: Set-Cookie 스코프를 **실제 로그인 응답에서** 본다. 아래처럼 미인증 GET을 찔러
-# 보는 것으로는 Set-Cookie 자체가 안 나와 `|| true`로 조용히 통과한다 - 검사가 아니라 소음이다.
-# 브라우저로 카카오 로그인을 완료한 뒤 DevTools > Network에서 콜백 응답의 Set-Cookie를 읽거나,
-# 아래처럼 관리자 로그인 왕복으로 받는다.
-# 비밀번호를 명령행 인자로 넘기지 않는다: 셸 history와 프로세스 목록에 그대로 남는다.
-# read -s로 받아 stdin으로만 전달하고, 끝나면 변수를 지운다.
-# raw Set-Cookie 출력은 0이어야 한다. 첫 `;` 앞의 cookie 값만 `<redacted>`로 바꾸고
-# Domain/Path/SameSite/Secure/HttpOnly 속성만 확인한다.
-read -rp 'admin email: ' ADMIN_EMAIL
-read -rsp 'admin password: ' ADMIN_PASSWORD; echo
-(
-  set -o pipefail
-  printf '{"email":"%s","password":"%s"}' "${ADMIN_EMAIL}" "${ADMIN_PASSWORD}" \
-    | curl -sS -i -X POST https://blog.aquilaxk.site/member/api/v1/auth/login \
-        -H 'Content-Type: application/json' --data-binary @- \
-    | grep -i '^set-cookie' \
-    | sed -E 's/^([^:]+:[^=]+=)[^;]*/\1<redacted>/'
-) \
-  || { echo "FAIL: no Set-Cookie in the login response"; false; }
-unset ADMIN_PASSWORD ADMIN_EMAIL
+# 로그인 왕복: 브라우저에서 `https://blog.aquilaxk.site/admin/editor`를 열고 구성된 관리자
+# 이메일로 코드를 요청한 뒤 메일로 받은 코드를 입력한다. DevTools > Network에서
+# `/member/api/v1/auth/admin-email/verify` 응답의 Set-Cookie **속성만** 확인한다. 인증 코드와
+# 쿠키 값은 복사하거나 출력하지 않는다.
 # 판정: Domain 속성이 없거나 Domain=blog.aquilaxk.site 여야 한다.
 #       aquilaxk.site 또는 www가 보이면 즉시 롤백한다 (Rollback 표 3단계 행).
 

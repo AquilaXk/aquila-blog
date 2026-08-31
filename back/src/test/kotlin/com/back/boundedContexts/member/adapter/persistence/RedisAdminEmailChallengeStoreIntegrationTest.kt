@@ -51,7 +51,10 @@ class RedisAdminEmailChallengeStoreIntegrationTest : BaseSeededIntegrationTest()
 
             assertThat(results.map { it.get(5, TimeUnit.SECONDS) })
                 .containsExactlyInAnyOrder(
-                    AdminEmailChallengeStore.ConsumeResult.Matched(memberId = MEMBER_ID, rememberMe = true),
+                    AdminEmailChallengeStore.ConsumeResult.Matched(
+                        canonicalRecipientHash = RECIPIENT_HASH,
+                        rememberMe = true,
+                    ),
                     AdminEmailChallengeStore.ConsumeResult.Invalid,
                 )
         } finally {
@@ -96,7 +99,7 @@ class RedisAdminEmailChallengeStoreIntegrationTest : BaseSeededIntegrationTest()
             key,
             mapOf(
                 "codeHash" to "correct-hash",
-                "memberId" to "not-a-number",
+                "canonicalRecipientHash" to "",
                 "rememberMe" to "true",
                 "failures" to "0",
             ),
@@ -117,7 +120,7 @@ class RedisAdminEmailChallengeStoreIntegrationTest : BaseSeededIntegrationTest()
             AdminEmailChallengeStore.Challenge(
                 challengeId = challengeId,
                 codeHash = codeHash,
-                memberId = MEMBER_ID,
+                canonicalRecipientHash = RECIPIENT_HASH,
                 rememberMe = true,
                 ttl = ttl,
             ),
@@ -127,6 +130,6 @@ class RedisAdminEmailChallengeStoreIntegrationTest : BaseSeededIntegrationTest()
     private fun challengeKey(challengeId: String) = "auth:admin-email:challenge:$challengeId"
 
     private companion object {
-        private const val MEMBER_ID = 1L
+        private const val RECIPIENT_HASH = "configured-recipient-hash"
     }
 }

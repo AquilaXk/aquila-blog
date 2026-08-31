@@ -106,7 +106,8 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
 
         val firstIssued =
             memberLoginSessionIssueService.issueAdminEmail(
-                memberId = memberId,
+                email = "admin@test.com",
+                nickname = "관리자",
                 rememberLoginEnabled = true,
                 createdIp = "203.0.113.10",
                 userAgent = "transaction-integration-test",
@@ -122,7 +123,8 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
 
         val secondIssued =
             memberLoginSessionIssueService.issueAdminEmail(
-                memberId = memberId,
+                email = "admin@test.com",
+                nickname = "관리자",
                 rememberLoginEnabled = true,
                 createdIp = "203.0.113.11",
                 userAgent = "transaction-integration-test",

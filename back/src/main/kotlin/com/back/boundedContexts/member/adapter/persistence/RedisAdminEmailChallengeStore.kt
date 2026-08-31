@@ -18,7 +18,7 @@ class RedisAdminEmailChallengeStore(
             ISSUE_SCRIPT,
             listOf(challengeKey(challenge.challengeId)),
             challenge.codeHash,
-            challenge.memberId.toString(),
+            challenge.canonicalRecipientHash,
             challenge.rememberMe.toString(),
             challenge.ttl.seconds.toString(),
         )
@@ -64,10 +64,10 @@ class RedisAdminEmailChallengeStore(
 
     private fun String.toMatchedResult(): AdminEmailChallengeStore.ConsumeResult {
         val values = split('|')
-        val memberId = values.getOrNull(1)?.toLongOrNull()
+        val canonicalRecipientHash = values.getOrNull(1)?.takeIf { it.isNotBlank() }
         val rememberMe = values.getOrNull(2)?.toBooleanStrictOrNull()
-        return if (values.size == 3 && memberId != null && rememberMe != null) {
-            AdminEmailChallengeStore.ConsumeResult.Matched(memberId, rememberMe)
+        return if (values.size == 3 && canonicalRecipientHash != null && rememberMe != null) {
+            AdminEmailChallengeStore.ConsumeResult.Matched(canonicalRecipientHash, rememberMe)
         } else {
             AdminEmailChallengeStore.ConsumeResult.Invalid
         }
@@ -86,7 +86,7 @@ class RedisAdminEmailChallengeStore(
         private val ISSUE_SCRIPT =
             DefaultRedisScript<Long>(
                 """
-                redis.call('HSET', KEYS[1], 'codeHash', ARGV[1], 'memberId', ARGV[2], 'rememberMe', ARGV[3], 'failures', '0')
+                redis.call('HSET', KEYS[1], 'codeHash', ARGV[1], 'canonicalRecipientHash', ARGV[2], 'rememberMe', ARGV[3], 'failures', '0')
                 redis.call('EXPIRE', KEYS[1], ARGV[4])
                 return 1
                 """.trimIndent(),
@@ -97,14 +97,14 @@ class RedisAdminEmailChallengeStore(
                 """
                 if redis.call('EXISTS', KEYS[1]) == 0 then return 'invalid' end
                 if redis.call('HGET', KEYS[1], 'codeHash') == ARGV[1] then
-                  local memberId = redis.call('HGET', KEYS[1], 'memberId')
+                  local canonicalRecipientHash = redis.call('HGET', KEYS[1], 'canonicalRecipientHash')
                   local rememberMe = redis.call('HGET', KEYS[1], 'rememberMe')
-                  if not memberId or not rememberMe then
+                  if not canonicalRecipientHash or not rememberMe then
                     redis.call('DEL', KEYS[1])
                     return 'invalid'
                   end
                   redis.call('DEL', KEYS[1])
-                  return 'matched|' .. memberId .. '|' .. rememberMe
+                  return 'matched|' .. canonicalRecipientHash .. '|' .. rememberMe
                 end
                 local failures = redis.call('HINCRBY', KEYS[1], 'failures', 1)
                 if failures >= tonumber(ARGV[2]) then

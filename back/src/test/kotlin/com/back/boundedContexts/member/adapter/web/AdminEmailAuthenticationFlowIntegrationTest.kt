@@ -13,6 +13,7 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
@@ -31,6 +32,9 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
 
     @Autowired
     private lateinit var memberSessionRepository: MemberSessionRepository
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
 
     @ParameterizedTest
     @ValueSource(booleans = [false, true])
@@ -112,6 +116,84 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
                 AuthCookieNames.AUTHENTICATION_COOKIE_NAMES.forEach { name -> cookie { maxAge(name, 0) } }
             }
     }
+
+    @Test
+    fun `verified email promotes an existing ordinary identity and clears its password`() {
+        jdbcTemplate.update("update member set is_admin = false where email = ?", "admin@test.com")
+        val (challengeId, deliveredCode) = requestChallenge()
+
+        assertThat(memberState("admin@test.com"))
+            .containsExactly(false, true)
+
+        verifyChallenge(challengeId, deliveredCode)
+
+        assertThat(memberState("admin@test.com"))
+            .containsExactly(true, false)
+    }
+
+    @Test
+    fun `verified email creates a missing administrator without mutating the request phase`() {
+        jdbcTemplate.update("update member set email = ? where email = ?", "former-admin@test.com", "admin@test.com")
+        val (challengeId, deliveredCode) = requestChallenge()
+
+        assertThat(memberCount("admin@test.com")).isZero()
+
+        verifyChallenge(challengeId, deliveredCode)
+
+        assertThat(memberCount("admin@test.com")).isEqualTo(1)
+        assertThat(memberState("admin@test.com"))
+            .containsExactly(true, false)
+    }
+
+    private fun requestChallenge(): Pair<String, String> {
+        var deliveredCode = ""
+        doAnswer { invocation ->
+            deliveredCode = invocation.getArgument(1)
+            null
+        }.`when`(adminLoginMailSender).sendCode(anyString(), anyString(), anyLong())
+
+        val response =
+            mvc
+                .post("/member/api/v1/auth/admin-email/request") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"email":"admin@test.com","rememberMe":false}"""
+                }.andExpect {
+                    status { isOk() }
+                }.andReturn()
+
+        return objectMapper.readTree(response.response.contentAsString).at("/data/challengeId").asText() to deliveredCode
+    }
+
+    private fun verifyChallenge(
+        challengeId: String,
+        deliveredCode: String,
+    ) {
+        assertThat(deliveredCode).matches("\\d{8}")
+        mvc
+            .post("/member/api/v1/auth/admin-email/verify") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"challengeId":"$challengeId","code":"$deliveredCode"}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.item.isAdmin") { value(true) }
+            }
+    }
+
+    private fun memberCount(email: String): Int =
+        requireNotNull(
+            jdbcTemplate.queryForObject(
+                "select count(*) from member where email = ?",
+                Int::class.java,
+                email,
+            ),
+        )
+
+    private fun memberState(email: String): List<Boolean> =
+        jdbcTemplate.queryForObject(
+            "select is_admin, password is not null from member where email = ?",
+            { resultSet, _ -> listOf(resultSet.getBoolean(1), resultSet.getBoolean(2)) },
+            email,
+        )
 
     private fun requireCookie(
         cookies: List<Cookie>,

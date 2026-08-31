@@ -6,14 +6,14 @@ interface AdminEmailChallengeStore {
     data class Challenge(
         val challengeId: String,
         val codeHash: String,
-        val memberId: Long,
+        val canonicalRecipientHash: String,
         val rememberMe: Boolean,
         val ttl: Duration,
     )
 
     sealed interface ConsumeResult {
         data class Matched(
-            val memberId: Long,
+            val canonicalRecipientHash: String,
             val rememberMe: Boolean,
         ) : ConsumeResult
 

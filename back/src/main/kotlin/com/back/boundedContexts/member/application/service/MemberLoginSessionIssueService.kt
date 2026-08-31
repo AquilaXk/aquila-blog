@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class MemberLoginSessionIssueService(
     private val memberRepository: MemberRepositoryPort,
+    private val memberApplicationService: MemberApplicationService,
     private val memberSessionUseCase: MemberSessionUseCase,
     private val authTokenIssueUseCase: AuthTokenIssueUseCase,
     private val canonicalAdminPolicy: CanonicalAdminPolicy,
@@ -38,13 +39,15 @@ class MemberLoginSessionIssueService(
 
     @Transactional
     fun issueAdminEmail(
-        memberId: Long,
+        email: String,
+        nickname: String,
         rememberLoginEnabled: Boolean,
         createdIp: String?,
         userAgent: String?,
-    ): IssuedLoginSession =
-        issueInternal(
-            memberId = memberId,
+    ): IssuedLoginSession {
+        val member = memberApplicationService.ensureVerifiedEmailIdentity(email, nickname)
+        return issueInternal(
+            memberId = member.id,
             rememberLoginEnabled = rememberLoginEnabled,
             ipSecurityEnabled = false,
             ipSecurityFingerprint = null,
@@ -52,6 +55,7 @@ class MemberLoginSessionIssueService(
             userAgent = userAgent,
             administratorEmailVerified = true,
         )
+    }
 
     private fun issueInternal(
         memberId: Long,
@@ -69,6 +73,7 @@ class MemberLoginSessionIssueService(
 
         val validCredentialBoundary =
             if (administratorEmailVerified) {
+                if (!member.isAdmin) member.grantAdmin()
                 member.isAdmin && canonicalAdminPolicy.canAuthenticate(member)
             } else {
                 !member.isAdmin &&

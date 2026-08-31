@@ -175,16 +175,18 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
     }
 
     @Test
-    fun `canonical admin with a retired password rejects generic issue without creating a session`() {
+    fun `canonical admin with a stored password rejects generic issue without mutation`() {
         val memberId =
             inTransaction {
                 memberRepository
                     .findByEmail("admin@test.com")!!
-                    .also { member -> member.password = null }
+                    .also { member -> member.password = "legacy-password" }
                     .id
             }
 
         assertLoginIssueRejectedWithoutSession(memberId)
+        assertThat(inTransaction { memberRepository.findById(memberId).orElseThrow().password })
+            .isEqualTo("legacy-password")
     }
 
     @Test

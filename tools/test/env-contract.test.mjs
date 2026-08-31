@@ -14,6 +14,11 @@ const backupRestoreWorkflowPath = path.join(repoRoot, ".github/workflows/backup-
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const caddyfilePath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
 const envExamplePath = path.join(repoRoot, "deploy/homeserver/.env.prod.example")
+const backEnvExamplePath = path.join(repoRoot, "deploy/homeserver/.env.back.prod.example")
+const backDefaultEnvPath = path.join(repoRoot, "back/.env.default")
+const backTestEnvPath = path.join(repoRoot, "back/.env.test")
+const backBuildPath = path.join(repoRoot, "back/build.gradle.kts")
+const applicationPath = path.join(repoRoot, "back/src/main/resources/application.yaml")
 const applicationProdPath = path.join(repoRoot, "back/src/main/resources/application-prod.yaml")
 const deployScriptPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
 const doctorScriptPath = path.join(repoRoot, "deploy/homeserver/doctor.sh")
@@ -273,7 +278,6 @@ const baseHomeServerEnv = [
   "PROD___CUSTOM__POST__READ__CURSOR_SIGNING_KEY_VERSION=2",
   "CUSTOM__ADMIN__USERNAME=관리자",
   "CUSTOM__ADMIN__EMAIL=admin@aquilaxk.site",
-  "CUSTOM__ADMIN__PASSWORD=valid-admin-password",
   "CUSTOM__AUTH__ADMIN_EMAIL__CHALLENGE_EXPIRATION_SECONDS=600",
   "CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS=10000",
   "CUSTOM_PROD_COOKIEDOMAIN=blog.aquilaxk.site",
@@ -284,7 +288,6 @@ const baseHomeServerEnv = [
   "CUSTOM__REVALIDATE__URL=https://blog.aquilaxk.site/api/revalidate",
   "CUSTOM__REVALIDATE__TOKEN=valid-revalidate-token",
   `WEB_METRICS_TOKEN=${webMetricsTokenFixture}`,
-  "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID=configured-for-contract-test",
   "SPRING__MAIL__HOST=smtp.mail.example",
   "SPRING__MAIL__PORT=587",
   "SPRING__MAIL__USERNAME=mailer@aquilaxk.site",
@@ -334,23 +337,37 @@ test("home-server-source contract accepts a complete deployment env without BACK
   assert.equal(result.ok, true, result.errors.map((error) => error.message).join("\n"))
 })
 
-test("home-server-source는 Kakao OIDC client-id의 누락과 빈 값을 배포 전에 거부한다", async () => {
-  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const contract = loadContract(contractPath)
-  const key = "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID"
-  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+test("administrator email cutoff removes password and OAuth runtime contracts", () => {
+  const contract = JSON.parse(readFileSync(contractPath, "utf8"))
+  const sourceKeys = new Set(targetKeyNames(contract, "home-server-source"))
+  const localRenderKeys = new Set(contract.targets["back-local"].render.map((entry) => entry.name))
+  const retiredKeys = [
+    "CUSTOM__ADMIN__PASSWORD",
+    "SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID",
+  ]
 
-  assert.equal(definition?.required, true, "Kakao client-id must be required at the HOME_SERVER_ENV source")
-  assert.equal(definition?.secret, true, "Kakao client-id must be marked secret so diagnostics cannot disclose it")
-
-  for (const [name, text] of [
-    ["missing", baseHomeServerEnv.replace(new RegExp(`^${key}=.*\\n`, "m"), "")],
-    ["blank", baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=`)],
-  ]) {
-    const result = validateEnvText({ contract, target: "home-server-source", text })
-    assert.equal(result.ok, false, `${name} Kakao client-id must fail before deployment`)
-    assert(result.errors.some((error) => error.key === key && error.message === "is required"), JSON.stringify(result.errors))
+  for (const key of retiredKeys) {
+    assert.equal(sourceKeys.has(key), false, `${key} must be absent from the production source contract`)
+    assert.equal(localRenderKeys.has(key), false, `${key} must be absent from local backend materialization`)
   }
+
+  for (const filePath of [envExamplePath, backEnvExamplePath, backDefaultEnvPath, backTestEnvPath]) {
+    const content = readFileSync(filePath, "utf8")
+    for (const key of retiredKeys) {
+      assert.doesNotMatch(content, new RegExp(`^${key}=`, "m"), `${key} must be absent from ${path.relative(repoRoot, filePath)}`)
+    }
+  }
+
+  const build = readFileSync(backBuildPath, "utf8")
+  assert.doesNotMatch(build, /spring-boot-starter-security-oauth2-client/)
+  assert.doesNotMatch(build, /spring-boot-starter-session-data-redis/)
+
+  const application = readFileSync(applicationPath, "utf8")
+  assert.doesNotMatch(application, /^  security:\n    oauth2:/m)
+
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  assert.doesNotMatch(caddyfile, /\/oauth2\/\*/)
+  assert.doesNotMatch(caddyfile, /\/login\/oauth2\/\*/)
 })
 
 test("home-server-source requires the SMTP username used as the admin email From address", async () => {
@@ -586,8 +603,6 @@ test("공개 API 게이트는 두 vhost가 같은 snippet을 공유하고 front 
     "/member/*",
     "/post/*",
     "/system/*",
-    "/oauth2/*",
-    "/login/oauth2/*",
     // 집계 엔드포인트와 개별 probe는 다른 경로다. bare 형태가 빠지면 HARDENING.md가 안내하는
     // `/actuator/health`가 web 호스트에서 front 404로 떨어진다.
     "/actuator/health",
@@ -860,8 +875,8 @@ test("web vhost의 backend prefix 목록이 백엔드 라우트 표면과 어긋
   // 새 최상위 prefix가 생기면 여기 추가되지 않고, 공개 web 호스트에서 그 API 전체가 front
   // 404가 된다 - 배포는 green이다. 그래서 어노테이션 표면과 대조한다.
   //
-  // 목록 전체를 파생시키지는 않는다: `/oauth2/*`·`/login/oauth2/*`·`/actuator/health*`는 우리
-  // 어노테이션이 아니라 Spring이 소유하는 경로이고, `/`·`/session`은 의도적 제외다. 반쯤 파생된
+  // 목록 전체를 파생시키지는 않는다: `/actuator/health*`는 우리 어노테이션이 아니라 Spring이
+  // 소유하는 경로이고, `/`·`/session`은 의도적 제외다. 반쯤 파생된
   // 표는 "전부 검증됐다"는 잘못된 확신을 준다. 대조 대상은 우리가 소유한 부분으로 한정한다.
   const backendMainDir = path.join(repoRoot, "back/src/main/kotlin")
   const kotlinFiles = []
@@ -898,7 +913,7 @@ test("web vhost의 backend prefix 목록이 백엔드 라우트 표면과 어긋
   }
 
   // Spring 소유 경로는 어노테이션에서 안 나온다. 리터럴로 고정한다.
-  for (const frameworkPath of ["/oauth2/*", "/login/oauth2/*", "/actuator/health", "/actuator/health/*"]) {
+  for (const frameworkPath of ["/actuator/health", "/actuator/health/*"]) {
     assert(routed.includes(frameworkPath), `${frameworkPath} must stay routed to the backend`)
   }
 })
@@ -933,7 +948,6 @@ test("Caddy access logs skip sensitive query routes before proxying", () => {
   const adminHandleIndex = gates.indexOf("handle @adminApi {")
   const publicReadHandleIndex = gates.indexOf("handle @publicReadFallback {")
   const sensitiveRoutes = [
-    ["@oauthCallbackSensitive", "path /login/oauth2/code/*"],
     ["@socialSignupSensitive", "path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete"],
     ["@accountDeletionSensitive", "path /member/api/v1/privacy/account"],
     ["@publicSearchSensitive", "path /post/api/v1/posts/search"],
@@ -2149,7 +2163,10 @@ test("home-server-source requires DB runtime username after runtime-role cutover
 test("validator reports key-level failures without leaking secret values", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const text = baseHomeServerEnv
-    .replace("CUSTOM__ADMIN__PASSWORD=valid-admin-password", "CUSTOM__ADMIN__PASSWORD=change_me_admin_password")
+    .replace(
+      "CUSTOM__JWT__SECRET_KEY=abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz",
+      "CUSTOM__JWT__SECRET_KEY=short-secret",
+    )
     .replace("CUSTOM_PROD_FRONTURL=https://blog.aquilaxk.site", "CUSTOM_PROD_FRONTURL=https://wrong.blog.aquilaxk.site")
 
   const result = validateEnvText({
@@ -2159,9 +2176,9 @@ test("validator reports key-level failures without leaking secret values", async
   })
 
   assert.equal(result.ok, false)
-  assert(result.errors.some((error) => error.key === "CUSTOM__ADMIN__PASSWORD"))
+  assert(result.errors.some((error) => error.key === "CUSTOM__JWT__SECRET_KEY"))
   assert(result.errors.some((error) => error.message.includes("CUSTOM_PROD_BACKURL")))
-  assert(!JSON.stringify(result).includes("change_me_admin_password"))
+  assert(!JSON.stringify(result).includes("short-secret"))
 })
 
 test("Platform contract keeps runtime keys but removes Web rendering and Web-owned keys", async () => {
@@ -2449,19 +2466,36 @@ test("deploy workflow probes Caddy through its edge network", () => {
   assert.doesNotMatch(workflow, /docker run --rm --network blog_home_default curlimages\/curl:8\.7\.1/)
 })
 
-test("blue green deploy keeps grafana route checks out of backend rollback decisions", () => {
+test("blue green deploy fails closed on the unauthenticated Grafana boundary", () => {
   const deployScript = readFileSync(deployScriptPath, "utf8")
-  const burnInBody = deployScript.slice(
-    deployScript.indexOf("run_blue_green_burn_in()"),
-    deployScript.indexOf("rollback_to_backend()"),
-  )
+  const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
+  const check = extractTopLevelShellFunction(deployScript, "check_grafana_access_boundary")
+  const steadyCheck = extractTopLevelShellFunction(steadyStateGuard, "check_grafana_access_boundary")
+  const callStart = deployScript.indexOf("if ! check_grafana_access_boundary; then")
 
-  assert.match(deployScript, /warn_grafana_embed_origin_route\(\)/)
-  assert.doesNotMatch(deployScript, /if ! check_grafana_embed_origin_route; then/)
-  assert.doesNotMatch(deployScript, /^check_grafana_embed_origin_route$/m)
-  assert.doesNotMatch(deployScript, /grafana origin auth-proxy route verify failed[\s\S]{0,220}rollback_/)
-  assert.doesNotMatch(burnInBody, /warn_grafana_embed_origin_route/)
-  assert.doesNotMatch(deployScript, /steady-state guard monitors it/)
+  for (const [name, body] of [["deploy", check], ["steady-state", steadyCheck]]) {
+    assert.match(body, /internal_health.*==.*"200"/, `${name} must require exact internal health`)
+    assert.match(body, /is_protected_http_status "\$\{origin_status\}"/, `${name} must protect origin access`)
+    assert.match(body, /is_protected_http_status "\$\{public_status\}"/, `${name} must protect public access`)
+    assert.doesNotMatch(body, /CUSTOM__ADMIN__PASSWORD/)
+    assert.doesNotMatch(body, /skip|force-recreate/, `${name} must fail closed without a fallback`)
+  }
+  assert.notEqual(callStart, -1, "Grafana access boundary must be a post-cutover gate")
+  assert.match(deployScript.slice(callStart, callStart + 600), /rollback_to_backend "\$\{active_backend\}"/)
+  assert.doesNotMatch(deployScript, /warn_grafana_embed_(?:origin|public)_route/)
+  assert.doesNotMatch(deployScript, /check_notification_sse_route/)
+  assert.match(steadyStateGuard, /if check_grafana_access_boundary; then ok=/)
+})
+
+test("retired password and notification probes are absent", () => {
+  const deployScript = readFileSync(deployScriptPath, "utf8")
+  const doctorScript = readFileSync(doctorScriptPath, "utf8")
+  const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
+
+  for (const script of [deployScript, doctorScript, steadyStateGuard]) {
+    assert.doesNotMatch(script, /CUSTOM__ADMIN__PASSWORD/)
+    assert.doesNotMatch(script, /notification_sse_(?:probe|route|status)/)
+  }
 })
 
 test("required secret check does not inject multi-line HOME_SERVER_ENV into shell", () => {
@@ -3321,9 +3355,9 @@ test("blue-green deploy waits longer for candidate Flyway startup only", () => {
   const workflow = readFileSync(workflowPath, "utf8")
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const candidateStart = deployScript.indexOf("check_candidate_backend_health()")
-  const candidateEnd = deployScript.indexOf("check_notification_sse_route()")
+  const candidateEnd = deployScript.indexOf("switch_caddy_upstream()")
   assert.notEqual(candidateStart, -1, "candidate health helper marker must exist")
-  assert.notEqual(candidateEnd, -1, "notification route marker must exist")
+  assert.notEqual(candidateEnd, -1, "cutover helper marker must exist")
   const candidateHealthBlock = deployScript.slice(candidateStart, candidateEnd)
 
   const deployJobStart = workflow.indexOf("  blueGreenDeploy:")

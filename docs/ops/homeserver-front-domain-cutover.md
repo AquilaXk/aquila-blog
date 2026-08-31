@@ -69,7 +69,6 @@ front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스�
 | prefix | 대상 |
 | --- | --- |
 | `/member/*` `/post/*` `/system/*` | 백엔드 (edge에서 read/admin upstream 분리 적용) |
-| `/oauth2/*` `/login/oauth2/*` | 백엔드 (Spring OAuth2 authorization·callback) |
 | `/actuator/health` `/actuator/health/*` | 백엔드 (health만 — 집계 엔드포인트와 개별 probe 둘 다. `/actuator/prometheus`는 edge에서 403) |
 | 그 외 전부 | front (`/`, `/posts/*`, `/admin/*`, `/api/*` Next API routes, `/_next/*`, `/robots.txt`, `/sitemap.xml`) |
 
@@ -77,7 +76,6 @@ front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스�
 
 - front의 `/api/*`(revalidate·backend proxy·rum)는 백엔드에 bare `/api` prefix가 없어 겹치지
   않는다.
-- front 페이지 `/login`과 백엔드 callback `/login/oauth2/*`는 경로 깊이로 갈린다.
 - 백엔드 `GET /`(placeholder)와 `GET /session`은 front가 쓰지 않으므로(front는
   `/member/api/v1/auth/session` 사용) 공개 라우팅에서 제외하고 내부 전용으로 남긴다.
 
@@ -116,31 +114,12 @@ upstream은 peer 주소를 받고, 같은 위조를 공개 호스트로 보내�
 (`front/src/libs/utils/postPath.ts`의 `toCanonicalPostPath`), 루트의 `[slug]` catch-all은
 레거시 URL 리다이렉트 전용이다 — `extractPostIdFromLegacySlug`가 `-`로 끊은 마지막 토큰을
 양의 정수로 파싱하지 못하면 그대로 404다. 따라서 `member`·`post`·`system`·`session`·
-`actuator`·`oauth2` 같은 값은 애초에 도달 가능한 콘텐츠 경로가 아니고, 거부할 입력이 존재하지
+`actuator` 같은 값은 애초에 도달 가능한 콘텐츠 경로가 아니고, 거부할 입력이 존재하지
 않는다. 나중에 사용자 지정 slug를 도입하면 그때 위 표의 prefix를 예약어로 막아야 한다.
 
 ## 선행 조건
 
-### 1. 카카오 콘솔 callback 등록 (오너, 콘솔)
-
-`https://blog.aquilaxk.site/login/oauth2/code/kakao`를 **추가**한다.
-
-> ⚠️ **교체가 아니라 추가다.** 콘솔 저장이 기존 항목을 대체해 버린 사고 이력이 있다. 기존
-> 항목(`https://api.aquilaxk.site/login/oauth2/code/kakao` 등)을 지우지 말고 새 항목을 함께
-> 남긴다. 구 항목 정리는 전환이 끝난 뒤 별도로 한다.
-
-`back/src/main/resources/application.yaml`의 `redirect-uri`가 `${custom.site.backUrl}` 파생이라
-`CUSTOM_PROD_BACKURL`을 바꾸는 순간 애플리케이션은 새 URI를 보낸다. 콘솔 등록을 확인하기 전에는
-아래 전환 순서 3단계를 시작하지 않는다.
-
-### Kakao OIDC current-state checklist (#1547)
-
-- 오너는 Kakao 콘솔에서 OpenID Connect 사용 상태와 `openid`, `profile_nickname`, `profile_image` 동의 항목을 확인하고, callback이 정확히 `https://blog.aquilaxk.site/login/oauth2/code/kakao`인지 확인한다.
-- `HOME_SERVER_ENV`의 `SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID`는 required nonblank 계약으로만 검증한다. 값은 저장소·로그·이슈·PR에 기록하지 않는다.
-- #1547 close 전에는 OIDC ON, exact callback, real login 성공을 각각 별도 sanitized evidence로 남긴다. 각 evidence에는 timestamp와 credential이 아닌 app identifier만 남기고, client_id·state·code·token·cookie는 남기지 않는다.
-- 공개 discovery 응답이나 `/oauth2/authorization/kakao`의 302은 콘솔 설정이나 callback에서 실제로 완료되는 로그인을 증명하지 않으며 close evidence를 대체하지 않는다. 위 세 evidence 전에는 #1547을 닫지 않는다.
-
-### 2. front 이미지 산출물 게이트
+### 1. front 이미지 산출물 게이트
 
 `NEXT_PUBLIC_*`는 **빌드 시점에 번들로 인라인**된다. `ENV`는 builder 스테이지를 넘지 않아
 런타임 컨테이너에서 `printenv`로는 좋은 이미지와 나쁜 이미지를 구분할 수 없다(둘 다 빈 출력 +

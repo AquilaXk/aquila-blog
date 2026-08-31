@@ -22,11 +22,6 @@ import com.back.global.security.config.PublicApiRequestMatcher
 import com.back.global.security.config.RefreshTokenAuthenticationHandler
 import com.back.global.security.config.SecurityConfig
 import com.back.global.security.config.SecurityContextAuthenticationWriter
-import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
-import com.back.global.security.config.oauth2.CustomOAuth2LoginFailureHandler
-import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
-import com.back.global.security.config.oauth2.CustomOAuth2UserService
-import com.back.global.security.config.oauth2.CustomOidcUserService
 import com.back.global.web.ErrorResponseWriter
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.ClientIpResolver
@@ -68,27 +63,11 @@ private const val STRICT_TRANSPORT_SECURITY_HEADER = "Strict-Transport-Security"
 @TestPropertySource(
     properties = [
         "custom.security.apiRateLimit.enabled=false",
-        "spring.security.oauth2.client.registration.kakao.client-id=test-kakao-client-id",
     ],
 )
 abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
     @Autowired
     protected lateinit var mvc: MockMvc
-
-    @MockitoBean
-    protected lateinit var customOAuth2LoginSuccessHandler: CustomOAuth2LoginSuccessHandler
-
-    @MockitoBean
-    protected lateinit var customOAuth2LoginFailureHandler: CustomOAuth2LoginFailureHandler
-
-    @MockitoBean
-    protected lateinit var customOAuth2AuthorizationRequestResolver: CustomOAuth2AuthorizationRequestResolver
-
-    @MockitoBean
-    protected lateinit var customOAuth2UserService: CustomOAuth2UserService
-
-    @MockitoBean
-    protected lateinit var customOidcUserService: CustomOidcUserService
 
     @MockitoBean(name = "jpaMappingContext")
     protected lateinit var jpaMappingContext: JpaMetamodelMappingContext
@@ -98,6 +77,19 @@ abstract class SecurityConfigEndpointExposureWebMvcTestSupport {
     class ProbeController {
         @GetMapping("/__security-config-test-probe")
         fun probe(): String = "ok"
+    }
+
+    @Test
+    @DisplayName("OAuth route families do not redirect")
+    fun `oauth route families fail closed`() {
+        listOf(
+            "/oauth2/authorization/kakao",
+            "/login/oauth2/code/kakao",
+        ).forEach { path ->
+            val response = mvc.get(path).andReturn().response
+            assertThat(response.status).isBetween(400, 499)
+            assertThat(response.getHeader(HttpHeaders.LOCATION)).isNull()
+        }
     }
 
     @TestConfiguration

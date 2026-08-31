@@ -748,142 +748,65 @@ probe_grafana_internal_health() {
 }
 
 probe_grafana_embed_origin_headers() {
-  local web_domain="$1"
-  local grafana_domain="$2"
-  local path="$3"
-  local admin_email="$4"
-  local admin_password="$5"
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
-    set -eu
-    web_domain="$1"
-    grafana_domain="$2"
-    path="$3"
-    admin_email="$4"
-    admin_password="$5"
-    cookie_jar="$(mktemp)"
-    trap "rm -f \"${cookie_jar}\"" EXIT
-    login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
-    login_code="$(
-      curl -sS \
-        --connect-timeout 3 \
-        --max-time 12 \
-        -c "${cookie_jar}" \
-        -o /dev/null \
-        -w "%{http_code}" \
-        -H "Host: ${web_domain}" \
-        -H "Content-Type: application/json" \
-        --data "${login_payload}" \
-        "http://caddy:80/member/api/v1/auth/login" || true
-    )"
-    if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
-      printf "HTTP/1.1 000 login_failed\r\n"
-      exit 0
-    fi
-    curl -s \
-      --connect-timeout 3 \
-      --max-time 12 \
-      -D - \
-      -o /dev/null \
-      -b "${cookie_jar}" \
-      -H "Host: ${grafana_domain}" \
-      "http://caddy:80${path}" || true
-  ' sh "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
+  local grafana_domain="$1"
+  local path="$2"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 12 \
+    -D - \
+    -o /dev/null \
+    -s \
+    -H "Host: ${grafana_domain}" \
+    "http://caddy:80${path}" 2>/dev/null || true
 }
 
-check_grafana_embed_origin_route() {
-  local web_domain grafana_domain path admin_email admin_password
-  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+is_protected_http_status() {
+  [[ "$1" =~ ^(401|403)$ ]]
+}
+
+check_grafana_access_boundary() {
+  local grafana_domain url path
   grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
+  url="$(monitoring_embed_candidate_url)"
   path="$(monitoring_embed_candidate_path)"
-  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
-  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
 
   if [[ -z "${grafana_domain}" ]]; then
-    echo "skip grafana origin route check: no GRAFANA_DOMAIN configured"
-    return 0
+    echo "grafana access boundary failed: GRAFANA_DOMAIN is required" >&2
+    return 1
   fi
-  if [[ -z "${web_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
-    echo "skip grafana origin route check: missing WEB_DOMAIN or admin credentials"
-    return 0
+  if [[ -z "${url}" ]] || ! is_grafana_embed_url "${url}"; then
+    echo "grafana access boundary failed: a Grafana monitoring embed URL is required" >&2
+    return 1
   fi
 
   local attempts=20
   local sleep_seconds=3
   local try=1
-  local headers status location xfo csp internal_health
+  local origin_headers public_headers origin_status public_status internal_health
 
   while (( try <= attempts )); do
     internal_health="$(probe_grafana_internal_health)"
-    headers="$(probe_grafana_embed_origin_headers "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
-    status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
-    location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
-    xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
-    csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
+    origin_headers="$(probe_grafana_embed_origin_headers "${grafana_domain}" "${path}")"
+    public_headers="$(probe_grafana_embed_headers "${url}")"
+    origin_status="$(printf '%s\n' "${origin_headers}" | awk 'NR==1 {print $2}')"
+    public_status="$(printf '%s\n' "${public_headers}" | awk 'NR==1 {print $2}')"
 
     if [[ "${internal_health}" == "200" ]] &&
-      [[ "${status}" == "200" || "${status}" == "401" || "${status}" == "403" ]] &&
-      [[ "${location}" != *"/login"* ]] &&
-      [[ -z "${xfo}" || ! "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
-      if [[ -z "${csp}" || "${csp}" != *"frame-ancestors"* || "${csp}" == *"aquilaxk.site"* || "${csp}" == *"*"* ]]; then
-        if [[ "${status}" == "200" ]]; then
-          echo "grafana origin auth-proxy route ok: status=${status} grafana_health=${internal_health} host=${grafana_domain} path=${path}"
-        else
-          echo "grafana origin auth-proxy route ok(protected): status=${status} grafana_health=${internal_health} host=${grafana_domain} path=${path}"
-        fi
-        return 0
-      fi
+      is_protected_http_status "${origin_status}" &&
+      is_protected_http_status "${public_status}"; then
+      echo "grafana access boundary ok: internal=${internal_health} origin=${origin_status} public=${public_status}"
+      return 0
     fi
 
     if (( try % 5 == 0 )); then
-      echo "waiting grafana origin auth-proxy route (${try}/${attempts}) status=${status:-none} grafana_health=${internal_health:-none} location=${location:-none} x-frame-options=${xfo:-none}" >&2
+      echo "waiting grafana access boundary (${try}/${attempts}) internal=${internal_health:-none} origin=${origin_status:-none} public=${public_status:-none}" >&2
     fi
     sleep "${sleep_seconds}"
     try=$((try + 1))
   done
 
-  echo "grafana origin auth-proxy route check failed: host=${grafana_domain} path=${path} status=${status:-none} grafana_health=${internal_health:-none} location=${location:-none} x-frame-options=${xfo:-none}" >&2
-  if [[ -n "${csp}" ]]; then
-    echo "grafana embed csp=${csp}" >&2
-  fi
+  echo "grafana access boundary failed: internal=${internal_health:-none} origin=${origin_status:-none} public=${public_status:-none}" >&2
   return 1
-}
-
-warn_grafana_embed_origin_route() {
-  check_grafana_embed_origin_route && return 0
-  echo "WARN grafana origin auth-proxy route unhealthy; backend deploy continues" >&2
-  return 0
-}
-
-warn_grafana_embed_public_route() {
-  local url
-  url="$(monitoring_embed_candidate_url)"
-  if [[ -z "${url}" ]] || ! is_grafana_embed_url "${url}"; then
-    echo "skip grafana public route warning: no grafana monitoring embed url configured"
-    return 0
-  fi
-
-  local headers status location xfo csp internal_health
-  internal_health="$(probe_grafana_internal_health)"
-  headers="$(probe_grafana_embed_headers "${url}")"
-  status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
-  location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
-  xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
-  csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
-
-  if [[ "${internal_health}" == "200" ]] &&
-    [[ "${status}" == "200" || "${status}" == "401" || "${status}" == "403" ]] &&
-    [[ "${location}" != *"/login"* ]] &&
-    [[ -z "${xfo}" || ! "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]] &&
-    [[ -z "${csp}" || "${csp}" != *"frame-ancestors"* || "${csp}" == *"aquilaxk.site"* || "${csp}" == *"*"* ]]; then
-    echo "grafana public embed route ok: status=${status} grafana_health=${internal_health} url=${url}"
-    return 0
-  fi
-
-  echo "WARN grafana public embed route unhealthy: url=${url} status=${status:-none} grafana_health=${internal_health:-none} location=${location:-none} x-frame-options=${xfo:-none}" >&2
-  if [[ -n "${csp}" ]]; then
-    echo "WARN grafana public embed csp=${csp}" >&2
-  fi
-  return 0
 }
 
 upsert_env_key() {
@@ -2474,82 +2397,6 @@ check_candidate_admin_email_auth_readiness() {
   return 1
 }
 
-check_notification_sse_route() {
-  local web_domain="$1"
-  local admin_email admin_password
-  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
-  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
-
-  if [[ -z "${admin_email}" || -z "${admin_password}" ]]; then
-    echo "notification sse probe skipped: missing CUSTOM__ADMIN__EMAIL or CUSTOM__ADMIN__PASSWORD"
-    return 0
-  fi
-
-  local probe_output
-  probe_output="$(
-    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
-      set -eu
-      web_domain="$1"
-      admin_email="$2"
-      admin_password="$3"
-      cookie_jar="$(mktemp)"
-      stream_body_file="$(mktemp)"
-      trap "rm -f \"${cookie_jar}\" \"${stream_body_file}\"" EXIT
-      login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
-      login_code="$(
-        curl -sS \
-          --connect-timeout 3 \
-          --max-time 12 \
-          -c "${cookie_jar}" \
-          -o /dev/null \
-          -w "%{http_code}" \
-          -H "Host: ${web_domain}" \
-          -H "Content-Type: application/json" \
-          --data "${login_payload}" \
-          "http://caddy:80/member/api/v1/auth/login" || true
-      )"
-      echo "login_status=${login_code}"
-      if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
-        exit 11
-      fi
-
-      stream_status="$(
-        curl -sS -N \
-          --connect-timeout 3 \
-          --max-time 35 \
-          -b "${cookie_jar}" \
-          -H "Host: ${web_domain}" \
-          -o "${stream_body_file}" \
-          -w "%{http_code}" \
-          "http://caddy:80/member/api/v1/notifications/stream" || true
-      )"
-      echo "stream_status=${stream_status}"
-      tr -d "\r" < "${stream_body_file}"
-    ' sh "${web_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
-  )"
-
-  if [[ "${probe_output}" == *"event: connected"* && "${probe_output}" == *"event: heartbeat"* ]]; then
-    echo "notification sse probe ok: connected+heartbeat observed"
-    return 0
-  fi
-
-  local login_status stream_status
-  login_status="$(printf '%s\n' "${probe_output}" | sed -n 's/^login_status=//p' | head -n 1)"
-  stream_status="$(printf '%s\n' "${probe_output}" | sed -n 's/^stream_status=//p' | head -n 1)"
-  if printf '%s' "${login_status}" | grep -Eq '^2[0-9][0-9]$'; then
-    if [[ "${stream_status}" == "401" || "${stream_status}" == "403" ]] || \
-      printf '%s\n' "${probe_output}" | grep -Eq 'resultCode"[[:space:]]*:[[:space:]]*"401-'; then
-      echo "notification sse probe warning: login ok but stream unauthorized (status=${stream_status:-none}); continuing deploy gate" >&2
-      echo "${probe_output}" >&2
-      return 0
-    fi
-  fi
-
-  echo "notification sse probe failed" >&2
-  echo "${probe_output}" >&2
-  return 1
-}
-
 switch_caddy_upstream() {
   local target="$1"
   local host
@@ -2871,12 +2718,6 @@ run_blue_green_burn_in() {
     post_code="$(probe_caddy_http_code "${web_domain}")"
     if ! is_healthy_http_code "${post_code}"; then
       echo "burn-in public route verify failed (status=${post_code:-none})" >&2
-      rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${web_domain}" || true
-      return 1
-    fi
-
-    if ! check_notification_sse_route "${web_domain}"; then
-      echo "burn-in notification sse verify failed" >&2
       rollback_caddy_route_only "${previous_backend}" "${candidate_backend}" "${web_domain}" || true
       return 1
     fi
@@ -3738,8 +3579,6 @@ if [[ "${active_backend_was_running}" == "true" ]]; then
 else
   echo "skip cloudflared runtime check before candidate health: active backend is not running (${active_backend})"
 fi
-warn_grafana_embed_origin_route
-warn_grafana_embed_public_route
 validate_db_runtime_role_env
 provision_db_runtime_role
 validate_postgres_exporter_env
@@ -3810,9 +3649,9 @@ if ! is_healthy_http_code "${post_code}"; then
   exit 1
 fi
 
-echo "post-switch phase: notification sse verify"
-if ! check_notification_sse_route "${web_domain}"; then
-  echo "post-switch notification sse verify failed" >&2
+echo "post-switch phase: grafana access boundary verify"
+if ! check_grafana_access_boundary; then
+  echo "post-switch grafana access boundary verify failed" >&2
   rollback_to_backend "${active_backend}" "${web_domain}" || true
   if ! checked_stop_backend_service_if_running "${next_backend}"; then
     emit_backend_diagnostics "${next_backend}" >&2 || true
@@ -3844,10 +3683,6 @@ if ! check_cloudflared_runtime "${web_domain}"; then
   fi
   exit 1
 fi
-
-echo "post-switch phase: grafana embed route verify"
-warn_grafana_embed_origin_route
-warn_grafana_embed_public_route
 
 echo "post-switch phase: public read prewarm"
 prewarm_public_read_cache "${web_domain}"

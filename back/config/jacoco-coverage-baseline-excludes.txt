@@ -158,9 +158,6 @@ com/back/global/security/config/ApiDefaultCacheControlFilter.class
 com/back/global/security/config/ApiRuntimeBoundaryFilter.class
 com/back/global/security/config/CustomAuthenticationFilter.class
 com/back/global/security/config/CustomUserDetailsService.class
-com/back/global/security/config/oauth2/CustomOAuth2AuthorizationRequestResolver.class
-com/back/global/security/config/oauth2/CustomOAuth2LoginSuccessHandler.class
-com/back/global/security/config/oauth2/application/OAuth2State$Companion.class
 com/back/global/security/domain/SecurityUser.class
 com/back/global/storage/application/UploadedFileUrlCodec.class
 com/back/global/storage/adapter/CloudStorageAdapter.class

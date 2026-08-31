@@ -20,7 +20,7 @@
   - Facades/use-case services load/save aggregates and coordinate transactional flow.
   - Domain events emitted from domain/application; publishing handled in application/infrastructure.
 - Infrastructure layer:
-  - Repository implementations, QueryDSL, external integrations (OAuth2, storage, Redis).
+  - Repository implementations, QueryDSL, and external integrations such as storage and Redis.
 
 ## 4. Scope
 - In scope:

@@ -70,9 +70,6 @@
 	@notificationSse path /member/api/v1/notifications/stream
 	log_skip @notificationSse
 
-	@oauthCallbackSensitive path /login/oauth2/code/*
-	log_skip @oauthCallbackSensitive
-
 	@signupVerifySensitive path /member/api/v1/signup/email/verify
 	log_skip @signupVerifySensitive
 
@@ -182,8 +179,7 @@
 
 		reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
 			# Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
-			# Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
-			# callback URLs, so we pin the upstream scheme/host to the external URL.
+			# Caddy is plain HTTP. Preserve the external request scheme and host upstream.
 			import trusted_edge_client_ip
 			header_up Host {host}
 			header_up X-Forwarded-Proto https
@@ -356,7 +352,6 @@ http://{$WEB_DOMAIN:web.localhost} {
   #
   # The prefix list is the backend's public route surface, verified against the front route table:
   # front owns `/api/*` (Next API routes) and the backend has no bare `/api` prefix, and
-  # `/login` (front page) is one path segment shorter than `/login/oauth2/*` (Spring callback).
   # `/actuator/*` is narrowed to health only: the rest has no reason to be public on the web host.
   # Both the aggregate `/actuator/health` and the `/actuator/health/*` probes are listed - a path
   # matcher without the bare form would send the aggregate endpoint (documented in
@@ -367,7 +362,7 @@ http://{$WEB_DOMAIN:web.localhost} {
   #
   # The backend's `GET /` and `GET /session` are deliberately NOT routed here: front does not call
   # them (it uses /member/api/v1/auth/session) and `/` is the site itself.
-  @backendApi path /member/* /post/* /system/* /oauth2/* /login/oauth2/* /actuator/health /actuator/health/*
+  @backendApi path /member/* /post/* /system/* /actuator/health /actuator/health/*
   handle @backendApi {
     import backend_edge_gates
   }

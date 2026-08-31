@@ -121,12 +121,12 @@ class ApiRateLimitBackstopFilterTest {
     }
 
     @Test
-    @DisplayName("OAuth와 password login 요청은 auth bucket으로 제한한다")
-    fun `oauth and password login paths use auth bucket`() {
+    @DisplayName("password login 요청은 auth bucket으로 제한한다")
+    fun `password login paths use auth bucket`() {
         val redis = InMemoryRedisKeyValuePort()
         val filter = createFilter(redis = redis, authLimitPerMinute = 1)
 
-        assertThat(runFilter(filter, "GET", "/login/oauth2/code/github").status).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(filter, "POST", "/member/api/v1/auth/login").status).isEqualTo(HttpServletResponse.SC_OK)
 
         val limited = runFilter(filter, "POST", "/member/api/v1/auth/login")
 

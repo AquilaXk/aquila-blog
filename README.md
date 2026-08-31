@@ -149,7 +149,6 @@ Local development can run with the default development infrastructure. External 
 | --- | --- | --- |
 | `CUSTOM__JWT__SECRET_KEY` | Backend | JWT signing key |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | MinIO | Local object storage credentials |
-| `SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID` | Backend | Optional Kakao OAuth client ID |
 
 ## Quality Checks
 

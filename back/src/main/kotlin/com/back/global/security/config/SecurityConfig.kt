@@ -5,11 +5,6 @@ import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
 import com.back.global.exception.application.ErrorCode
-import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
-import com.back.global.security.config.oauth2.CustomOAuth2LoginFailureHandler
-import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
-import com.back.global.security.config.oauth2.CustomOAuth2UserService
-import com.back.global.security.config.oauth2.CustomOidcUserService
 import com.back.global.web.ErrorResponseSource
 import com.back.global.web.ErrorResponseWriter
 import jakarta.servlet.http.HttpServletResponse
@@ -34,11 +29,6 @@ import java.net.InetAddress
 @Configuration
 class SecurityConfig(
     private val customAuthenticationFilter: CustomAuthenticationFilter,
-    private val customOAuth2LoginSuccessHandler: CustomOAuth2LoginSuccessHandler,
-    private val customOAuth2LoginFailureHandler: CustomOAuth2LoginFailureHandler,
-    private val customOAuth2AuthorizationRequestResolver: CustomOAuth2AuthorizationRequestResolver,
-    private val customOAuth2UserService: CustomOAuth2UserService,
-    private val customOidcUserService: CustomOidcUserService,
     private val authSecurityConfigurer: AuthSecurityConfigurer,
     private val memberSecurityConfigurer: MemberSecurityConfigurer,
     private val postSecurityConfigurer: PostSecurityConfigurer,
@@ -64,8 +54,6 @@ class SecurityConfig(
 
                 authorize("/*/api/*/adm/**", hasRole("ADMIN"))
                 authorize("/*/api/*/**", authenticated)
-                authorize("/oauth2/**", permitAll)
-                authorize("/login/oauth2/**", permitAll)
                 authorize("/internal/health/admin-email-auth", permitAll)
                 val endpointExposurePolicy = SecurityEndpointExposurePolicy(isProd)
                 if (isProd) {
@@ -111,20 +99,6 @@ class SecurityConfig(
 
             sessionManagement {
                 sessionCreationPolicy = SessionCreationPolicy.STATELESS
-            }
-
-            oauth2Login {
-                authenticationSuccessHandler = customOAuth2LoginSuccessHandler
-                authenticationFailureHandler = customOAuth2LoginFailureHandler
-
-                authorizationEndpoint {
-                    authorizationRequestResolver = customOAuth2AuthorizationRequestResolver
-                }
-
-                userInfoEndpoint {
-                    userService = customOAuth2UserService
-                    oidcUserService = customOidcUserService
-                }
             }
 
             addFilterBefore<UsernamePasswordAuthenticationFilter>(apiMutationCsrfGuardFilter)

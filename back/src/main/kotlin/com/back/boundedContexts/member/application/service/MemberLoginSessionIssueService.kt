@@ -71,8 +71,9 @@ class MemberLoginSessionIssueService(
             if (administratorEmailVerified) {
                 member.isAdmin && canonicalAdminPolicy.canAuthenticate(member)
             } else {
-                canonicalAdminPolicy.canAuthenticate(member) &&
-                    (!member.isAdmin || !member.password.isNullOrBlank())
+                !member.isAdmin &&
+                    canonicalAdminPolicy.canAuthenticate(member) &&
+                    !member.password.isNullOrBlank()
             }
         if (!validCredentialBoundary) {
             throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")

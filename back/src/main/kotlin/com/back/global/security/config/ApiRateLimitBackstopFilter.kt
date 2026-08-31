@@ -127,10 +127,7 @@ class ApiRateLimitBackstopFilter(
         return null
     }
 
-    private fun isAuthPath(path: String): Boolean =
-        AUTH_PATHS.any { it.matches(path) } ||
-            path.startsWith("/oauth2/") ||
-            path.startsWith("/login/oauth2/")
+    private fun isAuthPath(path: String): Boolean = AUTH_PATHS.any { it.matches(path) }
 
     private fun shouldFailClosedWithoutRedis(): Boolean = environment.matchesProfiles("prod") && requireRedisInProd
 

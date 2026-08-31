@@ -16,8 +16,6 @@ LOCK_DIR="${SCRIPT_DIR}/.steady-state-guard.lock"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 DEPLOY_LOCK_TTL_SECONDS="${DEPLOY_LOCK_TTL_SECONDS:-21600}"
 GRAFANA_DS_STATE_FILE="${SCRIPT_DIR}/.grafana-datasource-state"
-GRAFANA_EMBED_STATE_FILE="${SCRIPT_DIR}/.grafana-embed-state"
-NOTIFICATION_SSE_STATE_FILE="${SCRIPT_DIR}/.notification-sse-state"
 
 log() {
   echo "[steady-guard] $(date -Is) $*"
@@ -78,25 +76,8 @@ reset_grafana_admin_password() {
   compose exec -T grafana grafana cli admin reset-admin-password "${grafana_password}" >/dev/null 2>&1 || true
 }
 
-auth_probes_enabled() {
-  local value
-  value="$(trim_quotes "$(env_value "STEADY_GUARD_AUTH_PROBES_ENABLED")")"
-  case "${value,,}" in
-    1|true|yes|on)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 GRAFANA_DS_FAIL_COUNT=0
 GRAFANA_DS_LAST_RECREATE_EPOCH=0
-GRAFANA_EMBED_FAIL_COUNT=0
-GRAFANA_EMBED_LAST_RECREATE_EPOCH=0
-NOTIFICATION_SSE_FAIL_COUNT=0
-NOTIFICATION_SSE_LAST_RECREATE_EPOCH=0
 
 load_grafana_ds_state() {
   GRAFANA_DS_FAIL_COUNT=0
@@ -117,48 +98,6 @@ load_grafana_ds_state() {
 
 save_grafana_ds_state() {
   printf 'fail_count=%s\nlast_recreate_epoch=%s\n' "${GRAFANA_DS_FAIL_COUNT}" "${GRAFANA_DS_LAST_RECREATE_EPOCH}" > "${GRAFANA_DS_STATE_FILE}"
-}
-
-load_grafana_embed_state() {
-  GRAFANA_EMBED_FAIL_COUNT=0
-  GRAFANA_EMBED_LAST_RECREATE_EPOCH=0
-  [[ -f "${GRAFANA_EMBED_STATE_FILE}" ]] || return 0
-
-  local fail_count_raw last_recreate_raw
-  fail_count_raw="$(awk -F= '$1 == "fail_count" {print $2; exit}' "${GRAFANA_EMBED_STATE_FILE}" 2>/dev/null || true)"
-  last_recreate_raw="$(awk -F= '$1 == "last_recreate_epoch" {print $2; exit}' "${GRAFANA_EMBED_STATE_FILE}" 2>/dev/null || true)"
-
-  if [[ "${fail_count_raw}" =~ ^[0-9]+$ ]]; then
-    GRAFANA_EMBED_FAIL_COUNT="${fail_count_raw}"
-  fi
-  if [[ "${last_recreate_raw}" =~ ^[0-9]+$ ]]; then
-    GRAFANA_EMBED_LAST_RECREATE_EPOCH="${last_recreate_raw}"
-  fi
-}
-
-save_grafana_embed_state() {
-  printf 'fail_count=%s\nlast_recreate_epoch=%s\n' "${GRAFANA_EMBED_FAIL_COUNT}" "${GRAFANA_EMBED_LAST_RECREATE_EPOCH}" > "${GRAFANA_EMBED_STATE_FILE}"
-}
-
-load_notification_sse_state() {
-  NOTIFICATION_SSE_FAIL_COUNT=0
-  NOTIFICATION_SSE_LAST_RECREATE_EPOCH=0
-  [[ -f "${NOTIFICATION_SSE_STATE_FILE}" ]] || return 0
-
-  local fail_count_raw last_recreate_raw
-  fail_count_raw="$(awk -F= '$1 == "fail_count" {print $2; exit}' "${NOTIFICATION_SSE_STATE_FILE}" 2>/dev/null || true)"
-  last_recreate_raw="$(awk -F= '$1 == "last_recreate_epoch" {print $2; exit}' "${NOTIFICATION_SSE_STATE_FILE}" 2>/dev/null || true)"
-
-  if [[ "${fail_count_raw}" =~ ^[0-9]+$ ]]; then
-    NOTIFICATION_SSE_FAIL_COUNT="${fail_count_raw}"
-  fi
-  if [[ "${last_recreate_raw}" =~ ^[0-9]+$ ]]; then
-    NOTIFICATION_SSE_LAST_RECREATE_EPOCH="${last_recreate_raw}"
-  fi
-}
-
-save_notification_sse_state() {
-  printf 'fail_count=%s\nlast_recreate_epoch=%s\n' "${NOTIFICATION_SSE_FAIL_COUNT}" "${NOTIFICATION_SSE_LAST_RECREATE_EPOCH}" > "${NOTIFICATION_SSE_STATE_FILE}"
 }
 
 monitoring_embed_candidate_url() {
@@ -207,76 +146,21 @@ inspect_grafana_internal_health() {
     "http://grafana:3000/api/health" 2>/dev/null || true
 }
 
-grafana_embed_headers_are_healthy() {
-  local headers="$1"
-  local internal_health="$2"
-  local status location xfo csp
-  status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
-  location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
-  xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
-  csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
-
-  if [[ "${internal_health}" != "200" ]]; then
-    return 1
-  fi
-  if [[ -z "${status}" || "${status}" == "none" ]]; then
-    return 1
-  fi
-  if [[ "${status}" != "200" && "${status}" != "401" && "${status}" != "403" ]]; then
-    return 1
-  fi
-  if [[ -n "${location}" && "${location}" == *"/login"* ]]; then
-    return 1
-  fi
-  if [[ -n "${xfo}" && "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
-    return 1
-  fi
-  if [[ -n "${csp}" && "${csp}" == *"frame-ancestors"* && "${csp}" != *"aquilaxk.site"* && "${csp}" != *"*"* ]]; then
-    return 1
-  fi
-
-  return 0
+probe_grafana_embed_origin_headers() {
+  local grafana_domain="$1"
+  local path="$2"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 12 \
+    -D - \
+    -o /dev/null \
+    -s \
+    -H "Host: ${grafana_domain}" \
+    "http://caddy:80${path}" 2>/dev/null || true
 }
 
-probe_grafana_embed_origin_headers() {
-  local web_domain="$1"
-  local grafana_domain="$2"
-  local path="$3"
-  local admin_email="$4"
-  local admin_password="$5"
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
-    set -eu
-    web_domain="$1"
-    grafana_domain="$2"
-    path="$3"
-    admin_email="$4"
-    admin_password="$5"
-    cookie_jar="$(mktemp)"
-    trap "rm -f \"${cookie_jar}\"" EXIT
-    login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
-    login_code="$(
-      curl -sS \
-        --connect-timeout 3 \
-        --max-time 12 \
-        -c "${cookie_jar}" \
-        -o /dev/null \
-        -w "%{http_code}" \
-        -H "Host: ${web_domain}" \
-        -H "Content-Type: application/json" \
-        --data "${login_payload}" \
-        "http://caddy:80/member/api/v1/auth/login" || true
-    )"
-    if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
-      printf "HTTP/1.1 000 login_failed\r\n"
-      exit 0
-    fi
-    curl -I -s \
-      --connect-timeout 3 \
-      --max-time 12 \
-      -b "${cookie_jar}" \
-      -H "Host: ${grafana_domain}" \
-      "http://caddy:80${path}" || true
-  ' sh "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
+is_protected_http_status() {
+  [[ "$1" =~ ^(401|403)$ ]]
 }
 
 host_caddy_sha256() {
@@ -616,208 +500,35 @@ check_grafana_core_datasources() {
   return 1
 }
 
-check_grafana_embed_route() {
-  local web_domain grafana_domain path admin_email admin_password
-  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+check_grafana_access_boundary() {
+  local grafana_domain url path
   grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
+  url="$(monitoring_embed_candidate_url)"
   path="$(monitoring_embed_candidate_path)"
-  if ! auth_probes_enabled; then
-    log "skip grafana origin route check (STEADY_GUARD_AUTH_PROBES_ENABLED is not enabled)"
-    return 0
-  fi
-  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
-  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
   if [[ -z "${grafana_domain}" ]]; then
-    log "skip grafana origin route check (no GRAFANA_DOMAIN configured)"
-    return 0
+    log "FAIL grafana access boundary: missing GRAFANA_DOMAIN"
+    return 1
   fi
-  if [[ -z "${web_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
-    log "skip grafana origin route check (missing WEB_DOMAIN or admin credentials)"
-    return 0
+  if [[ -z "${url}" ]] || ! is_grafana_embed_url "${url}"; then
+    log "FAIL grafana access boundary: missing Grafana monitoring embed URL"
+    return 1
   fi
 
-  local fail_threshold cooldown_seconds
-  fail_threshold="$(normalize_positive_int "$(env_value "GRAFANA_EMBED_FAIL_THRESHOLD")" "3")"
-  cooldown_seconds="$(normalize_non_negative_int "$(env_value "GRAFANA_EMBED_RECREATE_COOLDOWN_SECONDS")" "900")"
-
-  load_grafana_embed_state
-
-  local headers internal_health
+  local origin_headers public_headers origin_status public_status internal_health
   internal_health="$(inspect_grafana_internal_health)"
-  headers="$(probe_grafana_embed_origin_headers "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+  origin_headers="$(probe_grafana_embed_origin_headers "${grafana_domain}" "${path}")"
+  public_headers="$(inspect_grafana_embed_headers "${url}")"
+  origin_status="$(printf '%s\n' "${origin_headers}" | awk 'NR==1 {print $2}')"
+  public_status="$(printf '%s\n' "${public_headers}" | awk 'NR==1 {print $2}')"
 
-  if grafana_embed_headers_are_healthy "${headers}" "${internal_health}"; then
-    if (( GRAFANA_EMBED_FAIL_COUNT > 0 )); then
-      log "OK grafana origin route recovered consecutive_failures=${GRAFANA_EMBED_FAIL_COUNT} host=${grafana_domain} path=${path}"
-    else
-      log "OK grafana origin route host=${grafana_domain} path=${path}"
-    fi
-    GRAFANA_EMBED_FAIL_COUNT=0
-    save_grafana_embed_state
+  if [[ "${internal_health}" == "200" ]] &&
+    is_protected_http_status "${origin_status}" &&
+    is_protected_http_status "${public_status}"; then
+    log "OK grafana access boundary internal=${internal_health} origin=${origin_status} public=${public_status}"
     return 0
   fi
 
-  GRAFANA_EMBED_FAIL_COUNT=$(( GRAFANA_EMBED_FAIL_COUNT + 1 ))
-  save_grafana_embed_state
-  log "WARN grafana origin route unhealthy consecutive_failures=${GRAFANA_EMBED_FAIL_COUNT} threshold=${fail_threshold} host=${grafana_domain} path=${path}"
-
-  if (( GRAFANA_EMBED_FAIL_COUNT < fail_threshold )); then
-    return 1
-  fi
-
-  local now elapsed_since_recreate
-  now="$(date +%s)"
-  elapsed_since_recreate=$(( now - GRAFANA_EMBED_LAST_RECREATE_EPOCH ))
-  if (( GRAFANA_EMBED_LAST_RECREATE_EPOCH > 0 && elapsed_since_recreate < cooldown_seconds )); then
-    local cooldown_remaining
-    cooldown_remaining=$(( cooldown_seconds - elapsed_since_recreate ))
-    log "WARN grafana embed recreate skipped due cooldown remaining_seconds=${cooldown_remaining}"
-    return 1
-  fi
-
-  log "WARN grafana origin route threshold reached; recreating caddy and grafana"
-  compose up -d --force-recreate caddy grafana >/dev/null || true
-  GRAFANA_EMBED_LAST_RECREATE_EPOCH="${now}"
-  save_grafana_embed_state
-  sleep 3
-
-  internal_health="$(inspect_grafana_internal_health)"
-  headers="$(probe_grafana_embed_origin_headers "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
-  if grafana_embed_headers_are_healthy "${headers}" "${internal_health}"; then
-    GRAFANA_EMBED_FAIL_COUNT=0
-    save_grafana_embed_state
-    log "OK grafana origin route repaired host=${grafana_domain} path=${path}"
-    return 0
-  fi
-
-  log "FAIL grafana origin route still unhealthy after_recreate=true host=${grafana_domain} path=${path}"
-  return 1
-}
-
-probe_notification_sse_route() {
-  local web_domain="$1"
-  local admin_email admin_password
-  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
-  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
-
-  if [[ -z "${admin_email}" || -z "${admin_password}" ]]; then
-    log "skip notification sse route check (missing CUSTOM__ADMIN__EMAIL or CUSTOM__ADMIN__PASSWORD)"
-    return 0
-  fi
-
-  local probe_output
-  probe_output="$(
-    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
-      set -eu
-      web_domain="$1"
-      admin_email="$2"
-      admin_password="$3"
-      cookie_jar="$(mktemp)"
-      trap "rm -f \"${cookie_jar}\"" EXIT
-      login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
-      login_code="$(
-        curl -sS \
-          --connect-timeout 3 \
-          --max-time 12 \
-          -c "${cookie_jar}" \
-          -o /dev/null \
-          -w "%{http_code}" \
-          -H "Host: ${web_domain}" \
-          -H "Content-Type: application/json" \
-          --data "${login_payload}" \
-          "http://caddy:80/member/api/v1/auth/login" || true
-      )"
-      echo "login_status=${login_code}"
-      if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
-        exit 11
-      fi
-
-      stream_body="$(
-        curl -sS -N \
-          --connect-timeout 3 \
-          --max-time 35 \
-          -b "${cookie_jar}" \
-          -H "Host: ${web_domain}" \
-          "http://caddy:80/member/api/v1/notifications/stream" || true
-      )"
-      printf "%s\n" "${stream_body}" | tr -d "\r"
-    ' sh "${web_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
-  )"
-
-  if [[ "${probe_output}" == *"event: connected"* && "${probe_output}" == *"event: heartbeat"* ]]; then
-    return 0
-  fi
-
-  printf '%s' "${probe_output}"
-  return 1
-}
-
-check_notification_sse_route() {
-  local web_domain
-  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
-  if [[ -z "${web_domain}" ]]; then
-    log "FAIL missing WEB_DOMAIN in ${ENV_FILE}"
-    return 1
-  fi
-  if ! auth_probes_enabled; then
-    log "skip notification sse route check (STEADY_GUARD_AUTH_PROBES_ENABLED is not enabled)"
-    return 0
-  fi
-
-  local fail_threshold cooldown_seconds
-  fail_threshold="$(normalize_positive_int "$(env_value "NOTIFICATION_SSE_FAIL_THRESHOLD")" "2")"
-  cooldown_seconds="$(normalize_non_negative_int "$(env_value "NOTIFICATION_SSE_RECREATE_COOLDOWN_SECONDS")" "900")"
-
-  load_notification_sse_state
-
-  local probe_output
-  if probe_output="$(probe_notification_sse_route "${web_domain}")"; then
-    if (( NOTIFICATION_SSE_FAIL_COUNT > 0 )); then
-      log "OK notification sse route recovered consecutive_failures=${NOTIFICATION_SSE_FAIL_COUNT}"
-    else
-      log "OK notification sse route connected+heartbeat"
-    fi
-    NOTIFICATION_SSE_FAIL_COUNT=0
-    save_notification_sse_state
-    return 0
-  fi
-
-  NOTIFICATION_SSE_FAIL_COUNT=$(( NOTIFICATION_SSE_FAIL_COUNT + 1 ))
-  save_notification_sse_state
-  log "WARN notification sse unhealthy consecutive_failures=${NOTIFICATION_SSE_FAIL_COUNT} threshold=${fail_threshold}"
-
-  if (( NOTIFICATION_SSE_FAIL_COUNT < fail_threshold )); then
-    log "WARN notification sse probe output: ${probe_output}"
-    return 1
-  fi
-
-  local now elapsed_since_recreate
-  now="$(date +%s)"
-  elapsed_since_recreate=$(( now - NOTIFICATION_SSE_LAST_RECREATE_EPOCH ))
-  if (( NOTIFICATION_SSE_LAST_RECREATE_EPOCH > 0 && elapsed_since_recreate < cooldown_seconds )); then
-    local cooldown_remaining
-    cooldown_remaining=$(( cooldown_seconds - elapsed_since_recreate ))
-    log "WARN notification sse recreate skipped due cooldown remaining_seconds=${cooldown_remaining}"
-    log "WARN notification sse probe output: ${probe_output}"
-    return 1
-  fi
-
-  log "WARN notification sse threshold reached; recreating caddy"
-  compose up -d --force-recreate caddy >/dev/null || true
-  compose exec -T caddy caddy reload --config "${CADDY_CONTAINER_FILE}" >/dev/null || true
-  NOTIFICATION_SSE_LAST_RECREATE_EPOCH="${now}"
-  save_notification_sse_state
-  sleep 3
-
-  if probe_output="$(probe_notification_sse_route "${web_domain}")"; then
-    NOTIFICATION_SSE_FAIL_COUNT=0
-    save_notification_sse_state
-    log "OK notification sse repaired connected+heartbeat"
-    return 0
-  fi
-
-  log "FAIL notification sse route still unhealthy after_recreate=true"
-  log "FAIL notification sse probe output: ${probe_output}"
+  log "FAIL grafana access boundary internal=${internal_health:-none} origin=${origin_status:-none} public=${public_status:-none}"
   return 1
 }
 
@@ -864,10 +575,9 @@ main() {
   if check_api_readiness; then ok=$((ok + 1)); fi
   if check_notification_snapshot_route; then ok=$((ok + 1)); fi
   if check_grafana_core_datasources; then ok=$((ok + 1)); fi
-  if check_grafana_embed_route; then ok=$((ok + 1)); fi
-  if check_notification_sse_route; then ok=$((ok + 1)); fi
+  if check_grafana_access_boundary; then ok=$((ok + 1)); fi
 
-  if [[ "${ok}" -ne 8 ]]; then
+  if [[ "${ok}" -ne 7 ]]; then
     compose logs --no-color --tail=80 caddy grafana loki promtail >&2 || true
     exit 1
   fi

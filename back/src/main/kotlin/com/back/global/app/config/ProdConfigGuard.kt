@@ -25,7 +25,6 @@ class ProdConfigGuard(
                 if (frontUrl.isBlank()) add("custom.site.frontUrl")
                 if (backUrl.isBlank()) add("custom.site.backUrl")
                 if (adminProperties.normalizedEmail.isBlank()) add("custom.admin.email")
-                if (adminProperties.password.isBlank()) add("custom.admin.password")
             }
 
         require(missingKeys.isEmpty()) {

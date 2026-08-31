@@ -69,7 +69,6 @@ front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스�
 | prefix | 대상 |
 | --- | --- |
 | `/member/*` `/post/*` `/system/*` | 백엔드 (edge에서 read/admin upstream 분리 적용) |
-| `/oauth2/*` `/login/oauth2/*` | 백엔드 (Spring OAuth2 authorization·callback) |
 | `/actuator/health` `/actuator/health/*` | 백엔드 (health만 — 집계 엔드포인트와 개별 probe 둘 다. `/actuator/prometheus`는 edge에서 403) |
 | 그 외 전부 | front (`/`, `/posts/*`, `/admin/*`, `/api/*` Next API routes, `/_next/*`, `/robots.txt`, `/sitemap.xml`) |
 
@@ -77,7 +76,6 @@ front와 공개 API가 **같은 호스트**를 쓴다 — API는 별도 호스�
 
 - front의 `/api/*`(revalidate·backend proxy·rum)는 백엔드에 bare `/api` prefix가 없어 겹치지
   않는다.
-- front 페이지 `/login`과 백엔드 callback `/login/oauth2/*`는 경로 깊이로 갈린다.
 - 백엔드 `GET /`(placeholder)와 `GET /session`은 front가 쓰지 않으므로(front는
   `/member/api/v1/auth/session` 사용) 공개 라우팅에서 제외하고 내부 전용으로 남긴다.
 
@@ -116,31 +114,12 @@ upstream은 peer 주소를 받고, 같은 위조를 공개 호스트로 보내�
 (`front/src/libs/utils/postPath.ts`의 `toCanonicalPostPath`), 루트의 `[slug]` catch-all은
 레거시 URL 리다이렉트 전용이다 — `extractPostIdFromLegacySlug`가 `-`로 끊은 마지막 토큰을
 양의 정수로 파싱하지 못하면 그대로 404다. 따라서 `member`·`post`·`system`·`session`·
-`actuator`·`oauth2` 같은 값은 애초에 도달 가능한 콘텐츠 경로가 아니고, 거부할 입력이 존재하지
+`actuator` 같은 값은 애초에 도달 가능한 콘텐츠 경로가 아니고, 거부할 입력이 존재하지
 않는다. 나중에 사용자 지정 slug를 도입하면 그때 위 표의 prefix를 예약어로 막아야 한다.
 
 ## 선행 조건
 
-### 1. 카카오 콘솔 callback 등록 (오너, 콘솔)
-
-`https://blog.aquilaxk.site/login/oauth2/code/kakao`를 **추가**한다.
-
-> ⚠️ **교체가 아니라 추가다.** 콘솔 저장이 기존 항목을 대체해 버린 사고 이력이 있다. 기존
-> 항목(`https://api.aquilaxk.site/login/oauth2/code/kakao` 등)을 지우지 말고 새 항목을 함께
-> 남긴다. 구 항목 정리는 전환이 끝난 뒤 별도로 한다.
-
-`back/src/main/resources/application.yaml`의 `redirect-uri`가 `${custom.site.backUrl}` 파생이라
-`CUSTOM_PROD_BACKURL`을 바꾸는 순간 애플리케이션은 새 URI를 보낸다. 콘솔 등록을 확인하기 전에는
-아래 전환 순서 3단계를 시작하지 않는다.
-
-### Kakao OIDC current-state checklist (#1547)
-
-- 오너는 Kakao 콘솔에서 OpenID Connect 사용 상태와 `openid`, `profile_nickname`, `profile_image` 동의 항목을 확인하고, callback이 정확히 `https://blog.aquilaxk.site/login/oauth2/code/kakao`인지 확인한다.
-- `HOME_SERVER_ENV`의 `SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID`는 required nonblank 계약으로만 검증한다. 값은 저장소·로그·이슈·PR에 기록하지 않는다.
-- #1547 close 전에는 OIDC ON, exact callback, real login 성공을 각각 별도 sanitized evidence로 남긴다. 각 evidence에는 timestamp와 credential이 아닌 app identifier만 남기고, client_id·state·code·token·cookie는 남기지 않는다.
-- 공개 discovery 응답이나 `/oauth2/authorization/kakao`의 302은 콘솔 설정이나 callback에서 실제로 완료되는 로그인을 증명하지 않으며 close evidence를 대체하지 않는다. 위 세 evidence 전에는 #1547을 닫지 않는다.
-
-### 2. front 이미지 산출물 게이트
+### 1. front 이미지 산출물 게이트
 
 `NEXT_PUBLIC_*`는 **빌드 시점에 번들로 인라인**된다. `ENV`는 builder 스테이지를 넘지 않아
 런타임 컨테이너에서 `printenv`로는 좋은 이미지와 나쁜 이미지를 구분할 수 없다(둘 다 빈 출력 +
@@ -258,7 +237,7 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
 구 hostname 제거는 **항상 마지막**이다. `blog.aquilaxk.site`는 이 블로그의 신규 공개 호스트이므로
 **cutover는 그 DNS 전환 한 번뿐**이고, 구 `www`·`api` 호스트는 그때까지 그대로 둔다.
 
-1. **선행 조건 두 가지를 끝낸다** (카카오 콘솔 등록, 쓸 digest의 산출물 게이트 통과).
+1. **front 이미지 산출물 게이트를 통과한다.**
 
 2. **홈서버 env에 front 키를 넣고 front를 기동한다.** `HOME_SERVER_ENV`에 추가한다.
 
@@ -331,8 +310,7 @@ docker run --rm --entrypoint sh ghcr.io/aquilaxk/aquila-blog-front@sha256:<diges
    > (`back/.../Rq.kt`의 `builder.domain(cookieDomain)`에 호스트 조건이 없다), 브라우저는
    > RFC 6265 §5.3으로 그 쿠키를 거부한다. `blog`도 마찬가지다 — 이 시점의 blog는 아직 Vercel이
    > 서빙하고 그 프론트는 구 API 호스트를 부르므로, 쿠키 Domain이 blog로 바뀌어도 그 응답은
-   > 구 호스트에서 오기 때문에 브라우저가 거부한다. OAuth redirect-uri도 이미 blog(=Vercel)로
-   > 바뀌어 콜백이 홈서버에 닿지 않는다. 두 origin 모두 남는 것은 **공개 GET뿐**이다.
+   > 구 호스트에서 오기 때문에 브라우저가 거부한다. 두 origin 모두 남는 것은 **공개 GET뿐**이다.
    > 그래서 3단계와 4단계는 **연달아** 수행한다.
 
 4. **`blog.aquilaxk.site` DNS/Tunnel public hostname을 만든다 (오너, 콘솔).**
@@ -468,26 +446,10 @@ curl -sSI https://blog.aquilaxk.site/actuator/health/readiness \
   fi
 ) || exit $?
 
-# 로그인 왕복: Set-Cookie 스코프를 **실제 로그인 응답에서** 본다. 아래처럼 미인증 GET을 찔러
-# 보는 것으로는 Set-Cookie 자체가 안 나와 `|| true`로 조용히 통과한다 - 검사가 아니라 소음이다.
-# 브라우저로 카카오 로그인을 완료한 뒤 DevTools > Network에서 콜백 응답의 Set-Cookie를 읽거나,
-# 아래처럼 관리자 로그인 왕복으로 받는다.
-# 비밀번호를 명령행 인자로 넘기지 않는다: 셸 history와 프로세스 목록에 그대로 남는다.
-# read -s로 받아 stdin으로만 전달하고, 끝나면 변수를 지운다.
-# raw Set-Cookie 출력은 0이어야 한다. 첫 `;` 앞의 cookie 값만 `<redacted>`로 바꾸고
-# Domain/Path/SameSite/Secure/HttpOnly 속성만 확인한다.
-read -rp 'admin email: ' ADMIN_EMAIL
-read -rsp 'admin password: ' ADMIN_PASSWORD; echo
-(
-  set -o pipefail
-  printf '{"email":"%s","password":"%s"}' "${ADMIN_EMAIL}" "${ADMIN_PASSWORD}" \
-    | curl -sS -i -X POST https://blog.aquilaxk.site/member/api/v1/auth/login \
-        -H 'Content-Type: application/json' --data-binary @- \
-    | grep -i '^set-cookie' \
-    | sed -E 's/^([^:]+:[^=]+=)[^;]*/\1<redacted>/'
-) \
-  || { echo "FAIL: no Set-Cookie in the login response"; false; }
-unset ADMIN_PASSWORD ADMIN_EMAIL
+# 로그인 왕복: 브라우저에서 `https://blog.aquilaxk.site/admin/editor`를 열고 구성된 관리자
+# 이메일로 코드를 요청한 뒤 메일로 받은 코드를 입력한다. DevTools > Network에서
+# `/member/api/v1/auth/admin-email/verify` 응답의 Set-Cookie **속성만** 확인한다. 인증 코드와
+# 쿠키 값은 복사하거나 출력하지 않는다.
 # 판정: Domain 속성이 없거나 Domain=blog.aquilaxk.site 여야 한다.
 #       aquilaxk.site 또는 www가 보이면 즉시 롤백한다 (Rollback 표 3단계 행).
 

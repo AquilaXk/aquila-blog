@@ -130,6 +130,25 @@ class MemberApplicationService(
         throw AppException(ErrorCode.MEMBER_USERNAME_GENERATE_FAILED, "회원가입 사용자 식별자 생성에 실패했습니다.")
     }
 
+    @Transactional
+    fun ensureVerifiedEmailIdentity(
+        email: String,
+        nickname: String,
+    ): Member {
+        val normalizedEmail =
+            normalizeEmailOrNull(email)
+                ?: throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "이메일을 입력해주세요.")
+
+        memberRepository.lockEmailIdentityProvisioning(normalizedEmail)
+        return memberRepository.findByEmail(normalizedEmail)
+            ?: joinWithVerifiedEmail(
+                email = normalizedEmail,
+                password = null,
+                nickname = nickname,
+                profileImgUrl = null,
+            )
+    }
+
     @Transactional(readOnly = true)
     fun findByLoginId(loginId: String): Member? =
         memberRepository

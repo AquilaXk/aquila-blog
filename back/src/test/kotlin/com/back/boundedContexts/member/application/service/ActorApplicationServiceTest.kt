@@ -178,6 +178,8 @@ class ActorApplicationServiceTest {
 
         override fun findByEmail(email: String): Member? = member.takeIf { it.email == email }
 
+        override fun lockEmailIdentityProvisioning(email: String) = Unit
+
         override fun findByApiKey(apiKey: String): Member? = member.takeIf { it.apiKey == apiKey }
 
         override fun findById(id: Long): Optional<Member> = Optional.ofNullable(member.takeIf { it.id == id })

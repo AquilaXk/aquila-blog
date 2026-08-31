@@ -4,7 +4,10 @@ import com.back.boundedContexts.member.application.port.output.MemberRepositoryP
 import com.back.boundedContexts.member.domain.shared.Member
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.RowCallbackHandler
 import org.springframework.stereotype.Component
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.Optional
 
 /**
@@ -14,6 +17,7 @@ import java.util.Optional
 @Component
 class MemberRepositoryAdapter(
     private val memberRepository: MemberRepository,
+    private val jdbcTemplate: JdbcTemplate,
 ) : MemberRepositoryPort {
     override fun count(): Long = memberRepository.count()
 
@@ -26,6 +30,18 @@ class MemberRepositoryAdapter(
     override fun findByLoginId(loginId: String): Member? = memberRepository.findByLoginId(loginId)
 
     override fun findByEmail(email: String): Member? = memberRepository.findByEmail(email)
+
+    override fun lockEmailIdentityProvisioning(email: String) {
+        check(TransactionSynchronizationManager.isActualTransactionActive()) {
+            "Email identity provisioning requires an active transaction."
+        }
+        jdbcTemplate.query(
+            "SELECT pg_advisory_xact_lock(?, ?)",
+            RowCallbackHandler { },
+            EMAIL_IDENTITY_PROVISIONING_LOCK_NAMESPACE.hashCode(),
+            email.hashCode(),
+        )
+    }
 
     override fun findByApiKey(apiKey: String): Member? = memberRepository.findByApiKey(apiKey)
 
@@ -50,5 +66,9 @@ class MemberRepositoryAdapter(
             content = memberPage.content,
             totalElements = memberPage.totalElements,
         )
+    }
+
+    private companion object {
+        private const val EMAIL_IDENTITY_PROVISIONING_LOCK_NAMESPACE = "member-email-provisioning"
     }
 }

@@ -28,79 +28,6 @@ extract_function() {
   ' "${doctor}"
 }
 
-# 로그인 프로브 3곳(notification sse, notification diagnostics, grafana origin auth-proxy)이
-# 같은 쿠키 선택 로직을 쓰는지까지 확인하려고 블록을 개별 파일로 뽑는다.
-blocks_dir="${workdir}/access-token-blocks"
-mkdir -p "${blocks_dir}"
-awk -v outdir="${blocks_dir}" '
-  /^[[:space:]]*access_token="\$\($/ { count += 1; capture = 1 }
-  capture {
-    line = $0
-    sub(/^[[:space:]]+/, "", line)
-    print line > (outdir "/block-" count ".sh")
-  }
-  capture && /^[[:space:]]*\)"$/ { capture = 0; close(outdir "/block-" count ".sh") }
-' "${doctor}"
-
-shopt -s nullglob
-access_token_blocks=("${blocks_dir}"/block-*.sh)
-shopt -u nullglob
-if [ "${#access_token_blocks[@]}" -lt 3 ]; then
-  fail "expected the three login probes to select accessToken from Set-Cookie, found ${#access_token_blocks[@]} selection blocks"
-fi
-for block in "${access_token_blocks[@]:1}"; do
-  if ! diff -u "${access_token_blocks[0]}" "${block}" >/dev/null; then
-    echo "[test] accessToken selection diverges between login probes" >&2
-    diff -u "${access_token_blocks[0]}" "${block}" >&2 || true
-    exit 1
-  fi
-done
-access_token_selection="$(cat "${access_token_blocks[0]}")"
-
-# 토큰이 하나도 없을 때 실패로 보고하는 분기(exit 12)까지 같이 평가한다.
-missing_token_branch="$(
-  awk '
-    index($0, "if [[ -z \"${access_token}\" ]]; then") > 0 { capture = 1; buffer = "" }
-    capture {
-      line = $0
-      sub(/^[[:space:]]+/, "", line)
-      buffer = buffer line "\n"
-    }
-    capture && /^[[:space:]]*fi$/ {
-      capture = 0
-      if (buffer ~ /exit 12/) {
-        printf "%s", buffer
-        exit
-      }
-    }
-  ' "${doctor}"
-)"
-if [ -z "${missing_token_branch}" ]; then
-  fail "expected the notification sse probe to keep reporting a missing accessToken as a failure"
-fi
-probe_snippet="${access_token_selection}"$'\n'"${missing_token_branch}"
-
-select_access_token() {
-  # shellcheck disable=SC2034  # 원본에서 떼어 온 선택 로직이 eval 시점에 읽는다
-  local login_headers="$1"
-  local access_token=""
-  eval "${access_token_selection}"
-  printf '%s' "${access_token}"
-}
-
-run_probe_snippet() {
-  local headers_file="$1"
-  set +e
-  probe_output="$(
-    # shellcheck disable=SC2034  # 원본에서 떼어 온 프로브 조각이 eval 시점에 읽는다
-    login_headers="${headers_file}"
-    eval "${probe_snippet}"
-    echo "probe-continued"
-  )"
-  probe_status=$?
-  set -e
-}
-
 env_full="${workdir}/env.full"
 env_minimal="${workdir}/env.minimal"
 env_crlf="${workdir}/env.crlf"
@@ -125,7 +52,6 @@ printf '%s\n' 'WEB_DOMAIN=web.example.com' > "${env_minimal}"
 eval "$(extract_function env_value)"
 eval "$(extract_function print_env_key_status)"
 eval "$(extract_function trim_quotes)"
-eval "$(extract_function print_notification_sse_status)"
 minio_status_function="$(extract_function print_minio_service_identity_status)"
 if [ -z "${minio_status_function}" ]; then
   fail "expected doctor to isolate the MinIO identity status check"
@@ -240,29 +166,6 @@ fi
 ENV_FILE="${env_minimal}"
 if [ "$(print_env_key_status "ADMIN_EMBED_ORIGINS")" != "ADMIN_EMBED_ORIGINS=MISSING" ]; then
   fail "expected an absent ADMIN_EMBED_ORIGINS to report MISSING"
-fi
-
-notification_sse_probe_output() {
-  printf '%s\n' "${notification_sse_fixture}"
-}
-
-# SSE의 field value 앞 공백은 선택 사항이다. 실제 서버는 event:connected 형식을 사용하므로
-# 두 필수 이벤트를 받았으면 max-time 종료 진단이 섞여 있어도 정상으로 판정해야 한다.
-notification_sse_fixture="$(printf '%s\n' \
-  'curl: (28) Operation timed out after 35002 milliseconds with 218 bytes received' \
-  'id:connected-1' \
-  'event:connected' \
-  'data:{"connectedAt":"2026-07-26T10:47:40Z"}' \
-  '' \
-  'id:heartbeat-1' \
-  'event:heartbeat' \
-  'data:{"heartbeatAt":"2026-07-26T10:48:10Z"}')"
-notification_sse_output="$(print_notification_sse_status)"
-if [[ "${notification_sse_output}" != *"notification sse probe: OK (connected+heartbeat)"* ]]; then
-  fail "expected event fields without an optional space to pass the SSE probe, got: ${notification_sse_output}"
-fi
-if [[ "${notification_sse_output}" == *"notification sse probe: FAIL"* ]]; then
-  fail "expected a max-time termination after both SSE events not to be reported as a probe failure"
 fi
 
 # Mount Sync는 runtime-split placeholder 해석을 caddy_upstream_probe.sh 한 곳에 맡겨야 한다.
@@ -494,93 +397,6 @@ if [ "${robots_code_status}" -ne 0 ]; then
 fi
 if [ "${robots_code_output}" != "origin=[] public=[]" ]; then
   fail "expected absent robots header files to read as empty status codes, got '${robots_code_output}'"
-fi
-
-headers_expired_first="${workdir}/headers-expired-first.txt"
-headers_expired_last="${workdir}/headers-expired-last.txt"
-headers_two_tokens="${workdir}/headers-two-tokens.txt"
-headers_lowercase_name="${workdir}/headers-lowercase-name.txt"
-headers_without_token="${workdir}/headers-without-token.txt"
-# AuthCookieService.issueCookie()는 host-only 잔여 쿠키를 지우는 빈 값 쿠키를 실제 발급 쿠키보다
-# 먼저 내보낸다. 첫 매치를 집으면 항상 빈 토큰을 읽는다.
-printf '%s\r\n' \
-  'HTTP/1.1 200 OK' \
-  'Content-Type: application/json' \
-  'Set-Cookie: accessToken=; Max-Age=0; Path=/; HttpOnly' \
-  'Set-Cookie: refreshToken=; Max-Age=0; Path=/; HttpOnly' \
-  'Set-Cookie: accessToken=header.payload.signature; Path=/; Domain=.example.com; HttpOnly; Secure' \
-  'Set-Cookie: refreshToken=refresh.token.value; Path=/; HttpOnly' \
-  '' > "${headers_expired_first}"
-# 만료용 빈 쿠키가 마지막에 오는 순서. 값 있는 쿠키만 남기는 grep 필터가 없으면 마지막 줄을 집는
-# 순간 빈 토큰이 되므로, 이 fixture가 `accessToken=[^;]` 필터를 단독으로 고정한다.
-printf '%s\r\n' \
-  'HTTP/1.1 200 OK' \
-  'Content-Type: application/json' \
-  'Set-Cookie: accessToken=header.payload.signature; Path=/; Domain=.example.com; HttpOnly; Secure' \
-  'Set-Cookie: refreshToken=refresh.token.value; Path=/; HttpOnly' \
-  'Set-Cookie: accessToken=; Max-Age=0; Path=/; HttpOnly' \
-  '' > "${headers_expired_last}"
-# 값 있는 accessToken이 둘인 응답. 마지막 쿠키가 최종 발급본이므로 첫 매치를 집으면 폐기된 토큰을
-# 쓰게 된다. 이 fixture가 `tail -n 1` 선택을 단독으로 고정한다.
-printf '%s\r\n' \
-  'HTTP/1.1 200 OK' \
-  'Content-Type: application/json' \
-  'Set-Cookie: accessToken=first.payload.signature; Path=/; HttpOnly' \
-  'Set-Cookie: accessToken=second.payload.signature; Path=/; HttpOnly' \
-  '' > "${headers_two_tokens}"
-# HTTP 헤더 이름은 대소문자를 구분하지 않는다. 프록시가 소문자로 정규화해 내려도 선택이 동작해야 한다.
-printf '%s\r\n' \
-  'HTTP/1.1 200 OK' \
-  'content-type: application/json' \
-  'set-cookie: accessToken=; Max-Age=0; Path=/; HttpOnly' \
-  'set-cookie: accessToken=lowercase.payload.signature; Path=/; HttpOnly' \
-  '' > "${headers_lowercase_name}"
-printf '%s\r\n' \
-  'HTTP/1.1 200 OK' \
-  'Content-Type: application/json' \
-  'Set-Cookie: refreshToken=refresh.token.value; Path=/; HttpOnly' \
-  '' > "${headers_without_token}"
-
-run_probe_snippet "${headers_expired_first}"
-if [ "${probe_status}" -ne 0 ]; then
-  fail "expected a login that issues a real accessToken to pass the probe (exit ${probe_status}): ${probe_output}"
-fi
-if [ "${probe_output}" != "probe-continued" ]; then
-  fail "expected the probe to continue past the expired accessToken cookie, got '${probe_output}'"
-fi
-
-selected_token="$(select_access_token "${headers_expired_first}")"
-if [ "${selected_token}" != "header.payload.signature" ]; then
-  fail "expected the probe to skip the empty accessToken cookie and read the issued one, got '${selected_token}'"
-fi
-selected_token="$(select_access_token "${headers_expired_last}")"
-if [ "${selected_token}" != "header.payload.signature" ]; then
-  fail "expected the probe to skip a trailing empty accessToken cookie and read the issued one, got '${selected_token}'"
-fi
-selected_token="$(select_access_token "${headers_two_tokens}")"
-if [ "${selected_token}" != "second.payload.signature" ]; then
-  fail "expected the probe to read the last issued accessToken cookie, got '${selected_token}'"
-fi
-selected_token="$(select_access_token "${headers_lowercase_name}")"
-if [ "${selected_token}" != "lowercase.payload.signature" ]; then
-  fail "expected the probe to read a lowercased set-cookie header name, got '${selected_token}'"
-fi
-
-run_probe_snippet "${headers_expired_last}"
-if [ "${probe_status}" -ne 0 ]; then
-  fail "expected a trailing empty accessToken cookie not to be reported as a missing token (exit ${probe_status}): ${probe_output}"
-fi
-
-if [ -n "$(select_access_token "${headers_without_token}")" ]; then
-  fail "expected a response without any accessToken cookie to read as an empty token"
-fi
-
-run_probe_snippet "${headers_without_token}"
-if [ "${probe_status}" -ne 12 ]; then
-  fail "expected a response without any accessToken cookie to keep failing with exit 12, got ${probe_status}"
-fi
-if [ "${probe_output}" != "login_access_token=missing" ]; then
-  fail "expected a response without any accessToken cookie to report it as missing, got '${probe_output}'"
 fi
 
 eval "$(extract_function is_grafana_embed_url)"

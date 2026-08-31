@@ -10,7 +10,7 @@
 - Spring Data JPA + PostgreSQL
 - Redis (락/큐/캐시 보조)
 - MinIO (이미지 저장)
-- Spring Security + OAuth2 (Kakao)
+- Spring Security + server-backed sessions
 - SpringDoc OpenAPI
 
 ## 아키텍처 요약
@@ -45,9 +45,8 @@
 
 ### 인증/세션
 
-- 로그인/로그아웃/`auth/me` 제공
+- 일반 회원 비밀번호 로그인과 관리자 이메일 코드 로그인, 로그아웃, `auth/me` 제공
 - 쿠키 기반 인증(`apiKey`, `accessToken`)
-- OAuth2 로그인(Kakao)
 
 #### 인증 흐름
 

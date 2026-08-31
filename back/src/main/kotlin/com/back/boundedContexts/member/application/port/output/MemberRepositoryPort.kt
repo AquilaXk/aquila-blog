@@ -29,6 +29,8 @@ interface MemberRepositoryPort {
 
     fun findByEmail(email: String): Member?
 
+    fun lockEmailIdentityProvisioning(email: String)
+
     fun findByApiKey(apiKey: String): Member?
 
     fun findById(id: Long): Optional<Member>

@@ -6,11 +6,14 @@ import com.back.support.BaseAdminEmailAuthenticationFlowIntegrationTest
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
@@ -30,8 +33,12 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
     @Autowired
     private lateinit var memberSessionRepository: MemberSessionRepository
 
-    @Test
-    fun `email authentication persists and revokes the canonical admin session`() {
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
+
+    @ParameterizedTest
+    @ValueSource(booleans = [false, true])
+    fun `email authentication honors persistence and revokes the canonical admin session`(rememberMe: Boolean) {
         var deliveredCode = ""
         doAnswer { invocation ->
             deliveredCode = invocation.getArgument(1)
@@ -42,7 +49,7 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
             mvc
                 .post("/member/api/v1/auth/admin-email/request") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"email":"admin@test.com","rememberMe":true}"""
+                    content = """{"email":"admin@test.com","rememberMe":$rememberMe}"""
                 }.andExpect {
                     status { isOk() }
                 }.andReturn()
@@ -65,19 +72,26 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
             }
         assertThat(verified.response.cookies.map { it.name }).doesNotContain("SESSION", "JSESSIONID")
         assertThat(authCookies.map { it.name }).containsExactlyInAnyOrderElementsOf(AuthCookieNames.AUTHENTICATION_COOKIE_NAMES)
-        assertThat(authCookies).allSatisfy { cookie -> assertThat(cookie.maxAge).isPositive() }
+        if (rememberMe) {
+            assertThat(authCookies).allSatisfy { cookie -> assertThat(cookie.maxAge).isPositive() }
+        } else {
+            assertThat(authCookies).allSatisfy { cookie -> assertThat(cookie.maxAge).isEqualTo(-1) }
+        }
 
         val sessionKey = requireCookie(authCookies, AuthCookieNames.SESSION_KEY).value
         val activeSession = memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(sessionKey)
         assertThat(activeSession).isNotNull
+        assertThat(activeSession!!.rememberLoginEnabled).isEqualTo(rememberMe)
 
         mvc
             .get("/member/api/v1/auth/session") {
                 authCookies.forEach { cookie(it) }
             }.andExpect {
                 status { isOk() }
-                jsonPath("$.id") { value(activeSession!!.member.id) }
+                jsonPath("$.id") { value(activeSession.member.id) }
                 jsonPath("$.isAdmin") { value(true) }
+                jsonPath("$.nickname") { value("관리자") }
+                jsonPath("$.legalReconsent") { doesNotExist() }
             }
 
         mvc
@@ -102,6 +116,84 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
                 AuthCookieNames.AUTHENTICATION_COOKIE_NAMES.forEach { name -> cookie { maxAge(name, 0) } }
             }
     }
+
+    @Test
+    fun `verified email normalizes the configured identity and clears its password`() {
+        jdbcTemplate.update("update member set is_admin = false where email = ?", "admin@test.com")
+        val (challengeId, deliveredCode) = requestChallenge()
+
+        assertThat(memberState("admin@test.com"))
+            .containsExactly(false, true)
+
+        verifyChallenge(challengeId, deliveredCode)
+
+        assertThat(memberState("admin@test.com"))
+            .containsExactly(true, false)
+    }
+
+    @Test
+    fun `verified email creates a missing administrator without mutating the request phase`() {
+        jdbcTemplate.update("update member set email = ? where email = ?", "former-admin@test.com", "admin@test.com")
+        val (challengeId, deliveredCode) = requestChallenge()
+
+        assertThat(memberCount("admin@test.com")).isZero()
+
+        verifyChallenge(challengeId, deliveredCode)
+
+        assertThat(memberCount("admin@test.com")).isEqualTo(1)
+        assertThat(memberState("admin@test.com"))
+            .containsExactly(true, false)
+    }
+
+    private fun requestChallenge(): Pair<String, String> {
+        var deliveredCode = ""
+        doAnswer { invocation ->
+            deliveredCode = invocation.getArgument(1)
+            null
+        }.`when`(adminLoginMailSender).sendCode(anyString(), anyString(), anyLong())
+
+        val response =
+            mvc
+                .post("/member/api/v1/auth/admin-email/request") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"email":"admin@test.com","rememberMe":false}"""
+                }.andExpect {
+                    status { isOk() }
+                }.andReturn()
+
+        return objectMapper.readTree(response.response.contentAsString).at("/data/challengeId").asText() to deliveredCode
+    }
+
+    private fun verifyChallenge(
+        challengeId: String,
+        deliveredCode: String,
+    ) {
+        assertThat(deliveredCode).matches("\\d{8}")
+        mvc
+            .post("/member/api/v1/auth/admin-email/verify") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"challengeId":"$challengeId","code":"$deliveredCode"}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.item.isAdmin") { value(true) }
+            }
+    }
+
+    private fun memberCount(email: String): Int =
+        requireNotNull(
+            jdbcTemplate.queryForObject(
+                "select count(*) from member where email = ?",
+                Int::class.java,
+                email,
+            ),
+        )
+
+    private fun memberState(email: String): List<Boolean> =
+        jdbcTemplate.queryForObject(
+            "select is_admin, password is not null from member where email = ?",
+            { resultSet, _ -> listOf(resultSet.getBoolean(1), resultSet.getBoolean(2)) },
+            email,
+        )
 
     private fun requireCookie(
         cookies: List<Cookie>,

@@ -21,7 +21,6 @@ import java.util.Locale
 @Service
 class AdminEmailAuthenticationService(
     private val adminProperties: AdminProperties,
-    private val canonicalAdminPolicy: CanonicalAdminPolicy,
     private val memberUseCase: MemberUseCase,
     private val adminEmailChallengeStore: AdminEmailChallengeStore,
     private val redisKeyValuePort: RedisKeyValuePort,
@@ -62,9 +61,6 @@ class AdminEmailAuthenticationService(
             val normalizedEmail = email.trim().lowercase(Locale.ROOT)
             if (!adminProperties.matchesEmail(normalizedEmail)) return response
 
-            val admin = memberUseCase.findByEmail(adminProperties.normalizedEmail)
-            if (admin == null || !admin.isAdmin || !canonicalAdminPolicy.canAuthenticate(admin)) return response
-
             if (!acquireRequestSlot()) return response
 
             val challengeId = response.challengeId
@@ -74,7 +70,7 @@ class AdminEmailAuthenticationService(
                     AdminEmailChallengeStore.Challenge(
                         challengeId = challengeId,
                         codeHash = sha256("$challengeId:$code"),
-                        memberId = admin.id,
+                        canonicalRecipientHash = sha256(adminProperties.normalizedEmail),
                         rememberMe = rememberMe,
                         ttl = Duration.ofSeconds(challengeExpirationSeconds),
                     ),
@@ -117,9 +113,14 @@ class AdminEmailAuthenticationService(
                 throw dependencyUnavailable(exception)
             }
         val matched = result as? AdminEmailChallengeStore.ConsumeResult.Matched ?: throw invalidChallenge()
+        val currentRecipientHash = sha256(adminProperties.normalizedEmail)
+        if (!MessageDigest.isEqual(matched.canonicalRecipientHash.toByteArray(), currentRecipientHash.toByteArray())) {
+            throw invalidChallenge()
+        }
 
         return memberUseCase.issueAdminEmailLoginSession(
-            memberId = matched.memberId,
+            email = adminProperties.normalizedEmail,
+            nickname = adminProperties.nickname,
             rememberLoginEnabled = matched.rememberMe,
             createdIp = createdIp,
             userAgent = userAgent,
@@ -128,8 +129,7 @@ class AdminEmailAuthenticationService(
 
     override fun verifyReadiness() {
         ensureRedisAvailable()
-        val admin = memberUseCase.findByEmail(adminProperties.normalizedEmail)
-        if (admin == null || !admin.isAdmin || !canonicalAdminPolicy.canAuthenticate(admin)) {
+        if (adminProperties.normalizedEmail.isBlank()) {
             throw dependencyUnavailable()
         }
 

@@ -41,7 +41,8 @@ interface MemberUseCase {
     ): IssuedLoginSession
 
     fun issueAdminEmailLoginSession(
-        memberId: Long,
+        email: String,
+        nickname: String,
         rememberLoginEnabled: Boolean,
         createdIp: String?,
         userAgent: String?,

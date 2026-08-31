@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
+import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.model.shared.Member
@@ -15,6 +16,9 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededIntegrationTest() {
     @Autowired
@@ -90,11 +94,12 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
     @Test
     fun `every verified admin email login retires credentials and prior sessions`() {
         val oldSessionKey = "legacy-admin-session-${System.nanoTime()}"
+        val legacyApiKey = MemberPolicy.genApiKey()
         val memberId =
             inTransaction {
                 val member = memberRepository.findByEmail("admin@test.com")!!
                 member.password = "legacy-password"
-                member.modifyApiKey(member.username)
+                member.modifyApiKey(legacyApiKey)
                 memberSessionRepository.saveAndFlush(
                     MemberSession(
                         member = member,
@@ -106,7 +111,8 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
 
         val firstIssued =
             memberLoginSessionIssueService.issueAdminEmail(
-                memberId = memberId,
+                email = "admin@test.com",
+                nickname = "관리자",
                 rememberLoginEnabled = true,
                 createdIp = "203.0.113.10",
                 userAgent = "transaction-integration-test",
@@ -115,22 +121,68 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
         inTransaction {
             val member = memberRepository.findById(memberId).orElseThrow()
             assertThat(member.password).isNull()
-            assertThat(member.apiKey).isNotBlank().isNotEqualTo(member.username)
+            assertThat(member.apiKey).isNotBlank().isNotEqualTo(legacyApiKey)
+            assertThat(firstIssued.apiKey).isEqualTo(member.apiKey)
             assertThat(memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(oldSessionKey)).isNull()
             assertThat(memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(firstIssued.sessionKey)).isNotNull()
         }
 
         val secondIssued =
             memberLoginSessionIssueService.issueAdminEmail(
-                memberId = memberId,
+                email = "admin@test.com",
+                nickname = "관리자",
                 rememberLoginEnabled = true,
                 createdIp = "203.0.113.11",
                 userAgent = "transaction-integration-test",
             )
 
         inTransaction {
+            assertThat(secondIssued.apiKey).isNotEqualTo(firstIssued.apiKey)
             assertThat(memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(firstIssued.sessionKey)).isNull()
             assertThat(memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(secondIssued.sessionKey)).isNotNull()
+        }
+    }
+
+    @Test
+    fun `concurrent first verified email logins create one administrator identity`() {
+        inTransaction {
+            memberRepository.findByEmail("admin@test.com")!!.email = "former-admin-${System.nanoTime()}@test.com"
+        }
+        val ready = CountDownLatch(2)
+        val start = CountDownLatch(1)
+
+        val issued =
+            Executors.newFixedThreadPool(2).use { executor ->
+                val results =
+                    List(2) { index ->
+                        executor.submit<MemberUseCase.IssuedLoginSession> {
+                            ready.countDown()
+                            check(start.await(10, TimeUnit.SECONDS)) { "concurrent administrator login start timed out" }
+                            memberLoginSessionIssueService.issueAdminEmail(
+                                email = "admin@test.com",
+                                nickname = "관리자",
+                                rememberLoginEnabled = true,
+                                createdIp = "203.0.113.${20 + index}",
+                                userAgent = "transaction-integration-test",
+                            )
+                        }
+                    }
+
+                assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue()
+                start.countDown()
+                results.map { it.get(20, TimeUnit.SECONDS) }
+            }
+
+        assertThat(issued.map { it.member.id }.distinct()).hasSize(1)
+        assertThat(issued.map { it.apiKey }.distinct()).hasSize(2)
+        inTransaction {
+            val member = memberRepository.findByEmail("admin@test.com")!!
+            assertThat(member.isAdmin).isTrue()
+            assertThat(
+                issued.count { session ->
+                    memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(session.sessionKey) != null
+                },
+            ).isEqualTo(1)
         }
     }
 
@@ -175,16 +227,18 @@ class MemberLoginSessionIssueServiceTransactionIntegrationTest : BaseSeededInteg
     }
 
     @Test
-    fun `canonical admin with a retired password rejects generic issue without creating a session`() {
+    fun `canonical admin with a stored password rejects generic issue without mutation`() {
         val memberId =
             inTransaction {
                 memberRepository
                     .findByEmail("admin@test.com")!!
-                    .also { member -> member.password = null }
+                    .also { member -> member.password = "legacy-password" }
                     .id
             }
 
         assertLoginIssueRejectedWithoutSession(memberId)
+        assertThat(inTransaction { memberRepository.findById(memberId).orElseThrow().password })
+            .isEqualTo("legacy-password")
     }
 
     @Test

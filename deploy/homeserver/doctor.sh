@@ -76,149 +76,6 @@ trim_quotes() {
   printf '%s' "${value}"
 }
 
-notification_sse_probe_output() {
-  local web_domain="$1"
-  local admin_email admin_password
-  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
-  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
-
-  if [[ -z "${admin_email}" || -z "${admin_password}" ]]; then
-    echo "notification sse probe: skip (missing CUSTOM__ADMIN__EMAIL or CUSTOM__ADMIN__PASSWORD)"
-    return 0
-  fi
-
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
-    set -eu
-    web_domain="$1"
-    admin_email="$2"
-    admin_password="$3"
-    login_headers="$(mktemp)"
-    trap "rm -f \"${login_headers}\"" EXIT
-    login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
-    login_code="$(
-      curl -sS \
-        --connect-timeout 3 \
-        --max-time 12 \
-        -D "${login_headers}" \
-        -o /dev/null \
-        -w "%{http_code}" \
-        -H "Host: ${web_domain}" \
-        -H "Content-Type: application/json" \
-        --data "${login_payload}" \
-        "http://caddy:80/member/api/v1/auth/login" || true
-    )"
-    echo "login_status=${login_code}"
-    if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
-      exit 11
-    fi
-
-    # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
-    # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
-    access_token="$(
-      tr -d "\r" < "${login_headers}" \
-        | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
-        | tail -n 1 \
-        | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
-    )"
-    if [[ -z "${access_token}" ]]; then
-      echo "login_access_token=missing"
-      exit 12
-    fi
-
-    stream_body="$(
-      curl -sS -N \
-        --connect-timeout 3 \
-        --max-time 35 \
-        -H "Authorization: Bearer ${access_token}" \
-        -H "Accept: text/event-stream" \
-        -H "Host: ${web_domain}" \
-        "http://caddy:80/member/api/v1/notifications/stream" || true
-    )"
-    printf "%s\n" "${stream_body}" | tr -d "\r"
-  ' sh "${web_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
-}
-
-print_notification_sse_status() {
-  local web_domain
-  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
-  if [[ -z "${web_domain}" ]]; then
-    echo "notification sse: skip (missing WEB_DOMAIN)"
-    return 0
-  fi
-
-  local probe_output
-  probe_output="$(notification_sse_probe_output "${web_domain}")"
-  if grep -qx 'event:[[:space:]]*connected' <<< "${probe_output}" && grep -qx 'event:[[:space:]]*heartbeat' <<< "${probe_output}"; then
-    echo "notification sse probe: OK (connected+heartbeat)"
-  else
-    echo "notification sse probe: FAIL"
-    printf '%s\n' "${probe_output}"
-  fi
-
-  local admin_email admin_password diagnostics_body diagnostics_code
-  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
-  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
-  if [[ -z "${admin_email}" || -z "${admin_password}" ]]; then
-    echo "notification diagnostics: skip (missing CUSTOM__ADMIN__EMAIL or CUSTOM__ADMIN__PASSWORD)"
-    return 0
-  fi
-
-  diagnostics_body="$(
-    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
-      set -eu
-      web_domain="$1"
-      admin_email="$2"
-      admin_password="$3"
-      login_headers="$(mktemp)"
-      trap "rm -f \"${login_headers}\"" EXIT
-      login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
-      login_code="$(
-        curl -sS \
-          --connect-timeout 3 \
-          --max-time 12 \
-          -D "${login_headers}" \
-          -o /dev/null \
-          -w "%{http_code}" \
-          -H "Host: ${web_domain}" \
-          -H "Content-Type: application/json" \
-          --data "${login_payload}" \
-          "http://caddy:80/member/api/v1/auth/login" || true
-      )"
-      if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
-        echo "HTTP_STATUS:000"
-        exit 0
-      fi
-      # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
-      # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
-      access_token="$(
-        tr -d "\r" < "${login_headers}" \
-          | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
-          | tail -n 1 \
-          | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
-      )"
-      if [[ -z "${access_token}" ]]; then
-        echo "HTTP_STATUS:000"
-        echo "login_access_token=missing"
-        exit 0
-      fi
-      response="$(
-        curl -sS \
-          --connect-timeout 3 \
-          --max-time 10 \
-          -H "Authorization: Bearer ${access_token}" \
-          -w $"\nHTTP_STATUS:%{http_code}\n" \
-          -H "Host: ${web_domain}" \
-          "http://caddy:80/system/api/v1/adm/notifications/stream" || true
-      )"
-      printf "%s\n" "${response}"
-    ' sh "${web_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
-  )"
-  diagnostics_code="$(printf '%s\n' "${diagnostics_body}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
-  [[ -n "${diagnostics_code}" ]] || diagnostics_code="none"
-  echo "notification diagnostics status: ${diagnostics_code}"
-  printf '%s\n' "${diagnostics_body}" | sed '/^HTTP_STATUS:/d'
-}
-
 monitoring_embed_candidate_url() {
   local url
   url="$(trim_quotes "$(env_value "NEXT_PUBLIC_MONITORING_EMBED_URL")")"
@@ -333,75 +190,32 @@ print_monitoring_stack_status() {
   fi
 }
 
-inspect_grafana_origin_auth_proxy_headers() {
-  local web_domain="$1"
-  local grafana_domain="$2"
-  local path="$3"
-  local admin_email="$4"
-  local admin_password="$5"
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
-    set -eu
-    web_domain="$1"
-    grafana_domain="$2"
-    path="$3"
-    admin_email="$4"
-    admin_password="$5"
-    login_headers="$(mktemp)"
-    trap "rm -f \"${login_headers}\"" EXIT
-    login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
-    login_code="$(
-      curl -sS \
-        --connect-timeout 3 \
-        --max-time 12 \
-        -D "${login_headers}" \
-        -o /dev/null \
-        -w "%{http_code}" \
-        -H "Host: ${web_domain}" \
-        -H "Content-Type: application/json" \
-        --data "${login_payload}" \
-        "http://caddy:80/member/api/v1/auth/login" || true
-    )"
-    if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
-      printf "HTTP/1.1 000 login_failed\r\n"
-      exit 0
-    fi
-    # 로그인 응답은 host-only 만료용 빈 값 accessToken 쿠키를 실제 발급 쿠키보다 먼저 내보낸다.
-    # 첫 매치를 집으면 항상 빈 토큰이 되므로 값이 있는 마지막 쿠키를 고른다.
-    access_token="$(
-      tr -d "\r" < "${login_headers}" \
-        | grep -i "^Set-Cookie:[[:space:]]*accessToken=[^;]" \
-        | tail -n 1 \
-        | sed -n "s/^[^:]*:[[:space:]]*accessToken=\([^;]*\).*/\1/p"
-    )"
-    if [[ -z "${access_token}" ]]; then
-      printf "HTTP/1.1 000 missing_access_token\r\n"
-      exit 0
-    fi
-    curl -I -s \
-      --connect-timeout 3 \
-      --max-time 12 \
-      -H "Authorization: Bearer ${access_token}" \
-      -H "Host: ${grafana_domain}" \
-      "http://caddy:80${path}" || true
-  ' sh "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
+inspect_grafana_origin_headers() {
+  local grafana_domain="$1"
+  local path="$2"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 12 \
+    -D - \
+    -o /dev/null \
+    -s \
+    -H "Host: ${grafana_domain}" \
+    "http://caddy:80${path}" 2>/dev/null || true
 }
 
 print_grafana_origin_status() {
-  local web_domain grafana_domain path admin_email admin_password
-  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
+  local grafana_domain path
   grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
   path="$(monitoring_embed_candidate_path)"
-  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
-  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
 
-  if [[ -z "${grafana_domain}" || -z "${web_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
-    echo "grafana origin auth-proxy: skip (missing GRAFANA_DOMAIN/WEB_DOMAIN/admin credentials)"
+  if [[ -z "${grafana_domain}" ]]; then
+    echo "grafana origin access boundary: unavailable (missing GRAFANA_DOMAIN)"
     return 0
   fi
 
   local headers status location xfo csp internal_health
   internal_health="$(inspect_grafana_internal_health)"
-  headers="$(inspect_grafana_origin_auth_proxy_headers "${web_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+  headers="$(inspect_grafana_origin_headers "${grafana_domain}" "${path}")"
   status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
   location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
   xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
@@ -645,7 +459,6 @@ print_env_key_status "CUSTOM_PROD_BACKURL"
 print_env_key_status "CUSTOM_PROD_FRONTURL"
 print_env_key_status "CUSTOM_PROD_COOKIEDOMAIN"
 print_env_key_status "CUSTOM__ADMIN__EMAIL"
-print_env_key_status "CUSTOM__ADMIN__PASSWORD"
 
 print_section "Steady Guard Cron"
 if command -v crontab >/dev/null 2>&1; then
@@ -698,9 +511,6 @@ print_grafana_embed_status "$(monitoring_embed_candidate_url)"
 
 print_section "Monitoring Stack (Loki/Promtail)"
 print_monitoring_stack_status
-
-print_section "Notification SSE"
-print_notification_sse_status
 
 print_section "Listening Ports (80/443/22/8080)"
 ss -lntp '( sport = :80 or sport = :443 or sport = :22 or sport = :8080 )' || true

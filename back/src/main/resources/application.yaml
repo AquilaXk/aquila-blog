@@ -21,24 +21,6 @@ spring:
   jackson:
     serialization:
       fail-on-empty-beans: false
-  security:
-    oauth2:
-      client:
-        registration:
-          kakao:
-            client-id: ${SPRING__SECURITY__OAUTH2__CLIENT__REGISTRATION__KAKAO__CLIENT_ID:}
-            scope: openid, profile_nickname, profile_image
-            client-name: Kakao
-            authorization-grant-type: authorization_code
-            redirect-uri: '${custom.site.backUrl}/login/oauth2/code/{registrationId}'
-        provider:
-          kakao:
-            issuer-uri: https://kauth.kakao.com
-            authorization-uri: https://kauth.kakao.com/oauth/authorize
-            token-uri: https://kauth.kakao.com/oauth/token
-            jwk-set-uri: https://kauth.kakao.com/.well-known/jwks.json
-            user-info-uri: https://kapi.kakao.com/v1/oidc/userinfo
-            user-name-attribute: sub
   mail:
     host: ${SPRING__MAIL__HOST:}
     port: ${SPRING__MAIL__PORT:587}
@@ -174,7 +156,7 @@ custom:
     # (api.<apex>)에 두면 쿠키가 한 단계 위로 새어 나간다.
     # 이 값이 실제로 쓰이는 것은 CUSTOM_PROD_COOKIEDOMAIN 바인딩이 없을 때뿐이다. 그때
     # site.frontUrl/backUrl이 전부 이 호스트에서 파생되므로, 공개 호스트와 다른 값이면 쿠키
-    # Domain과 OAuth redirect-uri가 조용히 엉뚱한 호스트를 가리킨다. 기본값도 공개 호스트로 둔다.
+    # Domain과 공개 URL이 조용히 엉뚱한 호스트를 가리킨다. 기본값도 공개 호스트로 둔다.
     cookieDomain: blog.aquilaxk.site
     frontUrl: "https://${custom.prod.cookieDomain}"
     backUrl: "https://${custom.prod.cookieDomain}"
@@ -213,9 +195,6 @@ custom:
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     email: "${CUSTOM__ADMIN__EMAIL:}"
-    password: "${CUSTOM__ADMIN__PASSWORD:}"
-    bootstrap:
-      rotatePasswordOnStartup: ${CUSTOM__ADMIN__BOOTSTRAP__ROTATE_PASSWORD_ON_STARTUP:false}
   security:
     apiRateLimit:
       enabled: ${CUSTOM__SECURITY__API_RATE_LIMIT__ENABLED:true}

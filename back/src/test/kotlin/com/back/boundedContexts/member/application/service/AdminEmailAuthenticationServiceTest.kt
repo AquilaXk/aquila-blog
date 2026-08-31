@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyBoolean
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.nullable
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
@@ -37,7 +38,6 @@ class AdminEmailAuthenticationServiceTest {
         val defaultService =
             AdminEmailAuthenticationService(
                 adminProperties = AdminProperties(email = ADMIN_EMAIL),
-                canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = ADMIN_EMAIL)),
                 memberUseCase = memberUseCase,
                 adminEmailChallengeStore = challengeStore,
                 redisKeyValuePort = redis,
@@ -66,11 +66,11 @@ class AdminEmailAuthenticationServiceTest {
 
     @Test
     fun `verified code is consumed once and preserves explicit persistence choice`() {
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
         val issued = issuedSession(rememberLoginEnabled = true)
         `when`(
             memberUseCase.issueAdminEmailLoginSession(
-                memberId = admin.id,
+                email = ADMIN_EMAIL,
+                nickname = "관리자",
                 rememberLoginEnabled = true,
                 createdIp = "127.0.0.1",
                 userAgent = "test-agent",
@@ -104,7 +104,6 @@ class AdminEmailAuthenticationServiceTest {
 
     @Test
     fun `wrong or unknown code creates no administrator session`() {
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
         var deliveredCode = ""
         doAnswer { invocation ->
             assertThat(invocation.getArgument<String>(0)).isEqualTo(ADMIN_EMAIL)
@@ -118,13 +117,11 @@ class AdminEmailAuthenticationServiceTest {
         assertThatThrownBy {
             service.verifyCode(challenge.challengeId, wrongCode, null, null)
         }.isInstanceOf(AppException::class.java)
-        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+        verifyNoAdminSessionIssued()
     }
 
     @Test
     fun `unknown email returns an opaque challenge without sending mail or storing authority`() {
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
-
         val challenge = service.requestCode("someone@example.com", rememberMe = true)
 
         assertThat(challenge.challengeId).isNotBlank()
@@ -136,7 +133,6 @@ class AdminEmailAuthenticationServiceTest {
     fun `matching and unknown requests complete through the same timing boundary`() {
         val timing = mock(AdminEmailRequestTiming::class.java)
         `when`(timing.startedAtNanos()).thenReturn(11L, 22L)
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
         doAnswer { null }.`when`(mailSender).sendCode(anyString(), anyString(), anyLong())
         val timedService = newService(requestTiming = timing)
 
@@ -149,7 +145,6 @@ class AdminEmailAuthenticationServiceTest {
 
     @Test
     fun `smtp failure returns the same opaque outcome as an unknown email and creates no session`() {
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
         doThrow(IllegalStateException("smtp unavailable"))
             .`when`(mailSender)
             .sendCode(anyString(), anyString(), anyLong())
@@ -160,13 +155,12 @@ class AdminEmailAuthenticationServiceTest {
         assertThat(smtpFailure.expiresInSeconds).isEqualTo(unknownEmail.expiresInSeconds)
         assertThat(smtpFailure.challengeId).isNotBlank()
         assertThat(challengeStore.challenges).isEmpty()
-        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+        verifyNoAdminSessionIssued()
     }
 
     @Test
     fun `unavailable redis fails closed before mail delivery`() {
         challengeStore.available = false
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
 
         assertThatThrownBy { service.requestCode(ADMIN_EMAIL, rememberMe = false) }
             .isInstanceOfSatisfying(AppException::class.java) { exception ->
@@ -178,25 +172,23 @@ class AdminEmailAuthenticationServiceTest {
     @Test
     fun `challenge issue failure fails closed before mail delivery`() {
         challengeStore.issueFailure = IllegalStateException("redis write failed")
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
 
         assertDependencyUnavailable { service.requestCode(ADMIN_EMAIL, rememberMe = false) }
 
         verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
-        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+        verifyNoAdminSessionIssued()
     }
 
     @Test
     fun `challenge discard failure after mail failure fails closed`() {
         challengeStore.discardFailure = IllegalStateException("redis delete failed")
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
         doThrow(IllegalStateException("smtp unavailable"))
             .`when`(mailSender)
             .sendCode(anyString(), anyString(), anyLong())
 
         assertDependencyUnavailable { service.requestCode(ADMIN_EMAIL, rememberMe = false) }
 
-        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+        verifyNoAdminSessionIssued()
     }
 
     @Test
@@ -206,24 +198,22 @@ class AdminEmailAuthenticationServiceTest {
         assertDependencyUnavailable { service.verifyCode("challenge", "00000000", null, null) }
 
         verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
-        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+        verifyNoAdminSessionIssued()
     }
 
     @Test
     fun `request slot runtime failure fails closed before challenge or mail delivery`() {
         challengeStore.requestSlotFailure = IllegalStateException("redis counter failed")
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
 
         assertDependencyUnavailable { service.requestCode(ADMIN_EMAIL, rememberMe = false) }
 
         assertThat(challengeStore.challenges).isEmpty()
         verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
-        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+        verifyNoAdminSessionIssued()
     }
 
     @Test
     fun `request limit is opaque and does not send or store another challenge`() {
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
         doAnswer { null }.`when`(mailSender).sendCode(anyString(), anyString(), anyLong())
 
         repeat(5) { service.requestCode(ADMIN_EMAIL, rememberMe = false) }
@@ -236,7 +226,6 @@ class AdminEmailAuthenticationServiceTest {
 
     @Test
     fun `wrong attempts exhaust the challenge without issuing a session`() {
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
         var deliveredCode = ""
         doAnswer { invocation ->
             assertThat(invocation.getArgument<String>(0)).isEqualTo(ADMIN_EMAIL)
@@ -253,32 +242,50 @@ class AdminEmailAuthenticationServiceTest {
         }
 
         assertThat(challengeStore.challenges).doesNotContainKey(challenge.challengeId)
-        verify(memberUseCase, never()).issueAdminEmailLoginSession(anyLong(), anyBoolean(), anyString(), anyString())
+        verifyNoAdminSessionIssued()
     }
 
     @Test
-    fun `internal readiness proves canonical admin redis atomicity and smtp transport without sending mail`() {
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
-
+    fun `internal readiness proves configured recipient redis atomicity and smtp transport without sending mail`() {
         service.verifyReadiness()
 
         assertThat(redis.entries).isEmpty()
         verify(mailSender).verifyConnection()
         verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
+        verify(memberUseCase, never()).findByEmail(anyString())
     }
 
     @Test
-    fun `readiness fails closed when the canonical administrator is missing`() {
-        assertDependencyUnavailable { service.verifyReadiness() }
+    fun `readiness fails closed without a configured recipient`() {
+        val unconfiguredService = newService(adminProperties = AdminProperties())
+
+        assertDependencyUnavailable { unconfiguredService.verifyReadiness() }
 
         verify(mailSender, never()).verifyConnection()
         verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
     }
 
     @Test
+    fun `verification rejects a challenge issued for a previous configured recipient`() {
+        var deliveredCode = ""
+        doAnswer { invocation ->
+            deliveredCode = invocation.getArgument(1)
+            null
+        }.`when`(mailSender).sendCode(anyString(), anyString(), anyLong())
+        val challenge = service.requestCode(ADMIN_EMAIL, rememberMe = false)
+        val rotatedService = newService(adminProperties = AdminProperties(email = "rotated@example.com"))
+
+        assertThatThrownBy {
+            rotatedService.verifyCode(challenge.challengeId, deliveredCode, null, null)
+        }.isInstanceOfSatisfying(AppException::class.java) { exception ->
+            assertThat(exception.errorCode).isEqualTo(ErrorCode.UNAUTHORIZED)
+        }
+        verifyNoAdminSessionIssued()
+    }
+
+    @Test
     fun `readiness fails closed when redis round trip does not preserve the probe`() {
         redis.getAndDeleteOverride = "mismatch"
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
 
         assertDependencyUnavailable { service.verifyReadiness() }
 
@@ -289,7 +296,6 @@ class AdminEmailAuthenticationServiceTest {
     @Test
     fun `readiness fails closed when redis probe throws`() {
         redis.setFailure = IllegalStateException("redis unavailable")
-        `when`(memberUseCase.findByEmail(ADMIN_EMAIL)).thenReturn(admin)
 
         assertDependencyUnavailable { service.verifyReadiness() }
 
@@ -303,9 +309,9 @@ class AdminEmailAuthenticationServiceTest {
         requestMaxPerWindow: Int = 5,
         requestWindowSeconds: Long = 600,
         requestTiming: AdminEmailRequestTiming = this.requestTiming,
+        adminProperties: AdminProperties = AdminProperties(email = ADMIN_EMAIL),
     ) = AdminEmailAuthenticationService(
-        adminProperties = AdminProperties(email = ADMIN_EMAIL),
-        canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = ADMIN_EMAIL)),
+        adminProperties = adminProperties,
         memberUseCase = memberUseCase,
         adminEmailChallengeStore = challengeStore,
         redisKeyValuePort = redis,
@@ -316,6 +322,16 @@ class AdminEmailAuthenticationServiceTest {
         requestMaxPerWindow = requestMaxPerWindow,
         requestWindowSeconds = requestWindowSeconds,
     )
+
+    private fun verifyNoAdminSessionIssued() {
+        verify(memberUseCase, never()).issueAdminEmailLoginSession(
+            email = anyString(),
+            nickname = anyString(),
+            rememberLoginEnabled = anyBoolean(),
+            createdIp = nullable(String::class.java),
+            userAgent = nullable(String::class.java),
+        )
+    }
 
     private fun assertDependencyUnavailable(action: () -> Unit) {
         assertThatThrownBy { action() }
@@ -397,7 +413,10 @@ class AdminEmailAuthenticationServiceTest {
             val challenge = challenges[challengeId] ?: return AdminEmailChallengeStore.ConsumeResult.Invalid
             if (challenge.codeHash == submittedCodeHash) {
                 discard(challengeId)
-                return AdminEmailChallengeStore.ConsumeResult.Matched(challenge.memberId, challenge.rememberMe)
+                return AdminEmailChallengeStore.ConsumeResult.Matched(
+                    challenge.canonicalRecipientHash,
+                    challenge.rememberMe,
+                )
             }
             val updatedFailures = (failures[challengeId] ?: 0) + 1
             failures[challengeId] = updatedFailures

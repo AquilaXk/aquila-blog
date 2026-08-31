@@ -13,7 +13,6 @@ import java.util.Locale
 data class AdminProperties(
     val username: String = "",
     val email: String = "",
-    val password: String = "",
 ) {
     val normalizedEmail: String
         get() = email.trim().lowercase(Locale.ROOT)

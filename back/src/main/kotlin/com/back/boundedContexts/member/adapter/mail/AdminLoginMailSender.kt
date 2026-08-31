@@ -82,7 +82,7 @@ class AdminLoginMailSender(
             MimeMessageHelper(message, StandardCharsets.UTF_8.name()).apply {
                 setFrom(fromAddress)
                 setTo(email)
-                setSubject("Aquila Blog administrator sign-in code")
+                setSubject("[AquilaLog] 관리자 로그인 인증 코드")
             }
             val alternative = MimeMultipart("alternative")
             alternative.addBodyPart(

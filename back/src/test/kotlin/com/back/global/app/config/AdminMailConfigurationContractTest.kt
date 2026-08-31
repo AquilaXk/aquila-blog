@@ -29,5 +29,7 @@ class AdminMailConfigurationContractTest {
             .isEqualTo("\${SPRING__MAIL__PROPERTIES__MAIL__SMTP__WRITETIMEOUT:8000}")
         assertThat(properties.getProperty("custom.auth.adminEmail.requestDeadlineMillis"))
             .isEqualTo("\${CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS:10000}")
+        assertThat(properties.getProperty("custom.auth.adminEmail.responseMinimumMillis"))
+            .isEqualTo("\${CUSTOM__AUTH__ADMIN_EMAIL__RESPONSE_MINIMUM_MILLIS:1000}")
     }
 }

@@ -34,7 +34,7 @@ class AdminEmailAuthenticationServiceTest {
         newService(challengeExpirationSeconds = 600)
 
     @Test
-    fun `default challenge expiration is 600 seconds`() {
+    fun `default challenge expiration is 300 seconds`() {
         val defaultService =
             AdminEmailAuthenticationService(
                 adminProperties = AdminProperties(email = ADMIN_EMAIL),
@@ -45,7 +45,7 @@ class AdminEmailAuthenticationServiceTest {
                 requestTiming = requestTiming,
             )
 
-        assertThat(defaultService.requestCode("someone@example.com", rememberMe = false).expiresInSeconds).isEqualTo(600)
+        assertThat(defaultService.requestCode("someone@example.com", rememberMe = false).expiresInSeconds).isEqualTo(300)
     }
 
     @Test

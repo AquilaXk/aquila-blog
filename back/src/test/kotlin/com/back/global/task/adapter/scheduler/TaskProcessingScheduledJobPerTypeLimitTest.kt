@@ -630,6 +630,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         try {
             fixture.job.processTasks()
             waitUntilStatus(task, TaskStatus.QUARANTINED)
+            waitUntilQuarantineCounter(fixture.meterRegistry, "unregistered", "UNKNOWN_TASK_TYPE")
 
             assertThat(task.status).isEqualTo(TaskStatus.QUARANTINED)
             assertThat(task.payload).isEqualTo(Task.REDACTED_PAYLOAD)
@@ -675,6 +676,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         try {
             fixture.job.processTasks()
             waitUntilStatus(task, TaskStatus.QUARANTINED)
+            waitUntilQuarantineCounter(fixture.meterRegistry, taskType, "MALFORMED_ENVELOPE")
 
             assertThat(handler.invocations).hasValue(0)
             assertThat(task.payload).isEqualTo(Task.REDACTED_PAYLOAD)
@@ -724,6 +726,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         try {
             fixture.job.processTasks()
             waitUntilStatus(task, TaskStatus.QUARANTINED)
+            waitUntilQuarantineCounter(fixture.meterRegistry, taskType, "UNKNOWN_SCHEMA_VERSION")
 
             assertThat(handler.invocations).hasValue(0)
             assertThat(task.errorMessage).isEqualTo("UNKNOWN_SCHEMA_VERSION")
@@ -1071,6 +1074,25 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     ) {
         repeat(40) {
             if (task.status == expected) return
+            Thread.sleep(25)
+        }
+    }
+
+    private fun waitUntilQuarantineCounter(
+        meterRegistry: SimpleMeterRegistry,
+        taskType: String,
+        reason: String,
+    ) {
+        repeat(40) {
+            if (
+                meterRegistry
+                    .find("task.payload.quarantine")
+                    .tags("taskType", taskType, "reason", reason)
+                    .counter()
+                    ?.count() == 1.0
+            ) {
+                return
+            }
             Thread.sleep(25)
         }
     }

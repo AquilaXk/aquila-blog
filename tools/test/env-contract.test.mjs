@@ -279,6 +279,7 @@ const baseHomeServerEnv = [
   "CUSTOM__ADMIN__USERNAME=관리자",
   "CUSTOM__ADMIN__EMAIL=admin@aquilaxk.site",
   "CUSTOM__AUTH__ADMIN_EMAIL__CHALLENGE_EXPIRATION_SECONDS=600",
+  "CUSTOM__AUTH__ADMIN_EMAIL__RESPONSE_MINIMUM_MILLIS=1000",
   "CUSTOM__AUTH__ADMIN_EMAIL__REQUEST_DEADLINE_MILLIS=10000",
   "CUSTOM_PROD_COOKIEDOMAIN=blog.aquilaxk.site",
   "CUSTOM_PROD_FRONTURL=https://blog.aquilaxk.site",
@@ -429,7 +430,30 @@ test("home-server-source keeps the administrator email deadline inside the readi
   }
 })
 
-test("home-server-source keeps the shared email deadline and SMTP transport inside the readiness budget", async () => {
+test("home-server-source fixes the administrator email response floor at one second", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+  const contract = loadContract(contractPath)
+  const key = "CUSTOM__AUTH__ADMIN_EMAIL__RESPONSE_MINIMUM_MILLIS"
+  const definition = contract.targets["home-server-source"].keys.find((candidate) => candidate.name === key)
+
+  assert.equal(definition?.min, 1000)
+  assert.equal(definition?.max, 1000)
+
+  const valid = validateEnvText({ contract, target: "home-server-source", text: baseHomeServerEnv })
+  assert.equal(valid.ok, true, JSON.stringify(valid.errors))
+
+  for (const value of ["999", "1001"]) {
+    const result = validateEnvText({
+      contract,
+      target: "home-server-source",
+      text: baseHomeServerEnv.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${value}`),
+    })
+    assert.equal(result.ok, false, `${value} milliseconds must fail before deployment`)
+    assert(result.errors.some((error) => error.key === key), JSON.stringify(result.errors))
+  }
+})
+
+test("home-server-source keeps the mail operation deadline and SMTP transport inside the readiness budget", async () => {
   const { loadContract } = await import("../env/validate-env.mjs")
   const contract = loadContract(contractPath)
   const target = contract.targets["home-server-source"]
@@ -443,7 +467,7 @@ test("home-server-source keeps the shared email deadline and SMTP transport insi
   ]) {
     const definition = target.keys.find((candidate) => candidate.name === key)
     assert.equal(definition?.max, 8000, `${key} must finish before the mail operation deadline`)
-    assert(definition.max <= deadline.min, `${key} must not exceed the shortest allowed shared deadline`)
+    assert(definition.max <= deadline.min, `${key} must not exceed the shortest allowed mail operation deadline`)
   }
 })
 

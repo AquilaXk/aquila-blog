@@ -4,50 +4,68 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.global.app.AppConfig
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.Isolated
+import java.lang.reflect.Field
 import java.time.Instant
 
+@Isolated
 class MemberWithUsernameDtoTest {
-    @BeforeEach
-    fun setUp() {
-        AppConfig(CURRENT_BACK_URL, "https://blog.aquilaxk.site")
-    }
+    @Test
+    fun `member profile image responses canonicalize the retired public host`() =
+        withIsolatedAppConfig {
+            val member = createMember()
+            member.profileImgUrl = "$RETIRED_BACK_URL/post/api/v1/images/profile/member.png"
+
+            val response = MemberWithUsernameDto(member)
+
+            assertThat(response.profileImageUrl)
+                .startsWith("$CURRENT_BACK_URL/post/api/v1/images/profile/member.png?v=")
+            assertThat(response.profileImageDirectUrl).isEqualTo(response.profileImageUrl)
+            Unit
+        }
 
     @Test
-    fun `member profile image responses canonicalize the retired public host`() {
-        val member = createMember()
-        member.profileImgUrl = "$RETIRED_BACK_URL/post/api/v1/images/profile/member.png"
+    fun `published workspace profile image responses canonicalize after versioning`() =
+        withIsolatedAppConfig {
+            val member = createMember()
+            val modifiedAt = TEST_INSTANT
+            val workspace =
+                MemberProfileWorkspaceContent(
+                    profileImageUrl = "$RETIRED_BACK_URL/post/api/v1/images/profile/workspace.png",
+                )
 
-        val response = MemberWithUsernameDto(member)
+            val response = MemberWithUsernameDto(member, workspace, modifiedAt)
+            val expected =
+                "$CURRENT_BACK_URL/post/api/v1/images/profile/workspace.png?v=${modifiedAt.toEpochMilli()}"
 
-        assertThat(response.profileImageUrl)
-            .startsWith("$CURRENT_BACK_URL/post/api/v1/images/profile/member.png?v=")
-        assertThat(response.profileImageDirectUrl).isEqualTo(response.profileImageUrl)
-    }
-
-    @Test
-    fun `published workspace profile image responses canonicalize after versioning`() {
-        val member = createMember()
-        val modifiedAt = TEST_INSTANT
-        val workspace =
-            MemberProfileWorkspaceContent(
-                profileImageUrl = "$RETIRED_BACK_URL/post/api/v1/images/profile/workspace.png",
-            )
-
-        val response = MemberWithUsernameDto(member, workspace, modifiedAt)
-        val expected =
-            "$CURRENT_BACK_URL/post/api/v1/images/profile/workspace.png?v=${modifiedAt.toEpochMilli()}"
-
-        assertThat(response.profileImageUrl).isEqualTo(expected)
-        assertThat(response.profileImageDirectUrl).isEqualTo(expected)
-    }
+            assertThat(response.profileImageUrl).isEqualTo(expected)
+            assertThat(response.profileImageDirectUrl).isEqualTo(expected)
+            Unit
+        }
 
     private fun createMember(): Member =
         Member(1, "admin", null, "관리자", "admin@example.com", true).apply {
             createdAt = TEST_INSTANT
             modifiedAt = TEST_INSTANT
         }
+
+    private fun <T> withIsolatedAppConfig(block: () -> T): T {
+        val snapshot = appConfigUrlFields.map { field -> field.get(null) }
+        AppConfig(CURRENT_BACK_URL, "https://blog.aquilaxk.site")
+
+        return try {
+            block()
+        } finally {
+            appConfigUrlFields.zip(snapshot).forEach { (field, value) -> field.set(null, value) }
+        }
+    }
+
+    private val appConfigUrlFields: List<Field> by lazy {
+        listOf("siteBackUrl", "siteFrontUrl").map { name ->
+            AppConfig::class.java.getDeclaredField(name).apply { isAccessible = true }
+        }
+    }
 
     private companion object {
         const val RETIRED_BACK_URL = "https://api.aquilaxk.site"

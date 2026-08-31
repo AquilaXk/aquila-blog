@@ -118,7 +118,7 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
     }
 
     @Test
-    fun `verified email promotes an existing ordinary identity and clears its password`() {
+    fun `verified email normalizes the configured identity and clears its password`() {
         jdbcTemplate.update("update member set is_admin = false where email = ?", "admin@test.com")
         val (challengeId, deliveredCode) = requestChallenge()
 

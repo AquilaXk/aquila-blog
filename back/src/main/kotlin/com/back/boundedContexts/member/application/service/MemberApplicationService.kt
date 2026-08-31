@@ -139,6 +139,7 @@ class MemberApplicationService(
             normalizeEmailOrNull(email)
                 ?: throw AppException(ErrorCode.MEMBER_BAD_REQUEST, "이메일을 입력해주세요.")
 
+        memberRepository.lockEmailIdentityProvisioning(normalizedEmail)
         return memberRepository.findByEmail(normalizedEmail)
             ?: joinWithVerifiedEmail(
                 email = normalizedEmail,

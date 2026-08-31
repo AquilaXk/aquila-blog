@@ -96,7 +96,7 @@ class MemberLoginSessionIssueService(
             ipSecurityEnabled = ipSecurityEnabled,
             ipSecurityFingerprint = ipSecurityFingerprint,
         )
-        if (member.apiKey.isBlank() || member.apiKey == member.username) {
+        if (administratorEmailVerified || member.apiKey.isBlank() || member.apiKey == member.username) {
             member.modifyApiKey(MemberPolicy.genApiKey())
         }
 

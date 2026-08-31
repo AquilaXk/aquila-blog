@@ -6,19 +6,19 @@ import java.util.concurrent.TimeUnit
 
 @Component
 class AdminEmailRequestTiming(
-    @param:Value("\${custom.auth.adminEmail.requestDeadlineMillis:10000}")
-    private val requestDeadlineMillis: Long = 10_000,
+    @param:Value("\${custom.auth.adminEmail.responseMinimumMillis:1000}")
+    private val responseMinimumMillis: Long = 1_000,
 ) {
     init {
-        require(requestDeadlineMillis in 1_000..10_000) {
-            "custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 10000."
+        require(responseMinimumMillis in 1_000..10_000) {
+            "custom.auth.adminEmail.responseMinimumMillis must be between 1000 and 10000."
         }
     }
 
     fun startedAtNanos(): Long = System.nanoTime()
 
     fun awaitMinimum(startedAtNanos: Long) {
-        val deadlineNanos = startedAtNanos + TimeUnit.MILLISECONDS.toNanos(requestDeadlineMillis)
+        val deadlineNanos = startedAtNanos + TimeUnit.MILLISECONDS.toNanos(responseMinimumMillis)
         while (true) {
             val remainingNanos = deadlineNanos - System.nanoTime()
             if (remainingNanos <= 0) return

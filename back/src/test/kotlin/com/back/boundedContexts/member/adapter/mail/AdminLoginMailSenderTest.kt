@@ -40,21 +40,21 @@ class AdminLoginMailSenderTest {
         }.`when`(javaMailSender).send(any(MimeMessage::class.java))
         val sender = AdminLoginMailSender(objectProvider(javaMailSender), FROM_ADDRESS)
 
-        sender.sendCode(ADMIN_EMAIL, "12345678", 600)
+        sender.sendCode(ADMIN_EMAIL, "12345678", 300)
 
         assertThat(delivered).isNotNull
         delivered!!.saveChanges()
         assertThat(delivered!!.from.map { it.toString() }).containsExactly(FROM_ADDRESS)
         assertThat(delivered!!.allRecipients.map { it.toString() }).containsExactly(ADMIN_EMAIL)
-        assertThat(delivered!!.subject).isEqualTo("Aquila Blog administrator sign-in code")
+        assertThat(delivered!!.subject).isEqualTo("[AquilaLog] 관리자 로그인 인증 코드")
         val parts = delivered!!.content as jakarta.mail.internet.MimeMultipart
         assertThat(parts.count).isEqualTo(2)
         val plainText = parts.getBodyPart(0).content as String
         val html = parts.getBodyPart(1).content as String
         assertThat(parts.getBodyPart(0).contentType).contains("text/plain")
         assertThat(parts.getBodyPart(1).contentType).contains("text/html")
-        assertThat(plainText).contains("12345678", "10분", "요청하지 않았다면")
-        assertThat(html).contains("12345678", "10분", "요청하지 않았다면", "AquilaLog", "#155eef")
+        assertThat(plainText).contains("12345678", "5분", "요청하지 않았다면")
+        assertThat(html).contains("12345678", "5분", "요청하지 않았다면", "AquilaLog", "#155eef")
         assertThat(html.lowercase()).doesNotContain(
             "http://",
             "https://",

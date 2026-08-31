@@ -3,18 +3,25 @@ package com.back.boundedContexts.member.application.service
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import java.util.concurrent.TimeUnit
 
 class AdminEmailRequestTimingTest {
     @Test
-    fun `default timing boundary records a monotonic start`() {
-        assertThat(AdminEmailRequestTiming().startedAtNanos()).isPositive()
+    fun `default response minimum completes near one second`() {
+        val timing = AdminEmailRequestTiming()
+        val startedAt = timing.startedAtNanos()
+
+        timing.awaitMinimum(startedAt)
+
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt))
+            .isBetween(900, 2_500)
     }
 
     @Test
-    fun `request deadline outside the edge-safe range is rejected`() {
+    fun `response minimum outside the edge-safe range is rejected`() {
         assertThatThrownBy { AdminEmailRequestTiming(999) }
             .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessage("custom.auth.adminEmail.requestDeadlineMillis must be between 1000 and 10000.")
+            .hasMessage("custom.auth.adminEmail.responseMinimumMillis must be between 1000 and 10000.")
     }
 
     @Test

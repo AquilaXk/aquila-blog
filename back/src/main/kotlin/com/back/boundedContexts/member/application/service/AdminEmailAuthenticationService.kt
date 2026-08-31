@@ -26,8 +26,8 @@ class AdminEmailAuthenticationService(
     private val redisKeyValuePort: RedisKeyValuePort,
     private val mailSender: AdminLoginMailSender,
     private val requestTiming: AdminEmailRequestTiming,
-    @param:Value("\${custom.auth.adminEmail.challengeExpirationSeconds:600}")
-    private val challengeExpirationSeconds: Long = 600,
+    @param:Value("\${custom.auth.adminEmail.challengeExpirationSeconds:300}")
+    private val challengeExpirationSeconds: Long = 300,
     @param:Value("\${custom.auth.adminEmail.maxFailedAttempts:5}")
     private val maxFailedAttempts: Int = 5,
     @param:Value("\${custom.auth.adminEmail.requestMaxPerWindow:5}")

@@ -10,7 +10,6 @@ import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.dto.PostDto
-import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
@@ -331,35 +330,6 @@ class PostWriteSideEffectHandlerTest {
 
         // then
         assertThat(applicationEventPublisher.publishedEvent).isInstanceOf(PostDeletedEvent::class.java)
-    }
-
-    @Test
-    @DisplayName("계정 탈퇴 삭제 domain event payload는 durable task 처리 중 복원해 발행한다")
-    fun publishAccountDeletionDeletedDomainEventFromTaskPayload() {
-        // given
-        val domainEvent =
-            PostAccountDeletionDeletedEvent(
-                uid = UUID.randomUUID(),
-                aggregateId = 33L,
-                beforeTags = listOf("privacy"),
-                afterTags = emptyList(),
-            )
-        val payload =
-            postWriteSideEffectPayload(
-                postId = 33L,
-                recommendationAction = PostRecommendationSideEffect.EVICT,
-                domainEventType = PostAccountDeletionDeletedEvent::class.java.name,
-                domainEventJson = ObjectMapper().writeValueAsString(domainEvent),
-            )
-
-        // when
-        val applicationEventPublisher = RecordingApplicationEventPublisher()
-        newHandler(EventPublisher(applicationEventPublisher)).handle(payload)
-
-        // then
-        val publishedEvent = applicationEventPublisher.publishedEvent
-        assertThat(publishedEvent).isInstanceOf(PostAccountDeletionDeletedEvent::class.java)
-        assertThat((publishedEvent as PostAccountDeletionDeletedEvent).beforeTags).containsExactly("privacy")
     }
 
     @Test

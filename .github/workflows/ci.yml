@@ -118,6 +118,9 @@ jobs:
       - name: Verify member privacy email eligibility inventory contract
         run: node --test tools/test/member-privacy-email-eligibility-inventory.test.mjs
 
+      - name: Verify account-deletion event drain inventory contract
+        run: node --test tools/test/post-account-deletion-event-drain-inventory.test.mjs
+
       - name: Verify hot-query telemetry capability contract
         run: node --test tools/test/hot-query-telemetry-capability.test.mjs
 

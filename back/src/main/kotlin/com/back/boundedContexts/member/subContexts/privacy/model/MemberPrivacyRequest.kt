@@ -137,7 +137,6 @@ class MemberPrivacyRequest(
     ) {
         require(identityStatus.isVerified())
         require(!this.status.isClosed())
-        require(status != MemberPrivacyRequestHoldStatus.UNREVIEWED)
         when (status) {
             MemberPrivacyRequestHoldStatus.ACTIVE -> {
                 require(!scope.isNullOrBlank() && !reason.isNullOrBlank())
@@ -162,7 +161,8 @@ class MemberPrivacyRequest(
                 holdReleaseDecision = releaseDecision.trim()
                 holdReleasedAt = at
             }
-            MemberPrivacyRequestHoldStatus.UNREVIEWED -> error("UNREVIEWED is not an operator decision")
+            MemberPrivacyRequestHoldStatus.UNREVIEWED ->
+                throw IllegalArgumentException("UNREVIEWED is not an operator decision")
         }
         holdStatus = status
     }

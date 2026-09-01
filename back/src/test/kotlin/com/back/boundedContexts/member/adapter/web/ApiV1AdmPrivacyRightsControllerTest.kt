@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.M
 import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.MemberPrivacyRequestAuditRepository
 import com.back.boundedContexts.member.subContexts.privacy.adapter.persistence.MemberPrivacyRequestRepository
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
+import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestAuditAction
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.model.PostSummaryMode
@@ -61,6 +62,58 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             }.andExpect {
                 status { isForbidden() }
             }
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `request creation preserves optional message and scopes operation replay`() {
+        val operationId = UUID.randomUUID()
+        val body =
+            """
+            {
+              "operationId": "$operationId",
+              "type": "EXPORT",
+              "requesterContact": "mailbox@example.com"
+            }
+            """.trimIndent()
+
+        val createdBody =
+            mvc
+                .post(REQUESTS_PATH) {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = body
+                }.andExpect {
+                    status { isCreated() }
+                    jsonPath("$.message") { doesNotExist() }
+                }.andReturn()
+                .response.contentAsString
+        val requestId = JsonPath.read<Number>(createdBody, "$.id").toLong()
+        val audit = requireNotNull(auditRepository.findByOperationId(operationId))
+
+        assertThat(requestRepository.findById(requestId).orElseThrow().message).isNull()
+        assertThat(audit.operationId).isEqualTo(operationId)
+        assertThat(audit.requestId).isEqualTo(requestId)
+        assertThat(audit.action).isEqualTo(MemberPrivacyRequestAuditAction.REQUEST_CREATED)
+
+        mvc
+            .post(REQUESTS_PATH) {
+                contentType = MediaType.APPLICATION_JSON
+                content = body
+            }.andExpect {
+                status { isCreated() }
+                jsonPath("$.id") { value(requestId) }
+            }
+        assertThat(auditRepository.count()).isEqualTo(1)
+
+        mvc
+            .post(REQUESTS_PATH) {
+                contentType = MediaType.APPLICATION_JSON
+                content = createRequestBody(operationId, "different@example.com")
+            }.andExpect {
+                status { isConflict() }
+                jsonPath("$.resultCode") { value("409-40") }
+            }
+        assertThat(auditRepository.count()).isEqualTo(1)
     }
 
     @Test
@@ -193,6 +246,75 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
 
     @Test
     @WithUserDetails("admin@test.com")
+    fun `identity and hold decisions reject invalid subject state without audit`() {
+        val subject =
+            memberApplicationService.join(
+                username = "privacy-invalid-identity-subject",
+                password = "Abcd1234!",
+                nickname = "Identity subject",
+                profileImgUrl = null,
+                email = "privacy-invalid-identity-subject@example.com",
+            )
+        val rejectedWithLink = JsonPath.read<Number>(createRequest(UUID.randomUUID(), "reject-link@example.com"), "$.id").toLong()
+        val missingLink = JsonPath.read<Number>(createRequest(UUID.randomUUID(), "missing-link@example.com"), "$.id").toLong()
+        val missingTombstone = JsonPath.read<Number>(createRequest(UUID.randomUUID(), "missing-tombstone@example.com"), "$.id").toLong()
+        val pendingHold = JsonPath.read<Number>(createRequest(UUID.randomUUID(), "pending-hold@example.com"), "$.id").toLong()
+        val initialAuditCount = auditRepository.count()
+
+        decide(
+            rejectedWithLink,
+            "identity-decisions",
+            """{"operationId": "${UUID.randomUUID()}", "approved": false, "memberId": ${subject.id}}""",
+        ).andExpect { status { isBadRequest() } }
+        decide(
+            missingLink,
+            "identity-decisions",
+            """{"operationId": "${UUID.randomUUID()}", "approved": true, "requesterRole": "SUBJECT"}""",
+        ).andExpect { status { isBadRequest() } }
+        decide(
+            missingTombstone,
+            "identity-decisions",
+            """
+            {
+              "operationId": "${UUID.randomUUID()}",
+              "approved": true,
+              "requesterRole": "SUBJECT",
+              "accountDeletionId": 9223372036854775807
+            }
+            """,
+        ).andExpect { status { isNotFound() } }
+        decide(
+            pendingHold,
+            "hold-decisions",
+            """{"operationId": "${UUID.randomUUID()}", "status": "CLEARED"}""",
+        ).andExpect { status { isBadRequest() } }
+
+        assertThat(auditRepository.count()).isEqualTo(initialAuditCount)
+        listOf(rejectedWithLink, missingLink, missingTombstone, pendingHold).forEach { requestId ->
+            assertThat(
+                requestRepository
+                    .findById(requestId)
+                    .orElseThrow()
+                    .identityStatus.name,
+            ).isEqualTo("IDENTITY_PENDING")
+        }
+
+        val unreviewedHold =
+            JsonPath
+                .read<Number>(createRequest(UUID.randomUUID(), "unreviewed-hold@example.com"), "$.id")
+                .toLong()
+        approveIdentity(unreviewedHold, subject.id)
+        val verifiedAuditCount = auditRepository.count()
+        decide(
+            unreviewedHold,
+            "hold-decisions",
+            """{"operationId": "${UUID.randomUUID()}", "status": "UNREVIEWED"}""",
+        ).andExpect { status { isBadRequest() } }
+        assertThat(auditRepository.count()).isEqualTo(verifiedAuditCount)
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
     fun `administrator links a tombstone or rejects an unverified request`() {
         val deletedSubject =
             memberApplicationService.join(
@@ -225,6 +347,20 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             jsonPath("$.identityStatus") { value("VERIFIED_MANUAL") }
             jsonPath("$.accountDeletionId") { value(deletion.id) }
         }
+        decide(
+            tombstoneRequestId,
+            "step-up-decisions",
+            """{"operationId": "${UUID.randomUUID()}", "approved": true}""",
+        ).andExpect { status { isOk() } }
+        decide(
+            tombstoneRequestId,
+            "exports",
+            """{"operationId": "${UUID.randomUUID()}"}""",
+        ).andExpect {
+            status { isOk() }
+            jsonPath("$.export.member.id") { value(deletedSubject.id) }
+            jsonPath("$.export.requestHistory[0].id") { value(tombstoneRequestId) }
+        }
 
         val rejectedRequestId =
             JsonPath.read<Number>(createRequest(UUID.randomUUID(), "rejected@example.com"), "$.id").toLong()
@@ -247,7 +383,8 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     @WithUserDetails("admin@test.com")
     fun `operation id cannot be reused for a different request`() {
         val operationId = UUID.randomUUID()
-        val firstRequestId = JsonPath.read<Number>(createRequest(operationId, "first@example.com"), "$.id").toLong()
+        val firstRequestId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), "first@example.com"), "$.id").toLong()
         val secondRequestId =
             JsonPath.read<Number>(createRequest(UUID.randomUUID(), "second@example.com"), "$.id").toLong()
 
@@ -255,9 +392,18 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             firstRequestId,
             "identity-decisions",
             """
-            {"operationId": "${UUID.randomUUID()}", "approved": false}
+            {"operationId": "$operationId", "approved": false}
             """,
         ).andExpect { status { isOk() } }
+        val auditCount = auditRepository.count()
+        decide(
+            firstRequestId,
+            "identity-decisions",
+            """
+            {"operationId": "$operationId", "approved": false}
+            """,
+        ).andExpect { status { isOk() } }
+        assertThat(auditRepository.count()).isEqualTo(auditCount)
 
         decide(
             secondRequestId,
@@ -269,6 +415,114 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             status { isConflict() }
             jsonPath("$.resultCode") { value("409-40") }
         }
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `final decisions require recorded fulfillment for export and deletion`() {
+        val subject =
+            memberApplicationService.join(
+                username = "privacy-fulfillment-subject",
+                password = "Abcd1234!",
+                nickname = "Fulfillment subject",
+                profileImgUrl = null,
+                email = "privacy-fulfillment-subject@example.com",
+            )
+        val exportRequestId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), subject.email!!, "EXPORT"), "$.id").toLong()
+        val deletionRequestId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), subject.email!!, "DELETION"), "$.id").toLong()
+        val correctionRequestId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), subject.email!!, "CORRECTION"), "$.id").toLong()
+        listOf(exportRequestId, deletionRequestId, correctionRequestId).forEach { approveIdentity(it, subject.id) }
+
+        decide(
+            exportRequestId,
+            "decisions",
+            """{"operationId": "${UUID.randomUUID()}", "status": "COMPLETED"}""",
+        ).andExpect { status { isBadRequest() } }
+        decide(
+            deletionRequestId,
+            "decisions",
+            """{"operationId": "${UUID.randomUUID()}", "status": "COMPLETED"}""",
+        ).andExpect { status { isBadRequest() } }
+        decide(
+            correctionRequestId,
+            "decisions",
+            """{"operationId": "${UUID.randomUUID()}", "status": "COMPLETED"}""",
+        ).andExpect {
+            status { isOk() }
+            jsonPath("$.status") { value("COMPLETED") }
+        }
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `operator actions fail closed when request gates are unmet or mismatched`() {
+        val subject =
+            memberApplicationService.join(
+                username = "privacy-operator-gate-subject",
+                password = "Abcd1234!",
+                nickname = "Operator gate subject",
+                profileImgUrl = null,
+                email = "privacy-operator-gate-subject@example.com",
+            )
+        val pendingExportId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), subject.email!!, "EXPORT"), "$.id").toLong()
+        decide(
+            pendingExportId,
+            "exports",
+            """{"operationId": "${UUID.randomUUID()}"}""",
+        ).andExpect { status { isBadRequest() } }
+        approveIdentity(pendingExportId, subject.id)
+        decide(
+            pendingExportId,
+            "exports",
+            """{"operationId": "${UUID.randomUUID()}"}""",
+        ).andExpect { status { isBadRequest() } }
+        decide(
+            pendingExportId,
+            "decisions",
+            """{"operationId": "${UUID.randomUUID()}", "status": "REJECTED"}""",
+        ).andExpect { status { isOk() } }
+        decide(
+            pendingExportId,
+            "exports",
+            """{"operationId": "${UUID.randomUUID()}"}""",
+        ).andExpect { status { isBadRequest() } }
+
+        val deletionRequestId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), subject.email!!, "DELETION"), "$.id").toLong()
+        approveIdentity(deletionRequestId, subject.id)
+        decide(
+            deletionRequestId,
+            "step-up-decisions",
+            """{"operationId": "${UUID.randomUUID()}", "approved": true}""",
+        ).andExpect { status { isOk() } }
+        decide(
+            deletionRequestId,
+            "exports",
+            """{"operationId": "${UUID.randomUUID()}"}""",
+        ).andExpect { status { isBadRequest() } }
+        decide(
+            deletionRequestId,
+            "deletions",
+            """{"operationId": "${UUID.randomUUID()}"}""",
+        ).andExpect { status { isBadRequest() } }
+
+        val exportRequestId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), subject.email!!, "EXPORT"), "$.id").toLong()
+        approveIdentity(exportRequestId, subject.id)
+        decide(
+            exportRequestId,
+            "step-up-decisions",
+            """{"operationId": "${UUID.randomUUID()}", "approved": true}""",
+        ).andExpect { status { isOk() } }
+        decide(
+            exportRequestId,
+            "deletions",
+            """{"operationId": "${UUID.randomUUID()}"}""",
+        ).andExpect { status { isBadRequest() } }
     }
 
     @Test
@@ -311,6 +565,11 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             "step-up-decisions",
             """{"operationId": "${UUID.randomUUID()}", "approved": true}""",
         ).andExpect { status { isOk() } }
+        decide(
+            requestId,
+            "deletions",
+            """{"operationId": "${UUID.randomUUID()}"}""",
+        ).andExpect { status { isBadRequest() } }
         val exportOperationId = UUID.randomUUID()
 
         val exportBody =
@@ -346,6 +605,43 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
         assertThat(JsonPath.read<String>(replayBody, "$.evidenceSha256"))
             .isEqualTo(JsonPath.read<String>(exportBody, "$.evidenceSha256"))
         assertThat(auditRepository.count()).isEqualTo(auditCount)
+
+        postApplicationService.write(
+            author = subject,
+            title = "Later public export post",
+            content = "Changed canonical export bytes",
+            published = true,
+            listed = true,
+            summaryMode = PostSummaryMode.AUTO,
+        )
+        decide(
+            requestId,
+            "exports",
+            """{"operationId": "$exportOperationId"}""",
+        ).andExpect {
+            status { isConflict() }
+            jsonPath("$.resultCode") { value("409-40") }
+        }
+
+        val otherRequestId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), "other-export@example.com", "EXPORT"), "$.id").toLong()
+        decide(
+            otherRequestId,
+            "exports",
+            """{"operationId": "$exportOperationId"}""",
+        ).andExpect {
+            status { isConflict() }
+            jsonPath("$.resultCode") { value("409-40") }
+        }
+
+        decide(
+            requestId,
+            "decisions",
+            """{"operationId": "${UUID.randomUUID()}", "status": "COMPLETED"}""",
+        ).andExpect {
+            status { isOk() }
+            jsonPath("$.status") { value("COMPLETED") }
+        }
     }
 
     @Test
@@ -417,17 +713,53 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             """{"operationId": "${UUID.randomUUID()}", "status": "REJECTED"}""",
         ).andExpect { status { isOk() } }
 
+        val deletionOperationId = UUID.randomUUID()
+        val deletionBody =
+            decide(
+                deletionRequestId,
+                "deletions",
+                """{"operationId": "$deletionOperationId"}""",
+            ).andExpect {
+                status { isOk() }
+                jsonPath("$.request.id") { value(deletionRequestId) }
+                jsonPath("$.request.memberId") { doesNotExist() }
+                jsonPath("$.request.accountDeletionId") { exists() }
+                jsonPath("$.deletedAt") { exists() }
+                jsonPath("$.evidenceSha256") { value(org.hamcrest.Matchers.matchesPattern("[0-9a-f]{64}")) }
+            }.andReturn()
+                .response.contentAsString
+
+        val auditCount = auditRepository.count()
+        val replayBody =
+            decide(
+                deletionRequestId,
+                "deletions",
+                """{"operationId": "$deletionOperationId"}""",
+            ).andExpect { status { isOk() } }
+                .andReturn()
+                .response.contentAsString
+        assertThat(JsonPath.read<String>(replayBody, "$.evidenceSha256"))
+            .isEqualTo(JsonPath.read<String>(deletionBody, "$.evidenceSha256"))
+        assertThat(auditRepository.count()).isEqualTo(auditCount)
+
+        val otherRequestId =
+            JsonPath.read<Number>(createRequest(UUID.randomUUID(), "other-deletion@example.com", "DELETION"), "$.id").toLong()
+        decide(
+            otherRequestId,
+            "deletions",
+            """{"operationId": "$deletionOperationId"}""",
+        ).andExpect {
+            status { isConflict() }
+            jsonPath("$.resultCode") { value("409-40") }
+        }
+
         decide(
             deletionRequestId,
-            "deletions",
-            """{"operationId": "${UUID.randomUUID()}", "reason": "Verified request"}""",
+            "decisions",
+            """{"operationId": "${UUID.randomUUID()}", "status": "COMPLETED"}""",
         ).andExpect {
             status { isOk() }
-            jsonPath("$.request.id") { value(deletionRequestId) }
-            jsonPath("$.request.memberId") { doesNotExist() }
-            jsonPath("$.request.accountDeletionId") { exists() }
-            jsonPath("$.deletedAt") { exists() }
-            jsonPath("$.evidenceSha256") { value(org.hamcrest.Matchers.matchesPattern("[0-9a-f]{64}")) }
+            jsonPath("$.status") { value("COMPLETED") }
         }
 
         assertThat(memberApplicationService.findByEmail(subjectEmail)).isNull()

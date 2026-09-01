@@ -195,7 +195,6 @@ class PostDeletedQueryRepository(
         if (markedRows <= 0) return false
 
         jdbcTemplate.update("delete from post_like where post_id = ?", id)
-        jdbcTemplate.update("delete from post_comment where post_id = ?", id)
         jdbcTemplate.update("delete from post_attr where subject_id = ?", id)
         jdbcTemplate.update("update post_write_request_idempotency set post_id = null where post_id = ?", id)
 

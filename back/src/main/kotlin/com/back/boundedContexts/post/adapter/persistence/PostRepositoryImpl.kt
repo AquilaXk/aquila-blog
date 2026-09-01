@@ -105,8 +105,6 @@ class PostRepositoryImpl(
             .fetchJoin()
             .leftJoin(post.likesCountAttr)
             .fetchJoin()
-            .leftJoin(post.commentsCountAttr)
-            .fetchJoin()
             .leftJoin(post.hitCountAttr)
             .fetchJoin()
             .where(

@@ -23,17 +23,6 @@ WITH inventory_output AS (
     WHERE m.is_admin IS FALSE
         AND m.deleted_at IS NULL
         AND ms.revoked_at IS NULL
-
-    UNION ALL
-
-    SELECT
-        3 AS ordinal,
-        'legacy_unresolved_privacy_request_count' AS label,
-        COUNT(*)::bigint AS count
-    FROM member_privacy_request AS pr
-    JOIN member AS m ON pr.member_id = m.id
-    WHERE m.is_admin IS FALSE
-        AND pr.status IN ('RECEIVED', 'IN_PROGRESS')
 )
 SELECT inventory_output.label, inventory_output.count
 FROM inventory_output

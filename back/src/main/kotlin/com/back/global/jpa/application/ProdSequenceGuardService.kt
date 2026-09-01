@@ -181,22 +181,14 @@ class ProdSequenceGuardService(
                 "pk_member" to SequenceTarget("member", "member_seq", 50),
                 "member_attr_pkey" to SequenceTarget("member_attr", "member_attr_seq", 50),
                 "pk_member_attr" to SequenceTarget("member_attr", "member_attr_seq", 50),
-                "member_notification_pkey" to SequenceTarget("member_notification", "member_notification_seq", 50),
-                "pk_member_notification" to SequenceTarget("member_notification", "member_notification_seq", 50),
                 "member_action_log_pkey" to SequenceTarget("member_action_log", "member_action_log_seq", 50),
                 "pk_member_action_log" to SequenceTarget("member_action_log", "member_action_log_seq", 50),
-                "member_signup_verification_pkey" to
-                    SequenceTarget("member_signup_verification", "member_signup_verification_seq", 20),
-                "pk_member_signup_verification" to
-                    SequenceTarget("member_signup_verification", "member_signup_verification_seq", 20),
                 "post_pkey" to SequenceTarget("post", "post_seq", 50),
                 "pk_post" to SequenceTarget("post", "post_seq", 50),
                 "post_attr_pkey" to SequenceTarget("post_attr", "post_attr_seq", 50),
                 "pk_post_attr" to SequenceTarget("post_attr", "post_attr_seq", 50),
                 "post_like_pkey" to SequenceTarget("post_like", "post_like_seq", 50),
                 "pk_post_like" to SequenceTarget("post_like", "post_like_seq", 50),
-                "post_comment_pkey" to SequenceTarget("post_comment", "post_comment_seq", 50),
-                "pk_post_comment" to SequenceTarget("post_comment", "post_comment_seq", 50),
                 "post_write_request_idempotency_pkey" to
                     SequenceTarget("post_write_request_idempotency", "post_write_request_idempotency_seq", 50),
                 "pk_post_write_request_idempotency" to

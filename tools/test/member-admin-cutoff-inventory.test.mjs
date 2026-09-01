@@ -7,7 +7,6 @@ const sqlPath = path.resolve(import.meta.dirname, "../../deploy/homeserver/sql/m
 const expectedLabels = [
   "legacy_active_member_count",
   "legacy_active_session_count",
-  "legacy_unresolved_privacy_request_count",
 ]
 
 function readSql() {
@@ -27,7 +26,6 @@ function validateSafeSql(sql) {
   const withoutCounts = sql.replace(/COUNT\s*\(\s*\*\s*\)/gi, "COUNT_ROWS")
   const withoutRequiredJoins = withoutCounts
     .replace(/ms\.member_id\s*=\s*m\.id/gi, "")
-    .replace(/pr\.member_id\s*=\s*m\.id/gi, "")
 
   if (transactionStatements.length !== 5) errors.push("statement count")
   if (!/^BEGIN\s+TRANSACTION\s+ISOLATION\s+LEVEL\s+REPEATABLE\s+READ\s+READ\s+ONLY$/i.test(transactionStatements[0] ?? "")) errors.push("transaction")
@@ -37,9 +35,9 @@ function validateSafeSql(sql) {
   if (/\b(?:COMMIT|INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE|COPY)\b/i.test(sql)) errors.push("mutation")
   if (/\bSELECT\s+INTO\b/i.test(sql) || /^\s*\\/m.test(sql)) errors.push("export or meta-command")
   if (/(?:\bSELECT|,)\s+\*/i.test(withoutCounts) || /\b\w+\.\*/i.test(withoutCounts)) errors.push("wildcard projection")
-  if ((sql.match(/COUNT\s*\(\s*\*\s*\)::bigint/gi) ?? []).length !== 3) errors.push("non-count output")
+  if ((sql.match(/COUNT\s*\(\s*\*\s*\)::bigint/gi) ?? []).length !== 2) errors.push("non-count output")
   if (/\b(?:email|login_id|password|api_key|session_key|token|hash|ip_address|user_agent|nickname|message|type)\b/i.test(sql)) errors.push("private field")
-  if (/\b(?:m\.id|(?:ms|pr)\.member_id)\b/i.test(withoutRequiredJoins)) errors.push("raw identifier")
+  if (/\b(?:m\.id|ms\.member_id)\b/i.test(withoutRequiredJoins)) errors.push("raw identifier")
   if (!/^WITH\b[\s\S]*SELECT\s+inventory_output\.label,\s*inventory_output\.count\s+FROM\s+inventory_output\s+ORDER\s+BY\s+inventory_output\.ordinal$/i.test(transactionStatements[3] ?? "")) errors.push("outer projection")
 
   const labels = [...sql.matchAll(/'(legacy_[a-z_]+)'/g)].map((match) => match[1])
@@ -64,15 +62,13 @@ test("uses one bounded repeatable-read read-only transaction", () => {
   assert.deepEqual(validateSafeSql(readSql()), [])
 })
 
-test("emits only the three ordered administrator cutoff aggregates", () => {
+test("emits only the two ordered administrator cutoff aggregates", () => {
   const sql = readSql().replace(/\s+/g, " ")
 
   assert.match(sql, /m\.is_admin IS FALSE AND m\.deleted_at IS NULL/i)
   assert.match(sql, /ms\.member_id = m\.id[\s\S]*ms\.revoked_at IS NULL/i)
-  assert.match(sql, /pr\.member_id = m\.id[\s\S]*m\.is_admin IS FALSE[\s\S]*pr\.status IN \('RECEIVED', 'IN_PROGRESS'\)/i)
-  assert.doesNotMatch(sql, /pr\.member_id = m\.id[\s\S]*m\.deleted_at IS NULL/i)
   assert.match(sql, /SELECT inventory_output\.label, inventory_output\.count FROM inventory_output ORDER BY inventory_output\.ordinal/i)
-  assert.equal((sql.match(/COUNT\(\*\)::bigint/gi) ?? []).length, 3)
+  assert.equal((sql.match(/COUNT\(\*\)::bigint/gi) ?? []).length, 2)
 })
 
 test("rejects unsafe SQL contract drift", () => {
@@ -96,7 +92,7 @@ test("rejects malformed aggregate output", () => {
   validateRows(expectedLabels.map((label) => ({ label, count: 0n })))
 
   for (const rows of [
-    expectedLabels.slice(0, 2).map((label) => ({ label, count: 0n })),
+    expectedLabels.slice(0, 1).map((label) => ({ label, count: 0n })),
     expectedLabels.map((label) => ({ label, count: -1n })),
     expectedLabels.map((label) => ({ label, count: "0" })),
     expectedLabels.map((label) => ({ label, count: 0n, id: 1 })),

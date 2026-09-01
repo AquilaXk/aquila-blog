@@ -94,6 +94,8 @@ test("Platform boundary scanner is symlink-safe and rejects foreign Web workflow
   symlinkSync(outside, path.join(root, "tools/external-link"))
   const raceFile = path.join(root, "tools/race.txt")
   writeFileSync(raceFile, "safe\n")
+  const deletedFile = path.join(root, "tools/deleted.txt")
+  writeFileSync(deletedFile, "safe\n")
   writeFileSync(path.join(root, ".github/workflows/ci.yml"), "name: Platform CI\n")
   const blockedPipe = path.join(root, "blocked-pipe")
   assert.equal(spawnSync("mkfifo", [blockedPipe]).status, 0)
@@ -118,6 +120,13 @@ syncBuiltinESMExports()
     encoding: "utf8",
   })
   assert.equal(result.status, 0, result.stderr)
+
+  rmSync(deletedFile)
+  const deletionResult = spawnSync(process.execPath, ["tools/repo-boundary/check-platform-boundary.mjs"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  assert.equal(deletionResult.status, 0, deletionResult.stderr)
 
   const writeWorkflow = (name, source) => {
     const relative = `.github/workflows/${name}.yml`

@@ -60,10 +60,7 @@ class DatabaseCleanup(
             TRUNCATE TABLE
                 uploaded_file,
                 task,
-                member_notification,
                 member_action_log,
-                member_signup_verification,
-                post_comment,
                 post_like,
                 post_attr,
                 post,

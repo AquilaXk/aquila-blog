@@ -369,34 +369,6 @@ check_api_readiness() {
   return 1
 }
 
-check_notification_snapshot_route() {
-  local web_domain
-  web_domain="$(trim_quotes "$(env_value "WEB_DOMAIN")")"
-  if [[ -z "${web_domain}" ]]; then
-    log "FAIL missing WEB_DOMAIN in ${ENV_FILE}"
-    return 1
-  fi
-
-  local metrics code bytes
-  metrics="$(probe_internal_caddy_route_metrics "${web_domain}" "/member/api/v1/notifications/snapshot")"
-  code="${metrics%% *}"
-  bytes="${metrics##* }"
-
-  if is_unmatched_host_response "${code}" "${bytes}"; then
-    log "FAIL notification snapshot route status=200 with an empty body: no Caddy vhost matched Host ${web_domain}"
-    return 1
-  fi
-
-  # 미인증 호출이라 401/403이 정상 응답이다. 여기서는 라우팅이 살아 있는지만 본다.
-  if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
-    log "OK notification snapshot route status=${code}"
-    return 0
-  fi
-
-  log "FAIL notification snapshot route status=${code:-none}"
-  return 1
-}
-
 query_grafana_datasource_by_uid() {
   local grafana_user="$1"
   local grafana_password="$2"
@@ -573,11 +545,10 @@ main() {
   if check_active_backend_image; then ok=$((ok + 1)); fi
   if ensure_caddy_mount_sync; then ok=$((ok + 1)); fi
   if check_api_readiness; then ok=$((ok + 1)); fi
-  if check_notification_snapshot_route; then ok=$((ok + 1)); fi
   if check_grafana_core_datasources; then ok=$((ok + 1)); fi
   if check_grafana_access_boundary; then ok=$((ok + 1)); fi
 
-  if [[ "${ok}" -ne 7 ]]; then
+  if [[ "${ok}" -ne 6 ]]; then
     compose logs --no-color --tail=80 caddy grafana loki promtail >&2 || true
     exit 1
   fi

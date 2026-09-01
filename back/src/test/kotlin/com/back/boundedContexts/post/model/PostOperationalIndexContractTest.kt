@@ -26,11 +26,6 @@ class PostOperationalIndexContractTest {
     fun `post hard-delete와 cleanup 인덱스는 AfterDDL과 versioned concurrent migration에 함께 선언된다`() {
         val expectedIndexes =
             mapOf(
-                PostComment::class to
-                    listOf(
-                        "post_comment_idx_post_id",
-                        "post_comment_idx_parent_comment_id",
-                    ),
                 PostLike::class to
                     listOf("post_like_idx_post_id"),
                 PostWriteRequestIdempotency::class to

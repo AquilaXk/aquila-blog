@@ -1,9 +1,6 @@
 package com.back.boundedContexts.member.subContexts.privacy.job
 
 import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.output.MemberActionLogRepositoryPort
-import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
-import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import io.micrometer.core.instrument.MeterRegistry
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
@@ -22,19 +19,10 @@ import java.time.temporal.ChronoUnit
     matchIfMissing = true,
 )
 class PrivacyRetentionCleanupScheduledJob(
-    private val signupVerificationRepository: MemberSignupVerificationRepositoryPort,
     private val memberActionLogRepository: MemberActionLogRepositoryPort,
-    private val memberNotificationRepository: MemberNotificationRepositoryPort,
-    private val memberPrivacyRequestRepository: MemberPrivacyRequestRepositoryPort,
     private val meterRegistry: MeterRegistry?,
-    @param:Value("\${custom.privacy.retention.signupVerificationDays:7}")
-    private val signupVerificationDays: Int,
     @param:Value("\${custom.privacy.retention.memberActionLogDays:90}")
     private val memberActionLogDays: Int,
-    @param:Value("\${custom.privacy.retention.notificationDays:60}")
-    private val notificationDays: Int,
-    @param:Value("\${custom.privacy.retention.privacyRequestDays:30}")
-    private val privacyRequestDays: Int,
     @param:Value("\${custom.privacy.retention.cleanup.batchSize:500}")
     private val batchSize: Int,
     @param:Value("\${custom.privacy.retention.cleanup.maxBatches:20}")
@@ -49,10 +37,7 @@ class PrivacyRetentionCleanupScheduledJob(
     }
 
     fun cleanup(now: Instant) {
-        purge("signup_verification", now, signupVerificationDays, signupVerificationRepository::deleteRetainedBefore)
         purge("member_action_log", now, memberActionLogDays, memberActionLogRepository::deleteCreatedBefore)
-        purge("notification", now, notificationDays, memberNotificationRepository::deleteCreatedBefore)
-        purge("privacy_request", now, privacyRequestDays, memberPrivacyRequestRepository::deleteClosedBefore)
     }
 
     private fun purge(

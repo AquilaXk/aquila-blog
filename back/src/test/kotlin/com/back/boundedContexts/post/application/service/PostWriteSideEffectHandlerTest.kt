@@ -6,7 +6,6 @@ import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryP
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
-import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.dto.PostDto
@@ -252,10 +251,8 @@ class PostWriteSideEffectHandlerTest {
         `when`(postRepository.findById(16L)).thenReturn(Optional.of(post))
         `when`(postAttrRepository.findBySubjectAndName(post, LIKES_COUNT))
             .thenReturn(PostAttr(1L, post, LIKES_COUNT, 7))
-        `when`(postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT))
-            .thenReturn(PostAttr(2L, post, COMMENTS_COUNT, 3))
         `when`(postAttrRepository.findBySubjectAndName(post, HIT_COUNT))
-            .thenReturn(PostAttr(3L, post, HIT_COUNT, 11))
+            .thenReturn(PostAttr(2L, post, HIT_COUNT, 11))
 
         // when
         handler.handle(
@@ -271,7 +268,6 @@ class PostWriteSideEffectHandlerTest {
 
         // then
         assertThat(post.likesCount).isEqualTo(7)
-        assertThat(post.commentsCount).isEqualTo(3)
         assertThat(post.hitCount).isEqualTo(11)
         verify(postRecommendFeatureStoreService).refresh(post)
     }
@@ -282,8 +278,7 @@ class PostWriteSideEffectHandlerTest {
         // given
         val post = testPost(17L)
         post.likesCountAttr = PostAttr(4L, post, LIKES_COUNT, 8)
-        post.commentsCountAttr = PostAttr(5L, post, COMMENTS_COUNT, 4)
-        post.hitCountAttr = PostAttr(6L, post, HIT_COUNT, 12)
+        post.hitCountAttr = PostAttr(5L, post, HIT_COUNT, 12)
         `when`(postRepository.findById(17L)).thenReturn(Optional.of(post))
 
         // when

@@ -54,29 +54,6 @@ class ProdSequenceGuardServiceTest {
     }
 
     @Test
-    @DisplayName("pk_member_signup_verification 별칭도 보정 타깃으로 인식한다")
-    fun repairSignupVerificationSequenceAlias() {
-        // given
-        val jdbcTemplate = mock(JdbcTemplate::class.java)
-        val service = ProdSequenceGuardService(jdbcTemplate, sequenceGuardOnStartup = false)
-
-        // when
-        val repaired =
-            service.repairIfSequenceDrift(
-                DataIntegrityViolationException(
-                    "duplicate key value violates unique constraint \"pk_member_signup_verification\"",
-                ),
-            )
-
-        // then
-        assertThat(repaired).isTrue()
-        verify(jdbcTemplate).execute("ALTER SEQUENCE IF EXISTS public.member_signup_verification_seq INCREMENT BY 20")
-        verify(jdbcTemplate).execute(
-            "SELECT setval('public.member_signup_verification_seq', COALESCE((SELECT MAX(id) FROM public.member_signup_verification), 0) + 20, false)",
-        )
-    }
-
-    @Test
     @DisplayName("한글 로케일 duplicate 메시지도 uploaded_file 시퀀스 보정 타깃으로 인식한다")
     fun repairUploadedFileSequenceFromKoreanDuplicateMessage() {
         // given

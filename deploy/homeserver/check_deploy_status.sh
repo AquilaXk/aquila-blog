@@ -225,14 +225,6 @@ INTERNAL_HTTP_BYTES="${INTERNAL_HTTP_METRICS##* }"
 PUBLIC_HTTP_CODE="$(
   probe_public_route_code "${WEB_DOMAIN}" "/actuator/health/readiness"
 )"
-INTERNAL_NOTIFICATION_SNAPSHOT_METRICS="$(
-  probe_internal_caddy_route_metrics "${WEB_DOMAIN}" "/member/api/v1/notifications/snapshot"
-)"
-INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE="${INTERNAL_NOTIFICATION_SNAPSHOT_METRICS%% *}"
-INTERNAL_NOTIFICATION_SNAPSHOT_BYTES="${INTERNAL_NOTIFICATION_SNAPSHOT_METRICS##* }"
-PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE="$(
-  probe_public_route_code "${WEB_DOMAIN}" "/member/api/v1/notifications/snapshot"
-)"
 BACK_ADMIN_RUNTIME_STATE="$(compose_service_runtime_state "back_admin")"
 BACK_READ_RUNTIME_STATE="$(compose_service_runtime_state "back_read")"
 IFS='|' read -r BACK_ADMIN_STATUS BACK_ADMIN_HEALTH BACK_ADMIN_RESTART_COUNT BACK_ADMIN_OOM_KILLED <<< "${BACK_ADMIN_RUNTIME_STATE}"
@@ -277,8 +269,6 @@ log "read_api_upstream=${READ_API_UPSTREAM:-none}"
 log "runtime_split_enabled=${RUNTIME_SPLIT_ENABLED} split_literal_upstream=${HAS_SPLIT_LITERAL_UPSTREAM}"
 log "internal_readiness=${INTERNAL_HTTP_CODE:-none} bytes=${INTERNAL_HTTP_BYTES:-none}"
 log "public_readiness=${PUBLIC_HTTP_CODE:-none}"
-log "internal_notification_snapshot=${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none} bytes=${INTERNAL_NOTIFICATION_SNAPSHOT_BYTES:-none}"
-log "public_notification_snapshot=${PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
 log "back_admin_runtime=status:${BACK_ADMIN_STATUS} health:${BACK_ADMIN_HEALTH} restart_count:${BACK_ADMIN_RESTART_COUNT} oom_killed:${BACK_ADMIN_OOM_KILLED}"
 log "back_read_runtime=status:${BACK_READ_STATUS} health:${BACK_READ_HEALTH} restart_count:${BACK_READ_RESTART_COUNT} oom_killed:${BACK_READ_OOM_KILLED}"
 log "cloudflared_status=${CLOUDFLARED_STATUS} restarting=${CLOUDFLARED_RESTARTING} restart_count=${CLOUDFLARED_RESTART_COUNT} registration=${CLOUDFLARED_HAS_REGISTRATION}"
@@ -320,16 +310,6 @@ fi
 
 if ! public_http_reachable "${PUBLIC_HTTP_CODE}"; then
   remember_failure "public_readiness=${PUBLIC_HTTP_CODE:-none}"
-fi
-
-if is_unmatched_host_response "${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE}" "${INTERNAL_NOTIFICATION_SNAPSHOT_BYTES}"; then
-  remember_failure "internal_notification_snapshot_empty_body host=${WEB_DOMAIN:-none} (no Caddy vhost matched this Host)"
-elif ! public_http_reachable "${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE}"; then
-  remember_failure "internal_notification_snapshot=${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
-fi
-
-if ! public_http_reachable "${PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE}"; then
-  remember_failure "public_notification_snapshot=${PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
 fi
 
 if [[ "${ADMIN_API_UPSTREAM}" == "back_admin" ]] && [[ "${BACK_ADMIN_STATUS}" != "running" || "${BACK_ADMIN_HEALTH}" != "healthy" ]]; then

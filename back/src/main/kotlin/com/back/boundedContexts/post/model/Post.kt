@@ -1,7 +1,6 @@
 package com.back.boundedContexts.post.model
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.domain.postMixin.PostHasComments
 import com.back.boundedContexts.post.domain.postMixin.PostHasHit
 import com.back.boundedContexts.post.domain.postMixin.PostHasLikes
 import com.back.boundedContexts.post.domain.postMixin.PostHasPolicy
@@ -108,7 +107,6 @@ class Post(
 ) : BaseTime(id),
     PostHasHit,
     PostHasLikes,
-    PostHasComments,
     PostHasPolicy {
     @field:Column
     var deletedAt: Instant? = null
@@ -119,9 +117,6 @@ class Post(
 
     @field:OneToOne(fetch = FetchType.LAZY)
     var likesCountAttr: PostAttr? = null
-
-    @field:OneToOne(fetch = FetchType.LAZY)
-    var commentsCountAttr: PostAttr? = null
 
     @field:OneToOne(fetch = FetchType.LAZY)
     var hitCountAttr: PostAttr? = null

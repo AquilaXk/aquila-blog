@@ -131,17 +131,18 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                     result.next()
                     assertEquals(0, result.getInt(1))
                 }
-                statement.executeQuery(
-                    """
-                    SELECT delete_rule
-                    FROM information_schema.referential_constraints
-                    WHERE constraint_schema = '$compatibilitySchema'
-                      AND constraint_name = 'fk_post_comment_post'
-                    """.trimIndent(),
-                ).use { result ->
-                    result.next()
-                    assertEquals("CASCADE", result.getString(1))
-                }
+                statement
+                    .executeQuery(
+                        """
+                        SELECT delete_rule
+                        FROM information_schema.referential_constraints
+                        WHERE constraint_schema = '$compatibilitySchema'
+                          AND constraint_name = 'fk_post_comment_post'
+                        """.trimIndent(),
+                    ).use { result ->
+                        result.next()
+                        assertEquals("CASCADE", result.getString(1))
+                    }
             }
         }
     }

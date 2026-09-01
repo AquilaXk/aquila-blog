@@ -1,24 +1,12 @@
 legalBasis:
-  - id: contractAndConsent
-    activities:
-      - account_registration_email
-    rationale: 계정 제공 계약 이행과 약관·개인정보처리방침 동의 증빙
-    reviewRequired: 동의 version/hash 저장은 issue996
-  - id: contractPreparationAndConsentEvidence
-    activities:
-      - signup_email_verification
-      - kakao_oauth_pending_signup
-    rationale: 회원가입 전 이메일 소유 확인과 동의 증빙 연결
-    reviewRequired: token hash/URL 제거는 issue998; OAuth pending purge 자동화는 issue1000
   - id: contractAndLegitimateSecurityInterest
     activities:
-      - kakao_oauth_existing_login
       - auth_session_and_cookies
     rationale: 로그인 제공과 세션 보안·오남용 방지
-    reviewRequired: legacy OAuth provider subject unlink/migration 정책 확정 필요
+    reviewRequired: []
   - id: contractAndUserPublishedContent
     activities:
-      - user_content_posts_comments
+      - user_content_posts
       - file_uploads_profile_post_cloud
     rationale: 사용자가 요청한 콘텐츠 게시와 서비스 제공
     reviewRequired: 삭제/export는 issue999
@@ -32,11 +20,6 @@ legalBasis:
       - member_action_logs
     rationale: 관리자 작업 감사와 운영 안정성
     reviewRequired: free-text log 축소는 issue1001
-  - id: contractAndLegitimateOperationalInterest
-    activities:
-      - notifications_sse
-    rationale: 계정 기능 제공과 이벤트 전달 안정성; notification DB history is purged after custom.privacy.retention.notificationDays, default 60 days
-    reviewRequired: []
   - id: legitimateOperationalAndSecurityInterest
     activities:
       - backup_and_restore

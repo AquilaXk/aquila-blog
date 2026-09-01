@@ -8,7 +8,6 @@ processors:
       - session
       - content
       - logs
-      - notifications
     region: selfHostedHomeServer
     overseasTransfer: false
     enabledByEnv: DATABASE_URL and docker compose postgres service
@@ -26,11 +25,10 @@ processors:
     role: transientOperationalStateProcessor
     serviceType: cacheRateLimitAndPubSub
     dataCategories:
-      - signupEmailRateLimitKey
-      - signupIpRateLimitKey
+      - administratorEmailChallengeHash
+      - administratorEmailRequestRateLimitKey
       - loginIdentifierAttemptKey
       - loginIpAttemptKey
-      - notificationRelayPayload
       - postHitDedupHash
     region: selfHostedHomeServer
     overseasTransfer: false
@@ -43,7 +41,7 @@ processors:
       - ttlBoundKeys
       - restrictedOperatorAccess
     reviewRequired:
-      - Raw signup/login identifiers in Redis keys should be hashed before unrestricted signup.
+      - Administrator login identifiers in Redis keys must remain one-way hashed.
 
   - id: home_server_minio
     name: Home server MinIO

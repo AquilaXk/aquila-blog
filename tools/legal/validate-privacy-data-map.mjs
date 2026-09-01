@@ -168,6 +168,9 @@ const retiredCurrentFragments = [
   "/api/rum/",
   "Vercel",
   "Google Analytics",
+  "signupEmailRateLimitKey",
+  "signupIpRateLimitKey",
+  "notificationRelayPayload",
 ]
 const currentLegalSources = [
   ...activeDataMapSources,

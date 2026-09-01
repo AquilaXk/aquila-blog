@@ -185,7 +185,6 @@ class PostDeletedQueryRepository(
                 """
                 update post
                 set likes_count_attr_id = null,
-                    comments_count_attr_id = null,
                     hit_count_attr_id = null
                 where id = ?
                   and deleted_at is not null

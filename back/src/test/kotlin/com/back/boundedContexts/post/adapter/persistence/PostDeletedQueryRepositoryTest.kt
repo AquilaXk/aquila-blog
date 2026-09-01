@@ -12,6 +12,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.PageRequest
+import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 
 @org.junit.jupiter.api.DisplayName("PostDeletedQueryRepository 테스트")
@@ -27,6 +28,32 @@ class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
 
     @Autowired
     private lateinit var postDeletedQueryRepository: PostDeletedQueryRepository
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
+
+    @Test
+    fun `영구 삭제는 퇴역 댓글 집계 컬럼에 의존하지 않는다`() {
+        val author =
+            memberRepository.saveAndFlush(Member(0, "hard-delete-author", "1234", "영구삭제작성자"))
+        val post =
+            postRepository.saveAndFlush(
+                Post(
+                    id = 0,
+                    author = author,
+                    title = "영구 삭제 글",
+                    content = "본문",
+                    published = false,
+                    listed = false,
+                ).apply {
+                    deletedAt = Instant.parse("2026-09-01T00:00:00Z")
+                },
+            )
+
+        jdbcTemplate.execute("ALTER TABLE post DROP COLUMN comments_count_attr_id")
+
+        assertThat(postDeletedQueryRepository.hardDeleteDeletedById(post.id)).isTrue()
+    }
 
     @Test
     fun `삭제 글 목록은 작성자 프로필 이미지 versioned url을 포함한다`() {

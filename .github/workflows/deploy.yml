@@ -149,7 +149,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      statuses: read
     runs-on: ubuntu-latest
     if: >
       needs.triggerGuard.result == 'success' && (
@@ -302,21 +301,21 @@ jobs:
           for ATTEMPT in $(seq 1 250); do
             RUN_STATES="$(
               gh api \
-                "repos/${GITHUB_REPOSITORY}/commits/${DEPLOY_SHA}/statuses?per_page=100" \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
                 --paginate \
-                --jq '.[] | select(.context == "aquila/security-gates-complete" and .creator.login == "github-actions[bot]" and (.target_url | startswith("https://github.com/AquilaXk/aquila-blog/actions/runs/"))) | if .state == "success" then "success:\(.id)" elif .state == "pending" then "active:\(.id)" else "terminal:\(.id)" end'
+                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
             )" || {
               echo "automatic Security delivery API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
               exit 1
             }
 
-            SUCCESS_CHECK_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
-            if [ -n "${SUCCESS_CHECK_RUN_ID}" ]; then
-              echo "automatic Security delivery gate passed: deploy_sha=${DEPLOY_SHA} security_check_run_id=${SUCCESS_CHECK_RUN_ID}"
+            SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
+            if [ -n "${SUCCESS_RUN_ID}" ]; then
+              echo "automatic Security delivery gate passed: deploy_sha=${DEPLOY_SHA} security_run_id=${SUCCESS_RUN_ID}"
               exit 0
             fi
             if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
-              echo "repository dispatch blocked: exact-SHA Security gates did not succeed for deploy_sha=${DEPLOY_SHA}" >&2
+              echo "repository dispatch blocked: exact-SHA Security delivery did not succeed for deploy_sha=${DEPLOY_SHA}" >&2
               exit 1
             fi
             if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
@@ -445,10 +444,84 @@ jobs:
             echo "- decision source: ${CHANGE_SOURCE}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  buildAndPush:
+  validateBackendDeployEnvironment:
     runs-on: ubuntu-latest
     needs: calculateTag
     if: needs.calculateTag.outputs.backend_deploy == 'true'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Verify required secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            TS_OAUTH_CLIENT_ID
+            TS_OAUTH_SECRET
+            HOME_SSH_USER
+            HOME_APP_DIR
+            HOME_TAILSCALE_HOST
+            HOME_SSH_KEY
+            HOME_KNOWN_HOSTS
+            HOME_GHCR_USERNAME
+            HOME_GHCR_TOKEN
+            HOME_SERVER_ENV
+          )
+
+          for key in "${required[@]}"; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "$key missing"
+              exit 1
+            fi
+            echo "$key present"
+          done
+
+          if [[ ! "${HOME_TAILSCALE_HOST}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.[a-z0-9]([a-z0-9-]*[a-z0-9])?\.ts\.net$ ]]; then
+            echo "HOME_TAILSCALE_HOST must be a full MagicDNS FQDN ending in .ts.net." >&2
+            exit 1
+          fi
+
+      - name: Validate HOME_SERVER_ENV contract
+        env:
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          home_server_env_file="${RUNNER_TEMP}/home-server.env"
+          HOME_RESTORE_PRIVACY_GATE_SCRIPT="${HOME_APP_DIR%/}/restore-privacy-gate.sh"
+          {
+            printf '%s\n' "${HOME_SERVER_ENV}"
+            printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
+          } > "${home_server_env_file}"
+          node tools/env/validate-env.mjs --target home-server-source --file "${home_server_env_file}"
+
+  buildAndPush:
+    runs-on: ubuntu-latest
+    needs:
+      - calculateTag
+      - validateBackendDeployEnvironment
+    if: >
+      needs.calculateTag.outputs.backend_deploy == 'true' &&
+      needs.validateBackendDeployEnvironment.result == 'success'
     timeout-minutes: 30
     permissions:
       contents: read
@@ -619,61 +692,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.calculateTag.outputs.deploy_sha }}
-
-      - name: Verify required secrets
-        env:
-          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
-          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
-          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
-          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
-          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
-          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
-          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
-          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
-        shell: bash
-        run: |
-          required=(
-            TS_OAUTH_CLIENT_ID
-            TS_OAUTH_SECRET
-            HOME_SSH_USER
-            HOME_APP_DIR
-            HOME_TAILSCALE_HOST
-            HOME_SSH_KEY
-            HOME_KNOWN_HOSTS
-            HOME_GHCR_USERNAME
-            HOME_GHCR_TOKEN
-            HOME_SERVER_ENV
-          )
-
-          for key in "${required[@]}"; do
-            value="${!key:-}"
-            if [ -z "$value" ]; then
-              echo "$key missing"
-              exit 1
-            fi
-            echo "$key present"
-          done
-
-          if [[ ! "${HOME_TAILSCALE_HOST}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.[a-z0-9]([a-z0-9-]*[a-z0-9])?\.ts\.net$ ]]; then
-            echo "HOME_TAILSCALE_HOST must be a full MagicDNS FQDN ending in .ts.net." >&2
-            exit 1
-          fi
-
-      - name: Validate HOME_SERVER_ENV contract
-        env:
-          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
-          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          home_server_env_file="${RUNNER_TEMP}/home-server.env"
-          HOME_RESTORE_PRIVACY_GATE_SCRIPT="${HOME_APP_DIR%/}/restore-privacy-gate.sh"
-          {
-            printf '%s\n' "${HOME_SERVER_ENV}"
-            printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
-          } > "${home_server_env_file}"
-          node tools/env/validate-env.mjs --target home-server-source --file "${home_server_env_file}"
 
       - name: Resolve Tailscale OAuth tags
         shell: bash

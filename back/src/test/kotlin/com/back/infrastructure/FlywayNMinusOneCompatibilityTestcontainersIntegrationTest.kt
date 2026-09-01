@@ -417,6 +417,65 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
     }
 
     @Test
+    fun `retired persistence recovery rejects a canonical foreign key with a legacy duplicate`() {
+        val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
+        val compatibilitySchema = "retired_persistence_duplicate_fk"
+        val duplicateFkMigrations = migrations.resolve("duplicate-fk").createDirectories()
+        val duplicateFkBaseline =
+            retiredPersistenceBaseline.replace(
+                "CONSTRAINT post_comment_post_id_fkey FOREIGN KEY (post_id) REFERENCES post (id)",
+                """
+                CONSTRAINT fk_post_comment_post FOREIGN KEY (post_id) REFERENCES post (id) ON DELETE CASCADE,
+                CONSTRAINT post_comment_post_id_fkey FOREIGN KEY (post_id) REFERENCES post (id)
+                """.trimIndent(),
+            )
+        val callback = ClassPathResource("db/migration/$callbackName").inputStream.bufferedReader().use { it.readText() }
+
+        duplicateFkMigrations.resolve("V1__retired_persistence_baseline.sql").writeText(duplicateFkBaseline)
+        Flyway
+            .configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .defaultSchema(compatibilitySchema)
+            .schemas(compatibilitySchema)
+            .createSchemas(true)
+            .locations("filesystem:$duplicateFkMigrations")
+            .validateOnMigrate(true)
+            .load()
+            .migrate()
+
+        duplicateFkMigrations.resolve(callbackName).writeText(callback)
+        assertFailsWith<FlywayException> {
+            Flyway
+                .configure()
+                .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+                .defaultSchema(compatibilitySchema)
+                .schemas(compatibilitySchema)
+                .createSchemas(true)
+                .locations("filesystem:$duplicateFkMigrations")
+                .validateOnMigrate(true)
+                .load()
+                .migrate()
+        }
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                statement
+                    .executeQuery(
+                        """
+                        SELECT count(*)
+                        FROM pg_constraint
+                        WHERE conrelid = '$compatibilitySchema.post_comment'::regclass
+                          AND confrelid = '$compatibilitySchema.post'::regclass
+                        """.trimIndent(),
+                    ).use { result ->
+                        result.next()
+                        assertEquals(2, result.getInt(1))
+                    }
+            }
+        }
+    }
+
+    @Test
     fun `retired persistence recovery rejects a conflicting canonical constraint`() {
         val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
         val compatibilitySchema = "retired_persistence_conflicting_fk"

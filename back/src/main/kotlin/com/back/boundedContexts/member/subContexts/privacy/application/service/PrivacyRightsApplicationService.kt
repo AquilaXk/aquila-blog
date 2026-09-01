@@ -19,13 +19,13 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPA
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
 import com.back.boundedContexts.member.domain.shared.memberMixin.decodeMemberProfileWorkspaceContent
 import com.back.boundedContexts.member.subContexts.oauthSignup.application.port.input.OAuthSignupUseCase
+import com.back.boundedContexts.member.subContexts.privacy.application.dto.PrivacyExportPublicPostRecord
+import com.back.boundedContexts.member.subContexts.privacy.application.dto.PrivacyExportRequestRecord
+import com.back.boundedContexts.member.subContexts.privacy.application.dto.PrivacyExportSessionRecord
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberAccountDeletionRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestAuditRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyCanonicalExportReadPort
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyExportPublicPostRecord
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyExportRequestRecord
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyExportSessionRecord
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberAccountDeletion
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestAudit

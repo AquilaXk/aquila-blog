@@ -1,11 +1,11 @@
 package com.back.boundedContexts.member.subContexts.privacy.adapter.persistence
 
+import com.back.boundedContexts.member.subContexts.privacy.application.dto.PrivacyExportAccountRecord
+import com.back.boundedContexts.member.subContexts.privacy.application.dto.PrivacyExportLegalAcceptanceRecord
+import com.back.boundedContexts.member.subContexts.privacy.application.dto.PrivacyExportPublicPostRecord
+import com.back.boundedContexts.member.subContexts.privacy.application.dto.PrivacyExportRequestRecord
+import com.back.boundedContexts.member.subContexts.privacy.application.dto.PrivacyExportSessionRecord
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyCanonicalExportReadPort
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyExportAccountRecord
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyExportLegalAcceptanceRecord
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyExportPublicPostRecord
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyExportRequestRecord
-import com.back.boundedContexts.member.subContexts.privacy.application.port.output.PrivacyExportSessionRecord
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestHoldStatus
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestIdentityStatus
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestIntakeChannel

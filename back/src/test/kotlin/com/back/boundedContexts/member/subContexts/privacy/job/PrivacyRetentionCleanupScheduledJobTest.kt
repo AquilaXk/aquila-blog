@@ -120,20 +120,26 @@ class PrivacyRetentionCleanupScheduledJobTest {
     @Test
     fun `retained privacy request mapping keeps persisted state fields available for closure`() {
         val requestedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val dueAt = requestedAt.plusSeconds(DAY)
         val completedAt = Instant.parse("2026-06-02T00:00:00Z")
+        val member = mock(Member::class.java)
         val request =
             MemberPrivacyRequest(
                 id = 91L,
-                member = mock(Member::class.java),
+                member = member,
                 type = MemberPrivacyRequestType.EXPORT,
                 requestedAt = requestedAt,
-                dueAt = requestedAt.plusSeconds(DAY),
+                dueAt = dueAt,
             )
 
         request.status = MemberPrivacyRequestStatus.COMPLETED
         request.completedAt = completedAt
 
         assertThat(request.id).isEqualTo(91L)
+        assertThat(request.member).isSameAs(member)
+        assertThat(request.type).isEqualTo(MemberPrivacyRequestType.EXPORT)
+        assertThat(request.requestedAt).isEqualTo(requestedAt)
+        assertThat(request.dueAt).isEqualTo(dueAt)
         assertThat(request.status).isEqualTo(MemberPrivacyRequestStatus.COMPLETED)
         assertThat(request.completedAt).isEqualTo(completedAt)
     }

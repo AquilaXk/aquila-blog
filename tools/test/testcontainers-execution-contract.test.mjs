@@ -291,6 +291,13 @@ test("Gradle and reusable backend workflow fail closed and retain Testcontainers
   assert.doesNotMatch(summaryArtifactBlock, /testcontainersTest\/TEST-/)
 })
 
+test("Flyway migration naming admits the exact beforeMigrate SQL callback form", () => {
+  const workflow = fs.readFileSync(workflowPath, "utf8")
+  const namingBlock = extractWorkflowStep(workflow, "Validate Flyway migration naming")
+
+  assert.match(namingBlock, /\^beforeMigrate__\[a-z0-9_\]\+\\\.sql\$/)
+})
+
 test("Gradle resolves the approved Testcontainers family version in PR and main gates", () => {
   const buildGradle = fs.readFileSync(buildGradlePath, "utf8")
   const jacocoGradle = fs.readFileSync(jacocoGradlePath, "utf8")

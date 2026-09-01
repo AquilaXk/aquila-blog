@@ -339,7 +339,9 @@ jobs:
           invalid=0
           for file in "${files[@]}"; do
             base="$(basename "$file")"
-            if [[ "$base" =~ ^V[0-9]{8}_[0-9]{2}__[a-z0-9_]+\.sql$ ]] || [[ "$base" =~ ^R__[a-z0-9_]+\.sql$ ]]; then
+            if [[ "$base" =~ ^V[0-9]{8}_[0-9]{2}__[a-z0-9_]+\.sql$ ]] || \
+              [[ "$base" =~ ^R__[a-z0-9_]+\.sql$ ]] || \
+              [[ "$base" =~ ^beforeMigrate__[a-z0-9_]+\.sql$ ]]; then
               continue
             fi
             echo "Invalid migration file name: $base"

@@ -35,7 +35,7 @@ activities:
       - home_server_redis
       - smtp_provider_unconfirmed
       - cloudflare_tunnel
-    overseasTransfer: reviewRequired:cloudflare-tunnel-provider-facts
+    overseasTransfer: reviewRequired:smtp-provider-and-cloudflare-tunnel-facts
     retentionRule: administrator email challenge until configured expiry, default 5 minutes; revoked sessions custom.privacy.retention.revokedSessionDays default 30 days; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
     destructionMethod: consumeOrExpireAdministratorEmailChallenge; revokeSessionExpireCookiePurgeExpiredSessions; auth.login.* browserPreferenceDeletion
     accessRoles:

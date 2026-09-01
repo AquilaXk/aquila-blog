@@ -74,6 +74,9 @@ const requiredActivityProcessors = new Map([
   ["file_uploads_profile_post_cloud", ["cloudflare_tunnel"]],
   ["auth_security_events", ["home_server_redis"]],
 ])
+const requiredActivityOverseasTransferFragments = new Map([
+  ["auth_session_and_cookies", ["smtp-provider", "cloudflare-tunnel"]],
+])
 const requiredProcessorEnvFragments = new Map([
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
@@ -221,6 +224,11 @@ for (const activity of activities) {
   }
   for (const processorId of requiredActivityProcessors.get(activity.id) || []) {
     if (!activity.processors.includes(processorId)) fail(`activity ${activity.id} processors must include ${processorId}`)
+  }
+  for (const fragment of requiredActivityOverseasTransferFragments.get(activity.id) || []) {
+    if (!activity.overseasTransfer.includes(fragment)) {
+      fail(`activity ${activity.id} overseasTransfer must include ${fragment}`)
+    }
   }
 }
 

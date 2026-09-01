@@ -11,6 +11,14 @@ const workflowPath = path.join(root, ".github/workflows/reusable-backend-quality
 const buildGradlePath = path.join(root, "back/build.gradle.kts")
 const jacocoGradlePath = path.join(root, "back/gradle/backend-jacoco.gradle.kts")
 const testInfraPath = path.join(root, "back/gradle/backend-test-infra.gradle.kts")
+const flywayCompatibilityTestPath = path.join(
+  root,
+  "back/src/test/kotlin/com/back/infrastructure/FlywayNMinusOneCompatibilityTestcontainersIntegrationTest.kt",
+)
+const migrationResourcePaths = [
+  path.join(root, "back/src/main/resources/db/migration"),
+  path.join(root, "back/src/main/resources/db/migration-test"),
+]
 
 const fixture = (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "aquila-testcontainers-results-"))
@@ -296,6 +304,16 @@ test("Flyway migration naming admits the exact beforeMigrate SQL callback form",
   const namingBlock = extractWorkflowStep(workflow, "Validate Flyway migration naming")
 
   assert.match(namingBlock, /\^beforeMigrate__\[a-z0-9_\]\+\\\.sql\$/)
+})
+
+test("served cutovers do not retain temporary Flyway lifecycle callbacks", () => {
+  for (const migrationResources of migrationResourcePaths) {
+    const callbacks = fs.readdirSync(migrationResources).filter((file) => /^beforeMigrate__.+\.sql$/.test(file))
+    assert.deepEqual(callbacks, [])
+  }
+
+  const compatibilityAcceptance = fs.readFileSync(flywayCompatibilityTestPath, "utf8")
+  assert.doesNotMatch(compatibilityAcceptance, /beforeMigrate__|retired persistence recovery/)
 })
 
 test("Gradle resolves the approved Testcontainers family version in PR and main gates", () => {

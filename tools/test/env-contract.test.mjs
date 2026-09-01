@@ -2882,59 +2882,15 @@ test("rollback keeps the current materialized keyring and only arms after blue-g
   assert(materializedIndex > 0 && materializedIndex < blueGreenIndex, "rollback must arm immediately before blue-green activation")
 })
 
-test("rollback bridges the retired SMTP placeholder only in the child process", () => {
+test("served cutover does not retain the retired SMTP rollback bridge", () => {
   const workflow = readFileSync(workflowPath, "utf8")
-  const bridgeStart = workflow.indexOf("run_rollback_script_with_current_env_contract() {")
-  const bridgeEnd = workflow.indexOf("run_backup_rollback() {", bridgeStart)
-  const bridgeBlock = workflow.slice(bridgeStart, bridgeEnd)
 
-  assert(bridgeStart >= 0 && bridgeEnd > bridgeStart, "rollback SMTP bridge must be discoverable")
-  assert.match(bridgeBlock, /grep -Fq '\$\{CUSTOM__MEMBER__SIGNUP__MAIL_FROM:'/)
-  assert.match(bridgeBlock, /extract_env_value_from_text "ALERTMANAGER_SMTP_FROM"/)
-  assert.match(bridgeBlock, /env -u BACK_IMAGE CUSTOM__MEMBER__SIGNUP__MAIL_FROM="\$\{rollback_smtp_from\}"/)
-  assert.doesNotMatch(bridgeBlock, /upsert_env_key|PRE_DEPLOY_ENV_CONTENT|printf.*CUSTOM__MEMBER__SIGNUP__MAIL_FROM/)
-  assert.match(workflow.slice(bridgeEnd, workflow.indexOf("rollback_from_backup_if_needed() {", bridgeEnd)), /run_rollback_script_with_current_env_contract/)
-
-  const workDir = mkdtempSync(path.join(tmpdir(), "aquila-rollback-env-contract-"))
-  try {
-    const deployDir = path.join(workDir, "deploy/homeserver")
-    mkdirSync(deployDir, { recursive: true })
-    writeFileSync(
-      path.join(deployDir, "docker-compose.prod.yml"),
-      "ALERTMANAGER_SMTP_FROM: ${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:?required}\n",
-    )
-    writeFileSync(path.join(deployDir, ".env.prod"), "ALERTMANAGER_SMTP_FROM=sender@example.test\n")
-    const rollbackScript = path.join(deployDir, "rollback_last_deploy.sh")
-    writeFileSync(
-      rollbackScript,
-      [
-        "#!/usr/bin/env bash",
-        "set -euo pipefail",
-        '[ "${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:-}" = "sender@example.test" ]',
-        '[ "${RUNTIME_SPLIT_ENABLED:-}" = "false" ]',
-        '[ -z "${BACK_IMAGE+x}" ]',
-        'printf passed > "${1}/child-result"',
-      ].join("\n"),
-    )
-    chmodSync(rollbackScript, 0o755)
-
-    const script = [
-      "set -euo pipefail",
-      `cd ${JSON.stringify(workDir)}`,
-      extractDeployRemoteFunctions(["extract_env_value_from_text", "run_rollback_script_with_current_env_contract"]),
-      'ROLLBACK_RUNTIME_SPLIT_ENABLED="false"',
-      'export BACK_IMAGE="must-not-reach-child"',
-      `run_rollback_script_with_current_env_contract ${JSON.stringify(workDir)}`,
-      '[ -z "${CUSTOM__MEMBER__SIGNUP__MAIL_FROM+x}" ]',
-    ].join("\n")
-    const output = execFileSync("bash", ["-c", script], { encoding: "utf8" })
-
-    assert.equal(output, "")
-    assert.equal(readFileSync(path.join(workDir, "child-result"), "utf8"), "passed")
-    assert.doesNotMatch(readFileSync(path.join(deployDir, ".env.prod"), "utf8"), /CUSTOM__MEMBER__SIGNUP__MAIL_FROM/)
-  } finally {
-    rmSync(workDir, { recursive: true, force: true })
-  }
+  assert.doesNotMatch(workflow, /run_rollback_script_with_current_env_contract/)
+  assert.doesNotMatch(workflow, /CUSTOM__MEMBER__SIGNUP__MAIL_FROM/)
+  assert.match(
+    workflow,
+    /if ! env -u BACK_IMAGE RUNTIME_SPLIT_ENABLED="\$\{ROLLBACK_RUNTIME_SPLIT_ENABLED\}" \\\n\s+\.\/deploy\/homeserver\/rollback_last_deploy\.sh "\$\{BACKUP_DIR\}"; then/,
+  )
 })
 
 test("deploy workflow requires pinned known_hosts and private GHCR credentials", () => {

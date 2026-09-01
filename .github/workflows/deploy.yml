@@ -993,25 +993,6 @@ jobs:
             fi
           }
 
-          run_rollback_script_with_current_env_contract() {
-            local backup_dir="$1"
-            local rollback_smtp_from=""
-
-            if grep -Fq '${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:' deploy/homeserver/docker-compose.prod.yml; then
-              rollback_smtp_from="$(extract_env_value_from_text "ALERTMANAGER_SMTP_FROM" "$(cat deploy/homeserver/.env.prod)")"
-              if [ -z "${rollback_smtp_from}" ]; then
-                echo "rollback compose requires the current Alertmanager sender contract" >&2
-                return 1
-              fi
-              env -u BACK_IMAGE CUSTOM__MEMBER__SIGNUP__MAIL_FROM="${rollback_smtp_from}" RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" \
-                ./deploy/homeserver/rollback_last_deploy.sh "${backup_dir}"
-              return
-            fi
-
-            env -u BACK_IMAGE RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" \
-              ./deploy/homeserver/rollback_last_deploy.sh "${backup_dir}"
-          }
-
           run_backup_rollback() {
             local reason="${1:-unexpected_exit}"
             if [ -z "${BACKUP_DIR:-}" ] || [ ! -d "${BACKUP_DIR}" ]; then
@@ -1025,7 +1006,8 @@ jobs:
             fi
 
             local rollback_status=0
-            if ! run_rollback_script_with_current_env_contract "${BACKUP_DIR}"; then
+            if ! env -u BACK_IMAGE RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" \
+              ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}"; then
               echo "rollback script failed after minimal backup restore: ${BACKUP_DIR} (reason=${reason})" >&2
               rollback_status=1
             fi

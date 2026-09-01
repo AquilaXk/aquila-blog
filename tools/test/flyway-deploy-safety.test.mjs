@@ -309,6 +309,26 @@ test("missing changed migration file fails closed for rename and delete", () => 
   }
 })
 
+test("retired lifecycle callback deletion does not permit repeatable migration deletion", () => {
+  const callback = "back/src/main/resources/db/migration/beforeMigrate__temporary_recovery.sql"
+  const repeatable = "back/src/main/resources/db/migration/R__current_projection.sql"
+  const root = createRepo({ files: {} })
+
+  try {
+    const callbackResult = runSafety({ root, changedFiles: [callback], policy: compatibilityPolicy() })
+    assert.equal(callbackResult.status, 0, callbackResult.stderr)
+    assert.equal(callbackResult.json.ok, true)
+    assert.deepEqual(callbackResult.json.findings, [])
+
+    const repeatableResult = runSafety({ root, changedFiles: [repeatable], policy: compatibilityPolicy() })
+    assert.equal(repeatableResult.status, 1)
+    assert.equal(repeatableResult.json.ok, false)
+    assert.deepEqual(repeatableResult.json.findings, [{ file: repeatable, rule: "missing-migration-file" }])
+  } finally {
+    rmSync(root, { force: true, recursive: true })
+  }
+})
+
 test("CONTRACT_AFTER_CUTOVER accepts only merge-base cutover evidence and routes N-1", () => {
   const file = "back/src/main/resources/db/migration/V20260619_16__contract_after_cutover.sql"
   const baseCutover = {

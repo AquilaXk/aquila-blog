@@ -59,7 +59,7 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
         CREATE TABLE post_comment (
             id bigint PRIMARY KEY,
             post_id bigint NOT NULL,
-            CONSTRAINT post_comment_post_id_fkey FOREIGN KEY (post_id) REFERENCES post (id)
+            CONSTRAINT fk_post_comment_post FOREIGN KEY (post_id) REFERENCES post (id)
         );
         """.trimIndent()
 
@@ -106,19 +106,12 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
     @Test
     fun `retired persistence migration drains data and keeps both hard delete orders compatible`() {
         val migrationName = "V20260902_01__drain_retired_public_persistence.sql"
-        val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
         val compatibilitySchema = "retired_persistence_n_minus_one"
         val productionMigration =
             ClassPathResource("db/migration/$migrationName").inputStream.bufferedReader().use { it.readText() }
         val testMigration =
             ClassPathResource("db/migration-test/$migrationName").inputStream.bufferedReader().use { it.readText() }
         assertEquals(productionMigration, testMigration)
-        val productionCallback =
-            ClassPathResource("db/migration/$callbackName").inputStream.bufferedReader().use { it.readText() }
-        val testCallback =
-            ClassPathResource("db/migration-test/$callbackName").inputStream.bufferedReader().use { it.readText() }
-        assertEquals(productionCallback, testCallback)
-
         migrations.resolve("V1__post_comment_baseline.sql").writeText(retiredPersistenceBaseline)
         Flyway
             .configure()
@@ -148,7 +141,6 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                 statement.execute("INSERT INTO post_comment (id, post_id) VALUES (11, 1)")
             }
 
-            migrations.resolve(callbackName).writeText(productionCallback)
             migrations.resolve(migrationName).writeText(productionMigration)
             Flyway
                 .configure()
@@ -237,14 +229,10 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
     @Test
     fun `retired persistence drain rejects unresolved privacy requests without deleting data`() {
         val migrationName = "V20260902_01__drain_retired_public_persistence.sql"
-        val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
         val compatibilitySchema = "retired_persistence_unresolved"
         val unresolvedMigrations = migrations.resolve("unresolved").createDirectories()
         val productionMigration =
             ClassPathResource("db/migration/$migrationName").inputStream.bufferedReader().use { it.readText() }
-        val productionCallback =
-            ClassPathResource("db/migration/$callbackName").inputStream.bufferedReader().use { it.readText() }
-
         unresolvedMigrations.resolve("V1__retired_persistence_baseline.sql").writeText(retiredPersistenceBaseline)
         Flyway
             .configure()
@@ -263,7 +251,6 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                 statement.execute("INSERT INTO member_privacy_request (id, status) VALUES (1, 'IN_PROGRESS')")
             }
 
-            unresolvedMigrations.resolve(callbackName).writeText(productionCallback)
             unresolvedMigrations.resolve(migrationName).writeText(productionMigration)
             assertFailsWith<FlywayException> {
                 Flyway
@@ -296,221 +283,6 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                         assertEquals("NO ACTION", result.getString(1))
                     }
             }
-        }
-    }
-
-    @Test
-    fun `retired persistence recovery rejects a missing exact foreign key`() {
-        val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
-        val migrationName = "V20260902_01__drain_retired_public_persistence.sql"
-        val compatibilitySchema = "retired_persistence_missing_fk"
-        val missingFkMigrations = migrations.resolve("missing-fk").createDirectories()
-        val baselineWithoutFk =
-            retiredPersistenceBaseline.replace(
-                ",\n    CONSTRAINT post_comment_post_id_fkey FOREIGN KEY (post_id) REFERENCES post (id)",
-                "",
-            )
-        val callback = ClassPathResource("db/migration/$callbackName").inputStream.bufferedReader().use { it.readText() }
-        val migration = ClassPathResource("db/migration/$migrationName").inputStream.bufferedReader().use { it.readText() }
-
-        missingFkMigrations.resolve("V1__retired_persistence_baseline.sql").writeText(baselineWithoutFk)
-
-        Flyway
-            .configure()
-            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-            .defaultSchema(compatibilitySchema)
-            .schemas(compatibilitySchema)
-            .createSchemas(true)
-            .locations("filesystem:$missingFkMigrations")
-            .validateOnMigrate(true)
-            .load()
-            .migrate()
-
-        missingFkMigrations.resolve(callbackName).writeText(callback)
-        missingFkMigrations.resolve(migrationName).writeText(migration)
-        assertFailsWith<FlywayException> {
-            Flyway
-                .configure()
-                .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-                .defaultSchema(compatibilitySchema)
-                .schemas(compatibilitySchema)
-                .createSchemas(true)
-                .locations("filesystem:$missingFkMigrations")
-                .validateOnMigrate(true)
-                .load()
-                .migrate()
-        }
-
-        postgres.createConnection("").use { connection ->
-            connection.createStatement().use { statement ->
-                statement
-                    .executeQuery(
-                        """
-                        SELECT count(*)
-                        FROM information_schema.referential_constraints
-                        WHERE constraint_schema = '$compatibilitySchema'
-                          AND constraint_name = 'fk_post_comment_post'
-                        """.trimIndent(),
-                    ).use { result ->
-                        result.next()
-                        assertEquals(0, result.getInt(1))
-                    }
-            }
-        }
-    }
-
-    @Test
-    fun `retired persistence recovery rejects semantic foreign key drift`() {
-        val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
-        val compatibilitySchema = "retired_persistence_semantic_fk_drift"
-        val semanticDriftMigrations = migrations.resolve("semantic-fk-drift").createDirectories()
-        val cascadeBaseline =
-            retiredPersistenceBaseline.replace(
-                "REFERENCES post (id)",
-                "REFERENCES post (id) ON DELETE CASCADE",
-            )
-        val callback = ClassPathResource("db/migration/$callbackName").inputStream.bufferedReader().use { it.readText() }
-
-        semanticDriftMigrations.resolve("V1__retired_persistence_baseline.sql").writeText(cascadeBaseline)
-        Flyway
-            .configure()
-            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-            .defaultSchema(compatibilitySchema)
-            .schemas(compatibilitySchema)
-            .createSchemas(true)
-            .locations("filesystem:$semanticDriftMigrations")
-            .validateOnMigrate(true)
-            .load()
-            .migrate()
-
-        semanticDriftMigrations.resolve(callbackName).writeText(callback)
-        assertFailsWith<FlywayException> {
-            Flyway
-                .configure()
-                .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-                .defaultSchema(compatibilitySchema)
-                .schemas(compatibilitySchema)
-                .createSchemas(true)
-                .locations("filesystem:$semanticDriftMigrations")
-                .validateOnMigrate(true)
-                .load()
-                .migrate()
-        }
-
-        postgres.createConnection("").use { connection ->
-            connection.createStatement().use { statement ->
-                statement
-                    .executeQuery(
-                        """
-                        SELECT constraint_name, delete_rule
-                        FROM information_schema.referential_constraints
-                        WHERE constraint_schema = '$compatibilitySchema'
-                          AND constraint_name = 'post_comment_post_id_fkey'
-                        """.trimIndent(),
-                    ).use { result ->
-                        result.next()
-                        assertEquals("post_comment_post_id_fkey", result.getString(1))
-                        assertEquals("CASCADE", result.getString(2))
-                    }
-            }
-        }
-    }
-
-    @Test
-    fun `retired persistence recovery rejects a canonical foreign key with a legacy duplicate`() {
-        val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
-        val compatibilitySchema = "retired_persistence_duplicate_fk"
-        val duplicateFkMigrations = migrations.resolve("duplicate-fk").createDirectories()
-        val duplicateFkBaseline =
-            retiredPersistenceBaseline.replace(
-                "CONSTRAINT post_comment_post_id_fkey FOREIGN KEY (post_id) REFERENCES post (id)",
-                """
-                CONSTRAINT fk_post_comment_post FOREIGN KEY (post_id) REFERENCES post (id) ON DELETE CASCADE,
-                CONSTRAINT post_comment_post_id_fkey FOREIGN KEY (post_id) REFERENCES post (id)
-                """.trimIndent(),
-            )
-        val callback = ClassPathResource("db/migration/$callbackName").inputStream.bufferedReader().use { it.readText() }
-
-        duplicateFkMigrations.resolve("V1__retired_persistence_baseline.sql").writeText(duplicateFkBaseline)
-        Flyway
-            .configure()
-            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-            .defaultSchema(compatibilitySchema)
-            .schemas(compatibilitySchema)
-            .createSchemas(true)
-            .locations("filesystem:$duplicateFkMigrations")
-            .validateOnMigrate(true)
-            .load()
-            .migrate()
-
-        duplicateFkMigrations.resolve(callbackName).writeText(callback)
-        assertFailsWith<FlywayException> {
-            Flyway
-                .configure()
-                .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-                .defaultSchema(compatibilitySchema)
-                .schemas(compatibilitySchema)
-                .createSchemas(true)
-                .locations("filesystem:$duplicateFkMigrations")
-                .validateOnMigrate(true)
-                .load()
-                .migrate()
-        }
-
-        postgres.createConnection("").use { connection ->
-            connection.createStatement().use { statement ->
-                statement
-                    .executeQuery(
-                        """
-                        SELECT count(*)
-                        FROM pg_constraint
-                        WHERE conrelid = '$compatibilitySchema.post_comment'::regclass
-                          AND confrelid = '$compatibilitySchema.post'::regclass
-                        """.trimIndent(),
-                    ).use { result ->
-                        result.next()
-                        assertEquals(2, result.getInt(1))
-                    }
-            }
-        }
-    }
-
-    @Test
-    fun `retired persistence recovery rejects a conflicting canonical constraint`() {
-        val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
-        val compatibilitySchema = "retired_persistence_conflicting_fk"
-        val conflictingMigrations = migrations.resolve("conflicting-fk").createDirectories()
-        val conflictingBaseline =
-            retiredPersistenceBaseline.replace(
-                "CONSTRAINT post_comment_post_id_fkey FOREIGN KEY (post_id) REFERENCES post (id)",
-                "CONSTRAINT fk_post_comment_post FOREIGN KEY (post_id) REFERENCES post_attr (id)",
-            )
-        val callback = ClassPathResource("db/migration/$callbackName").inputStream.bufferedReader().use { it.readText() }
-
-        conflictingMigrations.resolve("V1__retired_persistence_baseline.sql").writeText(conflictingBaseline)
-        Flyway
-            .configure()
-            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-            .defaultSchema(compatibilitySchema)
-            .schemas(compatibilitySchema)
-            .createSchemas(true)
-            .locations("filesystem:$conflictingMigrations")
-            .validateOnMigrate(true)
-            .load()
-            .migrate()
-
-        conflictingMigrations.resolve(callbackName).writeText(callback)
-        assertFailsWith<FlywayException> {
-            Flyway
-                .configure()
-                .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
-                .defaultSchema(compatibilitySchema)
-                .schemas(compatibilitySchema)
-                .createSchemas(true)
-                .locations("filesystem:$conflictingMigrations")
-                .validateOnMigrate(true)
-                .load()
-                .migrate()
         }
     }
 }

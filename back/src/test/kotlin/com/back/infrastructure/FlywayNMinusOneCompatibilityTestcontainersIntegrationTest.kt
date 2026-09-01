@@ -3,6 +3,7 @@ package com.back.infrastructure
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.springframework.core.io.ClassPathResource
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
@@ -63,6 +64,83 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                 statement.executeQuery().use { result ->
                     result.next()
                     assertEquals("baseline", result.getString(1))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `post comment cascade migration keeps N minus 1 and current hard delete compatible`() {
+        val migrationName = "V20260902_01__cascade_retired_post_comments_on_post_delete.sql"
+        val compatibilitySchema = "post_comment_n_minus_one"
+        val productionMigration =
+            ClassPathResource("db/migration/$migrationName").inputStream.bufferedReader().use { it.readText() }
+        val testMigration =
+            ClassPathResource("db/migration-test/$migrationName").inputStream.bufferedReader().use { it.readText() }
+        assertEquals(productionMigration, testMigration)
+
+        migrations.resolve("V1__post_comment_baseline.sql").writeText(
+            """
+            CREATE TABLE post (id bigint PRIMARY KEY);
+            CREATE TABLE post_comment (
+                id bigint PRIMARY KEY,
+                post_id bigint NOT NULL,
+                CONSTRAINT fk_post_comment_post FOREIGN KEY (post_id) REFERENCES post (id)
+            );
+            """.trimIndent(),
+        )
+        Flyway
+            .configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .defaultSchema(compatibilitySchema)
+            .schemas(compatibilitySchema)
+            .createSchemas(true)
+            .locations("filesystem:$migrations")
+            .validateOnMigrate(true)
+            .load()
+            .migrate()
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("SET search_path TO $compatibilitySchema")
+                statement.execute("INSERT INTO post (id) VALUES (1)")
+                statement.execute("INSERT INTO post_comment (id, post_id) VALUES (11, 1)")
+            }
+
+            migrations.resolve(migrationName).writeText(productionMigration)
+            Flyway
+                .configure()
+                .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+                .defaultSchema(compatibilitySchema)
+                .schemas(compatibilitySchema)
+                .createSchemas(true)
+                .locations("filesystem:$migrations")
+                .validateOnMigrate(true)
+                .load()
+                .migrate()
+
+            connection.createStatement().use { statement ->
+                statement.execute("INSERT INTO post (id) VALUES (2)")
+                statement.execute("INSERT INTO post_comment (id, post_id) VALUES (22, 2)")
+
+                statement.execute("DELETE FROM post_comment WHERE post_id = 1")
+                assertEquals(1, statement.executeUpdate("DELETE FROM post WHERE id = 1"))
+
+                assertEquals(1, statement.executeUpdate("DELETE FROM post WHERE id = 2"))
+                statement.executeQuery("SELECT count(*) FROM post_comment").use { result ->
+                    result.next()
+                    assertEquals(0, result.getInt(1))
+                }
+                statement.executeQuery(
+                    """
+                    SELECT delete_rule
+                    FROM information_schema.referential_constraints
+                    WHERE constraint_schema = '$compatibilitySchema'
+                      AND constraint_name = 'fk_post_comment_post'
+                    """.trimIndent(),
+                ).use { result ->
+                    result.next()
+                    assertEquals("CASCADE", result.getString(1))
                 }
             }
         }

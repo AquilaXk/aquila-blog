@@ -56,6 +56,41 @@ class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
     }
 
     @Test
+    fun `영구 삭제는 스키마 전환 전 남아 있는 댓글도 함께 제거한다`() {
+        val author =
+            memberRepository.saveAndFlush(Member(0, "legacy-comment-author", "1234", "기존댓글작성자"))
+        val post =
+            postRepository.saveAndFlush(
+                Post(
+                    id = 0,
+                    author = author,
+                    title = "기존 댓글이 남은 삭제 글",
+                    content = "본문",
+                    published = false,
+                    listed = false,
+                ).apply {
+                    deletedAt = Instant.parse("2026-09-01T00:00:00Z")
+                },
+            )
+
+        jdbcTemplate.update(
+            "insert into post_comment (author_id, post_id, content) values (?, ?, ?)",
+            author.id,
+            post.id,
+            "전환 전 댓글",
+        )
+
+        assertThat(postDeletedQueryRepository.hardDeleteDeletedById(post.id)).isTrue()
+        assertThat(
+            jdbcTemplate.queryForObject(
+                "select count(*) from post_comment where post_id = ?",
+                Long::class.java,
+                post.id,
+            ),
+        ).isZero()
+    }
+
+    @Test
     fun `삭제 글 목록은 작성자 프로필 이미지 versioned url을 포함한다`() {
         val author =
             memberRepository.saveAndFlush(Member(0, "deleted-author", "1234", "삭제작성자"))

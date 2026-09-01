@@ -1,3 +1,14 @@
+LOCK TABLE
+    member_signup_verification,
+    pending_oauth_signup,
+    member_privacy_request,
+    member_notification,
+    post_comment,
+    post,
+    post_attr,
+    member_attr
+IN SHARE MODE;
+
 DO $$
 DECLARE
     retired_drift_count bigint;

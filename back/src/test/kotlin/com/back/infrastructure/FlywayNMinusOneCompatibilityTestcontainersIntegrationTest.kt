@@ -16,6 +16,7 @@ import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -104,6 +105,9 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
             "member_notification_seq",
             "post_comment_seq",
         )
+
+    private val phase2InspectedTables =
+        phase2TargetTables + listOf("post", "post_attr", "member_attr")
 
     private val phase2RetainedTables =
         listOf(
@@ -226,6 +230,20 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
         assertEquals(productionMigration, testMigration)
         assertFalse(Regex("\\bCASCADE\\b", RegexOption.IGNORE_CASE).containsMatchIn(productionMigration))
         assertFalse(Regex("\\bIF\\s+EXISTS\\b", RegexOption.IGNORE_CASE).containsMatchIn(productionMigration))
+        val driftGuardStart = productionMigration.indexOf("DO $$")
+        val lockStatement =
+            Regex(
+                "LOCK\\s+TABLE\\s+.+?\\s+IN\\s+SHARE\\s+MODE;",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+            ).find(productionMigration)
+        assertNotNull(lockStatement)
+        assertTrue(lockStatement.range.first < driftGuardStart, "write-blocking locks must precede the drift guard")
+        phase2InspectedTables.forEach { table ->
+            assertTrue(
+                Regex("\\b${Regex.escape(table)}\\b", RegexOption.IGNORE_CASE).containsMatchIn(lockStatement.value),
+                "$table must be write-locked before the drift guard",
+            )
+        }
 
         phase2Migrations.resolve("V1__retired_persistence_baseline.sql").writeText(retiredPersistenceBaseline)
         phase2Migrations.resolve(phase1MigrationName).writeText(phase1Migration)

@@ -38,17 +38,23 @@ const requiredProcessorFields = [
   "securityControls",
 ]
 const requiredProcessors = new Set([
+  "home_server_postgresql",
   "home_server_redis",
-  "vercel_frontend_hosting",
-  "cloudflare_dns_proxy",
-  "kakao_oauth",
+  "home_server_minio",
+  "cloudflare_tunnel",
   "smtp_provider_unconfirmed",
   "home_server_backup_storage",
+  "grafana_loki_monitoring",
+  "github_actions",
+  "ghcr_container_registry",
 ])
 const requiredActivityDataCategories = new Map([
-  ["account_registration_email", ["email", "nickname", "passwordHash", "apiKey"]],
   [
-    "user_content_posts_comments",
+    "admin_email_authentication",
+    ["administratorEmail", "adminEmailChallengeId", "emailSignInCodeHash", "canonicalRecipientHash"],
+  ],
+  [
+    "administrator_content_and_public_delivery",
     [
       "profileNickname",
       "profileRole",
@@ -64,31 +70,28 @@ const requiredActivityDataCategories = new Map([
 ])
 const requiredActivityEnvFragments = new Map([
   [
-    "analytics_and_rum",
-    ["NEXT_PUBLIC_RUM_SAMPLE_RATE", "defaults 0", "explicit non-zero enables custom RUM"],
+    "admin_email_authentication",
+    ["custom.auth.adminEmail", "CUSTOM__ADMIN__EMAIL", "SPRING__MAIL__"],
   ],
-  ["file_uploads_profile_post_cloud", ["AQUILA_EXTERNAL_STORAGE_ROOT"]],
+  ["administrator_file_uploads", ["AQUILA_EXTERNAL_STORAGE_ROOT"]],
   ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
 ])
 const requiredActivityProcessors = new Map([
-  ["signup_email_verification", ["home_server_redis"]],
-  ["auth_session_and_cookies", ["home_server_redis"]],
-  ["user_content_posts_comments", ["home_server_redis"]],
+  ["admin_email_authentication", ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed"]],
+  ["administrator_session_and_cookies", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
+  ["administrator_content_and_public_delivery", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
+  ["administrator_file_uploads", ["home_server_postgresql", "home_server_minio", "home_server_backup_storage", "cloudflare_tunnel"]],
   ["auth_security_events", ["home_server_redis"]],
-  ["notifications_sse", ["home_server_redis"]],
 ])
 const requiredProcessorEnvFragments = new Map([
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
 const requiredFlowProcessors = new Map([
-  ["email_signup", ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed"]],
-  ["kakao_oauth_login", ["home_server_postgresql", "kakao_oauth"]],
-  ["auth_session", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
-  ["posts_comments_profile", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
-  ["uploads", ["home_server_postgresql", "home_server_minio", "home_server_backup_storage", "cloudflare_dns_proxy"]],
+  ["admin_email_authentication", ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed"]],
+  ["administrator_session", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
+  ["published_content", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
+  ["uploads", ["home_server_postgresql", "home_server_minio", "home_server_backup_storage", "cloudflare_tunnel"]],
   ["security_and_action_logs", ["home_server_postgresql", "home_server_redis", "grafana_loki_monitoring"]],
-  ["notifications_sse", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
-  ["analytics_rum", ["google_analytics", "vercel_frontend_hosting", "grafana_loki_monitoring"]],
   ["backup_restore", ["home_server_backup_storage", "github_actions", "ghcr_container_registry"]],
 ])
 
@@ -166,18 +169,66 @@ const retiredCurrentFragments = [
   "custom.ai.summary.enabled",
   "CUSTOM__AI__SUMMARY__ENABLED",
   "custom.ai.summary.gemini.",
+  "account_registration_email",
+  "signup_email_verification",
+  "kakao_oauth",
+  "user_content_posts_comments",
+  "notifications_sse",
+  "analytics_and_rum",
+  "email_signup",
+  "kakao_oauth_login",
+  "posts_comments_profile",
+  "analytics_rum",
+  "vercel_frontend_hosting",
+  "google_analytics",
+  "cloudflare_dns_proxy",
+  "registeredMember",
+  "signupApplicant",
+  "oauthApplicant",
+  "commentContent",
+  "post_comment",
+  "member_notification",
+  "notificationRelayPayload",
+  "privacy.optionalTrackingConsent",
+  "NEXT_PUBLIC_RUM_SAMPLE_RATE",
+  "CUSTOM__MEMBER__SIGNUP",
+  "custom.member.signup",
+  "spring.security.oauth2",
+  "/api/rum/",
+  "Vercel",
+  "Google Analytics",
 ]
-const activeLegalSources = [
+const currentLegalSources = [
   ...activeDataMapSources,
   "legal/data-map/retention-matrix.yaml",
   "legal/data-map/legal-basis-matrix.yaml",
-  "legal/privacy-launch-controls.json",
   "legal/vendors/processors.yaml",
 ]
-for (const relativePath of activeLegalSources) {
+for (const relativePath of currentLegalSources) {
   const source = read(relativePath)
   for (const fragment of retiredCurrentFragments) {
     if (source.includes(fragment)) fail(`${relativePath} contains retired current fragment ${fragment}`)
+  }
+}
+
+const retiredLaunchControlIssues = new Set([996, 997, 998, 999, 1002, 1007, 1008, 1127])
+const launchControls = JSON.parse(read("legal/privacy-launch-controls.json")).controls || []
+const launchControlByIssue = new Map(launchControls.map((control) => [control.issue, control]))
+for (const issue of retiredLaunchControlIssues) {
+  const control = launchControlByIssue.get(issue)
+  if (!control) {
+    fail(`retired launch control #${issue} is missing`)
+    continue
+  }
+  if (control.status !== "Closed") fail(`retired launch control #${issue} must be Closed`)
+  if (control.launchDecision !== "제거됨") fail(`retired launch control #${issue} must use 제거됨 decision`)
+  if (control.current !== false) fail(`retired launch control #${issue} must be explicitly non-current`)
+  if (control.supersededByIssue !== 1600) fail(`retired launch control #${issue} must be superseded by #1600`)
+  if (control.disabledByFlag !== undefined || control.disabledEvidence !== undefined) {
+    fail(`retired launch control #${issue} must not preserve a disabled feature fallback`)
+  }
+  if (!control.evidenceArtifacts?.includes("issue #1600")) {
+    fail(`retired launch control #${issue} must reference issue #1600 evidence`)
   }
 }
 

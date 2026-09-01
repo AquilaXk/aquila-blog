@@ -186,6 +186,10 @@ class ApiV1PrivacyRightsControllerTest : BaseControllerIntegrationTest() {
                 }.andReturn()
 
         val requestId = JsonPath.read<Int>(created.response.contentAsString, "$.data.item.id").toLong()
+        val requestedAt = JsonPath.read<String>(created.response.contentAsString, "$.data.item.requestedAt")
+        val dueAt = JsonPath.read<String>(created.response.contentAsString, "$.data.item.dueAt")
+
+        assertThat(Instant.parse(dueAt)).isEqualTo(Instant.parse(requestedAt).plusSeconds(10 * 24 * 60 * 60))
 
         mvc
             .get("/member/api/v1/privacy/requests/$requestId") {

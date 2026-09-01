@@ -33,14 +33,52 @@ class MemberPrivacyRequest(
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_privacy_request_seq_gen")
     override val id: Long = 0,
     @field:ManyToOne(fetch = FetchType.LAZY)
-    @field:JoinColumn(name = "member_id", nullable = false)
-    val member: Member,
+    @field:JoinColumn(name = "member_id")
+    val member: Member? = null,
+    @field:Column(name = "account_deletion_id")
+    val accountDeletionId: Long? = null,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 48)
     val type: MemberPrivacyRequestType,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 32)
     var status: MemberPrivacyRequestStatus = MemberPrivacyRequestStatus.RECEIVED,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(nullable = false, length = 32)
+    val intakeChannel: MemberPrivacyRequestIntakeChannel = MemberPrivacyRequestIntakeChannel.AUTHENTICATED_SESSION,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(nullable = false, length = 32)
+    val identityStatus: MemberPrivacyRequestIdentityStatus = MemberPrivacyRequestIdentityStatus.VERIFIED_SESSION,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(nullable = false, length = 32)
+    val requesterRole: MemberPrivacyRequestRequesterRole = MemberPrivacyRequestRequesterRole.SUBJECT,
+    @field:Column(length = 320)
+    val requesterContact: String? = null,
+    @field:Column
+    val assignedOwnerId: Long? = null,
+    @field:Column
+    val identityVerifiedById: Long? = null,
+    @field:Column
+    val identityVerifiedAt: Instant? = null,
+    @field:Column
+    val stepUpVerifiedById: Long? = null,
+    @field:Column
+    val stepUpVerifiedAt: Instant? = null,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(nullable = false, length = 32)
+    val holdStatus: MemberPrivacyRequestHoldStatus = MemberPrivacyRequestHoldStatus.UNREVIEWED,
+    @field:Column(length = 64)
+    val holdScope: String? = null,
+    @field:Column(length = 1000)
+    val holdReason: String? = null,
+    @field:Column
+    val holdReviewedById: Long? = null,
+    @field:Column
+    val holdReviewedAt: Instant? = null,
+    @field:Column
+    val holdReleasedAt: Instant? = null,
+    @field:Column(length = 1000)
+    val holdReleaseDecision: String? = null,
     @field:Column(length = 1000)
     val message: String? = null,
     @field:Column(nullable = false)
@@ -63,4 +101,28 @@ enum class MemberPrivacyRequestStatus {
     IN_PROGRESS,
     COMPLETED,
     REJECTED,
+}
+
+enum class MemberPrivacyRequestIntakeChannel {
+    AUTHENTICATED_SESSION,
+    EMAIL,
+}
+
+enum class MemberPrivacyRequestIdentityStatus {
+    VERIFIED_SESSION,
+    IDENTITY_PENDING,
+    VERIFIED_MANUAL,
+    REJECTED,
+}
+
+enum class MemberPrivacyRequestRequesterRole {
+    SUBJECT,
+    AUTHORIZED_REPRESENTATIVE,
+}
+
+enum class MemberPrivacyRequestHoldStatus {
+    UNREVIEWED,
+    CLEARED,
+    ACTIVE,
+    RELEASED,
 }

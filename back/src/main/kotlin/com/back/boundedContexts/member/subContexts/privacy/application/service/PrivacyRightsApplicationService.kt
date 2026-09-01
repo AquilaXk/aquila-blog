@@ -104,7 +104,7 @@ class PrivacyRightsApplicationService(
                     type = type,
                     message = message?.trim()?.takeIf { it.isNotBlank() },
                     requestedAt = requestedAt,
-                    dueAt = requestedAt.plus(30, ChronoUnit.DAYS),
+                    dueAt = requestedAt.plus(10, ChronoUnit.DAYS),
                 ),
             )
 
@@ -285,7 +285,7 @@ data class PrivacyRequestDto(
 ) {
     constructor(request: MemberPrivacyRequest) : this(
         id = request.id,
-        memberId = request.member.id,
+        memberId = requireNotNull(request.member) { "Authenticated privacy response requires a linked member." }.id,
         type = request.type,
         status = request.status,
         message = request.message,

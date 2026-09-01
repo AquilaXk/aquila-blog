@@ -26,6 +26,7 @@ interface MemberPrivacyRequestRepository :
             select id
             from member_privacy_request
             where status in ('COMPLETED', 'REJECTED')
+              and hold_status <> 'ACTIVE'
               and coalesce(completed_at, modified_at, requested_at) < :cutoff
             order by coalesce(completed_at, modified_at, requested_at) asc, id asc
             limit :limit

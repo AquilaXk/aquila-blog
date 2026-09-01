@@ -1,0 +1,61 @@
+ALTER TABLE member_privacy_request
+    ALTER COLUMN member_id DROP NOT NULL,
+    ADD COLUMN IF NOT EXISTS account_deletion_id BIGINT,
+    ADD COLUMN IF NOT EXISTS intake_channel VARCHAR(32) NOT NULL DEFAULT 'AUTHENTICATED_SESSION',
+    ADD COLUMN IF NOT EXISTS identity_status VARCHAR(32) NOT NULL DEFAULT 'VERIFIED_SESSION',
+    ADD COLUMN IF NOT EXISTS requester_role VARCHAR(32) NOT NULL DEFAULT 'SUBJECT',
+    ADD COLUMN IF NOT EXISTS requester_contact VARCHAR(320),
+    ADD COLUMN IF NOT EXISTS assigned_owner_id BIGINT,
+    ADD COLUMN IF NOT EXISTS identity_verified_by_id BIGINT,
+    ADD COLUMN IF NOT EXISTS identity_verified_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS step_up_verified_by_id BIGINT,
+    ADD COLUMN IF NOT EXISTS step_up_verified_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS hold_status VARCHAR(32) NOT NULL DEFAULT 'UNREVIEWED',
+    ADD COLUMN IF NOT EXISTS hold_scope VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS hold_reason VARCHAR(1000),
+    ADD COLUMN IF NOT EXISTS hold_reviewed_by_id BIGINT,
+    ADD COLUMN IF NOT EXISTS hold_reviewed_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS hold_released_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS hold_release_decision VARCHAR(1000);
+
+ALTER TABLE member_privacy_request
+    ADD CONSTRAINT fk_member_privacy_request_account_deletion FOREIGN KEY (account_deletion_id) REFERENCES member_account_deletion(id),
+    ADD CONSTRAINT fk_member_privacy_request_assigned_owner FOREIGN KEY (assigned_owner_id) REFERENCES member(id),
+    ADD CONSTRAINT fk_member_privacy_request_identity_verifier FOREIGN KEY (identity_verified_by_id) REFERENCES member(id),
+    ADD CONSTRAINT fk_member_privacy_request_step_up_verifier FOREIGN KEY (step_up_verified_by_id) REFERENCES member(id),
+    ADD CONSTRAINT fk_member_privacy_request_hold_reviewer FOREIGN KEY (hold_reviewed_by_id) REFERENCES member(id),
+    ADD CONSTRAINT chk_member_privacy_request_intake_channel CHECK (intake_channel IN ('AUTHENTICATED_SESSION', 'EMAIL')),
+    ADD CONSTRAINT chk_member_privacy_request_identity_status CHECK (identity_status IN ('VERIFIED_SESSION', 'IDENTITY_PENDING', 'VERIFIED_MANUAL', 'REJECTED')),
+    ADD CONSTRAINT chk_member_privacy_request_requester_role CHECK (requester_role IN ('SUBJECT', 'AUTHORIZED_REPRESENTATIVE')),
+    ADD CONSTRAINT chk_member_privacy_request_hold_status CHECK (hold_status IN ('UNREVIEWED', 'CLEARED', 'ACTIVE', 'RELEASED')),
+    ADD CONSTRAINT chk_member_privacy_request_identity_link CHECK (identity_status IN ('IDENTITY_PENDING', 'REJECTED') OR member_id IS NOT NULL OR account_deletion_id IS NOT NULL),
+    ADD CONSTRAINT chk_member_privacy_request_authenticated_session CHECK (intake_channel <> 'AUTHENTICATED_SESSION' OR (identity_status = 'VERIFIED_SESSION' AND member_id IS NOT NULL AND account_deletion_id IS NULL)),
+    ADD CONSTRAINT chk_member_privacy_request_verified_session_link CHECK (identity_status <> 'VERIFIED_SESSION' OR (member_id IS NOT NULL AND account_deletion_id IS NULL)),
+    ADD CONSTRAINT chk_member_privacy_request_email_contact_owner CHECK (intake_channel <> 'EMAIL' OR (requester_contact IS NOT NULL AND requester_contact = btrim(requester_contact) AND btrim(requester_contact) <> '' AND assigned_owner_id IS NOT NULL)),
+    ADD CONSTRAINT chk_member_privacy_request_pending_link CHECK (identity_status <> 'IDENTITY_PENDING' OR (intake_channel = 'EMAIL' AND member_id IS NULL AND account_deletion_id IS NULL)),
+    ADD CONSTRAINT chk_member_privacy_request_rejected_link CHECK (identity_status <> 'REJECTED' OR (status = 'REJECTED' AND intake_channel = 'EMAIL' AND member_id IS NULL AND account_deletion_id IS NULL)),
+    ADD CONSTRAINT chk_member_privacy_request_verified_manual_link CHECK (identity_status <> 'VERIFIED_MANUAL' OR ((member_id IS NULL) <> (account_deletion_id IS NULL) AND identity_verified_by_id IS NOT NULL AND identity_verified_at IS NOT NULL)),
+    ADD CONSTRAINT chk_member_privacy_request_active_hold CHECK (hold_status <> 'ACTIVE' OR (hold_scope IS NOT NULL AND btrim(hold_scope) <> '' AND hold_reason IS NOT NULL AND btrim(hold_reason) <> '' AND hold_reviewed_by_id IS NOT NULL AND hold_reviewed_at IS NOT NULL)),
+    ADD CONSTRAINT chk_member_privacy_request_released_hold CHECK (hold_status <> 'RELEASED' OR (hold_release_decision IS NOT NULL AND btrim(hold_release_decision) <> '' AND hold_released_at IS NOT NULL));
+
+CREATE SEQUENCE IF NOT EXISTS member_privacy_request_audit_seq START WITH 1 INCREMENT BY 20;
+
+CREATE TABLE member_privacy_request_audit (
+    id BIGINT PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL,
+    modified_at TIMESTAMPTZ NOT NULL,
+    request_id BIGINT NOT NULL,
+    operation_id UUID NOT NULL,
+    actor_member_id BIGINT NOT NULL,
+    action VARCHAR(48) NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    decision VARCHAR(1000),
+    redacted_record_count BIGINT NOT NULL DEFAULT 0,
+    evidence_sha256 VARCHAR(64),
+    CONSTRAINT fk_member_privacy_request_audit_request FOREIGN KEY (request_id) REFERENCES member_privacy_request(id) ON DELETE CASCADE,
+    CONSTRAINT fk_member_privacy_request_audit_actor FOREIGN KEY (actor_member_id) REFERENCES member(id),
+    CONSTRAINT uk_member_privacy_request_audit_operation UNIQUE (operation_id),
+    CONSTRAINT chk_member_privacy_request_audit_action CHECK (action IN ('IDENTITY_REVIEWED', 'STEP_UP_VERIFIED', 'HOLD_REVIEWED', 'HOLD_RELEASED', 'REQUEST_REJECTED')),
+    CONSTRAINT chk_member_privacy_request_audit_redacted_count CHECK (redacted_record_count >= 0),
+    CONSTRAINT chk_member_privacy_request_audit_evidence_sha256 CHECK (evidence_sha256 IS NULL OR evidence_sha256 ~ '^[0-9a-f]{64}$')
+);

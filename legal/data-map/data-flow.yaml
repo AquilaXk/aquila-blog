@@ -8,6 +8,7 @@ flows:
       - home_server_postgresql
       - home_server_redis
       - smtp_provider_unconfirmed
+      - cloudflare_tunnel
     status: provider/region/DPA 확정 필요
   - id: kakao_oauth_login
     collectionPoint: Kakao redirect and Spring Security OAuth2
@@ -19,6 +20,7 @@ flows:
     processors:
       - home_server_postgresql
       - kakao_oauth
+      - cloudflare_tunnel
     status: 신규 가입은 /signup/social/complete pending 동의 완료 후 계정 생성
   - id: auth_session
     collectionPoint: login form and auth filter

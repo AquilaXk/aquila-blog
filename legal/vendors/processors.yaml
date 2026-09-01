@@ -92,7 +92,11 @@ processors:
     serviceType: secureTunnelIngress
     dataCategories:
       - publicHttpRequestMetadata
-      - encryptedHttpTraffic
+      - requestHeaders
+      - authenticationCookies
+      - requestBodies
+      - contentPayloads
+      - uploadedFileContent
     region: reviewRequired
     overseasTransfer: reviewRequired
     enabledByEnv: cloudflared service and CF_TUNNEL_TOKEN

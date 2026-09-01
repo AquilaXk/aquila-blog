@@ -19,7 +19,8 @@ activities:
     processors:
       - home_server_postgresql
       - smtp_provider_unconfirmed
-    overseasTransfer: reviewRequired:smtp-provider-region-unconfirmed
+      - cloudflare_tunnel
+    overseasTransfer: reviewRequired:smtp-provider-and-cloudflare-tunnel-facts
     retentionRule: accountLifetimeUntilDeletionOrLegalHold
     destructionMethod: softDeleteThenAnonymizeOrHardDeleteAfterRetention
     accessRoles:
@@ -57,7 +58,8 @@ activities:
       - home_server_postgresql
       - home_server_redis
       - smtp_provider_unconfirmed
-    overseasTransfer: reviewRequired:smtp-provider-region-unconfirmed
+      - cloudflare_tunnel
+    overseasTransfer: reviewRequired:smtp-provider-and-cloudflare-tunnel-facts
     retentionRule: token/session expiry plus custom.privacy.retention.signupVerificationDays default 7 days; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days or earlier payload expiry; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
     destructionMethod: expireCancelConsumeThenPrivacyRetentionCleanupPurge; bounded taskRetentionCleanup redaction and purge
     accessRoles:
@@ -91,7 +93,8 @@ activities:
     processors:
       - kakao_oauth
       - home_server_postgresql
-    overseasTransfer: noPlannedOverseasTransferByService; Kakao processing terms apply
+      - cloudflare_tunnel
+    overseasTransfer: reviewRequired:kakao-and-cloudflare-tunnel-provider-facts
     retentionRule: accountLifetimeForLinkedIdentifier; transientStateCookieUntilCallback
     destructionMethod: unlinkOrAccountDeletion; transientCookieExpiry
     accessRoles:
@@ -129,7 +132,8 @@ activities:
     processors:
       - kakao_oauth
       - home_server_postgresql
-    overseasTransfer: noPlannedOverseasTransferByService; Kakao processing terms apply
+      - cloudflare_tunnel
+    overseasTransfer: reviewRequired:kakao-and-cloudflare-tunnel-provider-facts
     retentionRule: pendingTokenTtlThenPurge; accountLifetimeAfterConsent
     destructionMethod: expireCancelConsumeThenPurgeByRetentionJob; unlinkOrAccountDeletion
     accessRoles:

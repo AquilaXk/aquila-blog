@@ -71,7 +71,10 @@ const requiredActivityEnvFragments = new Map([
   ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
 ])
 const requiredActivityProcessors = new Map([
-  ["signup_email_verification", ["home_server_redis"]],
+  ["account_registration_email", ["cloudflare_tunnel"]],
+  ["signup_email_verification", ["home_server_redis", "cloudflare_tunnel"]],
+  ["kakao_oauth_existing_login", ["cloudflare_tunnel"]],
+  ["kakao_oauth_pending_signup", ["cloudflare_tunnel"]],
   ["auth_session_and_cookies", ["home_server_redis", "cloudflare_tunnel"]],
   ["user_content_posts_comments", ["home_server_redis", "cloudflare_tunnel"]],
   ["file_uploads_profile_post_cloud", ["cloudflare_tunnel"]],
@@ -82,8 +85,11 @@ const requiredProcessorEnvFragments = new Map([
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
 const requiredFlowProcessors = new Map([
-  ["email_signup", ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed"]],
-  ["kakao_oauth_login", ["home_server_postgresql", "kakao_oauth"]],
+  [
+    "email_signup",
+    ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed", "cloudflare_tunnel"],
+  ],
+  ["kakao_oauth_login", ["home_server_postgresql", "kakao_oauth", "cloudflare_tunnel"]],
   ["auth_session", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
   ["posts_comments_profile", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
   ["uploads", ["home_server_postgresql", "home_server_minio", "home_server_backup_storage", "cloudflare_tunnel"]],

@@ -12,7 +12,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.PageRequest
-import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 
 @org.junit.jupiter.api.DisplayName("PostDeletedQueryRepository 테스트")
@@ -29,11 +28,8 @@ class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
     @Autowired
     private lateinit var postDeletedQueryRepository: PostDeletedQueryRepository
 
-    @Autowired
-    private lateinit var jdbcTemplate: JdbcTemplate
-
     @Test
-    fun `영구 삭제는 퇴역 댓글 집계 컬럼에 의존하지 않는다`() {
+    fun `영구 삭제는 현재 스키마에서 정상 동작한다`() {
         val author =
             memberRepository.saveAndFlush(Member(0, "hard-delete-author", "1234", "영구삭제작성자"))
         val post =
@@ -50,44 +46,7 @@ class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
                 },
             )
 
-        jdbcTemplate.execute("ALTER TABLE post DROP COLUMN comments_count_attr_id")
-
         assertThat(postDeletedQueryRepository.hardDeleteDeletedById(post.id)).isTrue()
-    }
-
-    @Test
-    fun `영구 삭제는 스키마 전환 전 남아 있는 댓글도 함께 제거한다`() {
-        val author =
-            memberRepository.saveAndFlush(Member(0, "legacy-comment-author", "1234", "기존댓글작성자"))
-        val post =
-            postRepository.saveAndFlush(
-                Post(
-                    id = 0,
-                    author = author,
-                    title = "기존 댓글이 남은 삭제 글",
-                    content = "본문",
-                    published = false,
-                    listed = false,
-                ).apply {
-                    deletedAt = Instant.parse("2026-09-01T00:00:00Z")
-                },
-            )
-
-        jdbcTemplate.update(
-            "insert into post_comment (author_id, post_id, content) values (?, ?, ?)",
-            author.id,
-            post.id,
-            "전환 전 댓글",
-        )
-
-        assertThat(postDeletedQueryRepository.hardDeleteDeletedById(post.id)).isTrue()
-        assertThat(
-            jdbcTemplate.queryForObject(
-                "select count(*) from post_comment where post_id = ?",
-                Long::class.java,
-                post.id,
-            ),
-        ).isZero()
     }
 
     @Test

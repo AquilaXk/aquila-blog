@@ -86,7 +86,7 @@
 
 ## Phase 5: Performance/Optimization Validation (1 day)
 - Validate no regression:
-  - Query counts for key endpoints (post list/detail/comment/like, member auth flows).
+  - Query counts for key endpoints (post list/detail/like, member auth flows).
   - Check indexes and QueryDSL query plans remain effective.
 - Deliverables:
   - Before/after perf sanity report
@@ -97,9 +97,9 @@
 ## Sprint A (Week 1)
 1. Add architecture constraints test.
 2. Refactor `member` path first:
-   - Move `profileImgUrl`, `postsCount`, `postCommentsCount` persistence writes to app layer.
+   - Move `profileImgUrl` and `postsCount` persistence writes to app layer.
 3. Refactor `post` path:
-   - `addComment/deleteComment/toggleLike` persistence orchestration to app layer.
+   - Move `toggleLike` persistence orchestration to the app layer.
 4. Remove static repository fields from domain classes.
 5. Run full regression tests.
 
@@ -110,7 +110,7 @@
 4. Performance validation and docs update.
 
 ## 7. Risk Management
-- Risk: behavior drift in comment/like/count updates.
+- Risk: behavior drift in like/count updates.
   - Mitigation: add focused tests for counter consistency and transactional rollback cases.
 - Risk: hidden dependency on static repository state in untested paths.
   - Mitigation: temporarily add runtime assertions detecting domain->repository direct access.
@@ -121,7 +121,7 @@
 - [x] Domain packages have no direct repository dependency.
 - [x] No global mutable repository state in domain entities.
 - [x] Full backend tests pass (`./gradlew clean test --no-daemon`).
-- [x] Key API integration tests pass for member/post/comment/like.
+- [x] Key API integration tests pass for member/post/like.
 - [x] Query/performance sanity check completed.
 - [x] Refactoring decisions documented (short ADRs recommended).
 

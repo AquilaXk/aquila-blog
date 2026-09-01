@@ -6,7 +6,6 @@ import com.back.boundedContexts.post.application.service.PostSearchIndexSyncServ
 import com.back.boundedContexts.post.dto.PostReadPrewarmPayload
 import com.back.boundedContexts.post.dto.PostSearchEngineMirrorPayload
 import com.back.boundedContexts.post.dto.PostSearchIndexSyncPayload
-import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
@@ -74,20 +73,6 @@ class PostReadModelTaskEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
     fun handle(event: PostDeletedEvent) =
-        enqueueFollowupTasks(
-            sourceEventUid = event.uid,
-            aggregateType = event.aggregateType,
-            postId = event.aggregateId,
-            beforeTags = event.beforeTags,
-            afterTags = event.afterTags,
-            forceClearSearchIndex = true,
-            warmDetail = false,
-        )
-
-    @TransactionalEventListener(
-        phase = TransactionPhase.AFTER_COMMIT,
-    )
-    fun handle(event: PostAccountDeletionDeletedEvent) =
         enqueueFollowupTasks(
             sourceEventUid = event.uid,
             aggregateType = event.aggregateType,

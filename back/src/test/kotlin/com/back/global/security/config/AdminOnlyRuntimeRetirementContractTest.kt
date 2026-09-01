@@ -7,7 +7,6 @@ import com.back.boundedContexts.post.application.service.PostRecommendFeatureSto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
-import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
@@ -103,7 +102,7 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
     }
 
     @Test
-    fun `removes account deletion producers while retaining queued event consumption and active boundaries`() {
+    fun `removes drained account deletion event consumption while retaining active boundaries`() {
         assertThat(PostUseCase::class.java.methods.map { it.name })
             .doesNotContain("deleteContentByAuthorForAccountDeletion")
 
@@ -117,7 +116,6 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
                 PostWrittenEvent::class.java,
                 PostModifiedEvent::class.java,
                 PostDeletedEvent::class.java,
-                PostAccountDeletionDeletedEvent::class.java,
             )
 
         assertThat(applicationContext.containsBean("memberAccountDeletionRepository")).isFalse()

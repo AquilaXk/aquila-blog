@@ -28,8 +28,7 @@ flows:
     processors:
       - home_server_postgresql
       - home_server_redis
-      - vercel_frontend_hosting
-      - cloudflare_dns_proxy
+      - cloudflare_tunnel
     status: cookie inventory는 policy versioning 작업에서 확정
   - id: posts_comments_profile
     collectionPoint: admin editor, comment form, profile editor
@@ -41,8 +40,7 @@ flows:
     processors:
       - home_server_postgresql
       - home_server_redis
-      - vercel_frontend_hosting
-      - cloudflare_dns_proxy
+      - cloudflare_tunnel
     status: deletion/export는 issue999
   - id: uploads
     collectionPoint: post/profile/cloud multipart upload
@@ -54,7 +52,7 @@ flows:
       - home_server_postgresql
       - home_server_minio
       - home_server_backup_storage
-      - cloudflare_dns_proxy
+      - cloudflare_tunnel
     status: restore tombstone은 issue1004
   - id: security_and_action_logs
     collectionPoint: auth filter and domain events
@@ -75,20 +73,8 @@ flows:
     processors:
       - home_server_postgresql
       - home_server_redis
-      - vercel_frontend_hosting
-      - cloudflare_dns_proxy
+      - cloudflare_tunnel
     status: PostgreSQL member_notification is purged after custom.privacy.retention.notificationDays, default 60 days
-  - id: analytics_rum
-    collectionPoint: browser runtime after optional tracking consent, /api/rum/vitals, and /api/rum/client-errors
-    stores:
-      - Google Analytics property
-      - Vercel analytics
-      - application logs for custom RUM
-    processors:
-      - google_analytics
-      - vercel_frontend_hosting
-      - grafana_loki_monitoring
-    status: /settings/privacy consent manager와 opt-out guard 구현
   - id: backup_restore
     collectionPoint: deploy and backup scripts
     stores:
@@ -115,7 +101,5 @@ codeEvidence:
   comment: back/src/main/kotlin/com/back/boundedContexts/post/model/PostComment.kt
   uploadedFile: back/src/main/kotlin/com/back/global/storage/model/UploadedFile.kt
   cloudFile: back/src/main/kotlin/com/back/boundedContexts/cloud/model/CloudFile.kt
-  rum: https://github.com/AquilaXk/aquila-blog-web/blob/main/src/pages/api/rum/vitals.ts
-  analytics: https://github.com/AquilaXk/aquila-blog-web/blob/main/src/libs/gtag.ts
   backup: deploy/homeserver/create_external_backup.sh
   restoreDrill: deploy/homeserver/restore_external_backup_drill.sh

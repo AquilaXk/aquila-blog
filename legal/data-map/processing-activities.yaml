@@ -178,9 +178,8 @@ activities:
     processors:
       - home_server_postgresql
       - home_server_redis
-      - vercel_frontend_hosting
-      - cloudflare_dns_proxy
-    overseasTransfer: possibleViaVercelOrCloudflareEdge
+      - cloudflare_tunnel
+    overseasTransfer: reviewRequired:cloudflare-tunnel-provider-facts
     retentionRule: revoked sessions custom.privacy.retention.revokedSessionDays default 30 days; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; signup_session untilSignupExpiry; auth.signupMailCooldown.v1 untilCooldownExpiryOrTabClose; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
     destructionMethod: revokeSessionExpireCookiePurgeExpiredSessions; auth.signupMailCooldown.v1 expires hashed entries; auth.login.* browserPreferenceDeletion
     accessRoles:
@@ -233,9 +232,8 @@ activities:
     processors:
       - home_server_postgresql
       - home_server_redis
-      - vercel_frontend_hosting
-      - cloudflare_dns_proxy
-    overseasTransfer: possibleViaVercelOrCloudflareEdge
+      - cloudflare_tunnel
+    overseasTransfer: reviewRequired:cloudflare-tunnel-provider-facts
     retentionRule: untilUserDeletionOrContentDeletion; publicCacheUntilRevalidation; admin.editor.localDraft.v1 sevenDaysFromSavedAt; admin.editor.customTags/admin.editor.customCategories untilCatalogChange; admin.contentStudio.listConditions.v1 untilPreferenceChange; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* untilTabCloseOrBrowserStorageClear; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
     destructionMethod: softDeleteThenCachePurge; anonymizeWhereRequired; admin.editor.localDraft.v1 manualClearPublishOrTtlExpiry; editor.actual-preview.v1:*/posts:public-cursor-disabled:v1/posts:runtime-endpoints:v1/feed.restore.* tabCloseOrBrowserStorageDeletion; bounded taskRetentionCleanup redaction and purge
     accessRoles:
@@ -275,8 +273,8 @@ activities:
       - home_server_postgresql
       - home_server_minio
       - home_server_backup_storage
-      - cloudflare_dns_proxy
-    overseasTransfer: noPlannedOverseasTransferForObjectStorage; edgeTransferPossibleViaCloudflare
+      - cloudflare_tunnel
+    overseasTransfer: reviewRequired:cloudflare-tunnel-provider-facts
     retentionRule: activeUntilOwnerDeletion; tempUploadsUntilPurgeAfter; deletedObjectsUntilBackupExpiry; aquila-cloud-video-upload-session:* untilUploadCompleteCancelOrStale
     destructionMethod: objectDeleteAndMetadataMarkDeleted; backupExpiryOrTombstoneFutureWork; aquila-cloud-video-upload-session:* localStorageClearOnCompleteCancelOrStale
     accessRoles:
@@ -388,9 +386,8 @@ activities:
     processors:
       - home_server_postgresql
       - home_server_redis
-      - vercel_frontend_hosting
-      - cloudflare_dns_proxy
-    overseasTransfer: possibleViaVercelOrCloudflareEdge
+      - cloudflare_tunnel
+    overseasTransfer: reviewRequired:cloudflare-tunnel-provider-facts
     retentionRule: custom.privacy.retention.notificationDays default 60 days; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
     destructionMethod: privacyRetentionCleanup scheduled batch purge; account deletion removes account-visible access; bounded taskRetentionCleanup redaction and purge
     accessRoles:
@@ -402,40 +399,6 @@ activities:
     codeOwner: back/member-notification
     policySectionId: privacy-collection-notification
     enabledByEnv: alwaysEnabledForLoggedInMembers
-    reviewRequired: []
-
-  - id: analytics_and_rum
-    name: Google Analytics, Vercel Speed Insights, custom RUM
-    dataCategories:
-      - pagePath
-      - webVitalsMetric
-      - performanceRating
-      - browserEventMetadata
-      - aggregatedUsageEvent
-      - privacy.optionalTrackingConsent.v1
-    dataSubjects:
-      - publicVisitor
-      - registeredMemberWhenLoggedIn
-    purpose: 페이지 품질, 성능, 오류 추적, 이용 흐름 집계 분석
-    legalBasis: consentOrLegitimateAnalyticsInterestReviewRequired
-    collectionSource: browser runtime after optional tracking consent, Next.js API route /api/rum/vitals and /api/rum/client-errors
-    requiredOrOptional: optionalAnalyticsExceptEssentialOperationalMetrics
-    systemOfRecord: Google Analytics, Vercel analytics, application logs for custom RUM
-    processors:
-      - google_analytics
-      - vercel_frontend_hosting
-      - grafana_loki_monitoring
-    overseasTransfer: possibleViaGoogleAndVercelGlobalInfrastructure
-    retentionRule: providerDefaultUnlessConfigured; localRumLogRetentionPolicyRequired; privacy.optionalTrackingConsent.v1 JSON record untilConsentChangeOrBrowserStorageClear
-    destructionMethod: providerRetentionControlsAndLocalLogExpiry; privacy.optionalTrackingConsent.v1 preferenceDeletion
-    accessRoles:
-      - serviceAdmin
-      - analyticsOperator
-    encryption: transportTls; aggregateMetricsPreferred
-    userRightsHandler: /settings/privacy preference and consent withdrawal
-    codeOwner: AquilaXk/aquila-blog-web:src/libs/rum
-    policySectionId: privacy-cookie-analytics
-    enabledByEnv: CONFIG.googleAnalytics.enable with optional tracking consent; Vercel analytics package in production only after optional tracking consent; NEXT_PUBLIC_RUM_SAMPLE_RATE defaults 0 and explicit non-zero enables custom RUM; RUM_LOG_SLOW_ONLY only controls server logging; Do Not Track and Global Privacy Control block optional tracking
     reviewRequired: []
 
   - id: backup_and_restore

@@ -22,5 +22,12 @@
       "class": "REQUIRES_N_MINUS_1_TEST"
     }
   ],
-  "cutovers": []
+  "cutovers": [
+    {
+      "id": "retired-public-persistence-phase-1",
+      "repository": "AquilaXk/aquila-blog",
+      "mergeSha": "8902c8e2ec09e3f8c9393d8f044759c0141129d8",
+      "deployRunId": 33554058558
+    }
+  ]
 }

@@ -36,6 +36,9 @@ const readChangedFiles = (file) =>
 
 const isMigrationFile = (file) => /^back\/src\/main\/resources\/db\/migration\/.+\.sql$/.test(file)
 const isVersionedMigration = (file) => /^back\/src\/main\/resources\/db\/migration\/V.+\.sql$/.test(file)
+const retiredLifecycleCallbacks = new Set([
+  "back/src/main/resources/db/migration/beforeMigrate__normalize_post_comment_post_fk.sql",
+])
 
 const isProceduralBodyPrefix = (statement) =>
   /\bdo\s+(?:language\s+[a-z_][a-z0-9_]*\s+)?$/i.test(statement) || /\bas\s*$/i.test(statement)
@@ -248,6 +251,7 @@ const main = () => {
   }
 
   for (const file of checkedFiles) {
+    if (retiredLifecycleCallbacks.has(file) && !existsSync(path.join(args.repoRoot, file))) continue
     const destructive = inspectFile({ repoRoot: args.repoRoot, file })
     if (destructive.some(({ rule }) => rule === "missing-migration-file")) {
       findings.push(...destructive)

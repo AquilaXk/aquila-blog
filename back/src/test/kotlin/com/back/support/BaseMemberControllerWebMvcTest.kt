@@ -3,6 +3,7 @@ package com.back.support
 import com.back.boundedContexts.member.adapter.web.ApiV1MemberController
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
 import com.back.global.observability.ErrorMetrics
@@ -52,6 +53,9 @@ abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean
     protected lateinit var currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase
+
+    @MockitoBean
+    protected lateinit var canonicalAdminPolicy: CanonicalAdminPolicy
 
     @MockitoBean
     protected lateinit var securityTipProvider: SecurityTipProvider

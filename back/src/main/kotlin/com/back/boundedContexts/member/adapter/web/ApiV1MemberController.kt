@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.AdminProperties
 import com.back.global.exception.application.AppException
@@ -17,6 +18,7 @@ class ApiV1MemberController(
     private val memberUseCase: MemberUseCase,
     private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val adminProperties: AdminProperties,
+    private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) {
     companion object {
         const val ADMIN_PROFILE_CACHE_NAME = "member-admin-profile-v2"
@@ -35,6 +37,7 @@ class ApiV1MemberController(
             adminEmail
                 .takeIf { it.isNotBlank() }
                 ?.let(memberUseCase::findByEmail)
+                ?.takeIf(canonicalAdminPolicy::canAuthenticate)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "관리자 프로필을 찾을 수 없습니다.")
 
         return currentMemberProfileQueryUseCase.getPublishedById(adminMember.id)

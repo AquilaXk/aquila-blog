@@ -3,8 +3,6 @@ package com.back.boundedContexts.member.application.port.input
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
-import com.back.standard.dto.member.type1.MemberSearchSortType1
-import com.back.standard.dto.page.PagedResult
 import java.util.Optional
 
 interface MemberUseCase {
@@ -31,15 +29,6 @@ interface MemberUseCase {
 
     fun findById(id: Long): Optional<Member>
 
-    fun issueLoginSession(
-        memberId: Long,
-        rememberLoginEnabled: Boolean,
-        ipSecurityEnabled: Boolean,
-        ipSecurityFingerprint: String?,
-        createdIp: String?,
-        userAgent: String?,
-    ): IssuedLoginSession
-
     fun issueAdminEmailLoginSession(
         email: String,
         nickname: String,
@@ -47,11 +36,6 @@ interface MemberUseCase {
         createdIp: String?,
         userAgent: String?,
     ): IssuedLoginSession
-
-    fun checkPassword(
-        member: Member,
-        rawPassword: String,
-    )
 
     fun modify(
         member: Member,
@@ -81,13 +65,6 @@ interface MemberUseCase {
     )
 
     fun publishProfileWorkspace(member: Member)
-
-    fun findPagedByKw(
-        kw: String,
-        sort: MemberSearchSortType1,
-        page: Int,
-        pageSize: Int,
-    ): PagedResult<Member>
 
     data class IssuedLoginSession(
         val member: Member,

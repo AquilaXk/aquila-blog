@@ -3,7 +3,6 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
-import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
@@ -62,7 +61,6 @@ class PostApplicationServiceDeleteResilienceTest {
     private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
     private val memberAttrRepository: MemberAttrRepositoryPort = mock(MemberAttrRepositoryPort::class.java)
-    private val postCommentRepository: PostCommentRepositoryPort = mock(PostCommentRepositoryPort::class.java)
     private val postLikeRepository: PostLikeRepositoryPort = mock(PostLikeRepositoryPort::class.java)
     private val postTagIndexRepository: PostTagIndexRepositoryPort = mock(PostTagIndexRepositoryPort::class.java)
     private val postWriteRequestIdempotencyRepository: PostWriteRequestIdempotencyRepositoryPort =
@@ -111,13 +109,6 @@ class PostApplicationServiceDeleteResilienceTest {
         )
     private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository)
     private val postHitSideEffectQueue = PostHitSideEffectQueue(taskFacade)
-    private val postCommentApplicationService =
-        PostCommentApplicationService(
-            postRepository = postRepository,
-            postCommentRepository = postCommentRepository,
-            postHydrationService = postHydrationService,
-            postCounterService = postCounterService,
-        )
     private val service =
         PostApplicationService(
             postRepository = postRepository,
@@ -132,7 +123,6 @@ class PostApplicationServiceDeleteResilienceTest {
             postCounterService = postCounterService,
             postTagIndexService = postTagIndexService,
             postTempDraftService = postTempDraftService,
-            postCommentApplicationService = postCommentApplicationService,
             postHitSideEffectQueue = postHitSideEffectQueue,
         )
 

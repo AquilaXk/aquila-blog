@@ -273,11 +273,11 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
             entityManager.clear()
 
             mvc
-                .get("/member/api/v1/adm/members/${member.id}")
+                .get("/member/api/v1/adm/members/profile/bootstrap")
                 .andExpect {
                     status { isOk() }
-                    jsonPath("$.blogDesign") { value("grid") }
-                    jsonPath("$.legacyBlogScheme") { value("light") }
+                    jsonPath("$.workspace.draft.blogDesign") { value("grid") }
+                    jsonPath("$.workspace.draft.legacyBlogScheme") { value("light") }
                 }
         }
 
@@ -312,14 +312,10 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
                     status { isOk() }
                 }
 
-            mvc
-                .get("/member/api/v1/adm/members/${member.id}")
-                .andExpect {
-                    status { isOk() }
-                    jsonPath("$.aboutRole") { value(aboutRole) }
-                    jsonPath("$.aboutBio") { value(aboutBio) }
-                    jsonPath("$.aboutDetails") { value(aboutDetails) }
-                }
+            val reloaded = memberFacade.findById(member.id).orElseThrow()
+            assertThat(reloaded.aboutRole).isEqualTo(aboutRole)
+            assertThat(reloaded.aboutBio).isEqualTo(aboutBio)
+            assertThat(reloaded.aboutDetails).isEqualTo(aboutDetails)
         }
 
         @Test
@@ -652,8 +648,8 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
     inner class UpdateProfileImg {
         @Test
         @WithUserDetails("admin@test.com")
-        fun `관리자는 회원 프로필 이미지 URL을 변경할 수 있다`() {
-            val member = memberFacade.findByEmail("user1@test.com")!!
+        fun `관리자는 자신의 프로필 이미지 URL을 변경할 수 있다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
             val newProfileImgUrl = "https://example.com/updated-profile.png"
 
             mvc
@@ -681,7 +677,7 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
 
         @Test
         @WithUserDetails("admin@test.com")
-        fun `회원 프로필 이미지 URL 변경에서 존재하지 않는 id를 보내면 404를 반환한다`() {
+        fun `회원 프로필 이미지 URL 변경에서 다른 id를 보내면 403을 반환한다`() {
             mvc
                 .patch("/member/api/v1/adm/members/999999/profileImgUrl") {
                     contentType = MediaType.APPLICATION_JSON
@@ -692,9 +688,9 @@ class ApiV1AdmMemberControllerTest : BaseControllerIntegrationTest() {
                         }
                         """.trimIndent()
                 }.andExpect {
-                    status { isNotFound() }
-                    jsonPath("$.resultCode") { value("404-1") }
-                    jsonPath("$.msg") { value("해당 데이터가 존재하지 않습니다.") }
+                    status { isForbidden() }
+                    jsonPath("$.resultCode") { value("403-1") }
+                    jsonPath("$.msg") { value("권한이 없습니다.") }
                 }
         }
 

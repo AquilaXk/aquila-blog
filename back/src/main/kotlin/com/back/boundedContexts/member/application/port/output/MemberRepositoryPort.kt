@@ -4,19 +4,6 @@ import com.back.boundedContexts.member.domain.shared.Member
 import java.util.Optional
 
 interface MemberRepositoryPort {
-    data class PagedQuery(
-        val kw: String,
-        val zeroBasedPage: Int,
-        val pageSize: Int,
-        val sortProperty: String,
-        val sortAscending: Boolean,
-    )
-
-    data class PagedResult<T>(
-        val content: List<T>,
-        val totalElements: Long,
-    )
-
     fun count(): Long
 
     fun save(member: Member): Member
@@ -38,6 +25,4 @@ interface MemberRepositoryPort {
     fun findByIdForUpdate(id: Long): Optional<Member>
 
     fun getReferenceById(id: Long): Member
-
-    fun findQPagedByKw(query: PagedQuery): PagedResult<Member>
 }

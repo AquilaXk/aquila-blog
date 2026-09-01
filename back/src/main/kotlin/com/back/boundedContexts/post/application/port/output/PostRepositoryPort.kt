@@ -71,8 +71,6 @@ interface PostRepositoryPort {
 
     fun findById(id: Long): Optional<Post>
 
-    fun findByAuthorIdOrderByIdAsc(authorId: Long): List<Post>
-
     fun findFirstByOrderByIdDesc(): Post?
 
     fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(

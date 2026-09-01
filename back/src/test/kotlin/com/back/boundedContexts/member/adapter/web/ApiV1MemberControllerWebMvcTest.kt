@@ -31,6 +31,7 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
             adminMember.blogDesign = "grid"
             adminMember.legacyBlogScheme = "light"
             given(memberUseCase.findByEmail("admin@test.com")).willReturn(adminMember)
+            given(canonicalAdminPolicy.canAuthenticate(adminMember)).willReturn(true)
             given(currentMemberProfileQueryUseCase.getPublishedById(adminMember.id))
                 .willReturn(MemberWithUsernameDto(adminMember))
 
@@ -55,6 +56,18 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
                     jsonPath("$.blogDesign") { value("grid") }
                     jsonPath("$.legacyBlogScheme") { value("light") }
                     jsonPath("$.profileImageUrl") { value(startsWith(adminMember.profileImgUrlOrDefault)) }
+                }
+        }
+
+        @Test
+        fun `설정 이메일의 일반 회원은 관리자 프로필로 노출하지 않는다`() {
+            val ordinaryMember = sampleMember(id = 2, username = "ordinary", nickname = "일반 회원")
+            given(memberUseCase.findByEmail("admin@test.com")).willReturn(ordinaryMember)
+
+            mvc
+                .get("/member/api/v1/members/adminProfile")
+                .andExpect {
+                    status { isNotFound() }
                 }
         }
     }

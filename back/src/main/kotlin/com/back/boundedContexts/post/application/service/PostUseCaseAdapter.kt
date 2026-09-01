@@ -85,9 +85,6 @@ class PostUseCaseAdapter(
         actor: Member,
     ) = postApplicationService.delete(post, actor)
 
-    override fun deleteContentByAuthorForAccountDeletion(author: Member) =
-        postApplicationService.deleteContentByAuthorForAccountDeletion(author)
-
     override fun incrementHit(post: Post) = postApplicationService.incrementHit(post)
 
     override fun findPagedByKw(

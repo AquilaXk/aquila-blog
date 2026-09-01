@@ -74,7 +74,7 @@ class ApiRuntimeBoundaryMatrixTest {
                     RouteCase("GET", "/post/api/v1/images/posts/2026/03/cover.webp", publicReadSafe = true),
                     RouteCase("GET", "/post/api/v1/posts/feed", publicReadSafe = true),
                     RouteCase("POST", "/post/api/v1/posts/466/hit", publicReadSafe = false),
-                    RouteCase("POST", "/member/api/v1/auth/login", publicReadSafe = false),
+                    RouteCase("POST", "/member/api/v1/auth/admin-email/request", publicReadSafe = false),
                     RouteCase("OPTIONS", "/post/api/v1/posts/466/hit", publicReadSafe = false, options = true),
                 )
             val modes =

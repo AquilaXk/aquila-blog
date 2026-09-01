@@ -7,6 +7,8 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.convertAboutSec
 import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.member.domain.shared.memberMixin.parseLegacyAboutDetailsToBlocks
 import com.back.global.storage.application.UploadedFileUrlCodec
+import com.fasterxml.jackson.annotation.JsonProperty
+import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
 
 data class MemberProfileLinkItemDto(
@@ -25,6 +27,8 @@ data class MemberWithUsernameDto(
     val id: Long,
     val createdAt: Instant,
     val modifiedAt: Instant,
+    @get:JsonProperty("isAdmin")
+    @get:Schema(name = "isAdmin", requiredMode = Schema.RequiredMode.REQUIRED)
     val isAdmin: Boolean,
     val username: String,
     val name: String,

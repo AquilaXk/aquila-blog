@@ -85,6 +85,18 @@ class PostImageAdmissionValidatorTest {
     }
 
     @Test
+    @DisplayName("PNG signature가 다르면 거절한다")
+    fun rejectsInvalidPngSignature() {
+        val invalidSignature = createImage("png").also { it[0] = 0 }
+
+        withUpload(invalidSignature, "invalid-signature.png") { path ->
+            assertBadRequest {
+                validator.validate(path, "image/png")
+            }
+        }
+    }
+
+    @Test
     @DisplayName("reader가 선택된 뒤 깨진 이미지를 BAD_REQUEST로 변환한다")
     fun rejectsMalformedImageAfterReaderSelection() {
         val malformed = corruptPngImageData(createImage("png"))

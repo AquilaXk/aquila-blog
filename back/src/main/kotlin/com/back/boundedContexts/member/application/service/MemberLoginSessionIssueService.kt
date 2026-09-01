@@ -19,25 +19,6 @@ class MemberLoginSessionIssueService(
     private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) {
     @Transactional
-    fun issue(
-        memberId: Long,
-        rememberLoginEnabled: Boolean,
-        ipSecurityEnabled: Boolean,
-        ipSecurityFingerprint: String?,
-        createdIp: String?,
-        userAgent: String?,
-    ): IssuedLoginSession =
-        issueInternal(
-            memberId = memberId,
-            rememberLoginEnabled = rememberLoginEnabled,
-            ipSecurityEnabled = ipSecurityEnabled,
-            ipSecurityFingerprint = ipSecurityFingerprint,
-            createdIp = createdIp,
-            userAgent = userAgent,
-            administratorEmailVerified = false,
-        )
-
-    @Transactional
     fun issueAdminEmail(
         email: String,
         nickname: String,
@@ -49,63 +30,45 @@ class MemberLoginSessionIssueService(
         return issueInternal(
             memberId = member.id,
             rememberLoginEnabled = rememberLoginEnabled,
-            ipSecurityEnabled = false,
-            ipSecurityFingerprint = null,
             createdIp = createdIp,
             userAgent = userAgent,
-            administratorEmailVerified = true,
         )
     }
 
     private fun issueInternal(
         memberId: Long,
         rememberLoginEnabled: Boolean,
-        ipSecurityEnabled: Boolean,
-        ipSecurityFingerprint: String?,
         createdIp: String?,
         userAgent: String?,
-        administratorEmailVerified: Boolean,
     ): IssuedLoginSession {
         val member =
             memberRepository
                 .findByIdForUpdate(memberId)
                 .orElseThrow { AppException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.") }
 
-        val validCredentialBoundary =
-            if (administratorEmailVerified) {
-                if (!member.isAdmin) member.grantAdmin()
-                member.isAdmin && canonicalAdminPolicy.canAuthenticate(member)
-            } else {
-                !member.isAdmin &&
-                    canonicalAdminPolicy.canAuthenticate(member) &&
-                    !member.password.isNullOrBlank()
-            }
-        if (!validCredentialBoundary) {
+        if (!member.isAdmin) member.grantAdmin()
+        if (!canonicalAdminPolicy.canAuthenticate(member)) {
             throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")
         }
 
-        if (administratorEmailVerified) {
-            if (!member.password.isNullOrBlank()) {
-                member.password = null
-            }
-            memberSessionUseCase.revokeAllActiveSessionsForMember(member.id)
+        if (!member.password.isNullOrBlank()) {
+            member.password = null
         }
+        memberSessionUseCase.revokeAllActiveSessionsForMember(member.id)
 
         member.applyLoginSecurityPolicy(
             rememberLoginEnabled = rememberLoginEnabled,
-            ipSecurityEnabled = ipSecurityEnabled,
-            ipSecurityFingerprint = ipSecurityFingerprint,
+            ipSecurityEnabled = false,
+            ipSecurityFingerprint = null,
         )
-        if (administratorEmailVerified || member.apiKey.isBlank() || member.apiKey == member.username) {
-            member.modifyApiKey(MemberPolicy.genApiKey())
-        }
+        member.modifyApiKey(MemberPolicy.genApiKey())
 
         val createdSession =
             memberSessionUseCase.createSessionWithRefreshToken(
                 member = member,
                 rememberLoginEnabled = rememberLoginEnabled,
-                ipSecurityEnabled = ipSecurityEnabled,
-                ipSecurityFingerprint = ipSecurityFingerprint,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
                 createdIp = createdIp,
                 userAgent = userAgent,
             )

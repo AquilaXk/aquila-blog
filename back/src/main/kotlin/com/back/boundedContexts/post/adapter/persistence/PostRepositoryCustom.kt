@@ -57,6 +57,4 @@ interface PostRepositoryCustom {
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 
     fun findAllPublicListedContents(): List<String>
-
-    fun findActiveByAuthorIdOrderByIdAsc(authorId: Long): List<Post>
 }

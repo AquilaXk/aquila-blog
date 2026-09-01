@@ -10,5 +10,6 @@ class CanonicalAdminPolicy(
 ) {
     fun canAuthenticate(member: Member): Boolean =
         member.deletedAt == null &&
-            (!member.isAdmin || adminProperties.matchesEmail(member.email))
+            member.isAdmin &&
+            adminProperties.matchesEmail(member.email)
 }

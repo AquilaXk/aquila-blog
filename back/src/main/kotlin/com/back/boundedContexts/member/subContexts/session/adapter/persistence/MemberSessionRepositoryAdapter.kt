@@ -24,6 +24,7 @@ class MemberSessionRepositoryAdapter(
                 from Member member
                 where member.id = :memberId
                   and member.deletedAt is null
+                  and member.admin = true
                 """.trimIndent(),
                 Member::class.java,
             ).setParameter("memberId", memberId)

@@ -147,16 +147,6 @@ class PostRepositoryImpl(
             .where(post.published.isTrue.and(post.listed.isTrue))
             .fetch()
 
-    override fun findActiveByAuthorIdOrderByIdAsc(authorId: Long): List<Post> =
-        queryFactory
-            .selectFrom(post)
-            .where(
-                post.author.id
-                    .eq(authorId)
-                    .and(post.deletedAt.isNull),
-            ).orderBy(post.id.asc())
-            .fetch()
-
     private fun findPosts(
         author: Member?,
         kw: String,

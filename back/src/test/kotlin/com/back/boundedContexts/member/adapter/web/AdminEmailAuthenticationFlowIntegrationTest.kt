@@ -95,6 +95,16 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
             }
 
         mvc
+            .get("/member/api/v1/auth/me") {
+                authCookies.forEach { cookie(it) }
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.id") { value(activeSession.member.id) }
+                jsonPath("$.isAdmin") { value(true) }
+                jsonPath("$.nickname") { value("관리자") }
+            }
+
+        mvc
             .delete("/member/api/v1/auth/logout") {
                 authCookies.forEach { cookie(it) }
                 header("X-Aquila-CSRF", "1")

@@ -221,6 +221,17 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                     }
             }
         }
+
+        Flyway
+            .configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .defaultSchema(compatibilitySchema)
+            .schemas(compatibilitySchema)
+            .createSchemas(true)
+            .locations("filesystem:$migrations")
+            .validateOnMigrate(true)
+            .load()
+            .migrate()
     }
 
     @Test

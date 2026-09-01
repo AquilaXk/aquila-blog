@@ -6,6 +6,7 @@ DECLARE
     post_comment_post_id_attnum smallint;
     post_id_attnum smallint;
     canonical_constraint_oid oid;
+    canonical_expected_count integer;
     matching_constraint_oid oid;
     matching_constraint_count integer;
     matching_constraint_name text;
@@ -66,7 +67,23 @@ BEGIN
        AND NOT condeferred;
 
     IF canonical_constraint_oid IS NOT NULL THEN
-        IF matching_constraint_count <> 1 OR matching_constraint_oid <> canonical_constraint_oid THEN
+        SELECT count(*)
+          INTO canonical_expected_count
+          FROM pg_constraint
+         WHERE oid = canonical_constraint_oid
+           AND contype = 'f'
+           AND conrelid = post_comment_oid
+           AND confrelid = post_oid
+           AND conkey = ARRAY[post_comment_post_id_attnum]::smallint[]
+           AND confkey = ARRAY[post_id_attnum]::smallint[]
+           AND convalidated
+           AND confupdtype = 'a'
+           AND confdeltype IN ('a', 'c')
+           AND confmatchtype = 's'
+           AND NOT condeferrable
+           AND NOT condeferred;
+
+        IF canonical_expected_count <> 1 THEN
             RAISE EXCEPTION 'Constraint fk_post_comment_post conflicts with the expected relationship';
         END IF;
         RETURN;

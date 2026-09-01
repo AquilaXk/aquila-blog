@@ -383,8 +383,9 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
     @WithUserDetails("admin@test.com")
     fun `operation id cannot be reused for a different request`() {
         val operationId = UUID.randomUUID()
+        val creationOperationId = UUID.randomUUID()
         val firstRequestId =
-            JsonPath.read<Number>(createRequest(UUID.randomUUID(), "first@example.com"), "$.id").toLong()
+            JsonPath.read<Number>(createRequest(creationOperationId, "first@example.com"), "$.id").toLong()
         val secondRequestId =
             JsonPath.read<Number>(createRequest(UUID.randomUUID(), "second@example.com"), "$.id").toLong()
 
@@ -411,6 +412,14 @@ class ApiV1AdmPrivacyRightsControllerTest : BaseControllerIntegrationTest() {
             """
             {"operationId": "$operationId", "approved": false}
             """,
+        ).andExpect {
+            status { isConflict() }
+            jsonPath("$.resultCode") { value("409-40") }
+        }
+        decide(
+            secondRequestId,
+            "identity-decisions",
+            """{"operationId": "$creationOperationId", "approved": false}""",
         ).andExpect {
             status { isConflict() }
             jsonPath("$.resultCode") { value("409-40") }

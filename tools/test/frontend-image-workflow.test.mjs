@@ -202,7 +202,7 @@ test("Security calls Deploy only after every push security gate with minimum reu
 
   const workflow = deployDocument()
   assert.equal(workflow.jobs.calculateTag.permissions.checks, undefined)
-  assert.equal(workflow.jobs.calculateTag.permissions.statuses, "read")
+  assert.equal(workflow.jobs.calculateTag.permissions.statuses, undefined)
   assert.deepEqual(workflow.on.workflow_call, {})
   assert.equal(workflow.on.workflow_run, undefined)
   assert.equal(workflow.on.push, undefined)
@@ -233,10 +233,9 @@ test("Security calls Deploy only after every push security gate with minimum reu
   assert.equal(securityGate.env.SECURITY_CALLER_ADMISSION, "${{ needs.triggerGuard.outputs.security_caller_admission }}")
   assert.match(securityGate.run, /Security gate satisfied by the exact same-SHA caller DAG/)
   assert.equal(meta.env.DEPLOY_SHA_INPUT, "${{ github.sha }}")
-  assert.match(dispatchDelivery.run, /commits\/\$\{DEPLOY_SHA\}\/statuses\?per_page=100/)
-  assert.match(dispatchDelivery.run, /\.context == "aquila\/security-gates-complete"/)
-  assert.match(dispatchDelivery.run, /\.creator\.login == "github-actions\[bot\]"/)
-  assert.match(dispatchDelivery.run, /actions\/runs\//)
+  assert.match(dispatchDelivery.run, /actions\/workflows\/security\.yml\/runs\?head_sha=\$\{DEPLOY_SHA\}&per_page=50/)
+  assert.match(dispatchDelivery.run, /select\(\.event == "push" and \.head_branch == "main"\)/)
+  assert.doesNotMatch(dispatchDelivery.run, /commits\/\$\{DEPLOY_SHA\}\/statuses|aquila\/security-gates-complete/)
   assert.doesNotMatch(dispatchDelivery.run, /deploy\.yml\/runs|\.event == "workflow_run"/)
   assert.doesNotMatch(meta.run, /attestation-source-sha-mismatch/)
 
@@ -289,7 +288,7 @@ test("CI gate fails immediately when the workflow API errors", () => {
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), [])
 })
 
-test("dispatch gate selectors classify every nonterminal GitHub status as active", () => {
+test("dispatch gate selectors classify every nonterminal workflow run as active", () => {
   const input = JSON.stringify({
     workflow_runs: [
       { id: 1, event: "push", head_branch: "main", status: "completed", conclusion: "failure" },
@@ -301,6 +300,7 @@ test("dispatch gate selectors classify every nonterminal GitHub status as active
   for (const stepName of [
     "Require successful CI for deployment SHA",
     "Require successful Security for deploy SHA",
+    "Require successful automatic Security delivery for dispatch SHA",
   ]) {
     const result = spawnSync("jq", ["-r", gateJq(stepName)], { encoding: "utf8", input })
     assert.ifError(result.error)
@@ -333,8 +333,8 @@ test("dispatch waits for the exact Platform Security delivery to succeed", () =>
   assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60"])
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [
-    `api repos/AquilaXk/aquila-blog/commits/${"a".repeat(40)}/statuses?per_page=100 --paginate --jq .[] | select(.context == "aquila/security-gates-complete" and .creator.login == "github-actions[bot]" and (.target_url | startswith("https://github.com/AquilaXk/aquila-blog/actions/runs/"))) | if .state == "success" then "success:\\(.id)" elif .state == "pending" then "active:\\(.id)" else "terminal:\\(.id)" end`,
-    `api repos/AquilaXk/aquila-blog/commits/${"a".repeat(40)}/statuses?per_page=100 --paginate --jq .[] | select(.context == "aquila/security-gates-complete" and .creator.login == "github-actions[bot]" and (.target_url | startswith("https://github.com/AquilaXk/aquila-blog/actions/runs/"))) | if .state == "success" then "success:\\(.id)" elif .state == "pending" then "active:\\(.id)" else "terminal:\\(.id)" end`,
+    `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
+    `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
   ])
 })
 
@@ -354,7 +354,7 @@ test("dispatch gates paginate past terminal first pages to find the exact workfl
   }
 })
 
-test("dispatch fails immediately when the exact Security gate marker is terminal non-success", () => {
+test("dispatch fails immediately when the exact Security delivery is terminal non-success", () => {
   const result = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", ["terminal:1"])
 
   assert.notEqual(result.status, 0)
@@ -392,7 +392,7 @@ test("dispatch gates query only their exact workflow paths", () => {
   const dispatchResult = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", ["success:3"])
   assert.equal(dispatchResult.status, 0, dispatchResult.stderr)
   assert.deepEqual(dispatchResult.callLog.filter((call) => call.startsWith("api ")), [
-    `api repos/AquilaXk/aquila-blog/commits/${"a".repeat(40)}/statuses?per_page=100 --paginate --jq .[] | select(.context == "aquila/security-gates-complete" and .creator.login == "github-actions[bot]" and (.target_url | startswith("https://github.com/AquilaXk/aquila-blog/actions/runs/"))) | if .state == "success" then "success:\\(.id)" elif .state == "pending" then "active:\\(.id)" else "terminal:\\(.id)" end`,
+    `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
   ])
 })
 

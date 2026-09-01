@@ -38,12 +38,16 @@ const requiredProcessorFields = [
   "securityControls",
 ]
 const requiredProcessors = new Set([
+  "home_server_postgresql",
   "home_server_redis",
-  "vercel_frontend_hosting",
-  "cloudflare_dns_proxy",
+  "home_server_minio",
+  "cloudflare_tunnel",
   "kakao_oauth",
   "smtp_provider_unconfirmed",
   "home_server_backup_storage",
+  "grafana_loki_monitoring",
+  "github_actions",
+  "ghcr_container_registry",
 ])
 const requiredActivityDataCategories = new Map([
   ["account_registration_email", ["email", "nickname", "passwordHash", "apiKey"]],
@@ -63,32 +67,34 @@ const requiredActivityDataCategories = new Map([
   ],
 ])
 const requiredActivityEnvFragments = new Map([
-  [
-    "analytics_and_rum",
-    ["NEXT_PUBLIC_RUM_SAMPLE_RATE", "defaults 0", "explicit non-zero enables custom RUM"],
-  ],
   ["file_uploads_profile_post_cloud", ["AQUILA_EXTERNAL_STORAGE_ROOT"]],
   ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
 ])
 const requiredActivityProcessors = new Map([
-  ["signup_email_verification", ["home_server_redis"]],
-  ["auth_session_and_cookies", ["home_server_redis"]],
-  ["user_content_posts_comments", ["home_server_redis"]],
+  ["account_registration_email", ["cloudflare_tunnel"]],
+  ["signup_email_verification", ["home_server_redis", "cloudflare_tunnel"]],
+  ["kakao_oauth_existing_login", ["cloudflare_tunnel"]],
+  ["kakao_oauth_pending_signup", ["cloudflare_tunnel"]],
+  ["auth_session_and_cookies", ["home_server_redis", "cloudflare_tunnel"]],
+  ["user_content_posts_comments", ["home_server_redis", "cloudflare_tunnel"]],
+  ["file_uploads_profile_post_cloud", ["cloudflare_tunnel"]],
   ["auth_security_events", ["home_server_redis"]],
-  ["notifications_sse", ["home_server_redis"]],
+  ["notifications_sse", ["home_server_redis", "cloudflare_tunnel"]],
 ])
 const requiredProcessorEnvFragments = new Map([
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
 const requiredFlowProcessors = new Map([
-  ["email_signup", ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed"]],
-  ["kakao_oauth_login", ["home_server_postgresql", "kakao_oauth"]],
-  ["auth_session", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
-  ["posts_comments_profile", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
-  ["uploads", ["home_server_postgresql", "home_server_minio", "home_server_backup_storage", "cloudflare_dns_proxy"]],
+  [
+    "email_signup",
+    ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed", "cloudflare_tunnel"],
+  ],
+  ["kakao_oauth_login", ["home_server_postgresql", "kakao_oauth", "cloudflare_tunnel"]],
+  ["auth_session", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
+  ["posts_comments_profile", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
+  ["uploads", ["home_server_postgresql", "home_server_minio", "home_server_backup_storage", "cloudflare_tunnel"]],
   ["security_and_action_logs", ["home_server_postgresql", "home_server_redis", "grafana_loki_monitoring"]],
-  ["notifications_sse", ["home_server_postgresql", "home_server_redis", "vercel_frontend_hosting", "cloudflare_dns_proxy"]],
-  ["analytics_rum", ["google_analytics", "vercel_frontend_hosting", "grafana_loki_monitoring"]],
+  ["notifications_sse", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
   ["backup_restore", ["home_server_backup_storage", "github_actions", "ghcr_container_registry"]],
 ])
 
@@ -166,15 +172,24 @@ const retiredCurrentFragments = [
   "custom.ai.summary.enabled",
   "CUSTOM__AI__SUMMARY__ENABLED",
   "custom.ai.summary.gemini.",
+  "analytics_and_rum",
+  "analytics_rum",
+  "vercel_frontend_hosting",
+  "google_analytics",
+  "cloudflare_dns_proxy",
+  "NEXT_PUBLIC_RUM_SAMPLE_RATE",
+  "/api/rum/",
+  "Vercel",
+  "Google Analytics",
 ]
-const activeLegalSources = [
+const currentLegalSources = [
   ...activeDataMapSources,
   "legal/data-map/retention-matrix.yaml",
   "legal/data-map/legal-basis-matrix.yaml",
   "legal/privacy-launch-controls.json",
   "legal/vendors/processors.yaml",
 ]
-for (const relativePath of activeLegalSources) {
+for (const relativePath of currentLegalSources) {
   const source = read(relativePath)
   for (const fragment of retiredCurrentFragments) {
     if (source.includes(fragment)) fail(`${relativePath} contains retired current fragment ${fragment}`)

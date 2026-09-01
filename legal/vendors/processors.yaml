@@ -86,46 +86,27 @@ processors:
     reviewRequired:
       - Encryption at rest and deletion tombstone controls are tracked by issue1004.
 
-  - id: vercel_frontend_hosting
-    name: Vercel
-    role: frontendHostingAndAnalyticsProcessor
-    serviceType: hostingEdgeAnalytics
+  - id: cloudflare_tunnel
+    name: Cloudflare Tunnel
+    role: ingressTunnelProvider
+    serviceType: secureTunnelIngress
     dataCategories:
-      - pageRequests
-      - publicAssets
-      - analyticsEvents
-      - speedInsights
-    region: globalEdgeNetwork
-    overseasTransfer: true
-    enabledByEnv: Vercel deployment; analytics packages only after optional tracking consent
-    contractStatus: vendorTermsReviewRequired
-    retentionControl: Vercel project settings and provider retention controls
+      - publicHttpRequestMetadata
+      - requestHeaders
+      - authenticationCookies
+      - requestBodies
+      - contentPayloads
+      - uploadedFileContent
+    region: reviewRequired
+    overseasTransfer: reviewRequired
+    enabledByEnv: cloudflared service and CF_TUNNEL_TOKEN
+    contractStatus: providerContractReviewRequired
+    retentionControl: providerRetentionReviewRequired
     securityControls:
-      - HTTPS
-      - projectAccessControl
-      - deploymentAudit
+      - encryptedTunnel
+      - restrictedCredentialAccess
     reviewRequired:
-      - Provider retention settings still require launch owner review.
-
-  - id: cloudflare_dns_proxy
-    name: Cloudflare
-    role: dnsProxyAndEdgeSecurityProvider
-    serviceType: dnsProxyCdnSecurity
-    dataCategories:
-      - dnsRequestMetadata
-      - edgeRequestMetadata
-      - securityHeaders
-    region: globalEdgeNetwork
-    overseasTransfer: true
-    enabledByEnv: domain DNS and proxy configuration
-    contractStatus: vendorTermsReviewRequired
-    retentionControl: Cloudflare dashboard retention controls
-    securityControls:
-      - TLS
-      - edgeProxy
-      - accessControl
-    reviewRequired:
-      - Exact Cloudflare products enabled in production must be confirmed.
+      - Region, transfer, contract, and provider retention facts require provider-account evidence.
 
   - id: kakao_oauth
     name: Kakao OAuth
@@ -166,27 +147,6 @@ processors:
       - TLSReviewRequired
     reviewRequired:
       - Provider name, region, DPA, retention, and TLS mode must be finalized before open signup.
-
-  - id: google_analytics
-    name: Google Analytics
-    role: analyticsProcessor
-    serviceType: webAnalytics
-    dataCategories:
-      - pagePath
-      - eventMetadata
-      - browserMetadata
-      - aggregatedUsage
-    region: globalGoogleInfrastructure
-    overseasTransfer: true
-    enabledByEnv: CONFIG.googleAnalytics.enable and measurementId
-    contractStatus: googleTermsReviewRequired
-    retentionControl: Google Analytics property data retention settings
-    securityControls:
-      - HTTPS
-      - accountAccessControl
-      - IPAndSignalControlsReviewRequired
-    reviewRequired:
-      - Consent manager and opt-out are tracked by issue1002.
 
   - id: grafana_loki_monitoring
     name: Grafana and Loki monitoring stack

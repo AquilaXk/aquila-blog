@@ -12,6 +12,7 @@ import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.support.BaseControllerIntegrationTest
+import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -33,6 +34,9 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
     @jakarta.annotation.Resource
     private lateinit var requestMappingHandlerMapping: RequestMappingHandlerMapping
 
+    @jakarta.annotation.Resource
+    private lateinit var entityManagerFactory: EntityManagerFactory
+
     @Test
     fun `removes drained handlers while retaining active task boundaries`() {
         val registeredTaskTypes = taskHandlerRegistry.getRegisteredEntries().map { it.taskType }
@@ -48,7 +52,7 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
     }
 
     @Test
-    fun `removes retired mail and notification operations while retaining privacy persistence`() {
+    fun `removes retired public persistence while retaining administrator operations`() {
         listOf(
             HttpMethod.GET to "/system/api/v1/adm/mail/signup",
             HttpMethod.POST to "/system/api/v1/adm/mail/signup/test",
@@ -62,9 +66,39 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
         assertThat(applicationContext.containsBean("signupVerificationMailTaskHandler")).isFalse()
         assertThat(applicationContext.containsBean("postInteractionSideEffectHandler")).isFalse()
         assertThat(applicationContext.containsBean("memberNotificationSseService")).isFalse()
-        assertThat(applicationContext.containsBean("memberSignupVerificationRepositoryAdapter")).isTrue()
-        assertThat(applicationContext.containsBean("memberNotificationRepositoryAdapter")).isTrue()
-        assertThat(applicationContext.containsBean("postHitSideEffectHandler")).isTrue()
+        assertThat(applicationContext.beanDefinitionNames)
+            .doesNotContain(
+                "memberSignupVerificationRepository",
+                "memberSignupVerificationRepositoryAdapter",
+                "signupStartRateLimitService",
+                "pendingOAuthSignupRepository",
+                "pendingOAuthSignupRepositoryAdapter",
+                "oauthSignupApplicationService",
+                "oauthSignupHashService",
+                "memberNotificationRepository",
+                "memberNotificationRepositoryAdapter",
+                "memberPrivacyRequestRepository",
+            ).contains(
+                "memberSessionRepositoryAdapter",
+                "legalAcceptanceApplicationService",
+                "memberActionLogApplicationService",
+                "privacyRetentionCleanupScheduledJob",
+                "postHitSideEffectHandler",
+            )
+
+        assertThat(entityManagerFactory.metamodel.entities.map { it.javaType.name })
+            .doesNotContain(
+                "com.back.boundedContexts.member.subContexts.signupVerification.model.MemberSignupVerification",
+                "com.back.boundedContexts.member.subContexts.oauthSignup.model.PendingOAuthSignup",
+                "com.back.boundedContexts.member.subContexts.notification.model.MemberNotification",
+                "com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest",
+                "com.back.boundedContexts.post.model.PostComment",
+            ).contains(
+                "com.back.boundedContexts.member.subContexts.session.model.MemberSession",
+                "com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance",
+                "com.back.boundedContexts.member.subContexts.memberActionLog.model.MemberActionLog",
+                "com.back.boundedContexts.post.model.Post",
+            )
     }
 
     @Test
@@ -120,7 +154,6 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
 
         assertThat(applicationContext.containsBean("memberAccountDeletionRepository")).isFalse()
         assertThat(applicationContext.containsBean("memberAccountDeletionRepositoryAdapter")).isFalse()
-        assertThat(applicationContext.containsBean("memberPrivacyRequestRepository")).isTrue()
         assertThat(applicationContext.containsBean("privacyRetentionCleanupScheduledJob")).isTrue()
         assertThat(applicationContext.containsBean("postWriteSideEffectHandler")).isTrue()
 

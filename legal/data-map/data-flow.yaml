@@ -1,49 +1,28 @@
 flows:
-  - id: email_signup
-    collectionPoint: /signup and /member/api/v1/signup/email/start
+  - id: auth_session
+    collectionPoint: administrator email sign-in and auth filter
     stores:
-      - PostgreSQL member
-      - PostgreSQL member_signup_verification
+      - Redis administrator email challenge
+      - PostgreSQL member_session
+      - outbound SMTP administrator sign-in code
+      - HttpOnly browser cookies
     processors:
       - home_server_postgresql
       - home_server_redis
       - smtp_provider_unconfirmed
       - cloudflare_tunnel
-    status: provider/region/DPA 확정 필요
-  - id: kakao_oauth_login
-    collectionPoint: Kakao redirect and Spring Security OAuth2
-    stores:
-      - PostgreSQL member
-      - PostgreSQL pending_oauth_signup for new applicants
-      - PostgreSQL member_legal_acceptance after consent
-      - OAuth state cookie
-    processors:
-      - home_server_postgresql
-      - kakao_oauth
-      - cloudflare_tunnel
-    status: 신규 가입은 /signup/social/complete pending 동의 완료 후 계정 생성
-  - id: auth_session
-    collectionPoint: login form and auth filter
-    stores:
-      - PostgreSQL member_session
-      - HttpOnly browser cookies
-    processors:
-      - home_server_postgresql
-      - home_server_redis
-      - cloudflare_tunnel
-    status: cookie inventory는 policy versioning 작업에서 확정
-  - id: posts_comments_profile
-    collectionPoint: admin editor, comment form, profile editor
+    status: administrator challenge is consumed or expires before a member session is issued
+  - id: admin_content_profile
+    collectionPoint: admin editor and profile editor
     stores:
       - PostgreSQL post
-      - PostgreSQL post_comment
       - PostgreSQL member profile columns
       - public frontend cache
     processors:
       - home_server_postgresql
       - home_server_redis
       - cloudflare_tunnel
-    status: deletion/export는 issue999
+    status: administrator-owned content follows the active post deletion and cache invalidation contracts
   - id: uploads
     collectionPoint: post/profile/cloud multipart upload
     stores:
@@ -67,16 +46,6 @@ flows:
       - home_server_redis
       - grafana_loki_monitoring
     status: auth security identifiers and member action log bodies are minimized by issue1001
-  - id: notifications_sse
-    collectionPoint: post/comment domain events and SSE API
-    stores:
-      - PostgreSQL member_notification
-      - runtime SSE memory
-    processors:
-      - home_server_postgresql
-      - home_server_redis
-      - cloudflare_tunnel
-    status: PostgreSQL member_notification is purged after custom.privacy.retention.notificationDays, default 60 days
   - id: backup_restore
     collectionPoint: deploy and backup scripts
     stores:
@@ -90,17 +59,15 @@ flows:
     status: encryption/tombstone은 issue1004
 
 reviewBlockers:
-  - SMTP provider name, region, TLS mode, DPA, retention policy
+  - SMTP provider name, region, TLS mode, DPA, retention policy for administrator sign-in email
   - Backup encryption and deletion tombstone replay
 
 codeEvidence:
   account: back/src/main/kotlin/com/back/boundedContexts/member/model/shared/Member.kt
-  signupVerification: back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/model/MemberSignupVerification.kt
   session: back/src/main/kotlin/com/back/boundedContexts/member/subContexts/session/model/MemberSession.kt
   securityEvent: back/src/main/kotlin/com/back/global/security/model/AuthSecurityEvent.kt
   actionLog: back/src/main/kotlin/com/back/boundedContexts/member/subContexts/memberActionLog/model/MemberActionLog.kt
   post: back/src/main/kotlin/com/back/boundedContexts/post/model/Post.kt
-  comment: back/src/main/kotlin/com/back/boundedContexts/post/model/PostComment.kt
   uploadedFile: back/src/main/kotlin/com/back/global/storage/model/UploadedFile.kt
   cloudFile: back/src/main/kotlin/com/back/boundedContexts/cloud/model/CloudFile.kt
   backup: deploy/homeserver/create_external_backup.sh

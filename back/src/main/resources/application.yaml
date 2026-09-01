@@ -176,22 +176,6 @@ custom:
     redisHost: "${custom.dev.redisHost}"
     redisPort: "${custom.dev.redisPort}"
     redisDatabase: "${custom.dev.redisDatabase}"
-  member:
-    signup:
-      enabled: ${CUSTOM__MEMBER__SIGNUP__ENABLED:false}
-      legacyDirectJoinEnabled: ${CUSTOM__MEMBER__SIGNUP__LEGACY_DIRECT_JOIN_ENABLED:false}
-      verifyPath: ${CUSTOM__MEMBER__SIGNUP__VERIFY_PATH:/signup/verify}
-      emailExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__EMAIL_EXPIRATION_SECONDS:86400}
-      sessionExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__SESSION_EXPIRATION_SECONDS:3600}
-      startRateLimit:
-        maxAttemptsPerEmail: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPEREMAIL:5}
-        maxAttemptsPerIp: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPERIP:20}
-        windowSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__WINDOWSECONDS:3600}
-        memoryMaxEntries: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_MAX_ENTRIES:10000}
-        memoryCleanupIntervalSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
-        requireRedisInProd: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__REQUIRE_REDIS_IN_PROD:true}
-    oauth-signup:
-      enabled: ${CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED:false}
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     email: "${CUSTOM__ADMIN__EMAIL:}"
@@ -270,12 +254,9 @@ custom:
     apiMode: ${CUSTOM__RUNTIME__API_MODE:all}
   privacy:
     retention:
-      signupVerificationDays: ${CUSTOM__PRIVACY__RETENTION__SIGNUP_VERIFICATION_DAYS:7}
       revokedSessionDays: ${CUSTOM__PRIVACY__RETENTION__REVOKED_SESSION_DAYS:${CUSTOM__AUTH__SESSION__REVOKED_RETENTION_DAYS:30}}
       authSecurityEventDays: ${CUSTOM__PRIVACY__RETENTION__AUTH_SECURITY_EVENT_DAYS:${CUSTOM__AUTH__SECURITY_EVENT__RETENTION_DAYS:30}}
       memberActionLogDays: ${CUSTOM__PRIVACY__RETENTION__MEMBER_ACTION_LOG_DAYS:90}
-      notificationDays: ${CUSTOM__PRIVACY__RETENTION__NOTIFICATION_DAYS:60}
-      privacyRequestDays: ${CUSTOM__PRIVACY__RETENTION__PRIVACY_REQUEST_DAYS:30}
       cleanup:
         batchSize: ${CUSTOM__PRIVACY__RETENTION__CLEANUP__BATCH_SIZE:500}
         maxBatches: ${CUSTOM__PRIVACY__RETENTION__CLEANUP__MAX_BATCHES:20}

@@ -591,16 +591,6 @@ class ArchitectureGuardTest {
                     "com.back.boundedContexts.member.subContexts.memberActionLog.model.MemberActionLog",
                 ),
                 PersistenceModelAlias(
-                    "com/back/boundedContexts/member/subContexts/notification/domain/PersistenceModelAliases.kt",
-                    "MemberNotification",
-                    "com.back.boundedContexts.member.subContexts.notification.model.MemberNotification",
-                ),
-                PersistenceModelAlias(
-                    "com/back/boundedContexts/member/subContexts/signupVerification/domain/PersistenceModelAliases.kt",
-                    "MemberSignupVerification",
-                    "com.back.boundedContexts.member.subContexts.signupVerification.model.MemberSignupVerification",
-                ),
-                PersistenceModelAlias(
                     "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
                     "Post",
                     "com.back.boundedContexts.post.model.Post",
@@ -609,11 +599,6 @@ class ArchitectureGuardTest {
                     "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
                     "PostAttr",
                     "com.back.boundedContexts.post.model.PostAttr",
-                ),
-                PersistenceModelAlias(
-                    "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
-                    "PostComment",
-                    "com.back.boundedContexts.post.model.PostComment",
                 ),
                 PersistenceModelAlias(
                     "com/back/boundedContexts/post/domain/PersistenceModelAliases.kt",
@@ -700,7 +685,7 @@ class ArchitectureGuardTest {
                     |
                     |typealias ImportedPost = Post
                     |typealias ImportedPostAttrAlias = ImportedPostAttr
-                    |typealias WildcardPostComment = PostComment
+                    |typealias WildcardPostLike = PostLike
                     |typealias LocalId = Long
                     |typealias ImportedPostList = List<Post>
                     |typealias ImportedPostMap<T> = Map<T, Post>
@@ -724,8 +709,8 @@ class ArchitectureGuardTest {
                 ),
                 PersistenceModelAlias(
                     "example/domain/PersistenceModelAliases.kt",
-                    "WildcardPostComment",
-                    "com.back.boundedContexts.post.model.PostComment",
+                    "WildcardPostLike",
+                    "com.back.boundedContexts.post.model.PostLike",
                 ),
                 PersistenceModelAlias(
                     "example/domain/PersistenceModelAliases.kt",

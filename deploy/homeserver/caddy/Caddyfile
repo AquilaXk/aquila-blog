@@ -67,15 +67,6 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 
-	@notificationSse path /member/api/v1/notifications/stream
-	log_skip @notificationSse
-
-	@signupVerifySensitive path /member/api/v1/signup/email/verify
-	log_skip @signupVerifySensitive
-
-	@socialSignupSensitive path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete
-	log_skip @socialSignupSensitive
-
 	@accountDeletionSensitive path /member/api/v1/privacy/account
 	log_skip @accountDeletionSensitive
 
@@ -103,34 +94,10 @@
 		respond 403
 	}
 
-	handle @notificationSse {
-		header {
-			Cache-Control "no-cache, no-transform"
-		}
-
-		reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
-			import trusted_edge_client_ip
-			header_up Host {host}
-			header_up X-Forwarded-Proto https
-			header_up X-Forwarded-Port 443
-			header_down -Strict-Transport-Security
-			header_down -X-Content-Type-Options
-			header_down -X-Frame-Options
-			header_down -Referrer-Policy
-			header_down -Permissions-Policy
-			flush_interval -1
-			transport http {
-				dial_timeout 3s
-				response_header_timeout 10s
-			}
-		}
-	}
-
 	# read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
 	# Paths must match PublicApiRouteContributor SoT export (tools/guards/public-api-read-caddy-paths.sot).
 	@publicReadFallback {
 		path /post/api/v1/images/* /post/api/v1/posts /post/api/v1/posts/* /post/api/v1/posts/bootstrap /post/api/v1/posts/explore /post/api/v1/posts/explore/cursor /post/api/v1/posts/feed /post/api/v1/posts/feed/cursor /post/api/v1/posts/related/author /post/api/v1/posts/search /post/api/v1/posts/tags /system/api/v1/adm/cloud/files/*/external-content
-		not path /post/api/v1/posts/*/comments /post/api/v1/posts/*/comments/*
 		method GET HEAD OPTIONS
 	}
 	handle @publicReadFallback {
@@ -448,7 +415,7 @@ http://{$WEB_DOMAIN:web.localhost} {
   #
   # The catch-all below hands every unclaimed path to Next, and Next owns `/api/*`. One of those
   # routes is `pages/api/backend/[...path].ts`, which proxies straight to BACKEND_INTERNAL_URL - so
-  # a catch-all alone publishes the whole backend proxy surface (auth, signup, posts) on hosts that
+  # a catch-all alone publishes the whole backend proxy surface (auth and posts) on hosts that
   # have no CORS entry, no cookie scope and no page that calls it. `/api/revalidate` reaches the
   # backend too (admin session check + read-cache invalidation). Neither belongs here.
   #

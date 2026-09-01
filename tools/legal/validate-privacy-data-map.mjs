@@ -42,7 +42,6 @@ const requiredProcessors = new Set([
   "home_server_redis",
   "home_server_minio",
   "cloudflare_tunnel",
-  "kakao_oauth",
   "smtp_provider_unconfirmed",
   "home_server_backup_storage",
   "grafana_loki_monitoring",
@@ -50,9 +49,8 @@ const requiredProcessors = new Set([
   "ghcr_container_registry",
 ])
 const requiredActivityDataCategories = new Map([
-  ["account_registration_email", ["email", "nickname", "passwordHash", "apiKey"]],
   [
-    "user_content_posts_comments",
+    "user_content_posts",
     [
       "profileNickname",
       "profileRole",
@@ -71,30 +69,22 @@ const requiredActivityEnvFragments = new Map([
   ["backup_and_restore", ["AQUILA_BACKUP_ROOT"]],
 ])
 const requiredActivityProcessors = new Map([
-  ["account_registration_email", ["cloudflare_tunnel"]],
-  ["signup_email_verification", ["home_server_redis", "cloudflare_tunnel"]],
-  ["kakao_oauth_existing_login", ["cloudflare_tunnel"]],
-  ["kakao_oauth_pending_signup", ["cloudflare_tunnel"]],
-  ["auth_session_and_cookies", ["home_server_redis", "cloudflare_tunnel"]],
-  ["user_content_posts_comments", ["home_server_redis", "cloudflare_tunnel"]],
+  ["auth_session_and_cookies", ["home_server_redis", "smtp_provider_unconfirmed", "cloudflare_tunnel"]],
+  ["user_content_posts", ["home_server_redis", "cloudflare_tunnel"]],
   ["file_uploads_profile_post_cloud", ["cloudflare_tunnel"]],
   ["auth_security_events", ["home_server_redis"]],
-  ["notifications_sse", ["home_server_redis", "cloudflare_tunnel"]],
+])
+const requiredActivityOverseasTransferFragments = new Map([
+  ["auth_session_and_cookies", ["smtp-provider", "cloudflare-tunnel"]],
 ])
 const requiredProcessorEnvFragments = new Map([
   ["home_server_redis", ["custom.site.redisHost", "SPRING__DATA__REDIS__PASSWORD", "REDIS_IMAGE"]],
 ])
 const requiredFlowProcessors = new Map([
-  [
-    "email_signup",
-    ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed", "cloudflare_tunnel"],
-  ],
-  ["kakao_oauth_login", ["home_server_postgresql", "kakao_oauth", "cloudflare_tunnel"]],
-  ["auth_session", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
-  ["posts_comments_profile", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
+  ["auth_session", ["home_server_postgresql", "home_server_redis", "smtp_provider_unconfirmed", "cloudflare_tunnel"]],
+  ["admin_content_profile", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
   ["uploads", ["home_server_postgresql", "home_server_minio", "home_server_backup_storage", "cloudflare_tunnel"]],
   ["security_and_action_logs", ["home_server_postgresql", "home_server_redis", "grafana_loki_monitoring"]],
-  ["notifications_sse", ["home_server_postgresql", "home_server_redis", "cloudflare_tunnel"]],
   ["backup_restore", ["home_server_backup_storage", "github_actions", "ghcr_container_registry"]],
 ])
 
@@ -181,6 +171,9 @@ const retiredCurrentFragments = [
   "/api/rum/",
   "Vercel",
   "Google Analytics",
+  "signupEmailRateLimitKey",
+  "signupIpRateLimitKey",
+  "notificationRelayPayload",
 ]
 const currentLegalSources = [
   ...activeDataMapSources,
@@ -231,6 +224,11 @@ for (const activity of activities) {
   }
   for (const processorId of requiredActivityProcessors.get(activity.id) || []) {
     if (!activity.processors.includes(processorId)) fail(`activity ${activity.id} processors must include ${processorId}`)
+  }
+  for (const fragment of requiredActivityOverseasTransferFragments.get(activity.id) || []) {
+    if (!activity.overseasTransfer.includes(fragment)) {
+      fail(`activity ${activity.id} overseasTransfer must include ${fragment}`)
+    }
   }
 }
 

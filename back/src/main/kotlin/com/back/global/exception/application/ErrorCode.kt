@@ -111,18 +111,6 @@ enum class ErrorCode(
         "작성자만 글을 삭제할 수 있습니다.",
         ErrorKind.USER,
     ),
-    POST_COMMENT_EDIT_DENIED(
-        "403-13",
-        HttpStatus.FORBIDDEN,
-        "작성자만 댓글을 수정할 수 있습니다.",
-        ErrorKind.USER,
-    ),
-    POST_COMMENT_DELETE_DENIED(
-        "403-14",
-        HttpStatus.FORBIDDEN,
-        "작성자만 댓글을 삭제할 수 있습니다.",
-        ErrorKind.USER,
-    ),
     CLOUD_PLAYBACK_DENIED(
         "403-30",
         HttpStatus.FORBIDDEN,

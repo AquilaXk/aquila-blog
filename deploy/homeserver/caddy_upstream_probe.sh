@@ -7,8 +7,8 @@
 # ({$ADMIN_API_UPSTREAM:back_blue}:8080 / {$READ_API_UPSTREAM:back_blue}:8080) and
 # runtime-split pins those keys to back_admin/back_read. Verifiers that matched only the
 # literal back_blue/back_green form returned an empty upstream on a healthy split edge and
-# reported drift that does not exist (#1418), so every consumer resolves through this one
-# implementation instead of re-deriving the awk.
+# reported drift that does not exist (#1418). The probe observes ADMIN_API_UPSTREAM because
+# the readiness path reaches the default admin handle; public-read may appear earlier.
 #
 # usage:
 #   caddy_upstream_probe.sh host                     upstream resolved from the host Caddyfile
@@ -77,12 +77,12 @@ host_upstream_token() {
   # non-zero and set -e would abort instead of printing the empty line the host/mounted
   # contract promises. recover.sh only hides that behind `|| true`.
   [[ -f "${CADDY_FILE}" ]] || return 0
-  awk '$1 == "reverse_proxy" && $2 ~ /^(back[-_](blue|green|read|admin):8080|\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\}:8080)$/ {print $2; exit}' "${CADDY_FILE}"
+  awk '$1 == "reverse_proxy" && $2 ~ /^(back[-_](blue|green|read|admin):8080|\{\$ADMIN_API_UPSTREAM:back[-_](blue|green|read|admin)\}:8080)$/ {print $2; exit}' "${CADDY_FILE}"
 }
 
 mounted_upstream_token() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T caddy \
-    awk '$1 == "reverse_proxy" && $2 ~ /^(back[-_](blue|green|read|admin):8080|\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\}:8080)$/ {print $2; exit}' \
+    awk '$1 == "reverse_proxy" && $2 ~ /^(back[-_](blue|green|read|admin):8080|\{\$ADMIN_API_UPSTREAM:back[-_](blue|green|read|admin)\}:8080)$/ {print $2; exit}' \
     "${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1
 }
 
@@ -120,8 +120,8 @@ expected_upstream() {
   local active_backend="$1"
 
   # runtime-split never routes the edge at a blue/green colour: configure_runtime_split_env()
-  # pins ADMIN_API_UPSTREAM/READ_API_UPSTREAM, and the first reverse_proxy token plus the
-  # default handle that the readiness probe traverses both resolve through ADMIN_API_UPSTREAM.
+  # pins ADMIN_API_UPSTREAM/READ_API_UPSTREAM, and the default handle that the readiness
+  # probe traverses resolves through ADMIN_API_UPSTREAM.
   if [[ "$(runtime_split_enabled)" == "true" ]]; then
     local admin_upstream
     admin_upstream="$(normalize_backend_name "$(host_env_value "ADMIN_API_UPSTREAM")")"

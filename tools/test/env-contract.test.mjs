@@ -259,6 +259,7 @@ const baseHomeServerEnv = [
   "PROMETHEUS_BASIC_AUTH_USER=prometheus-operator",
   "PROMETHEUS_BASIC_AUTH_HASH=$$2y$$05$$abcdefghijklmnopqrstuvABCDEFGHIJKLMNOPQRSTUVabcdefghi",
   "OPERATIONS_ALERT_EMAIL_TO=ops@aquilaxk.site",
+  "ALERTMANAGER_SMTP_FROM=mailer@aquilaxk.site",
   "ALERTMANAGER_SMTP_AUTH_ENABLED=true",
   "ALERTMANAGER_SMTP_AUTH_USERNAME=mailer@aquilaxk.site",
   "ALERTMANAGER_SMTP_AUTH_PASSWORD=valid-mail-password",
@@ -295,11 +296,6 @@ const baseHomeServerEnv = [
   "SPRING__MAIL__PASSWORD=valid-mail-password",
   "SPRING__MAIL__PROPERTIES__MAIL__SMTP__AUTH=true",
   "SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE=true",
-  "CUSTOM__MEMBER__SIGNUP__MAIL_FROM=mailer@aquilaxk.site",
-  "CUSTOM__MEMBER__SIGNUP__MAIL_SUBJECT=[AquilaXk] 회원가입 이메일 인증",
-  "CUSTOM__MEMBER__SIGNUP__VERIFY_PATH=/signup/verify",
-  "CUSTOM__MEMBER__SIGNUP__EMAIL_EXPIRATION_SECONDS=86400",
-  "CUSTOM__MEMBER__SIGNUP__SESSION_EXPIRATION_SECONDS=3600",
   "MINIO_ROOT_USER=minio",
   "MINIO_ROOT_PASSWORD=valid-minio-password",
   "CUSTOM_STORAGE_ENABLED=true",
@@ -566,20 +562,18 @@ test("active product contracts do not retain the unimplemented AI summary seam",
   }
 })
 
-test("Caddy access logs skip signup verification endpoint before proxying", () => {
+test("Caddy omits retired signup notification and comment routes", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
-  const matcherIndex = gates.indexOf("@signupVerifySensitive path /member/api/v1/signup/email/verify")
-  const skipIndex = gates.indexOf("log_skip @signupVerifySensitive")
-  const proxyIndex = gates.lastIndexOf("reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080")
 
   assert.notEqual(gates, "", "shared backend gate snippet must be extractable")
-  assert.notEqual(matcherIndex, -1, "signup verify sensitive matcher must be configured")
-  assert.notEqual(skipIndex, -1, "signup verify access log skip must be configured")
-  assert(skipIndex > matcherIndex, "signup verify log_skip must reference the sensitive matcher")
-  assert(skipIndex < proxyIndex, "signup verify log_skip must be declared before API proxy handling")
-  assert(!caddyfile.includes("?token="), "Caddy config must not preserve signup verification token query examples")
-  assert(!caddyfile.includes("signup=done&email="), "Caddy config must not preserve signup completion email query examples")
+  for (const retiredPath of [
+    "/member/api/v1/signup",
+    "/member/api/v1/notifications",
+    "/post/api/v1/posts/*/comments",
+  ]) {
+    assert(!caddyfile.includes(retiredPath), `${retiredPath} must not remain in Caddy`)
+  }
 })
 
 test("공개 API 게이트는 두 vhost가 같은 snippet을 공유하고 front 응답에는 닿지 않는다", () => {
@@ -596,7 +590,6 @@ test("공개 API 게이트는 두 vhost가 같은 snippet을 공유하고 front 
   for (const gate of [
     "@denyPrometheus",
     "@denyAdminEmailAuthReadiness",
-    "@notificationSse",
     "@publicReadFallback",
     "@adminApi",
     "max_size 100MB",
@@ -972,7 +965,6 @@ test("Caddy access logs skip sensitive query routes before proxying", () => {
   const adminHandleIndex = gates.indexOf("handle @adminApi {")
   const publicReadHandleIndex = gates.indexOf("handle @publicReadFallback {")
   const sensitiveRoutes = [
-    ["@socialSignupSensitive", "path /member/api/v1/signup/social/pending /member/api/v1/signup/social/complete"],
     ["@accountDeletionSensitive", "path /member/api/v1/privacy/account"],
     ["@publicSearchSensitive", "path /post/api/v1/posts/search"],
   ]
@@ -2224,7 +2216,7 @@ test("Platform contract keeps runtime keys but removes Web rendering and Web-own
   ]) {
     assert.equal(sourceKeys.has(key), false, `${key} must belong to Web only`)
   }
-  for (const key of ["CUSTOM_PROD_FRONTURL", "CUSTOM_PROD_BACKURL", "CUSTOM_PROD_COOKIEDOMAIN", "CUSTOM__REVALIDATE__URL", "CUSTOM__REVALIDATE__TOKEN", "CUSTOM__MEMBER__SIGNUP__ENABLED"]) {
+  for (const key of ["CUSTOM_PROD_FRONTURL", "CUSTOM_PROD_BACKURL", "CUSTOM_PROD_COOKIEDOMAIN", "CUSTOM__REVALIDATE__URL", "CUSTOM__REVALIDATE__TOKEN", "ALERTMANAGER_SMTP_FROM"]) {
     assert.equal(sourceKeys.has(key), true, `${key} must remain Platform-owned`)
   }
 
@@ -2450,7 +2442,7 @@ test("내부 edge probe는 미매치 Host의 빈 200을 성공으로 읽지 않�
     assert.match(predicate, /\^\[1-9\]\[0-9\]\*\$/, `${name} predicate must require a non-empty body`)
     // 판정 지점에서 실제로 쓰여야 한다. 정의만 있고 호출이 없으면 게이트가 아니다.
     assert(
-      script.split("is_unmatched_host_response").length - 1 >= 3,
+      script.split("is_unmatched_host_response").length - 1 >= 2,
       `${name} must call the predicate on every internal probe verdict`,
     )
   }

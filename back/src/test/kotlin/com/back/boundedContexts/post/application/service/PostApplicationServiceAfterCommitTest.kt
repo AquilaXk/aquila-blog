@@ -4,7 +4,6 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.event.PostModifiedEvent
@@ -223,7 +222,7 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     @Test
-    @DisplayName("글 수정 후 추천 feature store 갱신은 기존 hit/like/comment 카운터를 유지한다")
+    @DisplayName("글 수정 후 추천 feature store 갱신은 기존 hit/like 카운터를 유지한다")
     fun modifyCommitRefreshesRecommendFeatureStoreWithHydratedCounters() {
         // given
         clearSideEffectMocks()
@@ -242,7 +241,6 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         transactionTemplate.executeWithoutResult {
             postAttrRepository.incrementIntValue(post, HIT_COUNT, 11)
             postAttrRepository.incrementIntValue(post, LIKES_COUNT, 7)
-            postAttrRepository.incrementIntValue(post, COMMENTS_COUNT, 3)
         }
         val refreshedCounters = mutableListOf<PostCounterSnapshot>()
         clearSideEffectMocks()

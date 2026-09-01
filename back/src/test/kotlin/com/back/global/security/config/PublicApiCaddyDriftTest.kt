@@ -15,7 +15,6 @@ class PublicApiCaddyDriftTest {
         val exported = matcher.edgePublicReadCaddyPaths()
         val snapshot = readSnapshotPaths()
         val caddyPaths = readCaddyPublicReadDirectivePaths("path ")
-        val caddyExcludedPaths = readCaddyPublicReadDirectivePaths("not path ")
 
         assertThat(exported)
             .describedAs("Kotlin SoT export vs tools/guards/public-api-read-caddy-paths.sot")
@@ -23,12 +22,6 @@ class PublicApiCaddyDriftTest {
         assertThat(caddyPaths)
             .describedAs("Caddyfile @publicReadFallback vs SoT snapshot")
             .isEqualTo(snapshot)
-        assertThat(caddyExcludedPaths)
-            .describedAs("Caddyfile @publicReadFallback retired comment descendants")
-            .containsExactlyInAnyOrder(
-                "/post/api/v1/posts/*/comments",
-                "/post/api/v1/posts/*/comments/*",
-            )
     }
 
     private fun readSnapshotPaths(): Set<String> {

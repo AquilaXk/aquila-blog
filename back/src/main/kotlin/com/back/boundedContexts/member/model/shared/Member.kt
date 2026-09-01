@@ -114,9 +114,6 @@ class Member(
     @Transient
     override var postsCountAttr: MemberAttr? = null
 
-    @Transient
-    override var postCommentsCountAttr: MemberAttr? = null
-
     fun softDelete(now: Instant = Instant.now()) {
         deletedAt = now
         username = "deleted-$id-${UUID.randomUUID()}"

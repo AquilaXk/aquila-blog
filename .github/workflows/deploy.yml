@@ -664,8 +664,6 @@ jobs:
         env:
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
           HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
-          HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
-          HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -674,8 +672,6 @@ jobs:
           {
             printf '%s\n' "${HOME_SERVER_ENV}"
             printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
-            printf 'CUSTOM__MEMBER__SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
-            printf 'CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=%s\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
           } > "${home_server_env_file}"
           node tools/env/validate-env.mjs --target home-server-source --file "${home_server_env_file}"
 
@@ -750,8 +746,6 @@ jobs:
           HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
           HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
           HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
-          HOME_MEMBER_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__SIGNUP__ENABLED || vars.CUSTOM__MEMBER__SIGNUP__ENABLED || 'false' }}
-          HOME_MEMBER_OAUTH_SIGNUP_ENABLED: ${{ secrets.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || vars.CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED || 'false' }}
         run: |
           set -euo pipefail
           PORT="${HOME_SSH_PORT:-22}"
@@ -766,8 +760,6 @@ jobs:
             printf 'HOME_DEPLOY_SHA=%q\n' "${HOME_DEPLOY_SHA}"
             printf 'HOME_GHCR_USERNAME=%q\n' "${HOME_GHCR_USERNAME}"
             printf 'HOME_GHCR_TOKEN=%q\n' "${HOME_GHCR_TOKEN}"
-            printf 'HOME_MEMBER_SIGNUP_ENABLED=%q\n' "${HOME_MEMBER_SIGNUP_ENABLED:-false}"
-            printf 'HOME_MEMBER_OAUTH_SIGNUP_ENABLED=%q\n' "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}"
             printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
           } > "${LOCAL_REMOTE_VARS_FILE}"
           chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
@@ -1052,11 +1044,6 @@ jobs:
               exit 1
             fi
           }
-
-          require_privacy_freeze_value "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "false"
-          require_privacy_freeze_value "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "false"
-          upsert_env_key "CUSTOM__MEMBER__SIGNUP__ENABLED" "${HOME_MEMBER_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
-          upsert_env_key "CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED" "${HOME_MEMBER_OAUTH_SIGNUP_ENABLED:-false}" "deploy/homeserver/.env.prod"
 
           # prod에서 sql.init 경로가 켜지면 부팅 실패(DO $$ 분리/DDL 충돌)로 이어질 수 있다.
           # HOME_SERVER_ENV 드리프트가 있어도 배포 직전에 안전값으로 강제한다.

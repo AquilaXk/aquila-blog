@@ -9,6 +9,15 @@ if (process.argv.length !== 2) {
 }
 
 const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim()
+const deletedPaths = new Set(
+  [[], ["--cached"]].flatMap((mode) =>
+    execFileSync(
+      "git",
+      ["-C", repositoryRoot, "diff", ...mode, "--name-only", "--diff-filter=D", "-z"],
+      { encoding: "utf8" },
+    ).split("\0").filter(Boolean),
+  ),
+)
 const self = "tools/repo-boundary/check-platform-boundary.mjs"
 const scopes = [".github/", ".githooks/", "tools/", "deploy/", "back/"]
 const forbidden = /working-directory:\s*["']?(?:\.?\/)?front(?:[/\\"'\s#]|$)|front\/yarn\.lock|frontLiveE2E|reusable-frontend-verify\.yml/
@@ -367,6 +376,7 @@ for (const file of tracked) {
   try {
     descriptor = openSync(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
   } catch (error) {
+    if (error?.code === "ENOENT" && deletedPaths.has(file)) continue
     if (error?.code !== "ELOOP") throw error
     contents = readlinkSync(absolutePath)
   }

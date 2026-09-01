@@ -1,154 +1,4 @@
 activities:
-  - id: account_registration_email
-    name: 이메일 회원가입 계정 생성
-    dataCategories:
-      - email
-      - nickname
-      - passwordHash
-      - legalAcceptanceVersion
-      - legalAcceptanceTimestamp
-      - accountIdentifier
-      - apiKey
-    dataSubjects:
-      - registeredMember
-    purpose: 이메일 인증 기반 계정 제공, 로그인 식별, 약관 및 개인정보처리방침 동의 증빙
-    legalBasis: contractAndConsent
-    collectionSource: /signup 이메일 회원가입 form
-    requiredOrOptional: required
-    systemOfRecord: PostgreSQL member, member_signup_verification
-    processors:
-      - home_server_postgresql
-      - smtp_provider_unconfirmed
-      - cloudflare_tunnel
-    overseasTransfer: reviewRequired:smtp-provider-and-cloudflare-tunnel-facts
-    retentionRule: accountLifetimeUntilDeletionOrLegalHold
-    destructionMethod: softDeleteThenAnonymizeOrHardDeleteAfterRetention
-    accessRoles:
-      - accountOwner
-      - serviceAdmin
-      - databaseOperator
-    encryption: passwordHashAndTransportTls; databaseDiskEncryptionReviewRequired
-    userRightsHandler: privacyRequestEmailAndFutureAccountDeletionFlow
-    codeOwner: back/member-auth
-    policySectionId: privacy-collection-account
-    enabledByEnv: custom.member.signup.enabled defaults false via CUSTOM__MEMBER__SIGNUP__ENABLED; NEXT_PUBLIC_SIGNUP_ENABLED defaults false
-    reviewRequired:
-      - SMTP provider name, region, DPA, retention policy must be finalized before commercial launch.
-
-  - id: signup_email_verification
-    name: 회원가입 이메일 인증 링크 발송과 세션 검증
-    dataCategories:
-      - email
-      - emailVerificationToken
-      - signupSessionToken
-      - verificationExpiry
-      - legalAcceptanceVersion
-      - legalAcceptanceTimestamp
-      - signupEmailRateLimitKey
-      - signupIpRateLimitKey
-      - durableTaskEnvelopeMetadata
-    dataSubjects:
-      - signupApplicant
-    purpose: 회원가입 요청자가 이메일 소유자인지 확인하고 in-flight 가입 세션을 제한
-    legalBasis: contractPreparationAndConsentEvidence
-    collectionSource: /member/api/v1/signup/email/start and verification link
-    requiredOrOptional: required
-    systemOfRecord: PostgreSQL member_signup_verification; outbound SMTP task queue
-    processors:
-      - home_server_postgresql
-      - home_server_redis
-      - smtp_provider_unconfirmed
-      - cloudflare_tunnel
-    overseasTransfer: reviewRequired:smtp-provider-and-cloudflare-tunnel-facts
-    retentionRule: token/session expiry plus custom.privacy.retention.signupVerificationDays default 7 days; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days or earlier payload expiry; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
-    destructionMethod: expireCancelConsumeThenPrivacyRetentionCleanupPurge; bounded taskRetentionCleanup redaction and purge
-    accessRoles:
-      - signupApplicant
-      - serviceAdmin
-      - databaseOperator
-    encryption: randomTokenAtRestCurrentlyPlaintext; hashMigrationTrackedByIssue998; transportTls
-    userRightsHandler: privacyRequestEmailAndExpiredTokenPurge
-    codeOwner: back/member-signup-verification
-    policySectionId: privacy-collection-signup-verification
-    enabledByEnv: custom.member.signup.enabled defaults false via CUSTOM__MEMBER__SIGNUP__ENABLED
-    reviewRequired:
-      - Token hash migration is tracked separately and must complete before unrestricted signup.
-
-  - id: kakao_oauth_existing_login
-    name: Kakao OAuth 기존 연결 계정 로그인
-    dataCategories:
-      - oauthProvider
-      - oauthProviderSubject
-      - emailWhenProvided
-      - authState
-      - redirectOrigin
-    dataSubjects:
-      - registeredMember
-      - oauthApplicant
-    purpose: 기존 연결 계정 로그인과 OAuth CSRF state 검증
-    legalBasis: contractAndLegitimateSecurityInterest
-    collectionSource: Kakao OAuth redirect and Spring Security OAuth2 client
-    requiredOrOptional: optionalLoginMethod
-    systemOfRecord: PostgreSQL member; OAuth2 state cookie/session
-    processors:
-      - kakao_oauth
-      - home_server_postgresql
-      - cloudflare_tunnel
-    overseasTransfer: reviewRequired:kakao-and-cloudflare-tunnel-provider-facts
-    retentionRule: accountLifetimeForLinkedIdentifier; transientStateCookieUntilCallback
-    destructionMethod: unlinkOrAccountDeletion; transientCookieExpiry
-    accessRoles:
-      - accountOwner
-      - serviceAdmin
-      - databaseOperator
-    encryption: transportTls; legacyProviderSubjectMayExistInAccountRecord; newAccountsUseProviderSubjectHashLoginId
-    userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
-    codeOwner: back/oauth2
-    policySectionId: privacy-collection-oauth
-    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id; existing login remains available while signup freeze is on
-    reviewRequired:
-      - Legacy connected accounts may still contain provider subject in member login_id until unlink/migration policy is finalized.
-
-  - id: kakao_oauth_pending_signup
-    name: Kakao OAuth 신규 가입 pending 동의
-    dataCategories:
-      - oauthProvider
-      - oauthProviderSubjectHash
-      - pendingOAuthSignupTokenHash
-      - profileNickname
-      - profileImageUrl
-      - authState
-      - redirectOrigin
-      - legalAcceptanceVersion
-      - legalAcceptanceTimestamp
-    dataSubjects:
-      - oauthApplicant
-      - registeredMemberAfterConsent
-    purpose: Kakao OAuth 신규 사용자를 로컬 약관·개인정보·연령 동의 완료 전 pending 상태로 제한하고 동의 완료 후 계정 생성
-    legalBasis: contractPreparationAndConsentEvidence
-    collectionSource: Kakao OAuth redirect, /signup/social/complete, /member/api/v1/signup/social/*
-    requiredOrOptional: optionalSignupMethod
-    systemOfRecord: PostgreSQL pending_oauth_signup, member, member_legal_acceptance
-    processors:
-      - kakao_oauth
-      - home_server_postgresql
-      - cloudflare_tunnel
-    overseasTransfer: reviewRequired:kakao-and-cloudflare-tunnel-provider-facts
-    retentionRule: pendingTokenTtlThenPurge; accountLifetimeAfterConsent
-    destructionMethod: expireCancelConsumeThenPurgeByRetentionJob; unlinkOrAccountDeletion
-    accessRoles:
-      - signupApplicant
-      - accountOwner
-      - serviceAdmin
-      - databaseOperator
-    encryption: pendingTokenHmacHashAtRest; providerSubjectHmacHashAtRest; transportTls
-    userRightsHandler: privacyRequestEmailAndFutureOauthUnlinkFlow
-    codeOwner: back/oauth-signup; AquilaXk/aquila-blog-web:src/pages/signup/social/complete.tsx
-    policySectionId: privacy-collection-oauth
-    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id; custom.member.oauth-signup.enabled defaults false via CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED
-    reviewRequired:
-      - Pending signup purge job and OAuth unlink/account deletion workflow remain tracked by issue1000 and issue999.
-
   - id: auth_session_and_cookies
     name: 인증 세션, refresh token, 보안 cookie
     dataCategories:
@@ -160,10 +10,8 @@ activities:
       - accessToken cookie
       - refreshToken cookie
       - sessionKey cookie
-      - signup_session cookie
       - auth.login.keepSignedIn
       - auth.login.ipSecurityOn
-      - auth.signupMailCooldown.v1
       - auth:me:anon-probe-suppress-until:v1
       - header.auth-shell.v1
       - createdIp
@@ -172,20 +20,24 @@ activities:
       - rememberLoginPreference
       - loginAttemptIdentifierKey
       - loginAttemptIpKey
+      - administratorEmail
+      - administratorEmailChallengeHash
+      - administratorEmailRequestRateLimitKey
     dataSubjects:
       - registeredMember
-    purpose: 로그인 상태 유지, 세션 탈취 방지, IP 보안 정책 적용
+    purpose: 관리자 이메일 인증, 로그인 상태 유지, 세션 탈취 방지, IP 보안 정책 적용
     legalBasis: contractAndLegitimateSecurityInterest
-    collectionSource: login form, auth filter, browser cookies
+    collectionSource: /member/api/v1/auth/admin-email/request, /member/api/v1/auth/admin-email/verify, auth filter, browser cookies
     requiredOrOptional: requiredForLogin; ipSecurityOptional
-    systemOfRecord: PostgreSQL member_session; HttpOnly browser cookies
+    systemOfRecord: Redis administrator email challenge; PostgreSQL member_session; outbound SMTP; HttpOnly browser cookies
     processors:
       - home_server_postgresql
       - home_server_redis
+      - smtp_provider_unconfirmed
       - cloudflare_tunnel
-    overseasTransfer: reviewRequired:cloudflare-tunnel-provider-facts
-    retentionRule: revoked sessions custom.privacy.retention.revokedSessionDays default 30 days; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; signup_session untilSignupExpiry; auth.signupMailCooldown.v1 untilCooldownExpiryOrTabClose; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
-    destructionMethod: revokeSessionExpireCookiePurgeExpiredSessions; auth.signupMailCooldown.v1 expires hashed entries; auth.login.* browserPreferenceDeletion
+    overseasTransfer: reviewRequired:smtp-provider-and-cloudflare-tunnel-facts
+    retentionRule: administrator email challenge until configured expiry, default 5 minutes; revoked sessions custom.privacy.retention.revokedSessionDays default 30 days; apiKey/accessToken/refreshToken/sessionKey cookies sessionOrConfiguredMaxAge; auth.login.keepSignedIn/auth.login.ipSecurityOn untilPreferenceChangeOrBrowserStorageClear
+    destructionMethod: consumeOrExpireAdministratorEmailChallenge; revokeSessionExpireCookiePurgeExpiredSessions; auth.login.* browserPreferenceDeletion
     accessRoles:
       - accountOwner
       - serviceAdmin
@@ -194,17 +46,16 @@ activities:
     userRightsHandler: logoutAllSessionsAndPrivacyRequestEmail
     codeOwner: back/auth-session
     policySectionId: privacy-collection-session
-    enabledByEnv: custom.prod.cookieDomain; custom.prod.frontUrl
+    enabledByEnv: custom.admin.email; custom.auth.adminEmail.*; spring.mail.*; custom.prod.cookieDomain; custom.prod.frontUrl
     reviewRequired:
       - Cookie inventory is published in cookies.ko-KR.v1.0.2 and must stay aligned with browserStorageRegistry.
 
-  - id: user_content_posts_comments
-    name: 게시글, 댓글, 공개 프로필 콘텐츠
+  - id: user_content_posts
+    name: 게시글과 공개 프로필 콘텐츠
     dataCategories:
       - postTitle
       - postMarkdownContent
       - postRenderedHtml
-      - commentContent
       - profileNickname
       - profileRole
       - profileBio
@@ -228,11 +79,11 @@ activities:
     dataSubjects:
       - registeredMember
       - publicVisitorWhenViewing
-    purpose: 블로그 콘텐츠 작성, 공개 열람, 댓글 커뮤니케이션, 프로필 표시
+    purpose: 블로그 콘텐츠 작성, 공개 열람, 프로필 표시
     legalBasis: contractAndUserPublishedContent
-    collectionSource: admin editor, comment form, profile editor
+    collectionSource: admin editor and profile editor
     requiredOrOptional: optionalUserGeneratedContent
-    systemOfRecord: PostgreSQL post, post_comment, member profile columns, member_attr profile/home fields; transient durable task queue
+    systemOfRecord: PostgreSQL post, member profile columns, member_attr profile/home fields; transient durable task queue
     processors:
       - home_server_postgresql
       - home_server_redis
@@ -367,43 +218,7 @@ activities:
     policySectionId: privacy-collection-action-log
     enabledByEnv: alwaysEnabledForAuditableActions
     reviewRequired:
-      - action log data stores structured_audit_v1 metadata without post/comment body text.
-
-  - id: notifications_sse
-    name: 알림과 SSE 연결 상태
-    dataCategories:
-      - receiverMemberId
-      - notificationType
-      - eventUid
-      - readAt
-      - lastNotificationId
-      - notificationRelayPayload
-      - unreadCount
-      - durableTaskEnvelopeMetadata
-    dataSubjects:
-      - registeredMember
-    purpose: 댓글 등 서비스 이벤트 알림, unread count 제공, SSE 재연결 복구
-    legalBasis: contractAndLegitimateOperationalInterest
-    collectionSource: post/comment domain events and notification API
-    requiredOrOptional: requiredForNotificationFeature
-    systemOfRecord: PostgreSQL member_notification; SSE runtime memory; Redis pub/sub relay; transient durable task queue
-    processors:
-      - home_server_postgresql
-      - home_server_redis
-      - cloudflare_tunnel
-    overseasTransfer: reviewRequired:cloudflare-tunnel-provider-facts
-    retentionRule: custom.privacy.retention.notificationDays default 60 days; durable task payload COMPLETED/QUARANTINED immediate redaction, FAILED max 7 days; terminal task row COMPLETED 7 days, FAILED/QUARANTINED 30 days
-    destructionMethod: privacyRetentionCleanup scheduled batch purge; account deletion removes account-visible access; bounded taskRetentionCleanup redaction and purge
-    accessRoles:
-      - accountOwner
-      - serviceAdmin
-      - databaseOperator
-    encryption: transportTls
-    userRightsHandler: privacyRequestEmailAndFutureAccountDeletionFlow
-    codeOwner: back/member-notification
-    policySectionId: privacy-collection-notification
-    enabledByEnv: alwaysEnabledForLoggedInMembers
-    reviewRequired: []
+      - action log data stores structured_audit_v1 metadata without post body text.
 
   - id: backup_and_restore
     name: PostgreSQL, MinIO, deploy rollback backup

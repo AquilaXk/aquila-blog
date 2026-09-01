@@ -219,7 +219,7 @@ stage_home_server_env_compose_values() {
   stage_home_server_env_key "BACK_WORKER_MEM_LIMIT"
   stage_home_server_env_key "BACK_WORKER_MEM_RESERVATION"
   stage_home_server_env_key "CF_TUNNEL_TOKEN"
-  stage_home_server_env_key "CUSTOM__MEMBER__SIGNUP__MAIL_FROM"
+  stage_home_server_env_key "ALERTMANAGER_SMTP_FROM"
   stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE"
   stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_BLUE"
   stage_home_server_env_key "CUSTOM__RUNTIME__API_MODE_GREEN"

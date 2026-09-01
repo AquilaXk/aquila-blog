@@ -8,7 +8,6 @@ processors:
       - session
       - content
       - logs
-      - notifications
     region: selfHostedHomeServer
     overseasTransfer: false
     enabledByEnv: DATABASE_URL and docker compose postgres service
@@ -26,11 +25,10 @@ processors:
     role: transientOperationalStateProcessor
     serviceType: cacheRateLimitAndPubSub
     dataCategories:
-      - signupEmailRateLimitKey
-      - signupIpRateLimitKey
+      - administratorEmailChallengeHash
+      - administratorEmailRequestRateLimitKey
       - loginIdentifierAttemptKey
       - loginIpAttemptKey
-      - notificationRelayPayload
       - postHitDedupHash
     region: selfHostedHomeServer
     overseasTransfer: false
@@ -43,7 +41,7 @@ processors:
       - ttlBoundKeys
       - restrictedOperatorAccess
     reviewRequired:
-      - Raw signup/login identifiers in Redis keys should be hashed before unrestricted signup.
+      - Administrator login identifiers in Redis keys must remain one-way hashed.
 
   - id: home_server_minio
     name: Home server MinIO
@@ -108,45 +106,24 @@ processors:
     reviewRequired:
       - Region, transfer, contract, and provider retention facts require provider-account evidence.
 
-  - id: kakao_oauth
-    name: Kakao OAuth
-    role: identityProvider
-    serviceType: oauthProvider
-    dataCategories:
-      - oauthProviderSubject
-      - emailWhenProvided
-      - oauthAuthorizationCode
-      - oauthState
-    region: koreaProviderReviewRequired
-    overseasTransfer: false
-    enabledByEnv: spring.security.oauth2.client.registration.kakao.client-id
-    contractStatus: kakaoDeveloperTermsReviewRequired
-    retentionControl: Kakao developer console and account unlink controls
-    securityControls:
-      - OAuth2AuthorizationCodeFlow
-      - redirectUriAllowlist
-      - stateParameter
-    reviewRequired:
-      - New OAuth signup pending consent is tracked by issue997.
-
   - id: smtp_provider_unconfirmed
     name: SMTP provider
     role: emailDeliveryProcessor
     serviceType: emailDelivery
     dataCategories:
       - recipientEmail
-      - signupVerificationLink
+      - administratorSignInCode
       - operationalEmailContent
     region: reviewRequired
     overseasTransfer: reviewRequired
-    enabledByEnv: custom.member.signup.mail.* SMTP configuration
-    contractStatus: providerUnconfirmedLaunchBlocker
+    enabledByEnv: spring.mail.* administrator authentication configuration
+    contractStatus: providerReviewRequired
     retentionControl: providerRetentionPolicyReviewRequired
     securityControls:
       - SMTPAuth
       - TLSReviewRequired
     reviewRequired:
-      - Provider name, region, DPA, retention, and TLS mode must be finalized before open signup.
+      - Provider name, region, DPA, retention, and TLS mode must be finalized for administrator sign-in email.
 
   - id: grafana_loki_monitoring
     name: Grafana and Loki monitoring stack

@@ -1,9 +1,6 @@
 package com.back.boundedContexts.member.subContexts.privacy.job
 
 import com.back.boundedContexts.member.subContexts.memberActionLog.model.MemberActionLog
-import com.back.boundedContexts.member.subContexts.notification.model.MemberNotification
-import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
-import com.back.boundedContexts.member.subContexts.signupVerification.model.MemberSignupVerification
 import com.back.global.jpa.domain.AfterDDL
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
@@ -21,21 +18,7 @@ class PrivacyRetentionOperationalIndexContractTest {
     @Test
     fun `retention cleanup indexes are declared in AfterDDL and production Flyway migration`() {
         val expectedIndexes =
-            mapOf(
-                MemberSignupVerification::class to
-                    listOf(
-                        "member_signup_verification_idx_consumed_at_id",
-                        "member_signup_verification_idx_cancelled_at_id",
-                        "member_signup_verification_idx_email_verification_expires_at_id",
-                        "member_signup_verification_idx_signup_session_expires_at_id",
-                    ),
-                MemberNotification::class to
-                    listOf("member_notification_idx_created_at_id"),
-                MemberPrivacyRequest::class to
-                    listOf("member_privacy_request_idx_status_closed_at_id"),
-                MemberActionLog::class to
-                    listOf("member_action_log_idx_created_at_id"),
-            )
+            mapOf(MemberActionLog::class to listOf("member_action_log_idx_created_at_id"))
 
         expectedIndexes.forEach { (entityClass, indexNames) ->
             val afterDdlSql = entityClass.afterDdlSql()

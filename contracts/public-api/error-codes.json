@@ -78,18 +78,6 @@
     "kind": "USER"
   },
   {
-    "code": "403-13",
-    "httpStatus": 403,
-    "defaultUserMessage": "작성자만 댓글을 수정할 수 있습니다.",
-    "kind": "USER"
-  },
-  {
-    "code": "403-14",
-    "httpStatus": 403,
-    "defaultUserMessage": "작성자만 댓글을 삭제할 수 있습니다.",
-    "kind": "USER"
-  },
-  {
     "code": "403-2",
     "httpStatus": 403,
     "defaultUserMessage": "허용되지 않은 Origin의 요청입니다.",

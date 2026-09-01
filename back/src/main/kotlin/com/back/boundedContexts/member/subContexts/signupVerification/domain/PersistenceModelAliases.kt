@@ -1,3 +1,0 @@
-package com.back.boundedContexts.member.subContexts.signupVerification.domain
-
-typealias MemberSignupVerification = com.back.boundedContexts.member.subContexts.signupVerification.model.MemberSignupVerification

@@ -570,22 +570,6 @@ fi
 print_section "Robots.txt (Origin vs Public)"
 print_robots_status
 
-print_section "Notification Snapshot Route (Origin vs Public)"
-internal_snapshot_code="$(
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
-    -s -o /dev/null -w "%{http_code}" \
-    --connect-timeout 3 \
-    --max-time 8 \
-    -H "Host: ${web_domain}" \
-    "http://caddy:80/member/api/v1/notifications/snapshot" || true
-)"
-public_snapshot_code="$(
-  curl -sS --connect-timeout 5 -m 15 -o /dev/null -w "%{http_code}" \
-    "https://${web_domain}/member/api/v1/notifications/snapshot" || true
-)"
-echo "internal_snapshot=${internal_snapshot_code:-none}"
-echo "public_snapshot=${public_snapshot_code:-none}"
-
 print_section "MinIO Service Identity"
 if ! print_minio_service_identity_status; then
   doctor_failures=$((doctor_failures + 1))

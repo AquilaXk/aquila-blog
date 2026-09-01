@@ -193,7 +193,7 @@ class PostApplicationService(
         postRepository
             .findPublicDetailById(id)
             ?.also { post ->
-                if (post.likesCountAttr == null || post.commentsCountAttr == null || post.hitCountAttr == null) {
+                if (post.likesCountAttr == null || post.hitCountAttr == null) {
                     postHydrationService.hydratePostAttrs(post)
                 }
                 postHydrationService.hydrateMembersProfileImgAttrs(listOf(post.author))

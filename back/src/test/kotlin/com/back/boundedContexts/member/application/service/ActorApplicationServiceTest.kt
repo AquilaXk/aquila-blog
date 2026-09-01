@@ -143,12 +143,12 @@ class ActorApplicationServiceTest {
     }
 
     @Test
-    fun `인증 정책은 기존 회원과 canonical 관리자를 허용하고 탈퇴 회원과 다른 관리자를 거부한다`() {
+    fun `인증 정책은 canonical 관리자만 허용한다`() {
         val canonicalAdmin = member(email = "admin@test.com").also(Member::grantAdmin)
         val otherAdmin = member(email = "other-admin@test.com").also(Member::grantAdmin)
         val deletedMember = member(email = "deleted@test.com").also { it.deletedAt = Instant.now() }
 
-        assertThat(actorApplicationService.canAuthenticate(user1)).isTrue()
+        assertThat(actorApplicationService.canAuthenticate(user1)).isFalse()
         assertThat(actorApplicationService.canAuthenticate(canonicalAdmin)).isTrue()
         assertThat(actorApplicationService.canAuthenticate(otherAdmin)).isFalse()
         assertThat(actorApplicationService.canAuthenticate(deletedMember)).isFalse()
@@ -187,8 +187,5 @@ class ActorApplicationServiceTest {
         override fun findByIdForUpdate(id: Long): Optional<Member> = findById(id)
 
         override fun getReferenceById(id: Long): Member = member.takeIf { it.id == id } ?: error("member not found")
-
-        override fun findQPagedByKw(query: MemberRepositoryPort.PagedQuery): MemberRepositoryPort.PagedResult<Member> =
-            error("not used in this test")
     }
 }

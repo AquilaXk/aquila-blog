@@ -4,7 +4,7 @@
   "artifacts": {
     "openapi": {
       "path": "openapi.json",
-      "sha256": "932c5bbdd9ec1ba3a2556fbe67f924505b976d7799bda23eb4e87fbc41d3b9e9"
+      "sha256": "61765f480ae51207114c4a2f5f9a2707ffd513cc757c5b49430759ab42260fec"
     },
     "errorCodes": {
       "path": "error-codes.json",

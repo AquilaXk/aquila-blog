@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 data class AuthSessionMemberDto(
     val id: Long,
     @get:JsonProperty("isAdmin")
-    @field:Schema(name = "isAdmin")
+    @get:Schema(name = "isAdmin", requiredMode = Schema.RequiredMode.REQUIRED)
     val isAdmin: Boolean,
     val username: String,
     val nickname: String,

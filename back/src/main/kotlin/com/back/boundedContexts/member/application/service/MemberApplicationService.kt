@@ -7,8 +7,6 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWo
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.UploadedFileRetentionService
-import com.back.standard.dto.member.type1.MemberSearchSortType1
-import com.back.standard.dto.page.PagedResult
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
@@ -169,17 +167,6 @@ class MemberApplicationService(
                 memberProfileHydrator.hydrate(member)
             }
 
-    @Transactional(readOnly = true)
-    fun checkPassword(
-        member: Member,
-        rawPassword: String,
-    ) {
-        val hashed = member.password
-        if (!passwordEncoder.matches(rawPassword, hashed)) {
-            throw AppException(ErrorCode.UNAUTHORIZED, "비밀번호가 일치하지 않습니다.")
-        }
-    }
-
     @Transactional
     fun modify(
         member: Member,
@@ -253,51 +240,6 @@ class MemberApplicationService(
                 imageSyncRequest.currentProfileImgUrl,
             )
         }
-    }
-
-    @Transactional(readOnly = true)
-    fun findPagedByKw(
-        kw: String,
-        sort: MemberSearchSortType1,
-        page: Int,
-        pageSize: Int,
-    ): PagedResult<Member> {
-        val safeZeroBasedPage = normalizeZeroBasedPage(page)
-        val safePageSize = normalizePageSize(pageSize)
-        val query =
-            MemberRepositoryPort.PagedQuery(
-                kw = kw,
-                zeroBasedPage = safeZeroBasedPage,
-                pageSize = safePageSize,
-                sortProperty = sort.property,
-                sortAscending = sort.isAsc,
-            )
-        val memberPage = memberRepository.findQPagedByKw(query)
-        memberProfileHydrator.hydrateAll(memberPage.content)
-
-        return PagedResult(
-            memberPage.content,
-            safeZeroBasedPage + 1,
-            safePageSize,
-            memberPage.totalElements,
-        )
-    }
-
-    private fun normalizeZeroBasedPage(page: Int): Int {
-        if (page < 1) {
-            throw AppException(ErrorCode.BAD_REQUEST, "page는 1 이상이어야 합니다.")
-        }
-
-        // page >= 1 일 때만 변환하여 underflow 가능성을 제거한다.
-        return if (page == 1) 0 else page - 1
-    }
-
-    private fun normalizePageSize(pageSize: Int): Int {
-        if (pageSize !in 1..30) {
-            throw AppException(ErrorCode.BAD_REQUEST, "pageSize는 1~30 범위여야 합니다.")
-        }
-
-        return pageSize
     }
 
     private fun normalizeEmailOrNull(email: String?): String? =

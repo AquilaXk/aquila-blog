@@ -1,7 +1,6 @@
 package com.back.perf
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
-import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.support.BasePerformanceIntegrationTest
@@ -11,17 +10,12 @@ import org.hibernate.SessionFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.get
-import org.springframework.test.web.servlet.post
 
 @org.junit.jupiter.api.DisplayName("PerformanceSanity 테스트")
 class PerformanceSanityTest : BasePerformanceIntegrationTest() {
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService
-
-    @Autowired
-    private lateinit var memberApplicationService: MemberApplicationService
 
     @Autowired
     private lateinit var postFacade: PostApplicationService
@@ -65,34 +59,6 @@ class PerformanceSanityTest : BasePerformanceIntegrationTest() {
             }
 
         assertQueryCountWithin("post-detail", 8)
-    }
-
-    @Test
-    fun `auth login query count sanity`() {
-        memberApplicationService.join(
-            username = "perf-login-user",
-            password = "Abcd1234!",
-            nickname = "퍼프로그인",
-            profileImgUrl = null,
-            email = "perf-login-user@example.com",
-        )
-        statistics.clear()
-
-        mvc
-            .post("/member/api/v1/auth/login") {
-                contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                        "email": "perf-login-user@example.com",
-                        "password": "Abcd1234!"
-                    }
-                    """.trimIndent()
-            }.andExpect {
-                status { isOk() }
-            }
-
-        assertQueryCountWithin("auth-login", 15)
     }
 
     private fun assertQueryCountWithin(

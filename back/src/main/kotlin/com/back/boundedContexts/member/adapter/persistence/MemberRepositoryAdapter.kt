@@ -2,8 +2,6 @@ package com.back.boundedContexts.member.adapter.persistence
 
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowCallbackHandler
 import org.springframework.stereotype.Component
@@ -50,23 +48,6 @@ class MemberRepositoryAdapter(
     override fun findByIdForUpdate(id: Long): Optional<Member> = memberRepository.findByIdForUpdate(id)
 
     override fun getReferenceById(id: Long): Member = memberRepository.getReferenceById(id)
-
-    override fun findQPagedByKw(query: MemberRepositoryPort.PagedQuery): MemberRepositoryPort.PagedResult<Member> {
-        val pageable =
-            PageRequest.of(
-                query.zeroBasedPage,
-                query.pageSize,
-                Sort.by(
-                    if (query.sortAscending) Sort.Direction.ASC else Sort.Direction.DESC,
-                    query.sortProperty,
-                ),
-            )
-        val memberPage = memberRepository.findQPagedByKw(query.kw, pageable)
-        return MemberRepositoryPort.PagedResult(
-            content = memberPage.content,
-            totalElements = memberPage.totalElements,
-        )
-    }
 
     private companion object {
         private const val EMAIL_IDENTITY_PROVISIONING_LOCK_NAMESPACE = "member-email-provisioning"

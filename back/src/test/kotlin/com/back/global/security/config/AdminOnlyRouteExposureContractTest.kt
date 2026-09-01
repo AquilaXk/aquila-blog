@@ -40,6 +40,13 @@ class AdminOnlyRouteExposureContractTest : BaseControllerIntegrationTest() {
             HttpMethod.DELETE to "/post/api/v1/posts/1/comments/2",
             HttpMethod.PUT to "/post/api/v1/posts/1/like",
             HttpMethod.DELETE to "/post/api/v1/posts/1/like",
+            HttpMethod.POST to "/member/api/v1/auth/login",
+            HttpMethod.GET to "/member/api/v1/privacy/export",
+            HttpMethod.POST to "/member/api/v1/privacy/requests",
+            HttpMethod.GET to "/member/api/v1/privacy/requests/1",
+            HttpMethod.DELETE to "/member/api/v1/privacy/account",
+            HttpMethod.GET to "/member/api/v1/adm/members",
+            HttpMethod.GET to "/member/api/v1/adm/members/1",
         ).forEach { (method, path) ->
             assertThat(hasHandlerMethod(method, path))
                 .describedAs("%s %s must not remain mapped", method, path)
@@ -47,17 +54,16 @@ class AdminOnlyRouteExposureContractTest : BaseControllerIntegrationTest() {
         }
 
         listOf(
-            HttpMethod.POST to "/member/api/v1/auth/login",
             HttpMethod.POST to "/member/api/v1/auth/admin-email/request",
             HttpMethod.POST to "/member/api/v1/auth/admin-email/verify",
             HttpMethod.GET to "/internal/health/admin-email-auth",
             HttpMethod.DELETE to "/member/api/v1/auth/logout",
             HttpMethod.GET to "/member/api/v1/auth/me",
             HttpMethod.GET to "/member/api/v1/auth/session",
-            HttpMethod.GET to "/member/api/v1/privacy/export",
-            HttpMethod.POST to "/member/api/v1/privacy/requests",
-            HttpMethod.DELETE to "/member/api/v1/privacy/account",
             HttpMethod.GET to "/member/api/v1/members/adminProfile",
+            HttpMethod.GET to "/member/api/v1/adm/members/bootstrap",
+            HttpMethod.GET to "/member/api/v1/adm/members/profile/bootstrap",
+            HttpMethod.PATCH to "/member/api/v1/adm/members/1/nickname",
             HttpMethod.GET to "/post/api/v1/posts/feed",
             HttpMethod.GET to "/post/api/v1/posts/1",
             HttpMethod.POST to "/post/api/v1/posts/1/hit",

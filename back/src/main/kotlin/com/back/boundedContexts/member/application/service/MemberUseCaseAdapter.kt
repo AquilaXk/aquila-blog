@@ -5,8 +5,6 @@ import com.back.boundedContexts.member.application.port.input.MemberUseCase.Issu
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
-import com.back.standard.dto.member.type1.MemberSearchSortType1
-import com.back.standard.dto.page.PagedResult
 import org.springframework.stereotype.Service
 import java.util.Optional
 
@@ -38,23 +36,6 @@ class MemberUseCaseAdapter(
 
     override fun findById(id: Long): Optional<Member> = memberApplicationService.findById(id)
 
-    override fun issueLoginSession(
-        memberId: Long,
-        rememberLoginEnabled: Boolean,
-        ipSecurityEnabled: Boolean,
-        ipSecurityFingerprint: String?,
-        createdIp: String?,
-        userAgent: String?,
-    ): IssuedLoginSession =
-        memberLoginSessionIssueService.issue(
-            memberId = memberId,
-            rememberLoginEnabled = rememberLoginEnabled,
-            ipSecurityEnabled = ipSecurityEnabled,
-            ipSecurityFingerprint = ipSecurityFingerprint,
-            createdIp = createdIp,
-            userAgent = userAgent,
-        )
-
     override fun issueAdminEmailLoginSession(
         email: String,
         nickname: String,
@@ -69,11 +50,6 @@ class MemberUseCaseAdapter(
             createdIp = createdIp,
             userAgent = userAgent,
         )
-
-    override fun checkPassword(
-        member: Member,
-        rawPassword: String,
-    ) = memberApplicationService.checkPassword(member, rawPassword)
 
     override fun modify(
         member: Member,
@@ -120,11 +96,4 @@ class MemberUseCaseAdapter(
     ) = memberApplicationService.saveProfileWorkspaceDraft(member, content)
 
     override fun publishProfileWorkspace(member: Member) = memberApplicationService.publishProfileWorkspace(member)
-
-    override fun findPagedByKw(
-        kw: String,
-        sort: MemberSearchSortType1,
-        page: Int,
-        pageSize: Int,
-    ): PagedResult<Member> = memberApplicationService.findPagedByKw(kw, sort, page, pageSize)
 }

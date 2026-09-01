@@ -118,6 +118,51 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val authSessionMemberSchema = openApiNode.path("components").path("schemas").path("AuthSessionMemberDto")
         assertThat(authSessionMemberSchema.path("properties").has("legalReconsent")).isFalse()
         val paths = openApiNode.path("paths")
+        listOf(
+            "MemberDto",
+            "MemberWithUsernameDto",
+            "AuthSessionMemberDto",
+        ).forEach { schemaName ->
+            val schema = schemas.path(schemaName)
+            assertThat(schema.path("properties").has("isAdmin")).isTrue()
+            assertThat(schema.path("properties").has("admin")).isFalse()
+            assertThat(
+                schema
+                    .path("properties")
+                    .path("isAdmin")
+                    .path("type")
+                    .asText(),
+            ).isEqualTo("boolean")
+            assertThat(schema.path("required").values().map { it.asText() }).contains("isAdmin")
+        }
+        listOf(
+            "/member/api/v1/auth/login",
+            "/member/api/v1/privacy/export",
+            "/member/api/v1/privacy/requests",
+            "/member/api/v1/privacy/requests/{requestId}",
+            "/member/api/v1/privacy/account",
+            "/member/api/v1/adm/members",
+            "/member/api/v1/adm/members/{id}",
+        ).forEach { retiredPath ->
+            assertThat(paths.has(retiredPath)).isFalse()
+        }
+        listOf(
+            "AccountDeletionRequest",
+            "AccountDeletionResult",
+            "MemberLoginRequest",
+            "PageDtoMemberWithUsernameDto",
+            "PrivacyExportMemberSnapshot",
+            "PrivacyExportResponse",
+            "PrivacyLegalAcceptanceSnapshot",
+            "PrivacyRequestCreateRequest",
+            "PrivacyRequestDto",
+            "PrivacyRequestResBody",
+            "RsDataAccountDeletionResult",
+            "RsDataPrivacyExportResponse",
+            "RsDataPrivacyRequestResBody",
+        ).forEach { retiredSchema ->
+            assertThat(schemas.has(retiredSchema)).isFalse()
+        }
         assertThat(paths.has("/system/api/v1/adm/operations/task-dlq-replay")).isTrue()
         assertThat(paths.has("/system/api/v1/adm/operations/{operationId}")).isTrue()
         assertThat(paths.has("/system/api/v1/adm/tasks/replay-failed")).isFalse()

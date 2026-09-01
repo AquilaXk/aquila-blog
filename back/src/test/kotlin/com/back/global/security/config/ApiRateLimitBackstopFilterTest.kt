@@ -121,23 +121,6 @@ class ApiRateLimitBackstopFilterTest {
     }
 
     @Test
-    @DisplayName("password login 요청은 auth bucket으로 제한한다")
-    fun `password login paths use auth bucket`() {
-        val redis = InMemoryRedisKeyValuePort()
-        val filter = createFilter(redis = redis, authLimitPerMinute = 1)
-
-        assertThat(runFilter(filter, "POST", "/member/api/v1/auth/login").status).isEqualTo(HttpServletResponse.SC_OK)
-
-        val limited = runFilter(filter, "POST", "/member/api/v1/auth/login")
-
-        assertThat(limited.status).isEqualTo(429)
-        assertThat(limited.contentAsString)
-            .contains("\"resultCode\":\"429-10\"")
-            .doesNotContain("\"bucket\"")
-        assertThat(redis.expiredKeys()).anyMatch { it.contains(":auth:") }
-    }
-
-    @Test
     @DisplayName("administrator email authentication requests use the auth bucket")
     fun `administrator email authentication requests use auth bucket`() {
         val redis = InMemoryRedisKeyValuePort()

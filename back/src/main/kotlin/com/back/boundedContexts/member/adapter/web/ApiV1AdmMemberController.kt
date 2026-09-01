@@ -27,11 +27,7 @@ import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.ProfileImageHistoryDto
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.domain.UploadedFilePurpose
-import com.back.standard.dto.member.type1.MemberSearchSortType1
-import com.back.standard.dto.page.PageDto
 import jakarta.validation.Valid
-import jakarta.validation.constraints.Max
-import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
@@ -48,7 +44,6 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
@@ -95,6 +90,16 @@ class ApiV1AdmMemberController(
     ) {
         SERVICE("serviceLinks", PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE, PROFILE_SERVICE_ICON_ALLOWED),
         CONTACT("contactLinks", PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE, PROFILE_CONTACT_ICON_ALLOWED),
+    }
+
+    private fun requireAuthenticatedMemberId(
+        requestedId: Long,
+        securityUser: SecurityUser,
+    ): Long {
+        if (requestedId != securityUser.id) {
+            throw AppException(ErrorCode.ACCESS_DENIED, "권한이 없습니다.")
+        }
+        return securityUser.id
     }
 
     data class UpdateProfileImgRequest(
@@ -214,40 +219,6 @@ class ApiV1AdmMemberController(
         val contactLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
     )
 
-    @GetMapping
-    @Transactional(readOnly = true)
-    fun getItems(
-        @RequestParam(defaultValue = "1")
-        @Min(1)
-        page: Int,
-        @RequestParam(defaultValue = "30")
-        @Min(1)
-        @Max(30)
-        pageSize: Int,
-        @RequestParam(defaultValue = "") kw: String,
-        @RequestParam(defaultValue = "CREATED_AT") sort: MemberSearchSortType1,
-    ): PageDto<MemberWithUsernameDto> {
-        val normalizedKw = kw.trim()
-
-        return PageDto(
-            memberUseCase
-                .findPagedByKw(
-                    kw = normalizedKw,
-                    sort = sort,
-                    page = page,
-                    pageSize = pageSize,
-                ).map(::MemberWithUsernameDto),
-        )
-    }
-
-    @GetMapping("/{id}")
-    @Transactional(readOnly = true)
-    fun getItem(
-        @PathVariable
-        @Positive
-        id: Long,
-    ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(id)
-
     @GetMapping("/bootstrap")
     @Transactional(readOnly = true)
     fun bootstrap(
@@ -274,7 +245,11 @@ class ApiV1AdmMemberController(
         @PathVariable
         @Positive
         id: Long,
-    ): MemberProfileWorkspaceResponseDto = currentMemberProfileQueryUseCase.getWorkspaceById(id)
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): MemberProfileWorkspaceResponseDto {
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
+        return currentMemberProfileQueryUseCase.getWorkspaceById(memberId)
+    }
 
     /**
      * ProfileImg 항목을 수정한다.
@@ -287,10 +262,12 @@ class ApiV1AdmMemberController(
         @Positive
         id: Long,
         @RequestBody @Valid reqBody: UpdateProfileImgRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
     ): MemberWithUsernameDto {
-        val member = memberUseCase.findById(id).orElseThrow()
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
+        val member = memberUseCase.findById(memberId).orElseThrow()
         memberUseCase.modify(member, member.nickname, reqBody.profileImgUrl.trim())
-        return currentMemberProfileQueryUseCase.getById(id)
+        return currentMemberProfileQueryUseCase.getById(memberId)
     }
 
     @PostMapping("/{id}/profileImageFile", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
@@ -301,7 +278,9 @@ class ApiV1AdmMemberController(
         @Positive
         id: Long,
         @RequestPart("file") file: MultipartFile,
+        @AuthenticationPrincipal securityUser: SecurityUser,
     ): MemberWithUsernameDto {
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
         if (file.isEmpty) {
             throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일이 비어 있습니다.")
         }
@@ -311,7 +290,7 @@ class ApiV1AdmMemberController(
             throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
         }
 
-        val member = memberUseCase.findById(id).orElseThrow()
+        val member = memberUseCase.findById(memberId).orElseThrow()
         val uploadRequest =
             PostImageStoragePort.UploadImageRequest(
                 inputStream = file.inputStream,
@@ -333,7 +312,7 @@ class ApiV1AdmMemberController(
                 .replace("%2F", "/")
         val imageUrl = "${AppConfig.siteBackUrl}/post/api/v1/images/$encodedKey"
         memberUseCase.modify(member, member.nickname, imageUrl)
-        return currentMemberProfileQueryUseCase.getById(id)
+        return currentMemberProfileQueryUseCase.getById(memberId)
     }
 
     @GetMapping("/{id}/profileImageFiles")
@@ -342,12 +321,14 @@ class ApiV1AdmMemberController(
         @PathVariable
         @Positive
         id: Long,
+        @AuthenticationPrincipal securityUser: SecurityUser,
     ): ProfileImageHistoryResponse {
-        val member = memberUseCase.findById(id).orElseThrow()
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
+        val member = memberUseCase.findById(memberId).orElseThrow()
         return ProfileImageHistoryResponse(
             images =
                 uploadedFileRetentionService.listProfileImages(
-                    memberId = id,
+                    memberId = memberId,
                     protectedProfileImgUrls = member.protectedProfileImgUrls(),
                 ),
         )
@@ -362,10 +343,12 @@ class ApiV1AdmMemberController(
         @PathVariable
         @Positive
         fileId: Long,
+        @AuthenticationPrincipal securityUser: SecurityUser,
     ): RsData<Void> {
-        val member = memberUseCase.findById(id).orElseThrow()
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
+        val member = memberUseCase.findById(memberId).orElseThrow()
         uploadedFileRetentionService.deleteProfileImage(
-            memberId = id,
+            memberId = memberId,
             fileId = fileId,
             protectedProfileImgUrls = member.protectedProfileImgUrls(),
         )
@@ -389,10 +372,12 @@ class ApiV1AdmMemberController(
         @Positive
         id: Long,
         @RequestBody @Valid reqBody: UpdateProfileIdentityRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
     ): MemberWithUsernameDto {
-        val member = memberUseCase.findById(id).orElseThrow()
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
+        val member = memberUseCase.findById(memberId).orElseThrow()
         memberUseCase.modify(member, reqBody.nickname.trim(), member.profileImgUrl)
-        return currentMemberProfileQueryUseCase.getById(id)
+        return currentMemberProfileQueryUseCase.getById(memberId)
     }
 
     /**
@@ -406,8 +391,10 @@ class ApiV1AdmMemberController(
         @Positive
         id: Long,
         @RequestBody @Valid reqBody: UpdateProfileCardRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
     ): MemberWithUsernameDto {
-        val member = memberUseCase.findById(id).orElseThrow()
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
+        val member = memberUseCase.findById(memberId).orElseThrow()
         memberUseCase.modifyProfileCard(
             member = member,
             role = reqBody.role.trim(),
@@ -423,7 +410,7 @@ class ApiV1AdmMemberController(
             serviceLinks = reqBody.serviceLinks.normalize(LinkSection.SERVICE),
             contactLinks = reqBody.contactLinks.normalize(LinkSection.CONTACT),
         )
-        return currentMemberProfileQueryUseCase.getById(id)
+        return currentMemberProfileQueryUseCase.getById(memberId)
     }
 
     @PutMapping("/{id}/profileWorkspace/draft")
@@ -433,10 +420,12 @@ class ApiV1AdmMemberController(
         @Positive
         id: Long,
         @RequestBody @Valid reqBody: UpdateProfileWorkspaceDraftRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
     ): MemberProfileWorkspaceResponseDto {
-        val member = memberUseCase.findById(id).orElseThrow()
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
+        val member = memberUseCase.findById(memberId).orElseThrow()
         memberUseCase.saveProfileWorkspaceDraft(member, reqBody.toDomain(member.blogDesign, member.legacyBlogScheme))
-        return currentMemberProfileQueryUseCase.getWorkspaceById(id)
+        return currentMemberProfileQueryUseCase.getWorkspaceById(memberId)
     }
 
     @PostMapping("/{id}/profileWorkspace/publish")
@@ -446,10 +435,12 @@ class ApiV1AdmMemberController(
         @PathVariable
         @Positive
         id: Long,
+        @AuthenticationPrincipal securityUser: SecurityUser,
     ): MemberProfileWorkspaceResponseDto {
-        val member = memberUseCase.findById(id).orElseThrow()
+        val memberId = requireAuthenticatedMemberId(id, securityUser)
+        val member = memberUseCase.findById(memberId).orElseThrow()
         memberUseCase.publishProfileWorkspace(member)
-        return currentMemberProfileQueryUseCase.getWorkspaceById(id)
+        return currentMemberProfileQueryUseCase.getWorkspaceById(memberId)
     }
 
     private fun List<ProfileCardLinkItemRequest>.normalize(section: LinkSection): List<MemberProfileLinkItem> =

@@ -744,66 +744,6 @@
         ]
       }
     },
-    "/member/api/v1/privacy/requests": {
-      "post": {
-        "tags": [
-          "api-v-1-privacy-rights-controller"
-        ],
-        "operationId": "createRequest",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PrivacyRequestCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/RsDataPrivacyRequestResBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/member/api/v1/auth/login": {
-      "post": {
-        "tags": [
-          "api-v-1-auth-controller"
-        ],
-        "operationId": "login",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MemberLoginRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/RsDataMemberLoginResBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/member/api/v1/auth/admin-email/verify": {
       "post": {
         "tags": [
@@ -2337,57 +2277,6 @@
         ]
       }
     },
-    "/member/api/v1/privacy/requests/{requestId}": {
-      "get": {
-        "tags": [
-          "api-v-1-privacy-rights-controller"
-        ],
-        "operationId": "getRequest",
-        "parameters": [
-          {
-            "name": "requestId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/RsDataPrivacyRequestResBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/member/api/v1/privacy/export": {
-      "get": {
-        "tags": [
-          "api-v-1-privacy-rights-controller"
-        ],
-        "operationId": "export",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/RsDataPrivacyExportResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/member/api/v1/members/adminProfile": {
       "get": {
         "tags": [
@@ -2434,109 +2323,6 @@
           "api-v-1-auth-controller"
         ],
         "operationId": "me",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemberWithUsernameDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/member/api/v1/adm/members": {
-      "get": {
-        "tags": [
-          "api-v-1-adm-member-controller"
-        ],
-        "operationId": "getItems_2",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 1,
-              "minimum": 1
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 30,
-              "maximum": 30,
-              "minimum": 1
-            }
-          },
-          {
-            "name": "kw",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": ""
-            }
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "CREATED_AT",
-              "enum": [
-                "CREATED_AT",
-                "CREATED_AT_ASC",
-                "USERNAME",
-                "USERNAME_ASC",
-                "NICKNAME",
-                "NICKNAME_ASC"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/PageDtoMemberWithUsernameDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/member/api/v1/adm/members/{id}": {
-      "get": {
-        "tags": [
-          "api-v-1-adm-member-controller"
-        ],
-        "operationId": "getItem_2",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "exclusiveMinimum": 0
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2745,36 +2531,6 @@
             "bearerAuth": []
           }
         ]
-      }
-    },
-    "/member/api/v1/privacy/account": {
-      "delete": {
-        "tags": [
-          "api-v-1-privacy-rights-controller"
-        ],
-        "operationId": "deleteAccount",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AccountDeletionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/RsDataAccountDeletionResult"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/member/api/v1/auth/logout": {
@@ -4053,132 +3809,24 @@
           }
         }
       },
-      "PrivacyRequestCreateRequest": {
+      "AdminEmailCodeVerifyRequest": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "EXPORT",
-              "CORRECTION",
-              "DELETION",
-              "PROCESSING_RESTRICTION",
-              "CONSENT_WITHDRAWAL"
-            ]
-          },
-          "message": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 1000,
-            "minLength": 0
-          }
-        },
-        "required": [
-          "type"
-        ]
-      },
-      "PrivacyRequestDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "memberId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "EXPORT",
-              "CORRECTION",
-              "DELETION",
-              "PROCESSING_RESTRICTION",
-              "CONSENT_WITHDRAWAL"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "RECEIVED",
-              "IN_PROGRESS",
-              "COMPLETED",
-              "REJECTED"
-            ]
-          },
-          "message": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "requestedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "dueAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "completedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          }
-        }
-      },
-      "PrivacyRequestResBody": {
-        "type": "object",
-        "properties": {
-          "item": {
-            "$ref": "#/components/schemas/PrivacyRequestDto"
-          }
-        }
-      },
-      "RsDataPrivacyRequestResBody": {
-        "type": "object",
-        "properties": {
-          "resultCode": {
-            "type": "string"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/PrivacyRequestResBody"
-          }
-        }
-      },
-      "MemberLoginRequest": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 320,
-            "minLength": 2
-          },
-          "password": {
+          "challengeId": {
             "type": "string",
             "maxLength": 128,
-            "minLength": 0
+            "minLength": 20
           },
-          "rememberMe": {
-            "type": "boolean"
-          },
-          "ipSecurity": {
-            "type": "boolean"
+          "code": {
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 8,
+            "pattern": "\\d{8}"
           }
         },
         "required": [
-          "password"
+          "challengeId",
+          "code"
         ]
       },
       "MemberDto": {
@@ -4204,11 +3852,11 @@
           },
           "profileImageUrl": {
             "type": "string"
-          },
-          "admin": {
-            "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "isAdmin"
+        ]
       },
       "MemberLoginResBody": {
         "type": "object",
@@ -4231,26 +3879,6 @@
             "$ref": "#/components/schemas/MemberLoginResBody"
           }
         }
-      },
-      "AdminEmailCodeVerifyRequest": {
-        "type": "object",
-        "properties": {
-          "challengeId": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 20
-          },
-          "code": {
-            "type": "string",
-            "maxLength": 8,
-            "minLength": 8,
-            "pattern": "\\d{8}"
-          }
-        },
-        "required": [
-          "challengeId",
-          "code"
-        ]
       },
       "AdminEmailCodeRequest": {
         "type": "object",
@@ -4384,10 +4012,13 @@
               "$ref": "#/components/schemas/MemberProfileLinkItemDto"
             }
           },
-          "admin": {
+          "isAdmin": {
             "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "isAdmin"
+        ]
       },
       "UpdateProfileImgRequest": {
         "type": "object",
@@ -5086,7 +4717,10 @@
           "isAdmin": {
             "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "isAdmin"
+        ]
       },
       "AuthSecurityEventDto": {
         "type": "object",
@@ -5410,121 +5044,6 @@
           }
         }
       },
-      "PrivacyExportMemberSnapshot": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "username": {
-            "type": "string"
-          },
-          "nickname": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "modifiedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "PrivacyExportResponse": {
-        "type": "object",
-        "properties": {
-          "generatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "member": {
-            "$ref": "#/components/schemas/PrivacyExportMemberSnapshot"
-          },
-          "latestLegalAcceptance": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/PrivacyLegalAcceptanceSnapshot"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        }
-      },
-      "PrivacyLegalAcceptanceSnapshot": {
-        "type": "object",
-        "properties": {
-          "termsVersion": {
-            "type": "string"
-          },
-          "termsContentSha256": {
-            "type": "string"
-          },
-          "privacyVersion": {
-            "type": "string"
-          },
-          "privacyContentSha256": {
-            "type": "string"
-          },
-          "age14OrOlder": {
-            "type": "boolean"
-          },
-          "requiredPrivacyConfirmed": {
-            "type": "boolean"
-          },
-          "analyticsConsent": {
-            "type": "boolean"
-          },
-          "overseasTransferAcknowledged": {
-            "type": "boolean"
-          },
-          "source": {
-            "type": "string"
-          },
-          "acceptedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "RsDataPrivacyExportResponse": {
-        "type": "object",
-        "properties": {
-          "resultCode": {
-            "type": "string"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/PrivacyExportResponse"
-          }
-        }
-      },
-      "PageDtoMemberWithUsernameDto": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MemberWithUsernameDto"
-            }
-          },
-          "pageable": {
-            "$ref": "#/components/schemas/PageableDto"
-          }
-        }
-      },
       "ProfileImageHistoryDto": {
         "type": "object",
         "properties": {
@@ -5639,61 +5158,6 @@
             "type": "string"
           },
           "data": {}
-        }
-      },
-      "AccountDeletionRequest": {
-        "type": "object",
-        "properties": {
-          "password": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 128,
-            "minLength": 1
-          },
-          "oauthAccountDeletionConfirmed": {
-            "type": "boolean"
-          },
-          "reason": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 500,
-            "minLength": 0
-          }
-        }
-      },
-      "AccountDeletionResult": {
-        "type": "object",
-        "properties": {
-          "memberId": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "deletedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "revokedSessionCount": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "RsDataAccountDeletionResult": {
-        "type": "object",
-        "properties": {
-          "resultCode": {
-            "type": "string"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AccountDeletionResult"
-          }
         }
       }
     },

@@ -349,6 +349,63 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
     }
 
     @Test
+    fun `retired persistence recovery rejects semantic foreign key drift`() {
+        val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
+        val compatibilitySchema = "retired_persistence_semantic_fk_drift"
+        val semanticDriftMigrations = migrations.resolve("semantic-fk-drift").createDirectories()
+        val cascadeBaseline =
+            retiredPersistenceBaseline.replace(
+                "REFERENCES post (id)",
+                "REFERENCES post (id) ON DELETE CASCADE",
+            )
+        val callback = ClassPathResource("db/migration/$callbackName").inputStream.bufferedReader().use { it.readText() }
+
+        semanticDriftMigrations.resolve("V1__retired_persistence_baseline.sql").writeText(cascadeBaseline)
+        Flyway
+            .configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .defaultSchema(compatibilitySchema)
+            .schemas(compatibilitySchema)
+            .createSchemas(true)
+            .locations("filesystem:$semanticDriftMigrations")
+            .validateOnMigrate(true)
+            .load()
+            .migrate()
+
+        semanticDriftMigrations.resolve(callbackName).writeText(callback)
+        assertFailsWith<FlywayException> {
+            Flyway
+                .configure()
+                .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+                .defaultSchema(compatibilitySchema)
+                .schemas(compatibilitySchema)
+                .createSchemas(true)
+                .locations("filesystem:$semanticDriftMigrations")
+                .validateOnMigrate(true)
+                .load()
+                .migrate()
+        }
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                statement
+                    .executeQuery(
+                        """
+                        SELECT constraint_name, delete_rule
+                        FROM information_schema.referential_constraints
+                        WHERE constraint_schema = '$compatibilitySchema'
+                          AND constraint_name = 'post_comment_post_id_fkey'
+                        """.trimIndent(),
+                    ).use { result ->
+                        result.next()
+                        assertEquals("post_comment_post_id_fkey", result.getString(1))
+                        assertEquals("CASCADE", result.getString(2))
+                    }
+            }
+        }
+    }
+
+    @Test
     fun `retired persistence recovery rejects a conflicting canonical constraint`() {
         val callbackName = "beforeMigrate__normalize_post_comment_post_fk.sql"
         val compatibilitySchema = "retired_persistence_conflicting_fk"

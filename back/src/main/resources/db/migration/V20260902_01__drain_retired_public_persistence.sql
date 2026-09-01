@@ -14,13 +14,13 @@ UPDATE post
 SET comments_count_attr_id = NULL
 WHERE comments_count_attr_id IS NOT NULL;
 
-DELETE FROM member_notification;
-DELETE FROM post_comment;
+DELETE FROM member_notification WHERE id IS NOT NULL;
+DELETE FROM post_comment WHERE id IS NOT NULL;
 DELETE FROM post_attr WHERE name = 'commentsCount';
 DELETE FROM member_attr WHERE name = 'postCommentsCount';
-DELETE FROM member_signup_verification;
-DELETE FROM pending_oauth_signup;
-DELETE FROM member_privacy_request;
+DELETE FROM member_signup_verification WHERE id IS NOT NULL;
+DELETE FROM pending_oauth_signup WHERE id IS NOT NULL;
+DELETE FROM member_privacy_request WHERE id IS NOT NULL;
 
 DO $$
 BEGIN

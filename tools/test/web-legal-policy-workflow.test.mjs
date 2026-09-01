@@ -83,10 +83,12 @@ test("receiver reads one exact Web manifest without checking out, building, or w
   assert.doesNotMatch(source, /gh api .*aquila-blog-web.*(?:-X POST|-X PUT|-f |--method (?:POST|PUT))/)
 })
 
-test("Platform CI admits generated Web legal-policy lock pull requests", () => {
+test("Platform CI admits legal-policy and privacy contract pull requests", () => {
   const { document } = loadWorkflow(ciWorkflowPath)
   const triggers = document.on || document.true
-  assert.ok(triggers.pull_request.paths.includes("contracts/web/**"))
+  for (const requiredPath of ["contracts/web/**", "legal/**", "tools/legal/**", "tools/privacy/**"]) {
+    assert.ok(triggers.pull_request.paths.includes(requiredPath), `missing CI pull request path: ${requiredPath}`)
+  }
 })
 
 test("write path uses separate least-privilege tokens and one Platform-local draft PR", () => {

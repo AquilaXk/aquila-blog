@@ -864,6 +864,303 @@
         }
       }
     },
+    "/member/api/v1/adm/privacy/requests": {
+      "get": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorPrivacyRequestDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPrivacyRequestDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/privacy/requests/{requestId}/step-up-decisions": {
+      "post": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "stepUp",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepUpDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPrivacyRequestDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/privacy/requests/{requestId}/identity-decisions": {
+      "post": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "identity",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPrivacyRequestDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/privacy/requests/{requestId}/hold-decisions": {
+      "post": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "hold",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPrivacyRequestDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/privacy/requests/{requestId}/exports": {
+      "post": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "export",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPrivacyExportResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/privacy/requests/{requestId}/deletions": {
+      "post": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "delete_1",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPrivacyDeletionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/privacy/requests/{requestId}/decisions": {
+      "post": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "decide",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPrivacyRequestDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/adm/members/{id}/profileWorkspace/publish": {
       "post": {
         "tags": [
@@ -1390,7 +1687,7 @@
         "tags": [
           "api-v-1-adm-cloud-controller"
         ],
-        "operationId": "delete_1",
+        "operationId": "delete_2",
         "parameters": [
           {
             "name": "id",
@@ -2373,7 +2670,7 @@
         "tags": [
           "api-v-1-privacy-rights-controller"
         ],
-        "operationId": "export",
+        "operationId": "export_1",
         "responses": {
           "200": {
             "description": "OK",
@@ -2441,6 +2738,37 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/MemberWithUsernameDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/privacy/requests/{requestId}": {
+      "get": {
+        "tags": [
+          "api-v-1-adm-privacy-rights-controller"
+        ],
+        "operationId": "detail",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPrivacyRequestDto"
                 }
               }
             }
@@ -4294,6 +4622,661 @@
           }
         }
       },
+      "CreateRequest": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "EXPORT",
+              "CORRECTION",
+              "DELETION",
+              "PROCESSING_RESTRICTION",
+              "CONSENT_WITHDRAWAL"
+            ]
+          },
+          "requesterContact": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 0
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "operationId",
+          "requesterContact",
+          "type"
+        ]
+      },
+      "OperatorPrivacyRequestDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "memberId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "accountDeletionId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "EXPORT",
+              "CORRECTION",
+              "DELETION",
+              "PROCESSING_RESTRICTION",
+              "CONSENT_WITHDRAWAL"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RECEIVED",
+              "IN_PROGRESS",
+              "COMPLETED",
+              "REJECTED"
+            ]
+          },
+          "intakeChannel": {
+            "type": "string",
+            "enum": [
+              "AUTHENTICATED_SESSION",
+              "EMAIL"
+            ]
+          },
+          "identityStatus": {
+            "type": "string",
+            "enum": [
+              "VERIFIED_SESSION",
+              "IDENTITY_PENDING",
+              "VERIFIED_MANUAL",
+              "REJECTED"
+            ]
+          },
+          "requesterRole": {
+            "type": "string",
+            "enum": [
+              "SUBJECT",
+              "AUTHORIZED_REPRESENTATIVE"
+            ]
+          },
+          "requesterContact": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assignedOwnerId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "identityVerifiedById": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "identityVerifiedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "stepUpVerifiedById": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "stepUpVerifiedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "holdStatus": {
+            "type": "string",
+            "enum": [
+              "UNREVIEWED",
+              "CLEARED",
+              "ACTIVE",
+              "RELEASED"
+            ]
+          },
+          "holdScope": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "holdReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "holdReviewedById": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "holdReviewedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "holdReleasedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "holdReleaseDecision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "StepUpDecision": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "approved": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "approved",
+          "operationId"
+        ]
+      },
+      "IdentityDecision": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "approved": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "requesterRole": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "SUBJECT",
+              "AUTHORIZED_REPRESENTATIVE",
+              null
+            ]
+          },
+          "memberId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "accountDeletionId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        },
+        "required": [
+          "approved",
+          "operationId"
+        ]
+      },
+      "HoldDecision": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UNREVIEWED",
+              "CLEARED",
+              "ACTIVE",
+              "RELEASED"
+            ]
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64,
+            "minLength": 0
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000,
+            "minLength": 0
+          },
+          "releaseDecision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "operationId",
+          "status"
+        ]
+      },
+      "OperationRequest": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "operationId"
+        ]
+      },
+      "OperatorPrivacyExportResult": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "export": {
+            "$ref": "#/components/schemas/PrivacyExportResponse"
+          },
+          "redactedRecordCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "evidenceSha256": {
+            "type": "string"
+          }
+        }
+      },
+      "PrivacyExportMemberSnapshot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "username": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PrivacyExportPublicPostSnapshot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "contentHtml": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "listed": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PrivacyExportRequestSnapshot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "EXPORT",
+              "CORRECTION",
+              "DELETION",
+              "PROCESSING_RESTRICTION",
+              "CONSENT_WITHDRAWAL"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RECEIVED",
+              "IN_PROGRESS",
+              "COMPLETED",
+              "REJECTED"
+            ]
+          },
+          "intakeChannel": {
+            "type": "string",
+            "enum": [
+              "AUTHENTICATED_SESSION",
+              "EMAIL"
+            ]
+          },
+          "identityStatus": {
+            "type": "string",
+            "enum": [
+              "VERIFIED_SESSION",
+              "IDENTITY_PENDING",
+              "VERIFIED_MANUAL",
+              "REJECTED"
+            ]
+          },
+          "requesterRole": {
+            "type": "string",
+            "enum": [
+              "SUBJECT",
+              "AUTHORIZED_REPRESENTATIVE"
+            ]
+          },
+          "holdStatus": {
+            "type": "string",
+            "enum": [
+              "UNREVIEWED",
+              "CLEARED",
+              "ACTIVE",
+              "RELEASED"
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "PrivacyExportResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "member": {
+            "$ref": "#/components/schemas/PrivacyExportMemberSnapshot"
+          },
+          "latestLegalAcceptance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PrivacyLegalAcceptanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrivacyExportRequestSnapshot"
+            }
+          },
+          "ownedPublicContent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrivacyExportPublicPostSnapshot"
+            }
+          },
+          "sessionSummary": {
+            "$ref": "#/components/schemas/PrivacyExportSessionSummary"
+          }
+        }
+      },
+      "PrivacyExportSessionSummary": {
+        "type": "object",
+        "properties": {
+          "totalCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "activeCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "firstCreatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastAuthenticatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "PrivacyLegalAcceptanceSnapshot": {
+        "type": "object",
+        "properties": {
+          "termsVersion": {
+            "type": "string"
+          },
+          "termsContentSha256": {
+            "type": "string"
+          },
+          "privacyVersion": {
+            "type": "string"
+          },
+          "privacyContentSha256": {
+            "type": "string"
+          },
+          "age14OrOlder": {
+            "type": "boolean"
+          },
+          "requiredPrivacyConfirmed": {
+            "type": "boolean"
+          },
+          "analyticsConsent": {
+            "type": "boolean"
+          },
+          "overseasTransferAcknowledged": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DeletionRequest": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "operationId"
+        ]
+      },
+      "OperatorPrivacyDeletionResult": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/OperatorPrivacyRequestDto"
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "redactedRecordCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "evidenceSha256": {
+            "type": "string"
+          }
+        }
+      },
+      "FinalDecision": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RECEIVED",
+              "IN_PROGRESS",
+              "COMPLETED",
+              "REJECTED"
+            ]
+          }
+        },
+        "required": [
+          "operationId",
+          "status"
+        ]
+      },
       "MemberWithUsernameDto": {
         "type": "object",
         "properties": {
@@ -5407,93 +6390,6 @@
           },
           "firstPage": {
             "$ref": "#/components/schemas/PageDtoPostDto"
-          }
-        }
-      },
-      "PrivacyExportMemberSnapshot": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "username": {
-            "type": "string"
-          },
-          "nickname": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "modifiedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "PrivacyExportResponse": {
-        "type": "object",
-        "properties": {
-          "generatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "member": {
-            "$ref": "#/components/schemas/PrivacyExportMemberSnapshot"
-          },
-          "latestLegalAcceptance": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/PrivacyLegalAcceptanceSnapshot"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        }
-      },
-      "PrivacyLegalAcceptanceSnapshot": {
-        "type": "object",
-        "properties": {
-          "termsVersion": {
-            "type": "string"
-          },
-          "termsContentSha256": {
-            "type": "string"
-          },
-          "privacyVersion": {
-            "type": "string"
-          },
-          "privacyContentSha256": {
-            "type": "string"
-          },
-          "age14OrOlder": {
-            "type": "boolean"
-          },
-          "requiredPrivacyConfirmed": {
-            "type": "boolean"
-          },
-          "analyticsConsent": {
-            "type": "boolean"
-          },
-          "overseasTransferAcknowledged": {
-            "type": "boolean"
-          },
-          "source": {
-            "type": "string"
-          },
-          "acceptedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         }
       },

@@ -6,6 +6,8 @@ import com.back.boundedContexts.member.subContexts.notification.adapter.persiste
 import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
+import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestStatus
+import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestType
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import com.back.global.jpa.domain.BaseTime
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -13,6 +15,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.util.Optional
 
 class PrivacyRetentionCleanupScheduledJobTest {
     @Test
@@ -177,6 +180,21 @@ class PrivacyRetentionCleanupScheduledJobTest {
             id: Long,
             memberId: Long,
         ): MemberPrivacyRequest? = null
+
+        override fun findByIdForUpdate(id: Long): Optional<MemberPrivacyRequest> =
+            throw UnsupportedOperationException("not used by privacy retention cleanup tests")
+
+        override fun findById(id: Long): Optional<MemberPrivacyRequest> =
+            throw UnsupportedOperationException("not used by privacy retention cleanup tests")
+
+        override fun findAllByOrderByRequestedAtDescIdDesc(): List<MemberPrivacyRequest> =
+            throw UnsupportedOperationException("not used by privacy retention cleanup tests")
+
+        override fun existsByMemberIdAndTypeAndStatusIn(
+            memberId: Long,
+            type: MemberPrivacyRequestType,
+            statuses: Collection<MemberPrivacyRequestStatus>,
+        ): Boolean = throw UnsupportedOperationException("not used by privacy retention cleanup tests")
 
         override fun deleteClosedBefore(
             cutoff: Instant,

@@ -55,7 +55,7 @@ CREATE TABLE member_privacy_request_audit (
     CONSTRAINT fk_member_privacy_request_audit_request FOREIGN KEY (request_id) REFERENCES member_privacy_request(id) ON DELETE CASCADE,
     CONSTRAINT fk_member_privacy_request_audit_actor FOREIGN KEY (actor_member_id) REFERENCES member(id),
     CONSTRAINT uk_member_privacy_request_audit_operation UNIQUE (operation_id),
-    CONSTRAINT chk_member_privacy_request_audit_action CHECK (action IN ('IDENTITY_REVIEWED', 'STEP_UP_VERIFIED', 'HOLD_REVIEWED', 'HOLD_RELEASED', 'REQUEST_REJECTED')),
+    CONSTRAINT chk_member_privacy_request_audit_action CHECK (action IN ('REQUEST_CREATED', 'IDENTITY_REVIEWED', 'STEP_UP_VERIFIED', 'STEP_UP_REJECTED', 'HOLD_REVIEWED', 'HOLD_RELEASED', 'EXPORT_GENERATED', 'DELETION_COMPLETED', 'REQUEST_REJECTED', 'REQUEST_COMPLETED')),
     CONSTRAINT chk_member_privacy_request_audit_redacted_count CHECK (redacted_record_count >= 0),
     CONSTRAINT chk_member_privacy_request_audit_evidence_sha256 CHECK (evidence_sha256 IS NULL OR evidence_sha256 ~ '^[0-9a-f]{64}$')
 );

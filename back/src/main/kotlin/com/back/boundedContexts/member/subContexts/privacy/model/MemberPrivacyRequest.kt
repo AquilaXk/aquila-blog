@@ -34,9 +34,9 @@ class MemberPrivacyRequest(
     override val id: Long = 0,
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(name = "member_id")
-    val member: Member? = null,
+    var member: Member? = null,
     @field:Column(name = "account_deletion_id")
-    val accountDeletionId: Long? = null,
+    var accountDeletionId: Long? = null,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 48)
     val type: MemberPrivacyRequestType,
@@ -48,37 +48,37 @@ class MemberPrivacyRequest(
     val intakeChannel: MemberPrivacyRequestIntakeChannel = MemberPrivacyRequestIntakeChannel.AUTHENTICATED_SESSION,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 32)
-    val identityStatus: MemberPrivacyRequestIdentityStatus = MemberPrivacyRequestIdentityStatus.VERIFIED_SESSION,
+    var identityStatus: MemberPrivacyRequestIdentityStatus = MemberPrivacyRequestIdentityStatus.VERIFIED_SESSION,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 32)
-    val requesterRole: MemberPrivacyRequestRequesterRole = MemberPrivacyRequestRequesterRole.SUBJECT,
+    var requesterRole: MemberPrivacyRequestRequesterRole = MemberPrivacyRequestRequesterRole.SUBJECT,
     @field:Column(length = 320)
     val requesterContact: String? = null,
     @field:Column
     val assignedOwnerId: Long? = null,
     @field:Column
-    val identityVerifiedById: Long? = null,
+    var identityVerifiedById: Long? = null,
     @field:Column
-    val identityVerifiedAt: Instant? = null,
+    var identityVerifiedAt: Instant? = null,
     @field:Column
-    val stepUpVerifiedById: Long? = null,
+    var stepUpVerifiedById: Long? = null,
     @field:Column
-    val stepUpVerifiedAt: Instant? = null,
+    var stepUpVerifiedAt: Instant? = null,
     @field:Enumerated(EnumType.STRING)
     @field:Column(nullable = false, length = 32)
-    val holdStatus: MemberPrivacyRequestHoldStatus = MemberPrivacyRequestHoldStatus.UNREVIEWED,
+    var holdStatus: MemberPrivacyRequestHoldStatus = MemberPrivacyRequestHoldStatus.UNREVIEWED,
     @field:Column(length = 64)
-    val holdScope: String? = null,
+    var holdScope: String? = null,
     @field:Column(length = 1000)
-    val holdReason: String? = null,
+    var holdReason: String? = null,
     @field:Column
-    val holdReviewedById: Long? = null,
+    var holdReviewedById: Long? = null,
     @field:Column
-    val holdReviewedAt: Instant? = null,
+    var holdReviewedAt: Instant? = null,
     @field:Column
-    val holdReleasedAt: Instant? = null,
+    var holdReleasedAt: Instant? = null,
     @field:Column(length = 1000)
-    val holdReleaseDecision: String? = null,
+    var holdReleaseDecision: String? = null,
     @field:Column(length = 1000)
     val message: String? = null,
     @field:Column(nullable = false)
@@ -86,7 +86,113 @@ class MemberPrivacyRequest(
     @field:Column(nullable = false)
     val dueAt: Instant,
     var completedAt: Instant? = null,
-) : BaseTime(id)
+) : BaseTime(id) {
+    fun approveManualIdentity(
+        member: Member?,
+        accountDeletionId: Long?,
+        requesterRole: MemberPrivacyRequestRequesterRole,
+        verifierId: Long,
+        verifiedAt: Instant,
+    ) {
+        require(identityStatus == MemberPrivacyRequestIdentityStatus.IDENTITY_PENDING)
+        require(status == MemberPrivacyRequestStatus.RECEIVED)
+        require((member == null) != (accountDeletionId == null))
+        this.member = member
+        this.accountDeletionId = accountDeletionId
+        this.requesterRole = requesterRole
+        identityStatus = MemberPrivacyRequestIdentityStatus.VERIFIED_MANUAL
+        identityVerifiedById = verifierId
+        identityVerifiedAt = verifiedAt
+        status = MemberPrivacyRequestStatus.IN_PROGRESS
+    }
+
+    fun rejectIdentity(at: Instant) {
+        require(identityStatus == MemberPrivacyRequestIdentityStatus.IDENTITY_PENDING)
+        require(status == MemberPrivacyRequestStatus.RECEIVED)
+        member = null
+        accountDeletionId = null
+        identityStatus = MemberPrivacyRequestIdentityStatus.REJECTED
+        status = MemberPrivacyRequestStatus.REJECTED
+        completedAt = at
+    }
+
+    fun recordStepUp(
+        verifierId: Long,
+        at: Instant,
+        approved: Boolean,
+    ) {
+        require(identityStatus.isVerified())
+        require(!status.isClosed())
+        stepUpVerifiedById = if (approved) verifierId else null
+        stepUpVerifiedAt = if (approved) at else null
+    }
+
+    fun decideHold(
+        status: MemberPrivacyRequestHoldStatus,
+        scope: String?,
+        reason: String?,
+        reviewerId: Long,
+        at: Instant,
+        releaseDecision: String?,
+    ) {
+        require(identityStatus.isVerified())
+        require(!this.status.isClosed())
+        require(status != MemberPrivacyRequestHoldStatus.UNREVIEWED)
+        when (status) {
+            MemberPrivacyRequestHoldStatus.ACTIVE -> {
+                require(!scope.isNullOrBlank() && !reason.isNullOrBlank())
+                holdScope = scope.trim()
+                holdReason = reason.trim()
+                holdReviewedById = reviewerId
+                holdReviewedAt = at
+                holdReleaseDecision = null
+                holdReleasedAt = null
+            }
+            MemberPrivacyRequestHoldStatus.CLEARED -> {
+                holdScope = null
+                holdReason = null
+                holdReviewedById = reviewerId
+                holdReviewedAt = at
+                holdReleaseDecision = null
+                holdReleasedAt = null
+            }
+            MemberPrivacyRequestHoldStatus.RELEASED -> {
+                require(holdStatus == MemberPrivacyRequestHoldStatus.ACTIVE)
+                require(!releaseDecision.isNullOrBlank())
+                holdReleaseDecision = releaseDecision.trim()
+                holdReleasedAt = at
+            }
+            MemberPrivacyRequestHoldStatus.UNREVIEWED -> error("UNREVIEWED is not an operator decision")
+        }
+        holdStatus = status
+    }
+
+    fun decide(
+        status: MemberPrivacyRequestStatus,
+        at: Instant,
+    ) {
+        require(identityStatus.isVerified())
+        require(!this.status.isClosed())
+        require(status == MemberPrivacyRequestStatus.COMPLETED || status == MemberPrivacyRequestStatus.REJECTED)
+        this.status = status
+        completedAt = at
+    }
+
+    fun linkDeletionTombstone(accountDeletionId: Long) {
+        require(identityStatus.isVerified())
+        require(member != null)
+        require(this.accountDeletionId == null)
+        member = null
+        this.accountDeletionId = accountDeletionId
+    }
+
+    private fun MemberPrivacyRequestIdentityStatus.isVerified(): Boolean =
+        this == MemberPrivacyRequestIdentityStatus.VERIFIED_SESSION ||
+            this == MemberPrivacyRequestIdentityStatus.VERIFIED_MANUAL
+
+    private fun MemberPrivacyRequestStatus.isClosed(): Boolean =
+        this == MemberPrivacyRequestStatus.COMPLETED || this == MemberPrivacyRequestStatus.REJECTED
+}
 
 enum class MemberPrivacyRequestType {
     EXPORT,

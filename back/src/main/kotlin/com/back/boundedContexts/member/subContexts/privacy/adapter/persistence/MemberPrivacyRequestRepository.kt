@@ -2,12 +2,17 @@ package com.back.boundedContexts.member.subContexts.privacy.adapter.persistence
 
 import com.back.boundedContexts.member.subContexts.privacy.application.port.output.MemberPrivacyRequestRepositoryPort
 import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest
+import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestStatus
+import com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequestType
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
+import java.util.Optional
 
 interface MemberPrivacyRequestRepository :
     JpaRepository<MemberPrivacyRequest, Long>,
@@ -16,6 +21,20 @@ interface MemberPrivacyRequestRepository :
         id: Long,
         memberId: Long,
     ): MemberPrivacyRequest?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select request from MemberPrivacyRequest request where request.id = :id")
+    override fun findByIdForUpdate(
+        @Param("id") id: Long,
+    ): Optional<MemberPrivacyRequest>
+
+    override fun findAllByOrderByRequestedAtDescIdDesc(): List<MemberPrivacyRequest>
+
+    override fun existsByMemberIdAndTypeAndStatusIn(
+        memberId: Long,
+        type: MemberPrivacyRequestType,
+        statuses: Collection<MemberPrivacyRequestStatus>,
+    ): Boolean
 
     @Modifying(flushAutomatically = true, clearAutomatically = false)
     @Transactional

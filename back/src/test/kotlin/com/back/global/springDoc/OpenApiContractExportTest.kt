@@ -118,6 +118,26 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val authSessionMemberSchema = openApiNode.path("components").path("schemas").path("AuthSessionMemberDto")
         assertThat(authSessionMemberSchema.path("properties").has("legalReconsent")).isFalse()
         val paths = openApiNode.path("paths")
+        listOf(
+            "/member/api/v1/adm/privacy/requests",
+            "/member/api/v1/adm/privacy/requests/{requestId}",
+            "/member/api/v1/adm/privacy/requests/{requestId}/identity-decisions",
+            "/member/api/v1/adm/privacy/requests/{requestId}/hold-decisions",
+            "/member/api/v1/adm/privacy/requests/{requestId}/step-up-decisions",
+            "/member/api/v1/adm/privacy/requests/{requestId}/exports",
+            "/member/api/v1/adm/privacy/requests/{requestId}/deletions",
+            "/member/api/v1/adm/privacy/requests/{requestId}/decisions",
+        ).forEach { path ->
+            assertThat(paths.has(path)).isTrue()
+        }
+        val privacySessionSummary = schemas.path("PrivacyExportSessionSummary")
+        val privacySessionProperties = privacySessionSummary.path("properties")
+        assertThat(privacySessionProperties.size()).isEqualTo(4)
+        listOf("totalCount", "activeCount", "firstCreatedAt", "lastAuthenticatedAt").forEach { property ->
+            assertThat(privacySessionProperties.has(property)).isTrue()
+        }
+        assertThat(privacySessionSummary.toString())
+            .doesNotContain("sessionKey", "refreshToken", "createdIp", "userAgent", "fingerprint")
         assertThat(paths.has("/system/api/v1/adm/operations/task-dlq-replay")).isTrue()
         assertThat(paths.has("/system/api/v1/adm/operations/{operationId}")).isTrue()
         assertThat(paths.has("/system/api/v1/adm/tasks/replay-failed")).isFalse()

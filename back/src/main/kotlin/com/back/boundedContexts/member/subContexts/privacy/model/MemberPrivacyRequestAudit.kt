@@ -49,9 +49,14 @@ class MemberPrivacyRequestAudit(
 ) : BaseTime(id)
 
 enum class MemberPrivacyRequestAuditAction {
+    REQUEST_CREATED,
     IDENTITY_REVIEWED,
     STEP_UP_VERIFIED,
+    STEP_UP_REJECTED,
     HOLD_REVIEWED,
     HOLD_RELEASED,
+    EXPORT_GENERATED,
+    DELETION_COMPLETED,
     REQUEST_REJECTED,
+    REQUEST_COMPLETED,
 }

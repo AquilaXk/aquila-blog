@@ -32,6 +32,7 @@
     { "path": "tools/test/native-image-evidence.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify native image evidence contract" },
     { "path": "tools/test/content-html-trust-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify contentHtml trust inventory contract" },
     { "path": "tools/test/member-admin-cutoff-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify member administrator cutoff inventory contract" },
+    { "path": "tools/test/member-privacy-email-eligibility-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify member privacy email eligibility inventory contract" },
     { "path": "tools/test/hot-query-telemetry-capability.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify hot-query telemetry capability contract" },
     { "path": "tools/test/dockerfile-supply-chain.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify Dockerfile supply-chain contracts" },
     { "path": "tools/test/vulnerability-exceptions.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/security.yml", "job": "vulnerability-exception-schema", "step": "Validate vulnerability exception allowlist" },

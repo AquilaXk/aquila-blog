@@ -16,6 +16,10 @@
     {
       "file": "back/src/main/resources/db/migration/V20260829_01__restore_task_id_sequence_default.sql",
       "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260901_01__evolve_member_privacy_request.sql",
+      "class": "EXPAND_SAFE"
     }
   ],
   "cutovers": []

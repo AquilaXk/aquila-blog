@@ -20,6 +20,11 @@
     {
       "file": "back/src/main/resources/db/migration/V20260902_01__drain_retired_public_persistence.sql",
       "class": "REQUIRES_N_MINUS_1_TEST"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260902_02__drop_retired_public_persistence.sql",
+      "class": "CONTRACT_AFTER_CUTOVER",
+      "cutoverEvidenceId": "retired-public-persistence-phase-1"
     }
   ],
   "cutovers": [

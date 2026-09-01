@@ -10,11 +10,14 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.utility.DockerImageName
 import java.nio.file.Path
+import java.sql.Statement
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @Testcontainers
 class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
@@ -35,6 +38,21 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
 
     private val retiredPersistenceBaseline =
         """
+        CREATE SEQUENCE member_signup_verification_seq;
+        CREATE SEQUENCE pending_oauth_signup_seq;
+        CREATE SEQUENCE member_privacy_request_seq;
+        CREATE SEQUENCE member_notification_seq;
+        CREATE SEQUENCE post_comment_seq;
+
+        CREATE TABLE member (id bigint PRIMARY KEY);
+        CREATE TABLE member_session (id bigint PRIMARY KEY);
+        CREATE TABLE member_legal_acceptance (id bigint PRIMARY KEY);
+        CREATE TABLE member_account_deletion (id bigint PRIMARY KEY);
+        CREATE TABLE uploaded_file (id bigint PRIMARY KEY);
+        CREATE TABLE cloud_file (id bigint PRIMARY KEY);
+        CREATE TABLE auth_security_event (id bigint PRIMARY KEY);
+        CREATE TABLE member_action_log (id bigint PRIMARY KEY);
+        CREATE TABLE task (id bigint PRIMARY KEY);
         CREATE TABLE member_signup_verification (id bigint PRIMARY KEY);
         CREATE TABLE pending_oauth_signup (id bigint PRIMARY KEY);
         CREATE TABLE member_privacy_request (
@@ -62,6 +80,98 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
             CONSTRAINT fk_post_comment_post FOREIGN KEY (post_id) REFERENCES post (id)
         );
         """.trimIndent()
+
+    private data class Phase2DriftCase(
+        val name: String,
+        val seedStatements: List<String>,
+        val residueCountSql: String,
+    )
+
+    private val phase2TargetTables =
+        listOf(
+            "member_signup_verification",
+            "pending_oauth_signup",
+            "member_privacy_request",
+            "member_notification",
+            "post_comment",
+        )
+
+    private val phase2TargetSequences =
+        listOf(
+            "member_signup_verification_seq",
+            "pending_oauth_signup_seq",
+            "member_privacy_request_seq",
+            "member_notification_seq",
+            "post_comment_seq",
+        )
+
+    private val phase2RetainedTables =
+        listOf(
+            "member",
+            "member_attr",
+            "member_session",
+            "member_legal_acceptance",
+            "member_account_deletion",
+            "post",
+            "post_attr",
+            "uploaded_file",
+            "cloud_file",
+            "auth_security_event",
+            "member_action_log",
+            "task",
+        )
+
+    private val phase2DriftCases =
+        listOf(
+            Phase2DriftCase(
+                name = "member signup verification row",
+                seedStatements = listOf("INSERT INTO member_signup_verification (id) VALUES (1)"),
+                residueCountSql = "SELECT count(*) FROM member_signup_verification",
+            ),
+            Phase2DriftCase(
+                name = "pending OAuth signup row",
+                seedStatements = listOf("INSERT INTO pending_oauth_signup (id) VALUES (1)"),
+                residueCountSql = "SELECT count(*) FROM pending_oauth_signup",
+            ),
+            Phase2DriftCase(
+                name = "member privacy request row",
+                seedStatements = listOf("INSERT INTO member_privacy_request (id, status) VALUES (1, 'COMPLETED')"),
+                residueCountSql = "SELECT count(*) FROM member_privacy_request",
+            ),
+            Phase2DriftCase(
+                name = "member notification row",
+                seedStatements = listOf("INSERT INTO member_notification (id) VALUES (1)"),
+                residueCountSql = "SELECT count(*) FROM member_notification",
+            ),
+            Phase2DriftCase(
+                name = "post comment row",
+                seedStatements =
+                    listOf(
+                        "INSERT INTO post (id) VALUES (1)",
+                        "INSERT INTO post_comment (id, post_id) VALUES (1, 1)",
+                    ),
+                residueCountSql = "SELECT count(*) FROM post_comment",
+            ),
+            Phase2DriftCase(
+                name = "post comments count reference",
+                seedStatements =
+                    listOf(
+                        "INSERT INTO post_attr (id, name) VALUES (1, 'retainedControl')",
+                        "INSERT INTO post (id, comments_count_attr_id) VALUES (1, 1)",
+                    ),
+                residueCountSql = "SELECT count(*) FROM post WHERE comments_count_attr_id IS NOT NULL",
+            ),
+            Phase2DriftCase(
+                name = "comments count post attribute",
+                seedStatements = listOf("INSERT INTO post_attr (id, name) VALUES (1, 'commentsCount')"),
+                residueCountSql = "SELECT count(*) FROM post_attr WHERE name = 'commentsCount'",
+            ),
+            Phase2DriftCase(
+                name = "post comments count member attribute",
+                seedStatements = listOf("INSERT INTO member_attr (id, name) VALUES (1, 'postCommentsCount')"),
+                residueCountSql = "SELECT count(*) FROM member_attr WHERE name = 'postCommentsCount'",
+            ),
+        )
 
     @Test
     fun `synthetic expand schema keeps N minus 1 and current JDBC queries compatible`() {
@@ -98,6 +208,96 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                 statement.executeQuery().use { result ->
                     result.next()
                     assertEquals("baseline", result.getString(1))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `retired persistence schema migration removes only the proven Phase 2 targets`() {
+        val phase1MigrationName = "V20260902_01__drain_retired_public_persistence.sql"
+        val phase2MigrationName = "V20260902_02__drop_retired_public_persistence.sql"
+        val compatibilitySchema = "retired_persistence_phase_2"
+        val phase2Migrations = migrations.resolve("phase-2-success").createDirectories()
+        val phase1Migration = readProductionMigration(phase1MigrationName)
+        val productionMigration = readProductionMigration(phase2MigrationName)
+        val testMigration = readTestMigration(phase2MigrationName)
+
+        assertEquals(productionMigration, testMigration)
+        assertFalse(Regex("\\bCASCADE\\b", RegexOption.IGNORE_CASE).containsMatchIn(productionMigration))
+        assertFalse(Regex("\\bIF\\s+EXISTS\\b", RegexOption.IGNORE_CASE).containsMatchIn(productionMigration))
+
+        phase2Migrations.resolve("V1__retired_persistence_baseline.sql").writeText(retiredPersistenceBaseline)
+        phase2Migrations.resolve(phase1MigrationName).writeText(phase1Migration)
+        flyway(compatibilitySchema, phase2Migrations).migrate()
+        phase2Migrations.resolve(phase2MigrationName).writeText(productionMigration)
+        flyway(compatibilitySchema, phase2Migrations).migrate()
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                phase2TargetTables.forEach { table ->
+                    assertFalse(relationExists(statement, compatibilitySchema, table), "$table must be absent")
+                }
+                phase2TargetSequences.forEach { sequence ->
+                    assertFalse(relationExists(statement, compatibilitySchema, sequence), "$sequence must be absent")
+                }
+                assertFalse(columnExists(statement, compatibilitySchema, "post", "comments_count_attr_id"))
+                phase2RetainedTables.forEach { table ->
+                    assertTrue(relationExists(statement, compatibilitySchema, table), "$table must remain present")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `retired persistence schema migration rejects every Phase 2 drift atomically`() {
+        val phase1MigrationName = "V20260902_01__drain_retired_public_persistence.sql"
+        val phase2MigrationName = "V20260902_02__drop_retired_public_persistence.sql"
+        val phase1Migration = readProductionMigration(phase1MigrationName)
+        val phase2Migration = readProductionMigration(phase2MigrationName)
+
+        phase2DriftCases.forEachIndexed { index, driftCase ->
+            val compatibilitySchema = "retired_persistence_phase_2_drift_$index"
+            val driftMigrations = migrations.resolve("phase-2-drift-$index").createDirectories()
+            driftMigrations.resolve("V1__retired_persistence_baseline.sql").writeText(retiredPersistenceBaseline)
+            driftMigrations.resolve(phase1MigrationName).writeText(phase1Migration)
+            flyway(compatibilitySchema, driftMigrations).migrate()
+
+            postgres.createConnection("").use { connection ->
+                connection.createStatement().use { statement ->
+                    statement.execute("SET search_path TO $compatibilitySchema")
+                    driftCase.seedStatements.forEach(statement::execute)
+                }
+            }
+
+            driftMigrations.resolve(phase2MigrationName).writeText(phase2Migration)
+            assertFailsWith<FlywayException>(driftCase.name) {
+                flyway(compatibilitySchema, driftMigrations).migrate()
+            }
+
+            postgres.createConnection("").use { connection ->
+                connection.createStatement().use { statement ->
+                    statement.execute("SET search_path TO $compatibilitySchema")
+                    phase2TargetTables.forEach { table ->
+                        assertTrue(
+                            relationExists(statement, compatibilitySchema, table),
+                            "${driftCase.name}: $table must remain after rollback",
+                        )
+                    }
+                    phase2TargetSequences.forEach { sequence ->
+                        assertTrue(
+                            relationExists(statement, compatibilitySchema, sequence),
+                            "${driftCase.name}: $sequence must remain after rollback",
+                        )
+                    }
+                    assertTrue(
+                        columnExists(statement, compatibilitySchema, "post", "comments_count_attr_id"),
+                        "${driftCase.name}: comments_count_attr_id must remain after rollback",
+                    )
+                    statement.executeQuery(driftCase.residueCountSql).use { result ->
+                        result.next()
+                        assertEquals(1, result.getInt(1), "${driftCase.name}: drift row must remain after rollback")
+                    }
                 }
             }
         }
@@ -285,4 +485,56 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
             }
         }
     }
+
+    private fun readProductionMigration(name: String): String =
+        ClassPathResource("db/migration/$name").inputStream.bufferedReader().use { it.readText() }
+
+    private fun readTestMigration(name: String): String =
+        ClassPathResource("db/migration-test/$name").inputStream.bufferedReader().use { it.readText() }
+
+    private fun flyway(
+        schema: String,
+        migrationDirectory: Path,
+    ): Flyway =
+        Flyway
+            .configure()
+            .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
+            .defaultSchema(schema)
+            .schemas(schema)
+            .createSchemas(true)
+            .locations("filesystem:$migrationDirectory")
+            .validateOnMigrate(true)
+            .load()
+
+    private fun relationExists(
+        statement: Statement,
+        schema: String,
+        relation: String,
+    ): Boolean =
+        statement.executeQuery("SELECT to_regclass('$schema.$relation') IS NOT NULL").use { result ->
+            result.next()
+            result.getBoolean(1)
+        }
+
+    private fun columnExists(
+        statement: Statement,
+        schema: String,
+        table: String,
+        column: String,
+    ): Boolean =
+        statement
+            .executeQuery(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = '$schema'
+                      AND table_name = '$table'
+                      AND column_name = '$column'
+                )
+                """.trimIndent(),
+            ).use { result ->
+                result.next()
+                result.getBoolean(1)
+            }
 }

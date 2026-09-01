@@ -69,9 +69,53 @@ reject_pattern 'needs\.calculateTag\.outputs\.front_live_verify' "Platform deplo
 reject_pattern 'needs\.calculateTag\.outputs\.editor_live_canary' "Platform deploy must not gate jobs on an editor live canary"
 reject_pattern 'needs\.calculateTag\.outputs\.expected_front_commit_sha' "Platform deploy must not consume a frontend commit sha output"
 reject_pattern 'E2E_EXPECTED_FRONT_COMMIT_SHA' "Platform deploy must not parse a frontend live commit sha"
-require_pattern 'statuses:[[:space:]]*read' "repository dispatch must read the exact-SHA Security gate status"
-require_fixed 'commits/${DEPLOY_SHA}/statuses?per_page=100' "repository dispatch must bind the Security gate status to DEPLOY_SHA"
-require_fixed 'aquila/security-gates-complete' "repository dispatch must select only the Security gate status context"
+reject_pattern 'statuses:[[:space:]]*read' "Deploy must not retain the pre-delivery Security status-marker permission"
+reject_fixed='commits/${DEPLOY_SHA}/statuses?per_page=100'
+if grep -Fq -- "${reject_fixed}" "${workflow}"; then
+  echo "unexpected: repository dispatch must not treat a pre-delivery commit status as served evidence" >&2
+  exit 1
+fi
+reject_pattern 'aquila/security-gates-complete' "repository dispatch must not accept the pre-delivery Security marker"
+
+security_delivery_queries="$(grep -Fc 'actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50' "${workflow}")"
+if [[ "${security_delivery_queries}" -ne 2 ]]; then
+  echo "missing: both ordinary and Web-dispatch admission must query the exact-SHA Security workflow run" >&2
+  exit 1
+fi
+
+job_block() {
+  local job="$1"
+  awk -v header="  ${job}:" '
+    $0 == header { capture = 1 }
+    capture && $0 ~ /^  [[:alnum:]_]+:$/ && $0 != header { exit }
+    capture { print }
+  ' "${workflow}"
+}
+
+validation_job="$(job_block validateBackendDeployEnvironment)"
+build_job="$(job_block buildAndPush)"
+blue_green_job="$(job_block blueGreenDeploy)"
+
+if [[ -z "${validation_job}" ]]; then
+  echo "missing: backend deployment environment validation job" >&2
+  exit 1
+fi
+if ! grep -Fq 'needs: calculateTag' <<< "${validation_job}" ||
+  ! grep -Fq "needs.calculateTag.outputs.backend_deploy == 'true'" <<< "${validation_job}" ||
+  ! grep -Fq 'Validate HOME_SERVER_ENV contract' <<< "${validation_job}"; then
+  echo "missing: backend environment validation must follow target calculation and validate HOME_SERVER_ENV" >&2
+  exit 1
+fi
+if ! grep -Fq -- '- validateBackendDeployEnvironment' <<< "${build_job}" ||
+  ! grep -Fq "needs.validateBackendDeployEnvironment.result == 'success'" <<< "${build_job}"; then
+  echo "missing: backend image build must require successful environment validation" >&2
+  exit 1
+fi
+if grep -Fq 'Validate HOME_SERVER_ENV contract' <<< "${blue_green_job}" ||
+  grep -Fq 'Verify required secrets' <<< "${blue_green_job}"; then
+  echo "unexpected: backend deployment must not repeat the pre-build environment validation" >&2
+  exit 1
+fi
 reject_pattern 'WEB_LIVE_E2E_ENV' "Platform deploy must not parse the Web live E2E environment"
 reject_pattern 'validate-env\.mjs --target live-e2e' "Platform deploy must not validate the Web live E2E environment"
 reject_pattern 'PLAYWRIGHT_' "Platform deploy must not parse Playwright environment variables"

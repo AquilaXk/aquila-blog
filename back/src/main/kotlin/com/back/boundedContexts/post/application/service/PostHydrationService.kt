@@ -5,8 +5,6 @@ import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
-import com.back.boundedContexts.post.domain.POSTS_COUNT
-import com.back.boundedContexts.post.domain.POST_COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
@@ -37,13 +35,6 @@ class PostHydrationService(
             post.commentsCountAttr = post.commentsCountAttr ?: attrsByKey["${post.id}:$COMMENTS_COUNT"]
             post.hitCountAttr = post.hitCountAttr ?: attrsByKey["${post.id}:$HIT_COUNT"]
         }
-    }
-
-    fun hydrateMemberCounterAttrs(member: Member) {
-        member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)?.let { member.postsCountAttr = it }
-        member.postCommentsCountAttr ?: memberAttrRepository
-            .findBySubjectAndName(member, POST_COMMENTS_COUNT)
-            ?.let { member.postCommentsCountAttr = it }
     }
 
     fun hydrateMembersProfileImgAttrs(members: List<Member>) {

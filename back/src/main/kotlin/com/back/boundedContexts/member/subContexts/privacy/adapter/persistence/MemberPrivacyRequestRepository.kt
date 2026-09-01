@@ -12,11 +12,6 @@ import java.time.Instant
 interface MemberPrivacyRequestRepository :
     JpaRepository<MemberPrivacyRequest, Long>,
     MemberPrivacyRequestRepositoryPort {
-    override fun findByIdAndMemberId(
-        id: Long,
-        memberId: Long,
-    ): MemberPrivacyRequest?
-
     @Modifying(flushAutomatically = true, clearAutomatically = false)
     @Transactional
     @Query(

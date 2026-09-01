@@ -9,6 +9,8 @@ import java.util.Locale
 import javax.imageio.ImageIO
 
 internal class PostImageAdmissionValidator {
+    private val pngSignature = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+
     fun validate(
         path: Path,
         declaredContentType: String?,
@@ -69,9 +71,9 @@ internal class PostImageAdmissionValidator {
     private fun rejectAnimatedPng(path: Path) {
         val fileSize = Files.size(path)
         DataInputStream(Files.newInputStream(path)).use { input ->
-            if (!input.readNBytes(PNG_SIGNATURE.size).contentEquals(PNG_SIGNATURE)) throw invalidImage()
+            if (!input.readNBytes(pngSignature.size).contentEquals(pngSignature)) throw invalidImage()
 
-            var offset = PNG_SIGNATURE.size.toLong()
+            var offset = pngSignature.size.toLong()
             while (offset + PNG_CHUNK_OVERHEAD <= fileSize) {
                 val dataLength = input.readInt().toLong() and UINT32_MASK
                 val typeBytes = input.readNBytes(PNG_CHUNK_TYPE_SIZE)
@@ -122,7 +124,6 @@ internal class PostImageAdmissionValidator {
         const val UINT32_MASK = 0xFFFF_FFFFL
         const val APNG_ANIMATION_CONTROL_CHUNK = "acTL"
         const val PNG_END_CHUNK = "IEND"
-        val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
     }
 }
 

@@ -52,8 +52,6 @@ interface PostUseCase {
         actor: Member,
     )
 
-    fun deleteContentByAuthorForAccountDeletion(author: Member)
-
     fun incrementHit(post: Post)
 
     fun findPagedByKw(

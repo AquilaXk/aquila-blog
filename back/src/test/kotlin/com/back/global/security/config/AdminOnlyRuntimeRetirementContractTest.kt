@@ -1,11 +1,13 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.subContexts.memberActionLog.adapter.event.MemberActionLogEventListener
+import com.back.boundedContexts.post.adapter.event.PostReadModelTaskEventListener
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.service.PostRecommendFeatureStoreService
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.event.PostAccountDeletionDeletedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
@@ -98,6 +100,39 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
                 .single { it.name == "addTask" }
                 .isAnnotationPresent(TransactionalEventListener::class.java),
         ).isFalse()
+    }
+
+    @Test
+    fun `removes account deletion producers while retaining queued event consumption and active boundaries`() {
+        assertThat(PostUseCase::class.java.methods.map { it.name })
+            .doesNotContain("deleteContentByAuthorForAccountDeletion")
+
+        val listenerParameterTypes =
+            PostReadModelTaskEventListener::class.java.declaredMethods
+                .filter { it.isAnnotationPresent(TransactionalEventListener::class.java) }
+                .map { it.parameterTypes.single() }
+
+        assertThat(listenerParameterTypes)
+            .containsExactlyInAnyOrder(
+                PostWrittenEvent::class.java,
+                PostModifiedEvent::class.java,
+                PostDeletedEvent::class.java,
+                PostAccountDeletionDeletedEvent::class.java,
+            )
+
+        assertThat(applicationContext.containsBean("memberAccountDeletionRepository")).isFalse()
+        assertThat(applicationContext.containsBean("memberAccountDeletionRepositoryAdapter")).isFalse()
+        assertThat(applicationContext.containsBean("memberPrivacyRequestRepository")).isTrue()
+        assertThat(applicationContext.containsBean("privacyRetentionCleanupScheduledJob")).isTrue()
+        assertThat(applicationContext.containsBean("postWriteSideEffectHandler")).isTrue()
+
+        assertThat(taskHandlerRegistry.getRegisteredEntries().map { it.taskType })
+            .contains(
+                "post.write.side-effect",
+                "post.search-index.sync",
+                "post.search-engine.mirror",
+                "post.read.prewarm",
+            )
     }
 
     private fun hasHandlerMethod(

@@ -309,16 +309,23 @@ test("missing changed migration file fails closed for rename and delete", () => 
   }
 })
 
-test("retired lifecycle callback deletion does not permit repeatable migration deletion", () => {
-  const callback = "back/src/main/resources/db/migration/beforeMigrate__temporary_recovery.sql"
+test("only the retired lifecycle callback can be deleted without permitting other migration deletion", () => {
+  const retiredCallback =
+    "back/src/main/resources/db/migration/beforeMigrate__normalize_post_comment_post_fk.sql"
+  const activeCallback = "back/src/main/resources/db/migration/beforeMigrate__temporary_recovery.sql"
   const repeatable = "back/src/main/resources/db/migration/R__current_projection.sql"
   const root = createRepo({ files: {} })
 
   try {
-    const callbackResult = runSafety({ root, changedFiles: [callback], policy: compatibilityPolicy() })
-    assert.equal(callbackResult.status, 0, callbackResult.stderr)
-    assert.equal(callbackResult.json.ok, true)
-    assert.deepEqual(callbackResult.json.findings, [])
+    const retiredResult = runSafety({ root, changedFiles: [retiredCallback], policy: compatibilityPolicy() })
+    assert.equal(retiredResult.status, 0, retiredResult.stderr)
+    assert.equal(retiredResult.json.ok, true)
+    assert.deepEqual(retiredResult.json.findings, [])
+
+    const activeResult = runSafety({ root, changedFiles: [activeCallback], policy: compatibilityPolicy() })
+    assert.equal(activeResult.status, 1)
+    assert.equal(activeResult.json.ok, false)
+    assert.deepEqual(activeResult.json.findings, [{ file: activeCallback, rule: "missing-migration-file" }])
 
     const repeatableResult = runSafety({ root, changedFiles: [repeatable], policy: compatibilityPolicy() })
     assert.equal(repeatableResult.status, 1)

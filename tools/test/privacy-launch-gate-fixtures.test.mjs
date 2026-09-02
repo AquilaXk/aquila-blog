@@ -91,3 +91,46 @@ test("privacy launch gate fixture rejects retired policy requirements", () => {
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /evidenceRequirement references retired artifact/)
 })
+
+test("privacy launch gate fixture rejects deleted receiver artifacts", () => {
+  const retiredArtifacts = [
+    ".github/workflows/sync-web-legal-policy-to-platform.yml",
+    "tools/test/web-policy-contract.test.mjs",
+    "tools/test/web-legal-policy-workflow.test.mjs",
+  ]
+
+  for (const retiredArtifact of retiredArtifacts) {
+    const fixture = createFixture()
+    const source = JSON.parse(fs.readFileSync(fixture.sourceFixturePath, "utf8"))
+    source.controls[0].evidenceArtifacts = [retiredArtifact]
+    fs.writeFileSync(fixture.sourceFixturePath, `${JSON.stringify(source, null, 2)}\n`)
+
+    const result = runValidator(fixture)
+
+    assert.notEqual(result.status, 0, retiredArtifact)
+    assert.match(result.stderr, /references retired artifact/, retiredArtifact)
+  }
+})
+
+test("privacy launch gate fixture rejects contradictory current decisions", () => {
+  const fixture = createFixture()
+  const checklist = fs.readFileSync(fixture.checklistFixturePath, "utf8")
+  const staleDecision =
+    "| Legal sign-off | `block` | Pending external approval. | Wait for approval. |"
+  const withoutStaleDecision = checklist
+    .split("\n")
+    .filter((line) => !line.startsWith("| Legal sign-off |"))
+    .join("\n")
+  fs.writeFileSync(
+    fixture.checklistFixturePath,
+    withoutStaleDecision.replace(
+      /^(\| Production launch .*\|)$/m,
+      `$1\n${staleDecision}`,
+    ),
+  )
+
+  const result = runValidator(fixture)
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /Production launch cannot pass while Legal sign-off is block/)
+})

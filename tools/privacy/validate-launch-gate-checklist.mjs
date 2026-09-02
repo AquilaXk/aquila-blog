@@ -22,9 +22,12 @@ const readText = (filePath) => fs.readFileSync(filePath, "utf8")
 const normalizeCell = (value) => value.trim()
 const retainedControlIssues = new Set([994, 1000, 1001, 1004, 1005, 1006, 1027])
 const retiredEvidenceReferences = [
+  ".github/workflows/sync-web-legal-policy-to-platform.yml",
   "contracts/web/legal-policy-manifest.lock.json",
   "tools/contracts/check-web-policy-lock.mjs",
   "tools/contracts/import-web-policy-manifest.mjs",
+  "tools/test/web-policy-contract.test.mjs",
+  "tools/test/web-legal-policy-workflow.test.mjs",
   "AquilaXk/aquila-blog-web:src/routes/LegalPolicy/",
   "AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts",
   "AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts",
@@ -49,6 +52,23 @@ const parseIssueMatrix = (markdown) => {
       evidenceRequirement: cells[4],
       launchDecision: cells[5],
     })
+  }
+  return rows
+}
+
+const parseCurrentDecisions = (markdown) => {
+  const rows = new Map()
+  let inCurrentDecision = false
+  for (const line of markdown.split(/\r?\n/)) {
+    if (line === "## Current Decision") {
+      inCurrentDecision = true
+      continue
+    }
+    if (inCurrentDecision && line.startsWith("## ")) break
+    if (!inCurrentDecision || !line.startsWith("| ")) continue
+    const cells = line.split("|").slice(1, -1).map(normalizeCell)
+    if (cells.length !== 4 || cells[0] === "항목" || cells[0].startsWith("---")) continue
+    rows.set(cells[0], cells[1].replaceAll("`", ""))
   }
   return rows
 }
@@ -119,6 +139,15 @@ const assertChecklistRowMatches = (control, row) => {
 const source = readJson(controlsPath)
 const checklist = readText(checklistPath)
 const matrixRows = parseIssueMatrix(checklist)
+const currentDecisions = parseCurrentDecisions(checklist)
+
+if (currentDecisions.get("Production launch") === "pass") {
+  for (const [label, decision] of currentDecisions) {
+    if (label !== "Production launch" && decision === "block") {
+      fail(`Production launch cannot pass while ${label} is block`)
+    }
+  }
+}
 
 if (source.version !== 1) fail("source version must be 1")
 if (!source.releaseLinkage || typeof source.releaseLinkage !== "object") {

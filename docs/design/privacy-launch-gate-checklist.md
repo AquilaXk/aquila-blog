@@ -9,7 +9,7 @@ Follow-up matrix의 source of truth는 `legal/privacy-launch-controls.json`이�
 | 항목 | 현재 판정 | 근거 | 다음 조치 |
 | --- | --- | --- | --- |
 | Production launch | `pass` | retained controls #994, #1000, #1001, #1004, #1005, #1006, #1027이 closed이고 current evidence가 있다. | runtime 또는 retained evidence가 변경되면 matrix와 source를 함께 갱신한다. |
-| Legal sign-off | `block` | 실제 사업자 요건, processor 계약, 국외이전, 최종 정책 문구는 전문가 확인 전이다. | 출시 승인 전 법무/운영 owner가 evidence와 결정을 남긴다. |
+| Public legal-surface review | `not applicable` | public policy, signup/OAuth, consent, tracking surface가 퇴역했고 current processor·retention operations는 retained controls가 소유한다. | 해당 surface를 재도입하는 tracked work에서 legal·processor·retention evidence를 다시 판정한다. |
 | Operations readiness | `pass` | 보유기간 자동 파기와 백업 암호화/복구 privacy guard의 current acceptance가 있다. | runtime 또는 restore evidence가 변경되면 재판정한다. |
 
 ## Owner And Contact

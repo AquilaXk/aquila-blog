@@ -1,0 +1,2 @@
+DROP TABLE member_legal_acceptance;
+DROP SEQUENCE member_legal_acceptance_seq;

@@ -163,11 +163,11 @@ test("runs PostgreSQL 18 shared hydration admission regression", { timeout: 60_0
     psql(`
       CREATE SCHEMA telemetry;
       CREATE EXTENSION pg_stat_statements WITH SCHEMA telemetry;
-      CREATE TABLE post (id bigint PRIMARY KEY, published boolean NOT NULL, listed boolean NOT NULL);
+      CREATE TABLE post (id bigint PRIMARY KEY, published boolean NOT NULL, listed boolean NOT NULL, author_id bigint NOT NULL);
       CREATE TABLE member (id bigint PRIMARY KEY);
       CREATE TABLE post_tag_index (post_id bigint NOT NULL, tag text NOT NULL);
       CREATE TABLE telemetry.first_ids (id bigint PRIMARY KEY);
-      INSERT INTO post VALUES (1, true, true), (2, true, true);
+      INSERT INTO post VALUES (1, true, true, 1), (2, true, true, 2);
       INSERT INTO member VALUES (1), (2);
       INSERT INTO post_tag_index VALUES (1, 'kotlin'), (2, 'spring');
       SELECT telemetry.pg_stat_statements_reset();
@@ -176,7 +176,7 @@ test("runs PostgreSQL 18 shared hydration admission regression", { timeout: 60_0
       WHERE p.published AND p.listed
       ORDER BY p.id DESC
       OFFSET 0 LIMIT 2;
-      SELECT DISTINCT p.id FROM post p LEFT JOIN member m ON m.id = p.id WHERE p.id IN (1, 2);
+      SELECT DISTINCT p.id FROM post p LEFT JOIN member m ON m.id = p.id WHERE p.id IN (1, 2) AND p.published AND p.listed AND p.author_id > 0 ORDER BY p.id DESC LIMIT 2;
       INSERT INTO telemetry.first_ids
       SELECT queryid FROM telemetry.pg_stat_statements WHERE query ~* '^\\s*SELECT DISTINCT';
       SELECT telemetry.pg_stat_statements_reset();
@@ -185,7 +185,7 @@ test("runs PostgreSQL 18 shared hydration admission regression", { timeout: 60_0
       WHERE p.published AND p.listed AND p.id < 3
       ORDER BY p.id DESC
       LIMIT 2;
-      SELECT DISTINCT p.id FROM post p LEFT JOIN member m ON m.id = p.id WHERE p.id IN (1, 2);
+      SELECT DISTINCT p.id FROM post p LEFT JOIN member m ON m.id = p.id WHERE p.id IN (1, 2) AND p.published AND p.listed AND p.author_id > 0 ORDER BY p.id DESC LIMIT 2;
       SELECT pti.tag, count(*)
       FROM post_tag_index pti
       JOIN post p ON p.id = pti.post_id

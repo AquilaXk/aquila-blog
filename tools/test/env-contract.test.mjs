@@ -801,7 +801,7 @@ test("an absent optional key stays valid", async () => {
   const contract = loadContract(contractPath)
 
   // 줄 자체가 없는 것은 정상 사용이다. 빈 값 규칙이 이걸 깨면 안 된다.
-  const absent = baseHomeServerEnv.replace(/^CUSTOM__REVALIDATE__URL=.*$\n?/m, "")
+  const absent = baseHomeServerEnv.replace(/^DB_BASE_NAME=.*$\n?/m, "")
   const absentResult = validateEnvText({ contract, target: "home-server-source", text: absent })
   assert.equal(absentResult.ok, true, absentResult.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
 
@@ -1951,15 +1951,21 @@ test("a topology may not grant admin embed rights outside its own web host", asy
   assert(result.errors.some((error) => error.message.includes("adminEmbedOrigins")))
 })
 
-test("an absent revalidate URL is announced because the backend call path is live", async () => {
+test("home-server-source requires revalidate URL and token", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
-  const text = baseHomeServerEnv.replace(/^CUSTOM__REVALIDATE__URL=.*$\n?/m, "")
+  const contract = loadContract(contractPath)
 
-  const result = validateEnvText({ contract: loadContract(contractPath), target: "home-server-source", text })
+  for (const key of ["CUSTOM__REVALIDATE__URL", "CUSTOM__REVALIDATE__TOKEN"]) {
+    for (const text of [
+      baseHomeServerEnv.replace(new RegExp(`^${key}=.*$\\n?`, "m"), ""),
+      withEnvKeys(baseHomeServerEnv, [[key, ""]]),
+    ]) {
+      const result = validateEnvText({ contract, target: "home-server-source", text })
 
-  // required: false지만 비어 있으면 RevalidateService가 조용히 drop한다.
-  assert.equal(result.ok, true, result.errors.map((error) => `${error.key}: ${error.message}`).join("\n"))
-  assert(result.warnings.some((warning) => warning.key === "CUSTOM__REVALIDATE__URL"))
+      assert.equal(result.ok, false, `${key} must reject an absent or blank value`)
+      assert(result.errors.some((error) => error.key === key), `${key} must be named in the error`)
+    }
+  }
 })
 
 test("ADMIN_EMBED_ORIGINS drift to another service host is announced", async () => {
@@ -2157,7 +2163,7 @@ test("deploy workflow derives every prod site value from the same topology table
 
   // front origin 파생 키가 스위치 밖에 있으면 오너가 스위치만 바꿨을 때 조용히 어긋난다.
   assert.match(workflow, /upsert_env_key "ADMIN_EMBED_ORIGINS" "\$\{PROD_SITE_ADMIN_EMBED_ORIGINS\}" "deploy\/homeserver\/\.env\.prod"/)
-  // CUSTOM__REVALIDATE__URL은 required: false다. 비어 있는 상태(재생성 비활성)를 켜 버리면 안 된다.
+  // 배포 조건부는 방어선으로 남고, source validation이 revalidate 활성화의 required 조건을 소유한다.
   assert.match(workflow, /if \[ -n "\$\{EXISTING_REVALIDATE_URL\}" \]; then/)
   assert.match(workflow, /upsert_env_key "CUSTOM__REVALIDATE__URL" "\$\{PROD_SITE_REVALIDATE_URL\}" "deploy\/homeserver\/\.env\.prod"/)
 })

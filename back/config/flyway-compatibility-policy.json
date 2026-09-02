@@ -33,6 +33,12 @@
       "repository": "AquilaXk/aquila-blog",
       "mergeSha": "8902c8e2ec09e3f8c9393d8f044759c0141129d8",
       "deployRunId": 33554058558
+    },
+    {
+      "id": "retired-legal-acceptance-runtime",
+      "repository": "AquilaXk/aquila-blog",
+      "mergeSha": "19f9040c625bd5f36fc871311e28826d89db3f75",
+      "deployRunId": 33614068613
     }
   ]
 }

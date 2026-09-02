@@ -25,7 +25,6 @@ const findings = []
 const webRepositoryName = "aquilaxk/aquila-blog-web"
 const webOwnerWorkflows = new Set([
   ".github/workflows/sync-public-contract-to-web.yml",
-  ".github/workflows/sync-web-legal-policy-to-platform.yml",
   ".github/workflows/deploy.yml",
 ])
 const rubyYamlParser = [

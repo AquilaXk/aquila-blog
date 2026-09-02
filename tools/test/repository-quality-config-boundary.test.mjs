@@ -337,7 +337,7 @@ jobs:
     steps:
       - run: gh pr close https://github.com/AquilaXk/aquila-blog-web/pull/123
 `, "foreign-pr-write"],
-    ["sync-web-legal-policy-to-platform", `
+    ["sync-public-contract-to-web", `
 name: Environment Web Git remote
 on: workflow_dispatch
 env:
@@ -373,7 +373,7 @@ jobs:
     steps:
       - run: git push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
 `, "foreign-web-owner")
-  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+  assertWorkflowRejected("sync-public-contract-to-web", `
 name: Allowlisted owner with foreign Web Git push
 on: workflow_dispatch
 jobs:
@@ -435,7 +435,7 @@ jobs:
     steps:
       - run: gh api --method POST "repos/\${WEB_REPOSITORY}/dispatches" -f event_type=handoff
 `, "foreign-web-owner")
-  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+  assertWorkflowRejected("sync-public-contract-to-web", `
 name: Alternate Web Git remotes
 on: workflow_dispatch
 jobs:
@@ -482,7 +482,7 @@ jobs:
     steps:
       - run: gh api -X$METHOD "repos/\${WEB_REPOSITORY}/issues"
 `, "foreign-api-write")
-  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+  assertWorkflowRejected("sync-public-contract-to-web", `
 name: SSH Web Git remote
 on: workflow_dispatch
 jobs:
@@ -530,7 +530,7 @@ jobs:
     steps:
       - run: git -c user.name=ci -c user.email=ci@example.invalid push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
 `, "foreign-git-write")
-  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+  assertWorkflowRejected("sync-public-contract-to-web", `
 name: Static Git directory before Web push
 on: workflow_dispatch
 jobs:
@@ -539,7 +539,7 @@ jobs:
     steps:
       - run: git -C platform push https://github.com/AquilaXk/aquila-blog-web.git HEAD:main
 `, "foreign-git-write")
-  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+  assertWorkflowRejected("sync-public-contract-to-web", `
 name: No pager before Web push
 on: workflow_dispatch
 jobs:
@@ -600,7 +600,7 @@ jobs:
         with:
           repository: \${{ github.repository_owner }}/aquila-blog-web
 `, "foreign-checkout")
-  assertWorkflowRejected("sync-web-legal-policy-to-platform", `
+  assertWorkflowRejected("sync-public-contract-to-web", `
 name: Allowlisted owner with foreign Web clone
 on: workflow_dispatch
 jobs:

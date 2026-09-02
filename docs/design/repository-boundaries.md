@@ -21,26 +21,22 @@ check out, build, scan, or retain a fallback copy of Web source.
 The Web URL is `https://blog.aquilaxk.site`, and the public API is served from that
 same host by path rather than from a separate API host (#1575). The pre-transition
 hosts `www.aquilaxk.site` and `api.aquilaxk.site` are retired (#1555, #1596).
-Platform retains DB, Redis, MinIO, cookie, OAuth callback, and backend runtime
+Platform retains DB, Redis, MinIO, administrator cookies, and backend runtime
 ownership. The GHCR image family remains unchanged, including
 `ghcr.io/aquilaxk/aquila-blog-back`.
 
-This split does not include a DB migration, data movement, cookie-domain change, or
-OAuth callback change.
+This split does not include a DB migration, data movement, or cookie-domain change.
 
 ## Repository contract direction
 
 Platform publishes its canonical API bundle at `contracts/public-api/**`. Web
-imports a SHA-pinned snapshot into `contracts/platform/**`. Web publishes the
-canonical legal manifest at `contracts/export/legal-policy-manifest.json`; Platform
-imports its lock at `contracts/web/legal-policy-manifest.lock.json`.
+imports a SHA-pinned snapshot into `contracts/platform/**`.
 
-Each imported lock fails closed unless it identifies its source repository, a
+The imported API lock fails closed unless it identifies its source repository, a
 40-character source SHA, lower-case artifact SHA-256 values, and bytes matching those
 hashes. Normal CI does not check out the other repository's source tree. A potentially
 breaking API change is treated as breaking: deploy compatible Web first, then merge
-Platform. Platform does not merge active legal metadata until Web custom-domain
-validation succeeds.
+Platform.
 
 ## Baseline and rollback
 
@@ -57,6 +53,6 @@ from the expected SHA and writes the base SHA, tracked source counts, plus the G
 
 Every source-boundary change must be independently reversible with a normal revert.
 Do not rewrite Platform history. The final Web-source removal is one delete/config
-commit, so reverting that commit restores the pre-cutover copy without changing data,
-cookie, or OAuth runtime contracts. Runtime rollback selects the last verified
+commit, so reverting that commit restores the pre-cutover copy without changing data
+or administrator cookie contracts. Runtime rollback selects the last verified
 immutable Web image digest rather than rebuilding Web source in Platform.

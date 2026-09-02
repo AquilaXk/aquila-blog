@@ -1,12 +1,8 @@
 {
   "version": 1,
   "releaseLinkage": {
-    "policyEffectiveDateSource": "contracts/web/legal-policy-manifest.lock.json",
     "deployShaSource": "AQUILA_BUILD_SHA",
     "evidenceArtifacts": [
-      "contracts/web/legal-policy-manifest.lock.json",
-      "tools/contracts/check-web-policy-lock.mjs",
-      "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt",
       "AquilaXk/aquila-blog-web:src/pages/_document.tsx"
     ]
   },
@@ -15,91 +11,37 @@
       "issue": 994,
       "status": "Closed",
       "category": "필수 출시 전 완료",
-      "target": "데이터맵, 법적 근거 registry",
-      "evidenceRequirement": "`legal/data-map/*.yaml`와 공개 정책 참조",
+      "target": "runtime 데이터맵과 처리 근거 registry",
+      "evidenceRequirement": "현재 runtime의 `legal/data-map/*.yaml` 정합성",
       "launchDecision": "완료",
       "evidenceArtifacts": ["legal/data-map/processing-activities.yaml", "legal/data-map/legal-basis-matrix.yaml"]
     },
     {
-      "issue": 995,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "정책 버전관리와 공개 페이지",
-      "evidenceRequirement": "Web canonical policy manifest와 pinned Platform lock, `/privacy`, `/terms`, `/cookies`",
-      "launchDecision": "완료",
-      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "AquilaXk/aquila-blog-web:src/routes/LegalPolicy/LegalPolicyPage.tsx"]
-    },
-    {
-      "issue": 996,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "이메일 가입 동의와 증빙 저장",
-      "evidenceRequirement": "backend acceptance version/hash, signup flow evidence",
-      "launchDecision": "완료",
-      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance"]
-    },
-    {
-      "issue": 997,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "Kakao OAuth 신규 가입 pending 동의",
-      "evidenceRequirement": "OAuth 신규 가입 동의 flow evidence",
-      "launchDecision": "완료",
-      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts", "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance"]
-    },
-    {
-      "issue": 998,
-      "status": "Open",
-      "category": "필수 출시 전 완료",
-      "target": "회원가입 token/email URL 노출 제거",
-      "evidenceRequirement": "token hash 저장, URL/log redaction 테스트",
-      "launchDecision": "차단",
-      "evidenceArtifacts": ["issue #998"]
-    },
-    {
-      "issue": 999,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "권리 요청, export, 계정 탈퇴",
-      "evidenceRequirement": "privacy request/export/delete 테스트",
-      "launchDecision": "완료",
-      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts", "docs/legal/data-subject-request-runbook.md"]
-    },
-    {
       "issue": 1000,
-      "status": "Open",
+      "status": "Closed",
       "category": "필수 출시 전 완료",
       "target": "보유기간 설정과 자동 파기 job",
-      "evidenceRequirement": "retention config, scheduled deletion test, dry-run log",
-      "launchDecision": "차단",
-      "evidenceArtifacts": ["legal/data-map/retention-matrix.yaml", "issue #1000"]
+      "evidenceRequirement": "retention config와 scheduled deletion acceptance",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["legal/data-map/retention-matrix.yaml", "back/src/test/kotlin/com/back/boundedContexts/member/subContexts/privacy/job/PrivacyRetentionCleanupScheduledJobTest.kt"]
     },
     {
       "issue": 1001,
-      "status": "Open",
-      "category": "필수 출시 전 완료",
-      "target": "로그 최소화와 민감정보 redaction",
-      "evidenceRequirement": "request/application log redaction test, sample log",
-      "launchDecision": "차단",
-      "evidenceArtifacts": ["issue #1001"]
-    },
-    {
-      "issue": 1002,
       "status": "Closed",
       "category": "필수 출시 전 완료",
-      "target": "analytics/cookie consent manager와 opt-out",
-      "evidenceRequirement": "`/settings/privacy` consent UI, `privacy.optionalTrackingConsent.v1` structured storage, tracking pre-consent/withdrawal e2e",
+      "target": "로그 최소화와 민감정보 redaction",
+      "evidenceRequirement": "request/application log redaction acceptance",
       "launchDecision": "완료",
-      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts", "AquilaXk/aquila-blog-web:e2e/browser-storage-registry.spec.ts"]
+      "evidenceArtifacts": ["back/src/test/kotlin/com/back/global/exception/config/ExceptionHandlerLogRedactionTest.kt", "back/src/test/kotlin/com/back/global/web/logging/SensitiveQueryRedactorTest.kt"]
     },
     {
       "issue": 1004,
-      "status": "Open",
+      "status": "Closed",
       "category": "필수 출시 전 완료",
       "target": "backup 암호화, deletion tombstone, restore privacy guard",
-      "evidenceRequirement": "backup artifact encryption, restore drill, deletion tombstone evidence",
-      "launchDecision": "차단",
-      "evidenceArtifacts": ["docs/legal/backup-restore-privacy-runbook.md", "tools/test/verify-external-backup-restore-drill.sh", "issue #1004"]
+      "evidenceRequirement": "backup artifact encryption, restore drill, deletion tombstone acceptance",
+      "launchDecision": "완료",
+      "evidenceArtifacts": ["docs/legal/backup-restore-privacy-runbook.md", "tools/test/verify-external-backup-restore-drill.sh", "tools/test/restore-drill-artifact-evidence.test.sh"]
     },
     {
       "issue": 1005,
@@ -112,59 +54,12 @@
     },
     {
       "issue": 1006,
-      "status": "Open",
+      "status": "Closed",
       "category": "필수 출시 전 완료",
       "target": "정책·코드 privacy drift gate",
-      "evidenceRequirement": "CI command, failing fixture example, passing workflow link",
-      "launchDecision": "차단",
-      "evidenceArtifacts": ["tools/privacy/ci-privacy-gate.mjs", "issue #1006"]
-    },
-    {
-      "issue": 1007,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "신규 개인정보 수집 feature flag 동결",
-      "evidenceRequirement": "`back/gradlew -p back ciFastCheck --rerun-tasks` 2회 연속 exit 0, Web repository `yarn build` 2회 exit 0, privacy data-map/env contract validator exit 0",
+      "evidenceRequirement": "CI privacy gate와 failing fixture acceptance",
       "launchDecision": "완료",
-      "disabledByFlag": true,
-      "disabledEvidence": ["deploy/env/env.contract.json", ".github/workflows/deploy.yml"],
-      "evidenceArtifacts": ["tools/legal/validate-privacy-data-map.mjs", "deploy/env/env.contract.json"]
-    },
-    {
-      "issue": 1008,
-      "status": "Open",
-      "category": "필수 출시 전 완료",
-      "target": "기존 사용자 재동의와 legacy 고지 migration",
-      "evidenceRequirement": "legacy account migration, re-consent prompt, audit log evidence",
-      "launchDecision": "차단",
-      "evidenceArtifacts": ["issue #1008"]
-    },
-    {
-      "issue": 1024,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "공개 정책과 legal acceptance version/hash 단일화",
-      "evidenceRequirement": "pinned Web policy lock과 `ActiveLegalDocumentMetadata` terms/privacy hash evidence",
-      "launchDecision": "완료",
-      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "back/src/test/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/WebLegalPolicyManifestContractTest.kt"]
-    },
-    {
-      "issue": 1025,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "effective 정책의 내부 검토 문구 제거",
-      "evidenceRequirement": "`reviewRequired=0`, internal phrase validator, page e2e",
-      "launchDecision": "완료",
-      "evidenceArtifacts": ["contracts/web/legal-policy-manifest.lock.json", "tools/contracts/check-web-policy-lock.mjs", "AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts"]
-    },
-    {
-      "issue": 1026,
-      "status": "Closed",
-      "category": "출시 후 보완 가능",
-      "target": "법적 정책 탐색성과 원문 검증 UX",
-      "evidenceRequirement": "policy URL, TOC, hash/download 검증, live page evidence",
-      "launchDecision": "완료",
-      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:src/routes/LegalPolicy/LegalPolicyPage.tsx", "AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts"]
+      "evidenceArtifacts": ["tools/privacy/ci-privacy-gate.mjs", "tools/test/privacy-launch-gate-fixtures.test.mjs", ".github/workflows/security.yml"]
     },
     {
       "issue": 1027,
@@ -174,37 +69,6 @@
       "evidenceRequirement": "browser storage registry, retention mapping evidence",
       "launchDecision": "완료",
       "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/browser-storage-registry.spec.ts", "legal/data-map/retention-matrix.yaml"]
-    },
-    {
-      "issue": 1028,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "정책·동의·추적 회귀 검증 세트",
-      "evidenceRequirement": "legal policy and tracking regression test output",
-      "launchDecision": "완료",
-      "evidenceArtifacts": ["AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts", "AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts"]
-    },
-    {
-      "issue": 1127,
-      "status": "Closed",
-      "category": "필수 출시 전 완료",
-      "target": "Soft-launch 출시 범위와 privacy freeze 키 계약 고정",
-      "evidenceRequirement": "Soft-launch 제품 목표=admin publish+anonymous public read; gate=three signup/OAuth signup/RUM controls across four settings keys, enforced as false/0; 기존 회원 로그인·쓰기는 예외; live smoke",
-      "launchDecision": "완료",
-      "disabledByFlag": true,
-      "disabledEvidence": [
-        "deploy/env/env.contract.json",
-        ".github/workflows/deploy.yml",
-        "docs/design/privacy-launch-gate-checklist.md",
-        "docs/design/launch-gate-operations.md"
-      ],
-      "evidenceArtifacts": [
-        "docs/design/privacy-launch-gate-checklist.md",
-        "docs/design/launch-gate-operations.md",
-        "deploy/env/env.contract.json",
-        "issue #1127",
-        "issue #1256"
-      ]
     }
   ]
 }

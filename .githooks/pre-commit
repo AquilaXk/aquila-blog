@@ -20,8 +20,6 @@ bash tools/guards/check-current-task-scope.sh --staged
 node tools/repo-boundary/check-platform-boundary.mjs
 
 needs_public_contract_check="false"
-needs_web_policy_check="false"
-needs_web_legal_receiver_check="false"
 needs_test_inventory_check="false"
 needs_precommit_route_check="false"
 while IFS= read -r file; do
@@ -29,17 +27,10 @@ while IFS= read -r file; do
     back/build.gradle.kts|back/settings.gradle.kts|back/gradle/backend-test-infra.gradle.kts|back/src/main/*|back/src/test/kotlin/com/back/global/springDoc/*|back/src/test/kotlin/com/back/global/contracts/*|contracts/public-api/*|tools/contracts/sync-public-contracts.mjs|tools/contracts/write-public-manifest.mjs|tools/test/public-contract-manifest.test.mjs)
       needs_public_contract_check="true"
       ;;
-    contracts/web/legal-policy-manifest.lock.json|tools/contracts/check-web-policy-lock.mjs|tools/contracts/import-web-policy-manifest.mjs|tools/test/web-policy-contract.test.mjs)
-      needs_web_policy_check="true"
-      ;;
-    .github/workflows/sync-web-legal-policy-to-platform.yml|tools/test/web-legal-policy-workflow.test.mjs)
-      needs_web_legal_receiver_check="true"
-      ;;
     tools/test/test-execution-inventory.json|tools/ci/verify-test-execution-inventory.mjs|tools/test/test-execution-inventory.test.mjs)
       needs_test_inventory_check="true"
       ;;
     .github/workflows/ci.yml)
-      needs_web_legal_receiver_check="true"
       needs_test_inventory_check="true"
       ;;
     .github/workflows/dependabot-credential-contract.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/security.yml|.github/workflows/backup-restore-drill.yml)
@@ -50,17 +41,6 @@ while IFS= read -r file; do
       ;;
   esac
 done <<< "${staged_files}"
-
-if [[ "${needs_web_policy_check}" == "true" ]]; then
-  echo "[pre-commit] Web legal-policy 계약 검사 실행"
-  node --test tools/test/web-policy-contract.test.mjs
-  node tools/contracts/check-web-policy-lock.mjs
-fi
-
-if [[ "${needs_web_legal_receiver_check}" == "true" ]]; then
-  echo "[pre-commit] Web legal-policy receiver 검사 실행"
-  node --test tools/test/web-legal-policy-workflow.test.mjs
-fi
 
 if [[ "${needs_test_inventory_check}" == "true" ]]; then
   echo "[pre-commit] test execution inventory 검사 실행"

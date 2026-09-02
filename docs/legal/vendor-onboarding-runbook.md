@@ -23,8 +23,8 @@
 2. DPA, 이용약관, 보안 문서, 국외이전 조건, 삭제/반환 조건을 확인한다.
 3. 최소 전송 원칙을 검토한다. secret, access token, raw email, OAuth subject 원문이 불필요하게 전송되면 block한다.
 4. feature flag 또는 env kill switch가 있는지 확인한다.
-5. `legal/vendors/processors.yaml`, `legal/data-map/processing-activities.yaml`, 공개 정책 문서의 processor section을 같은 PR에서 갱신한다.
-6. 법무 확인 필요 항목은 `reviewRequired` 또는 launch gate issue에 남기고 `status: effective` 공개 정책에는 내부 검토 문구를 노출하지 않는다.
+5. `legal/vendors/processors.yaml`과 `legal/data-map/processing-activities.yaml`을 같은 PR에서 갱신한다.
+6. 미확정 계약·국외이전·삭제 조건은 provider issue에 남기고 확인 전 활성화를 차단한다.
 
 ## Approval Gate
 
@@ -34,26 +34,26 @@
 | Contract evidence | DPA 또는 동등한 계약 검토 기록 존재 | 계약/삭제 조건 불명확 |
 | Overseas transfer | 국가, 이전 항목, 보유기간, 사용자 고지 판단 기록 | 국외이전 여부 미확인 |
 | Runtime control | env/feature flag로 disable 가능 | 장애 또는 거부 시 즉시 중단 불가 |
-| Policy alignment | data map, processor registry, policy가 일치 | 문서와 코드 동작 불일치 |
+| Registry alignment | data map, processor registry, runtime이 일치 | registry와 코드 동작 불일치 |
 
 ## Evidence
 
 - processor review note: provider, scope, data categories, legal review status.
 - DPA/security document link 또는 restricted evidence path.
-- policy/data-map diff.
+- processor registry/data-map diff.
 - kill switch 또는 env var 확인 command output.
 - test 또는 dry run request/response sample은 redacted 상태만 저장한다.
 
 ## Exit Criteria
 
-- registry, data map, policy, code configuration이 같은 의미로 정렬됐다.
+- registry, data map, code configuration이 같은 의미로 정렬됐다.
 - legal counsel이 필요한 항목과 기술적으로 검증된 항목이 분리됐다.
 - processor 장애 또는 계약 문제 발생 시 disable 절차가 문서화됐다.
 - launch gate matrix에서 관련 issue 상태와 evidence가 갱신됐다.
 
 ## Validation
 
-- `node tools/contracts/check-web-policy-lock.mjs`로 pinned Web policy lock의 source identity와 manifest hash integrity를 확인한다.
-- `./back/gradlew -p back test --tests '*WebLegalPolicyManifestContractTest'`로 terms/privacy acceptance metadata와 signup max SemVer를 확인한다.
+- `node tools/legal/validate-privacy-data-map.mjs`로 current data map과 processor registry 정합성을 확인한다.
+- `node tools/privacy/ci-privacy-gate.mjs`로 retained privacy operations evidence를 확인한다.
 - processor id가 `legal/data-map/processing-activities.yaml`와 `legal/vendors/processors.yaml`에 일관되게 존재하는지 확인한다.
 - optional integration은 disabled 환경에서 외부 요청이 발생하지 않는지 테스트한다.

@@ -5,11 +5,9 @@
 ## Scope
 
 - Issue: #958
-- Soft-launch 제품 범위 목표 (Locked — #1127 / epic #1256): 관리자 글 발행 + 비로그인 공개 열람
-- Soft-launch freeze 키(이 gate 강제 범위): `CUSTOM__MEMBER__SIGNUP__ENABLED=false`, `CUSTOM__MEMBER__OAUTH_SIGNUP__ENABLED=false`, `NEXT_PUBLIC_SIGNUP_ENABLED=false`, `NEXT_PUBLIC_RUM_SAMPLE_RATE=0`
-- Soft-launch 명시적 예외: 관리자 로그인/발행 필수. 기존 회원 로그인·댓글 쓰기는 이 freeze 범위 밖(별도 issue)
-- Soft-launch freeze 운영 경로: homeserver deploy/env.contract + deploy.yml. 프론트 운영 값은 홈서버 이미지 빌드 인자로만 들어가며 별도 호스팅 provider env는 없다.
-- 적용 대상: release readiness, GitHub Actions CI/CD, 홈서버 배포, QA, monitoring, legal/public pages, privacy launch gate
+- 정식 출시 제품 범위: 관리자 글 발행 + 비로그인 공개 열람
+- 공개 회원가입, OAuth 가입, 댓글, 알림, 선택 추적 동의, 공개 legal page는 current runtime에 없다. 재도입은 별도 tracked issue와 동등한 fail-closed acceptance가 필요하다.
+- 적용 대상: release readiness, GitHub Actions CI/CD, 홈서버 배포, QA, monitoring, privacy operations gate
 - 기본 흐름: issue 확인 -> work branch -> PR -> CI/security -> code review -> merge -> post-merge CI/CD 확인
 
 ## Gate Decision
@@ -39,9 +37,8 @@
 | Alert receiver | Prometheus/Grafana alert rule과 수신 채널 evidence | alert rule과 수신 채널이 존재하고 테스트 evidence 연결 | 운영 alert 수신 경로 없음 |
 | Live E2E account cleanup | live E2E run artifact 또는 cleanup log | 테스트 계정/데이터 cleanup 결과 확인 | live E2E가 계정/데이터를 남김 |
 | Mobile/keyboard/200% zoom QA | [Web release UI QA matrix](https://github.com/AquilaXk/aquila-blog-web/blob/main/docs/design/release-ui-qa-matrix.md) run table과 artifact | matrix pass run 연결 | 핵심 viewport 또는 keyboard/zoom failure |
-| Privacy/terms/contact | public URL 또는 PR evidence | privacy, terms, contact 접근 가능 | 법적/연락처 페이지 미공개 |
-| Privacy launch gate | `docs/design/privacy-launch-gate-checklist.md`의 matrix와 evidence | 개인정보 필수 출시 전 완료 항목 closed, 공개 정책 gate pass, 법무/운영 owner evidence 존재 | 개인정보 launch-blocking issue open, policy-code drift, 법무/운영 owner evidence 없음 |
-| Soft-launch feature freeze | #1127 Locked decision, `deploy/env/env.contract.json`, deploy privacy freeze step, live UI smoke | Soft-launch 범위 문서와 freeze 키가 false/0으로 일치하고 signup/OAuth signup/RUM가 공개되지 않음 | freeze 키 drift or a Soft-launch scope expansion |
+| Retired public surface | Web absence contract와 Platform receiver absence evidence | 공개 signup/OAuth/comment/notification/tracking-consent/legal routes와 receiver가 없음 | 새 surface가 reintroduction acceptance 없이 노출됨 |
+| Privacy operations gate | `docs/design/privacy-launch-gate-checklist.md`의 matrix와 evidence | current data-map, retention, redaction, backup, incident, browser-storage control이 통과 | current control open, runtime drift, evidence 없음 |
 
 ## Evidence Collection
 
@@ -52,8 +49,8 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 - 배포 영향: docs-only, frontend, backend, deploy 중 하나로 분류
 - post-merge 확인: main CI run, deploy workflow run, live verification run 또는 skip 사유
 - QA evidence: release UI QA matrix 문서 또는 Actions artifact
-- legal evidence: privacy, terms, contact URL 확인 결과
-- privacy evidence: `docs/design/privacy-launch-gate-checklist.md`의 go/no-go 판정과 launch-blocking issue 상태
+- retired-surface evidence: Web absence contract와 Platform receiver absence 결과
+- privacy evidence: `docs/design/privacy-launch-gate-checklist.md`의 current operation 판정과 launch-blocking control 상태
 
 ## Current Baseline Links
 
@@ -100,7 +97,7 @@ Before merge:
 - [ ] CodeRabbit review 또는 Codex CLI fallback review가 PR review로 남아 있다.
 - [ ] unresolved review thread와 requested changes가 없다.
 - [ ] 배포 영향 범위를 `docs-only`, `frontend`, `backend`, `deploy` 중 하나로 기록했다.
-- [ ] 필요한 QA/legal/monitoring evidence가 PR 본문 또는 연결 문서에 있다.
+- [ ] 필요한 QA/privacy operations/monitoring evidence가 PR 본문 또는 연결 문서에 있다.
 - [ ] launch/release면 최근 30일 `backup-restore-drill` 성공 artifact 링크가 있다.
 
 After merge:

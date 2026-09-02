@@ -6,16 +6,8 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 
 const checks = [
   {
-    name: "pinned Web policy lock integrity",
-    command: [process.execPath, "tools/contracts/check-web-policy-lock.mjs"],
-  },
-  {
     name: "privacy data-map processor/retention drift",
     command: [process.execPath, "tools/legal/validate-privacy-data-map.mjs"],
-  },
-  {
-    name: "Web policy contract failure fixtures",
-    command: [process.execPath, "--test", "tools/test/web-policy-contract.test.mjs"],
   },
   {
     name: "privacy launch checklist evidence sync",

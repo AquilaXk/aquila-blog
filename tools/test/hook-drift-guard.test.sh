@@ -164,11 +164,7 @@ write_node_stub "${route_repo}/tools/repo-boundary/check-platform-boundary.mjs"
 write_shell_stub "${route_repo}/back/gradlew" 'public-gradle'
 write_node_stub "${route_repo}/tools/contracts/sync-public-contracts.mjs" 'public-sync'
 write_node_stub "${route_repo}/tools/contracts/write-public-manifest.mjs"
-write_node_stub "${route_repo}/tools/contracts/check-web-policy-lock.mjs" 'web-policy-check'
-write_node_stub "${route_repo}/tools/contracts/import-web-policy-manifest.mjs"
 write_node_stub "${route_repo}/tools/test/public-contract-manifest.test.mjs"
-write_node_stub "${route_repo}/tools/test/web-policy-contract.test.mjs" 'web-policy-test'
-write_node_stub "${route_repo}/tools/test/web-legal-policy-workflow.test.mjs" 'receiver-test'
 write_node_stub "${route_repo}/tools/ci/verify-test-execution-inventory.mjs" 'inventory-test'
 write_shell_stub "${route_repo}/tools/test/hook-drift-guard.test.sh" 'hook-route-test'
 
@@ -177,35 +173,18 @@ mkdir -p \
   "${route_repo}/back/gradle" \
   "${route_repo}/back/src/main/resources" \
   "${route_repo}/contracts/public-api" \
-  "${route_repo}/contracts/web" \
   "${route_repo}/tools/test"
 printf 'name: CI\n' >"${route_repo}/.github/workflows/ci.yml"
 printf 'name: Dependabot Credential Contract\n' \
   >"${route_repo}/.github/workflows/dependabot-credential-contract.yml"
-printf 'name: Receiver\n' >"${route_repo}/.github/workflows/sync-web-legal-policy-to-platform.yml"
 printf '// fixture\n' >"${route_repo}/back/gradle/backend-test-infra.gradle.kts"
 printf 'spring: {}\n' >"${route_repo}/back/src/main/resources/application.yml"
 printf '{}\n' >"${route_repo}/contracts/public-api/openapi.json"
 printf '{}\n' >"${route_repo}/contracts/public-api/error-codes.json"
 printf '{}\n' >"${route_repo}/contracts/public-api/manifest.json"
-printf '{}\n' >"${route_repo}/contracts/web/legal-policy-manifest.lock.json"
 printf '{}\n' >"${route_repo}/tools/test/test-execution-inventory.json"
 git -C "${route_repo}" add .
 git -C "${route_repo}" commit -qm 'test: pre-commit routing fixture'
-
-# Web legal-policy changes run their focused contract checks without the public API exporter.
-stage_and_run_hook 'contracts/web/legal-policy-manifest.lock.json'
-assert_route_marker 'web-policy-test'
-assert_route_marker 'web-policy-check'
-assert_no_route_marker 'public-gradle'
-assert_no_route_marker 'public-sync'
-restore_route_fixture 'contracts/web/legal-policy-manifest.lock.json'
-
-# The receiver and execution inventory each run only their own deterministic check.
-stage_and_run_hook '.github/workflows/sync-web-legal-policy-to-platform.yml'
-assert_route_marker 'receiver-test'
-assert_no_route_marker 'public-gradle'
-restore_route_fixture '.github/workflows/sync-web-legal-policy-to-platform.yml'
 
 stage_and_run_hook 'tools/test/test-execution-inventory.json'
 assert_route_marker 'inventory-test'
@@ -215,7 +194,6 @@ restore_route_fixture 'tools/test/test-execution-inventory.json'
 # General CI wiring verifies its execution inventory without invoking the public exporter.
 stage_and_run_hook '.github/workflows/ci.yml'
 assert_route_marker 'inventory-test'
-assert_route_marker 'receiver-test'
 assert_no_route_marker 'public-gradle'
 assert_no_route_marker 'public-sync'
 restore_route_fixture '.github/workflows/ci.yml'

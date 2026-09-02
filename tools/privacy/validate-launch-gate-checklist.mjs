@@ -20,6 +20,18 @@ const fail = (message) => {
 const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, "utf8"))
 const readText = (filePath) => fs.readFileSync(filePath, "utf8")
 const normalizeCell = (value) => value.trim()
+const retainedControlIssues = new Set([994, 1000, 1001, 1004, 1005, 1006, 1027])
+const retiredEvidenceReferences = [
+  "contracts/web/legal-policy-manifest.lock.json",
+  "tools/contracts/check-web-policy-lock.mjs",
+  "tools/contracts/import-web-policy-manifest.mjs",
+  "AquilaXk/aquila-blog-web:src/routes/LegalPolicy/",
+  "AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts",
+  "AquilaXk/aquila-blog-web:e2e/privacy-tracking-consent.spec.ts",
+  "back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance",
+  "docs/legal/data-subject-request-runbook.md",
+  "공개 정책 참조",
+]
 
 const parseIssueMatrix = (markdown) => {
   const rows = new Map()
@@ -55,6 +67,14 @@ const requireStringArray = (value, label) => {
   value.forEach((entry, index) => requireNonEmptyString(entry, `${label}[${index}]`))
 }
 
+const rejectRetiredEvidenceReference = (value, label) => {
+  for (const retiredReference of retiredEvidenceReferences) {
+    if (value.includes(retiredReference)) {
+      fail(`${label} references retired artifact: ${retiredReference}`)
+    }
+  }
+}
+
 const validateControl = (control) => {
   const label = `#${control.issue}`
   if (!Number.isInteger(control.issue)) fail(`${label} issue must be an integer`)
@@ -66,6 +86,11 @@ const validateControl = (control) => {
   requireNonEmptyString(control.evidenceRequirement, `${label} evidenceRequirement`)
   requireNonEmptyString(control.launchDecision, `${label} launchDecision`)
   requireStringArray(control.evidenceArtifacts, `${label} evidenceArtifacts`)
+  rejectRetiredEvidenceReference(control.target, `${label} target`)
+  rejectRetiredEvidenceReference(control.evidenceRequirement, `${label} evidenceRequirement`)
+  control.evidenceArtifacts.forEach((entry, index) =>
+    rejectRetiredEvidenceReference(entry, `${label} evidenceArtifacts[${index}]`),
+  )
 
   if (control.status === "Open" && control.launchDecision !== "차단") {
     fail(`${label} open control must block launch`)
@@ -99,9 +124,14 @@ if (source.version !== 1) fail("source version must be 1")
 if (!source.releaseLinkage || typeof source.releaseLinkage !== "object") {
   fail("releaseLinkage is required")
 } else {
-  requireNonEmptyString(source.releaseLinkage.policyEffectiveDateSource, "releaseLinkage.policyEffectiveDateSource")
+  if (Object.hasOwn(source.releaseLinkage, "policyEffectiveDateSource")) {
+    fail("releaseLinkage.policyEffectiveDateSource is retired")
+  }
   requireNonEmptyString(source.releaseLinkage.deployShaSource, "releaseLinkage.deployShaSource")
   requireStringArray(source.releaseLinkage.evidenceArtifacts, "releaseLinkage.evidenceArtifacts")
+  source.releaseLinkage.evidenceArtifacts.forEach((entry, index) =>
+    rejectRetiredEvidenceReference(entry, `releaseLinkage.evidenceArtifacts[${index}]`),
+  )
 }
 
 if (!Array.isArray(source.controls) || source.controls.length === 0) {
@@ -111,12 +141,17 @@ if (!Array.isArray(source.controls) || source.controls.length === 0) {
   for (const control of source.controls) {
     if (seen.has(control.issue)) fail(`#${control.issue} is duplicated`)
     seen.add(control.issue)
+    if (!retainedControlIssues.has(control.issue)) fail(`#${control.issue} is retired`)
     validateControl(control)
     assertChecklistRowMatches(control, matrixRows.get(control.issue))
   }
 
   for (const issue of matrixRows.keys()) {
     if (!seen.has(issue)) fail(`#${issue} exists in checklist matrix but not structured source`)
+  }
+
+  for (const issue of retainedControlIssues) {
+    if (!seen.has(issue)) fail(`#${issue} retained control is missing`)
   }
 }
 

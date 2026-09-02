@@ -55,11 +55,39 @@ test("privacy launch gate fixture fails when checklist matrix drifts", () => {
   const checklist = fs.readFileSync(fixture.checklistFixturePath, "utf8")
   fs.writeFileSync(
     fixture.checklistFixturePath,
-    checklist.replace("| #998 | Open |", "| #998 | Closed |"),
+    checklist.replace("| #1000 | Closed |", "| #1000 | Open |"),
   )
 
   const result = runValidator(fixture)
 
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /#998 checklist status drift/)
+  assert.match(result.stderr, /#1000 checklist status drift/)
+})
+
+test("privacy launch gate fixture rejects retired policy linkage and evidence", () => {
+  const fixture = createFixture()
+  const source = JSON.parse(fs.readFileSync(fixture.sourceFixturePath, "utf8"))
+  source.releaseLinkage.policyEffectiveDateSource = "contracts/web/legal-policy-manifest.lock.json"
+  source.controls[0].evidenceArtifacts.push(
+    "AquilaXk/aquila-blog-web:e2e/legal-policy-pages.spec.ts",
+  )
+  fs.writeFileSync(fixture.sourceFixturePath, `${JSON.stringify(source, null, 2)}\n`)
+
+  const result = runValidator(fixture)
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /policyEffectiveDateSource is retired/)
+  assert.match(result.stderr, /references retired artifact/)
+})
+
+test("privacy launch gate fixture rejects retired policy requirements", () => {
+  const fixture = createFixture()
+  const source = JSON.parse(fs.readFileSync(fixture.sourceFixturePath, "utf8"))
+  source.controls[0].evidenceRequirement = "`legal/data-map/*.yaml`와 공개 정책 참조"
+  fs.writeFileSync(fixture.sourceFixturePath, `${JSON.stringify(source, null, 2)}\n`)
+
+  const result = runValidator(fixture)
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /evidenceRequirement references retired artifact/)
 })

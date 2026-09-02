@@ -4,6 +4,21 @@ import com.back.boundedContexts.post.application.port.output.PostTagIndexReposit
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 
+internal val PUBLIC_TAG_COUNTS_SQL =
+    """
+    SELECT
+        pti.tag AS tag,
+        COUNT(*)::int AS count
+    FROM post_tag_index pti
+    JOIN post p
+        ON p.id = pti.post_id
+    WHERE p.deleted_at IS NULL
+      AND p.published IS TRUE
+      AND p.listed IS TRUE
+    GROUP BY pti.tag
+    ORDER BY COUNT(*) DESC, LOWER(pti.tag) ASC
+    """.trimIndent()
+
 /**
  * PostTagIndexJdbcRepository는 post_tag_index 테이블 기반 태그 저장/집계를 담당합니다.
  * 본문/속성 문자열 파싱 집계를 피하고 SQL group by 집계로 태그 카운트를 계산합니다.
@@ -69,19 +84,7 @@ class PostTagIndexJdbcRepository(
 
     override fun findAllPublicTagCounts(): List<PostTagIndexRepositoryPort.TagCountRow> =
         jdbcTemplate.query(
-            """
-            SELECT
-                pti.tag AS tag,
-                COUNT(*)::int AS count
-            FROM post_tag_index pti
-            JOIN post p
-                ON p.id = pti.post_id
-            WHERE p.deleted_at IS NULL
-              AND p.published IS TRUE
-              AND p.listed IS TRUE
-            GROUP BY pti.tag
-            ORDER BY COUNT(*) DESC, LOWER(pti.tag) ASC
-            """.trimIndent(),
+            PUBLIC_TAG_COUNTS_SQL,
         ) { resultSet, _ ->
             PostTagIndexRepositoryPort.TagCountRow(
                 tag = resultSet.getString("tag"),

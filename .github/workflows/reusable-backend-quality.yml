@@ -324,6 +324,11 @@ jobs:
         working-directory: back
         run: ./gradlew testcontainersTest --tests com.back.infrastructure.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest --rerun-tasks
 
+      - name: Run selected hot-query plan regression gate
+        if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request'
+        working-directory: back
+        run: ./gradlew testcontainersTest --tests com.back.infrastructure.PostTagIndexQueryPlanTestcontainersIntegrationTest --rerun-tasks
+
       - name: Validate Flyway migration naming
         if: steps.changes.outputs.backend == 'true'
         run: |

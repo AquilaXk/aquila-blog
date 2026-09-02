@@ -22,7 +22,7 @@ const ownerMap = new Map([
   ["PUBLIC_CURSOR_LIST", ["findPublicByCursor", "/feed/cursor", "/bootstrap"]],
   ["PUBLIC_TAG_CURSOR_LIST", ["findPublicByTagCursor", "/explore/cursor", "/bootstrap"]],
   ["PUBLIC_RELATED_AUTHOR", ["findPublicByAuthorExceptPost", "/related/author"]],
-  ["PUBLIC_TAG_COUNTS", ["findAllPublicTagCounts", "/tags", "/bootstrap"]],
+  ["PUBLIC_TAG_COUNTS", ["findAllPublicTagCounts", "/tags", "/bootstrap", "/explore"]],
   ["PUBLIC_DETAIL_META", ["findPublicDetailById", "/{id}", "/images/**"]],
   ["PUBLIC_DETAIL_CONTENT", ["findPublicDetailContentById", "/{id}"]],
 ])

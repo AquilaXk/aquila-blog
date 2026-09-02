@@ -6,6 +6,12 @@ guard_path="${repo_root}/tools/guards/check-hook-drift.sh"
 
 # Keep the staged inventory routes synchronized with regular tracked workflow files.
 staged_pre_commit="$(git -C "${repo_root}" show :.githooks/pre-commit)"
+if [[ "${staged_pre_commit}" == *"ActiveLegalDocumentMetadata.kt"* ]] &&
+  { [[ "${staged_pre_commit}" != *"-PtestInfraMode=none"* ]] ||
+    [[ "${staged_pre_commit}" != *"WebLegalPolicyManifestContractTest"* ]]; }; then
+  echo "[test] backend legal metadata route must use its focused no-infra contract" >&2
+  exit 1
+fi
 while IFS= read -r workflow_path; do
   workflow_entry="$(git -C "${repo_root}" ls-files --stage -- "${workflow_path}")"
   if [[ -z "${workflow_entry}" ]]; then
@@ -176,6 +182,7 @@ mkdir -p \
   "${route_repo}/.github/workflows" \
   "${route_repo}/back/gradle" \
   "${route_repo}/back/src/main/resources" \
+  "${route_repo}/back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service" \
   "${route_repo}/contracts/public-api" \
   "${route_repo}/contracts/web" \
   "${route_repo}/tools/test"
@@ -185,6 +192,8 @@ printf 'name: Dependabot Credential Contract\n' \
 printf 'name: Receiver\n' >"${route_repo}/.github/workflows/sync-web-legal-policy-to-platform.yml"
 printf '// fixture\n' >"${route_repo}/back/gradle/backend-test-infra.gradle.kts"
 printf 'spring: {}\n' >"${route_repo}/back/src/main/resources/application.yml"
+printf '// fixture\n' \
+  >"${route_repo}/back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt"
 printf '{}\n' >"${route_repo}/contracts/public-api/openapi.json"
 printf '{}\n' >"${route_repo}/contracts/public-api/error-codes.json"
 printf '{}\n' >"${route_repo}/contracts/public-api/manifest.json"
@@ -200,6 +209,15 @@ assert_route_marker 'web-policy-check'
 assert_no_route_marker 'public-gradle'
 assert_no_route_marker 'public-sync'
 restore_route_fixture 'contracts/web/legal-policy-manifest.lock.json'
+
+# Backend legal-policy metadata runs its focused no-infra policy contract without
+# regenerating unrelated public API artifacts.
+stage_and_run_hook 'back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt'
+assert_route_marker 'web-policy-test'
+assert_route_marker 'web-policy-check'
+assert_route_marker 'public-gradle'
+assert_no_route_marker 'public-sync'
+restore_route_fixture 'back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt'
 
 # The receiver and execution inventory each run only their own deterministic check.
 stage_and_run_hook '.github/workflows/sync-web-legal-policy-to-platform.yml'

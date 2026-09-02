@@ -21,11 +21,16 @@ node tools/repo-boundary/check-platform-boundary.mjs
 
 needs_public_contract_check="false"
 needs_web_policy_check="false"
+needs_web_policy_metadata_check="false"
 needs_web_legal_receiver_check="false"
 needs_test_inventory_check="false"
 needs_precommit_route_check="false"
 while IFS= read -r file; do
   case "${file}" in
+    back/src/main/kotlin/com/back/boundedContexts/member/subContexts/legalAcceptance/application/service/ActiveLegalDocumentMetadata.kt)
+      needs_web_policy_check="true"
+      needs_web_policy_metadata_check="true"
+      ;;
     back/build.gradle.kts|back/settings.gradle.kts|back/gradle/backend-test-infra.gradle.kts|back/src/main/*|back/src/test/kotlin/com/back/global/springDoc/*|back/src/test/kotlin/com/back/global/contracts/*|contracts/public-api/*|tools/contracts/sync-public-contracts.mjs|tools/contracts/write-public-manifest.mjs|tools/test/public-contract-manifest.test.mjs)
       needs_public_contract_check="true"
       ;;
@@ -55,6 +60,14 @@ if [[ "${needs_web_policy_check}" == "true" ]]; then
   echo "[pre-commit] Web legal-policy 계약 검사 실행"
   node --test tools/test/web-policy-contract.test.mjs
   node tools/contracts/check-web-policy-lock.mjs
+fi
+
+if [[ "${needs_web_policy_metadata_check}" == "true" ]]; then
+  echo "[pre-commit] Backend Web legal-policy metadata 검사 실행"
+  back/gradlew -p back test \
+    -PtestInfraMode=none \
+    --tests "com.back.boundedContexts.member.subContexts.legalAcceptance.application.service.WebLegalPolicyManifestContractTest" \
+    --no-daemon
 fi
 
 if [[ "${needs_web_legal_receiver_check}" == "true" ]]; then

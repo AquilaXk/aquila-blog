@@ -3,19 +3,19 @@
   "contract": "aquila-public-legal-policies",
   "active": {
     "terms": {
-      "version": "1.0.2",
-      "contentSha256": "825642074982313f39c5d9bfbeffb20b12fc1a072addce8770b332652a75ad9b"
+      "version": "1.0.4",
+      "contentSha256": "f18c911c0c2c10dbd2f2131226afbb1391c92b310bd3d1dc9ffd5f0ba578c6dd"
     },
     "privacy": {
-      "version": "1.0.3",
-      "contentSha256": "b1a9d7f800214aeab69e0185c2a4721dc394afd3c47a581a3190888a17d95827"
+      "version": "1.0.4",
+      "contentSha256": "42756f25ffd14545fa4c85c6569cb6a195b268de6a29a4acd90f975f231b0eab"
     },
     "cookies": {
-      "version": "1.0.3",
-      "contentSha256": "cc8be651603df0480886d6c258e16dd7228cbfe78fa2bf16ee07ae80359e0f99"
+      "version": "1.0.4",
+      "contentSha256": "c6aacdd07d463519dbffa757bd35378c4749ec322f925e62c26369d19fbc4982"
     }
   },
   "sourceRepository": "AquilaXk/aquila-blog-web",
-  "sourceCommit": "30472d3d5c3189735a332f81f027397764b747ff",
-  "manifestSha256": "81c06c83fd61eaee78e857badd9a73f7fd8ba58839efe8cda2adfdacb810c660"
+  "sourceCommit": "b69b254346acfbdf8f62e51f21f1624d6f9d3013",
+  "manifestSha256": "c73d1602fe23a018606816bf786fe9ad44eeea4d699ec9bd80567753fdb4d490"
 }

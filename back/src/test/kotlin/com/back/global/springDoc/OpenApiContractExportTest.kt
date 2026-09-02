@@ -143,6 +143,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             "/member/api/v1/privacy/account",
             "/member/api/v1/adm/members",
             "/member/api/v1/adm/members/{id}",
+            "/member/api/v1/adm/members/legal-reconsent/report",
         ).forEach { retiredPath ->
             assertThat(paths.has(retiredPath)).isFalse()
         }
@@ -160,6 +161,8 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             "RsDataAccountDeletionResult",
             "RsDataPrivacyExportResponse",
             "RsDataPrivacyRequestResBody",
+            "LegalReconsentReport",
+            "LegalReconsentReportResponse",
         ).forEach { retiredSchema ->
             assertThat(schemas.has(retiredSchema)).isFalse()
         }

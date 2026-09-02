@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import test from "node:test"
@@ -7,6 +8,8 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 const sqlPath = path.join(repoRoot, "deploy/homeserver/sql/hot_query_telemetry_aggregate.sql")
 const inventoryPath = path.join(repoRoot, "tools/test/test-execution-inventory.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/ci.yml")
+const postgresImage = "postgres:18.1-alpine@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29"
+const postgresIntegrationEnabled = process.env.HOT_QUERY_POSTGRES_INTEGRATION === "1"
 
 const recordTypes = new Set(["meta", "shape"])
 const metaMetrics = new Set([
@@ -25,10 +28,24 @@ const shapeMetrics = new Set([
 const kinds = new Set(["select", "insert", "update", "delete", "other"])
 const domains = new Set(["post", "member", "session", "storage", "task", "system", "other"])
 const featureNames = ["search", "tag", "join", "group", "order", "limit", "distinct"]
-const canonicalNumber = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/
+const canonicalInteger = /^(?:0|[1-9][0-9]*)$/
+const canonicalDecimal = /^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,3})?$/
 
 function readSql() {
   return readFileSync(sqlPath, "utf8")
+}
+
+function runDocker(args, options = {}) {
+  const result = spawnSync("docker", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+    ...options,
+  })
+  if (result.error || result.signal || result.status !== 0) {
+    throw new Error(`docker ${args[0]} failed without exposing command output`)
+  }
+  return result.stdout
 }
 
 function parseShapeIdentity(identity) {
@@ -65,7 +82,6 @@ function parseAggregateOutput(output, stderr = "") {
     assert.equal(fields.length, 4, "each row must have exactly four tab-delimited fields")
     const [recordType, identity, metric, value] = fields
     assert.ok(recordTypes.has(recordType), "record type must be allowlisted")
-    assert.match(value, canonicalNumber, "metric value must be canonical non-negative decimal")
     const rowKey = `${recordType}\t${identity}\t${metric}`
     assert.ok(!seen.has(rowKey), "output must not contain duplicate rows")
     seen.add(rowKey)
@@ -74,11 +90,17 @@ function parseAggregateOutput(output, stderr = "") {
     if (recordType === "meta") {
       assert.equal(identity, "collector", "meta identity must remain collector")
       assert.ok(metaMetrics.has(metric), "meta metric must be allowlisted")
+      assert.match(value, canonicalInteger, "meta metric must be a canonical non-negative integer")
       meta.set(metric, value)
       continue
     }
 
     assert.ok(shapeMetrics.has(metric), "shape metric must be allowlisted")
+    assert.match(
+      value,
+      metric === "total_exec_time_ms" ? canonicalDecimal : canonicalInteger,
+      `${metric} must use its canonical numeric type`,
+    )
     parseShapeIdentity(identity)
     const metrics = shapes.get(identity) ?? new Map()
     metrics.set(metric, value)
@@ -106,7 +128,7 @@ test("pins the raw-free read-only aggregate SQL contract", () => {
     "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;",
     "SET LOCAL statement_timeout = '5s';",
     "SET LOCAL lock_timeout = '1s';",
-    "FROM public.pg_stat_statements AS statements",
+    "FROM :\"extension_schema\".pg_stat_statements AS statements",
     "statements.dbid = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())",
     "statements.toplevel",
     "statements.calls > 0",
@@ -114,15 +136,23 @@ test("pins the raw-free read-only aggregate SQL contract", () => {
   ]) {
     assert.ok(sql.includes(fragment), `SQL must include ${fragment}`)
   }
-  assert.match(sql, /CASE WHEN EXISTS \(SELECT 1 FROM source WHERE query IS NULL\) THEN 0 ELSE 1 END/, "null query must fail closed")
+  assert.match(sql, /FROM pg_catalog\.pg_extension AS extension[\s\S]*FROM :"extension_schema"\.pg_stat_statements AS statements/, "extension namespace must come from the catalog")
+  assert.match(sql, /WHERE extension\.extname = 'pg_stat_statements'\s*\\gset/, "namespace lookup must require exactly one psql gset row")
+  assert.match(sql, /count\(\*\) > 0 AND count\(\*\) FILTER \(WHERE query IS NULL\) = 0/, "empty or null query material must fail closed")
   assert.match(sql, /CASE WHEN shape_count\.count = 0 OR shape_count\.count > 128 THEN 0 ELSE 1 END/, "shape cardinality must fail closed")
-  assert.match(sql, /CASE WHEN collector\.row_count = 1 AND collector\.stats_reset IS NOT NULL THEN 1 ELSE 0 END/, "missing or duplicate reset metadata must fail closed")
+  assert.match(sql, /metadata_before AS MATERIALIZED/, "metadata before the source must be materialized")
+  assert.match(sql, /source AS MATERIALIZED/, "statement source must be materialized")
+  assert.match(sql, /metadata_after AS MATERIALIZED/, "metadata after the source must be materialized")
+  assert.match(sql, /metadata_before\.stats_reset = metadata_after\.stats_reset/, "reset identity must remain stable")
+  assert.match(sql, /metadata_before\.dealloc = metadata_after\.dealloc/, "deallocation identity must remain stable")
+  assert.match(sql, /metadata_after\.source_dependency > 0/, "post-source metadata must consume the source snapshot")
   assert.match(sql, /WHERE source_guard\.ok = 1/, "source guard must be consumed by an executable predicate")
-  assert.equal((sql.match(/WHERE collector_guard\.reset_ok = 1/g) ?? []).length, 4, "every output branch must consume the metadata guard")
+  assert.equal((sql.match(/WHERE snapshot_guard\.snapshot_ok = 1/g) ?? []).length, 4, "every output branch must consume the snapshot guard")
   assert.equal((sql.match(/AND shape_guard\.count_ok = 1/g) ?? []).length, 4, "every output branch must consume the shape guard")
-  assert.match(sql, /FROM public\.pg_stat_statements_info AS info/, "collector metadata must use the installed public extension view")
+  assert.equal((sql.match(/FROM :"extension_schema"\.pg_stat_statements_info AS info/g) ?? []).length, 2, "both metadata reads must use the resolved extension schema")
   assert.match(sql, /pgroonga_post_match\|like\|ilike/, "search identity must describe a search operation rather than any filter")
   assert.match(sql, /post_tag_index/, "tag identity must use the canonical tag index relation")
+  assert.doesNotMatch(sql, /\(select\|with\)/, "WITH statements must not be assumed to be read-only selects")
   assert.match(sql, /kind=|domain=|search=|tag=|join=|group=|order=|limit=|distinct=/, "identity must use fixed tokens")
   assert.match(sql, /statement_count|total_exec_time_ms|shared_blks_read|temp_blks_written/, "SQL must emit only the fixed shape metric vocabulary")
   assert.match(sql, /ORDER BY record_type, identity, metric/, "output must be deterministic")
@@ -152,6 +182,9 @@ test("parses only complete raw-free aggregate output", () => {
     valid.replace("kind=select", "kind=raw_users"),
     valid.replace("\trows\t6", "\trows\t06"),
     valid.replace("\trows\t6", "\trows\t-1"),
+    valid.replace("\tcalls\t12", "\tcalls\t1.5"),
+    valid.replace("\tdeallocations\t0", "\tdeallocations\t0.5"),
+    valid.replace("\ttotal_exec_time_ms\t15.25", "\ttotal_exec_time_ms\t15.2500"),
     valid.replace("\trows\t6", "\trows\t6\nshape\tkind=select|domain=post|search=t|tag=f|join=f|group=f|order=t|limit=t|distinct=f\trows\t6"),
     valid.replace("\ttemp_blks_written\t0\n", ""),
     valid.replace("\n", "\r\n"),
@@ -160,6 +193,78 @@ test("parses only complete raw-free aggregate output", () => {
     assert.throws(() => parseAggregateOutput(invalid))
   }
   assert.throws(() => parseAggregateOutput(valid, "NOTICE: stderr"))
+})
+
+test("executes the exact contract on PostgreSQL 18 with a relocated extension", {
+  timeout: 60_000,
+  skip: postgresIntegrationEnabled ? false : "requires HOT_QUERY_POSTGRES_INTEGRATION=1 and Docker",
+}, async () => {
+  const containerName = `aquila-hot-query-${process.pid}-${Date.now()}`
+  let started = false
+  try {
+    runDocker([
+      "run", "--detach", "--rm", "--name", containerName,
+      "--env", "POSTGRES_HOST_AUTH_METHOD=trust",
+      postgresImage,
+      "-c", "shared_preload_libraries=pg_stat_statements",
+    ])
+    started = true
+
+    let ready = false
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const probe = spawnSync("docker", ["exec", containerName, "pg_isready", "-U", "postgres"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024,
+      })
+      if (!probe.error && !probe.signal && probe.status === 0) {
+        ready = true
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    assert.equal(ready, true, "PostgreSQL 18 fixture must become ready")
+
+    const fixtureSql = `
+CREATE SCHEMA telemetry;
+CREATE EXTENSION pg_stat_statements WITH SCHEMA telemetry;
+CREATE TABLE public.post (id bigint PRIMARY KEY, title text NOT NULL);
+INSERT INTO public.post (id, title) VALUES (1, 'alpha'), (2, 'beta');
+SELECT id FROM public.post WHERE title LIKE 'a%' ORDER BY id LIMIT 1;
+WITH changed AS (UPDATE public.post SET title = title WHERE id = 2 RETURNING id)
+SELECT count(*) FROM changed;
+`
+    runDocker([
+      "exec", "--interactive", containerName,
+      "psql", "-X", "-q", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-f", "-",
+    ], { input: fixtureSql })
+
+    const collector = spawnSync("docker", [
+      "exec", "--interactive", containerName,
+      "psql", "-X", "-q", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-f", "-",
+    ], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      input: readSql(),
+      maxBuffer: 1024 * 1024,
+    })
+    assert.equal(collector.error, undefined, "collector process must start")
+    assert.equal(collector.signal, null, "collector process must not receive a signal")
+    assert.equal(collector.status, 0, "collector SQL must execute successfully")
+    const parsed = parseAggregateOutput(collector.stdout, collector.stderr)
+    assert.ok(
+      [...parsed.shapes.keys()].some((identity) => identity.startsWith("kind=other|domain=post|")),
+      "data-modifying WITH statements must remain conservatively classified as other",
+    )
+  } finally {
+    if (started) {
+      spawnSync("docker", ["rm", "--force", containerName], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024,
+      })
+    }
+  }
 })
 
 test("registers the focused contract test in Platform standalone CI", () => {
@@ -173,5 +278,9 @@ test("registers the focused contract test in Platform standalone CI", () => {
     step: "Verify hot-query telemetry aggregate contract",
   })
   const workflow = readFileSync(workflowPath, "utf8")
-  assert.match(workflow, /- name: Verify hot-query telemetry aggregate contract\n        run: node --test tools\/test\/hot-query-telemetry-aggregate\.test\.mjs/, "CI step must be literal and fail-propagating")
+  assert.match(
+    workflow,
+    /- name: Verify hot-query telemetry aggregate contract\n        env:\n          HOT_QUERY_POSTGRES_INTEGRATION: "1"\n        run: node --test tools\/test\/hot-query-telemetry-aggregate\.test\.mjs/,
+    "CI step must enable the PostgreSQL integration and fail-propagate",
+  )
 })

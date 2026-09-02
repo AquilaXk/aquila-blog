@@ -4,11 +4,27 @@
 \pset tuples_only on
 \pset fieldsep '\t'
 
+SELECT namespace.nspname AS extension_schema
+FROM pg_catalog.pg_extension AS extension
+JOIN pg_catalog.pg_namespace AS namespace
+  ON namespace.oid = extension.extnamespace
+WHERE extension.extname = 'pg_stat_statements'
+\gset
+
 BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '5s';
 SET LOCAL lock_timeout = '1s';
 
-WITH source AS (
+WITH metadata_before AS MATERIALIZED (
+    SELECT
+        min(info.stats_reset) AS stats_reset,
+        coalesce(max(info.dealloc), 0)::bigint AS dealloc,
+        count(*)::bigint AS row_count
+    FROM :"extension_schema".pg_stat_statements_info AS info
+), metadata_before_guard AS MATERIALIZED (
+    SELECT 1 / (CASE WHEN metadata_before.row_count = 1 AND metadata_before.stats_reset IS NOT NULL THEN 1 ELSE 0 END) AS ok
+    FROM metadata_before
+), source AS MATERIALIZED (
     SELECT
         statements.query,
         statements.calls,
@@ -16,16 +32,24 @@ WITH source AS (
         statements.rows,
         statements.shared_blks_read,
         statements.temp_blks_written
-    FROM public.pg_stat_statements AS statements
+    FROM :"extension_schema".pg_stat_statements AS statements
+    CROSS JOIN metadata_before_guard
     WHERE statements.dbid = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
       AND statements.toplevel
       AND statements.calls > 0
+      AND metadata_before_guard.ok = 1
 ), source_guard AS (
-    SELECT 1 / (CASE WHEN EXISTS (SELECT 1 FROM source WHERE query IS NULL) THEN 0 ELSE 1 END) AS ok
+    SELECT 1 / (
+        CASE
+            WHEN count(*) > 0 AND count(*) FILTER (WHERE query IS NULL) = 0 THEN 1
+            ELSE 0
+        END
+    ) AS ok
+    FROM source
 ), classified AS (
     SELECT
         CASE
-            WHEN source.query ~* E'^\\s*(/\\*[^\\n]*\\*/\\s*)?(select|with)\\M' THEN 'select'
+            WHEN source.query ~* E'^\\s*(/\\*[^\\n]*\\*/\\s*)?select\\M' THEN 'select'
             WHEN source.query ~* E'^\\s*(/\\*[^\\n]*\\*/\\s*)?insert\\M' THEN 'insert'
             WHEN source.query ~* E'^\\s*(/\\*[^\\n]*\\*/\\s*)?update\\M' THEN 'update'
             WHEN source.query ~* E'^\\s*(/\\*[^\\n]*\\*/\\s*)?delete\\M' THEN 'delete'
@@ -78,15 +102,28 @@ WITH source AS (
     GROUP BY kind, domain, search, tag, join_feature, group_feature, order_feature, limit_feature, distinct_feature
 ), shape_count AS (
     SELECT count(*)::bigint AS count FROM shapes
-), collector AS (
+), metadata_after AS MATERIALIZED (
     SELECT
         min(info.stats_reset) AS stats_reset,
-        coalesce(sum(info.dealloc), 0)::bigint AS dealloc,
-        count(*)::bigint AS row_count
-    FROM public.pg_stat_statements_info AS info
-), collector_guard AS (
-    SELECT 1 / (CASE WHEN collector.row_count = 1 AND collector.stats_reset IS NOT NULL THEN 1 ELSE 0 END) AS reset_ok
-    FROM collector
+        coalesce(max(info.dealloc), 0)::bigint AS dealloc,
+        count(*)::bigint AS row_count,
+        (SELECT count(*) FROM source) AS source_dependency
+    FROM :"extension_schema".pg_stat_statements_info AS info
+), snapshot_guard AS (
+    SELECT 1 / (
+        CASE
+            WHEN metadata_before.row_count = 1
+                AND metadata_after.row_count = 1
+                AND metadata_before.stats_reset IS NOT NULL
+                AND metadata_before.stats_reset = metadata_after.stats_reset
+                AND metadata_before.dealloc = metadata_after.dealloc
+                AND metadata_after.source_dependency > 0
+                THEN 1
+            ELSE 0
+        END
+    ) AS snapshot_ok
+    FROM metadata_before
+    CROSS JOIN metadata_after
 ), shape_guard AS (
     SELECT 1 / (CASE WHEN shape_count.count = 0 OR shape_count.count > 128 THEN 0 ELSE 1 END) AS count_ok
     FROM shape_count
@@ -95,22 +132,22 @@ WITH source AS (
         'meta'::text AS record_type,
         'collector'::text AS identity,
         'stats_reset_epoch_seconds'::text AS metric,
-        floor(extract(epoch FROM collector.stats_reset))::bigint::text AS numeric_value
-    FROM collector
-    CROSS JOIN collector_guard
+        floor(extract(epoch FROM metadata_before.stats_reset))::bigint::text AS numeric_value
+    FROM metadata_before
+    CROSS JOIN snapshot_guard
     CROSS JOIN shape_guard
-    WHERE collector_guard.reset_ok = 1
+    WHERE snapshot_guard.snapshot_ok = 1
       AND shape_guard.count_ok = 1
     UNION ALL
     SELECT
         'meta'::text,
         'collector'::text,
         'deallocations'::text,
-        collector.dealloc::numeric::text
-    FROM collector
-    CROSS JOIN collector_guard
+        metadata_before.dealloc::numeric::text
+    FROM metadata_before
+    CROSS JOIN snapshot_guard
     CROSS JOIN shape_guard
-    WHERE collector_guard.reset_ok = 1
+    WHERE snapshot_guard.snapshot_ok = 1
       AND shape_guard.count_ok = 1
     UNION ALL
     SELECT
@@ -119,9 +156,9 @@ WITH source AS (
         'shape_count'::text,
         shape_count.count::numeric::text
     FROM shape_count
-    CROSS JOIN collector_guard
+    CROSS JOIN snapshot_guard
     CROSS JOIN shape_guard
-    WHERE collector_guard.reset_ok = 1
+    WHERE snapshot_guard.snapshot_ok = 1
       AND shape_guard.count_ok = 1
     UNION ALL
     SELECT
@@ -130,7 +167,7 @@ WITH source AS (
         metrics.metric,
         metrics.numeric_value
     FROM shapes
-    CROSS JOIN collector_guard
+    CROSS JOIN snapshot_guard
     CROSS JOIN shape_guard
     CROSS JOIN LATERAL (
         VALUES
@@ -141,7 +178,7 @@ WITH source AS (
             ('shared_blks_read'::text, shapes.shared_blks_read::text),
             ('temp_blks_written'::text, shapes.temp_blks_written::text)
     ) AS metrics(metric, numeric_value)
-    WHERE collector_guard.reset_ok = 1
+    WHERE snapshot_guard.snapshot_ok = 1
       AND shape_guard.count_ok = 1
 )
 SELECT record_type, identity, metric, numeric_value

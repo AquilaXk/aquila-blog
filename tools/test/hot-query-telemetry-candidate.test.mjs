@@ -29,6 +29,7 @@ const labels = new Set(ownerMap.keys())
 const metrics = new Set(["statement_count", "calls", "total_exec_time_ms", "rows", "shared_blks_read", "temp_blks_written"])
 const integers = /^(?:0|[1-9][0-9]*)$/
 const decimals = /^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,3})?$/
+const flywayVersion = /^[1-9][0-9]*(?:\.[0-9]+)*$/
 
 const sql = () => readFileSync(sqlPath, "utf8")
 const docker = (args, options = {}) => {
@@ -56,8 +57,8 @@ function parse(output, stderr = "") {
     rowKeys.push(rowKey)
     if (type === "meta") {
       assert.equal(identity, "collector")
-      assert.ok(["stats_reset_epoch_seconds", "deallocations", "candidate_count"].includes(metric))
-      assert.match(value, integers)
+      assert.ok(["stats_reset_epoch_seconds", "deallocations", "candidate_count", "flyway_version", "observed_at_epoch_seconds"].includes(metric))
+      assert.match(value, metric === "flyway_version" ? flywayVersion : integers)
       meta.set(metric, value)
       continue
     }
@@ -69,7 +70,7 @@ function parse(output, stderr = "") {
     candidate.set(metric, value)
     candidates.set(identity, candidate)
   }
-  assert.deepEqual(new Set(meta.keys()), new Set(["stats_reset_epoch_seconds", "deallocations", "candidate_count"]))
+  assert.deepEqual(new Set(meta.keys()), new Set(["stats_reset_epoch_seconds", "deallocations", "candidate_count", "flyway_version", "observed_at_epoch_seconds"]))
   assert.deepEqual(rowKeys, [...rowKeys].sort())
   assert.ok(candidates.size <= labels.size)
   assert.equal(meta.get("candidate_count"), String(candidates.size))
@@ -99,7 +100,7 @@ test("pins raw-free owner admission and all fixed labels", () => {
 })
 
 test("parses only fixed raw-free candidate rows and permits zero candidates", () => {
-  const zero = "meta\tcollector\tcandidate_count\t0\nmeta\tcollector\tdeallocations\t0\nmeta\tcollector\tstats_reset_epoch_seconds\t1\n"
+  const zero = "meta\tcollector\tcandidate_count\t0\nmeta\tcollector\tdeallocations\t0\nmeta\tcollector\tflyway_version\t20260903.1\nmeta\tcollector\tobserved_at_epoch_seconds\t0\nmeta\tcollector\tstats_reset_epoch_seconds\t1\n"
   assert.equal(parse(zero).candidates.size, 0)
   const valid = [
     "candidate\tPUBLIC_TAG_COUNTS\tcalls\t2",
@@ -110,6 +111,8 @@ test("parses only fixed raw-free candidate rows and permits zero candidates", ()
     "candidate\tPUBLIC_TAG_COUNTS\ttotal_exec_time_ms\t1.2",
     "meta\tcollector\tcandidate_count\t1",
     "meta\tcollector\tdeallocations\t0",
+    "meta\tcollector\tflyway_version\t20260903.1",
+    "meta\tcollector\tobserved_at_epoch_seconds\t1",
     "meta\tcollector\tstats_reset_epoch_seconds\t1",
   ].join("\n") + "\n"
   assert.equal(parse(valid).candidates.size, 1)
@@ -122,6 +125,10 @@ test("parses only fixed raw-free candidate rows and permits zero candidates", ()
     valid.replace("\trows\t2\n", ""),
     valid.replace("\n", "\r\n"),
     zero.replace("candidate_count\t0", "candidate_count\t01"),
+    zero.replace("flyway_version\t20260903.1", "flyway_version\t0"),
+    zero.replace("flyway_version\t20260903.1", "flyway_version\t0.1"),
+    zero.replace("observed_at_epoch_seconds\t0", "observed_at_epoch_seconds\t-1"),
+    zero.replace("observed_at_epoch_seconds\t0", "observed_at_epoch_seconds\t00"),
   ]) assert.throws(() => parse(invalid))
   assert.throws(() => parse(valid, "unexpected stderr"))
 })
@@ -163,6 +170,8 @@ test("runs PostgreSQL 18 shared hydration admission regression", { timeout: 60_0
     psql(`
       CREATE SCHEMA telemetry;
       CREATE EXTENSION pg_stat_statements WITH SCHEMA telemetry;
+      CREATE TABLE public.flyway_schema_history (installed_rank integer PRIMARY KEY, version text, success boolean NOT NULL);
+      INSERT INTO public.flyway_schema_history VALUES (1, '20260903.1', true), (2, NULL, true), (3, '20260903.2', false);
       CREATE TABLE post (id bigint PRIMARY KEY, published boolean NOT NULL, listed boolean NOT NULL, author_id bigint NOT NULL);
       CREATE TABLE member (id bigint PRIMARY KEY);
       CREATE TABLE post_tag_index (post_id bigint NOT NULL, tag text NOT NULL);
@@ -195,12 +204,17 @@ test("runs PostgreSQL 18 shared hydration admission regression", { timeout: 60_0
     `)
     const intersection = psql("SELECT count(*) FROM telemetry.first_ids JOIN telemetry.pg_stat_statements s ON s.queryid = first_ids.id WHERE s.query ~* '^\\s*SELECT DISTINCT';").trim()
     assert.match(intersection, /^[1-9][0-9]*$/)
+    const observedBefore = Math.floor(Date.now() / 1000)
     const result = spawnSync("docker", ["exec", "--interactive", name, "psql", "-X", "-q", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-f", "-"], { cwd: root, encoding: "utf8", input: sql(), maxBuffer: 1024 * 1024, timeout })
+    const observedAfter = Math.floor(Date.now() / 1000)
     assert.equal(result.error, undefined)
     assert.equal(result.signal, null)
     assert.equal(result.status, 0)
     const parsed = parse(result.stdout, result.stderr)
     assert.deepEqual([...parsed.candidates.keys()], ["PUBLIC_CURSOR_LIST", "PUBLIC_TAG_COUNTS"])
+    assert.equal(parsed.meta.get("flyway_version"), "20260903.1")
+    assert.ok(Number(parsed.meta.get("observed_at_epoch_seconds")) >= observedBefore)
+    assert.ok(Number(parsed.meta.get("observed_at_epoch_seconds")) <= observedAfter)
     assert.equal(parsed.candidates.get("PUBLIC_CURSOR_LIST").get("statement_count"), "1")
     assert.equal(parsed.candidates.get("PUBLIC_TAG_COUNTS").get("statement_count"), "1")
   } finally { if (started) spawnSync("docker", ["rm", "--force", name], { cwd: root, encoding: "utf8", maxBuffer: 1024 * 1024, timeout }) }

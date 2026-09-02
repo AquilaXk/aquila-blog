@@ -129,6 +129,11 @@ jobs:
           HOT_QUERY_POSTGRES_INTEGRATION: "1"
         run: node --test tools/test/hot-query-telemetry-aggregate.test.mjs
 
+      - name: Verify hot-query telemetry candidate contract
+        env:
+          HOT_QUERY_POSTGRES_INTEGRATION: "1"
+        run: node --test tools/test/hot-query-telemetry-candidate.test.mjs
+
       - name: Verify Dockerfile supply-chain contracts
         run: node --test tools/test/dockerfile-supply-chain.test.mjs
 

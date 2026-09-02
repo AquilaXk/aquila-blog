@@ -322,6 +322,80 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
     }
 
     @Test
+    fun `retired legal acceptance migration removes only the retired table and sequence`() {
+        val migrationName = "V20260902_03__drop_retired_member_legal_acceptance.sql"
+        val compatibilitySchema = "retired_legal_acceptance_success"
+        val legalAcceptanceMigrations = migrations.resolve("legal-acceptance-success").createDirectories()
+        val productionMigration = readProductionMigration(migrationName)
+        val testMigration = readTestMigration(migrationName)
+
+        assertEquals(productionMigration, testMigration)
+        assertFalse(Regex("\\bCASCADE\\b", RegexOption.IGNORE_CASE).containsMatchIn(productionMigration))
+        assertFalse(Regex("\\bIF\\s+EXISTS\\b", RegexOption.IGNORE_CASE).containsMatchIn(productionMigration))
+        legalAcceptanceMigrations.resolve("V1__retired_legal_acceptance_baseline.sql").writeText(
+            retiredPersistenceBaseline + "\nCREATE SEQUENCE member_legal_acceptance_seq;",
+        )
+        flyway(compatibilitySchema, legalAcceptanceMigrations).migrate()
+        legalAcceptanceMigrations.resolve(migrationName).writeText(productionMigration)
+        flyway(compatibilitySchema, legalAcceptanceMigrations).migrate()
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                assertFalse(
+                    relationExists(statement, compatibilitySchema, "member_legal_acceptance"),
+                    "member_legal_acceptance must be absent",
+                )
+                assertFalse(
+                    relationExists(statement, compatibilitySchema, "member_legal_acceptance_seq"),
+                    "member_legal_acceptance_seq must be absent",
+                )
+                phase2RetainedTables.filterNot { it == "member_legal_acceptance" }.forEach { table ->
+                    assertTrue(relationExists(statement, compatibilitySchema, table), "$table must remain present")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `retired legal acceptance migration rolls back on an external sequence dependency`() {
+        val migrationName = "V20260902_03__drop_retired_member_legal_acceptance.sql"
+        val compatibilitySchema = "retired_legal_acceptance_dependency"
+        val legalAcceptanceMigrations = migrations.resolve("legal-acceptance-dependency").createDirectories()
+        val productionMigration = readProductionMigration(migrationName)
+
+        legalAcceptanceMigrations.resolve("V1__retired_legal_acceptance_baseline.sql").writeText(
+            retiredPersistenceBaseline +
+                "\n" +
+                """
+                CREATE SEQUENCE member_legal_acceptance_seq;
+                CREATE TABLE legal_acceptance_sequence_consumer (
+                    id bigint PRIMARY KEY DEFAULT nextval('member_legal_acceptance_seq')
+                );
+                INSERT INTO member_legal_acceptance (id) VALUES (1);
+                """.trimIndent(),
+        )
+        flyway(compatibilitySchema, legalAcceptanceMigrations).migrate()
+        legalAcceptanceMigrations.resolve(migrationName).writeText(productionMigration)
+
+        assertFailsWith<FlywayException> {
+            flyway(compatibilitySchema, legalAcceptanceMigrations).migrate()
+        }
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("SET search_path TO $compatibilitySchema")
+                assertTrue(relationExists(statement, compatibilitySchema, "member_legal_acceptance"))
+                assertTrue(relationExists(statement, compatibilitySchema, "member_legal_acceptance_seq"))
+                assertTrue(relationExists(statement, compatibilitySchema, "legal_acceptance_sequence_consumer"))
+                statement.executeQuery("SELECT count(*) FROM member_legal_acceptance").use { result ->
+                    result.next()
+                    assertEquals(1, result.getInt(1), "retired legal acceptance row must remain after rollback")
+                }
+            }
+        }
+    }
+
+    @Test
     fun `retired persistence migration drains data and keeps both hard delete orders compatible`() {
         val migrationName = "V20260902_01__drain_retired_public_persistence.sql"
         val compatibilitySchema = "retired_persistence_n_minus_one"

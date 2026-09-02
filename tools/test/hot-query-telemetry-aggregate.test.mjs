@@ -10,7 +10,8 @@ const inventoryPath = path.join(repoRoot, "tools/test/test-execution-inventory.j
 const workflowPath = path.join(repoRoot, ".github/workflows/ci.yml")
 const postgresImage = "postgres:18.1-alpine@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29"
 const postgresIntegrationEnabled = process.env.HOT_QUERY_POSTGRES_INTEGRATION === "1"
-const dockerTimeoutMs = 10_000
+const dockerCommandTimeoutMs = 10_000
+const dockerStartupTimeoutMs = 60_000
 
 const recordTypes = new Set(["meta", "shape"])
 const metaMetrics = new Set([
@@ -36,13 +37,17 @@ function readSql() {
   return readFileSync(sqlPath, "utf8")
 }
 
+function dockerTimeoutFor(args) {
+  return args[0] === "run" ? dockerStartupTimeoutMs : dockerCommandTimeoutMs
+}
+
 function runDocker(args, options = {}) {
   const result = spawnSync("docker", args, {
     cwd: repoRoot,
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
     ...options,
-    timeout: dockerTimeoutMs,
+    timeout: dockerTimeoutFor(args),
   })
   if (result.error || result.signal || result.status !== 0) {
     throw new Error(`docker ${args[0]} failed without exposing command output`)
@@ -166,8 +171,11 @@ test("pins the raw-free read-only aggregate SQL contract", () => {
 
 test("bounds Docker execution and isolates the PostgreSQL 18 regression fixture", () => {
   const testSource = readFileSync(new URL(import.meta.url), "utf8")
+  assert.equal(dockerTimeoutFor(["run"]), dockerStartupTimeoutMs, "cold-image startup must use its dedicated finite bound")
+  assert.equal(dockerTimeoutFor(["exec"]), dockerCommandTimeoutMs, "ordinary Docker commands must retain the short bound")
+  assert.ok(dockerStartupTimeoutMs > dockerCommandTimeoutMs, "cold-image startup must not inherit the ordinary command bound")
   const dockerSpawnCount = (testSource.match(/spawnSync\("docker"/g) ?? []).length
-  const dockerTimeoutCount = (testSource.match(new RegExp(`timeout:\\s+${"dockerTimeoutMs"}`, "g")) ?? []).length
+  const dockerTimeoutCount = (testSource.match(/timeout:\s+(?:dockerTimeoutFor\(args\)|dockerCommandTimeoutMs)/g) ?? []).length
   assert.equal(dockerTimeoutCount, dockerSpawnCount, "every synchronous Docker spawn must have a finite timeout")
   assert.match(
     testSource,
@@ -220,7 +228,7 @@ test("parses only complete raw-free aggregate output", () => {
 })
 
 test("executes the exact contract on PostgreSQL 18 with a relocated extension", {
-  timeout: 60_000,
+  timeout: 120_000,
   skip: postgresIntegrationEnabled ? false : "requires HOT_QUERY_POSTGRES_INTEGRATION=1 and Docker",
 }, async () => {
   const containerName = `aquila-hot-query-${process.pid}-${Date.now()}`
@@ -240,7 +248,7 @@ test("executes the exact contract on PostgreSQL 18 with a relocated extension", 
         cwd: repoRoot,
         encoding: "utf8",
         maxBuffer: 1024 * 1024,
-        timeout: dockerTimeoutMs,
+        timeout: dockerCommandTimeoutMs,
       })
       if (!probe.error && !probe.signal && probe.status === 0) {
         ready = true
@@ -273,7 +281,7 @@ SELECT count(*) FROM changed;
       encoding: "utf8",
       input: readSql(),
       maxBuffer: 1024 * 1024,
-      timeout: dockerTimeoutMs,
+      timeout: dockerCommandTimeoutMs,
     })
     assert.equal(collector.error, undefined, "collector process must start")
     assert.equal(collector.signal, null, "collector process must not receive a signal")
@@ -290,7 +298,7 @@ SELECT count(*) FROM changed;
         cwd: repoRoot,
         encoding: "utf8",
         maxBuffer: 1024 * 1024,
-        timeout: dockerTimeoutMs,
+        timeout: dockerCommandTimeoutMs,
       })
     }
   }

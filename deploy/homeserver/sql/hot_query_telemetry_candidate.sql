@@ -16,7 +16,8 @@ SET LOCAL lock_timeout = '1s';
 
 WITH metadata_before AS MATERIALIZED (
     SELECT min(info.stats_reset) AS stats_reset, coalesce(max(info.dealloc), 0)::bigint AS dealloc,
-           count(*)::bigint AS row_count
+           count(*)::bigint AS row_count,
+           floor(extract(epoch FROM transaction_timestamp()))::bigint AS observed_at_epoch_seconds
     FROM :"extension_schema".pg_stat_statements_info AS info
 ), metadata_before_guard AS MATERIALIZED (
     SELECT 1 / CASE WHEN row_count = 1 AND stats_reset IS NOT NULL THEN 1 ELSE 0 END AS ok
@@ -86,6 +87,19 @@ WITH metadata_before AS MATERIALIZED (
     GROUP BY label
     HAVING count(DISTINCT queryid) = 1 AND sum(calls) > 0
 ), candidate_count AS MATERIALIZED (SELECT count(*)::bigint AS count FROM candidates),
+flyway_identity AS MATERIALIZED (
+    SELECT CASE
+      WHEN count(*) = 1 AND max(version) ~ '^[1-9][0-9]*(\.[0-9]+)*$' THEN max(version)
+      ELSE (1 / (count(*) - count(*)))::text
+    END AS version
+    FROM (
+      SELECT version
+      FROM public.flyway_schema_history
+      WHERE success AND version IS NOT NULL
+      ORDER BY installed_rank DESC
+      LIMIT 1
+    ) AS latest_successful_versioned_flyway
+),
 metadata_after AS MATERIALIZED (
     SELECT min(info.stats_reset) AS stats_reset, coalesce(max(info.dealloc), 0)::bigint AS dealloc,
            count(*)::bigint AS row_count, (SELECT count(*) FROM source) AS source_dependency
@@ -104,6 +118,10 @@ metadata_after AS MATERIALIZED (
     FROM metadata_before CROSS JOIN snapshot_guard WHERE snapshot_guard.ok = 1
     UNION ALL SELECT 'meta', 'collector', 'candidate_count', candidate_count.count::numeric::text
     FROM candidate_count CROSS JOIN snapshot_guard WHERE snapshot_guard.ok = 1
+    UNION ALL SELECT 'meta', 'collector', 'flyway_version', flyway_identity.version
+    FROM flyway_identity CROSS JOIN snapshot_guard WHERE snapshot_guard.ok = 1
+    UNION ALL SELECT 'meta', 'collector', 'observed_at_epoch_seconds', metadata_before.observed_at_epoch_seconds::text
+    FROM metadata_before CROSS JOIN snapshot_guard WHERE snapshot_guard.ok = 1
     UNION ALL
     SELECT 'candidate'::text, candidates.label, metric, numeric_value
     FROM candidates CROSS JOIN snapshot_guard

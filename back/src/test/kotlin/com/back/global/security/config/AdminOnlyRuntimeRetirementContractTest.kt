@@ -78,9 +78,14 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
                 "memberNotificationRepository",
                 "memberNotificationRepositoryAdapter",
                 "memberPrivacyRequestRepository",
-            ).contains(
-                "memberSessionRepositoryAdapter",
+                "memberLegalAcceptanceRepository",
                 "legalAcceptanceApplicationService",
+            ).contains(
+                "adminEmailAuthenticationService",
+                "memberSessionService",
+                "memberSessionRepositoryAdapter",
+                "authSecurityEventService",
+                "authSecurityEventPersistenceAdapter",
                 "memberActionLogApplicationService",
                 "privacyRetentionCleanupScheduledJob",
                 "postHitSideEffectHandler",
@@ -92,11 +97,12 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
                 "com.back.boundedContexts.member.subContexts.oauthSignup.model.PendingOAuthSignup",
                 "com.back.boundedContexts.member.subContexts.notification.model.MemberNotification",
                 "com.back.boundedContexts.member.subContexts.privacy.model.MemberPrivacyRequest",
+                "com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance",
                 "com.back.boundedContexts.post.model.PostComment",
             ).contains(
                 "com.back.boundedContexts.member.subContexts.session.model.MemberSession",
-                "com.back.boundedContexts.member.subContexts.legalAcceptance.model.MemberLegalAcceptance",
                 "com.back.boundedContexts.member.subContexts.memberActionLog.model.MemberActionLog",
+                "com.back.global.security.model.AuthSecurityEvent",
                 "com.back.boundedContexts.post.model.Post",
             )
     }

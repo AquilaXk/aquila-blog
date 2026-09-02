@@ -47,6 +47,7 @@ class AdminOnlyRouteExposureContractTest : BaseControllerIntegrationTest() {
             HttpMethod.DELETE to "/member/api/v1/privacy/account",
             HttpMethod.GET to "/member/api/v1/adm/members",
             HttpMethod.GET to "/member/api/v1/adm/members/1",
+            HttpMethod.GET to "/member/api/v1/adm/members/legal-reconsent/report",
         ).forEach { (method, path) ->
             assertThat(hasHandlerMethod(method, path))
                 .describedAs("%s %s must not remain mapped", method, path)

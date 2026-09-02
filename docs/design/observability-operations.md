@@ -15,6 +15,55 @@
 
 ---
 
+## Web runtime SLO evidence decision
+
+Platform #1641 did not adopt a numeric Web runtime SLO. The approved one-time
+production observation proved that the current producer and consumer emit data, but
+it did not establish a complete or independently auditable service-availability
+denominator.
+
+- Public SSR counters cover instrumented Pages Router handlers. They do not count
+  static or ISR cache hits, and a returned `props` result does not always mean that
+  the backing data load succeeded.
+- Backend-fetch counters include indistinguishable readiness and runtime probe traffic
+  on both the active and inactive front colors. They are dependency diagnostics, not a
+  public-request denominator.
+- Prometheus scrapes both warm colors. No fail-closed active-color selector currently
+  binds those series to the served route for an automatic SLO rule.
+- The retained observation includes its exact time range and sanitized aggregates but
+  not the deleted observer's exact query text and range step. It therefore cannot own
+  a numeric objective, error budget, or burn-rate decision.
+
+The current operational owners remain separate:
+
+| Signal | Current purpose | Failure behavior |
+| --- | --- | --- |
+| `AquilaFrontRuntimeMetricsScrapeDown` | Front metric transport health | Warning alert; never convert missing data to healthy |
+| Public-edge route and cache alerts | Synthetic external route and ISR health | Alert under the existing route/cache policy |
+| Candidate health and render-status probes | Point-in-time deployment admission | Fail closed before cutover |
+| Full front render check | Post-deployment or standalone render evidence | Keep its existing explicit execution owner |
+| Deployment receipt and served SHA | Workflow release identity | Reject missing or mismatched evidence |
+
+No SLO compliance window, error budget, burn-rate alert, or release pass/veto is
+derived from the current Web runtime counters. This decision does not weaken or
+replace any existing alert, workflow gate, or separately executed render check. It
+also does not promote a warning or standalone check into an automatic launch veto.
+
+Reintroduction requires one separately accepted contract that provides all of the
+following before implementation:
+
+1. A completed-response denominator covering public static, ISR, and SSR delivery.
+2. Bounded success and exclusion classes that cannot absorb backend failures as
+   success.
+3. A fail-closed binding to the actually served release rather than both warm colors.
+4. Durable exact query text, range step, and reset/no-data behavior.
+5. A numeric objective selected independently of the observed result.
+
+Do not substitute the synthetic public-edge probe, backend-fetch ratio, a previous
+window, or a cached dashboard result for that contract.
+
+---
+
 ## 1. 에러 조회 LogQL cookbook
 
 공통 스트림 셀렉터 (대시보드와 동일):

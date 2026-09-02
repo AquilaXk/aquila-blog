@@ -20,6 +20,29 @@
 
 `defer`는 사용자 영향, 보안, 배포/복구, 법적 고지, 데이터 손실 가능성이 없는 항목에만 허용한다.
 
+### Web runtime SLO status
+
+No numeric Web runtime SLO currently supplies a launch `pass`, `block`, or `defer`
+decision. Platform #1641 found that the available SSR and backend-fetch counters do
+not provide a complete, served-release-bound availability denominator, so deriving an
+objective, error budget, or burn-rate release gate from them would create false
+evidence.
+
+This is a final evidence decision for the current metric contract, not a calendar wait
+or an exception to the launch gate. Existing CI and Security requirements,
+pre-cutover candidate health and render-status probes, and workflow deployment-receipt
+and served-SHA checks keep their current fail-closed behavior. Public-edge alerts,
+the runtime scrape warning, and the separately executed full front render check keep
+their existing evidence owners and severity; this decision does not promote them into
+automatic launch vetoes. Missing Web runtime data never counts as healthy or as
+release-pass evidence.
+
+A future numeric SLO may enter this table only after its completed-response
+denominator, bounded success classes, served-release identity, exact query retention,
+and independently selected objective have executable acceptance. Do not use a
+synthetic-only result, previous window, cached dashboard, or alternate denominator as
+a temporary launch gate.
+
 ## Required Evidence
 
 | Gate | Evidence | Pass 기준 | Block 기준 |

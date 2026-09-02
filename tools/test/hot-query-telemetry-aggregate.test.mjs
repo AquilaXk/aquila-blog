@@ -10,6 +10,7 @@ const inventoryPath = path.join(repoRoot, "tools/test/test-execution-inventory.j
 const workflowPath = path.join(repoRoot, ".github/workflows/ci.yml")
 const postgresImage = "postgres:18.1-alpine@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29"
 const postgresIntegrationEnabled = process.env.HOT_QUERY_POSTGRES_INTEGRATION === "1"
+const dockerTimeoutMs = 10_000
 
 const recordTypes = new Set(["meta", "shape"])
 const metaMetrics = new Set([
@@ -41,6 +42,7 @@ function runDocker(args, options = {}) {
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
     ...options,
+    timeout: dockerTimeoutMs,
   })
   if (result.error || result.signal || result.status !== 0) {
     throw new Error(`docker ${args[0]} failed without exposing command output`)
@@ -162,6 +164,28 @@ test("pins the raw-free read-only aggregate SQL contract", () => {
   assert.doesNotMatch(sql, /(?:queryid|userid|query\s+AS|md5\s*\(|sha\d*\s*\()/i, "SQL must not project or derive raw statement identity")
 })
 
+test("bounds Docker execution and isolates the PostgreSQL 18 regression fixture", () => {
+  const testSource = readFileSync(new URL(import.meta.url), "utf8")
+  const dockerSpawnCount = (testSource.match(/spawnSync\("docker"/g) ?? []).length
+  const dockerTimeoutCount = (testSource.match(new RegExp(`timeout:\\s+${"dockerTimeoutMs"}`, "g")) ?? []).length
+  assert.equal(dockerTimeoutCount, dockerSpawnCount, "every synchronous Docker spawn must have a finite timeout")
+  assert.match(
+    testSource,
+    /\["exec", containerName, "pg_isready", "-h", "127\.0\.0\.1", "-p", "5432", "-U", "postgres"\]/,
+    "readiness must probe PostgreSQL's final TCP listener",
+  )
+  assert.match(
+    testSource,
+    /SELECT telemetry\.pg_stat_statements_reset\(\);\nSELECT id FROM public\.post/,
+    "the fixture must reset statistics after setup and before the intended workload",
+  )
+  assert.match(
+    testSource,
+    /const withIdentity = "kind=other\|domain=post\|search=f\|tag=f\|join=f\|group=f\|order=f\|limit=f\|distinct=f"/,
+    "the regression must assert the exact data-modifying WITH identity",
+  )
+})
+
 test("parses only complete raw-free aggregate output", () => {
   const valid = [
     "meta\tcollector\tdeallocations\t0",
@@ -212,10 +236,11 @@ test("executes the exact contract on PostgreSQL 18 with a relocated extension", 
 
     let ready = false
     for (let attempt = 0; attempt < 30; attempt += 1) {
-      const probe = spawnSync("docker", ["exec", containerName, "pg_isready", "-U", "postgres"], {
+      const probe = spawnSync("docker", ["exec", containerName, "pg_isready", "-h", "127.0.0.1", "-p", "5432", "-U", "postgres"], {
         cwd: repoRoot,
         encoding: "utf8",
         maxBuffer: 1024 * 1024,
+        timeout: dockerTimeoutMs,
       })
       if (!probe.error && !probe.signal && probe.status === 0) {
         ready = true
@@ -230,6 +255,7 @@ CREATE SCHEMA telemetry;
 CREATE EXTENSION pg_stat_statements WITH SCHEMA telemetry;
 CREATE TABLE public.post (id bigint PRIMARY KEY, title text NOT NULL);
 INSERT INTO public.post (id, title) VALUES (1, 'alpha'), (2, 'beta');
+SELECT telemetry.pg_stat_statements_reset();
 SELECT id FROM public.post WHERE title LIKE 'a%' ORDER BY id LIMIT 1;
 WITH changed AS (UPDATE public.post SET title = title WHERE id = 2 RETURNING id)
 SELECT count(*) FROM changed;
@@ -247,21 +273,24 @@ SELECT count(*) FROM changed;
       encoding: "utf8",
       input: readSql(),
       maxBuffer: 1024 * 1024,
+      timeout: dockerTimeoutMs,
     })
     assert.equal(collector.error, undefined, "collector process must start")
     assert.equal(collector.signal, null, "collector process must not receive a signal")
     assert.equal(collector.status, 0, "collector SQL must execute successfully")
     const parsed = parseAggregateOutput(collector.stdout, collector.stderr)
-    assert.ok(
-      [...parsed.shapes.keys()].some((identity) => identity.startsWith("kind=other|domain=post|")),
-      "data-modifying WITH statements must remain conservatively classified as other",
-    )
+    const withIdentity = "kind=other|domain=post|search=f|tag=f|join=f|group=f|order=f|limit=f|distinct=f"
+    const withMetrics = parsed.shapes.get(withIdentity)
+    assert.ok(withMetrics, "data-modifying WITH statements must remain conservatively classified as other")
+    assert.equal(withMetrics.get("statement_count"), "1", "the reset fixture must exclude setup utility statements")
+    assert.equal(withMetrics.get("calls"), "1", "the regression must prove the single intended data-modifying WITH statement")
   } finally {
     if (started) {
       spawnSync("docker", ["rm", "--force", containerName], {
         cwd: repoRoot,
         encoding: "utf8",
         maxBuffer: 1024 * 1024,
+        timeout: dockerTimeoutMs,
       })
     }
   }

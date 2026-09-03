@@ -418,8 +418,8 @@ flowchart LR
 | Loki application/security logs | requestId 기반 장애·보안 조사 | `336h` (14일) | Loki compactor `retention_enabled: true` | tracked config 기준 gap 없음 |
 | Prometheus TSDB | bounded operational metrics/alerts | `PROMETHEUS_RETENTION_TIME`, 미설정 시 `15d` | Prometheus TSDB retention | 실제 override 값은 deploy env 정본 |
 | durable task payload/row | async side-effect retry·진단 | COMPLETED/QUARANTINED payload 즉시 redaction, FAILED payload 최대 7일; row는 COMPLETED 7일, FAILED/QUARANTINED 30일 | `TaskRetentionCleanupScheduledJob` → `TaskRetentionService` | #1628 owner 완료, 중복 구현 금지 |
-| revoked member session | session revoke/security | `custom.privacy.retention.revokedSessionDays`, 기본 30일 | `MemberSessionCleanupScheduledJob` → `MemberSessionService.purgeExpiredRevokedSessions` | 기존 owner 유지 |
-| auth security event | login/security incident evidence | `custom.privacy.retention.authSecurityEventDays`, 기본 30일 | `AuthSecurityEventCleanupScheduledJob` → `AuthSecurityEventService.purgeExpired` | 기존 owner 유지 |
-| signup verification / member action log / notification / closed privacy request | privacy lifecycle | 기본 7/90/60/30일 | `PrivacyRetentionCleanupScheduledJob` bounded batch purge | 기존 owner 유지 |
+| revoked member session | session revoke/security | `custom.auth.session.revokedRetentionDays`, 기본 30일 | `MemberSessionCleanupScheduledJob` → `MemberSessionService.purgeExpiredRevokedSessions` | direct auth owner |
+| auth security event | login/security incident evidence | `custom.auth.securityEvent.retentionDays`, 기본 30일 | `AuthSecurityEventCleanupScheduledJob` → `AuthSecurityEventService.purgeExpired` | direct auth owner |
+| member action log | administrator audit trail | `custom.memberActionLog.retention.days`, 기본 90일 | `MemberActionLogRetentionCleanupScheduledJob` bounded batch purge | direct member action-log owner |
 
 GitHub Actions workflow log·security artifact retention gap은 Platform #1714, Web local RUM은 Web #46이 소유한다. 이 표는 durable delete·new scheduler·production setting mutation을 승인하지 않는다.

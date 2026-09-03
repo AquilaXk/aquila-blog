@@ -304,6 +304,15 @@ test("Flyway migration naming admits the exact beforeMigrate SQL callback form",
   const namingBlock = extractWorkflowStep(workflow, "Validate Flyway migration naming")
 
   assert.match(namingBlock, /\^beforeMigrate__\[a-z0-9_\]\+\\\.sql\$/)
+  assert.match(namingBlock, /back\/src\/main\/kotlin\/db\/migration\/\*\.kt/)
+  assert.match(namingBlock, /\^V\[0-9\]\{8\}_\[0-9\]\{2\}__\[A-Za-z0-9_\]\+\\\.kt\$/)
+  assert.doesNotMatch(namingBlock, /\^R__\[A-Za-z0-9_\]\+\\\.kt\$/)
+
+  const nMinusOneBlock = extractWorkflowStep(workflow, "Run Flyway N-1 compatibility test")
+  assert.match(
+    nMinusOneBlock,
+    /--tests com\.back\.infrastructure\.ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest/,
+  )
 })
 
 test("served cutovers do not retain temporary Flyway lifecycle callbacks", () => {

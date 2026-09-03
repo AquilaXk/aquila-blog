@@ -57,7 +57,7 @@ class ProfileWorkspaceCanonicalInventoryTestcontainersIntegrationTest {
                     (1, 'profileImgUrl', 'image-1'),
                     (1, 'profileRole', 'role-1'),
                     (1, 'aboutDetails', '$legacyAboutDetails'),
-                    (1, 'profileServiceLinks', '{"items":[{"icon":"github","label":"Source","href":"https://github.com/AquilaXk/aquila-blog"}]}'),
+                    (1, 'profileServiceLinks', '{"items":[{"icon":"service","label":"Source","href":"https://github.com/AquilaXk/aquila-blog"}]}'),
                     (1, 'profileContactLinks', '{"items":[{"icon":"mail","label":"Email","href":"mailto:aquila@aquilaxk.site"}]}'),
                     (3, 'profileWorkspaceDraft', '   '),
                     (4, 'profileWorkspaceDraft', '{bad json'),
@@ -94,6 +94,9 @@ class ProfileWorkspaceCanonicalInventoryTestcontainersIntegrationTest {
                                 "draft_noncanonical_count" to 1,
                                 "draft_canonical_count" to 1,
                                 "published_missing_count" to 4,
+                                "published_blank_count" to 0,
+                                "published_invalid_count" to 0,
+                                "published_noncanonical_count" to 0,
                                 "published_valid_count" to 1,
                                 "draft_published_different_count" to 1,
                                 "draft_image_parity_count" to 1,
@@ -109,6 +112,9 @@ class ProfileWorkspaceCanonicalInventoryTestcontainersIntegrationTest {
                                 "draft_noncanonical_count",
                                 "draft_canonical_count",
                                 "published_missing_count",
+                                "published_blank_count",
+                                "published_invalid_count",
+                                "published_noncanonical_count",
                                 "published_valid_count",
                                 "draft_published_different_count",
                                 "draft_image_parity_count",
@@ -151,7 +157,7 @@ class ProfileWorkspaceCanonicalInventoryTestcontainersIntegrationTest {
                 serviceLinks =
                     listOf(
                         MemberProfileLinkItem(
-                            icon = "github",
+                            icon = "service",
                             label = "Source",
                             href = "https://github.com/AquilaXk/aquila-blog",
                         ),

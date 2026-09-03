@@ -189,10 +189,26 @@ classified AS (
                   WHERE item.value ->> key.name <> btrim(item.value ->> key.name, kotlin_trim_chars)
               )
               OR EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(draft_doc -> 'content' -> 'serviceLinks') AS item(value)
+                  WHERE item.value ->> 'icon' NOT IN (
+                      'service', 'briefcase', 'laptop', 'rocket', 'spark', 'search', 'tag', 'camera', 'question'
+                  )
+                     OR item.value ->> 'label' = ''
+                     OR item.value ->> 'href' = ''
+              )
+              OR EXISTS (
                   SELECT 1
                   FROM jsonb_array_elements(draft_doc -> 'content' -> 'contactLinks') AS item(value)
                   CROSS JOIN unnest(ARRAY['icon', 'label', 'href']) AS key(name)
                   WHERE item.value ->> key.name <> btrim(item.value ->> key.name, kotlin_trim_chars)
+              )
+              OR EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(draft_doc -> 'content' -> 'contactLinks') AS item(value)
+                  WHERE item.value ->> 'icon' NOT IN (
+                      'github', 'linkedin', 'mail', 'message', 'kakao', 'instagram', 'globe', 'link', 'phone', 'bell'
+                  )
+                     OR item.value ->> 'label' = ''
+                     OR item.value ->> 'href' = ''
               )
               OR (draft_doc -> 'content' ->> 'blogDesign') <> CASE
                   WHEN lower(btrim(draft_doc -> 'content' ->> 'blogDesign', kotlin_trim_chars)) = 'grid' THEN 'grid'
@@ -329,10 +345,26 @@ classified AS (
                   WHERE item.value ->> key.name <> btrim(item.value ->> key.name, kotlin_trim_chars)
               )
               OR EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(published_doc -> 'content' -> 'serviceLinks') AS item(value)
+                  WHERE item.value ->> 'icon' NOT IN (
+                      'service', 'briefcase', 'laptop', 'rocket', 'spark', 'search', 'tag', 'camera', 'question'
+                  )
+                     OR item.value ->> 'label' = ''
+                     OR item.value ->> 'href' = ''
+              )
+              OR EXISTS (
                   SELECT 1
                   FROM jsonb_array_elements(published_doc -> 'content' -> 'contactLinks') AS item(value)
                   CROSS JOIN unnest(ARRAY['icon', 'label', 'href']) AS key(name)
                   WHERE item.value ->> key.name <> btrim(item.value ->> key.name, kotlin_trim_chars)
+              )
+              OR EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(published_doc -> 'content' -> 'contactLinks') AS item(value)
+                  WHERE item.value ->> 'icon' NOT IN (
+                      'github', 'linkedin', 'mail', 'message', 'kakao', 'instagram', 'globe', 'link', 'phone', 'bell'
+                  )
+                     OR item.value ->> 'label' = ''
+                     OR item.value ->> 'href' = ''
               )
               OR (published_doc -> 'content' ->> 'blogDesign') <> CASE
                   WHEN lower(btrim(published_doc -> 'content' ->> 'blogDesign', kotlin_trim_chars)) = 'grid' THEN 'grid'

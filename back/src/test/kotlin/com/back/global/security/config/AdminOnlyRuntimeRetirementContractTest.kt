@@ -87,7 +87,7 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
                 "authSecurityEventService",
                 "authSecurityEventPersistenceAdapter",
                 "memberActionLogApplicationService",
-                "privacyRetentionCleanupScheduledJob",
+                "memberActionLogRetentionCleanupScheduledJob",
                 "postHitSideEffectHandler",
             )
 
@@ -160,7 +160,7 @@ class AdminOnlyRuntimeRetirementContractTest : BaseControllerIntegrationTest() {
 
         assertThat(applicationContext.containsBean("memberAccountDeletionRepository")).isFalse()
         assertThat(applicationContext.containsBean("memberAccountDeletionRepositoryAdapter")).isFalse()
-        assertThat(applicationContext.containsBean("privacyRetentionCleanupScheduledJob")).isTrue()
+        assertThat(applicationContext.containsBean("memberActionLogRetentionCleanupScheduledJob")).isTrue()
         assertThat(applicationContext.containsBean("postWriteSideEffectHandler")).isTrue()
 
         assertThat(taskHandlerRegistry.getRegisteredEntries().map { it.taskType })

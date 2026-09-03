@@ -1,4 +1,4 @@
-package com.back.boundedContexts.member.subContexts.privacy.job
+package com.back.boundedContexts.member.subContexts.memberActionLog.job
 
 import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.output.MemberActionLogRepositoryPort
 import com.back.boundedContexts.member.subContexts.memberActionLog.domain.MemberActionLog
@@ -8,14 +8,14 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.time.Instant
 
-class PrivacyRetentionCleanupScheduledJobTest {
+class MemberActionLogRetentionCleanupScheduledJobTest {
     @Test
     fun `cleanup은 configured cutoff와 batch limit으로 관리자 action log를 정리한다`() {
         val now = Instant.parse("2026-06-23T00:00:00Z")
         val actionLog = RecordingActionLogRepository(1)
         val registry = SimpleMeterRegistry()
         val job =
-            PrivacyRetentionCleanupScheduledJob(
+            MemberActionLogRetentionCleanupScheduledJob(
                 memberActionLogRepository = actionLog,
                 meterRegistry = registry,
                 memberActionLogDays = 90,
@@ -26,7 +26,7 @@ class PrivacyRetentionCleanupScheduledJobTest {
         job.cleanup(now)
 
         assertThat(actionLog.calls).containsExactly(DeleteCall(now.minusSeconds(90 * DAY), 25))
-        assertThat(registry.counter("privacy.retention.cleanup.deleted", "target", "member_action_log").count()).isEqualTo(1.0)
+        assertThat(registry.counter("member.action.log.retention.cleanup.deleted", "target", "member_action_log").count()).isEqualTo(1.0)
     }
 
     @Test
@@ -34,7 +34,7 @@ class PrivacyRetentionCleanupScheduledJobTest {
         val now = Instant.parse("2026-06-23T00:00:00Z")
         val actionLog = RecordingActionLogRepository(2, 2, 2)
         val job =
-            PrivacyRetentionCleanupScheduledJob(
+            MemberActionLogRetentionCleanupScheduledJob(
                 memberActionLogRepository = actionLog,
                 meterRegistry = SimpleMeterRegistry(),
                 memberActionLogDays = 90,
@@ -51,7 +51,7 @@ class PrivacyRetentionCleanupScheduledJobTest {
     fun `cleanup은 target 실패를 metric으로 기록하고 개인정보 없이 로그 경로로 넘긴다`() {
         val registry = SimpleMeterRegistry()
         val job =
-            PrivacyRetentionCleanupScheduledJob(
+            MemberActionLogRetentionCleanupScheduledJob(
                 memberActionLogRepository = FailingActionLogRepository(),
                 meterRegistry = registry,
                 memberActionLogDays = 90,
@@ -61,7 +61,7 @@ class PrivacyRetentionCleanupScheduledJobTest {
 
         job.cleanup(Instant.parse("2026-06-23T00:00:00Z"))
 
-        assertThat(registry.counter("privacy.retention.cleanup.failed", "target", "member_action_log").count()).isEqualTo(1.0)
+        assertThat(registry.counter("member.action.log.retention.cleanup.failed", "target", "member_action_log").count()).isEqualTo(1.0)
     }
 
     @Test

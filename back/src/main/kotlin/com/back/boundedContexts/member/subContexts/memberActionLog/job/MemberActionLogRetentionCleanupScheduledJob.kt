@@ -1,4 +1,4 @@
-package com.back.boundedContexts.member.subContexts.privacy.job
+package com.back.boundedContexts.member.subContexts.memberActionLog.job
 
 import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.output.MemberActionLogRepositoryPort
 import io.micrometer.core.instrument.MeterRegistry
@@ -18,20 +18,20 @@ import java.time.temporal.ChronoUnit
     havingValue = "true",
     matchIfMissing = true,
 )
-class PrivacyRetentionCleanupScheduledJob(
+class MemberActionLogRetentionCleanupScheduledJob(
     private val memberActionLogRepository: MemberActionLogRepositoryPort,
     private val meterRegistry: MeterRegistry?,
-    @param:Value("\${custom.privacy.retention.memberActionLogDays:90}")
+    @param:Value("\${custom.memberActionLog.retention.days:90}")
     private val memberActionLogDays: Int,
-    @param:Value("\${custom.privacy.retention.cleanup.batchSize:500}")
+    @param:Value("\${custom.memberActionLog.retention.cleanup.batchSize:500}")
     private val batchSize: Int,
-    @param:Value("\${custom.privacy.retention.cleanup.maxBatches:20}")
+    @param:Value("\${custom.memberActionLog.retention.cleanup.maxBatches:20}")
     private val maxBatches: Int,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @Scheduled(fixedDelayString = "\${custom.privacy.retention.cleanup.fixedDelayMs:3600000}")
-    @SchedulerLock(name = "privacyRetentionCleanup", lockAtLeastFor = "PT1M")
+    @Scheduled(fixedDelayString = "\${custom.memberActionLog.retention.cleanup.fixedDelayMs:3600000}")
+    @SchedulerLock(name = "memberActionLogRetentionCleanup", lockAtLeastFor = "PT1M")
     fun cleanup() {
         cleanup(Instant.now())
     }
@@ -61,12 +61,12 @@ class PrivacyRetentionCleanupScheduledJob(
                 if (deleted < normalizedBatchSize) break
             }
             if (totalDeleted > 0) {
-                meterRegistry?.counter("privacy.retention.cleanup.deleted", "target", target)?.increment(totalDeleted.toDouble())
-                log.info("privacy_retention_cleanup_deleted target={} count={}", target, totalDeleted)
+                meterRegistry?.counter("member.action.log.retention.cleanup.deleted", "target", target)?.increment(totalDeleted.toDouble())
+                log.info("member_action_log_retention_cleanup_deleted target={} count={}", target, totalDeleted)
             }
         } catch (ex: RuntimeException) {
-            meterRegistry?.counter("privacy.retention.cleanup.failed", "target", target)?.increment()
-            log.error("privacy_retention_cleanup_failed target={}", target, ex)
+            meterRegistry?.counter("member.action.log.retention.cleanup.failed", "target", target)?.increment()
+            log.error("member_action_log_retention_cleanup_failed target={}", target, ex)
         }
     }
 }

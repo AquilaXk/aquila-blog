@@ -1,4 +1,4 @@
-package com.back.boundedContexts.member.subContexts.privacy.job
+package com.back.boundedContexts.member.subContexts.memberActionLog.job
 
 import com.back.boundedContexts.member.subContexts.memberActionLog.model.MemberActionLog
 import com.back.global.jpa.domain.AfterDDL
@@ -7,8 +7,8 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import kotlin.reflect.KClass
 
-@DisplayName("Privacy retention 운영 인덱스 계약 테스트")
-class PrivacyRetentionOperationalIndexContractTest {
+@DisplayName("Member action log retention 운영 인덱스 계약 테스트")
+class MemberActionLogRetentionOperationalIndexContractTest {
     private val productionMigrationSql: String =
         readResource("db/migration/V20260623_03__add_privacy_retention_indexes_concurrently.sql")
 

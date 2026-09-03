@@ -95,6 +95,34 @@ class PostApplicationUseCaseCollaboratorTest {
     }
 
     @Test
+    fun `temp draft lookup ignores an untracked legacy title and creates a marked post`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
+        val service = PostTempDraftService(postRepository, memberAttrRepository)
+        val author = testMember()
+        val untrackedLegacyPost = testPost(author = author)
+        var savedMarker: MemberAttr? = null
+        untrackedLegacyPost.title = "임시글"
+        untrackedLegacyPost.published = false
+        given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(null)
+        given(memberAttrRepository.incrementIntValue(author, "activeTempDraftLock", 1)).willReturn(1)
+        given(postRepository.save(anyValue())).willAnswer { it.arguments[0] as Post }
+        given(memberAttrRepository.save(anyValue())).willAnswer {
+            (it.arguments[0] as MemberAttr).also { marker -> savedMarker = marker }
+        }
+
+        assertThat(service.findTemp(author)).isNull()
+        val (createdPost, created) = service.getOrCreateTemp(author)
+
+        assertThat(created).isTrue()
+        assertThat(createdPost).isNotSameAs(untrackedLegacyPost)
+        assertThat(createdPost.title).isEqualTo("임시글")
+        then(postRepository).should().save(createdPost)
+        assertThat(savedMarker?.name).isEqualTo("activeTempDraftPostId")
+        assertThat(savedMarker?.strValue).isEqualTo(createdPost.id.toString())
+    }
+
+    @Test
     fun `post hydration applies one persisted profile image to duplicate member instances`() {
         val postAttrRepository = mock(PostAttrRepositoryPort::class.java)
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)

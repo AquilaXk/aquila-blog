@@ -34,11 +34,6 @@ class PostRepositoryAdapter(
 
     override fun findFirstByOrderByIdDesc(): Post? = postRepository.findFirstByOrderByIdDesc()
 
-    override fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(
-        author: Member,
-        title: String,
-    ): Post? = postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, title)
-
     override fun existsByAuthorAndTitle(
         author: Member,
         title: String,

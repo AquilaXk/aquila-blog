@@ -21,7 +21,7 @@ class PostTempDraftService(
 
     fun findTemp(author: Member): Post? {
         val persistenceAuthor = author.toPersistenceMember()
-        return resolveTrackedTempPost(persistenceAuthor) ?: findLegacyTemp(persistenceAuthor)
+        return resolveTrackedTempPost(persistenceAuthor)
     }
 
     @Transactional
@@ -32,7 +32,7 @@ class PostTempDraftService(
         }
 
         return try {
-            val existingTemp = resolveTrackedTempPost(persistenceAuthor) ?: findLegacyTemp(persistenceAuthor)
+            val existingTemp = resolveTrackedTempPost(persistenceAuthor)
             if (existingTemp != null) {
                 updateTempDraftMarker(persistenceAuthor, existingTemp.id)
                 postRepository.flush()
@@ -60,8 +60,6 @@ class PostTempDraftService(
         attr.strValue = postId?.toString().orEmpty()
         memberAttrRepository.save(attr)
     }
-
-    private fun findLegacyTemp(author: Member): Post? = postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, "임시글")
 
     private fun resolveTrackedTempPost(author: Member): Post? {
         val trackedPostId = resolveTrackedTempPostId(author) ?: return null

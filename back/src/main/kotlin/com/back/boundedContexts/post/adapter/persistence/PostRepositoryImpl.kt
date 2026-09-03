@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.persistence
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.model.shared.QMemberAttr
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.model.QPost.post
@@ -163,16 +164,22 @@ class PostRepositoryImpl(
             builder.and(post.published.isTrue)
             builder.and(post.listed.isTrue)
         } else {
+            val activeDraftMarker = QMemberAttr("activeDraftMarker")
+            val hasActiveDraftMarker =
+                JPAExpressions
+                    .selectOne()
+                    .from(activeDraftMarker)
+                    .where(
+                        activeDraftMarker.subject
+                            .eq(post.author)
+                            .and(activeDraftMarker.name.eq("activeTempDraftPostId"))
+                            .and(activeDraftMarker.strValue.trim().eq(post.id.stringValue())),
+                    ).exists()
             when (adminStatus) {
                 "draft" ->
-                    builder.and(
-                        post.published
-                            .isFalse
-                            .and(post.listed.isFalse)
-                            .and(post.title.eq("임시글")),
-                    )
+                    builder.and(post.published.isFalse.and(hasActiveDraftMarker))
                 "published" -> builder.and(post.published.isTrue)
-                "private" -> builder.and(post.published.isFalse.and(post.title.ne("임시글")))
+                "private" -> builder.and(post.published.isFalse.and(hasActiveDraftMarker.not()))
             }
         }
         author?.let { builder.and(post.author.eq(it)) }

@@ -85,7 +85,6 @@ Spring Boot + Kotlin API
 ├── perf/k6/                # Read-path load and chaos scenarios
 ├── docs/                   # Tracked user-facing design and legal document hub
 ├── tools/                  # Repository guards and automation scripts
-├── infra/                  # Legacy / experimental Terraform setup
 └── README.assets/          # Screenshots and README images
 ```
 
@@ -171,4 +170,3 @@ cd back
 | [Backend README](back/README.md) | Backend architecture, API modules, quality checks, and OpenAPI flow |
 | [k6 Guide](perf/k6/README.md) | Load and chaos scenarios for public read paths |
 | [Home Server Hardening](deploy/homeserver/HARDENING.md) | Home server hardening and operational checklist |
-| [Legacy Infra](infra/README.md) | Legacy cloud infra experiment; production uses homeserver deploy |

@@ -150,7 +150,7 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "tools/repo-split/**",
     "tools/guards/check-public-api-caddy-drift.sh",
     "tools/guards/public-api-read-caddy-paths.sot",
-    "infra/**",
+    "**/*.tf",
     "tools/test/check-forbidden-tracked-files.test.sh",
     "tools/test/materialize-compose-test-env.test.mjs",
     "tools/test/repository-standalone-verification.test.sh",

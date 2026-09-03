@@ -5,12 +5,23 @@ cd "$ROOT"
 
 # Fail only on security-group *ingress* world-open CIDRs.
 # Route table defaults and SG egress 0.0.0.0/0 are out of scope for this guard.
+terraform_files=()
+while IFS= read -r -d '' terraform_file; do
+  [[ -f "${terraform_file}" ]] || continue
+  terraform_files+=("${terraform_file}")
+done < <(git ls-files -z -- '*.tf')
+
+if (( ${#terraform_files[@]} == 0 )); then
+  echo "terraform world-open SG ingress guard passed (no tracked .tf files)"
+  exit 0
+fi
+
 hits="$(
-  python3 - <<'PY'
+  python3 - "${terraform_files[@]}" <<'PY'
 from pathlib import Path
 import re
+import sys
 
-legacy = Path("infra/legacy")
 ingress_block = re.compile(r"ingress\s*\{([^{}]|\{[^{}]*\})*\}", re.MULTILINE)
 sg_rule = re.compile(
     r'resource\s+"aws_security_group_rule"\s+"[^"]+"\s*\{([^{}]|\{[^{}]*\})*\}',
@@ -22,9 +33,8 @@ vpc_ingress_rule = re.compile(
 )
 findings = []
 
-for path in Path(".").rglob("*.tf"):
-    if legacy in path.parents or any(part in {".git", "node_modules"} for part in path.parts):
-        continue
+for raw_path in sys.argv[1:]:
+    path = Path(raw_path)
     text = path.read_text(encoding="utf-8")
     for match in ingress_block.finditer(text):
         block = match.group(0)
@@ -47,14 +57,9 @@ PY
 )"
 
 if [[ -n "${hits}" ]]; then
-  echo "FAIL: world-open CIDR 0.0.0.0/0 found on security-group ingress outside infra/legacy/:" >&2
+  echo "FAIL: world-open CIDR 0.0.0.0/0 found on security-group ingress in tracked Terraform:" >&2
   echo "${hits}" >&2
   exit 1
 fi
 
-if [[ ! -f infra/legacy/main.tf ]]; then
-  echo "FAIL: expected infra/legacy/main.tf quarantine file missing" >&2
-  exit 1
-fi
-
-echo "terraform world-open SG ingress guard passed (active .tf clean; legacy quarantined)"
+echo "terraform world-open SG ingress guard passed (all tracked .tf clean)"

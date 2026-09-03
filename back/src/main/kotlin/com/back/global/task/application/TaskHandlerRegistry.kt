@@ -10,15 +10,6 @@ data class TaskHandlerMethod(
     val method: Method,
 )
 
-data class TaskPayloadDecoder(
-    val schemaVersion: Int,
-    val payloadClass: Class<out TaskPayload>,
-) {
-    init {
-        require(schemaVersion >= 1) { "Task payload decoder schemaVersion must be positive" }
-    }
-}
-
 data class TaskHandlerEntry(
     val taskType: String,
     val payloadClass: Class<out TaskPayload>,
@@ -26,31 +17,21 @@ data class TaskHandlerEntry(
     val retryPolicy: TaskRetryPolicy,
     val schemaVersion: Int,
     val sensitivity: TaskPayloadSensitivity,
-    val decoders: Map<Int, TaskPayloadDecoder>,
 ) {
     init {
         require(schemaVersion == TaskHandlerRegistry.CURRENT_TASK_PAYLOAD_SCHEMA_VERSION) {
             "Current task payload schema must be ${TaskHandlerRegistry.CURRENT_TASK_PAYLOAD_SCHEMA_VERSION}"
         }
-        require(decoders.keys == setOf(TaskHandlerRegistry.LEGACY_TASK_PAYLOAD_SCHEMA_VERSION, schemaVersion)) {
-            "Task payload decoders must register exact v1 and v$schemaVersion"
-        }
-        require(decoders.all { (version, decoder) -> version == decoder.schemaVersion }) {
-            "Task payload decoder key and schemaVersion must match"
-        }
     }
 
-    fun decoderFor(schemaVersion: Int): TaskPayloadDecoder? = decoders[schemaVersion]
-
     companion object {
-        fun withExactDecoders(
+        fun withCurrentDecoder(
             taskType: String,
             payloadClass: Class<out TaskPayload>,
             handlerMethod: TaskHandlerMethod,
             retryPolicy: TaskRetryPolicy,
             schemaVersion: Int,
             sensitivity: TaskPayloadSensitivity,
-            legacyPayloadClass: Class<out TaskPayload> = payloadClass,
         ): TaskHandlerEntry =
             TaskHandlerEntry(
                 taskType = taskType,
@@ -59,12 +40,6 @@ data class TaskHandlerEntry(
                 retryPolicy = retryPolicy,
                 schemaVersion = schemaVersion,
                 sensitivity = sensitivity,
-                decoders =
-                    mapOf(
-                        TaskHandlerRegistry.LEGACY_TASK_PAYLOAD_SCHEMA_VERSION to
-                            TaskPayloadDecoder(TaskHandlerRegistry.LEGACY_TASK_PAYLOAD_SCHEMA_VERSION, legacyPayloadClass),
-                        schemaVersion to TaskPayloadDecoder(schemaVersion, payloadClass),
-                    ),
             )
     }
 }
@@ -107,7 +82,6 @@ class TaskHandlerRegistry {
     fun getRegisteredEntries(): List<TaskHandlerEntry> = byType.values.sortedBy { it.taskType }
 
     companion object {
-        const val LEGACY_TASK_PAYLOAD_SCHEMA_VERSION = 1
         const val CURRENT_TASK_PAYLOAD_SCHEMA_VERSION = 2
     }
 }

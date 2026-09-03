@@ -392,7 +392,7 @@ class PostApplicationServiceDeleteResilienceTest {
         val registry = TaskHandlerRegistry()
         registry.register(
             PostWriteSideEffectPayload.TASK_TYPE,
-            TaskHandlerEntry.withExactDecoders(
+            TaskHandlerEntry.withCurrentDecoder(
                 taskType = PostWriteSideEffectPayload.TASK_TYPE,
                 payloadClass = PostWriteSideEffectPayload::class.java,
                 handlerMethod =

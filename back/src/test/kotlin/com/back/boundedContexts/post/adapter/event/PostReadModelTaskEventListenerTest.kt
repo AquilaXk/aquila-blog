@@ -142,7 +142,7 @@ class PostReadModelTaskEventListenerTest {
     ) {
         registry.register(
             taskType,
-            TaskHandlerEntry.withExactDecoders(
+            TaskHandlerEntry.withCurrentDecoder(
                 taskType = taskType,
                 payloadClass = payloadClass,
                 handlerMethod =

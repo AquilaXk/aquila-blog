@@ -842,7 +842,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
     }
 
     private fun taskHandlerEntry(taskType: String): TaskHandlerEntry =
-        TaskHandlerEntry.withExactDecoders(
+        TaskHandlerEntry.withCurrentDecoder(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -865,7 +865,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         releaseWorkers: CountDownLatch,
     ): TaskHandlerEntry {
         val handler = BlockingHandler(startedWorkers, releaseWorkers)
-        return TaskHandlerEntry.withExactDecoders(
+        return TaskHandlerEntry.withCurrentDecoder(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -887,7 +887,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         taskType: String,
         handler: AttemptBlockingHandler,
     ): TaskHandlerEntry =
-        TaskHandlerEntry.withExactDecoders(
+        TaskHandlerEntry.withCurrentDecoder(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -908,7 +908,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         taskType: String,
         handler: ContextCapturingHandler,
     ): TaskHandlerEntry =
-        TaskHandlerEntry.withExactDecoders(
+        TaskHandlerEntry.withCurrentDecoder(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -929,7 +929,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         taskType: String,
         handler: CountingBlockingHandler,
     ): TaskHandlerEntry =
-        TaskHandlerEntry.withExactDecoders(
+        TaskHandlerEntry.withCurrentDecoder(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =
@@ -950,7 +950,7 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
         taskType: String,
         handler: InterruptAwareHandler,
     ): TaskHandlerEntry =
-        TaskHandlerEntry.withExactDecoders(
+        TaskHandlerEntry.withCurrentDecoder(
             taskType = taskType,
             payloadClass = StubPayload::class.java,
             handlerMethod =

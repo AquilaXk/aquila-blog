@@ -82,6 +82,55 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
         );
         """.trimIndent()
 
+    private val taskPayloadV1Baseline =
+        """
+        CREATE TABLE task (
+            id bigint PRIMARY KEY,
+            task_type text NOT NULL,
+            payload text NOT NULL,
+            status text NOT NULL DEFAULT 'PENDING',
+            modified_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE FUNCTION task_wrap_legacy_payload_v1(
+            raw_payload text,
+            raw_task_type text,
+            raw_created_at timestamptz
+        ) RETURNS text
+        LANGUAGE sql
+        IMMUTABLE
+        STRICT
+        AS ${'$'}${'$'} SELECT raw_payload ${'$'}${'$'};
+
+        CREATE FUNCTION task_normalize_legacy_payload_v1_on_insert()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS ${'$'}${'$'}
+        BEGIN
+            RETURN NEW;
+        END;
+        ${'$'}${'$'};
+
+        CREATE TRIGGER task_normalize_legacy_payload_v1_before_insert
+        BEFORE INSERT ON task
+        FOR EACH ROW
+        EXECUTE FUNCTION task_normalize_legacy_payload_v1_on_insert();
+
+        CREATE FUNCTION task_apply_terminal_retention_defaults()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS ${'$'}${'$'}
+        BEGIN
+            RETURN NEW;
+        END;
+        ${'$'}${'$'};
+
+        CREATE TRIGGER task_apply_terminal_retention_before_update
+        BEFORE UPDATE OF status ON task
+        FOR EACH ROW
+        EXECUTE FUNCTION task_apply_terminal_retention_defaults();
+        """.trimIndent()
+
     private data class Phase2DriftCase(
         val name: String,
         val seedStatements: List<String>,
@@ -396,6 +445,112 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
     }
 
     @Test
+    fun `task payload v2 migration rejects residual v1 atomically`() {
+        val migrationName = "V20260903_01__enforce_task_payload_v2_storage.sql"
+        val compatibilitySchema = "task_payload_v2_residual_v1"
+        val taskMigrations = migrations.resolve("task-payload-v2-residual-v1").createDirectories()
+        val productionMigration = readProductionMigration(migrationName)
+
+        assertEquals(productionMigration, readTestMigration(migrationName))
+        taskMigrations.resolve("V1__task_payload_v1_baseline.sql").writeText(taskPayloadV1Baseline)
+        flyway(compatibilitySchema, taskMigrations).migrate()
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("SET search_path TO $compatibilitySchema")
+                statement.execute(
+                    """
+                    INSERT INTO task (id, task_type, payload)
+                    VALUES (
+                        1,
+                        'post.search-index.sync',
+                        '{"schemaVersion":1,"taskType":"post.search-index.sync","uid":"legacy"}'
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        taskMigrations.resolve(migrationName).writeText(productionMigration)
+        assertFailsWith<FlywayException> {
+            flyway(compatibilitySchema, taskMigrations).migrate()
+        }
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("SET search_path TO $compatibilitySchema")
+                statement.executeQuery("SELECT count(*) FROM task WHERE id = 1").use { result ->
+                    result.next()
+                    assertEquals(1, result.getInt(1))
+                }
+                assertTrue(triggerExists(statement, compatibilitySchema, "task_normalize_legacy_payload_v1_before_insert"))
+                assertTrue(functionExists(statement, compatibilitySchema, "task_normalize_legacy_payload_v1_on_insert"))
+                assertTrue(functionExists(statement, compatibilitySchema, "task_wrap_legacy_payload_v1"))
+                assertFalse(constraintExists(statement, compatibilitySchema, "task_payload_v2_or_exact_redacted"))
+            }
+        }
+    }
+
+    @Test
+    fun `task payload v2 migration keeps only current storage and retention contracts`() {
+        val migrationName = "V20260903_01__enforce_task_payload_v2_storage.sql"
+        val compatibilitySchema = "task_payload_v2_success"
+        val taskMigrations = migrations.resolve("task-payload-v2-success").createDirectories()
+        val productionMigration = readProductionMigration(migrationName)
+        val v2Payload =
+            """{"schemaVersion":2,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":1786406400000,"expiresAtEpochMs":null,"payloadJson":"{}"}"""
+
+        assertEquals(productionMigration, readTestMigration(migrationName))
+        taskMigrations.resolve("V1__task_payload_v1_baseline.sql").writeText(taskPayloadV1Baseline)
+        flyway(compatibilitySchema, taskMigrations).migrate()
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("SET search_path TO $compatibilitySchema")
+                statement.execute(
+                    "INSERT INTO task (id, task_type, payload) VALUES (1, 'post.search-index.sync', '$v2Payload')",
+                )
+                statement.execute(
+                    "INSERT INTO task (id, task_type, payload) VALUES (2, 'post.search-index.sync', '{\"redacted\":true}')",
+                )
+            }
+        }
+
+        taskMigrations.resolve(migrationName).writeText(productionMigration)
+        flyway(compatibilitySchema, taskMigrations).migrate()
+
+        postgres.createConnection("").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("SET search_path TO $compatibilitySchema")
+                assertFalse(triggerExists(statement, compatibilitySchema, "task_normalize_legacy_payload_v1_before_insert"))
+                assertFalse(functionExists(statement, compatibilitySchema, "task_normalize_legacy_payload_v1_on_insert"))
+                assertFalse(functionExists(statement, compatibilitySchema, "task_wrap_legacy_payload_v1"))
+                assertTrue(triggerExists(statement, compatibilitySchema, "task_apply_terminal_retention_before_update"))
+                assertTrue(functionExists(statement, compatibilitySchema, "task_apply_terminal_retention_defaults"))
+                assertTrue(constraintExists(statement, compatibilitySchema, "task_payload_v2_or_exact_redacted"))
+
+                statement.execute(
+                    "INSERT INTO task (id, task_type, payload) VALUES (3, 'post.search-index.sync', '$v2Payload')",
+                )
+                statement.execute(
+                    "INSERT INTO task (id, task_type, payload) VALUES (4, 'post.search-index.sync', '{\"redacted\":true}')",
+                )
+                listOf(
+                    "{}",
+                    """{"schemaVersion":2,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":1786406400000,"expiresAtEpochMs":null}""",
+                    """{"schemaVersion":1,"taskType":"post.search-index.sync","uid":"legacy"}""",
+                    """{"schemaVersion":1,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":1786406400000,"expiresAtEpochMs":null,"payloadJson":"{}"}""",
+                ).forEachIndexed { index, rejectedPayload ->
+                    assertFailsWith<java.sql.SQLException> {
+                        statement.execute(
+                            "INSERT INTO task (id, task_type, payload) VALUES (${index + 10}, 'post.search-index.sync', '$rejectedPayload')",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `retired persistence migration drains data and keeps both hard delete orders compatible`() {
         val migrationName = "V20260902_01__drain_retired_public_persistence.sql"
         val compatibilitySchema = "retired_persistence_n_minus_one"
@@ -623,6 +778,71 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                     WHERE table_schema = '$schema'
                       AND table_name = '$table'
                       AND column_name = '$column'
+                )
+                """.trimIndent(),
+            ).use { result ->
+                result.next()
+                result.getBoolean(1)
+            }
+
+    private fun triggerExists(
+        statement: Statement,
+        schema: String,
+        trigger: String,
+    ): Boolean =
+        statement
+            .executeQuery(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_trigger AS trigger_catalog
+                    JOIN pg_class AS relation ON relation.oid = trigger_catalog.tgrelid
+                    JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+                    WHERE namespace.nspname = '$schema'
+                      AND trigger_catalog.tgname = '$trigger'
+                      AND NOT trigger_catalog.tgisinternal
+                )
+                """.trimIndent(),
+            ).use { result ->
+                result.next()
+                result.getBoolean(1)
+            }
+
+    private fun functionExists(
+        statement: Statement,
+        schema: String,
+        function: String,
+    ): Boolean =
+        statement
+            .executeQuery(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_proc AS procedure
+                    JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+                    WHERE namespace.nspname = '$schema'
+                      AND procedure.proname = '$function'
+                )
+                """.trimIndent(),
+            ).use { result ->
+                result.next()
+                result.getBoolean(1)
+            }
+
+    private fun constraintExists(
+        statement: Statement,
+        schema: String,
+        constraint: String,
+    ): Boolean =
+        statement
+            .executeQuery(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_constraint AS constraint_catalog
+                    JOIN pg_namespace AS namespace ON namespace.oid = constraint_catalog.connamespace
+                    WHERE namespace.nspname = '$schema'
+                      AND constraint_catalog.conname = '$constraint'
                 )
                 """.trimIndent(),
             ).use { result ->

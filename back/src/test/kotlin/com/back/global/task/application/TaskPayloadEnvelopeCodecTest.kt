@@ -18,7 +18,7 @@ class TaskPayloadEnvelopeCodecTest {
     private val codec = TaskPayloadEnvelopeCodec(objectMapper, Clock.fixed(now, ZoneOffset.UTC))
 
     @Test
-    fun `v2 envelope round trip uses the exact current decoder`() {
+    fun `v2 envelope round trip uses the registered current payload class`() {
         val payload = StubTaskPayload(UUID.randomUUID(), "Post", 41L, "value")
         val entry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.INTERNAL)
 
@@ -26,8 +26,6 @@ class TaskPayloadEnvelopeCodecTest {
         val decoded = codec.decode(encoded, metadata(payload, entry.taskType), entry)
 
         assertThat(decoded).isEqualTo(payload)
-        assertThat(entry.decoderFor(1)).isNotSameAs(entry.decoderFor(2))
-        assertThat(entry.decoderFor(2)?.schemaVersion).isEqualTo(2)
     }
 
     @Test
@@ -41,17 +39,17 @@ class TaskPayloadEnvelopeCodecTest {
     }
 
     @Test
-    fun `flat v1 envelope remains readable by N minus 1 and uses only the registered v1 decoder`() {
+    fun `flat and nested v1 envelopes fail closed`() {
         val payload = StubTaskPayload(UUID.randomUUID(), "Post", 42L, "legacy")
         val entry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.INTERNAL)
         val encoded = flatV1EnvelopeJson(payload, entry)
 
-        val nMinusOneDecoded = objectMapper.readValue(encoded, StubTaskPayload::class.java)
-        val decoded = codec.decode(encoded, metadata(payload, entry.taskType), entry)
-
-        assertThat(nMinusOneDecoded).isEqualTo(payload)
-        assertThat(decoded).isEqualTo(payload)
-        assertThat(entry.decoderFor(1)?.schemaVersion).isEqualTo(1)
+        assertQuarantined(TaskQuarantineReason.MALFORMED_ENVELOPE) {
+            codec.decode(encoded, metadata(payload, entry.taskType), entry)
+        }
+        assertQuarantined(TaskQuarantineReason.UNKNOWN_SCHEMA_VERSION) {
+            codec.decode(envelopeJson(payload, entry, schemaVersion = 1), metadata(payload, entry.taskType), entry)
+        }
     }
 
     @Test
@@ -71,22 +69,6 @@ class TaskPayloadEnvelopeCodecTest {
 
         assertQuarantined(TaskQuarantineReason.MALFORMED_ENVELOPE) {
             codec.decode("{}", metadata(payload, entry.taskType), entry)
-        }
-
-        val flatWithNestedPayload =
-            objectMapper
-                .readTree(flatV1EnvelopeJson(payload, entry))
-                .also { root -> (root as tools.jackson.databind.node.ObjectNode).put("payloadJson", "{}") }
-        assertQuarantined(TaskQuarantineReason.MALFORMED_ENVELOPE) {
-            codec.decode(objectMapper.writeValueAsString(flatWithNestedPayload), metadata(payload, entry.taskType), entry)
-        }
-
-        val flatWithoutTaskType =
-            objectMapper
-                .readTree(flatV1EnvelopeJson(payload, entry))
-                .also { root -> (root as tools.jackson.databind.node.ObjectNode).remove("taskType") }
-        assertQuarantined(TaskQuarantineReason.MALFORMED_ENVELOPE) {
-            codec.decode(objectMapper.writeValueAsString(flatWithoutTaskType), metadata(payload, entry.taskType), entry)
         }
     }
 
@@ -132,18 +114,10 @@ class TaskPayloadEnvelopeCodecTest {
     }
 
     @Test
-    fun `decoder output class mismatch는 malformed payload로 quarantine한다`() {
+    fun `current payload class mismatch는 malformed payload로 quarantine한다`() {
         val payload = OtherTaskPayload(UUID.randomUUID(), "Post", 46L)
         val entry =
-            directEntry(
-                payloadClass = StubTaskPayload::class.java,
-                sensitivity = TaskPayloadSensitivity.INTERNAL,
-                decoders =
-                    mapOf(
-                        1 to TaskPayloadDecoder(1, StubTaskPayload::class.java),
-                        2 to TaskPayloadDecoder(2, OtherTaskPayload::class.java),
-                    ),
-            )
+            directEntry(StubTaskPayload::class.java, TaskPayloadSensitivity.INTERNAL)
         val encoded = envelopeJson(payload, entry, schemaVersion = 2)
 
         assertQuarantined(TaskQuarantineReason.MALFORMED_PAYLOAD) {
@@ -208,11 +182,6 @@ class TaskPayloadEnvelopeCodecTest {
             codec.decode(mismatchedV2, metadata(payload, expiringEntry.taskType), expiringEntry)
         }
 
-        val mismatchedV1 = flatV1EnvelopeJson(payload, expiringEntry, payload.expiresAt.plusSeconds(1).toEpochMilli())
-        assertQuarantined(TaskQuarantineReason.METADATA_MISMATCH) {
-            codec.decode(mismatchedV1, metadata(payload, expiringEntry.taskType), expiringEntry)
-        }
-
         val nonExpiringPayload = StubTaskPayload(UUID.randomUUID(), "Member", 50L, "no-expiry")
         val secretEntry = entry(StubTaskPayload::class.java, TaskPayloadSensitivity.EXPIRING_SECRET)
         assertQuarantined(TaskQuarantineReason.SENSITIVITY_MISMATCH) {
@@ -259,17 +228,11 @@ class TaskPayloadEnvelopeCodecTest {
         directEntry(
             payloadClass = payloadClass,
             sensitivity = sensitivity,
-            decoders =
-                mapOf(
-                    1 to TaskPayloadDecoder(1, payloadClass),
-                    2 to TaskPayloadDecoder(2, payloadClass),
-                ),
         )
 
     private fun directEntry(
         payloadClass: Class<out TaskPayload>,
         sensitivity: TaskPayloadSensitivity,
-        decoders: Map<Int, TaskPayloadDecoder>,
     ): TaskHandlerEntry {
         val handler = StubTaskHandler()
         return TaskHandlerEntry(
@@ -283,7 +246,6 @@ class TaskPayloadEnvelopeCodecTest {
             retryPolicy = TaskRetryPolicy("test", 3, 1, 2.0, 10),
             schemaVersion = 2,
             sensitivity = sensitivity,
-            decoders = decoders,
         )
     }
 

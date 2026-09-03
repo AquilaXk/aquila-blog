@@ -1,8 +1,5 @@
 package com.back.global.task.annotation
 
-import com.back.standard.dto.TaskPayload
-import kotlin.reflect.KClass
-
 enum class TaskPayloadSensitivity {
     PUBLIC,
     INTERNAL,
@@ -20,7 +17,6 @@ annotation class Task(
     val type: String,
     val schemaVersion: Int,
     val sensitivity: TaskPayloadSensitivity,
-    val legacyPayloadClass: KClass<out TaskPayload> = TaskPayload::class,
     val label: String = "",
     val maxRetries: Int = 10,
     val baseDelaySeconds: Long = 180,

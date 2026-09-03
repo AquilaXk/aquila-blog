@@ -20,6 +20,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -42,10 +43,10 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
 
     @Test
     @Order(1)
-    fun `pre envelope row migrates and production task id default is restored`() {
+    fun `v2 row remains valid and production task id default is restored`() {
         migrateToPreviousVersion()
         val taskUid = UUID.randomUUID()
-        val rawPayload = """{"uid":"$taskUid","aggregateType":"Post","aggregateId":77,"value":"private"}"""
+        val rawPayload = v2Envelope(taskUid, aggregateId = 77L, taskType = "post.interaction.side-effect")
 
         postgres.createConnection("").use { connection ->
             connection
@@ -97,17 +98,14 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
                     statement.executeQuery().use { result ->
                         assertTrue(result.next())
                         val migratedPayload = result.getString(1)
-                        assertEquals("1", result.getString(2))
+                        assertEquals("2", result.getString(2))
                         assertEquals("post.interaction.side-effect", result.getString(3))
-                        assertEquals("PERSONAL", result.getString(4))
-                        assertEquals(false, result.getBoolean(5))
+                        assertEquals("INTERNAL", result.getString(4))
+                        assertEquals(true, result.getBoolean(5))
                         assertEquals(Instant.parse("2026-08-17T00:00:00Z"), result.getTimestamp(6).toInstant())
                         assertEquals(null, result.getTimestamp(7))
                         assertEquals(Instant.parse("2026-09-09T00:00:00Z"), result.getTimestamp(8).toInstant())
-                        assertEquals(
-                            LegacyOverlapPayload(taskUid, "Post", 77L, "private"),
-                            objectMapper.readValue(migratedPayload, LegacyOverlapPayload::class.java),
-                        )
+                        assertEquals(rawPayload, migratedPayload)
                     }
                 }
         }
@@ -115,29 +113,35 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
 
     @Test
     @Order(2)
-    fun `N minus 1 insert is normalized to flat v1 and old terminal update receives retention`() {
+    fun `v1 insert is rejected and current terminal update receives retention`() {
         migrate()
         val insertSql = productionAtomicInsertSql()
-        val legacyUid = UUID.randomUUID()
-        val legacyPayload = LegacyOverlapPayload(legacyUid, "Post", 88L, "overlap-private")
-        val rawPayload = objectMapper.writeValueAsString(legacyPayload)
+        val taskUid = UUID.randomUUID()
+        val legacyPayload = LegacyOverlapPayload(taskUid, "Post", 88L, "overlap-private")
 
         postgres.createConnection("").use { connection ->
+            assertFailsWith<java.sql.SQLException> {
+                insert(
+                    connection = connection,
+                    sql = insertSql,
+                    uid = taskUid,
+                    aggregateId = 88L,
+                    taskType = "post.interaction.side-effect",
+                    payload = objectMapper.writeValueAsString(legacyPayload),
+                )
+            }
+
             assertEquals(
                 1,
                 insert(
                     connection = connection,
                     sql = insertSql,
-                    uid = legacyUid,
+                    uid = taskUid,
                     aggregateId = 88L,
                     taskType = "post.interaction.side-effect",
-                    payload = rawPayload,
+                    payload = v2Envelope(taskUid, aggregateId = 88L, taskType = "post.interaction.side-effect"),
                 ),
             )
-            val normalizedPayload = payloadByUid(connection, legacyUid)
-            assertEquals(legacyPayload, objectMapper.readValue(normalizedPayload, LegacyOverlapPayload::class.java))
-            assertEquals(1, objectMapper.readTree(normalizedPayload).get("schemaVersion").intValue())
-            assertEquals(null, objectMapper.readTree(normalizedPayload).get("payloadJson"))
 
             val currentUid = UUID.randomUUID()
             val currentEnvelope =
@@ -150,13 +154,13 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
                 .prepareStatement("UPDATE task SET status = 'COMPLETED', modified_at = ? WHERE uid = ?")
                 .use { statement ->
                     statement.setTimestamp(1, Timestamp.from(completedAt))
-                    statement.setObject(2, legacyUid)
+                    statement.setObject(2, taskUid)
                     assertEquals(1, statement.executeUpdate())
                 }
             connection
                 .prepareStatement("SELECT payload, payload_redacted_at, row_purge_after FROM task WHERE uid = ?")
                 .use { statement ->
-                    statement.setObject(1, legacyUid)
+                    statement.setObject(1, taskUid)
                     statement.executeQuery().use { result ->
                         assertTrue(result.next())
                         assertEquals("{\"redacted\":true}", result.getString(1))
@@ -253,7 +257,7 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
         uid: UUID,
         aggregateId: Long = 1L,
         taskType: String = "test.atomic-insert",
-        payload: String = "{}",
+        payload: String = v2Envelope(uid, taskType = taskType),
     ): Int =
         connection.prepareStatement(sql).use { statement ->
             statement.setObject(1, uid)
@@ -270,6 +274,27 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
             statement.setNull(12, Types.OTHER)
             statement.executeUpdate()
         }
+
+    private fun v2Envelope(
+        uid: UUID,
+        aggregateId: Long = 1L,
+        taskType: String,
+    ): String {
+        val payloadJson =
+            objectMapper.writeValueAsString(
+                TaskV2Payload(
+                    uid = uid,
+                    aggregateType = "Post",
+                    aggregateId = aggregateId,
+                ),
+            )
+        return objectMapper.writeValueAsString(
+            TaskV2Envelope(
+                taskType = taskType,
+                payloadJson = payloadJson,
+            ),
+        )
+    }
 
     private fun payloadByUid(
         connection: Connection,
@@ -317,5 +342,20 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
         val aggregateType: String,
         val aggregateId: Long,
         val value: String,
+    )
+
+    private data class TaskV2Envelope(
+        val schemaVersion: Int = 2,
+        val taskType: String,
+        val sensitivity: String = "INTERNAL",
+        val createdAtEpochMs: Long = 1_786_406_400_000,
+        val expiresAtEpochMs: Long? = null,
+        val payloadJson: String,
+    )
+
+    private data class TaskV2Payload(
+        val uid: UUID,
+        val aggregateType: String,
+        val aggregateId: Long,
     )
 }

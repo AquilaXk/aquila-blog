@@ -126,7 +126,7 @@ assert_contains "${platform_script}" 'git update-ref refs/remotes/origin/main HE
 assert_contains "${platform_script}" 'check-platform-boundary.mjs'
 assert_not_contains "${platform_script}" 'check-platform-boundary.mjs --report-only'
 assert_contains "${platform_script}" 'tools/contracts/check-public-contracts.mjs'
-assert_contains "${platform_script}" 'tools/privacy/ci-privacy-gate.mjs'
+assert_not_contains "${platform_script}" 'tools/privacy/ci-privacy-gate.mjs'
 assert_contains "${platform_script}" './gradlew check --rerun-tasks'
 assert_before "${platform_script}" './gradlew check --rerun-tasks' 'tools/contracts/check-public-contracts.mjs'
 assert_contains "${platform_script}" 'materialize-compose-test-env.mjs'

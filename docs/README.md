@@ -25,7 +25,6 @@ Agent-only 작업 메모와 로컬 상태 파일은 `.gitignore` 대상이므로
 | [Release UI QA Matrix](https://github.com/AquilaXk/aquila-blog-web/blob/main/docs/design/release-ui-qa-matrix.md) | Web-owned release UI quality checklist |
 | [Security CSP Rollout](https://github.com/AquilaXk/aquila-blog-web/blob/main/docs/design/security-csp-rollout.md) | Web-owned CSP rollout notes |
 | [Launch Gate Operations](design/launch-gate-operations.md) | Launch readiness and operations checks |
-| [Privacy Launch Gate Checklist](design/privacy-launch-gate-checklist.md) | Privacy launch checklist |
 | [Code Comment Policy](design/code-comment-policy.md) | Code comment policy |
 
 ## Tracked Ops Runbooks
@@ -33,15 +32,6 @@ Agent-only 작업 메모와 로컬 상태 파일은 `.gitignore` 대상이므로
 | Document | Description |
 | --- | --- |
 | [Cloud Transfer Limits and Recovery](ops/cloud-transfer-limits-and-recovery.md) | Edge/Caddy/Spring size limits, Cloudflare ToS risk, upload/playback recovery commands |
-
-## Tracked Legal / Privacy Runbooks
-
-| Document | Description |
-| --- | --- |
-| [Account Deletion Runbook](legal/account-deletion-runbook.md) | Account deletion process |
-| [Backup Restore Privacy Runbook](legal/backup-restore-privacy-runbook.md) | Backup and restore privacy checks |
-| [Data Subject Request Runbook](legal/data-subject-request-runbook.md) | Data subject request handling |
-| [Policy Change Runbook](legal/policy-change-runbook.md) | Policy change process |
-| [Privacy Incident Runbook](legal/privacy-incident-runbook.md) | Privacy incident response |
-| [Privacy Tabletop Exercise Template](legal/privacy-tabletop-exercise-template.md) | Tabletop exercise template |
-| [Vendor Onboarding Runbook](legal/vendor-onboarding-runbook.md) | Vendor onboarding checks |
+| [Backup Restore Runbook](ops/backup-restore-runbook.md) | Isolated encrypted backup restore and traffic-open procedure |
+| [Security Incident Runbook](ops/security-incident-runbook.md) | Generic security incident response |
+| [Security Incident Exercise Template](ops/security-incident-exercise-template.md) | Incident exercise record template |

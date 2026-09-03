@@ -10,10 +10,7 @@ on:
       - "back/**"
       - "contracts/public-api/**"
       - "contracts/web/**"
-      - "legal/**"
       - "tools/contracts/**"
-      - "tools/legal/**"
-      - "tools/privacy/**"
       - "tools/test/**"
       - "tools/test/public-contract-manifest.test.mjs"
       - "tools/test/sync-public-contract-workflow.test.mjs"
@@ -111,12 +108,6 @@ jobs:
 
       - name: Verify contentHtml trust inventory contract
         run: node --test tools/test/content-html-trust-inventory.test.mjs
-
-      - name: Verify member privacy email eligibility inventory contract
-        run: node --test tools/test/member-privacy-email-eligibility-inventory.test.mjs
-
-      - name: Verify account-deletion event drain inventory contract
-        run: node --test tools/test/post-account-deletion-event-drain-inventory.test.mjs
 
       - name: Verify hot-query telemetry capability contract
         run: node --test tools/test/hot-query-telemetry-capability.test.mjs

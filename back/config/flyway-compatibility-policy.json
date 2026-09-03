@@ -44,6 +44,12 @@
       "repository": "AquilaXk/aquila-blog",
       "mergeSha": "19f9040c625bd5f36fc871311e28826d89db3f75",
       "deployRunId": 33614068613
+    },
+    {
+      "id": "task-payload-v2-producer",
+      "repository": "AquilaXk/aquila-blog",
+      "mergeSha": "2551e6c4068aec245bdda57b843d4f3aaf35b1c2",
+      "deployRunId": 33724981013
     }
   ]
 }

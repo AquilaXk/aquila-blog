@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
+RELEASE_STATE_FILE="${SCRIPT_DIR}/.backend-release-state.env"
 
 compose() {
   bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
@@ -102,6 +103,31 @@ backend_image_key() {
   esac
 }
 
+release_state_image_key() {
+  local service="$1"
+  case "${service}" in
+    back_blue) echo "back_blue_image" ;;
+    back_green) echo "back_green_image" ;;
+    back_read) echo "back_read_image" ;;
+    back_admin) echo "back_admin_image" ;;
+    back_worker) echo "back_worker_image" ;;
+    *)
+      echo "unknown backend release-state service: ${service}" >&2
+      return 1
+      ;;
+  esac
+}
+
+release_state_image_for_service() {
+  local service="$1"
+  local key
+  key="$(release_state_image_key "${service}")"
+  awk -F= -v key="${key}" '
+    $1 == key { value = substr($0, index($0, "=") + 1); count++ }
+    END { if (count != 1 || value == "") exit 1; print value }
+  ' "${RELEASE_STATE_FILE}"
+}
+
 require_digest_image_value() {
   local key="$1"
   local value="$2"
@@ -121,8 +147,7 @@ require_digest_image_value() {
 
 repair_runtime_back_image_if_missing() {
   local service="$1"
-  local fallback="$2"
-  local key value repaired_value legacy_value
+  local key value repaired_value
   key="$(backend_image_key "${service}")"
   value="$(trim_quotes "$(env_value "${key}")")"
   if [[ -n "${value}" ]]; then
@@ -131,22 +156,17 @@ repair_runtime_back_image_if_missing() {
     return 0
   fi
 
-  repaired_value="$(container_image_for_service_any_state "${service}" || true)"
-  if [[ -n "${repaired_value}" ]]; then
-    echo "recover ${key} repair source=${service}_container image=${repaired_value}"
-  fi
-
-  if [[ -z "${repaired_value}" ]]; then
-    legacy_value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-    if [[ -n "${legacy_value}" ]]; then
-      repaired_value="${legacy_value}"
-      echo "recover ${key} repair source=legacy_BACK_IMAGE image=${repaired_value}"
+  if [[ -f "${RELEASE_STATE_FILE}" ]]; then
+    if ! repaired_value="$(release_state_image_for_service "${service}")"; then
+      echo "recover ${key} release-state evidence is missing or malformed: ${RELEASE_STATE_FILE}" >&2
+      exit 1
     fi
-  fi
-
-  if [[ -z "${repaired_value}" ]]; then
-    repaired_value="${fallback}"
-    echo "recover ${key} repair source=fallback image=${repaired_value}"
+    echo "recover ${key} repair source=release_state image=${repaired_value}"
+  else
+    repaired_value="$(container_image_for_service_any_state "${service}" || true)"
+    if [[ -n "${repaired_value}" ]]; then
+      echo "recover ${key} repair source=${service}_container image=${repaired_value}"
+    fi
   fi
 
   require_digest_image_value "${key}" "${repaired_value}"
@@ -154,27 +174,12 @@ repair_runtime_back_image_if_missing() {
   echo "recover repaired missing ${key}=${repaired_value}"
 }
 
-require_back_image() {
-  local state_backend fallback_image
-  state_backend="$(cat "${SCRIPT_DIR}/.active_backend" 2>/dev/null || true)"
-  if [[ "${state_backend}" != "back_blue" && "${state_backend}" != "back_green" ]]; then
-    state_backend="back_blue"
-  fi
-
-  fallback_image="$(container_image_for_service_any_state "${state_backend}" || true)"
-  if [[ -z "${fallback_image}" ]]; then
-    fallback_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  fi
-  if [[ -z "${fallback_image}" ]]; then
-    echo "backend image is empty in ${ENV_FILE} and no repair source is available." >&2
-    exit 1
-  fi
-
-  repair_runtime_back_image_if_missing "back_blue" "${fallback_image}"
-  repair_runtime_back_image_if_missing "back_green" "${fallback_image}"
-  repair_runtime_back_image_if_missing "back_read" "${fallback_image}"
-  repair_runtime_back_image_if_missing "back_admin" "${fallback_image}"
-  repair_runtime_back_image_if_missing "back_worker" "${fallback_image}"
+require_runtime_back_images() {
+  repair_runtime_back_image_if_missing "back_blue"
+  repair_runtime_back_image_if_missing "back_green"
+  repair_runtime_back_image_if_missing "back_read"
+  repair_runtime_back_image_if_missing "back_admin"
+  repair_runtime_back_image_if_missing "back_worker"
 }
 
 section() {
@@ -247,7 +252,7 @@ main() {
     exit 1
   fi
 
-  require_back_image
+  require_runtime_back_images
 
   section "0" "start core services"
   compose up -d back_blue back_green caddy cloudflared uptime_kuma \

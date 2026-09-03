@@ -304,11 +304,9 @@ require_digest_image_value() {
 
 repair_runtime_back_image_if_missing() {
   local service="$1"
-  local fallback="$2"
-  local key metadata_key repaired_value metadata_image legacy_image
+  local key metadata_key repaired_value metadata_image
   repaired_value=""
   metadata_image=""
-  legacy_image=""
   key="$(backend_image_key "${service}")"
   if [[ "${service}" == "back_worker" && "${PRESERVE_CURRENT_WORKER_IMAGE}" == "true" ]]; then
     require_digest_image_value "${key}" "${CURRENT_WORKER_IMAGE}"
@@ -331,24 +329,9 @@ repair_runtime_back_image_if_missing() {
   fi
 
   if [[ -z "${repaired_value}" ]]; then
-    repaired_value="${fallback}"
-    if [[ -n "${repaired_value}" ]]; then
-      echo "rollback ${key} repair source=backup_fallback image=${repaired_value}"
-    fi
-  fi
-
-  if [[ -z "${repaired_value}" ]]; then
     repaired_value="$(container_image_for_service_any_state "${service}" || true)"
     if [[ -n "${repaired_value}" ]]; then
       echo "rollback ${key} repair source=${service}_container image=${repaired_value}"
-    fi
-  fi
-
-  if [[ -z "${repaired_value}" ]]; then
-    legacy_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-    if [[ -n "${legacy_image}" ]]; then
-      repaired_value="${legacy_image}"
-      echo "rollback ${key} repair source=legacy_BACK_IMAGE image=${repaired_value}"
     fi
   fi
 
@@ -358,24 +341,11 @@ repair_runtime_back_image_if_missing() {
 }
 
 repair_back_image_if_missing() {
-  local target_image
-  target_image="$(container_image_for_service_any_state "${target_backend}" || true)"
-  if [[ -z "${target_image}" ]]; then
-    target_image="$(trim_quotes "$(backup_metadata_value "active_backend_image")")"
-  fi
-  if [[ -z "${target_image}" ]]; then
-    target_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  fi
-  if [[ -z "${target_image}" ]]; then
-    echo "rollback failed: no target backend image repair source available" >&2
-    return 1
-  fi
-
-  repair_runtime_back_image_if_missing "${target_backend}" "${target_image}"
-  repair_runtime_back_image_if_missing "${inactive_backend}" "${target_image}"
-  repair_runtime_back_image_if_missing "back_read" "${target_image}"
-  repair_runtime_back_image_if_missing "back_admin" "${target_image}"
-  repair_runtime_back_image_if_missing "back_worker" "${target_image}"
+  repair_runtime_back_image_if_missing "${target_backend}"
+  repair_runtime_back_image_if_missing "${inactive_backend}"
+  repair_runtime_back_image_if_missing "back_read"
+  repair_runtime_back_image_if_missing "back_admin"
+  repair_runtime_back_image_if_missing "back_worker"
 }
 
 restore_compose_image_metadata() {

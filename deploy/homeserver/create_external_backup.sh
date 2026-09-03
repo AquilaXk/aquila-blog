@@ -335,24 +335,14 @@ container_image_for_service_any_state() {
 ensure_backend_runtime_image_env_key() {
   local key="$1"
   local service="$2"
-  local value legacy_value container_value
+  local value container_value
   value="$(trim_quotes "$(env_value "${key}")")"
   if [[ -n "${value}" ]]; then
     if is_digest_image_value "${value}"; then
       stage_backend_runtime_image_env_key "${key}" "${value}"
       return 0
     fi
-    log "invalid ${key} runtime image env value will try fallback sources before backup compose evaluation"
-  fi
-
-  legacy_value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  if [[ -n "${legacy_value}" ]]; then
-    if is_digest_image_value "${legacy_value}"; then
-      stage_backend_runtime_image_env_key "${key}" "${legacy_value}"
-      log "auto-filled ${key} from legacy BACK_IMAGE for compose preflight"
-      return 0
-    fi
-    log "invalid legacy BACK_IMAGE value will try container image before backup compose evaluation"
+    log "invalid ${key} runtime image env value will try same-service container evidence before backup compose evaluation"
   fi
 
   container_value="$(container_image_for_service_any_state "${service}" || true)"

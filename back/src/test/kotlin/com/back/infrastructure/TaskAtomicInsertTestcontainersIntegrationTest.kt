@@ -144,8 +144,7 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
             )
 
             val currentUid = UUID.randomUUID()
-            val currentEnvelope =
-                """{"schemaVersion":2,"taskType":"test.atomic-insert","sensitivity":"INTERNAL","createdAtEpochMs":1786406400000,"expiresAtEpochMs":null,"payloadJson":"{}"}"""
+            val currentEnvelope = v2Envelope(currentUid, taskType = "test.atomic-insert")
             assertEquals(1, insert(connection, insertSql, currentUid, payload = currentEnvelope))
             assertEquals(currentEnvelope, payloadByUid(connection, currentUid))
 
@@ -173,6 +172,42 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
 
     @Test
     @Order(3)
+    fun `v2 storage rejects payload bodies that runtime would quarantine`() {
+        migrate()
+        val insertSql = productionAtomicInsertSql()
+
+        postgres.createConnection("").use { connection ->
+            val invalidBodies =
+                listOf<(UUID) -> String>(
+                    { "not-json" },
+                    { "[]" },
+                    { "{}" },
+                    { _ -> objectMapper.writeValueAsString(TaskV2Payload(UUID.randomUUID(), "Post", 88L)) },
+                    { uid -> objectMapper.writeValueAsString(TaskV2Payload(uid, "Member", 88L)) },
+                    { uid -> objectMapper.writeValueAsString(TaskV2Payload(uid, "Post", 89L)) },
+                )
+
+            invalidBodies.forEach { invalidBody ->
+                val taskUid = UUID.randomUUID()
+                val envelope = v2EnvelopeWithBody("post.interaction.side-effect", invalidBody(taskUid))
+
+                assertFailsWith<java.sql.SQLException> {
+                    insert(
+                        connection = connection,
+                        sql = insertSql,
+                        uid = taskUid,
+                        aggregateId = 88L,
+                        taskType = "post.interaction.side-effect",
+                        payload = envelope,
+                    )
+                }
+                assertEquals(0, countByUid(connection, taskUid))
+            }
+        }
+    }
+
+    @Test
+    @Order(4)
     fun `same uid insert is atomic and duplicate transaction remains usable`() {
         migrate()
         val insertSql = productionAtomicInsertSql()
@@ -279,22 +314,29 @@ class TaskAtomicInsertTestcontainersIntegrationTest {
         uid: UUID,
         aggregateId: Long = 1L,
         taskType: String,
-    ): String {
-        val payloadJson =
-            objectMapper.writeValueAsString(
-                TaskV2Payload(
-                    uid = uid,
-                    aggregateType = "Post",
-                    aggregateId = aggregateId,
+    ): String =
+        v2EnvelopeWithBody(
+            taskType = taskType,
+            payloadJson =
+                objectMapper.writeValueAsString(
+                    TaskV2Payload(
+                        uid = uid,
+                        aggregateType = "Post",
+                        aggregateId = aggregateId,
+                    ),
                 ),
-            )
-        return objectMapper.writeValueAsString(
+        )
+
+    private fun v2EnvelopeWithBody(
+        taskType: String,
+        payloadJson: String,
+    ): String =
+        objectMapper.writeValueAsString(
             TaskV2Envelope(
                 taskType = taskType,
                 payloadJson = payloadJson,
             ),
         )
-    }
 
     private fun payloadByUid(
         connection: Connection,

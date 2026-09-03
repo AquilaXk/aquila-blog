@@ -42,5 +42,18 @@ ALTER TABLE task
                 )
             )
             AND jsonb_typeof(payload::JSONB -> 'payloadJson') = 'string'
+            AND CASE
+                WHEN NOT pg_input_is_valid(payload::JSONB ->> 'payloadJson', 'jsonb') THEN FALSE
+                ELSE
+                    jsonb_typeof((payload::JSONB ->> 'payloadJson')::JSONB) = 'object'
+                    AND (payload::JSONB ->> 'payloadJson')::JSONB ?& ARRAY[
+                        'uid',
+                        'aggregateType',
+                        'aggregateId'
+                    ]
+                    AND (payload::JSONB ->> 'payloadJson')::JSONB ->> 'uid' = uid::TEXT
+                    AND (payload::JSONB ->> 'payloadJson')::JSONB ->> 'aggregateType' = aggregate_type
+                    AND (payload::JSONB ->> 'payloadJson')::JSONB ->> 'aggregateId' = aggregate_id::TEXT
+            END
         )
     );

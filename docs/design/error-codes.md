@@ -6,7 +6,6 @@
 - `resultCode` = `{HttpStatus}-{n}`
 - 두 번째 숫자 대역: `1–9` global/security, `10–19` post, `20–29` member/auth, `30–39` cloud/storage, `40–49` admin/system, `50+` reserved
 - `kind`: `USER`(warn 1-line) / `DEVELOPER`(error + stack)
-- `409-4`는 oauth signup policy 전용. 값/의미 변경 금지
 
 ## Codes
 
@@ -37,7 +36,6 @@
 | 409-1 | 409 | USER | DB integrity / optimistic lock only | 동시에 처리된 요청 충돌이 발생했습니다. 잠시 후 다시 시도해주세요. |
 | 409-2 | 409 | USER | resource conflict (email 등) | 이미 사용 중인 리소스입니다. |
 | 409-3 | 409 | USER | member signup race | 동시에 처리된 회원가입 요청입니다. 다시 시도해주세요. |
-| 409-4 | 409 | USER | oauth signup policy (front depends) | 약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요. |
 | 409-10 | 409 | USER | PostApplicationService concurrent edit | 다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요. |
 | 409-20 | 409 | USER | MemberApplicationService duplicate | 이미 존재하는 회원 아이디입니다. |
 | 409-21 | 409 | USER | withdrawn member / privacy delete | 이미 탈퇴 처리된 계정입니다. |

@@ -157,12 +157,6 @@ enum class ErrorCode(
         "동시에 처리된 회원가입 요청입니다. 다시 시도해주세요.",
         ErrorKind.USER,
     ),
-    OAUTH_SIGNUP_POLICY(
-        "409-4",
-        HttpStatus.CONFLICT,
-        "약관 또는 개인정보처리방침이 변경되었습니다. 최신 내용을 확인하고 다시 동의해주세요.",
-        ErrorKind.USER,
-    ),
     POST_CONCURRENT_EDIT(
         "409-10",
         HttpStatus.CONFLICT,

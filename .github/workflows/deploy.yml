@@ -1006,7 +1006,7 @@ jobs:
             fi
 
             local rollback_status=0
-            if ! env -u BACK_IMAGE RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" \
+            if ! RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" \
               ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}"; then
               echo "rollback script failed after minimal backup restore: ${BACKUP_DIR} (reason=${reason})" >&2
               rollback_status=1
@@ -1341,7 +1341,7 @@ jobs:
           }
 
           require_nonempty_env_key "CF_TUNNEL_TOKEN"
-          require_digest_image_value "BACK_IMAGE" "${STAGED_BACK_IMAGE}"
+          require_digest_image_value "STAGED_BACK_IMAGE" "${STAGED_BACK_IMAGE}"
           ensure_image_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
           ensure_image_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:latest"
           ensure_image_key_from_local_digest "DOCKER_SOCKET_PROXY_IMAGE" "tecnativa/docker-socket-proxy:0.3.0"
@@ -1386,7 +1386,7 @@ jobs:
             exit 1
           fi
 
-          if ! BACK_IMAGE="${STAGED_BACK_IMAGE}" ./deploy/homeserver/pgroonga_precheck.sh; then
+          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" ./deploy/homeserver/pgroonga_precheck.sh; then
             exit 1
           fi
 

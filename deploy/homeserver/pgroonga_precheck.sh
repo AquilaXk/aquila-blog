@@ -12,11 +12,11 @@ TARGET_DB_NAME="unknown"
 
 compose() {
   bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
-  BACK_BLUE_IMAGE="${BACK_IMAGE}" \
-    BACK_GREEN_IMAGE="${BACK_IMAGE}" \
-    BACK_READ_IMAGE="${BACK_IMAGE}" \
-    BACK_ADMIN_IMAGE="${BACK_IMAGE}" \
-    BACK_WORKER_IMAGE="${BACK_IMAGE}" \
+  BACK_BLUE_IMAGE="${STAGED_BACK_IMAGE}" \
+    BACK_GREEN_IMAGE="${STAGED_BACK_IMAGE}" \
+    BACK_READ_IMAGE="${STAGED_BACK_IMAGE}" \
+    BACK_ADMIN_IMAGE="${STAGED_BACK_IMAGE}" \
+    BACK_WORKER_IMAGE="${STAGED_BACK_IMAGE}" \
     docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -49,18 +49,18 @@ require_digest_image_value() {
   local key="$1"
   local value="$2"
   if [[ -z "${value}" ]]; then
-    pgroonga_precheck_fail "back_image_missing" "required image value is missing: ${key}"
+    pgroonga_precheck_fail "staged_back_image_missing" "required image value is missing: ${key}"
   fi
   if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
-    pgroonga_precheck_fail "back_image_latest_forbidden" "latest tag is not allowed for ${key}: ${value}"
+    pgroonga_precheck_fail "staged_back_image_latest_forbidden" "latest tag is not allowed for ${key}: ${value}"
   fi
   if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
-    pgroonga_precheck_fail "back_image_not_digest" "BACK_IMAGE must be pinned by sha256 digest value=${value}"
+    pgroonga_precheck_fail "staged_back_image_not_digest" "STAGED_BACK_IMAGE must be pinned by sha256 digest value=${value}"
   fi
 }
 
-require_back_image() {
-  require_digest_image_value "BACK_IMAGE" "${BACK_IMAGE:-}"
+require_staged_back_image() {
+  require_digest_image_value "STAGED_BACK_IMAGE" "${STAGED_BACK_IMAGE:-}"
 }
 
 resolve_target_db_name() {
@@ -129,7 +129,7 @@ main() {
   fi
 
   TARGET_DB_NAME="$(resolve_target_db_name)"
-  require_back_image
+  require_staged_back_image
 
   echo "pgroonga precheck target db=${TARGET_DB_NAME}"
   startup_stderr="$(mktemp)"

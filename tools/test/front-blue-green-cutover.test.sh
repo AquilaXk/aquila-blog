@@ -382,8 +382,8 @@ assert_file_lacks() {
   fi
 }
 
-good_image="ghcr.io/aquilaxk/aquila-blog-front@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-old_image="ghcr.io/aquilaxk/aquila-blog-front@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+good_image="ghcr.io/aquilaxk/aquila-blog-web-front@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+old_image="ghcr.io/aquilaxk/aquila-blog-web-front@sha256:2222222222222222222222222222222222222222222222222222222222222222"
 new_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 old_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 wrong_sha="cccccccccccccccccccccccccccccccccccccccc"
@@ -408,7 +408,7 @@ assert_file_lacks "a failed front deploy must not emit a success marker" "${case
 # 3) digest가 아닌 이미지 참조와 빈 build sha는 cutover 전에 막힌다.
 # ---------------------------------------------------------------------------
 setup_case "tag-image-rejected" "runtime-split,front" "blog.aquilaxk.site"
-status="$(run_front_case 'STAGED_FRONT_IMAGE="ghcr.io/aquilaxk/aquila-blog-front:sha-'"${new_sha}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+status="$(run_front_case 'STAGED_FRONT_IMAGE="ghcr.io/aquilaxk/aquila-blog-web-front:sha-'"${new_sha}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
 assert_equals "a tag ref must be refused" "1" "${status}"
 
 setup_case "missing-build-sha-rejected" "runtime-split,front" "blog.aquilaxk.site"

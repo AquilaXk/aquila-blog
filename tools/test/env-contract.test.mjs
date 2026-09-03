@@ -2801,12 +2801,20 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   )
   assert.match(
     externalBackupScript,
-    /invalid .*runtime image env .*will try fallback sources before backup compose evaluation/,
+    /invalid .*runtime image env .*will try same-service container evidence before backup compose evaluation/,
   )
-  assert.match(externalBackupScript, /stage_backend_runtime_image_env_key "\$\{key\}" "\$\{legacy_value\}"/)
   assert.match(externalBackupScript, /stage_backend_runtime_image_env_key "\$\{key\}" "\$\{container_value\}"/)
+  assert.doesNotMatch(externalBackupScript, /env_value "BACK_IMAGE"/)
+  assert.doesNotMatch(externalBackupScript, /legacy BACK_IMAGE/)
   assert.match(deployScript, /write_backend_release_state "\$\{next_backend\}" "\$\{active_backend\}"/)
   assert.match(deployScript, /prepare_runtime_backend_images "\$\{active_backend\}" "\$\{next_backend\}" "\$\{STAGED_BACK_IMAGE\}"/)
+  assert.match(deployScript, /has_existing_backend_release_evidence\(\) \{/)
+  assert.match(deployScript, /if has_existing_backend_release_evidence; then[\s\S]*refusing to substitute a staged image/)
+  assert.match(deployScript, /\[\[ -e "\$\{STATE_FILE\}" \|\| -e "\$\{RELEASE_STATE_FILE\}" \]\] && return 0/)
+  assert.match(deployScript, /for service in back_blue back_green back_read back_admin back_worker/)
+  assert.match(deployScript, /echo "\$\{staged_image\}"/)
+  assert.doesNotMatch(deployScript, /env_value "BACK_IMAGE"/)
+  assert.doesNotMatch(deployScript, /\bBACK_IMAGE=/)
   assert.match(backupScript, /\.backend-release-state\.env/)
   assert.doesNotMatch(backupScript, forbiddenSecretBackupCopyPattern)
   assert.match(backupScript, /secret_files_copied=false/)
@@ -2826,12 +2834,18 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(rollbackScript, /backup_image_key_for_service\(\)/)
   assert.match(rollbackScript, /COMPOSE_IMAGE_METADATA_KEYS=\(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE CADDY_IMAGE/)
   assert.match(rollbackScript, /restore_compose_image_metadata/)
-  assert.match(rollbackScript, /local key metadata_key repaired_value metadata_image legacy_image\s+repaired_value=""/)
+  assert.match(rollbackScript, /local key metadata_key repaired_value metadata_image\s+repaired_value=""/)
   assert.match(rollbackScript, /rollback \$\{key\} restored from backup_metadata/)
-  assert.match(rollbackScript, /rollback \$\{key\} repair source=backup_fallback/)
+  assert.match(rollbackScript, /rollback \$\{key\} repair source=\$\{service\}_container/)
   assert.doesNotMatch(rollbackScript, /rollback \$\{key\} preserved:/)
+  assert.doesNotMatch(rollbackScript, /env_value "BACK_IMAGE"/)
+  assert.doesNotMatch(recoverScript, /env_value "BACK_IMAGE"/)
   assert.match(rollbackScript, /repair_runtime_back_image_if_missing "\$\{target_backend\}"/)
   assert.match(recoverScript, /repair_runtime_back_image_if_missing "back_worker"/)
+  assert.match(recoverScript, /RELEASE_STATE_FILE="\$\{SCRIPT_DIR\}\/\.backend-release-state\.env"/)
+  assert.match(recoverScript, /release_state_image_key\(\)/)
+  assert.match(recoverScript, /release_state_image_for_service "\$\{service\}"/)
+  assert.match(recoverScript, /recover \$\{key\} repair source=release_state image=\$\{repaired_value\}/)
   assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE"/)
   assert.match(statusScript, /ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE"/)
   assert.match(steadyStateGuard, /image_key="BACK_BLUE_IMAGE"/)
@@ -2861,6 +2875,9 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(steadyStateGuard, /image_key="BACK_GREEN_IMAGE"/)
   assert.doesNotMatch(statusScript, /env_value "BACK_IMAGE"/)
   assert.doesNotMatch(steadyStateGuard, /env_value "BACK_IMAGE"/)
+  assert.match(workflow, /require_digest_image_value "STAGED_BACK_IMAGE" "\$\{STAGED_BACK_IMAGE\}"/)
+  assert.match(workflow, /if ! STAGED_BACK_IMAGE="\$\{STAGED_BACK_IMAGE\}" \.\/deploy\/homeserver\/pgroonga_precheck\.sh; then/)
+  assert.doesNotMatch(workflow, /\bBACK_IMAGE=/)
 })
 
 test("rollback keeps the current materialized keyring and only arms after blue-green activation", () => {
@@ -2888,15 +2905,13 @@ test("rollback keeps the current materialized keyring and only arms after blue-g
   assert(materializedIndex > 0 && materializedIndex < blueGreenIndex, "rollback must arm immediately before blue-green activation")
 })
 
-test("served cutover does not retain the retired SMTP rollback bridge", () => {
+test("served cutover does not retain retired rollback environment aliases", () => {
   const workflow = readFileSync(workflowPath, "utf8")
 
   assert.doesNotMatch(workflow, /run_rollback_script_with_current_env_contract/)
   assert.doesNotMatch(workflow, /CUSTOM__MEMBER__SIGNUP__MAIL_FROM/)
-  assert.match(
-    workflow,
-    /if ! env -u BACK_IMAGE RUNTIME_SPLIT_ENABLED="\$\{ROLLBACK_RUNTIME_SPLIT_ENABLED\}" \\\n\s+\.\/deploy\/homeserver\/rollback_last_deploy\.sh "\$\{BACKUP_DIR\}"; then/,
-  )
+  assert.match(workflow, /if ! RUNTIME_SPLIT_ENABLED="\$\{ROLLBACK_RUNTIME_SPLIT_ENABLED\}" \\\n\s+\.\/deploy\/homeserver\/rollback_last_deploy\.sh "\$\{BACKUP_DIR\}"; then/)
+  assert.doesNotMatch(workflow, /env -u BACK_IMAGE/)
 })
 
 test("deploy workflow requires pinned known_hosts and private GHCR credentials", () => {
@@ -5167,6 +5182,10 @@ test("배포·롤백 스크립트는 env 파일의 COMPOSE_PROFILES를 병합하
 test(".env.prod.example은 자기 자신이 env 계약을 통과한다", async () => {
   const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
   const example = readFileSync(envExamplePath, "utf8")
+
+  assert.doesNotMatch(example, /^BACK_IMAGE=/m)
+  assert.doesNotMatch(example, /aquila-blog-front/)
+  assert.match(example, /aquila-blog-web-front/)
 
   // 예시 파일은 placeholder(change_me / example.com / <digest>)로 채워져 있는 것이 정상이라
   // 값 자체를 보는 규칙은 끈다. 이 게이트가 지키는 것은 키 사이의 정합성이다 —

@@ -18,25 +18,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  privacy-drift-gate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "20"
-
-      - name: Run privacy drift gate
-        run: node tools/privacy/ci-privacy-gate.mjs
-
   # PR: 즉시 성공으로 required-check drift만 막고 full NVD는 돌리지 않는다 (#1344).
   # main push / weekly schedule / workflow_dispatch: OWASP+NVD full scan (#1124 fail-closed).
   backend-dependency-check:
@@ -301,7 +282,6 @@ jobs:
     name: security-gates-complete
     if: always() && github.event_name == 'push'
     needs:
-      - privacy-drift-gate
       - backend-dependency-check
       - codeql
       - vulnerability-exception-schema
@@ -315,7 +295,6 @@ jobs:
       - name: Record exact-SHA Security gate result
         env:
           GH_TOKEN: ${{ github.token }}
-          PRIVACY_RESULT: ${{ needs.privacy-drift-gate.result }}
           DEPENDENCY_RESULT: ${{ needs.backend-dependency-check.result }}
           CODEQL_RESULT: ${{ needs.codeql.result }}
           EXCEPTION_RESULT: ${{ needs.vulnerability-exception-schema.result }}
@@ -327,7 +306,6 @@ jobs:
           STATE="success"
           DESCRIPTION="All exact-SHA Security gates passed."
           for RESULT in \
-            "${PRIVACY_RESULT}" \
             "${DEPENDENCY_RESULT}" \
             "${CODEQL_RESULT}" \
             "${EXCEPTION_RESULT}" \

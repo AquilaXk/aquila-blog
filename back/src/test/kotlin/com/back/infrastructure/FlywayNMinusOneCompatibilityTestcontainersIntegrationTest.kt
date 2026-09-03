@@ -86,6 +86,9 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
         """
         CREATE TABLE task (
             id bigint PRIMARY KEY,
+            uid uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001',
+            aggregate_type text NOT NULL DEFAULT 'Post',
+            aggregate_id bigint NOT NULL DEFAULT 1,
             task_type text NOT NULL,
             payload text NOT NULL,
             status text NOT NULL DEFAULT 'PENDING',
@@ -498,7 +501,7 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
         val taskMigrations = migrations.resolve("task-payload-v2-success").createDirectories()
         val productionMigration = readProductionMigration(migrationName)
         val v2Payload =
-            """{"schemaVersion":2,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":1786406400000,"expiresAtEpochMs":null,"payloadJson":"{}"}"""
+            """{"schemaVersion":2,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":1786406400000,"expiresAtEpochMs":null,"payloadJson":"{\"uid\":\"00000000-0000-0000-0000-000000000001\",\"aggregateType\":\"Post\",\"aggregateId\":1}"}"""
 
         assertEquals(productionMigration, readTestMigration(migrationName))
         taskMigrations.resolve("V1__task_payload_v1_baseline.sql").writeText(taskPayloadV1Baseline)

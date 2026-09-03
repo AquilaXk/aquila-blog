@@ -23,12 +23,9 @@
 | 403-1 | 403 | USER | Security AccessDenied only | 권한이 없습니다. |
 | 403-2 | 403 | USER | ApiMutationCsrfGuardFilter Origin | 허용되지 않은 Origin의 요청입니다. |
 | 403-3 | 403 | USER | ApiMutationCsrfGuardFilter CSRF preflight | CSRF preflight 헤더가 필요합니다. |
-| 403-4 | 403 | USER | OAuth signup required (failure handler) | 소셜 로그인 신규 가입은 현재 지원하지 않습니다. |
 | 403-10 | 403 | USER | PostHasPolicy edit denied | 작성자만 글을 수정할 수 있습니다. |
 | 403-11 | 403 | USER | PostHasPolicy view denied | 글 조회권한이 없습니다. |
 | 403-12 | 403 | USER | PostHasPolicy delete denied | 작성자만 글을 삭제할 수 있습니다. |
-| 403-13 | 403 | USER | PostCommentHasPolicy edit denied | 작성자만 댓글을 수정할 수 있습니다. |
-| 403-14 | 403 | USER | PostCommentHasPolicy delete denied | 작성자만 댓글을 삭제할 수 있습니다. |
 | 403-30 | 403 | USER | CloudExternalPlaybackTokenService | 외부 재생 token이 올바르지 않거나 만료되었습니다. |
 | 404-1 | 404 | USER | 일반 not found / ExceptionHandler | 해당 데이터가 존재하지 않습니다. |
 | 404-2 | 404 | USER | member/oauth signup session not found | 유효하지 않은 세션입니다. |
@@ -52,7 +49,6 @@
 | 503-2 | 503 | DEVELOPER | dependency not ready | 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요. |
 | 503-3 | 503 | DEVELOPER | signup protection not ready | 회원가입 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요. |
 | 503-4 | 503 | DEVELOPER | ApiRateLimitBackstopFilter redis 미준비 | API 보호 시스템이 준비되지 않았습니다. |
-| 503-5 | 503 | USER | signup not launched | 회원가입은 출시 준비 중입니다. |
 
 ## Add a new code (3 steps)
 

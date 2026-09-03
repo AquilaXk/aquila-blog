@@ -67,9 +67,6 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 
-	@accountDeletionSensitive path /member/api/v1/privacy/account
-	log_skip @accountDeletionSensitive
-
 	@cloudExternalContentSensitive path /system/api/v1/adm/cloud/files/*/external-content
 	log_skip @cloudExternalContentSensitive
 

@@ -43,7 +43,7 @@ data class FeedPostDto(
                 authorId = post.author.id,
                 authorName = post.author.name,
                 authorUsername = post.author.name,
-                authorProfileImgUrl = post.author.profileImgUrlVersionedOrDefault,
+                authorProfileImgUrl = post.author.publishedProfileImageUrlVersionedOrDefault,
                 title = post.title,
                 thumbnail = thumbnail,
                 summary = post.summaryText.orEmpty(),

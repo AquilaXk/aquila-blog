@@ -20,7 +20,6 @@ is_allowed_markdown() {
     back/REFACTORING_ROADMAP.md|\
     deploy/homeserver/HARDENING.md|\
     docs/README.md|\
-    infra/README.md|\
     perf/k6/README.md|\
     perf/k6/cloud-launch-criteria.md|\
     tools/templates/agent-plan.compact.md|\

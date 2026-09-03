@@ -16,6 +16,7 @@ run_with_temp_index() {
   GIT_INDEX_FILE="${tmp_index}" git read-tree HEAD
   GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch front >/dev/null
   GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch docs/legal >/dev/null
+  GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch infra >/dev/null
   set +e
   GIT_INDEX_FILE="${tmp_index}" bash -c "${command}"
   local status=$?

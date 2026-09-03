@@ -2,7 +2,6 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
@@ -21,6 +20,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.any
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.times
 import java.time.Instant
 import java.util.Optional
 
@@ -79,7 +79,8 @@ class PostApplicationUseCaseCollaboratorTest {
     fun `temp draft lookup returns the tracked post and rejects lock contention`() {
         val postRepository = mock(PostRepositoryPort::class.java)
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
-        val service = PostTempDraftService(postRepository, memberAttrRepository)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
         val author = testMember()
         val tempPost = testPost(author = author)
         val marker = MemberAttr(1, author, "activeTempDraftPostId", tempPost.id.toString())
@@ -95,20 +96,39 @@ class PostApplicationUseCaseCollaboratorTest {
     }
 
     @Test
-    fun `post hydration applies one persisted profile image to duplicate member instances`() {
-        val postAttrRepository = mock(PostAttrRepositoryPort::class.java)
+    fun `temp draft lookup ignores an untracked legacy title and creates a marked post`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
-        val service = PostHydrationService(postAttrRepository, memberAttrRepository)
-        val first = testMember(id = 3)
-        val second = testMember(id = 3)
-        val persistedAttr = MemberAttr(1, first, PROFILE_IMG_URL, "https://example.com/profile.png")
-        given(memberAttrRepository.findBySubjectInAndNameIn(listOf(first), listOf(PROFILE_IMG_URL)))
-            .willReturn(listOf(persistedAttr))
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
+        val author = testMember()
+        val untrackedLegacyPost = testPost(author = author)
+        var savedMarker: MemberAttr? = null
+        untrackedLegacyPost.title = "임시글"
+        untrackedLegacyPost.published = false
+        given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(null)
+        given(memberAttrRepository.incrementIntValue(author, "activeTempDraftLock", 1)).willReturn(1)
+        given(postRepository.save(anyValue())).willAnswer { it.arguments[0] as Post }
+        given(memberAttrRepository.save(anyValue())).willAnswer {
+            (it.arguments[0] as MemberAttr).also { marker -> savedMarker = marker }
+        }
 
-        service.hydrateMembersProfileImgAttrs(listOf(first, second))
+        assertThat(service.findTemp(author)).isNull()
+        val (createdPost, created) = service.getOrCreateTemp(author)
 
-        assertThat(first.profileImgUrl).isEqualTo("https://example.com/profile.png")
-        assertThat(second.profileImgUrl).isEqualTo("https://example.com/profile.png")
+        assertThat(created).isTrue()
+        assertThat(createdPost).isNotSameAs(untrackedLegacyPost)
+        assertThat(createdPost.title).isEqualTo("임시글")
+        val marker = requireNotNull(savedMarker)
+        then(postRepository).should().save(createdPost)
+        then(postRepository).should().flush()
+        then(postRepository).shouldHaveNoMoreInteractions()
+        then(memberAttrRepository).should(times(3)).findBySubjectAndName(author, "activeTempDraftPostId")
+        then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", 1)
+        then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", -1)
+        then(memberAttrRepository).should().save(marker)
+        assertThat(marker.name).isEqualTo("activeTempDraftPostId")
+        assertThat(marker.strValue).isEqualTo(createdPost.id.toString())
     }
 
     private fun testMember(id: Long = 1): Member =

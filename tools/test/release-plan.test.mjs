@@ -85,6 +85,7 @@ test("security deploy storage task migration workflow and dockerfile changes are
     "back/src/main/kotlin/com/back/boundedContexts/task/TaskWorker.kt",
     "deploy/homeserver/docker-compose.prod.yml",
     "back/src/main/resources/db/migration/V20260619_03__add_safe_column.sql",
+    "back/src/main/kotlin/db/migration/V20260903_02__reconcile_profile_workspace_snapshots.kt",
     ".github/workflows/reusable-backend-quality.yml",
     "back/Dockerfile",
   ]
@@ -95,6 +96,16 @@ test("security deploy storage task migration workflow and dockerfile changes are
     assert.equal(result.json.riskProfile, "extended", file)
     assert(result.json.reasons.length > 0, file)
   }
+})
+
+test("Kotlin Java migrations retain the migration release reason", () => {
+  const result = runClassifier([
+    "back/src/main/kotlin/db/migration/V20260903_02__reconcile_profile_workspace_snapshots.kt",
+  ])
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.json.riskProfile, "extended")
+  assert(result.json.reasons.includes("migration"))
 })
 
 test("authoring paths do not count as auth risk", () => {
@@ -195,6 +206,8 @@ test("Platform reusable workflow runs release planner and strict boundary checks
   const backendWorkflow = readFileSync(backendWorkflowPath, "utf8")
   const nMinusOneTest = readFileSync(nMinusOneTestPath, "utf8")
   const backendDetection = backendWorkflow.match(/case "\$\{file\}" in([\s\S]*?)esac/)?.[1] ?? ""
+  const nMinusOneStep =
+    backendWorkflow.match(/      - name: Run Flyway N-1 compatibility test[\s\S]*?(?=\n      - name:)/)?.[0] ?? ""
 
   assert.match(backendWorkflow, /Check Flyway deploy safety/)
   assert.match(backendWorkflow, /previous_filename/)
@@ -202,7 +215,10 @@ test("Platform reusable workflow runs release planner and strict boundary checks
   assert.match(backendWorkflow, /Classify release risk/)
   assert.match(backendWorkflow, /tools\/ci\/classify-release\.mjs/)
   assert.match(backendWorkflow, /--migration-safety-json "\$\{RUNNER_TEMP\}\/flyway-deploy-safety\.json"/)
-  assert.match(backendWorkflow, /--policy "\$\{policy_path\}"[\s\S]*--base-policy "\$\{base_policy\}"[\s\S]*Run Flyway N-1 compatibility test[\s\S]*\.\/gradlew testcontainersTest --tests com\.back\.infrastructure\.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest --rerun-tasks/)
+  assert.match(backendWorkflow, /--policy "\$\{policy_path\}"[\s\S]*--base-policy "\$\{base_policy\}"/)
+  assert.match(nMinusOneStep, /\.\/gradlew testcontainersTest/)
+  assert.match(nMinusOneStep, /--tests com\.back\.infrastructure\.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest/)
+  assert.match(nMinusOneStep, /--rerun-tasks/)
   assert.match(backendWorkflow, /steps\.flyway_safety\.outputs\.status != '0'/)
   assert.match(backendDetection, /tools\/test\/flyway-deploy-safety\.test\.mjs/)
   assert.doesNotMatch(nMinusOneTest, /disabledWithoutDocker\s*=\s*true/)

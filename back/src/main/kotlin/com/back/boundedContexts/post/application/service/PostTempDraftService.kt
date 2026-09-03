@@ -15,24 +15,26 @@ import kotlin.jvm.optionals.getOrNull
 class PostTempDraftService(
     private val postRepository: PostRepositoryPort,
     private val memberAttrRepository: MemberAttrRepositoryPort,
+    private val postHydrationService: PostHydrationService,
 ) {
     private val activeTempDraftPostIdAttrName = "activeTempDraftPostId"
     private val activeTempDraftLockAttrName = "activeTempDraftLock"
 
     fun findTemp(author: Member): Post? {
         val persistenceAuthor = author.toPersistenceMember()
-        return resolveTrackedTempPost(persistenceAuthor) ?: findLegacyTemp(persistenceAuthor)
+        return resolveTrackedTempPost(persistenceAuthor)
     }
 
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
         val persistenceAuthor = author.toPersistenceMember()
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
         if (!tryAcquireTempDraftLock(persistenceAuthor)) {
             throw AppException(ErrorCode.RESOURCE_CONFLICT, "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.")
         }
 
         return try {
-            val existingTemp = resolveTrackedTempPost(persistenceAuthor) ?: findLegacyTemp(persistenceAuthor)
+            val existingTemp = resolveTrackedTempPost(persistenceAuthor)
             if (existingTemp != null) {
                 updateTempDraftMarker(persistenceAuthor, existingTemp.id)
                 postRepository.flush()
@@ -60,8 +62,6 @@ class PostTempDraftService(
         attr.strValue = postId?.toString().orEmpty()
         memberAttrRepository.save(attr)
     }
-
-    private fun findLegacyTemp(author: Member): Post? = postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, "임시글")
 
     private fun resolveTrackedTempPost(author: Member): Post? {
         val trackedPostId = resolveTrackedTempPostId(author) ?: return null

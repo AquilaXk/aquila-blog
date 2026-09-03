@@ -44,7 +44,9 @@ const isPipelineFile = (file) =>
   file.startsWith("tools/ci/") ||
   file === "back/Dockerfile"
 
-const isMigrationFile = (file) => /^back\/src\/main\/resources\/db\/migration\/.+\.sql$/.test(file)
+const isMigrationFile = (file) =>
+  /^back\/src\/main\/resources\/db\/migration\/.+\.sql$/.test(file) ||
+  /^back\/src\/main\/kotlin\/db\/migration\/V[0-9]{8}_[0-9]{2}__[A-Za-z0-9_]+\.kt$/.test(file)
 
 const extendedRules = [
   { reason: "security-or-auth", pattern: /(^|[/_.-])(security|authorization|oauth|auth(?!or)|session|cookie|csrf|cors)/i },
@@ -53,7 +55,11 @@ const extendedRules = [
   { reason: "deploy", pattern: /^(?:deploy\/|.*(?:docker-compose|Caddyfile))/i },
   { reason: "workflow", pattern: /^\.github\/workflows\// },
   { reason: "dockerfile", pattern: /(^|\/)Dockerfile$/ },
-  { reason: "migration", pattern: /^back\/src\/main\/resources\/db\/migration\/.+\.sql$/ },
+  {
+    reason: "migration",
+    pattern:
+      /^(?:back\/src\/main\/resources\/db\/migration\/.+\.sql|back\/src\/main\/kotlin\/db\/migration\/V[0-9]{8}_[0-9]{2}__[A-Za-z0-9_]+\.kt)$/,
+  },
 ]
 
 const loadMigrationSafety = (path) => {

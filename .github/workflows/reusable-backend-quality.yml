@@ -322,7 +322,11 @@ jobs:
       - name: Run Flyway N-1 compatibility test
         if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request' && (steps.release_policy.outputs.release_run_n_minus_one == 'true' || steps.release_policy.outputs.release_framework_changed == 'true')
         working-directory: back
-        run: ./gradlew testcontainersTest --tests com.back.infrastructure.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest --rerun-tasks
+        run: >-
+          ./gradlew testcontainersTest
+          --tests com.back.infrastructure.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest
+          --tests com.back.infrastructure.ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest
+          --rerun-tasks
 
       - name: Run selected PostgreSQL contract regression gates
         if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request'
@@ -330,7 +334,7 @@ jobs:
         run: >-
           ./gradlew testcontainersTest
           --tests com.back.infrastructure.PostTagIndexQueryPlanTestcontainersIntegrationTest
-          --tests com.back.infrastructure.TaskPayloadV1InventoryTestcontainersIntegrationTest
+          --tests com.back.infrastructure.ProfileWorkspaceLegacyRetirementTestcontainersIntegrationTest
           --rerun-tasks
 
       - name: Validate Flyway migration naming
@@ -338,15 +342,16 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=(back/src/main/resources/db/migration/*.sql)
+          sql_files=(back/src/main/resources/db/migration/*.sql)
+          java_files=(back/src/main/kotlin/db/migration/*.kt)
 
-          if [ ${#files[@]} -eq 0 ]; then
+          if [ ${#sql_files[@]} -eq 0 ] && [ ${#java_files[@]} -eq 0 ]; then
             echo "No migration files found."
             exit 1
           fi
 
           invalid=0
-          for file in "${files[@]}"; do
+          for file in "${sql_files[@]}"; do
             base="$(basename "$file")"
             if [[ "$base" =~ ^V[0-9]{8}_[0-9]{2}__[a-z0-9_]+\.sql$ ]] || \
               [[ "$base" =~ ^R__[a-z0-9_]+\.sql$ ]] || \
@@ -354,6 +359,15 @@ jobs:
               continue
             fi
             echo "Invalid migration file name: $base"
+            invalid=1
+          done
+
+          for file in "${java_files[@]}"; do
+            base="$(basename "$file")"
+            if [[ "$base" =~ ^V[0-9]{8}_[0-9]{2}__[A-Za-z0-9_]+\.kt$ ]]; then
+              continue
+            fi
+            echo "Invalid Java migration file name: $base"
             invalid=1
           done
 

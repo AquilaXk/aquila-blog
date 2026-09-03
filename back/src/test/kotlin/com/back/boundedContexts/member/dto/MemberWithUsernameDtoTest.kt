@@ -12,16 +12,12 @@ import java.time.Instant
 @Isolated
 class MemberWithUsernameDtoTest {
     @Test
-    fun `member profile image responses canonicalize the retired public host`() =
+    fun `empty canonical workspace uses the canonical default image`() =
         withIsolatedAppConfig {
             val member = createMember()
-            member.profileImgUrl = "$RETIRED_BACK_URL/post/api/v1/images/profile/member.png"
+            val response = MemberWithUsernameDto(member, MemberProfileWorkspaceContent(), TEST_INSTANT)
 
-            val response = MemberWithUsernameDto(member)
-
-            assertThat(response.profileImageUrl)
-                .startsWith("$CURRENT_BACK_URL/post/api/v1/images/profile/member.png?v=")
-            assertThat(response.profileImageDirectUrl).isEqualTo(response.profileImageUrl)
+            assertThat(response.profileImageUrl).isEqualTo("https://blog.aquilaxk.site/images/default-profile.svg")
             Unit
         }
 
@@ -40,7 +36,6 @@ class MemberWithUsernameDtoTest {
                 "$CURRENT_BACK_URL/post/api/v1/images/profile/workspace.png?v=${modifiedAt.toEpochMilli()}"
 
             assertThat(response.profileImageUrl).isEqualTo(expected)
-            assertThat(response.profileImageDirectUrl).isEqualTo(expected)
             Unit
         }
 

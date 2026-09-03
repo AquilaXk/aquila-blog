@@ -118,8 +118,8 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         val authSessionMemberSchema = openApiNode.path("components").path("schemas").path("AuthSessionMemberDto")
         assertThat(authSessionMemberSchema.path("properties").has("legalReconsent")).isFalse()
         val paths = openApiNode.path("paths")
+        assertThat(schemas.has("MemberDto")).isFalse()
         listOf(
-            "MemberDto",
             "MemberWithUsernameDto",
             "AuthSessionMemberDto",
         ).forEach { schemaName ->
@@ -135,6 +135,8 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             ).isEqualTo("boolean")
             assertThat(schema.path("required").values().map { it.asText() }).contains("isAdmin")
         }
+        assertThat(schemas.path("MemberWithUsernameDto").path("properties").has("aboutDetails")).isFalse()
+        assertThat(schemas.path("MemberWithUsernameDto").path("properties").has("profileImageDirectUrl")).isFalse()
         listOf(
             "/member/api/v1/auth/login",
             "/member/api/v1/privacy/export",
@@ -144,9 +146,13 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             "/member/api/v1/adm/members",
             "/member/api/v1/adm/members/{id}",
             "/member/api/v1/adm/members/legal-reconsent/report",
+            "/member/api/v1/adm/members/{id}/profileImgUrl",
+            "/member/api/v1/adm/members/{id}/profileCard",
         ).forEach { retiredPath ->
             assertThat(paths.has(retiredPath)).isFalse()
         }
+        val uploadResponse = schemas.path("ProfileImageUploadResponse")
+        assertThat(uploadResponse.path("properties").propertyNames()).containsExactly("profileImageUrl")
         listOf(
             "AccountDeletionRequest",
             "AccountDeletionResult",

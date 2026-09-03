@@ -124,7 +124,6 @@ class MemberActionLogApplicationServiceTest {
             modifiedAt = Instant.EPOCH,
             isAdmin = false,
             name = "작성자",
-            profileImageUrl = "",
         )
 
     private fun unknownEvent(): EventPayload =

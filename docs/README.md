@@ -12,7 +12,6 @@ Agent-only 작업 메모와 로컬 상태 파일은 `.gitignore` 대상이므로
 | Backend | [back/README.md](../back/README.md) | Backend architecture, API modules, quality checks, OpenAPI flow |
 | Performance | [perf/k6/README.md](../perf/k6/README.md) | Read-path load and chaos scenarios |
 | Deployment | [deploy/homeserver/HARDENING.md](../deploy/homeserver/HARDENING.md) | Home server hardening checklist |
-| Legacy Infra | [infra/README.md](../infra/README.md) | Legacy cloud infra experiment; current production uses homeserver deploy |
 
 ## Tracked Design Notes
 

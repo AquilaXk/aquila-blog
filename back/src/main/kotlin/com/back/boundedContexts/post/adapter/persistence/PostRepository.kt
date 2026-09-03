@@ -22,9 +22,4 @@ interface PostRepository :
     fun existsByContentContaining(contentFragment: String): Boolean
 
     fun findFirstByOrderByIdDesc(): Post?
-
-    fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(
-        author: Member,
-        title: String,
-    ): Post?
 }

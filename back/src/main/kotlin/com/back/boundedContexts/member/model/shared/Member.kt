@@ -1,8 +1,7 @@
 package com.back.boundedContexts.member.model.shared
 
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
-import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileCard
-import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileWorkspace
 import com.back.boundedContexts.post.domain.PostMember
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
@@ -65,8 +64,7 @@ class Member(
     private var admin: Boolean = false,
 ) : BaseTime(id),
     PostMember,
-    MemberHasProfileImgUrl,
-    MemberHasProfileCard {
+    MemberHasProfileWorkspace {
     constructor(
         id: Long,
         username: String,
@@ -138,12 +136,8 @@ class Member(
         admin = true
     }
 
-    fun modify(
-        nickname: String,
-        profileImgUrl: String?,
-    ) {
+    fun modify(nickname: String) {
         this.nickname = nickname
-        profileImgUrl?.let { this.profileImgUrl = it }
     }
 
     fun modifyApiKey(apiKey: String) {

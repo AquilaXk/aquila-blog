@@ -60,6 +60,10 @@ reject_pattern 'expected_front_commit_sha:' "Platform deploy must not expose a f
 legacy_front_live_job='frontLive''E2E:'
 reject_pattern "${legacy_front_live_job}" "Platform deploy must not retain the frontend live E2E job"
 reject_pattern 'force_front_live_verify:' "Platform manual deploy must not expose a frontend live verification input"
+require_fixed 'preflight_profile_workspace_cutover_source_floor' "backend deploy must preflight the profile workspace source floor before mutation"
+require_fixed 'rollback_last_deploy.sh --check-profile-workspace-compatibility' "backup rollback must verify profile workspace compatibility before restoring files"
+require_fixed 'retire_profile_workspace_legacy.sql' "post-cutover profile retirement must run after delivery gates"
+require_fixed 'DEPLOY_COMPLETED="true"' "profile retirement must complete before deploy completion"
 reject_pattern 'force_editor_live_canary:' "Platform manual deploy must not expose an editor live canary input"
 require_pattern 'git diff-tree --no-commit-id --name-only -r -m "\$\{DEPLOY_SHA\}"' "merge commit changed-file detection must use -m fallback"
 reject_pattern 'git diff-tree --no-commit-id --name-only -r "\$\{DEPLOY_SHA\}"' "single-parent diff-tree form can return empty changed files for merge commits"

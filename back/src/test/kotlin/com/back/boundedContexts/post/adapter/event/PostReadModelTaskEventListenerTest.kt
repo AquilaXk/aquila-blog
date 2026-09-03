@@ -77,8 +77,8 @@ class PostReadModelTaskEventListenerTest {
     }
 
     @Test
-    @DisplayName("search index task는 legacy forceClear payload 값 대신 current post sync만 호출한다")
-    fun `search index task ignores legacy force clear payload field`() {
+    @DisplayName("search index task는 current post sync를 호출한다")
+    fun `search index task calls current post sync`() {
         val searchIndexSyncService = mock(PostSearchIndexSyncService::class.java)
         val listener =
             createListener(
@@ -91,7 +91,6 @@ class PostReadModelTaskEventListenerTest {
                 aggregateType = "Post",
                 aggregateId = 92L,
                 postId = 92L,
-                forceClear = true,
                 enqueuedAtEpochMs = System.currentTimeMillis(),
             )
 
@@ -142,7 +141,7 @@ class PostReadModelTaskEventListenerTest {
     ) {
         registry.register(
             taskType,
-            TaskHandlerEntry.withExactDecoders(
+            TaskHandlerEntry.withCurrentDecoder(
                 taskType = taskType,
                 payloadClass = payloadClass,
                 handlerMethod =
@@ -184,7 +183,6 @@ class PostReadModelTaskEventListenerTest {
                     modifiedAt = Instant.EPOCH,
                     isAdmin = false,
                     name = "author",
-                    profileImageUrl = "",
                 ),
             afterTags = listOf("kotlin", "spring"),
         )

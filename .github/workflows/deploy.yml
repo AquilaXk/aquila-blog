@@ -919,6 +919,62 @@ jobs:
             exit 1
           fi
 
+          resolve_active_prod_db_name() {
+            local value
+            value="$(awk -F= '$1 == "custom.prod.dbName" || $1 == "CUSTOM_PROD_DBNAME" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.env.prod 2>/dev/null | tail -n 1 | tr -d '\r')"
+            if [ -n "${value}" ]; then printf '%s\n' "${value}"; return; fi
+            value="$(awk -F= '$1 == "DB_BASE_NAME" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.env.prod 2>/dev/null | tail -n 1 | tr -d '\r')"
+            printf '%s_prod\n' "${value:-blog}"
+          }
+
+          preflight_profile_workspace_cutover_source_floor() {
+            local db_name table_exists marker_sha baseline_marker
+            db_name="$(resolve_active_prod_db_name)"
+            table_exists="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.platform_schema_cutover') IS NOT NULL" 2>/dev/null | tr -d '\r' | tail -n 1)" || {
+              echo "profile workspace cutover preflight query failed" >&2
+              return 1
+            }
+            [ "${table_exists}" = "f" ] && return 0
+            [ "${table_exists}" = "t" ] || { echo "profile workspace cutover preflight catalog result is malformed" >&2; return 1; }
+            marker_sha="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r' | tail -n 1)" || {
+              echo "profile workspace cutover marker query failed" >&2
+              return 1
+            }
+            [ -z "${marker_sha}" ] && return 0
+            [[ "${marker_sha}" =~ ^[0-9a-f]{40}$ && "${HOME_DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "profile workspace cutover preflight SHA is malformed" >&2
+              return 1
+            }
+            git cat-file -e "${marker_sha}^{commit}" 2>/dev/null || git fetch origin "${marker_sha}" --depth 1
+            git cat-file -e "${marker_sha}^{commit}" 2>/dev/null || {
+              echo "profile workspace cutover marker commit is unavailable" >&2
+              return 1
+            }
+            git merge-base --is-ancestor "${marker_sha}" "${HOME_DEPLOY_SHA}" || {
+              echo "profile workspace cutover blocks a pre-cutover backend deploy" >&2
+              return 1
+            }
+            baseline_marker="$(awk -F= '$1 == "profile_workspace_cutover_sha" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.deploy-baseline/metadata.env 2>/dev/null | tail -n 1)"
+            if [ "${baseline_marker}" != "${marker_sha}" ]; then
+              PROFILE_WORKSPACE_CUTOVER_SHA="${marker_sha}" ./deploy/homeserver/record_deploy_baseline.sh --publish-pending || {
+                echo "profile workspace cutover has no compatible baseline or recoverable pending baseline" >&2
+                return 1
+              }
+            fi
+          }
+
+          git fetch origin main --prune
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "${HOME_DEPLOY_SHA}" --depth 1 || true
+          fi
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null || ! git merge-base --is-ancestor "${HOME_DEPLOY_SHA}" "origin/main"; then
+            echo "deploy sha is unavailable or unreachable from origin/main" >&2
+            exit 1
+          fi
+          if ! preflight_profile_workspace_cutover_source_floor; then
+            exit 1
+          fi
+
           umask 077
           if [ ! -f deploy/homeserver/create_deploy_backup.sh ]; then
             echo "deploy backup script missing before checkout: deploy/homeserver/create_deploy_backup.sh" >&2
@@ -954,6 +1010,7 @@ jobs:
             echo "deploy sha is not reachable from origin/main: ${HOME_DEPLOY_SHA}" >&2
             exit 1
           fi
+
           git checkout --force "${HOME_DEPLOY_SHA}"
 
           mkdir -p deploy/homeserver
@@ -1000,6 +1057,12 @@ jobs:
             fi
 
             echo "rollback from backup: ${BACKUP_DIR} (reason=${reason})" >&2
+
+            if ! RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" \
+              ./deploy/homeserver/rollback_last_deploy.sh --check-profile-workspace-compatibility "${BACKUP_DIR}"; then
+              echo "rollback blocked by profile workspace cutover compatibility: ${BACKUP_DIR}" >&2
+              return 1
+            fi
 
             if ! restore_backup_files_minimally "${BACKUP_DIR}"; then
               echo "minimal backup restore failed before rollback script: ${BACKUP_DIR}" >&2
@@ -1136,8 +1199,7 @@ jobs:
           upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "${PROD_SITE_COOKIE_DOMAIN}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM_PROD_FRONTURL" "${PROD_SITE_FRONT_URL}" "deploy/homeserver/.env.prod"
           # The switch key writes itself back in canonical form. The case above matched on the host
-          # alone, so a trailing slash or an uppercase label reaches the containers normalised
-          # instead of flowing into custom.site.backUrl (and from there into the OAuth redirect-uri).
+          # alone, so a trailing slash or an uppercase label reaches the containers normalised.
           upsert_env_key "CUSTOM_PROD_BACKURL" "${PROD_SITE_BACK_URL}" "deploy/homeserver/.env.prod"
           # Caddy web vhost address (#1538). The only supported topology always pins it.
           upsert_env_key "WEB_DOMAIN" "${PROD_SITE_WEB_DOMAIN}" "deploy/homeserver/.env.prod"
@@ -1459,7 +1521,7 @@ jobs:
           ensure_monitoring_bind_mount_permissions
 
           RUNTIME_ENV_MATERIALIZED="true"
-          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" BACKUP_FLYWAY_SCHEMA_VERSION="${BACKUP_FLYWAY_SCHEMA_VERSION}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
+          if ! HOME_DEPLOY_SHA="${HOME_DEPLOY_SHA}" STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" BACKUP_FLYWAY_SCHEMA_VERSION="${BACKUP_FLYWAY_SCHEMA_VERSION}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
             rollback_and_exit "blue_green_deploy_failed"
           fi
 
@@ -1786,19 +1848,33 @@ jobs:
             rollback_and_exit "minio_service_identity_finalize_failed"
           fi
 
-          rm -f deploy/homeserver/.external-minio-migration-stopped
-          DEPLOY_COMPLETED="true"
+          PROFILE_WORKSPACE_BASELINE_MARKER_SHA="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "$(resolve_active_prod_db_name)" -Atq -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r')" || rollback_and_exit "profile_workspace_cutover_marker_read_failed"
+          if [ -z "${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" ]; then
+            PROFILE_WORKSPACE_BASELINE_MARKER_SHA="${HOME_DEPLOY_SHA}"
+          fi
+          if [[ ! "${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" "${HOME_DEPLOY_SHA}"; then
+            rollback_and_exit "profile_workspace_cutover_marker_incompatible"
+          fi
 
-          # Pin the rollback restore point to this verified deploy. Recorded after
-          # DEPLOY_COMPLETED so a snapshot failure can never trigger a rollback of a
-          # healthy deploy; the fallback (previous baseline, or the working tree) is
-          # logged instead of silently taken.
-          if DEPLOY_BASELINE_DIR="$(./deploy/homeserver/record_deploy_baseline.sh)"; then
+          if ! DEPLOY_BASELINE_SHA="${HOME_DEPLOY_SHA}" PROFILE_WORKSPACE_CUTOVER_SHA="${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" ./deploy/homeserver/record_deploy_baseline.sh --stage-pending; then
+            rollback_and_exit "profile_workspace_baseline_stage_failed"
+          fi
+
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "$(resolve_active_prod_db_name)" -Atq -v ON_ERROR_STOP=1 -v cutover_sha="${HOME_DEPLOY_SHA}" -v expected_marker_sha="${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" -f deploy/homeserver/sql/retire_profile_workspace_legacy.sql >/dev/null 2>&1; then
+            rollback_and_exit "profile_workspace_legacy_retirement_failed"
+          fi
+
+          DEPLOY_COMPLETED="true"
+          rm -f deploy/homeserver/.external-minio-migration-stopped
+
+          # Publish only the exact baseline staged before retirement. DEPLOY_COMPLETED
+          # prevents a post-commit publication failure from crossing the cutover marker.
+          if DEPLOY_BASELINE_DIR="$(PROFILE_WORKSPACE_CUTOVER_SHA="${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" ./deploy/homeserver/record_deploy_baseline.sh --publish-pending)"; then
             echo "deploy baseline recorded: ${DEPLOY_BASELINE_DIR}"
           else
             # On stdout, not stderr, so the runner parses it as a workflow annotation:
             # a silently repeated failure leaves rollback pinned to an ever-older point.
-            echo "::warning title=Deploy baseline not recorded::failed to record successful-deploy baseline; the next rollback will restore an older baseline or the server working tree"
+            echo "::warning title=Deploy baseline not recorded::healthy deploy remains active, but the next deploy and rollback are blocked until a marker-compatible baseline is recorded"
           fi
 
           cleanup_remote_tmp
@@ -2175,6 +2251,41 @@ jobs:
           fi
           if ! git merge-base --is-ancestor "${HOME_DEPLOY_SHA}" "origin/main"; then
             echo "deploy sha is not reachable from origin/main: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+
+          resolve_active_prod_db_name() {
+            local value
+            value="$(awk -F= '$1 == "custom.prod.dbName" || $1 == "CUSTOM_PROD_DBNAME" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.env.prod 2>/dev/null | tail -n 1 | tr -d '\r')"
+            if [ -n "${value}" ]; then printf '%s\n' "${value}"; return; fi
+            value="$(awk -F= '$1 == "DB_BASE_NAME" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.env.prod 2>/dev/null | tail -n 1 | tr -d '\r')"
+            printf '%s_prod\n' "${value:-blog}"
+          }
+
+          preflight_profile_workspace_cutover_source_floor() {
+            local db_name table_exists marker_sha
+            db_name="$(resolve_active_prod_db_name)"
+            table_exists="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.platform_schema_cutover') IS NOT NULL" 2>/dev/null | tr -d '\r' | tail -n 1)" || {
+              echo "profile workspace cutover front preflight query failed" >&2
+              return 1
+            }
+            [ "${table_exists}" = "f" ] && return 0
+            [ "${table_exists}" = "t" ] || { echo "profile workspace cutover front preflight catalog result is malformed" >&2; return 1; }
+            marker_sha="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r' | tail -n 1)" || {
+              echo "profile workspace cutover front marker query failed" >&2
+              return 1
+            }
+            [ -z "${marker_sha}" ] && return 0
+            [[ "${marker_sha}" =~ ^[0-9a-f]{40}$ ]] || { echo "profile workspace cutover front marker is malformed" >&2; return 1; }
+            git cat-file -e "${marker_sha}^{commit}" 2>/dev/null || git fetch origin "${marker_sha}" --depth 1
+            git cat-file -e "${marker_sha}^{commit}" 2>/dev/null || { echo "profile workspace cutover front marker commit is unavailable" >&2; return 1; }
+            git merge-base --is-ancestor "${marker_sha}" "${HOME_DEPLOY_SHA}" || {
+              echo "profile workspace cutover blocks a pre-cutover front deploy" >&2
+              return 1
+            }
+          }
+
+          if ! preflight_profile_workspace_cutover_source_floor; then
             exit 1
           fi
           git checkout --force "${HOME_DEPLOY_SHA}"

@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.persistence
 
+import com.back.boundedContexts.member.domain.shared.memberMixin.decodeMemberProfileWorkspaceContent
 import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
@@ -18,7 +19,7 @@ class PostDeletedQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
     private companion object {
-        const val PROFILE_IMG_ATTR_NAME = "profileImgUrl"
+        const val PUBLISHED_PROFILE_WORKSPACE_ATTR_NAME = "profileWorkspacePublished"
     }
 
     fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto? =
@@ -71,9 +72,10 @@ class PostDeletedQueryRepository(
               p.title,
               p.author_id,
               coalesce(m.nickname, m.login_id, '알 수 없음') as author_name,
-              ma.str_value as author_profile_img_url,
+              ma.str_value as author_profile_workspace,
               ma.modified_at as author_profile_img_modified_at,
               m.modified_at as author_modified_at,
+              m.deleted_at as author_deleted_at,
               p.published,
               p.listed,
               p.created_at,
@@ -96,7 +98,7 @@ class PostDeletedQueryRepository(
 
         val listParams =
             mutableListOf<Any>().apply {
-                add(PROFILE_IMG_ATTR_NAME)
+                add(PUBLISHED_PROFILE_WORKSPACE_ATTR_NAME)
                 if (hasKeyword) {
                     add(escapedKw)
                     add(escapedKw)
@@ -124,9 +126,10 @@ class PostDeletedQueryRepository(
                         authorName = rs.getString("author_name"),
                         authorProfileImgUrl =
                             resolveAuthorProfileImgUrl(
-                                rawUrl = rs.getString("author_profile_img_url"),
+                                rawWorkspace = rs.getString("author_profile_workspace"),
                                 profileImgModifiedAt = rs.getTimestamp("author_profile_img_modified_at")?.toInstant(),
                                 authorModifiedAt = rs.getTimestamp("author_modified_at")?.toInstant(),
+                                authorDeleted = rs.getTimestamp("author_deleted_at") != null,
                             ),
                         published = rs.getBoolean("published"),
                         listed = rs.getBoolean("listed"),
@@ -216,11 +219,17 @@ class PostDeletedQueryRepository(
             .replace("_", "\\_")
 
     private fun resolveAuthorProfileImgUrl(
-        rawUrl: String?,
+        rawWorkspace: String?,
         profileImgModifiedAt: java.time.Instant?,
         authorModifiedAt: java.time.Instant?,
+        authorDeleted: Boolean,
     ): String {
-        val normalizedUrl = rawUrl?.trim().orEmpty()
+        if (authorDeleted) return defaultProfileImageUrl()
+
+        val normalizedUrl =
+            requireNotNull(decodeMemberProfileWorkspaceContent(rawWorkspace)) {
+                "Active post author profile workspace is missing or invalid"
+            }.profileImageUrl
         if (normalizedUrl.isBlank()) return defaultProfileImageUrl()
 
         val version = profileImgModifiedAt ?: authorModifiedAt ?: return normalizedUrl

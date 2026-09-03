@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
@@ -620,6 +621,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 ).apply {
                     createdAt = Instant.parse("2026-01-01T00:00:00Z")
                     modifiedAt = Instant.parse("2026-01-01T00:01:00Z")
+                    setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent())
                 },
             title = "작성자 매핑",
             content = "본문",

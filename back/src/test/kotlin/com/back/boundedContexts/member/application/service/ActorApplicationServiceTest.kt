@@ -103,7 +103,7 @@ class ActorApplicationServiceTest {
     }
 
     @Test
-    fun `MemberProxy 에서 nickname 과 profileImgUrl 을 수정하면 실제 회원에도 반영된다`() {
+    fun `MemberProxy 에서 nickname을 수정하면 실제 회원에도 반영된다`() {
         val securityUser =
             SecurityUser(
                 user1.id,
@@ -116,11 +116,8 @@ class ActorApplicationServiceTest {
         val member = actorApplicationService.memberOf(securityUser)
 
         member.nickname = "프록시유저1"
-        member.profileImgUrl = "https://example.com/proxy-user1.png"
 
         assertThat(user1.nickname).isEqualTo("프록시유저1")
-        assertThat(user1.profileImgUrl).isEqualTo("https://example.com/proxy-user1.png")
-        assertThat(member.profileImgUrlOrDefault).isEqualTo("https://example.com/proxy-user1.png")
     }
 
     @Test

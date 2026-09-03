@@ -163,16 +163,25 @@ class PostRepositoryImpl(
             builder.and(post.published.isTrue)
             builder.and(post.listed.isTrue)
         } else {
+            val hasActiveDraftMarker =
+                Expressions.booleanTemplate(
+                    """
+                    exists (
+                        select 1
+                        from MemberAttr activeDraftMarker
+                        where activeDraftMarker.subject = {0}
+                          and activeDraftMarker.name = 'activeTempDraftPostId'
+                          and trim(activeDraftMarker.strValue) = str({1})
+                    )
+                    """.trimIndent(),
+                    post.author,
+                    post.id,
+                )
             when (adminStatus) {
                 "draft" ->
-                    builder.and(
-                        post.published
-                            .isFalse
-                            .and(post.listed.isFalse)
-                            .and(post.title.eq("임시글")),
-                    )
+                    builder.and(post.published.isFalse.and(hasActiveDraftMarker))
                 "published" -> builder.and(post.published.isTrue)
-                "private" -> builder.and(post.published.isFalse.and(post.title.ne("임시글")))
+                "private" -> builder.and(post.published.isFalse.and(hasActiveDraftMarker.not()))
             }
         }
         author?.let { builder.and(post.author.eq(it)) }

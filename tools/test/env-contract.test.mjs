@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -2261,7 +2261,7 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   )
   assert(workflow.indexOf('rollback_from_backup_if_needed "unexpected_exit_status_${status}"') < workflow.indexOf("EXTERNAL_BACKUP_DIR="))
   assert(workflow.indexOf("run_backup_rollback") < workflow.indexOf("restart_external_backup_legacy_minio_if_needed", workflow.indexOf("run_backup_rollback")))
-  assert(workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped") < workflow.indexOf('DEPLOY_COMPLETED="true"'))
+  assert(workflow.indexOf('DEPLOY_COMPLETED="true"') < workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped"))
 })
 
 test("deploy workflow derives the pinned prod site scope from the switch instead of hard-coding it", () => {
@@ -4128,6 +4128,7 @@ test("crashloop 진단 게이트는 docker 실패에도 set -e로 배포를 죽�
 test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정된다", () => {
   const baselineScript = readFileSync(baselineScriptPath, "utf8")
   const backupScript = readFileSync(deployBackupScriptPath, "utf8")
+  const deployScript = readFileSync(deployScriptPath, "utf8")
   const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
   const workflow = readFileSync(workflowPath, "utf8")
   const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8")
@@ -4136,29 +4137,26 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   // 다음 rollback이 그걸 "마지막 성공 배포"로 착각한다.
   assert.match(baselineScript, /^umask 077$/m)
   assert.match(baselineScript, /STAGING_DIR="\$\{SCRIPT_DIR\}\/\.deploy-baseline\.staging\.\$\$"/)
-  assert.match(baselineScript, /PREV_DIR="\$\{SCRIPT_DIR\}\/\.deploy-baseline\.prev\.\$\$"/)
+  assert.match(baselineScript, /RECOVERY_DIR="\$\{SCRIPT_DIR\}\/\.deploy-baseline\.recovery"/)
   assert.match(baselineScript, /trap cleanup_publish_scratch EXIT/)
   assert(
     baselineScript.indexOf('cp "${SCRIPT_DIR}/docker-compose.prod.yml" "${STAGING_DIR}/docker-compose.prod.yml"') <
-      baselineScript.indexOf('mv "${STAGING_DIR}" "${BASELINE_DIR}"'),
-    "baseline must be fully staged before it is published",
+      baselineScript.indexOf('mv "${STAGING_DIR}" "${PENDING_DIR}"'),
+    "baseline must be fully staged before it becomes the pending publish candidate",
   )
-  // 죽은 실행이 남긴 scratch는 다음 실행이 걷어낸다. 유효성 게이트 뒤라서, baseline을
-  // 만들 수 없는 실행이 앞선 실행의 잔존물을 지우고 끝나지 않는다.
-  assert.match(
-    baselineScript,
-    /rm -rf "\$\{SCRIPT_DIR\}"\/\.deploy-baseline\.staging\.\* "\$\{SCRIPT_DIR\}"\/\.deploy-baseline\.prev\.\*/,
-  )
+  assert.match(baselineScript, /recover_interrupted_publish\(\) \{/)
+  assert.match(baselineScript, /rm -rf "\$\{SCRIPT_DIR\}"\/\.deploy-baseline\.staging\.\*/)
+  assert.doesNotMatch(baselineScript, /\.deploy-baseline\.prev\.\*/)
   assert(
     baselineScript.indexOf("deploy baseline not recorded: compose file missing") <
       baselineScript.indexOf('rm -rf "${SCRIPT_DIR}"/.deploy-baseline.staging.*'),
     "the stale-scratch sweep must run after the gate that can abort the recording",
   )
-  // 공개는 rename-aside다: 두 mv 사이에도 디스크에는 복원 기준점이 항상 하나 남는다.
+  // 공개 중단은 고정 recovery owner가 다음 실행에서 복구한다.
   assert.doesNotMatch(baselineScript, /rm -rf "\$\{BASELINE_DIR\}"/)
   assert.match(
     baselineScript,
-    /if \[\[ -e "\$\{BASELINE_DIR\}" \]\]; then\s*\n\s*mv "\$\{BASELINE_DIR\}" "\$\{PREV_DIR\}"\s*\n\s*fi\s*\n\s*mv "\$\{STAGING_DIR\}" "\$\{BASELINE_DIR\}"\s*\n\s*rm -rf "\$\{PREV_DIR\}"/,
+    /mv "\$\{BASELINE_DIR\}" "\$\{RECOVERY_DIR\}"[\s\S]*mv "\$\{source_dir\}" "\$\{BASELINE_DIR\}"[\s\S]*rm -rf "\$\{RECOVERY_DIR\}"/,
   )
   // create_deploy_backup.sh의 게이트를 통과하지 못할 스냅샷은 공개하지 않는다.
   assert.match(
@@ -4167,10 +4165,14 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   )
   assert(
     baselineScript.indexOf('! -f "${STAGING_DIR}/caddy/Caddyfile"') <
-      baselineScript.indexOf('mv "${STAGING_DIR}" "${BASELINE_DIR}"'),
-    "the completeness gate must run before the snapshot is published",
+      baselineScript.indexOf('mv "${STAGING_DIR}" "${PENDING_DIR}"'),
+    "the completeness gate must run before the snapshot is staged for publication",
   )
-  assert.match(baselineScript, /echo "deploy_sha=\$\(git -C "\$\{SCRIPT_DIR\}\/\.\.\/\.\." rev-parse --short HEAD/)
+  assert.match(baselineScript, /\[\[ "\$\{MODE\}" == "--stage-pending" \]\] \|\| \{ echo "unknown deploy baseline mode"/)
+  assert.doesNotMatch(baselineScript, /"record"/)
+  assert.match(baselineScript, /echo "deploy_sha=\$\{DEPLOY_BASELINE_SHA\}"/)
+  assert.match(baselineScript, /echo "baseline_version=2"/)
+  assert.match(baselineScript, /echo "profile_workspace_cutover_sha=\$\{PROFILE_WORKSPACE_CUTOVER_SHA\}"/)
   assert.match(baselineScript, /^secret_files_copied=false$|echo "secret_files_copied=false"/m)
   assert.doesNotMatch(baselineScript, forbiddenSecretBackupCopyPattern)
   // baseline은 배포 산출물만 담는다. .active_backend는 지금 트래픽을 받는 색이라
@@ -4193,6 +4195,26 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="\$\(/)
   assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="unavailable"/)
   assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="\$\{BACKUP_FLYWAY_SCHEMA_VERSION\}"/)
+  const backendSourceFloorIndex = workflow.indexOf("if ! preflight_profile_workspace_cutover_source_floor; then")
+  const frontSourceFloorIndex = workflow.lastIndexOf("if ! preflight_profile_workspace_cutover_source_floor; then")
+  const firstCheckoutIndex = workflow.indexOf('git checkout --force "${HOME_DEPLOY_SHA}"')
+  const frontCheckoutIndex = workflow.lastIndexOf('git checkout --force "${HOME_DEPLOY_SHA}"')
+  const backupCreateIndex = workflow.indexOf('BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"')
+  assert(
+    backendSourceFloorIndex !== -1 && backendSourceFloorIndex < backupCreateIndex && backendSourceFloorIndex < firstCheckoutIndex,
+    "backend source-floor preflight must run before backup creation or checkout mutation",
+  )
+  assert(
+    frontSourceFloorIndex !== backendSourceFloorIndex && frontSourceFloorIndex < frontCheckoutIndex,
+    "front source-floor preflight must run before checkout mutation",
+  )
+  const standaloneSourceFloorIndex = deployScript.lastIndexOf("\nif ! ensure_profile_workspace_cutover_source_floor; then")
+  assert(
+    standaloneSourceFloorIndex !== -1 &&
+      standaloneSourceFloorIndex < deployScript.indexOf("\nconfigure_runtime_split_env\n") &&
+      standaloneSourceFloorIndex < deployScript.indexOf('compose_up_with_retry "${services_to_boot[@]}"'),
+    "standalone blue-green must reject a pre-cutover source before env or compose mutation",
+  )
   // .active_backend는 배포 산출물이 아니라 지금 트래픽을 받는 색이므로 워크트리에서 온다.
   assert.match(backupScript, /if \[\[ -f "\$\{STATE_FILE\}" \]\]; then\s*\n\s*cp "\$\{STATE_FILE\}" "\$\{BACKUP_DIR\}\/\.active_backend"/)
   assert.doesNotMatch(backupScript, /for file in docker-compose\.prod\.yml \.active_backend; do/)
@@ -4209,6 +4231,7 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
     "worker schema compatibility must be fixed before backup image metadata is restored",
   )
   assert.match(rollbackScript, /rollback restore point: source=\$\{restore_source:-worktree\} baseline_deploy_sha=\$\{deploy_sha:-unknown\} baseline_created_at=\$\{created_at:-unknown\}/)
+  assert.match(rollbackScript, /\[\[ "\$\{restore_source\}" == "baseline" \]\] \|\| \{ echo "rollback blocked: post-cutover backup must come from a verified baseline"/)
   assert(
     rollbackScript.indexOf('echo "rollback from backup: ${BACKUP_DIR}"') <
       rollbackScript.indexOf("\nlog_backup_restore_provenance\n"),
@@ -4218,14 +4241,22 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   // baseline 기록은 모든 post-deploy 검증을 통과한 뒤에만, 그리고 배포를 죽이지 않게.
   assert.match(workflow, /deploy\/homeserver\/record_deploy_baseline\.sh \\/)
   const completedIndex = workflow.indexOf('DEPLOY_COMPLETED="true"')
-  const recordIndex = workflow.indexOf('if DEPLOY_BASELINE_DIR="$(./deploy/homeserver/record_deploy_baseline.sh)"; then')
+  const retirementIndex = workflow.indexOf("retire_profile_workspace_legacy.sql")
+  const recordIndex = workflow.lastIndexOf("record_deploy_baseline.sh --publish-pending")
+  const stageIndex = workflow.indexOf("record_deploy_baseline.sh --stage-pending")
   assert.notEqual(recordIndex, -1, "successful deploy must record a baseline")
-  assert(completedIndex < recordIndex, "baseline must be recorded only after the deploy is declared complete")
+  assert(stageIndex < retirementIndex, "the exact candidate baseline must be staged before retirement")
+  assert.match(
+    workflow,
+    /DEPLOY_BASELINE_SHA="\$\{HOME_DEPLOY_SHA\}" PROFILE_WORKSPACE_CUTOVER_SHA="\$\{PROFILE_WORKSPACE_BASELINE_MARKER_SHA\}" \.\/deploy\/homeserver\/record_deploy_baseline\.sh --stage-pending/,
+  )
+  assert(retirementIndex < completedIndex, "retirement must finish before deploy completion")
+  assert(completedIndex < recordIndex, "the pending baseline must publish only after deploy completion")
   // 복원 기준점이 밀리는 두 경로는 workflow annotation으로 드러나야 한다. annotation은
   // 러너가 스텝 stdout에서 파싱하므로 stderr로 보내면 안 된다.
   assert.match(
     workflow,
-    /^ *echo "::warning title=Deploy baseline not recorded::failed to record successful-deploy baseline; the next rollback will restore an older baseline or the server working tree"$/m,
+    /^ *echo "::warning title=Deploy baseline not recorded::healthy deploy remains active, but the next deploy and rollback are blocked until a marker-compatible baseline is recorded"$/m,
   )
   assert.match(
     workflow,
@@ -4261,7 +4292,16 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
     // 이미지 메타데이터 수집만 docker를 쓴다. 복원 기준점 로직은 순수 파일 복사다.
     writeFileSync(
       path.join(stubDir, "docker"),
-      "#!/bin/sh\ncase \"$*\" in *flyway_schema_history*) printf '%s\\n' '20260810.01' ;; esac\nexit 0\n",
+      [
+        "#!/bin/sh",
+        "case \"$*\" in",
+        "  *to_regclass*) printf '%s\\n' \"${STUB_MARKER_PRESENT:-f}\" ;;",
+        "  *profile-workspace-legacy-attrs*) printf '%s\\n' \"${STUB_MARKER_SHA:-}\" ;;",
+        "  *flyway_schema_history*) printf '%s\\n' '20260810.01' ;;",
+        "esac",
+        "exit 0",
+        "",
+      ].join("\n"),
       { mode: 0o755 },
     )
 
@@ -4282,33 +4322,35 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
     git(workDir, ["config", "user.name", "CI Test"])
     git(workDir, ["add", "-A", "deploy"])
     git(workDir, ["commit", "-m", "successful deploy"])
-    const successSha = git(workDir, ["rev-parse", "--short", "HEAD"])
+    const successSha = git(workDir, ["rev-parse", "HEAD"])
 
-    const run = (script) => {
+    const run = (script, args = [], extraEnv = {}) => {
       const errPath = path.join(workDir, `${script}.err`)
+      const command = [path.join(homeserverDir, script), ...args].map((value) => JSON.stringify(value)).join(" ")
       const stdout = execFileSync(
         "bash",
-        ["-c", `${JSON.stringify(path.join(homeserverDir, script))} 2> ${JSON.stringify(errPath)}`],
+        ["-c", `${command} 2> ${JSON.stringify(errPath)}`],
         {
           cwd: workDir,
           encoding: "utf8",
-          env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` },
+          env: { ...process.env, ...extraEnv, PATH: `${stubDir}:${process.env.PATH}` },
           stdio: ["ignore", "pipe", "pipe"],
         },
       ).trim()
       return { stdout, stderr: readFileSync(errPath, "utf8") }
     }
 
-    const runFailing = (script) => {
+    const runFailing = (script, args = [], extraEnv = {}) => {
       const errPath = path.join(workDir, `${script}.err`)
+      const command = [path.join(homeserverDir, script), ...args].map((value) => JSON.stringify(value)).join(" ")
       try {
         execFileSync(
           "bash",
-          ["-c", `${JSON.stringify(path.join(homeserverDir, script))} 2> ${JSON.stringify(errPath)}`],
+          ["-c", `${command} 2> ${JSON.stringify(errPath)}`],
           {
             cwd: workDir,
             encoding: "utf8",
-            env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` },
+            env: { ...process.env, ...extraEnv, PATH: `${stubDir}:${process.env.PATH}` },
             stdio: ["ignore", "pipe", "pipe"],
           },
         )
@@ -4318,12 +4360,25 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
       throw new Error(`${script} was expected to fail`)
     }
 
+    const publishBaseline = (markerSha = successSha, deploySha = git(workDir, ["rev-parse", "HEAD"])) => {
+      run(
+        "record_deploy_baseline.sh",
+        ["--stage-pending"],
+        { DEPLOY_BASELINE_SHA: deploySha, PROFILE_WORKSPACE_CUTOVER_SHA: markerSha },
+      )
+      return run(
+        "record_deploy_baseline.sh",
+        ["--publish-pending"],
+        { PROFILE_WORKSPACE_CUTOVER_SHA: markerSha },
+      )
+    }
+
     // 실패한 배포도 서버에 checkout되므로 HEAD는 실패한 커밋으로 이동한다.
     const checkoutFailedDeployCommit = () => {
       writeFileSync(path.join(workDir, "failed-deploy-marker"), "failed\n")
       git(workDir, ["add", "failed-deploy-marker"])
       git(workDir, ["commit", "-m", "failed deploy"])
-      return git(workDir, ["rev-parse", "--short", "HEAD"])
+      return git(workDir, ["rev-parse", "HEAD"])
     }
 
     // 실패한 배포가 rollback으로 남기고 간 워크트리 상태.
@@ -4350,6 +4405,7 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
       successSha,
       run,
       runFailing,
+      publishBaseline,
       checkoutFailedDeployCommit,
       applyFailedRollbackLeftovers,
       baselineScratchLeftovers,
@@ -4359,7 +4415,7 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
 
   const withBaseline = createFixture()
   try {
-    withBaseline.run("record_deploy_baseline.sh")
+    withBaseline.publishBaseline()
     const failedSha = withBaseline.checkoutFailedDeployCommit()
     withBaseline.applyFailedRollbackLeftovers()
 
@@ -4402,16 +4458,16 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
   const republished = createFixture()
   try {
     const baselineDir = path.join(republished.homeserverDir, ".deploy-baseline")
-    republished.run("record_deploy_baseline.sh")
+    republished.publishBaseline()
     assert.equal(republished.readMetadata(baselineDir).deploy_sha, republished.successSha)
 
     const nextCompose = "services:\n  db_1: {}\n  cloudflared: {}\n"
     writeFileSync(path.join(republished.homeserverDir, "docker-compose.prod.yml"), nextCompose)
     git(republished.workDir, ["add", "deploy/homeserver/docker-compose.prod.yml"])
     git(republished.workDir, ["commit", "-m", "next successful deploy"])
-    const nextSha = git(republished.workDir, ["rev-parse", "--short", "HEAD"])
+    const nextSha = git(republished.workDir, ["rev-parse", "HEAD"])
 
-    republished.run("record_deploy_baseline.sh")
+    republished.publishBaseline(republished.successSha, nextSha)
 
     assert.equal(readFileSync(path.join(baselineDir, "docker-compose.prod.yml"), "utf8"), nextCompose)
     assert.equal(republished.readMetadata(baselineDir).deploy_sha, nextSha)
@@ -4428,10 +4484,17 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
   const failedRecording = createFixture()
   try {
     const baselineDir = path.join(failedRecording.homeserverDir, ".deploy-baseline")
-    failedRecording.run("record_deploy_baseline.sh")
+    failedRecording.publishBaseline()
 
     rmSync(path.join(failedRecording.homeserverDir, "docker-compose.prod.yml"))
-    const { status, stderr } = failedRecording.runFailing("record_deploy_baseline.sh")
+    const { status, stderr } = failedRecording.runFailing(
+      "record_deploy_baseline.sh",
+      ["--stage-pending"],
+      {
+        DEPLOY_BASELINE_SHA: failedRecording.successSha,
+        PROFILE_WORKSPACE_CUTOVER_SHA: failedRecording.successSha,
+      },
+    )
 
     assert.equal(status, 1)
     assert.match(stderr, /deploy baseline not recorded: compose file missing/)
@@ -4449,6 +4512,102 @@ test("연속 실패한 배포가 rollback 복원 기준점을 마지막 성공 �
     assert.equal(readFileSync(path.join(backupDir, "docker-compose.prod.yml"), "utf8"), successCompose)
   } finally {
     rmSync(failedRecording.workDir, { force: true, recursive: true })
+  }
+
+  const interruptedPublish = createFixture()
+  try {
+    const baselineDir = path.join(interruptedPublish.homeserverDir, ".deploy-baseline")
+    const recoveryDir = path.join(interruptedPublish.homeserverDir, ".deploy-baseline.recovery")
+    interruptedPublish.publishBaseline()
+    renameSync(baselineDir, recoveryDir)
+    rmSync(path.join(interruptedPublish.homeserverDir, "docker-compose.prod.yml"))
+
+    const { status } = interruptedPublish.runFailing(
+      "record_deploy_baseline.sh",
+      ["--stage-pending"],
+      {
+        DEPLOY_BASELINE_SHA: interruptedPublish.successSha,
+        PROFILE_WORKSPACE_CUTOVER_SHA: interruptedPublish.successSha,
+      },
+    )
+
+    assert.equal(status, 1)
+    assert.equal(interruptedPublish.readMetadata(baselineDir).deploy_sha, interruptedPublish.successSha)
+    assert.equal(existsSync(recoveryDir), false)
+  } finally {
+    rmSync(interruptedPublish.workDir, { force: true, recursive: true })
+  }
+
+  const recoverablePending = createFixture()
+  try {
+    const baselineDir = path.join(recoverablePending.homeserverDir, ".deploy-baseline")
+    recoverablePending.publishBaseline()
+    recoverablePending.run(
+      "record_deploy_baseline.sh",
+      ["--stage-pending"],
+      {
+        DEPLOY_BASELINE_SHA: recoverablePending.successSha,
+        PROFILE_WORKSPACE_CUTOVER_SHA: recoverablePending.successSha,
+      },
+    )
+
+    const backupDir = recoverablePending.run(
+      "create_deploy_backup.sh",
+      [],
+      { STUB_MARKER_PRESENT: "t", STUB_MARKER_SHA: recoverablePending.successSha },
+    ).stdout
+
+    assert.equal(recoverablePending.readMetadata(baselineDir).profile_workspace_cutover_sha, recoverablePending.successSha)
+    assert.equal(recoverablePending.readMetadata(backupDir).restore_source, "baseline")
+    assert.equal(recoverablePending.readMetadata(backupDir).baseline_deploy_sha, recoverablePending.successSha)
+    assert.deepEqual(recoverablePending.baselineScratchLeftovers(), [])
+  } finally {
+    rmSync(recoverablePending.workDir, { force: true, recursive: true })
+  }
+
+  const mismatchedPending = createFixture()
+  try {
+    const baselineDir = path.join(mismatchedPending.homeserverDir, ".deploy-baseline")
+    mismatchedPending.publishBaseline()
+    mismatchedPending.run(
+      "record_deploy_baseline.sh",
+      ["--stage-pending"],
+      {
+        DEPLOY_BASELINE_SHA: mismatchedPending.successSha,
+        PROFILE_WORKSPACE_CUTOVER_SHA: mismatchedPending.successSha,
+      },
+    )
+
+    const { status, stderr } = mismatchedPending.runFailing(
+      "create_deploy_backup.sh",
+      [],
+      { STUB_MARKER_PRESENT: "t", STUB_MARKER_SHA: "2222222222222222222222222222222222222222" },
+    )
+
+    assert.equal(status, 1)
+    assert.match(stderr, /live cutover has no complete compatible pending baseline/)
+    assert.equal(mismatchedPending.readMetadata(baselineDir).deploy_sha, mismatchedPending.successSha)
+  } finally {
+    rmSync(mismatchedPending.workDir, { force: true, recursive: true })
+  }
+
+  const incompletePending = createFixture()
+  try {
+    incompletePending.publishBaseline()
+    const pendingDir = path.join(incompletePending.homeserverDir, ".deploy-baseline.pending")
+    mkdirSync(pendingDir)
+    writeFileSync(path.join(pendingDir, "docker-compose.prod.yml"), successCompose)
+
+    const backupDir = incompletePending.run(
+      "create_deploy_backup.sh",
+      [],
+      { STUB_MARKER_PRESENT: "t", STUB_MARKER_SHA: incompletePending.successSha },
+    ).stdout
+
+    assert.equal(incompletePending.readMetadata(backupDir).restore_source, "baseline")
+    assert.equal(existsSync(pendingDir), false, "a partial candidate must not shadow the compatible published baseline")
+  } finally {
+    rmSync(incompletePending.workDir, { force: true, recursive: true })
   }
 })
 

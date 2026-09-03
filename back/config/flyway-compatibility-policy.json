@@ -30,6 +30,19 @@
       "file": "back/src/main/resources/db/migration/V20260902_03__drop_retired_member_legal_acceptance.sql",
       "class": "CONTRACT_AFTER_CUTOVER",
       "cutoverEvidenceId": "retired-legal-acceptance-runtime"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260903_01__enforce_task_payload_v2_storage.sql",
+      "class": "CONTRACT_AFTER_CUTOVER",
+      "cutoverEvidenceId": "task-payload-v2-producer"
+    },
+    {
+      "file": "back/src/main/kotlin/db/migration/V20260903_02__reconcile_profile_workspace_snapshots.kt",
+      "class": "REQUIRES_N_MINUS_1_TEST"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260903_03__create_platform_schema_cutover.sql",
+      "class": "EXPAND_SAFE"
     }
   ],
   "cutovers": [

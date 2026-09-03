@@ -92,7 +92,7 @@ class TaskFacadeTest {
         val registry = TaskHandlerRegistry()
         registry.register(
             StubTaskPayload.TASK_TYPE,
-            TaskHandlerEntry.withExactDecoders(
+            TaskHandlerEntry.withCurrentDecoder(
                 taskType = StubTaskPayload.TASK_TYPE,
                 payloadClass = StubTaskPayload::class.java,
                 handlerMethod =

@@ -73,11 +73,6 @@ interface PostRepositoryPort {
 
     fun findFirstByOrderByIdDesc(): Post?
 
-    fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(
-        author: Member,
-        title: String,
-    ): Post?
-
     fun existsByAuthorAndTitle(
         author: Member,
         title: String,

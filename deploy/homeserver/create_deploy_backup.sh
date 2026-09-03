@@ -10,6 +10,7 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
 BASELINE_DIR="${SCRIPT_DIR}/.deploy-baseline"
+PENDING_DIR="${SCRIPT_DIR}/.deploy-baseline.pending"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP_DIR="${BACKUP_ROOT}/${TIMESTAMP}"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
@@ -92,7 +93,17 @@ query_flyway_schema_version() {
   echo "${version}"
 }
 
-mkdir -p "${BACKUP_DIR}"
+query_profile_workspace_cutover_sha() {
+  local db_name table_exists value
+  db_name="$(resolve_prod_db_name)"
+  table_exists="$(docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/docker-compose.prod.yml" exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.platform_schema_cutover') IS NOT NULL" 2>/dev/null | tr -d '\r' | tail -n 1)" || return 1
+  [[ "${table_exists}" == "f" ]] && { printf 'absent\n'; return 0; }
+  [[ "${table_exists}" == "t" ]] || return 1
+  value="$(docker compose --env-file "${ENV_FILE}" -f "${SCRIPT_DIR}/docker-compose.prod.yml" exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r' | tail -n 1)" || return 1
+  [[ -z "${value}" ]] && { printf 'absent\n'; return 0; }
+  [[ "${value}" =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s\n' "${value}"
+}
 
 # The restorable file set must describe the last deploy that passed every post-deploy
 # check, not whatever the previous run happened to leave behind: a failed deploy rolls
@@ -103,6 +114,14 @@ mkdir -p "${BACKUP_DIR}"
 # exists yet, which must stay visible in the deploy log.
 # The gate checks caddy/Caddyfile rather than the caddy directory: an empty caddy/ would
 # pass a directory test and produce a backup that restores no reverse-proxy config at all.
+profile_workspace_cutover_sha="$(query_profile_workspace_cutover_sha)" || { echo "deploy backup: profile workspace marker query failed" >&2; exit 1; }
+if [[ "${profile_workspace_cutover_sha}" != "absent" ]]; then
+  if [[ "$(read_key_from_file "profile_workspace_cutover_sha" "${BASELINE_DIR}/metadata.env")" != "${profile_workspace_cutover_sha}" ]]; then
+    PROFILE_WORKSPACE_CUTOVER_SHA="${profile_workspace_cutover_sha}" "${SCRIPT_DIR}/record_deploy_baseline.sh" --publish-pending >/dev/null || { echo "deploy backup: live cutover has no complete compatible pending baseline" >&2; exit 1; }
+  else
+    rm -rf "${PENDING_DIR}"
+  fi
+fi
 restore_source="worktree"
 if [[ -f "${BASELINE_DIR}/docker-compose.prod.yml" && -f "${BASELINE_DIR}/caddy/Caddyfile" ]]; then
   restore_source="baseline"
@@ -110,17 +129,21 @@ else
   echo "deploy backup: no successful-deploy baseline at ${BASELINE_DIR}; falling back to server working tree files" >&2
 fi
 
+if [[ "${profile_workspace_cutover_sha}" != "absent" ]]; then
+  [[ "${restore_source}" == "baseline" ]] || { echo "deploy backup: post-cutover rollback requires a complete baseline" >&2; exit 1; }
+  [[ "$(read_key_from_file "profile_workspace_cutover_sha" "${BASELINE_DIR}/metadata.env")" == "${profile_workspace_cutover_sha}" ]] || { echo "deploy backup: baseline marker does not match live cutover" >&2; exit 1; }
+  baseline_sha="$(read_key_from_file "deploy_sha" "${BASELINE_DIR}/metadata.env")"
+  [[ "${baseline_sha}" =~ ^[0-9a-f]{40}$ ]] && git -C "${SCRIPT_DIR}/../.." merge-base --is-ancestor "${profile_workspace_cutover_sha}" "${baseline_sha}" || { echo "deploy backup: baseline source is below profile workspace cutover" >&2; exit 1; }
+fi
+
+mkdir -p "${BACKUP_DIR}"
+
 if [[ "${restore_source}" == "baseline" ]]; then
   cp "${BASELINE_DIR}/docker-compose.prod.yml" "${BACKUP_DIR}/docker-compose.prod.yml"
   cp -R "${BASELINE_DIR}/caddy" "${BACKUP_DIR}/caddy"
 else
-  if [[ -d "${SCRIPT_DIR}/caddy" ]]; then
-    cp -R "${SCRIPT_DIR}/caddy" "${BACKUP_DIR}/caddy"
-  elif [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
-    # legacy fallback for older layout
-    mkdir -p "${BACKUP_DIR}/caddy"
-    cp "${SCRIPT_DIR}/Caddyfile" "${BACKUP_DIR}/caddy/Caddyfile"
-  fi
+  [[ -f "${SCRIPT_DIR}/caddy/Caddyfile" ]] || { echo "deploy backup: caddy config missing under ${SCRIPT_DIR}/caddy" >&2; exit 1; }
+  cp -R "${SCRIPT_DIR}/caddy" "${BACKUP_DIR}/caddy"
 
   if [[ -f "${SCRIPT_DIR}/docker-compose.prod.yml" ]]; then
     cp "${SCRIPT_DIR}/docker-compose.prod.yml" "${BACKUP_DIR}/docker-compose.prod.yml"
@@ -159,10 +182,11 @@ compose_image_keys=(AUTOHEAL_IMAGE DOCKER_SOCKET_PROXY_IMAGE CLOUDFLARED_IMAGE C
 
 {
   echo "created_at=${TIMESTAMP}"
-  echo "manifest_version=4"
+  echo "manifest_version=5"
   echo "secret_files_copied=false"
   echo "flyway_schema_version=${flyway_schema_version}"
-  echo "git_head=$(git -C "${SCRIPT_DIR}/../.." rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  echo "git_head=$(git -C "${SCRIPT_DIR}/../.." rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "profile_workspace_cutover_sha=${profile_workspace_cutover_sha}"
   # git_head is the commit currently checked out on the server, which after a failed
   # deploy is the commit that failed. restore_source/baseline_* describe the commit the
   # restorable files actually came from.

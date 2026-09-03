@@ -9,6 +9,7 @@ const frameworkFiles = new Set([
   "tools/ci/classify-release.mjs",
   ".github/workflows/reusable-backend-quality.yml",
   "back/src/test/kotlin/com/back/infrastructure/FlywayNMinusOneCompatibilityTestcontainersIntegrationTest.kt",
+  "back/src/test/kotlin/com/back/infrastructure/ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest.kt",
   "tools/test/flyway-deploy-safety.test.mjs",
 ])
 
@@ -34,8 +35,12 @@ const readChangedFiles = (file) =>
     .map((line) => line.trim())
     .filter(Boolean)
 
-const isMigrationFile = (file) => /^back\/src\/main\/resources\/db\/migration\/.+\.sql$/.test(file)
-const isVersionedMigration = (file) => /^back\/src\/main\/resources\/db\/migration\/V.+\.sql$/.test(file)
+const isSqlMigrationFile = (file) => /^back\/src\/main\/resources\/db\/migration\/.+\.sql$/.test(file)
+const isJavaMigrationFile = (file) =>
+  /^back\/src\/main\/kotlin\/db\/migration\/V[0-9]{8}_[0-9]{2}__[A-Za-z0-9_]+\.kt$/.test(file)
+const isMigrationFile = (file) => isSqlMigrationFile(file) || isJavaMigrationFile(file)
+const isVersionedMigration = (file) =>
+  /^back\/src\/main\/resources\/db\/migration\/V.+\.sql$/.test(file) || isJavaMigrationFile(file)
 const isProceduralBodyPrefix = (statement) =>
   /\bdo\s+(?:language\s+[a-z_][a-z0-9_]*\s+)?$/i.test(statement) || /\bas\s*$/i.test(statement)
 
@@ -247,7 +252,12 @@ const main = () => {
   }
 
   for (const file of checkedFiles) {
-    const destructive = inspectFile({ repoRoot: args.repoRoot, file })
+    const destructive =
+      isSqlMigrationFile(file)
+        ? inspectFile({ repoRoot: args.repoRoot, file })
+        : existsSync(path.join(args.repoRoot, file))
+          ? []
+          : [{ file, rule: "missing-migration-file" }]
     if (destructive.some(({ rule }) => rule === "missing-migration-file")) {
       findings.push(...destructive)
       continue
@@ -259,6 +269,10 @@ const main = () => {
     const entry = currentPolicy.migrations?.get(file)
     if (!entry) {
       findings.push({ file, rule: "missing-compatibility-class" })
+      continue
+    }
+    if (isJavaMigrationFile(file) && entry.class === "EXPAND_SAFE") {
+      findings.push({ file, rule: "java-migration-expand-safe-unsupported" })
       continue
     }
     classifications.push({ file, class: entry.class, ...(entry.cutoverEvidenceId ? { cutoverEvidenceId: entry.cutoverEvidenceId } : {}) })

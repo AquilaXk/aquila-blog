@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
@@ -347,7 +348,20 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 nickname = "user1",
                 email = "user1@test.com",
             )
-        author.profileImgUrl = "https://cdn.example.com/profiles/user1.png"
+        author.setProfileWorkspaceDraftContent(
+            MemberProfileWorkspaceContent(profileImageUrl = "https://cdn.example.com/profiles/user1.png"),
+        )
+        author.setProfileWorkspacePublishedContent(
+            MemberProfileWorkspaceContent(profileImageUrl = "https://cdn.example.com/profiles/user1.png"),
+        )
+        author.getProfileWorkspaceDraftAttr().apply {
+            createdAt = Instant.parse("2026-03-13T00:00:00Z")
+            modifiedAt = Instant.parse("2026-03-13T00:00:00Z")
+        }
+        author.getProfileWorkspacePublishedAttr().apply {
+            createdAt = Instant.parse("2026-03-13T00:00:00Z")
+            modifiedAt = Instant.parse("2026-03-13T00:00:00Z")
+        }
         val post =
             Post(
                 id = id,

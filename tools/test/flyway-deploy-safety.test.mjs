@@ -81,6 +81,51 @@ test("changed versioned migration without a machine-readable compatibility class
   }
 })
 
+test("Kotlin Java migrations require N-1 policy and cannot claim EXPAND_SAFE", () => {
+  const file = "back/src/main/kotlin/db/migration/V20260903_02__reconcile_profile_workspace_snapshots.kt"
+  const root = createRepo({ files: { [file]: "class V20260903_02__reconcile_profile_workspace_snapshots" } })
+
+  try {
+    const missing = runSafety({ root, changedFiles: [file], policy: compatibilityPolicy() })
+    assert.equal(missing.status, 1)
+    assert.deepEqual(missing.json.checkedFiles, [file])
+    assert.deepEqual(missing.json.findings, [{ file, rule: "missing-compatibility-class" }])
+
+    const expand = runSafety({
+      root,
+      changedFiles: [file],
+      policy: compatibilityPolicy({ migrations: [{ file, class: "EXPAND_SAFE" }] }),
+    })
+    assert.equal(expand.status, 1)
+    assert.deepEqual(expand.json.findings, [{ file, rule: "java-migration-expand-safe-unsupported" }])
+
+    const nMinusOne = runSafety({
+      root,
+      changedFiles: [file],
+      policy: compatibilityPolicy({ migrations: [{ file, class: "REQUIRES_N_MINUS_1_TEST" }] }),
+    })
+    assert.equal(nMinusOne.status, 0, nMinusOne.stderr)
+    assert.equal(nMinusOne.json.runNMinusOne, true)
+    assert.deepEqual(nMinusOne.json.classifications, [{ file, class: "REQUIRES_N_MINUS_1_TEST" }])
+  } finally {
+    rmSync(root, { force: true, recursive: true })
+  }
+})
+
+test("profile migration acceptance changes route the N-1 framework lane", () => {
+  const file =
+    "back/src/test/kotlin/com/back/infrastructure/ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest.kt"
+  const root = createRepo({ files: { [file]: "class ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest" } })
+
+  try {
+    const result = runSafety({ root, changedFiles: [file] })
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.json.frameworkChanged, true)
+  } finally {
+    rmSync(root, { force: true, recursive: true })
+  }
+})
+
 test("EXPAND_SAFE permits additive SQL and rejects destructive SQL", () => {
   const additiveFile = "back/src/main/resources/db/migration/V20260619_03__expand_safe.sql"
   const destructiveFile = "back/src/main/resources/db/migration/V20260619_04__expand_unsafe.sql"

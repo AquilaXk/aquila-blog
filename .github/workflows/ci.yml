@@ -36,7 +36,7 @@ on:
       - "tools/repo-split/**"
       - "tools/guards/check-public-api-caddy-drift.sh"
       - "tools/guards/public-api-read-caddy-paths.sot"
-      - "infra/**"
+      - "**/*.tf"
       - "tools/test/check-forbidden-tracked-files.test.sh"
       - "tools/test/materialize-compose-test-env.test.mjs"
       - "tools/test/repository-standalone-verification.test.sh"
@@ -108,9 +108,6 @@ jobs:
 
       - name: Verify contentHtml trust inventory contract
         run: node --test tools/test/content-html-trust-inventory.test.mjs
-
-      - name: Verify task payload v1 inventory contract
-        run: node --test tools/test/task-payload-v1-inventory.test.mjs
 
       - name: Verify hot-query telemetry capability contract
         run: node --test tools/test/hot-query-telemetry-capability.test.mjs

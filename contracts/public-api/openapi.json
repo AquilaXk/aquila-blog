@@ -878,91 +878,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemberWithUsernameDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/member/api/v1/adm/members/{id}/profileImgUrl": {
-      "patch": {
-        "tags": [
-          "api-v-1-adm-member-controller"
-        ],
-        "operationId": "updateProfileImg",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "exclusiveMinimum": 0
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProfileImgRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemberWithUsernameDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/member/api/v1/adm/members/{id}/profileCard": {
-      "patch": {
-        "tags": [
-          "api-v-1-adm-member-controller"
-        ],
-        "operationId": "updateProfileCard",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "exclusiveMinimum": 0
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProfileCardRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemberWithUsernameDto"
+                  "$ref": "#/components/schemas/ProfileImageUploadResponse"
                 }
               }
             }
@@ -2939,18 +2855,12 @@
             "minLength": 0
           },
           "blogDesign": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "maxLength": 20,
             "minLength": 0
           },
           "legacyBlogScheme": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "maxLength": 20,
             "minLength": 0
           },
@@ -3809,29 +3719,21 @@
           "code"
         ]
       },
-      "MemberDto": {
+      "AuthSessionMemberDto": {
         "type": "object",
         "properties": {
-          "isAdmin": {
-            "type": "boolean"
-          },
           "id": {
             "type": "integer",
             "format": "int64"
           },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "modifiedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "name": {
+          "username": {
             "type": "string"
           },
-          "profileImageUrl": {
+          "nickname": {
             "type": "string"
+          },
+          "isAdmin": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -3842,7 +3744,7 @@
         "type": "object",
         "properties": {
           "item": {
-            "$ref": "#/components/schemas/MemberDto"
+            "$ref": "#/components/schemas/AuthSessionMemberDto"
           }
         }
       },
@@ -3902,6 +3804,27 @@
           }
         }
       },
+      "ProfileImageUploadResponse": {
+        "type": "object",
+        "properties": {
+          "profileImageUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateProfileIdentityRequest": {
+        "type": "object",
+        "properties": {
+          "nickname": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 2
+          }
+        },
+        "required": [
+          "nickname"
+        ]
+      },
       "MemberWithUsernameDto": {
         "type": "object",
         "properties": {
@@ -3929,9 +3852,6 @@
           "profileImageUrl": {
             "type": "string"
           },
-          "profileImageDirectUrl": {
-            "type": "string"
-          },
           "profileRole": {
             "type": "string"
           },
@@ -3945,9 +3865,6 @@
             "type": "string"
           },
           "aboutBio": {
-            "type": "string"
-          },
-          "aboutDetails": {
             "type": "string"
           },
           "aboutSections": {
@@ -3998,118 +3915,6 @@
         },
         "required": [
           "isAdmin"
-        ]
-      },
-      "UpdateProfileImgRequest": {
-        "type": "object",
-        "properties": {
-          "profileImgUrl": {
-            "type": "string",
-            "maxLength": 2000,
-            "minLength": 0
-          }
-        },
-        "required": [
-          "profileImgUrl"
-        ]
-      },
-      "UpdateProfileCardRequest": {
-        "type": "object",
-        "properties": {
-          "role": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 0
-          },
-          "bio": {
-            "type": "string",
-            "maxLength": 1000,
-            "minLength": 0
-          },
-          "aboutRole": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 100,
-            "minLength": 0
-          },
-          "aboutBio": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 2000,
-            "minLength": 0
-          },
-          "aboutDetails": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 12000,
-            "minLength": 0
-          },
-          "blogTitle": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 0
-          },
-          "homeIntroTitle": {
-            "type": "string",
-            "maxLength": 120,
-            "minLength": 0
-          },
-          "homeIntroDescription": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 0
-          },
-          "blogDesign": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 20,
-            "minLength": 0
-          },
-          "legacyBlogScheme": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "maxLength": 20,
-            "minLength": 0
-          },
-          "serviceLinks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProfileCardLinkItemRequest"
-            },
-            "maxItems": 30,
-            "minItems": 0
-          },
-          "contactLinks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProfileCardLinkItemRequest"
-            },
-            "maxItems": 30,
-            "minItems": 0
-          }
-        }
-      },
-      "UpdateProfileIdentityRequest": {
-        "type": "object",
-        "properties": {
-          "nickname": {
-            "type": "string",
-            "maxLength": 30,
-            "minLength": 2
-          }
-        },
-        "required": [
-          "nickname"
         ]
       },
       "TaskExecutionSample": {
@@ -4680,27 +4485,6 @@
             "$ref": "#/components/schemas/AdminDashboardSnapshot"
           }
         }
-      },
-      "AuthSessionMemberDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "username": {
-            "type": "string"
-          },
-          "nickname": {
-            "type": "string"
-          },
-          "isAdmin": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "isAdmin"
-        ]
       },
       "AuthSecurityEventDto": {
         "type": "object",

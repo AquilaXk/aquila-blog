@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
@@ -107,7 +108,7 @@ class PostApplicationServiceDeleteResilienceTest {
         PostTagIndexService(
             postTagIndexRepository = postTagIndexRepository,
         )
-    private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository)
+    private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
     private val postHitSideEffectQueue = PostHitSideEffectQueue(taskFacade)
     private val service =
         PostApplicationService(
@@ -138,7 +139,7 @@ class PostApplicationServiceDeleteResilienceTest {
                 nickname = "작성자",
                 email = null,
                 apiKey = "author-api-key",
-            )
+            ).also { it.setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent()) }
         val actor =
             Member(
                 id = 2,
@@ -206,7 +207,7 @@ class PostApplicationServiceDeleteResilienceTest {
                         nickname = "복구작성자",
                         email = null,
                         apiKey = "restored-author-api-key",
-                    ),
+                    ).also { it.setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent()) },
                 title = "복구 대상",
                 content = "tags: tag\n\n복구 본문",
                 published = true,
@@ -256,7 +257,7 @@ class PostApplicationServiceDeleteResilienceTest {
                         nickname = "반복복구작성자",
                         email = null,
                         apiKey = "repeat-restore-author-api-key",
-                    ),
+                    ).also { it.setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent()) },
                 title = "반복 복구 대상",
                 content = "반복 복구 본문 #tag",
                 published = true,
@@ -392,7 +393,7 @@ class PostApplicationServiceDeleteResilienceTest {
         val registry = TaskHandlerRegistry()
         registry.register(
             PostWriteSideEffectPayload.TASK_TYPE,
-            TaskHandlerEntry.withExactDecoders(
+            TaskHandlerEntry.withCurrentDecoder(
                 taskType = PostWriteSideEffectPayload.TASK_TYPE,
                 payloadClass = PostWriteSideEffectPayload::class.java,
                 handlerMethod =

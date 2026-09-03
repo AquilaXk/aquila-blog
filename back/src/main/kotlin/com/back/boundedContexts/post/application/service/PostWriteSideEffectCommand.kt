@@ -3,7 +3,6 @@ package com.back.boundedContexts.post.application.service
 import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.task.annotation.Task
 import com.back.global.task.annotation.TaskPayloadSensitivity
-import com.back.standard.dto.LegacyTaskPayload
 import com.back.standard.dto.TaskPayload
 import java.util.UUID
 
@@ -11,7 +10,6 @@ import java.util.UUID
     type = PostWriteSideEffectPayload.TASK_TYPE,
     schemaVersion = 2,
     sensitivity = TaskPayloadSensitivity.PERSONAL,
-    legacyPayloadClass = PostWriteSideEffectPayloadV1::class,
     label = "게시글 쓰기 후속 작업",
     maxRetries = 5,
     baseDelaySeconds = 10,
@@ -35,39 +33,6 @@ data class PostWriteSideEffectPayload(
     companion object {
         const val TASK_TYPE = "post.write.side-effect"
     }
-}
-
-data class PostWriteSideEffectPayloadV1(
-    override val uid: UUID,
-    override val aggregateType: String,
-    override val aggregateId: Long,
-    val postId: Long,
-    val previousContent: String?,
-    val currentContent: String?,
-    val deletedContent: String?,
-    val beforeTags: List<String>,
-    val afterTags: List<String>,
-    val cacheInvalidationTargets: Set<PostReadCacheInvalidationTarget>,
-    val evictReason: String,
-    val recommendationAction: PostRecommendationSideEffect,
-    val domainEventType: String?,
-    val domainEventJson: String?,
-) : LegacyTaskPayload {
-    override fun toCurrentTaskPayload(): TaskPayload =
-        PostWriteSideEffectPayload(
-            uid = uid,
-            aggregateType = aggregateType,
-            aggregateId = aggregateId,
-            postId = postId,
-            attachmentKeys = PostAttachmentObjectKeySnapshot.fromContents(previousContent, currentContent, deletedContent),
-            beforeTags = beforeTags,
-            afterTags = afterTags,
-            cacheInvalidationTargets = cacheInvalidationTargets,
-            evictReason = evictReason,
-            recommendationAction = recommendationAction,
-            domainEventType = domainEventType,
-            domainEventJson = domainEventJson,
-        )
 }
 
 enum class PostAttachmentTaskAction {

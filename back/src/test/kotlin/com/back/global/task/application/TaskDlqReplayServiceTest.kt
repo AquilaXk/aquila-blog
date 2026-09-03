@@ -85,7 +85,7 @@ class TaskDlqReplayServiceTest {
 
         @Suppress("UNCHECKED_CAST")
         val typedClass = payloadClass as Class<out TaskPayload>
-        return TaskHandlerEntry.withExactDecoders(
+        return TaskHandlerEntry.withCurrentDecoder(
             taskType = taskType,
             payloadClass = typedClass,
             handlerMethod =

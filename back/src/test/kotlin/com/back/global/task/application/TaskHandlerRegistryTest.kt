@@ -9,32 +9,11 @@ import java.util.UUID
 
 class TaskHandlerRegistryTest {
     @Test
-    fun `handler entry는 current schema와 exact decoder registry만 허용한다`() {
+    fun `handler entry는 v2 schema만 허용한다`() {
         assertThatThrownBy {
-            entry(
-                schemaVersion = 1,
-                decoders = mapOf(1 to TaskPayloadDecoder(1, StubTaskPayload::class.java)),
-            )
+            entry(schemaVersion = 1)
         }.isInstanceOf(IllegalArgumentException::class.java)
             .hasMessage("Current task payload schema must be 2")
-
-        assertThatThrownBy {
-            entry(
-                decoders = mapOf(2 to TaskPayloadDecoder(2, StubTaskPayload::class.java)),
-            )
-        }.isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessage("Task payload decoders must register exact v1 and v2")
-
-        assertThatThrownBy {
-            entry(
-                decoders =
-                    mapOf(
-                        1 to TaskPayloadDecoder(1, StubTaskPayload::class.java),
-                        2 to TaskPayloadDecoder(1, StubTaskPayload::class.java),
-                    ),
-            )
-        }.isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessage("Task payload decoder key and schemaVersion must match")
     }
 
     @Test
@@ -43,7 +22,7 @@ class TaskHandlerRegistryTest {
         val first = entry()
         registry.register(TASK_TYPE, first)
 
-        assertThat(first.decoders.keys).containsExactlyInAnyOrder(1, 2)
+        assertThat(first.schemaVersion).isEqualTo(TaskHandlerRegistry.CURRENT_TASK_PAYLOAD_SCHEMA_VERSION)
         assertThat(registry.getType(StubTaskPayload::class.java)).isEqualTo(TASK_TYPE)
         assertThatThrownBy { registry.register(TASK_TYPE, entry()) }
             .isInstanceOf(IllegalStateException::class.java)
@@ -51,14 +30,7 @@ class TaskHandlerRegistryTest {
             .hasMessageContaining("StubTaskHandler")
     }
 
-    private fun entry(
-        schemaVersion: Int = 2,
-        decoders: Map<Int, TaskPayloadDecoder> =
-            mapOf(
-                1 to TaskPayloadDecoder(1, StubTaskPayload::class.java),
-                2 to TaskPayloadDecoder(2, StubTaskPayload::class.java),
-            ),
-    ): TaskHandlerEntry {
+    private fun entry(schemaVersion: Int = 2): TaskHandlerEntry {
         val handler = StubTaskHandler()
         return TaskHandlerEntry(
             taskType = TASK_TYPE,
@@ -71,7 +43,6 @@ class TaskHandlerRegistryTest {
             retryPolicy = TaskRetryPolicy("test", 3, 1, 2.0, 10),
             schemaVersion = schemaVersion,
             sensitivity = TaskPayloadSensitivity.INTERNAL,
-            decoders = decoders,
         )
     }
 

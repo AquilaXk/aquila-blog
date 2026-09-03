@@ -34,9 +34,9 @@ Aquila Blog는 공개 블로그와 관리자 글쓰기 작업실, 백엔드 API,
 ## Features
 
 - **Public Blog**: 게시글 피드, 상세 페이지, 검색, 태그 기반 탐색
-- **Content Studio**: 관리자 글 작성, 미리보기, 임시 저장, 발행 관리
+- **Unified Authoring**: 관리자 글 작성 화면에서 편집·미리보기·임시 저장·발행 관리
 - **Markdown Rendering**: GFM, 코드 하이라이트, Mermaid, 수식, 콜아웃 렌더링
-- **Auth & Profile**: 로그인, OAuth, 프로필/작성자 정보 관리
+- **Admin Access & Profile**: 이메일 인증 코드, 유지 세션, 관리자 프로필과 작성자 정보 관리
 - **Storage**: MinIO 기반 이미지 업로드와 정리 흐름
 - **Operations**: 홈서버 배포, 헬스체크, 롤백, 모니터링, 회귀 검증
 
@@ -83,9 +83,8 @@ Spring Boot + Kotlin API
 ├── back/                   # Spring Boot + Kotlin API server
 ├── deploy/homeserver/      # Production compose, Caddy, blue-green deploy, rollback, monitoring
 ├── perf/k6/                # Read-path load and chaos scenarios
-├── docs/                   # Tracked user-facing design and legal document hub
+├── docs/                   # Tracked design and operations documentation
 ├── tools/                  # Repository guards and automation scripts
-├── infra/                  # Legacy / experimental Terraform setup
 └── README.assets/          # Screenshots and README images
 ```
 
@@ -166,9 +165,8 @@ cd back
 
 | Document | Description |
 | --- | --- |
-| [Docs Hub](docs/README.md) | Tracked user-facing design and legal document entry point |
+| [Docs Hub](docs/README.md) | Tracked design and operations documentation |
 | [Web Repository](https://github.com/AquilaXk/aquila-blog-web) | Web source, routes, scripts, UI checks, and image production |
 | [Backend README](back/README.md) | Backend architecture, API modules, quality checks, and OpenAPI flow |
 | [k6 Guide](perf/k6/README.md) | Load and chaos scenarios for public read paths |
 | [Home Server Hardening](deploy/homeserver/HARDENING.md) | Home server hardening and operational checklist |
-| [Legacy Infra](infra/README.md) | Legacy cloud infra experiment; production uses homeserver deploy |

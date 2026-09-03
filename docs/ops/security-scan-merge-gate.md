@@ -33,7 +33,6 @@ DB refresh source under that gate.
 - `vulnerability-exception-schema`
 - `container-image-scan`
 - `sbom`
-- `privacy-drift-gate`
 - `codeql` (java-kotlin)
 - plus reusable `dependency-review` from backend quality on PRs
 

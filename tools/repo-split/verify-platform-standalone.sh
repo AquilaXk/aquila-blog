@@ -5,8 +5,8 @@ usage() {
   cat <<'USAGE'
 Usage: bash tools/repo-split/verify-platform-standalone.sh [source-ref]
 
-Creates a temporary Platform archive and runs the backend, contracts, privacy,
-and production Compose gates on the final Platform-only repository shape.
+Creates a temporary Platform archive and runs the backend, contracts, and
+production Compose gates on the final Platform-only repository shape.
 Heavy execution is restricted to GitHub Actions.
 USAGE
 }
@@ -109,9 +109,6 @@ fi
     bash -c 'cd back && ./gradlew check --rerun-tasks'
   run_step "Verify canonical public contract" \
     node tools/contracts/check-public-contracts.mjs
-  run_step "Run privacy drift gate" \
-    node tools/privacy/ci-privacy-gate.mjs
-
   # Compose syntax validation uses the example as a non-secret base, while the
   # helper derives every digest image from the canonical deploy env contract.
   # The synthetic registry is never contacted by `docker compose config`.

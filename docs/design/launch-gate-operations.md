@@ -7,7 +7,7 @@
 - Issue: #958
 - 정식 출시 제품 범위: 관리자 글 발행 + 비로그인 공개 열람
 - 공개 회원가입, OAuth 가입, 댓글, 알림, 선택 추적 동의, 공개 legal page는 current runtime에 없다. 재도입은 별도 tracked issue와 동등한 fail-closed acceptance가 필요하다.
-- 적용 대상: release readiness, GitHub Actions CI/CD, 홈서버 배포, QA, monitoring, privacy operations gate
+- 적용 대상: release readiness, GitHub Actions CI/CD, 홈서버 배포, QA, monitoring, backup/restore operations gate
 - 기본 흐름: issue 확인 -> work branch -> PR -> CI/security -> code review -> merge -> post-merge CI/CD 확인
 
 ## Gate Decision
@@ -61,7 +61,7 @@ a temporary launch gate.
 | Live E2E account cleanup | live E2E run artifact 또는 cleanup log | 테스트 계정/데이터 cleanup 결과 확인 | live E2E가 계정/데이터를 남김 |
 | Mobile/keyboard/200% zoom QA | [Web release UI QA matrix](https://github.com/AquilaXk/aquila-blog-web/blob/main/docs/design/release-ui-qa-matrix.md) run table과 artifact | matrix pass run 연결 | 핵심 viewport 또는 keyboard/zoom failure |
 | Retired public surface | Web absence contract와 Platform receiver absence evidence | 공개 signup/OAuth/comment/notification/tracking-consent/legal routes와 receiver가 없음 | 새 surface가 reintroduction acceptance 없이 노출됨 |
-| Privacy operations gate | `docs/design/privacy-launch-gate-checklist.md`의 matrix와 evidence | current data-map, retention, redaction, backup, incident, browser-storage control이 통과 | current control open, runtime drift, evidence 없음 |
+| Backup/restore operations gate | restore drill artifact와 current runbook evidence | isolated restore, encrypted artifact, secret exclusion, traffic-open control이 통과 | current control open, restore evidence 없음 |
 
 ## Evidence Collection
 
@@ -73,12 +73,12 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 - post-merge 확인: main CI run, deploy workflow run, live verification run 또는 skip 사유
 - QA evidence: release UI QA matrix 문서 또는 Actions artifact
 - retired-surface evidence: Web absence contract와 Platform receiver absence 결과
-- privacy evidence: `docs/design/privacy-launch-gate-checklist.md`의 current operation 판정과 launch-blocking control 상태
+- backup/restore evidence: `docs/ops/backup-restore-runbook.md`의 current operation 판정과 launch-blocking control 상태
 
 ## Current Baseline Links
 
 - Release UI QA matrix: https://github.com/AquilaXk/aquila-blog-web/blob/main/docs/design/release-ui-qa-matrix.md
-- Privacy launch gate checklist: `docs/design/privacy-launch-gate-checklist.md`
+- Backup restore runbook: `docs/ops/backup-restore-runbook.md`
 - CI workflow: `.github/workflows/ci.yml`
 - Security workflow: `.github/workflows/security.yml`
 - Deploy workflow: `.github/workflows/deploy.yml`
@@ -105,7 +105,7 @@ Merge 전 PR 본문 또는 review note에는 다음 항목을 남긴다.
 - main/release 게이트: launch/release 판정 전에 **최근 30일 이내** 성공한 `Backup Restore Drill` run과 artifact 링크를 증거로 남긴다. 최근 성공 artifact가 없으면 go 판정을 하지 않는다.
 - DB 검증: 임시 PostgreSQL container에 `dump.sql.enc`를 복호화해 복원하고 `flyway_schema_history`, `post` row count, 최신 public post(`listed = true`) 조회를 확인한다.
 - Object 검증: `minio-data.tar.gz.enc`를 복호화한 archive에서 운영 object 샘플 1개 이상을 선택해 `sha256sum`을 기록한다.
-- Privacy gate: `AQUILA_RESTORE_PRIVACY_GATE_SCRIPT`가 tombstone replay 또는 동등한 삭제 검증을 수행하고 traffic open 전 `status=pass` evidence를 남긴다.
+- Restore gate: restore validation이 traffic open 전 `status=pass` evidence를 남긴다.
 - Key 분리: backup encryption key file은 기본 `${AQUILA_EXTERNAL_STORAGE_ROOT}/backup-encryption.key`이며 `AQUILA_BACKUP_ROOT` 내부에 있으면 gate 실패다.
 - RPO/RTO 기준: 기본 RPO target은 1440분, 기본 RTO target은 120분이며, 실제 `RPO_ACTUAL_MINUTES`와 `RTO_ACTUAL_SECONDS`를 artifact에 남긴다.
 
@@ -120,7 +120,7 @@ Before merge:
 - [ ] CodeRabbit review 또는 Codex CLI fallback review가 PR review로 남아 있다.
 - [ ] unresolved review thread와 requested changes가 없다.
 - [ ] 배포 영향 범위를 `docs-only`, `frontend`, `backend`, `deploy` 중 하나로 기록했다.
-- [ ] 필요한 QA/privacy operations/monitoring evidence가 PR 본문 또는 연결 문서에 있다.
+- [ ] 필요한 QA/backup-restore operations/monitoring evidence가 PR 본문 또는 연결 문서에 있다.
 - [ ] launch/release면 최근 30일 `backup-restore-drill` 성공 artifact 링크가 있다.
 
 After merge:

@@ -124,10 +124,7 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "back/**",
     "contracts/public-api/**",
     "contracts/web/**",
-    "legal/**",
     "tools/contracts/**",
-    "tools/legal/**",
-    "tools/privacy/**",
     "tools/test/**",
     "tools/test/public-contract-manifest.test.mjs",
     "tools/test/sync-public-contract-workflow.test.mjs",
@@ -171,7 +168,6 @@ test("Security calls Deploy only after every push security gate with minimum reu
   const deploy = security.jobs.deploy
 
   assert.deepEqual(securityGatesComplete.needs, [
-    "privacy-drift-gate",
     "backend-dependency-check",
     "codeql",
     "vulnerability-exception-schema",

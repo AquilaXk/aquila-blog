@@ -1116,30 +1116,18 @@ require_digest_image_value() {
   fi
 }
 
-require_back_image() {
-  local env_file_back_image
-  env_file_back_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  if [[ -n "${STAGED_BACK_IMAGE:-}" ]]; then
-    BACK_IMAGE="${STAGED_BACK_IMAGE}"
-  elif [[ -n "${BACK_IMAGE:-}" ]]; then
-    BACK_IMAGE="${BACK_IMAGE}"
-  elif [[ -n "${env_file_back_image}" ]]; then
-    echo "legacy BACK_IMAGE detected in ${ENV_FILE}; using it as staged deploy image" >&2
-    BACK_IMAGE="${env_file_back_image}"
-  fi
-
-  if [[ -z "${BACK_IMAGE:-}" ]]; then
+require_staged_back_image() {
+  if [[ -z "${STAGED_BACK_IMAGE:-}" ]]; then
     echo "STAGED_BACK_IMAGE is empty. refusing deploy to avoid accidental latest-image rollout." >&2
     echo "set STAGED_BACK_IMAGE=ghcr.io/aquilaxk/aquila-blog-back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >&2
     exit 1
   fi
 
-  if ! require_digest_image_value "STAGED_BACK_IMAGE" "${BACK_IMAGE}"; then
+  if ! require_digest_image_value "STAGED_BACK_IMAGE" "${STAGED_BACK_IMAGE}"; then
     echo "set STAGED_BACK_IMAGE=ghcr.io/aquilaxk/aquila-blog-back@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" >&2
     exit 1
   fi
 
-  STAGED_BACK_IMAGE="${BACK_IMAGE}"
   export STAGED_BACK_IMAGE
 }
 
@@ -1200,7 +1188,7 @@ upsert_runtime_backend_image() {
 
 resolve_preserved_backend_image() {
   local service="$1"
-  local fallback="$2"
+  local staged_image="$2"
   local image
   image="$(runtime_backend_image_value "${service}")"
   if [[ -n "${image}" ]]; then
@@ -1214,13 +1202,28 @@ resolve_preserved_backend_image() {
     return 0
   fi
 
-  image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
-  if [[ -n "${image}" ]]; then
-    echo "${image}"
-    return 0
+  if has_existing_backend_release_evidence; then
+    echo "missing current image evidence for ${service}; refusing to substitute a staged image" >&2
+    return 1
   fi
 
-  echo "${fallback}"
+  echo "${staged_image}"
+}
+
+has_existing_backend_release_evidence() {
+  local service
+  local image
+
+  [[ -e "${STATE_FILE}" || -e "${RELEASE_STATE_FILE}" ]] && return 0
+
+  for service in back_blue back_green back_read back_admin back_worker; do
+    image="$(runtime_backend_image_value "${service}")"
+    [[ -n "${image}" ]] && return 0
+    image="$(container_image_for_service_any_state "${service}" || true)"
+    [[ -n "${image}" ]] && return 0
+  done
+
+  return 1
 }
 
 write_backend_release_state() {
@@ -3497,7 +3500,7 @@ if [[ "${DEPLOY_TARGET}" == "front" ]]; then
 fi
 
 validate_storage_env
-require_back_image
+require_staged_back_image
 validate_required_runtime_env
 configure_runtime_split_env
 apply_auto_memory_tuner

@@ -120,7 +120,6 @@ check_cases() {
 
   # Protected branches stay blocked.
   expect_blocked "main" "local:main" "$(same_name_push "main")"
-  expect_blocked "develop" "local:develop" "$(same_name_push "develop")"
 
   # Everything outside the allowed namespaces stays blocked.
   expect_blocked "agent branch" "local:agent/foo" "$(same_name_push "agent/foo")"

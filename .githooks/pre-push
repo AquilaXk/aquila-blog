@@ -8,7 +8,7 @@ set -euo pipefail
 # .githooks/commit-msg, which pins the locale for its Hangul range.
 export LC_ALL=C
 
-protected_branches_regex='^(main|develop)$'
+protected_branches_regex='^main$'
 work_branch_regex='^(feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix)/[a-z0-9]+(-[a-z0-9]+)*$'
 # Dependabot pushes through the GitHub API and never runs this hook, so its branch names
 # were never negotiable here. A human adding a correction commit to such a PR does run the
@@ -19,8 +19,8 @@ work_branch_regex='^(feat|fix|refactor|chore|docs|style|test|perf|build|ci|rever
 # Accepted trade-off: the namespace is reachable by people too. This hook runs on the client
 # and cannot tell who is pushing, so someone can name a branch dependabot/<ecosystem>/<x> and
 # skip the work branch rule entirely. Closing that would mean refusing the pushes this rule
-# exists to allow, so issue #1528 took the opening over an unusable gate. `main` and
-# `develop` stay blocked either way, and server-side branch protection is the control that
+# exists to allow, so issue #1528 took the opening over an unusable gate. `main` stays
+# blocked either way, and server-side branch protection is the control that
 # does not depend on the pusher running a hook at all.
 bot_branch_regex='^dependabot/[a-z0-9_]+(/[A-Za-z0-9][A-Za-z0-9._-]*)+$'
 zero_sha='0000000000000000000000000000000000000000'
@@ -76,7 +76,7 @@ done
 
 if [[ "${#violations[@]}" -gt 0 ]]; then
   {
-    echo "[pre-push] main/develop 직접 push 는 금지됩니다."
+    echo "[pre-push] main 직접 push 는 금지됩니다."
     echo "[pre-push] 허용 브랜치 형식: type/short-description"
     echo "[pre-push] 허용 type: feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix"
     echo "[pre-push] 허용 bot 브랜치: dependabot/<ecosystem>/<path>/<dependency>-<version>"
@@ -85,7 +85,7 @@ if [[ "${#violations[@]}" -gt 0 ]]; then
       echo "  - ${violation}"
     done
     echo "[pre-push] 예시: feat/search-issue-workflow"
-    echo "[pre-push] 권장 흐름: issue 생성 -> work branch 작업 -> develop 대상 PR"
+    echo "[pre-push] 권장 흐름: issue 생성 -> work branch 작업 -> main 대상 PR"
   } >&2
   exit 1
 fi

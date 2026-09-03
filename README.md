@@ -114,7 +114,7 @@ git config --get core.hooksPath
 
 - `commit-msg`: 커밋 제목이 `<type>(<scope>): 한글+English 요약` 형식인지 검사합니다.
 - `pre-commit`: 스테이징된 파일에 저장소 경계 가드와 필요한 OpenAPI 계약 드리프트 검사를 실행합니다.
-- `pre-push`: 브랜치 이름이 `type/short-description` 형식인지 확인하고 `main`·`develop` 직접 push 를 차단합니다.
+- `pre-push`: 브랜치 이름이 `type/short-description` 형식인지 확인하고 `main` 직접 push 를 차단합니다.
 
 (worktree 사용 시) 절대 경로로 지정하면 linked worktree에서도 메인 checkout에 있는 훅 스크립트(현재 브랜치와 다른 버전일 수 있음)가 실행되므로 상대 경로를 사용합니다.
 

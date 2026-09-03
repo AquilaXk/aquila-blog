@@ -6,6 +6,7 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const sqlPath = path.join(repoRoot, "deploy/homeserver/sql/task_payload_v1_inventory.sql")
 const workflowPath = path.join(repoRoot, ".github/workflows/ci.yml")
+const backendWorkflowPath = path.join(repoRoot, ".github/workflows/reusable-backend-quality.yml")
 const executionInventoryPath = path.join(repoRoot, "tools/test/test-execution-inventory.json")
 
 function readSql() {
@@ -47,7 +48,8 @@ test("classifies JSON and v2 envelope shape without unsafe casts", () => {
     assert.match(sql, new RegExp(`'${payloadClass}'`))
   }
   assert.match(sql, /payload_doc\s*=\s*'\{"redacted":true\}'::jsonb/i)
-  assert.match(sql, /jsonb_object_length\(payload_doc\)\s*=\s*6/i)
+  assert.match(sql, /SELECT\s+COUNT\(\*\)\s+FROM\s+jsonb_object_keys\([\s\S]*?AS\s+envelope_key\s*\)\s*=\s*6/i)
+  assert.doesNotMatch(sql, /jsonb_object_length/i)
   assert.match(sql, /payload_doc\s+\?&\s+ARRAY\s*\[[\s\S]*'schemaVersion'[\s\S]*'payloadJson'[\s\S]*\]/i)
   assert.match(sql, /pg_input_is_valid\(payload_doc ->> 'createdAtEpochMs', 'bigint'\)/i)
   assert.match(sql, /pg_input_is_valid\(payload_doc ->> 'expiresAtEpochMs', 'bigint'\)/i)
@@ -90,6 +92,7 @@ test("emits one fixed aggregate row with exhaustive null-safe partitions", () =>
 
 test("runs the contract directly in Platform standalone CI", () => {
   const workflow = readFileSync(workflowPath, "utf8")
+  const backendWorkflow = readFileSync(backendWorkflowPath, "utf8")
   const inventory = JSON.parse(readFileSync(executionInventoryPath, "utf8"))
 
   assert.match(
@@ -105,5 +108,9 @@ test("runs the contract directly in Platform standalone CI", () => {
       job: "platform-standalone",
       step: "Verify task payload v1 inventory contract",
     },
+  )
+  assert.match(
+    backendWorkflow,
+    /- name: Run selected PostgreSQL contract regression gates[\s\S]*--tests com\.back\.infrastructure\.TaskPayloadV1InventoryTestcontainersIntegrationTest/,
   )
 })

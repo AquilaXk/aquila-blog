@@ -60,7 +60,15 @@ classified AS (
              AND NOT payload_doc ? 'payloadJson' THEN 'flat_v1'
             WHEN payload_doc -> 'schemaVersion' = '1'::jsonb THEN 'nested_v1'
             WHEN payload_doc -> 'schemaVersion' = '2'::jsonb
-             AND jsonb_object_length(payload_doc) = 6
+             AND (
+                 SELECT COUNT(*)
+                 FROM jsonb_object_keys(
+                     CASE
+                         WHEN jsonb_typeof(payload_doc) = 'object' THEN payload_doc
+                         ELSE '{}'::jsonb
+                     END
+                 ) AS envelope_key
+             ) = 6
              AND payload_doc ?& ARRAY[
                  'schemaVersion',
                  'taskType',

@@ -73,33 +73,46 @@ class TaskPayloadPrivacyContractTest {
     }
 
     @Test
-    fun `legacy post payload fields fail closed before they can enter the v2 envelope`() {
+    fun `search index v2 payload omits retired force clear field and rejects historical field`() {
         val payload =
             PostSearchIndexSyncPayload(
                 uid = UUID.randomUUID(),
                 aggregateType = "Post",
                 aggregateId = 43L,
                 postId = 43L,
-                forceClear = false,
                 enqueuedAtEpochMs = now.toEpochMilli(),
             )
         val entry = searchIndexEntry()
-        val nestedV1 =
+        val freshEnvelope = objectMapper.readValue(codec.encode(payload, entry), TaskPayloadEnvelope::class.java)
+
+        assertThat(freshEnvelope.payloadJson).doesNotContain("forceClear")
+
+        val historicalV2 =
             objectMapper.writeValueAsString(
                 TaskPayloadEnvelope(
-                    schemaVersion = 1,
+                    schemaVersion = 2,
                     taskType = entry.taskType,
                     sensitivity = entry.sensitivity,
                     createdAtEpochMs = now.toEpochMilli(),
                     expiresAtEpochMs = null,
-                    payloadJson = "{}",
+                    payloadJson =
+                        objectMapper.writeValueAsString(
+                            mapOf(
+                                "uid" to payload.uid,
+                                "aggregateType" to payload.aggregateType,
+                                "aggregateId" to payload.aggregateId,
+                                "postId" to payload.postId,
+                                "forceClear" to true,
+                                "enqueuedAtEpochMs" to payload.enqueuedAtEpochMs,
+                            ),
+                        ),
                 ),
             )
         assertThatThrownBy {
-            codec.decode(nestedV1, metadata(payload, entry.taskType), entry)
+            codec.decode(historicalV2, metadata(payload, entry.taskType), entry)
         }.isInstanceOf(TaskPayloadQuarantineException::class.java)
             .extracting { exception -> (exception as TaskPayloadQuarantineException).reason }
-            .isEqualTo(TaskQuarantineReason.UNKNOWN_SCHEMA_VERSION)
+            .isEqualTo(TaskQuarantineReason.MALFORMED_PAYLOAD)
     }
 
     private fun postWriteEntry(): TaskHandlerEntry =

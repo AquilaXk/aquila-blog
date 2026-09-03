@@ -150,7 +150,6 @@ class PostReadModelTaskEventListener(
                         aggregateType = aggregateType,
                         aggregateId = postId,
                         postId = postId,
-                        forceClear = forceClearSearchIndex,
                         enqueuedAtEpochMs = System.currentTimeMillis(),
                     ),
                 )

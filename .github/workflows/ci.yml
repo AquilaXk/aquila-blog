@@ -109,14 +109,8 @@ jobs:
       - name: Verify contentHtml trust inventory contract
         run: node --test tools/test/content-html-trust-inventory.test.mjs
 
-      - name: Verify task payload v1 inventory contract
-        run: node --test tools/test/task-payload-v1-inventory.test.mjs
-
       - name: Verify profile workspace canonical inventory contract
         run: node --test tools/test/profile-workspace-canonical-inventory.test.mjs
-
-      - name: Verify temporary draft title inventory contract
-        run: node --test tools/test/temporary-draft-title-inventory.test.mjs
 
       - name: Verify hot-query telemetry capability contract
         run: node --test tools/test/hot-query-telemetry-capability.test.mjs

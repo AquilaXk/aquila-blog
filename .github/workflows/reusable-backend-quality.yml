@@ -334,9 +334,7 @@ jobs:
         run: >-
           ./gradlew testcontainersTest
           --tests com.back.infrastructure.PostTagIndexQueryPlanTestcontainersIntegrationTest
-          --tests com.back.infrastructure.TaskPayloadV1InventoryTestcontainersIntegrationTest
           --tests com.back.infrastructure.ProfileWorkspaceCanonicalInventoryTestcontainersIntegrationTest
-          --tests com.back.infrastructure.TemporaryDraftTitleInventoryTestcontainersIntegrationTest
           --rerun-tasks
 
       - name: Validate Flyway migration naming

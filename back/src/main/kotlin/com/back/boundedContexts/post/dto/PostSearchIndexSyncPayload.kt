@@ -23,6 +23,5 @@ data class PostSearchIndexSyncPayload(
     override val aggregateType: String,
     override val aggregateId: Long,
     val postId: Long,
-    val forceClear: Boolean,
     val enqueuedAtEpochMs: Long,
 ) : TaskPayload

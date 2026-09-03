@@ -32,9 +32,6 @@ const isPlatformFile = (file) =>
   isBackendFile(file) ||
   file.startsWith("perf/") ||
   file.startsWith("infra/") ||
-  file.startsWith("legal/data-map/") ||
-  file.startsWith("legal/vendors/") ||
-  file === "legal/privacy-launch-controls.json" ||
   file.startsWith("contracts/public-api/") ||
   file.startsWith("contracts/web/") ||
   file.startsWith("tools/") ||

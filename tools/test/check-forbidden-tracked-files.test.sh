@@ -15,6 +15,7 @@ run_with_temp_index() {
   tmp_index="$(mktemp)"
   GIT_INDEX_FILE="${tmp_index}" git read-tree HEAD
   GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch front >/dev/null
+  GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch docs/legal >/dev/null
   set +e
   GIT_INDEX_FILE="${tmp_index}" bash -c "${command}"
   local status=$?
@@ -38,8 +39,8 @@ if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_bl
   exit 1
 fi
 
-if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/legal/privacy-incident-runbook.md && bash '${guard}' >'${guard_output}' 2>&1"; then
-  echo "[test] expected tracked docs/legal/privacy-incident-runbook.md to be allowed" >&2
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/security-incident-runbook.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked docs/ops/security-incident-runbook.md to be allowed" >&2
   exit 1
 fi
 
@@ -73,8 +74,8 @@ if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob
   exit 1
 fi
 
-if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/legal/privacy-incident-runbook.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
-  echo "[test] expected staged docs/legal/privacy-incident-runbook.md to be allowed" >&2
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/security-incident-runbook.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged docs/ops/security-incident-runbook.md to be allowed" >&2
   exit 1
 fi
 

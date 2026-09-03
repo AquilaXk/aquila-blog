@@ -539,6 +539,8 @@ class FlywayNMinusOneCompatibilityTestcontainersIntegrationTest {
                     """{"schemaVersion":2,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":1786406400000,"expiresAtEpochMs":null}""",
                     """{"schemaVersion":1,"taskType":"post.search-index.sync","uid":"legacy"}""",
                     """{"schemaVersion":1,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":1786406400000,"expiresAtEpochMs":null,"payloadJson":"{}"}""",
+                    """{"schemaVersion":2,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":9223372036854775808,"expiresAtEpochMs":null,"payloadJson":"{}"}""",
+                    """{"schemaVersion":2,"taskType":"post.search-index.sync","sensitivity":"PUBLIC","createdAtEpochMs":1786406400000,"expiresAtEpochMs":9223372036854775808,"payloadJson":"{}"}""",
                 ).forEachIndexed { index, rejectedPayload ->
                     assertFailsWith<java.sql.SQLException> {
                         statement.execute(

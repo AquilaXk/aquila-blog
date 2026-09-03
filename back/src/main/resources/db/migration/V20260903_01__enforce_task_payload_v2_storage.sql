@@ -32,11 +32,13 @@ ALTER TABLE task
             AND payload::JSONB ->> 'sensitivity' IN ('PUBLIC', 'INTERNAL', 'PERSONAL', 'EXPIRING_SECRET')
             AND jsonb_typeof(payload::JSONB -> 'createdAtEpochMs') = 'number'
             AND payload::JSONB ->> 'createdAtEpochMs' ~ '^[1-9][0-9]*$'
+            AND pg_input_is_valid(payload::JSONB ->> 'createdAtEpochMs', 'bigint')
             AND (
                 payload::JSONB -> 'expiresAtEpochMs' = 'null'::JSONB
                 OR (
                     jsonb_typeof(payload::JSONB -> 'expiresAtEpochMs') = 'number'
                     AND payload::JSONB ->> 'expiresAtEpochMs' ~ '^[1-9][0-9]*$'
+                    AND pg_input_is_valid(payload::JSONB ->> 'expiresAtEpochMs', 'bigint')
                 )
             )
             AND jsonb_typeof(payload::JSONB -> 'payloadJson') = 'string'

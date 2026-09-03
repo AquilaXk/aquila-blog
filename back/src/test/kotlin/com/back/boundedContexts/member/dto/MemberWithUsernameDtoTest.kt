@@ -18,7 +18,6 @@ class MemberWithUsernameDtoTest {
             val response = MemberWithUsernameDto(member, MemberProfileWorkspaceContent(), TEST_INSTANT)
 
             assertThat(response.profileImageUrl).isEqualTo("https://blog.aquilaxk.site/images/default-profile.svg")
-            assertThat(response.profileImageDirectUrl).isEqualTo(response.profileImageUrl)
             Unit
         }
 
@@ -37,7 +36,6 @@ class MemberWithUsernameDtoTest {
                 "$CURRENT_BACK_URL/post/api/v1/images/profile/workspace.png?v=${modifiedAt.toEpochMilli()}"
 
             assertThat(response.profileImageUrl).isEqualTo(expected)
-            assertThat(response.profileImageDirectUrl).isEqualTo(expected)
             Unit
         }
 

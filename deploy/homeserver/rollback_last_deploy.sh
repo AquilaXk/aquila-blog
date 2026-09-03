@@ -406,6 +406,31 @@ query_live_flyway_schema_version() {
   echo "${version}"
 }
 
+query_profile_workspace_cutover_sha() {
+  local db_name table_exists value
+  db_name="$(resolve_prod_db_name)"
+  table_exists="$(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.platform_schema_cutover') IS NOT NULL" 2>/dev/null | tr -d '\r' | tail -n 1)" || return 1
+  [[ "${table_exists}" == "f" ]] && { printf 'absent\n'; return 0; }
+  [[ "${table_exists}" == "t" ]] || return 1
+  value="$(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r' | tail -n 1)" || return 1
+  [[ -z "${value}" ]] && { printf 'absent\n'; return 0; }
+  [[ "${value}" =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s\n' "${value}"
+}
+
+check_profile_workspace_rollback_compatibility() {
+  local live_marker backup_marker backup_sha restore_source
+  live_marker="$(query_profile_workspace_cutover_sha)" || { echo "rollback blocked: profile workspace marker query failed" >&2; return 1; }
+  [[ "${live_marker}" == "absent" ]] && return 0
+  backup_marker="$(trim_quotes "$(backup_metadata_value "profile_workspace_cutover_sha")")"
+  backup_sha="$(trim_quotes "$(backup_metadata_value "baseline_deploy_sha")")"
+  restore_source="$(trim_quotes "$(backup_metadata_value "restore_source")")"
+  [[ "${restore_source}" == "baseline" ]] || { echo "rollback blocked: post-cutover backup must come from a verified baseline" >&2; return 1; }
+  [[ "${backup_marker}" == "${live_marker}" ]] || { echo "rollback blocked: backup marker does not match live profile workspace cutover" >&2; return 1; }
+  [[ "${backup_sha}" =~ ^[0-9a-f]{40}$ ]] || { echo "rollback blocked: post-cutover backup source SHA is missing" >&2; return 1; }
+  git -C "${SCRIPT_DIR}/../.." merge-base --is-ancestor "${live_marker}" "${backup_sha}" || { echo "rollback blocked: backup source is below profile workspace cutover" >&2; return 1; }
+}
+
 worker_rollback_mode() {
   local backup_version="$1"
   local live_version="$2"
@@ -803,6 +828,11 @@ ensure_steady_state_guard() {
   "${installer}"
 }
 
+CHECK_PROFILE_WORKSPACE_COMPATIBILITY="false"
+if [[ "${1:-}" == "--check-profile-workspace-compatibility" ]]; then
+  CHECK_PROFILE_WORKSPACE_COMPATIBILITY="true"
+  shift
+fi
 BACKUP_DIR="${1:-$(latest_backup)}"
 
 if [[ -z "${BACKUP_DIR:-}" || ! -d "${BACKUP_DIR}" ]]; then
@@ -822,6 +852,14 @@ fi
 if ! "${SCRIPT_DIR}/cursor_keyring_guard.sh" "${SCRIPT_DIR}/.env.prod"; then
   echo "rollback failed: live cursor keyring is invalid; release activation was not started" >&2
   exit 1
+fi
+
+if ! check_profile_workspace_rollback_compatibility; then
+  exit 1
+fi
+if [[ "${CHECK_PROFILE_WORKSPACE_COMPATIBILITY}" == "true" ]]; then
+  echo "profile workspace rollback compatibility verified"
+  exit 0
 fi
 
 echo "rollback from backup: ${BACKUP_DIR}"

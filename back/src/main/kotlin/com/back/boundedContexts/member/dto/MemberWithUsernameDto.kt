@@ -32,7 +32,6 @@ data class MemberWithUsernameDto(
     val name: String,
     val nickname: String,
     val profileImageUrl: String,
-    val profileImageDirectUrl: String,
     val profileRole: String,
     val profileBio: String,
     val aboutHeadline: String,
@@ -63,7 +62,6 @@ data class MemberWithUsernameDto(
         name = member.name,
         nickname = member.nickname,
         profileImageUrl = resolveProfileImageUrl(workspaceContent, workspaceModifiedAt),
-        profileImageDirectUrl = resolveProfileImageDirectUrl(workspaceContent, workspaceModifiedAt),
         profileRole = workspaceContent.profileRole,
         profileBio = workspaceContent.profileBio,
         aboutHeadline = workspaceContent.aboutHeadline,
@@ -90,19 +88,6 @@ data class MemberWithUsernameDto(
             val separator = if (url.contains("?")) "&" else "?"
             return "$url${separator}v=${modifiedAt.toEpochMilli()}"
         }
-
-        private fun resolveProfileImageDirectUrl(
-            workspaceContent: MemberProfileWorkspaceContent,
-            workspaceModifiedAt: Instant,
-        ): String =
-            (
-                workspaceContent
-                    .profileImageUrl
-                    .trim()
-                    .takeIf(String::isNotBlank)
-                    ?.let { appendVersion(it, workspaceModifiedAt) }
-                    ?: defaultProfileImageUrl()
-            ).let(UploadedFileUrlCodec::canonicalizePublicStorageUrl)
 
         private fun resolveProfileImageUrl(
             workspaceContent: MemberProfileWorkspaceContent,

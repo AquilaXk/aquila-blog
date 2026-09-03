@@ -136,6 +136,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             assertThat(schema.path("required").values().map { it.asText() }).contains("isAdmin")
         }
         assertThat(schemas.path("MemberWithUsernameDto").path("properties").has("aboutDetails")).isFalse()
+        assertThat(schemas.path("MemberWithUsernameDto").path("properties").has("profileImageDirectUrl")).isFalse()
         listOf(
             "/member/api/v1/auth/login",
             "/member/api/v1/privacy/export",

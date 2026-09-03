@@ -60,6 +60,7 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
                     jsonPath("$.blogDesign") { value("grid") }
                     jsonPath("$.legacyBlogScheme") { value("light") }
                     jsonPath("$.profileImageUrl") { value("https://example.com/admin.png?v=${adminMember.modifiedAt.toEpochMilli()}") }
+                    jsonPath("$.profileImageDirectUrl") { doesNotExist() }
                 }
         }
 

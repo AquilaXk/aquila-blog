@@ -99,42 +99,6 @@ private data class MemberProfileWorkspaceContentEnvelope(
     val content: MemberProfileWorkspaceContent = MemberProfileWorkspaceContent(),
 )
 
-private val legacyAboutProjectDefaults =
-    mapOf(
-        "고구마마켓" to
-            MemberProfileAboutProjectBlock(
-                name = "고구마마켓",
-                summary = "거래 흐름과 상태 전이를 직접 설계하며 커머스 도메인 감각을 다진 프로젝트입니다.",
-                role = "Backend · 도메인 설계",
-            ),
-        "마음-온" to
-            MemberProfileAboutProjectBlock(
-                name = "마음-온",
-                summary = "사용자 감정 기록 흐름을 다루며 서비스 구조와 데이터 설계를 다듬은 프로젝트입니다.",
-                role = "Backend · API 설계",
-            ),
-        "aquila-blog" to
-            MemberProfileAboutProjectBlock(
-                name = "aquila-blog",
-                summary = "글쓰기, 공개 렌더링, 운영 배포까지 직접 관리하는 개인 기술 블로그입니다.",
-                role = "Full-stack · Editor/SSR/Deploy",
-                href = "https://github.com/AquilaXk/aquila-blog",
-                linkLabel = "aquila-blog",
-            ),
-        "aquila-bank" to
-            MemberProfileAboutProjectBlock(
-                name = "aquila-bank",
-                summary = "금융 도메인을 가정하고 계좌/거래 흐름을 모델링한 학습 프로젝트입니다.",
-                role = "Backend · Transaction Flow",
-                href = "https://github.com/AquilaXk/aquila-bank",
-                linkLabel = "링크 보기",
-            ),
-    )
-
-private fun normalizeAboutSectionTitle(title: String): String = title.replace(Regex("\\s+"), "").lowercase()
-
-private fun isAboutProjectSection(title: String): Boolean = Regex("프로젝트|project").containsMatchIn(normalizeAboutSectionTitle(title))
-
 private fun normalizeAboutProjects(projects: List<MemberProfileAboutProjectBlock>): List<MemberProfileAboutProjectBlock> =
     projects.mapIndexedNotNull { index, project ->
         val name = project.name.trim()
@@ -156,21 +120,6 @@ private fun normalizeAboutProjects(projects: List<MemberProfileAboutProjectBlock
         )
     }
 
-private fun deriveLegacyAboutProjects(sections: List<MemberProfileAboutSectionBlock>): List<MemberProfileAboutProjectBlock> {
-    val projectSection = sections.firstOrNull { isAboutProjectSection(it.title) } ?: return emptyList()
-    return normalizeAboutProjects(
-        projectSection.items.mapIndexed { index, item ->
-            val name = item.trim()
-            val preset = legacyAboutProjectDefaults[name]
-            if (preset != null) {
-                preset.copy(id = "project-${index + 1}")
-            } else {
-                MemberProfileAboutProjectBlock(id = "project-${index + 1}", name = name)
-            }
-        },
-    )
-}
-
 fun normalizeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceContent): MemberProfileWorkspaceContent {
     val normalizedSections =
         content.aboutSections.mapIndexedNotNull { index, section ->
@@ -191,19 +140,7 @@ fun normalizeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceConten
                 dividerBefore = section.dividerBefore,
             )
         }
-    val legacyProjectSectionTitle = normalizedSections.firstOrNull { isAboutProjectSection(it.title) }?.title.orEmpty()
-    val normalizedProjects =
-        normalizeAboutProjects(
-            content.aboutProjects.ifEmpty {
-                deriveLegacyAboutProjects(normalizedSections)
-            },
-        )
-    val visibleSections =
-        if (normalizedProjects.isNotEmpty()) {
-            normalizedSections.filterNot { isAboutProjectSection(it.title) }
-        } else {
-            normalizedSections
-        }
+    val normalizedProjects = normalizeAboutProjects(content.aboutProjects)
 
     return MemberProfileWorkspaceContent(
         profileImageUrl = content.profileImageUrl.trim(),
@@ -212,8 +149,8 @@ fun normalizeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceConten
         aboutHeadline = content.aboutHeadline.trim(),
         aboutRole = content.aboutRole.trim(),
         aboutBio = content.aboutBio.trim(),
-        aboutSections = visibleSections,
-        aboutProjectSectionTitle = content.aboutProjectSectionTitle.trim().ifBlank { legacyProjectSectionTitle },
+        aboutSections = normalizedSections,
+        aboutProjectSectionTitle = content.aboutProjectSectionTitle.trim(),
         aboutProjects = normalizedProjects,
         blogTitle = content.blogTitle.trim(),
         homeIntroTitle = content.homeIntroTitle.trim(),
@@ -249,9 +186,10 @@ fun encodeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceContent):
 fun decodeMemberProfileWorkspaceContent(rawValue: String?): MemberProfileWorkspaceContent? {
     if (rawValue.isNullOrBlank()) return null
 
-    val decoded = runCatching {
-        Ut.JSON.fromString<MemberProfileWorkspaceContentEnvelope>(rawValue).content
-    }.getOrNull() ?: return null
+    val decoded =
+        runCatching {
+            Ut.JSON.fromString<MemberProfileWorkspaceContentEnvelope>(rawValue).content
+        }.getOrNull() ?: return null
     val normalized = normalizeMemberProfileWorkspaceContent(decoded)
 
     return normalized.takeIf { encodeMemberProfileWorkspaceContent(it) == rawValue }

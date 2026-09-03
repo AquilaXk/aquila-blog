@@ -313,6 +313,7 @@ test("Flyway migration naming admits the exact beforeMigrate SQL callback form",
     nMinusOneBlock,
     /--tests com\.back\.infrastructure\.ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest/,
   )
+  assert.match(workflow, /--tests com\.back\.infrastructure\.ProfileWorkspaceLegacyRetirementTestcontainersIntegrationTest/)
 })
 
 test("served cutovers do not retain temporary Flyway lifecycle callbacks", () => {

@@ -3852,9 +3852,6 @@
           "profileImageUrl": {
             "type": "string"
           },
-          "profileImageDirectUrl": {
-            "type": "string"
-          },
           "profileRole": {
             "type": "string"
           },

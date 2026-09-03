@@ -1,63 +1,100 @@
 # Profile Workspace Persistence
 
-## 목적
+## Purpose
 
-관리자 프로필 workspace의 draft/published/legacy attr 저장 규칙, retry 기준, idempotency key, 장애 후 복구 절차를 정의한다.
+This contract defines canonical administrator profile draft and published persistence,
+synchronous failure behavior, idempotency, and the recovery boundary.
 
-## 구현 근거
+## Implementation evidence
 
-| 책임 | 구현 |
+| Concern | Owner |
 | --- | --- |
-| Workspace model | `back/src/main/kotlin/com/back/boundedContexts/member/domain/shared/memberMixin/MemberProfileWorkspace.kt` |
-| Legacy/profile attr bridge | `back/src/main/kotlin/com/back/boundedContexts/member/domain/shared/memberMixin/MemberHasProfileCard.kt` |
-| Persistence service | `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberProfilePersistenceService.kt` |
-| Application boundary | `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberApplicationService.kt` |
-| Query boundary | `back/src/main/kotlin/com/back/boundedContexts/member/application/service/CurrentMemberProfileQueryService.kt` |
-| Admin API | `back/src/main/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1AdmMemberController.kt` |
-| Public profile change event | `back/src/main/kotlin/com/back/boundedContexts/member/application/event/MemberPublicProfileChangedEvent.kt` |
+| Workspace model and canonical codec | `MemberProfileWorkspace.kt` |
+| Member and post hydration | `MemberProfileHydrator.kt`, `PostHydrationService.kt` |
+| Persistence | `MemberProfilePersistenceService.kt` |
+| Application flow | `MemberApplicationService.kt` |
+| Current profile queries | `CurrentMemberProfileQueryService.kt` |
+| Administrator API | `ApiV1AdmMemberController.kt` |
+| Public cache event and listener | `MemberPublicProfileChangedEvent.kt`, `PostAuthorPublicReadCacheInvalidationListener.kt` |
 
-## 저장 슬롯
+## Storage
 
-| 슬롯 | attr name | 역할 |
-| --- | --- | --- |
-| legacy attrs | `profileRole`, `profileBio`, `aboutRole`, `aboutBio`, `aboutDetails`, `blogTitle`, `homeIntroTitle`, `homeIntroDescription`, `blogDesign`, `legacyBlogScheme`, `profileServiceLinks`, `profileContactLinks`, `profileImgUrl` | 기존 공개/관리자 경로와 호환되는 필드 저장소 |
-| draft workspace | `profileWorkspaceDraft` | 관리자 workspace에서 편집 중인 normalized JSON snapshot |
-| published workspace | `profileWorkspacePublished` | 공개 프로필 read path가 우선 사용하는 normalized JSON snapshot |
+| Attr name | Meaning |
+| --- | --- |
+| `profileWorkspaceDraft` | Normalized administrator editing snapshot |
+| `profileWorkspacePublished` | Normalized public-read snapshot |
 
-## Persistence contract
+`MemberProfileWorkspaceContent` owns the fixed 16-field JSON content contract. Current
+field names are part of that contract. Stored envelope bytes must decode, normalize, and
+re-encode to the exact same value.
 
-- `ensureWorkspaceSnapshotsInitialized`는 workspace attr이 없으면 현재 legacy attrs에서 published와 draft snapshot을 만든다.
-- `modifyProfileCard`는 legacy attrs를 갱신하고 draft workspace를 legacy 기준으로 동기화한다. published workspace는 바꾸지 않는다.
-- `saveProfileWorkspaceDraft`는 request content를 normalize한 뒤 legacy attrs와 draft workspace를 함께 저장한다. published workspace는 바꾸지 않는다.
-- `publishProfileWorkspace`는 draft workspace를 published workspace로 복사한다. legacy attrs는 draft save 시점에 이미 동기화된다.
-- 공개 profile query는 `getProfileWorkspacePublishedContent()`와 published modifiedAt을 사용한다.
-- workspace JSON decode가 실패하거나 비어 있으면 legacy attrs에서 `currentProfileWorkspaceContent`를 만들어 fallback한다.
+Member creation calls `initializeWorkspaceSnapshots` and stores the same normalized
+initial content in both attrs within the member transaction. Direct member and
+administrator reads require both attrs. Missing, malformed, or noncanonical bytes fail
+closed with `IllegalStateException`.
 
-## Retry 조건
+## Read and write behavior
 
-- profile workspace 저장은 HTTP transaction 안에서 처리되며 별도 async task retry 대상이 아니다.
-- DB transaction 실패 또는 optimistic conflict가 발생하면 client가 같은 payload로 다시 요청해야 한다.
-- image URL이 바뀌면 `UploadedFileRetentionService.syncProfileImage`가 이전/현재 profile image 참조를 동기화한다. 이 호출은 같은 transaction boundary 안에서 수행된다.
-- 계정 profile 수정 경로(`MemberApplicationService.modify`)에서 nickname/profile image가 바뀌면 `MemberPublicProfileChangedEvent`가 발행되어 post author representation cache invalidation을 유도한다.
-- workspace draft save와 publish 경로는 profile image file retention을 동기화하지만 `MemberPublicProfileChangedEvent`를 발행하지 않는다.
+- `PUT /member/api/v1/adm/members/{id}/profileWorkspace/draft` normalizes and saves the
+  complete draft only. Published state is unchanged.
+- `POST /member/api/v1/adm/members/{id}/profileWorkspace/publish` copies canonical draft
+  content to published. Equal snapshots produce no write.
+- Public member and profile reads use published content and its modified time only.
+- Active post authors require a valid canonical published snapshot. A blank canonical
+  image URL uses the configured default image; a missing or invalid snapshot fails.
+- Deleted authors use the default image without reconstructing profile state.
+- `POST /member/api/v1/adm/members/{id}/profileImageFile` registers a TEMP upload and
+  returns only `profileImageUrl`. It does not mutate a member, workspace, or cache. The
+  client persists the selected URL through the complete draft PUT.
+- Draft and published image URLs together protect referenced uploads from deletion.
 
-## Idempotency key
+Draft save and publish are synchronous HTTP-transaction operations, not durable-task
+retries. A changed draft or published image invokes
+`UploadedFileRetentionService.syncProfileImage` in the same transaction. Draft save does
+not emit a public event. Publish emits `MemberPublicProfileChangedEvent` only when the
+published image changes, while nickname modification emits it only when the nickname
+changes. `PostAuthorPublicReadCacheInvalidationListener` invalidates author
+representations after commit.
 
-- Workspace identity: member ID + attr name.
-- Draft save idempotency: 같은 member ID에 같은 normalized content를 다시 저장하면 draft JSON과 legacy attrs가 같은 값으로 덮인다.
-- Publish idempotency: draft와 published가 같으면 다시 publish해도 공개 content는 변하지 않는다.
-- Profile image retention identity: member ID + previous/current profile image URL.
+## Idempotency
 
-## 실패 후 수동 복구
+- Snapshot identity is the member ID and canonical attr name.
+- Re-saving equal normalized draft content performs no write.
+- Publishing an equal draft and published pair performs no write or event.
+- Image retention identity is the member ID plus previous and current canonical image
+  URLs.
 
-1. 관리자 API `GET /member/api/v1/adm/members/{id}/profileWorkspace`로 draft/published와 `dirtyFromPublished`를 확인한다.
-2. draft JSON이 깨졌거나 비어 있고 legacy attrs가 정상이라면 `PUT /member/api/v1/adm/members/{id}/profileWorkspace/draft`로 legacy 기준 content를 다시 저장한다.
-3. published가 오래됐으면 draft 내용을 확인한 뒤 `POST /member/api/v1/adm/members/{id}/profileWorkspace/publish`를 다시 호출한다.
-4. profile image 참조가 맞지 않으면 member의 legacy `profileImgUrl`, draft/published `profileImageUrl`, uploaded file retention 상태를 함께 확인한다.
-5. workspace draft save 또는 publish로 profile image가 바뀐 뒤 post public read path의 author image가 stale로 보이면 자동 event 발행을 기대하지 않는다. 계정 profile 수정 event 발생 여부를 먼저 확인하고, event가 없었다면 `docs/design/cache-consistency-contract.md`의 author recovery 절차로 post cache를 수동 복구한다.
+## Retirement and recovery
 
-## 금지 사항
+After backend, public canary, and MinIO gates succeed, the automatic deployment runs the
+profile attr retirement in one `SERIALIZABLE` transaction. It verifies every active
+member's canonical pair, deletes only the 13 retired standalone attrs, and records the
+one-time `profile-workspace-legacy-attrs` source marker. Reintroduction fails before
+deletion. Future deploys, backups, and rollbacks require a marker-compatible exact source.
 
-- published workspace를 거치지 않고 공개 profile DTO에 draft content를 사용하지 않는다.
-- `profileWorkspaceDraft` 또는 `profileWorkspacePublished` JSON을 수동 편집할 때 normalize 규칙을 우회하지 않는다.
-- legacy attrs와 draft workspace를 따로 고치지 않는다. draft save 경로는 두 저장소를 함께 동기화한다.
+The verified baseline is staged before retirement and published after the marker commits.
+An interrupted publish may recover only that complete pending baseline with the same
+marker and a source at or above the cutover. Marker query failure is never treated as a
+pre-cutover state.
+
+For application recovery:
+
+1. Read `GET /member/api/v1/adm/members/{id}/profileWorkspace` and use
+   `dirtyFromPublished` only after both snapshots decode.
+2. Stop direct profile reads, profile writes, and publication when either canonical attr
+   is missing, malformed, or noncanonical. Public post-author reads continue only when
+   the published snapshot is valid. No reconstruction endpoint or standalone-attr source
+   exists.
+3. Restore both snapshots only from verified canonical data through the approved data
+   recovery path, validate both, and retry the complete original request.
+4. Diagnose image-reference mismatch using only the canonical draft and published URLs
+   plus uploaded-file retention state.
+5. Diagnose a stale post-author image with `cache-consistency-contract.md`; do not
+   republish or reconstruct profile state as a fallback.
+
+## Forbidden
+
+- Exposing draft content in public DTOs.
+- Bypassing normalization or writing a partial workspace envelope.
+- Adding standalone-attr reads, dual writes, decode fallback, or reconstruction.
+- Treating an upload response as a persisted profile mutation.

@@ -39,6 +39,10 @@
     {
       "file": "back/src/main/kotlin/db/migration/V20260903_02__reconcile_profile_workspace_snapshots.kt",
       "class": "REQUIRES_N_MINUS_1_TEST"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260903_03__create_platform_schema_cutover.sql",
+      "class": "EXPAND_SAFE"
     }
   ],
   "cutovers": [

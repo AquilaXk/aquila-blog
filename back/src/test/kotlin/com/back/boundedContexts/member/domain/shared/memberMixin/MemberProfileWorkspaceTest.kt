@@ -25,6 +25,22 @@ class MemberProfileWorkspaceTest {
     }
 
     @Test
+    fun `normalization preserves explicit sections without synthesizing legacy projects`() {
+        val section =
+            MemberProfileAboutSectionBlock(
+                id = "projects",
+                title = "Projects",
+                items = listOf("aquila-blog"),
+            )
+
+        val normalized = normalizeMemberProfileWorkspaceContent(MemberProfileWorkspaceContent(aboutSections = listOf(section)))
+
+        assertThat(normalized.aboutSections).containsExactly(section)
+        assertThat(normalized.aboutProjectSectionTitle).isEmpty()
+        assertThat(normalized.aboutProjects).isEmpty()
+    }
+
+    @Test
     fun `draft workspace rejects malformed stored JSON`() {
         val member = memberWithWorkspace(PROFILE_WORKSPACE_DRAFT, "{malformed")
 

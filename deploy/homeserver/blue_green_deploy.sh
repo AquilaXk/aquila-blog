@@ -1412,6 +1412,50 @@ query_live_flyway_schema_version() {
   echo "${version}"
 }
 
+query_profile_workspace_cutover_sha() {
+  local db_name table_exists value
+  db_name="$(resolve_prod_db_name)"
+  if ! table_exists="$(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.platform_schema_cutover') IS NOT NULL" 2>/dev/null | tr -d '\r' | tail -n 1)"; then
+    return 2
+  fi
+  [[ "${table_exists}" == "f" ]] && { printf 'absent\n'; return 0; }
+  [[ "${table_exists}" == "t" ]] || return 2
+  if ! value="$(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r' | tail -n 1)"; then
+    return 2
+  fi
+  if [[ -z "${value}" ]]; then
+    printf 'absent\n'
+    return 0
+  fi
+  printf '%s\n' "${value}"
+}
+
+ensure_profile_workspace_cutover_source_floor() {
+  local marker_sha target_sha
+  marker_sha="$(query_profile_workspace_cutover_sha)" || {
+    echo "profile workspace cutover marker query failed" >&2
+    return 1
+  }
+  [[ "${marker_sha}" == "absent" ]] && return 0
+  [[ "${marker_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "profile workspace cutover marker is malformed" >&2
+    return 1
+  }
+  target_sha="${HOME_DEPLOY_SHA:-$(git -C "${SCRIPT_DIR}/../.." rev-parse HEAD 2>/dev/null || true)}"
+  [[ "${target_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "profile workspace cutover target SHA is unavailable" >&2
+    return 1
+  }
+  git -C "${SCRIPT_DIR}/../.." cat-file -e "${marker_sha}^{commit}" 2>/dev/null || {
+    echo "profile workspace cutover marker commit is unavailable" >&2
+    return 1
+  }
+  git -C "${SCRIPT_DIR}/../.." merge-base --is-ancestor "${marker_sha}" "${target_sha}" || {
+    echo "profile workspace cutover blocks a pre-cutover deploy target" >&2
+    return 1
+  }
+}
+
 worker_rollback_mode() {
   local backup_version="$1"
   local live_version="$2"
@@ -3485,6 +3529,12 @@ fi
 trap 'resume_autoheal_if_paused; release_deploy_lock' EXIT INT TERM
 
 require_supported_docker_engine
+
+# The current checkout is the rollback and migration authority. Once the cutover marker
+# exists, reject an older source before changing compose state, runtime env, or Caddy.
+if ! ensure_profile_workspace_cutover_source_floor; then
+  exit 1
+fi
 
 # front rollout은 backend 시퀀스를 재실행하지 않고 여기서 끝난다. 같은 deploy lock을 잡으므로
 # backend 배포와 동시에 진행되지 않는다.

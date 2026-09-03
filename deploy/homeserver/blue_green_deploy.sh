@@ -1188,6 +1188,7 @@ upsert_runtime_backend_image() {
 
 resolve_preserved_backend_image() {
   local service="$1"
+  local staged_image="$2"
   local image
   image="$(runtime_backend_image_value "${service}")"
   if [[ -n "${image}" ]]; then
@@ -1201,7 +1202,27 @@ resolve_preserved_backend_image() {
     return 0
   fi
 
-  echo "missing current image evidence for ${service}; refusing to substitute a staged image" >&2
+  if has_existing_backend_release_evidence; then
+    echo "missing current image evidence for ${service}; refusing to substitute a staged image" >&2
+    return 1
+  fi
+
+  echo "${staged_image}"
+}
+
+has_existing_backend_release_evidence() {
+  local service
+  local image
+
+  [[ -e "${STATE_FILE}" || -e "${RELEASE_STATE_FILE}" ]] && return 0
+
+  for service in back_blue back_green back_read back_admin back_worker; do
+    image="$(runtime_backend_image_value "${service}")"
+    [[ -n "${image}" ]] && return 0
+    image="$(container_image_for_service_any_state "${service}" || true)"
+    [[ -n "${image}" ]] && return 0
+  done
+
   return 1
 }
 
@@ -1231,7 +1252,7 @@ prepare_runtime_backend_images() {
   local staged_image="$3"
   local active_image
 
-  active_image="$(resolve_preserved_backend_image "${active_backend}")"
+  active_image="$(resolve_preserved_backend_image "${active_backend}" "${staged_image}")"
   upsert_runtime_backend_image "${active_backend}" "${active_image}"
   upsert_runtime_backend_image "${next_backend}" "${staged_image}"
   local service

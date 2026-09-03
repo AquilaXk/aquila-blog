@@ -46,7 +46,7 @@
 - Refactor targets:
   - `Member` companion repository usage
   - `Post` companion repository usage
-  - Mixins (`PostMember`, `PostHasComments`, `MemberHasProfileImgUrl`) that currently persist directly
+  - Mixins (`PostMember`, `PostHasComments`) that currently persist directly
 - Approach:
   - Move persistence operations to application services (`MemberFacade`, `PostFacade`) and dedicated domain/application helper services.
   - Domain methods return intent/state change only.

@@ -27,9 +27,6 @@ com/back/boundedContexts/member/application/service/LoginAttemptService.class
 com/back/boundedContexts/member/application/service/MemberApplicationService.class
 com/back/boundedContexts/member/application/service/MemberUseCaseAdapter.class
 com/back/boundedContexts/member/domain/shared/MemberProxy.class
-com/back/boundedContexts/member/domain/shared/memberMixin/MemberHasProfileCard$DefaultImpls.class
-com/back/boundedContexts/member/domain/shared/memberMixin/MemberHasProfileCardKt.class
-com/back/boundedContexts/member/domain/shared/memberMixin/MemberHasProfileImgUrl$DefaultImpls.class
 com/back/boundedContexts/member/domain/shared/memberMixin/MemberProfileAboutSectionBlock.class
 com/back/boundedContexts/member/domain/shared/memberMixin/MemberProfileLinkItem.class
 com/back/boundedContexts/member/domain/shared/memberMixin/MemberProfileLinkItemList.class

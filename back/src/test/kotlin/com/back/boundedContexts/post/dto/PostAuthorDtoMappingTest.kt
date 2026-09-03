@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
@@ -130,6 +131,7 @@ class PostAuthorDtoMappingTest {
             ).apply {
                 createdAt = Instant.parse("2026-01-01T00:00:00Z")
                 modifiedAt = Instant.parse("2026-01-01T00:01:00Z")
+                setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent())
             }
         return Post(
             id = 10L,

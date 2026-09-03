@@ -8,8 +8,11 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWo
 import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
 import com.back.boundedContexts.member.domain.shared.memberMixin.encodeMemberProfileWorkspaceContent
 import com.back.boundedContexts.post.domain.Post
+import com.back.global.app.AppConfig
 import com.back.support.BaseRepositoryIntegrationTest
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.data.domain.PageRequest
@@ -17,6 +20,17 @@ import java.time.Instant
 
 @org.junit.jupiter.api.DisplayName("PostDeletedQueryRepository 테스트")
 class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun setUpAppConfig() {
+            AppConfig(
+                siteBackUrl = "http://localhost:8080",
+                siteFrontUrl = "http://localhost:3000",
+            )
+        }
+    }
+
     @Autowired
     private lateinit var memberRepository: MemberRepository
 
@@ -88,9 +102,17 @@ class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
     }
 
     @Test
-    fun `삭제 글 목록은 작성자 이미지가 없으면 기본 프로필 이미지를 반환한다`() {
+    fun `삭제 글 목록은 canonical published 프로필 이미지가 비어 있으면 기본 이미지를 반환한다`() {
         val author =
             memberRepository.saveAndFlush(Member(0, "deleted-author-fallback", "1234", "기본이미지작성자"))
+        memberAttrRepository.saveAndFlush(
+            MemberAttr(
+                0,
+                author,
+                "profileWorkspacePublished",
+                encodeMemberProfileWorkspaceContent(MemberProfileWorkspaceContent()),
+            ),
+        )
 
         postRepository.saveAndFlush(
             Post(
@@ -111,6 +133,51 @@ class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
         val row = page.content.first { it.authorName == "기본이미지작성자" }
 
         assertThat(row.authorProfileImgUrl).isEqualTo(defaultProfileImageUrl())
+    }
+
+    @Test
+    fun `활성 작성자의 published workspace가 없으면 삭제 글 목록 조회를 실패한다`() {
+        val author =
+            memberRepository.saveAndFlush(Member(0, "missing-workspace-author", "1234", "누락작성자"))
+        postRepository.saveAndFlush(
+            Post(
+                id = 0,
+                author = author,
+                title = "workspace 누락 삭제 글",
+                content = "본문",
+                published = true,
+                listed = true,
+            ).apply { deletedAt = Instant.parse("2026-03-14T00:00:00Z") },
+        )
+
+        assertThatThrownBy {
+            postDeletedQueryRepository.findDeletedPagedByKw("", PageRequest.of(0, 10))
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("Active post author profile workspace is missing or invalid")
+    }
+
+    @Test
+    fun `활성 작성자의 malformed published workspace는 삭제 글 목록 조회를 실패한다`() {
+        val author =
+            memberRepository.saveAndFlush(Member(0, "malformed-workspace-author", "1234", "손상작성자"))
+        memberAttrRepository.saveAndFlush(
+            MemberAttr(0, author, "profileWorkspacePublished", "{malformed"),
+        )
+        postRepository.saveAndFlush(
+            Post(
+                id = 0,
+                author = author,
+                title = "workspace 손상 삭제 글",
+                content = "본문",
+                published = true,
+                listed = true,
+            ).apply { deletedAt = Instant.parse("2026-03-14T00:00:00Z") },
+        )
+
+        assertThatThrownBy {
+            postDeletedQueryRepository.findDeletedPagedByKw("", PageRequest.of(0, 10))
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessage("Active post author profile workspace is missing or invalid")
     }
 
     @Test

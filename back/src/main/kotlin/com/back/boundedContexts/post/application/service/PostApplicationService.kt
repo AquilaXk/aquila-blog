@@ -122,14 +122,14 @@ class PostApplicationService(
             )
 
         if (existingRequest?.postId != null) {
-            return postRepository.findById(existingRequest.postId!!).getOrNull()
+            return findById(existingRequest.postId!!)
                 ?: throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
         }
 
         val requestSlot = existingRequest ?: createIdempotencyRequestSlot(persistenceAuthor, normalizedIdempotencyKey)
 
         if (requestSlot.postId != null) {
-            return postRepository.findById(requestSlot.postId!!).getOrNull()
+            return findById(requestSlot.postId!!)
                 ?: throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
         }
 

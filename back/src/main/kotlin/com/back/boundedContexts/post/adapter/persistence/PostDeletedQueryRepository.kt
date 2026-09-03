@@ -226,7 +226,10 @@ class PostDeletedQueryRepository(
     ): String {
         if (authorDeleted) return defaultProfileImageUrl()
 
-        val normalizedUrl = decodeMemberProfileWorkspaceContent(rawWorkspace)?.profileImageUrl.orEmpty()
+        val normalizedUrl =
+            requireNotNull(decodeMemberProfileWorkspaceContent(rawWorkspace)) {
+                "Active post author profile workspace is missing or invalid"
+            }.profileImageUrl
         if (normalizedUrl.isBlank()) return defaultProfileImageUrl()
 
         val version = profileImgModifiedAt ?: authorModifiedAt ?: return normalizedUrl

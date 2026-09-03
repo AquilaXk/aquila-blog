@@ -40,12 +40,12 @@ fun normalizeProfileLinkHref(rawHref: String): String? {
     return href.takeIf { scheme in profileLinkAllowedSchemes }
 }
 
-private const val DEFAULT_SITE_FRONT_URL = "https://blog.aquilaxk.site"
 private const val DEFAULT_PROFILE_IMAGE_PATH = "/images/default-profile.svg"
 
 fun defaultProfileImageUrl(): String {
-    val siteFrontUrl = runCatching { AppConfig.siteFrontUrl.trimEnd('/') }.getOrDefault("")
-    return "${siteFrontUrl.ifBlank { DEFAULT_SITE_FRONT_URL }}$DEFAULT_PROFILE_IMAGE_PATH"
+    val siteFrontUrl = AppConfig.siteFrontUrl.trim().trimEnd('/')
+    require(siteFrontUrl.isNotBlank()) { "custom.site.frontUrl is required for the default profile image" }
+    return "$siteFrontUrl$DEFAULT_PROFILE_IMAGE_PATH"
 }
 
 fun normalizeBlogDesign(value: String?): String =
@@ -240,7 +240,7 @@ fun normalizeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceConten
 }
 
 fun encodeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceContent): String =
-    Ut.JSON.toString(
+    Ut.JSON.objectMapper.writeValueAsString(
         MemberProfileWorkspaceContentEnvelope(
             content = normalizeMemberProfileWorkspaceContent(content),
         ),
@@ -249,9 +249,12 @@ fun encodeMemberProfileWorkspaceContent(content: MemberProfileWorkspaceContent):
 fun decodeMemberProfileWorkspaceContent(rawValue: String?): MemberProfileWorkspaceContent? {
     if (rawValue.isNullOrBlank()) return null
 
-    return runCatching {
+    val decoded = runCatching {
         Ut.JSON.fromString<MemberProfileWorkspaceContentEnvelope>(rawValue).content
-    }.getOrNull()?.let(::normalizeMemberProfileWorkspaceContent)
+    }.getOrNull() ?: return null
+    val normalized = normalizeMemberProfileWorkspaceContent(decoded)
+
+    return normalized.takeIf { encodeMemberProfileWorkspaceContent(it) == rawValue }
 }
 
 interface MemberHasProfileWorkspace : MemberAware {

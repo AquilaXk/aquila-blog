@@ -35,11 +35,14 @@ class PostDraftClassificationIntegrationTest : BaseRepositoryIntegrationTest() {
         val pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "id"))
         val draft = postRepository.findQPagedByKwForAdmin("", pageable, "draft")
         val privatePosts = postRepository.findQPagedByKwForAdmin("", pageable, "private")
+        val fixtureIds = setOf(trackedRenamed.id, untrackedLegacyTitle.id, trackedListed.id, published.id)
+        val draftFixtureIds = draft.content.map(Post::id).filter(fixtureIds::contains)
+        val privateFixtureIds = privatePosts.content.map(Post::id).filter(fixtureIds::contains)
 
-        assertThat(draft.content.map(Post::id)).containsExactly(trackedRenamed.id, trackedListed.id)
-        assertThat(privatePosts.content.map(Post::id)).containsExactly(untrackedLegacyTitle.id)
-        assertThat(draft.content).doesNotContain(untrackedLegacyTitle, published)
-        assertThat(privatePosts.content).doesNotContain(trackedRenamed, trackedListed, published)
+        assertThat(draftFixtureIds).containsExactly(trackedRenamed.id, trackedListed.id)
+        assertThat(privateFixtureIds).containsExactly(untrackedLegacyTitle.id)
+        assertThat((draftFixtureIds + privateFixtureIds).toSet())
+            .containsExactlyInAnyOrder(trackedRenamed.id, trackedListed.id, untrackedLegacyTitle.id)
     }
 
     private fun post(

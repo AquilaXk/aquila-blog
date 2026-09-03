@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.adapter.web.ApiV1AdmPostController
 import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.global.app.AppConfig
+import com.back.global.app.application.AppFacade
 import com.back.global.observability.ErrorMetrics
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
@@ -41,7 +42,7 @@ import org.springframework.test.web.servlet.MockMvc
         ),
     ],
 )
-@Import(BaseAdmPostControllerWebMvcTest.TestSecurityConfig::class, ClientIpResolver::class)
+@Import(BaseAdmPostControllerWebMvcTest.TestSecurityConfig::class, ClientIpResolver::class, AppFacade::class)
 abstract class BaseAdmPostControllerWebMvcTest : BaseIntegrationTest() {
     @Autowired
     protected lateinit var mvc: MockMvc

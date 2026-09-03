@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.dto
 
+import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.security.domain.SecurityUser
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
@@ -17,5 +18,12 @@ data class AuthSessionMemberDto(
         isAdmin = securityUser.authorities.any { it.authority == "ROLE_ADMIN" },
         username = securityUser.nickname,
         nickname = securityUser.nickname,
+    )
+
+    constructor(member: Member) : this(
+        id = member.id,
+        isAdmin = member.isAdmin,
+        username = member.name,
+        nickname = member.nickname,
     )
 }

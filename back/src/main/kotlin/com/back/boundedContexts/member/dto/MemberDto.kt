@@ -17,7 +17,6 @@ data class MemberDto
         @get:Schema(name = "isAdmin", requiredMode = Schema.RequiredMode.REQUIRED)
         val isAdmin: Boolean,
         val name: String,
-        val profileImageUrl: String,
     ) {
         constructor(member: Member) : this(
             id = member.id,
@@ -25,6 +24,5 @@ data class MemberDto
             modifiedAt = member.modifiedAt,
             isAdmin = member.isAdmin,
             name = member.name,
-            profileImageUrl = member.profileImgUrlVersionedOrDefault,
         )
     }

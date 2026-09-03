@@ -186,7 +186,7 @@ class PostApplicationService(
             .getOrNull()
             ?.also { post ->
                 postHydrationService.hydratePostAttrs(post)
-                postHydrationService.hydrateMembersProfileImgAttrs(listOf(post.author))
+                postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
             }
 
     fun findPublicDetailById(id: Long): Post? =
@@ -196,7 +196,7 @@ class PostApplicationService(
                 if (post.likesCountAttr == null || post.hitCountAttr == null) {
                     postHydrationService.hydratePostAttrs(post)
                 }
-                postHydrationService.hydrateMembersProfileImgAttrs(listOf(post.author))
+                postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
             }
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
@@ -350,6 +350,7 @@ class PostApplicationService(
                 contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
             ).also { it.applyResolvedSummary(resolvedSummary) }
         val savedPost = postRepository.saveAndFlush(post)
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
         postTagIndexService.syncPostTags(savedPost)
         postCounterService.incrementMemberPostsCount(persistenceAuthor)
         return savedPost
@@ -670,6 +671,7 @@ class PostApplicationService(
         val restoredPost =
             postRepository.findById(id).getOrNull()
                 ?: throw AppException(ErrorCode.NOT_FOUND, "복구된 글을 확인할 수 없습니다.")
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(restoredPost.author))
         postTagIndexService.syncPostTags(restoredPost)
         val restoredTags = postTagIndexService.extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
@@ -838,7 +840,7 @@ class PostApplicationService(
     ): PagedResult<Post> {
         val pageResult = loader()
         postHydrationService.hydratePostAttrs(pageResult.content)
-        postHydrationService.hydrateMembersProfileImgAttrs(pageResult.content.map { it.author })
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(pageResult.content.map { it.author })
         return PagedResult(
             content = pageResult.content,
             page = page,
@@ -851,7 +853,7 @@ class PostApplicationService(
         val posts = loader()
         if (posts.isEmpty()) return posts
         postHydrationService.hydratePostAttrs(posts)
-        postHydrationService.hydrateMembersProfileImgAttrs(posts.map { it.author })
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(posts.map { it.author })
         return posts
     }
 

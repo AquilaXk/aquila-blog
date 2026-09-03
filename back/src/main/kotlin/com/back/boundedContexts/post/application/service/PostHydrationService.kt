@@ -1,8 +1,7 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.MemberAttr
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
 import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.domain.Post
@@ -34,18 +33,21 @@ class PostHydrationService(
         }
     }
 
-    fun hydrateMembersProfileImgAttrs(members: List<Member>) {
+    fun hydrateMembersPublishedProfileWorkspaces(members: List<Member>) {
         if (members.isEmpty()) return
 
         val uniqueMembers = members.distinctBy { it.id }
-        val profileAttrsByMemberId =
+        val publishedAttrsByMemberId =
             memberAttrRepository
-                .findBySubjectInAndNameIn(uniqueMembers, listOf(PROFILE_IMG_URL))
+                .findBySubjectInAndNameIn(uniqueMembers, listOf(PROFILE_WORKSPACE_PUBLISHED))
                 .associateBy { it.subject.id }
 
         members.forEach { member ->
-            member.getOrInitProfileImgUrlAttr {
-                profileAttrsByMemberId[member.id] ?: MemberAttr(0, member, PROFILE_IMG_URL, "")
+            val publishedAttr = publishedAttrsByMemberId[member.id]
+            if (member.deletedAt == null || publishedAttr != null) {
+                member.getProfileWorkspacePublishedAttr {
+                    publishedAttr ?: throw IllegalStateException("profile workspace published is missing")
+                }
             }
         }
     }

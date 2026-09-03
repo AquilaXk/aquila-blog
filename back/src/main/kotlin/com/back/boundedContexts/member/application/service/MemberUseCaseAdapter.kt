@@ -3,7 +3,6 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase.IssuedLoginSession
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import org.springframework.stereotype.Service
 import java.util.Optional
@@ -54,41 +53,7 @@ class MemberUseCaseAdapter(
     override fun modify(
         member: Member,
         nickname: String,
-        profileImgUrl: String?,
-    ) = memberApplicationService.modify(member, nickname, profileImgUrl)
-
-    override fun modifyProfileCard(
-        member: Member,
-        role: String,
-        bio: String,
-        aboutRole: String?,
-        aboutBio: String?,
-        aboutDetails: String?,
-        blogTitle: String,
-        homeIntroTitle: String,
-        homeIntroDescription: String,
-        blogDesign: String,
-        legacyBlogScheme: String,
-        serviceLinks: List<MemberProfileLinkItem>,
-        contactLinks: List<MemberProfileLinkItem>,
-    ) = memberApplicationService.modifyProfileCard(
-        member = member,
-        command =
-            UpdateProfileCardCommand(
-                role = role,
-                bio = bio,
-                aboutRole = aboutRole,
-                aboutBio = aboutBio,
-                aboutDetails = aboutDetails,
-                blogTitle = blogTitle,
-                homeIntroTitle = homeIntroTitle,
-                homeIntroDescription = homeIntroDescription,
-                blogDesign = blogDesign,
-                legacyBlogScheme = legacyBlogScheme,
-                serviceLinks = serviceLinks,
-                contactLinks = contactLinks,
-            ),
-    )
+    ) = memberApplicationService.modify(member, nickname)
 
     override fun saveProfileWorkspaceDraft(
         member: Member,

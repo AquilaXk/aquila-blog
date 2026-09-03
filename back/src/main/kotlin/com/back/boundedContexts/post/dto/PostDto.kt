@@ -41,7 +41,7 @@ data class PostDto
             post.author.id,
             post.author.name,
             post.author.name,
-            post.author.profileImgUrlVersionedOrDefault,
+            post.author.publishedProfileImageUrlVersionedOrDefault,
             post.title,
             thumbnail,
             post.summaryText.orEmpty(),

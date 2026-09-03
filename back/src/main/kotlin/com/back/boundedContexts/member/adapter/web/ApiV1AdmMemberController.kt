@@ -95,43 +95,10 @@ class ApiV1AdmMemberController(
         return securityUser.id
     }
 
-    data class UpdateProfileImgRequest(
-        @field:NotBlank
-        @field:Size(max = 2000)
-        val profileImgUrl: String,
-    )
-
     data class UpdateProfileIdentityRequest(
         @field:NotBlank
         @field:Size(min = 2, max = 30)
         val nickname: String,
-    )
-
-    data class UpdateProfileCardRequest(
-        @field:Size(max = 100)
-        val role: String = "",
-        @field:Size(max = 1000)
-        val bio: String = "",
-        @field:Size(max = 100)
-        val aboutRole: String? = null,
-        @field:Size(max = 2000)
-        val aboutBio: String? = null,
-        @field:Size(max = 12000)
-        val aboutDetails: String? = null,
-        @field:Size(max = 120)
-        val blogTitle: String = "",
-        @field:Size(max = 120)
-        val homeIntroTitle: String = "",
-        @field:Size(max = 500)
-        val homeIntroDescription: String = "",
-        @field:Size(max = 20)
-        val blogDesign: String? = null,
-        @field:Size(max = 20)
-        val legacyBlogScheme: String? = null,
-        @field:Size(max = 30)
-        val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
-        @field:Size(max = 30)
-        val contactLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
     )
 
     data class ProfileCardLinkItemRequest(
@@ -196,9 +163,9 @@ class ApiV1AdmMemberController(
         @field:Size(max = 500)
         val homeIntroDescription: String = "",
         @field:Size(max = 20)
-        val blogDesign: String? = null,
+        val blogDesign: String,
         @field:Size(max = 20)
-        val legacyBlogScheme: String? = null,
+        val legacyBlogScheme: String,
         @field:Size(max = 30)
         val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
         @field:Size(max = 30)
@@ -237,35 +204,15 @@ class ApiV1AdmMemberController(
         return currentMemberProfileQueryUseCase.getWorkspaceById(memberId)
     }
 
-    /**
-     * ProfileImg 항목을 수정한다.
-     */
-    @PatchMapping("/{id}/profileImgUrl")
-    @Transactional
-    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
-    fun updateProfileImg(
-        @PathVariable
-        @Positive
-        id: Long,
-        @RequestBody @Valid reqBody: UpdateProfileImgRequest,
-        @AuthenticationPrincipal securityUser: SecurityUser,
-    ): MemberWithUsernameDto {
-        val memberId = requireAuthenticatedMemberId(id, securityUser)
-        val member = memberUseCase.findById(memberId).orElseThrow()
-        memberUseCase.modify(member, member.nickname, reqBody.profileImgUrl.trim())
-        return currentMemberProfileQueryUseCase.getById(memberId)
-    }
-
     @PostMapping("/{id}/profileImageFile", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @Transactional
-    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun uploadProfileImageFile(
         @PathVariable
         @Positive
         id: Long,
         @RequestPart("file") file: MultipartFile,
         @AuthenticationPrincipal securityUser: SecurityUser,
-    ): MemberWithUsernameDto {
+    ): ProfileImageUploadResponse {
         val memberId = requireAuthenticatedMemberId(id, securityUser)
         if (file.isEmpty) {
             throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일이 비어 있습니다.")
@@ -276,7 +223,6 @@ class ApiV1AdmMemberController(
             throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
         }
 
-        val member = memberUseCase.findById(memberId).orElseThrow()
         val uploadRequest =
             PostImageStoragePort.UploadImageRequest(
                 inputStream = file.inputStream,
@@ -297,8 +243,7 @@ class ApiV1AdmMemberController(
                 .replace("+", "%20")
                 .replace("%2F", "/")
         val imageUrl = "${AppConfig.siteBackUrl}/post/api/v1/images/$encodedKey"
-        memberUseCase.modify(member, member.nickname, imageUrl)
-        return currentMemberProfileQueryUseCase.getById(memberId)
+        return ProfileImageUploadResponse(imageUrl)
     }
 
     @GetMapping("/{id}/profileImageFiles")
@@ -343,7 +288,7 @@ class ApiV1AdmMemberController(
 
     private fun Member.protectedProfileImgUrls(): List<String?> =
         listOf(
-            profileImgUrl,
+            getProfileWorkspaceDraftContent().profileImageUrl,
             getProfileWorkspacePublishedContent().profileImageUrl,
         )
 
@@ -362,41 +307,8 @@ class ApiV1AdmMemberController(
     ): MemberWithUsernameDto {
         val memberId = requireAuthenticatedMemberId(id, securityUser)
         val member = memberUseCase.findById(memberId).orElseThrow()
-        memberUseCase.modify(member, reqBody.nickname.trim(), member.profileImgUrl)
-        return currentMemberProfileQueryUseCase.getById(memberId)
-    }
-
-    /**
-     * ProfileCard 항목을 수정한다.
-     */
-    @PatchMapping("/{id}/profileCard")
-    @Transactional
-    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
-    fun updateProfileCard(
-        @PathVariable
-        @Positive
-        id: Long,
-        @RequestBody @Valid reqBody: UpdateProfileCardRequest,
-        @AuthenticationPrincipal securityUser: SecurityUser,
-    ): MemberWithUsernameDto {
-        val memberId = requireAuthenticatedMemberId(id, securityUser)
-        val member = memberUseCase.findById(memberId).orElseThrow()
-        memberUseCase.modifyProfileCard(
-            member = member,
-            role = reqBody.role.trim(),
-            bio = reqBody.bio.trim(),
-            aboutRole = reqBody.aboutRole?.trim(),
-            aboutBio = reqBody.aboutBio?.trim(),
-            aboutDetails = reqBody.aboutDetails?.trim(),
-            blogTitle = reqBody.blogTitle.trim(),
-            homeIntroTitle = reqBody.homeIntroTitle.trim(),
-            homeIntroDescription = reqBody.homeIntroDescription.trim(),
-            blogDesign = reqBody.blogDesign?.trim() ?: member.blogDesign,
-            legacyBlogScheme = reqBody.legacyBlogScheme?.trim() ?: member.legacyBlogScheme,
-            serviceLinks = reqBody.serviceLinks.normalize(LinkSection.SERVICE),
-            contactLinks = reqBody.contactLinks.normalize(LinkSection.CONTACT),
-        )
-        return currentMemberProfileQueryUseCase.getById(memberId)
+        memberUseCase.modify(member, reqBody.nickname.trim())
+        return currentMemberProfileQueryUseCase.getPublishedById(memberId)
     }
 
     @PutMapping("/{id}/profileWorkspace/draft")
@@ -410,7 +322,7 @@ class ApiV1AdmMemberController(
     ): MemberProfileWorkspaceResponseDto {
         val memberId = requireAuthenticatedMemberId(id, securityUser)
         val member = memberUseCase.findById(memberId).orElseThrow()
-        memberUseCase.saveProfileWorkspaceDraft(member, reqBody.toDomain(member.blogDesign, member.legacyBlogScheme))
+        memberUseCase.saveProfileWorkspaceDraft(member, reqBody.toDomain())
         return currentMemberProfileQueryUseCase.getWorkspaceById(memberId)
     }
 
@@ -451,10 +363,7 @@ class ApiV1AdmMemberController(
             )
         }
 
-    private fun UpdateProfileWorkspaceDraftRequest.toDomain(
-        currentBlogDesign: String,
-        currentLegacyBlogScheme: String,
-    ): MemberProfileWorkspaceContent =
+    private fun UpdateProfileWorkspaceDraftRequest.toDomain(): MemberProfileWorkspaceContent =
         MemberProfileWorkspaceContent(
             profileImageUrl = profileImageUrl.trim(),
             profileRole = profileRole.trim(),
@@ -486,9 +395,13 @@ class ApiV1AdmMemberController(
             blogTitle = blogTitle.trim(),
             homeIntroTitle = homeIntroTitle.trim(),
             homeIntroDescription = homeIntroDescription.trim(),
-            blogDesign = blogDesign?.trim() ?: currentBlogDesign,
-            legacyBlogScheme = legacyBlogScheme?.trim() ?: currentLegacyBlogScheme,
+            blogDesign = blogDesign.trim(),
+            legacyBlogScheme = legacyBlogScheme.trim(),
             serviceLinks = serviceLinks.normalize(LinkSection.SERVICE),
             contactLinks = contactLinks.normalize(LinkSection.CONTACT),
         )
+
+    data class ProfileImageUploadResponse(
+        val profileImageUrl: String,
+    )
 }

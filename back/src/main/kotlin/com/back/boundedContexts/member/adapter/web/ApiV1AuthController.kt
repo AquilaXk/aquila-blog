@@ -3,7 +3,6 @@ package com.back.boundedContexts.member.adapter.web
 import com.back.boundedContexts.member.application.port.input.AdminEmailAuthenticationUseCase
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.dto.AuthSessionMemberDto
-import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
@@ -49,7 +48,7 @@ class ApiV1AuthController(
     }
 
     data class MemberLoginResBody(
-        val item: MemberDto,
+        val item: AuthSessionMemberDto,
     )
 
     data class AdminEmailCodeRequest(
@@ -122,7 +121,7 @@ class ApiV1AuthController(
         return RsData(
             "200-1",
             "${issued.member.nickname}님 환영합니다.",
-            MemberLoginResBody(MemberDto(issued.member)),
+            MemberLoginResBody(AuthSessionMemberDto(issued.member)),
         )
     }
 
@@ -145,7 +144,7 @@ class ApiV1AuthController(
     @Transactional(readOnly = true)
     fun me(
         @AuthenticationPrincipal securityUser: SecurityUser,
-    ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(securityUser.id)
+    ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getPublishedById(securityUser.id)
 
     @GetMapping("/session")
     @Transactional(readOnly = true)

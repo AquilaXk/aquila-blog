@@ -1,6 +1,7 @@
 package com.back.global.storage.application
 
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_DRAFT
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.global.app.AppConfig
 import com.back.global.storage.adapter.persistence.UploadedFileRepository
@@ -449,7 +450,14 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         given(
             memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(
                 77,
-                PROFILE_IMG_URL,
+                PROFILE_WORKSPACE_DRAFT,
+                objectKey,
+            ),
+        ).willReturn(false)
+        given(
+            memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(
+                77,
+                PROFILE_WORKSPACE_PUBLISHED,
                 objectKey,
             ),
         ).willReturn(true)

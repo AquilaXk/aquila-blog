@@ -79,12 +79,15 @@ class MemberApplicationService(
                 }
                 throw AppException(ErrorCode.MEMBER_SIGNUP_RACE, "동시에 처리된 회원가입 요청입니다. 다시 시도해주세요.")
             }
-        memberProfileHydrator.hydrate(member)
-        profileImgUrl?.let {
-            member.profileImgUrl = it
-            memberProfilePersistenceService.saveProfileImage(member)
-            uploadedFileRetentionService.syncProfileImage(member.id, null, member.profileImgUrl)
-        }
+        memberProfilePersistenceService
+            .initializeWorkspaceSnapshots(member, MemberProfileWorkspaceContent(profileImageUrl = profileImgUrl.orEmpty()))
+            ?.let { imageSyncRequest ->
+                uploadedFileRetentionService.syncProfileImage(
+                    member.id,
+                    imageSyncRequest.previousProfileImgUrl,
+                    imageSyncRequest.currentProfileImgUrl,
+                )
+            }
         logger.info("member_signup_completed memberId={} actorId={}", member.id, member.id)
 
         return member
@@ -171,44 +174,20 @@ class MemberApplicationService(
     fun modify(
         member: Member,
         nickname: String,
-        profileImgUrl: String?,
     ) {
-        memberProfileHydrator.hydrate(member)
-        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
         val previousNickname = member.nickname
-        val previousProfileImgUrl = member.profileImgUrl
-        val publishedProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl
-        member.modify(nickname, profileImgUrl)
-        if (profileImgUrl != null) {
-            memberProfilePersistenceService.saveProfileImage(member)
-            memberProfilePersistenceService.syncDraftWorkspaceFromLegacy(member)
-            uploadedFileRetentionService.syncProfileImage(
-                member.id,
-                previousProfileImgUrl.takeUnless { it == publishedProfileImgUrl },
-                member.profileImgUrl,
-            )
-        }
-        if (previousNickname != member.nickname || previousProfileImgUrl != member.profileImgUrl) {
+        member.modify(nickname)
+        if (previousNickname != member.nickname) {
             applicationEventPublisher.publishEvent(
                 MemberPublicProfileChangedEvent(
                     memberId = member.id,
                     previousNickname = previousNickname,
                     currentNickname = member.nickname,
-                    previousProfileImgUrl = previousProfileImgUrl,
-                    currentProfileImgUrl = member.profileImgUrl,
+                    previousProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl,
+                    currentProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl,
                 ),
             )
         }
-    }
-
-    @Transactional
-    fun modifyProfileCard(
-        member: Member,
-        command: UpdateProfileCardCommand,
-    ) {
-        memberProfileHydrator.hydrate(member)
-        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
-        memberProfilePersistenceService.updateProfileCard(member, command)
     }
 
     @Transactional
@@ -216,8 +195,6 @@ class MemberApplicationService(
         member: Member,
         content: MemberProfileWorkspaceContent,
     ) {
-        memberProfileHydrator.hydrate(member)
-        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
         val imageSyncRequest = memberProfilePersistenceService.saveWorkspaceDraft(member, content)
         if (imageSyncRequest != null) {
             uploadedFileRetentionService.syncProfileImage(
@@ -230,14 +207,24 @@ class MemberApplicationService(
 
     @Transactional
     fun publishProfileWorkspace(member: Member) {
-        memberProfileHydrator.hydrate(member)
-        memberProfilePersistenceService.ensureWorkspaceSnapshotsInitialized(member)
+        val previousPublished = member.getProfileWorkspacePublishedContent()
         val imageSyncRequest = memberProfilePersistenceService.publishWorkspace(member)
         if (imageSyncRequest != null) {
             uploadedFileRetentionService.syncProfileImage(
                 member.id,
                 imageSyncRequest.previousProfileImgUrl,
                 imageSyncRequest.currentProfileImgUrl,
+            )
+        }
+        if (imageSyncRequest != null) {
+            applicationEventPublisher.publishEvent(
+                MemberPublicProfileChangedEvent(
+                    memberId = member.id,
+                    previousNickname = member.nickname,
+                    currentNickname = member.nickname,
+                    previousProfileImgUrl = previousPublished.profileImageUrl,
+                    currentProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl,
+                ),
             )
         }
     }

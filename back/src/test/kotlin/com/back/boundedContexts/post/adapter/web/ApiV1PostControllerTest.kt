@@ -347,7 +347,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 jsonPath("$.id") { value(post.id) }
                 jsonPath("$.authorId") { value(post.author.id) }
                 jsonPath("$.title") { value(post.title) }
-                jsonPath("$.authorProfileImageDirectUrl") { value(post.author.profileImgUrlOrDefault) }
+                jsonPath("$.authorProfileImageDirectUrl") { value(post.author.publishedProfileImageUrlVersionedOrDefault) }
                 jsonPath("$.published") { value(post.published) }
             }
         }

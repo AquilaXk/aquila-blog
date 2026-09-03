@@ -1,11 +1,11 @@
 package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.security.config.AuthCookieNames
 import com.back.support.BaseMemberControllerWebMvcTest
 import jakarta.servlet.http.Cookie
-import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
@@ -21,19 +21,23 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
         @Test
         fun `관리자 프로필 조회는 잘못된 인증 정보가 있어도 공개 응답을 반환한다`() {
             val adminMember = sampleMember(id = 1, username = "admin", nickname = "관리자")
-            adminMember.profileRole = "블로그 운영자"
-            adminMember.profileBio = "소개"
-            adminMember.aboutRole = "Platform Engineer"
-            adminMember.aboutBio = "상세 About 소개"
-            adminMember.blogTitle = "aquilaXk's Archive"
-            adminMember.homeIntroTitle = "aquilaXk's Blog"
-            adminMember.homeIntroDescription = "welcome to my backend dev log!"
-            adminMember.blogDesign = "grid"
-            adminMember.legacyBlogScheme = "light"
+            val workspace =
+                MemberProfileWorkspaceContent(
+                    profileImageUrl = "https://example.com/admin.png",
+                    profileRole = "블로그 운영자",
+                    profileBio = "소개",
+                    aboutRole = "Platform Engineer",
+                    aboutBio = "상세 About 소개",
+                    blogTitle = "aquilaXk's Archive",
+                    homeIntroTitle = "aquilaXk's Blog",
+                    homeIntroDescription = "welcome to my backend dev log!",
+                    blogDesign = "grid",
+                    legacyBlogScheme = "light",
+                )
             given(memberUseCase.findByEmail("admin@test.com")).willReturn(adminMember)
             given(canonicalAdminPolicy.canAuthenticate(adminMember)).willReturn(true)
             given(currentMemberProfileQueryUseCase.getPublishedById(adminMember.id))
-                .willReturn(MemberWithUsernameDto(adminMember))
+                .willReturn(MemberWithUsernameDto(adminMember, workspace, adminMember.modifiedAt))
 
             mvc
                 .get("/member/api/v1/members/adminProfile") {
@@ -55,7 +59,7 @@ class ApiV1MemberControllerWebMvcTest : BaseMemberControllerWebMvcTest() {
                     jsonPath("$.homeIntroDescription") { value("welcome to my backend dev log!") }
                     jsonPath("$.blogDesign") { value("grid") }
                     jsonPath("$.legacyBlogScheme") { value("light") }
-                    jsonPath("$.profileImageUrl") { value(startsWith(adminMember.profileImgUrlOrDefault)) }
+                    jsonPath("$.profileImageUrl") { value("https://example.com/admin.png?v=${adminMember.modifiedAt.toEpochMilli()}") }
                 }
         }
 

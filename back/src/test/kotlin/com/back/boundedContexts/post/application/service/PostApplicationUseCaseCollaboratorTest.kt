@@ -2,7 +2,6 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
@@ -80,7 +79,8 @@ class PostApplicationUseCaseCollaboratorTest {
     fun `temp draft lookup returns the tracked post and rejects lock contention`() {
         val postRepository = mock(PostRepositoryPort::class.java)
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
-        val service = PostTempDraftService(postRepository, memberAttrRepository)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
         val author = testMember()
         val tempPost = testPost(author = author)
         val marker = MemberAttr(1, author, "activeTempDraftPostId", tempPost.id.toString())
@@ -99,7 +99,8 @@ class PostApplicationUseCaseCollaboratorTest {
     fun `temp draft lookup ignores an untracked legacy title and creates a marked post`() {
         val postRepository = mock(PostRepositoryPort::class.java)
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
-        val service = PostTempDraftService(postRepository, memberAttrRepository)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
         val author = testMember()
         val untrackedLegacyPost = testPost(author = author)
         var savedMarker: MemberAttr? = null
@@ -128,23 +129,6 @@ class PostApplicationUseCaseCollaboratorTest {
         then(memberAttrRepository).should().save(marker)
         assertThat(marker.name).isEqualTo("activeTempDraftPostId")
         assertThat(marker.strValue).isEqualTo(createdPost.id.toString())
-    }
-
-    @Test
-    fun `post hydration applies one persisted profile image to duplicate member instances`() {
-        val postAttrRepository = mock(PostAttrRepositoryPort::class.java)
-        val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
-        val service = PostHydrationService(postAttrRepository, memberAttrRepository)
-        val first = testMember(id = 3)
-        val second = testMember(id = 3)
-        val persistedAttr = MemberAttr(1, first, PROFILE_IMG_URL, "https://example.com/profile.png")
-        given(memberAttrRepository.findBySubjectInAndNameIn(listOf(first), listOf(PROFILE_IMG_URL)))
-            .willReturn(listOf(persistedAttr))
-
-        service.hydrateMembersProfileImgAttrs(listOf(first, second))
-
-        assertThat(first.profileImgUrl).isEqualTo("https://example.com/profile.png")
-        assertThat(second.profileImgUrl).isEqualTo("https://example.com/profile.png")
     }
 
     private fun testMember(id: Long = 1): Member =

@@ -1,7 +1,6 @@
 package com.back.boundedContexts.member.application.port.input
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import java.util.Optional
 
@@ -40,23 +39,6 @@ interface MemberUseCase {
     fun modify(
         member: Member,
         nickname: String,
-        profileImgUrl: String?,
-    )
-
-    fun modifyProfileCard(
-        member: Member,
-        role: String,
-        bio: String,
-        aboutRole: String?,
-        aboutBio: String?,
-        aboutDetails: String?,
-        blogTitle: String,
-        homeIntroTitle: String,
-        homeIntroDescription: String,
-        blogDesign: String,
-        legacyBlogScheme: String,
-        serviceLinks: List<MemberProfileLinkItem>,
-        contactLinks: List<MemberProfileLinkItem>,
     )
 
     fun saveProfileWorkspaceDraft(

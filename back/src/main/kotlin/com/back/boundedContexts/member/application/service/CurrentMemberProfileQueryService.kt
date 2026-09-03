@@ -15,19 +15,12 @@ class CurrentMemberProfileQueryService(
     private val memberProfileHydrator: MemberProfileHydrator,
 ) : CurrentMemberProfileQueryUseCase {
     @Transactional(readOnly = true)
-    override fun getById(id: Long): MemberWithUsernameDto {
-        val member = findHydratedMember(id)
-
-        return MemberWithUsernameDto(member)
-    }
-
-    @Transactional(readOnly = true)
     override fun getPublishedById(id: Long): MemberWithUsernameDto {
         val member = findHydratedMember(id)
         return MemberWithUsernameDto(
             member = member,
             workspaceContent = member.getProfileWorkspacePublishedContent(),
-            workspaceModifiedAt = member.profileWorkspacePublishedModifiedAtOrNull() ?: member.modifiedAt,
+            workspaceModifiedAt = member.profileWorkspacePublishedModifiedAt(),
         )
     }
 
@@ -40,8 +33,8 @@ class CurrentMemberProfileQueryService(
         return MemberProfileWorkspaceResponseDto(
             draft = MemberProfileWorkspaceContentDto(draft),
             published = MemberProfileWorkspaceContentDto(published),
-            lastDraftSavedAt = member.profileWorkspaceDraftModifiedAtOrNull() ?: member.modifiedAt,
-            lastPublishedAt = member.profileWorkspacePublishedModifiedAtOrNull() ?: member.modifiedAt,
+            lastDraftSavedAt = member.profileWorkspaceDraftModifiedAt(),
+            lastPublishedAt = member.profileWorkspacePublishedModifiedAt(),
             dirtyFromPublished = draft != published,
         )
     }

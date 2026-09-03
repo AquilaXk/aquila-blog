@@ -107,7 +107,7 @@ class PostApplicationServiceDeleteResilienceTest {
         PostTagIndexService(
             postTagIndexRepository = postTagIndexRepository,
         )
-    private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository)
+    private val postTempDraftService = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
     private val postHitSideEffectQueue = PostHitSideEffectQueue(taskFacade)
     private val service =
         PostApplicationService(

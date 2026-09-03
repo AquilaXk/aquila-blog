@@ -1,7 +1,8 @@
 package com.back.global.storage.application
 
 import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_DRAFT
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileOwnerType
@@ -31,9 +32,14 @@ class UploadedFileReferenceQueryService(
             UploadedFileOwnerType.MEMBER_PROFILE ->
                 memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(
                     ownerId,
-                    PROFILE_IMG_URL,
+                    PROFILE_WORKSPACE_DRAFT,
                     uploadedFile.objectKey,
-                )
+                ) ||
+                    memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(
+                        ownerId,
+                        PROFILE_WORKSPACE_PUBLISHED,
+                        uploadedFile.objectKey,
+                    )
             else -> false
         }
     }
@@ -44,7 +50,9 @@ class UploadedFileReferenceQueryService(
         val fileUrl = UploadedFileUrlCodec.buildFileUrl(objectKey)
         return postRepository.existsByContentContaining(objectKey) ||
             postRepository.existsByContentContaining(fileUrl) ||
-            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_IMG_URL, objectKey) ||
-            memberAttrRepository.existsByNameAndStrValue(PROFILE_IMG_URL, imageUrl)
+            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, objectKey) ||
+            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, objectKey) ||
+            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, imageUrl) ||
+            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, imageUrl)
     }
 }

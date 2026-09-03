@@ -15,6 +15,7 @@ import kotlin.jvm.optionals.getOrNull
 class PostTempDraftService(
     private val postRepository: PostRepositoryPort,
     private val memberAttrRepository: MemberAttrRepositoryPort,
+    private val postHydrationService: PostHydrationService,
 ) {
     private val activeTempDraftPostIdAttrName = "activeTempDraftPostId"
     private val activeTempDraftLockAttrName = "activeTempDraftLock"
@@ -27,6 +28,7 @@ class PostTempDraftService(
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
         val persistenceAuthor = author.toPersistenceMember()
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
         if (!tryAcquireTempDraftLock(persistenceAuthor)) {
             throw AppException(ErrorCode.RESOURCE_CONFLICT, "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.")
         }

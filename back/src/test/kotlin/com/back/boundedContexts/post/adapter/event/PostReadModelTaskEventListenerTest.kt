@@ -184,7 +184,6 @@ class PostReadModelTaskEventListenerTest {
                     modifiedAt = Instant.EPOCH,
                     isAdmin = false,
                     name = "author",
-                    profileImageUrl = "",
                 ),
             afterTags = listOf("kotlin", "spring"),
         )

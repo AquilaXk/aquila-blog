@@ -1,6 +1,11 @@
 package com.back.boundedContexts.member.domain.shared.memberMixin
 
+import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.global.app.AppConfig
 import com.back.standard.util.Ut
+import java.net.URI
+import java.time.Instant
+import java.util.Locale
 
 const val PROFILE_WORKSPACE_DRAFT = "profileWorkspaceDraft"
 const val PROFILE_WORKSPACE_PUBLISHED = "profileWorkspacePublished"
@@ -8,6 +13,40 @@ const val BLOG_DESIGN_LEGACY = "legacy"
 const val BLOG_DESIGN_GRID = "grid"
 const val LEGACY_BLOG_SCHEME_LIGHT = "light"
 const val LEGACY_BLOG_SCHEME_DARK = "dark"
+
+const val PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE = "service"
+const val PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE = "message"
+
+val PROFILE_SERVICE_ICON_ALLOWED =
+    setOf("service", "briefcase", "laptop", "rocket", "spark", "search", "tag", "camera", "question")
+
+val PROFILE_CONTACT_ICON_ALLOWED =
+    setOf("github", "linkedin", "mail", "message", "kakao", "instagram", "globe", "link", "phone", "bell")
+
+private val profileLinkAllowedSchemes = setOf("https", "http", "mailto", "tel")
+
+data class MemberProfileLinkItem(
+    val icon: String = PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE,
+    val label: String = "",
+    val href: String = "",
+)
+
+fun normalizeProfileLinkHref(rawHref: String): String? {
+    val href = rawHref.trim()
+    if (href.isBlank()) return ""
+    if (href.any { it == '\r' || it == '\n' }) return null
+    if (href.startsWith("/")) return href.takeUnless { it.startsWith("//") }
+    val scheme = runCatching { URI(href).scheme?.lowercase(Locale.ROOT) }.getOrNull() ?: return null
+    return href.takeIf { scheme in profileLinkAllowedSchemes }
+}
+
+private const val DEFAULT_SITE_FRONT_URL = "https://blog.aquilaxk.site"
+private const val DEFAULT_PROFILE_IMAGE_PATH = "/images/default-profile.svg"
+
+fun defaultProfileImageUrl(): String {
+    val siteFrontUrl = runCatching { AppConfig.siteFrontUrl.trimEnd('/') }.getOrDefault("")
+    return "${siteFrontUrl.ifBlank { DEFAULT_SITE_FRONT_URL }}$DEFAULT_PROFILE_IMAGE_PATH"
+}
 
 fun normalizeBlogDesign(value: String?): String =
     when (value?.trim()?.lowercase()) {
@@ -215,131 +254,53 @@ fun decodeMemberProfileWorkspaceContent(rawValue: String?): MemberProfileWorkspa
     }.getOrNull()?.let(::normalizeMemberProfileWorkspaceContent)
 }
 
-fun parseLegacyAboutDetailsToBlocks(raw: String): List<MemberProfileAboutSectionBlock> {
-    if (raw.isBlank()) return emptyList()
-
-    val lines = raw.split(Regex("\\r?\\n")).map(String::trim)
-    val sections = mutableListOf<MemberProfileAboutSectionBlock>()
-    var currentTitle: String? = null
-    val currentItems = mutableListOf<String>()
-    var nextSectionHasDivider = false
-    var currentSectionHasDivider = false
-
-    fun pushCurrent() {
-        val title = currentTitle?.trim().orEmpty()
-        val items = currentItems.map(String::trim).filter(String::isNotBlank)
-        if (title.isBlank() && items.isEmpty()) {
-            currentTitle = null
-            currentItems.clear()
-            currentSectionHasDivider = false
-            return
+interface MemberHasProfileWorkspace : MemberAware {
+    fun getProfileWorkspaceDraftAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(PROFILE_WORKSPACE_DRAFT) {
+            loader?.invoke() ?: throw IllegalStateException("profile workspace draft is missing")
         }
 
-        sections.add(
-            MemberProfileAboutSectionBlock(
-                id = "legacy-${sections.size + 1}",
-                title = title,
-                items = items,
-                dividerBefore = currentSectionHasDivider,
-            ),
-        )
-        currentTitle = null
-        currentItems.clear()
-        currentSectionHasDivider = false
+    fun getProfileWorkspacePublishedAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(PROFILE_WORKSPACE_PUBLISHED) {
+            loader?.invoke() ?: throw IllegalStateException("profile workspace published is missing")
+        }
+
+    fun getProfileWorkspaceDraftContent(): MemberProfileWorkspaceContent =
+        decodeRequiredProfileWorkspace(getProfileWorkspaceDraftAttr().strValue, PROFILE_WORKSPACE_DRAFT)
+
+    fun getProfileWorkspacePublishedContent(): MemberProfileWorkspaceContent =
+        decodeRequiredProfileWorkspace(getProfileWorkspacePublishedAttr().strValue, PROFILE_WORKSPACE_PUBLISHED)
+
+    fun profileWorkspaceDraftModifiedAt(): Instant {
+        getProfileWorkspaceDraftContent()
+        return getProfileWorkspaceDraftAttr().modifiedAt
     }
 
-    lines.forEach { line ->
-        if (line.isBlank()) return@forEach
-
-        if (line == "---") {
-            pushCurrent()
-            nextSectionHasDivider = true
-            return@forEach
-        }
-
-        val markdownHeadingMatch = Regex("^#{1,3}\\s+(.+)$").matchEntire(line)
-        if (markdownHeadingMatch != null) {
-            pushCurrent()
-            currentTitle = markdownHeadingMatch.groupValues[1].trim()
-            currentSectionHasDivider = nextSectionHasDivider
-            nextSectionHasDivider = false
-            return@forEach
-        }
-
-        if (currentTitle == null && currentItems.isEmpty()) {
-            currentTitle = line
-            currentSectionHasDivider = nextSectionHasDivider
-            nextSectionHasDivider = false
-            return@forEach
-        }
-
-        val plainHeadingLike =
-            !line.startsWith("- ") &&
-                currentItems.isNotEmpty() &&
-                line.length <= 24 &&
-                !Regex("\\d{4}[./-]\\d{1,2}").containsMatchIn(line) &&
-                !Regex("[,:;)]$").containsMatchIn(line)
-        if (plainHeadingLike) {
-            pushCurrent()
-            currentTitle = line
-            currentSectionHasDivider = nextSectionHasDivider
-            nextSectionHasDivider = false
-            return@forEach
-        }
-
-        val itemText =
-            if (line.startsWith("- ")) {
-                line.removePrefix("- ").trim()
-            } else {
-                line
-            }
-        if (itemText.isBlank()) return@forEach
-        currentItems.add(itemText)
+    fun profileWorkspacePublishedModifiedAt(): Instant {
+        getProfileWorkspacePublishedContent()
+        return getProfileWorkspacePublishedAttr().modifiedAt
     }
 
-    pushCurrent()
-    return sections
+    val publishedProfileImageUrlVersionedOrDefault: String
+        get() {
+            if (member.deletedAt != null) return defaultProfileImageUrl()
+            val url = getProfileWorkspacePublishedContent().profileImageUrl.takeIf(String::isNotBlank) ?: return defaultProfileImageUrl()
+            val separator = if (url.contains("?")) "&" else "?"
+            return "$url${separator}v=${profileWorkspacePublishedModifiedAt().toEpochMilli()}"
+        }
+
+    fun setProfileWorkspaceDraftContent(content: MemberProfileWorkspaceContent) {
+        val raw = encodeMemberProfileWorkspaceContent(content)
+        member.getOrPutAttr(PROFILE_WORKSPACE_DRAFT) { MemberAttr(0, member, PROFILE_WORKSPACE_DRAFT, raw) }.strValue = raw
+    }
+
+    fun setProfileWorkspacePublishedContent(content: MemberProfileWorkspaceContent) {
+        val raw = encodeMemberProfileWorkspaceContent(content)
+        member.getOrPutAttr(PROFILE_WORKSPACE_PUBLISHED) { MemberAttr(0, member, PROFILE_WORKSPACE_PUBLISHED, raw) }.strValue = raw
+    }
 }
 
-fun convertAboutSectionsToLegacyDetails(sections: List<MemberProfileAboutSectionBlock>): String {
-    val normalizedSections =
-        sections.mapIndexedNotNull { index, section ->
-            val normalizedTitle = section.title.trim()
-            val normalizedItems =
-                section.items
-                    .map(String::trim)
-                    .filter(String::isNotBlank)
-            val hasContent = normalizedTitle.isNotBlank() || normalizedItems.isNotEmpty()
-            if (!hasContent) return@mapIndexedNotNull null
-
-            MemberProfileAboutSectionBlock(
-                id = section.id.trim().ifBlank { "section-${index + 1}" },
-                title = normalizedTitle,
-                items = normalizedItems,
-                dividerBefore = section.dividerBefore,
-            )
-        }
-    val lines = mutableListOf<String>()
-
-    normalizedSections.forEachIndexed { index, section ->
-        if (section.dividerBefore && lines.isNotEmpty()) {
-            if (lines.lastOrNull()?.isNotBlank() == true) {
-                lines.add("")
-            }
-            lines.add("---")
-            lines.add("")
-        } else if (index > 0 && lines.lastOrNull()?.isNotBlank() == true) {
-            lines.add("")
-        }
-
-        if (section.title.isNotBlank()) {
-            lines.add("## ${section.title}")
-        }
-        section.items.forEach { item ->
-            lines.add("- $item")
-        }
-        lines.add("")
-    }
-
-    return lines.dropLastWhile(String::isBlank).joinToString("\n")
-}
+private fun decodeRequiredProfileWorkspace(
+    raw: String?,
+    name: String,
+): MemberProfileWorkspaceContent = decodeMemberProfileWorkspaceContent(raw) ?: throw IllegalStateException("$name is missing or invalid")

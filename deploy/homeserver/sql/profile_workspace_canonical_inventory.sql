@@ -439,6 +439,27 @@ SELECT
     COUNT(*) FILTER (WHERE published_state IN ('invalid_json', 'invalid_shape'))::bigint AS published_invalid_count,
     COUNT(*) FILTER (WHERE published_state = 'noncanonical')::bigint AS published_noncanonical_count,
     COUNT(*) FILTER (WHERE published_state = 'canonical')::bigint AS published_valid_count,
+    COUNT(*) FILTER (WHERE draft_state = 'missing' AND published_state = 'missing')::bigint AS workspace_both_missing_count,
+    COUNT(*) FILTER (WHERE (draft_state = 'missing') <> (published_state = 'missing'))::bigint AS workspace_partial_missing_count,
+    COUNT(*) FILTER (
+        WHERE draft_state = 'missing'
+          AND published_state = 'missing'
+          AND (
+              btrim(legacy_profile_image_url, kotlin_trim_chars) <> ''
+              OR btrim(legacy_profile_role, kotlin_trim_chars) <> ''
+              OR btrim(legacy_profile_bio, kotlin_trim_chars) <> ''
+              OR btrim(legacy_about_role, kotlin_trim_chars) <> ''
+              OR btrim(legacy_about_bio, kotlin_trim_chars) <> ''
+              OR btrim(legacy_about_details, kotlin_trim_chars) <> ''
+              OR btrim(legacy_blog_title, kotlin_trim_chars) <> ''
+              OR btrim(legacy_home_intro_title, kotlin_trim_chars) <> ''
+              OR btrim(legacy_home_intro_description, kotlin_trim_chars) <> ''
+              OR lower(btrim(legacy_blog_design, kotlin_trim_chars)) NOT IN ('', 'legacy')
+              OR lower(btrim(legacy_blog_scheme, kotlin_trim_chars)) NOT IN ('', 'dark')
+              OR jsonb_array_length(legacy_service_links) > 0
+              OR jsonb_array_length(legacy_contact_links) > 0
+          )
+    )::bigint AS both_missing_material_legacy_count,
     COUNT(*) FILTER (WHERE draft_state = 'canonical' AND published_state = 'canonical' AND draft_content IS DISTINCT FROM published_content)::bigint AS draft_published_different_count,
     COUNT(*) FILTER (
         WHERE draft_state = 'canonical'

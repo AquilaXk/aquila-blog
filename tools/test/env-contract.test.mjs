@@ -959,30 +959,29 @@ test("컨테이너 내부 진입점은 backend 전용 vhost에 있어 front로 �
   assert.match(deployScript, /FRONT_BACKEND_PROXY_PATH="\$\{FRONT_BACKEND_PROXY_PATH:-\/api\/backend\/post\/api\/v1\/posts\/tags\}"/)
 })
 
-test("Caddy access logs skip sensitive query routes before proxying", () => {
+test("Caddy access logs skip the active public search route before proxying", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const gates = extractCaddySiteBlock(caddyfile, backendGatesSnippet)
   const adminHandleIndex = gates.indexOf("handle @adminApi {")
   const publicReadHandleIndex = gates.indexOf("handle @publicReadFallback {")
-  const sensitiveRoutes = [
-    ["@accountDeletionSensitive", "path /member/api/v1/privacy/account"],
-    ["@publicSearchSensitive", "path /post/api/v1/posts/search"],
-  ]
+  const matcherName = "@publicSearchSensitive"
+  const pathMatcher = "path /post/api/v1/posts/search"
 
   assert.notEqual(gates, "", "shared backend gate snippet must be configured")
   assert.notEqual(adminHandleIndex, -1, "admin API handle must be configured")
   assert.notEqual(publicReadHandleIndex, -1, "public read handle must be configured")
+  assert.doesNotMatch(gates, /@accountDeletionSensitive/, "retired account-deletion matcher must be removed")
+  assert.doesNotMatch(gates, /path \/member\/api\/v1\/privacy\/account/, "retired account-deletion path must be removed")
+  assert.doesNotMatch(gates, /log_skip @accountDeletionSensitive/, "retired account-deletion log skip must be removed")
 
-  for (const [matcherName, pathMatcher] of sensitiveRoutes) {
-    const matcherIndex = gates.indexOf(`${matcherName} ${pathMatcher}`)
-    const skipIndex = gates.indexOf(`log_skip ${matcherName}`)
+  const matcherIndex = gates.indexOf(`${matcherName} ${pathMatcher}`)
+  const skipIndex = gates.indexOf(`log_skip ${matcherName}`)
 
-    assert.notEqual(matcherIndex, -1, `${matcherName} matcher must be configured`)
-    assert.notEqual(skipIndex, -1, `${matcherName} access log skip must be configured`)
-    assert(skipIndex > matcherIndex, `${matcherName} log_skip must reference the sensitive matcher`)
-    assert(skipIndex < adminHandleIndex, `${matcherName} log_skip must be declared before admin API handling`)
-    assert(skipIndex < publicReadHandleIndex, `${matcherName} log_skip must be declared before public read handling`)
-  }
+  assert.notEqual(matcherIndex, -1, `${matcherName} matcher must be configured`)
+  assert.notEqual(skipIndex, -1, `${matcherName} access log skip must be configured`)
+  assert(skipIndex > matcherIndex, `${matcherName} log_skip must reference the sensitive matcher`)
+  assert(skipIndex < adminHandleIndex, `${matcherName} log_skip must be declared before admin API handling`)
+  assert(skipIndex < publicReadHandleIndex, `${matcherName} log_skip must be declared before public read handling`)
 })
 
 test("home-server-source contract allows no-auth operations alert SMTP relay", async () => {

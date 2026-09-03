@@ -21,6 +21,7 @@ import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.any
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.times
 import java.time.Instant
 import java.util.Optional
 
@@ -117,9 +118,16 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(created).isTrue()
         assertThat(createdPost).isNotSameAs(untrackedLegacyPost)
         assertThat(createdPost.title).isEqualTo("임시글")
+        val marker = requireNotNull(savedMarker)
         then(postRepository).should().save(createdPost)
-        assertThat(savedMarker?.name).isEqualTo("activeTempDraftPostId")
-        assertThat(savedMarker?.strValue).isEqualTo(createdPost.id.toString())
+        then(postRepository).should().flush()
+        then(postRepository).shouldHaveNoMoreInteractions()
+        then(memberAttrRepository).should(times(3)).findBySubjectAndName(author, "activeTempDraftPostId")
+        then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", 1)
+        then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", -1)
+        then(memberAttrRepository).should().save(marker)
+        assertThat(marker.name).isEqualTo("activeTempDraftPostId")
+        assertThat(marker.strValue).isEqualTo(createdPost.id.toString())
     }
 
     @Test

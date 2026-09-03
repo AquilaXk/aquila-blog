@@ -27,9 +27,13 @@ class ErrorCodeTest {
     }
 
     @Test
-    @DisplayName("fromCode는 등록된 code를 반환하고 미등록 code는 실패한다")
-    fun `fromCode resolves known codes and rejects unknown`() {
-        assertThat(ErrorCode.fromCode("409-4")).isEqualTo(ErrorCode.OAUTH_SIGNUP_POLICY)
+    @DisplayName("fromCode는 현행 code만 반환하고 퇴역 code는 실패한다")
+    fun `fromCode resolves current codes and rejects retired codes`() {
+        assertThat(ErrorCode.fromCode("409-3")).isEqualTo(ErrorCode.MEMBER_SIGNUP_RACE)
+        assertThat(ErrorCode.fromCode("500-2")).isEqualTo(ErrorCode.MEMBER_USERNAME_GENERATE_FAILED)
+        assertThatThrownBy { ErrorCode.fromCode("409-4") }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("Unknown ErrorCode")
         assertThatThrownBy { ErrorCode.fromCode("999-99") }
             .isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("Unknown ErrorCode")
@@ -44,9 +48,10 @@ class ErrorCodeTest {
         assertThat(ErrorCode.POST_VIEW_DENIED.code).isEqualTo("403-11")
         assertThat(ErrorCode.CLOUD_PLAYBACK_DENIED.code).isEqualTo("403-30")
         assertThat(ErrorCode.DB_CONFLICT.code).isEqualTo("409-1")
+        assertThat(ErrorCode.MEMBER_SIGNUP_RACE.code).isEqualTo("409-3")
         assertThat(ErrorCode.POST_CONCURRENT_EDIT.code).isEqualTo("409-10")
         assertThat(ErrorCode.MEMBER_DUPLICATE.code).isEqualTo("409-20")
-        assertThat(ErrorCode.OAUTH_SIGNUP_POLICY.code).isEqualTo("409-4")
+        assertThat(ErrorCode.MEMBER_USERNAME_GENERATE_FAILED.code).isEqualTo("500-2")
     }
 
     @Test

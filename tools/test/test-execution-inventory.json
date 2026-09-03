@@ -31,6 +31,8 @@
     { "path": "tools/test/native-image-evidence.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify native image evidence contract" },
     { "path": "tools/test/content-html-trust-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify contentHtml trust inventory contract" },
     { "path": "tools/test/task-payload-v1-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify task payload v1 inventory contract" },
+    { "path": "tools/test/profile-workspace-canonical-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify profile workspace canonical inventory contract" },
+    { "path": "tools/test/temporary-draft-title-inventory.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify temporary draft title inventory contract" },
     { "path": "tools/test/hot-query-telemetry-capability.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify hot-query telemetry capability contract" },
     { "path": "tools/test/hot-query-telemetry-aggregate.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify hot-query telemetry aggregate contract" },
     { "path": "tools/test/hot-query-telemetry-candidate.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/ci.yml", "job": "platform-standalone", "step": "Verify hot-query telemetry candidate contract" },

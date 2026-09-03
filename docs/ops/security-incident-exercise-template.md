@@ -38,5 +38,6 @@ Do not record secrets, tokens, or raw sensitive evidence in this template.
 - Final decision:
 - Missing controls:
 - Follow-up issue links:
+- Follow-up owner:
 - Evidence location:
 - Next exercise due:

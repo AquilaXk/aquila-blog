@@ -1,16 +1,24 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
+import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
+import com.back.boundedContexts.member.application.service.ProfileImageReadPolicy
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.boundedContexts.post.domain.Post
+import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFilePurpose
+import com.back.global.storage.domain.UploadedFileRetentionReason
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
@@ -22,10 +30,13 @@ import org.mockito.Mockito.`when`
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.web.multipart.MultipartFile
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.lang.reflect.Field
+import java.time.Instant
+import java.util.Optional
 
 @DisplayName("ApiV1PostImageController 업로드 테스트")
 class ApiV1PostImageControllerTest {
@@ -33,6 +44,14 @@ class ApiV1PostImageControllerTest {
     private val uploadedFileRetentionService = mock(UploadedFileRetentionService::class.java)
     private val uploadedFileRepository = mock(UploadedFileRepositoryPort::class.java)
     private val postRepository = mock(PostRepositoryPort::class.java)
+    private val memberRepository = mock(MemberRepositoryPort::class.java)
+    private val currentMemberProfileQueryUseCase = mock(CurrentMemberProfileQueryUseCase::class.java)
+    private val profileImageReadPolicy =
+        ProfileImageReadPolicy(
+            memberRepository = memberRepository,
+            canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = "admin@test.com")),
+            currentMemberProfileQueryUseCase = currentMemberProfileQueryUseCase,
+        )
     private val controller =
         ApiV1PostImageController(
             postImageStorageService = postImageStorageService,
@@ -40,6 +59,7 @@ class ApiV1PostImageControllerTest {
             uploadedFileRetentionService = uploadedFileRetentionService,
             uploadedFileRepository = uploadedFileRepository,
             postRepository = postRepository,
+            profileImageReadPolicy = profileImageReadPolicy,
         )
 
     @Test
@@ -147,6 +167,89 @@ class ApiV1PostImageControllerTest {
         assertThat(postImageStorageService.imageDownloads).isEmpty()
     }
 
+    @Test
+    fun `발행된 프로필 이미지는 공개 캐시 정책으로 반환한다`() {
+        withIsolatedAppConfig {
+            val objectKey = "profiles/7/published.png"
+            val owner = canonicalOwner()
+            val uploadedFile = memberProfileImage(objectKey, owner.id)
+            `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+            `when`(memberRepository.findById(owner.id)).thenReturn(Optional.of(owner))
+            `when`(currentMemberProfileQueryUseCase.getPublishedById(owner.id)).thenReturn(profile(owner, objectKey))
+            postImageStorageService.images[objectKey] = storedImage(objectKey)
+
+            val response = controller.getPostImage(imageRequest(objectKey))
+
+            assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
+            assertThat(response.headers.cacheControl).contains("no-cache").contains("public")
+            assertThat(response.headers.getFirst(HttpHeaders.VARY)).isNotEqualTo(HttpHeaders.COOKIE)
+            assertThat(postImageStorageService.imageDownloads).containsExactly(objectKey)
+        }
+    }
+
+    @Test
+    fun `owner-only profile image uses private no-store cache for 200 206 and 304`() {
+        val objectKey = "profiles/7/history.png"
+        val owner = canonicalOwner()
+        val uploadedFile =
+            memberProfileImage(objectKey, owner.id).apply {
+                scheduleDeletion(UploadedFileRetentionReason.REPLACED_PROFILE_IMAGE, Instant.now())
+            }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(memberRepository.findById(owner.id)).thenReturn(Optional.of(owner))
+        postImageStorageService.images[objectKey] = storedImage(objectKey)
+
+        val first = controller.getPostImage(imageRequest(objectKey), ownerSecurityUser(owner.id))
+        postImageStorageService.images[objectKey] = storedImage(objectKey)
+        val partial =
+            controller.getPostImage(
+                imageRequest(objectKey).apply { addHeader(HttpHeaders.RANGE, "bytes=0-2") },
+                ownerSecurityUser(owner.id),
+            )
+        val notModified =
+            controller.getPostImage(
+                imageRequest(objectKey).apply { addHeader(HttpHeaders.IF_NONE_MATCH, requireNotNull(first.headers.eTag)) },
+                ownerSecurityUser(owner.id),
+            )
+
+        listOf(first, partial, notModified).forEach { response ->
+            assertThat(response.headers.cacheControl).contains("no-store").contains("private")
+            assertThat(response.headers.getFirst(HttpHeaders.VARY)).isEqualTo(HttpHeaders.COOKIE)
+        }
+        assertThat(first.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(partial.statusCode).isEqualTo(HttpStatus.PARTIAL_CONTENT)
+        assertThat(notModified.statusCode).isEqualTo(HttpStatus.NOT_MODIFIED)
+    }
+
+    @Test
+    fun `anonymous foreign and deleted profile images are denied before storage`() {
+        withIsolatedAppConfig {
+            val owner = canonicalOwner()
+            val draftKey = "profiles/7/draft.png"
+            val historyKey = "profiles/7/history.png"
+            val deletedKey = "profiles/7/deleted.png"
+            val draft = memberProfileImage(draftKey, owner.id)
+            val history =
+                memberProfileImage(historyKey, owner.id).apply {
+                    scheduleDeletion(UploadedFileRetentionReason.REPLACED_PROFILE_IMAGE, Instant.now())
+                }
+            val deleted = memberProfileImage(deletedKey, owner.id).apply { markDeleted() }
+            `when`(uploadedFileRepository.findByObjectKey(draftKey)).thenReturn(draft)
+            `when`(uploadedFileRepository.findByObjectKey(historyKey)).thenReturn(history)
+            `when`(uploadedFileRepository.findByObjectKey(deletedKey)).thenReturn(deleted)
+            `when`(memberRepository.findById(owner.id)).thenReturn(Optional.of(owner))
+            `when`(currentMemberProfileQueryUseCase.getPublishedById(owner.id)).thenReturn(profile(owner, "profiles/7/published.png"))
+
+            assertThatThrownBy { controller.getPostImage(imageRequest(draftKey)) }.isInstanceOf(AppException::class.java)
+            assertThatThrownBy { controller.getPostImage(imageRequest(historyKey), ownerSecurityUser(8L)) }
+                .isInstanceOf(AppException::class.java)
+            assertThatThrownBy { controller.getPostImage(imageRequest(deletedKey), ownerSecurityUser(owner.id)) }
+                .isInstanceOf(AppException::class.java)
+
+            assertThat(postImageStorageService.imageDownloads).isEmpty()
+        }
+    }
+
     private fun <T> withIsolatedAppConfig(block: () -> T): T {
         val snapshot = appConfigUrlSnapshot()
         AppConfig(
@@ -178,6 +281,66 @@ class ApiV1PostImageControllerTest {
             contentType = "image/png",
             fileSize = pngBytes().size.toLong(),
             purpose = UploadedFilePurpose.POST_IMAGE,
+        )
+
+    private fun memberProfileImage(
+        objectKey: String,
+        memberId: Long,
+    ): UploadedFile =
+        UploadedFile(
+            objectKey = objectKey,
+            bucket = "blog-images",
+            contentType = "image/png",
+            fileSize = pngBytes().size.toLong(),
+        ).apply { attachToMemberProfile(memberId) }
+
+    private fun canonicalOwner(): Member = Member(7L, "admin", null, "관리자", "admin@test.com", true)
+
+    private fun ownerSecurityUser(id: Long) =
+        com.back.global.security.domain.SecurityUser(
+            id,
+            "admin",
+            "",
+            "관리자",
+            listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+        )
+
+    private fun profile(
+        owner: Member,
+        objectKey: String,
+    ): MemberWithUsernameDto =
+        MemberWithUsernameDto(
+            id = owner.id,
+            createdAt = Instant.EPOCH,
+            modifiedAt = Instant.EPOCH,
+            isAdmin = true,
+            username = "admin",
+            name = "관리자",
+            nickname = "관리자",
+            profileImageUrl = UploadedFileUrlCodec.buildRelativeImagePath(objectKey),
+            profileRole = "",
+            profileBio = "",
+            aboutHeadline = "",
+            aboutRole = "",
+            aboutBio = "",
+            aboutSections = emptyList(),
+            aboutProjectSectionTitle = "",
+            aboutProjects = emptyList(),
+            blogTitle = "",
+            homeIntroTitle = "",
+            homeIntroDescription = "",
+            blogDesign = "",
+            legacyBlogScheme = "",
+            serviceLinks = emptyList(),
+            contactLinks = emptyList(),
+        )
+
+    private fun storedImage(objectKey: String): PostImageStoragePort.StoredObject =
+        PostImageStoragePort.StoredObject(
+            inputStream = ByteArrayInputStream(pngBytes()),
+            contentType = "image/png",
+            contentLength = pngBytes().size.toLong(),
+            originalFilename = objectKey.substringAfterLast('/'),
         )
 
     private fun publicPost(id: Long): Post =

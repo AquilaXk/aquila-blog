@@ -133,10 +133,10 @@ groups:
       - alert: AquilaPostReadFeedCacheHitRatioLow
         expr: |
           (
-            sum(rate(post_read_cache_result_total{cache=~"post-feed-v4|post-feed-cursor-first-v1",result="hit"}[10m]))
+            sum(rate(post_read_cache_result_total{cache=~"post-feed-v5|post-feed-cursor-first-v2",result="hit"}[10m]))
             /
             clamp_min(
-              sum(rate(post_read_cache_result_total{cache=~"post-feed-v4|post-feed-cursor-first-v1",result=~"hit|miss"}[10m])),
+              sum(rate(post_read_cache_result_total{cache=~"post-feed-v5|post-feed-cursor-first-v2",result=~"hit|miss"}[10m])),
               0.001
             )
           ) < 0.35

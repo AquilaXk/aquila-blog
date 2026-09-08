@@ -16,8 +16,12 @@ import java.nio.file.Path
 import java.sql.Connection
 import java.sql.Timestamp
 import java.time.Instant
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 @Testcontainers
 class RetiredStorageUrlMigrationTestcontainersIntegrationTest {
@@ -166,6 +170,58 @@ class RetiredStorageUrlMigrationTestcontainersIntegrationTest {
         }
     }
 
+    @Test
+    fun `migration rewrites the committed writer row after waiting on its lock`() {
+        postgres.createConnection("").use { writer ->
+            postgres.createConnection("").use { migration ->
+                postgres.createConnection("").use { observer ->
+                    val executor = Executors.newSingleThreadExecutor()
+                    try {
+                        val modifiedAt = Instant.parse("2026-09-08T00:00:00Z")
+                        val oldContent = "old ${RETIRED_IMAGE_PREFIX}posts/old.png"
+                        val oldHtml = "<img src=\"${RETIRED_IMAGE_PREFIX}posts/old.png\">"
+                        val writerContent = "writer ${RETIRED_IMAGE_PREFIX}posts/new%20image.png?download=1#preview"
+                        val writerHtml = "<img src=\"${RETIRED_FILE_PREFIX}files/new.pdf?version=2#page-3\">"
+                        insertPost(writer, 10, oldContent, oldHtml, HtmlContentSanitizer.sha256Utf8(oldHtml), 7, modifiedAt)
+
+                        writer.autoCommit = false
+                        writer
+                            .prepareStatement(
+                                """
+                                UPDATE public.post
+                                SET content = ?, content_html = ?, content_html_hash = ?, version = version + 1, modified_at = CURRENT_TIMESTAMP
+                                WHERE id = 10
+                                """.trimIndent(),
+                            ).use { statement ->
+                                statement.setString(1, writerContent)
+                                statement.setString(2, writerHtml)
+                                statement.setString(3, HtmlContentSanitizer.sha256Utf8(writerHtml))
+                                statement.executeUpdate()
+                            }
+
+                        val migrationPid = backendPid(migration)
+                        val migrationFuture = executor.submit<Unit> { executeMigration(migration) }
+                        assertTrue(waitForPostgresLock(observer, migrationPid), "migration did not wait for the writer row lock")
+                        assertFalse(migrationFuture.isDone)
+
+                        writer.commit()
+                        migrationFuture.get(5, TimeUnit.SECONDS)
+
+                        val migrated = postSnapshot(writer, 10)
+                        assertEquals(writerContent.replace(RETIRED_IMAGE_PREFIX, RELATIVE_IMAGE_PREFIX), migrated.content)
+                        assertEquals(writerHtml.replace(RETIRED_FILE_PREFIX, RELATIVE_FILE_PREFIX), migrated.contentHtml)
+                        assertEquals(HtmlContentSanitizer.sha256Utf8(requireNotNull(migrated.contentHtml)), migrated.contentHtmlHash)
+                        assertEquals(9L, migrated.version)
+                    } finally {
+                        runCatching { writer.rollback() }
+                        executor.shutdownNow()
+                        assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS), "migration executor did not terminate")
+                    }
+                }
+            }
+        }
+    }
+
     private fun insertPost(
         connection: Connection,
         id: Long,
@@ -224,6 +280,32 @@ class RetiredStorageUrlMigrationTestcontainersIntegrationTest {
         } finally {
             connection.autoCommit = true
         }
+    }
+
+    private fun backendPid(connection: Connection): Int =
+        connection.createStatement().use { statement ->
+            statement.executeQuery("SELECT pg_backend_pid()").use { result ->
+                result.next()
+                result.getInt(1)
+            }
+        }
+
+    private fun waitForPostgresLock(
+        observer: Connection,
+        backendPid: Int,
+    ): Boolean {
+        repeat(100) {
+            val waiting =
+                observer
+                    .prepareStatement("SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = ?")
+                    .use { statement ->
+                        statement.setInt(1, backendPid)
+                        statement.executeQuery().use { result -> result.next() && result.getBoolean(1) }
+                    }
+            if (waiting) return true
+            Thread.sleep(25)
+        }
+        return false
     }
 
     private fun postSnapshot(

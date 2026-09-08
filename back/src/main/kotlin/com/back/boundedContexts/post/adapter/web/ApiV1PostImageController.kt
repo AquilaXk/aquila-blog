@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
@@ -7,8 +8,10 @@ import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
+import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileStatus
@@ -20,6 +23,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -42,6 +46,7 @@ class ApiV1PostImageController(
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val uploadedFileRepository: UploadedFileRepositoryPort,
     private val postRepository: PostRepositoryPort,
+    private val profileImageReadUseCase: ProfileImageReadUseCase,
 ) {
     companion object {
         private const val POST_IMAGE_MAX_FILE_SIZE_BYTES = 8L * 1024 * 1024
@@ -100,7 +105,10 @@ class ApiV1PostImageController(
 
     @GetMapping("/images/**")
     @Transactional(readOnly = true)
-    fun getPostImage(request: HttpServletRequest): ResponseEntity<Resource> {
+    fun getPostImage(
+        request: HttpServletRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser? = null,
+    ): ResponseEntity<Resource> {
         val objectKey =
             extractObjectKey(
                 request,
@@ -108,11 +116,21 @@ class ApiV1PostImageController(
                 "잘못된 이미지 경로입니다.",
                 "이미지를 찾을 수 없습니다.",
             )
-        ensurePublicPostUpload(
-            objectKey = objectKey,
-            purpose = UploadedFilePurpose.POST_IMAGE,
-            notFound = ::postImageNotFound,
-        )
+        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: throw postImageNotFound()
+        val access =
+            when (uploadedFile.purpose) {
+                UploadedFilePurpose.PROFILE_IMAGE ->
+                    profileImageReadUseCase.resolve(objectKey, uploadedFile, securityUser?.id)
+                UploadedFilePurpose.POST_IMAGE -> {
+                    ensurePublicPostUpload(
+                        uploadedFile = uploadedFile,
+                        purpose = UploadedFilePurpose.POST_IMAGE,
+                        notFound = ::postImageNotFound,
+                    )
+                    ProfileImageReadUseCase.Access.PUBLIC
+                }
+                else -> throw postImageNotFound()
+            }
         val etag =
             "\"" +
                 Base64
@@ -121,11 +139,12 @@ class ApiV1PostImageController(
                     .encodeToString(objectKey.toByteArray(StandardCharsets.UTF_8)) +
                 "\""
         if (isNotModified(request.getHeader(HttpHeaders.IF_NONE_MATCH), etag)) {
-            return ResponseEntity
-                .status(HttpStatus.NOT_MODIFIED)
-                .eTag(etag)
-                .cacheControl(imageCacheControl())
-                .build()
+            return withImageCacheControl(
+                ResponseEntity
+                    .status(HttpStatus.NOT_MODIFIED)
+                    .eTag(etag),
+                access,
+            ).build()
         }
 
         val image =
@@ -137,44 +156,49 @@ class ApiV1PostImageController(
             val totalLength = image.contentLength ?: -1
             if (totalLength <= 0) {
                 image.inputStream.close()
-                return ResponseEntity
-                    .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                    .header(HttpHeaders.CONTENT_RANGE, "bytes */*")
-                    .eTag(etag)
-                    .cacheControl(imageCacheControl())
-                    .build()
+                return withImageCacheControl(
+                    ResponseEntity
+                        .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes */*")
+                        .eTag(etag),
+                    access,
+                ).build()
             }
             val range = parseSingleRange(rangeHeader, totalLength)
             if (range == null) {
                 image.inputStream.close()
-                return ResponseEntity
-                    .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                    .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength")
-                    .eTag(etag)
-                    .cacheControl(imageCacheControl())
-                    .build()
+                return withImageCacheControl(
+                    ResponseEntity
+                        .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength")
+                        .eTag(etag),
+                    access,
+                ).build()
             }
 
             val body = InputStreamResource(sliceStream(image.inputStream, range))
 
-            return ResponseEntity
-                .status(HttpStatus.PARTIAL_CONTENT)
-                .contentType(MediaType.parseMediaType(image.contentType))
-                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
-                .contentLength(range.last - range.first + 1)
-                .eTag(etag)
-                .cacheControl(imageCacheControl())
-                .body(body)
+            return withImageCacheControl(
+                ResponseEntity
+                    .status(HttpStatus.PARTIAL_CONTENT)
+                    .contentType(MediaType.parseMediaType(image.contentType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
+                    .contentLength(range.last - range.first + 1)
+                    .eTag(etag),
+                access,
+            ).body(body)
         }
 
         val responseBuilder =
-            ResponseEntity
-                .ok()
-                .contentType(MediaType.parseMediaType(image.contentType))
-                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .eTag(etag)
-                .cacheControl(imageCacheControl())
+            withImageCacheControl(
+                ResponseEntity
+                    .ok()
+                    .contentType(MediaType.parseMediaType(image.contentType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .eTag(etag),
+                access,
+            )
 
         val finalizedBuilder =
             image.contentLength
@@ -186,11 +210,10 @@ class ApiV1PostImageController(
     }
 
     private fun ensurePublicPostUpload(
-        objectKey: String,
+        uploadedFile: UploadedFile,
         purpose: UploadedFilePurpose,
         notFound: () -> AppException,
     ) {
-        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: throw notFound()
         if (
             uploadedFile.purpose != purpose ||
             uploadedFile.status != UploadedFileStatus.ACTIVE ||
@@ -205,7 +228,17 @@ class ApiV1PostImageController(
 
     private fun postImageNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "이미지를 찾을 수 없습니다.")
 
-    private fun imageCacheControl(): CacheControl = CacheControl.noCache().cachePublic()
+    private fun withImageCacheControl(
+        builder: ResponseEntity.BodyBuilder,
+        access: ProfileImageReadUseCase.Access,
+    ): ResponseEntity.BodyBuilder =
+        if (access == ProfileImageReadUseCase.Access.OWNER_ONLY) {
+            builder
+                .cacheControl(CacheControl.noStore().cachePrivate())
+                .header(HttpHeaders.VARY, HttpHeaders.COOKIE)
+        } else {
+            builder.cacheControl(CacheControl.noCache().cachePublic())
+        }
 
     private fun extractObjectKey(
         request: HttpServletRequest,

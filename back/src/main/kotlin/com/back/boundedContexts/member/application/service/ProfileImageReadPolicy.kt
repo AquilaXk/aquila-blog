@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
+import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -16,17 +17,12 @@ class ProfileImageReadPolicy(
     private val memberRepository: MemberRepositoryPort,
     private val canonicalAdminPolicy: CanonicalAdminPolicy,
     private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
-) {
-    enum class Access {
-        PUBLIC,
-        OWNER_ONLY,
-    }
-
-    fun resolve(
+) : ProfileImageReadUseCase {
+    override fun resolve(
         objectKey: String,
         uploadedFile: UploadedFile,
         viewerId: Long?,
-    ): Access {
+    ): ProfileImageReadUseCase.Access {
         if (
             uploadedFile.purpose != UploadedFilePurpose.PROFILE_IMAGE ||
             uploadedFile.ownerType != UploadedFileOwnerType.MEMBER_PROFILE
@@ -41,10 +37,10 @@ class ProfileImageReadPolicy(
         if (uploadedFile.status == UploadedFileStatus.ACTIVE) {
             val publishedProfile = currentMemberProfileQueryUseCase.getPublishedById(ownerId)
             val publishedObjectKey = UploadedFileUrlCodec.extractObjectKeyFromImageUrl(publishedProfile.profileImageUrl)
-            if (publishedObjectKey == objectKey) return Access.PUBLIC
+            if (publishedObjectKey == objectKey) return ProfileImageReadUseCase.Access.PUBLIC
         }
 
-        if (viewerId == ownerId && uploadedFile.status != UploadedFileStatus.DELETED) return Access.OWNER_ONLY
+        if (viewerId == ownerId && uploadedFile.status != UploadedFileStatus.DELETED) return ProfileImageReadUseCase.Access.OWNER_ONLY
 
         throw notFound()
     }

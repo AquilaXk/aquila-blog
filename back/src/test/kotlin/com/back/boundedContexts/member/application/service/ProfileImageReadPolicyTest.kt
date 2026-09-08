@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
+import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
@@ -39,7 +40,7 @@ class ProfileImageReadPolicyTest {
             `when`(memberRepository.findById(owner.id)).thenReturn(Optional.of(owner))
             `when`(currentMemberProfileQueryUseCase.getPublishedById(owner.id)).thenReturn(profile(objectKey))
 
-            assertThat(policy.resolve(objectKey, uploadedFile, null)).isEqualTo(ProfileImageReadPolicy.Access.PUBLIC)
+            assertThat(policy.resolve(objectKey, uploadedFile, null)).isEqualTo(ProfileImageReadUseCase.Access.PUBLIC)
         }
     }
 
@@ -52,7 +53,7 @@ class ProfileImageReadPolicyTest {
             }
         `when`(memberRepository.findById(owner.id)).thenReturn(Optional.of(owner))
 
-        assertThat(policy.resolve(objectKey, uploadedFile, owner.id)).isEqualTo(ProfileImageReadPolicy.Access.OWNER_ONLY)
+        assertThat(policy.resolve(objectKey, uploadedFile, owner.id)).isEqualTo(ProfileImageReadUseCase.Access.OWNER_ONLY)
         assertThatThrownBy { policy.resolve(objectKey, uploadedFile, null) }
             .isInstanceOf(AppException::class.java)
             .hasMessageContaining("이미지를 찾을 수 없습니다.")

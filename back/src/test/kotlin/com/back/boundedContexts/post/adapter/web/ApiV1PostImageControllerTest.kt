@@ -59,7 +59,7 @@ class ApiV1PostImageControllerTest {
             uploadedFileRetentionService = uploadedFileRetentionService,
             uploadedFileRepository = uploadedFileRepository,
             postRepository = postRepository,
-            profileImageReadPolicy = profileImageReadPolicy,
+            profileImageReadUseCase = profileImageReadPolicy,
         )
 
     @Test

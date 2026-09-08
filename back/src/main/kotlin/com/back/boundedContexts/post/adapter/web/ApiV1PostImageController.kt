@@ -1,6 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
-import com.back.boundedContexts.member.application.service.ProfileImageReadPolicy
+import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
@@ -46,7 +46,7 @@ class ApiV1PostImageController(
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val uploadedFileRepository: UploadedFileRepositoryPort,
     private val postRepository: PostRepositoryPort,
-    private val profileImageReadPolicy: ProfileImageReadPolicy,
+    private val profileImageReadUseCase: ProfileImageReadUseCase,
 ) {
     companion object {
         private const val POST_IMAGE_MAX_FILE_SIZE_BYTES = 8L * 1024 * 1024
@@ -120,14 +120,14 @@ class ApiV1PostImageController(
         val access =
             when (uploadedFile.purpose) {
                 UploadedFilePurpose.PROFILE_IMAGE ->
-                    profileImageReadPolicy.resolve(objectKey, uploadedFile, securityUser?.id)
+                    profileImageReadUseCase.resolve(objectKey, uploadedFile, securityUser?.id)
                 UploadedFilePurpose.POST_IMAGE -> {
                     ensurePublicPostUpload(
                         uploadedFile = uploadedFile,
                         purpose = UploadedFilePurpose.POST_IMAGE,
                         notFound = ::postImageNotFound,
                     )
-                    ProfileImageReadPolicy.Access.PUBLIC
+                    ProfileImageReadUseCase.Access.PUBLIC
                 }
                 else -> throw postImageNotFound()
             }
@@ -230,9 +230,9 @@ class ApiV1PostImageController(
 
     private fun withImageCacheControl(
         builder: ResponseEntity.BodyBuilder,
-        access: ProfileImageReadPolicy.Access,
+        access: ProfileImageReadUseCase.Access,
     ): ResponseEntity.BodyBuilder =
-        if (access == ProfileImageReadPolicy.Access.OWNER_ONLY) {
+        if (access == ProfileImageReadUseCase.Access.OWNER_ONLY) {
             builder
                 .cacheControl(CacheControl.noStore().cachePrivate())
                 .header(HttpHeaders.VARY, HttpHeaders.COOKIE)

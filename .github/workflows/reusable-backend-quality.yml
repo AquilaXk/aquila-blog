@@ -326,6 +326,7 @@ jobs:
           ./gradlew testcontainersTest
           --tests com.back.infrastructure.FlywayNMinusOneCompatibilityTestcontainersIntegrationTest
           --tests com.back.infrastructure.ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest
+          --tests com.back.infrastructure.RetiredStorageUrlMigrationTestcontainersIntegrationTest
           --rerun-tasks
 
       - name: Run selected PostgreSQL contract regression gates

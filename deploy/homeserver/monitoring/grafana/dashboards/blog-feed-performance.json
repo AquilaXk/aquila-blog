@@ -347,7 +347,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=\"hit\"}[5m])) / clamp_min(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=~\"hit|miss\"}[5m])), 0.001)) or on() vector(0)",
+          "expr": "(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v5|post-feed-cursor-first-v2\",result=\"hit\"}[5m])) / clamp_min(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v5|post-feed-cursor-first-v2\",result=~\"hit|miss\"}[5m])), 0.001)) or on() vector(0)",
           "legendFormat": "cache hit ratio",
           "range": true,
           "refId": "A"
@@ -502,14 +502,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=\"hit\"}[5m])) or on() vector(0)",
+          "expr": "sum(rate(post_read_cache_result_total{cache=~\"post-feed-v5|post-feed-cursor-first-v2\",result=\"hit\"}[5m])) or on() vector(0)",
           "legendFormat": "cache hit",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=\"miss\"}[5m])) or on() vector(0)",
+          "expr": "sum(rate(post_read_cache_result_total{cache=~\"post-feed-v5|post-feed-cursor-first-v2\",result=\"miss\"}[5m])) or on() vector(0)",
           "legendFormat": "cache miss",
           "range": true,
           "refId": "B"
@@ -556,14 +556,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(sum(rate(post_read_cache_payload_bytes_sum{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v4|post-feed-cursor-first-v1\"}[5m])) / clamp_min(sum(rate(post_read_cache_payload_bytes_count{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v4|post-feed-cursor-first-v1\"}[5m])), 0.001)) or on() vector(0)",
+          "expr": "(sum(rate(post_read_cache_payload_bytes_sum{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v5|post-feed-cursor-first-v2\"}[5m])) / clamp_min(sum(rate(post_read_cache_payload_bytes_count{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v5|post-feed-cursor-first-v2\"}[5m])), 0.001)) or on() vector(0)",
           "legendFormat": "avg payload bytes",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "max(post_read_cache_payload_max_bytes{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v4|post-feed-cursor-first-v1\"}) or on() vector(0)",
+          "expr": "max(post_read_cache_payload_max_bytes{job=\"back\",service=\"aquila-back\",cache=~\"post-feed-v5|post-feed-cursor-first-v2\"}) or on() vector(0)",
           "legendFormat": "max payload bytes",
           "range": true,
           "refId": "B"
@@ -624,7 +624,7 @@
         },
         {
           "editorMode": "code",
-          "expr": "(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=\"miss\"}[5m])) / clamp_min(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v4|post-feed-cursor-first-v1\",result=~\"hit|miss\"}[5m])), 0.001)) or on() vector(0)",
+          "expr": "(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v5|post-feed-cursor-first-v2\",result=\"miss\"}[5m])) / clamp_min(sum(rate(post_read_cache_result_total{cache=~\"post-feed-v5|post-feed-cursor-first-v2\",result=~\"hit|miss\"}[5m])), 0.001)) or on() vector(0)",
           "legendFormat": "cache miss ratio",
           "range": true,
           "refId": "C"

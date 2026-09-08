@@ -4,7 +4,6 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
-import com.back.global.storage.application.UploadedFileUrlCodec
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.swagger.v3.oas.annotations.media.Schema
 import java.time.Instant
@@ -93,13 +92,11 @@ data class MemberWithUsernameDto(
             workspaceContent: MemberProfileWorkspaceContent,
             workspaceModifiedAt: Instant,
         ): String =
-            (
-                workspaceContent
-                    .profileImageUrl
-                    .trim()
-                    .takeIf(String::isNotBlank)
-                    ?.let { appendVersion(it, workspaceModifiedAt) }
-                    ?: defaultProfileImageUrl()
-            ).let(UploadedFileUrlCodec::canonicalizePublicStorageUrl)
+            workspaceContent
+                .profileImageUrl
+                .trim()
+                .takeIf(String::isNotBlank)
+                ?.let { appendVersion(it, workspaceModifiedAt) }
+                ?: defaultProfileImageUrl()
     }
 }

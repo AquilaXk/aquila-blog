@@ -20,10 +20,6 @@ class ApiV1MemberController(
     private val adminProperties: AdminProperties,
     private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) {
-    companion object {
-        const val ADMIN_PROFILE_CACHE_NAME = "member-admin-profile-v2"
-    }
-
     @GetMapping("/adminProfile")
     @Transactional(readOnly = true)
     fun getAdminProfile(): MemberWithUsernameDto {

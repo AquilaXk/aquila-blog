@@ -29,7 +29,6 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
-import org.springframework.cache.annotation.CacheEvict
 import org.springframework.http.MediaType
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
@@ -297,7 +296,6 @@ class ApiV1AdmMemberController(
      */
     @PatchMapping("/{id}/nickname")
     @Transactional
-    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun updateProfileIdentity(
         @PathVariable
         @Positive
@@ -328,7 +326,6 @@ class ApiV1AdmMemberController(
 
     @PostMapping("/{id}/profileWorkspace/publish")
     @Transactional
-    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun publishProfileWorkspace(
         @PathVariable
         @Positive

@@ -22,18 +22,18 @@ class MemberWithUsernameDtoTest {
         }
 
     @Test
-    fun `published workspace profile image responses canonicalize after versioning`() =
+    fun `published workspace relative profile image responses preserve the version timestamp`() =
         withIsolatedAppConfig {
             val member = createMember()
             val modifiedAt = TEST_INSTANT
             val workspace =
                 MemberProfileWorkspaceContent(
-                    profileImageUrl = "$RETIRED_BACK_URL/post/api/v1/images/profile/workspace.png",
+                    profileImageUrl = "/post/api/v1/images/profile/workspace.png",
                 )
 
             val response = MemberWithUsernameDto(member, workspace, modifiedAt)
             val expected =
-                "$CURRENT_BACK_URL/post/api/v1/images/profile/workspace.png?v=${modifiedAt.toEpochMilli()}"
+                "/post/api/v1/images/profile/workspace.png?v=${modifiedAt.toEpochMilli()}"
 
             assertThat(response.profileImageUrl).isEqualTo(expected)
             Unit
@@ -63,7 +63,6 @@ class MemberWithUsernameDtoTest {
     }
 
     private companion object {
-        const val RETIRED_BACK_URL = "https://api.aquilaxk.site"
         const val CURRENT_BACK_URL = "https://api.current-aquilaxk.site"
         val TEST_INSTANT: Instant = Instant.parse("2026-08-31T00:00:00Z")
     }

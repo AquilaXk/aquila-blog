@@ -3,7 +3,7 @@ import org.gradle.api.tasks.compile.JavaCompile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.4.10"
+    kotlin("jvm") version "2.4.20"
     kotlin("plugin.spring") version "2.4.10"
     jacoco
     id("org.springframework.boot") version "4.1.1"

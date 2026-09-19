@@ -28,7 +28,7 @@ extra["netty.version"] = "4.2.17.Final"
 extra["postgresql.version"] = "42.7.13"
 
 val nettyVersion = extra["netty.version"] as String
-val awsSdkVersion = "2.54.5"
+val awsSdkVersion = "2.54.11"
 val testcontainersVersion = "1.21.4"
 
 java {
@@ -77,13 +77,13 @@ dependencies {
     kapt("io.github.openfeign.querydsl:querydsl-apt:7.6:jpa")
 
     // SpringDoc
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
     implementation("org.webjars:swagger-ui:5.32.14") // DOMPurify 3.4.12; fixes CVE-2026-65898 (#1451).
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
     // ShedLock
-    implementation("net.javacrumbs.shedlock:shedlock-spring:7.9.0")
-    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.9.0")
+    implementation("net.javacrumbs.shedlock:shedlock-spring:7.10.1")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.10.1")
 
     // Database
     runtimeOnly("org.postgresql:postgresql")
@@ -95,7 +95,7 @@ dependencies {
     }
     implementation("software.amazon.awssdk:url-connection-client:$awsSdkVersion")
     implementation("org.jsoup:jsoup:1.23.2")
-    implementation("com.twelvemonkeys.imageio:imageio-webp:3.14.0")
+    implementation("com.twelvemonkeys.imageio:imageio-webp:3.15.0")
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")

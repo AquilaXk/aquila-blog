@@ -30,9 +30,9 @@ const doctorPath = path.join(repoRoot, "deploy/homeserver/doctor.sh")
 const precheckPath = path.join(repoRoot, "deploy/homeserver/post_precheck_env_guard.sh")
 
 const pinnedMinioImage =
-  "minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+  "quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
 const pinnedMcImage =
-  "minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
+  "quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
 const pinnedNodeImage = "node@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293"
 const rootSecret = "root-secret-for-contract-tests"
 const firstSecret = "first-generated-storage-secret-value"

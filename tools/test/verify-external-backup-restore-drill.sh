@@ -242,7 +242,7 @@ TMP_BASE="${TMP_BASE%/}"
 WORK_DIR="$(mktemp -d "${TMP_BASE}/aquila-restore-drill-test.XXXXXX")"
 PRIVACY_DB_CONTAINER="aquila-restore-drill-test-${RANDOM}-$$"
 PRIVACY_DB_IMAGE="jangka512/pgj@sha256:a8bfcb8e5c64805429cd1406d0840ba1c13f70830e73d9f5e4a63cd7c1b62da7"
-MINIO_FIXTURE_IMAGE="minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+MINIO_FIXTURE_IMAGE="quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
 MINIO_SOURCE_CONTAINER="aquila-restore-minio-source-${RANDOM}-$$"
 MINIO_LIVE_CONTAINER="aquila-restore-minio-live-${RANDOM}-$$"
 REAL_DOCKER="$(command -v docker)"
@@ -390,7 +390,7 @@ case "${1:-}" in
         exit 97
       fi
     fi
-    if [[ "$*" == *"minio/minio@sha256:"* ]]; then
+    if [[ "$*" == *"minio/minio@sha256:"* || "$*" == *"quay.io/minio/minio@sha256:"* ]]; then
       exec "${REAL_DOCKER}" "$@"
     fi
     echo "fake-postgres-container"

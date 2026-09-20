@@ -16,6 +16,7 @@ LOCK_DIR="${SCRIPT_DIR}/.steady-state-guard.lock"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 DEPLOY_LOCK_TTL_SECONDS="${DEPLOY_LOCK_TTL_SECONDS:-21600}"
 GRAFANA_DS_STATE_FILE="${SCRIPT_DIR}/.grafana-datasource-state"
+LOG_FILE="${LOG_FILE:-${SCRIPT_DIR}/.steady-state-guard.log}"
 
 log() {
   echo "[steady-guard] $(date -Is) $*"
@@ -58,6 +59,34 @@ normalize_non_negative_int() {
   else
     printf '%s' "${fallback}"
   fi
+}
+
+rotate_guard_log() {
+  local log_file="${LOG_FILE:-${SCRIPT_DIR}/.steady-state-guard.log}"
+  local max_bytes="${STEADY_GUARD_LOG_MAX_BYTES:-10485760}"
+  local keep_files="${STEADY_GUARD_LOG_KEEP_FILES:-5}"
+
+  [[ -f "${log_file}" ]] || return 0
+
+  local size
+  size="$(stat -c %s "${log_file}" 2>/dev/null || stat -f %z "${log_file}" 2>/dev/null || echo 0)"
+  if [[ "${size}" =~ ^[0-9]+$ ]] && (( size > max_bytes )); then
+    local i
+    for (( i = keep_files; i >= 1; i-- )); do
+      local next=$(( i + 1 ))
+      if [[ -f "${log_file}.${i}.gz" ]]; then
+        mv -f "${log_file}.${i}.gz" "${log_file}.${next}.gz" 2>/dev/null || true
+      elif [[ -f "${log_file}.${i}" ]]; then
+        mv -f "${log_file}.${i}" "${log_file}.${next}" 2>/dev/null || true
+      fi
+    done
+    if cp "${log_file}" "${log_file}.1" 2>/dev/null; then
+      truncate -s 0 "${log_file}" 2>/dev/null || true
+      gzip -f "${log_file}.1" 2>/dev/null || true
+    fi
+    rm -f "${log_file}.$(( keep_files + 1 )).gz" "${log_file}.$(( keep_files + 1 ))" 2>/dev/null || true
+  fi
+  return 0
 }
 
 ensure_monitoring_bind_mount_permissions() {
@@ -137,7 +166,7 @@ inspect_grafana_embed_headers() {
 }
 
 inspect_grafana_internal_health() {
-  docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --label promtail=ignore --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 10 \
     -o /dev/null \
@@ -149,7 +178,7 @@ inspect_grafana_internal_health() {
 probe_grafana_embed_origin_headers() {
   local grafana_domain="$1"
   local path="$2"
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --label promtail=ignore --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 12 \
     -D - \
@@ -326,7 +355,7 @@ ensure_caddy_mount_sync() {
 probe_internal_caddy_route_metrics() {
   local web_domain="$1"
   local path="$2"
-  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+  docker run --rm --label promtail=ignore --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 8 \
     -s -o /dev/null -w "%{http_code} %{size_download}" \
@@ -376,7 +405,7 @@ query_grafana_datasource_by_uid() {
 
   local response code
   response="$(
-    docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
+    docker run --rm --label promtail=ignore --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
       --connect-timeout 3 \
       --max-time 8 \
       -sS \
@@ -534,6 +563,8 @@ main() {
     exit 0
   fi
   trap 'rmdir "${LOCK_DIR}" 2>/dev/null || true' EXIT
+
+  rotate_guard_log || true
 
   if deploy_lock_is_active; then
     exit 0

@@ -5407,3 +5407,28 @@ test(".env.prod.example은 자기 자신이 env 계약을 통과한다", async (
     ".env.prod.example must stay internally consistent with the env contract",
   )
 })
+
+test("homeserver guard rotates logs, Promtail filters ephemeral curl, and MinIO uses 192h expiry", () => {
+  const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
+  const promtailConfig = readFileSync(path.join(repoRoot, "deploy/homeserver/monitoring/promtail/promtail-config.yml"), "utf8")
+  const compose = readFileSync(composePath, "utf8")
+
+  // Bug 1: Guard log rotation static contracts and functional execution
+  assert.match(steadyStateGuard, /rotate_guard_log\(\)/)
+  assert.match(steadyStateGuard, /truncate -s 0/)
+  assert.match(steadyStateGuard, /STEADY_GUARD_LOG_MAX_BYTES/)
+  const logrotateTestScript = path.join(repoRoot, "tools/test/homeserver-guard-logrotate.test.sh")
+  const logrotateOutput = execFileSync("bash", [logrotateTestScript], { encoding: "utf8" })
+  assert.match(logrotateOutput, /homeserver guard logrotate rules passed/)
+
+  // Bug 2: MinIO 192h expiry
+  assert.match(compose, /MINIO_API_STALE_UPLOADS_EXPIRY:\s*192h/)
+  assert.doesNotMatch(compose, /MINIO_API_STALE_UPLOADS_EXPIRY:\s*8d/)
+
+  // Bug 4: Promtail filters ephemeral curl containers
+  assert.match(promtailConfig, /com\.docker\.compose\.project=blog_home/)
+  assert.match(promtailConfig, /__meta_docker_container_label_promtail/)
+  assert.match(promtailConfig, /regex: ignore/)
+  assert.match(steadyStateGuard, /--label promtail=ignore/)
+})
+

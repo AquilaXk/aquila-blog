@@ -4,7 +4,45 @@ updates:
     directory: "/back"
     schedule:
       interval: "weekly"
+    groups:
+      kotlin:
+        patterns:
+          - "org.jetbrains.kotlin*"
+          - "kotlin*"
+          - "jvm"
+          - "kapt"
+          - "plugin.spring"
+          - "plugin.jpa"
+      spring:
+        patterns:
+          - "org.springframework*"
+          - "io.spring*"
+      aws:
+        patterns:
+          - "software.amazon.awssdk*"
+          - "awsSdkVersion"
+      testcontainers:
+        patterns:
+          - "org.testcontainers*"
+          - "testcontainersVersion"
+      querydsl:
+        patterns:
+          - "io.github.openfeign.querydsl*"
+      shedlock:
+        patterns:
+          - "net.javacrumbs.shedlock*"
+      jjwt:
+        patterns:
+          - "io.jsonwebtoken*"
+      jackson:
+        patterns:
+          - "com.fasterxml.jackson*"
+          - "tools.jackson*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"

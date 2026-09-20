@@ -16,7 +16,7 @@ LOCK_DIR="${SCRIPT_DIR}/.steady-state-guard.lock"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 DEPLOY_LOCK_TTL_SECONDS="${DEPLOY_LOCK_TTL_SECONDS:-21600}"
 GRAFANA_DS_STATE_FILE="${SCRIPT_DIR}/.grafana-datasource-state"
-LOG_FILE="${SCRIPT_DIR}/.steady-state-guard.log"
+LOG_FILE="${LOG_FILE:-${SCRIPT_DIR}/.steady-state-guard.log}"
 
 log() {
   echo "[steady-guard] $(date -Is) $*"
@@ -72,18 +72,21 @@ rotate_guard_log() {
   size="$(stat -c %s "${log_file}" 2>/dev/null || stat -f %z "${log_file}" 2>/dev/null || echo 0)"
   if [[ "${size}" =~ ^[0-9]+$ ]] && (( size > max_bytes )); then
     local i
-    for (( i = keep_files - 1; i >= 1; i-- )); do
+    for (( i = keep_files; i >= 1; i-- )); do
       local next=$(( i + 1 ))
       if [[ -f "${log_file}.${i}.gz" ]]; then
-        mv "${log_file}.${i}.gz" "${log_file}.${next}.gz" 2>/dev/null || true
+        mv -f "${log_file}.${i}.gz" "${log_file}.${next}.gz" 2>/dev/null || true
+      elif [[ -f "${log_file}.${i}" ]]; then
+        mv -f "${log_file}.${i}" "${log_file}.${next}" 2>/dev/null || true
       fi
     done
     if cp "${log_file}" "${log_file}.1" 2>/dev/null; then
       truncate -s 0 "${log_file}" 2>/dev/null || true
       gzip -f "${log_file}.1" 2>/dev/null || true
     fi
-    rm -f "${log_file}.$(( keep_files + 1 )).gz" 2>/dev/null || true
+    rm -f "${log_file}.$(( keep_files + 1 )).gz" "${log_file}.$(( keep_files + 1 ))" 2>/dev/null || true
   fi
+  return 0
 }
 
 ensure_monitoring_bind_mount_permissions() {
@@ -561,7 +564,7 @@ main() {
   fi
   trap 'rmdir "${LOCK_DIR}" 2>/dev/null || true' EXIT
 
-  rotate_guard_log
+  rotate_guard_log || true
 
   if deploy_lock_is_active; then
     exit 0

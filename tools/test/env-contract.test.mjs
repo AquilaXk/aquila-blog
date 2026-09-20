@@ -5413,10 +5413,13 @@ test("homeserver guard rotates logs, Promtail filters ephemeral curl, and MinIO 
   const promtailConfig = readFileSync(path.join(repoRoot, "deploy/homeserver/monitoring/promtail/promtail-config.yml"), "utf8")
   const compose = readFileSync(composePath, "utf8")
 
-  // Bug 1: Guard log rotation
+  // Bug 1: Guard log rotation static contracts and functional execution
   assert.match(steadyStateGuard, /rotate_guard_log\(\)/)
   assert.match(steadyStateGuard, /truncate -s 0/)
   assert.match(steadyStateGuard, /STEADY_GUARD_LOG_MAX_BYTES/)
+  const logrotateTestScript = path.join(repoRoot, "tools/test/homeserver-guard-logrotate.test.sh")
+  const logrotateOutput = execFileSync("bash", [logrotateTestScript], { encoding: "utf8" })
+  assert.match(logrotateOutput, /homeserver guard logrotate rules passed/)
 
   // Bug 2: MinIO 192h expiry
   assert.match(compose, /MINIO_API_STALE_UPLOADS_EXPIRY:\s*192h/)

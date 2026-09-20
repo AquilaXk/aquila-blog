@@ -41,6 +41,7 @@ on:
       - "tools/test/materialize-compose-test-env.test.mjs"
       - "tools/test/repository-standalone-verification.test.sh"
       - ".github/workflows/**"
+      - ".github/dependabot.yml"
   push:
     branches:
       - main

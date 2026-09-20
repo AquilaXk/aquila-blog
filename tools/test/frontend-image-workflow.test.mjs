@@ -155,6 +155,7 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "tools/test/materialize-compose-test-env.test.mjs",
     "tools/test/repository-standalone-verification.test.sh",
     ".github/workflows/**",
+    ".github/dependabot.yml",
   ])
 })
 

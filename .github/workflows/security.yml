@@ -111,6 +111,9 @@ jobs:
           fi
           echo "dependency-check reports present: ${#reports[@]}"
 
+  # 이중 의존성 리뷰 안내 (Defense-in-depth):
+  # 공식 dependency-review-action을 실행하며, reusable-backend-quality.yml의 자체 API 검증과 병행 동작합니다.
+  # 두 작업 모두 GitHub Dependency Graph compare API를 활용하므로 API 장애 시 동시 실패할 수 있습니다 (#1124).
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

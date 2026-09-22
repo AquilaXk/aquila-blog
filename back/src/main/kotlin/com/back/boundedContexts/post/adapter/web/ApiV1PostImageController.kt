@@ -3,7 +3,6 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -11,6 +10,7 @@ import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
@@ -42,7 +42,7 @@ import java.util.Base64
 @RequestMapping("/post/api/v1")
 class ApiV1PostImageController(
     private val postImageStorageService: PostImageStoragePort,
-    private val postImageStorageProperties: PostImageStorageProperties,
+    private val storageProperties: StoragePropertiesPort,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val uploadedFileRepository: UploadedFileRepositoryPort,
     private val postRepository: PostRepositoryPort,
@@ -65,7 +65,7 @@ class ApiV1PostImageController(
         if (file.isEmpty) {
             throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일이 비어 있습니다.")
         }
-        val maxAllowedBytes = minOf(POST_IMAGE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
+        val maxAllowedBytes = minOf(POST_IMAGE_MAX_FILE_SIZE_BYTES, storageProperties.maxFileSizeBytes)
         if (file.size > maxAllowedBytes) {
             val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
             throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "이미지 파일은 ${limitMb}MB 이하여야 합니다.")

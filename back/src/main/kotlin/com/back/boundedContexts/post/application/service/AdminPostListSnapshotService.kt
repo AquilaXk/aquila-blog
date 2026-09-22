@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.post.adapter.web.ApiV1AdmPostController.Companion.DEFAULT_ADMIN_POST_PAGE_SIZE
 import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.dto.PostDto
@@ -18,7 +19,7 @@ class AdminPostListSnapshotService(
         sync = true,
     )
     override fun getFirstPageSnapshot(sort: PostSearchSortType1): PageDto<PostDto> {
-        val postPage = postUseCase.findPagedByKwForAdmin("", sort, 1, 20)
+        val postPage = postUseCase.findPagedByKwForAdmin("", sort, 1, DEFAULT_ADMIN_POST_PAGE_SIZE)
         return PageDto(
             postPage.map { post ->
                 PostDto(post).apply {

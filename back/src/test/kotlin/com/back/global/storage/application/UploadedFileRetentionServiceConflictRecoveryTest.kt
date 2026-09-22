@@ -3,9 +3,10 @@ package com.back.global.storage.application
 import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.jpa.application.ProdSequenceGuardService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.config.CloudStorageProperties
+import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileStatus
@@ -219,7 +220,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         val service =
             newService(
                 repository = SuccessfulRepository(),
-                storageProperties = PostImageStorageProperties(keyPrefix = "custom-posts"),
+                storageProperties = CloudStorageProperties(keyPrefix = "custom-posts"),
             )
 
         val diagnostics = service.diagnoseCleanup()
@@ -235,7 +236,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         val service =
             newService(
                 repository = SuccessfulRepository(),
-                storageProperties = PostImageStorageProperties(keyPrefix = ""),
+                storageProperties = CloudStorageProperties(keyPrefix = ""),
             )
 
         val diagnostics = service.diagnoseCleanup()
@@ -359,7 +360,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
     private fun newService(
         repository: UploadedFileRepositoryPort,
-        storageProperties: PostImageStorageProperties = PostImageStorageProperties(),
+        storageProperties: StoragePropertiesPort = CloudStorageProperties(),
         retentionProperties: UploadedFileRetentionProperties = UploadedFileRetentionProperties(),
     ): UploadedFileRetentionService =
         UploadedFileRetentionService(

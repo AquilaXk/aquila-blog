@@ -118,6 +118,8 @@ custom:
     frontUrl: "${custom.prod.frontUrl}"
     backUrl: "${custom.prod.backUrl}"
     dbHost: "${custom.prod.dbHost}"
+    dbPort: "${custom.prod.dbPort}"
     dbName: "${custom.prod.dbName}"
     redisHost: "${custom.prod.redisHost}"
+    redisPort: "${custom.prod.redisPort}"
     redisDatabase: "${custom.prod.redisDatabase}"

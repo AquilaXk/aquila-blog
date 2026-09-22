@@ -16,7 +16,6 @@ import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.member.model.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -24,6 +23,7 @@ import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.ProfileImageHistoryDto
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFilePurpose
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
@@ -54,7 +54,7 @@ class ApiV1AdmMemberController(
     private val memberUseCase: MemberUseCase,
     private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val postImageStorageService: PostImageStoragePort,
-    private val postImageStorageProperties: PostImageStorageProperties,
+    private val storageProperties: StoragePropertiesPort,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
     companion object {
@@ -216,7 +216,7 @@ class ApiV1AdmMemberController(
         if (file.isEmpty) {
             throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일이 비어 있습니다.")
         }
-        val maxAllowedBytes = minOf(PROFILE_IMAGE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
+        val maxAllowedBytes = minOf(PROFILE_IMAGE_MAX_FILE_SIZE_BYTES, storageProperties.maxFileSizeBytes)
         if (file.size > maxAllowedBytes) {
             val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
             throw AppException(ErrorCode.PAYLOAD_TOO_LARGE, "이미지 파일은 ${limitMb}MB 이하여야 합니다.")

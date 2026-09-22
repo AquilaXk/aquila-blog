@@ -1,9 +1,9 @@
 package com.back.boundedContexts.post.adapter.storage
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.health.StorageDependencyDownCache
 import com.back.global.storage.health.StorageDependencyFailureClassifier
 import com.back.global.storage.health.StorageDependencyOperationGuard
@@ -38,7 +38,7 @@ import java.util.UUID
  */
 @Service
 class PostImageStorageAdapter(
-    private val properties: PostImageStorageProperties,
+    private val properties: StoragePropertiesPort,
 ) : PostImageStoragePort {
     private val datePathFormatter = DateTimeFormatter.ofPattern("yyyy/MM")
     private val logger = LoggerFactory.getLogger(javaClass)

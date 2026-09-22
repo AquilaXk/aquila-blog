@@ -528,6 +528,19 @@ class ArchitectureGuardTest {
     }
 
     @Test
+    fun `global 및 member는 post config에 의존하지 않아야 한다`() {
+        noClasses()
+            .that()
+            .resideInAnyPackage("..global..", "..boundedContexts.member..")
+            .and()
+            .doNotHaveFullyQualifiedName("com.back.global.security.config.SecurityConfig")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("com.back.boundedContexts.post.config..")
+            .check(importedClasses())
+    }
+
+    @Test
     fun `핵심 web controller는 application service 구현체를 직접 참조하지 않아야 한다`() {
         noClasses()
             .that()

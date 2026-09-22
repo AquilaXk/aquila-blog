@@ -101,10 +101,10 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 "관리자 검색용 숨김",
                 com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT,
                 1,
-                30,
+                20,
                 "all",
             ),
-        ).willReturn(PagedResult(content = listOf(privatePost), page = 1, pageSize = 30, totalElements = 1))
+        ).willReturn(PagedResult(content = listOf(privatePost), page = 1, pageSize = 20, totalElements = 1))
 
         mvc
             .get("/post/api/v1/adm/posts") {
@@ -117,7 +117,7 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 jsonPath("$.content[0].published") { value(false) }
                 jsonPath("$.content[0].listed") { value(false) }
                 jsonPath("$.pageable.pageNumber") { value(1) }
-                jsonPath("$.pageable.pageSize") { value(30) }
+                jsonPath("$.pageable.pageSize") { value(20) }
             }
     }
 
@@ -156,6 +156,51 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 param("kw", "")
                 param("sort", "MODIFIED_AT")
             }.andExpect {
+                status { isOk() }
+                jsonPath("$.content[0].id") { value(55) }
+                jsonPath("$.content[0].title") { value("첫 화면 캐시") }
+                jsonPath("$.content[0].category[0]") { value("운영") }
+            }
+
+        then(adminPostListSnapshotService)
+            .should()
+            .getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT)
+        then(postUseCase)
+            .should(never())
+            .findPagedByKwForAdmin("", com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT, 1, 20, "all")
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자 첫 화면 기본 목록은 쿼리 파라미터 없이 호출 시에도 snapshot cache 서비스로 응답한다`() {
+        val post =
+            samplePost(
+                id = 55,
+                title = "첫 화면 캐시",
+                content =
+                    """
+                    category: 운영
+
+                    본문
+                    """.trimIndent(),
+                published = true,
+                listed = true,
+            )
+        given(adminPostListSnapshotService.getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT))
+            .willReturn(
+                PageDto(
+                    content =
+                        listOf(
+                            PostDto(post).apply {
+                                tempDraft = false
+                            },
+                        ),
+                ),
+            )
+
+        mvc
+            .get("/post/api/v1/adm/posts")
+            .andExpect {
                 status { isOk() }
                 jsonPath("$.content[0].id") { value(55) }
                 jsonPath("$.content[0].title") { value("첫 화면 캐시") }

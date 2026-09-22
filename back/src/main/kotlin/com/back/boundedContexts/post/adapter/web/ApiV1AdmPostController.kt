@@ -34,6 +34,7 @@ class ApiV1AdmPostController(
     private val adminPostListSnapshotService: AdminPostListSnapshotUseCase,
 ) {
     companion object {
+        const val DEFAULT_ADMIN_POST_PAGE_SIZE = 20
         private val validAdminListStatuses = setOf("all", "draft", "published", "private")
     }
 
@@ -72,7 +73,7 @@ class ApiV1AdmPostController(
     @Operation(summary = "관리자용 전체 글 목록 (숨김글 포함)")
     fun getItems(
         @RequestParam(defaultValue = "1") page: Int,
-        @RequestParam(defaultValue = "30") pageSize: Int,
+        @RequestParam(defaultValue = "$DEFAULT_ADMIN_POST_PAGE_SIZE") pageSize: Int,
         @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "MODIFIED_AT") sort: PostSearchSortType1,
         @RequestParam(defaultValue = "all") status: String,
@@ -83,7 +84,7 @@ class ApiV1AdmPostController(
         if (
             kw.isBlank() &&
             validPage == 1 &&
-            validPageSize == 20 &&
+            validPageSize == DEFAULT_ADMIN_POST_PAGE_SIZE &&
             sort == PostSearchSortType1.MODIFIED_AT &&
             validStatus == "all"
         ) {

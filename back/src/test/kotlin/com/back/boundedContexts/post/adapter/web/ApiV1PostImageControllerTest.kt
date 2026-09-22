@@ -8,7 +8,6 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.boundedContexts.post.domain.Post
 import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
@@ -16,6 +15,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.config.CloudStorageProperties
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
@@ -55,7 +55,7 @@ class ApiV1PostImageControllerTest {
     private val controller =
         ApiV1PostImageController(
             postImageStorageService = postImageStorageService,
-            postImageStorageProperties = PostImageStorageProperties(maxFileSizeBytes = 10 * 1024 * 1024),
+            storageProperties = CloudStorageProperties(maxFileSizeBytes = 10 * 1024 * 1024),
             uploadedFileRetentionService = uploadedFileRetentionService,
             uploadedFileRepository = uploadedFileRepository,
             postRepository = postRepository,

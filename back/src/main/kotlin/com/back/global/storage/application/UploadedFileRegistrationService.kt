@@ -1,9 +1,9 @@
 package com.back.global.storage.application
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.jpa.application.ProdSequenceGuardService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFilePurpose
 import org.slf4j.LoggerFactory
@@ -20,7 +20,7 @@ import java.time.Instant
 class UploadedFileRegistrationService(
     private val uploadedFileRepository: UploadedFileRepositoryPort,
     private val postImageStoragePort: PostImageStoragePort,
-    private val storageProperties: PostImageStorageProperties,
+    private val storageProperties: StoragePropertiesPort,
     private val retentionProperties: UploadedFileRetentionProperties,
     private val transactionManager: PlatformTransactionManager,
     private val clock: Clock,

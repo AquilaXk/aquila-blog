@@ -29,6 +29,7 @@ reviews:
 
   path_filters:
     - "!**/node_modules/**"
+    # Web 저장소(AquilaXk/aquila-blog-web) 분리 전 레거시 산출물 방어 및 Sonar exclusions 정렬용 필터
     - "!**/.next/**"
     - "!**/dist/**"
     - "!**/build/**"
@@ -56,6 +57,10 @@ reviews:
       enabled: false
 
   path_instructions:
+    - path: "contracts/**"
+      instructions: |
+        공개 API 계약(OpenAPI, error-codes, summary-fixtures, manifest.json) 변경은 Web 저장소(AquilaXk/aquila-blog-web)와의 하위 호환성, 스키마 유효성, checksum/manifest 동기화 누락 여부를 우선 검토한다.
+        breaking change가 발생하는 경우 클라이언트 영향도와 마이그레이션 전략이 마련되어 있는지 확인한다.
     - path: "back/**"
       instructions: |
         Kotlin/Spring 변경은 API 계약, 트랜잭션 경계, 인증/인가, N+1 쿼리, 동시성, 마이그레이션 호환성, 테스트 누락을 우선 검토한다.

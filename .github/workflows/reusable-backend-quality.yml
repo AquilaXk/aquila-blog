@@ -248,6 +248,10 @@ jobs:
       - name: Test Platform deploy workflow classification
         run: bash tools/test/verify-deploy-workflow-classification.sh
 
+      # 이중 의존성 리뷰 안내 (Defense-in-depth):
+      # 백엔드 CI 파이프라인의 빠른 피드백을 위해 Dependency Graph compare API를 직접 검증합니다.
+      # .github/workflows/security.yml의 공식 dependency-review-action과 병행 동작하므로,
+      # GitHub Dependency Graph API 장애/지연 시 두 검증이 동시에 실패할 수 있습니다 (#1124).
       - name: Dependency review
         if: github.event_name == 'pull_request'
         shell: bash

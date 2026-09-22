@@ -13,4 +13,5 @@ data class UploadedFileRetentionProperties(
     val reconcileObjectPrefix: String = "",
     val reconcileInventoryLimit: Int = 1_000,
     val longPendingDeleteSeconds: Long = 2_592_000,
+    val fallbackLookupEnabled: Boolean = false,
 )

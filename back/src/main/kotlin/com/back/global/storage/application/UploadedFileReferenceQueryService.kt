@@ -12,13 +12,16 @@ import org.springframework.stereotype.Service
 class UploadedFileReferenceQueryService(
     private val postRepository: PostRepositoryPort,
     private val memberAttrRepository: MemberAttrRepositoryPort,
+    private val retentionProperties: UploadedFileRetentionProperties = UploadedFileRetentionProperties(),
 ) {
     fun findReferencedObjectKeys(candidates: Collection<UploadedFile>): Set<String> {
         if (candidates.isEmpty()) return emptySet()
 
         val referencedKeys = linkedSetOf<String>()
         candidates.forEach { uploadedFile ->
-            if (isReferencedByKnownOwner(uploadedFile) || isReferencedByFallbackLookup(uploadedFile)) {
+            if (isReferencedByKnownOwner(uploadedFile) ||
+                (retentionProperties.fallbackLookupEnabled && isReferencedByFallbackLookup(uploadedFile))
+            ) {
                 referencedKeys += uploadedFile.objectKey
             }
         }

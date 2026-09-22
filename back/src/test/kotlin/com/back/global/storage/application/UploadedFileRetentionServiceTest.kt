@@ -387,7 +387,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
     }
 
     @Test
-    fun `reference query는 알 수 없는 owner type 후보를 fallback lookup으로 확인한다`() {
+    fun `reference query는 알 수 없는 owner type 후보를 fallback lookup 비활성화 시 확인하지 않는다`() {
         val uploadedFile =
             UploadedFile(
                 objectKey = "posts/2026/03/reference-unknown-owner.png",
@@ -401,6 +401,29 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         val referencedObjectKeys = uploadedFileReferenceQueryService.findReferencedObjectKeys(listOf(uploadedFile))
 
         assertThat(referencedObjectKeys).isEmpty()
+    }
+
+    @Test
+    fun `reference query는 fallback lookup 활성화 시 content containing을 확인한다`() {
+        val objectKey = "posts/2026/03/reference-fallback-enabled.png"
+        val uploadedFile =
+            UploadedFile(
+                objectKey = objectKey,
+                bucket = "post-img",
+                contentType = "image/png",
+                fileSize = 100,
+            )
+        val queryServiceWithFallback =
+            UploadedFileReferenceQueryService(
+                postRepository = postRepository,
+                memberAttrRepository = memberAttrRepository,
+                retentionProperties = UploadedFileRetentionProperties(fallbackLookupEnabled = true),
+            )
+        given(postRepository.existsByContentContaining(objectKey)).willReturn(true)
+
+        val referencedObjectKeys = queryServiceWithFallback.findReferencedObjectKeys(listOf(uploadedFile))
+
+        assertThat(referencedObjectKeys).containsExactly(objectKey)
     }
 
     @Test

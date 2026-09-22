@@ -319,6 +319,7 @@ custom:
       cleanupFixedDelayMs: ${CUSTOM__STORAGE__RETENTION__CLEANUP_FIXED_DELAY_MS:3600000}
       cleanupBatchSize: ${CUSTOM__STORAGE__RETENTION__CLEANUP_BATCH_SIZE:100}
       cleanupSafetyThreshold: ${CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD:25}
+      fallbackLookupEnabled: ${CUSTOM__STORAGE__RETENTION__FALLBACK_LOOKUP_ENABLED:false}
   post:
     recommend:
       enabled: ${CUSTOM__POST__RECOMMEND__ENABLED:true}

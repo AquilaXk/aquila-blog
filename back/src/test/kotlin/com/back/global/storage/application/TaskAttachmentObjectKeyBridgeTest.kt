@@ -1,7 +1,7 @@
 package com.back.global.storage.application
 
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.config.CloudStorageProperties
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
@@ -17,7 +17,7 @@ class TaskAttachmentObjectKeyBridgeTest {
         val service =
             PostAttachmentRetentionService(
                 uploadedFileRepository = repository,
-                storageProperties = PostImageStorageProperties(),
+                storageProperties = CloudStorageProperties(),
                 retentionProperties = UploadedFileRetentionProperties(),
                 clock = Clock.fixed(Instant.parse("2026-08-11T00:00:00Z"), ZoneOffset.UTC),
             )

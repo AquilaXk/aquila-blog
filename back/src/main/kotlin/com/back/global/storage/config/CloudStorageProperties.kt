@@ -31,16 +31,17 @@ const val DEFAULT_CLOUD_RECONCILE_SAFETY_THRESHOLD: Int = 25
 
 @ConfigurationProperties("custom.storage")
 data class CloudStorageProperties(
-    var enabled: Boolean = false,
-    var endpoint: String = "http://localhost:9000",
-    var region: String = "us-east-1",
-    var bucket: String = "blog-images",
-    var accessKey: String = "",
-    var secretKey: String = "",
-    var credentialVersion: String = "",
-    var pathStyleAccess: Boolean = true,
+    override var enabled: Boolean = false,
+    override var endpoint: String = "http://localhost:9000",
+    override var region: String = "us-east-1",
+    override var bucket: String = "blog-images",
+    override var accessKey: String = "",
+    override var secretKey: String = "",
+    override var credentialVersion: String = "",
+    override var pathStyleAccess: Boolean = true,
+    override var keyPrefix: String = "posts",
     var cloudKeyPrefix: String = "cloud",
-    var maxFileSizeBytes: Long = DEFAULT_CLOUD_DOCUMENT_MAX_SIZE_BYTES,
+    override var maxFileSizeBytes: Long = DEFAULT_CLOUD_DOCUMENT_MAX_SIZE_BYTES,
     var cloudDocumentMaxFileSizeBytes: Long = maxFileSizeBytes,
     var cloudPhotoMaxFileSizeBytes: Long = DEFAULT_CLOUD_PHOTO_MAX_SIZE_BYTES,
     var cloudArchiveMaxFileSizeBytes: Long = maxFileSizeBytes,
@@ -66,7 +67,7 @@ data class CloudStorageProperties(
     var cloudReconcileSafetyThreshold: Int = DEFAULT_CLOUD_RECONCILE_SAFETY_THRESHOLD,
     var cloudReconcileRepairEnabled: Boolean = false,
     var cloudReconcileMetricsRefreshEnabled: Boolean = true,
-) {
+) : StoragePropertiesPort {
     fun validateResumableLifetimeAgainstMinioStaleExpiry() {
         val sliding = cloudVideoResumableExpiresSeconds.coerceAtLeast(60)
         val absoluteMax = cloudVideoResumableAbsoluteMaxSeconds.coerceAtLeast(sliding)

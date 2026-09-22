@@ -3,7 +3,6 @@ package com.back.support
 import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.jpa.config.JpaConfig
 import com.back.global.storage.application.PostAttachmentRetentionService
@@ -13,6 +12,8 @@ import com.back.global.storage.application.UploadedFileReferenceQueryService
 import com.back.global.storage.application.UploadedFileRegistrationService
 import com.back.global.storage.application.UploadedFileRetentionProperties
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.config.CloudStorageProperties
+import com.back.global.storage.config.StoragePropertiesPort
 import org.junit.jupiter.api.BeforeAll
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
@@ -60,7 +61,7 @@ abstract class BaseUploadedFileRetentionServiceIntegrationTest : BaseIntegration
     @TestConfiguration
     class TestConfig {
         @Bean
-        fun postImageStorageProperties(): PostImageStorageProperties = PostImageStorageProperties()
+        fun storageProperties(): StoragePropertiesPort = CloudStorageProperties()
 
         @Bean
         fun uploadedFileRetentionProperties(): UploadedFileRetentionProperties = UploadedFileRetentionProperties()

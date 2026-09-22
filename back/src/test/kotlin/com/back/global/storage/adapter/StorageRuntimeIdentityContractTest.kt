@@ -1,7 +1,6 @@
 package com.back.global.storage.adapter
 
 import com.back.boundedContexts.post.adapter.storage.PostImageStorageAdapter
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.storage.config.CloudStorageProperties
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
@@ -51,7 +50,7 @@ class StorageRuntimeIdentityContractTest {
         val postClient = MissingBucketS3Client()
         val postAdapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = true,
                     endpoint = "http://minio:9000",
                     region = "us-east-1",

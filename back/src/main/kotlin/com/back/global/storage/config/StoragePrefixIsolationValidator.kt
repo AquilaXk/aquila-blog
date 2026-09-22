@@ -1,6 +1,5 @@
 package com.back.global.storage.config
 
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
 import org.springframework.core.Ordered
@@ -15,12 +14,12 @@ import org.springframework.stereotype.Component
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 class StoragePrefixIsolationValidator(
-    private val postImageStorageProperties: PostImageStorageProperties,
+    private val storageProperties: StoragePropertiesPort,
     private val cloudStorageProperties: CloudStorageProperties,
 ) : ApplicationRunner {
     override fun run(args: ApplicationArguments) {
         StoragePrefixIsolation.validate(
-            postKeyPrefix = postImageStorageProperties.keyPrefix,
+            postKeyPrefix = storageProperties.keyPrefix,
             cloudKeyPrefix = cloudStorageProperties.cloudKeyPrefix,
         )
         cloudStorageProperties.validateAgainstEdgeTransferLimits()

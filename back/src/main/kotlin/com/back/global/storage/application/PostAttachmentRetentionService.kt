@@ -1,7 +1,7 @@
 package com.back.global.storage.application
 
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
@@ -14,7 +14,7 @@ import java.time.Instant
 @Service
 class PostAttachmentRetentionService(
     private val uploadedFileRepository: UploadedFileRepositoryPort,
-    private val storageProperties: PostImageStorageProperties,
+    private val storageProperties: StoragePropertiesPort,
     private val retentionProperties: UploadedFileRetentionProperties,
     private val clock: Clock,
 ) {

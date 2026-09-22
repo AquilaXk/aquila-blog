@@ -4,13 +4,14 @@ import com.back.boundedContexts.member.adapter.web.ApiV1AdmMemberController
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.observability.ErrorMetrics
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.config.CloudStorageProperties
+import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.web.application.ClientIpResolver
 import org.junit.jupiter.api.BeforeAll
 import org.springframework.beans.factory.annotation.Autowired
@@ -80,7 +81,7 @@ abstract class BaseAdmMemberControllerWebMvcTest : BaseIntegrationTest() {
     @TestConfiguration
     class TestSecurityConfig {
         @Bean
-        fun postImageStorageProperties(): PostImageStorageProperties = PostImageStorageProperties()
+        fun storageProperties(): StoragePropertiesPort = CloudStorageProperties()
 
         @Bean
         fun testSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {

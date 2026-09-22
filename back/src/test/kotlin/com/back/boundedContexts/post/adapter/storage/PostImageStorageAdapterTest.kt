@@ -1,7 +1,7 @@
 package com.back.boundedContexts.post.adapter.storage
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
+import com.back.global.storage.config.CloudStorageProperties
 import com.back.global.storage.health.StorageDependencyDownCache
 import com.back.global.storage.health.StorageDependencyFailureReason
 import org.assertj.core.api.Assertions.assertThat
@@ -36,7 +36,7 @@ class PostImageStorageAdapterTest {
         // given
         val adapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = false,
                     keyPrefix = "posts",
                 ),
@@ -55,7 +55,7 @@ class PostImageStorageAdapterTest {
         // given
         val adapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = false,
                     keyPrefix = "posts",
                 ),
@@ -84,7 +84,7 @@ class PostImageStorageAdapterTest {
             )
         val adapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = true,
                     bucket = TEST_BUCKET,
                     keyPrefix = "posts",
@@ -128,7 +128,7 @@ class PostImageStorageAdapterTest {
             )
         val adapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = true,
                     bucket = TEST_BUCKET,
                     keyPrefix = "posts",
@@ -178,7 +178,7 @@ class PostImageStorageAdapterTest {
         failures.forEach { (reason, failure) ->
             val adapter =
                 PostImageStorageAdapter(
-                    PostImageStorageProperties(
+                    CloudStorageProperties(
                         enabled = true,
                         bucket = TEST_BUCKET,
                         keyPrefix = "posts",
@@ -217,7 +217,7 @@ class PostImageStorageAdapterTest {
         // given
         val adapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = false,
                     keyPrefix = "   ",
                 ),
@@ -236,7 +236,7 @@ class PostImageStorageAdapterTest {
         // given
         val adapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = false,
                     keyPrefix = "",
                 ),
@@ -255,7 +255,7 @@ class PostImageStorageAdapterTest {
         // given
         val adapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = false,
                     keyPrefix = "",
                 ),
@@ -352,7 +352,7 @@ class PostImageStorageAdapterTest {
         val s3Client = RecordingPutS3Client()
         val adapter =
             PostImageStorageAdapter(
-                PostImageStorageProperties(
+                CloudStorageProperties(
                     enabled = true,
                     bucket = TEST_BUCKET,
                     keyPrefix = "posts",
@@ -398,7 +398,7 @@ class PostImageStorageAdapterTest {
 
     private fun disabledAdapter(maxFileSizeBytes: Long = 10 * 1024 * 1024): PostImageStorageAdapter =
         PostImageStorageAdapter(
-            PostImageStorageProperties(
+            CloudStorageProperties(
                 enabled = false,
                 keyPrefix = "posts",
                 maxFileSizeBytes = maxFileSizeBytes,

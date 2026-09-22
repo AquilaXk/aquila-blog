@@ -1,10 +1,10 @@
 package com.back.global.storage.application
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
+import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
@@ -21,7 +21,7 @@ import java.time.Instant
 class ProfileImageRetentionService(
     private val uploadedFileRepository: UploadedFileRepositoryPort,
     private val postImageStoragePort: PostImageStoragePort,
-    private val storageProperties: PostImageStorageProperties,
+    private val storageProperties: StoragePropertiesPort,
     private val retentionProperties: UploadedFileRetentionProperties,
     private val transactionManager: PlatformTransactionManager,
     private val clock: Clock,

@@ -1,6 +1,7 @@
 package com.back.global.system.application
 
 import com.back.global.system.adapter.web.ApiV1AdmSystemController
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -50,7 +51,8 @@ class AdminSystemHealthSnapshotService(
         try {
             val result = jdbcTemplate.queryForObject("SELECT 1", Int::class.java)
             if (result == 1) "UP" else "DOWN"
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log.error("Database health check failed", e)
             "DOWN"
         }
 
@@ -63,8 +65,13 @@ class AdminSystemHealthSnapshotService(
                     connection.ping()
                 }
             if (pong.equals("PONG", ignoreCase = true)) "UP" else "DOWN"
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log.error("Redis health check failed", e)
             "DOWN"
         }
+    }
+
+    companion object {
+        private val log = LoggerFactory.getLogger(AdminSystemHealthSnapshotService::class.java)
     }
 }

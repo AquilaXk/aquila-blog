@@ -36,11 +36,15 @@ class PostTempDraftService(
         return try {
             val existingTemp = resolveTrackedTempPost(persistenceAuthor)
             if (existingTemp != null) {
+                if (!existingTemp.isTempDraft) {
+                    existingTemp.isTempDraft = true
+                    postRepository.save(existingTemp)
+                }
                 updateTempDraftMarker(persistenceAuthor, existingTemp.id)
                 postRepository.flush()
                 existingTemp to false
             } else {
-                val newPost = postRepository.save(Post(0, persistenceAuthor, "임시글", "임시글 입니다."))
+                val newPost = postRepository.save(Post(0, persistenceAuthor, "임시글", "임시글 입니다.", isTempDraft = true))
                 updateTempDraftMarker(persistenceAuthor, newPost.id)
                 postRepository.flush()
                 newPost to true
@@ -50,7 +54,7 @@ class PostTempDraftService(
         }
     }
 
-    fun isTempDraft(post: Post): Boolean = resolveTrackedTempPostId(post.author) == post.id
+    fun isTempDraft(post: Post): Boolean = post.isTempDraft || resolveTrackedTempPostId(post.author) == post.id
 
     fun updateTempDraftMarker(
         author: Member,

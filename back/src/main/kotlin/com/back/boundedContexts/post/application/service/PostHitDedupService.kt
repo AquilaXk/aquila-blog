@@ -41,13 +41,6 @@ class PostHitDedupService(
         }
     }
 
-    fun clearAllForTest() {
-        redisTemplateProvider.getIfAvailable()?.let { redisTemplate ->
-            val keys = redisTemplate.keys("$redisKeyPrefix*")
-            if (!keys.isNullOrEmpty()) redisTemplate.delete(keys)
-        }
-    }
-
     private fun redisKey(value: String): String = "$redisKeyPrefix$value"
 
     private fun serviceUnavailable(cause: Throwable? = null): AppException =

@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component
 class CloudSecurityConfigurer : PublicApiRouteContributor {
     override fun publicApiRoutes() =
         listOf(
-            PublicApiRouteSpec("/system/api/v1/adm/cloud/files/*/external-content", HttpMethod.GET),
-            PublicApiRouteSpec("/system/api/v1/adm/cloud/files/*/external-content", HttpMethod.HEAD),
+            PublicApiRouteSpec("/system/api/v1/public/cloud/files/*/playback", HttpMethod.GET),
+            PublicApiRouteSpec("/system/api/v1/public/cloud/files/*/playback", HttpMethod.HEAD),
         )
 
     fun configure(authorize: AuthorizeHttpRequestsDsl) {

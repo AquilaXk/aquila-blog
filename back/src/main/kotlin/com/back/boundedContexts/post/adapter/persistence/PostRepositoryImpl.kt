@@ -31,7 +31,6 @@ class PostRepositoryImpl(
     private data class KeywordRelevanceWeights(
         val title: Int,
         val tag: Int,
-        val content: Int,
     )
 
     override fun findQPagedByKw(
@@ -103,10 +102,6 @@ class PostRepositoryImpl(
             .selectFrom(post)
             .leftJoin(post.author)
             .fetchJoin()
-            .leftJoin(post.likesCountAttr)
-            .fetchJoin()
-            .leftJoin(post.hitCountAttr)
-            .fetchJoin()
             .where(
                 post.id
                     .eq(id)
@@ -163,25 +158,11 @@ class PostRepositoryImpl(
             builder.and(post.published.isTrue)
             builder.and(post.listed.isTrue)
         } else {
-            val hasActiveDraftMarker =
-                Expressions.booleanTemplate(
-                    """
-                    exists (
-                        select 1
-                        from MemberAttr activeDraftMarker
-                        where activeDraftMarker.subject = {0}
-                          and activeDraftMarker.name = 'activeTempDraftPostId'
-                          and trim(activeDraftMarker.strValue) = str({1})
-                    )
-                    """.trimIndent(),
-                    post.author,
-                    post.id,
-                )
             when (adminStatus) {
                 "draft" ->
-                    builder.and(post.published.isFalse.and(hasActiveDraftMarker))
+                    builder.and(post.published.isFalse.and(post.isTempDraft.isTrue))
                 "published" -> builder.and(post.published.isTrue)
-                "private" -> builder.and(post.published.isFalse.and(hasActiveDraftMarker.not()))
+                "private" -> builder.and(post.published.isFalse.and(post.isTempDraft.isFalse))
             }
         }
         author?.let { builder.and(post.author.eq(it)) }
@@ -228,23 +209,11 @@ class PostRepositoryImpl(
                 .select(post.id)
                 .from(post)
 
-        when (sort) {
-            PostSearchSortType1.HIT_COUNT -> idQuery.leftJoin(post.hitCountAttr)
-            PostSearchSortType1.LIKES_COUNT -> idQuery.leftJoin(post.likesCountAttr)
-            else -> Unit
-        }
-
         idQuery.where(builder)
 
         when (sort) {
-            PostSearchSortType1.HIT_COUNT -> {
-                val countExpr = post.hitCountAttr.intValue.coalesce(0)
-                idQuery.orderBy(countExpr.desc(), post.id.desc())
-            }
-            PostSearchSortType1.LIKES_COUNT -> {
-                val countExpr = post.likesCountAttr.intValue.coalesce(0)
-                idQuery.orderBy(countExpr.desc(), post.id.desc())
-            }
+            PostSearchSortType1.HIT_COUNT -> idQuery.orderBy(post.hitCount.desc(), post.id.desc())
+            PostSearchSortType1.LIKES_COUNT -> idQuery.orderBy(post.likesCount.desc(), post.id.desc())
             PostSearchSortType1.CREATED_AT_ASC -> idQuery.orderBy(post.createdAt.asc(), post.id.asc())
             else -> idQuery.orderBy(post.createdAt.desc(), post.id.desc())
         }
@@ -306,18 +275,16 @@ class PostRepositoryImpl(
         if (cursorSortValue == null || cursorId == null || cursorId <= 0L) return null
         return when (sort) {
             PostSearchSortType1.HIT_COUNT -> {
-                val countExpr = post.hitCountAttr.intValue.coalesce(0)
                 val cursorCount = cursorSortValue.toInt()
-                countExpr
+                post.hitCount
                     .lt(cursorCount)
-                    .or(countExpr.eq(cursorCount).and(post.id.lt(cursorId)))
+                    .or(post.hitCount.eq(cursorCount).and(post.id.lt(cursorId)))
             }
             PostSearchSortType1.LIKES_COUNT -> {
-                val countExpr = post.likesCountAttr.intValue.coalesce(0)
                 val cursorCount = cursorSortValue.toInt()
-                countExpr
+                post.likesCount
                     .lt(cursorCount)
-                    .or(countExpr.eq(cursorCount).and(post.id.lt(cursorId)))
+                    .or(post.likesCount.eq(cursorCount).and(post.id.lt(cursorId)))
             }
             PostSearchSortType1.CREATED_AT_ASC -> {
                 val cursorCreatedAt = Instant.ofEpochMilli(cursorSortValue)
@@ -367,28 +334,18 @@ class PostRepositoryImpl(
         if (requiresAuthorSort(pageable)) {
             idQuery.leftJoin(post.author)
         }
-        if (requiresHitCountSort(pageable)) {
-            idQuery.leftJoin(post.hitCountAttr)
-        }
-        if (requiresLikesCountSort(pageable)) {
-            idQuery.leftJoin(post.likesCountAttr)
-        }
 
         idQuery.where(builder)
 
         val normalizedKeyword = kw.trim()
         if (requiresHitCountSort(pageable)) {
             idQuery.orderBy(
-                post.hitCountAttr.intValue
-                    .coalesce(0)
-                    .desc(),
+                post.hitCount.desc(),
                 post.id.desc(),
             )
         } else if (requiresLikesCountSort(pageable)) {
             idQuery.orderBy(
-                post.likesCountAttr.intValue
-                    .coalesce(0)
-                    .desc(),
+                post.likesCount.desc(),
                 post.id.desc(),
             )
         } else if (normalizedKeyword.isNotBlank()) {
@@ -468,15 +425,14 @@ class PostRepositoryImpl(
         return keywordTerms.withIndex().fold(zeroScore()) { acc, (index, term) ->
             val weights =
                 if (index == 0) {
-                    KeywordRelevanceWeights(title = 300, tag = 120, content = 40)
+                    KeywordRelevanceWeights(title = 300, tag = 120)
                 } else {
-                    KeywordRelevanceWeights(title = 110, tag = 45, content = 20)
+                    KeywordRelevanceWeights(title = 110, tag = 45)
                 }
 
             acc
                 .add(buildLikeScore(post.title, buildEscapedLikePattern(term), weights.title))
                 .add(buildTagScore(term, weights.tag))
-                .add(buildLikeScore(post.content, buildEscapedLikePattern(term), weights.content))
         }
     }
 

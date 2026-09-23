@@ -21,6 +21,7 @@ class PostCounterService(
 ) {
     fun incrementHit(post: Post) {
         val updatedHitCount = postAttrRepository.incrementIntValue(post, HIT_COUNT)
+        post.hitCount = updatedHitCount
         val refreshedAttr = post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)
         refreshedAttr?.let {
             it.intValue = updatedHitCount

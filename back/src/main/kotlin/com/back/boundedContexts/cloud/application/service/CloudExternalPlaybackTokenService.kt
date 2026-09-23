@@ -201,7 +201,7 @@ class CloudExternalPlaybackTokenService(
             fileId: Long,
             token: String,
         ): String =
-            "/system/api/v1/adm/cloud/files/$fileId/external-content?token=" +
+            "/system/api/v1/public/cloud/files/$fileId/playback?token=" +
                 URLEncoder.encode(token, StandardCharsets.UTF_8)
     }
 }

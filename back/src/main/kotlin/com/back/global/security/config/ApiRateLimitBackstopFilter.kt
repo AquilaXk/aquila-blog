@@ -73,7 +73,7 @@ class ApiRateLimitBackstopFilter(
 
         val clientIp = (clientIpResolverProvider.getIfAvailable() ?: ClientIpResolver()).resolve(request).ifBlank { "unknown" }
         val key = redisKey(bucket.name, clientIp)
-        val count = redisKeyValuePort.increment(key)
+        val count = redisKeyValuePort.incrementAndExpire(key, WINDOW)
         if (count == null) {
             if (shouldFailClosedWithoutRedis()) {
                 writeUnavailable(request, response)
@@ -82,20 +82,6 @@ class ApiRateLimitBackstopFilter(
             }
             filterChain.doFilter(request, response)
             return
-        }
-
-        if (count == 1L) {
-            val ttlApplied = redisKeyValuePort.expire(key, WINDOW)
-            if (!ttlApplied) {
-                if (shouldFailClosedWithoutRedis()) {
-                    writeUnavailable(request, response)
-                    record(bucket.name, "redis-unavailable")
-                    return
-                }
-                redisKeyValuePort.delete(listOf(key))
-                filterChain.doFilter(request, response)
-                return
-            }
         }
 
         if (count > bucket.limit.toLong()) {

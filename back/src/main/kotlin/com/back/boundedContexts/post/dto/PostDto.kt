@@ -28,7 +28,7 @@ data class PostDto
         val category: List<String> = emptyList(),
         val summarySource: PostSummarySource = PostSummarySource.NONE,
     ) {
-        constructor(post: Post) : this(post, PostPreviewExtractor.extractThumbnail(post.content))
+        constructor(post: Post) : this(post, post.thumbnail ?: PostPreviewExtractor.extractThumbnail(post.content))
 
         private constructor(
             post: Post,
@@ -48,7 +48,7 @@ data class PostDto
             post.version ?: 0L,
             post.published,
             post.listed,
-            false,
+            post.isTempDraft,
             post.likesCount,
             post.hitCount,
             tags = meta.tags,

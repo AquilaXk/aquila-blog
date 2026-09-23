@@ -9,4 +9,4 @@
 /post/api/v1/posts/related/author
 /post/api/v1/posts/search
 /post/api/v1/posts/tags
-/system/api/v1/adm/cloud/files/*/external-content
+/system/api/v1/public/cloud/files/*/playback

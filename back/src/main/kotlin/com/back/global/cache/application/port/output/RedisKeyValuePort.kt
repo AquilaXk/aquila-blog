@@ -17,6 +17,11 @@ interface RedisKeyValuePort {
 
     fun increment(key: String): Long?
 
+    fun incrementAndExpire(
+        key: String,
+        ttl: Duration,
+    ): Long?
+
     fun expire(
         key: String,
         ttl: Duration,

@@ -337,7 +337,7 @@ class CustomAuthenticationFilterTest {
                     publicApiRequestMatcherOverride =
                         PublicApiRequestMatcher(listOf(CloudSecurityConfigurer())),
                 )
-            val request = MockHttpServletRequest(method, "/system/api/v1/adm/cloud/files/12/external-content")
+            val request = MockHttpServletRequest(method, "/system/api/v1/public/cloud/files/12/playback")
 
             fixture.givenEmptyAuthorizationHeader()
             fixture.givenCookieTokens(accessToken = "broken-access-token")

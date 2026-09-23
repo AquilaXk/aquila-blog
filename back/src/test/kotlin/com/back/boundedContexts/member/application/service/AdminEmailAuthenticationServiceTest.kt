@@ -373,6 +373,11 @@ class AdminEmailAuthenticationServiceTest {
 
         override fun increment(key: String): Long? = null
 
+        override fun incrementAndExpire(
+            key: String,
+            ttl: Duration,
+        ): Long? = null
+
         override fun expire(
             key: String,
             ttl: Duration,

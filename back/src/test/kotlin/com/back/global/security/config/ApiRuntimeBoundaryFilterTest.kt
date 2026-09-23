@@ -47,7 +47,7 @@ class ApiRuntimeBoundaryFilterTest {
         val filter = createFilter("read")
 
         for (method in listOf("GET", "HEAD")) {
-            val request = MockHttpServletRequest(method, "/system/api/v1/adm/cloud/files/12/external-content")
+            val request = MockHttpServletRequest(method, "/system/api/v1/public/cloud/files/12/playback")
             val response = MockHttpServletResponse()
 
             filter.doFilter(request, response, MockFilterChain())

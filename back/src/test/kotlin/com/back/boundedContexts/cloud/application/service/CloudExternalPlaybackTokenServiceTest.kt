@@ -56,7 +56,7 @@ class CloudExternalPlaybackTokenServiceTest {
         assertThat(issued.token).isNotBlank()
         assertThat(issued.expiresAt).isEqualTo(Instant.parse("2026-06-26T18:00:00Z"))
         assertThat(issued.contentPath)
-            .startsWith("/system/api/v1/adm/cloud/files/12/external-content?token=")
+            .startsWith("/system/api/v1/public/cloud/files/12/playback?token=")
         assertThat(tokens.savedTokens).hasSize(1)
         assertThat(tokens.savedTokens.single().tokenHash).isNotEqualTo(issued.token)
         assertThat(tokens.savedTokens.single().tokenHash).hasSize(64)

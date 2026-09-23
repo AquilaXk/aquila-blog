@@ -80,7 +80,7 @@ class ApiRateLimitBackstopFilterTest {
         assertPublicReadBucketLimit(
             filter = filter,
             redis = redis,
-            path = "/system/api/v1/adm/cloud/files/12/external-content",
+            path = "/system/api/v1/public/cloud/files/12/playback",
         )
     }
 
@@ -465,6 +465,18 @@ class ApiRateLimitBackstopFilterTest {
         override fun increment(key: String): Long? {
             if (!available || !incrementAvailable) return null
             return values.compute(key) { _, current -> ((current?.toLongOrNull() ?: 0L) + 1L).toString() }?.toLong()
+        }
+
+        override fun incrementAndExpire(
+            key: String,
+            ttl: Duration,
+        ): Long? {
+            if (!available || !incrementAvailable || !expireAvailable) return null
+            val count = values.compute(key) { _, current -> ((current?.toLongOrNull() ?: 0L) + 1L).toString() }?.toLong()
+            if (count != null) {
+                expirations += key
+            }
+            return count
         }
 
         override fun expire(

@@ -10,6 +10,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.dto.PostPreviewExtractor
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.event.PostDeletedEvent
@@ -196,9 +197,6 @@ class PostApplicationService(
         postRepository
             .findPublicDetailById(id)
             ?.also { post ->
-                if (post.likesCountAttr == null || post.hitCountAttr == null) {
-                    postHydrationService.hydratePostAttrs(post)
-                }
                 postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
             }
 
@@ -239,6 +237,7 @@ class PostApplicationService(
         val wasPublic = isPubliclyListed(post)
         val wasPublished = post.published
         val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
+        val thumbnail = PostPreviewExtractor.extractThumbnail(content)
         try {
             val contentHtmlTrust =
                 if (contentHtml == null) {
@@ -247,7 +246,7 @@ class PostApplicationService(
                     HtmlContentSanitizer.sanitizeForPersistence(contentHtml)
                 }
             if (contentHtmlTrust == null) {
-                post.modify(title, content, published, listed)
+                post.modify(title, content, published, listed, thumbnail = thumbnail)
             } else {
                 post.modify(
                     title = title,
@@ -258,6 +257,7 @@ class PostApplicationService(
                     contentHtmlHash = contentHtmlTrust.contentHtmlHash,
                     contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
                     contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
+                    thumbnail = thumbnail,
                 )
             }
             resolveModifiedSummary(
@@ -273,6 +273,7 @@ class PostApplicationService(
                 UploadedFileUrlCodec.extractObjectKeysFromContent(post.content),
             )
             if (wasTempDraft) {
+                post.isTempDraft = false
                 postTempDraftService.updateTempDraftMarker(post.author, null)
             }
         } catch (exception: ObjectOptimisticLockingFailureException) {
@@ -360,6 +361,7 @@ class PostApplicationService(
                 contentHtmlHash = contentHtmlTrust.contentHtmlHash,
                 contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
                 contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
+                thumbnail = PostPreviewExtractor.extractThumbnail(content),
             ).also { it.applyResolvedSummary(resolvedSummary) }
         val savedPost = postRepository.saveAndFlush(post)
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))

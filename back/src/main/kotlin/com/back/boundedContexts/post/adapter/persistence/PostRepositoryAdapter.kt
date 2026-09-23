@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.persistence
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.application.port.output.PostImageReferenceRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
@@ -19,6 +20,7 @@ import java.util.Optional
 class PostRepositoryAdapter(
     private val postRepository: PostRepository,
     private val postDeletedQueryRepository: PostDeletedQueryRepository,
+    private val postImageReferenceRepository: PostImageReferenceRepositoryPort,
 ) : PostRepositoryPort {
     override fun count(): Long = postRepository.count()
 
@@ -118,6 +120,20 @@ class PostRepositoryAdapter(
     ): Boolean = postRepository.existsByIdAndContentContaining(id, contentFragment)
 
     override fun existsByContentContaining(contentFragment: String): Boolean = postRepository.existsByContentContaining(contentFragment)
+
+    override fun existsImageReference(
+        postId: Long,
+        objectKey: String,
+    ): Boolean = postImageReferenceRepository.existsByPostIdAndObjectKey(postId, objectKey)
+
+    override fun existsImageReferenceByObjectKey(objectKey: String): Boolean = postImageReferenceRepository.existsByObjectKey(objectKey)
+
+    override fun syncImageReferences(
+        postId: Long,
+        objectKeys: Collection<String>,
+    ) = postImageReferenceRepository.replacePostImageReferences(postId, objectKeys)
+
+    override fun deleteImageReferencesByPostId(postId: Long) = postImageReferenceRepository.deletePostImageReferences(postId)
 
     private fun PostRepositoryPort.PagedQuery.toPageRequest(): PageRequest =
         PageRequest.of(

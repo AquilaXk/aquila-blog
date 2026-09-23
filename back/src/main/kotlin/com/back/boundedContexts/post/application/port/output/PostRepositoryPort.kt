@@ -119,4 +119,18 @@ interface PostRepositoryPort {
     ): Boolean
 
     fun existsByContentContaining(contentFragment: String): Boolean
+
+    fun existsImageReference(
+        postId: Long,
+        objectKey: String,
+    ): Boolean
+
+    fun existsImageReferenceByObjectKey(objectKey: String): Boolean
+
+    fun syncImageReferences(
+        postId: Long,
+        objectKeys: Collection<String>,
+    )
+
+    fun deleteImageReferencesByPostId(postId: Long)
 }

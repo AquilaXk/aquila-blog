@@ -419,7 +419,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
                 memberAttrRepository = memberAttrRepository,
                 retentionProperties = UploadedFileRetentionProperties(fallbackLookupEnabled = true),
             )
-        given(postRepository.existsByContentContaining(objectKey)).willReturn(true)
+        given(postRepository.existsImageReferenceByObjectKey(objectKey)).willReturn(true)
 
         val referencedObjectKeys = queryServiceWithFallback.findReferencedObjectKeys(listOf(uploadedFile))
 
@@ -450,7 +450,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
             Instant.now(clock).minusSeconds(60),
         )
         uploadedFileRepository.save(uploadedFile)
-        given(postRepository.existsByIdAndContentContaining(44, objectKey)).willReturn(true)
+        given(postRepository.existsImageReference(44, objectKey)).willReturn(true)
 
         uploadedFileRetentionService.purgeExpiredFiles(limit = 10)
 

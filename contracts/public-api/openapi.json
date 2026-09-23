@@ -18,6 +18,10 @@
     {
       "name": "HomeController",
       "description": "홈 컨트롤러"
+    },
+    {
+      "name": "ApiV1PublicCloudController",
+      "description": "Public Cloud Playback API"
     }
   ],
   "paths": {
@@ -928,12 +932,13 @@
         }
       }
     },
-    "/system/api/v1/adm/cloud/files/{id}/external-content": {
+    "/system/api/v1/public/cloud/files/{id}/playback": {
       "get": {
         "tags": [
-          "api-v-1-adm-cloud-controller"
+          "ApiV1PublicCloudController"
         ],
-        "operationId": "externalContent",
+        "summary": "외부 비디오 파일 재생",
+        "operationId": "playback",
         "parameters": [
           {
             "name": "id",
@@ -970,9 +975,10 @@
       },
       "head": {
         "tags": [
-          "api-v-1-adm-cloud-controller"
+          "ApiV1PublicCloudController"
         ],
-        "operationId": "externalContentHead",
+        "summary": "외부 비디오 파일 메타데이터 조회",
+        "operationId": "playbackHead",
         "parameters": [
           {
             "name": "id",

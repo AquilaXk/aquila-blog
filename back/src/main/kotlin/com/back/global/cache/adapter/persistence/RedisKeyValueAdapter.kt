@@ -3,6 +3,7 @@ package com.back.global.cache.adapter.persistence
 import com.back.global.cache.application.port.output.RedisKeyValuePort
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Component
 import java.time.Duration
 
@@ -10,6 +11,18 @@ import java.time.Duration
 class RedisTemplateKeyValuePortAdapter(
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
 ) : RedisKeyValuePort {
+    private val incrementAndExpireScript =
+        DefaultRedisScript(
+            """
+            local current = redis.call('INCR', KEYS[1])
+            if current == 1 or redis.call('TTL', KEYS[1]) == -1 then
+                redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+            end
+            return current
+            """.trimIndent(),
+            Long::class.java,
+        )
+
     override fun isAvailable(): Boolean = redisTemplateProvider.getIfAvailable() != null
 
     override fun get(key: String): String? = redisTemplateProvider.getIfAvailable()?.opsForValue()?.get(key)
@@ -30,6 +43,19 @@ class RedisTemplateKeyValuePortAdapter(
     }
 
     override fun increment(key: String): Long? = redisTemplateProvider.getIfAvailable()?.opsForValue()?.increment(key)
+
+    override fun incrementAndExpire(
+        key: String,
+        ttl: Duration,
+    ): Long? {
+        val redisTemplate = redisTemplateProvider.getIfAvailable() ?: return null
+        val ttlSeconds = ttl.seconds.coerceAtLeast(1L).toString()
+        return redisTemplate.execute(
+            incrementAndExpireScript,
+            listOf(key),
+            ttlSeconds,
+        )
+    }
 
     override fun expire(
         key: String,

@@ -70,7 +70,7 @@ export const options = {
 };
 
 function contentUrl() {
-  return `${BASE_URL}/system/api/v1/adm/cloud/files/${FILE_ID}/external-content?token=${encodeURIComponent(PLAYBACK_TOKEN)}`;
+  return `${BASE_URL}/system/api/v1/public/cloud/files/${FILE_ID}/playback?token=${encodeURIComponent(PLAYBACK_TOKEN)}`;
 }
 
 /** Deterministic PRNG (mulberry32). Avoid Math.random for Sonar S2245 / QG security rating. */

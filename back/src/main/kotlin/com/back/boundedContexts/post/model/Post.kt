@@ -64,6 +64,12 @@ import java.time.Instant
     pgroonga_text_array_full_text_search_ops_v2) WITH (tokenizer = 'TokenBigram')
     """,
 )
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS idx_post_published_is_temp_draft
+    ON post (published, is_temp_draft)
+    """,
+)
 class Post(
     @field:Id
     @field:SequenceGenerator(name = "post_seq_gen", sequenceName = "post_seq", allocationSize = 50)
@@ -104,6 +110,16 @@ class Post(
     var summaryAlgorithmVersion: String? = null,
     @field:Column(name = "summary_generated_at")
     var summaryGeneratedAt: Instant? = null,
+    @field:Column(length = 1000)
+    var thumbnail: String? = null,
+    @field:Column(name = "is_temp_draft", nullable = false)
+    var isTempDraft: Boolean = false,
+    @field:Column(name = "likes_count", nullable = false)
+    @org.hibernate.annotations.OptimisticLock(excluded = true)
+    override var likesCount: Int = 0,
+    @field:Column(name = "hit_count", nullable = false)
+    @org.hibernate.annotations.OptimisticLock(excluded = true)
+    override var hitCount: Int = 0,
 ) : BaseTime(id),
     PostHasHit,
     PostHasLikes,
@@ -117,9 +133,21 @@ class Post(
 
     @field:OneToOne(fetch = FetchType.LAZY)
     var likesCountAttr: PostAttr? = null
+        set(value) {
+            field = value
+            if (value?.intValue != null) {
+                likesCount = value.intValue!!
+            }
+        }
 
     @field:OneToOne(fetch = FetchType.LAZY)
     var hitCountAttr: PostAttr? = null
+        set(value) {
+            field = value
+            if (value?.intValue != null) {
+                hitCount = value.intValue!!
+            }
+        }
 
     override val post: Post get() = this
 
@@ -132,6 +160,7 @@ class Post(
         contentHtmlHash: String? = this.contentHtmlHash,
         contentHtmlSanitizerPolicyVersion: String? = this.contentHtmlSanitizerPolicyVersion,
         contentHtmlTrustState: ContentHtmlTrustState? = this.contentHtmlTrustState,
+        thumbnail: String? = this.thumbnail,
     ) {
         this.title = title
         this.content = content
@@ -139,6 +168,7 @@ class Post(
         this.contentHtmlHash = contentHtmlHash
         this.contentHtmlSanitizerPolicyVersion = contentHtmlSanitizerPolicyVersion
         this.contentHtmlTrustState = contentHtmlTrustState
+        this.thumbnail = thumbnail
         published?.let { this.published = it }
         listed?.let { this.listed = it }
         if (!this.published) this.listed = false

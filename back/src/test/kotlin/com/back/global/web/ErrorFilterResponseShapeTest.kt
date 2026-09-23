@@ -236,6 +236,11 @@ class ErrorFilterResponseShapeTest {
         override fun increment(key: String): Long? =
             values.compute(key) { _, current -> ((current?.toLongOrNull() ?: 0L) + 1L).toString() }?.toLong()
 
+        override fun incrementAndExpire(
+            key: String,
+            ttl: Duration,
+        ): Long? = increment(key)
+
         override fun expire(
             key: String,
             ttl: Duration,

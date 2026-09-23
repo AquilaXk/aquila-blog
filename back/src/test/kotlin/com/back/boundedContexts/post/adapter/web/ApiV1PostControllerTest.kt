@@ -15,6 +15,7 @@ import com.back.global.security.config.AuthCookieNames
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import com.back.support.BaseControllerIntegrationTest
+import com.back.support.RedisTestSupport
 import com.jayway.jsonpath.JsonPath
 import jakarta.persistence.EntityManager
 import jakarta.servlet.http.Cookie
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.cache.CacheManager
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
@@ -46,6 +48,9 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var postHitDedupService: PostHitDedupService
 
+    @Autowired(required = false)
+    private var redisTemplate: StringRedisTemplate? = null
+
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
 
@@ -57,7 +62,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
 
     @AfterEach
     fun clearHitDedupState() {
-        postHitDedupService.clearAllForTest()
+        RedisTestSupport.clearKeys(redisTemplate, "post:hit:viewed:*")
     }
 
     private fun writePost(

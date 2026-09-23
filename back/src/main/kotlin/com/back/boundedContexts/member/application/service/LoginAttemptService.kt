@@ -110,14 +110,6 @@ class LoginAttemptService(
         states.remove(key)
     }
 
-    fun clearAllForTest() {
-        states.clear()
-        if (redisKeyValuePort.isAvailable()) {
-            val keys = redisKeyValuePort.keys("auth:login:*")
-            if (keys.isNotEmpty()) redisKeyValuePort.delete(keys)
-        }
-    }
-
     private fun key(
         username: String,
         clientIp: String,
@@ -134,11 +126,7 @@ class LoginAttemptService(
 
         val failureKey = redisFailureKey(key)
         val blockedKey = redisBlockedKey(key)
-        val failures = redisKeyValuePort.increment(failureKey) ?: 0L
-
-        if (failures == 1L) {
-            redisKeyValuePort.expire(failureKey, Duration.ofSeconds(windowSeconds))
-        }
+        val failures = redisKeyValuePort.incrementAndExpire(failureKey, Duration.ofSeconds(windowSeconds)) ?: 0L
 
         if (failures >= maxAttempts.toLong()) {
             val blockedUntil = nowEpochSeconds() + lockSeconds

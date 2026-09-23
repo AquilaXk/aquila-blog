@@ -64,6 +64,8 @@ class PostDraftClassificationIntegrationTest : BaseRepositoryIntegrationTest() {
     }
 
     private fun markActiveDraft(post: Post) {
+        post.isTempDraft = true
+        postRepository.saveAndFlush(post)
         memberAttrRepository.saveAndFlush(MemberAttr(0, post.author, "activeTempDraftPostId", post.id.toString()))
     }
 }

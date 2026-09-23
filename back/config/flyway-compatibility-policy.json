@@ -51,6 +51,10 @@
     {
       "file": "back/src/main/resources/db/migration/V20260923_01__create_post_image_references.sql",
       "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260923_02__normalize_post_columns.sql",
+      "class": "EXPAND_SAFE"
     }
   ],
   "cutovers": [

@@ -67,8 +67,8 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 
-	@cloudExternalContentSensitive path /system/api/v1/adm/cloud/files/*/external-content
-	log_skip @cloudExternalContentSensitive
+	@cloudPlaybackSensitive path /system/api/v1/public/cloud/files/*/playback
+	log_skip @cloudPlaybackSensitive
 
 	@publicSearchSensitive path /post/api/v1/posts/search
 	log_skip @publicSearchSensitive
@@ -94,7 +94,7 @@
 	# read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
 	# Paths must match PublicApiRouteContributor SoT export (tools/guards/public-api-read-caddy-paths.sot).
 	@publicReadFallback {
-		path /post/api/v1/images/* /post/api/v1/posts /post/api/v1/posts/* /post/api/v1/posts/bootstrap /post/api/v1/posts/explore /post/api/v1/posts/explore/cursor /post/api/v1/posts/feed /post/api/v1/posts/feed/cursor /post/api/v1/posts/related/author /post/api/v1/posts/search /post/api/v1/posts/tags /system/api/v1/adm/cloud/files/*/external-content
+		path /post/api/v1/images/* /post/api/v1/posts /post/api/v1/posts/* /post/api/v1/posts/bootstrap /post/api/v1/posts/explore /post/api/v1/posts/explore/cursor /post/api/v1/posts/feed /post/api/v1/posts/feed/cursor /post/api/v1/posts/related/author /post/api/v1/posts/search /post/api/v1/posts/tags /system/api/v1/public/cloud/files/*/playback
 		method GET HEAD OPTIONS
 	}
 	handle @publicReadFallback {

@@ -34,7 +34,7 @@ data class FeedPostDto(
             val postId = post.id
             val content = post.content
             val meta = extractMeta(postId, content, reportFailure)
-            val thumbnail = extractThumbnail(postId, content, reportFailure)
+            val thumbnail = post.thumbnail ?: extractThumbnail(postId, content, reportFailure)
 
             return FeedPostDto(
                 id = postId,

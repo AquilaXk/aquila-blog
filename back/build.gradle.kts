@@ -78,7 +78,7 @@ dependencies {
 
     // SpringDoc
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
-    implementation("org.webjars:swagger-ui:5.32.14") // DOMPurify 3.4.12; fixes CVE-2026-65898 (#1451).
+    implementation("org.webjars:swagger-ui:5.32.15") // DOMPurify 3.4.12; fixes CVE-2026-65898 (#1451).
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
     // ShedLock

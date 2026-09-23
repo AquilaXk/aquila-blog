@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.persistence
 
+import com.back.boundedContexts.post.model.PostImageReference
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -16,6 +17,8 @@ import org.mockito.Mockito.`when`
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.ParameterizedPreparedStatementSetter
 import org.springframework.jdbc.core.RowMapper
+import java.sql.PreparedStatement
+import java.sql.ResultSet
 
 @DisplayName("PostImageReferenceJdbcRepository 테스트")
 class PostImageReferenceJdbcRepositoryTest {
@@ -41,6 +44,17 @@ class PostImageReferenceJdbcRepositoryTest {
 
         val blankKey = repository.existsByPostIdAndObjectKey(10L, "")
         assertThat(blankKey).isFalse()
+
+        `when`(
+            jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Long::class.java),
+                eq(10L),
+                eq("posts/null.png"),
+            ),
+        ).thenReturn(null)
+        val nullResult = repository.existsByPostIdAndObjectKey(10L, "posts/null.png")
+        assertThat(nullResult).isFalse()
     }
 
     @Test
@@ -58,19 +72,43 @@ class PostImageReferenceJdbcRepositoryTest {
 
         val blankKey = repository.existsByObjectKey("   ")
         assertThat(blankKey).isFalse()
+
+        `when`(
+            jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Long::class.java),
+                eq("posts/null.png"),
+            ),
+        ).thenReturn(null)
+        val nullResult = repository.existsByObjectKey("posts/null.png")
+        assertThat(nullResult).isFalse()
     }
 
     @Test
     fun `replacePostImageReferences - 기존 키 삭제 후 신규 키를 batchUpdate 한다`() {
+        val ps = mock(PreparedStatement::class.java)
+        `when`(
+            jdbcTemplate.batchUpdate(
+                anyString(),
+                anyList(),
+                anyInt(),
+                any<ParameterizedPreparedStatementSetter<String>>(),
+            ),
+        ).thenAnswer { invocation ->
+            val setter = invocation.getArgument<ParameterizedPreparedStatementSetter<String>>(3)
+            setter.setValues(ps, "posts/1.png")
+            arrayOf(intArrayOf(1))
+        }
+
         repository.replacePostImageReferences(10L, listOf("posts/1.png", "posts/2.png", "  posts/1.png  ", ""))
 
         verify(jdbcTemplate, times(1)).update(anyString(), eq(10L))
-        verify(jdbcTemplate, times(1)).batchUpdate(
-            anyString(),
-            eq(listOf("posts/1.png", "posts/2.png")),
-            eq(2),
-            any<ParameterizedPreparedStatementSetter<String>>(),
-        )
+        verify(ps, times(1)).setLong(1, 10L)
+        verify(ps, times(1)).setString(2, "posts/1.png")
+
+        // postId <= 0L early return
+        repository.replacePostImageReferences(0L, listOf("posts/1.png"))
+        verify(jdbcTemplate, times(1)).update(anyString(), eq(10L))
     }
 
     @Test
@@ -96,17 +134,48 @@ class PostImageReferenceJdbcRepositoryTest {
     }
 
     @Test
+    fun `PostImageReference model entity 생성 및 프로퍼티 검증`() {
+        val refWithDefaults =
+            PostImageReference(
+                postId = 10L,
+                objectKey = "posts/image.png",
+            )
+        assertThat(refWithDefaults.id).isEqualTo(0L)
+        assertThat(refWithDefaults.postId).isEqualTo(10L)
+        assertThat(refWithDefaults.objectKey).isEqualTo("posts/image.png")
+        assertThat(refWithDefaults.uploadedFileId).isNull()
+
+        val refWithAllArgs =
+            PostImageReference(
+                id = 99L,
+                postId = 20L,
+                objectKey = "posts/custom.jpg",
+                uploadedFileId = 123L,
+            )
+        assertThat(refWithAllArgs.id).isEqualTo(99L)
+        assertThat(refWithAllArgs.postId).isEqualTo(20L)
+        assertThat(refWithAllArgs.objectKey).isEqualTo("posts/custom.jpg")
+        assertThat(refWithAllArgs.uploadedFileId).isEqualTo(123L)
+    }
+
+    @Test
     fun `findObjectKeysByPostId - 키 목록을 조회한다`() {
+        val rs = mock(ResultSet::class.java)
+        `when`(rs.getString("object_key")).thenReturn("posts/1.png")
+
         `when`(
             jdbcTemplate.query(
                 anyString(),
                 any<RowMapper<String>>(),
                 eq(10L),
             ),
-        ).thenReturn(listOf("posts/1.png", "posts/2.png"))
+        ).thenAnswer { invocation ->
+            val rowMapper = invocation.getArgument<RowMapper<String>>(1)
+            listOf(rowMapper.mapRow(rs, 1))
+        }
 
         val keys = repository.findObjectKeysByPostId(10L)
-        assertThat(keys).containsExactly("posts/1.png", "posts/2.png")
+        assertThat(keys).containsExactly("posts/1.png")
 
         val emptyKeys = repository.findObjectKeysByPostId(-1L)
         assertThat(emptyKeys).isEmpty()

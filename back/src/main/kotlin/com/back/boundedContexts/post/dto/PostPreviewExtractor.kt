@@ -73,25 +73,32 @@ object PostPreviewExtractor {
             }
         }
 
-        val lines = remaining.lines()
-        var consumed = 0
-        for (line in lines) {
+        if (thumbnail != null) {
+            return PreviewMetadata(
+                body = remaining,
+                thumbnail = thumbnail,
+            )
+        }
+
+        var offset = 0
+        while (offset < remaining.length) {
+            val nextNewline = remaining.indexOf('\n', offset)
+            val lineEnd = if (nextNewline == -1) remaining.length else nextNewline
+            val line = remaining.substring(offset, lineEnd)
             if (line.isBlank()) {
-                consumed += 1
+                offset = if (nextNewline == -1) remaining.length else nextNewline + 1
                 break
             }
 
             val match = metadataLineRegex.matchEntire(line) ?: break
             assignScalar(match.groupValues[1], match.groupValues[2])
-            consumed += 1
+            offset = if (nextNewline == -1) remaining.length else nextNewline + 1
         }
 
-        if (consumed > 0) {
-            remaining = lines.drop(consumed).joinToString("\n").trimStart()
-        }
+        val body = if (offset > 0) remaining.substring(offset).trimStart() else remaining
 
         return PreviewMetadata(
-            body = remaining,
+            body = body,
             thumbnail = thumbnail,
         )
     }

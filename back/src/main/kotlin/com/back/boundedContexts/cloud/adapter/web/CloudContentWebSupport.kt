@@ -11,6 +11,7 @@ import org.springframework.core.io.InputStreamResource
 import org.springframework.core.io.Resource
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpRange
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -148,38 +149,18 @@ object CloudContentWebSupport {
         rangeHeader: String,
         totalLength: Long,
     ): LongRange? {
-        if (!rangeHeader.startsWith("bytes=")) return null
-        if (totalLength <= 0) return null
-
-        val spec = rangeHeader.removePrefix("bytes=").trim()
-        if (spec.contains(",")) return null
-
-        val (rawStart, rawEnd) =
-            spec.split("-", limit = 2).let {
-                if (it.size != 2) return null
-                it[0].trim() to it[1].trim()
-            }
-
-        if (rawStart.isEmpty()) {
-            val suffixLength = rawEnd.toLongOrNull() ?: return null
-            if (suffixLength <= 0) return null
-            val actualLength = minOf(suffixLength, totalLength)
-            val start = totalLength - actualLength
-            return start..(totalLength - 1)
-        }
-
-        val start = rawStart.toLongOrNull() ?: return null
-        if (start < 0 || start >= totalLength) return null
-
-        val end =
-            if (rawEnd.isEmpty()) {
-                totalLength - 1
+        if (!rangeHeader.startsWith("bytes=") || totalLength <= 0L) return null
+        return runCatching {
+            val ranges = HttpRange.parseRanges(rangeHeader)
+            if (ranges.size != 1) return null
+            val range = ranges[0]
+            val start = range.getRangeStart(totalLength)
+            val end = range.getRangeEnd(totalLength)
+            if (start in 0..end && end < totalLength) {
+                start..end
             } else {
-                val parsedEnd = rawEnd.toLongOrNull() ?: return null
-                if (parsedEnd < start) return null
-                minOf(parsedEnd, totalLength - 1)
+                null
             }
-
-        return start..end
+        }.getOrNull()
     }
 }

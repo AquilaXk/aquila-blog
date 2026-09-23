@@ -29,15 +29,17 @@ class Rq(
         get() =
             (SecurityContextHolder.getContext()?.authentication?.principal as? SecurityUser)
                 ?.let { securityUser ->
-                    runCatching { actorApplicationService.memberOf(securityUser) }
-                        .onFailure { exception ->
-                            logger.warn(
-                                "actor_resolution_fallback actorId={} reason={}",
-                                securityUser.id,
-                                exception::class.java.simpleName,
-                                exception,
-                            )
-                        }.getOrNull()
+                    try {
+                        actorApplicationService.memberOf(securityUser)
+                    } catch (exception: AppException) {
+                        logger.warn(
+                            "actor_resolution_fallback actorId={} reason={}",
+                            securityUser.id,
+                            exception::class.java.simpleName,
+                            exception,
+                        )
+                        null
+                    }
                 }
 
     val actor: Member

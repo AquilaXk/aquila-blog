@@ -131,6 +131,30 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(marker.strValue).isEqualTo(createdPost.id.toString())
     }
 
+    @Test
+    fun `getOrCreateTemp reconciles existing tracked post when isTempDraft is false`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
+        val author = testMember()
+        val existingPost = testPost(author = author)
+        existingPost.isTempDraft = false
+        val marker = MemberAttr(1, author, "activeTempDraftPostId", existingPost.id.toString())
+        given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(marker)
+        given(postRepository.findById(existingPost.id)).willReturn(Optional.of(existingPost))
+        given(memberAttrRepository.incrementIntValue(author, "activeTempDraftLock", 1)).willReturn(1)
+        given(postRepository.save(anyValue())).willAnswer { it.arguments[0] as Post }
+
+        val (post, created) = service.getOrCreateTemp(author)
+
+        assertThat(created).isFalse()
+        assertThat(post).isSameAs(existingPost)
+        assertThat(post.isTempDraft).isTrue()
+        then(postRepository).should().save(existingPost)
+        then(postRepository).should().flush()
+    }
+
     private fun testMember(id: Long = 1): Member =
         Member(id = id, username = "user-$id", nickname = "작성자$id", apiKey = "api-key-$id").also {
             val now = Instant.now()

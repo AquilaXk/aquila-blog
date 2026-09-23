@@ -53,6 +53,7 @@ object UploadedFileUrlCodec {
             url
                 ?.trim()
                 ?.substringBefore("?")
+                ?.substringBefore("#")
                 ?.takeIf(String::isNotBlank)
                 ?: return null
 
@@ -81,14 +82,16 @@ object UploadedFileUrlCodec {
 
         val escapedBackUrl = Regex.escape(AppConfig.siteBackUrl)
         val absoluteRegex = Regex("$escapedBackUrl${Regex.escape(pathPrefix)}([^\\s)\"'>]+)")
-        val relativeRegex = Regex("${Regex.escape(pathPrefix)}([^\\s)\"'>]+)")
+        val relativeRegex = Regex("(?<=^|[\\s(\"'>\\[])${Regex.escape(pathPrefix)}([^\\s)\"'>]+)")
 
         return buildSet {
             absoluteRegex.findAll(content).forEach { match ->
-                decodeOrNull(match.groupValues[1])?.let(::add)
+                val rawCandidate = match.groupValues[1].substringBefore("?").substringBefore("#")
+                decodeOrNull(rawCandidate)?.takeIf(String::isNotBlank)?.let(::add)
             }
             relativeRegex.findAll(content).forEach { match ->
-                decodeOrNull(match.groupValues[1])?.let(::add)
+                val rawCandidate = match.groupValues[1].substringBefore("?").substringBefore("#")
+                decodeOrNull(rawCandidate)?.takeIf(String::isNotBlank)?.let(::add)
             }
         }
     }

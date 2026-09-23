@@ -61,8 +61,7 @@ if [[ "${needs_public_contract_check}" == "true" ]]; then
   echo "[pre-commit] Platform 계약 산출물 검사 실행"
   back/gradlew -p back test \
     --tests "com.back.global.springDoc.OpenApiContractExportTest" \
-    --tests "com.back.global.contracts.ErrorCodeContractExportTest" \
-    --no-daemon
+    --tests "com.back.global.contracts.ErrorCodeContractExportTest"
   node tools/contracts/sync-public-contracts.mjs
   git ls-files --error-unmatch -- \
     contracts/public-api/openapi.json \

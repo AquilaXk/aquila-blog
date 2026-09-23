@@ -128,6 +128,10 @@ class PostWriteSideEffectHandler(
                         currentFileObjectKeys = attachmentKeys.currentFileObjectKeys,
                         previousFileObjectKeys = attachmentKeys.previousFileObjectKeys,
                     )
+                    postRepository.syncImageReferences(
+                        postId = postId,
+                        objectKeys = (attachmentKeys.currentImageObjectKeys + attachmentKeys.currentFileObjectKeys).toSet(),
+                    )
                 }?.let(failures::add)
             PostAttachmentTaskAction.DELETE ->
                 runAfterCommitSideEffectInNewTransaction(
@@ -138,6 +142,7 @@ class PostWriteSideEffectHandler(
                         attachmentKeys.deletedImageObjectKeys,
                         attachmentKeys.deletedFileObjectKeys,
                     )
+                    postRepository.deleteImageReferencesByPostId(postId)
                 }?.let(failures::add)
         }
 

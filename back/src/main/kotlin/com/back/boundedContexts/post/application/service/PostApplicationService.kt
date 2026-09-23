@@ -20,6 +20,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.task.application.TaskFacade
 import com.back.standard.dto.EventPayload
 import com.back.standard.dto.page.PagedResult
@@ -69,7 +70,7 @@ class PostApplicationService(
         summaryMode: PostSummaryMode,
     ): Post {
         validateCreateSummaryIntent(summary, summaryMode)
-        val persistenceAuthor = author.toPersistenceMember()
+        val persistenceAuthor = author
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
 
         if (normalizedIdempotencyKey == null) {
@@ -267,6 +268,10 @@ class PostApplicationService(
             )?.let { resolved -> post.applyResolvedSummary(resolved) }
             postRepository.flush()
             postTagIndexService.syncPostTags(post)
+            postRepository.syncImageReferences(
+                post.id,
+                UploadedFileUrlCodec.extractObjectKeysFromContent(post.content),
+            )
             if (wasTempDraft) {
                 postTempDraftService.updateTempDraftMarker(post.author, null)
             }
@@ -359,6 +364,10 @@ class PostApplicationService(
         val savedPost = postRepository.saveAndFlush(post)
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
         postTagIndexService.syncPostTags(savedPost)
+        postRepository.syncImageReferences(
+            savedPost.id,
+            UploadedFileUrlCodec.extractObjectKeysFromContent(savedPost.content),
+        )
         postCounterService.incrementMemberPostsCount(persistenceAuthor)
         return savedPost
     }
@@ -449,6 +458,7 @@ class PostApplicationService(
         if (!softDeleted) {
             throw AppException(ErrorCode.NOT_FOUND, "${post.id}번 글을 찾을 수 없습니다.")
         }
+        postRepository.deleteImageReferencesByPostId(post.id)
         if (wasTempDraft) {
             postTempDraftService.updateTempDraftMarker(post.author, null)
         }
@@ -666,6 +676,10 @@ class PostApplicationService(
                 ?: throw AppException(ErrorCode.NOT_FOUND, "복구된 글을 확인할 수 없습니다.")
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(restoredPost.author))
         postTagIndexService.syncPostTags(restoredPost)
+        postRepository.syncImageReferences(
+            restoredPost.id,
+            UploadedFileUrlCodec.extractObjectKeysFromContent(restoredPost.content),
+        )
         val restoredTags = postTagIndexService.extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
         publishPostWriteAfterCommitEvent(
@@ -700,6 +714,7 @@ class PostApplicationService(
         if (!hardDeleted) {
             throw AppException(ErrorCode.NOT_FOUND, "이미 영구삭제되었거나 존재하지 않는 글입니다.")
         }
+        postRepository.deleteImageReferencesByPostId(id)
 
         publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
@@ -730,7 +745,7 @@ class PostApplicationService(
     ): PagedResult<Post> =
         findAndHydratePagedPosts(page, pageSize) {
             postRepository.findQPagedByAuthorAndKw(
-                author.toPersistenceMember(),
+                author,
                 PostRepositoryPort.PagedQuery(
                     kw = kw,
                     zeroBasedPage = page - 1,

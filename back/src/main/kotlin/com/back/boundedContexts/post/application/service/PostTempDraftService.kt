@@ -21,13 +21,13 @@ class PostTempDraftService(
     private val activeTempDraftLockAttrName = "activeTempDraftLock"
 
     fun findTemp(author: Member): Post? {
-        val persistenceAuthor = author.toPersistenceMember()
+        val persistenceAuthor = author
         return resolveTrackedTempPost(persistenceAuthor)
     }
 
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
-        val persistenceAuthor = author.toPersistenceMember()
+        val persistenceAuthor = author
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
         if (!tryAcquireTempDraftLock(persistenceAuthor)) {
             throw AppException(ErrorCode.RESOURCE_CONFLICT, "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.")

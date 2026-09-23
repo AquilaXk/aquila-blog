@@ -3,7 +3,8 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.input.ActorQueryUseCase
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.MemberProxy
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.security.domain.SecurityUser
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,10 +18,9 @@ class ActorApplicationService(
     private val canonicalAdminPolicy: CanonicalAdminPolicy,
 ) : ActorQueryUseCase {
     @Transactional(readOnly = true)
-    fun memberOf(securityUser: SecurityUser): Member {
-        val realMember = getReferenceById(securityUser.id)
-        return MemberProxy(realMember, securityUser.id, securityUser.username, securityUser.nickname)
-    }
+    fun memberOf(securityUser: SecurityUser): Member =
+        findById(securityUser.id)
+            ?: throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 회원입니다.")
 
     @Transactional(readOnly = true)
     override fun findByLoginId(loginId: String): Member? = memberRepository.findByLoginId(loginId)

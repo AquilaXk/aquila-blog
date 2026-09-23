@@ -47,6 +47,10 @@
     {
       "file": "back/src/main/resources/db/migration/V20260908_01__migrate_retired_storage_urls.sql",
       "class": "REQUIRES_N_MINUS_1_TEST"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260923_01__create_post_image_references.sql",
+      "class": "EXPAND_SAFE"
     }
   ],
   "cutovers": [

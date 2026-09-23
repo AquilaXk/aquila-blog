@@ -2,10 +2,11 @@ package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.MemberProxy
 import com.back.global.app.AdminProperties
+import com.back.global.exception.application.AppException
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.security.core.authority.SimpleGrantedAuthority
@@ -96,47 +97,25 @@ class ActorApplicationServiceTest {
 
         val member = actorApplicationService.memberOf(securityUser)
 
-        assertThat(member).isInstanceOf(MemberProxy::class.java)
+        assertThat(member).isInstanceOf(Member::class.java)
         assertThat(member.id).isEqualTo(user1.id)
         assertThat(member.username).isEqualTo(user1.username)
         assertThat(member.nickname).isEqualTo(user1.nickname)
     }
 
     @Test
-    fun `MemberProxy 에서 nickname을 수정하면 실제 회원에도 반영된다`() {
-        val securityUser =
+    fun `존재하지 않는 SecurityUser 로 회원을 조회하면 NOT_FOUND 예외가 발생한다`() {
+        val missingSecurityUser =
             SecurityUser(
-                user1.id,
-                user1.username,
-                user1.password ?: "",
-                user1.nickname,
+                999999L,
+                "missing",
+                "",
+                "missing",
                 listOf(SimpleGrantedAuthority("ROLE_USER")),
             )
 
-        val member = actorApplicationService.memberOf(securityUser)
-
-        member.nickname = "프록시유저1"
-
-        assertThat(user1.nickname).isEqualTo("프록시유저1")
-    }
-
-    @Test
-    fun `MemberProxy 에서 관리자 권한을 부여하면 실제 회원에도 반영된다`() {
-        val securityUser =
-            SecurityUser(
-                user1.id,
-                user1.username,
-                user1.password ?: "",
-                user1.nickname,
-                listOf(SimpleGrantedAuthority("ROLE_USER")),
-            )
-
-        val member = actorApplicationService.memberOf(securityUser)
-
-        member.grantAdmin()
-
-        assertThat(member.isAdmin).isTrue()
-        assertThat(user1.isAdmin).isTrue()
+        assertThatThrownBy { actorApplicationService.memberOf(missingSecurityUser) }
+            .isInstanceOf(AppException::class.java)
     }
 
     @Test

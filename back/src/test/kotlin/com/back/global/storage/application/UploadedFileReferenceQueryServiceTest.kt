@@ -85,7 +85,7 @@ class UploadedFileReferenceQueryServiceTest {
                 ownerId = 10L,
                 ownerType = UploadedFileOwnerType.POST,
             )
-        given(postRepository.existsByIdAndContentContaining(10L, "posts/2026/03/post.png")).willReturn(true)
+        given(postRepository.existsImageReference(10L, "posts/2026/03/post.png")).willReturn(true)
 
         val result = service.findReferencedObjectKeys(listOf(postFile))
         assertThat(result).containsExactly("posts/2026/03/post.png")
@@ -178,27 +178,27 @@ class UploadedFileReferenceQueryServiceTest {
         val file6 = makeFile(key6)
         val fileNone = makeFile(keyNone)
 
-        // key1: post content by key
-        given(postRepository.existsByContentContaining(key1)).willReturn(true)
+        // key1: post image reference by key
+        given(postRepository.existsImageReferenceByObjectKey(key1)).willReturn(true)
 
-        // key2: post content by fileUrl
-        given(postRepository.existsByContentContaining(key2)).willReturn(false)
-        given(postRepository.existsByContentContaining(UploadedFileUrlCodec.buildFileUrl(key2))).willReturn(true)
+        // key2: member attr draft by key
+        given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, key2)).willReturn(true)
 
-        // key3: member attr draft by key
-        given(postRepository.existsByContentContaining(key3)).willReturn(false)
-        given(postRepository.existsByContentContaining(UploadedFileUrlCodec.buildFileUrl(key3))).willReturn(false)
-        given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, key3)).willReturn(true)
+        // key3: member attr pub by key
+        given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, key3)).willReturn(false)
+        given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, key3)).willReturn(true)
 
-        // key4: member attr pub by key
-        given(postRepository.existsByContentContaining(key4)).willReturn(false)
-        given(postRepository.existsByContentContaining(UploadedFileUrlCodec.buildFileUrl(key4))).willReturn(false)
+        // key4: member attr draft by imageUrl
         given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, key4)).willReturn(false)
-        given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, key4)).willReturn(true)
+        given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, key4)).willReturn(false)
+        given(
+            memberAttrRepository.existsByNameAndStrValueContaining(
+                PROFILE_WORKSPACE_DRAFT,
+                UploadedFileUrlCodec.buildImageUrl(key4),
+            ),
+        ).willReturn(true)
 
-        // key5: member attr draft by imageUrl
-        given(postRepository.existsByContentContaining(key5)).willReturn(false)
-        given(postRepository.existsByContentContaining(UploadedFileUrlCodec.buildFileUrl(key5))).willReturn(false)
+        // key5: member attr pub by imageUrl
         given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, key5)).willReturn(false)
         given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, key5)).willReturn(false)
         given(
@@ -206,29 +206,15 @@ class UploadedFileReferenceQueryServiceTest {
                 PROFILE_WORKSPACE_DRAFT,
                 UploadedFileUrlCodec.buildImageUrl(key5),
             ),
-        ).willReturn(true)
-
-        // key6: member attr pub by imageUrl
-        given(postRepository.existsByContentContaining(key6)).willReturn(false)
-        given(postRepository.existsByContentContaining(UploadedFileUrlCodec.buildFileUrl(key6))).willReturn(false)
-        given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, key6)).willReturn(false)
-        given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, key6)).willReturn(false)
-        given(
-            memberAttrRepository.existsByNameAndStrValueContaining(
-                PROFILE_WORKSPACE_DRAFT,
-                UploadedFileUrlCodec.buildImageUrl(key6),
-            ),
         ).willReturn(false)
         given(
             memberAttrRepository.existsByNameAndStrValueContaining(
                 PROFILE_WORKSPACE_PUBLISHED,
-                UploadedFileUrlCodec.buildImageUrl(key6),
+                UploadedFileUrlCodec.buildImageUrl(key5),
             ),
         ).willReturn(true)
 
         // keyNone: all false
-        given(postRepository.existsByContentContaining(keyNone)).willReturn(false)
-        given(postRepository.existsByContentContaining(UploadedFileUrlCodec.buildFileUrl(keyNone))).willReturn(false)
         given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, keyNone)).willReturn(false)
         given(memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, keyNone)).willReturn(false)
         given(
@@ -244,7 +230,7 @@ class UploadedFileReferenceQueryServiceTest {
             ),
         ).willReturn(false)
 
-        val result = service.findReferencedObjectKeys(listOf(file1, file2, file3, file4, file5, file6, fileNone))
-        assertThat(result).containsExactly(key1, key2, key3, key4, key5, key6)
+        val result = service.findReferencedObjectKeys(listOf(file1, file2, file3, file4, file5, fileNone))
+        assertThat(result).containsExactly(key1, key2, key3, key4, key5)
     }
 }

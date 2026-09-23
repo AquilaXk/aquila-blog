@@ -1,7 +1,7 @@
 name: p14141_dev
 services:
   redis_1:
-    image: redis:latest
+    image: redis:7.4-alpine
     container_name: redis_1
     ports:
       - "6379:6379"
@@ -9,7 +9,7 @@ services:
       TZ: Asia/Seoul
     command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru --requirepass ${DEV_REDIS_PASSWORD:-dev_redis_password_change_me}
   db_1:
-    image: jangka512/pgj:latest
+    image: jangka512/pgj:16-3.15
     container_name: db_1
     ports:
       - "5432:5432"
@@ -39,7 +39,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql
   minio_1:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
     container_name: minio_1
     ports:
       - "9000:9000"

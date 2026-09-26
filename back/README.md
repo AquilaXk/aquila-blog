@@ -5,26 +5,35 @@
 
 ## Stack
 
-- Spring Boot 4
-- Kotlin
-- Spring Data JPA + PostgreSQL
-- Redis (락/큐/캐시 보조)
-- MinIO (이미지 저장)
+- Spring Boot 4.1.1
+- Kotlin 2.4.10
+- Java 25 (JVM release 24)
+- Spring Data JPA + PostgreSQL (PGroonga)
+- Redis 7.4 (락/큐/캐시 보조)
+- MinIO (이미지/클라우드 파일 저장 및 멀티파트 업로드)
 - Spring Security + server-backed sessions
-- SpringDoc OpenAPI
+- SpringDoc OpenAPI 3.1.1 + Swagger UI
+- QueryDSL 7.6
+- ShedLock 7.10.1
 
 ## 아키텍처 요약
 
 - 패키지 기준: `boundedContexts/*`, `global/*`, `standard/*`
-- 도메인 경계: `member`, `post`
+- 도메인 경계 (Bounded Contexts):
+  - `member`: 회원 가입/인증, 프로필, 관리자 세션
+  - `post`: 게시글 CRUD, 피드/탐색/검색, ETag 캐시, 이미지 첨부 및 retention
+  - `cloud`: 대용량 파일/멀티파트 업로드 세션, 외부 스트리밍 토큰, 파일 라이프사이클
+  - `home`: 홈 화면 메타데이터 및 운영 헬스체크
 - 계층 기준: `adapter` / `application` / `domain`
 - 비동기 후속 처리: Task Queue + Scheduler (`TaskProcessingScheduledJob`)
 
 주요 문서:
 
-- [`../docs/design/System-Architecture.md`](../docs/design/System-Architecture.md)
-- [`../docs/design/package-structure.md`](../docs/design/package-structure.md)
-- [`../docs/session-handoff.md`](../docs/session-handoff.md)
+- [`../docs/design/repository-boundaries.md`](../docs/design/repository-boundaries.md) (저장소 분리 및 플랫폼-웹 경계)
+- [`../docs/design/task-delivery-guarantees.md`](../docs/design/task-delivery-guarantees.md) (태스크 큐 및 비동기 처리 보장)
+- [`../docs/design/cache-consistency-contract.md`](../docs/design/cache-consistency-contract.md) (공개 조회 캐시 및 ETag 계약)
+- [`../docs/design/cloud-multipart-state-machine.md`](../docs/design/cloud-multipart-state-machine.md) (클라우드 멀티파트 상태 머신)
+- [`../docs/session-handoff.md`](../docs/session-handoff.md) (운영 세션 핸드오프)
 
 ## 핵심 기능
 
@@ -135,25 +144,38 @@ cd back
 - `./gradlew test` 실행 시 `back/testInfra/docker-compose.yml` 기반 Postgres/Redis를 자동 부트스트랩합니다.
 - 기본 테스트 포트: Postgres `15432`, Redis `16379`
 
-## OpenAPI
+## OpenAPI & 계약 관리
 
-- Swagger UI: `/swagger-ui/index.html`
-- 계약 산출: `back/build/openapi/openapi.json` (테스트 기반 export)
+- Swagger UI: `/swagger-ui/index.html` (로컬: `http://localhost:8080/swagger-ui/index.html`)
+- 플랫폼 공용 계약 산출물: `contracts/public-api/`
+  - `openapi.json`: OpenAPI 3.0 사양
+  - `error-codes.json`: 공통 비즈니스/시스템 에러 코드
+  - `manifest.json`: 산출물 무결성 체크섬
 
-프론트 계약 동기화:
+계약 산출 및 검증 절차:
 
 ```bash
-cd front
-yarn contracts:check
+# 1) 테스트 실행을 통한 최신 OpenAPI 및 에러 코드 export
+./gradlew test --tests "com.back.global.springDoc.OpenApiContractExportTest" --tests "com.back.global.contracts.ErrorCodeContractExportTest"
+
+# 2) 플랫폼 계약 디렉터리로 동기화
+node ../tools/contracts/sync-public-contracts.mjs
+
+# 3) 플랫폼 계약 드리프트 검사
+node ../tools/contracts/check-public-contracts.mjs
 ```
+
+Web 저장소 계약 반영:
+- Platform `main` 브랜치 병합 시 `.github/workflows/sync-public-contract-to-web.yml` 자동화 워크플로우를 통해 Web 저장소로 자동 PR이 생성됩니다.
+- Web 저장소([aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web))에서는 `yarn contracts:check` 또는 `yarn contracts:import:local`을 사용하여 계약을 검증하고 타입을 생성합니다.
 
 ## 배포
 
-- 이미지 빌드/푸시: GHCR
-- 홈서버 Blue/Green 배포: `.github/workflows/deploy.yml`
-- 운영 체크: `../docs/design/DevOps.md`
+- 이미지 빌드/푸시: GHCR (`ghcr.io/aquilaxk/aquila-blog-back`)
+- 홈서버 Blue/Green 무중단 배포: `.github/workflows/deploy.yml`, `deploy/homeserver/blue_green_deploy.sh`
+- 운영 및 보안 체크: [`../deploy/homeserver/HARDENING.md`](../deploy/homeserver/HARDENING.md), [`../docs/design/launch-gate-operations.md`](../docs/design/launch-gate-operations.md)
 
 ## 참고
 
 - 운영 환경값은 GitHub Actions의 `HOME_SERVER_ENV`가 배포 시 `.env.prod`로 주입됩니다.
-- 실운영 트리아지는 `../docs/session-handoff.md`를 기준으로 진행합니다.
+- 실운영 트리아지는 [`../docs/session-handoff.md`](../docs/session-handoff.md)를 기준으로 진행합니다.

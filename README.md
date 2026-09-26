@@ -68,19 +68,19 @@ Spring Boot + Kotlin API
 
 | Area | Stack |
 | --- | --- |
-| Frontend | Next.js, React, TypeScript, Emotion, TanStack Query |
-| Editor / Rendering | Tiptap, react-markdown, Mermaid, Shiki, KaTeX |
-| Backend | Spring Boot, Kotlin, Spring Security, JPA, QueryDSL, Flyway |
-| Data / Storage | PostgreSQL, Redis, MinIO |
-| Infra / Deploy | Home Server, Caddy, Cloudflare Tunnel, Docker Compose, GHCR |
+| Platform / Backend | Spring Boot 4.1.1, Kotlin 2.4.10, Java 25 (JVM 24), Spring Security, JPA, QueryDSL 7.6, Flyway, ShedLock |
+| Data & Storage | PostgreSQL 16 (PGroonga), Redis 7.4, MinIO |
+| Infra & Deploy | Home Server, Caddy, Cloudflare Tunnel, Docker Compose, GHCR |
 | Observability | Prometheus, Grafana, Loki, Promtail, Micrometer |
-| Quality | JUnit5, Testcontainers, ArchUnit, Playwright, Storybook, k6 |
+| Platform Quality | JUnit 5, Testcontainers, ArchUnit, ktlint, OWASP Dependency Check, k6 |
+| Frontend (Web Repo) | Next.js 15.5, React 19.2, TypeScript 5.6, Emotion, TanStack Query, Playwright, Storybook ([Web Repository](https://github.com/AquilaXk/aquila-blog-web)) |
 
 ## Project Structure
 
 ```text
 .
 ├── back/                   # Spring Boot + Kotlin API server
+├── contracts/              # Public API & platform contract artifacts
 ├── deploy/homeserver/      # Production compose, Caddy, blue-green deploy, rollback, monitoring
 ├── perf/k6/                # Read-path load and chaos scenarios
 ├── docs/                   # Tracked design and operations documentation
@@ -111,9 +111,9 @@ git config --get core.hooksPath
 
 `.githooks/`에는 아래 훅이 들어 있으며, 위 설정을 해야 적용됩니다.
 
-- `commit-msg`: 커밋 제목이 `<type>(<scope>): 한글+English 요약` 형식인지 검사합니다.
-- `pre-commit`: 스테이징된 파일에 저장소 경계 가드와 필요한 OpenAPI 계약 드리프트 검사를 실행합니다.
-- `pre-push`: 브랜치 이름이 `type/short-description` 형식인지 확인하고 `main` 직접 push 를 차단합니다.
+- `commit-msg`: 커밋 제목이 `<type>(<scope>): <summary>` 형식(ASCII 문자 및 영문 요약 필수)인지 검사합니다.
+- `pre-commit`: 스테이징된 파일에 저장소 경계 가드, 금지 파일 검사, 계약 및 테스트 인벤토리 검사를 실행합니다.
+- `pre-push`: 브랜치 이름이 `type/short-description` 형식인지 확인하고 `main` 직접 push를 차단합니다.
 
 (worktree 사용 시) 절대 경로로 지정하면 linked worktree에서도 메인 checkout에 있는 훅 스크립트(현재 브랜치와 다른 버전일 수 있음)가 실행되므로 상대 경로를 사용합니다.
 
@@ -122,6 +122,12 @@ git config --get core.hooksPath
 ```bash
 docker compose -f back/devInfra/docker-compose.yml up -d
 ```
+
+기본 로컬 인프라 포트 매핑:
+- PostgreSQL: `5432` (database: `blog_dev`, `blog_test`)
+- Redis: `6379`
+- MinIO API: `9000`
+- MinIO Web Console: `9001` (기본 계정: `minio` / `dev_minio_password_change_me`)
 
 ### 3. Start Backend
 
@@ -139,27 +145,34 @@ Web source와 로컬 실행 절차는 [AquilaXk/aquila-blog-web](https://github.
 | Frontend | `http://localhost:3000` |
 | Backend API | `http://localhost:8080` |
 | Swagger UI | `http://localhost:8080/swagger-ui/index.html` |
+| MinIO Console | `http://localhost:9001` |
 
 ## Environment Variables
 
-Local development can run with the default development infrastructure. External integrations require additional variables.
+Local development can run with the default development infrastructure without additional configuration. External integrations require additional variables.
 
 | Variable | Used by | Description |
 | --- | --- | --- |
-| `CUSTOM__JWT__SECRET_KEY` | Backend | JWT signing key |
+| `CUSTOM__JWT__SECRET_KEY` | Backend | JWT signing key (default fallback provided in dev profile) |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | MinIO | Local object storage credentials |
 
 ## Quality Checks
 
 ```bash
-# Backend
+# 1. Backend Lint & Unit/Integration Tests
 cd back
 ./gradlew ktlintCheck
+./gradlew compileKotlin
 ./gradlew test
 
+# 2. Platform Contract & Guard Verification
+cd ..
+node tools/contracts/check-public-contracts.mjs
+bash tools/guards/check-forbidden-tracked-files.sh
+node tools/ci/verify-test-execution-inventory.mjs
 ```
 
-이 저장소의 추가 검증에는 k6 부하 시나리오와 backend architecture/deploy contract tests가 포함됩니다. Playwright, Storybook, Web bundle 검증은 [Web repository](https://github.com/AquilaXk/aquila-blog-web)에서 실행합니다.
+이 저장소의 추가 검증에는 k6 부하 시나리오(`perf/k6/README.md`)와 backend architecture/deploy contract tests가 포함됩니다. Playwright, Storybook, Web bundle 검증은 [Web repository](https://github.com/AquilaXk/aquila-blog-web)에서 실행합니다.
 
 ## Documentation
 

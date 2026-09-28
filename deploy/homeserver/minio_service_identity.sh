@@ -135,7 +135,7 @@ validate_inputs() {
   ROTATION_STARTED_AT="$(env_value "CUSTOM_STORAGE_ROTATION_STARTED_AT_EPOCH_SECONDS")"
 
   is_digest_image "${MINIO_MC_IMAGE}" || fail "mc_image_invalid"
-  [[ "${MINIO_MC_IMAGE}" == "ghcr.io/aquilaxk/minio-mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727" ]] ||
+  [[ "${MINIO_MC_IMAGE}" == "ghcr.io/aquilaxk/minio-mc:RELEASE.2026-09-16T00-00-00Z@sha256:cfc83108c3abb371f8fb84d99c1fdc88f8c237e022409b0081fb7c0a3be634dd" ]] ||
     fail "mc_image_not_approved"
   is_digest_image "${NODE_RUNTIME_IMAGE}" || fail "node_runtime_image_invalid"
   [[ -n "${ROOT_ACCESS_KEY}" && -n "${ROOT_SECRET_KEY}" ]] || fail "root_identity_missing"

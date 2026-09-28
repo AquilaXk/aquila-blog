@@ -30,9 +30,9 @@ const doctorPath = path.join(repoRoot, "deploy/homeserver/doctor.sh")
 const precheckPath = path.join(repoRoot, "deploy/homeserver/post_precheck_env_guard.sh")
 
 const pinnedMinioImage =
-  "ghcr.io/aquilaxk/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+  "ghcr.io/aquilaxk/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
 const pinnedMcImage =
-  "ghcr.io/aquilaxk/minio-mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727"
+  "ghcr.io/aquilaxk/minio-mc:RELEASE.2026-09-16T00-00-00Z@sha256:cfc83108c3abb371f8fb84d99c1fdc88f8c237e022409b0081fb7c0a3be634dd"
 const pinnedNodeImage = "node@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293"
 const rootSecret = "root-secret-for-contract-tests"
 const firstSecret = "first-generated-storage-secret-value"

@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: "gradle"
     directory: "/back"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       kotlin:
         patterns:
@@ -41,7 +41,7 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       actions:
         patterns:

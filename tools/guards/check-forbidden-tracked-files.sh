@@ -13,6 +13,7 @@ fi
 is_allowed_markdown() {
   case "$1" in
     README.md|\
+    CHANGELOG.md|\
     .github/pull_request_template.md|\
     SECURITY.md|\
     back/PERF_SANITY_REPORT.md|\

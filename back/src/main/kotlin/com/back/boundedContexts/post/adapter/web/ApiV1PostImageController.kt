@@ -243,7 +243,7 @@ class ApiV1PostImageController(
             builder
                 .cacheControl(CacheControl.noStore().cachePrivate())
                 .header(HttpHeaders.VARY, HttpHeaders.COOKIE)
-        } else if (purpose == UploadedFilePurpose.POST_IMAGE) {
+        } else if (purpose == UploadedFilePurpose.POST_IMAGE || purpose == UploadedFilePurpose.PROFILE_IMAGE) {
             builder.cacheControl(
                 CacheControl
                     .maxAge(3600, TimeUnit.SECONDS)

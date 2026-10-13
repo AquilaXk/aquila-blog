@@ -982,6 +982,11 @@ test("Caddy access logs skip the active public search route before proxying", ()
   assert(skipIndex > matcherIndex, `${matcherName} log_skip must reference the sensitive matcher`)
   assert(skipIndex < adminHandleIndex, `${matcherName} log_skip must be declared before admin API handling`)
   assert(skipIndex < publicReadHandleIndex, `${matcherName} log_skip must be declared before public read handling`)
+
+  const publicReadBlock = extractCaddySiteBlock(gates, "handle @publicReadFallback {")
+  const adminBlock = extractCaddySiteBlock(gates, "handle @adminApi {")
+  assert.match(publicReadBlock, /encode gzip zstd/, "@publicReadFallback must enable gzip and zstd compression")
+  assert.match(adminBlock, /encode gzip zstd/, "@adminApi must enable gzip and zstd compression")
 })
 
 test("home-server-source contract allows no-auth operations alert SMTP relay", async () => {

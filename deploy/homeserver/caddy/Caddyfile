@@ -98,6 +98,8 @@
 		method GET HEAD OPTIONS
 	}
 	handle @publicReadFallback {
+		encode gzip zstd
+
 		reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
 			import trusted_edge_client_ip
 			header_up Host {host}
@@ -120,6 +122,8 @@
 		path /post/api/v1/adm/* /member/api/v1/adm/* /system/api/v1/adm/*
 	}
 	handle @adminApi {
+		encode gzip zstd
+
 		reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
 			import trusted_edge_client_ip
 			header_up Host {host}

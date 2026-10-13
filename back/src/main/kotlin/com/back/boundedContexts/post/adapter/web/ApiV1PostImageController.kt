@@ -51,6 +51,7 @@ class ApiV1PostImageController(
 ) {
     companion object {
         private const val POST_IMAGE_MAX_FILE_SIZE_BYTES = 8L * 1024 * 1024
+        private const val IMAGE_NOT_FOUND_MESSAGE = "이미지를 찾을 수 없습니다."
     }
 
     data class UploadPostImageResBody(
@@ -115,7 +116,7 @@ class ApiV1PostImageController(
                 request,
                 "/post/api/v1/images/",
                 "잘못된 이미지 경로입니다.",
-                "이미지를 찾을 수 없습니다.",
+                IMAGE_NOT_FOUND_MESSAGE,
             )
         val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: throw postImageNotFound()
         val access =
@@ -151,7 +152,7 @@ class ApiV1PostImageController(
 
         val image =
             postImageStorageService.getPostImage(objectKey)
-                ?: throw AppException(ErrorCode.NOT_FOUND, "이미지를 찾을 수 없습니다.")
+                ?: throw AppException(ErrorCode.NOT_FOUND, IMAGE_NOT_FOUND_MESSAGE)
 
         val rangeHeader = request.getHeader(HttpHeaders.RANGE)
         if (!rangeHeader.isNullOrBlank()) {
@@ -232,7 +233,7 @@ class ApiV1PostImageController(
         if (postRepository.findPublicDetailById(postId) == null) throw notFound()
     }
 
-    private fun postImageNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, "이미지를 찾을 수 없습니다.")
+    private fun postImageNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, IMAGE_NOT_FOUND_MESSAGE)
 
     private fun withImageCacheControl(
         builder: ResponseEntity.BodyBuilder,
@@ -243,7 +244,7 @@ class ApiV1PostImageController(
             builder
                 .cacheControl(CacheControl.noStore().cachePrivate())
                 .header(HttpHeaders.VARY, HttpHeaders.COOKIE)
-        } else if (purpose == UploadedFilePurpose.POST_IMAGE) {
+        } else if (purpose == UploadedFilePurpose.POST_IMAGE || purpose == UploadedFilePurpose.PROFILE_IMAGE) {
             builder.cacheControl(
                 CacheControl
                     .maxAge(3600, TimeUnit.SECONDS)

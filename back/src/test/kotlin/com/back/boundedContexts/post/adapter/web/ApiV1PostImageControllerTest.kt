@@ -185,7 +185,11 @@ class ApiV1PostImageControllerTest {
             val response = controller.getPostImage(imageRequest(objectKey))
 
             assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
-            assertThat(response.headers.cacheControl).contains("no-cache").contains("public")
+            assertThat(response.headers.cacheControl)
+                .contains("max-age=3600")
+                .contains("public")
+                .contains("stale-while-revalidate=86400")
+                .doesNotContain("immutable")
             assertThat(response.headers.getFirst(HttpHeaders.VARY)).isNotEqualTo(HttpHeaders.COOKIE)
             assertThat(postImageStorageService.imageDownloads).containsExactly(objectKey)
         }

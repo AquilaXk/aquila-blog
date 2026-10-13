@@ -37,6 +37,7 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Base64
+import java.util.concurrent.TimeUnit
 
 @RestController
 @RequestMapping("/post/api/v1")
@@ -144,6 +145,7 @@ class ApiV1PostImageController(
                     .status(HttpStatus.NOT_MODIFIED)
                     .eTag(etag),
                 access,
+                uploadedFile.purpose,
             ).build()
         }
 
@@ -162,6 +164,7 @@ class ApiV1PostImageController(
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */*")
                         .eTag(etag),
                     access,
+                    uploadedFile.purpose,
                 ).build()
             }
             val range = parseSingleRange(rangeHeader, totalLength)
@@ -173,6 +176,7 @@ class ApiV1PostImageController(
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength")
                         .eTag(etag),
                     access,
+                    uploadedFile.purpose,
                 ).build()
             }
 
@@ -187,6 +191,7 @@ class ApiV1PostImageController(
                     .contentLength(range.last - range.first + 1)
                     .eTag(etag),
                 access,
+                uploadedFile.purpose,
             ).body(body)
         }
 
@@ -198,6 +203,7 @@ class ApiV1PostImageController(
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .eTag(etag),
                 access,
+                uploadedFile.purpose,
             )
 
         val finalizedBuilder =
@@ -231,11 +237,19 @@ class ApiV1PostImageController(
     private fun withImageCacheControl(
         builder: ResponseEntity.BodyBuilder,
         access: ProfileImageReadUseCase.Access,
+        purpose: UploadedFilePurpose,
     ): ResponseEntity.BodyBuilder =
         if (access == ProfileImageReadUseCase.Access.OWNER_ONLY) {
             builder
                 .cacheControl(CacheControl.noStore().cachePrivate())
                 .header(HttpHeaders.VARY, HttpHeaders.COOKIE)
+        } else if (purpose == UploadedFilePurpose.POST_IMAGE) {
+            builder.cacheControl(
+                CacheControl
+                    .maxAge(3600, TimeUnit.SECONDS)
+                    .staleWhileRevalidate(86400, TimeUnit.SECONDS)
+                    .cachePublic(),
+            )
         } else {
             builder.cacheControl(CacheControl.noCache().cachePublic())
         }

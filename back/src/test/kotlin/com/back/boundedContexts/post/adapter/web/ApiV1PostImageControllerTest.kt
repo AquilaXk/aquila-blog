@@ -120,7 +120,11 @@ class ApiV1PostImageControllerTest {
         assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
         assertThat(response.headers.contentType.toString()).isEqualTo("image/png")
         assertThat(response.headers.eTag).isNotBlank()
-        assertThat(response.headers.cacheControl).contains("no-cache").contains("public").doesNotContain("immutable")
+        assertThat(response.headers.cacheControl)
+            .contains("max-age=3600")
+            .contains("public")
+            .contains("stale-while-revalidate=86400")
+            .doesNotContain("immutable")
         assertThat(postImageStorageService.imageDownloads).containsExactly(objectKey)
 
         `when`(postRepository.findPublicDetailById(30L)).thenReturn(null)

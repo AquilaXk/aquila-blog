@@ -156,6 +156,9 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "tools/test/repository-standalone-verification.test.sh",
     ".github/workflows/**",
     ".github/dependabot.yml",
+    ".release-please-manifest.json",
+    "release-please-config.json",
+    "CHANGELOG.md",
   ])
 })
 

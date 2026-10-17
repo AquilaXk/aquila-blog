@@ -88,7 +88,7 @@ object PostPreviewExtractor {
             val line = content.substring(cursor, lineEnd)
             val match = metadataLineRegex.matchEntire(line) ?: break
             extractThumbnailValue(match.groupValues[1], match.groupValues[2])?.let { thumbnail = it }
-            cursor = lineEnd + 1
+            cursor = if (nextNewline == -1) content.length else nextNewline + 1
         }
 
         return HeaderScanResult(

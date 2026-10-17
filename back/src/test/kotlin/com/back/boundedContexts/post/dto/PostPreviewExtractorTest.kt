@@ -67,6 +67,8 @@ class PostPreviewExtractorTest {
             .isEqualTo("https://example.com/real-body.png")
         assertThat(PostPreviewExtractor.extractThumbnail(singleLineMetadata))
             .isEqualTo("https://example.com/single-line.png")
+        assertThat(PostPreviewExtractor.extractThumbnail("tags: [kotlin]")).isNull()
+        assertThat(PostPreviewExtractor.extractThumbnail("thumbnail: \"\"")).isNull()
     }
 
     @Test

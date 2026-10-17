@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.dto
 
+import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.security.application.ContentHtmlTrustState
 import com.back.global.security.application.HtmlContentSanitizer
@@ -55,6 +56,28 @@ data class PublicPostDetailMetaCacheDto(
     }
 
     companion object {
+        fun from(post: Post): PublicPostDetailMetaCacheDto {
+            val authorProfileImageUrl = post.author.publishedProfileImageUrlVersionedOrDefault
+            return PublicPostDetailMetaCacheDto(
+                id = post.id,
+                createdAt = post.createdAt,
+                modifiedAt = post.modifiedAt,
+                authorId = post.author.id,
+                authorName = post.author.name,
+                authorUsername = post.author.name,
+                authorProfileImageUrl = authorProfileImageUrl,
+                authorProfileImageDirectUrl = authorProfileImageUrl,
+                title = post.title,
+                version = post.version ?: 0L,
+                published = post.published,
+                listed = post.listed,
+                likesCount = post.likesCount,
+                hitCount = post.hitCount,
+                summary = post.summaryText.orEmpty(),
+                summarySource = post.summarySource,
+            )
+        }
+
         fun from(detail: PostWithContentDto): PublicPostDetailMetaCacheDto =
             PublicPostDetailMetaCacheDto(
                 id = detail.id,
@@ -93,6 +116,15 @@ data class PublicPostDetailContentCacheDto(
         )
 
     companion object {
+        fun from(post: Post): PublicPostDetailContentCacheDto =
+            PublicPostDetailContentCacheDto(
+                content = post.content,
+                contentHtml = post.contentHtml,
+                contentHtmlHash = post.contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion = post.contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState = post.contentHtmlTrustState ?: ContentHtmlTrustState.UNKNOWN,
+            )
+
         fun from(detail: PostWithContentDto): PublicPostDetailContentCacheDto =
             PublicPostDetailContentCacheDto(
                 content = detail.content,

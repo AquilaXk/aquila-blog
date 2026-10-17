@@ -12,6 +12,9 @@ import com.back.boundedContexts.post.application.port.output.PostWriteRequestIde
 import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
+import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
+import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.app.AppConfig
@@ -87,13 +90,14 @@ class PostApplicationServiceDeleteResilienceTest {
         mock(PostKeywordSearchPipelineService::class.java)
     private val objectMapper = jacksonObjectMapper().also { Ut.JSON.objectMapper = it }
     private val postReadCacheInvalidator = PostReadCacheInvalidator(cacheManager)
+    private val postHydrationService = PostHydrationService(postAttrRepository, memberAttrRepository)
     private val postWriteSideEffectHandler =
         PostWriteSideEffectHandler(
             postReadCacheInvalidator = postReadCacheInvalidator,
             uploadedFileRetentionService = uploadedFileRetentionService,
             postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postRepository = postRepository,
-            postAttrRepository = postAttrRepository,
+            postHydrationService = postHydrationService,
             eventPublisher = eventPublisher,
             objectMapper = objectMapper,
             transactionManager = transactionManager,
@@ -105,7 +109,6 @@ class PostApplicationServiceDeleteResilienceTest {
             taskHandlerRegistry = postWriteTaskHandlerRegistry(),
             taskPayloadEnvelopeCodec = TaskPayloadEnvelopeCodec(objectMapper, Clock.systemUTC()),
         )
-    private val postHydrationService = PostHydrationService(postAttrRepository, memberAttrRepository)
     private val postCounterService =
         PostCounterService(
             postRepository = postRepository,
@@ -136,6 +139,35 @@ class PostApplicationServiceDeleteResilienceTest {
             postTempDraftService = postTempDraftService,
             postHitSideEffectQueue = postHitSideEffectQueue,
         )
+
+    @Test
+    @DisplayName("findPublicDetailById는 작성자 프로필과 함께 카운터 PostAttr를 배치 조회해 hydrate한다")
+    fun hydratePostAttrsOnFindPublicDetailById() {
+        val author = member(10, "상세 작성자")
+        val post = Post(id = 200, author = author, title = "공개 상세", content = "본문", published = true, listed = true)
+        given(postRepository.findPublicDetailById(200)).willReturn(post)
+        given(
+            postAttrRepository.findBySubjectInAndNameIn(
+                listOf(post),
+                listOf(LIKES_COUNT, HIT_COUNT),
+            ),
+        ).willReturn(
+            listOf(
+                PostAttr(1L, post, LIKES_COUNT, 6),
+                PostAttr(2L, post, HIT_COUNT, 19),
+            ),
+        )
+
+        val result = service.findPublicDetailById(200)
+
+        assertThat(result).isSameAs(post)
+        assertThat(post.likesCount).isEqualTo(6)
+        assertThat(post.hitCount).isEqualTo(19)
+        then(postAttrRepository).should().findBySubjectInAndNameIn(
+            listOf(post),
+            listOf(LIKES_COUNT, HIT_COUNT),
+        )
+    }
 
     @Test
     @DisplayName("멱등 글 작성은 replay slot 조회 전에 작성자 행을 잠근다")

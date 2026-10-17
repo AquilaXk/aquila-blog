@@ -9,10 +9,15 @@ import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
+import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicPostDetailMetaCacheDto
+import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import com.back.standard.util.Ut
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -23,12 +28,14 @@ import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.`when`
 import org.slf4j.LoggerFactory
 import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Instant
@@ -48,6 +55,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         @JvmStatic
         @BeforeAll
         fun initAppConfig() {
+            Ut.JSON.objectMapper = jacksonObjectMapper()
             AppConfig(
                 siteBackUrl = "https://api.example.com",
                 siteFrontUrl = "https://example.com",
@@ -538,6 +546,82 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 .counter()!!
                 .count(),
         ).isEqualTo(1.0)
+    }
+
+    @Test
+    @DisplayName("상세 캐시가 모두 cold miss면 findPublicDetailById 1회로 meta/content/snapshot 캐시를 채우고 findPublicDetailContentById를 중복 호출하지 않는다")
+    fun loadsPublicPostDetailInSinglePassOnColdCacheMiss() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val cacheManager = ConcurrentMapCacheManager()
+        val service = createService(postUseCase, SimpleMeterRegistry(), cacheManager = cacheManager)
+        val post =
+            postByAuthor(id = 77L).apply {
+                title = "단일 패스 상세"
+                content = "단일 패스 본문"
+                likesCountAttr = PostAttr(1L, this, LIKES_COUNT, 9)
+                hitCountAttr = PostAttr(2L, this, HIT_COUNT, 42)
+            }
+        given(postUseCase.isPublicDetailReadable(77L)).willReturn(true)
+        given(postUseCase.findPublicDetailById(77L)).willReturn(post)
+
+        val detail = service.getPublicPostDetail(77L)
+
+        assertThat(detail.id).isEqualTo(77L)
+        assertThat(detail.title).isEqualTo("단일 패스 상세")
+        assertThat(detail.content).isEqualTo("단일 패스 본문")
+        assertThat(detail.likesCount).isEqualTo(9)
+        assertThat(detail.hitCount).isEqualTo(42)
+        then(postUseCase).should(times(1)).findPublicDetailById(77L)
+        then(postUseCase).should(never()).findPublicDetailContentById(77L)
+        assertThat(
+            cacheManager
+                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
+                ?.get(77L, PublicPostDetailMetaCacheDto::class.java),
+        ).isNotNull()
+        assertThat(
+            cacheManager
+                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
+                ?.get(77L, PublicPostDetailContentCacheDto::class.java),
+        ).isNotNull()
+        assertThat(
+            cacheManager
+                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                ?.get(77L, PublicPostDetailSnapshotCacheDto::class.java),
+        ).isNotNull()
+    }
+
+    @Test
+    @DisplayName("상세 meta 캐시가 warm이고 content 캐시가 cold miss면 findPublicDetailContentById로 본문만 보충한다")
+    fun loadsContentOnlyWhenDetailMetaCacheIsWarmAndContentCacheIsCold() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val cacheManager = ConcurrentMapCacheManager()
+        val service = createService(postUseCase, SimpleMeterRegistry(), cacheManager = cacheManager)
+        val post =
+            postByAuthor(id = 78L).apply {
+                title = "메타 캐시 히트 글"
+                content = "원본 본문"
+                likesCountAttr = PostAttr(1L, this, LIKES_COUNT, 3)
+                hitCountAttr = PostAttr(2L, this, HIT_COUNT, 14)
+            }
+        cacheManager
+            .getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)!!
+            .put(78L, PublicPostDetailMetaCacheDto.from(post))
+        given(postUseCase.isPublicDetailReadable(78L)).willReturn(true)
+        given(postUseCase.findPublicDetailContentById(78L)).willReturn(
+            PublicPostDetailContentCacheDto(
+                content = "보충된 본문",
+            ),
+        )
+
+        val detail = service.getPublicPostDetail(78L)
+
+        assertThat(detail.id).isEqualTo(78L)
+        assertThat(detail.title).isEqualTo("메타 캐시 히트 글")
+        assertThat(detail.content).isEqualTo("보충된 본문")
+        assertThat(detail.likesCount).isEqualTo(3)
+        assertThat(detail.hitCount).isEqualTo(14)
+        then(postUseCase).should(never()).findPublicDetailById(78L)
+        then(postUseCase).should(times(1)).findPublicDetailContentById(78L)
     }
 
     private fun createService(

@@ -1,7 +1,13 @@
 package com.back.boundedContexts.post.dto
 
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.HexFormat
+import java.util.concurrent.ConcurrentHashMap
+
 object PostMetaExtractor {
-    private const val CACHE_MAX_ENTRIES = 1024
+    internal const val MAX_CACHE_ENTRIES = 512
+    private val HEX_FORMAT = HexFormat.of()
 
     /**
      * PostMeta는 계층 간 데이터 전달에 사용하는 DTO입니다.
@@ -12,10 +18,13 @@ object PostMetaExtractor {
         val categories: List<String>,
     )
 
-    private val metaCache =
-        object : LinkedHashMap<Long, PostMeta>(CACHE_MAX_ENTRIES, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, PostMeta>): Boolean = size > CACHE_MAX_ENTRIES
-        }
+    private val EMPTY_META =
+        PostMeta(
+            tags = emptyList(),
+            categories = emptyList(),
+        )
+
+    private val metaCache = ConcurrentHashMap<String, PostMeta>()
 
     private val metadataLineRegex =
         Regex(
@@ -23,65 +32,79 @@ object PostMetaExtractor {
             RegexOption.IGNORE_CASE,
         )
 
-    fun extract(content: String): PostMeta =
-        synchronized(metaCache) {
-            val key = contentKey(content)
-            metaCache[key] ?: buildMeta(content).also { metaCache[key] = it }
+    fun extract(content: String): PostMeta {
+        val metadataBlock = extractMetadataBlock(content) ?: return EMPTY_META
+        val cacheKey = cacheKeyFor(metadataBlock)
+        metaCache[cacheKey]?.let { return it }
+        val computed = buildMeta(metadataBlock)
+        metaCache[cacheKey] = computed
+        while (metaCache.size > MAX_CACHE_ENTRIES) {
+            metaCache.remove(metaCache.keys.iterator().next())
+        }
+        return computed
+    }
+
+    internal fun clearCache() {
+        metaCache.clear()
+    }
+
+    internal fun cachedEntryCount(): Int = metaCache.size
+
+    internal fun cacheKeyFor(metadataBlock: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(metadataBlock.toByteArray(StandardCharsets.UTF_8))
+        return HEX_FORMAT.formatHex(digest)
+    }
+
+    private fun extractMetadataBlock(content: String): String? {
+        var cursor = skipLeadingWhitespace(content, 0)
+        if (cursor >= content.length) return null
+
+        val blocks = ArrayList<String>(2)
+        if (content.startsWith("---\n", startIndex = cursor)) {
+            val closingIndex = content.indexOf("\n---", startIndex = cursor + 4)
+            if (closingIndex > 0) {
+                blocks.add(content.substring(cursor + 4, closingIndex))
+                cursor = skipLeadingWhitespace(content, closingIndex + 4)
+            }
         }
 
-    private fun buildMeta(content: String): PostMeta {
-        var remaining = content.trimStart()
+        while (cursor < content.length) {
+            val newlineIndex = content.indexOf('\n', startIndex = cursor)
+            val lineEnd = if (newlineIndex == -1) content.length else newlineIndex
+            val line = content.substring(cursor, lineEnd)
+            if (!metadataLineRegex.matches(line)) break
+            blocks.add(line)
+            cursor = lineEnd + 1
+        }
+
+        return if (blocks.isEmpty()) null else blocks.joinToString("\n")
+    }
+
+    private fun skipLeadingWhitespace(
+        text: String,
+        startIndex: Int,
+    ): Int {
+        var index = startIndex
+        while (index < text.length && text[index].isWhitespace()) {
+            index += 1
+        }
+        return index
+    }
+
+    private fun buildMeta(metadataBlock: String): PostMeta {
         val tags = linkedSetOf<String>()
         val categories = linkedSetOf<String>()
 
-        fun appendTags(items: List<String>) {
-            items.forEach { item ->
-                val normalized = item.trim()
-                if (normalized.isNotEmpty()) tags += normalized
-            }
-        }
-
-        fun appendCategories(items: List<String>) {
-            items.forEach { item ->
-                val normalized = item.trim()
-                if (normalized.isNotEmpty()) categories += normalized
-            }
-        }
-
-        if (remaining.startsWith("---\n")) {
-            val closingIndex = remaining.indexOf("\n---", startIndex = 4)
-            if (closingIndex > 0) {
-                remaining
-                    .substring(4, closingIndex)
-                    .lineSequence()
-                    .forEach { line ->
-                        val parts = line.split(":", limit = 2)
-                        if (parts.size < 2) return@forEach
-                        val key = parts[0].trim().lowercase()
-                        val rawValue = parts[1].trim()
-                        if (rawValue.isBlank()) return@forEach
-
-                        when (key) {
-                            "tag", "tags" -> appendTags(parseMetaItems(rawValue))
-                            "category", "categories" -> appendCategories(parseMetaItems(rawValue))
-                        }
-                    }
-                remaining = remaining.substring(closingIndex + 4).trimStart()
-            }
-        }
-
-        for (line in remaining.lineSequence()) {
-            if (line.isBlank()) {
-                break
-            }
-
-            val match = metadataLineRegex.matchEntire(line) ?: break
-            val key = match.groupValues[1].lowercase()
-            val rawValue = match.groupValues[2]
-
-            when (key) {
-                "tag", "tags" -> appendTags(parseMetaItems(rawValue))
-                "category", "categories" -> appendCategories(parseMetaItems(rawValue))
+        metadataBlock.lineSequence().forEach { line ->
+            val parts = line.split(":", limit = 2)
+            if (parts.size == 2) {
+                val key = parts[0].trim().lowercase()
+                val items = parseMetaItems(parts[1])
+                if (key == "tag" || key == "tags") {
+                    tags.addAll(items)
+                } else if (key == "category" || key == "categories") {
+                    categories.addAll(items)
+                }
             }
         }
 
@@ -91,21 +114,17 @@ object PostMetaExtractor {
         )
     }
 
-    private fun contentKey(content: String): Long =
-        (content.hashCode().toLong() shl 32) xor
-            content.length.toLong()
-
-    private fun parseMetaItems(rawValue: String): List<String> {
-        val normalized = rawValue.trim().removePrefix("[").removeSuffix("]")
-        if (normalized.isBlank()) return emptyList()
-
-        return normalized
+    private fun parseMetaItems(rawValue: String): List<String> =
+        rawValue
+            .trim()
+            .removePrefix("[")
+            .removeSuffix("]")
             .split(",")
             .map { token ->
-                val trimmed = token.trim()
-                val unquotedDouble = trimmed.removeSurrounding("\"")
-                val unquotedSingle = unquotedDouble.removeSurrounding("'")
-                unquotedSingle.trim()
+                token
+                    .trim()
+                    .removeSurrounding("\"")
+                    .removeSurrounding("'")
+                    .trim()
             }.filter { it.isNotEmpty() }
-    }
 }

@@ -64,7 +64,7 @@ class PostPublicReadQueryService(
         )
     private val detailContentCacheLimit = detailContentCacheMaxChars.coerceAtLeast(2_048)
     private val detailSnapshotCacheLimit = detailSnapshotCacheMaxChars.coerceAtLeast(detailContentCacheLimit)
-    private val detailCacheLockRegistry = ConcurrentHashMap<Long, Any>()
+    private val detailCacheLockRegistry = ConcurrentHashMap<Long, DetailCacheLock>()
     private val cachePayloadMaxBytes = ConcurrentHashMap<String, AtomicLong>()
 
     @Transactional(readOnly = true)
@@ -659,17 +659,28 @@ class PostPublicReadQueryService(
         return loaded to post
     }
 
+    private class DetailCacheLock {
+        @JvmField
+        var waiters: Int = 0
+    }
+
     private fun <T> withDetailCacheLock(
         id: Long,
         supplier: () -> T,
     ): T {
-        val lock = detailCacheLockRegistry.computeIfAbsent(id) { Any() }
+        val lock =
+            detailCacheLockRegistry.compute(id) { _, existing ->
+                (existing ?: DetailCacheLock()).also { it.waiters += 1 }
+            }!!
         return try {
             synchronized(lock) {
                 supplier()
             }
         } finally {
-            detailCacheLockRegistry.remove(id, lock)
+            detailCacheLockRegistry.computeIfPresent(id) { _, current ->
+                current.waiters -= 1
+                if (current.waiters <= 0) null else current
+            }
         }
     }
 

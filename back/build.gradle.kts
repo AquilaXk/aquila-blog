@@ -26,8 +26,12 @@ description = "back"
 extra["tomcat.version"] = "11.0.25"
 extra["netty.version"] = "4.2.17.Final"
 extra["postgresql.version"] = "42.7.13"
+extra["jackson-2-bom.version"] = "2.21.7"
+extra["jackson-bom.version"] = "3.1.7"
 
 val nettyVersion = extra["netty.version"] as String
+val jackson2Version = extra["jackson-2-bom.version"] as String
+val jackson3Version = extra["jackson-bom.version"] as String
 val awsSdkVersion = "2.54.11"
 val testcontainersVersion = "1.21.4"
 
@@ -172,6 +176,48 @@ tasks.register("verifyNettyVersionAlignment") {
                     .joinToString(separator = ", ")
             throw GradleException(
                 "Netty version alignment failed: expected $nettyVersion, resolved $resolvedModules",
+            )
+        }
+    }
+}
+
+tasks.register("verifyJacksonVersionAlignment") {
+    description = "Verifies the resolved Jackson 2 and Jackson 3 modules use the approved versions."
+    group = "verification"
+
+    doLast {
+        val runtimeComponents =
+            configurations
+                .getByName("runtimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+
+        val jackson2Components =
+            runtimeComponents.filter { component ->
+                component.group.startsWith("com.fasterxml.jackson") && component.module != "jackson-annotations"
+            }
+        val jackson3Components =
+            runtimeComponents.filter { component ->
+                component.group.startsWith("tools.jackson")
+            }
+
+        if (jackson2Components.isEmpty() || jackson3Components.isEmpty()) {
+            throw GradleException("No Jackson 2 or Jackson 3 modules resolved in runtimeClasspath.")
+        }
+
+        val misalignedJackson2 = jackson2Components.filter { component -> component.version != jackson2Version }
+        val misalignedJackson3 = jackson3Components.filter { component -> component.version != jackson3Version }
+        if (misalignedJackson2.isNotEmpty() || misalignedJackson3.isNotEmpty()) {
+            val resolvedModules =
+                (jackson2Components + jackson3Components)
+                    .map { component -> "${component.group}:${component.module}:${component.version}" }
+                    .sorted()
+                    .joinToString(separator = ", ")
+            throw GradleException(
+                "Jackson version alignment failed: expected Jackson2=$jackson2Version, Jackson3=$jackson3Version, " +
+                    "resolved $resolvedModules",
             )
         }
     }

@@ -41,8 +41,12 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.Base64
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import kotlin.math.max
 
 @DisplayName("공개 게시글 feed DTO 매핑")
 class PostPublicReadQueryServiceFeedDtoMappingTest {
@@ -622,6 +626,90 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         assertThat(detail.hitCount).isEqualTo(14)
         then(postUseCase).should(never()).findPublicDetailById(78L)
         then(postUseCase).should(times(1)).findPublicDetailContentById(78L)
+    }
+
+    @Test
+    @DisplayName("상세 캐시 cold miss 중 후속 요청이 겹쳐도 같은 게시글 ID에 대한 로드는 직렬화되고 종료 후 락 레지스트리를 비운다")
+    fun serializesConcurrentColdDetailLoadsEvenWhenThirdThreadArrivesAfterFirstCompletes() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val noOpCacheManager = mock(CacheManager::class.java)
+        val service = createService(postUseCase, SimpleMeterRegistry(), cacheManager = noOpCacheManager)
+        val post =
+            postByAuthor(id = 88L).apply {
+                title = "동시성 락 검증"
+                content = "동시성 본문"
+            }
+        val threadAEntered = CountDownLatch(1)
+        val releaseThreadA = CountDownLatch(1)
+        val threadBEntered = CountDownLatch(1)
+        val releaseThreadB = CountDownLatch(1)
+        val activeCalls = AtomicInteger(0)
+        val maxConcurrentCalls = AtomicInteger(0)
+        val callSequence = AtomicInteger(0)
+
+        given(postUseCase.isPublicDetailReadable(88L)).willReturn(true)
+        given(postUseCase.findPublicDetailById(88L)).willAnswer {
+            val currentActive = activeCalls.incrementAndGet()
+            maxConcurrentCalls.accumulateAndGet(currentActive) { prev, next -> max(prev, next) }
+            try {
+                when (callSequence.incrementAndGet()) {
+                    1 -> {
+                        threadAEntered.countDown()
+                        releaseThreadA.await(5, TimeUnit.SECONDS)
+                    }
+                    2 -> {
+                        threadBEntered.countDown()
+                        releaseThreadB.await(5, TimeUnit.SECONDS)
+                    }
+                }
+                post
+            } finally {
+                activeCalls.decrementAndGet()
+            }
+        }
+
+        val threadA = Thread { service.getPublicPostDetail(88L) }
+        val threadB = Thread { service.getPublicPostDetail(88L) }
+        val threadC = Thread { service.getPublicPostDetail(88L) }
+
+        threadA.start()
+        assertThat(threadAEntered.await(5, TimeUnit.SECONDS)).isTrue()
+
+        threadB.start()
+        val deadlineB = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (threadB.state != Thread.State.BLOCKED && System.nanoTime() < deadlineB) {
+            Thread.onSpinWait()
+        }
+        assertThat(threadB.state).isEqualTo(Thread.State.BLOCKED)
+
+        releaseThreadA.countDown()
+        threadA.join(5_000)
+        assertThat(threadBEntered.await(5, TimeUnit.SECONDS)).isTrue()
+
+        threadC.start()
+        val deadlineC = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (
+            threadC.state != Thread.State.BLOCKED &&
+            maxConcurrentCalls.get() < 2 &&
+            threadC.isAlive &&
+            System.nanoTime() < deadlineC
+        ) {
+            Thread.onSpinWait()
+        }
+
+        releaseThreadB.countDown()
+        threadB.join(5_000)
+        threadC.join(5_000)
+
+        assertThat(maxConcurrentCalls.get()).isEqualTo(1)
+        then(postUseCase).should(times(3)).findPublicDetailById(88L)
+
+        val lockRegistryField =
+            PostPublicReadQueryService::class.java
+                .getDeclaredField("detailCacheLockRegistry")
+                .apply { isAccessible = true }
+        val lockRegistry = lockRegistryField.get(service) as Map<*, *>
+        assertThat(lockRegistry).isEmpty()
     }
 
     private fun createService(

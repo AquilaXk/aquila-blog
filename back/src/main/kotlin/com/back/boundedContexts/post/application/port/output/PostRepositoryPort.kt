@@ -111,8 +111,6 @@ interface PostRepositoryPort {
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 
-    fun findAllPublicListedContents(): List<String>
-
     fun existsByIdAndContentContaining(
         id: Long,
         contentFragment: String,

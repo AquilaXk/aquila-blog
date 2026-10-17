@@ -133,13 +133,6 @@ class PostRepositoryImpl(
                 )
             }
 
-    override fun findAllPublicListedContents(): List<String> =
-        queryFactory
-            .select(post.content)
-            .from(post)
-            .where(post.published.isTrue.and(post.listed.isTrue))
-            .fetch()
-
     private fun findPosts(
         author: Member?,
         kw: String,

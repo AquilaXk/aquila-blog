@@ -195,4 +195,27 @@ class PostMetaExtractorTest {
         assertThat(meta.categories).containsExactly("crlf-cat")
         assertThat(thumbnail).isEqualTo("https://example.com/crlf-thumb.png")
     }
+
+    @Test
+    fun `front matter 와 상단 메타 라인이 함께 있을 때 두 블록을 모두 병합하고 비메타 콜론 라인에서 스캔을 중단한다`() {
+        val combinedContent =
+            """
+            ---
+            tag: 프론트태그
+            ---
+            tags: 상단태그
+            category: 상단카테고리
+            author: 메타키가아닌콜론라인
+            tags: 본문중간태그
+            """.trimIndent()
+        val nonMetaColonOnly = "author: 작성자\n본문입니다."
+
+        val combinedMeta = PostMetaExtractor.extract(combinedContent)
+        val nonMetaColonResult = PostMetaExtractor.extract(nonMetaColonOnly)
+
+        assertThat(combinedMeta.tags).containsExactly("프론트태그", "상단태그")
+        assertThat(combinedMeta.categories).containsExactly("상단카테고리")
+        assertThat(nonMetaColonResult.tags).isEmpty()
+        assertThat(nonMetaColonResult.categories).isEmpty()
+    }
 }

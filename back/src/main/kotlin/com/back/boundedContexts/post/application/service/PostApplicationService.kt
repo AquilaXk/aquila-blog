@@ -75,7 +75,7 @@ class PostApplicationService(
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
 
         if (normalizedIdempotencyKey == null) {
-            val created =
+            val (created, createdTags) =
                 writeNewPost(
                     author = author,
                     persistenceAuthor = persistenceAuthor,
@@ -87,7 +87,7 @@ class PostApplicationService(
                     summary = summary,
                     summaryMode = summaryMode,
                 )
-            return completePostWrite(created, author)
+            return completePostWrite(created, author, createdTags)
         }
 
         // 같은 작성자의 keyed 요청은 slot 조회 전에 작성자 행을 직렬화한다.
@@ -109,7 +109,7 @@ class PostApplicationService(
 
         val requestSlot = existingRequest ?: createIdempotencyRequestSlot(lockedAuthor, normalizedIdempotencyKey)
 
-        val createdPost =
+        val (createdPost, createdTags) =
             writeNewPost(
                 author = lockedAuthor,
                 persistenceAuthor = lockedAuthor,
@@ -124,15 +124,15 @@ class PostApplicationService(
 
         requestSlot.postId = createdPost.id
         postWriteRequestIdempotencyRepository.save(requestSlot)
-        return completePostWrite(createdPost, author, normalizedIdempotencyKey)
+        return completePostWrite(createdPost, author, createdTags, normalizedIdempotencyKey)
     }
 
     private fun completePostWrite(
         post: Post,
         actor: Member,
+        createdTags: List<String>,
         idempotencyKey: String? = null,
     ): Post {
-        val createdTags = postTagIndexService.extractNormalizedTags(post.content)
         val isPublic = isPubliclyListed(post)
         publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
@@ -218,6 +218,7 @@ class PostApplicationService(
         val wasPublished = post.published
         val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
         val thumbnail = PostPreviewExtractor.extractThumbnail(content)
+        val afterTags: List<String>
         try {
             val contentHtmlTrust =
                 if (contentHtml == null) {
@@ -247,7 +248,7 @@ class PostApplicationService(
                 requestedMode = summaryMode,
             )?.let { resolved -> post.applyResolvedSummary(resolved) }
             postRepository.flush()
-            postTagIndexService.syncPostTags(post)
+            afterTags = postTagIndexService.syncPostTags(post)
             postRepository.syncImageReferences(
                 post.id,
                 UploadedFileUrlCodec.extractObjectKeysFromContent(post.content),
@@ -266,7 +267,6 @@ class PostApplicationService(
             )
             throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
-        val afterTags = postTagIndexService.extractNormalizedTags(post.content)
         val isPublic = isPubliclyListed(post)
         val listingVisibilityChanged = wasPublic != isPublic
         val contentChanged = previousContent != post.content
@@ -327,7 +327,7 @@ class PostApplicationService(
         contentHtml: String?,
         summary: String?,
         summaryMode: PostSummaryMode,
-    ): Post {
+    ): Pair<Post, List<String>> {
         val resolvedSummary = resolveCreatedSummary(title, content, summary, summaryMode)
         val contentHtmlTrust = HtmlContentSanitizer.sanitizeForPersistence(contentHtml)
         val post =
@@ -345,13 +345,13 @@ class PostApplicationService(
             ).also { it.applyResolvedSummary(resolvedSummary) }
         val savedPost = postRepository.saveAndFlush(post)
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
-        postTagIndexService.syncPostTags(savedPost)
+        val createdTags = postTagIndexService.syncPostTags(savedPost)
         postRepository.syncImageReferences(
             savedPost.id,
             UploadedFileUrlCodec.extractObjectKeysFromContent(savedPost.content),
         )
         postCounterService.incrementMemberPostsCount(persistenceAuthor)
-        return savedPost
+        return savedPost to createdTags
     }
 
     private fun resolveCreatedSummary(
@@ -657,12 +657,11 @@ class PostApplicationService(
             postRepository.findById(id).getOrNull()
                 ?: throw AppException(ErrorCode.NOT_FOUND, "복구된 글을 확인할 수 없습니다.")
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(restoredPost.author))
-        postTagIndexService.syncPostTags(restoredPost)
+        val restoredTags = postTagIndexService.syncPostTags(restoredPost)
         postRepository.syncImageReferences(
             restoredPost.id,
             UploadedFileUrlCodec.extractObjectKeysFromContent(restoredPost.content),
         )
-        val restoredTags = postTagIndexService.extractNormalizedTags(restoredPost.content)
         val isPublic = isPubliclyListed(restoredPost)
         publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(

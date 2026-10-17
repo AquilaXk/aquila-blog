@@ -54,16 +54,28 @@ class PostTagIndexServiceTest {
     }
 
     @Test
-    @DisplayName("본문 태그를 canonical 정규화 테이블에만 동기화한다")
+    @DisplayName("본문 태그를 canonical 정규화 테이블에만 동기화하고 정규화된 태그 목록을 반환한다")
     fun syncPostTagsToCanonicalIndexOnly() {
         // given
         val post = testPost(content = "tags: kotlin, spring, kotlin\n\n본문")
 
         // when
-        service.syncPostTags(post)
+        val syncedTags = service.syncPostTags(post)
 
         // then
+        assertThat(syncedTags).containsExactly("kotlin", "spring")
         then(postTagIndexRepository).should().replacePostTags(post.id, listOf("kotlin", "spring"))
+    }
+
+    @Test
+    @DisplayName("영속화되지 않은 post(id <= 0)는 저장소 호출 없이 빈 태그 목록을 반환한다")
+    fun returnsEmptyListWithoutRepositoryCallWhenPostIdIsNotPositive() {
+        val unsavedPost = testPost(id = 0, content = "tags: kotlin, spring\n\n본문")
+
+        val syncedTags = service.syncPostTags(unsavedPost)
+
+        assertThat(syncedTags).isEmpty()
+        then(postTagIndexRepository).shouldHaveNoInteractions()
     }
 
     @Test
@@ -84,8 +96,9 @@ class PostTagIndexServiceTest {
         val tag = "\uD83D\uDE00".repeat(80)
         val post = testPost(content = "tags:  $tag  \n\n본문")
 
-        service.syncPostTags(post)
+        val syncedTags = service.syncPostTags(post)
 
+        assertThat(syncedTags).containsExactly(tag)
         then(postTagIndexRepository).should().replacePostTags(post.id, listOf(tag))
     }
 
@@ -102,9 +115,12 @@ class PostTagIndexServiceTest {
         then(postTagIndexRepository).shouldHaveNoInteractions()
     }
 
-    private fun testPost(content: String): Post =
+    private fun testPost(
+        id: Long = 10,
+        content: String,
+    ): Post =
         Post(
-            id = 10,
+            id = id,
             author = Member(id = 1, username = "author", nickname = "작성자", apiKey = "author-api-key"),
             title = "제목",
             content = content,

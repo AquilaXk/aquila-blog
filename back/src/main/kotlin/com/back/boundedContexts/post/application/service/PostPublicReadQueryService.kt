@@ -26,16 +26,12 @@ import org.springframework.cache.CacheManager
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Clock
-import java.util.Base64
 import java.util.HexFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 import kotlin.math.max
 
 @Service
@@ -51,17 +47,17 @@ class PostPublicReadQueryService(
     @Value("\${custom.post.read.cursor-previous-expires-at-epoch-seconds:}") cursorPreviousExpiresAtEpochSeconds: String,
     @Value("\${custom.post.read.detail-content-cache-max-chars:120000}") detailContentCacheMaxChars: Int,
     @Value("\${custom.post.read.detail-snapshot-cache-max-chars:180000}") detailSnapshotCacheMaxChars: Int,
-    private val clock: Clock,
+    clock: Clock,
 ) : PostPublicReadQueryUseCase {
     private val logger = LoggerFactory.getLogger(PostPublicReadQueryService::class.java)
-    private val cursorKeyring =
-        CursorKeyring.create(
-            currentSecret = cursorSigningSecret,
-            currentVersion = cursorSigningKeyVersion,
-            previousSecret = cursorPreviousSigningSecret,
-            previousVersion = cursorPreviousSigningKeyVersion,
-            previousExpiresAtEpochSeconds = cursorPreviousExpiresAtEpochSeconds,
-            nowEpochSeconds = clock.instant().epochSecond,
+    private val cursorCodec =
+        PostPublicCursorCodec(
+            cursorSigningSecret = cursorSigningSecret,
+            cursorSigningKeyVersion = cursorSigningKeyVersion,
+            cursorPreviousSigningSecret = cursorPreviousSigningSecret,
+            cursorPreviousSigningKeyVersion = cursorPreviousSigningKeyVersion,
+            cursorPreviousExpiresAtEpochSeconds = cursorPreviousExpiresAtEpochSeconds,
+            clock = clock,
         )
     private val detailContentCacheLimit = detailContentCacheMaxChars.coerceAtLeast(2_048)
     private val detailSnapshotCacheLimit = detailSnapshotCacheMaxChars.coerceAtLeast(detailContentCacheLimit)
@@ -106,9 +102,9 @@ class PostPublicReadQueryService(
             "pageSize=$pageSize sort=${sort.name} cursorPresent=${!cursor.isNullOrBlank()}",
         ) {
             postReadBulkheadService.withFeedPermit {
-                val safeSort = requireCursorSort(sort)
+                val safeSort = cursorCodec.requireCursorSort(sort)
                 val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
-                val parsedCursor = parseCursor(cursor, safeSort)
+                val parsedCursor = cursorCodec.parseCursor(cursor, safeSort)
                 val rows =
                     postUseCase.findPublicByCursor(
                         cursorSortValue = parsedCursor?.sortValue,
@@ -182,13 +178,13 @@ class PostPublicReadQueryService(
             "pageSize=$pageSize sort=${sort.name} tag=${tag.take(80)} cursorPresent=${!cursor.isNullOrBlank()}",
         ) {
             postReadBulkheadService.withExplorePermit {
-                val safeSort = requireCursorSort(sort)
+                val safeSort = cursorCodec.requireCursorSort(sort)
                 val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
                 val normalizedTag = tag.trim()
                 if (normalizedTag.isBlank()) {
                     throw AppException(ErrorCode.BAD_REQUEST, "태그 커서 탐색에는 tag 파라미터가 필요합니다.")
                 }
-                val parsedCursor = parseCursor(cursor, safeSort)
+                val parsedCursor = cursorCodec.parseCursor(cursor, safeSort)
                 val rows =
                     postUseCase.findPublicByTagCursor(
                         tag = normalizedTag,
@@ -351,7 +347,7 @@ class PostPublicReadQueryService(
             "pageSize=$pageSize sort=${sort.name} tag=${tag.take(80)}",
         ) {
             val normalizedTag = tag.trim()
-            val safeSort = requireCursorSort(sort)
+            val safeSort = cursorCodec.requireCursorSort(sort)
             val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
             val feed =
                 postReadBulkheadService.withFeedPermit {
@@ -757,7 +753,12 @@ class PostPublicReadQueryService(
             )
         }
 
-        val cursorRows = rows.mapNotNull { post -> toCursorPostRow(post, sort) }
+        val cursorRows =
+            rows.mapNotNull { post ->
+                cursorCodec.toCursorPostRow(post, sort) { postId, exception ->
+                    recordFeedPostDtoMappingFailure(postId, FeedPostDtoMappingFailureType.CORE, exception)
+                }
+            }
         if (cursorRows.isEmpty()) {
             return CursorFeedPageDto(
                 content = emptyList(),
@@ -772,7 +773,7 @@ class PostPublicReadQueryService(
         val content = currentRows.mapNotNull { row -> toFeedPostDto(row.post) }
         val nextCursor =
             if (hasNext) {
-                currentRows.lastOrNull()?.let { encodeCursor(it.sortValue, it.post.id, sort) }
+                currentRows.lastOrNull()?.let { cursorCodec.encodeCursor(it.sortValue, it.post.id, sort) }
             } else {
                 null
             }
@@ -810,248 +811,8 @@ class PostPublicReadQueryService(
             ?.increment()
     }
 
-    private data class CursorPostRow(
-        val post: Post,
-        val sortValue: Long,
-    )
-
-    private fun requireCursorSort(sort: PostSearchSortType1): PostSearchSortType1 =
-        when (sort) {
-            PostSearchSortType1.CREATED_AT,
-            PostSearchSortType1.CREATED_AT_ASC,
-            PostSearchSortType1.HIT_COUNT,
-            PostSearchSortType1.LIKES_COUNT,
-            -> sort
-            else ->
-                throw AppException(
-                    ErrorCode.BAD_REQUEST,
-                    "커서 조회는 CREATED_AT/HIT_COUNT/LIKES_COUNT 정렬만 지원합니다.",
-                )
-        }
-
-    private fun parseCursor(
-        raw: String?,
-        expectedSort: PostSearchSortType1,
-    ): CursorToken? {
-        val value = raw?.trim().orEmpty()
-        if (value.isBlank()) return null
-        val parts = value.split(":")
-        if (parts.size != CURSOR_VERSIONED_PART_COUNT) {
-            throw AppException(ErrorCode.BAD_REQUEST, "cursor 형식이 올바르지 않습니다.")
-        }
-        return parseVersionedCursor(parts, expectedSort)
-    }
-
-    private fun parseVersionedCursor(
-        parts: List<String>,
-        expectedSort: PostSearchSortType1,
-    ): CursorToken {
-        val sortValue =
-            parts[2].toLongOrNull()
-                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor sortValue 형식이 올바르지 않습니다.")
-        val id =
-            parts[3].toLongOrNull()
-                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor id 형식이 올바르지 않습니다.")
-        val cursorSort =
-            runCatching { PostSearchSortType1.valueOf(parts[4].trim()) }.getOrElse {
-                throw AppException(ErrorCode.BAD_REQUEST, "cursor 정렬 모드가 올바르지 않습니다.")
-            }
-        if (cursorSort != expectedSort) {
-            throw AppException(
-                ErrorCode.BAD_REQUEST,
-                "cursor 정렬 모드(${cursorSort.name})가 요청 정렬(${expectedSort.name})과 일치하지 않습니다.",
-            )
-        }
-        val key = cursorKeyring.keyForVersion(parts[0], clock.instant().epochSecond)
-        val issuedAtEpochSeconds = parseCursorIssuedAt(parts[1])
-        verifyCursorToken(
-            sortValue,
-            id,
-            payload = parts.take(CURSOR_VERSIONED_PART_COUNT - 1).joinToString(":"),
-            signature = parts[5],
-            key = key,
-            issuedAtEpochSeconds = issuedAtEpochSeconds,
-        )
-        return CursorToken(sortValue, id, cursorSort)
-    }
-
-    private fun verifyCursorToken(
-        sortValue: Long,
-        id: Long,
-        payload: String,
-        signature: String,
-        key: CursorKey,
-        issuedAtEpochSeconds: Long,
-    ) {
-        if (sortValue < 0 || id <= 0L) {
-            throw AppException(ErrorCode.BAD_REQUEST, "cursor 값이 유효하지 않습니다.")
-        }
-        val trimmedSignature = signature.trim()
-        if (trimmedSignature.isBlank()) {
-            throw AppException(ErrorCode.BAD_REQUEST, "cursor 서명이 비어 있습니다.")
-        }
-        val nowEpochSeconds = clock.instant().epochSecond
-        if (issuedAtEpochSeconds > nowEpochSeconds || nowEpochSeconds - issuedAtEpochSeconds > MAX_CURSOR_AGE_SECONDS) {
-            throw AppException(ErrorCode.BAD_REQUEST, "cursor가 만료되었습니다.")
-        }
-        val expectedSignature = signCursorPayload(payload, key.secretKeySpec)
-        val isSignatureValid =
-            MessageDigest.isEqual(
-                expectedSignature.toByteArray(StandardCharsets.UTF_8),
-                trimmedSignature.toByteArray(StandardCharsets.UTF_8),
-            )
-        if (!isSignatureValid) {
-            throw AppException(ErrorCode.BAD_REQUEST, "cursor 서명이 유효하지 않습니다.")
-        }
-    }
-
-    private fun encodeCursor(
-        sortValue: Long,
-        id: Long,
-        sort: PostSearchSortType1,
-    ): String {
-        val payload = "${cursorKeyring.current.version}:${clock.instant().epochSecond}:$sortValue:$id:${sort.name}"
-        return "$payload:${signCursorPayload(payload, cursorKeyring.current.secretKeySpec)}"
-    }
-
-    private fun toCursorPostRow(
-        post: Post,
-        sort: PostSearchSortType1,
-    ): CursorPostRow? {
-        val sortValue =
-            when (sort) {
-                PostSearchSortType1.HIT_COUNT -> post.hitCount.toLong()
-                PostSearchSortType1.LIKES_COUNT -> post.likesCount.toLong()
-                else -> {
-                    val createdAt =
-                        try {
-                            post.createdAt
-                        } catch (exception: UninitializedPropertyAccessException) {
-                            recordFeedPostDtoMappingFailure(post.id, FeedPostDtoMappingFailureType.CORE, exception)
-                            return null
-                        }
-                    createdAt.toEpochMilli()
-                }
-            }
-        return CursorPostRow(post, sortValue)
-    }
-
-    private fun signCursorPayload(
-        payload: String,
-        secretKeySpec: SecretKeySpec,
-    ): String {
-        val mac = Mac.getInstance(CURSOR_HMAC_ALGORITHM)
-        mac.init(secretKeySpec)
-        val digest = mac.doFinal(payload.toByteArray(StandardCharsets.UTF_8))
-        val truncated = digest.copyOf(CURSOR_SIGNATURE_BYTES)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(truncated)
-    }
-
-    private fun parseCursorIssuedAt(raw: String): Long {
-        if (!CANONICAL_POSITIVE_DECIMAL.matches(raw)) {
-            throw AppException(ErrorCode.BAD_REQUEST, "cursor issuedAt 형식이 올바르지 않습니다.")
-        }
-        return raw.toLongOrNull()
-            ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor issuedAt 형식이 올바르지 않습니다.")
-    }
-
-    private class CursorKey(
-        val version: Long,
-        secretBytes: ByteArray,
-        val expiresAtEpochSeconds: Long? = null,
-    ) {
-        val secretKeySpec: SecretKeySpec = SecretKeySpec(secretBytes, CURSOR_HMAC_ALGORITHM)
-    }
-
-    private class CursorKeyring private constructor(
-        val current: CursorKey,
-        private val previous: CursorKey?,
-    ) {
-        fun keyForVersion(
-            rawVersion: String,
-            nowEpochSeconds: Long,
-        ): CursorKey {
-            val version = parsePublicVersion(rawVersion)
-            if (version == current.version) return current
-            val previousKey = previous
-            if (previousKey != null && version == previousKey.version) {
-                if (nowEpochSeconds >= requireNotNull(previousKey.expiresAtEpochSeconds)) {
-                    throw AppException(ErrorCode.BAD_REQUEST, "cursor key version이 만료되었습니다.")
-                }
-                return previousKey
-            }
-            throw AppException(ErrorCode.BAD_REQUEST, "cursor key version이 올바르지 않습니다.")
-        }
-
-        companion object {
-            fun create(
-                currentSecret: String,
-                currentVersion: String,
-                previousSecret: String,
-                previousVersion: String,
-                previousExpiresAtEpochSeconds: String,
-                nowEpochSeconds: Long,
-            ): CursorKeyring {
-                val current =
-                    CursorKey(
-                        version = parseVersion(currentVersion),
-                        secretBytes = requireCursorSigningSecret(currentSecret).toByteArray(StandardCharsets.UTF_8),
-                    )
-                val previousValues = listOf(previousSecret, previousVersion, previousExpiresAtEpochSeconds)
-                if (previousValues.all(String::isBlank)) return CursorKeyring(current, null)
-                require(previousValues.none(String::isBlank)) {
-                    "previous cursor key must provide secret, version, and expiry together"
-                }
-                val previousVersionValue = parseVersion(previousVersion)
-                require(previousVersionValue < current.version) { "previous cursor key version must be lower than current" }
-                require(previousSecret != currentSecret) { "previous cursor key must differ from current" }
-                val previousExpiry = parseVersion(previousExpiresAtEpochSeconds)
-                require(previousExpiry > nowEpochSeconds && previousExpiry <= nowEpochSeconds + MAX_CURSOR_AGE_SECONDS) {
-                    "previous cursor key expiry must be within the rotation window"
-                }
-                return CursorKeyring(
-                    current,
-                    CursorKey(
-                        version = previousVersionValue,
-                        secretBytes = requireCursorSigningSecret(previousSecret).toByteArray(StandardCharsets.UTF_8),
-                        expiresAtEpochSeconds = previousExpiry,
-                    ),
-                )
-            }
-
-            private fun parseVersion(raw: String): Long {
-                require(CANONICAL_POSITIVE_DECIMAL.matches(raw)) {
-                    "cursor key version must be a canonical positive decimal"
-                }
-                return raw.toLongOrNull() ?: throw IllegalArgumentException("cursor key version is out of range")
-            }
-
-            private fun parsePublicVersion(raw: String): Long =
-                try {
-                    parseVersion(raw)
-                } catch (exception: IllegalArgumentException) {
-                    throw AppException(ErrorCode.BAD_REQUEST, "cursor key version이 올바르지 않습니다.")
-                }
-        }
-    }
-
     companion object {
         private val WHITESPACE_REGEX = Regex("\\s+")
-
-        private fun requireCursorSigningSecret(raw: String): String {
-            require(raw.isNotBlank()) { "cursor signing secret must be configured" }
-            require(raw == raw.trim()) { "cursor signing secret must not include surrounding whitespace" }
-            require(raw.length >= MIN_CURSOR_SECRET_LENGTH) {
-                "cursor signing secret must be at least $MIN_CURSOR_SECRET_LENGTH characters"
-            }
-            require(
-                !CURSOR_SECRET_PLACEHOLDER.containsMatchIn(raw) &&
-                    !raw.contains("change-me", ignoreCase = true),
-            ) {
-                "cursor signing secret must not use a placeholder"
-            }
-            return raw
-        }
 
         @JvmStatic
         fun normalizeCacheToken(raw: String): String =
@@ -1120,23 +881,5 @@ class PostPublicReadQueryService(
         private const val MAX_CACHE_KEY_LOG_LENGTH = 120
         private const val MAX_CACHE_VALUE_LOG_LENGTH = 80
         private const val MAX_CURSOR_PAGE_SIZE = 30
-        private const val CURSOR_HMAC_ALGORITHM = "HmacSHA256"
-        private const val CURSOR_SIGNATURE_BYTES = 18
-        private const val CURSOR_VERSIONED_PART_COUNT = 6
-        private const val MIN_CURSOR_SECRET_LENGTH = 32
-        private val CURSOR_SECRET_PLACEHOLDER =
-            Regex(
-                "^(?:NEED_TO|EMPTY$|change_me|change-me|.*example\\.com$|https://www\\.example\\.com|" +
-                    "https://api\\.example\\.com|smtp\\.example\\.com|.*<[^>]+>.*|.*sha-<[^>]+>.*)",
-                RegexOption.IGNORE_CASE,
-            )
-        private const val MAX_CURSOR_AGE_SECONDS = 86_400L
-        private val CANONICAL_POSITIVE_DECIMAL = Regex("[1-9][0-9]*")
     }
-
-    private data class CursorToken(
-        val sortValue: Long,
-        val id: Long,
-        val sort: PostSearchSortType1,
-    )
 }

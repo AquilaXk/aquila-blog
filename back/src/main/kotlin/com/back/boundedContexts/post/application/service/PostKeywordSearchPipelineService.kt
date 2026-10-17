@@ -265,9 +265,14 @@ class PostKeywordSearchPipelineService(
         weights: SearchWeights,
         now: Instant,
     ): Double {
-        val titleHitCount = tokens.count { token -> signals.titleLower.contains(token) }
-        val tagHitCount = tokens.count { token -> signals.tagsLower.any { tag -> tag.contains(token) } }
-        val contentHitCount = tokens.count { token -> signals.contentLower.contains(token) }
+        var titleHitCount = 0
+        var tagHitCount = 0
+        var contentHitCount = 0
+        for (token in tokens) {
+            if (signals.titleLower.contains(token)) titleHitCount += 1
+            if (signals.tagsLower.any { tag -> tag.contains(token) }) tagHitCount += 1
+            if (signals.contentLower.contains(token)) contentHitCount += 1
+        }
 
         val ageHours = Duration.between(post.createdAt, now).toHours().coerceAtLeast(0)
         val freshnessTier =

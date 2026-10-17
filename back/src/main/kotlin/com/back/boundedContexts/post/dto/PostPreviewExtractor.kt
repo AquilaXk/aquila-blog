@@ -34,12 +34,21 @@ object PostPreviewExtractor {
         val scanResult = extractFrontmatterAndMetadataHeader(content)
         val result =
             scanResult.explicitThumbnail
-                ?: markdownImageRegex.find(content, startIndex = scanResult.bodyStartOffset)?.groupValues?.getOrNull(1)
+                ?: findFirstBodyMarkdownImage(content, scanResult.bodyStartOffset)
         thumbnailCache[cacheKey] = result ?: NO_THUMBNAIL_SENTINEL
         while (thumbnailCache.size > MAX_CACHE_ENTRIES) {
             thumbnailCache.remove(thumbnailCache.keys.iterator().next())
         }
         return result
+    }
+
+    private fun findFirstBodyMarkdownImage(
+        content: String,
+        bodyStartOffset: Int,
+    ): String? {
+        val firstImageMarker = content.indexOf("![", startIndex = bodyStartOffset)
+        if (firstImageMarker == -1) return null
+        return markdownImageRegex.find(content, startIndex = firstImageMarker)?.groupValues?.getOrNull(1)
     }
 
     internal fun clearCache() {
@@ -85,8 +94,9 @@ object PostPreviewExtractor {
         while (cursor < content.length) {
             val nextNewline = content.indexOf('\n', startIndex = cursor)
             val lineEnd = if (nextNewline == -1) content.length else nextNewline
-            val line = content.substring(cursor, lineEnd)
-            val match = metadataLineRegex.matchEntire(line) ?: break
+            val colonIndex = content.indexOf(':', startIndex = cursor)
+            if (colonIndex !in cursor until lineEnd) break
+            val match = metadataLineRegex.matchEntire(content.subSequence(cursor, lineEnd)) ?: break
             extractThumbnailValue(match.groupValues[1], match.groupValues[2])?.let { thumbnail = it }
             cursor = if (nextNewline == -1) content.length else nextNewline + 1
         }

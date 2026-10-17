@@ -748,6 +748,97 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         ).isEqualTo("size=20:sort=CREATED_AT:tag=spring boot")
     }
 
+    @Test
+    @DisplayName("PostPublicCursorCodec는 지원 정렬, 토큰 파싱 경계, row 매핑을 결정론적으로 검증한다")
+    fun verifiesPostPublicCursorCodecContractAndEdgeCases() {
+        val codec =
+            PostPublicCursorCodec(
+                cursorSigningSecret = CURSOR_TEST_SECRET,
+                cursorSigningKeyVersion = CURSOR_TEST_VERSION,
+                cursorPreviousSigningSecret = "",
+                cursorPreviousSigningKeyVersion = "",
+                cursorPreviousExpiresAtEpochSeconds = "",
+                clock = CURSOR_TEST_CLOCK,
+            )
+
+        assertThat(codec.requireCursorSort(PostSearchSortType1.CREATED_AT)).isEqualTo(PostSearchSortType1.CREATED_AT)
+        assertThat(codec.requireCursorSort(PostSearchSortType1.CREATED_AT_ASC)).isEqualTo(PostSearchSortType1.CREATED_AT_ASC)
+        assertThat(codec.requireCursorSort(PostSearchSortType1.HIT_COUNT)).isEqualTo(PostSearchSortType1.HIT_COUNT)
+        assertThat(codec.requireCursorSort(PostSearchSortType1.LIKES_COUNT)).isEqualTo(PostSearchSortType1.LIKES_COUNT)
+        assertThatThrownBy { codec.requireCursorSort(PostSearchSortType1.MODIFIED_AT) }
+            .isInstanceOf(AppException::class.java)
+
+        assertThat(codec.parseCursor(null, PostSearchSortType1.CREATED_AT)).isNull()
+        assertThat(codec.parseCursor("   ", PostSearchSortType1.CREATED_AT)).isNull()
+
+        val encoded = codec.encodeCursor(123L, 45L, PostSearchSortType1.LIKES_COUNT)
+        val parsed = requireNotNull(codec.parseCursor(encoded, PostSearchSortType1.LIKES_COUNT))
+        assertThat(parsed.sortValue).isEqualTo(123L)
+        assertThat(parsed.id).isEqualTo(45L)
+        assertThat(parsed.sort).isEqualTo(PostSearchSortType1.LIKES_COUNT)
+
+        val now = CURSOR_TEST_CLOCK.instant().epochSecond
+        listOf(
+            "$CURSOR_TEST_VERSION:$now:not-long:1:CREATED_AT:sig",
+            "$CURSOR_TEST_VERSION:$now:1:not-long:CREATED_AT:sig",
+            "$CURSOR_TEST_VERSION:$now:1:1:INVALID_SORT:sig",
+            "$CURSOR_TEST_VERSION:not-decimal:1:1:CREATED_AT:sig",
+            "$CURSOR_TEST_VERSION:9223372036854775808:1:1:CREATED_AT:sig",
+            "$CURSOR_TEST_VERSION:$now:-1:1:CREATED_AT:sig",
+            "$CURSOR_TEST_VERSION:$now:1:0:CREATED_AT:sig",
+            "$CURSOR_TEST_VERSION:$now:1:1:CREATED_AT:   ",
+        ).forEach { invalidToken ->
+            assertThatThrownBy { codec.parseCursor(invalidToken, PostSearchSortType1.CREATED_AT) }
+                .isInstanceOf(AppException::class.java)
+        }
+
+        val likedPost = postByAuthor(91L).also { it.likesCountAttr = PostAttr(1L, it, LIKES_COUNT, 17) }
+        val likesRow = requireNotNull(codec.toCursorPostRow(likedPost, PostSearchSortType1.LIKES_COUNT) { _, _ -> })
+        assertThat(likesRow.post).isSameAs(likedPost)
+        assertThat(likesRow.sortValue).isEqualTo(17L)
+
+        var recordedPostId: Long? = null
+        val brokenRow =
+            codec.toCursorPostRow(postWithoutAuditTimestamps(92L), PostSearchSortType1.CREATED_AT) { postId, _ ->
+                recordedPostId = postId
+            }
+        assertThat(brokenRow).isNull()
+        assertThat(recordedPostId).isEqualTo(92L)
+
+        assertThatThrownBy {
+            PostPublicCursorCodec(
+                cursorSigningSecret = " $CURSOR_TEST_SECRET ",
+                cursorSigningKeyVersion = CURSOR_TEST_VERSION,
+                cursorPreviousSigningSecret = "",
+                cursorPreviousSigningKeyVersion = "",
+                cursorPreviousExpiresAtEpochSeconds = "",
+                clock = CURSOR_TEST_CLOCK,
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+
+        assertThatThrownBy {
+            PostPublicCursorCodec(
+                cursorSigningSecret = "too-short-secret",
+                cursorSigningKeyVersion = CURSOR_TEST_VERSION,
+                cursorPreviousSigningSecret = "",
+                cursorPreviousSigningKeyVersion = "",
+                cursorPreviousExpiresAtEpochSeconds = "",
+                clock = CURSOR_TEST_CLOCK,
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+
+        assertThatThrownBy {
+            PostPublicCursorCodec(
+                cursorSigningSecret = CURSOR_TEST_SECRET,
+                cursorSigningKeyVersion = "9223372036854775808",
+                cursorPreviousSigningSecret = "",
+                cursorPreviousSigningKeyVersion = "",
+                cursorPreviousExpiresAtEpochSeconds = "",
+                clock = CURSOR_TEST_CLOCK,
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+    }
+
     private fun createService(
         postUseCase: PostUseCase,
         meterRegistry: SimpleMeterRegistry,

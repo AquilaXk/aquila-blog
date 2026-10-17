@@ -75,11 +75,13 @@ class PostPreviewExtractorTest {
     fun `contents without thumbnail cache sentinel and return null on repeat lookup`() {
         val plain = "   \n# 이미지 없는 글\n\n텍스트만 있는 본문입니다."
         val unclosedFrontmatter = "---\nthumbnail: https://example.com/unclosed.png\n본문"
+        val malformedImageMarker = "tags: [kotlin]\nauthor: someone\n\n본문 텍스트 ![닫히지않은이미지"
         val blank = "   "
 
         assertThat(PostPreviewExtractor.extractThumbnail(plain)).isNull()
         assertThat(PostPreviewExtractor.extractThumbnail(plain)).isNull()
         assertThat(PostPreviewExtractor.extractThumbnail(unclosedFrontmatter)).isNull()
+        assertThat(PostPreviewExtractor.extractThumbnail(malformedImageMarker)).isNull()
         assertThat(PostPreviewExtractor.extractThumbnail(blank)).isNull()
     }
 

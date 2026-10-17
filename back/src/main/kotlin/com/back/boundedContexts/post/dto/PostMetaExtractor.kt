@@ -59,26 +59,34 @@ object PostMetaExtractor {
         var cursor = skipLeadingWhitespace(content, 0)
         if (cursor >= content.length) return null
 
-        val blocks = ArrayList<String>(2)
+        var frontmatterBlock: String? = null
         val frontmatterBodyStart = openingFrontmatterBodyOffset(content, cursor)
         if (frontmatterBodyStart != -1) {
             val closingIndex = content.indexOf("\n---", startIndex = frontmatterBodyStart)
             if (closingIndex > 0) {
-                blocks.add(content.substring(frontmatterBodyStart, closingIndex))
+                frontmatterBlock = content.substring(frontmatterBodyStart, closingIndex)
                 cursor = skipLeadingWhitespace(content, closingIndex + 4)
             }
         }
 
+        var blockStart = -1
+        var blockEnd = -1
         while (cursor < content.length) {
             val newlineIndex = content.indexOf('\n', startIndex = cursor)
             val lineEnd = if (newlineIndex == -1) content.length else newlineIndex
-            val line = content.substring(cursor, lineEnd)
-            if (!metadataLineRegex.matches(line)) break
-            blocks.add(line)
+            val colonIndex = content.indexOf(':', startIndex = cursor)
+            if (colonIndex !in cursor until lineEnd) break
+            if (!metadataLineRegex.matches(content.subSequence(cursor, lineEnd))) break
+            if (blockStart == -1) {
+                blockStart = cursor
+            }
+            blockEnd = lineEnd
             cursor = lineEnd + 1
         }
 
-        return if (blocks.isEmpty()) null else blocks.joinToString("\n")
+        if (blockStart == -1) return frontmatterBlock
+        val headerBlock = content.substring(blockStart, blockEnd)
+        return if (frontmatterBlock == null) headerBlock else "$frontmatterBlock\n$headerBlock"
     }
 
     private fun openingFrontmatterBodyOffset(

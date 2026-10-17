@@ -21,9 +21,11 @@ class PostTagIndexService(
             TagCountDto(row.tag, row.count)
         }
 
-    fun syncPostTags(post: Post) {
+    fun syncPostTags(post: Post): List<String> {
+        if (post.id <= 0) return emptyList()
         val normalizedTags = extractNormalizedTags(post.content)
         postTagIndexRepository.replacePostTags(post.id, normalizedTags)
+        return normalizedTags
     }
 
     fun extractNormalizedTags(content: String): List<String> =

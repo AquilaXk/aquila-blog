@@ -218,6 +218,76 @@ summary: "이전 frontmatter 요약"
         assertThat(resolved.text).doesNotContain("indented")
     }
 
+    @Test
+    fun `crlf and cr line endings normalize to identical hash and summary as lf`() {
+        val lfContent = "---\ntitle: 테스트\n---\n\n첫 번째 핵심 문장입니다.\n두 번째 핵심 문장입니다."
+        val crlfContent = "---\r\ntitle: 테스트\r\n---\r\n\r\n첫 번째 핵심 문장입니다.\r\n두 번째 핵심 문장입니다."
+        val crContent = "---\rtitle: 테스트\r---\r\r첫 번째 핵심 문장입니다.\r두 번째 핵심 문장입니다."
+
+        val lfResolved = PostSummaryResolver.resolveAutomatic("제목", lfContent)
+        val crlfResolved = PostSummaryResolver.resolveAutomatic("제목", crlfContent, fixedNow)
+        val crResolved = PostSummaryResolver.resolveAutomatic("제목", crContent, fixedNow)
+
+        assertThat(crlfResolved.contentHash).isEqualTo(lfResolved.contentHash)
+        assertThat(crResolved.contentHash).isEqualTo(lfResolved.contentHash)
+        assertThat(crlfResolved.text).isEqualTo(lfResolved.text)
+        assertThat(crResolved.text).isEqualTo(lfResolved.text)
+        assertThat(lfResolved.generatedAt).isNotNull()
+    }
+
+    @Test
+    fun `inline markdown guards strip inline image reference link code footnote and html tags`() {
+        val content =
+            """
+            ---
+            title: 인라인 마크다운 정리
+            ---
+            ~~~~
+            ```
+            ~~~
+            ~~~~
+
+            <!-- 주석 -->
+            <br/>
+            <section>
+            블록 내부
+
+            > 일반 인용문입니다.
+            - 목록 항목입니다.
+            ${'\t'}탭 인덴트 코드입니다.
+
+            안녕하세요!
+
+            짧은글
+
+            인라인 ![아이콘](https://example.com/icon.png "아이콘") 이미지와 [문서](https://example.com) 및 [참조링크][id1], `코드조각`, 각주[^1], <span>태그</span>, **굵게** __강조__ ~~취소~~ 표현을 모두 정리하는 문장입니다.
+            """.trimIndent()
+
+        val resolved = PostSummaryResolver.resolveAutomatic("인라인 마크다운 정리", content, fixedNow)
+
+        assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
+        assertThat(resolved.text).isEqualTo(
+            "인라인 이미지와 문서 및 참조링크, 코드조각, 각주 , 태그 , 굵게 강조 취소 표현을 모두 정리하는 문장입니다.",
+        )
+    }
+
+    @Test
+    fun `frontmatter edge cases with unclosed or empty body resolve deterministically`() {
+        val dashOnly = "---"
+        val dashPrefixNotDelimiter = "---not-frontmatter\n핵심 본문 문장입니다. 충분히 긴 두 번째 문장입니다."
+        val unclosedFrontmatter = "---\ntitle: 미종료\n핵심 본문 문장입니다. 충분히 긴 두 번째 문장입니다."
+        val emptyBodyAfterFrontmatter = "---\ntitle: 빈본문\n---"
+
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", dashOnly, fixedNow).source)
+            .isEqualTo(PostSummarySource.NONE)
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", dashPrefixNotDelimiter, fixedNow).text)
+            .contains("핵심 본문 문장입니다.")
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", unclosedFrontmatter, fixedNow).text)
+            .contains("핵심 본문 문장입니다.")
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", emptyBodyAfterFrontmatter, fixedNow).source)
+            .isEqualTo(PostSummarySource.NONE)
+    }
+
     private fun graphemeCount(value: String): Int {
         val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
         iterator.setText(value)

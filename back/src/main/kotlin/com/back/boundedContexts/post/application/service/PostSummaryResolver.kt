@@ -65,13 +65,13 @@ object PostSummaryResolver {
     ): ResolvedPostSummary {
         val normalizedContent = normalizeLineEndings(content)
         val hash = sha256(normalizedContent)
-        val split = splitFrontmatter(normalizedContent)
-        val leading = extractLeadingSummaryBlock(split.body)
+        val bodyLines = splitFrontmatter(normalizedContent).lines()
+        val leading = extractLeadingSummaryBlock(bodyLines)
         if (leading.isNotBlank()) {
             return derived(leading, PostSummarySource.LEADING_BLOCK, hash, ALGORITHM_VERSION, now)
         }
 
-        val prose = extractFirstMeaningfulParagraph(title, split.body)
+        val prose = extractFirstMeaningfulParagraph(title, bodyLines)
         if (prose.isNotBlank()) {
             return derived(prose, PostSummarySource.EXTRACTED, hash, ALGORITHM_VERSION, now)
         }
@@ -117,24 +117,23 @@ object PostSummaryResolver {
         return ResolvedPostSummary(limit(normalized), source, hash, version, now)
     }
 
-    private data class FrontmatterSplit(
-        val body: String,
-    )
-
-    private fun splitFrontmatter(content: String): FrontmatterSplit {
+    private fun splitFrontmatter(content: String): String {
         val trimmed = content.trimStart()
-        val lines = trimmed.lines()
-        if (lines.firstOrNull()?.trim() != "---") return FrontmatterSplit(trimmed)
-        val closing = lines.drop(1).indexOfFirst { it.trim() == "---" }
-        if (closing < 0) return FrontmatterSplit(trimmed)
-        val closingIndex = closing + 1
-        return FrontmatterSplit(
-            body = lines.drop(closingIndex + 1).joinToString("\n").trimStart(),
-        )
+        if (!trimmed.startsWith("---")) return trimmed
+        val firstNewline = trimmed.indexOf('\n')
+        if (firstNewline < 0 || trimmed.substring(0, firstNewline).trimEnd() != "---") return trimmed
+        var cursor = firstNewline + 1
+        while (cursor <= trimmed.length) {
+            val lineEnd = trimmed.indexOf('\n', cursor).let { if (it < 0) trimmed.length else it }
+            if (trimmed.substring(cursor, lineEnd).trim() == "---") {
+                return if (lineEnd < trimmed.length) trimmed.substring(lineEnd + 1).trimStart() else ""
+            }
+            cursor = lineEnd + 1
+        }
+        return trimmed
     }
 
-    private fun extractLeadingSummaryBlock(body: String): String {
-        val lines = body.lines()
+    private fun extractLeadingSummaryBlock(lines: List<String>): String {
         val firstContentIndex = lines.indexOfFirst { it.isNotBlank() }
         if (
             firstContentIndex < 0 ||
@@ -144,12 +143,11 @@ object PostSummaryResolver {
         }
 
         val quoteLines = mutableListOf<String>()
-        for (line in lines.drop(firstContentIndex)) {
-            val trimmed = line.trimStart()
+        for (index in firstContentIndex until lines.size) {
+            val trimmed = lines[index].trimStart()
             if (!trimmed.startsWith('>')) break
             quoteLines += trimmed.removePrefix(">").trimStart()
         }
-        if (quoteLines.isEmpty()) return ""
 
         val normalized =
             quoteLines
@@ -163,9 +161,9 @@ object PostSummaryResolver {
 
     private fun extractFirstMeaningfulParagraph(
         title: String,
-        body: String,
+        bodyLines: List<String>,
     ): String {
-        val paragraphs = collectProseParagraphs(body)
+        val paragraphs = collectProseParagraphs(bodyLines)
         val normalizedTitle = normalizeComparable(title)
         for (paragraph in paragraphs) {
             val cleaned = cleanInlineMarkdown(paragraph)
@@ -178,7 +176,7 @@ object PostSummaryResolver {
         return ""
     }
 
-    private fun collectProseParagraphs(body: String): List<String> {
+    private fun collectProseParagraphs(bodyLines: List<String>): List<String> {
         val paragraphs = mutableListOf<String>()
         val current = mutableListOf<String>()
         var fenceChar: Char? = null
@@ -193,10 +191,15 @@ object PostSummaryResolver {
             }
         }
 
-        for (rawLine in body.lines()) {
+        for (rawLine in bodyLines) {
             val line = rawLine.trimEnd()
             val trimmed = line.trimStart()
-            val fence = fenceRegex.matchEntire(line)
+            val fence =
+                if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+                    fenceRegex.matchEntire(line)
+                } else {
+                    null
+                }
             if (fenceChar != null) {
                 if (fence != null) {
                     val marker = fence.groupValues[1]
@@ -239,13 +242,16 @@ object PostSummaryResolver {
             }
             if (
                 trimmed.startsWith('>') ||
-                headingRegex.matches(trimmed) ||
+                (trimmed.startsWith('#') && headingRegex.matches(trimmed)) ||
                 listMarkerRegex.containsMatchIn(trimmed)
             ) {
                 flush()
                 continue
             }
-            if (tableDelimiterRegex.matches(trimmed) || looksLikeTableRow(trimmed)) {
+            if (
+                (trimmed.contains('|') && trimmed.contains('-') && tableDelimiterRegex.matches(trimmed)) ||
+                looksLikeTableRow(trimmed)
+            ) {
                 flush()
                 continue
             }
@@ -261,19 +267,21 @@ object PostSummaryResolver {
 
     private fun looksLikeTableRow(value: String): Boolean = value.count { it == '|' } >= 2 && (value.startsWith('|') || value.endsWith('|'))
 
-    private fun cleanInlineMarkdown(value: String): String =
-        normalizeText(
-            value
-                .replace(markdownImageRegex, " ")
-                .replace(markdownLinkRegex, "$1")
-                .replace(referenceLinkRegex, "$1")
-                .replace(inlineCodeRegex, "$1")
-                .replace(footnoteReferenceRegex, " ")
-                .replace(htmlTagRegex, " ")
+    private fun cleanInlineMarkdown(value: String): String {
+        var current = value
+        if ("![" in current) current = markdownImageRegex.replace(current, " ")
+        if ("](" in current) current = markdownLinkRegex.replace(current, "$1")
+        if ("][" in current) current = referenceLinkRegex.replace(current, "$1")
+        if ('`' in current) current = inlineCodeRegex.replace(current, "$1")
+        if ("[^" in current) current = footnoteReferenceRegex.replace(current, " ")
+        if ('<' in current) current = htmlTagRegex.replace(current, " ")
+        return normalizeText(
+            current
                 .replace("**", "")
                 .replace("__", "")
                 .replace("~~", ""),
         )
+    }
 
     private fun takeCompleteSentences(value: String): String {
         val iterator = BreakIterator.getSentenceInstance(Locale.KOREAN)
@@ -287,11 +295,10 @@ object PostSummaryResolver {
             start = end
             end = iterator.next()
         }
-        return limit(sentences.joinToString(" ").ifBlank { value })
+        return sentences.joinToString(" ").ifBlank { value }
     }
 
-    private fun limit(value: String): String {
-        val normalized = normalizeText(value)
+    private fun limit(normalized: String): String {
         if (graphemeCount(normalized) <= MAX_GRAPHEMES) return normalized
         val contentLimit = MAX_GRAPHEMES - graphemeCount(ELLIPSIS)
         return takeGraphemes(normalized, contentLimit).trimEnd() + ELLIPSIS
@@ -310,15 +317,12 @@ object PostSummaryResolver {
         value: String,
         count: Int,
     ): String {
-        if (count <= 0) return ""
         val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
         iterator.setText(value)
         iterator.first()
         var boundary = 0
         repeat(count) {
-            val next = iterator.next()
-            if (next == BreakIterator.DONE) return value
-            boundary = next
+            boundary = iterator.next()
         }
         return value.substring(0, boundary)
     }
@@ -333,10 +337,12 @@ object PostSummaryResolver {
             .lowercase(Locale.ROOT)
             .replace(NON_ALPHANUMERIC_REGEX, "")
 
-    private fun normalizeLineEndings(value: String): String =
-        value
+    private fun normalizeLineEndings(value: String): String {
+        if ('\r' !in value) return value
+        return value
             .replace("\r\n", "\n")
             .replace('\r', '\n')
+    }
 
     private fun sha256(value: String): String =
         HexFormat.of().formatHex(

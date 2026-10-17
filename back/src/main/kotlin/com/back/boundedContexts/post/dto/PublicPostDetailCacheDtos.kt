@@ -77,26 +77,6 @@ data class PublicPostDetailMetaCacheDto(
                 summarySource = post.summarySource,
             )
         }
-
-        fun from(detail: PostWithContentDto): PublicPostDetailMetaCacheDto =
-            PublicPostDetailMetaCacheDto(
-                id = detail.id,
-                createdAt = detail.createdAt,
-                modifiedAt = detail.modifiedAt,
-                authorId = detail.authorId,
-                authorName = detail.authorName,
-                authorUsername = detail.authorUsername,
-                authorProfileImageUrl = detail.authorProfileImageUrl,
-                authorProfileImageDirectUrl = detail.authorProfileImageDirectUrl,
-                title = detail.title,
-                version = detail.version,
-                published = detail.published,
-                listed = detail.listed,
-                likesCount = detail.likesCount,
-                hitCount = detail.hitCount,
-                summary = detail.summary,
-                summarySource = detail.summarySource,
-            )
     }
 }
 
@@ -123,15 +103,6 @@ data class PublicPostDetailContentCacheDto(
                 contentHtmlHash = post.contentHtmlHash,
                 contentHtmlSanitizerPolicyVersion = post.contentHtmlSanitizerPolicyVersion,
                 contentHtmlTrustState = post.contentHtmlTrustState ?: ContentHtmlTrustState.UNKNOWN,
-            )
-
-        fun from(detail: PostWithContentDto): PublicPostDetailContentCacheDto =
-            PublicPostDetailContentCacheDto(
-                content = detail.content,
-                contentHtml = detail.contentHtml,
-                contentHtmlHash = detail.contentHtmlHash,
-                contentHtmlSanitizerPolicyVersion = detail.contentHtmlSanitizerPolicyVersion,
-                contentHtmlTrustState = detail.contentHtmlTrustState,
             )
     }
 }

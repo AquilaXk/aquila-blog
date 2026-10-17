@@ -4,6 +4,9 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @DisplayName("PostMetaExtractor 테스트")
 class PostMetaExtractorTest {
@@ -59,9 +62,11 @@ class PostMetaExtractorTest {
             """.trimIndent()
 
         val meta = PostMetaExtractor.extract(content)
+        val singleLineMeta = PostMetaExtractor.extract("category: 단독카테고리")
 
         assertThat(meta.tags).containsExactly("성능", "피드")
         assertThat(meta.categories).containsExactly("백엔드")
+        assertThat(singleLineMeta.categories).containsExactly("단독카테고리")
     }
 
     @Test
@@ -131,6 +136,45 @@ class PostMetaExtractorTest {
             assertThat(meta.categories).containsExactly("cat-$index")
         }
 
+        assertThat(PostMetaExtractor.cachedEntryCount()).isLessThanOrEqualTo(PostMetaExtractor.MAX_CACHE_ENTRIES)
+    }
+
+    @Test
+    fun `캐시 키는 원문 문자열이 아닌 64자리 SHA-256 다이제스트를 사용하고 동시 미스 폭주 후에도 상한을 초과하지 않는다`() {
+        val sampleBlock = "tags: [kotlin]\ncategories: [backend]"
+        val key = PostMetaExtractor.cacheKeyFor(sampleBlock)
+
+        assertThat(key).hasSize(64)
+        assertThat(key).matches("^[0-9a-f]{64}$")
+        assertThat(key).isNotEqualTo(sampleBlock)
+
+        for (index in 1..PostMetaExtractor.MAX_CACHE_ENTRIES) {
+            PostMetaExtractor.extract("tags: [warm-$index]\n\n본문")
+        }
+        assertThat(PostMetaExtractor.cachedEntryCount()).isEqualTo(PostMetaExtractor.MAX_CACHE_ENTRIES)
+
+        val burstThreads = 16
+        val startLatch = CountDownLatch(1)
+        val doneLatch = CountDownLatch(burstThreads)
+        val pool = Executors.newFixedThreadPool(burstThreads)
+        try {
+            for (threadIndex in 1..burstThreads) {
+                pool.submit {
+                    try {
+                        startLatch.await()
+                        PostMetaExtractor.extract("tags: [burst-$threadIndex]\n\n본문")
+                    } finally {
+                        doneLatch.countDown()
+                    }
+                }
+            }
+            startLatch.countDown()
+            assertThat(doneLatch.await(5, TimeUnit.SECONDS)).isTrue()
+        } finally {
+            pool.shutdownNow()
+        }
+
+        PostMetaExtractor.extract("tags: [after-burst]\n\n본문")
         assertThat(PostMetaExtractor.cachedEntryCount()).isLessThanOrEqualTo(PostMetaExtractor.MAX_CACHE_ENTRIES)
     }
 }

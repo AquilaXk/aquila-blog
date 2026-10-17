@@ -1,9 +1,13 @@
 package com.back.boundedContexts.post.dto
 
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.HexFormat
 import java.util.concurrent.ConcurrentHashMap
 
 object PostMetaExtractor {
     internal const val MAX_CACHE_ENTRIES = 512
+    private val HEX_FORMAT = HexFormat.of()
 
     /**
      * PostMeta는 계층 간 데이터 전달에 사용하는 DTO입니다.
@@ -30,12 +34,13 @@ object PostMetaExtractor {
 
     fun extract(content: String): PostMeta {
         val metadataBlock = extractMetadataBlock(content) ?: return EMPTY_META
-        metaCache[metadataBlock]?.let { return it }
+        val cacheKey = cacheKeyFor(metadataBlock)
+        metaCache[cacheKey]?.let { return it }
         val computed = buildMeta(metadataBlock)
-        if (metaCache.size >= MAX_CACHE_ENTRIES) {
-            metaCache.keys.firstOrNull()?.let(metaCache::remove)
+        metaCache[cacheKey] = computed
+        while (metaCache.size > MAX_CACHE_ENTRIES) {
+            metaCache.remove(metaCache.keys.iterator().next())
         }
-        metaCache[metadataBlock] = computed
         return computed
     }
 
@@ -44,6 +49,11 @@ object PostMetaExtractor {
     }
 
     internal fun cachedEntryCount(): Int = metaCache.size
+
+    internal fun cacheKeyFor(metadataBlock: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(metadataBlock.toByteArray(StandardCharsets.UTF_8))
+        return HEX_FORMAT.formatHex(digest)
+    }
 
     private fun extractMetadataBlock(content: String): String? {
         var cursor = skipLeadingWhitespace(content, 0)
@@ -90,9 +100,10 @@ object PostMetaExtractor {
             if (parts.size == 2) {
                 val key = parts[0].trim().lowercase()
                 val items = parseMetaItems(parts[1])
-                when (key) {
-                    "tag", "tags" -> tags.addAll(items)
-                    "category", "categories" -> categories.addAll(items)
+                if (key == "tag" || key == "tags") {
+                    tags.addAll(items)
+                } else if (key == "category" || key == "categories") {
+                    categories.addAll(items)
                 }
             }
         }

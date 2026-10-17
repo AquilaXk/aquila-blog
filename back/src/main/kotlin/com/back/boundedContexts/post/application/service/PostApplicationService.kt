@@ -197,6 +197,7 @@ class PostApplicationService(
         postRepository
             .findPublicDetailById(id)
             ?.also { post ->
+                postHydrationService.hydratePostAttrs(post)
                 postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
             }
 

@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberDto
+import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
@@ -50,6 +51,8 @@ class PostWriteSideEffectHandlerTest {
         mock(PostRecommendFeatureStoreService::class.java)
     private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)
+    private val memberAttrRepository: MemberAttrRepositoryPort = mock(MemberAttrRepositoryPort::class.java)
+    private val postHydrationService = PostHydrationService(postAttrRepository, memberAttrRepository)
     private val eventPublisher: EventPublisher = mock(EventPublisher::class.java)
     private val handler = newHandler()
 
@@ -59,7 +62,7 @@ class PostWriteSideEffectHandlerTest {
             uploadedFileRetentionService = uploadedFileRetentionService,
             postRecommendFeatureStoreService = postRecommendFeatureStoreService,
             postRepository = postRepository,
-            postAttrRepository = postAttrRepository,
+            postHydrationService = postHydrationService,
             eventPublisher = eventPublisher,
             objectMapper = ObjectMapper(),
             transactionManager = NoopTransactionManager(),
@@ -249,10 +252,13 @@ class PostWriteSideEffectHandlerTest {
         // given
         val post = testPost(16L)
         `when`(postRepository.findById(16L)).thenReturn(Optional.of(post))
-        `when`(postAttrRepository.findBySubjectAndName(post, LIKES_COUNT))
-            .thenReturn(PostAttr(1L, post, LIKES_COUNT, 7))
-        `when`(postAttrRepository.findBySubjectAndName(post, HIT_COUNT))
-            .thenReturn(PostAttr(2L, post, HIT_COUNT, 11))
+        `when`(postAttrRepository.findBySubjectInAndNameIn(listOf(post), listOf(LIKES_COUNT, HIT_COUNT)))
+            .thenReturn(
+                listOf(
+                    PostAttr(1L, post, LIKES_COUNT, 7),
+                    PostAttr(2L, post, HIT_COUNT, 11),
+                ),
+            )
 
         // when
         handler.handle(
@@ -269,6 +275,7 @@ class PostWriteSideEffectHandlerTest {
         // then
         assertThat(post.likesCount).isEqualTo(7)
         assertThat(post.hitCount).isEqualTo(11)
+        verify(postAttrRepository).findBySubjectInAndNameIn(listOf(post), listOf(LIKES_COUNT, HIT_COUNT))
         verify(postRecommendFeatureStoreService).refresh(post)
     }
 

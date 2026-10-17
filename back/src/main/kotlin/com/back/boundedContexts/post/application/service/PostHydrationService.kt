@@ -15,21 +15,25 @@ class PostHydrationService(
     private val memberAttrRepository: MemberAttrRepositoryPort,
 ) {
     fun hydratePostAttrs(post: Post) {
-        post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)?.let { post.likesCountAttr = it }
-        post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)?.let { post.hitCountAttr = it }
+        hydratePostAttrs(listOf(post))
     }
 
     fun hydratePostAttrs(posts: List<Post>) {
-        if (posts.isEmpty()) return
+        val missingPosts = posts.filter { it.likesCountAttr == null || it.hitCountAttr == null }
+        if (missingPosts.isEmpty()) return
 
         val attrsByKey =
             postAttrRepository
-                .findBySubjectInAndNameIn(posts, listOf(LIKES_COUNT, HIT_COUNT))
+                .findBySubjectInAndNameIn(missingPosts, listOf(LIKES_COUNT, HIT_COUNT))
                 .associateBy { "${it.subject.id}:${it.name}" }
 
-        posts.forEach { post ->
-            post.likesCountAttr = post.likesCountAttr ?: attrsByKey["${post.id}:$LIKES_COUNT"]
-            post.hitCountAttr = post.hitCountAttr ?: attrsByKey["${post.id}:$HIT_COUNT"]
+        missingPosts.forEach { post ->
+            if (post.likesCountAttr == null) {
+                attrsByKey["${post.id}:$LIKES_COUNT"]?.let { post.likesCountAttr = it }
+            }
+            if (post.hitCountAttr == null) {
+                attrsByKey["${post.id}:$HIT_COUNT"]?.let { post.hitCountAttr = it }
+            }
         }
     }
 

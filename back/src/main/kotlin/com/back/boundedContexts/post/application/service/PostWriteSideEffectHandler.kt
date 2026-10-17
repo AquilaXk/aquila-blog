@@ -1,10 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
-import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
-import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
-import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
@@ -26,7 +22,7 @@ class PostWriteSideEffectHandler(
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
     private val postRepository: PostRepositoryPort,
-    private val postAttrRepository: PostAttrRepositoryPort,
+    private val postHydrationService: PostHydrationService,
     private val eventPublisher: EventPublisher,
     private val objectMapper: ObjectMapper,
     transactionManager: PlatformTransactionManager,
@@ -189,13 +185,8 @@ class PostWriteSideEffectHandler(
         val post =
             postRepository.findById(postId).getOrNull()
                 ?: error("Cannot refresh recommendation features for missing postId=$postId")
-        hydratePostAttrs(post)
+        postHydrationService.hydratePostAttrs(post)
         postRecommendFeatureStoreService.refresh(post)
-    }
-
-    private fun hydratePostAttrs(post: Post) {
-        post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)?.let { post.likesCountAttr = it }
-        post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)?.let { post.hitCountAttr = it }
     }
 
     private fun PostWriteSideEffectPayload.toDomainEvent(): EventPayload? {

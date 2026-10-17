@@ -272,8 +272,8 @@ class PostPublicReadQueryService(
                         return@withDetailCacheLock doubleChecked.toPostWithContentDto()
                     }
 
-                    val meta = getCachedPublicPostDetailMeta(id)
-                    val content = getOrLoadPublicPostDetailContent(id)
+                    val (meta, loadedPost) = getOrLoadPublicPostDetailMeta(id)
+                    val content = getOrLoadPublicPostDetailContent(id, loadedPost)
                     val merged = meta.merge(content)
                     cachePublicPostDetailSnapshot(snapshotCache, id, merged)
                     clearDetailNegativeCache(id)
@@ -570,49 +570,45 @@ class PostPublicReadQueryService(
             .trim()
             .take(maxLength)
 
-    private fun getOrLoadPublicPostDetailContent(id: Long): PublicPostDetailContentCacheDto {
-        val cached =
-            cacheManager
-                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
-                ?.get(id, PublicPostDetailContentCacheDto::class.java)
+    private fun getOrLoadPublicPostDetailContent(
+        id: Long,
+        loadedPost: Post?,
+    ): PublicPostDetailContentCacheDto {
+        val contentCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
+        val cached = contentCache?.get(id, PublicPostDetailContentCacheDto::class.java)
         if (cached != null) {
             recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "hit")
             return cached
         }
         recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "miss")
 
-        return withDetailCacheLock(id) {
-            val contentCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
-            val doubleChecked = contentCache?.get(id, PublicPostDetailContentCacheDto::class.java)
-            if (doubleChecked != null) {
-                recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "hit")
-                return@withDetailCacheLock doubleChecked
-            }
-
-            val loaded =
+        val loaded =
+            if (loadedPost != null) {
+                PublicPostDetailContentCacheDto.from(loadedPost)
+            } else {
                 postUseCase.findPublicDetailContentById(id)
                     ?: run {
                         markDetailNegativeCache(id)
                         throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
                     }
-
-            if (shouldCacheDetailContent(loaded)) {
-                val written =
-                    recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put") {
-                        contentCache?.put(id, loaded)
-                    }
-                if (written) {
-                    recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put")
-                    recordCachePayloadSize(
-                        PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
-                        loaded.content.length + (loaded.contentHtml?.length ?: 0),
-                    )
-                }
-            } else {
-                recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "skip_large")
             }
-            loaded
+
+        if (shouldCacheDetailContent(loaded)) {
+            val written =
+                recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put") {
+                    contentCache?.put(id, loaded)
+                }
+            if (written) {
+                recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put")
+                recordCachePayloadSize(
+                    PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+                    loaded.content.length + (loaded.contentHtml?.length ?: 0),
+                )
+            }
+        } else {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "skip_large")
         }
+        return loaded
     }
 
     private fun shouldCacheDetailContent(content: PublicPostDetailContentCacheDto): Boolean {
@@ -635,43 +631,32 @@ class PostPublicReadQueryService(
         return null
     }
 
-    private fun getCachedPublicPostDetailMeta(id: Long): PublicPostDetailMetaCacheDto {
-        val cached =
-            cacheManager
-                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
-                ?.get(id, PublicPostDetailMetaCacheDto::class.java)
+    private fun getOrLoadPublicPostDetailMeta(id: Long): Pair<PublicPostDetailMetaCacheDto, Post?> {
+        val metaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
+        val cached = metaCache?.get(id, PublicPostDetailMetaCacheDto::class.java)
         if (cached != null) {
             recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "hit")
-            return cached
+            return cached to null
         }
         recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "miss")
 
-        return withDetailCacheLock(id) {
-            val metaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
-            val doubleChecked = metaCache?.get(id, PublicPostDetailMetaCacheDto::class.java)
-            if (doubleChecked != null) {
-                recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "hit")
-                return@withDetailCacheLock doubleChecked
-            }
-
-            val post =
-                postUseCase.findPublicDetailById(id)
-                    ?: run {
-                        markDetailNegativeCache(id)
-                        throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
-                    }
-            post.checkActorCanRead(null)
-            val loaded = PublicPostDetailMetaCacheDto.from(PostWithContentDto(post))
-            val written =
-                recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_META, "put") {
-                    metaCache?.put(id, loaded)
+        val post =
+            postUseCase.findPublicDetailById(id)
+                ?: run {
+                    markDetailNegativeCache(id)
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
                 }
-            if (written) {
-                recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "put")
-                recordCachePayloadSize(PostQueryCacheNames.DETAIL_PUBLIC_META, estimateDetailMetaPayloadSize(loaded))
+        post.checkActorCanRead(null)
+        val loaded = PublicPostDetailMetaCacheDto.from(post)
+        val written =
+            recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_META, "put") {
+                metaCache?.put(id, loaded)
             }
-            loaded
+        if (written) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "put")
+            recordCachePayloadSize(PostQueryCacheNames.DETAIL_PUBLIC_META, estimateDetailMetaPayloadSize(loaded))
         }
+        return loaded to post
     }
 
     private fun <T> withDetailCacheLock(

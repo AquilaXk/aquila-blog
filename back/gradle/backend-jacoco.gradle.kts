@@ -184,6 +184,7 @@ tasks.register("ciFastCheck") {
         "verifyAwsSdkHttpClientBoundary",
         "verifyTestcontainersVersionAlignment",
         "verifyNettyVersionAlignment",
+        "verifyJacksonVersionAlignment",
         "ktlintCheck",
     )
 }
@@ -194,5 +195,7 @@ tasks.named("check") {
     dependsOn("verifyAwsSdkHttpClientBoundary")
     dependsOn("verifyTestcontainersVersionAlignment")
     dependsOn("verifyNettyVersionAlignment")
+    dependsOn("verifyJacksonVersionAlignment")
     dependsOn(tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification"))
 }
+

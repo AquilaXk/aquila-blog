@@ -859,3 +859,22 @@ test("backend Netty policy pins the patched runtime version", () => {
   assert.match(build, /failBuildOnCVSS = 7\.0f/)
   assert.match(build, /failOnError = true/)
 })
+
+test("backend Jackson policy pins the patched Jackson 2 and Jackson 3 runtime versions", () => {
+  const suppressions = read("back/config/dependency-check-suppressions.xml")
+  const build = read("back/build.gradle.kts")
+  const jacoco = read("back/gradle/backend-jacoco.gradle.kts")
+
+  assert.match(build, /extra\["jackson-2-bom\.version"\] = "2\.21\.7"/)
+  assert.match(build, /extra\["jackson-bom\.version"\] = "3\.1\.7"/)
+  assert.match(build, /tasks\.register\("verifyJacksonVersionAlignment"\)/)
+  assert.match(build, /component\.group\.startsWith\("com\.fasterxml\.jackson"\)/)
+  assert.match(build, /component\.group\.startsWith\("tools\.jackson"\)/)
+  assert.match(jacoco, /"verifyJacksonVersionAlignment"/)
+  assert.match(jacoco, /dependsOn\("verifyJacksonVersionAlignment"\)/)
+  assert.doesNotMatch(
+    suppressions,
+    /CVE-2026-89407|CVE-2026-89425|CVE-2026-68497|CVE-2026-91776|CVE-2026-91777/,
+  )
+})
+

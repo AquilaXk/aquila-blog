@@ -16,6 +16,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.Duration
 import java.util.Base64
+import java.util.HexFormat
 import java.util.Locale
 
 @Service
@@ -174,10 +175,11 @@ class AdminEmailAuthenticationService(
     private fun randomCode(): String = secureRandom.nextInt(CODE_UPPER_BOUND).toString().padStart(CODE_LENGTH, '0')
 
     private fun sha256(value: String): String =
-        MessageDigest
-            .getInstance("SHA-256")
-            .digest(value.toByteArray(Charsets.UTF_8))
-            .joinToString("") { byte -> "%02x".format(byte) }
+        HexFormat.of().formatHex(
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(value.toByteArray(Charsets.UTF_8)),
+        )
 
     private fun invalidChallenge() = AppException(ErrorCode.UNAUTHORIZED, "인증 코드가 올바르지 않거나 만료되었습니다.")
 

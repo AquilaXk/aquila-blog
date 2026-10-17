@@ -5,6 +5,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.HexFormat
 
 @Component
 class PostPublicReadEtagSupport {
@@ -13,9 +14,7 @@ class PostPublicReadEtagSupport {
             MessageDigest
                 .getInstance("SHA-256")
                 .digest(seed.toByteArray(StandardCharsets.UTF_8))
-                .joinToString("") { each -> "%02x".format(each) }
-                .take(32)
-        return "W/\"$digest\""
+        return "W/\"${HexFormat.of().formatHex(digest, 0, 16)}\""
     }
 
     fun isNotModified(

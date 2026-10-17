@@ -22,6 +22,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.Base64
+import java.util.HexFormat
 
 data class CloudExternalPlaybackTokenDto(
     val fileId: Long,
@@ -186,10 +187,11 @@ class CloudExternalPlaybackTokenService(
         private val secureRandom = SecureRandom()
 
         fun hashToken(token: String): String =
-            MessageDigest
-                .getInstance("SHA-256")
-                .digest(token.toByteArray(StandardCharsets.UTF_8))
-                .joinToString("") { "%02x".format(it) }
+            HexFormat.of().formatHex(
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(token.toByteArray(StandardCharsets.UTF_8)),
+            )
 
         private fun generateRawToken(): String {
             val bytes = ByteArray(32)

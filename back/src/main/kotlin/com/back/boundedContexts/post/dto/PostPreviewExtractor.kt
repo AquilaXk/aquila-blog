@@ -1,15 +1,16 @@
 package com.back.boundedContexts.post.dto
 
-object PostPreviewExtractor {
-    private const val MAX_CACHE_SIZE = 256
-    private const val NO_THUMBNAIL_SENTINEL = "__NO_THUMBNAIL__"
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.HexFormat
+import java.util.concurrent.ConcurrentHashMap
 
-    private val thumbnailCache =
-        java.util.Collections.synchronizedMap(
-            object : java.util.LinkedHashMap<String, String>(MAX_CACHE_SIZE, 0.75f, true) {
-                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > MAX_CACHE_SIZE
-            },
-        )
+object PostPreviewExtractor {
+    internal const val MAX_CACHE_ENTRIES = 256
+    private const val NO_THUMBNAIL_SENTINEL = "__NO_THUMBNAIL__"
+    private val HEX_FORMAT = HexFormat.of()
+
+    private val thumbnailCache = ConcurrentHashMap<String, String>()
 
     private val markdownImageRegex = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")
     private val metadataLineRegex =
@@ -17,89 +18,118 @@ object PostPreviewExtractor {
             "^\\s*(tag|tags|category|categories|summary|thumbnail|thumb|cover|coverimage|cover_image)\\s*:\\s*(.+)\\s*$",
             RegexOption.IGNORE_CASE,
         )
+    private val THUMBNAIL_KEYS = setOf("thumbnail", "thumb", "cover", "coverimage", "cover_image")
 
-    private data class PreviewMetadata(
-        val body: String,
-        val thumbnail: String?,
+    private class HeaderScanResult(
+        val explicitThumbnail: String?,
+        val bodyStartOffset: Int,
     )
 
     fun extractThumbnail(content: String): String? {
-        val cached = thumbnailCache[content]
+        val cacheKey = cacheKeyFor(content)
+        val cached = thumbnailCache[cacheKey]
         if (cached != null) {
             return if (cached == NO_THUMBNAIL_SENTINEL) null else cached
         }
-        val metadata = parsePreviewMetadata(content)
-        val result = metadata.thumbnail ?: markdownImageRegex.find(metadata.body)?.groupValues?.getOrNull(1)
-        thumbnailCache[content] = result ?: NO_THUMBNAIL_SENTINEL
+        val scanResult = extractFrontmatterAndMetadataHeader(content)
+        val result =
+            scanResult.explicitThumbnail
+                ?: markdownImageRegex.find(content, startIndex = scanResult.bodyStartOffset)?.groupValues?.getOrNull(1)
+        thumbnailCache[cacheKey] = result ?: NO_THUMBNAIL_SENTINEL
+        while (thumbnailCache.size > MAX_CACHE_ENTRIES) {
+            thumbnailCache.remove(thumbnailCache.keys.iterator().next())
+        }
         return result
     }
 
-    private fun parsePreviewMetadata(content: String): PreviewMetadata {
-        var remaining = content.trimStart()
+    internal fun clearCache() {
+        thumbnailCache.clear()
+    }
+
+    internal fun cachedEntryCount(): Int = thumbnailCache.size
+
+    internal fun cacheKeyFor(content: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(content.toByteArray(StandardCharsets.UTF_8))
+        return HEX_FORMAT.formatHex(digest)
+    }
+
+    private fun extractFrontmatterAndMetadataHeader(content: String): HeaderScanResult {
+        var cursor = skipLeadingWhitespace(content, 0)
+        if (cursor >= content.length) return HeaderScanResult(null, content.length)
+
         var thumbnail: String? = null
-
-        fun normalizeScalar(raw: String): String =
-            raw
-                .trim()
-                .removeSurrounding("\"")
-                .removeSurrounding("'")
-                .trim()
-
-        fun assignScalar(
-            rawKey: String,
-            rawValue: String,
-        ) {
-            val key = rawKey.trim().lowercase()
-            val value = normalizeScalar(rawValue)
-            if (value.isBlank()) return
-
-            when (key) {
-                "thumbnail", "thumb", "cover", "coverimage", "cover_image" -> thumbnail = value
-            }
-        }
-
-        if (remaining.startsWith("---\n")) {
-            val closingIndex = remaining.indexOf("\n---", startIndex = 4)
+        val frontmatterBodyStart = openingFrontmatterBodyOffset(content, cursor)
+        if (frontmatterBodyStart != -1) {
+            val closingIndex = content.indexOf("\n---", startIndex = frontmatterBodyStart)
             if (closingIndex > 0) {
-                remaining
-                    .substring(4, closingIndex)
+                content
+                    .substring(frontmatterBodyStart, closingIndex)
                     .lineSequence()
                     .forEach { line ->
                         val parts = line.split(":", limit = 2)
-                        if (parts.size < 2) return@forEach
-                        assignScalar(parts[0], parts[1])
+                        if (parts.size == 2) {
+                            extractThumbnailValue(parts[0], parts[1])?.let { thumbnail = it }
+                        }
                     }
-                remaining = remaining.substring(closingIndex + 4).trimStart()
+                cursor = skipLeadingWhitespace(content, closingIndex + 4)
             }
         }
 
         if (thumbnail != null) {
-            return PreviewMetadata(
-                body = remaining,
-                thumbnail = thumbnail,
+            return HeaderScanResult(
+                explicitThumbnail = thumbnail,
+                bodyStartOffset = cursor,
             )
         }
 
-        var offset = 0
-        while (offset < remaining.length) {
-            val nextNewline = remaining.indexOf('\n', offset)
-            val lineEnd = if (nextNewline == -1) remaining.length else nextNewline
-            val line = remaining.substring(offset, lineEnd)
-            if (line.isBlank()) {
-                offset = if (nextNewline == -1) remaining.length else nextNewline + 1
-                break
-            }
-
+        while (cursor < content.length) {
+            val nextNewline = content.indexOf('\n', startIndex = cursor)
+            val lineEnd = if (nextNewline == -1) content.length else nextNewline
+            val line = content.substring(cursor, lineEnd)
             val match = metadataLineRegex.matchEntire(line) ?: break
-            assignScalar(match.groupValues[1], match.groupValues[2])
-            offset = if (nextNewline == -1) remaining.length else nextNewline + 1
+            extractThumbnailValue(match.groupValues[1], match.groupValues[2])?.let { thumbnail = it }
+            cursor = lineEnd + 1
         }
 
-        val body = if (offset > 0) remaining.substring(offset).trimStart() else remaining
-
-        return PreviewMetadata(
-            body = body,
-            thumbnail = thumbnail,
+        return HeaderScanResult(
+            explicitThumbnail = thumbnail,
+            bodyStartOffset = skipLeadingWhitespace(content, cursor),
         )
+    }
+
+    private fun openingFrontmatterBodyOffset(
+        content: String,
+        cursor: Int,
+    ): Int =
+        when {
+            content.startsWith("---\n", startIndex = cursor) -> cursor + 4
+            content.startsWith("---\r\n", startIndex = cursor) -> cursor + 5
+            else -> -1
+        }
+
+    private fun skipLeadingWhitespace(
+        text: String,
+        startIndex: Int,
+    ): Int {
+        var index = startIndex
+        while (index < text.length && text[index].isWhitespace()) {
+            index += 1
+        }
+        return index
+    }
+
+    private fun extractThumbnailValue(
+        rawKey: String,
+        rawValue: String,
+    ): String? {
+        val key = rawKey.trim().lowercase()
+        if (key !in THUMBNAIL_KEYS) return null
+        val value =
+            rawValue
+                .trim()
+                .removeSurrounding("\"")
+                .removeSurrounding("'")
+                .trim()
+        return value.ifBlank { null }
     }
 }

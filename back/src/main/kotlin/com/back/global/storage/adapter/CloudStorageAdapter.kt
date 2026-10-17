@@ -37,6 +37,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.DigestInputStream
 import java.security.MessageDigest
+import java.util.HexFormat
 
 @Service
 class CloudStorageAdapter(
@@ -525,7 +526,7 @@ class CloudStorageAdapter(
         return error.awsErrorDetails()?.errorCode().equals("NoSuchUpload", ignoreCase = true)
     }
 
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+    private fun ByteArray.toHex(): String = HexFormat.of().formatHex(this)
 
     companion object {
         private const val MAX_LIST_OBJECTS = 1_000

@@ -151,33 +151,32 @@ class PostKeywordSearchPipelineService(
         val normalizedKeyword = keyword.trim().lowercase()
         val tokens = buildKeywordTokens(normalizedKeyword)
         val signalsByPostId = candidates.associate { post -> post.id to buildSignals(post) }
-        val controlRanked = rankWithProfile(candidates, signalsByPostId, tokens, controlWeights)
-        val variantRanked = rankWithProfile(candidates, signalsByPostId, tokens, variantWeights)
-
         val assignedProfile = resolveAssignedProfile(normalizedKeyword)
         val servedRanked =
             when (assignedProfile) {
-                SearchProfile.CONTROL -> controlRanked
-                SearchProfile.VARIANT -> variantRanked
+                SearchProfile.CONTROL -> rankWithProfile(candidates, signalsByPostId, tokens, controlWeights)
+                SearchProfile.VARIANT -> rankWithProfile(candidates, signalsByPostId, tokens, variantWeights)
             }
         meterRegistry?.counter("post.search.pipeline.assignment", "profile", assignedProfile.name.lowercase())?.increment()
 
         if (shadowReadEnabled) {
-            val shadowRanked =
+            val shadowWeights =
                 when (assignedProfile) {
-                    SearchProfile.CONTROL -> variantRanked
-                    SearchProfile.VARIANT -> controlRanked
+                    SearchProfile.CONTROL -> variantWeights
+                    SearchProfile.VARIANT -> controlWeights
                 }
+            val shadowRanked = rankWithProfile(candidates, signalsByPostId, tokens, shadowWeights)
+            val primaryPostIds = servedRanked.take(compareTopN).map { it.post.id }
             compareShadowOverlap(
                 source = "internal-ab",
-                primaryPostIds = servedRanked.take(compareTopN).map { it.post.id },
+                primaryPostIds = primaryPostIds,
                 shadowPostIds = shadowRanked.take(compareTopN).map { it.post.id },
             )
             compareWithExternalShadow(
                 keyword = normalizedKeyword,
                 page = safePage,
                 pageSize = safePageSize,
-                primaryPostIds = servedRanked.take(compareTopN).map { it.post.id },
+                primaryPostIds = primaryPostIds,
             )
         }
 
@@ -210,7 +209,7 @@ class PostKeywordSearchPipelineService(
     private fun buildKeywordTokens(normalizedKeyword: String): List<String> {
         val splitTokens =
             normalizedKeyword
-                .split(Regex("\\s+"))
+                .split(WHITESPACE_REGEX)
                 .map(String::trim)
                 .filter { it.length >= 2 }
                 .distinct()
@@ -388,6 +387,7 @@ class PostKeywordSearchPipelineService(
         }.getOrElse { emptyList() }
 
     companion object {
+        private val WHITESPACE_REGEX = Regex("\\s+")
         private val SHARED_HTTP_CLIENTS = ConcurrentHashMap<Long, HttpClient>()
 
         private fun sharedHttpClient(connectTimeoutMs: Long): HttpClient =

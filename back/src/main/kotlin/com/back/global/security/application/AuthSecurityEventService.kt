@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.HexFormat
 
 data class AuthSecurityEventDto(
     val id: Long,
@@ -125,10 +126,11 @@ class AuthSecurityEventService(
         if (memberId != null || loginIdentifier.isNullOrBlank()) return null
         val normalized = loginIdentifier.trim().lowercase()
         val digest =
-            MessageDigest
-                .getInstance("SHA-256")
-                .digest(normalized.toByteArray())
-                .joinToString("") { "%02x".format(it) }
+            HexFormat.of().formatHex(
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(normalized.toByteArray()),
+            )
         return "sha256:$digest"
     }
 }

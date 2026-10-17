@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.HexFormat
 import java.util.UUID
 
 @Service
@@ -184,10 +185,11 @@ class AdminOperationService(
                 command.resetRetryCount.toString(),
                 command.reason,
             ).joinToString(separator = "") { value -> "${value.length}:$value" }
-        return MessageDigest
-            .getInstance("SHA-256")
-            .digest(canonical.toByteArray(StandardCharsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
+        return HexFormat.of().formatHex(
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(canonical.toByteArray(StandardCharsets.UTF_8)),
+        )
     }
 
     private fun searchFingerprint(
@@ -199,10 +201,11 @@ class AdminOperationService(
         val canonical =
             listOf(action.name, key.name, value.name, reason)
                 .joinToString(separator = "") { item -> "${item.length}:$item" }
-        return MessageDigest
-            .getInstance("SHA-256")
-            .digest(canonical.toByteArray(StandardCharsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
+        return HexFormat.of().formatHex(
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(canonical.toByteArray(StandardCharsets.UTF_8)),
+        )
     }
 
     private fun ensureSameCommand(

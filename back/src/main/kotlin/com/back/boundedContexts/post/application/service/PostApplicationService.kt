@@ -87,35 +87,7 @@ class PostApplicationService(
                     summary = summary,
                     summaryMode = summaryMode,
                 )
-            val createdTags = postTagIndexService.extractNormalizedTags(created.content)
-            val isPublic = isPubliclyListed(created)
-            publishPostWriteAfterCommitEvent(
-                PostWriteSideEffectCommand(
-                    postId = created.id,
-                    previousContent = null,
-                    currentContent = created.content,
-                    deletedContent = null,
-                    beforeTags = emptyList(),
-                    afterTags = createdTags,
-                    cacheInvalidationScope =
-                        if (isPublic) {
-                            PostReadCacheInvalidationScope.PublicPostCreated
-                        } else {
-                            PostReadCacheInvalidationScope.None
-                        },
-                    evictReason = "write",
-                    recommendationAction = recommendationActionFor(isPublic),
-                ),
-                PostWrittenEvent(
-                    UUID.randomUUID(),
-                    PostDto(created),
-                    MemberDto(author),
-                    emptyList(),
-                    createdTags,
-                ),
-            )
-            logger.info("post_create_completed postId={} actorId={}", created.id, author.id)
-            return created
+            return completePostWrite(created, author)
         }
 
         // 같은 작성자의 keyed 요청은 slot 조회 전에 작성자 행을 직렬화한다.
@@ -152,13 +124,21 @@ class PostApplicationService(
 
         requestSlot.postId = createdPost.id
         postWriteRequestIdempotencyRepository.save(requestSlot)
-        val createdTags = postTagIndexService.extractNormalizedTags(createdPost.content)
-        val isPublic = isPubliclyListed(createdPost)
+        return completePostWrite(createdPost, author, normalizedIdempotencyKey)
+    }
+
+    private fun completePostWrite(
+        post: Post,
+        actor: Member,
+        idempotencyKey: String? = null,
+    ): Post {
+        val createdTags = postTagIndexService.extractNormalizedTags(post.content)
+        val isPublic = isPubliclyListed(post)
         publishPostWriteAfterCommitEvent(
             PostWriteSideEffectCommand(
-                postId = createdPost.id,
+                postId = post.id,
                 previousContent = null,
-                currentContent = createdPost.content,
+                currentContent = post.content,
                 deletedContent = null,
                 beforeTags = emptyList(),
                 afterTags = createdTags,
@@ -168,20 +148,19 @@ class PostApplicationService(
                     } else {
                         PostReadCacheInvalidationScope.None
                     },
-                evictReason = "write-idempotent",
+                evictReason = if (idempotencyKey == null) "write" else "write-idempotent",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
             PostWrittenEvent(
                 UUID.randomUUID(),
-                PostDto(createdPost),
-                MemberDto(author),
+                PostDto(post),
+                MemberDto(actor),
                 emptyList(),
                 createdTags,
             ),
         )
-        logger.info("post_create_completed postId={} actorId={}", createdPost.id, author.id)
-
-        return createdPost
+        logger.info("post_create_completed postId={} actorId={}", post.id, actor.id)
+        return post
     }
 
     fun findById(id: Long): Post? =

@@ -58,8 +58,28 @@ class UploadedFileUrlCodecTest {
     }
 
     @Test
-    fun `빈 본문은 빈 Set을 반환한다`() {
+    fun `빈 본문이나 업로드 경로가 없는 본문은 빈 Set을 반환하고 단일 유형 본문도 정확히 추출한다`() {
+        assertThat(UploadedFileUrlCodec.buildImageUrl("folder/cover image.png"))
+            .isEqualTo("https://api.new-aquilaxk.site/post/api/v1/images/folder/cover%20image.png")
+        assertThat(UploadedFileUrlCodec.buildFileUrl("docs/report name.pdf"))
+            .isEqualTo("https://api.new-aquilaxk.site/post/api/v1/files/docs/report%20name.pdf")
+        assertThat(UploadedFileUrlCodec.extractObjectKeyFromImageUrl(null)).isNull()
+        assertThat(UploadedFileUrlCodec.extractObjectKeyFromImageUrl("   ")).isNull()
+        assertThat(UploadedFileUrlCodec.extractObjectKeyFromImageUrl("/post/api/v1/images/?v=1")).isNull()
+        assertThat(UploadedFileUrlCodec.extractObjectKeyFromImageUrl("/post/api/v1/images/%ZZ")).isNull()
+
         assertThat(UploadedFileUrlCodec.extractObjectKeysFromContent("")).isEmpty()
         assertThat(UploadedFileUrlCodec.extractObjectKeysFromContent("   ")).isEmpty()
+        assertThat(UploadedFileUrlCodec.extractObjectKeysFromContent("일반 텍스트와 외부 이미지 ![ext](https://example.com/a.png)")).isEmpty()
+        assertThat(UploadedFileUrlCodec.extractObjectKeysFromContent("![img](/post/api/v1/images/only-image.png)"))
+            .containsExactly("only-image.png")
+        assertThat(UploadedFileUrlCodec.extractObjectKeysFromContent("[file](/post/api/v1/files/only-file.pdf)"))
+            .containsExactly("only-file.pdf")
+        assertThat(
+            UploadedFileUrlCodec.extractObjectKeysFromContent(
+                "![bad](${AppConfig.siteBackUrl}/post/api/v1/images/%ZZ) ![empty](${AppConfig.siteBackUrl}/post/api/v1/images/?v=1) " +
+                    "![relbad](/post/api/v1/images/%ZZ) ![relempty](/post/api/v1/images/#frag)",
+            ),
+        ).isEmpty()
     }
 }

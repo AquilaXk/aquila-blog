@@ -22,19 +22,17 @@ class PostHydrationService(
         val missingPosts = posts.filter { it.likesCountAttr == null || it.hitCountAttr == null }
         if (missingPosts.isEmpty()) return
 
-        val attrsByKey =
-            postAttrRepository
-                .findBySubjectInAndNameIn(missingPosts, listOf(LIKES_COUNT, HIT_COUNT))
-                .associateBy { "${it.subject.id}:${it.name}" }
-
-        missingPosts.forEach { post ->
-            if (post.likesCountAttr == null) {
-                attrsByKey["${post.id}:$LIKES_COUNT"]?.let { post.likesCountAttr = it }
+        val postsById = missingPosts.associateBy { it.id }
+        postAttrRepository
+            .findBySubjectInAndNameIn(missingPosts, listOf(LIKES_COUNT, HIT_COUNT))
+            .forEach { attr ->
+                val post = postsById[attr.subject.id] ?: return@forEach
+                if (attr.name == LIKES_COUNT && post.likesCountAttr == null) {
+                    post.likesCountAttr = attr
+                } else if (attr.name == HIT_COUNT && post.hitCountAttr == null) {
+                    post.hitCountAttr = attr
+                }
             }
-            if (post.hitCountAttr == null) {
-                attrsByKey["${post.id}:$HIT_COUNT"]?.let { post.hitCountAttr = it }
-            }
-        }
     }
 
     fun hydrateMembersPublishedProfileWorkspaces(members: List<Member>) {

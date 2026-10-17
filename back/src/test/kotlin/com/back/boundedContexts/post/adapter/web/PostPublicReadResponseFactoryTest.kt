@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
@@ -485,6 +486,37 @@ class PostPublicReadResponseFactoryTest {
         assertThat(PostPublicReadCachePolicies.SEARCH_NO_STORE.noStore).isTrue()
         assertThat(PostPublicReadCachePolicies.DETAIL.noStore).isTrue()
         assertThat(PostPublicReadCachePolicies.RELATED_AUTHOR.sharedMaxAgeSeconds).isEqualTo(45)
+    }
+
+    @Test
+    @DisplayName("PostCacheTags는 정규화된 태그 슬러그와 12자리 SHA-256 지문 및 쓰기 무효화 태그 집합을 생성한다")
+    fun buildPostCacheTagsDeterministically() {
+        val emptyTag = PostCacheTags.byTag("   ")
+        val symbolOnlyTag = PostCacheTags.byTag(" 한글태그! ")
+        val asciiTag = PostCacheTags.byTag(" Kotlin  Spring! ")
+        val invalidationTags =
+            PostCacheTags.writeInvalidationTags(
+                postId = 42L,
+            )
+        val invalidationTagsWithBeforeAfter =
+            PostCacheTags.writeInvalidationTags(
+                postId = 42L,
+                beforeTags = listOf("Kotlin"),
+                afterTags = listOf("Spring"),
+            )
+
+        assertThat(emptyTag).isEqualTo("post-tag-empty")
+        assertThat(symbolOnlyTag).matches("^post-tag-[0-9a-f]{12}$")
+        assertThat(asciiTag).matches("^post-tag-kotlin-spring-[0-9a-f]{12}$")
+        assertThat(invalidationTags).contains(
+            PostCacheTags.LIST,
+            PostCacheTags.DETAIL,
+            "post-id-42",
+        )
+        assertThat(invalidationTagsWithBeforeAfter).contains(
+            PostCacheTags.byTag("Kotlin"),
+            PostCacheTags.byTag("Spring"),
+        )
     }
 
     private fun feedPost(

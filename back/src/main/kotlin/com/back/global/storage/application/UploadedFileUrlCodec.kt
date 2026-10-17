@@ -4,10 +4,18 @@ import com.back.global.app.AppConfig
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ConcurrentHashMap
 
 object UploadedFileUrlCodec {
     private const val IMAGE_PATH_PREFIX = "/post/api/v1/images/"
     private const val FILE_PATH_PREFIX = "/post/api/v1/files/"
+
+    private val RELATIVE_REGEX_BY_PREFIX =
+        mapOf(
+            IMAGE_PATH_PREFIX to Regex("(?<=^|[\\s(\"'>\\[])${Regex.escape(IMAGE_PATH_PREFIX)}([^\\s)\"'>]+)"),
+            FILE_PATH_PREFIX to Regex("(?<=^|[\\s(\"'>\\[])${Regex.escape(FILE_PATH_PREFIX)}([^\\s)\"'>]+)"),
+        )
+    private val absoluteRegexByPrefix = ConcurrentHashMap<String, Regex>()
 
     private fun decodeOrNull(encoded: String): String? =
         runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }
@@ -71,18 +79,19 @@ object UploadedFileUrlCodec {
         return decodeOrNull(encodedKey)
     }
 
-    fun extractObjectKeysFromContent(content: String): Set<String> =
-        extractImageObjectKeysFromContent(content) + extractFileObjectKeysFromContent(content)
+    fun extractObjectKeysFromContent(content: String): Set<String> {
+        if (!content.contains(IMAGE_PATH_PREFIX) && !content.contains(FILE_PATH_PREFIX)) return emptySet()
+        return extractImageObjectKeysFromContent(content) + extractFileObjectKeysFromContent(content)
+    }
 
     private fun extractObjectKeysFromContent(
         content: String,
         pathPrefix: String,
     ): Set<String> {
-        if (content.isBlank()) return emptySet()
+        if (!content.contains(pathPrefix)) return emptySet()
 
-        val escapedBackUrl = Regex.escape(AppConfig.siteBackUrl)
-        val absoluteRegex = Regex("$escapedBackUrl${Regex.escape(pathPrefix)}([^\\s)\"'>]+)")
-        val relativeRegex = Regex("(?<=^|[\\s(\"'>\\[])${Regex.escape(pathPrefix)}([^\\s)\"'>]+)")
+        val absoluteRegex = absoluteRegexFor(AppConfig.siteBackUrl, pathPrefix)
+        val relativeRegex = RELATIVE_REGEX_BY_PREFIX.getValue(pathPrefix)
 
         return buildSet {
             absoluteRegex.findAll(content).forEach { match ->
@@ -93,6 +102,16 @@ object UploadedFileUrlCodec {
                 val rawCandidate = match.groupValues[1].substringBefore("?").substringBefore("#")
                 decodeOrNull(rawCandidate)?.takeIf(String::isNotBlank)?.let(::add)
             }
+        }
+    }
+
+    private fun absoluteRegexFor(
+        siteBackUrl: String,
+        pathPrefix: String,
+    ): Regex {
+        val cacheKey = "$siteBackUrl$pathPrefix"
+        return absoluteRegexByPrefix.computeIfAbsent(cacheKey) {
+            Regex("${Regex.escape(siteBackUrl)}${Regex.escape(pathPrefix)}([^\\s)\"'>]+)")
         }
     }
 }

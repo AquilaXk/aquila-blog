@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.persistence
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import jakarta.persistence.EntityManager
+import jakarta.persistence.FlushModeType
 import jakarta.persistence.PersistenceContext
 import jakarta.persistence.PersistenceException
 import org.hibernate.Session
@@ -42,7 +43,8 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
                   and a.name in :names
                 """.trimIndent(),
                 PostAttr::class.java,
-            ).setParameter("subjects", subjects)
+            ).setFlushMode(FlushModeType.COMMIT)
+            .setParameter("subjects", subjects)
             .setParameter("names", names)
             .resultList
     }

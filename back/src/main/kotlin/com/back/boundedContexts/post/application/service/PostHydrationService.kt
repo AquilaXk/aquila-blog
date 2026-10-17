@@ -28,8 +28,12 @@ class PostHydrationService(
                 .associateBy { "${it.subject.id}:${it.name}" }
 
         missingPosts.forEach { post ->
-            post.likesCountAttr = post.likesCountAttr ?: attrsByKey["${post.id}:$LIKES_COUNT"]
-            post.hitCountAttr = post.hitCountAttr ?: attrsByKey["${post.id}:$HIT_COUNT"]
+            if (post.likesCountAttr == null) {
+                attrsByKey["${post.id}:$LIKES_COUNT"]?.let { post.likesCountAttr = it }
+            }
+            if (post.hitCountAttr == null) {
+                attrsByKey["${post.id}:$HIT_COUNT"]?.let { post.hitCountAttr = it }
+            }
         }
     }
 

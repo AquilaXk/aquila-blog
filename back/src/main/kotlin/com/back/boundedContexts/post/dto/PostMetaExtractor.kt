@@ -60,10 +60,11 @@ object PostMetaExtractor {
         if (cursor >= content.length) return null
 
         val blocks = ArrayList<String>(2)
-        if (content.startsWith("---\n", startIndex = cursor)) {
-            val closingIndex = content.indexOf("\n---", startIndex = cursor + 4)
+        val frontmatterBodyStart = openingFrontmatterBodyOffset(content, cursor)
+        if (frontmatterBodyStart != -1) {
+            val closingIndex = content.indexOf("\n---", startIndex = frontmatterBodyStart)
             if (closingIndex > 0) {
-                blocks.add(content.substring(cursor + 4, closingIndex))
+                blocks.add(content.substring(frontmatterBodyStart, closingIndex))
                 cursor = skipLeadingWhitespace(content, closingIndex + 4)
             }
         }
@@ -79,6 +80,16 @@ object PostMetaExtractor {
 
         return if (blocks.isEmpty()) null else blocks.joinToString("\n")
     }
+
+    private fun openingFrontmatterBodyOffset(
+        content: String,
+        cursor: Int,
+    ): Int =
+        when {
+            content.startsWith("---\n", startIndex = cursor) -> cursor + 4
+            content.startsWith("---\r\n", startIndex = cursor) -> cursor + 5
+            else -> -1
+        }
 
     private fun skipLeadingWhitespace(
         text: String,

@@ -1,5 +1,9 @@
 package com.back.boundedContexts.post.application.support
 
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.HexFormat
+
 /**
  * PostCacheTags는 공개 읽기 캐시 태그를 한 곳에서 정의해
  * 응답 헤더(surrogate/cache-tag)와 CDN purge 키 드리프트를 방지합니다.
@@ -14,6 +18,9 @@ object PostCacheTags {
     const val TAGS = "post-tags"
     const val DETAIL = "post-detail"
 
+    private val NON_TAG_CHAR_REGEX = Regex("[^a-z0-9_-]")
+    private val MULTI_DASH_REGEX = Regex("-+")
+
     fun byPostId(postId: Long): String = "post-id-$postId"
 
     fun byTag(tag: String): String {
@@ -22,8 +29,8 @@ object PostCacheTags {
 
         val slug =
             canonical
-                .replace(Regex("[^a-z0-9_-]"), "-")
-                .replace(Regex("-+"), "-")
+                .replace(NON_TAG_CHAR_REGEX, "-")
+                .replace(MULTI_DASH_REGEX, "-")
                 .trim('-')
                 .take(MAX_TAG_SLUG_LENGTH)
         val fingerprint = shortHash(canonical)
@@ -58,14 +65,13 @@ object PostCacheTags {
 
     private fun shortHash(input: String): String {
         val digest =
-            java.security.MessageDigest
+            MessageDigest
                 .getInstance("SHA-256")
-                .digest(input.toByteArray())
-        val hex = digest.joinToString("") { "%02x".format(it) }
-        return hex.take(TAG_HASH_LENGTH)
+                .digest(input.toByteArray(StandardCharsets.UTF_8))
+        return HexFormat.of().formatHex(digest, 0, TAG_HASH_BYTES)
     }
 
     private const val MAX_TAG_LENGTH = 64
     private const val MAX_TAG_SLUG_LENGTH = 40
-    private const val TAG_HASH_LENGTH = 12
+    private const val TAG_HASH_BYTES = 6
 }

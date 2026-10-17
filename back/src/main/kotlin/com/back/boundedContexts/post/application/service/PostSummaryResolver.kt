@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.text.BreakIterator
 import java.time.Instant
+import java.util.HexFormat
 import java.util.Locale
 
 object PostSummaryResolver {
@@ -322,12 +323,15 @@ object PostSummaryResolver {
         return value.substring(0, boundary)
     }
 
-    private fun normalizeText(value: String): String = value.replace(Regex("\\s+"), " ").trim()
+    private val WHITESPACE_REGEX = Regex("\\s+")
+    private val NON_ALPHANUMERIC_REGEX = Regex("[^\\p{L}\\p{N}]+")
+
+    private fun normalizeText(value: String): String = value.replace(WHITESPACE_REGEX, " ").trim()
 
     private fun normalizeComparable(value: String): String =
         normalizeText(value)
             .lowercase(Locale.ROOT)
-            .replace(Regex("[^\\p{L}\\p{N}]+"), "")
+            .replace(NON_ALPHANUMERIC_REGEX, "")
 
     private fun normalizeLineEndings(value: String): String =
         value
@@ -335,8 +339,9 @@ object PostSummaryResolver {
             .replace('\r', '\n')
 
     private fun sha256(value: String): String =
-        MessageDigest
-            .getInstance("SHA-256")
-            .digest(value.toByteArray(StandardCharsets.UTF_8))
-            .joinToString("") { byte -> "%02x".format(byte) }
+        HexFormat.of().formatHex(
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(value.toByteArray(StandardCharsets.UTF_8)),
+        )
 }

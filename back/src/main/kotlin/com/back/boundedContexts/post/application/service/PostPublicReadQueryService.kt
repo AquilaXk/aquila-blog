@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Clock
 import java.util.Base64
+import java.util.HexFormat
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -768,10 +769,7 @@ class PostPublicReadQueryService(
 
         val hasNext = cursorRows.size > pageSize
         val currentRows = cursorRows.take(pageSize)
-        val mappedRows =
-            currentRows.mapNotNull { row ->
-                toFeedPostDto(row.post)?.let { dto -> FeedPostRow(row.post, dto) }
-            }
+        val content = currentRows.mapNotNull { row -> toFeedPostDto(row.post) }
         val nextCursor =
             if (hasNext) {
                 currentRows.lastOrNull()?.let { encodeCursor(it.sortValue, it.post.id, sort) }
@@ -780,7 +778,7 @@ class PostPublicReadQueryService(
             }
 
         return CursorFeedPageDto(
-            content = mappedRows.map(FeedPostRow::dto),
+            content = content,
             pageSize = pageSize,
             hasNext = hasNext && nextCursor != null,
             nextCursor = nextCursor,
@@ -811,11 +809,6 @@ class PostPublicReadQueryService(
             ?.counter("post.feed.dto.mapping.failure", "failureType", failureType.metricTag)
             ?.increment()
     }
-
-    private data class FeedPostRow(
-        val post: Post,
-        val dto: FeedPostDto,
-    )
 
     private data class CursorPostRow(
         val post: Post,
@@ -901,7 +894,7 @@ class PostPublicReadQueryService(
         if (issuedAtEpochSeconds > nowEpochSeconds || nowEpochSeconds - issuedAtEpochSeconds > MAX_CURSOR_AGE_SECONDS) {
             throw AppException(ErrorCode.BAD_REQUEST, "cursor가 만료되었습니다.")
         }
-        val expectedSignature = signCursorPayload(payload, key.secretBytes)
+        val expectedSignature = signCursorPayload(payload, key.secretKeySpec)
         val isSignatureValid =
             MessageDigest.isEqual(
                 expectedSignature.toByteArray(StandardCharsets.UTF_8),
@@ -918,7 +911,7 @@ class PostPublicReadQueryService(
         sort: PostSearchSortType1,
     ): String {
         val payload = "${cursorKeyring.current.version}:${clock.instant().epochSecond}:$sortValue:$id:${sort.name}"
-        return "$payload:${signCursorPayload(payload, cursorKeyring.current.secretBytes)}"
+        return "$payload:${signCursorPayload(payload, cursorKeyring.current.secretKeySpec)}"
     }
 
     private fun toCursorPostRow(
@@ -945,10 +938,10 @@ class PostPublicReadQueryService(
 
     private fun signCursorPayload(
         payload: String,
-        secretBytes: ByteArray,
+        secretKeySpec: SecretKeySpec,
     ): String {
         val mac = Mac.getInstance(CURSOR_HMAC_ALGORITHM)
-        mac.init(SecretKeySpec(secretBytes, CURSOR_HMAC_ALGORITHM))
+        mac.init(secretKeySpec)
         val digest = mac.doFinal(payload.toByteArray(StandardCharsets.UTF_8))
         val truncated = digest.copyOf(CURSOR_SIGNATURE_BYTES)
         return Base64.getUrlEncoder().withoutPadding().encodeToString(truncated)
@@ -962,11 +955,13 @@ class PostPublicReadQueryService(
             ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor issuedAt 형식이 올바르지 않습니다.")
     }
 
-    private data class CursorKey(
+    private class CursorKey(
         val version: Long,
-        val secretBytes: ByteArray,
+        secretBytes: ByteArray,
         val expiresAtEpochSeconds: Long? = null,
-    )
+    ) {
+        val secretKeySpec: SecretKeySpec = SecretKeySpec(secretBytes, CURSOR_HMAC_ALGORITHM)
+    }
 
     private class CursorKeyring private constructor(
         val current: CursorKey,
@@ -1041,6 +1036,8 @@ class PostPublicReadQueryService(
     }
 
     companion object {
+        private val WHITESPACE_REGEX = Regex("\\s+")
+
         private fun requireCursorSigningSecret(raw: String): String {
             require(raw.isNotBlank()) { "cursor signing secret must be configured" }
             require(raw == raw.trim()) { "cursor signing secret must not include surrounding whitespace" }
@@ -1060,7 +1057,7 @@ class PostPublicReadQueryService(
         fun normalizeCacheToken(raw: String): String =
             raw
                 .trim()
-                .replace(Regex("\\s+"), " ")
+                .replace(WHITESPACE_REGEX, " ")
                 .lowercase()
 
         @JvmStatic
@@ -1068,7 +1065,7 @@ class PostPublicReadQueryService(
             val normalized = normalizeCacheToken(raw)
             if (normalized.isBlank()) return "_"
             if (normalized.length <= CACHE_KEY_DIRECT_MAX_LENGTH) return normalized
-            return "__h:${sha256Hex(normalized).take(CACHE_KEY_HASH_LENGTH)}"
+            return "__h:${sha256Hex(normalized)}"
         }
 
         @JvmStatic
@@ -1105,14 +1102,16 @@ class PostPublicReadQueryService(
             tag: String,
         ): String = "size=$pageSize:sort=${sort.name}:tag=${toCacheKeyToken(tag)}"
 
-        private fun sha256Hex(value: String): String =
-            MessageDigest
-                .getInstance("SHA-256")
-                .digest(value.toByteArray(Charsets.UTF_8))
-                .joinToString("") { each -> "%02x".format(each) }
+        private fun sha256Hex(value: String): String {
+            val digest =
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(value.toByteArray(Charsets.UTF_8))
+            return HexFormat.of().formatHex(digest, 0, CACHE_KEY_HASH_BYTES)
+        }
 
         private const val CACHE_KEY_DIRECT_MAX_LENGTH = 24
-        private const val CACHE_KEY_HASH_LENGTH = 24
+        private const val CACHE_KEY_HASH_BYTES = 12
         private const val MAX_CACHEABLE_PAGE = 10
         private const val MAX_CACHEABLE_KW_LENGTH = 24
         private const val MAX_CACHEABLE_TAG_LENGTH = 24

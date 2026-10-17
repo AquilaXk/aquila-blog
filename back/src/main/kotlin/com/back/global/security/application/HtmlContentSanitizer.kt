@@ -5,6 +5,7 @@ import org.jsoup.safety.Cleaner
 import org.jsoup.safety.Safelist
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.HexFormat
 
 enum class ContentHtmlTrustState {
     TRUSTED_CURRENT,
@@ -110,19 +111,17 @@ object HtmlContentSanitizer {
         val document = Jsoup.parseBodyFragment(rawHtml, SANITIZER_BASE_URI)
         val body = cleaner.clean(document).body()
 
-        body.getAllElements().forEach { element ->
-            if (element.tagName().equals("a", ignoreCase = true) && element.attr("target") == "_blank") {
-                val mergedRel =
-                    element
-                        .attr("rel")
-                        .split(' ')
-                        .map(String::trim)
-                        .filter(String::isNotBlank)
-                        .plus(listOf("noopener", "noreferrer"))
-                        .distinct()
-                        .joinToString(" ")
-                element.attr("rel", mergedRel)
-            }
+        body.select("a[target=_blank]").forEach { element ->
+            val mergedRel =
+                element
+                    .attr("rel")
+                    .split(' ')
+                    .map(String::trim)
+                    .filter(String::isNotBlank)
+                    .plus(listOf("noopener", "noreferrer"))
+                    .distinct()
+                    .joinToString(" ")
+            element.attr("rel", mergedRel)
         }
 
         val sanitized = body.html().trim()
@@ -175,10 +174,11 @@ object HtmlContentSanitizer {
         }
 
     fun sha256Utf8(value: String): String =
-        MessageDigest
-            .getInstance("SHA-256")
-            .digest(value.toByteArray(StandardCharsets.UTF_8))
-            .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        HexFormat.of().formatHex(
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(value.toByteArray(StandardCharsets.UTF_8)),
+        )
 
     private fun unknown(): ContentHtmlTrustResult = ContentHtmlTrustResult(null, null, null, ContentHtmlTrustState.UNKNOWN)
 }

@@ -712,6 +712,42 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         assertThat(lockRegistry).isEmpty()
     }
 
+    @Test
+    @DisplayName("캐시 키 토큰 정규화 및 해시 축약과 캐시 우회 조건을 일관되게 계산한다")
+    fun normalizesAndHashesCacheKeyTokensAndEvaluatesBypassRules() {
+        assertThat(PostPublicReadQueryService.toCacheKeyToken("   ")).isEqualTo("_")
+        assertThat(PostPublicReadQueryService.toCacheKeyToken("  Kotlin   Spring  ")).isEqualTo("kotlin spring")
+
+        val longToken = "  Very-Long-Search-Keyword-Token-Exceeding-Twenty-Four-Chars  "
+        val hashedToken = PostPublicReadQueryService.toCacheKeyToken(longToken)
+        assertThat(hashedToken).matches("^__h:[0-9a-f]{24}$")
+        assertThat(PostPublicReadQueryService.toCacheKeyToken("very-long-search-keyword-token-exceeding-twenty-four-chars"))
+            .isEqualTo(hashedToken)
+
+        assertThat(PostPublicReadQueryService.shouldBypassExploreCache(1, "kotlin", "spring")).isFalse()
+        assertThat(PostPublicReadQueryService.shouldBypassExploreCache(11, "kotlin", "spring")).isTrue()
+        assertThat(PostPublicReadQueryService.shouldBypassExploreCache(1, "a".repeat(25), "spring")).isTrue()
+        assertThat(PostPublicReadQueryService.shouldBypassExploreCache(1, "kotlin", "b".repeat(25))).isTrue()
+        assertThat(PostPublicReadQueryService.shouldBypassExploreCache(1, "a".repeat(20), "b".repeat(13))).isTrue()
+
+        assertThat(PostPublicReadQueryService.shouldBypassSearchCache(1, "   ")).isTrue()
+        assertThat(PostPublicReadQueryService.shouldBypassSearchCache(1, "kotlin")).isFalse()
+        assertThat(PostPublicReadQueryService.shouldBypassSearchCache(11, "kotlin")).isTrue()
+        assertThat(PostPublicReadQueryService.shouldBypassSearchCache(1, "a".repeat(25))).isTrue()
+
+        assertThat(PostPublicReadQueryService.isFirstCursorRequest(null)).isTrue()
+        assertThat(PostPublicReadQueryService.isFirstCursorRequest("  ")).isTrue()
+        assertThat(PostPublicReadQueryService.isFirstCursorRequest("cursor-token")).isFalse()
+
+        assertThat(
+            PostPublicReadQueryService.buildBootstrapCacheKey(
+                pageSize = 20,
+                sort = PostSearchSortType1.CREATED_AT,
+                tag = "  Spring  Boot ",
+            ),
+        ).isEqualTo("size=20:sort=CREATED_AT:tag=spring boot")
+    }
+
     private fun createService(
         postUseCase: PostUseCase,
         meterRegistry: SimpleMeterRegistry,

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Duration
+import java.util.HexFormat
 
 @Service
 class PostHitDedupService(
@@ -50,8 +51,9 @@ class PostHitDedupService(
         )
 
     private fun sha256(value: String): String =
-        MessageDigest
-            .getInstance("SHA-256")
-            .digest(value.toByteArray(StandardCharsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
+        HexFormat.of().formatHex(
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(value.toByteArray(StandardCharsets.UTF_8)),
+        )
 }

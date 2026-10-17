@@ -435,7 +435,7 @@ class PostRepositoryImpl(
 
         val splitTokens =
             normalizedKeyword
-                .split(Regex("\\s+"))
+                .split(WHITESPACE_REGEX)
                 .map(String::trim)
                 .filter { it.length >= 2 }
                 .distinct()
@@ -497,5 +497,9 @@ class PostRepositoryImpl(
         val safePageSize = pageable.pageSize.coerceAtLeast(1)
         val consumed = pageable.offset + safeFetched
         return if (safeFetched < safePageSize) consumed else consumed + 1L
+    }
+
+    companion object {
+        private val WHITESPACE_REGEX = Regex("\\s+")
     }
 }

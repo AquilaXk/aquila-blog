@@ -31,6 +31,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.HexFormat
 import java.util.Locale
 import java.util.UUID
 
@@ -993,7 +994,7 @@ class CloudVideoUploadSessionService(
         return total
     }
 
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+    private fun ByteArray.toHex(): String = HexFormat.of().formatHex(this)
 
     private fun String.hexToByteArray(): ByteArray {
         require(length % 2 == 0) { "hex length must be even" }

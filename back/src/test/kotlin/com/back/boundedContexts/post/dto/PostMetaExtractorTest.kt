@@ -177,4 +177,22 @@ class PostMetaExtractorTest {
         PostMetaExtractor.extract("tags: [after-burst]\n\n본문")
         assertThat(PostMetaExtractor.cachedEntryCount()).isLessThanOrEqualTo(PostMetaExtractor.MAX_CACHE_ENTRIES)
     }
+
+    @Test
+    fun `CRLF 개행으로 시작하는 front matter 에서도 메타데이터와 썸네일을 정상 추출한다`() {
+        val crlfContent =
+            "---\r\n" +
+                "tags: [crlf-tag, 백엔드]\r\n" +
+                "categories: [crlf-cat]\r\n" +
+                "thumbnail: \"https://example.com/crlf-thumb.png\"\r\n" +
+                "---\r\n\r\n" +
+                "![본문 이미지](https://example.com/body.png)\r\n"
+
+        val meta = PostMetaExtractor.extract(crlfContent)
+        val thumbnail = PostPreviewExtractor.extractThumbnail(crlfContent)
+
+        assertThat(meta.tags).containsExactly("crlf-tag", "백엔드")
+        assertThat(meta.categories).containsExactly("crlf-cat")
+        assertThat(thumbnail).isEqualTo("https://example.com/crlf-thumb.png")
+    }
 }

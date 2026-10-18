@@ -135,7 +135,7 @@ class ApiRateLimitBackstopFilter(
         return "security:api-rate-limit:$bucket:${sanitizeKeyToken(clientIp)}:$minuteBucket"
     }
 
-    private fun sanitizeKeyToken(raw: String): String = raw.replace(Regex("[^A-Za-z0-9:._-]"), "_").take(96)
+    private fun sanitizeKeyToken(raw: String): String = raw.replace(KEY_TOKEN_SANITIZE_REGEX, "_").take(96)
 
     private fun writeTooManyRequests(
         request: HttpServletRequest,
@@ -179,6 +179,7 @@ class ApiRateLimitBackstopFilter(
         private val WINDOW = Duration.ofMinutes(1)
         private val SAFE_METHODS = setOf("GET", "HEAD")
         private val API_PATH_REGEX = Regex("^/[^/]+/api/.*")
+        private val KEY_TOKEN_SANITIZE_REGEX = Regex("[^A-Za-z0-9:._-]")
         private val AUTH_PATHS =
             listOf(
                 Regex("^/member/api/v\\d+/auth/admin-email/(request|verify)$"),

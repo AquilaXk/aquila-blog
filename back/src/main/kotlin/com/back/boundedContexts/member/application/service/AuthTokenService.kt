@@ -7,6 +7,7 @@ import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import java.nio.charset.StandardCharsets
 import java.util.Date
 
 @Service
@@ -16,10 +17,14 @@ class AuthTokenService(
     @param:Value("\${custom.accessToken.expirationSeconds}")
     private val accessTokenExpirationSeconds: Int,
 ) : AuthTokenIssueUseCase {
-    init {
-        require(jwtSecretKey.isNotBlank()) { "CUSTOM__JWT__SECRET_KEY must be configured." }
-        require(jwtSecretKey.toByteArray().size >= 32) { "CUSTOM__JWT__SECRET_KEY must be at least 32 bytes." }
-    }
+    private val signingKey =
+        run {
+            require(jwtSecretKey.isNotBlank()) { "CUSTOM__JWT__SECRET_KEY must be configured." }
+            val secretBytes = jwtSecretKey.toByteArray(StandardCharsets.UTF_8)
+            require(secretBytes.size >= 32) { "CUSTOM__JWT__SECRET_KEY must be at least 32 bytes." }
+            Keys.hmacShaKeyFor(secretBytes)
+        }
+    private val jwtParser = Jwts.parser().verifyWith(signingKey).build()
 
     override fun genAccessToken(member: Member): String =
         genAccessToken(
@@ -51,16 +56,13 @@ class AuthTokenService(
                 ),
             ).issuedAt(Date())
             .expiration(Date(System.currentTimeMillis() + accessTokenExpirationSeconds * 1000L))
-            .signWith(Keys.hmacShaKeyFor(jwtSecretKey.toByteArray()))
+            .signWith(signingKey)
             .compact()
 
     fun payload(accessToken: String): AccessTokenPayload? {
         val claims =
             runCatching {
-                Jwts
-                    .parser()
-                    .verifyWith(Keys.hmacShaKeyFor(jwtSecretKey.toByteArray()))
-                    .build()
+                jwtParser
                     .parseSignedClaims(accessToken)
                     .payload
             }.getOrNull() ?: return null

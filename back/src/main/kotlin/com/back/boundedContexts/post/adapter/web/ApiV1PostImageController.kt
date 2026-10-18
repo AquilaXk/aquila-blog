@@ -123,14 +123,12 @@ class ApiV1PostImageController(
             when (uploadedFile.purpose) {
                 UploadedFilePurpose.PROFILE_IMAGE ->
                     profileImageReadUseCase.resolve(objectKey, uploadedFile, securityUser?.id)
-                UploadedFilePurpose.POST_IMAGE -> {
-                    ensurePublicPostUpload(
+                UploadedFilePurpose.POST_IMAGE ->
+                    resolvePostImageAccess(
                         uploadedFile = uploadedFile,
-                        purpose = UploadedFilePurpose.POST_IMAGE,
+                        securityUser = securityUser,
                         notFound = ::postImageNotFound,
                     )
-                    ProfileImageReadUseCase.Access.PUBLIC
-                }
                 else -> throw postImageNotFound()
             }
         val etag =
@@ -216,13 +214,17 @@ class ApiV1PostImageController(
         return finalizedBuilder.body(InputStreamResource(image.inputStream))
     }
 
-    private fun ensurePublicPostUpload(
+    private fun resolvePostImageAccess(
         uploadedFile: UploadedFile,
-        purpose: UploadedFilePurpose,
+        securityUser: SecurityUser?,
         notFound: () -> AppException,
-    ) {
+    ): ProfileImageReadUseCase.Access {
+        val isAdmin = isAdminUser(securityUser)
+        if (uploadedFile.status == UploadedFileStatus.TEMP) {
+            if (isAdmin) return ProfileImageReadUseCase.Access.OWNER_ONLY
+            throw notFound()
+        }
         if (
-            uploadedFile.purpose != purpose ||
             uploadedFile.status != UploadedFileStatus.ACTIVE ||
             uploadedFile.ownerType != UploadedFileOwnerType.POST
         ) {
@@ -230,8 +232,16 @@ class ApiV1PostImageController(
         }
 
         val postId = uploadedFile.ownerId?.takeIf { it > 0L } ?: throw notFound()
-        if (postRepository.findPublicDetailById(postId) == null) throw notFound()
+        if (postRepository.findPublicDetailById(postId) != null) {
+            return ProfileImageReadUseCase.Access.PUBLIC
+        }
+        if (isAdmin && postRepository.findById(postId).isPresent) {
+            return ProfileImageReadUseCase.Access.OWNER_ONLY
+        }
+        throw notFound()
     }
+
+    private fun isAdminUser(securityUser: SecurityUser?): Boolean = securityUser?.authorities?.any { it.authority == "ROLE_ADMIN" } == true
 
     private fun postImageNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, IMAGE_NOT_FOUND_MESSAGE)
 

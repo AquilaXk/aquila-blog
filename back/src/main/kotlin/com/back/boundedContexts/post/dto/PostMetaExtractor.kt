@@ -9,10 +9,6 @@ object PostMetaExtractor {
     internal const val MAX_CACHE_ENTRIES = 512
     private val HEX_FORMAT = HexFormat.of()
 
-    /**
-     * PostMeta는 계층 간 데이터 전달에 사용하는 DTO입니다.
-     * 도메인 엔티티 직접 노출을 피하고 API/서비스 경계를 명확히 유지합니다.
-     */
     data class PostMeta(
         val tags: List<String>,
         val categories: List<String>,
@@ -115,14 +111,14 @@ object PostMetaExtractor {
         val categories = linkedSetOf<String>()
 
         metadataBlock.lineSequence().forEach { line ->
-            val parts = line.split(":", limit = 2)
-            if (parts.size == 2) {
-                val key = parts[0].trim().lowercase()
-                val items = parseMetaItems(parts[1])
+            val colonIndex = line.indexOf(':')
+            if (colonIndex > 0) {
+                val key = line.substring(0, colonIndex).trim().lowercase()
+                val rawValue = line.substring(colonIndex + 1)
                 if (key == "tag" || key == "tags") {
-                    tags.addAll(items)
+                    collectMetaItems(rawValue, tags)
                 } else if (key == "category" || key == "categories") {
-                    categories.addAll(items)
+                    collectMetaItems(rawValue, categories)
                 }
             }
         }
@@ -133,17 +129,31 @@ object PostMetaExtractor {
         )
     }
 
-    private fun parseMetaItems(rawValue: String): List<String> =
-        rawValue
-            .trim()
-            .removePrefix("[")
-            .removeSuffix("]")
-            .split(",")
-            .map { token ->
-                token
+    private fun collectMetaItems(
+        rawValue: String,
+        sink: MutableCollection<String>,
+    ) {
+        val stripped =
+            rawValue
+                .trim()
+                .removePrefix("[")
+                .removeSuffix("]")
+        var start = 0
+        while (start <= stripped.length) {
+            val commaIndex = stripped.indexOf(',', startIndex = start)
+            val end = if (commaIndex == -1) stripped.length else commaIndex
+            val token =
+                stripped
+                    .substring(start, end)
                     .trim()
                     .removeSurrounding("\"")
                     .removeSurrounding("'")
                     .trim()
-            }.filter { it.isNotEmpty() }
+            if (token.isNotEmpty()) {
+                sink.add(token)
+            }
+            if (commaIndex == -1) break
+            start = commaIndex + 1
+        }
+    }
 }

@@ -613,7 +613,7 @@ class TaskProcessingScheduledJob(
     }
 
     private fun safeTagValue(raw: String): String {
-        val sanitized = raw.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val sanitized = raw.trim().replace(SAFE_TAG_SANITIZE_REGEX, "_")
         return sanitized.take(80).ifBlank { "unknown" }
     }
 
@@ -800,4 +800,8 @@ class TaskProcessingScheduledJob(
         val workerDeadlineNanos: Long,
         val phaseDeadlineNanos: Long,
     )
+
+    companion object {
+        private val SAFE_TAG_SANITIZE_REGEX = Regex("[^a-zA-Z0-9._-]")
+    }
 }

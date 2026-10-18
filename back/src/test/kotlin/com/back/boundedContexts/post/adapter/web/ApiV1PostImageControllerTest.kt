@@ -172,6 +172,88 @@ class ApiV1PostImageControllerTest {
     }
 
     @Test
+    @DisplayName("관리자 세션은 TEMP 및 비공개 게시글 POST_IMAGE를 private no-store 캐시로 미리보기할 수 있다")
+    fun `관리자 세션은 TEMP 및 비공개 게시글 이미지를 private no-store로 조회한다`() {
+        val tempKey = "posts/2026/03/temp-preview.png"
+        val privateKey = "posts/2026/03/private-preview.png"
+        val tempFile = postImage(tempKey)
+        val privateFile = postImage(privateKey).apply { attachToPost(40L, UploadedFilePurpose.POST_IMAGE) }
+        val privatePost =
+            Post(
+                id = 40L,
+                author = Member(1L, "admin", null, "관리자"),
+                title = "비공개 초안",
+                content = "본문",
+                published = false,
+                listed = false,
+            )
+
+        `when`(uploadedFileRepository.findByObjectKey(tempKey)).thenReturn(tempFile)
+        `when`(uploadedFileRepository.findByObjectKey(privateKey)).thenReturn(privateFile)
+        `when`(postRepository.findPublicDetailById(40L)).thenReturn(null)
+        `when`(postRepository.findById(40L)).thenReturn(Optional.of(privatePost))
+        postImageStorageService.images[tempKey] = storedImage(tempKey)
+        postImageStorageService.images[privateKey] = storedImage(privateKey)
+
+        val adminUser = ownerSecurityUser(7L)
+        val tempResponse = controller.getPostImage(imageRequest(tempKey), adminUser)
+        val privateResponse = controller.getPostImage(imageRequest(privateKey), adminUser)
+        val tempNotModified =
+            controller.getPostImage(
+                imageRequest(tempKey).apply { addHeader(HttpHeaders.IF_NONE_MATCH, requireNotNull(tempResponse.headers.eTag)) },
+                adminUser,
+            )
+
+        listOf(tempResponse, privateResponse, tempNotModified).forEach { response ->
+            assertThat(response.headers.cacheControl).contains("no-store").contains("private")
+            assertThat(response.headers.getFirst(HttpHeaders.VARY)).isEqualTo(HttpHeaders.COOKIE)
+        }
+        assertThat(tempResponse.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(privateResponse.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(tempNotModified.statusCode).isEqualTo(HttpStatus.NOT_MODIFIED)
+        assertThat(postImageStorageService.imageDownloads).containsExactly(tempKey, privateKey)
+    }
+
+    @Test
+    @DisplayName("비관리자 세션이나 삭제된 게시글의 POST_IMAGE는 관리자라도 storage 접근 전에 차단한다")
+    fun `비관리자 세션과 삭제된 게시글 또는 삭제 상태 이미지는 storage 접근 전에 차단한다`() {
+        val tempKey = "posts/2026/03/temp-denied.png"
+        val missingPostKey = "posts/2026/03/missing-post.png"
+        val invalidOwnerIdKey = "posts/2026/03/invalid-owner-id.png"
+        val deletedFileKey = "posts/2026/03/deleted-file.png"
+        val nonAdminUser =
+            com.back.global.security.domain.SecurityUser(
+                99L,
+                "reader",
+                "",
+                "일반회원",
+                listOf(SimpleGrantedAuthority("ROLE_USER")),
+            )
+        val adminUser = ownerSecurityUser(7L)
+
+        `when`(uploadedFileRepository.findByObjectKey(tempKey)).thenReturn(postImage(tempKey))
+        `when`(uploadedFileRepository.findByObjectKey(missingPostKey))
+            .thenReturn(postImage(missingPostKey).apply { attachToPost(404L, UploadedFilePurpose.POST_IMAGE) })
+        `when`(uploadedFileRepository.findByObjectKey(invalidOwnerIdKey))
+            .thenReturn(postImage(invalidOwnerIdKey).apply { attachToPost(0L, UploadedFilePurpose.POST_IMAGE) })
+        `when`(uploadedFileRepository.findByObjectKey(deletedFileKey))
+            .thenReturn(postImage(deletedFileKey).apply { markDeleted() })
+        `when`(postRepository.findPublicDetailById(404L)).thenReturn(null)
+        `when`(postRepository.findById(404L)).thenReturn(Optional.empty())
+
+        assertThatThrownBy { controller.getPostImage(imageRequest(tempKey), nonAdminUser) }
+            .isInstanceOf(AppException::class.java)
+        assertThatThrownBy { controller.getPostImage(imageRequest(missingPostKey), adminUser) }
+            .isInstanceOf(AppException::class.java)
+        assertThatThrownBy { controller.getPostImage(imageRequest(invalidOwnerIdKey), adminUser) }
+            .isInstanceOf(AppException::class.java)
+        assertThatThrownBy { controller.getPostImage(imageRequest(deletedFileKey), adminUser) }
+            .isInstanceOf(AppException::class.java)
+
+        assertThat(postImageStorageService.imageDownloads).isEmpty()
+    }
+
+    @Test
     fun `발행된 프로필 이미지는 공개 캐시 정책으로 반환한다`() {
         withIsolatedAppConfig {
             val objectKey = "profiles/7/published.png"

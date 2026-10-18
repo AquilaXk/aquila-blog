@@ -217,4 +217,36 @@ class HtmlContentSanitizerTest {
         assertThat(sanitized)
             .isEqualTo("""<a target="_blank" rel="nofollow noopener noreferrer" href="https://example.com">external</a>""")
     }
+
+    @Test
+    @DisplayName("Obsidian/GFM 시맨틱 태그와 비활성 체크박스는 유지하고 일반 input 태그는 제거한다")
+    fun preservesSemanticTagsAndDisabledTaskListCheckboxesWhileStrippingOtherInputs() {
+        // given
+        val rawHtml =
+            """
+            <figure><img src="https://cdn.example.com/diagram.png" alt="diagram"><figcaption>Figure 1</figcaption></figure>
+            <p>Press <kbd>Cmd</kbd>+<kbd>K</kbd> for <abbr title="Command Palette">CP</abbr>, <dfn>term</dfn>, <var>x</var>, <samp>ok</samp>.</p>
+            <ul>
+            <li><input type="checkbox" checked> done</li>
+            <li><input type="CHECKBOX" disabled> todo</li>
+            <li><input type="text" value="phish"><input></li>
+            </ul>
+            """.trimIndent()
+
+        // when
+        val sanitized = HtmlContentSanitizer.sanitizeRichHtmlOrNull(rawHtml)
+
+        // then
+        assertThat(sanitized).contains("<figure>")
+        assertThat(sanitized).contains("<figcaption>Figure 1</figcaption>")
+        assertThat(sanitized).contains("<kbd>Cmd</kbd>")
+        assertThat(sanitized).contains("""<abbr title="Command Palette">CP</abbr>""")
+        assertThat(sanitized).contains("<dfn>term</dfn>")
+        assertThat(sanitized).contains("<var>x</var>")
+        assertThat(sanitized).contains("<samp>ok</samp>")
+        assertThat(sanitized).contains("""<input type="checkbox" checked disabled>""")
+        assertThat(sanitized).contains("""<input type="checkbox" disabled>""")
+        assertThat(sanitized).doesNotContain("""type="text"""")
+        assertThat(sanitized).doesNotContain("phish")
+    }
 }

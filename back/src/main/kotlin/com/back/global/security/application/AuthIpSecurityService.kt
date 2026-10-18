@@ -20,10 +20,16 @@ class AuthIpSecurityService(
     @param:Value("\${custom.jwt.secretKey}")
     private val jwtSecretKey: String,
 ) {
+    private val hmacKeySpec =
+        SecretKeySpec(
+            configuredHashSecret.ifBlank { jwtSecretKey }.toByteArray(UTF_8),
+            HMAC_ALGORITHM,
+        )
+
     fun fingerprint(clientIp: String): String? {
         val normalizedIp = normalizeIp(clientIp) ?: return null
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(resolveSecret().toByteArray(UTF_8), "HmacSHA256"))
+        val mac = Mac.getInstance(HMAC_ALGORITHM)
+        mac.init(hmacKeySpec)
         val digest = mac.doFinal(normalizedIp.toByteArray(UTF_8))
         return Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
     }
@@ -40,7 +46,9 @@ class AuthIpSecurityService(
         )
     }
 
-    private fun resolveSecret(): String = configuredHashSecret.ifBlank { jwtSecretKey }
-
     private fun normalizeIp(clientIp: String): String? = IpAddressNormalizer.normalize(clientIp)
+
+    companion object {
+        private const val HMAC_ALGORITHM = "HmacSHA256"
+    }
 }

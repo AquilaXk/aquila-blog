@@ -36,14 +36,18 @@ object HtmlContentSanitizer {
             .none()
             .addTags(
                 "a",
+                "abbr",
                 "b",
                 "blockquote",
                 "br",
                 "code",
                 "del",
                 "details",
+                "dfn",
                 "div",
                 "em",
+                "figcaption",
+                "figure",
                 "h1",
                 "h2",
                 "h3",
@@ -53,12 +57,15 @@ object HtmlContentSanitizer {
                 "hr",
                 "i",
                 "img",
+                "input",
+                "kbd",
                 "li",
                 "mark",
                 "ol",
                 "p",
                 "pre",
                 "s",
+                "samp",
                 "span",
                 "strong",
                 "sub",
@@ -72,6 +79,7 @@ object HtmlContentSanitizer {
                 "tr",
                 "u",
                 "ul",
+                "var",
             ).addAttributes(
                 ":all",
                 "class",
@@ -94,6 +102,7 @@ object HtmlContentSanitizer {
                 "data-theme",
             ).addAttributes("a", "href", "rel", "target")
             .addAttributes("img", "alt", "decoding", "height", "loading", "src", "width")
+            .addAttributes("input", "checked", "disabled", "type")
             .addAttributes("ol", "start", "type")
             .addAttributes("li", "value")
             .addAttributes("details", "open")
@@ -110,6 +119,15 @@ object HtmlContentSanitizer {
 
         val document = Jsoup.parseBodyFragment(rawHtml, SANITIZER_BASE_URI)
         val body = cleaner.clean(document).body()
+
+        body.select("input").forEach { element ->
+            if (!element.attr("type").equals("checkbox", ignoreCase = true)) {
+                element.remove()
+            } else {
+                element.attr("type", "checkbox")
+                element.attr("disabled", "")
+            }
+        }
 
         body.select("a[target=_blank]").forEach { element ->
             val mergedRel =

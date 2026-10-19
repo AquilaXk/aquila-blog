@@ -32,7 +32,7 @@ extra["jackson-bom.version"] = "3.1.7"
 val nettyVersion = extra["netty.version"] as String
 val jackson2Version = extra["jackson-2-bom.version"] as String
 val jackson3Version = extra["jackson-bom.version"] as String
-val awsSdkVersion = "2.54.11"
+val awsSdkVersion = "2.55.16"
 val testcontainersVersion = "1.21.4"
 
 java {

@@ -50,7 +50,10 @@ data class CloudVideoUploadPartResultDto(
 private val CLOUD_UPLOAD_DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd")
 private const val MAX_FILENAME_CODE_POINTS = 255L
 private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
-private val UNSAFE_FOLDER_SEGMENT_REGEX = Regex("[^A-Za-z0-9._ -]")
+private const val MAX_FOLDER_PATH_LENGTH = 180
+private val UNSAFE_FOLDER_SEGMENT_REGEX = Regex("[^\\p{L}\\p{N}._ -]")
+private val OBJECT_KEY_UNSAFE_SEGMENT_REGEX = Regex("[^A-Za-z0-9._-]")
+private val REPEATED_UNDERSCORE_REGEX = Regex("_+")
 private val UNSAFE_EXTENSION_CHAR_REGEX = Regex("[^a-z0-9]")
 private val FILENAME_LINEBREAK_REGEX = Regex("[\\r\\n\\t]")
 private val FILENAME_SLASH_REGEX = Regex("[/\\\\]")
@@ -67,22 +70,37 @@ internal fun normalizeContentType(raw: String?): String =
         .orEmpty()
 
 internal fun normalizeFolderPath(folderPath: String?): String {
-    val raw = folderPath?.trim()?.trim('/').orEmpty()
+    val raw =
+        folderPath
+            ?.let { Normalizer.normalize(it.trim(), Normalizer.Form.NFC) }
+            ?.trim('/')
+            .orEmpty()
     if (raw.isBlank()) return ""
-    if (
-        raw.contains("..") ||
-        raw.contains("//") ||
-        raw.startsWith("/") ||
-        raw.split('/').any { it.isBlank() || it == "." || it == ".." }
-    ) {
+    if (raw.contains("..") || raw.contains("//")) {
         throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 폴더 경로입니다.")
     }
 
-    return raw
-        .split('/')
-        .joinToString("/") { segment ->
-            segment.replace(UNSAFE_FOLDER_SEGMENT_REGEX, "_").take(80)
-        }.take(500)
+    val normalized =
+        raw
+            .split('/')
+            .joinToString("/") { segment ->
+                val sanitized =
+                    segment
+                        .trim()
+                        .replace(UNSAFE_FOLDER_SEGMENT_REGEX, "_")
+                        .replace(WHITESPACE_REGEX, " ")
+                        .replace(REPEATED_UNDERSCORE_REGEX, "_")
+                        .trim()
+                        .take(80)
+                if (sanitized.isBlank() || sanitized == ".") {
+                    throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 폴더 경로입니다.")
+                }
+                sanitized
+            }
+    if (normalized.length > MAX_FOLDER_PATH_LENGTH) {
+        throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 폴더 경로입니다.")
+    }
+    return normalized
 }
 
 internal fun normalizeFilename(
@@ -185,7 +203,7 @@ internal fun buildObjectKey(
 ): String {
     val ext = extractObjectKeyExtension(originalFilename)
     val datePath = CLOUD_UPLOAD_DATE_PATH_FORMATTER.format(now.atZone(ZoneOffset.UTC))
-    val folderSegment = folderPath.takeIf(String::isNotBlank)?.let { "$it/" }.orEmpty()
+    val folderSegment = sanitizeObjectKeyFolderPath(folderPath)
     val normalizedKeyPrefix = normalizeObjectKeyPrefix(keyPrefix)
     return "$normalizedKeyPrefix/$ownerMemberId/$folderSegment$datePath/${UUID.randomUUID()}$ext"
 }
@@ -201,6 +219,7 @@ internal fun CloudFile.toDto(clock: Clock): CloudFileDto =
         folderPath = folderPath,
         createdAt = runCatching { createdAt }.getOrDefault(clock.instant()),
         modifiedAt = runCatching { modifiedAt }.getOrDefault(clock.instant()),
+        objectKey = objectKey,
     )
 
 internal fun CloudVideoUploadSession.toDto(parts: List<CloudVideoUploadPart>): CloudVideoUploadSessionDto =
@@ -225,6 +244,19 @@ internal fun CloudVideoUploadPart.toDto(): CloudVideoUploadPartDto =
         partNumber = partNumber,
         byteSize = byteSize,
     )
+
+private fun sanitizeObjectKeyFolderPath(folderPath: String): String {
+    if (folderPath.isBlank()) return ""
+    return folderPath
+        .split('/')
+        .joinToString("/") { segment ->
+            val sanitized =
+                segment
+                    .replace(OBJECT_KEY_UNSAFE_SEGMENT_REGEX, "_")
+                    .replace(REPEATED_UNDERSCORE_REGEX, "_")
+            if (sanitized == "_") "folder" else sanitized
+        }.let { "$it/" }
+}
 
 private fun normalizeObjectKeyPrefix(prefix: String): String =
     prefix

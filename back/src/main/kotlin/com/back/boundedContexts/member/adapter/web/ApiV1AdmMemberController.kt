@@ -16,13 +16,13 @@ import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.member.model.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.ProfileImageHistoryDto
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFilePurpose
 import jakarta.validation.Valid
@@ -44,8 +44,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 @Validated
 @RestController
@@ -236,13 +234,7 @@ class ApiV1AdmMemberController(
             fileSize = file.size,
             purpose = UploadedFilePurpose.PROFILE_IMAGE,
         )
-        val encodedKey =
-            URLEncoder
-                .encode(key, StandardCharsets.UTF_8)
-                .replace("+", "%20")
-                .replace("%2F", "/")
-        val imageUrl = "${AppConfig.siteBackUrl}/post/api/v1/images/$encodedKey"
-        return ProfileImageUploadResponse(imageUrl)
+        return ProfileImageUploadResponse(UploadedFileUrlCodec.buildImageUrl(key))
     }
 
     @GetMapping("/{id}/profileImageFiles")
@@ -291,9 +283,6 @@ class ApiV1AdmMemberController(
             getProfileWorkspacePublishedContent().profileImageUrl,
         )
 
-    /**
-     * 관리자 표시 이름(nickname)을 수정한다.
-     */
     @PatchMapping("/{id}/nickname")
     @Transactional
     fun updateProfileIdentity(

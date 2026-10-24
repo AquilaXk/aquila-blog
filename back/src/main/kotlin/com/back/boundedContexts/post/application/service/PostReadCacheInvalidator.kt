@@ -61,7 +61,6 @@ class PostReadCacheInvalidator(
         cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
         recordCacheEvict(PostQueryCacheNames.FEED, "clear", evictReason)
 
-        // Untagged cursor-first/bootstrap keys remain enumerable by hot page sizes.
         hotPageSizes.forEach { pageSize ->
             targetSorts.forEach { sort ->
                 val sortName = sort.name
@@ -230,37 +229,32 @@ class PostReadCacheInvalidator(
         exploreCursorFirstCache: Cache?,
         bootstrapCache: Cache?,
     ) {
-        val impactedTagTokens =
-            buildList(request.beforeTags.size + request.afterTags.size) {
-                addAll(request.beforeTags)
-                addAll(request.afterTags)
-            }.asSequence()
+        val impactedTags =
+            (request.beforeTags + request.afterTags)
+                .asSequence()
                 .map(String::trim)
                 .filter(String::isNotBlank)
-                .map(PostPublicReadQueryService::toCacheKeyToken)
                 .distinct()
-                .take(maxTagCacheEvict)
                 .toList()
 
-        impactedTagTokens.forEach { token ->
-            hotPageSizes.forEach { pageSize ->
-                hotSorts.forEach { sort ->
-                    val sortName = sort.name
-                    exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=$token")
-                    recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", request.evictReason)
-                    exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=$token")
-                    recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", request.evictReason)
+        impactedTags
+            .asSequence()
+            .map(PostPublicReadQueryService::toCacheKeyToken)
+            .distinct()
+            .take(maxTagCacheEvict)
+            .forEach { token ->
+                hotPageSizes.forEach { pageSize ->
+                    hotSorts.forEach { sort ->
+                        val sortName = sort.name
+                        exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=$token")
+                        recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", request.evictReason)
+                        exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=$token")
+                        recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", request.evictReason)
+                    }
                 }
             }
-        }
 
-        buildList(request.beforeTags.size + request.afterTags.size) {
-            addAll(request.beforeTags)
-            addAll(request.afterTags)
-        }.asSequence()
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .distinct()
+        impactedTags
             .take(maxTagCacheEvict)
             .forEach { rawTag ->
                 hotPageSizes.forEach { pageSize ->
@@ -279,28 +273,21 @@ class PostReadCacheInvalidator(
     }
 
     private fun evictDetailCaches(request: PostReadCacheInvalidationRequest) {
-        val detailSnapshotCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
-        val detailMetaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
-        val detailContentCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
-        val detailNegativeCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
-        if (request.postId == null) {
-            detailSnapshotCache?.clear()
-            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "clear", request.evictReason)
-            detailMetaCache?.clear()
-            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "clear", request.evictReason)
-            detailContentCache?.clear()
-            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "clear", request.evictReason)
-            detailNegativeCache?.clear()
-            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "clear", request.evictReason)
-        } else {
-            detailSnapshotCache?.evict(request.postId)
-            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "key", request.evictReason)
-            detailMetaCache?.evict(request.postId)
-            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "key", request.evictReason)
-            detailContentCache?.evict(request.postId)
-            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "key", request.evictReason)
-            detailNegativeCache?.evict(request.postId)
-            recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "key", request.evictReason)
+        val postId = request.postId
+        listOf(
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_META,
+            PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+            PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
+        ).forEach { cacheName ->
+            val cache = cacheManager.getCache(cacheName)
+            if (postId == null) {
+                cache?.clear()
+                recordCacheEvict(cacheName, "clear", request.evictReason)
+            } else {
+                cache?.evict(postId)
+                recordCacheEvict(cacheName, "key", request.evictReason)
+            }
         }
     }
 

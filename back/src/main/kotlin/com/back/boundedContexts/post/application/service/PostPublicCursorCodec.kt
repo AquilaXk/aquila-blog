@@ -41,17 +41,13 @@ internal class PostPublicCursorCodec(
         )
 
     fun requireCursorSort(sort: PostSearchSortType1): PostSearchSortType1 =
-        when (sort) {
-            PostSearchSortType1.CREATED_AT,
-            PostSearchSortType1.CREATED_AT_ASC,
-            PostSearchSortType1.HIT_COUNT,
-            PostSearchSortType1.LIKES_COUNT,
-            -> sort
-            else ->
-                throw AppException(
-                    ErrorCode.BAD_REQUEST,
-                    "커서 조회는 CREATED_AT/HIT_COUNT/LIKES_COUNT 정렬만 지원합니다.",
-                )
+        if (sort.isCursorSupported) {
+            sort
+        } else {
+            throw AppException(
+                ErrorCode.BAD_REQUEST,
+                "커서 조회는 CREATED_AT/HIT_COUNT/LIKES_COUNT 정렬만 지원합니다.",
+            )
         }
 
     fun parseCursor(

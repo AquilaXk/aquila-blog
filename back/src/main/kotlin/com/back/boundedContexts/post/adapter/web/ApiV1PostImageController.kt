@@ -3,12 +3,12 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
-import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFile
@@ -34,7 +34,6 @@ import org.springframework.web.multipart.MultipartFile
 import java.io.EOFException
 import java.io.InputStream
 import java.net.URLDecoder
-import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.concurrent.TimeUnit
@@ -87,12 +86,7 @@ class ApiV1PostImageController(
             fileSize = file.size,
             purpose = UploadedFilePurpose.POST_IMAGE,
         )
-        val encodedKey =
-            URLEncoder
-                .encode(key, StandardCharsets.UTF_8)
-                .replace("+", "%20")
-                .replace("%2F", "/")
-        val imageUrl = "${AppConfig.siteBackUrl}/post/api/v1/images/$encodedKey"
+        val imageUrl = UploadedFileUrlCodec.buildImageUrl(key)
 
         return RsData(
             "201-1",

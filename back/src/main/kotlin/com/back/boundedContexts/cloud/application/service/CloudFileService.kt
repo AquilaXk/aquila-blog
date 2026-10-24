@@ -13,17 +13,10 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.InputStream
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
-import java.text.Normalizer
 import java.time.Clock
 import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import java.util.UUID
 import java.util.zip.ZipFile
 
 data class CloudFileDto(
@@ -65,7 +58,11 @@ class CloudFileService(
         inputStream.use { source ->
             if (contentLength <= 0) throw AppException(ErrorCode.BAD_REQUEST, "클라우드 파일이 비어 있습니다.")
             val normalizedFolderPath = normalizeFolderPath(folderPath)
-            val safeFilename = normalizeFilename(clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename)
+            val safeFilename =
+                normalizeFilename(
+                    clientOriginalFilename?.takeIf(String::isNotBlank) ?: originalFilename,
+                    "cloud-file",
+                )
             val tempFile = copyToTempFile(source, contentLength)
             try {
                 val detected = detectContent(tempFile, contentType, safeFilename)
@@ -75,9 +72,10 @@ class CloudFileService(
                         ownerMemberId = ownerMemberId,
                         folderPath = normalizedFolderPath,
                         originalFilename = safeFilename,
+                        keyPrefix = cloudStorageProperties.cloudKeyPrefix,
+                        now = clock.instant(),
                     )
 
-                // 선언 MIME만 믿지 않고 파일 시그니처로 media kind를 확정해 preview spoofing을 막는다.
                 val uploadResult =
                     Files.newInputStream(tempFile).use { uploadStream ->
                         cloudStoragePort.upload(
@@ -110,7 +108,7 @@ class CloudFileService(
                     ownerMemberId,
                 )
 
-                return saved.toDto()
+                return saved.toDto(clock)
             } finally {
                 deleteTempFileQuietly(tempFile)
             }
@@ -129,7 +127,7 @@ class CloudFileService(
                 folderPath = normalizeOptionalFolderPath(folderPath),
                 keyword = keyword?.trim()?.takeIf(String::isNotBlank),
                 mediaKind = mediaKind,
-            ).map { it.toDto() }
+            ).map { it.toDto(clock) }
 
     @Transactional(readOnly = true)
     fun get(
@@ -138,7 +136,7 @@ class CloudFileService(
     ): CloudFileDto =
         cloudFileRepository
             .findActiveByIdAndOwner(fileId, ownerMemberId)
-            ?.toDto()
+            ?.toDto(clock)
             ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
     @Transactional(readOnly = true)
@@ -155,7 +153,7 @@ class CloudFileService(
                 ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
-            file = file.toDto(),
+            file = file.toDto(clock),
             storedObject = storedObject,
         )
     }
@@ -174,7 +172,7 @@ class CloudFileService(
                 ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
-            file = file.toDto(),
+            file = file.toDto(clock),
             storedObject = storedObject,
         )
     }
@@ -217,115 +215,7 @@ class CloudFileService(
         )
     }
 
-    private fun CloudFile.toDto(): CloudFileDto =
-        CloudFileDto(
-            id = id,
-            ownerMemberId = ownerMemberId,
-            originalFilename = originalFilename,
-            contentType = contentType,
-            byteSize = byteSize,
-            mediaKind = mediaKind,
-            folderPath = folderPath,
-            createdAt = runCatching { createdAt }.getOrDefault(clock.instant()),
-            modifiedAt = runCatching { modifiedAt }.getOrDefault(clock.instant()),
-        )
-
     private fun normalizeOptionalFolderPath(folderPath: String?): String? = normalizeFolderPath(folderPath).takeIf(String::isNotBlank)
-
-    private fun normalizeFolderPath(folderPath: String?): String {
-        val raw = folderPath?.trim()?.trim('/').orEmpty()
-        if (raw.isBlank()) return ""
-        if (
-            raw.contains("..") ||
-            raw.contains("//") ||
-            raw.startsWith("/") ||
-            raw.split('/').any { it.isBlank() || it == "." || it == ".." }
-        ) {
-            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 폴더 경로입니다.")
-        }
-
-        val cleaned =
-            raw
-                .split('/')
-                .joinToString("/") { segment ->
-                    segment.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)
-                }.take(500)
-
-        return cleaned
-    }
-
-    private fun normalizeFilename(originalFilename: String?): String {
-        val fallback = "cloud-file"
-        val raw =
-            originalFilename
-                ?.substringAfterLast('/')
-                ?.substringAfterLast('\\')
-                ?.trim()
-                .orEmpty()
-        val decoded = recoverUtf8MojibakeFilename(raw)
-        val cleaned =
-            Normalizer
-                .normalize(decoded, Normalizer.Form.NFC)
-                .ifBlank { fallback }
-                .replace(Regex("[\\r\\n\\t]"), " ")
-                .replace(Regex("[/\\\\]"), "_")
-                .replace(Regex("[\\p{Cc}\\p{Cf}\\p{Cs}]"), "")
-                .replace(Regex("\\s+"), " ")
-                .takeFilenameLimits()
-                .trim()
-
-        return cleaned.ifBlank { fallback }
-    }
-
-    private fun String.takeFilenameLimits(): String {
-        val originalExtensionIndex = lastIndexOf(".").takeIf { it > 0 && it < lastIndex }
-        val originalExtension =
-            originalExtensionIndex
-                ?.let(::substring)
-                .orEmpty()
-                .takeCodePoints(MAX_FILENAME_CODE_POINTS - 1)
-        val originalStem = originalExtensionIndex?.let { substring(0, it) } ?: this
-        val maxStemCodePoints =
-            MAX_FILENAME_CODE_POINTS - originalExtension.codePointCount(0, originalExtension.length).toLong()
-        val codePointLimited = originalStem.takeCodePoints(maxStemCodePoints.coerceAtLeast(0)) + originalExtension
-        if (metadataEncodedLength(codePointLimited) <= MAX_FILENAME_METADATA_ENCODED_BYTES) return codePointLimited
-
-        val extensionIndex = codePointLimited.lastIndexOf(".").takeIf { it > 0 && it < codePointLimited.lastIndex }
-        val extension =
-            extensionIndex
-                ?.let(codePointLimited::substring)
-                .orEmpty()
-                .takeMetadataEncodedBytes(MAX_FILENAME_METADATA_ENCODED_BYTES)
-        val stem = extensionIndex?.let { codePointLimited.substring(0, it) } ?: codePointLimited
-        val maxStemBytes = MAX_FILENAME_METADATA_ENCODED_BYTES - metadataEncodedLength(extension)
-        val safeStem = stem.takeMetadataEncodedBytes(maxStemBytes.coerceAtLeast(0))
-        return (safeStem + extension).ifBlank { takeMetadataEncodedBytes(MAX_FILENAME_METADATA_ENCODED_BYTES) }
-    }
-
-    private fun String.takeCodePoints(maxCodePoints: Long): String {
-        val codePoints = codePoints().limit(maxCodePoints).toArray()
-        return String(codePoints, 0, codePoints.size)
-    }
-
-    private fun String.takeMetadataEncodedBytes(maxEncodedBytes: Int): String {
-        val builder = StringBuilder()
-        val iterator = codePoints().iterator()
-        while (iterator.hasNext()) {
-            val next = iterator.nextInt()
-            val candidate = StringBuilder(builder).appendCodePoint(next).toString()
-            if (metadataEncodedLength(candidate) > maxEncodedBytes) break
-            builder.appendCodePoint(next)
-        }
-
-        return builder.toString()
-    }
-
-    private fun metadataEncodedLength(value: String): Int =
-        URLEncoder
-            .encode(value, StandardCharsets.UTF_8)
-            .replace("+", "%20")
-            .toByteArray(StandardCharsets.US_ASCII)
-            .size
 
     private fun copyToTempFile(
         inputStream: InputStream,
@@ -358,26 +248,6 @@ class CloudFileService(
         }
     }
 
-    private fun deleteTempFileQuietly(tempFile: Path) {
-        runCatching { Files.deleteIfExists(tempFile) }
-    }
-
-    private fun recoverUtf8MojibakeFilename(raw: String): String {
-        if (raw.isBlank()) return raw
-        if (raw.any { it in '가'..'힣' }) return raw
-
-        val recovered =
-            runCatching {
-                String(raw.toByteArray(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8)
-            }.getOrDefault(raw)
-
-        if (recovered == raw || recovered.contains('\uFFFD')) return raw
-
-        val rawHangulCount = raw.count { it in '가'..'힣' }
-        val recoveredHangulCount = recovered.count { it in '가'..'힣' }
-        return if (recoveredHangulCount > rawHangulCount) recovered else raw
-    }
-
     private fun validateFileSize(
         byteSize: Long,
         detected: DetectedContent,
@@ -408,53 +278,12 @@ class CloudFileService(
         return typeLimit.copy(maxBytes = effectiveMaxBytes)
     }
 
-    private fun formatFileSizeLimit(maxFileSizeBytes: Long): String {
-        val units = listOf("B", "KB", "MB", "GB")
-        var value = maxFileSizeBytes.toDouble()
-        var unitIndex = 0
-        while (value >= 1024 && unitIndex < units.lastIndex) {
-            value /= 1024
-            unitIndex++
-        }
-        val formatted = if (value % 1.0 == 0.0) value.toLong().toString() else "%.1f".format(Locale.US, value)
-        return "$formatted ${units[unitIndex]}"
-    }
-
-    private fun buildObjectKey(
-        ownerMemberId: Long,
-        folderPath: String,
-        originalFilename: String,
-    ): String {
-        val ext = extractExtension(originalFilename)
-        val datePath = DATE_PATH_FORMATTER.format(clock.instant().atZone(ZoneOffset.UTC))
-        val folderSegment = folderPath.takeIf(String::isNotBlank)?.let { "$it/" }.orEmpty()
-        val keyPrefix = normalizeObjectKeyPrefix(cloudStorageProperties.cloudKeyPrefix)
-        return "$keyPrefix/$ownerMemberId/$folderSegment$datePath/${UUID.randomUUID()}$ext"
-    }
-
-    private fun normalizeObjectKeyPrefix(prefix: String): String =
-        prefix
-            .trim()
-            .trim('/')
-            .ifBlank { "cloud" }
-
-    private fun extractExtension(filename: String): String {
-        if (!filename.contains(".")) return ""
-        val ext =
-            filename
-                .substringAfterLast(".")
-                .lowercase(Locale.ROOT)
-                .replace(Regex("[^a-z0-9]"), "")
-                .take(10)
-        return if (ext.isBlank()) "" else ".$ext"
-    }
-
     private fun detectContent(
         file: Path,
         declaredContentType: String?,
         filename: String,
     ): DetectedContent {
-        val normalizedDeclared = normalizeContentType(declaredContentType)
+        val normalizedDeclared = resolveDeclaredContentType(declaredContentType)
         val header = readHeader(file, 16)
         val detected =
             detectFromSignature(file, header, filename)
@@ -478,13 +307,8 @@ class CloudFileService(
         declaredContentType == detectedContentType ||
             (detectedContentType == HWPX_CONTENT_TYPE && declaredContentType == ZIP_CONTENT_TYPE)
 
-    private fun normalizeContentType(raw: String?): String? {
-        val normalized =
-            raw
-                ?.substringBefore(";")
-                ?.trim()
-                ?.lowercase(Locale.ROOT)
-                .orEmpty()
+    private fun resolveDeclaredContentType(raw: String?): String? {
+        val normalized = normalizeContentType(raw)
         if (normalized.isBlank()) return null
         return CONTENT_TYPE_ALIASES[normalized] ?: normalized
     }
@@ -527,22 +351,12 @@ class CloudFileService(
             val webp = bytes.copyOfRange(8, 12).toString(Charsets.US_ASCII)
             if (riff == "RIFF" && webp == "WEBP") return DetectedContent("image/webp", CloudFileMediaKind.PHOTO)
         }
-        if (bytes.size >= 12 && bytes.copyOfRange(4, 8).toString(Charsets.US_ASCII) == "ftyp") {
-            return DetectedContent("video/mp4", CloudFileMediaKind.VIDEO)
-        }
-        if (
-            bytes.size >= 4 &&
-            bytes[0] == 0x1A.toByte() &&
-            bytes[1] == 0x45.toByte() &&
-            bytes[2] == 0xDF.toByte() &&
-            bytes[3] == 0xA3.toByte()
-        ) {
-            return DetectedContent("video/webm", CloudFileMediaKind.VIDEO)
-        }
-        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "hwpx" && isHwpxPackage(file)) {
+        detectVideoFromSignature(bytes)?.let { return DetectedContent(it, CloudFileMediaKind.VIDEO) }
+        val extension = extractLowerExtension(filename)
+        if (extension == "hwpx" && isHwpxPackage(file)) {
             return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
-        if (filename.substringAfterLast(".", "").lowercase(Locale.ROOT) == "zip" && isValidZipArchive(file)) {
+        if (extension == "zip" && isValidZipArchive(file)) {
             return DetectedContent(ZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
 
@@ -594,31 +408,16 @@ class CloudFileService(
     )
 
     companion object {
-        private val DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd")
-        private const val MAX_FILENAME_CODE_POINTS = 255L
-        private const val MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
         private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
         private const val ZIP_CONTENT_TYPE = "application/zip"
         private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
         private const val ZIP_EOCD_MIN_SIZE = 22
-        private const val ZIP_EOCD_MAX_SEARCH_LENGTH = ZIP_EOCD_MIN_SIZE + 0xFFFF
-        private const val ZIP_EOCD_TOTAL_ENTRY_COUNT_OFFSET = 10
-        private const val ZIP_EOCD_DIRECTORY_SIZE_OFFSET = 12
-        private const val ZIP_EOCD_DIRECTORY_OFFSET = 16
-        private const val ZIP_CENTRAL_DIRECTORY_HEADER_SIZE = 46
-        private const val ZIP_CENTRAL_DIRECTORY_NAME_LENGTH_OFFSET = 28
-        private const val ZIP_CENTRAL_DIRECTORY_EXTRA_LENGTH_OFFSET = 30
-        private const val ZIP_CENTRAL_DIRECTORY_COMMENT_LENGTH_OFFSET = 32
         private val HWPX_DOCUMENT_ENTRIES =
             setOf(
                 "Contents/header.xml",
                 "Contents/section0.xml",
                 "META-INF/container.xml",
             )
-        private val ZIP_END_OF_CENTRAL_DIRECTORY_SIGNATURE =
-            byteArrayOf(0x50.toByte(), 0x4B.toByte(), 0x05.toByte(), 0x06.toByte())
-        private val ZIP_CENTRAL_DIRECTORY_FILE_HEADER_SIGNATURE =
-            byteArrayOf(0x50.toByte(), 0x4B.toByte(), 0x01.toByte(), 0x02.toByte())
         private val ZIP_SIGNATURES =
             setOf(
                 listOf(0x50.toByte(), 0x4B.toByte(), 0x03.toByte(), 0x04.toByte()),

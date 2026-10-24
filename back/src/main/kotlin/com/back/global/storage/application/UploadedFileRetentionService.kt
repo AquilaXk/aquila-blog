@@ -89,18 +89,6 @@ class UploadedFileRetentionService(
         )
     }
 
-    fun syncPostContent(
-        postId: Long,
-        previousContent: String?,
-        currentContent: String,
-    ) {
-        postAttachmentRetentionService.syncPostContent(
-            postId = postId,
-            previousContent = previousContent,
-            currentContent = currentContent,
-        )
-    }
-
     fun syncPostAttachmentKeys(
         postId: Long,
         currentImageObjectKeys: Collection<String>,
@@ -115,10 +103,6 @@ class UploadedFileRetentionService(
             currentFileObjectKeys = currentFileObjectKeys,
             previousFileObjectKeys = previousFileObjectKeys,
         )
-    }
-
-    fun scheduleDeletedPostAttachments(content: String) {
-        postAttachmentRetentionService.scheduleDeletedPostAttachments(content)
     }
 
     fun scheduleDeletedPostAttachmentKeys(

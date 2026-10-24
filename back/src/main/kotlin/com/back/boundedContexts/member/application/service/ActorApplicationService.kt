@@ -1,6 +1,5 @@
 package com.back.boundedContexts.member.application.service
 
-import com.back.boundedContexts.member.application.port.input.ActorQueryUseCase
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.exception.application.AppException
@@ -16,24 +15,24 @@ class ActorApplicationService(
     private val authTokenService: AuthTokenService,
     private val memberRepository: MemberRepositoryPort,
     private val canonicalAdminPolicy: CanonicalAdminPolicy,
-) : ActorQueryUseCase {
+) {
     @Transactional(readOnly = true)
     fun memberOf(securityUser: SecurityUser): Member =
         findById(securityUser.id)
             ?: throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 회원입니다.")
 
     @Transactional(readOnly = true)
-    override fun findByLoginId(loginId: String): Member? = memberRepository.findByLoginId(loginId)
+    fun findByLoginId(loginId: String): Member? = memberRepository.findByLoginId(loginId)
 
     @Transactional(readOnly = true)
-    override fun findByEmail(email: String): Member? =
+    fun findByEmail(email: String): Member? =
         memberRepository.findByEmail(
             email
                 .trim()
                 .lowercase(Locale.ROOT),
         )
 
-    override fun canAuthenticate(member: Member): Boolean = canonicalAdminPolicy.canAuthenticate(member)
+    fun canAuthenticate(member: Member): Boolean = canonicalAdminPolicy.canAuthenticate(member)
 
     @Transactional(readOnly = true)
     fun findByApiKey(apiKey: String): Member? = memberRepository.findByApiKey(apiKey)

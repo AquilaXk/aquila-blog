@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberDto
+import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostWriteRequestIdempotencyRepositoryPort
 import com.back.boundedContexts.post.application.port.output.SecureTipPort
@@ -51,23 +52,23 @@ class PostApplicationService(
     private val postTagIndexService: PostTagIndexService,
     private val postTempDraftService: PostTempDraftService,
     private val postHitSideEffectQueue: PostHitSideEffectQueue,
-) {
+) : PostUseCase {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
-    fun count(): Long = postRepository.count()
+    override fun count(): Long = postRepository.count()
 
-    fun randomSecureTip(): String = secureTipPort.randomSecureTip()
+    override fun randomSecureTip(): String = secureTipPort.randomSecureTip()
 
     @Transactional
-    fun write(
+    override fun write(
         author: Member,
         title: String,
         content: String,
-        published: Boolean = false,
-        listed: Boolean = false,
-        idempotencyKey: String? = null,
-        contentHtml: String? = null,
-        summary: String? = null,
+        published: Boolean,
+        listed: Boolean,
+        idempotencyKey: String?,
+        contentHtml: String?,
+        summary: String?,
         summaryMode: PostSummaryMode,
     ): Post {
         validateCreateSummaryIntent(summary, summaryMode)
@@ -134,7 +135,7 @@ class PostApplicationService(
         idempotencyKey: String? = null,
     ): Post {
         val isPublic = isPubliclyListed(post)
-        publishPostWriteAfterCommitEvent(
+        enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = post.id,
                 previousContent = null,
@@ -163,7 +164,7 @@ class PostApplicationService(
         return post
     }
 
-    fun findById(id: Long): Post? =
+    override fun findById(id: Long): Post? =
         postRepository
             .findById(id)
             .getOrNull()
@@ -172,7 +173,7 @@ class PostApplicationService(
                 postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
             }
 
-    fun findPublicDetailById(id: Long): Post? =
+    override fun findPublicDetailById(id: Long): Post? =
         postRepository
             .findPublicDetailById(id)
             ?.also { post ->
@@ -180,24 +181,24 @@ class PostApplicationService(
                 postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
             }
 
-    fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
+    override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
 
-    fun isPublicDetailReadable(id: Long): Boolean = postRepository.isPublicDetailReadable(id)
+    override fun isPublicDetailReadable(id: Long): Boolean = postRepository.isPublicDetailReadable(id)
 
-    fun findLatest(): Post? = postRepository.findFirstByOrderByIdDesc()
+    override fun findLatest(): Post? = postRepository.findFirstByOrderByIdDesc()
 
     @Transactional
-    fun modify(
+    override fun modify(
         actor: Member,
         post: Post,
         title: String,
         content: String,
-        published: Boolean? = null,
-        listed: Boolean? = null,
+        published: Boolean?,
+        listed: Boolean?,
         expectedVersion: Long,
-        contentHtml: String? = null,
-        summary: String? = null,
-        summaryMode: PostSummaryMode? = null,
+        contentHtml: String?,
+        summary: String?,
+        summaryMode: PostSummaryMode?,
     ) {
         postHydrationService.hydratePostAttrs(post)
         val currentVersion = post.version ?: 0L
@@ -279,7 +280,7 @@ class PostApplicationService(
         val summaryChanged = previousSummaryText != post.summaryText || previousSummarySource != post.summarySource
         val tagChanged = previousTags != afterTags
         val affectsPublicRead = wasPublic || isPublic
-        publishPostWriteAfterCommitEvent(
+        enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = post.id,
                 previousContent = previousContent,
@@ -427,7 +428,7 @@ class PostApplicationService(
         )
 
     @Transactional
-    fun delete(
+    override fun delete(
         post: Post,
         actor: Member,
     ) {
@@ -444,7 +445,6 @@ class PostApplicationService(
         if (wasTempDraft) {
             postTempDraftService.updateTempDraftMarker(post.author, null)
         }
-        // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.
         runCatching {
             postCounterService.decrementMemberPostsCount(Member(post.author.id))
         }.onFailure { exception ->
@@ -456,7 +456,7 @@ class PostApplicationService(
             }
         }
 
-        publishPostWriteAfterCommitEvent(
+        enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = post.id,
                 previousContent = null,
@@ -485,12 +485,12 @@ class PostApplicationService(
     }
 
     @Transactional
-    fun incrementHit(post: Post) {
+    override fun incrementHit(post: Post) {
         postCounterService.incrementHit(post)
         postHitSideEffectQueue.enqueue(post.id)
     }
 
-    fun findPagedByKw(
+    override fun findPagedByKw(
         kw: String,
         sort: PostSearchSortType1,
         page: Int,
@@ -537,7 +537,7 @@ class PostApplicationService(
         )
     }
 
-    fun findRecommendedExplorePage(
+    override fun findRecommendedExplorePage(
         page: Int,
         pageSize: Int,
     ): PagedResult<Post> {
@@ -579,12 +579,12 @@ class PostApplicationService(
         )
     }
 
-    fun findPagedByKwForAdmin(
+    override fun findPagedByKwForAdmin(
         kw: String,
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-        status: String = "all",
+        status: String,
     ): PagedResult<Post> =
         findAndHydratePagedPosts(page, pageSize) {
             postRepository.findQPagedByKwForAdmin(
@@ -599,7 +599,7 @@ class PostApplicationService(
             )
         }
 
-    fun findDeletedPagedByKwForAdmin(
+    override fun findDeletedPagedByKwForAdmin(
         kw: String,
         page: Int,
         pageSize: Int,
@@ -621,7 +621,7 @@ class PostApplicationService(
     }
 
     @Transactional
-    fun restoreDeletedByIdForAdmin(id: Long): Post {
+    override fun restoreDeletedByIdForAdmin(id: Long): Post {
         val snapshot =
             postRepository.findDeletedSnapshotById(id)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "해당 글을 찾을 수 없습니다.")
@@ -663,7 +663,7 @@ class PostApplicationService(
             UploadedFileUrlCodec.extractObjectKeysFromContent(restoredPost.content),
         )
         val isPublic = isPubliclyListed(restoredPost)
-        publishPostWriteAfterCommitEvent(
+        enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = id,
                 previousContent = null,
@@ -686,7 +686,7 @@ class PostApplicationService(
     }
 
     @Transactional
-    fun hardDeleteDeletedByIdForAdmin(id: Long) {
+    override fun hardDeleteDeletedByIdForAdmin(id: Long) {
         val snapshot =
             postRepository.findDeletedSnapshotById(id)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "해당 글을 찾을 수 없습니다.")
@@ -697,7 +697,7 @@ class PostApplicationService(
         }
         postRepository.deleteImageReferencesByPostId(id)
 
-        publishPostWriteAfterCommitEvent(
+        enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = id,
                 previousContent = null,
@@ -717,7 +717,7 @@ class PostApplicationService(
         )
     }
 
-    fun findPagedByAuthor(
+    override fun findPagedByAuthor(
         author: Member,
         kw: String,
         sort: PostSearchSortType1,
@@ -737,7 +737,7 @@ class PostApplicationService(
             )
         }
 
-    fun findPagedByKwAndTag(
+    override fun findPagedByKwAndTag(
         kw: String,
         tag: String,
         sort: PostSearchSortType1,
@@ -757,7 +757,7 @@ class PostApplicationService(
             )
         }
 
-    fun findPublicByCursor(
+    override fun findPublicByCursor(
         cursorSortValue: Long?,
         cursorId: Long?,
         limit: Int,
@@ -774,7 +774,7 @@ class PostApplicationService(
             )
         }
 
-    fun findPublicByTagCursor(
+    override fun findPublicByTagCursor(
         tag: String,
         cursorSortValue: Long?,
         cursorId: Long?,
@@ -793,7 +793,7 @@ class PostApplicationService(
             )
         }
 
-    fun findPublicByAuthorExceptPost(
+    override fun findPublicByAuthorExceptPost(
         authorId: Long,
         excludePostId: Long?,
         limit: Int,
@@ -813,14 +813,14 @@ class PostApplicationService(
         }
     }
 
-    fun getPublicTagCounts(): List<TagCountDto> = postTagIndexService.getPublicTagCounts()
+    override fun getPublicTagCounts(): List<TagCountDto> = postTagIndexService.getPublicTagCounts()
 
-    fun findTemp(author: Member): Post? = postTempDraftService.findTemp(author)
+    override fun findTemp(author: Member): Post? = postTempDraftService.findTemp(author)
 
     @Transactional
-    fun getOrCreateTemp(author: Member): Pair<Post, Boolean> = postTempDraftService.getOrCreateTemp(author)
+    override fun getOrCreateTemp(author: Member): Pair<Post, Boolean> = postTempDraftService.getOrCreateTemp(author)
 
-    fun isTempDraft(post: Post): Boolean = postTempDraftService.isTempDraft(post)
+    override fun isTempDraft(post: Post): Boolean = postTempDraftService.isTempDraft(post)
 
     private fun findAndHydratePagedPosts(
         page: Int,
@@ -849,7 +849,7 @@ class PostApplicationService(
     private fun recommendationActionFor(isPublic: Boolean): PostRecommendationSideEffect =
         if (isPublic) PostRecommendationSideEffect.REFRESH else PostRecommendationSideEffect.EVICT
 
-    private fun publishPostWriteAfterCommitEvent(
+    private fun enqueuePostWriteSideEffect(
         command: PostWriteSideEffectCommand,
         domainEvent: EventPayload? = null,
     ) {

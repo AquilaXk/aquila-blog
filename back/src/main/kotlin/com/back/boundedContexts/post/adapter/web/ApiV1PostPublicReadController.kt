@@ -75,7 +75,7 @@ class ApiV1PostPublicReadController(
     ): ResponseEntity<CursorFeedPageDto> {
         val startedAtNanos = System.nanoTime()
         val validPageSize = pageSize.coerceIn(1, 30)
-        val validSort = normalizeCursorSort(sort)
+        val validSort = sort.normalizeForCursor()
         val data = postPublicReadQueryUseCase.getPublicFeedByCursor(cursor, validPageSize, validSort)
         val etagSeed = postPublicReadResponseFactory.buildCursorFeedEtagSeed("feed-cursor", validPageSize, validSort, cursor, data = data)
         return postPublicReadResponseFactory.respondWithEtag(
@@ -146,7 +146,7 @@ class ApiV1PostPublicReadController(
         val startedAtNanos = System.nanoTime()
         val validPageSize = pageSize.coerceIn(1, 30)
         val normalizedTag = postSearchIntentResolver.normalizeTag(tag)
-        val validSort = normalizeCursorSort(sort)
+        val validSort = sort.normalizeForCursor()
         val data = postPublicReadQueryUseCase.getPublicExploreByCursor(cursor, validPageSize, normalizedTag, validSort)
         val etagSeed =
             postPublicReadResponseFactory.buildCursorFeedEtagSeed("explore-cursor", validPageSize, validSort, cursor, normalizedTag, data)
@@ -281,7 +281,7 @@ class ApiV1PostPublicReadController(
         val startedAtNanos = System.nanoTime()
         val normalizedTag = postSearchIntentResolver.normalizeTag(tag)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val validSort = normalizeCursorSort(sort)
+        val validSort = sort.normalizeForCursor()
         val data = postPublicReadQueryUseCase.getPublicBootstrap(normalizedTag, validPageSize, validSort)
         val etagSeed =
             postPublicReadResponseFactory.buildBootstrapEtagSeed(
@@ -356,16 +356,6 @@ class ApiV1PostPublicReadController(
     }
 
     private fun normalizePublicPage(page: Int): Int = page.coerceIn(1, MAX_PUBLIC_PAGE)
-
-    private fun normalizeCursorSort(sort: PostSearchSortType1): PostSearchSortType1 =
-        when (sort) {
-            PostSearchSortType1.CREATED_AT,
-            PostSearchSortType1.CREATED_AT_ASC,
-            PostSearchSortType1.HIT_COUNT,
-            PostSearchSortType1.LIKES_COUNT,
-            -> sort
-            else -> PostSearchSortType1.CREATED_AT
-        }
 
     companion object {
         private const val MAX_PUBLIC_PAGE = 200

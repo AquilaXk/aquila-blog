@@ -16,4 +16,17 @@ enum class PostSearchSortType1(
     val property: String by lazy { sortBy.first().property }
 
     val isAsc: Boolean by lazy { sortBy.first().isAscending }
+
+    val isCursorSupported: Boolean
+        get() =
+            when (this) {
+                CREATED_AT,
+                CREATED_AT_ASC,
+                HIT_COUNT,
+                LIKES_COUNT,
+                -> true
+                else -> false
+            }
+
+    fun normalizeForCursor(): PostSearchSortType1 = if (isCursorSupported) this else CREATED_AT
 }

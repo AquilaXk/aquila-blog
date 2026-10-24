@@ -767,6 +767,8 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         assertThat(codec.requireCursorSort(PostSearchSortType1.LIKES_COUNT)).isEqualTo(PostSearchSortType1.LIKES_COUNT)
         assertThatThrownBy { codec.requireCursorSort(PostSearchSortType1.MODIFIED_AT) }
             .isInstanceOf(AppException::class.java)
+        assertThat(PostSearchSortType1.LIKES_COUNT.normalizeForCursor()).isEqualTo(PostSearchSortType1.LIKES_COUNT)
+        assertThat(PostSearchSortType1.MODIFIED_AT.normalizeForCursor()).isEqualTo(PostSearchSortType1.CREATED_AT)
 
         assertThat(codec.parseCursor(null, PostSearchSortType1.CREATED_AT)).isNull()
         assertThat(codec.parseCursor("   ", PostSearchSortType1.CREATED_AT)).isNull()

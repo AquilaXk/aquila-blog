@@ -1,8 +1,8 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberDto
-import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
@@ -15,7 +15,6 @@ import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.annotation.TaskHandler
-import com.back.standard.dto.EventPayload
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
@@ -79,15 +78,11 @@ class PostWriteSideEffectHandlerTest {
         // when & then
         assertThatThrownBy {
             handler.handle(
-                PostWriteAfterCommitEvent(
-                    command =
-                        sideEffectCommand(
-                            postId = 10L,
-                            previousContent = "before",
-                            currentContent = "after",
-                            recommendationAction = PostRecommendationSideEffect.EVICT,
-                        ),
-                    domainEvent = null,
+                postWriteSideEffectPayload(
+                    postId = 10L,
+                    previousContent = "before",
+                    currentContent = "after",
+                    recommendationAction = PostRecommendationSideEffect.EVICT,
                 ),
             )
         }.isInstanceOf(RuntimeException::class.java)
@@ -106,13 +101,9 @@ class PostWriteSideEffectHandlerTest {
         // when & then
         assertThatThrownBy {
             handler.handle(
-                PostWriteAfterCommitEvent(
-                    command =
-                        sideEffectCommand(
-                            postId = 12L,
-                            recommendationAction = PostRecommendationSideEffect.EVICT,
-                        ),
-                    domainEvent = null,
+                postWriteSideEffectPayload(
+                    postId = 12L,
+                    recommendationAction = PostRecommendationSideEffect.EVICT,
                 ),
             )
         }.isInstanceOf(RuntimeException::class.java)
@@ -140,17 +131,21 @@ class PostWriteSideEffectHandlerTest {
     @DisplayName("외부 post write 이벤트는 후속 작업 이후에 발행한다")
     fun publishDomainEventAfterSideEffects() {
         // given
-        val domainEvent = mock(EventPayload::class.java)
+        val post = testPost(14L)
+        val domainEvent =
+            PostDeletedEvent(
+                uid = UUID.randomUUID(),
+                postDto = testPostDto(post.id).forEventLog(),
+                actorDto = testMemberDto(post.author.id),
+            )
 
         // when
         handler.handle(
-            PostWriteAfterCommitEvent(
-                command =
-                    sideEffectCommand(
-                        postId = 14L,
-                        recommendationAction = PostRecommendationSideEffect.EVICT,
-                    ),
-                domainEvent = domainEvent,
+            postWriteSideEffectPayload(
+                postId = 14L,
+                recommendationAction = PostRecommendationSideEffect.EVICT,
+                domainEventType = PostDeletedEvent::class.java.name,
+                domainEventJson = ObjectMapper().writeValueAsString(domainEvent),
             ),
         )
 
@@ -164,13 +159,9 @@ class PostWriteSideEffectHandlerTest {
     fun skipRecommendationSideEffectWhenNone() {
         // when
         handler.handle(
-            PostWriteAfterCommitEvent(
-                command =
-                    sideEffectCommand(
-                        postId = 18L,
-                        recommendationAction = PostRecommendationSideEffect.NONE,
-                    ),
-                domainEvent = null,
+            postWriteSideEffectPayload(
+                postId = 18L,
+                recommendationAction = PostRecommendationSideEffect.NONE,
             ),
         )
 
@@ -182,7 +173,13 @@ class PostWriteSideEffectHandlerTest {
     @DisplayName("외부 post write 이벤트 발행 실패는 후속 작업 handler 밖으로 전파한다")
     fun propagateDomainEventPublishFailure() {
         // given
-        val domainEvent = mock(EventPayload::class.java)
+        val post = testPost(15L)
+        val domainEvent =
+            PostDeletedEvent(
+                uid = UUID.randomUUID(),
+                postDto = testPostDto(post.id).forEventLog(),
+                actorDto = testMemberDto(post.author.id),
+            )
         doThrow(RuntimeException("event bus down"))
             .`when`(eventPublisher)
             .publish(domainEvent)
@@ -190,13 +187,11 @@ class PostWriteSideEffectHandlerTest {
         // when & then
         assertThatThrownBy {
             handler.handle(
-                PostWriteAfterCommitEvent(
-                    command =
-                        sideEffectCommand(
-                            postId = 15L,
-                            recommendationAction = PostRecommendationSideEffect.EVICT,
-                        ),
-                    domainEvent = domainEvent,
+                postWriteSideEffectPayload(
+                    postId = 15L,
+                    recommendationAction = PostRecommendationSideEffect.EVICT,
+                    domainEventType = PostDeletedEvent::class.java.name,
+                    domainEventJson = ObjectMapper().writeValueAsString(domainEvent),
                 ),
             )
         }.isInstanceOf(RuntimeException::class.java)
@@ -262,13 +257,9 @@ class PostWriteSideEffectHandlerTest {
 
         // when
         handler.handle(
-            PostWriteAfterCommitEvent(
-                command =
-                    sideEffectCommand(
-                        postId = 16L,
-                        recommendationAction = PostRecommendationSideEffect.REFRESH,
-                    ),
-                domainEvent = null,
+            postWriteSideEffectPayload(
+                postId = 16L,
+                recommendationAction = PostRecommendationSideEffect.REFRESH,
             ),
         )
 
@@ -290,13 +281,9 @@ class PostWriteSideEffectHandlerTest {
 
         // when
         handler.handle(
-            PostWriteAfterCommitEvent(
-                command =
-                    sideEffectCommand(
-                        postId = 17L,
-                        recommendationAction = PostRecommendationSideEffect.REFRESH,
-                    ),
-                domainEvent = null,
+            postWriteSideEffectPayload(
+                postId = 17L,
+                recommendationAction = PostRecommendationSideEffect.REFRESH,
             ),
         )
 
@@ -409,24 +396,6 @@ class PostWriteSideEffectHandlerTest {
             .hasMessageContaining("Post write side effect failed")
             .hasCauseInstanceOf(AssertionError::class.java)
     }
-
-    private fun sideEffectCommand(
-        postId: Long,
-        previousContent: String? = null,
-        currentContent: String? = null,
-        recommendationAction: PostRecommendationSideEffect,
-    ): PostWriteSideEffectCommand =
-        PostWriteSideEffectCommand(
-            postId = postId,
-            previousContent = previousContent,
-            currentContent = currentContent,
-            deletedContent = null,
-            beforeTags = emptyList(),
-            afterTags = emptyList(),
-            cacheInvalidationScope = PostReadCacheInvalidationScope.None,
-            evictReason = "unit-test",
-            recommendationAction = recommendationAction,
-        )
 
     private fun anyPost(): Post =
         ArgumentMatchers.any(Post::class.java)

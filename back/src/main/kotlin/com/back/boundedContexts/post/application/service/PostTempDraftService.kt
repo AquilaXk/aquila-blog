@@ -1,8 +1,8 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
-import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.global.exception.application.AppException

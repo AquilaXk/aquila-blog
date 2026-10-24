@@ -19,26 +19,6 @@ class PostAttachmentRetentionService(
     private val clock: Clock,
 ) {
     @Transactional
-    fun syncPostContent(
-        postId: Long,
-        previousContent: String?,
-        currentContent: String,
-    ) {
-        syncPostAttachmentKeys(
-            postId = postId,
-            currentKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(currentContent),
-            previousKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(previousContent.orEmpty()),
-            purpose = UploadedFilePurpose.POST_IMAGE,
-        )
-        syncPostAttachmentKeys(
-            postId = postId,
-            currentKeys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(currentContent),
-            previousKeys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(previousContent.orEmpty()),
-            purpose = UploadedFilePurpose.POST_FILE,
-        )
-    }
-
-    @Transactional
     fun syncPostAttachmentKeys(
         postId: Long,
         currentImageObjectKeys: Collection<String>,
@@ -57,18 +37,6 @@ class PostAttachmentRetentionService(
             currentKeys = currentFileObjectKeys.toSet(),
             previousKeys = previousFileObjectKeys.toSet(),
             purpose = UploadedFilePurpose.POST_FILE,
-        )
-    }
-
-    @Transactional
-    fun scheduleDeletedPostAttachments(content: String) {
-        scheduleDeletionForContent(
-            purpose = UploadedFilePurpose.POST_IMAGE,
-            keys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
-        )
-        scheduleDeletionForContent(
-            purpose = UploadedFilePurpose.POST_FILE,
-            keys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(content),
         )
     }
 

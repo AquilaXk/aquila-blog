@@ -14,30 +14,18 @@ import com.back.global.storage.application.CloudMultipartCommitDetector
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
 import com.back.global.storage.metrics.CloudMediaMetrics
-import com.fasterxml.jackson.annotation.JsonInclude
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import java.io.InputStream
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.DigestInputStream
 import java.security.MessageDigest
-import java.text.Normalizer
 import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import java.util.HexFormat
-import java.util.Locale
-import java.util.UUID
 
-private val CLOUD_VIDEO_UPLOAD_DATE_PATH_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd")
-private const val CLOUD_VIDEO_UPLOAD_MAX_FILENAME_CODE_POINTS = 255L
-private const val CLOUD_VIDEO_UPLOAD_MAX_FILENAME_METADATA_ENCODED_BYTES = 1024
 private const val CLOUD_VIDEO_UPLOAD_MAX_MULTIPART_PARTS = 10_000L
 private const val INVALID_PART_SIZE_MESSAGE = "업로드 조각 크기가 올바르지 않습니다."
 private const val PART_CONTENT_CONFLICT_MESSAGE = "이미 다른 내용의 업로드 조각이 저장되어 있습니다."
@@ -45,34 +33,6 @@ private const val MULTIPART_COMPOSITE_CHECKSUM_PREFIX = "sha256-composite:"
 private const val INTEGRITY_MISMATCH_MESSAGE = "완성된 업로드 파일의 무결성 검증에 실패했습니다."
 private const val COMMITTED_OBJECT_NOT_VISIBLE_MESSAGE =
     "완성된 업로드 객체를 아직 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
-
-data class CloudVideoUploadSessionDto(
-    val id: Long,
-    val ownerMemberId: Long,
-    val originalFilename: String,
-    val contentType: String,
-    val byteSize: Long,
-    val folderPath: String,
-    val partSizeBytes: Long,
-    val totalParts: Int,
-    val uploadedParts: List<Int>,
-    val status: CloudVideoUploadSessionStatus,
-    val expiresAt: Instant,
-    @get:JsonInclude(JsonInclude.Include.NON_NULL)
-    val completedFileId: Long?,
-    @get:JsonInclude(JsonInclude.Include.NON_NULL)
-    val failureReason: String?,
-)
-
-data class CloudVideoUploadPartDto(
-    val partNumber: Int,
-    val byteSize: Long,
-)
-
-data class CloudVideoUploadPartResultDto(
-    val session: CloudVideoUploadSessionDto,
-    val part: CloudVideoUploadPartDto,
-)
 
 @Service
 class CloudVideoUploadSessionService(
@@ -97,7 +57,7 @@ class CloudVideoUploadSessionService(
         byteSize: Long,
         folderPath: String?,
     ): CloudVideoUploadSessionDto {
-        val safeFilename = normalizeFilename(originalFilename)
+        val safeFilename = normalizeFilename(originalFilename, "cloud-video")
         val normalizedFolderPath = normalizeFolderPath(folderPath)
         val normalizedContentType = normalizeVideoContentType(contentType, safeFilename)
         validateTotalSize(byteSize)
@@ -108,6 +68,8 @@ class CloudVideoUploadSessionService(
                 ownerMemberId = ownerMemberId,
                 folderPath = normalizedFolderPath,
                 originalFilename = safeFilename,
+                keyPrefix = cloudStorageProperties.cloudKeyPrefix,
+                now = clock.instant(),
             )
         val expiresAt = clock.instant().plusSeconds(cloudStorageProperties.cloudVideoResumableExpiresSeconds.coerceAtLeast(60))
         val session =
@@ -413,12 +375,12 @@ class CloudVideoUploadSessionService(
                     conflictMessage = "다른 업로드 작업이 진행 중입니다.",
                 )
                 ensureStorageCommitted(session, parts)
-                return finishCommittedSession(session).toDto()
+                return finishCommittedSession(session).toDto(clock)
             }
             CloudVideoUploadSessionStatus.COMPLETING -> {
                 val parts = requireCompleteParts(session)
                 ensureStorageCommitted(session, parts)
-                return finishCommittedSession(session).toDto()
+                return finishCommittedSession(session).toDto(clock)
             }
             else -> throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "이미 종료된 대용량 업로드 세션입니다.")
         }
@@ -739,7 +701,7 @@ class CloudVideoUploadSessionService(
             fileId?.let { cloudFileRepository.findActiveByIdAndOwner(it, session.ownerMemberId) }
                 ?: cloudFileRepository.findActiveByObjectKey(session.objectKey)
         if (active != null) {
-            return active.toDto()
+            return active.toDto(clock)
         }
         val softDeleted =
             cloudFileRepository.findByObjectKey(session.objectKey)?.takeIf { file ->
@@ -750,7 +712,7 @@ class CloudVideoUploadSessionService(
             softDeleted,
             session,
             checksumSha256 = softDeleted.checksumSha256,
-        ).toDto()
+        ).toDto(clock)
     }
 
     private fun abortStaleIntermediateSession(
@@ -1003,10 +965,6 @@ class CloudVideoUploadSessionService(
         }
     }
 
-    private fun deleteTempFileQuietly(tempFile: Path) {
-        runCatching { Files.deleteIfExists(tempFile) }
-    }
-
     private fun validateFirstPartSignature(
         session: CloudVideoUploadSession,
         partNumber: Int,
@@ -1022,231 +980,10 @@ class CloudVideoUploadSessionService(
         }
     }
 
-    private fun normalizeVideoContentType(
-        contentType: String?,
-        filename: String,
-    ): String {
-        val normalized =
-            contentType
-                ?.substringBefore(";")
-                ?.trim()
-                ?.lowercase(Locale.ROOT)
-                .orEmpty()
-        val extension = filename.substringAfterLast(".", "").lowercase(Locale.ROOT)
-        val fromContentType =
-            when (normalized) {
-                "video/mp4", "application/mp4" -> "video/mp4"
-                "video/webm" -> "video/webm"
-                else -> null
-            }
-        val fromExtension =
-            when (extension) {
-                "mp4", "m4v", "mov" -> "video/mp4"
-                "webm" -> "video/webm"
-                else -> null
-            }
-        return fromContentType ?: fromExtension ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 동영상 파일 형식입니다.")
-    }
-
-    private fun detectVideoFromSignature(bytes: ByteArray): String? {
-        if (bytes.size >= 12 && bytes.copyOfRange(4, 8).toString(Charsets.US_ASCII) == "ftyp") return "video/mp4"
-        if (
-            bytes.size >= 4 &&
-            bytes[0] == 0x1A.toByte() &&
-            bytes[1] == 0x45.toByte() &&
-            bytes[2] == 0xDF.toByte() &&
-            bytes[3] == 0xA3.toByte()
-        ) {
-            return "video/webm"
-        }
-        return null
-    }
-
-    private fun normalizeFolderPath(folderPath: String?): String {
-        val raw = folderPath?.trim()?.trim('/').orEmpty()
-        if (raw.isBlank()) return ""
-        if (
-            raw.contains("..") ||
-            raw.contains("//") ||
-            raw.startsWith("/") ||
-            raw.split('/').any { it.isBlank() || it == "." || it == ".." }
-        ) {
-            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 폴더 경로입니다.")
-        }
-
-        return raw
-            .split('/')
-            .joinToString("/") { segment ->
-                segment.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)
-            }.take(500)
-    }
-
-    private fun normalizeFilename(originalFilename: String?): String {
-        val raw =
-            originalFilename
-                ?.substringAfterLast('/')
-                ?.substringAfterLast('\\')
-                ?.trim()
-                .orEmpty()
-        val decoded = recoverUtf8MojibakeFilename(raw)
-        val cleaned =
-            Normalizer
-                .normalize(decoded, Normalizer.Form.NFC)
-                .ifBlank { "cloud-video" }
-                .replace(Regex("[\\r\\n\\t]"), " ")
-                .replace(Regex("[/\\\\]"), "_")
-                .replace(Regex("[\\p{Cc}\\p{Cf}\\p{Cs}]"), "")
-                .replace(Regex("\\s+"), " ")
-                .takeFilenameLimits()
-                .trim()
-
-        return cleaned.ifBlank { "cloud-video" }
-    }
-
-    private fun String.takeFilenameLimits(): String {
-        val originalExtensionIndex = lastIndexOf(".").takeIf { it > 0 && it < lastIndex }
-        val originalExtension =
-            originalExtensionIndex
-                ?.let(::substring)
-                .orEmpty()
-                .takeCodePoints(CLOUD_VIDEO_UPLOAD_MAX_FILENAME_CODE_POINTS - 1)
-        val originalStem = originalExtensionIndex?.let { substring(0, it) } ?: this
-        val maxStemCodePoints =
-            CLOUD_VIDEO_UPLOAD_MAX_FILENAME_CODE_POINTS - originalExtension.codePointCount(0, originalExtension.length).toLong()
-        val codePointLimited = originalStem.takeCodePoints(maxStemCodePoints.coerceAtLeast(0)) + originalExtension
-        if (metadataEncodedLength(codePointLimited) <= CLOUD_VIDEO_UPLOAD_MAX_FILENAME_METADATA_ENCODED_BYTES) return codePointLimited
-
-        val extensionIndex = codePointLimited.lastIndexOf(".").takeIf { it > 0 && it < codePointLimited.lastIndex }
-        val extension =
-            extensionIndex
-                ?.let(codePointLimited::substring)
-                .orEmpty()
-                .takeMetadataEncodedBytes(CLOUD_VIDEO_UPLOAD_MAX_FILENAME_METADATA_ENCODED_BYTES)
-        val stem = extensionIndex?.let { codePointLimited.substring(0, it) } ?: codePointLimited
-        val maxStemBytes = CLOUD_VIDEO_UPLOAD_MAX_FILENAME_METADATA_ENCODED_BYTES - metadataEncodedLength(extension)
-        val safeStem = stem.takeMetadataEncodedBytes(maxStemBytes.coerceAtLeast(0))
-        return (safeStem + extension).ifBlank { takeMetadataEncodedBytes(CLOUD_VIDEO_UPLOAD_MAX_FILENAME_METADATA_ENCODED_BYTES) }
-    }
-
-    private fun String.takeMetadataEncodedBytes(maxEncodedBytes: Int): String {
-        val builder = StringBuilder()
-        val iterator = codePoints().iterator()
-        while (iterator.hasNext()) {
-            val next = iterator.nextInt()
-            val candidate = StringBuilder(builder).appendCodePoint(next).toString()
-            if (metadataEncodedLength(candidate) > maxEncodedBytes) break
-            builder.appendCodePoint(next)
-        }
-
-        return builder.toString()
-    }
-
-    private fun String.takeCodePoints(maxCodePoints: Long): String {
-        val codePoints = codePoints().limit(maxCodePoints).toArray()
-        return String(codePoints, 0, codePoints.size)
-    }
-
-    private fun metadataEncodedLength(value: String): Int =
-        URLEncoder
-            .encode(value, StandardCharsets.UTF_8)
-            .replace("+", "%20")
-            .toByteArray(StandardCharsets.US_ASCII)
-            .size
-
-    private fun recoverUtf8MojibakeFilename(raw: String): String {
-        if (raw.isBlank()) return raw
-        if (raw.any { it in '가'..'힣' }) return raw
-        val recovered =
-            runCatching {
-                String(raw.toByteArray(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8)
-            }.getOrDefault(raw)
-        if (recovered == raw || recovered.contains('\uFFFD')) return raw
-        val rawHangulCount = raw.count { it in '가'..'힣' }
-        val recoveredHangulCount = recovered.count { it in '가'..'힣' }
-        return if (recoveredHangulCount > rawHangulCount) recovered else raw
-    }
-
-    private fun buildObjectKey(
-        ownerMemberId: Long,
-        folderPath: String,
-        originalFilename: String,
-    ): String {
-        val ext = extractExtension(originalFilename)
-        val datePath = CLOUD_VIDEO_UPLOAD_DATE_PATH_FORMATTER.format(clock.instant().atZone(ZoneOffset.UTC))
-        val folderSegment = folderPath.takeIf(String::isNotBlank)?.let { "$it/" }.orEmpty()
-        val keyPrefix = normalizeObjectKeyPrefix(cloudStorageProperties.cloudKeyPrefix)
-        return "$keyPrefix/$ownerMemberId/$folderSegment$datePath/${UUID.randomUUID()}$ext"
-    }
-
-    private fun normalizeObjectKeyPrefix(prefix: String): String =
-        prefix
-            .trim()
-            .trim('/')
-            .ifBlank { "cloud" }
-
-    private fun extractExtension(filename: String): String {
-        if (!filename.contains(".")) return ""
-        val ext =
-            filename
-                .substringAfterLast(".")
-                .lowercase(Locale.ROOT)
-                .replace(Regex("[^a-z0-9]"), "")
-                .take(10)
-        return if (ext.isBlank()) "" else ".$ext"
-    }
-
     private fun resolvePartSizeBytes(): Long {
         val configured = cloudStorageProperties.cloudVideoResumablePartSizeBytes
         val minPartBytes = 5L * 1024 * 1024
         val maxPartBytes = cloudStorageProperties.maxFileSizeBytes.coerceAtLeast(minPartBytes)
         return configured.coerceIn(minPartBytes, maxPartBytes)
     }
-
-    private fun formatFileSizeLimit(maxFileSizeBytes: Long): String {
-        val units = listOf("B", "KB", "MB", "GB")
-        var value = maxFileSizeBytes.toDouble()
-        var unitIndex = 0
-        while (value >= 1024 && unitIndex < units.lastIndex) {
-            value /= 1024
-            unitIndex++
-        }
-        val formatted = if (value % 1.0 == 0.0) value.toLong().toString() else "%.1f".format(Locale.US, value)
-        return "$formatted ${units[unitIndex]}"
-    }
-
-    private fun CloudVideoUploadSession.toDto(parts: List<CloudVideoUploadPart>): CloudVideoUploadSessionDto =
-        CloudVideoUploadSessionDto(
-            id = id,
-            ownerMemberId = ownerMemberId,
-            originalFilename = originalFilename,
-            contentType = contentType,
-            byteSize = byteSize,
-            folderPath = folderPath,
-            partSizeBytes = partSizeBytes,
-            totalParts = totalParts,
-            uploadedParts = parts.map { it.partNumber }.sorted(),
-            status = status,
-            expiresAt = expiresAt,
-            completedFileId = completedFileId,
-            failureReason = failureReason,
-        )
-
-    private fun CloudVideoUploadPart.toDto(): CloudVideoUploadPartDto =
-        CloudVideoUploadPartDto(
-            partNumber = partNumber,
-            byteSize = byteSize,
-        )
-
-    private fun CloudFile.toDto(): CloudFileDto =
-        CloudFileDto(
-            id = id,
-            ownerMemberId = ownerMemberId,
-            originalFilename = originalFilename,
-            contentType = contentType,
-            byteSize = byteSize,
-            mediaKind = mediaKind,
-            folderPath = folderPath,
-            createdAt = runCatching { createdAt }.getOrDefault(clock.instant()),
-            modifiedAt = runCatching { modifiedAt }.getOrDefault(clock.instant()),
-        )
 }

@@ -7,7 +7,6 @@ import com.back.boundedContexts.member.application.service.CanonicalAdminPolicy
 import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
 import com.back.global.observability.ErrorMetrics
-import com.back.global.security.application.SecurityTipProvider
 import com.back.global.security.config.ApiRateLimitBackstopFilter
 import com.back.global.security.config.ApiRuntimeBoundaryFilter
 import com.back.global.security.config.CustomAuthenticationFilter
@@ -56,9 +55,6 @@ abstract class BaseMemberControllerWebMvcTest : BaseIntegrationTest() {
 
     @MockitoBean
     protected lateinit var canonicalAdminPolicy: CanonicalAdminPolicy
-
-    @MockitoBean
-    protected lateinit var securityTipProvider: SecurityTipProvider
 
     @MockitoBean
     protected lateinit var adminProperties: AdminProperties

@@ -56,34 +56,6 @@ class PostWriteSideEffectHandler(
         if (failures.isNotEmpty()) throwForTaskRetry(failures)
     }
 
-    internal fun handle(event: PostWriteAfterCommitEvent) {
-        val command = event.command
-        val failures =
-            handle(
-                postId = command.postId,
-                attachmentKeys =
-                    PostAttachmentObjectKeySnapshot.fromContents(
-                        command.previousContent,
-                        command.currentContent,
-                        command.deletedContent,
-                    ),
-                beforeTags = command.beforeTags,
-                afterTags = command.afterTags,
-                cacheInvalidationScope = command.cacheInvalidationScope,
-                evictReason = command.evictReason,
-                recommendationAction = command.recommendationAction,
-            ).toMutableList()
-        event.domainEvent?.let { domainEvent ->
-            runAfterCommitSideEffectInNewTransaction(
-                postId = event.command.postId,
-                failureMessage = "Failed to publish post write domain event after commit",
-            ) {
-                eventPublisher.publish(domainEvent)
-            }?.let(failures::add)
-        }
-        if (failures.isNotEmpty()) throwForTaskRetry(failures)
-    }
-
     private fun handle(
         postId: Long,
         attachmentKeys: PostAttachmentObjectKeySnapshot,

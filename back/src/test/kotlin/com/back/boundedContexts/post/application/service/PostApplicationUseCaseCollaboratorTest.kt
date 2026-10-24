@@ -1,8 +1,8 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
-import com.back.boundedContexts.post.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
@@ -67,7 +67,7 @@ class PostApplicationUseCaseCollaboratorTest {
         val member = testMember()
         given(postRepository.countByAuthor(member)).willReturn(3)
         given(memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)).willReturn(null)
-        given(memberAttrRepository.save(anyValue())).willAnswer { it.arguments[0] as MemberAttr }
+        given(memberAttrRepository.save(anyMemberAttr())).willAnswer { it.arguments[0] as MemberAttr }
 
         service.reconcileMemberPostsCount(member)
 
@@ -108,8 +108,8 @@ class PostApplicationUseCaseCollaboratorTest {
         untrackedLegacyPost.published = false
         given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(null)
         given(memberAttrRepository.incrementIntValue(author, "activeTempDraftLock", 1)).willReturn(1)
-        given(postRepository.save(anyValue())).willAnswer { it.arguments[0] as Post }
-        given(memberAttrRepository.save(anyValue())).willAnswer {
+        given(postRepository.save(anyPost())).willAnswer { it.arguments[0] as Post }
+        given(memberAttrRepository.save(anyMemberAttr())).willAnswer {
             (it.arguments[0] as MemberAttr).also { marker -> savedMarker = marker }
         }
 
@@ -144,7 +144,7 @@ class PostApplicationUseCaseCollaboratorTest {
         given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(marker)
         given(postRepository.findById(existingPost.id)).willReturn(Optional.of(existingPost))
         given(memberAttrRepository.incrementIntValue(author, "activeTempDraftLock", 1)).willReturn(1)
-        given(postRepository.save(anyValue())).willAnswer { it.arguments[0] as Post }
+        given(postRepository.save(anyPost())).willAnswer { it.arguments[0] as Post }
 
         val (post, created) = service.getOrCreateTemp(author)
 
@@ -179,9 +179,7 @@ class PostApplicationUseCaseCollaboratorTest {
             it.modifiedAt = now
         }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun <T> anyValue(): T {
-        any<T>()
-        return null as T
-    }
+    private fun anyPost(): Post = any(Post::class.java) ?: testPost()
+
+    private fun anyMemberAttr(): MemberAttr = any(MemberAttr::class.java) ?: MemberAttr(1, testMember(), POSTS_COUNT, 0)
 }

@@ -205,10 +205,12 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         uploadedFileRetentionService.registerTempUpload(removedKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
         uploadedFileRetentionService.registerTempUpload(activeKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
 
-        uploadedFileRetentionService.syncPostContent(
+        uploadedFileRetentionService.syncPostAttachmentKeys(
             postId = 15,
-            previousContent = previousContent,
-            currentContent = currentContent,
+            currentImageObjectKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(currentContent),
+            previousImageObjectKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(previousContent),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
         )
 
         val removedFile = uploadedFileRepository.findByObjectKey(removedKey)!!
@@ -235,10 +237,12 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
             [file](${UploadedFileUrlCodec.buildFileUrl(fileKey)})
             """.trimIndent()
 
-        uploadedFileRetentionService.syncPostContent(
+        uploadedFileRetentionService.syncPostAttachmentKeys(
             postId = 41,
-            previousContent = null,
-            currentContent = currentContent,
+            currentImageObjectKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(currentContent),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(currentContent),
+            previousFileObjectKeys = emptyList(),
         )
 
         val imageFile = uploadedFileRepository.findByObjectKey(imageKey)!!
@@ -281,10 +285,12 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
 
         uploadedFileRetentionService.registerTempUpload(validKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
 
-        uploadedFileRetentionService.syncPostContent(
+        uploadedFileRetentionService.syncPostAttachmentKeys(
             postId = 21,
-            previousContent = null,
-            currentContent = currentContent,
+            currentImageObjectKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(currentContent),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
         )
 
         val activeFile = uploadedFileRepository.findByObjectKey(validKey)!!
@@ -443,7 +449,13 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         val objectKey = "posts/2026/03/purge-post-reference.png"
         val content = "![](${UploadedFileUrlCodec.buildImageUrl(objectKey)})"
         uploadedFileRetentionService.registerTempUpload(objectKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
-        uploadedFileRetentionService.syncPostContent(postId = 44, previousContent = null, currentContent = content)
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 44,
+            currentImageObjectKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
+        )
         val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey)!!
         uploadedFile.scheduleDeletion(
             UploadedFileRetentionReason.DETACHED_POST_ATTACHMENT,
@@ -539,7 +551,10 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         uploadedFileRetentionService.registerTempUpload(knownKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
 
         assertDoesNotThrow {
-            uploadedFileRetentionService.scheduleDeletedPostAttachments(content)
+            uploadedFileRetentionService.scheduleDeletedPostAttachmentKeys(
+                UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
+                UploadedFileUrlCodec.extractFileObjectKeysFromContent(content),
+            )
         }
 
         val knownFile = uploadedFileRepository.findByObjectKey(knownKey)!!
@@ -554,7 +569,10 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         val content = "![](${UploadedFileUrlCodec.buildImageUrl(restoredKey)})"
 
         uploadedFileRetentionService.registerTempUpload(restoredKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
-        uploadedFileRetentionService.scheduleDeletedPostAttachments(content)
+        uploadedFileRetentionService.scheduleDeletedPostAttachmentKeys(
+            UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
+            emptyList(),
+        )
 
         uploadedFileRetentionService.restoreDeletedPostAttachments(postId = 33, content = content)
 

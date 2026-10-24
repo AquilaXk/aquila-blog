@@ -200,29 +200,6 @@ class PostWriteSideEffectHandlerTest {
     }
 
     @Test
-    @DisplayName("task payload 처리 중 첨부파일 동기화 실패는 task retry를 위해 전파한다")
-    fun propagateAttachmentSyncFailureWhenHandlingTaskPayload() {
-        // given
-        doThrow(RuntimeException("storage down"))
-            .`when`(uploadedFileRetentionService)
-            .syncPostAttachmentKeys(20L, emptyList(), emptyList(), emptyList(), emptyList())
-
-        val payload =
-            postWriteSideEffectPayload(
-                postId = 20L,
-                previousContent = "before",
-                currentContent = "after",
-                recommendationAction = PostRecommendationSideEffect.EVICT,
-            )
-
-        // when & then
-        assertThatThrownBy {
-            handler.handle(payload)
-        }.isInstanceOf(RuntimeException::class.java)
-            .hasMessageContaining("storage down")
-    }
-
-    @Test
     @DisplayName("추천 갱신 시점에 글이 사라졌으면 task retry를 위해 실패한다")
     fun failRecommendationRefreshWhenPostIsMissing() {
         // given

@@ -31,6 +31,9 @@ class JacocoCoverageBaselineContractTest {
     }
 
     private fun hasMatchingKotlinSource(entry: String): Boolean {
+        if (javaClass.classLoader.getResource(entry) == null) {
+            return false
+        }
         val outerClassPath =
             entry
                 .removeSuffix(".class")

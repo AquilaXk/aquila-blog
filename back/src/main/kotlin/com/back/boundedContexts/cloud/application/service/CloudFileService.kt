@@ -7,6 +7,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import com.fasterxml.jackson.annotation.JsonIgnore
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -29,6 +30,8 @@ data class CloudFileDto(
     val folderPath: String,
     val createdAt: Instant,
     val modifiedAt: Instant,
+    @get:JsonIgnore
+    val objectKey: String = "",
 )
 
 data class CloudFileContent(
@@ -90,18 +93,23 @@ class CloudFileService(
                     }
 
                 val saved =
-                    cloudFileRepository.save(
-                        CloudFile.create(
-                            ownerMemberId = ownerMemberId,
-                            objectKey = uploadResult.objectKey,
-                            originalFilename = safeFilename,
-                            contentType = detected.contentType,
-                            byteSize = contentLength,
-                            mediaKind = detected.mediaKind,
-                            folderPath = normalizedFolderPath,
-                            checksumSha256 = uploadResult.checksumSha256,
-                        ),
-                    )
+                    try {
+                        cloudFileRepository.save(
+                            CloudFile.create(
+                                ownerMemberId = ownerMemberId,
+                                objectKey = uploadResult.objectKey,
+                                originalFilename = safeFilename,
+                                contentType = detected.contentType,
+                                byteSize = contentLength,
+                                mediaKind = detected.mediaKind,
+                                folderPath = normalizedFolderPath,
+                                checksumSha256 = uploadResult.checksumSha256,
+                            ),
+                        )
+                    } catch (ex: Throwable) {
+                        runCatching { cloudStoragePort.delete(uploadResult.objectKey) }
+                        throw ex
+                    }
                 logger.info(
                     "cloud_file_upload_completed fileId={} actorId={}",
                     saved.id,
@@ -133,21 +141,14 @@ class CloudFileService(
     fun get(
         ownerMemberId: Long,
         fileId: Long,
-    ): CloudFileDto =
-        cloudFileRepository
-            .findActiveByIdAndOwner(fileId, ownerMemberId)
-            ?.toDto(clock)
-            ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
+    ): CloudFileDto = findActiveOwnedFile(fileId, ownerMemberId).toDto(clock)
 
     @Transactional(readOnly = true)
     fun openContent(
         ownerMemberId: Long,
         fileId: Long,
     ): CloudFileContent {
-        // owner check가 storage open보다 먼저 실행되어야 비소유자가 object 존재 여부를 추론할 수 없다.
-        val file =
-            cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
-                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
+        val file = findActiveOwnedFile(fileId, ownerMemberId)
         val storedObject =
             cloudStoragePort.open(file.objectKey)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
@@ -160,21 +161,41 @@ class CloudFileService(
 
     @Transactional(readOnly = true)
     fun openContentRange(
-        ownerMemberId: Long,
-        fileId: Long,
+        file: CloudFileDto,
         range: LongRange,
     ): CloudFileContent {
-        val file =
-            cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
-                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
         val storedObject =
             cloudStoragePort.openRange(file.objectKey, range)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
-            file = file.toDto(clock),
+            file = file,
             storedObject = storedObject,
         )
+    }
+
+    @Transactional(readOnly = true)
+    fun openContentRange(
+        ownerMemberId: Long,
+        fileId: Long,
+        range: LongRange,
+    ): CloudFileContent = openContentRange(get(ownerMemberId, fileId), range)
+
+    @Transactional
+    fun updateFile(
+        ownerMemberId: Long,
+        fileId: Long,
+        originalFilename: String?,
+        folderPath: String?,
+    ): CloudFileDto {
+        val file = findActiveOwnedFile(fileId, ownerMemberId)
+        val resolvedFilename =
+            originalFilename?.let { rawName ->
+                resolveUpdatedFilename(rawName, file.originalFilename)
+            } ?: file.originalFilename
+        val resolvedFolderPath = folderPath?.let(::normalizeFolderPath) ?: file.folderPath
+        file.updateMetadata(resolvedFilename, resolvedFolderPath)
+        return cloudFileRepository.save(file).toDto(clock)
     }
 
     @Transactional
@@ -182,15 +203,32 @@ class CloudFileService(
         ownerMemberId: Long,
         fileId: Long,
     ) {
-        val file =
-            cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
-                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
-
+        val file = findActiveOwnedFile(fileId, ownerMemberId)
         val objectKey = file.objectKey
         file.markDeleted(clock.instant())
         cloudFileRepository.save(file)
         deleteObjectAfterCommit(objectKey)
         logger.info("cloud_file_delete_completed fileId={} actorId={}", fileId, ownerMemberId)
+    }
+
+    private fun findActiveOwnedFile(
+        fileId: Long,
+        ownerMemberId: Long,
+    ): CloudFile =
+        cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
+            ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
+
+    private fun resolveUpdatedFilename(
+        newFilename: String,
+        currentFilename: String,
+    ): String {
+        val baseFallback = currentFilename.substringBeforeLast('.', currentFilename)
+        val normalized = normalizeFilename(newFilename, baseFallback)
+        val existingExtension = currentFilename.substringAfterLast('.', "")
+        if (existingExtension.isEmpty() || normalized.endsWith(".$existingExtension", ignoreCase = true)) {
+            return normalized
+        }
+        return normalizeFilename("$normalized.$existingExtension", currentFilename)
     }
 
     private fun deleteObjectAfterCommit(objectKey: String) {

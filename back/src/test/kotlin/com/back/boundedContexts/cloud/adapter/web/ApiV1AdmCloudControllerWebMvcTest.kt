@@ -34,6 +34,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.multipart
+import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head
@@ -563,7 +564,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     fun `content Range bytes 0-1023 요청은 storage range stream으로 private partial response를 반환한다`() {
         val admin = adminUser(id = 7L)
         val bytes = ByteArray(1024) { (it % 251).toByte() }
-        givenRangeContent(ownerMemberId = 7L, fileId = 12L, totalLength = 2048L, range = 0L..1023L, bytes = bytes)
+        val (_, file) = givenRangeContent(ownerMemberId = 7L, fileId = 12L, totalLength = 2048L, range = 0L..1023L, bytes = bytes)
 
         mvc
             .get("/system/api/v1/adm/cloud/files/12/content") {
@@ -579,8 +580,30 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 content { bytes(bytes) }
             }
 
-        then(cloudFileService).should().openContentRange(ownerMemberId = 7L, fileId = 12L, range = 0L..1023L)
+        then(cloudFileService).should().get(ownerMemberId = 7L, fileId = 12L)
+        then(cloudFileService).should().openContentRange(file = file, range = 0L..1023L)
         then(cloudFileService).should(never()).openContent(ownerMemberId = 7L, fileId = 12L)
+    }
+
+    @Test
+    @DisplayName("content download=true 요청은 attachment Content-Disposition을 반환한다")
+    fun `content download=true 요청은 attachment Content-Disposition을 반환한다`() {
+        val admin = adminUser(id = 7L)
+        givenContent(
+            ownerMemberId = 7L,
+            fileId = 12L,
+            bytes = "0123456789".toByteArray(),
+            contentLength = 10L,
+        )
+
+        mvc
+            .get("/system/api/v1/adm/cloud/files/12/content?download=true") {
+                with(user(admin))
+            }.andExpect {
+                status { isOk() }
+                header { string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"demo.mp4\"; filename*=UTF-8''demo.mp4") }
+                content { bytes("0123456789".toByteArray()) }
+            }
     }
 
     @Test
@@ -705,6 +728,46 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     }
 
     @Test
+    @DisplayName("patch는 파일 이름과 폴더 경로 수정을 자신의 owner id로 service에 위임한다")
+    fun `patch는 파일 이름과 폴더 경로 수정을 자신의 owner id로 service에 위임한다`() {
+        val admin = adminUser(id = 7L)
+        val updated =
+            sampleDto(
+                id = 12L,
+                ownerMemberId = 7L,
+                originalFilename = "새이름.pdf",
+            ).copy(folderPath = "사진/여행")
+        given(
+            cloudFileService.updateFile(
+                ownerMemberId = 7L,
+                fileId = 12L,
+                originalFilename = "새이름.pdf",
+                folderPath = "사진/여행",
+            ),
+        ).willReturn(updated)
+
+        mvc
+            .patch("/system/api/v1/adm/cloud/files/12") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"originalFilename":"새이름.pdf","folderPath":"사진/여행"}"""
+                with(user(admin))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.data.id") { value(12) }
+                jsonPath("$.data.originalFilename") { value("새이름.pdf") }
+                jsonPath("$.data.folderPath") { value("사진/여행") }
+            }
+
+        then(cloudFileService).should().updateFile(
+            ownerMemberId = 7L,
+            fileId = 12L,
+            originalFilename = "새이름.pdf",
+            folderPath = "사진/여행",
+        )
+    }
+
+    @Test
     @DisplayName("delete는 자신의 owner id로 service에 위임한다")
     fun `delete는 자신의 owner id로 service에 위임한다`() {
         val admin = adminUser(id = 7L)
@@ -779,10 +842,10 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
         range: LongRange,
         bytes: ByteArray,
         contentType: String = "video/mp4",
-    ): CloseAwareInputStream {
+    ): Pair<CloseAwareInputStream, CloudFileDto> {
         val inputStream = CloseAwareInputStream(bytes)
         val file = givenFileMetadata(ownerMemberId, fileId, totalLength, contentType)
-        given(cloudFileService.openContentRange(ownerMemberId = ownerMemberId, fileId = fileId, range = range))
+        given(cloudFileService.openContentRange(file = file, range = range))
             .willReturn(
                 CloudFileContent(
                     file = file,
@@ -795,7 +858,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                         ),
                 ),
             )
-        return inputStream
+        return inputStream to file
     }
 
     private fun adminUser(id: Long): SecurityUser =

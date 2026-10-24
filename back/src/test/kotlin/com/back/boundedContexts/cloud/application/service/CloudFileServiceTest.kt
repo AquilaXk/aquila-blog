@@ -168,6 +168,143 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 한글 및 유니코드 폴더 경로는 NFC로 보존하고 S3 object key는 ASCII-safe로 생성한다")
+    fun `upload는 한글 폴더 경로를 NFC로 보존하고 object key는 ASCII-safe로 생성한다`() {
+        val nfdFolderPath = Normalizer.normalize(" /사진/2026  여름@@@휴가/ ", Normalizer.Form.NFD)
+
+        val result =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "manual.pdf",
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = nfdFolderPath,
+            )
+
+        assertThat(result.folderPath).isEqualTo("사진/2026 여름_휴가")
+        assertThat(repository.savedFiles.single().objectKey).startsWith("cloud/7/folder/2026_/")
+    }
+
+    @Test
+    @DisplayName("업로드 시 공백 세그먼트나 점 세그먼트 또는 180자를 초과하는 폴더 경로는 차단한다")
+    fun `upload는 공백이나 점 세그먼트 또는 180자 초과 폴더 경로를 차단한다`() {
+        val tooLongFolderPath = "${"가".repeat(70)}/${"나".repeat(70)}/${"다".repeat(70)}"
+
+        listOf("docs/   /sub", "docs/./sub", tooLongFolderPath).forEach { invalidFolderPath ->
+            assertThatThrownBy {
+                service.upload(
+                    ownerMemberId = 7L,
+                    originalFilename = "manual.pdf",
+                    contentType = "application/pdf",
+                    bytes = "%PDF-1.7".toByteArray(),
+                    folderPath = invalidFolderPath,
+                )
+            }.isInstanceOf(AppException::class.java)
+                .hasMessageContaining("유효하지 않은 폴더 경로")
+        }
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("업로드 시 DB metadata 저장이 실패하면 업로드된 S3 객체를 보상 삭제한다")
+    fun `upload는 DB metadata 저장 실패 시 업로드된 S3 객체를 삭제한다`() {
+        repository.failSave = true
+        try {
+            assertThatThrownBy {
+                service.upload(
+                    ownerMemberId = 7L,
+                    originalFilename = "manual.pdf",
+                    contentType = "application/pdf",
+                    bytes = "%PDF-1.7".toByteArray(),
+                    folderPath = "docs",
+                )
+            }.isInstanceOf(IllegalStateException::class.java)
+                .hasMessageContaining("save failed")
+
+            assertThat(storage.uploaded).hasSize(1)
+            assertThat(storage.deletedObjectKeys).containsExactly(storage.uploaded.single().objectKey)
+        } finally {
+            repository.failSave = false
+        }
+    }
+
+    @Test
+    @DisplayName("updateFile은 파일명 변경 시 기존 확장자를 보존하고 폴더 경로를 정규화한다")
+    fun `updateFile은 기존 확장자를 보존하고 폴더 경로를 수정한다`() {
+        val saved =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/docs/manual.pdf",
+                    originalFilename = "manual.pdf",
+                    mediaKind = CloudFileMediaKind.DOCUMENT,
+                    folderPath = "docs",
+                ),
+            )
+        val noExtensionFile =
+            repository.save(
+                cloudFile(
+                    ownerMemberId = 7L,
+                    objectKey = "cloud/7/docs/readme",
+                    originalFilename = "README",
+                    mediaKind = CloudFileMediaKind.DOCUMENT,
+                    folderPath = "docs",
+                ),
+            )
+
+        val renamedWithoutExt =
+            service.updateFile(
+                ownerMemberId = 7L,
+                fileId = saved.id,
+                originalFilename = " 2026년 운영 보고서 ",
+                folderPath = " /프로젝트/2026 보고서/ ",
+            )
+        assertThat(renamedWithoutExt.originalFilename).isEqualTo("2026년 운영 보고서.pdf")
+        assertThat(renamedWithoutExt.folderPath).isEqualTo("프로젝트/2026 보고서")
+
+        val renamedWithCaseExt =
+            service.updateFile(
+                ownerMemberId = 7L,
+                fileId = saved.id,
+                originalFilename = "final-report.PDF",
+                folderPath = null,
+            )
+        assertThat(renamedWithCaseExt.originalFilename).isEqualTo("final-report.PDF")
+        assertThat(renamedWithCaseExt.folderPath).isEqualTo("프로젝트/2026 보고서")
+
+        val unchanged =
+            service.updateFile(
+                ownerMemberId = 7L,
+                fileId = saved.id,
+                originalFilename = null,
+                folderPath = "",
+            )
+        assertThat(unchanged.originalFilename).isEqualTo("final-report.PDF")
+        assertThat(unchanged.folderPath).isEmpty()
+
+        val renamedNoExt =
+            service.updateFile(
+                ownerMemberId = 7L,
+                fileId = noExtensionFile.id,
+                originalFilename = "LICENSE",
+                folderPath = null,
+            )
+        assertThat(renamedNoExt.originalFilename).isEqualTo("LICENSE")
+
+        assertThatThrownBy {
+            service.updateFile(
+                ownerMemberId = 8L,
+                fileId = saved.id,
+                originalFilename = "hacked.pdf",
+                folderPath = "docs",
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("파일을 찾을 수 없습니다")
+    }
+
+    @Test
     @DisplayName("업로드 시 파일 내용과 선언 content type이 다르면 차단한다")
     fun `upload는 content type spoofing을 차단한다`() {
         assertThatThrownBy {

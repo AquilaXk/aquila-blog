@@ -64,6 +64,14 @@ class CloudFile(
         deletedAt = now
     }
 
+    fun updateMetadata(
+        originalFilename: String,
+        folderPath: String,
+    ) {
+        this.originalFilename = originalFilename
+        this.folderPath = folderPath
+    }
+
     fun restoreForCommittedUpload(
         originalFilename: String,
         contentType: String,

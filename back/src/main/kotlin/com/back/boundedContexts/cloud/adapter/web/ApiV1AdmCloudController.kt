@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
@@ -59,6 +60,11 @@ class ApiV1AdmCloudController(
         val contentType: String?,
         val byteSize: Long?,
         val folderPath: String? = "",
+    )
+
+    data class UpdateCloudFileReqBody(
+        val originalFilename: String?,
+        val folderPath: String?,
     )
 
     @GetMapping("/files")
@@ -266,23 +272,25 @@ class ApiV1AdmCloudController(
         @PathVariable
         @Positive
         id: Long,
+        @RequestParam(defaultValue = "false")
+        download: Boolean,
         request: HttpServletRequest,
     ): ResponseEntity<Resource> =
         CloudContentWebSupport.contentResponse(
             request = request,
             meterRegistry = meterRegistry,
             endpoint = "content",
+            download = download,
             loadFile = {
                 cloudFileService.get(
                     ownerMemberId = securityUser.id,
                     fileId = id,
                 )
             },
-            openRange = { range ->
+            openRange = { file, byteRange ->
                 cloudFileService.openContentRange(
-                    ownerMemberId = securityUser.id,
-                    fileId = id,
-                    range = range,
+                    file = file,
+                    range = byteRange,
                 )
             },
             openFull = {
@@ -307,6 +315,25 @@ class ApiV1AdmCloudController(
                 fileId = id,
             ),
         )
+
+    @PatchMapping("/files/{id}")
+    fun update(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestBody body: UpdateCloudFileReqBody,
+    ): RsData<CloudFileDto> {
+        val updated =
+            cloudFileService.updateFile(
+                ownerMemberId = securityUser.id,
+                fileId = id,
+                originalFilename = body.originalFilename,
+                folderPath = body.folderPath,
+            )
+
+        return RsData("200-1", "클라우드 파일 정보를 수정했습니다.", updated)
+    }
 
     @DeleteMapping("/files/{id}")
     fun delete(

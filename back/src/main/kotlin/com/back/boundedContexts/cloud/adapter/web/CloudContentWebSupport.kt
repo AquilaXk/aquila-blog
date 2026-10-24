@@ -34,6 +34,25 @@ object CloudContentWebSupport {
         loadFile: () -> CloudFileDto,
         openRange: (LongRange) -> CloudFileContent,
         openFull: () -> CloudFileContent,
+    ): ResponseEntity<Resource> =
+        contentResponse(
+            request = request,
+            meterRegistry = meterRegistry,
+            endpoint = endpoint,
+            download = false,
+            loadFile = loadFile,
+            openRange = { _, range -> openRange(range) },
+            openFull = openFull,
+        )
+
+    fun contentResponse(
+        request: HttpServletRequest,
+        meterRegistry: MeterRegistry?,
+        endpoint: String,
+        download: Boolean,
+        loadFile: () -> CloudFileDto,
+        openRange: (CloudFileDto, LongRange) -> CloudFileContent,
+        openFull: () -> CloudFileContent,
     ): ResponseEntity<Resource> {
         val rangeHeader = request.getHeader(HttpHeaders.RANGE)
 
@@ -56,7 +75,7 @@ object CloudContentWebSupport {
                             .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength"),
                     ).build()
                 }
-                val content = openRange(range)
+                val content = openRange(file, range)
                 val storedObject = content.storedObject
                 val bytesSent = range.last - range.first + 1
                 CloudMediaMetrics.recordPlaybackRequest(
@@ -73,7 +92,7 @@ object CloudContentWebSupport {
                         .contentType(safeMediaType(storedObject.contentType))
                         .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                         .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
-                        .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename))
+                        .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(content.file.originalFilename, download))
                         .contentLength(bytesSent),
                 ).body(InputStreamResource(storedObject.inputStream))
             }
@@ -94,7 +113,7 @@ object CloudContentWebSupport {
                         .ok()
                         .contentType(safeMediaType(storedObject.contentType))
                         .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                        .header(HttpHeaders.CONTENT_DISPOSITION, inlineDisposition(content.file.originalFilename)),
+                        .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(content.file.originalFilename, download)),
                 )
             if (totalLength >= 0L) {
                 responseBuilder.contentLength(totalLength)
@@ -132,6 +151,18 @@ object CloudContentWebSupport {
             .filename(filename, StandardCharsets.UTF_8)
             .build()
             .toString()
+
+    fun attachmentDisposition(filename: String): String =
+        ContentDisposition
+            .attachment()
+            .filename(filename, StandardCharsets.UTF_8)
+            .build()
+            .toString()
+
+    private fun contentDisposition(
+        filename: String,
+        download: Boolean,
+    ): String = if (download) attachmentDisposition(filename) else inlineDisposition(filename)
 
     fun safeMediaType(contentType: String): MediaType =
         runCatching { MediaType.parseMediaType(contentType) }

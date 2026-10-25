@@ -156,9 +156,14 @@ is_complete_backup_set() {
   local backup_id="$1"
   local pg_dir="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}/${backup_id}"
   local minio_dir="${BACKUP_ROOT}/minio/${BACKUP_CLASS}/${backup_id}"
-  [[ -s "${pg_dir}/metadata.env" ]] || return 1
-  [[ -s "${pg_dir}/dump.sql.enc" ]] || return 1
-  [[ -s "${minio_dir}/minio-data.tar.gz.enc" ]] || return 1
+  [[ -f "${pg_dir}/metadata.env" && ! -L "${pg_dir}/metadata.env" && -s "${pg_dir}/metadata.env" ]] || return 1
+  [[ -f "${pg_dir}/dump.sql.enc" && ! -L "${pg_dir}/dump.sql.enc" && -s "${pg_dir}/dump.sql.enc" ]] || return 1
+  [[ -f "${pg_dir}/sha256sums.txt" && ! -L "${pg_dir}/sha256sums.txt" && -s "${pg_dir}/sha256sums.txt" ]] || return 1
+  [[ -f "${pg_dir}/hmac-sha256.txt" && ! -L "${pg_dir}/hmac-sha256.txt" && -s "${pg_dir}/hmac-sha256.txt" ]] || return 1
+  [[ -f "${minio_dir}/metadata.env" && ! -L "${minio_dir}/metadata.env" && -s "${minio_dir}/metadata.env" ]] || return 1
+  [[ -f "${minio_dir}/minio-data.tar.gz.enc" && ! -L "${minio_dir}/minio-data.tar.gz.enc" && -s "${minio_dir}/minio-data.tar.gz.enc" ]] || return 1
+  [[ -f "${minio_dir}/sha256sums.txt" && ! -L "${minio_dir}/sha256sums.txt" && -s "${minio_dir}/sha256sums.txt" ]] || return 1
+  [[ -f "${minio_dir}/hmac-sha256.txt" && ! -L "${minio_dir}/hmac-sha256.txt" && -s "${minio_dir}/hmac-sha256.txt" ]] || return 1
   return 0
 }
 
@@ -657,18 +662,23 @@ verify_backup_artifact_checksum() {
   local artifact_name="$2"
   local checksum_file="${backup_dir}/sha256sums.txt"
   local hmac_file="${backup_dir}/hmac-sha256.txt"
-  if [[ -f "${checksum_file}" ]]; then
-    (cd "${backup_dir}" && sha256sum -c "sha256sums.txt" >/dev/null 2>&1) \
-      || fail "backup artifact checksum verification failed: ${backup_dir}/${artifact_name}"
-  fi
-  if [[ -f "${hmac_file}" ]]; then
-    local expected_hmac actual_hmac key_material
-    expected_hmac="$(awk -v target="${artifact_name}" '$2 == target { print $1 }' "${hmac_file}")"
-    key_material="$(tr -d '\r\n' < "${BACKUP_ENCRYPTION_KEY_FILE}")"
-    actual_hmac="$(openssl dgst -sha256 -hmac "${key_material}" -r "${backup_dir}/${artifact_name}" | awk '{ print $1 }')"
-    [[ -n "${expected_hmac}" && "${actual_hmac}" == "${expected_hmac}" ]] \
-      || fail "backup artifact HMAC verification failed: ${backup_dir}/${artifact_name}"
-  fi
+  [[ -f "${checksum_file}" && ! -L "${checksum_file}" && -s "${checksum_file}" ]] \
+    || fail "missing backup artifact checksum file: ${checksum_file}"
+  [[ -f "${hmac_file}" && ! -L "${hmac_file}" && -s "${hmac_file}" ]] \
+    || fail "missing backup artifact HMAC file: ${hmac_file}"
+
+  local expected_sha256 actual_sha256
+  expected_sha256="$(awk -v target="${artifact_name}" '$2 == target || $2 == ("*" target) { print $1 }' "${checksum_file}")"
+  actual_sha256="$(sha256sum "${backup_dir}/${artifact_name}" | awk '{ print $1 }')"
+  [[ -n "${expected_sha256}" && "${actual_sha256}" == "${expected_sha256}" ]] \
+    || fail "backup artifact checksum verification failed: ${backup_dir}/${artifact_name}"
+
+  local expected_hmac actual_hmac key_material
+  expected_hmac="$(awk -v target="${artifact_name}" '$2 == target || $2 == ("*" target) { print $1 }' "${hmac_file}")"
+  key_material="$(tr -d '\r\n' < "${BACKUP_ENCRYPTION_KEY_FILE}")"
+  actual_hmac="$(openssl dgst -sha256 -hmac "${key_material}" -r "${backup_dir}/${artifact_name}" | awk '{ print $1 }')"
+  [[ -n "${expected_hmac}" && "${actual_hmac}" == "${expected_hmac}" ]] \
+    || fail "backup artifact HMAC verification failed: ${backup_dir}/${artifact_name}"
 }
 
 POSTGRES_BACKUP_SET_DIR="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}/${BACKUP_SET_ID}"

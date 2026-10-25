@@ -153,6 +153,8 @@ done
 mkdir -p "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-010000"
 mkdir -p "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-020000"
 printf 'partial-ciphertext' > "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-020000/dump.sql.enc"
+mkdir -p "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-030000"
+printf 'postgres_database=blog_prod\n' > "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-030000/metadata.env"
 
 AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
   AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
@@ -166,6 +168,7 @@ AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
 
 [[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-010000" ]] || { echo "incomplete empty backup dir was not pruned" >&2; exit 1; }
 [[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-020000" ]] || { echo "incomplete partial backup dir was not pruned" >&2; exit 1; }
+[[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-030000" ]] || { echo "metadata-only backup dir missing dump.sql.enc was not pruned" >&2; exit 1; }
 [[ -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260120-030000" ]] || { echo "newest backup of 20260120 was not retained" >&2; exit 1; }
 [[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260120-020000" ]] || { echo "older same-day backup 20260120-020000 was not deduplicated" >&2; exit 1; }
 [[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260120-010000" ]] || { echo "older same-day backup 20260120-010000 was not deduplicated" >&2; exit 1; }

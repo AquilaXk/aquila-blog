@@ -155,11 +155,11 @@ retention_for_class() {
 is_complete_backup_dir() {
   local candidate="$1"
   [[ -s "${candidate}/metadata.env" ]] || return 1
-  if grep -qx 'postgres_backup=completed' "${candidate}/metadata.env" 2>/dev/null; then
-    [[ -s "${candidate}/dump.sql.enc" ]] || return 1
+  if grep -qE '^postgres_database=' "${candidate}/metadata.env" 2>/dev/null; then
+    [[ -s "${candidate}/dump.sql.enc" || -s "${candidate}/dump.sql.skipped" ]] || return 1
   fi
-  if grep -qx 'minio_backup=completed' "${candidate}/metadata.env" 2>/dev/null; then
-    [[ -s "${candidate}/minio-data.tar.gz.enc" ]] || return 1
+  if grep -qE '^minio_backup_mode=' "${candidate}/metadata.env" 2>/dev/null; then
+    [[ -s "${candidate}/minio-data.tar.gz.enc" || -s "${candidate}/minio.skipped" ]] || return 1
   fi
   return 0
 }

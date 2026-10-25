@@ -307,8 +307,8 @@ created_at_utc=2026-01-01T01:02:03Z
 encryption=openssl-enc-aes-256-cbc-pbkdf2
 encryption_key_file=${KEY_FILE}
 EOF
-mkdir -p "${WORK_DIR}/backups/postgres/daily/20260109-090909"
-printf 'partial-ciphertext' > "${WORK_DIR}/backups/postgres/daily/20260109-090909/dump.sql.enc"
+mkdir -p "${BACKUP_ROOT}/postgres/daily/20260109-090909" "${BACKUP_ROOT}/minio/daily/20260109-090909"
+printf 'partial-ciphertext' > "${BACKUP_ROOT}/postgres/daily/20260109-090909/dump.sql.enc"
 "${REAL_DOCKER}" run -d \
   --name "${MINIO_SOURCE_CONTAINER}" \
   --network none \
@@ -679,6 +679,23 @@ if PATH="${FAKE_BIN_DIR}:${PATH}" \
 fi
 cp "${WORK_DIR}/postgres.hmac.orig" "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt"
 require_pattern "${WORK_DIR}/corrupted-hmac.txt" 'backup artifact HMAC verification failed' "restore drill must fail closed when encrypted backup artifact HMAC-SHA256 mismatches"
+
+rm -f "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt"
+if PATH="${FAKE_BIN_DIR}:${PATH}" \
+  REAL_DOCKER="${REAL_DOCKER}" \
+  REAL_DF="${REAL_DF}" \
+  MINIO_LIVE_CONTAINER="${MINIO_LIVE_CONTAINER}" \
+  AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+  AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
+  AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${WORK_DIR}/missing-hmac-artifacts" \
+  AQUILA_RESTORE_DRILL_TIMESTAMP="20260109-030405" \
+  AQUILA_RESTORE_DRILL_NOW_EPOCH="1767927845" \
+    "${DRILL_SCRIPT}" > "${WORK_DIR}/missing-hmac.txt" 2>&1; then
+  echo "restore drill unexpectedly passed with missing encrypted backup HMAC file" >&2
+  exit 1
+fi
+cp "${WORK_DIR}/postgres.hmac.orig" "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt"
+require_pattern "${WORK_DIR}/missing-hmac.txt" 'missing backup artifact HMAC file' "restore drill must fail closed when hmac-sha256.txt is deleted"
 
 
 docker run --detach \

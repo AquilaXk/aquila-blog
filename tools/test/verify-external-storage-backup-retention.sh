@@ -102,9 +102,10 @@ count_dirs() {
 
 LOW_SPACE_ROOT="${WORK_DIR}/low-space-root"
 LOW_SPACE_BACKUP_ROOT="${LOW_SPACE_ROOT}/backups"
-mkdir -p "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/20260101-000000"
-mkdir -p "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/20260102-000000"
-mkdir -p "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/20260103-000000"
+for dir in 20260101-000000 20260102-000000 20260103-000000; do
+  mkdir -p "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/${dir}"
+  printf 'postgres/daily/%s\n' "${dir}" > "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/${dir}/metadata.env"
+done
 
 AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
   AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
@@ -136,6 +137,41 @@ fi
 [[ ! -d "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/20260101-000000" ]]
 [[ ! -d "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/20260102-000000" ]]
 [[ -d "${LOW_SPACE_BACKUP_ROOT}/postgres/daily/20260103-000000" ]]
+
+DAILY_DEDUP_ROOT="${WORK_DIR}/daily-dedup-root"
+DAILY_DEDUP_BACKUP_ROOT="${DAILY_DEDUP_ROOT}/backups"
+for dir in \
+  20260117-120000 \
+  20260118-120000 \
+  20260119-120000 \
+  20260120-010000 \
+  20260120-020000 \
+  20260120-030000; do
+  mkdir -p "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/${dir}"
+  printf 'postgres/daily/%s\n' "${dir}" > "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/${dir}/metadata.env"
+done
+mkdir -p "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-010000"
+mkdir -p "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-020000"
+printf 'partial-ciphertext' > "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-020000/dump.sql.enc"
+
+AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${DAILY_DEDUP_ROOT}" \
+  AQUILA_BACKUP_ROOT="${DAILY_DEDUP_BACKUP_ROOT}" \
+  AQUILA_BACKUP_RETENTION_DAILY=3 \
+  AQUILA_BACKUP_RETENTION_WEEKLY=1 \
+  AQUILA_BACKUP_RETENTION_MONTHLY=1 \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+    "${PRUNE_SCRIPT}" >/dev/null
+
+[[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-010000" ]] || { echo "incomplete empty backup dir was not pruned" >&2; exit 1; }
+[[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260121-020000" ]] || { echo "incomplete partial backup dir was not pruned" >&2; exit 1; }
+[[ -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260120-030000" ]] || { echo "newest backup of 20260120 was not retained" >&2; exit 1; }
+[[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260120-020000" ]] || { echo "older same-day backup 20260120-020000 was not deduplicated" >&2; exit 1; }
+[[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260120-010000" ]] || { echo "older same-day backup 20260120-010000 was not deduplicated" >&2; exit 1; }
+[[ -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260119-120000" ]] || { echo "distinct day 20260119 was evicted by same-day deploys" >&2; exit 1; }
+[[ -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260118-120000" ]] || { echo "distinct day 20260118 was evicted by same-day deploys" >&2; exit 1; }
+[[ ! -d "${DAILY_DEDUP_BACKUP_ROOT}/postgres/daily/20260117-120000" ]] || { echo "day beyond RETENTION_DAILY=3 was not pruned" >&2; exit 1; }
 
 MINIO_ROOT="${WORK_DIR}/minio-root"
 MINIO_BACKUP_ROOT="${MINIO_ROOT}/minio/backups"
@@ -235,6 +271,46 @@ if grep -q "CADDY_IMAGE=caddy:2.8-alpine" "${SKIP_TAG_METADATA}"; then
   exit 1
 fi
 
+FAILED_DUMP_ROOT="${WORK_DIR}/failed-dump-root"
+FAILED_DUMP_SCRIPT_DIR="${FAILED_DUMP_ROOT}/deploy/homeserver"
+FAILED_DUMP_EXTERNAL_ROOT="${FAILED_DUMP_ROOT}/external"
+FAILED_DUMP_BACKUP_ROOT="${FAILED_DUMP_EXTERNAL_ROOT}/backups"
+FAILED_DUMP_BIN="${FAILED_DUMP_ROOT}/bin"
+mkdir -p "${FAILED_DUMP_SCRIPT_DIR}" "${FAILED_DUMP_EXTERNAL_ROOT}" "${FAILED_DUMP_BIN}"
+cp "${CREATE_SCRIPT}" "${FAILED_DUMP_SCRIPT_DIR}/create_external_backup.sh"
+chmod +x "${FAILED_DUMP_SCRIPT_DIR}/create_external_backup.sh"
+cat > "${FAILED_DUMP_SCRIPT_DIR}/.env.prod" <<'ENV'
+PROD___SPRING__DATASOURCE__USERNAME=blog_user
+CUSTOM_PROD_DBNAME=blog_prod
+ENV
+cat > "${FAILED_DUMP_BIN}/docker" <<'SH'
+#!/usr/bin/env bash
+if [[ "$*" == *"pg_dump"* ]]; then
+  printf 'partial-sql-stream'
+  exit 1
+fi
+exit 0
+SH
+chmod +x "${FAILED_DUMP_BIN}/docker"
+
+if PATH="${FAILED_DUMP_BIN}:${PATH}" \
+  AQUILA_BACKUP_TIMESTAMP=20260101-090909 \
+  AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${FAILED_DUMP_EXTERNAL_ROOT}" \
+  AQUILA_BACKUP_ROOT="${FAILED_DUMP_BACKUP_ROOT}" \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+  AQUILA_BACKUP_SKIP_MINIO=true \
+    "${FAILED_DUMP_SCRIPT_DIR}/create_external_backup.sh" >/dev/null 2>&1; then
+  echo "create_external_backup.sh unexpectedly succeeded when pg_dump failed" >&2
+  exit 1
+fi
+
+[[ ! -d "${FAILED_DUMP_BACKUP_ROOT}/postgres/daily/20260101-090909" ]] || { echo "failed pg_dump left partial postgres backup dir behind" >&2; exit 1; }
+[[ ! -d "${FAILED_DUMP_BACKUP_ROOT}/deploy/daily/20260101-090909" ]] || { echo "failed backup run left partial deploy backup dir behind" >&2; exit 1; }
+
+grep -q "sha256sums.txt" "${CREATE_SCRIPT}" || { echo "missing: sha256sums.txt generation in create_external_backup.sh" >&2; exit 1; }
+grep -q "hmac-sha256.txt" "${CREATE_SCRIPT}" || { echo "missing: hmac-sha256.txt generation in create_external_backup.sh" >&2; exit 1; }
 grep -q "stop_legacy_minio_for_migration" "${CREATE_SCRIPT}"
 grep -q "docker stop" "${CREATE_SCRIPT}"
 grep -q "MIGRATION_STOPPED_FILE" "${CREATE_SCRIPT}"
@@ -266,3 +342,4 @@ fi
 grep -q "AQUILA_BACKUP_ROOT must not be inside the MinIO data directory" "${PRUNE_SCRIPT}"
 
 echo "[external-storage-retention] ok"
+

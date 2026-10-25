@@ -475,3 +475,88 @@ test(
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
   },
 )
+
+test("docker_socket_proxy with POST=1 is isolated to autoheal_control and observe consumers use read-only docker_socket_read_proxy", () => {
+  const compose = read(composePath)
+  const promtailConfig = read("deploy/homeserver/monitoring/promtail/promtail-config.yml")
+
+  const serviceBlock = (name) => {
+    const marker = `\n  ${name}:\n`
+    const start = compose.indexOf(marker)
+    assert.notEqual(start, -1, `${name} service must exist in docker-compose.prod.yml`)
+    const rest = compose.slice(start + marker.length)
+    const nextMatch = rest.match(/\n(?:  [a-z0-9_]+:|networks:|volumes:)\n/)
+    return nextMatch ? rest.slice(0, nextMatch.index) : rest
+  }
+
+  const writeProxy = serviceBlock("docker_socket_proxy")
+  const autoheal = serviceBlock("autoheal")
+  const readProxy = serviceBlock("docker_socket_read_proxy")
+  const promtail = serviceBlock("promtail")
+  const runtimeProbe = serviceBlock("docker_runtime_probe")
+
+  assert.match(writeProxy, /POST:\s*"1"/)
+  assert.match(writeProxy, /networks:\s*\n\s*-\s*autoheal_control\b/)
+  assert.doesNotMatch(writeProxy, /-\s*observe\b/)
+
+  assert.match(autoheal, /networks:\s*\n\s*-\s*autoheal_control\b/)
+  assert.doesNotMatch(autoheal, /-\s*observe\b/)
+
+  assert.match(readProxy, /CONTAINERS:\s*"1"/)
+  assert.match(readProxy, /POST:\s*"0"/)
+  assert.match(readProxy, /networks:\s*\n\s*-\s*observe\b/)
+  assert.match(readProxy, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/)
+
+  assert.doesNotMatch(promtail, /\/var\/run\/docker\.sock/)
+  assert.match(promtail, /-\s*docker_socket_read_proxy\b/)
+  assert.match(promtailConfig, /host:\s*http:\/\/docker_socket_read_proxy:2375\b/)
+  assert.doesNotMatch(promtailConfig, /unix:\/\/\/var\/run\/docker\.sock/)
+
+  assert.doesNotMatch(runtimeProbe, /\/var\/run\/docker\.sock/)
+  assert.match(runtimeProbe, /"--docker-url"/)
+  assert.match(runtimeProbe, /"http:\/\/docker_socket_read_proxy:2375"/)
+
+  const networksSection = compose.slice(compose.indexOf("\nnetworks:\n"))
+  assert.match(
+    networksSection,
+    /autoheal_control:\s*\n\s*name:\s*blog_home_autoheal_control\s*\n\s*internal:\s*true/,
+  )
+})
+
+test("Grafana restricts auth.proxy trust to GF_AUTH_PROXY_WHITELIST and resolves hostnames to IP before /run.sh", () => {
+  const compose = read(composePath)
+  const grafanaStart = compose.indexOf("\n  grafana:\n")
+  const lokiStart = compose.indexOf("\n  loki:\n", grafanaStart)
+  const grafanaBlock = compose.slice(grafanaStart, lokiStart)
+
+  assert.match(grafanaBlock, /GF_AUTH_PROXY_ENABLED:\s*"true"/)
+  assert.match(
+    grafanaBlock,
+    /GF_AUTH_PROXY_WHITELIST:\s*\$\{GF_AUTH_PROXY_WHITELIST:-caddy\}/,
+  )
+  assert.match(grafanaBlock, /getent hosts "\$\$trimmed"/)
+  assert.match(grafanaBlock, /export GF_AUTH_PROXY_WHITELIST="\$\$resolved"/)
+  assert.match(grafanaBlock, /exec \/run\.sh/)
+  assert.match(grafanaBlock, /depends_on:\s*\n\s*-\s*caddy\b/)
+})
+
+test("Prometheus disables lifecycle flag and Caddy denies /-/ management endpoints on Prometheus vhost", () => {
+  const compose = read(composePath)
+  const caddy = read(caddyPath)
+
+  const prometheusStart = compose.indexOf("\n  prometheus:\n")
+  const alertmanagerStart = compose.indexOf("\n  alertmanager:\n", prometheusStart)
+  const prometheusBlock = compose.slice(prometheusStart, alertmanagerStart)
+  assert.doesNotMatch(prometheusBlock, /--web\.enable-lifecycle/)
+
+  const promVhostStart = caddy.indexOf("http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {")
+  const nextVhostStart = caddy.indexOf("http://caddy {", promVhostStart)
+  const promVhost = caddy.slice(promVhostStart, nextVhostStart)
+
+  assert.match(promVhost, /@denyPromManagement\s+path\s+\/-\/\*/)
+  assert.match(
+    promVhost,
+    /handle\s+@denyPromManagement\s*\{\s*\n\s*respond\s+403\s*\n\s*\}/,
+  )
+})
+

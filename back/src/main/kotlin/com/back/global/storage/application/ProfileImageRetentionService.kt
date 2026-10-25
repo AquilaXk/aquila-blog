@@ -39,6 +39,7 @@ class ProfileImageRetentionService(
 
         currentObjectKey?.let { objectKey ->
             val uploadedFile = findOrCreate(objectKey)
+            if (isPostOwnedFile(uploadedFile)) return@let
             uploadedFile.attachToMemberProfile(memberId)
             uploadedFileRepository.save(uploadedFile)
         }
@@ -111,12 +112,17 @@ class ProfileImageRetentionService(
         if (objectKey.isBlank()) return
 
         val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return
+        if (isPostOwnedFile(uploadedFile)) return
         uploadedFile.purpose = UploadedFilePurpose.PROFILE_IMAGE
         uploadedFile.ownerType = UploadedFileOwnerType.MEMBER_PROFILE
         uploadedFile.ownerId = memberId
         uploadedFile.scheduleDeletion(reason, purgeAfter)
         uploadedFileRepository.save(uploadedFile)
     }
+
+    private fun isPostOwnedFile(uploadedFile: UploadedFile): Boolean =
+        uploadedFile.ownerType == UploadedFileOwnerType.POST ||
+            uploadedFile.purpose in setOf(UploadedFilePurpose.POST_IMAGE, UploadedFilePurpose.POST_FILE)
 
     private fun findOrCreate(objectKey: String): UploadedFile =
         uploadedFileRepository.findByObjectKey(objectKey)
@@ -125,6 +131,7 @@ class ProfileImageRetentionService(
                 bucket = storageProperties.bucket,
                 contentType = "application/octet-stream",
                 fileSize = 0,
+                purpose = UploadedFilePurpose.PROFILE_IMAGE,
             )
 
     private fun UploadedFile.toProfileImageHistoryDto(isCurrent: Boolean): ProfileImageHistoryDto =

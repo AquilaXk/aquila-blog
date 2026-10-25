@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.port.output
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
@@ -125,10 +126,31 @@ interface PostRepositoryPort {
 
     fun existsImageReferenceByObjectKey(objectKey: String): Boolean
 
+    fun findFirstReferencingPostId(objectKey: String): Long? = null
+
+    fun existsPublicPostReferencingImage(objectKey: String): Boolean = false
+
+    fun existsAuthorPostReferencingImage(
+        objectKey: String,
+        authorId: Long,
+    ): Boolean = false
+
     fun syncImageReferences(
         postId: Long,
         objectKeys: Collection<String>,
     )
 
     fun deleteImageReferencesByPostId(postId: Long)
+
+    fun updateHitCount(
+        post: Post,
+        hitCount: Int,
+        hitCountAttr: PostAttr? = null,
+    ) {}
+
+    fun updateLikesCount(
+        post: Post,
+        likesCount: Int,
+        likesCountAttr: PostAttr? = null,
+    ) {}
 }

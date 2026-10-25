@@ -65,6 +65,21 @@ class CdnCachePurgeService(
         )
     }
 
+    fun purgePostReadCachesOrThrow(
+        postId: Long,
+        beforeTags: Collection<String> = emptyList(),
+        afterTags: Collection<String> = emptyList(),
+    ) {
+        if (!isEnabled()) return
+        val normalizedTags = normalizeTags(PostCacheTags.writeInvalidationTags(postId, beforeTags, afterTags))
+        if (normalizedTags.isEmpty()) return
+        purgeByTagsNow(
+            normalizedTags = normalizedTags,
+            reason = "post-write:$postId",
+            throwOnFailure = true,
+        )
+    }
+
     fun purgeByTags(
         tags: Collection<String>,
         reason: String,
@@ -145,6 +160,7 @@ class CdnCachePurgeService(
     private fun purgeByTagsNow(
         normalizedTags: List<String>,
         reason: String,
+        throwOnFailure: Boolean = false,
     ) {
         val startedAtNanos = System.nanoTime()
         val reasonBucket = reason.substringBefore(':').take(24).ifBlank { "unknown" }
@@ -174,6 +190,11 @@ class CdnCachePurgeService(
                     response.statusCode(),
                     normalizedTags.joinToString(","),
                 )
+                if (throwOnFailure) {
+                    throw IllegalStateException(
+                        "CDN cache purge returned non-success status=${response.statusCode()} for reason=$reason",
+                    )
+                }
             } else {
                 meterRegistry
                     ?.timer("cdn.purge.duration", "status", "success", "reason", reasonBucket)
@@ -187,6 +208,9 @@ class CdnCachePurgeService(
                 )
             }
         }.onFailure { exception ->
+            if (exception is IllegalStateException && throwOnFailure) {
+                throw exception
+            }
             val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
             meterRegistry
                 ?.timer("cdn.purge.duration", "status", "failed", "reason", reasonBucket)
@@ -198,6 +222,9 @@ class CdnCachePurgeService(
                 normalizedTags.joinToString(","),
                 exception,
             )
+            if (throwOnFailure) {
+                throw IllegalStateException("CDN cache purge failed for reason=$reason", exception)
+            }
         }
     }
 

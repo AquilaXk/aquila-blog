@@ -111,7 +111,11 @@ class CloudFileReconcileService(
                 emptyList()
             } else {
                 val inventoryKeys = inventory.objects.map { it.objectKey }.toSet()
-                sampledDbRows.filterNot { it.objectKey in inventoryKeys }
+                sampledDbRows.filter { file ->
+                    file.objectKey !in inventoryKeys &&
+                        file.objectKey !in inFlightObjectKeys &&
+                        isEligibleOrphanDbRow(file, graceCutoff)
+                }
             }
 
         // DB/in-flight 샘플이 잘리면 bucket-only 판정이 불완전하므로 삭제 금지.
@@ -213,6 +217,17 @@ class CloudFileReconcileService(
             sampleDbOnlyObjectKeys = emptyList(),
             repairMode = "dry-run-degraded",
         )
+
+    private fun isEligibleOrphanDbRow(
+        file: com.back.boundedContexts.cloud.model.CloudFile,
+        graceCutoff: java.time.Instant,
+    ): Boolean {
+        val lastTouchedAt =
+            runCatching { file.modifiedAt }.getOrNull()
+                ?: runCatching { file.createdAt }.getOrNull()
+                ?: return true
+        return lastTouchedAt <= graceCutoff
+    }
 
     private fun normalizePrefix(prefix: String): String =
         prefix

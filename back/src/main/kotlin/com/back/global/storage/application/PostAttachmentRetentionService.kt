@@ -1,8 +1,10 @@
 package com.back.global.storage.application
 
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.config.StoragePropertiesPort
 import com.back.global.storage.domain.UploadedFile
+import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
 import com.back.global.storage.domain.UploadedFileStatus
@@ -17,6 +19,7 @@ class PostAttachmentRetentionService(
     private val storageProperties: StoragePropertiesPort,
     private val retentionProperties: UploadedFileRetentionProperties,
     private val clock: Clock,
+    private val postRepository: PostRepositoryPort? = null,
 ) {
     @Transactional
     fun syncPostAttachmentKeys(
@@ -80,6 +83,14 @@ class PostAttachmentRetentionService(
     ) {
         currentKeys.forEach { objectKey ->
             val uploadedFile = findOrCreate(objectKey)
+            if (isProfileOwnedFile(uploadedFile)) return@forEach
+            if (hasActiveOwnerPostReference(uploadedFile, postId)) {
+                if (uploadedFile.status != UploadedFileStatus.ACTIVE) {
+                    uploadedFile.restoreActive()
+                    uploadedFileRepository.save(uploadedFile)
+                }
+                return@forEach
+            }
             uploadedFile.attachToPost(postId, purpose)
             uploadedFileRepository.save(uploadedFile)
         }
@@ -115,7 +126,14 @@ class PostAttachmentRetentionService(
     ) {
         keys.forEach { objectKey ->
             val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return@forEach
-            if (uploadedFile.status == UploadedFileStatus.DELETED) return@forEach
+            if (uploadedFile.status == UploadedFileStatus.DELETED || isProfileOwnedFile(uploadedFile)) return@forEach
+            if (hasActiveOwnerPostReference(uploadedFile, postId)) {
+                if (uploadedFile.status != UploadedFileStatus.ACTIVE) {
+                    uploadedFile.restoreActive()
+                    uploadedFileRepository.save(uploadedFile)
+                }
+                return@forEach
+            }
             uploadedFile.attachToPost(postId, purpose)
             uploadedFileRepository.save(uploadedFile)
         }
@@ -130,9 +148,45 @@ class PostAttachmentRetentionService(
         if (objectKey.isBlank()) return
 
         val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return
+        if (isProfileOwnedFile(uploadedFile)) return
+
+        val existingOwnerId = uploadedFile.ownerId
+        if (uploadedFile.ownerType == UploadedFileOwnerType.POST &&
+            existingOwnerId != null &&
+            postRepository?.existsImageReference(existingOwnerId, objectKey) == true
+        ) {
+            if (uploadedFile.status != UploadedFileStatus.ACTIVE) {
+                uploadedFile.restoreActive()
+                uploadedFileRepository.save(uploadedFile)
+            }
+            return
+        }
+
+        val activeReferencingPostId = postRepository?.findFirstReferencingPostId(objectKey)?.takeIf { it > 0L }
+        if (activeReferencingPostId != null) {
+            uploadedFile.attachToPost(activeReferencingPostId, purpose)
+            uploadedFileRepository.save(uploadedFile)
+            return
+        }
+
         uploadedFile.purpose = purpose
         uploadedFile.scheduleDeletion(reason, purgeAfter)
         uploadedFileRepository.save(uploadedFile)
+    }
+
+    private fun isProfileOwnedFile(uploadedFile: UploadedFile): Boolean =
+        uploadedFile.purpose == UploadedFilePurpose.PROFILE_IMAGE ||
+            uploadedFile.ownerType == UploadedFileOwnerType.MEMBER_PROFILE
+
+    private fun hasActiveOwnerPostReference(
+        uploadedFile: UploadedFile,
+        currentPostId: Long,
+    ): Boolean {
+        val existingOwnerId = uploadedFile.ownerId ?: return false
+        if (uploadedFile.ownerType != UploadedFileOwnerType.POST || existingOwnerId == currentPostId) {
+            return false
+        }
+        return postRepository?.existsImageReference(existingOwnerId, uploadedFile.objectKey) == true
     }
 
     private fun findOrCreate(objectKey: String): UploadedFile =

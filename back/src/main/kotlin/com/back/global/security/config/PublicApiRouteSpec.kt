@@ -21,14 +21,15 @@ data class PublicApiRouteSpec(
         authorize.authorize(method, pattern, authorize.permitAll)
     }
 
-    fun matches(request: HttpServletRequest): Boolean = matches(request.method, request.requestURI)
+    fun matches(request: HttpServletRequest): Boolean = matches(request.method, RequestPathNormalizer.normalize(request))
 
     fun matches(
         rawMethod: String,
         path: String,
     ): Boolean {
         if (method != null && rawMethod.uppercase() != method.name()) return false
+        val normalizedPath = RequestPathNormalizer.normalizePath(path)
 
-        return pathPattern.matches(PathContainer.parsePath(path))
+        return runCatching { pathPattern.matches(PathContainer.parsePath(normalizedPath)) }.getOrDefault(false)
     }
 }

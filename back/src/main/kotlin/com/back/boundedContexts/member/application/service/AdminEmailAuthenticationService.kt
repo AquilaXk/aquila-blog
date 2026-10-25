@@ -10,6 +10,7 @@ import com.back.global.app.AdminProperties
 import com.back.global.cache.application.port.output.RedisKeyValuePort
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.web.application.IpAddressNormalizer
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.security.MessageDigest
@@ -51,9 +52,15 @@ class AdminEmailAuthenticationService(
         }
     }
 
+    fun requestCode(
+        email: String,
+        rememberMe: Boolean,
+    ): RequestedChallenge = requestCode(email, rememberMe, null)
+
     override fun requestCode(
         email: String,
         rememberMe: Boolean,
+        clientIp: String?,
     ): RequestedChallenge {
         val startedAtNanos = requestTiming.startedAtNanos()
         try {
@@ -62,7 +69,13 @@ class AdminEmailAuthenticationService(
             val normalizedEmail = email.trim().lowercase(Locale.ROOT)
             if (!adminProperties.matchesEmail(normalizedEmail)) return response
 
-            if (!acquireRequestSlot()) return response
+            val clientIpBucket =
+                if (clientIp.isNullOrBlank()) {
+                    DEFAULT_CLIENT_IP_BUCKET
+                } else {
+                    IpAddressNormalizer.normalizeRateLimitKey(clientIp)
+                }
+            if (!acquireRequestSlot(clientIpBucket)) return response
 
             val challengeId = response.challengeId
             val code = randomCode()
@@ -155,12 +168,14 @@ class AdminEmailAuthenticationService(
         }
     }
 
-    private fun acquireRequestSlot(): Boolean =
+    private fun acquireRequestSlot(clientIpBucket: String): Boolean =
         try {
             adminEmailChallengeStore.acquireRequestSlot(
                 canonicalRecipientHash = sha256(adminProperties.normalizedEmail),
                 maxRequests = requestMaxPerWindow,
                 window = Duration.ofSeconds(requestWindowSeconds),
+                clientIpBucket = clientIpBucket,
+                globalMaxRequests = requestMaxPerWindow * GLOBAL_REQUEST_MULTIPLIER,
             )
         } catch (exception: RuntimeException) {
             throw dependencyUnavailable(exception)
@@ -187,6 +202,8 @@ class AdminEmailAuthenticationService(
         AppException(ErrorCode.DEPENDENCY_NOT_READY, "이메일 인증을 사용할 수 없습니다.", cause)
 
     companion object {
+        private const val DEFAULT_CLIENT_IP_BUCKET = "global"
+        private const val GLOBAL_REQUEST_MULTIPLIER = 4
         private const val CHALLENGE_BYTES = 24
         private const val CODE_LENGTH = 8
         private const val CODE_UPPER_BOUND = 100_000_000

@@ -77,8 +77,42 @@ class RedisAdminEmailChallengeStoreIntegrationTest : BaseSeededIntegrationTest()
         assertThat(redisTemplate.hasKey(challengeKey(expiredId))).isFalse()
 
         val recipientHash = "recipient-${System.nanoTime()}"
-        assertThat(store.acquireRequestSlot(recipientHash, maxRequests = 1, window = Duration.ofMinutes(10))).isTrue()
-        assertThat(store.acquireRequestSlot(recipientHash, maxRequests = 1, window = Duration.ofMinutes(10))).isFalse()
+        assertThat(
+            store.acquireRequestSlot(
+                recipientHash,
+                maxRequests = 1,
+                window = Duration.ofMinutes(10),
+                clientIpBucket = "203.0.113.10",
+                globalMaxRequests = 2,
+            ),
+        ).isTrue()
+        assertThat(
+            store.acquireRequestSlot(
+                recipientHash,
+                maxRequests = 1,
+                window = Duration.ofMinutes(10),
+                clientIpBucket = "203.0.113.10",
+                globalMaxRequests = 2,
+            ),
+        ).isFalse()
+        assertThat(
+            store.acquireRequestSlot(
+                recipientHash,
+                maxRequests = 1,
+                window = Duration.ofMinutes(10),
+                clientIpBucket = "203.0.113.11",
+                globalMaxRequests = 2,
+            ),
+        ).isTrue()
+        assertThat(
+            store.acquireRequestSlot(
+                recipientHash,
+                maxRequests = 1,
+                window = Duration.ofMinutes(10),
+                clientIpBucket = "203.0.113.12",
+                globalMaxRequests = 2,
+            ),
+        ).isFalse()
     }
 
     @Test

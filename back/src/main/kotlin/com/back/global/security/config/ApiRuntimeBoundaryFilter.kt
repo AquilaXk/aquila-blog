@@ -75,13 +75,5 @@ class ApiRuntimeBoundaryFilter(
         }
     }
 
-    private fun requestPath(request: HttpServletRequest): String {
-        val contextPath = request.contextPath.orEmpty()
-        val uri = request.requestURI.orEmpty()
-        return if (contextPath.isNotBlank() && uri.startsWith(contextPath)) {
-            uri.removePrefix(contextPath)
-        } else {
-            uri
-        }
-    }
+    private fun requestPath(request: HttpServletRequest): String = RequestPathNormalizer.normalize(request)
 }

@@ -803,7 +803,7 @@ class CustomAuthenticationFilterTest {
         appender.stop()
     }
 
-    private class CustomAuthenticationFilterFixture(
+    internal class CustomAuthenticationFilterFixture(
         publicApiRequestMatcherOverride: PublicApiRequestMatcher? = null,
     ) {
         val actorApplicationService: ActorApplicationService = mock(ActorApplicationService::class.java)

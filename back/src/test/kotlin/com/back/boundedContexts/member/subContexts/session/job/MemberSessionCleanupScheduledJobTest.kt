@@ -54,6 +54,8 @@ class MemberSessionCleanupScheduledJobTest {
 
         override fun findWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession? = null
 
+        override fun findForUpdateWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession? = null
+
         override fun findByMemberIdAndSessionKeyAndRevokedAtIsNull(
             memberId: Long,
             sessionKey: String,

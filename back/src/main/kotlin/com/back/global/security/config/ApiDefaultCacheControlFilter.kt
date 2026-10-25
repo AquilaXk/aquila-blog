@@ -28,6 +28,12 @@ class ApiDefaultCacheControlFilter : OncePerRequestFilter() {
         filterChain.doFilter(request, response)
 
         if (response.isCommitted) return
+        if (response.containsHeader(HttpHeaders.AUTHORIZATION) || response.containsHeader(HttpHeaders.SET_COOKIE)) {
+            response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0, must-revalidate")
+            response.setHeader(HttpHeaders.PRAGMA, "no-cache")
+            response.setDateHeader(HttpHeaders.EXPIRES, 0)
+            return
+        }
         if (response.containsHeader(HttpHeaders.CACHE_CONTROL)) return
 
         response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")
@@ -35,13 +41,5 @@ class ApiDefaultCacheControlFilter : OncePerRequestFilter() {
         response.setDateHeader(HttpHeaders.EXPIRES, 0)
     }
 
-    private fun requestPath(request: HttpServletRequest): String {
-        val contextPath = request.contextPath.orEmpty()
-        val uri = request.requestURI.orEmpty()
-        return if (contextPath.isNotBlank() && uri.startsWith(contextPath)) {
-            uri.removePrefix(contextPath)
-        } else {
-            uri
-        }
-    }
+    private fun requestPath(request: HttpServletRequest): String = RequestPathNormalizer.normalize(request)
 }

@@ -9,6 +9,7 @@ import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.core.env.Environment
+import org.springframework.http.HttpHeaders
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
@@ -55,14 +56,15 @@ class CustomAuthenticationFilter(
         filterChain: FilterChain,
     ) {
         val isPublicApi = publicApiRequestMatcher.matches(request)
+        val isPublicReadSafe = isPublicApi && isReadSafeMethod(request.method)
 
         try {
             try {
-                authenticateIfPossible(request)
+                authenticateIfPossible(request, allowRefreshRotation = !isPublicReadSafe)
             } catch (e: AppException) {
                 if (!isPublicApi) throw e
-                // 공개 API는 잘못된 인증정보가 있어도 익명으로 계속 처리한다.
                 SecurityContextHolder.clearContext()
+                enforcePrivateCacheIfCredentialsTouched(response)
             } catch (e: Exception) {
                 val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
                 log.warn(
@@ -74,8 +76,8 @@ class CustomAuthenticationFilter(
                 if (!isPublicApi) {
                     throw AppException(ErrorCode.UNAUTHORIZED, "로그인 후 이용해주세요.")
                 }
-                // 공개 API는 예기치 못한 인증 오류에서도 익명으로 계속 처리한다.
                 SecurityContextHolder.clearContext()
+                enforcePrivateCacheIfCredentialsTouched(response)
             }
             filterChain.doFilter(request, response)
         } catch (e: AppException) {
@@ -92,16 +94,29 @@ class CustomAuthenticationFilter(
     }
 
     /**
-     * 기존 accessToken을 먼저 검증하고, 실패하면 refreshToken 회전 경로로 이동합니다.
+     * 기존 accessToken을 먼저 검증하고, 실패하면 보호 경로에 한해 refreshToken 회전 경로로 이동합니다.
      */
-    private fun authenticateIfPossible(request: HttpServletRequest) {
+    private fun authenticateIfPossible(
+        request: HttpServletRequest,
+        allowRefreshRotation: Boolean,
+    ) {
         val tokens = authTokenExtractor.extract()
         val clientIp = clientIpResolver.resolve(request)
 
         if (tokens.apiKey.isBlank() && tokens.accessToken.isBlank() && tokens.refreshToken.isBlank()) return
 
         if (accessTokenAuthenticationHandler.authenticate(request, tokens, clientIp)) return
+        if (!allowRefreshRotation) return
         refreshTokenAuthenticationHandler.authenticate(request, tokens, clientIp)
+    }
+
+    private fun isReadSafeMethod(method: String?): Boolean =
+        method.equals("GET", ignoreCase = true) || method.equals("HEAD", ignoreCase = true)
+
+    private fun enforcePrivateCacheIfCredentialsTouched(response: HttpServletResponse) {
+        if (response.containsHeader(HttpHeaders.SET_COOKIE) || response.containsHeader(HttpHeaders.AUTHORIZATION)) {
+            response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0, must-revalidate")
+        }
     }
 
     private fun sanitizeLogValue(

@@ -13,9 +13,9 @@ class PostPublicReadCacheHeaderWriter(
         policy: PublicReadCachePolicy,
         surrogateKeys: Set<String>,
     ) {
-        if (hasCredentialHeaders(response)) {
+        if (response.containsHeader(HttpHeaders.AUTHORIZATION) || response.containsHeader(HttpHeaders.SET_COOKIE)) {
             applyPrivateNoStoreHeaders(response)
-            ensurePrivateVaryHeader(response)
+            response.setHeader(HttpHeaders.VARY, "${HttpHeaders.AUTHORIZATION}, ${HttpHeaders.COOKIE}")
             return
         }
         val safeMaxAge = policy.maxAgeSeconds.coerceAtLeast(0)
@@ -33,36 +33,6 @@ class PostPublicReadCacheHeaderWriter(
 
     fun applyPrivateNoStoreHeaders(response: HttpServletResponse) {
         response.setHeader("Cache-Control", "private, no-store, max-age=0")
-    }
-
-    private fun hasCredentialHeaders(response: HttpServletResponse): Boolean {
-        if (response.containsHeader(HttpHeaders.AUTHORIZATION) || response.containsHeader(HttpHeaders.SET_COOKIE)) {
-            return true
-        }
-        return response.headerNames.orEmpty().any { headerName ->
-            headerName.equals(HttpHeaders.AUTHORIZATION, ignoreCase = true) ||
-                headerName.equals(HttpHeaders.SET_COOKIE, ignoreCase = true)
-        }
-    }
-
-    private fun ensurePrivateVaryHeader(response: HttpServletResponse) {
-        val existingTokens =
-            response
-                .getHeaders(HttpHeaders.VARY)
-                .orEmpty()
-                .flatMap { it.split(',') }
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-        if (existingTokens.any { it == "*" }) return
-        val merged = linkedSetOf<String>()
-        existingTokens.forEach { merged.add(it) }
-        if (merged.none { it.equals(HttpHeaders.AUTHORIZATION, ignoreCase = true) }) {
-            merged.add(HttpHeaders.AUTHORIZATION)
-        }
-        if (merged.none { it.equals(HttpHeaders.COOKIE, ignoreCase = true) }) {
-            merged.add(HttpHeaders.COOKIE)
-        }
-        response.setHeader(HttpHeaders.VARY, merged.joinToString(", "))
     }
 
     fun applySurrogateKeyHeaders(

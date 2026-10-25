@@ -45,11 +45,13 @@ class MemberSessionService(
     private val meterRegistry: MeterRegistry? = null,
     private val redisKeyValuePort: RedisKeyValuePort? = null,
     @param:Value("\${custom.auth.refreshToken.rotationGraceSeconds:10}")
-    private val refreshTokenRotationGraceSeconds: Long = ROTATION_GRACE_WINDOW.seconds,
+    private val refreshTokenRotationGraceSeconds: Long = 10,
 ) : MemberSessionUseCase {
     private val logger = LoggerFactory.getLogger(MemberSessionService::class.java)
     private val rotationGraceWindow: Duration = Duration.ofSeconds(refreshTokenRotationGraceSeconds.coerceAtLeast(0))
-    private val inMemoryRotationGraceEntries = ConcurrentHashMap<String, RotationGraceEntry>()
+    private val rotationGraceRedisKeyPrefix = "auth:session:refresh-grace:"
+    private val maxInMemoryGraceEntries = 1_024
+    private val inMemoryRotationGraceEntries = ConcurrentHashMap<String, String>()
 
     @Transactional
     override fun createSession(
@@ -248,22 +250,19 @@ class MemberSessionService(
         now: Instant,
     ) {
         val expiresAt = now.plus(rotationGraceWindow)
-        if (inMemoryRotationGraceEntries.size >= MAX_IN_MEMORY_GRACE_ENTRIES) {
-            inMemoryRotationGraceEntries.entries.removeIf { !now.isBefore(it.value.expiresAt) }
+        val maskedToken = maskTokenWithSecret(rotatedRefreshToken, previousRefreshToken)
+        val serialized = "$previousRefreshTokenHash|$currentRefreshTokenHash|$maskedToken|${expiresAt.toEpochMilli()}"
+        val redis = redisKeyValuePort?.takeIf { it.isAvailable() }
+        if (redis != null) {
+            runCatching {
+                redis.set(rotationGraceRedisKey(sessionKey), serialized, rotationGraceWindow)
+            }
+            return
         }
-        val entry =
-            RotationGraceEntry(
-                previousRefreshTokenHash = previousRefreshTokenHash,
-                currentRefreshTokenHash = currentRefreshTokenHash,
-                maskedRotatedRefreshToken = maskTokenWithSecret(rotatedRefreshToken, previousRefreshToken),
-                expiresAt = expiresAt,
-            )
-        inMemoryRotationGraceEntries[sessionKey] = entry
-
-        val redis = redisKeyValuePort?.takeIf { it.isAvailable() } ?: return
-        runCatching {
-            redis.set(rotationGraceRedisKey(sessionKey), entry.serialize(), rotationGraceWindow)
+        if (inMemoryRotationGraceEntries.size >= maxInMemoryGraceEntries) {
+            inMemoryRotationGraceEntries.entries.removeIf { isSerializedGraceExpired(it.value, now) }
         }
+        inMemoryRotationGraceEntries[sessionKey] = serialized
     }
 
     private fun resolveGraceRotatedRefreshToken(
@@ -275,25 +274,34 @@ class MemberSessionService(
         val activeHash = session.refreshTokenHash ?: return null
         val presentedHash = MemberSessionRefreshTokenPolicy.hash(presentedRefreshToken)
 
-        val entry =
-            readRedisRotationGraceEntry(session.sessionKey)
-                ?: inMemoryRotationGraceEntries[session.sessionKey]
-                ?: return null
+        val redis = redisKeyValuePort?.takeIf { it.isAvailable() }
+        val raw =
+            if (redis != null) {
+                runCatching { redis.get(rotationGraceRedisKey(session.sessionKey)) }.getOrNull()
+            } else {
+                inMemoryRotationGraceEntries[session.sessionKey]
+            } ?: return null
 
-        if (!now.isBefore(entry.expiresAt)) {
+        val parts = raw.split('|')
+        if (parts.size != 4) return null
+        val expiresAtMillis = parts[3].toLongOrNull() ?: return null
+        if (parts[0].isBlank() || parts[1].isBlank() || parts[2].isBlank()) return null
+        if (!now.isBefore(Instant.ofEpochMilli(expiresAtMillis))) {
             clearRotationGraceEntry(session.sessionKey)
             return null
         }
-        if (entry.previousRefreshTokenHash != presentedHash || entry.currentRefreshTokenHash != activeHash) {
+        if (parts[0] != presentedHash || parts[1] != activeHash) {
             return null
         }
-        return unmaskTokenWithSecret(entry.maskedRotatedRefreshToken, presentedRefreshToken)
+        return unmaskTokenWithSecret(parts[2], presentedRefreshToken)
     }
 
-    private fun readRedisRotationGraceEntry(sessionKey: String): RotationGraceEntry? {
-        val redis = redisKeyValuePort?.takeIf { it.isAvailable() } ?: return null
-        val raw = runCatching { redis.get(rotationGraceRedisKey(sessionKey)) }.getOrNull() ?: return null
-        return RotationGraceEntry.deserialize(raw)
+    private fun isSerializedGraceExpired(
+        raw: String,
+        now: Instant,
+    ): Boolean {
+        val expiresAtMillis = raw.substringAfterLast('|').toLongOrNull() ?: return true
+        return !now.isBefore(Instant.ofEpochMilli(expiresAtMillis))
     }
 
     private fun clearRotationGraceEntry(sessionKey: String) {
@@ -304,7 +312,7 @@ class MemberSessionService(
         }
     }
 
-    private fun rotationGraceRedisKey(sessionKey: String): String = "$ROTATION_GRACE_REDIS_KEY_PREFIX$sessionKey"
+    private fun rotationGraceRedisKey(sessionKey: String): String = "$rotationGraceRedisKeyPrefix$sessionKey"
 
     private fun evictActiveSnapshot(
         memberId: Long,
@@ -367,31 +375,6 @@ class MemberSessionService(
 
     private fun refreshTokenExpiresAt(now: Instant): Instant = now.plusSeconds(refreshTokenExpirationSeconds.coerceAtLeast(1))
 
-    private data class RotationGraceEntry(
-        val previousRefreshTokenHash: String,
-        val currentRefreshTokenHash: String,
-        val maskedRotatedRefreshToken: String,
-        val expiresAt: Instant,
-    ) {
-        fun serialize(): String =
-            "$previousRefreshTokenHash|$currentRefreshTokenHash|$maskedRotatedRefreshToken|${expiresAt.toEpochMilli()}"
-
-        companion object {
-            fun deserialize(raw: String): RotationGraceEntry? {
-                val parts = raw.split('|')
-                if (parts.size != 4) return null
-                val expiresAtMillis = parts[3].toLongOrNull() ?: return null
-                if (parts[0].isBlank() || parts[1].isBlank() || parts[2].isBlank()) return null
-                return RotationGraceEntry(
-                    previousRefreshTokenHash = parts[0],
-                    currentRefreshTokenHash = parts[1],
-                    maskedRotatedRefreshToken = parts[2],
-                    expiresAt = Instant.ofEpochMilli(expiresAtMillis),
-                )
-            }
-        }
-    }
-
     private fun maskTokenWithSecret(
         plaintextToken: String,
         secretToken: String,
@@ -430,11 +413,5 @@ class MemberSessionService(
             counter += 1
         }
         return output
-    }
-
-    companion object {
-        val ROTATION_GRACE_WINDOW: Duration = Duration.ofSeconds(10)
-        private const val ROTATION_GRACE_REDIS_KEY_PREFIX = "auth:session:refresh-grace:"
-        private const val MAX_IN_MEMORY_GRACE_ENTRIES = 1_024
     }
 }

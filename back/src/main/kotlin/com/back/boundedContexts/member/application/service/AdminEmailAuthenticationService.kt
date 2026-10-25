@@ -52,6 +52,11 @@ class AdminEmailAuthenticationService(
         }
     }
 
+    fun requestCode(
+        email: String,
+        rememberMe: Boolean,
+    ): RequestedChallenge = requestCode(email, rememberMe, null)
+
     override fun requestCode(
         email: String,
         rememberMe: Boolean,
@@ -170,6 +175,7 @@ class AdminEmailAuthenticationService(
                 maxRequests = requestMaxPerWindow,
                 window = Duration.ofSeconds(requestWindowSeconds),
                 clientIpBucket = clientIpBucket,
+                globalMaxRequests = requestMaxPerWindow * GLOBAL_REQUEST_MULTIPLIER,
             )
         } catch (exception: RuntimeException) {
             throw dependencyUnavailable(exception)
@@ -197,6 +203,7 @@ class AdminEmailAuthenticationService(
 
     companion object {
         private const val DEFAULT_CLIENT_IP_BUCKET = "global"
+        private const val GLOBAL_REQUEST_MULTIPLIER = 4
         private const val CHALLENGE_BYTES = 24
         private const val CODE_LENGTH = 8
         private const val CODE_UPPER_BOUND = 100_000_000

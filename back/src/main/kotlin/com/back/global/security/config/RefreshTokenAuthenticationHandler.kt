@@ -76,8 +76,6 @@ class RefreshTokenAuthenticationHandler(
 
         securityContextAuthenticationWriter.write(member, memberSession.id)
     }
-
-    private companion object {
-        private const val PRIVATE_NO_STORE_CACHE_CONTROL = "private, no-store, max-age=0"
-    }
 }
+
+private const val PRIVATE_NO_STORE_CACHE_CONTROL = "private, no-store, max-age=0"

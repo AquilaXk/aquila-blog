@@ -16,8 +16,7 @@ interface MemberSessionStorePort {
 
     fun findWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession?
 
-    fun findForUpdateWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession? =
-        findWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey)
+    fun findForUpdateWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession?
 
     fun findByMemberIdAndSessionKeyAndRevokedAtIsNull(
         memberId: Long,

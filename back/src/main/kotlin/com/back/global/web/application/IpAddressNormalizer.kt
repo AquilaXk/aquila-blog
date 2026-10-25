@@ -14,7 +14,8 @@ object IpAddressNormalizer {
     private const val UNKNOWN_RATE_LIMIT_KEY = "unknown"
     private const val IPV6_BYTE_LENGTH = 16
     private const val IPV6_PREFIX_HEXTET_COUNT = 4
-    private val POSSIBLE_IP_LITERAL_REGEX = Regex("^[0-9A-Fa-f:.%]+$")
+    private val IPV4_LITERAL_CANDIDATE_REGEX = Regex("^[0-9.]+$")
+    private val IPV6_LITERAL_CANDIDATE_REGEX = Regex("^[0-9A-Fa-f:.%]*:[0-9A-Fa-f:.%]*$")
     private val IPV4_WITH_PORT_REGEX = Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}:\\d{1,5}$")
     private val BRACKET_IPV6_WITH_PORT_REGEX = Regex("^\\[([0-9A-Fa-f:.%]+)]:(\\d{1,5})$")
 
@@ -25,7 +26,13 @@ object IpAddressNormalizer {
         if (trimmed.isEmpty()) return null
 
         val candidate = extractHostPart(trimmed) ?: return null
-        if (!POSSIBLE_IP_LITERAL_REGEX.matches(candidate)) return null
+        val isPlausibleIpLiteral =
+            if (candidate.contains(':')) {
+                IPV6_LITERAL_CANDIDATE_REGEX.matches(candidate)
+            } else {
+                IPV4_LITERAL_CANDIDATE_REGEX.matches(candidate)
+            }
+        if (!isPlausibleIpLiteral) return null
 
         return runCatching {
             InetAddress

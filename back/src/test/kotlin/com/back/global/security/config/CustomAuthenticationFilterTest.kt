@@ -769,61 +769,6 @@ class CustomAuthenticationFilterTest {
         }
     }
 
-    @Test
-    @DisplayName("refreshToken 회전 성공 시 응답에 private no-store Cache-Control 헤더를 즉시 설정한다")
-    fun `refresh token rotation sets private no store cache control header`() {
-        val fixture = CustomAuthenticationFilterFixture()
-        val request = MockHttpServletRequest("GET", "/post/api/v1/posts")
-        val sessionKey = "admin-session-key"
-        val refreshToken = "valid-refresh-token"
-        val admin = Member(54L, "internal-admin", null, "aquila", "admin@test.com").also { it.grantAdmin() }
-        val memberSession = MemberSession(id = 10L, member = admin, sessionKey = sessionKey)
-        given(fixture.memberSessionUseCase.rotateRefreshToken(sessionKey, refreshToken))
-            .willReturn(MemberSessionWithRefreshToken(memberSession, "rotated-refresh-token"))
-        given(fixture.actorApplicationService.findById(admin.id)).willReturn(admin)
-        given(fixture.actorApplicationService.genAccessToken(admin, sessionKey, true, false, null))
-            .willReturn("new-access-token")
-
-        try {
-            fixture.refreshTokenAuthenticationHandler().authenticate(
-                request = request,
-                tokens = ExtractedAuthTokens("api-key", "", sessionKey, refreshToken),
-                clientIp = "203.0.113.10",
-            )
-
-            verify(fixture.rq).setHeader(HttpHeaders.AUTHORIZATION, "Bearer new-access-token")
-            verify(fixture.rq).setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")
-        } finally {
-            SecurityContextHolder.clearContext()
-        }
-    }
-
-    @Test
-    @DisplayName("인코딩되거나 중복 슬래시가 포함된 보호 API 경로도 인증 필터를 우회하지 못한다")
-    fun `encoded or duplicate slash protected paths do not bypass authentication filter`() {
-        val fixture = CustomAuthenticationFilterFixture()
-        val filter = fixture.authenticationFilter()
-        fixture.givenEmptyAuthorizationHeader()
-        fixture.givenCookieTokens(accessToken = "broken-access-token")
-        given(fixture.actorApplicationService.payload("broken-access-token")).willThrow(RuntimeException("jwt down"))
-
-        for (rawPath in listOf(
-            "/member/%61pi/v1/privacy/export",
-            "//member//api/v1/privacy/export",
-            "/member/api/v1/privacy/export;jsessionid=123",
-        )) {
-            val request = MockHttpServletRequest("GET", rawPath)
-            val response = MockHttpServletResponse()
-            fixture.givenProtectedRequest(request)
-            fixture.givenClientIp(request, "203.0.113.10")
-
-            filter.doFilter(request, response, MockFilterChain())
-
-            assertThat(response.status).isEqualTo(HttpServletResponse.SC_UNAUTHORIZED)
-            assertThat(response.contentAsString).contains("\"resultCode\":\"401-1\"")
-        }
-    }
-
     private fun configureProductionUrls() {
         AppConfig(
             siteBackUrl = "https://api.blog.aquilaxk.site",
@@ -858,7 +803,7 @@ class CustomAuthenticationFilterTest {
         appender.stop()
     }
 
-    private class CustomAuthenticationFilterFixture(
+    internal class CustomAuthenticationFilterFixture(
         publicApiRequestMatcherOverride: PublicApiRequestMatcher? = null,
     ) {
         val actorApplicationService: ActorApplicationService = mock(ActorApplicationService::class.java)

@@ -53,12 +53,17 @@ class RedisAdminEmailChallengeStore(
         maxRequests: Int,
         window: Duration,
         clientIpBucket: String,
+        globalMaxRequests: Int,
     ): Boolean =
         requireTemplate().execute(
             REQUEST_SLOT_SCRIPT,
-            listOf(requestSlotKey(canonicalRecipientHash, clientIpBucket)),
+            listOf(
+                requestSlotKey(canonicalRecipientHash, clientIpBucket),
+                requestSlotKey(canonicalRecipientHash, DEFAULT_CLIENT_IP_BUCKET),
+            ),
             maxRequests.toString(),
             window.seconds.toString(),
+            globalMaxRequests.toString(),
         ) == 1L
 
     private fun requireTemplate(): StringRedisTemplate = redisTemplateProvider.getIfAvailable() ?: error("Redis template is unavailable")
@@ -126,10 +131,16 @@ class RedisAdminEmailChallengeStore(
         private val REQUEST_SLOT_SCRIPT =
             DefaultRedisScript<Long>(
                 """
-                local requests = tonumber(redis.call('GET', KEYS[1]) or '0')
-                if requests >= tonumber(ARGV[1]) then return 0 end
-                requests = redis.call('INCR', KEYS[1])
-                if requests == 1 then redis.call('EXPIRE', KEYS[1], ARGV[2]) end
+                local ipRequests = tonumber(redis.call('GET', KEYS[1]) or '0')
+                if ipRequests >= tonumber(ARGV[1]) then return 0 end
+                local globalRequests = tonumber(redis.call('GET', KEYS[2]) or '0')
+                if globalRequests >= tonumber(ARGV[3]) then return 0 end
+                ipRequests = redis.call('INCR', KEYS[1])
+                if ipRequests == 1 then redis.call('EXPIRE', KEYS[1], ARGV[2]) end
+                if KEYS[2] ~= KEYS[1] then
+                  globalRequests = redis.call('INCR', KEYS[2])
+                  if globalRequests == 1 then redis.call('EXPIRE', KEYS[2], ARGV[2]) end
+                end
                 return 1
                 """.trimIndent(),
                 Long::class.java,

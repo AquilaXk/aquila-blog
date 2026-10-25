@@ -3,6 +3,7 @@ package com.back.global.security.config
 import jakarta.servlet.http.HttpServletRequest
 
 object RequestPathNormalizer {
+    private const val MAX_DECODE_PASSES = 3
     private val MULTIPLE_SLASH_REGEX = Regex("/+")
 
     fun normalize(request: HttpServletRequest): String {
@@ -23,13 +24,14 @@ object RequestPathNormalizer {
                 uriWithoutQuery
             }
 
-        val decoded = decodePercentEncodedSafely(strippedContextUri).replace('\\', '/')
+        val preStripped = stripMatrixParametersPerSegment(strippedContextUri)
+        val decoded = decodePercentEncodedIteratively(preStripped).replace('\\', '/')
         val collapsed = MULTIPLE_SLASH_REGEX.replace(decoded, "/")
         if (collapsed.isBlank() || collapsed == "/") return "/"
 
         val preserveTrailingSlash = collapsed.length > 1 && collapsed.endsWith('/')
         val segments = ArrayDeque<String>()
-        for (rawSegment in collapsed.split('/')) {
+        for (rawSegment in collapsed.split('/', '\\')) {
             val segment = rawSegment.substringBefore(';')
             when (segment) {
                 "", "." -> Unit
@@ -43,9 +45,23 @@ object RequestPathNormalizer {
         return if (preserveTrailingSlash) "$joined/" else joined
     }
 
-    private fun decodePercentEncodedSafely(input: String): String {
-        if (!input.contains('%')) return input
+    private fun stripMatrixParametersPerSegment(path: String): String =
+        path
+            .split('/', '\\')
+            .joinToString("/") { it.substringBefore(';') }
 
+    private fun decodePercentEncodedIteratively(input: String): String {
+        var current = input
+        repeat(MAX_DECODE_PASSES) {
+            if (!current.contains('%')) return current
+            val next = stripMatrixParametersPerSegment(decodePercentEncodedSafely(current))
+            if (next == current) return current
+            current = next
+        }
+        return current
+    }
+
+    private fun decodePercentEncodedSafely(input: String): String {
         val out = StringBuilder(input.length)
         val byteBuffer = ByteArray(input.length / 3 + 1)
         var index = 0

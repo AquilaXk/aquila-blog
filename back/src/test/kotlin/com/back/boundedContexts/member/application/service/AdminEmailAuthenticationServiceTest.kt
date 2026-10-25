@@ -460,12 +460,21 @@ class AdminEmailAuthenticationServiceTest {
             maxRequests: Int,
             window: Duration,
             clientIpBucket: String,
+            globalMaxRequests: Int,
         ): Boolean {
             requestSlotFailure?.let { throw it }
-            val key = "$canonicalRecipientHash:$clientIpBucket"
-            val next = (requestCountsByBucket[key] ?: 0) + 1
-            requestCountsByBucket[key] = next
-            return next <= maxRequests
+            val ipKey = "$canonicalRecipientHash:$clientIpBucket"
+            val globalKey = "$canonicalRecipientHash:global"
+            val currentIp = requestCountsByBucket[ipKey] ?: 0
+            val currentGlobal = requestCountsByBucket[globalKey] ?: 0
+            if (currentIp >= maxRequests || currentGlobal >= globalMaxRequests) {
+                return false
+            }
+            requestCountsByBucket[ipKey] = currentIp + 1
+            if (ipKey != globalKey) {
+                requestCountsByBucket[globalKey] = currentGlobal + 1
+            }
+            return true
         }
     }
 

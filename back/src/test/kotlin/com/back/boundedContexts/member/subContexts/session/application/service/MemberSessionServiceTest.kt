@@ -115,6 +115,7 @@ class MemberSessionServiceTest {
         assertThat(firstRotation).isNotNull
         assertThat(concurrentSecondRotation).isNotNull
         assertThat(concurrentSecondRotation!!.refreshToken).isEqualTo(firstRotation!!.refreshToken)
+        assertThat(store.lockedLookupCount).isEqualTo(2)
         assertThat(created.session.revokedAt).isNull()
         assertThat(created.session.refreshTokenReusedAt).isNull()
         assertThat(created.session.matchesRefreshToken(firstRotation.refreshToken)).isTrue()
@@ -123,6 +124,72 @@ class MemberSessionServiceTest {
         assertThat(forgedReuseWithinGrace).isNull()
         assertThat(created.session.revokedAt).isNotNull
         assertThat(created.session.refreshTokenReusedAt).isNotNull
+    }
+
+    @Test
+    fun `RedisKeyValuePort가 활성화되면 회전 유예 엔트리를 Redis에서 직렬화 및 역직렬화하고 폐기 시 삭제한다`() {
+        val store = RecordingMemberSessionStorePort()
+        val redisEntries = mutableMapOf<String, String>()
+        val redisPort =
+            object : com.back.global.cache.application.port.output.RedisKeyValuePort {
+                override fun isAvailable(): Boolean = true
+
+                override fun get(key: String): String? = redisEntries[key]
+
+                override fun set(
+                    key: String,
+                    value: String,
+                    ttl: java.time.Duration?,
+                ) {
+                    redisEntries[key] = value
+                }
+
+                override fun getAndDelete(key: String): String? = redisEntries.remove(key)
+
+                override fun increment(key: String): Long? = null
+
+                override fun incrementAndExpire(
+                    key: String,
+                    ttl: java.time.Duration,
+                ): Long? = null
+
+                override fun expire(
+                    key: String,
+                    ttl: java.time.Duration,
+                ): Boolean = false
+
+                override fun delete(keys: Collection<String>): Long = keys.count { redisEntries.remove(it) != null }.toLong()
+
+                override fun keys(pattern: String): Set<String> = redisEntries.keys
+            }
+        val service =
+            MemberSessionService(
+                memberSessionStorePort = store,
+                cacheManager = ConcurrentMapCacheManager(),
+                touchMinIntervalSeconds = 60,
+                refreshTokenExpirationSeconds = 3600,
+                redisKeyValuePort = redisPort,
+            )
+        val member = Member(62L, "redis-grace-user", null, "레디스유예", "redis-grace@example.com", MemberPolicy.genApiKey())
+        val created =
+            service.createSessionWithRefreshToken(
+                member = member,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.23",
+                userAgent = "test-agent",
+            )
+
+        val firstRotation = service.rotateRefreshToken(created.session.sessionKey, created.refreshToken)
+        assertThat(redisEntries).containsKey("auth:session:refresh-grace:${created.session.sessionKey}")
+
+        val concurrentSecondRotation = service.rotateRefreshToken(created.session.sessionKey, created.refreshToken)
+        assertThat(concurrentSecondRotation).isNotNull
+        assertThat(concurrentSecondRotation!!.refreshToken).isEqualTo(firstRotation!!.refreshToken)
+
+        service.revokeSession(created.session.sessionKey)
+        assertThat(redisEntries).doesNotContainKey("auth:session:refresh-grace:${created.session.sessionKey}")
     }
 
     @Test
@@ -357,6 +424,7 @@ class MemberSessionServiceTest {
 
     private class RecordingMemberSessionStorePort : MemberSessionStorePort {
         var touchCallCount: Int = 0
+        var lockedLookupCount: Int = 0
         var lastTouchedSessionId: Long? = null
         var lastRevokedBeyondLimit: Int? = null
         val deletedMemberIds = mutableSetOf<Long>()
@@ -384,6 +452,11 @@ class MemberSessionServiceTest {
 
         override fun findWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession? =
             findBySessionKeyAndRevokedAtIsNull(sessionKey)
+
+        override fun findForUpdateWithMemberBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSession? {
+            lockedLookupCount += 1
+            return findBySessionKeyAndRevokedAtIsNull(sessionKey)
+        }
 
         override fun findByMemberIdAndSessionKeyAndRevokedAtIsNull(
             memberId: Long,

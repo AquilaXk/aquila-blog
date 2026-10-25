@@ -61,6 +61,8 @@ class ClientIpResolverTest {
             .isEqualTo("2001:db8:1:2::/64")
         assertThat(IpAddressNormalizer.normalizeRateLimitKey("2001:db8::abcd"))
             .isEqualTo("2001:db8::/64")
+        assertThat(IpAddressNormalizer.normalize("dead.beef"))
+            .isNull()
         assertThat(IpAddressNormalizer.normalizeRateLimitKey("invalid-host"))
             .isEqualTo("unknown")
     }

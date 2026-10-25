@@ -152,6 +152,28 @@ retention_for_class() {
   esac
 }
 
+is_complete_backup_dir() {
+  local candidate="$1"
+  [[ -s "${candidate}/metadata.env" ]] || return 1
+  if grep -qE '^postgres_database=' "${candidate}/metadata.env" 2>/dev/null; then
+    [[ -s "${candidate}/dump.sql.enc" || -s "${candidate}/dump.sql.skipped" ]] || return 1
+  fi
+  if grep -qE '^minio_backup_mode=' "${candidate}/metadata.env" 2>/dev/null; then
+    [[ -s "${candidate}/minio-data.tar.gz.enc" || -s "${candidate}/minio.skipped" ]] || return 1
+  fi
+  return 0
+}
+
+delete_backup_entry() {
+  local candidate="$1"
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[external-backup-prune] dry-run delete ${candidate}"
+  else
+    echo "[external-backup-prune] delete ${candidate}"
+    rm -rf -- "${candidate}"
+  fi
+}
+
 prune_class_dir() {
   local category="$1"
   local class="$2"
@@ -174,20 +196,45 @@ prune_class_dir() {
 
   [[ "${#entries[@]}" -gt 0 ]] || return 0
 
-  local newest="${entries[0]}"
-  local index=0
+  local complete_entries=()
   for candidate in "${entries[@]}"; do
+    if is_complete_backup_dir "${candidate}"; then
+      complete_entries+=("${candidate}")
+    else
+      delete_backup_entry "${candidate}"
+    fi
+  done
+
+  [[ "${#complete_entries[@]}" -gt 0 ]] || return 0
+
+  local newest="${complete_entries[0]}"
+  local index=0
+  local kept_days=0
+  local last_day_prefix=""
+  for candidate in "${complete_entries[@]}"; do
+    if [[ "${class}" == "daily" ]]; then
+      local name day_prefix
+      name="$(basename "${candidate}")"
+      day_prefix="${name:0:8}"
+      if [[ "${day_prefix}" == "${last_day_prefix}" ]]; then
+        delete_backup_entry "${candidate}"
+        continue
+      fi
+      last_day_prefix="${day_prefix}"
+      kept_days=$((kept_days + 1))
+      if [[ "${kept_days}" -le "${keep_count}" || "${candidate}" == "${newest}" ]]; then
+        continue
+      fi
+      delete_backup_entry "${candidate}"
+      continue
+    fi
+
     index=$((index + 1))
     if [[ "${index}" -le "${keep_count}" || "${candidate}" == "${newest}" ]]; then
       continue
     fi
 
-    if [[ "${DRY_RUN}" == "true" ]]; then
-      echo "[external-backup-prune] dry-run delete ${candidate}"
-    else
-      echo "[external-backup-prune] delete ${candidate}"
-      rm -rf -- "${candidate}"
-    fi
+    delete_backup_entry "${candidate}"
   done
 }
 

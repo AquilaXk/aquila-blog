@@ -3609,7 +3609,7 @@ ensure_monitoring_bind_mount_permissions
 # force-recreate --no-deps so json-file max-size/max-file logging applies without
 # recreating backend/DB dependencies (logging opts bind at container create).
 monitoring_services_to_boot=(
-  alertmanager loki promtail prometheus grafana
+  docker_socket_read_proxy alertmanager loki promtail prometheus grafana
   public_edge_probe docker_runtime_probe postgres_exporter
 )
 compose_up_force_recreate_no_deps_with_retry "${monitoring_services_to_boot[@]}"

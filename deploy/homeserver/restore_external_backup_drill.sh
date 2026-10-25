@@ -152,13 +152,32 @@ resolve_min_free_percent() {
   printf '%s' "${value}"
 }
 
+is_complete_backup_set() {
+  local backup_id="$1"
+  local pg_dir="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}/${backup_id}"
+  local minio_dir="${BACKUP_ROOT}/minio/${BACKUP_CLASS}/${backup_id}"
+  [[ -s "${pg_dir}/metadata.env" ]] || return 1
+  [[ -s "${pg_dir}/dump.sql.enc" ]] || return 1
+  [[ -s "${minio_dir}/minio-data.tar.gz.enc" ]] || return 1
+  return 0
+}
+
 latest_backup_set_id() {
   local postgres_root="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}"
   [[ -d "${postgres_root}" ]] || fail "missing PostgreSQL backup class directory: ${postgres_root}"
-  find "${postgres_root}" -mindepth 1 -maxdepth 1 -type d -print \
-    | sed 's#.*/##' \
-    | sort \
-    | tail -n 1
+  local candidate_id
+  while IFS= read -r candidate_id; do
+    [[ -n "${candidate_id}" ]] || continue
+    if is_safe_backup_id "${candidate_id}" && is_complete_backup_set "${candidate_id}"; then
+      printf '%s\n' "${candidate_id}"
+      return 0
+    fi
+  done < <(
+    find "${postgres_root}" -mindepth 1 -maxdepth 1 -type d -print \
+      | sed 's#.*/##' \
+      | sort -r
+  )
+  fail "no complete backup set found in ${postgres_root}"
 }
 
 date_utc_epoch() {
@@ -633,11 +652,35 @@ fi
 is_safe_backup_id "${BACKUP_SET_ID}" || fail "unsafe backup set id: ${BACKUP_SET_ID}"
 resolve_backup_encryption_key_for_backup
 
-POSTGRES_ENCRYPTED_DUMP_FILE="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}/${BACKUP_SET_ID}/dump.sql.enc"
-MINIO_ENCRYPTED_ARCHIVE_FILE="${BACKUP_ROOT}/minio/${BACKUP_CLASS}/${BACKUP_SET_ID}/minio-data.tar.gz.enc"
+verify_backup_artifact_checksum() {
+  local backup_dir="$1"
+  local artifact_name="$2"
+  local checksum_file="${backup_dir}/sha256sums.txt"
+  local hmac_file="${backup_dir}/hmac-sha256.txt"
+  if [[ -f "${checksum_file}" ]]; then
+    (cd "${backup_dir}" && sha256sum -c "sha256sums.txt" >/dev/null 2>&1) \
+      || fail "backup artifact checksum verification failed: ${backup_dir}/${artifact_name}"
+  fi
+  if [[ -f "${hmac_file}" ]]; then
+    local expected_hmac actual_hmac key_material
+    expected_hmac="$(awk -v target="${artifact_name}" '$2 == target { print $1 }' "${hmac_file}")"
+    key_material="$(tr -d '\r\n' < "${BACKUP_ENCRYPTION_KEY_FILE}")"
+    actual_hmac="$(openssl dgst -sha256 -hmac "${key_material}" -r "${backup_dir}/${artifact_name}" | awk '{ print $1 }')"
+    [[ -n "${expected_hmac}" && "${actual_hmac}" == "${expected_hmac}" ]] \
+      || fail "backup artifact HMAC verification failed: ${backup_dir}/${artifact_name}"
+  fi
+}
 
+POSTGRES_BACKUP_SET_DIR="${BACKUP_ROOT}/postgres/${BACKUP_CLASS}/${BACKUP_SET_ID}"
+MINIO_BACKUP_SET_DIR="${BACKUP_ROOT}/minio/${BACKUP_CLASS}/${BACKUP_SET_ID}"
+POSTGRES_ENCRYPTED_DUMP_FILE="${POSTGRES_BACKUP_SET_DIR}/dump.sql.enc"
+MINIO_ENCRYPTED_ARCHIVE_FILE="${MINIO_BACKUP_SET_DIR}/minio-data.tar.gz.enc"
+
+[[ -s "${POSTGRES_BACKUP_SET_DIR}/metadata.env" ]] || fail "missing PostgreSQL backup metadata.env: ${POSTGRES_BACKUP_SET_DIR}/metadata.env"
 [[ -s "${POSTGRES_ENCRYPTED_DUMP_FILE}" ]] || fail "missing encrypted PostgreSQL dump.sql.enc: ${POSTGRES_ENCRYPTED_DUMP_FILE}"
 [[ -s "${MINIO_ENCRYPTED_ARCHIVE_FILE}" ]] || fail "missing encrypted MinIO minio-data.tar.gz.enc: ${MINIO_ENCRYPTED_ARCHIVE_FILE}"
+verify_backup_artifact_checksum "${POSTGRES_BACKUP_SET_DIR}" "dump.sql.enc"
+verify_backup_artifact_checksum "${MINIO_BACKUP_SET_DIR}" "minio-data.tar.gz.enc"
 
 mkdir -p "${ARTIFACT_DIR}"
 trap cleanup EXIT

@@ -39,10 +39,11 @@ sshd -t
 systemctl restart ssh
 
 echo "[3/6] Configure UFW"
+SSH_ALLOW_INTERFACE="${SSH_ALLOW_INTERFACE:-tailscale0}"
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow "${SSH_PORT}/tcp"
+ufw allow in on "${SSH_ALLOW_INTERFACE}" to any port "${SSH_PORT}" proto tcp
 # Cloudflare Tunnel is the public ingress. Do not open 80/443 on the host;
 # Caddy is bound to loopback and cloudflared reaches it through Docker networking.
 ufw --force enable

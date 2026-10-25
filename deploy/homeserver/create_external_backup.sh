@@ -525,6 +525,20 @@ encrypt_stream_to_file() {
   openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${BACKUP_ENCRYPTION_KEY_FILE}" -out "${target_file}"
 }
 
+compute_backup_artifact_hmac() {
+  local artifact_file="$1"
+  local key_material
+  key_material="$(tr -d '\r\n' < "${BACKUP_ENCRYPTION_KEY_FILE}")"
+  openssl dgst -sha256 -hmac "${key_material}" -r "${artifact_file}" | awk '{ print $1 }'
+}
+
+write_backup_artifact_integrity_files() {
+  local target_dir="$1"
+  local artifact_name="$2"
+  (cd "${target_dir}" && sha256sum "${artifact_name}" > sha256sums.txt)
+  printf '%s  %s\n' "$(compute_backup_artifact_hmac "${target_dir}/${artifact_name}")" "${artifact_name}" > "${target_dir}/hmac-sha256.txt"
+}
+
 compose() {
   bash "${SCRIPT_DIR}/materialize_service_env.sh" "${COMPOSE_ENV_FILE}"
   docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -609,10 +623,14 @@ write_metadata() {
   } > "${target_dir}/metadata.env"
 }
 
+CREATED_BACKUP_DIRS=()
+BACKUP_COMPLETED="false"
+
 copy_deploy_config() {
   local class="$1"
   local target_dir="${BACKUP_ROOT}/deploy/${class}/${TIMESTAMP}"
   mkdir -p "${target_dir}"
+  CREATED_BACKUP_DIRS+=("${target_dir}")
 
   if [[ -d "${SCRIPT_DIR}/caddy" ]]; then
     cp -R "${SCRIPT_DIR}/caddy" "${target_dir}/caddy"
@@ -635,6 +653,7 @@ backup_postgres() {
   local class="$1"
   local target_dir="${BACKUP_ROOT}/postgres/${class}/${TIMESTAMP}"
   mkdir -p "${target_dir}"
+  CREATED_BACKUP_DIRS+=("${target_dir}")
 
   if [[ "${AQUILA_BACKUP_SKIP_POSTGRES:-false}" == "true" ]]; then
     echo "skipped=true" > "${target_dir}/dump.sql.skipped"
@@ -645,6 +664,8 @@ backup_postgres() {
   prepare_postgres_backup_compose_if_needed
   compose exec -T db_1 pg_dump --no-owner --no-acl -U postgres -d "${POSTGRES_DB_NAME}" \
     | encrypt_stream_to_file "${target_dir}/dump.sql.enc"
+  [[ -s "${target_dir}/dump.sql.enc" ]] || fail "postgres backup produced an empty dump.sql.enc"
+  write_backup_artifact_integrity_files "${target_dir}" "dump.sql.enc"
   write_metadata "${class}" "${target_dir}"
 }
 
@@ -755,7 +776,15 @@ cleanup_on_exit() {
   if [[ -n "${COMPOSE_ENV_FILE_TMP}" ]]; then
     rm -f -- "${COMPOSE_ENV_FILE_TMP}" "${COMPOSE_ENV_FILE_TMP}.tmp"
   fi
-  if [[ "${status}" -ne 0 ]]; then
+  if [[ "${status}" -ne 0 || "${BACKUP_COMPLETED}" != "true" ]]; then
+    if [[ "${#CREATED_BACKUP_DIRS[@]}" -gt 0 ]]; then
+      local dir
+      for dir in "${CREATED_BACKUP_DIRS[@]}"; do
+        if [[ -n "${dir}" && "${dir}" != "/" && -d "${dir}" ]]; then
+          rm -rf -- "${dir}"
+        fi
+      done
+    fi
     if [[ "${MINIO_STOPPED_FOR_BACKUP}" == "true" ]]; then
       restart_minio_after_consistent_backup || true
     fi
@@ -817,6 +846,7 @@ backup_minio() {
   local minio_dir="${EXTERNAL_STORAGE_ROOT}/minio"
   local mode="offline-filesystem-copy"
   mkdir -p "${target_dir}"
+  CREATED_BACKUP_DIRS+=("${target_dir}")
 
   if [[ "${AQUILA_BACKUP_SKIP_MINIO:-false}" == "true" ]]; then
     echo "skipped=true" > "${target_dir}/minio.skipped"
@@ -836,6 +866,8 @@ backup_minio() {
     fail "failed to archive minio data directory: ${minio_dir}"
   fi
   restart_minio_after_consistent_backup || fail "failed to restart minio after backup"
+  [[ -s "${target_dir}/minio-data.tar.gz.enc" ]] || fail "minio backup produced an empty minio-data.tar.gz.enc"
+  write_backup_artifact_integrity_files "${target_dir}" "minio-data.tar.gz.enc"
   write_metadata "${class}" "${target_dir}" "${mode}"
 }
 
@@ -865,5 +897,7 @@ for class in "${classes[@]}"; do
   backup_minio "${class}"
 done
 
+BACKUP_COMPLETED="true"
 log "backup complete id=${TIMESTAMP}"
 printf '%s\n' "${BACKUP_ROOT}/deploy/daily/${TIMESTAMP}"
+

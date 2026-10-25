@@ -5,6 +5,7 @@ import com.back.global.exception.application.ErrorCode
 import com.back.global.web.ErrorResponseSource
 import com.back.global.web.ErrorResponseWriter
 import com.back.global.web.application.ClientIpResolver
+import com.back.global.web.application.IpAddressNormalizer
 import io.micrometer.core.instrument.MeterRegistry
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -48,7 +49,7 @@ class ApiRateLimitBackstopFilter(
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         if (!enabled) return true
         val path = requestPath(request)
-        if (path.startsWith("/actuator/")) return true
+        if (path == "/actuator" || path.startsWith("/actuator/")) return true
         return bucketFor(request.method, path) == null
     }
 
@@ -71,8 +72,9 @@ class ApiRateLimitBackstopFilter(
             return
         }
 
-        val clientIp = (clientIpResolverProvider.getIfAvailable() ?: ClientIpResolver()).resolve(request).ifBlank { "unknown" }
-        val key = redisKey(bucket.name, clientIp)
+        val rawClientIp = (clientIpResolverProvider.getIfAvailable() ?: ClientIpResolver()).resolve(request)
+        val clientIpKey = IpAddressNormalizer.normalizeRateLimitKey(rawClientIp)
+        val key = redisKey(bucket.name, clientIpKey)
         val count = redisKeyValuePort.incrementAndExpire(key, WINDOW)
         if (count == null) {
             if (shouldFailClosedWithoutRedis()) {
@@ -117,15 +119,7 @@ class ApiRateLimitBackstopFilter(
 
     private fun shouldFailClosedWithoutRedis(): Boolean = environment.matchesProfiles("prod") && requireRedisInProd
 
-    private fun requestPath(request: HttpServletRequest): String {
-        val contextPath = request.contextPath.orEmpty()
-        val uri = request.requestURI.orEmpty()
-        return if (contextPath.isNotBlank() && uri.startsWith(contextPath)) {
-            uri.removePrefix(contextPath)
-        } else {
-            uri
-        }
-    }
+    private fun requestPath(request: HttpServletRequest): String = RequestPathNormalizer.normalize(request)
 
     private fun redisKey(
         bucket: String,
@@ -182,7 +176,7 @@ class ApiRateLimitBackstopFilter(
         private val KEY_TOKEN_SANITIZE_REGEX = Regex("[^A-Za-z0-9:._-]")
         private val AUTH_PATHS =
             listOf(
-                Regex("^/member/api/v\\d+/auth/admin-email/(request|verify)$"),
+                Regex("^/member/api/v\\d+/auth/admin-email/(request|verify)/?$"),
             )
     }
 }

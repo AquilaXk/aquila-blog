@@ -35,11 +35,13 @@ class CustomAuthenticationFilter(
     private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/") + protectedDocumentationPrefixes
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
-        val uri = request.requestURI
-        if (!environment.matchesProfiles("prod") && protectedDocumentationPrefixes.any { uri.startsWith(it) }) {
+        val uri = RequestPathNormalizer.normalize(request)
+        if (!environment.matchesProfiles("prod") &&
+            protectedDocumentationPrefixes.any { uri.startsWith(it) || uri == it.removeSuffix("/") }
+        ) {
             return true
         }
-        return filteredPrefixes.none { uri.startsWith(it) }
+        return filteredPrefixes.none { uri.startsWith(it) || uri == it.removeSuffix("/") }
     }
 
     override fun shouldNotFilterAsyncDispatch(): Boolean = false

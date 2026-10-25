@@ -4,6 +4,7 @@ interface AdminEmailAuthenticationUseCase {
     fun requestCode(
         email: String,
         rememberMe: Boolean,
+        clientIp: String? = null,
     ): RequestedChallenge
 
     fun verifyCode(

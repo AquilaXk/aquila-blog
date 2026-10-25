@@ -52,10 +52,11 @@ class RedisAdminEmailChallengeStore(
         canonicalRecipientHash: String,
         maxRequests: Int,
         window: Duration,
+        clientIpBucket: String,
     ): Boolean =
         requireTemplate().execute(
             REQUEST_SLOT_SCRIPT,
-            listOf(requestSlotKey(canonicalRecipientHash)),
+            listOf(requestSlotKey(canonicalRecipientHash, clientIpBucket)),
             maxRequests.toString(),
             window.seconds.toString(),
         ) == 1L
@@ -75,11 +76,18 @@ class RedisAdminEmailChallengeStore(
 
     private fun challengeKey(challengeId: String) = "$CHALLENGE_KEY_PREFIX$challengeId"
 
-    private fun requestSlotKey(canonicalRecipientHash: String) = "$REQUEST_SLOT_KEY_PREFIX$canonicalRecipientHash"
+    private fun requestSlotKey(
+        canonicalRecipientHash: String,
+        clientIpBucket: String,
+    ): String {
+        val normalizedBucket = clientIpBucket.trim().ifBlank { DEFAULT_CLIENT_IP_BUCKET }
+        return "$REQUEST_SLOT_KEY_PREFIX$canonicalRecipientHash:$normalizedBucket"
+    }
 
     private companion object {
         private const val CHALLENGE_KEY_PREFIX = "auth:admin-email:challenge:"
         private const val REQUEST_SLOT_KEY_PREFIX = "auth:admin-email:request:"
+        private const val DEFAULT_CLIENT_IP_BUCKET = "global"
         private const val MATCHED = "matched"
         private const val EXHAUSTED = "exhausted"
 

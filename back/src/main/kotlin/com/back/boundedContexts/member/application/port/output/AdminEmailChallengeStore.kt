@@ -38,5 +38,6 @@ interface AdminEmailChallengeStore {
         canonicalRecipientHash: String,
         maxRequests: Int,
         window: Duration,
+        clientIpBucket: String = "global",
     ): Boolean
 }

@@ -75,12 +75,14 @@ class ApiV1AuthController(
 
     @PostMapping("/admin-email/request")
     fun requestAdminEmailCode(
+        request: HttpServletRequest,
         @RequestBody @Valid reqBody: AdminEmailCodeRequest,
     ): RsData<AdminEmailCodeRequestResBody> {
         val requested =
             adminEmailAuthenticationUseCase.requestCode(
                 email = resolveEmail(reqBody.email),
                 rememberMe = reqBody.rememberMe,
+                clientIp = extractClientIp(request),
             )
         return RsData(
             "200-1",

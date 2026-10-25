@@ -72,7 +72,12 @@ class RefreshTokenAuthenticationHandler(
             refreshToken = refreshedSession.refreshToken,
         )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
+        rq.setHeader(HttpHeaders.CACHE_CONTROL, PRIVATE_NO_STORE_CACHE_CONTROL)
 
         securityContextAuthenticationWriter.write(member, memberSession.id)
+    }
+
+    private companion object {
+        private const val PRIVATE_NO_STORE_CACHE_CONTROL = "private, no-store, max-age=0"
     }
 }

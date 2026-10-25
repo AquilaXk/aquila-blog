@@ -1,6 +1,7 @@
 package com.back.global.storage.application
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
@@ -25,6 +26,7 @@ class ProfileImageRetentionService(
     private val retentionProperties: UploadedFileRetentionProperties,
     private val transactionManager: PlatformTransactionManager,
     private val clock: Clock,
+    private val postRepository: PostRepositoryPort? = null,
 ) {
     private val writeTransactionTemplate = TransactionTemplate(transactionManager)
 
@@ -112,7 +114,7 @@ class ProfileImageRetentionService(
         if (objectKey.isBlank()) return
 
         val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return
-        if (isPostOwnedFile(uploadedFile)) return
+        if (isPostOwnedFile(uploadedFile) || postRepository?.existsImageReferenceByObjectKey(objectKey) == true) return
         uploadedFile.purpose = UploadedFilePurpose.PROFILE_IMAGE
         uploadedFile.ownerType = UploadedFileOwnerType.MEMBER_PROFILE
         uploadedFile.ownerId = memberId

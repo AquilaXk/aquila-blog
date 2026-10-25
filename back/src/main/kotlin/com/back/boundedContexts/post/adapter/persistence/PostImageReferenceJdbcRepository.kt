@@ -86,29 +86,6 @@ class PostImageReferenceJdbcRepository(
         return count > 0L
     }
 
-    @Transactional(readOnly = true)
-    override fun existsAuthorPostByObjectKey(
-        objectKey: String,
-        authorId: Long,
-    ): Boolean {
-        if (objectKey.isBlank() || authorId <= 0L) return false
-        val count =
-            jdbcTemplate.queryForObject(
-                """
-                SELECT COUNT(1)
-                FROM post_image_references pir
-                JOIN post p ON p.id = pir.post_id
-                WHERE pir.object_key = ?
-                  AND p.deleted_at IS NULL
-                  AND p.author_id = ?
-                """.trimIndent(),
-                Long::class.java,
-                objectKey,
-                authorId,
-            ) ?: 0L
-        return count > 0L
-    }
-
     @Transactional
     override fun replacePostImageReferences(
         postId: Long,

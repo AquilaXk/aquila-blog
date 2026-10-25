@@ -126,14 +126,9 @@ interface PostRepositoryPort {
 
     fun existsImageReferenceByObjectKey(objectKey: String): Boolean
 
-    fun findFirstReferencingPostId(objectKey: String): Long? = null
+    fun findFirstReferencingPostId(objectKey: String): Long?
 
-    fun existsPublicPostReferencingImage(objectKey: String): Boolean = false
-
-    fun existsAuthorPostReferencingImage(
-        objectKey: String,
-        authorId: Long,
-    ): Boolean = false
+    fun existsPublicPostReferencingImage(objectKey: String): Boolean
 
     fun syncImageReferences(
         postId: Long,
@@ -145,12 +140,12 @@ interface PostRepositoryPort {
     fun updateHitCount(
         post: Post,
         hitCount: Int,
-        hitCountAttr: PostAttr? = null,
-    ) {}
+        hitCountAttr: PostAttr?,
+    )
 
     fun updateLikesCount(
         post: Post,
         likesCount: Int,
-        likesCountAttr: PostAttr? = null,
-    ) {}
+        likesCountAttr: PostAttr?,
+    )
 }

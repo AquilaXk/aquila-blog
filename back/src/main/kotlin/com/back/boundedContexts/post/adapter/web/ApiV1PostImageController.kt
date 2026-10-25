@@ -117,7 +117,15 @@ class ApiV1PostImageController(
         val access =
             when (uploadedFile.purpose) {
                 UploadedFilePurpose.PROFILE_IMAGE ->
-                    profileImageReadUseCase.resolve(objectKey, uploadedFile, securityUser?.id)
+                    try {
+                        profileImageReadUseCase.resolve(objectKey, uploadedFile, securityUser?.id)
+                    } catch (ex: AppException) {
+                        resolvePostImageAccess(
+                            uploadedFile = uploadedFile,
+                            securityUser = securityUser,
+                            notFound = { ex },
+                        )
+                    }
                 UploadedFilePurpose.POST_IMAGE ->
                     resolvePostImageAccess(
                         uploadedFile = uploadedFile,
@@ -221,25 +229,27 @@ class ApiV1PostImageController(
         }
         if (
             uploadedFile.status != UploadedFileStatus.ACTIVE ||
-            uploadedFile.ownerType != UploadedFileOwnerType.POST
+            uploadedFile.ownerType !in setOf(UploadedFileOwnerType.POST, UploadedFileOwnerType.MEMBER_PROFILE)
         ) {
             throw notFound()
         }
 
-        val postId = uploadedFile.ownerId?.takeIf { it > 0L }
+        val postId =
+            if (uploadedFile.ownerType == UploadedFileOwnerType.POST) {
+                uploadedFile.ownerId?.takeIf { it > 0L }
+            } else {
+                null
+            }
         if ((postId != null && postRepository.findPublicDetailById(postId) != null) ||
             postRepository.existsPublicPostReferencingImage(uploadedFile.objectKey)
         ) {
             return ProfileImageReadUseCase.Access.PUBLIC
         }
-        if (postId != null) {
-            val ownerPost = postRepository.findById(postId).orElse(null)
-            if (ownerPost != null && (isAdmin || (securityUser != null && ownerPost.author.id == securityUser.id))) {
-                return ProfileImageReadUseCase.Access.OWNER_ONLY
-            }
-        }
-        if ((isAdmin && postRepository.existsImageReferenceByObjectKey(uploadedFile.objectKey)) ||
-            (securityUser != null && postRepository.existsAuthorPostReferencingImage(uploadedFile.objectKey, securityUser.id))
+        if (isAdmin &&
+            (
+                (postId != null && postRepository.findById(postId).isPresent) ||
+                    postRepository.existsImageReferenceByObjectKey(uploadedFile.objectKey)
+            )
         ) {
             return ProfileImageReadUseCase.Access.OWNER_ONLY
         }
@@ -261,9 +271,14 @@ class ApiV1PostImageController(
                 .header(HttpHeaders.VARY, HttpHeaders.COOKIE)
         } else if (uploadedFile.purpose == UploadedFilePurpose.POST_IMAGE) {
             val cacheTags =
-                buildList {
+                buildSet {
+                    add(PostCacheTags.IMAGES)
                     add("post-image:${uploadedFile.objectKey}")
                     uploadedFile.ownerId?.takeIf { it > 0L }?.let {
+                        add(PostCacheTags.byPostId(it))
+                        add("post:$it")
+                    }
+                    postRepository.findFirstReferencingPostId(uploadedFile.objectKey)?.takeIf { it > 0L }?.let {
                         add(PostCacheTags.byPostId(it))
                         add("post:$it")
                     }

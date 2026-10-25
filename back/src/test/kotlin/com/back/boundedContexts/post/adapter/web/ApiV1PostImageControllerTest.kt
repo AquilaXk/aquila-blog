@@ -383,6 +383,46 @@ class ApiV1PostImageControllerTest {
         }
     }
 
+    @Test
+    fun `referencing post author and shared profile image in public post are served with post image cache tags`() {
+        withIsolatedAppConfig {
+            val sharedPostKey = "posts/2026/03/shared-author-image.png"
+            val sharedPostFile = postImage(sharedPostKey).apply { attachToPost(10L) }
+            `when`(uploadedFileRepository.findByObjectKey(sharedPostKey)).thenReturn(sharedPostFile)
+            `when`(postRepository.findPublicDetailById(10L)).thenReturn(null)
+            `when`(postRepository.existsPublicPostReferencingImage(sharedPostKey)).thenReturn(false)
+            `when`(postRepository.findById(10L)).thenReturn(Optional.empty())
+            `when`(postRepository.existsImageReferenceByObjectKey(sharedPostKey)).thenReturn(true)
+            postImageStorageService.images[sharedPostKey] = storedImage(sharedPostKey)
+
+            val adminResponse = controller.getPostImage(imageRequest(sharedPostKey), ownerSecurityUser(7L))
+            assertThat(adminResponse.statusCode).isEqualTo(HttpStatus.OK)
+            assertThat(adminResponse.headers.cacheControl).contains("private")
+
+            `when`(postRepository.existsPublicPostReferencingImage(sharedPostKey)).thenReturn(true)
+            `when`(postRepository.findFirstReferencingPostId(sharedPostKey)).thenReturn(20L)
+            postImageStorageService.images[sharedPostKey] = storedImage(sharedPostKey)
+            val publicResponse = controller.getPostImage(imageRequest(sharedPostKey))
+            assertThat(publicResponse.statusCode).isEqualTo(HttpStatus.OK)
+            assertThat(publicResponse.headers.getFirst("Surrogate-Key"))
+                .contains("post-images")
+                .contains("post-id-10")
+                .contains("post-id-20")
+
+            val profileInPostKey = "profiles/7/shared-in-post.png"
+            val profileFile = memberProfileImage(profileInPostKey, 7L)
+            `when`(uploadedFileRepository.findByObjectKey(profileInPostKey)).thenReturn(profileFile)
+            `when`(memberRepository.findById(7L)).thenReturn(Optional.of(canonicalOwner()))
+            `when`(currentMemberProfileQueryUseCase.getPublishedById(7L))
+                .thenReturn(profile(canonicalOwner(), "profiles/7/other.png"))
+            `when`(postRepository.existsPublicPostReferencingImage(profileInPostKey)).thenReturn(true)
+            postImageStorageService.images[profileInPostKey] = storedImage(profileInPostKey)
+
+            val sharedProfileResponse = controller.getPostImage(imageRequest(profileInPostKey))
+            assertThat(sharedProfileResponse.statusCode).isEqualTo(HttpStatus.OK)
+        }
+    }
+
     private fun <T> withIsolatedAppConfig(block: () -> T): T {
         val snapshot = appConfigUrlSnapshot()
         AppConfig(

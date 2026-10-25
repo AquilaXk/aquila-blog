@@ -564,8 +564,8 @@ class PostRepositoryImpl(
         val em = entityManager ?: return
         if (!em.contains(targetPost)) return
         val session = em.unwrap(SharedSessionContractImplementor::class.java)
-        val entry = session.persistenceContextInternal.getEntry(targetPost)
-        val loadedState = entry.loadedState
+        val entry = session.persistenceContextInternal.getEntry(targetPost) ?: return
+        val loadedState = entry.loadedState ?: return
         val propertyNames = entry.persister.propertyNames
         val counterIdx = propertyNames.indexOf(counterProperty)
         if (counterIdx >= 0) {
@@ -586,8 +586,8 @@ class PostRepositoryImpl(
         val em = entityManager ?: return
         if (!em.contains(attr)) return
         val session = em.unwrap(SharedSessionContractImplementor::class.java)
-        val entry = session.persistenceContextInternal.getEntry(attr)
-        val loadedState = entry.loadedState
+        val entry = session.persistenceContextInternal.getEntry(attr) ?: return
+        val loadedState = entry.loadedState ?: return
         val intValueIdx = entry.persister.propertyNames.indexOf("intValue")
         if (intValueIdx >= 0) {
             loadedState[intValueIdx] = counterValue

@@ -128,11 +128,6 @@ class PostRepositoryAdapter(
     override fun existsPublicPostReferencingImage(objectKey: String): Boolean =
         postImageReferenceRepository.existsPublicPostByObjectKey(objectKey)
 
-    override fun existsAuthorPostReferencingImage(
-        objectKey: String,
-        authorId: Long,
-    ): Boolean = postImageReferenceRepository.existsAuthorPostByObjectKey(objectKey, authorId)
-
     override fun syncImageReferences(
         postId: Long,
         objectKeys: Collection<String>,

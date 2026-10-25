@@ -255,9 +255,9 @@ class UploadedFilePurgeService(
         val current =
             readOnlyTransactionTemplate.execute<UploadedFile?> {
                 uploadedFileRepository.findByObjectKey(objectKey)
-            } ?: return false
-        val purgeAfter = current.purgeAfter
-        if (current.status !in purgeCandidateStatuses || purgeAfter == null || purgeAfter > now) {
+            }
+        val purgeAfter = current?.purgeAfter
+        if (current == null || current.status !in purgeCandidateStatuses || purgeAfter == null || purgeAfter > now) {
             return false
         }
         if (objectKey in referenceQueryService.findReferencedObjectKeys(listOf(current))) {
@@ -274,11 +274,10 @@ class UploadedFilePurgeService(
         writeTransactionTemplate.executeWithoutResult {
             val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return@executeWithoutResult
             val purgeAfter = uploadedFile.purgeAfter
-            if (uploadedFile.status !in purgeCandidateStatuses || purgeAfter == null || purgeAfter > now) {
-                return@executeWithoutResult
+            if (uploadedFile.status in purgeCandidateStatuses && purgeAfter != null && purgeAfter <= now) {
+                uploadedFile.markDeleted()
+                uploadedFileRepository.save(uploadedFile)
             }
-            uploadedFile.markDeleted()
-            uploadedFileRepository.save(uploadedFile)
         }
     }
 

@@ -17,6 +17,7 @@ object PostCacheTags {
     const val SEARCH = "post-search"
     const val TAGS = "post-tags"
     const val DETAIL = "post-detail"
+    const val IMAGES = "post-images"
 
     private val NON_TAG_CHAR_REGEX = Regex("[^a-z0-9_-]")
     private val MULTI_DASH_REGEX = Regex("-+")
@@ -58,6 +59,7 @@ object PostCacheTags {
             add(SEARCH)
             add(TAGS)
             add(DETAIL)
+            add(IMAGES)
             add(byPostId(postId))
             beforeTags.mapTo(this) { byTag(it) }
             afterTags.mapTo(this) { byTag(it) }

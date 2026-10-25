@@ -12,11 +12,6 @@ interface PostImageReferenceRepositoryPort {
 
     fun existsPublicPostByObjectKey(objectKey: String): Boolean
 
-    fun existsAuthorPostByObjectKey(
-        objectKey: String,
-        authorId: Long,
-    ): Boolean
-
     fun replacePostImageReferences(
         postId: Long,
         objectKeys: Collection<String>,

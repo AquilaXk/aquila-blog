@@ -704,14 +704,22 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         assertThat(postFile.ownerType).isEqualTo(UploadedFileOwnerType.POST)
         assertThat(postFile.ownerId).isEqualTo(55L)
         assertThat(postFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
+
+        uploadedFileRetentionService.restoreDeletedPostAttachments(
+            postId = 99L,
+            content = "![](${UploadedFileUrlCodec.buildImageUrl(profileKey)})",
+        )
+        assertThat(uploadedFileRepository.findByObjectKey(profileKey)!!.ownerType).isEqualTo(UploadedFileOwnerType.MEMBER_PROFILE)
     }
 
     @Test
     fun `purge 도중 ACTIVE로 전환된 파일은 스토리지에서 삭제하거나 DELETED로 덮어쓰지 않는다`() {
         val firstKey = "posts/2026/03/purge-toctou-first.png"
         val secondKey = "posts/2026/03/purge-toctou-second.png"
+        val thirdKey = "posts/2026/03/purge-toctou-third.png"
         uploadedFileRetentionService.registerTempUpload(firstKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
         uploadedFileRetentionService.registerTempUpload(secondKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+        uploadedFileRetentionService.registerTempUpload(thirdKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
 
         val firstFile = uploadedFileRepository.findByObjectKey(firstKey)!!
         firstFile.purgeAfter = Instant.now(clock).minusSeconds(120)
@@ -721,6 +729,15 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         secondFile.purgeAfter = Instant.now(clock).minusSeconds(60)
         uploadedFileRepository.save(secondFile)
 
+        val thirdFile = uploadedFileRepository.findByObjectKey(thirdKey)!!
+        thirdFile.ownerType = UploadedFileOwnerType.POST
+        thirdFile.ownerId = 99L
+        thirdFile.purgeAfter = Instant.now(clock).minusSeconds(30)
+        uploadedFileRepository.save(thirdFile)
+
+        var referenceActivatedDuringPurge = false
+        given(postRepository.existsImageReferenceByObjectKey(thirdKey)).willAnswer { referenceActivatedDuringPurge }
+
         given(postImageStoragePort.deletePostImage(firstKey)).willAnswer {
             uploadedFileRetentionService.syncPostAttachmentKeys(
                 postId = 88L,
@@ -729,6 +746,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
                 currentFileObjectKeys = emptyList(),
                 previousFileObjectKeys = emptyList(),
             )
+            referenceActivatedDuringPurge = true
             Unit
         }
 
@@ -738,8 +756,11 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         val reloadedSecond = uploadedFileRepository.findByObjectKey(secondKey)!!
         assertThat(reloadedSecond.status).isEqualTo(UploadedFileStatus.ACTIVE)
         assertThat(reloadedSecond.ownerId).isEqualTo(88L)
+        val reloadedThird = uploadedFileRepository.findByObjectKey(thirdKey)!!
+        assertThat(reloadedThird.status).isEqualTo(UploadedFileStatus.ACTIVE)
         then(postImageStoragePort).should().deletePostImage(firstKey)
         then(postImageStoragePort).should(never()).deletePostImage(secondKey)
+        then(postImageStoragePort).should(never()).deletePostImage(thirdKey)
     }
 
     private fun expireUpload(objectKey: String) {

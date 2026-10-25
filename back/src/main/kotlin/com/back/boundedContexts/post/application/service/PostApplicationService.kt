@@ -12,7 +12,6 @@ import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.PostDto
-import com.back.boundedContexts.post.dto.PostMetaExtractor
 import com.back.boundedContexts.post.dto.PostPreviewExtractor
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
@@ -685,8 +684,8 @@ class PostApplicationService(
             ),
             PostModifiedEvent(
                 UUID.randomUUID(),
-                toEventPostDto(restoredPost),
-                toEventMemberDto(restoredPost.author),
+                PostDto(restoredPost),
+                MemberDto(restoredPost.author),
                 emptyList(),
                 restoredTags,
             ),
@@ -919,50 +918,6 @@ class PostApplicationService(
         }
 
     private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed
-
-    private fun toEventPostDto(post: Post): PostDto {
-        val now = Instant.now()
-        val createdAt = runCatching { post.createdAt }.getOrDefault(now)
-        val modifiedAt = runCatching { post.modifiedAt }.getOrDefault(createdAt)
-        val authorProfileImgUrl =
-            runCatching { post.author.publishedProfileImageUrlVersionedOrDefault }
-                .getOrDefault("")
-        val meta = PostMetaExtractor.extract(post.content)
-        return PostDto(
-            id = post.id,
-            createdAt = createdAt,
-            modifiedAt = modifiedAt,
-            authorId = post.author.id,
-            authorName = post.author.name,
-            authorUsername = post.author.name,
-            authorProfileImgUrl = authorProfileImgUrl,
-            title = post.title,
-            thumbnail = post.thumbnail ?: PostPreviewExtractor.extractThumbnail(post.content),
-            summary = post.summaryText.orEmpty(),
-            version = post.version ?: 0L,
-            published = post.published,
-            listed = post.listed,
-            tempDraft = post.isTempDraft,
-            likesCount = post.likesCount,
-            hitCount = post.hitCount,
-            tags = meta.tags,
-            category = meta.categories,
-            summarySource = post.summarySource,
-        )
-    }
-
-    private fun toEventMemberDto(member: Member): MemberDto {
-        val now = Instant.now()
-        val createdAt = runCatching { member.createdAt }.getOrDefault(now)
-        val modifiedAt = runCatching { member.createdAt }.getOrDefault(createdAt)
-        return MemberDto(
-            id = member.id,
-            createdAt = createdAt,
-            modifiedAt = modifiedAt,
-            isAdmin = member.isAdmin,
-            name = member.name,
-        )
-    }
 
     private fun toDeletedSnapshotPostDto(
         snapshot: AdmDeletedPostSnapshotDto,

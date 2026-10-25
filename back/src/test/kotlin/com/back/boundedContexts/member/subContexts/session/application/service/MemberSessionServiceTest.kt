@@ -80,11 +80,49 @@ class MemberSessionServiceTest {
         assertThat(rotated.session.refreshTokenHash).isNotEqualTo(originalHash)
         assertThat(rotated.session.matchesRefreshToken(rotated.refreshToken)).isTrue()
 
+        created.session.refreshTokenRotatedAt = Instant.now().minusSeconds(11)
         val reused = service.rotateRefreshToken(created.session.sessionKey, created.refreshToken)
 
         assertThat(reused).isNull()
         assertThat(created.session.refreshTokenReusedAt).isNotNull
         assertThat(created.session.revokedAt).isNotNull
+    }
+
+    @Test
+    fun `동시 요청이 회전 유예 구간 안에 직전 refreshToken을 제시하면 세션을 폐기하지 않고 회전된 토큰을 반환한다`() {
+        val store = RecordingMemberSessionStorePort()
+        val service =
+            MemberSessionService(
+                memberSessionStorePort = store,
+                cacheManager = ConcurrentMapCacheManager(),
+                touchMinIntervalSeconds = 60,
+                refreshTokenExpirationSeconds = 3600,
+            )
+        val member = Member(61L, "refresh-grace-user", null, "리프레시유예", "refresh-grace@example.com", MemberPolicy.genApiKey())
+        val created =
+            service.createSessionWithRefreshToken(
+                member = member,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.22",
+                userAgent = "test-agent",
+            )
+
+        val firstRotation = service.rotateRefreshToken(created.session.sessionKey, created.refreshToken)
+        val concurrentSecondRotation = service.rotateRefreshToken(created.session.sessionKey, created.refreshToken)
+
+        assertThat(firstRotation).isNotNull
+        assertThat(concurrentSecondRotation).isNotNull
+        assertThat(concurrentSecondRotation!!.refreshToken).isEqualTo(firstRotation!!.refreshToken)
+        assertThat(created.session.revokedAt).isNull()
+        assertThat(created.session.refreshTokenReusedAt).isNull()
+        assertThat(created.session.matchesRefreshToken(firstRotation.refreshToken)).isTrue()
+
+        val forgedReuseWithinGrace = service.rotateRefreshToken(created.session.sessionKey, "forged-unknown-refresh-token")
+        assertThat(forgedReuseWithinGrace).isNull()
+        assertThat(created.session.revokedAt).isNotNull
+        assertThat(created.session.refreshTokenReusedAt).isNotNull
     }
 
     @Test

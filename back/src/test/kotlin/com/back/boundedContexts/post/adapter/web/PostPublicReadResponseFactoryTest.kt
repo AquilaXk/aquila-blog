@@ -188,6 +188,47 @@ class PostPublicReadResponseFactoryTest {
     }
 
     @Test
+    @DisplayName("토큰 회전으로 Authorization 또는 Set-Cookie가 포함된 공개 read 응답은 private no-store로 강등하고 공유 캐시 헤더를 생략한다")
+    fun downgradeToPrivateNoStoreWhenResponseContainsAuthOrSetCookieHeaders() {
+        val policy =
+            PublicReadCachePolicy(
+                name = "feed-max20-smax60-swr60",
+                maxAgeSeconds = 20,
+                sharedMaxAgeSeconds = 60,
+                staleWhileRevalidateSeconds = 60,
+            )
+
+        for (headerPair in listOf(
+            HttpHeaders.AUTHORIZATION to "Bearer rotated-access-token",
+            HttpHeaders.SET_COOKIE to "accessToken=rotated; Path=/; HttpOnly; Secure",
+        )) {
+            val request = MockHttpServletRequest()
+            val response =
+                MockHttpServletResponse().apply {
+                    addHeader(headerPair.first, headerPair.second)
+                }
+
+            val result =
+                responseFactory.respondWithEtag(
+                    request = request,
+                    response = response,
+                    cachePolicy = policy,
+                    surrogateKeys = setOf("post:123"),
+                    etagSeed = "post|123|1",
+                    startedAtNanos = System.nanoTime(),
+                    body = "payload",
+                )
+
+            assertThat(result.statusCode).isEqualTo(HttpStatus.OK)
+            assertThat(response.getHeaders(HttpHeaders.CACHE_CONTROL)).containsExactly("private, no-store, max-age=0")
+            assertThat(response.getHeader("X-Cache-Policy")).isNull()
+            assertThat(response.getHeader("Surrogate-Key")).isNull()
+            assertThat(response.getHeader("Cache-Tag")).isNull()
+            assertThat(response.getHeader(HttpHeaders.VARY)).contains("Authorization", "Cookie")
+        }
+    }
+
+    @Test
     @DisplayName("If-None-Match 와일드카드는 현재 ETag와 무관하게 304를 반환한다")
     fun respondNotModifiedWhenIfNoneMatchWildcard() {
         // given

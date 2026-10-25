@@ -49,4 +49,19 @@ class ClientIpResolverTest {
 
         assertThat(resolver.resolve(request)).isEqualTo("203.0.113.50")
     }
+
+    @Test
+    @DisplayName("rate-limit key 정규화는 IPv4를 정식 주소로 유지하고 IPv6는 /64 네트워크 프리픽스로 묶는다")
+    fun `normalizeRateLimitKey normalizes ipv4 and buckets ipv6 by 64 prefix`() {
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("203.0.113.10:8080"))
+            .isEqualTo("203.0.113.10")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("2001:db8:1:2:aaaa:bbbb:cccc:dddd"))
+            .isEqualTo("2001:db8:1:2::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("[2001:0db8:0001:0002:0000:0000:0000:0001]:443"))
+            .isEqualTo("2001:db8:1:2::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("2001:db8::abcd"))
+            .isEqualTo("2001:db8::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("invalid-host"))
+            .isEqualTo("unknown")
+    }
 }

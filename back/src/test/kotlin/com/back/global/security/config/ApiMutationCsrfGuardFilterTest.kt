@@ -129,6 +129,28 @@ class ApiMutationCsrfGuardFilterTest {
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
     }
 
+    @Test
+    @DisplayName("퍼센트 인코딩이나 중복 슬래시가 포함된 쿠키 인증 mutation도 CSRF guard를 우회하지 못한다")
+    fun `encoded or duplicate slash mutation path does not bypass csrf guard`() {
+        val filter = createFilter()
+
+        for (rawPath in listOf(
+            "/post/%61pi/v1/posts/1/hit",
+            "//post//api/v1/posts/1/hit",
+            "/post/api/v1/posts/1/hit;jsessionid=abc",
+        )) {
+            val request = MockHttpServletRequest("POST", rawPath)
+            request.setCookies(Cookie(AuthCookieNames.API_KEY, "api-key"))
+            request.addHeader(HttpHeaders.ORIGIN, "https://blog.aquilaxk.site")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_FORBIDDEN)
+            assertThat(response.contentAsString).contains("\"resultCode\":\"403-3\"")
+        }
+    }
+
     private fun createFilter(): ApiMutationCsrfGuardFilter =
         ApiMutationCsrfGuardFilter(
             apiCorsPolicy =

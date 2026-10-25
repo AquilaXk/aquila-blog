@@ -372,6 +372,48 @@ class ApiRateLimitBackstopFilterTest {
         assertThat(runFilter(filter, "GET", "/post/api/v1/posts/feed").status).isEqualTo(429)
     }
 
+    @Test
+    @DisplayName("퍼센트 인코딩, 중복 슬래시, 경로 파라미터가 포함된 경로도 정규화되어 동일한 rate limit bucket을 적용받는다")
+    fun `encoded and duplicate slash paths are normalized before rate limit matching`() {
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, authLimitPerMinute = 1, mutationLimitPerMinute = 1)
+
+        assertThat(runFilter(filter, "POST", "/member/%61pi/v1/auth/admin-email/request").status)
+            .isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(filter, "POST", "//member//api/v1/auth/admin-email/verify;jsessionid=abc").status)
+            .isEqualTo(429)
+
+        assertThat(runFilter(filter, "POST", "/post/%61pi/v1/posts/1/hit").status)
+            .isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(filter, "POST", "//post//api/v1/posts/1/hit;foo=bar").status)
+            .isEqualTo(429)
+    }
+
+    @Test
+    @DisplayName("동일한 IPv6 /64 대역 내 서로 다른 인터페이스 주소는 동일한 rate limit bucket을 공유한다")
+    fun `ipv6 addresses within same 64 prefix share rate limit bucket`() {
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, publicReadLimitPerMinute = 1)
+
+        val firstRequest =
+            MockHttpServletRequest("GET", "/post/api/v1/posts/feed").apply {
+                remoteAddr = "172.19.0.2"
+                addHeader("CF-Connecting-IP", "2001:db8:1:2::1")
+            }
+        val firstResponse = MockHttpServletResponse()
+        filter.doFilter(firstRequest, firstResponse, MockFilterChain())
+        assertThat(firstResponse.status).isEqualTo(HttpServletResponse.SC_OK)
+
+        val secondRequest =
+            MockHttpServletRequest("GET", "/post/api/v1/posts/feed").apply {
+                remoteAddr = "172.19.0.2"
+                addHeader("CF-Connecting-IP", "2001:db8:1:2:aaaa:bbbb:cccc:dddd")
+            }
+        val secondResponse = MockHttpServletResponse()
+        filter.doFilter(secondRequest, secondResponse, MockFilterChain())
+        assertThat(secondResponse.status).isEqualTo(429)
+    }
+
     private fun createFilter(
         redis: RedisKeyValuePort?,
         clientIpResolver: ClientIpResolver? = ClientIpResolver(),

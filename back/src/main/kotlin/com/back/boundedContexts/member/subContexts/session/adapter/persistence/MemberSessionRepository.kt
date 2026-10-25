@@ -2,7 +2,9 @@ package com.back.boundedContexts.member.subContexts.session.adapter.persistence
 
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -26,6 +28,20 @@ interface MemberSessionRepository : JpaRepository<MemberSession, Long> {
         """,
     )
     fun findWithMemberBySessionKeyAndRevokedAtIsNull(
+        @Param("sessionKey") sessionKey: String,
+    ): MemberSession?
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        """
+        select session
+        from MemberSession session
+        join fetch session.member
+        where session.sessionKey = :sessionKey
+          and session.revokedAt is null
+        """,
+    )
+    fun findForUpdateWithMemberBySessionKeyAndRevokedAtIsNull(
         @Param("sessionKey") sessionKey: String,
     ): MemberSession?
 

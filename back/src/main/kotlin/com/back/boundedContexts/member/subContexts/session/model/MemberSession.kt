@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType.SEQUENCE
 import jakarta.persistence.Id
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.SequenceGenerator
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -75,6 +76,17 @@ class MemberSession(
     fun isRefreshTokenExpired(now: Instant = Instant.now()): Boolean {
         val expiresAt = refreshTokenExpiresAt ?: return true
         return !now.isBefore(expiresAt)
+    }
+
+    fun isWithinRotationGraceWindow(
+        graceWindow: Duration,
+        now: Instant = Instant.now(),
+    ): Boolean {
+        if (graceWindow.isZero || graceWindow.isNegative) return false
+        val rotatedAt = refreshTokenRotatedAt ?: return false
+        val expiresAt = refreshTokenExpiresAt ?: return false
+        if (!now.isBefore(expiresAt)) return false
+        return !now.isBefore(rotatedAt) && now.isBefore(rotatedAt.plus(graceWindow))
     }
 
     fun markRefreshTokenReused(now: Instant = Instant.now()) {

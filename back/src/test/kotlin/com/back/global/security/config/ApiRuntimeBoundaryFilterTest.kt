@@ -193,6 +193,26 @@ class ApiRuntimeBoundaryFilterTest {
     }
 
     @Test
+    @DisplayName("퍼센트 인코딩이나 중복 슬래시가 포함된 API 경로도 런타임 경계를 우회하지 못한다")
+    fun `encoded or duplicate slash paths do not bypass runtime boundary`() {
+        val filter = createFilter("read")
+
+        for (rawPath in listOf(
+            "/member/%61pi/v1/members/adminProfile",
+            "//post//api/v1/posts/466/hit",
+            "/post/api/v1/posts/466/hit;jsessionid=1",
+        )) {
+            val request = MockHttpServletRequest(if (rawPath.endsWith("/hit") || rawPath.contains("/hit;")) "POST" else "GET", rawPath)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+            assertThat(response.contentAsString).contains("503-1")
+        }
+    }
+
+    @Test
     @DisplayName("isAllowed는 all 모드를 항상 허용한다")
     fun `isAllowed returns true for all mode`() {
         val filter = createFilter("all")

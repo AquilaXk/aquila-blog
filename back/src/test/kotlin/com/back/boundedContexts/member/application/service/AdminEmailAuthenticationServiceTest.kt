@@ -303,6 +303,22 @@ class AdminEmailAuthenticationServiceTest {
         verify(mailSender, never()).sendCode(anyString(), anyString(), anyLong())
     }
 
+    @Test
+    fun `request limit is scoped per requester ip bucket so one ip cannot block another ip`() {
+        doAnswer { null }.`when`(mailSender).sendCode(anyString(), anyString(), anyLong())
+
+        repeat(5) {
+            service.requestCode(ADMIN_EMAIL, rememberMe = false, clientIp = "198.51.100.10")
+        }
+        val blockedSameIp = service.requestCode(ADMIN_EMAIL, rememberMe = false, clientIp = "198.51.100.10")
+        val allowedOtherIp = service.requestCode(ADMIN_EMAIL, rememberMe = false, clientIp = "203.0.113.20")
+
+        assertThat(blockedSameIp.challengeId).isNotBlank()
+        assertThat(allowedOtherIp.challengeId).isNotBlank()
+        assertThat(challengeStore.challenges).hasSize(6)
+        verify(mailSender, org.mockito.Mockito.times(6)).sendCode(anyString(), anyString(), anyLong())
+    }
+
     private fun newService(
         challengeExpirationSeconds: Long = 600,
         maxFailedAttempts: Int = 5,
@@ -399,7 +415,7 @@ class AdminEmailAuthenticationServiceTest {
         var requestSlotFailure: RuntimeException? = null
         val challenges = mutableMapOf<String, AdminEmailChallengeStore.Challenge>()
         private val failures = mutableMapOf<String, Int>()
-        private var requestCount = 0
+        private val requestCountsByBucket = mutableMapOf<String, Int>()
 
         override fun isAvailable(): Boolean = available
 
@@ -443,9 +459,22 @@ class AdminEmailAuthenticationServiceTest {
             canonicalRecipientHash: String,
             maxRequests: Int,
             window: Duration,
+            clientIpBucket: String,
+            globalMaxRequests: Int,
         ): Boolean {
             requestSlotFailure?.let { throw it }
-            return ++requestCount <= maxRequests
+            val ipKey = "$canonicalRecipientHash:$clientIpBucket"
+            val globalKey = "$canonicalRecipientHash:global"
+            val currentIp = requestCountsByBucket[ipKey] ?: 0
+            val currentGlobal = requestCountsByBucket[globalKey] ?: 0
+            if (currentIp >= maxRequests || currentGlobal >= globalMaxRequests) {
+                return false
+            }
+            requestCountsByBucket[ipKey] = currentIp + 1
+            if (ipKey != globalKey) {
+                requestCountsByBucket[globalKey] = currentGlobal + 1
+            }
+            return true
         }
     }
 

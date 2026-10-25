@@ -56,10 +56,30 @@ class AuthSessionSecurityContractTest : BaseControllerIntegrationTest() {
         val sessionKey = requireCookie(authCookies, AuthCookieNames.SESSION_KEY)
         val staleRefreshToken = requireCookie(authCookies, AuthCookieNames.REFRESH_TOKEN)
 
+        val firstResult =
+            mvc
+                .get(SESSION_PATH) {
+                    cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "wrong-access-token"))
+                    cookie(staleRefreshToken)
+                    cookie(sessionKey)
+                }.andExpect {
+                    status { isOk() }
+                }.andReturn()
+        val rotatedRefreshToken = firstResult.response.cookies.first(::isIssuedRefreshToken)
+
         mvc
             .get(SESSION_PATH) {
                 cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "wrong-access-token"))
                 cookie(staleRefreshToken)
+                cookie(sessionKey)
+            }.andExpect {
+                status { isOk() }
+            }
+
+        mvc
+            .get(SESSION_PATH) {
+                cookie(Cookie(AuthCookieNames.ACCESS_TOKEN, "wrong-access-token"))
+                cookie(rotatedRefreshToken)
                 cookie(sessionKey)
             }.andExpect {
                 status { isOk() }

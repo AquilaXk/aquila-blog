@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.web
 
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.http.HttpHeaders
 import org.springframework.stereotype.Component
 
 @Component
@@ -12,6 +13,11 @@ class PostPublicReadCacheHeaderWriter(
         policy: PublicReadCachePolicy,
         surrogateKeys: Set<String>,
     ) {
+        if (response.containsHeader(HttpHeaders.AUTHORIZATION) || response.containsHeader(HttpHeaders.SET_COOKIE)) {
+            applyPrivateNoStoreHeaders(response)
+            response.setHeader(HttpHeaders.VARY, "${HttpHeaders.AUTHORIZATION}, ${HttpHeaders.COOKIE}")
+            return
+        }
         val safeMaxAge = policy.maxAgeSeconds.coerceAtLeast(0)
         val safeSharedMaxAge = policy.sharedMaxAgeSeconds.coerceAtLeast(safeMaxAge)
         val safeSWR = policy.staleWhileRevalidateSeconds.coerceAtLeast(0)

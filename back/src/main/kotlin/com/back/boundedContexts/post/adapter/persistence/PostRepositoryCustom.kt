@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.persistence
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
@@ -55,4 +56,16 @@ interface PostRepositoryCustom {
     fun findPublicDetailById(id: Long): Post?
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
+
+    fun updateHitCount(
+        targetPost: Post,
+        hitCount: Int,
+        hitCountAttr: PostAttr?,
+    )
+
+    fun updateLikesCount(
+        targetPost: Post,
+        likesCount: Int,
+        likesCountAttr: PostAttr?,
+    )
 }

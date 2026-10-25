@@ -71,10 +71,13 @@ class UploadedFilePurgeService(
                 restoreActive(uploadedFile.objectKey)
                 return@forEach
             }
+            if (!isStillEligibleForPurge(uploadedFile.objectKey, now)) {
+                return@forEach
+            }
 
             try {
                 postImageStoragePort.deletePostImage(uploadedFile.objectKey)
-                markDeleted(uploadedFile.objectKey)
+                markDeleted(uploadedFile.objectKey, now)
             } catch (exception: Exception) {
                 logger.error("Failed to purge uploaded file: {}", uploadedFile.objectKey, exception)
             }
@@ -245,11 +248,36 @@ class UploadedFilePurgeService(
         }
     }
 
-    private fun markDeleted(objectKey: String) {
+    private fun isStillEligibleForPurge(
+        objectKey: String,
+        now: Instant,
+    ): Boolean {
+        val current =
+            readOnlyTransactionTemplate.execute<UploadedFile?> {
+                uploadedFileRepository.findByObjectKey(objectKey)
+            }
+        val purgeAfter = current?.purgeAfter
+        if (current == null || current.status !in purgeCandidateStatuses || purgeAfter == null || purgeAfter > now) {
+            return false
+        }
+        if (objectKey in referenceQueryService.findReferencedObjectKeys(listOf(current))) {
+            restoreActive(objectKey)
+            return false
+        }
+        return true
+    }
+
+    private fun markDeleted(
+        objectKey: String,
+        now: Instant,
+    ) {
         writeTransactionTemplate.executeWithoutResult {
             val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return@executeWithoutResult
-            uploadedFile.markDeleted()
-            uploadedFileRepository.save(uploadedFile)
+            val purgeAfter = uploadedFile.purgeAfter
+            if (uploadedFile.status in purgeCandidateStatuses && purgeAfter != null && purgeAfter <= now) {
+                uploadedFile.markDeleted()
+                uploadedFileRepository.save(uploadedFile)
+            }
         }
     }
 

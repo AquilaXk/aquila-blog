@@ -10,6 +10,7 @@ import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostPreviewExtractor
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
@@ -500,7 +502,7 @@ class PostApplicationService(
         val safePage = page.coerceAtLeast(1)
         val safePageSize = pageSize.coerceIn(1, 100)
 
-        if (!postKeywordSearchPipelineService.shouldApply(normalizedKw, sort, safePage)) {
+        if (!postKeywordSearchPipelineService.shouldApply(normalizedKw, sort, safePage, safePageSize)) {
             return findAndHydratePagedPosts(safePage, safePageSize) {
                 postRepository.findQPagedByKw(
                     PostRepositoryPort.PagedQuery(
@@ -544,7 +546,7 @@ class PostApplicationService(
         val safePage = page.coerceAtLeast(1)
         val safePageSize = pageSize.coerceIn(1, 100)
 
-        if (!postRecommendRankingService.isEnabledForPage(safePage)) {
+        if (!postRecommendRankingService.isEnabledForPage(safePage, safePageSize)) {
             return findPagedByKw("", PostSearchSortType1.CREATED_AT, safePage, safePageSize)
         }
 
@@ -680,6 +682,13 @@ class PostApplicationService(
                 evictReason = "restore",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
+            PostModifiedEvent(
+                UUID.randomUUID(),
+                PostDto(restoredPost),
+                MemberDto(restoredPost.author),
+                emptyList(),
+                restoredTags,
+            ),
         )
 
         return restoredPost
@@ -697,13 +706,14 @@ class PostApplicationService(
         }
         postRepository.deleteImageReferencesByPostId(id)
 
+        val beforeTags = postTagIndexService.extractNormalizedTags(snapshot.content)
         enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = id,
                 previousContent = null,
                 currentContent = null,
                 deletedContent = snapshot.content,
-                beforeTags = postTagIndexService.extractNormalizedTags(snapshot.content),
+                beforeTags = beforeTags,
                 afterTags = emptyList(),
                 cacheInvalidationScope =
                     if (snapshot.published && snapshot.listed) {
@@ -713,6 +723,13 @@ class PostApplicationService(
                     },
                 evictReason = "hard-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
+            ),
+            PostDeletedEvent(
+                UUID.randomUUID(),
+                toDeletedSnapshotPostDto(snapshot, beforeTags),
+                toDeletedSnapshotActorDto(snapshot.authorId),
+                beforeTags,
+                emptyList(),
             ),
         )
     }
@@ -901,4 +918,42 @@ class PostApplicationService(
         }
 
     private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed
+
+    private fun toDeletedSnapshotPostDto(
+        snapshot: AdmDeletedPostSnapshotDto,
+        beforeTags: List<String>,
+    ): PostDto {
+        val now = Instant.now()
+        return PostDto(
+            id = snapshot.id,
+            createdAt = now,
+            modifiedAt = now,
+            authorId = snapshot.authorId,
+            authorName = "",
+            authorUsername = "",
+            authorProfileImgUrl = "",
+            title = snapshot.title,
+            thumbnail = null,
+            summary = "",
+            version = 0L,
+            published = snapshot.published,
+            listed = snapshot.listed,
+            tempDraft = false,
+            likesCount = 0,
+            hitCount = 0,
+            tags = beforeTags,
+            category = emptyList(),
+        )
+    }
+
+    private fun toDeletedSnapshotActorDto(authorId: Long): MemberDto {
+        val now = Instant.now()
+        return MemberDto(
+            id = authorId,
+            createdAt = now,
+            modifiedAt = now,
+            isAdmin = true,
+            name = "admin",
+        )
+    }
 }

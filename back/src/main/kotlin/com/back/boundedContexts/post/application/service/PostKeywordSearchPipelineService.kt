@@ -130,9 +130,24 @@ class PostKeywordSearchPipelineService(
             sort == PostSearchSortType1.CREATED_AT &&
             page in 1..maxRerankPages
 
+    fun shouldApply(
+        keyword: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): Boolean {
+        val safePageSize = pageSize.coerceIn(1, 100)
+        return enabled &&
+            keyword.trim().isNotBlank() &&
+            sort == PostSearchSortType1.CREATED_AT &&
+            page >= 1 &&
+            (page - 1L) * safePageSize < resolveCandidatePoolSize(safePageSize)
+    }
+
     fun resolveCandidatePoolSize(pageSize: Int): Int {
         val safePageSize = pageSize.coerceIn(1, 100)
-        return max(candidatePoolSize, safePageSize * maxRerankPages).coerceIn(safePageSize, 800)
+        val rawPoolSize = max(candidatePoolSize, safePageSize * maxRerankPages).coerceIn(safePageSize, 800)
+        return (rawPoolSize / safePageSize).coerceAtLeast(1) * safePageSize
     }
 
     fun rerank(

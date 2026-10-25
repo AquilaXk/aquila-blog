@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostImageReferenceRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
@@ -122,12 +123,29 @@ class PostRepositoryAdapter(
 
     override fun existsImageReferenceByObjectKey(objectKey: String): Boolean = postImageReferenceRepository.existsByObjectKey(objectKey)
 
+    override fun findFirstReferencingPostId(objectKey: String): Long? = postImageReferenceRepository.findFirstReferencingPostId(objectKey)
+
+    override fun existsPublicPostReferencingImage(objectKey: String): Boolean =
+        postImageReferenceRepository.existsPublicPostByObjectKey(objectKey)
+
     override fun syncImageReferences(
         postId: Long,
         objectKeys: Collection<String>,
     ) = postImageReferenceRepository.replacePostImageReferences(postId, objectKeys)
 
     override fun deleteImageReferencesByPostId(postId: Long) = postImageReferenceRepository.deletePostImageReferences(postId)
+
+    override fun updateHitCount(
+        post: Post,
+        hitCount: Int,
+        hitCountAttr: PostAttr?,
+    ) = postRepository.updateHitCount(post, hitCount, hitCountAttr)
+
+    override fun updateLikesCount(
+        post: Post,
+        likesCount: Int,
+        likesCountAttr: PostAttr?,
+    ) = postRepository.updateLikesCount(post, likesCount, likesCountAttr)
 
     private fun PostRepositoryPort.PagedQuery.toPageRequest(): PageRequest =
         PageRequest.of(

@@ -85,6 +85,38 @@ class PostImageReferenceJdbcRepositoryTest {
     }
 
     @Test
+    fun `findFirstReferencingPostId 및 공개 또는 작성자 참조 여부를 조회한다`() {
+        `when`(
+            jdbcTemplate.queryForList(
+                anyString(),
+                eq(Long::class.java),
+                eq("posts/shared.png"),
+            ),
+        ).thenReturn(listOf(42L))
+        assertThat(repository.findFirstReferencingPostId("posts/shared.png")).isEqualTo(42L)
+        assertThat(repository.findFirstReferencingPostId("")).isNull()
+
+        `when`(
+            jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Long::class.java),
+                eq("posts/public.png"),
+            ),
+        ).thenReturn(1L)
+        assertThat(repository.existsPublicPostByObjectKey("posts/public.png")).isTrue()
+        assertThat(repository.existsPublicPostByObjectKey("   ")).isFalse()
+
+        `when`(
+            jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Long::class.java),
+                eq("posts/null-public.png"),
+            ),
+        ).thenReturn(null)
+        assertThat(repository.existsPublicPostByObjectKey("posts/null-public.png")).isFalse()
+    }
+
+    @Test
     fun `replacePostImageReferences - 기존 키 삭제 후 신규 키를 batchUpdate 한다`() {
         val ps = mock(PreparedStatement::class.java)
         `when`(

@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
@@ -116,7 +117,15 @@ class ApiV1PostImageController(
         val access =
             when (uploadedFile.purpose) {
                 UploadedFilePurpose.PROFILE_IMAGE ->
-                    profileImageReadUseCase.resolve(objectKey, uploadedFile, securityUser?.id)
+                    try {
+                        profileImageReadUseCase.resolve(objectKey, uploadedFile, securityUser?.id)
+                    } catch (ex: AppException) {
+                        resolvePostImageAccess(
+                            uploadedFile = uploadedFile,
+                            securityUser = securityUser,
+                            notFound = { ex },
+                        )
+                    }
                 UploadedFilePurpose.POST_IMAGE ->
                     resolvePostImageAccess(
                         uploadedFile = uploadedFile,
@@ -138,7 +147,7 @@ class ApiV1PostImageController(
                     .status(HttpStatus.NOT_MODIFIED)
                     .eTag(etag),
                 access,
-                uploadedFile.purpose,
+                uploadedFile,
             ).build()
         }
 
@@ -157,7 +166,7 @@ class ApiV1PostImageController(
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */*")
                         .eTag(etag),
                     access,
-                    uploadedFile.purpose,
+                    uploadedFile,
                 ).build()
             }
             val range = parseSingleRange(rangeHeader, totalLength)
@@ -169,7 +178,7 @@ class ApiV1PostImageController(
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength")
                         .eTag(etag),
                     access,
-                    uploadedFile.purpose,
+                    uploadedFile,
                 ).build()
             }
 
@@ -184,7 +193,7 @@ class ApiV1PostImageController(
                     .contentLength(range.last - range.first + 1)
                     .eTag(etag),
                 access,
-                uploadedFile.purpose,
+                uploadedFile,
             ).body(body)
         }
 
@@ -196,7 +205,7 @@ class ApiV1PostImageController(
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .eTag(etag),
                 access,
-                uploadedFile.purpose,
+                uploadedFile,
             )
 
         val finalizedBuilder =
@@ -220,16 +229,28 @@ class ApiV1PostImageController(
         }
         if (
             uploadedFile.status != UploadedFileStatus.ACTIVE ||
-            uploadedFile.ownerType != UploadedFileOwnerType.POST
+            uploadedFile.ownerType !in setOf(UploadedFileOwnerType.POST, UploadedFileOwnerType.MEMBER_PROFILE)
         ) {
             throw notFound()
         }
 
-        val postId = uploadedFile.ownerId?.takeIf { it > 0L } ?: throw notFound()
-        if (postRepository.findPublicDetailById(postId) != null) {
+        val postId =
+            if (uploadedFile.ownerType == UploadedFileOwnerType.POST) {
+                uploadedFile.ownerId?.takeIf { it > 0L }
+            } else {
+                null
+            }
+        if ((postId != null && postRepository.findPublicDetailById(postId) != null) ||
+            postRepository.existsPublicPostReferencingImage(uploadedFile.objectKey)
+        ) {
             return ProfileImageReadUseCase.Access.PUBLIC
         }
-        if (isAdmin && postRepository.findById(postId).isPresent) {
+        if (isAdmin &&
+            (
+                (postId != null && postRepository.findById(postId).isPresent) ||
+                    postRepository.existsImageReferenceByObjectKey(uploadedFile.objectKey)
+            )
+        ) {
             return ProfileImageReadUseCase.Access.OWNER_ONLY
         }
         throw notFound()
@@ -242,13 +263,35 @@ class ApiV1PostImageController(
     private fun withImageCacheControl(
         builder: ResponseEntity.BodyBuilder,
         access: ProfileImageReadUseCase.Access,
-        purpose: UploadedFilePurpose,
+        uploadedFile: UploadedFile,
     ): ResponseEntity.BodyBuilder =
         if (access == ProfileImageReadUseCase.Access.OWNER_ONLY) {
             builder
                 .cacheControl(CacheControl.noStore().cachePrivate())
                 .header(HttpHeaders.VARY, HttpHeaders.COOKIE)
-        } else if (purpose == UploadedFilePurpose.POST_IMAGE || purpose == UploadedFilePurpose.PROFILE_IMAGE) {
+        } else if (uploadedFile.purpose == UploadedFilePurpose.POST_IMAGE) {
+            val cacheTags =
+                buildSet {
+                    add(PostCacheTags.IMAGES)
+                    add("post-image:${uploadedFile.objectKey}")
+                    uploadedFile.ownerId?.takeIf { it > 0L }?.let {
+                        add(PostCacheTags.byPostId(it))
+                        add("post:$it")
+                    }
+                    postRepository.findFirstReferencingPostId(uploadedFile.objectKey)?.takeIf { it > 0L }?.let {
+                        add(PostCacheTags.byPostId(it))
+                        add("post:$it")
+                    }
+                }
+            builder
+                .cacheControl(
+                    CacheControl
+                        .maxAge(3600, TimeUnit.SECONDS)
+                        .staleWhileRevalidate(86400, TimeUnit.SECONDS)
+                        .cachePublic(),
+                ).header("Surrogate-Key", cacheTags.joinToString(" "))
+                .header("Cache-Tag", cacheTags.joinToString(","))
+        } else if (uploadedFile.purpose == UploadedFilePurpose.PROFILE_IMAGE) {
             builder.cacheControl(
                 CacheControl
                     .maxAge(3600, TimeUnit.SECONDS)

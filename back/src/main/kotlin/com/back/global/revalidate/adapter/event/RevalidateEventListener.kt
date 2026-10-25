@@ -36,7 +36,7 @@ class RevalidateEventListener(
 
     @TaskHandler
     fun handle(payload: RevalidateHomePayload) {
-        revalidateService.revalidatePath(payload.path)
+        revalidateService.revalidatePathOrThrow(payload.path)
     }
 
     private fun enqueueRevalidatePaths(

@@ -27,15 +27,23 @@ class RevalidateService(
 
     fun revalidateHome() = revalidatePath("/")
 
+    fun revalidatePathOrThrow(path: String) = revalidatePath(path = path, throwOnFailure = true)
+
     /**
      * 데이터 동기화 또는 리밸리데이션 요청을 조정해 최신 상태를 유지합니다.
      * 운영 환경에서의 예외/경계 조건을 고려해 안정적으로 동작하도록 설계되었습니다.
      */
-    fun revalidatePath(path: String) {
+    fun revalidatePath(
+        path: String,
+        throwOnFailure: Boolean = false,
+    ) {
         if (revalidateUrl.isBlank() || revalidateToken.isBlank()) return
         val revalidateUri =
             runCatching { URI.create(revalidateUrl) }.getOrElse { exception ->
                 log.warn("Invalid revalidate url: {}", revalidateUrl, exception)
+                if (throwOnFailure) {
+                    throw IllegalStateException("Invalid revalidate url: $revalidateUrl", exception)
+                }
                 return
             }
         val normalizedPath =
@@ -59,12 +67,20 @@ class RevalidateService(
         }.onSuccess { response ->
             if (response.statusCode() >= 400) {
                 log.warn("Revalidate request returned non-success status: {}", response.statusCode())
+                if (throwOnFailure) {
+                    throw IllegalStateException(
+                        "Revalidate request returned non-success status=${response.statusCode()} for path=$normalizedPath",
+                    )
+                }
                 return@onSuccess
             }
             warmPath(revalidateUri, normalizedPath)
         }.onFailure { exception ->
             // revalidate가 실패해도 글 작성/수정/삭제 요청 경로는 비차단으로 유지한다.
             log.warn("Revalidate request failed", exception)
+            if (throwOnFailure) {
+                throw IllegalStateException("Revalidate request failed for path=$normalizedPath", exception)
+            }
         }
     }
 

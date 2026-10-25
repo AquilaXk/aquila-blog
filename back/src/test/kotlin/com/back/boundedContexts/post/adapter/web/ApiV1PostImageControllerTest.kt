@@ -254,6 +254,49 @@ class ApiV1PostImageControllerTest {
     }
 
     @Test
+    fun `ownerId 게시글이 비공개여도 다른 공개 게시글이 참조 중이면 익명 조회를 허용한다`() {
+        val sharedKey = "posts/2026/03/shared-public-image.png"
+        val privateOwnerPost =
+            Post(
+                id = 10L,
+                author = Member(2L, "writer1", null, "작성자1"),
+                title = "비공개 글",
+                content = "본문",
+                published = false,
+                listed = false,
+            )
+        val sharedFile = postImage(sharedKey).apply { attachToPost(privateOwnerPost.id, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(sharedKey)).thenReturn(sharedFile)
+        `when`(postRepository.findPublicDetailById(privateOwnerPost.id)).thenReturn(null)
+        `when`(postRepository.existsPublicPostReferencingImage(sharedKey)).thenReturn(true)
+        postImageStorageService.images[sharedKey] = storedImage(sharedKey)
+
+        val response = controller.getPostImage(imageRequest(sharedKey))
+
+        assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(response.headers.cacheControl).contains("public")
+    }
+
+    @Test
+    fun `공개 게시글 이미지는 Surrogate-Key와 Cache-Tag 헤더를 포함한다`() {
+        val objectKey = "posts/2026/03/tagged-public-image.png"
+        val uploadedFile = postImage(objectKey).apply { attachToPost(42L, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(postRepository.findPublicDetailById(42L)).thenReturn(publicPost(42L))
+        postImageStorageService.images[objectKey] = storedImage(objectKey)
+
+        val response = controller.getPostImage(imageRequest(objectKey))
+
+        assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(response.headers.getFirst("Surrogate-Key"))
+            .contains("post-image:$objectKey")
+            .contains("post:42")
+        assertThat(response.headers.getFirst("Cache-Tag"))
+            .contains("post-image:$objectKey")
+            .contains("post:42")
+    }
+
+    @Test
     fun `발행된 프로필 이미지는 공개 캐시 정책으로 반환한다`() {
         withIsolatedAppConfig {
             val objectKey = "profiles/7/published.png"
@@ -337,6 +380,46 @@ class ApiV1PostImageControllerTest {
                 .isInstanceOf(AppException::class.java)
 
             assertThat(postImageStorageService.imageDownloads).isEmpty()
+        }
+    }
+
+    @Test
+    fun `referencing post author and shared profile image in public post are served with post image cache tags`() {
+        withIsolatedAppConfig {
+            val sharedPostKey = "posts/2026/03/shared-author-image.png"
+            val sharedPostFile = postImage(sharedPostKey).apply { attachToPost(10L) }
+            `when`(uploadedFileRepository.findByObjectKey(sharedPostKey)).thenReturn(sharedPostFile)
+            `when`(postRepository.findPublicDetailById(10L)).thenReturn(null)
+            `when`(postRepository.existsPublicPostReferencingImage(sharedPostKey)).thenReturn(false)
+            `when`(postRepository.findById(10L)).thenReturn(Optional.empty())
+            `when`(postRepository.existsImageReferenceByObjectKey(sharedPostKey)).thenReturn(true)
+            postImageStorageService.images[sharedPostKey] = storedImage(sharedPostKey)
+
+            val adminResponse = controller.getPostImage(imageRequest(sharedPostKey), ownerSecurityUser(7L))
+            assertThat(adminResponse.statusCode).isEqualTo(HttpStatus.OK)
+            assertThat(adminResponse.headers.cacheControl).contains("private")
+
+            `when`(postRepository.existsPublicPostReferencingImage(sharedPostKey)).thenReturn(true)
+            `when`(postRepository.findFirstReferencingPostId(sharedPostKey)).thenReturn(20L)
+            postImageStorageService.images[sharedPostKey] = storedImage(sharedPostKey)
+            val publicResponse = controller.getPostImage(imageRequest(sharedPostKey))
+            assertThat(publicResponse.statusCode).isEqualTo(HttpStatus.OK)
+            assertThat(publicResponse.headers.getFirst("Surrogate-Key"))
+                .contains("post-images")
+                .contains("post-id-10")
+                .contains("post-id-20")
+
+            val profileInPostKey = "profiles/7/shared-in-post.png"
+            val profileFile = memberProfileImage(profileInPostKey, 7L)
+            `when`(uploadedFileRepository.findByObjectKey(profileInPostKey)).thenReturn(profileFile)
+            `when`(memberRepository.findById(7L)).thenReturn(Optional.of(canonicalOwner()))
+            `when`(currentMemberProfileQueryUseCase.getPublishedById(7L))
+                .thenReturn(profile(canonicalOwner(), "profiles/7/other.png"))
+            `when`(postRepository.existsPublicPostReferencingImage(profileInPostKey)).thenReturn(true)
+            postImageStorageService.images[profileInPostKey] = storedImage(profileInPostKey)
+
+            val sharedProfileResponse = controller.getPostImage(imageRequest(profileInPostKey))
+            assertThat(sharedProfileResponse.statusCode).isEqualTo(HttpStatus.OK)
         }
     }
 

@@ -92,6 +92,40 @@ class UploadedFileReferenceQueryServiceTest {
     }
 
     @Test
+    fun `POST 소유자가 다른 게시글이거나 ownerId가 비어 있어도 활성 게시글 참조가 있으면 fallback 미활성 시 식별된다`() {
+        val service =
+            UploadedFileReferenceQueryService(
+                postRepository,
+                memberAttrRepository,
+                UploadedFileRetentionProperties(fallbackLookupEnabled = false),
+            )
+        val crossReferencedPostFile =
+            UploadedFile(
+                objectKey = "posts/2026/03/shared.png",
+                bucket = "post-img",
+                contentType = "image/png",
+                fileSize = 100,
+                ownerId = 10L,
+                ownerType = UploadedFileOwnerType.POST,
+            )
+        val nullOwnerPostFile =
+            UploadedFile(
+                objectKey = "posts/2026/03/null-owner-shared.png",
+                bucket = "post-img",
+                contentType = "image/png",
+                fileSize = 100,
+                ownerId = null,
+                ownerType = UploadedFileOwnerType.POST,
+            )
+        given(postRepository.existsImageReference(10L, "posts/2026/03/shared.png")).willReturn(false)
+        given(postRepository.existsImageReferenceByObjectKey("posts/2026/03/shared.png")).willReturn(true)
+        given(postRepository.existsImageReferenceByObjectKey("posts/2026/03/null-owner-shared.png")).willReturn(true)
+
+        val result = service.findReferencedObjectKeys(listOf(crossReferencedPostFile, nullOwnerPostFile))
+        assertThat(result).containsExactly("posts/2026/03/shared.png", "posts/2026/03/null-owner-shared.png")
+    }
+
+    @Test
     fun `MEMBER_PROFILE 소유자가 draft 또는 published에서 참조 중이면 식별된다`() {
         val service =
             UploadedFileReferenceQueryService(
@@ -142,6 +176,45 @@ class UploadedFileReferenceQueryServiceTest {
 
         val result = service.findReferencedObjectKeys(listOf(draftFile, publishedFile))
         assertThat(result).containsExactly("posts/2026/03/draft.png", "posts/2026/03/pub.png")
+    }
+
+    @Test
+    fun `MEMBER_PROFILE 소유 파일이 게시글에서 참조되거나 POST 소유 파일이 프로필에서 참조되면 교차 도메인 참조로 식별된다`() {
+        val service =
+            UploadedFileReferenceQueryService(
+                postRepository,
+                memberAttrRepository,
+                UploadedFileRetentionProperties(fallbackLookupEnabled = false),
+            )
+        val profileFileInPost =
+            UploadedFile(
+                objectKey = "posts/2026/03/profile-in-post.png",
+                bucket = "post-img",
+                contentType = "image/png",
+                fileSize = 100,
+                ownerId = 20L,
+                ownerType = UploadedFileOwnerType.MEMBER_PROFILE,
+            )
+        val postFileInProfile =
+            UploadedFile(
+                objectKey = "posts/2026/03/post-in-profile.png",
+                bucket = "post-img",
+                contentType = "image/png",
+                fileSize = 100,
+                ownerId = 10L,
+                ownerType = UploadedFileOwnerType.POST,
+            )
+
+        given(postRepository.existsImageReferenceByObjectKey("posts/2026/03/profile-in-post.png")).willReturn(true)
+        given(
+            memberAttrRepository.existsByNameAndStrValueContaining(
+                PROFILE_WORKSPACE_PUBLISHED,
+                "posts/2026/03/post-in-profile.png",
+            ),
+        ).willReturn(true)
+
+        val result = service.findReferencedObjectKeys(listOf(profileFileInPost, postFileInProfile))
+        assertThat(result).containsExactly("posts/2026/03/profile-in-post.png", "posts/2026/03/post-in-profile.png")
     }
 
     @Test

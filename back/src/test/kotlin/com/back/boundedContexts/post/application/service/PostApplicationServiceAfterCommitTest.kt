@@ -476,6 +476,54 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         }
     }
 
+    @Test
+    @DisplayName("관리자 글 복구와 영구삭제는 commit 후 도메인 이벤트를 발행한다")
+    fun restoreAndHardDeletePublishDomainEventsAfterCommit() {
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            transactionTemplate.execute {
+                postApplicationService.write(
+                    author = admin,
+                    title = "admin restore and hard delete event source",
+                    content = "tags: [kotlin]\n\nrestore and hard delete content",
+                    published = true,
+                    listed = true,
+                    summaryMode = PostSummaryMode.AUTO,
+                )
+            }!!
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.delete(postApplicationService.findById(post.id)!!, admin)
+        }
+
+        clearSideEffectMocks()
+        val restorePrevTaskIds = taskRepository.findAll().map { it.id }.toSet()
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.restoreDeletedByIdForAdmin(post.id)
+        }
+        val restorePayload = singlePostWriteSideEffectPayloadSince(restorePrevTaskIds)
+        postWriteSideEffectHandler.handle(restorePayload)
+
+        assertThat(publishedEvents())
+            .filteredOn { it is PostModifiedEvent && it.aggregateId == post.id }
+            .isNotEmpty()
+
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.delete(postApplicationService.findById(post.id)!!, admin)
+        }
+
+        clearSideEffectMocks()
+        val hardDeletePrevTaskIds = taskRepository.findAll().map { it.id }.toSet()
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.hardDeleteDeletedByIdForAdmin(post.id)
+        }
+        val hardDeletePayload = singlePostWriteSideEffectPayloadSince(hardDeletePrevTaskIds)
+        postWriteSideEffectHandler.handle(hardDeletePayload)
+
+        assertThat(publishedEvents())
+            .filteredOn { it is com.back.boundedContexts.post.event.PostDeletedEvent && it.aggregateId == post.id }
+            .isNotEmpty()
+    }
+
     private fun clearSideEffectMocks() {
         clearInvocations(
             uploadedFileRetentionService,

@@ -116,7 +116,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         ).willReturn(listOf(invalidBoundaryPost, nextRawPost))
         given(
             postUseCase.findPublicByCursor(
-                cursorSortValue = Instant.parse("2026-01-02T00:00:00Z").toEpochMilli(),
+                cursorSortValue = Instant.parse("2026-01-02T00:00:00Z").epochSecond * 1_000_000L,
                 cursorId = 20L,
                 limit = 3,
                 sort = PostSearchSortType1.CREATED_AT,
@@ -291,8 +291,9 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
     fun issuesAndVerifiesSixPartVersionedCursor() {
         val postUseCase = mock(PostUseCase::class.java)
         val service = createService(postUseCase, SimpleMeterRegistry())
-        val first = postByAuthor(id = 61L)
-        val second = postByAuthor(id = 60L)
+        val first = postByAuthor(id = 61L).also { it.createdAt = Instant.parse("2026-01-02T00:00:00.123456Z") }
+        val second = postByAuthor(id = 60L).also { it.createdAt = Instant.parse("2026-01-02T00:00:00.123100Z") }
+        val expectedMicros = first.createdAt.epochSecond * 1_000_000L + (first.createdAt.nano / 1_000)
         given(
             postUseCase.findPublicByCursor(
                 cursorSortValue = null,
@@ -303,7 +304,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         ).willReturn(listOf(first, second))
         given(
             postUseCase.findPublicByCursor(
-                cursorSortValue = Instant.parse("2026-01-02T00:00:00Z").toEpochMilli(),
+                cursorSortValue = expectedMicros,
                 cursorId = 61L,
                 limit = 3,
                 sort = PostSearchSortType1.CREATED_AT,
@@ -314,7 +315,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         val nextPage = service.getPublicFeedByCursor(page.nextCursor, 1, PostSearchSortType1.CREATED_AT)
 
         assertThat(page.nextCursor!!.split(':')).hasSize(6)
-        assertThat(page.nextCursor).startsWith("$CURSOR_TEST_VERSION:${CURSOR_TEST_CLOCK.instant().epochSecond}:")
+        assertThat(page.nextCursor).startsWith("$CURSOR_TEST_VERSION:${CURSOR_TEST_CLOCK.instant().epochSecond}:$expectedMicros:")
         assertThat(nextPage.content.map { it.id }).containsExactly(60L)
     }
 

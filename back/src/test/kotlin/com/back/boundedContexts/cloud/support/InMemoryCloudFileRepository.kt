@@ -30,7 +30,11 @@ class InMemoryCloudFileRepository : CloudFileRepositoryPort {
                         mediaKind = file.mediaKind,
                         folderPath = file.folderPath,
                         checksumSha256 = file.checksumSha256,
-                    ).also { it.deletedAt = file.deletedAt }
+                    ).also { copied ->
+                        copied.deletedAt = file.deletedAt
+                        runCatching { file.createdAt }.onSuccess { copied.createdAt = it }
+                        runCatching { file.modifiedAt }.onSuccess { copied.modifiedAt = it }
+                    }
             } else {
                 file
             }

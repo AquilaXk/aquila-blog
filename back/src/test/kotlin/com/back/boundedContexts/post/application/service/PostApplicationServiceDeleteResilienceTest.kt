@@ -357,12 +357,19 @@ class PostApplicationServiceDeleteResilienceTest {
                         nickname = "복구작성자",
                         email = null,
                         apiKey = "restored-author-api-key",
-                    ).also { it.setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent()) },
+                    ).also {
+                        it.createdAt = Instant.now()
+                        it.modifiedAt = it.createdAt
+                        it.setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent())
+                    },
                 title = "복구 대상",
                 content = "tags: tag\n\n복구 본문",
                 published = true,
                 listed = true,
-            )
+            ).apply {
+                createdAt = Instant.now()
+                modifiedAt = createdAt
+            }
         given(postRepository.findDeletedSnapshotById(21)).willReturn(snapshot)
         given(postRepository.restoreDeletedById(21)).willReturn(true)
         given(postRepository.findById(21)).willReturn(Optional.of(restoredPost))
@@ -407,12 +414,19 @@ class PostApplicationServiceDeleteResilienceTest {
                         nickname = "반복복구작성자",
                         email = null,
                         apiKey = "repeat-restore-author-api-key",
-                    ).also { it.setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent()) },
+                    ).also {
+                        it.createdAt = Instant.now()
+                        it.modifiedAt = it.createdAt
+                        it.setProfileWorkspacePublishedContent(MemberProfileWorkspaceContent())
+                    },
                 title = "반복 복구 대상",
                 content = "반복 복구 본문 #tag",
                 published = true,
                 listed = true,
-            )
+            ).apply {
+                createdAt = Instant.now()
+                modifiedAt = createdAt
+            }
         given(postRepository.findDeletedSnapshotById(25)).willReturn(snapshot)
         given(postRepository.restoreDeletedById(25)).willReturn(true)
         given(postRepository.findById(25)).willReturn(Optional.of(restoredPost))

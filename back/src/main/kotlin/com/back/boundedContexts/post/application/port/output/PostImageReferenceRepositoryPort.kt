@@ -8,6 +8,10 @@ interface PostImageReferenceRepositoryPort {
 
     fun existsByObjectKey(objectKey: String): Boolean
 
+    fun findFirstReferencingPostId(objectKey: String): Long?
+
+    fun existsPublicPostByObjectKey(objectKey: String): Boolean
+
     fun replacePostImageReferences(
         postId: Long,
         objectKeys: Collection<String>,

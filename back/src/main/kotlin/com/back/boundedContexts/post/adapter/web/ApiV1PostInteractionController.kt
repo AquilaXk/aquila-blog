@@ -2,6 +2,8 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import com.back.standard.extensions.getOrThrow
@@ -25,8 +27,8 @@ class ApiV1PostInteractionController(
         @PathVariable @Positive id: Long,
     ): RsData<PostHitResBody> {
         val post = postUseCase.findById(id).getOrThrow()
-        if (!rq.hasRole("ADMIN")) {
-            post.checkActorCanRead(rq.actorOrNull)
+        if (!rq.hasRole("ADMIN") && !post.canRead(rq.actorOrNull)) {
+            throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
         }
         if (postHitDedupUseCase.shouldCountHit(id, resolveHitViewerKey())) {
             postUseCase.incrementHit(post)

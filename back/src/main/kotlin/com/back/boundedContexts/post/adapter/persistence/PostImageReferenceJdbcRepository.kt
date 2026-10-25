@@ -36,8 +36,49 @@ class PostImageReferenceJdbcRepository(
             jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(1)
-                FROM post_image_references
-                WHERE object_key = ?
+                FROM post_image_references pir
+                JOIN post p ON p.id = pir.post_id
+                WHERE pir.object_key = ?
+                  AND p.deleted_at IS NULL
+                """.trimIndent(),
+                Long::class.java,
+                objectKey,
+            ) ?: 0L
+        return count > 0L
+    }
+
+    @Transactional(readOnly = true)
+    override fun findFirstReferencingPostId(objectKey: String): Long? {
+        if (objectKey.isBlank()) return null
+        return jdbcTemplate
+            .queryForList(
+                """
+                SELECT pir.post_id
+                FROM post_image_references pir
+                JOIN post p ON p.id = pir.post_id
+                WHERE pir.object_key = ?
+                  AND p.deleted_at IS NULL
+                ORDER BY pir.post_id ASC
+                LIMIT 1
+                """.trimIndent(),
+                Long::class.java,
+                objectKey,
+            ).firstOrNull()
+    }
+
+    @Transactional(readOnly = true)
+    override fun existsPublicPostByObjectKey(objectKey: String): Boolean {
+        if (objectKey.isBlank()) return false
+        val count =
+            jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(1)
+                FROM post_image_references pir
+                JOIN post p ON p.id = pir.post_id
+                WHERE pir.object_key = ?
+                  AND p.deleted_at IS NULL
+                  AND p.published = TRUE
+                  AND p.is_temp_draft = FALSE
                 """.trimIndent(),
                 Long::class.java,
                 objectKey,

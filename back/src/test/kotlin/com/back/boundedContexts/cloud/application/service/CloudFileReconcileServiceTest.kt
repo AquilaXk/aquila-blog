@@ -254,6 +254,34 @@ class CloudFileReconcileServiceTest {
             .isEqualTo(clock.instant())
     }
 
+    @Test
+    @DisplayName("grace 안의 최근 생성된 DB 메타는 고아 메타 진단과 repair에서 제외한다")
+    fun `grace 안의 최근 생성된 DB 메타는 고아 메타 진단과 repair에서 제외한다`() {
+        properties.cloudReconcileRepairEnabled = true
+        val recentMetaKey = "cloud/7/recent-meta.mp4"
+        val agedMetaKey = "cloud/7/aged-meta.mp4"
+        fileRepository.save(
+            videoFile(recentMetaKey).apply {
+                createdAt = Instant.parse("2026-07-21T12:00:00Z")
+                modifiedAt = Instant.parse("2026-07-21T12:00:00Z")
+            },
+        )
+        fileRepository.save(
+            videoFile(agedMetaKey).apply {
+                createdAt = Instant.parse("2026-07-20T00:00:00Z")
+                modifiedAt = Instant.parse("2026-07-20T00:00:00Z")
+            },
+        )
+
+        val diagnostics = service.reconcile(sampleSize = 5, repair = true)
+
+        assertThat(diagnostics.dbOnlyMissingObjectCount).isEqualTo(1)
+        assertThat(diagnostics.sampleDbOnlyObjectKeys).containsExactly(agedMetaKey)
+        assertThat(diagnostics.repairedDbOnlySoftDeletedCount).isEqualTo(1)
+        assertThat(fileRepository.savedFiles.single { it.objectKey == recentMetaKey }.deletedAt).isNull()
+        assertThat(fileRepository.savedFiles.single { it.objectKey == agedMetaKey }.deletedAt).isEqualTo(clock.instant())
+    }
+
     private fun videoFile(
         objectKey: String,
         byteSize: Long = 10,

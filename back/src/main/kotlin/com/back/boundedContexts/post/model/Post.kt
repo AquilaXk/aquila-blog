@@ -132,6 +132,7 @@ class Post(
     }
 
     @field:OneToOne(fetch = FetchType.LAZY)
+    @org.hibernate.annotations.OptimisticLock(excluded = true)
     var likesCountAttr: PostAttr? = null
         set(value) {
             field = value
@@ -141,6 +142,7 @@ class Post(
         }
 
     @field:OneToOne(fetch = FetchType.LAZY)
+    @org.hibernate.annotations.OptimisticLock(excluded = true)
     var hitCountAttr: PostAttr? = null
         set(value) {
             field = value

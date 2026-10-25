@@ -89,7 +89,10 @@ internal class PostPublicCursorCodec(
                             onCoreMappingFailure(post.id, exception)
                             return null
                         }
-                    createdAt.toEpochMilli()
+                    Math.addExact(
+                        Math.multiplyExact(createdAt.epochSecond, 1_000_000L),
+                        (createdAt.nano / 1_000).toLong(),
+                    )
                 }
             }
         return CursorPostRow(post, sortValue)

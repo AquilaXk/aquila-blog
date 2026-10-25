@@ -46,6 +46,10 @@ class PostKeywordSearchPipelineServiceTest {
 
         assertThat(enabledService.resolveCandidatePoolSize(10)).isEqualTo(220)
         assertThat(enabledService.resolveCandidatePoolSize(80)).isEqualTo(320)
+        assertThat(enabledService.resolveCandidatePoolSize(15) % 15).isEqualTo(0)
+        assertThat(enabledService.shouldApply("kotlin", PostSearchSortType1.CREATED_AT, 5, 20)).isTrue()
+        assertThat(enabledService.shouldApply("kotlin", PostSearchSortType1.CREATED_AT, 11, 20)).isTrue()
+        assertThat(enabledService.shouldApply("kotlin", PostSearchSortType1.CREATED_AT, 12, 20)).isFalse()
     }
 
     @Test

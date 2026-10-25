@@ -87,6 +87,10 @@ class PostRecommendRankingServiceTest {
         assertThat(result.content).hasSize(2)
         assertThat(result.content.map(Post::id)).containsExactly(newerPost.id, olderPost.id)
         assertThat(result.totalElements).isEqualTo(2)
+        assertThat(rankingService.resolveCandidatePoolSize(17) % 17).isEqualTo(0)
+        assertThat(rankingService.isEnabledForPage(5, 10)).isTrue()
+        assertThat(rankingService.isEnabledForPage(6, 10)).isTrue()
+        assertThat(rankingService.isEnabledForPage(7, 10)).isFalse()
     }
 
     private fun testPost(

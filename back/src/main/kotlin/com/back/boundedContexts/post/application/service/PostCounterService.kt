@@ -27,12 +27,15 @@ class PostCounterService(
             it.intValue = updatedHitCount
             post.hitCountAttr = it
         }
+        postRepository.updateHitCount(post, updatedHitCount, refreshedAttr)
     }
 
     fun syncLikesCount(post: Post) {
         val actualLikesCount = postLikeRepository.countByPost(post).toInt()
         post.likesCount = actualLikesCount
+        post.likesCountAttr?.intValue = actualLikesCount
         savePostAttr(post.likesCountAttr)
+        postRepository.updateLikesCount(post, actualLikesCount, post.likesCountAttr)
     }
 
     fun incrementMemberPostsCount(member: Member) {

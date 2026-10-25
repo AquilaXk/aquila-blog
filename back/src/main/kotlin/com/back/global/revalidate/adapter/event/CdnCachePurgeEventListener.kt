@@ -60,7 +60,7 @@ class CdnCachePurgeEventListener(
 
     @TaskHandler
     fun handle(payload: PurgePostReadCachesPayload) {
-        cdnCachePurgeService.purgePostReadCaches(
+        cdnCachePurgeService.purgePostReadCachesOrThrow(
             postId = payload.postId,
             beforeTags = payload.beforeTags,
             afterTags = payload.afterTags,

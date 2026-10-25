@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.persistence
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.model.QPost.post
 import com.back.boundedContexts.post.model.QPostTagIndex.postTagIndex
@@ -15,6 +16,9 @@ import com.querydsl.core.types.dsl.NumberExpression
 import com.querydsl.jpa.JPAExpressions
 import com.querydsl.jpa.impl.JPAQuery
 import com.querydsl.jpa.impl.JPAQueryFactory
+import jakarta.persistence.EntityManager
+import jakarta.persistence.PersistenceContext
+import org.hibernate.engine.spi.SharedSessionContractImplementor
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
@@ -24,6 +28,9 @@ import java.time.Instant
 class PostRepositoryImpl(
     private val queryFactory: JPAQueryFactory,
 ) : PostRepositoryCustom {
+    @field:PersistenceContext
+    private var entityManager: EntityManager? = null
+
     private data class KeywordRelevanceWeights(
         val title: Int,
         val tag: Int,
@@ -238,13 +245,24 @@ class PostRepositoryImpl(
         return buildPGroongaMatchPredicate(token).or(tagPredicate)
     }
 
-    private fun buildPGroongaMatchPredicate(token: String): BooleanExpression =
-        Expressions.booleanTemplate(
+    private fun buildPGroongaMatchPredicate(token: String): BooleanExpression {
+        val sanitizedToken = sanitizePGroongaQueryToken(token) ?: return Expressions.booleanTemplate("1 = 0")
+        return Expressions.booleanTemplate(
             "function('pgroonga_post_match', {0}, {1}, {2}) = true",
             post.title,
             post.content,
-            Expressions.constant(token),
+            Expressions.constant(sanitizedToken),
         )
+    }
+
+    private fun sanitizePGroongaQueryToken(raw: String): String? {
+        val sanitized =
+            raw
+                .replace(PGROONGA_SPECIAL_CHARS_REGEX, " ")
+                .trim()
+                .replace(WHITESPACE_REGEX, " ")
+        return sanitized.takeIf { it.isNotBlank() }
+    }
 
     private fun buildPostTagIndexPredicate(normalizedTag: String): BooleanExpression =
         JPAExpressions
@@ -276,13 +294,13 @@ class PostRepositoryImpl(
                     .or(post.likesCount.eq(cursorCount).and(post.id.lt(cursorId)))
             }
             PostSearchSortType1.CREATED_AT_ASC -> {
-                val cursorCreatedAt = Instant.ofEpochMilli(cursorSortValue)
+                val cursorCreatedAt = resolveCursorInstant(cursorSortValue)
                 post.createdAt
                     .gt(cursorCreatedAt)
                     .or(post.createdAt.eq(cursorCreatedAt).and(post.id.gt(cursorId)))
             }
             else -> {
-                val cursorCreatedAt = Instant.ofEpochMilli(cursorSortValue)
+                val cursorCreatedAt = resolveCursorInstant(cursorSortValue)
                 post.createdAt
                     .lt(cursorCreatedAt)
                     .or(post.createdAt.eq(cursorCreatedAt).and(post.id.lt(cursorId)))
@@ -290,20 +308,23 @@ class PostRepositoryImpl(
         }
     }
 
+    private fun resolveCursorInstant(cursorSortValue: Long): Instant =
+        if (kotlin.math.abs(cursorSortValue) >= 100_000_000_000_000L) {
+            Instant.ofEpochSecond(
+                Math.floorDiv(cursorSortValue, 1_000_000L),
+                Math.floorMod(cursorSortValue, 1_000_000L) * 1_000L,
+            )
+        } else {
+            Instant.ofEpochMilli(cursorSortValue)
+        }
+
     private fun normalizeTagToken(tag: String): String = tag.trim().lowercase()
 
     private fun buildSafeTagToken(tag: String?): String? {
         val raw = tag?.trim().orEmpty()
         if (raw.isBlank()) return null
 
-        val normalizedTag = normalizeTagToken(raw)
-        val safeTagToken =
-            normalizedTag
-                .replace("%", "")
-                .replace("_", "")
-                .replace("\\", "")
-        if (safeTagToken.isBlank()) return null
-        return safeTagToken
+        return normalizeTagToken(raw).takeIf { it.isNotBlank() }
     }
 
     /**
@@ -495,7 +516,86 @@ class PostRepositoryImpl(
         return if (safeFetched < safePageSize) consumed else consumed + 1L
     }
 
+    override fun updateHitCount(
+        targetPost: Post,
+        hitCount: Int,
+        hitCountAttr: PostAttr?,
+    ) {
+        syncLoadedCounterState(targetPost, "hitCount", hitCount, "hitCountAttr", hitCountAttr)
+        if (hitCountAttr != null) {
+            syncLoadedAttrState(hitCountAttr, hitCount)
+        }
+        val updateClause =
+            queryFactory
+                .update(post)
+                .set(post.hitCount, hitCount)
+        if (hitCountAttr != null) {
+            updateClause.set(post.hitCountAttr, hitCountAttr)
+        }
+        updateClause.where(post.id.eq(targetPost.id)).execute()
+    }
+
+    override fun updateLikesCount(
+        targetPost: Post,
+        likesCount: Int,
+        likesCountAttr: PostAttr?,
+    ) {
+        syncLoadedCounterState(targetPost, "likesCount", likesCount, "likesCountAttr", likesCountAttr)
+        if (likesCountAttr != null) {
+            syncLoadedAttrState(likesCountAttr, likesCount)
+        }
+        val updateClause =
+            queryFactory
+                .update(post)
+                .set(post.likesCount, likesCount)
+        if (likesCountAttr != null) {
+            updateClause.set(post.likesCountAttr, likesCountAttr)
+        }
+        updateClause.where(post.id.eq(targetPost.id)).execute()
+    }
+
+    private fun syncLoadedCounterState(
+        targetPost: Post,
+        counterProperty: String,
+        counterValue: Int,
+        attrProperty: String,
+        attrValue: PostAttr?,
+    ) {
+        val em = entityManager ?: return
+        if (!em.contains(targetPost)) return
+        val session = em.unwrap(SharedSessionContractImplementor::class.java)
+        val entry = session.persistenceContextInternal.getEntry(targetPost) ?: return
+        val loadedState = entry.loadedState ?: return
+        val propertyNames = entry.persister.propertyNames
+        val counterIdx = propertyNames.indexOf(counterProperty)
+        if (counterIdx >= 0) {
+            loadedState[counterIdx] = counterValue
+        }
+        if (attrValue != null) {
+            val attrIdx = propertyNames.indexOf(attrProperty)
+            if (attrIdx >= 0) {
+                loadedState[attrIdx] = attrValue
+            }
+        }
+    }
+
+    private fun syncLoadedAttrState(
+        attr: PostAttr,
+        counterValue: Int,
+    ) {
+        val em = entityManager ?: return
+        if (!em.contains(attr)) return
+        val session = em.unwrap(SharedSessionContractImplementor::class.java)
+        val entry = session.persistenceContextInternal.getEntry(attr) ?: return
+        val loadedState = entry.loadedState ?: return
+        val intValueIdx = entry.persister.propertyNames.indexOf("intValue")
+        if (intValueIdx >= 0) {
+            loadedState[intValueIdx] = counterValue
+        }
+    }
+
     companion object {
         private val WHITESPACE_REGEX = Regex("\\s+")
+        private val PGROONGA_SPECIAL_CHARS_REGEX = Regex("""["'()\\+\-*~<>:@^$?\[\]{}|]+""")
     }
 }

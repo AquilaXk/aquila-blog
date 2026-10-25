@@ -840,7 +840,7 @@ test("Caddy request_header hop deletions use single-line syntax", () => {
   assert.match(capture, /^\s*request_header -X-Real-IP\s*$/m)
 })
 
-test("CF-Connecting-IP는 Cloudflare가 쓴 주소에서만 신뢰되고 컨테이너 내부 진입점에서는 버려진다", () => {
+test("CF-Connecting-IP는 전달된 값이 있을 때 보존되고 헤더가 없는 내부 호출에서만 remote_host로 대체된다", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const capture = extractCaddySiteBlock(caddyfile, clientIpCaptureSnippet)
   const apiBlock = extractCaddySiteBlock(caddyfile, backendVhostMarker)
@@ -859,15 +859,20 @@ test("CF-Connecting-IP는 Cloudflare가 쓴 주소에서만 신뢰되고 컨테�
     assert.doesNotMatch(block, /trusted_client_ip \{http\.request\.header/)
   }
 
-  // 내부 site address(`http://caddy`, #1539)는 compose 네트워크의 아무 컨테이너나 도달할 수 있다.
-  // 거기서 CF-Connecting-IP는 호출자가 쓰는 값이라, 그대로 믿으면 audit log와 rate-limit 버킷에
-  // 남는 client IP를 내부 호출자가 위조할 수 있다. 실측: `Host: caddy`로 보낸 위조 헤더는
-  // upstream에 도달하지 않고 peer 주소로 대체된다.
-  assert.match(capture, /@internalEntry host caddy/)
-  assert.match(capture, /@cloudflareEdge not host caddy/)
-  assert.match(capture, /vars @cloudflareEdge trusted_client_ip \{http\.request\.header\.CF-Connecting-IP\}/)
+  assert.match(
+    capture,
+    /@internalEntry\s*\{\s*\n\s*host caddy\s*\n\s*not header_regexp CF-Connecting-IP \\S\s*\n\s*\}/,
+  )
+  assert.match(capture, /vars trusted_client_ip \{http\.request\.header\.CF-Connecting-IP\}/)
   assert.match(capture, /vars @internalEntry trusted_client_ip \{remote_host\}/)
+
+  assert.match(webBlock, /@denyFrontBackendProxy\s+path\s+\/api\/backend\s+\/api\/backend\/\*/)
+  assert.match(
+    webBlock,
+    /handle\s+@denyFrontBackendProxy\s*\{\s*\n\s*respond\s+404\s*\n\s*\}/,
+  )
 })
+
 
 test("backend 전용 vhost의 edge 게이트는 그 vhost의 모든 주소에 적용된다", () => {
   const caddyfile = readFileSync(caddyfilePath, "utf8")
@@ -5436,4 +5441,30 @@ test("homeserver guard rotates logs, Promtail filters ephemeral curl, and MinIO 
   assert.match(promtailConfig, /regex: ignore/)
   assert.match(steadyStateGuard, /--label promtail=ignore/)
 })
+
+test("setup_hardening.sh restricts SSH UFW allowance to tailscale0 interface", () => {
+  const hardeningScript = readFileSync(path.join(repoRoot, "deploy/homeserver/hardening/setup_hardening.sh"), "utf8")
+
+  assert.match(hardeningScript, /SSH_ALLOW_INTERFACE="\$\{SSH_ALLOW_INTERFACE:-tailscale0\}"/)
+  assert.match(
+    hardeningScript,
+    /ufw allow in on "\$\{SSH_ALLOW_INTERFACE\}" to any port "\$\{SSH_PORT\}" proto tcp/,
+  )
+  assert.doesNotMatch(hardeningScript, /^\s*ufw allow "\$\{SSH_PORT\}\/tcp"\s*$/m)
+})
+
+test("release-please workflow pins release-please-action to an immutable commit SHA and automerge-queue requires review on current HEAD", () => {
+  const releasePlease = readFileSync(path.join(repoRoot, ".github/workflows/release-please.yml"), "utf8")
+  const automergeQueue = readFileSync(path.join(repoRoot, ".github/workflows/automerge-queue.yml"), "utf8")
+
+  assert.match(
+    releasePlease,
+    /uses:\s*googleapis\/release-please-action@a02a34c4d625f2be7cb5bc156fb7ac2aaf4fb73c\b/,
+  )
+  assert.doesNotMatch(releasePlease, /uses:\s*googleapis\/release-please-action@v4\b/)
+
+  assert.match(automergeQueue, /\(\.commit_id == \$head\) and/)
+  assert.doesNotMatch(automergeQueue, /\$commit_ids \| index\(\$review_commit\) != null/)
+})
+
 

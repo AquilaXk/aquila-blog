@@ -34,6 +34,28 @@ const diskPaths = optionValue("--disk-paths", "minio=/host-storage/minio")
   .filter(Boolean)
 
 const dockerSocketPath = optionValue("--docker-socket", "/var/run/docker.sock")
+const dockerUrl = optionValue("--docker-url", "")
+
+const resolveDockerEndpointOptions = ({
+  dockerUrl: rawUrl = dockerUrl,
+  dockerSocketPath: rawSocketPath = dockerSocketPath,
+} = {}) => {
+  const candidate = String(rawUrl || "").trim() || ( /^https?:\/\//i.test(String(rawSocketPath || "").trim()) ? String(rawSocketPath).trim() : "" )
+  if (candidate) {
+    const parsed = new URL(candidate)
+    return {
+      protocol: parsed.protocol,
+      hostname: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 2375,
+      basePath: parsed.pathname && parsed.pathname !== "/" ? parsed.pathname.replace(/\/+$/, "") : "",
+    }
+  }
+  return {
+    socketPath: String(rawSocketPath || "/var/run/docker.sock"),
+  }
+}
+
+const dockerEndpoint = resolveDockerEndpointOptions()
 
 // Spring Boot's readiness group. Every backend container answers here, so it stays the default and
 // the pre-#1541 `<component>=<host>:<port>` argument form keeps working unchanged.
@@ -92,8 +114,18 @@ const matchingContainerForService = (containers, service) =>
 const dockerGet = (path) =>
   new Promise((resolve, reject) => {
     const chunks = []
+    const requestOptions = dockerEndpoint.socketPath
+      ? { method: "GET", path, socketPath: dockerEndpoint.socketPath, timeout: 5000 }
+      : {
+          method: "GET",
+          protocol: dockerEndpoint.protocol,
+          hostname: dockerEndpoint.hostname,
+          port: dockerEndpoint.port,
+          path: `${dockerEndpoint.basePath}${path}`,
+          timeout: 5000,
+        }
 
-    const request = http.request({ method: "GET", path, socketPath: dockerSocketPath, timeout: 5000 }, (response) => {
+    const request = http.request(requestOptions, (response) => {
       response.on("data", (chunk) => chunks.push(chunk))
       response.on("end", () => {
         const status = response.statusCode || 0
@@ -276,4 +308,5 @@ if (isCliEntry()) {
   })
 }
 
-export { DEFAULT_READINESS_PATH, parseReadinessTargets }
+export { DEFAULT_READINESS_PATH, parseReadinessTargets, resolveDockerEndpointOptions }
+

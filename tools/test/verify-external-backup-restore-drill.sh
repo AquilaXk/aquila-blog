@@ -297,6 +297,8 @@ CREATE TABLE flyway_schema_history(success boolean);
 CREATE TABLE post(id bigint, listed boolean, created_at timestamptz);
 SQL
 openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${KEY_FILE}" -in "${WORK_DIR}/dump.sql" -out "${POSTGRES_BACKUP_DIR}/dump.sql.enc"
+(cd "${POSTGRES_BACKUP_DIR}" && sha256sum dump.sql.enc > sha256sums.txt)
+printf '%s  dump.sql.enc\n' "$(openssl dgst -sha256 -hmac "$(tr -d '\r\n' < "${KEY_FILE}")" -r "${POSTGRES_BACKUP_DIR}/dump.sql.enc" | awk '{ print $1 }')" > "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt"
 cat > "${POSTGRES_BACKUP_DIR}/metadata.env" <<EOF
 backup_set_id=20260101-010203
 class=daily
@@ -305,6 +307,8 @@ created_at_utc=2026-01-01T01:02:03Z
 encryption=openssl-enc-aes-256-cbc-pbkdf2
 encryption_key_file=${KEY_FILE}
 EOF
+mkdir -p "${BACKUP_ROOT}/postgres/daily/20260109-090909" "${BACKUP_ROOT}/minio/daily/20260109-090909"
+printf 'partial-ciphertext' > "${BACKUP_ROOT}/postgres/daily/20260109-090909/dump.sql.enc"
 "${REAL_DOCKER}" run -d \
   --name "${MINIO_SOURCE_CONTAINER}" \
   --network none \
@@ -326,7 +330,18 @@ printf 'fixture-object\n' | "${REAL_DOCKER}" exec -i "${MINIO_SOURCE_CONTAINER}"
 printf 'fixture-object-2\n' | "${REAL_DOCKER}" exec -i "${MINIO_SOURCE_CONTAINER}" mc pipe 'fixture/post-img/posts/2026/with space/zzz.txt' >/dev/null
 "${REAL_DOCKER}" stop "${MINIO_SOURCE_CONTAINER}" >/dev/null
 tar -C "${MINIO_SOURCE_DIR}" -czf - . | openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:${KEY_FILE}" -out "${MINIO_BACKUP_DIR}/minio-data.tar.gz.enc"
+(cd "${MINIO_BACKUP_DIR}" && sha256sum minio-data.tar.gz.enc > sha256sums.txt)
+printf '%s  minio-data.tar.gz.enc\n' "$(openssl dgst -sha256 -hmac "$(tr -d '\r\n' < "${KEY_FILE}")" -r "${MINIO_BACKUP_DIR}/minio-data.tar.gz.enc" | awk '{ print $1 }')" > "${MINIO_BACKUP_DIR}/hmac-sha256.txt"
+cat > "${MINIO_BACKUP_DIR}/metadata.env" <<EOF
+backup_set_id=20260101-010203
+class=daily
+created_at=20260101-010203
+created_at_utc=2026-01-01T01:02:03Z
+encryption=openssl-enc-aes-256-cbc-pbkdf2
+encryption_key_file=${KEY_FILE}
+EOF
 cp -a "${MINIO_SOURCE_DIR}/." "${WORK_DIR}/storage/minio/"
+
 "${REAL_DOCKER}" rm -f -v "${MINIO_SOURCE_CONTAINER}" >/dev/null
 "${REAL_DOCKER}" run -d \
   --name "${MINIO_LIVE_CONTAINER}" \
@@ -524,7 +539,6 @@ FAKE_MINIO_LARGE_INVENTORY=1 \
 FAKE_MINIO_NO_CURL=1 \
 FAKE_FAST_SLEEP=1 \
 FAKE_EXPECT_CURRENT_DB=custom_restore_prod \
-AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
 AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
 AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${ARTIFACT_DIR}" \
 AQUILA_RESTORE_DRILL_TIMESTAMP="20260102-030405" \
@@ -629,6 +643,60 @@ if PATH="${FAKE_BIN_DIR}:${PATH}" \
   exit 1
 fi
 require_pattern "${WORK_DIR}/unstable-latest-state.txt" 'latest member tombstone evidence changed during privacy gate' "restore drill must fail closed when latest tombstones change"
+
+cp "${POSTGRES_BACKUP_DIR}/sha256sums.txt" "${WORK_DIR}/postgres.sha256sums.orig"
+printf '%064d  dump.sql.enc\n' 0 > "${POSTGRES_BACKUP_DIR}/sha256sums.txt"
+if PATH="${FAKE_BIN_DIR}:${PATH}" \
+  REAL_DOCKER="${REAL_DOCKER}" \
+  REAL_DF="${REAL_DF}" \
+  MINIO_LIVE_CONTAINER="${MINIO_LIVE_CONTAINER}" \
+  AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+  AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
+  AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${WORK_DIR}/corrupted-checksum-artifacts" \
+  AQUILA_RESTORE_DRILL_TIMESTAMP="20260107-030405" \
+  AQUILA_RESTORE_DRILL_NOW_EPOCH="1767755045" \
+    "${DRILL_SCRIPT}" > "${WORK_DIR}/corrupted-checksum.txt" 2>&1; then
+  echo "restore drill unexpectedly passed with corrupted encrypted backup checksum" >&2
+  exit 1
+fi
+cp "${WORK_DIR}/postgres.sha256sums.orig" "${POSTGRES_BACKUP_DIR}/sha256sums.txt"
+require_pattern "${WORK_DIR}/corrupted-checksum.txt" 'backup artifact checksum verification failed' "restore drill must fail closed when encrypted backup artifact SHA-256 mismatches"
+
+cp "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt" "${WORK_DIR}/postgres.hmac.orig"
+printf '%064d  dump.sql.enc\n' 0 > "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt"
+if PATH="${FAKE_BIN_DIR}:${PATH}" \
+  REAL_DOCKER="${REAL_DOCKER}" \
+  REAL_DF="${REAL_DF}" \
+  MINIO_LIVE_CONTAINER="${MINIO_LIVE_CONTAINER}" \
+  AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+  AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
+  AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${WORK_DIR}/corrupted-hmac-artifacts" \
+  AQUILA_RESTORE_DRILL_TIMESTAMP="20260108-030405" \
+  AQUILA_RESTORE_DRILL_NOW_EPOCH="1767841445" \
+    "${DRILL_SCRIPT}" > "${WORK_DIR}/corrupted-hmac.txt" 2>&1; then
+  echo "restore drill unexpectedly passed with forged encrypted backup HMAC" >&2
+  exit 1
+fi
+cp "${WORK_DIR}/postgres.hmac.orig" "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt"
+require_pattern "${WORK_DIR}/corrupted-hmac.txt" 'backup artifact HMAC verification failed' "restore drill must fail closed when encrypted backup artifact HMAC-SHA256 mismatches"
+
+rm -f "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt"
+if PATH="${FAKE_BIN_DIR}:${PATH}" \
+  REAL_DOCKER="${REAL_DOCKER}" \
+  REAL_DF="${REAL_DF}" \
+  MINIO_LIVE_CONTAINER="${MINIO_LIVE_CONTAINER}" \
+  AQUILA_RESTORE_DRILL_BACKUP_SET_ID="${BACKUP_SET_ID}" \
+  AQUILA_RESTORE_DRILL_DEPLOY_DIR="${DEPLOY_DIR}" \
+  AQUILA_RESTORE_DRILL_ARTIFACT_DIR="${WORK_DIR}/missing-hmac-artifacts" \
+  AQUILA_RESTORE_DRILL_TIMESTAMP="20260109-030405" \
+  AQUILA_RESTORE_DRILL_NOW_EPOCH="1767927845" \
+    "${DRILL_SCRIPT}" > "${WORK_DIR}/missing-hmac.txt" 2>&1; then
+  echo "restore drill unexpectedly passed with missing encrypted backup HMAC file" >&2
+  exit 1
+fi
+cp "${WORK_DIR}/postgres.hmac.orig" "${POSTGRES_BACKUP_DIR}/hmac-sha256.txt"
+require_pattern "${WORK_DIR}/missing-hmac.txt" 'missing backup artifact HMAC file' "restore drill must fail closed when hmac-sha256.txt is deleted"
+
 
 docker run --detach \
   --name "${PRIVACY_DB_CONTAINER}" \

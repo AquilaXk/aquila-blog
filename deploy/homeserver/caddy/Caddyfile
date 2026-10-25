@@ -16,20 +16,21 @@
 # header. `vars` is ordered before `request_header` in Caddy's directive order, which is why the
 # capture can read a header the next lines delete.
 #
-# CF-Connecting-IP is only trustworthy where Cloudflare Tunnel is the one writing it. The API vhost
-# also carries the container-internal site address `http://caddy` (#1539), which any container on
-# the compose networks can reach directly; there the header is caller-controlled, so believing it
-# would let an internal caller forge the client IP that lands in audit logs and rate-limit buckets.
-# On that address the peer address is the only honest answer.
+# CF-Connecting-IP is set by Cloudflare Tunnel on public edge requests and forwarded by front SSR
+# (`http://caddy`, #1539) when making server-side backend calls on behalf of a visitor. When an
+# internal caller reaches `http://caddy` without a forwarded `CF-Connecting-IP` header (for example
+# container health/readiness probes), fall back to the direct peer address (`{remote_host}`).
 #
 # The split lives here rather than in the API vhost so a future internal address on any other vhost
-# inherits the same boundary instead of silently trusting the header.
+# inherits the same boundary.
 #
 # request_header supports single-line ops only (no block form; unlike `header`).
 (edge_client_ip_capture) {
-	@internalEntry host caddy
-	@cloudflareEdge not host caddy
-	vars @cloudflareEdge trusted_client_ip {http.request.header.CF-Connecting-IP}
+	@internalEntry {
+		host caddy
+		not header_regexp CF-Connecting-IP \S
+	}
+	vars trusted_client_ip {http.request.header.CF-Connecting-IP}
 	vars @internalEntry trusted_client_ip {remote_host}
 
 	request_header -X-Forwarded-For
@@ -220,7 +221,14 @@ http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
     {$PROMETHEUS_BASIC_AUTH_USER} {$PROMETHEUS_BASIC_AUTH_HASH}
   }
 
-  reverse_proxy prometheus:9090
+  @denyPromManagement path /-/*
+  handle @denyPromManagement {
+    respond 403
+  }
+
+  handle {
+    reverse_proxy prometheus:9090
+  }
 
   header {
     X-Content-Type-Options "nosniff"
@@ -312,6 +320,13 @@ http://{$WEB_DOMAIN:web.localhost} {
   @denyFrontRuntimeMetrics path /api/internal/metrics
   handle @denyFrontRuntimeMetrics {
     respond 403
+  }
+
+  # Internal front-to-backend proxy route is used by container-level probes only; browser traffic
+  # on the public web host uses the same-origin /member/*, /post/*, /system/* routes below.
+  @denyFrontBackendProxy path /api/backend /api/backend/*
+  handle @denyFrontBackendProxy {
+    respond 404
   }
 
   # Same-origin public API (#1575). The public API host was going to be api.blog.aquilaxk.site,

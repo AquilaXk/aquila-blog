@@ -559,7 +559,7 @@ jobs:
                   any($trusted[];
                     .state == "COMMENTED" and
                     (.commit_id | type == "string") and
-                    (.commit_id as $review_commit | $commit_ids | index($review_commit) != null) and
+                    (.commit_id == $head) and
                     (is_coderabbit or is_canonical_codex)
                   )
                 )

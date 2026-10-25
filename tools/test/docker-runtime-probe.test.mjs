@@ -114,3 +114,45 @@ test("front containers are covered by restart, OOM and readiness alerts", () => 
     /docker_container_oom_killed\{job="docker_runtime_probe",service=~"back_\.\+\|front_\.\+/,
   )
 })
+
+test("compose routes docker_runtime_probe through docker_socket_read_proxy without mounting raw docker.sock", () => {
+  const compose = read(composePath)
+  const dockerUrl = composeArgumentValue(compose, "--docker-url")
+
+  assert.equal(dockerUrl, "http://docker_socket_read_proxy:2375")
+
+  const probeSectionStart = compose.indexOf("  docker_runtime_probe:")
+  const nextSectionStart = compose.indexOf("  back_blue:", probeSectionStart)
+  const probeBlock = compose.slice(probeSectionStart, nextSectionStart)
+
+  assert.doesNotMatch(probeBlock, /\/var\/run\/docker\.sock/)
+  assert.match(probeBlock, /depends_on:\s*\n\s*-\s*docker_socket_read_proxy/)
+})
+
+test("resolveDockerEndpointOptions supports both unix socket paths and HTTP docker proxy URLs", async () => {
+  const probeModule = await import("../../deploy/homeserver/monitoring/docker-runtime-probe.mjs")
+
+  assert.equal(typeof probeModule.resolveDockerEndpointOptions, "function")
+  assert.deepEqual(
+    probeModule.resolveDockerEndpointOptions({
+      dockerUrl: "http://docker_socket_read_proxy:2375",
+      dockerSocketPath: "/var/run/docker.sock",
+    }),
+    {
+      protocol: "http:",
+      hostname: "docker_socket_read_proxy",
+      port: 2375,
+      basePath: "",
+    },
+  )
+  assert.deepEqual(
+    probeModule.resolveDockerEndpointOptions({
+      dockerUrl: "",
+      dockerSocketPath: "/var/run/docker.sock",
+    }),
+    {
+      socketPath: "/var/run/docker.sock",
+    },
+  )
+})
+

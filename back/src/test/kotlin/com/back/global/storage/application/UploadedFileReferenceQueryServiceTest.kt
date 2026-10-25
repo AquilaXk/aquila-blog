@@ -92,6 +92,40 @@ class UploadedFileReferenceQueryServiceTest {
     }
 
     @Test
+    fun `POST 소유자가 다른 게시글이거나 ownerId가 비어 있어도 활성 게시글 참조가 있으면 fallback 미활성 시 식별된다`() {
+        val service =
+            UploadedFileReferenceQueryService(
+                postRepository,
+                memberAttrRepository,
+                UploadedFileRetentionProperties(fallbackLookupEnabled = false),
+            )
+        val crossReferencedPostFile =
+            UploadedFile(
+                objectKey = "posts/2026/03/shared.png",
+                bucket = "post-img",
+                contentType = "image/png",
+                fileSize = 100,
+                ownerId = 10L,
+                ownerType = UploadedFileOwnerType.POST,
+            )
+        val nullOwnerPostFile =
+            UploadedFile(
+                objectKey = "posts/2026/03/null-owner-shared.png",
+                bucket = "post-img",
+                contentType = "image/png",
+                fileSize = 100,
+                ownerId = null,
+                ownerType = UploadedFileOwnerType.POST,
+            )
+        given(postRepository.existsImageReference(10L, "posts/2026/03/shared.png")).willReturn(false)
+        given(postRepository.existsImageReferenceByObjectKey("posts/2026/03/shared.png")).willReturn(true)
+        given(postRepository.existsImageReferenceByObjectKey("posts/2026/03/null-owner-shared.png")).willReturn(true)
+
+        val result = service.findReferencedObjectKeys(listOf(crossReferencedPostFile, nullOwnerPostFile))
+        assertThat(result).containsExactly("posts/2026/03/shared.png", "posts/2026/03/null-owner-shared.png")
+    }
+
+    @Test
     fun `MEMBER_PROFILE 소유자가 draft 또는 published에서 참조 중이면 식별된다`() {
         val service =
             UploadedFileReferenceQueryService(

@@ -584,6 +584,164 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         assertThat(restoredFile.purgeAfter).isNull()
     }
 
+    @Test
+    fun `기존 활성 게시글이 참조 중인 첨부파일은 다른 게시글이 참조 후 제거해도 소유권과 ACTIVE 상태를 유지한다`() {
+        val sharedKey = "posts/2026/03/shared-across-posts.png"
+        uploadedFileRetentionService.registerTempUpload(sharedKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 10,
+            currentImageObjectKeys = listOf(sharedKey),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
+        )
+        given(postRepository.existsImageReference(10, sharedKey)).willReturn(true)
+        given(postRepository.findFirstReferencingPostId(sharedKey)).willReturn(10L)
+
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 20,
+            currentImageObjectKeys = listOf(sharedKey),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
+        )
+
+        val afterSecondPostAttach = uploadedFileRepository.findByObjectKey(sharedKey)!!
+        assertThat(afterSecondPostAttach.ownerId).isEqualTo(10L)
+        assertThat(afterSecondPostAttach.status).isEqualTo(UploadedFileStatus.ACTIVE)
+
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 20,
+            currentImageObjectKeys = emptyList(),
+            previousImageObjectKeys = listOf(sharedKey),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
+        )
+
+        val afterSecondPostDetach = uploadedFileRepository.findByObjectKey(sharedKey)!!
+        assertThat(afterSecondPostDetach.ownerId).isEqualTo(10L)
+        assertThat(afterSecondPostDetach.status).isEqualTo(UploadedFileStatus.ACTIVE)
+        assertThat(afterSecondPostDetach.purgeAfter).isNull()
+    }
+
+    @Test
+    fun `원래 소유 게시글에서 제거되어도 다른 활성 게시글이 참조 중이면 해당 게시글로 소유권을 이전하고 ACTIVE를 유지한다`() {
+        val sharedKey = "posts/2026/03/rebind-to-other-post.png"
+        uploadedFileRetentionService.registerTempUpload(sharedKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 10,
+            currentImageObjectKeys = listOf(sharedKey),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
+        )
+        given(postRepository.existsImageReference(10, sharedKey)).willReturn(false)
+        given(postRepository.findFirstReferencingPostId(sharedKey)).willReturn(20L)
+
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 10,
+            currentImageObjectKeys = emptyList(),
+            previousImageObjectKeys = listOf(sharedKey),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
+        )
+
+        val reboundFile = uploadedFileRepository.findByObjectKey(sharedKey)!!
+        assertThat(reboundFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
+        assertThat(reboundFile.ownerType).isEqualTo(UploadedFileOwnerType.POST)
+        assertThat(reboundFile.ownerId).isEqualTo(20L)
+        assertThat(reboundFile.purgeAfter).isNull()
+    }
+
+    @Test
+    fun `프로필 이미지와 게시글 첨부파일은 서로의 동기화 경로로 소유권이나 목적이 침범되지 않는다`() {
+        val profileKey = "posts/2026/03/member-profile-only.png"
+        uploadedFileRetentionService.registerTempUpload(profileKey, "image/png", 100, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.syncProfileImage(
+            memberId = 7,
+            previousProfileImgUrl = null,
+            currentProfileImgUrl = UploadedFileUrlCodec.buildImageUrl(profileKey),
+        )
+
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 99,
+            currentImageObjectKeys = listOf(profileKey),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
+        )
+        uploadedFileRetentionService.scheduleDeletedPostAttachmentKeys(listOf(profileKey), emptyList())
+
+        val profileFile = uploadedFileRepository.findByObjectKey(profileKey)!!
+        assertThat(profileFile.purpose).isEqualTo(UploadedFilePurpose.PROFILE_IMAGE)
+        assertThat(profileFile.ownerType).isEqualTo(UploadedFileOwnerType.MEMBER_PROFILE)
+        assertThat(profileFile.ownerId).isEqualTo(7L)
+        assertThat(profileFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
+
+        val postKey = "posts/2026/03/post-attachment-only.png"
+        uploadedFileRetentionService.registerTempUpload(postKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 55,
+            currentImageObjectKeys = listOf(postKey),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = emptyList(),
+        )
+
+        uploadedFileRetentionService.syncProfileImage(
+            memberId = 8,
+            previousProfileImgUrl = null,
+            currentProfileImgUrl = UploadedFileUrlCodec.buildImageUrl(postKey),
+        )
+        uploadedFileRetentionService.syncProfileImage(
+            memberId = 8,
+            previousProfileImgUrl = UploadedFileUrlCodec.buildImageUrl(postKey),
+            currentProfileImgUrl = null,
+        )
+
+        val postFile = uploadedFileRepository.findByObjectKey(postKey)!!
+        assertThat(postFile.purpose).isEqualTo(UploadedFilePurpose.POST_IMAGE)
+        assertThat(postFile.ownerType).isEqualTo(UploadedFileOwnerType.POST)
+        assertThat(postFile.ownerId).isEqualTo(55L)
+        assertThat(postFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
+    }
+
+    @Test
+    fun `purge 도중 ACTIVE로 전환된 파일은 스토리지에서 삭제하거나 DELETED로 덮어쓰지 않는다`() {
+        val firstKey = "posts/2026/03/purge-toctou-first.png"
+        val secondKey = "posts/2026/03/purge-toctou-second.png"
+        uploadedFileRetentionService.registerTempUpload(firstKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+        uploadedFileRetentionService.registerTempUpload(secondKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+
+        val firstFile = uploadedFileRepository.findByObjectKey(firstKey)!!
+        firstFile.purgeAfter = Instant.now(clock).minusSeconds(120)
+        uploadedFileRepository.save(firstFile)
+
+        val secondFile = uploadedFileRepository.findByObjectKey(secondKey)!!
+        secondFile.purgeAfter = Instant.now(clock).minusSeconds(60)
+        uploadedFileRepository.save(secondFile)
+
+        given(postImageStoragePort.deletePostImage(firstKey)).willAnswer {
+            uploadedFileRetentionService.syncPostAttachmentKeys(
+                postId = 88L,
+                currentImageObjectKeys = listOf(secondKey),
+                previousImageObjectKeys = emptyList(),
+                currentFileObjectKeys = emptyList(),
+                previousFileObjectKeys = emptyList(),
+            )
+            Unit
+        }
+
+        uploadedFileRetentionService.purgeExpiredFiles(limit = 10)
+
+        assertThat(uploadedFileRepository.findByObjectKey(firstKey)!!.status).isEqualTo(UploadedFileStatus.DELETED)
+        val reloadedSecond = uploadedFileRepository.findByObjectKey(secondKey)!!
+        assertThat(reloadedSecond.status).isEqualTo(UploadedFileStatus.ACTIVE)
+        assertThat(reloadedSecond.ownerId).isEqualTo(88L)
+        then(postImageStoragePort).should().deletePostImage(firstKey)
+        then(postImageStoragePort).should(never()).deletePostImage(secondKey)
+    }
+
     private fun expireUpload(objectKey: String) {
         val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey)!!
         uploadedFile.purgeAfter = Instant.now(clock).minusSeconds(60)

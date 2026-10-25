@@ -377,6 +377,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
             postAttachmentRetentionService =
                 PostAttachmentRetentionService(
                     uploadedFileRepository = repository,
+                    postRepository = postRepository,
                     storageProperties = storageProperties,
                     retentionProperties = retentionProperties,
                     clock = clock,

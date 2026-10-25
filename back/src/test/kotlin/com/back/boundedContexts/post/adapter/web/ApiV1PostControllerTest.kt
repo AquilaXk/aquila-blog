@@ -632,6 +632,71 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
+        fun `CREATED_AT 커서 조회는 동일 밀리초 내 다른 마이크로초 시각의 글을 누락하지 않는다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val uniqueTag = "micros_cursor_${System.currentTimeMillis()}"
+            val newerMicrosSmallerId =
+                writePost(
+                    actor,
+                    "micros-newer-${System.currentTimeMillis()}",
+                    "tags: [$uniqueTag]\n\nnewer micros post",
+                    true,
+                    true,
+                )
+            val olderMicrosLargerId =
+                writePost(
+                    actor,
+                    "micros-older-${System.currentTimeMillis()}",
+                    "tags: [$uniqueTag]\n\nolder micros post",
+                    true,
+                    true,
+                )
+            jdbcTemplate.update(
+                "update post set created_at = ? where id = ?",
+                java.sql.Timestamp.from(java.time.Instant.parse("2030-01-02T00:00:00.123900Z")),
+                newerMicrosSmallerId.id,
+            )
+            jdbcTemplate.update(
+                "update post set created_at = ? where id = ?",
+                java.sql.Timestamp.from(java.time.Instant.parse("2030-01-02T00:00:00.123100Z")),
+                olderMicrosLargerId.id,
+            )
+            entityManager.clear()
+
+            val firstResponse =
+                mvc
+                    .get("/post/api/v1/posts/explore/cursor") {
+                        param("sort", "CREATED_AT")
+                        param("tag", uniqueTag)
+                        param("pageSize", "1")
+                    }.andExpect {
+                        status { isOk() }
+                        jsonPath("$.content[0].id") { value(newerMicrosSmallerId.id) }
+                        jsonPath("$.hasNext") { value(true) }
+                    }.andReturn()
+                    .response
+                    .contentAsString
+
+            val nextCursor =
+                tools.jackson.module.kotlin
+                    .jacksonObjectMapper()
+                    .readTree(firstResponse)
+                    .get("nextCursor")
+                    .asString()
+
+            mvc
+                .get("/post/api/v1/posts/explore/cursor") {
+                    param("sort", "CREATED_AT")
+                    param("tag", uniqueTag)
+                    param("pageSize", "1")
+                    param("cursor", nextCursor)
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content[0].id") { value(olderMicrosLargerId.id) }
+                }
+        }
+
+        @Test
         fun `explore 커서 cache tag는 빈 tag를 tag-specific key로 추가하지 않는다`() {
             val surrogateKeys = postExploreCursorSurrogateKeys("")
 
@@ -927,6 +992,56 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostPublicReadController::class.java))
                     match(handler().methodName("search"))
+                }
+        }
+
+        @Test
+        fun `검색과 태그 필터는 언더스코어 태그와 PGroonga 특수문자가 포함된 검색어를 정상 처리한다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val suffix = System.currentTimeMillis()
+            val underscoreTag = "spring_boot_$suffix"
+            val keywordToken = "pgroongasafe$suffix"
+            val taggedPost =
+                writePost(
+                    actor,
+                    "언더스코어 태그 검증 글 $keywordToken",
+                    """
+                    tags: [$underscoreTag]
+
+                    특수문자 검색 검증 본문입니다.
+                    """.trimIndent(),
+                    true,
+                    true,
+                )
+
+            mvc
+                .get("/post/api/v1/posts") {
+                    param("tag", underscoreTag)
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content[?(@.id == ${taggedPost.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
+                }
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", "\"($keywordToken)\\")
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content[?(@.id == ${taggedPost.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
+                }
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", "\"((\\")
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content") { isEmpty() }
                 }
         }
 
@@ -1571,6 +1686,58 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     status { isOk() }
                     jsonPath("$.resultCode") { value("200-1") }
                     jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
+                }
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `조회수 증가는 게시글의 version과 modifiedAt을 변경하지 않아 이후 편집이 충돌하지 않는다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = writePost(actor, "조회수 버전 보존 글", "원래 내용", true, true)
+            entityManager.flush()
+            entityManager.clear()
+            val persistedBeforeHit = postFacade.findById(post.id).getOrThrow()
+            val initialVersion = persistedBeforeHit.version ?: 0L
+            val initialModifiedAt = persistedBeforeHit.modifiedAt
+
+            mvc
+                .post("/post/api/v1/posts/${post.id}/hit") {
+                    header("X-Forwarded-For", "203.0.113.99")
+                    header(HttpHeaders.USER_AGENT, "JUnit-hit-version-check")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.hitCount") { value(1) }
+                }
+
+            entityManager.flush()
+            entityManager.clear()
+            val persistedAfterHit = postFacade.findById(post.id).getOrThrow()
+            assertThat(persistedAfterHit.hitCount).isEqualTo(1)
+            assertThat(persistedAfterHit.version).isEqualTo(initialVersion)
+            assertThat(persistedAfterHit.modifiedAt).isEqualTo(initialModifiedAt)
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"title": "조회수 이후 수정 제목", "content": "조회수 이후 수정 내용", "version": $initialVersion}"""
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                }
+        }
+
+        @Test
+        fun `실패 - 비공개 글에 대한 비소유자 조회수 반영 요청은 404를 반환한다`() {
+            val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val privatePost = writePost(writer, "비공개 글 존재 은닉", "내용", false, false)
+
+            mvc
+                .post("/post/api/v1/posts/${privatePost.id}/hit") {
+                    header("X-Forwarded-For", "203.0.113.100")
+                    header(HttpHeaders.USER_AGENT, "JUnit-hit-private-404")
+                }.andExpect {
+                    status { isNotFound() }
+                    jsonPath("$.resultCode") { value("404-1") }
                 }
         }
     }

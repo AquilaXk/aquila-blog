@@ -5459,7 +5459,7 @@ test("release-please workflow pins release-please-action to an immutable commit 
 
   assert.match(
     releasePlease,
-    /uses:\s*googleapis\/release-please-action@a02a34c4d625f2be7cb5bc156fb7ac2aaf4fb73c\b/,
+    /uses:\s*googleapis\/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071\b/,
   )
   assert.doesNotMatch(releasePlease, /uses:\s*googleapis\/release-please-action@v4\b/)
 

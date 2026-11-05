@@ -1875,14 +1875,18 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         }
 
         @Test
-        fun `좋아요 정합성 보정 서비스는 flush 및 clear 이후에도 post_attr와 post의 likes_count를 영속화하고 version과 modifiedAt을 보존한다`() {
+        fun `좋아요 정합성 보정 서비스는 flush 및 clear 이후에도 삭제된 글을 건너뛰고 post_attr와 post의 likes_count를 영속화하며 version과 modifiedAt을 보존한다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = writePost(actor, "좋아요 정합성 보정 영속화 검증 글", "내용", true, true)
+            val deletedPost = writePost(actor, "삭제된 좋아요 정합성 보정 제외 글", "내용", true, true)
             setPostCounterAttr(post.id, "likesCount", "likes_count_attr_id", 0)
+            setPostCounterAttr(deletedPost.id, "likesCount", "likes_count_attr_id", 2)
             jdbcTemplate.update(
-                "update post_attr set modified_at = now() where subject_id = ? and name = 'likesCount'",
+                "update post_attr set modified_at = now() where subject_id in (?, ?) and name = 'likesCount'",
                 post.id,
+                deletedPost.id,
             )
+            postFacade.delete(deletedPost, actor)
             jdbcTemplate.update(
                 "insert into post_like (id, liker_id, post_id) values (nextval('post_like_seq'), ?, ?)",
                 actor.id,

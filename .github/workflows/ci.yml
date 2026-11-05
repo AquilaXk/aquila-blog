@@ -45,6 +45,8 @@ on:
       - ".release-please-manifest.json"
       - "release-please-config.json"
       - "CHANGELOG.md"
+      - "README.md"
+      - "LICENSE"
   push:
     branches:
       - main

@@ -159,6 +159,8 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     ".release-please-manifest.json",
     "release-please-config.json",
     "CHANGELOG.md",
+    "README.md",
+    "LICENSE",
   ])
 })
 

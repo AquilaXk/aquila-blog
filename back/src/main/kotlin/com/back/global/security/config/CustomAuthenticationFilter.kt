@@ -60,7 +60,7 @@ class CustomAuthenticationFilter(
         val isPublicReadSafe = isPublicApi && isReadSafeMethod(request.method)
 
         try {
-            rejectForbiddenQueryCredentials(request)
+            rejectForbiddenQueryParams(request)
             try {
                 authenticateIfPossible(request, allowRefreshRotation = !isPublicReadSafe)
             } catch (e: AppException) {
@@ -95,28 +95,21 @@ class CustomAuthenticationFilter(
         }
     }
 
-    private fun rejectForbiddenQueryCredentials(request: HttpServletRequest) {
+    private fun rejectForbiddenQueryParams(request: HttpServletRequest) {
         val rawQuery = request.queryString
         if (!rawQuery.isNullOrBlank()) {
-            if (containsForbiddenQueryCredential(rawQuery)) {
-                throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_CREDENTIAL_MESSAGE)
+            if (containsForbiddenQueryParam(rawQuery)) {
+                throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_PARAM_MESSAGE)
             }
             return
         }
         if (
             canInspectParameterMapWithoutBodyParsing(request) &&
-            request.parameterMap.keys.any { isForbiddenQueryCredentialKey(it) }
+            request.parameterMap.keys.any { containsForbiddenQueryParam(it) }
         ) {
-            throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_CREDENTIAL_MESSAGE)
+            throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_PARAM_MESSAGE)
         }
     }
-
-    private fun containsForbiddenQueryCredential(rawQuery: String): Boolean =
-        SensitiveQueryRedactor.decodePercentPasses(rawQuery).any { queryPass ->
-            queryPass.split('&', ';').any { segment ->
-                isForbiddenQueryCredentialKey(segment.substringBefore('='))
-            }
-        }
 
     private fun canInspectParameterMapWithoutBodyParsing(request: HttpServletRequest): Boolean {
         if (request.contentLengthLong > 0L) return false
@@ -125,14 +118,14 @@ class CustomAuthenticationFilter(
             !contentType.startsWith("multipart/")
     }
 
-    private fun isForbiddenQueryCredentialKey(rawKey: String): Boolean =
-        SensitiveQueryRedactor.decodePercentPasses(rawKey).any { decodedKey ->
-            decodedKey.split('&', ';').any { part ->
-                normalizeQueryCredentialKey(part.substringBefore('=')) in FORBIDDEN_QUERY_CREDENTIAL_KEYS
+    private fun containsForbiddenQueryParam(raw: String): Boolean =
+        SensitiveQueryRedactor.decodePercentPasses(raw).any { decoded ->
+            decoded.split('&', ';').any { part ->
+                normalizeQueryParamName(part.substringBefore('=')) in FORBIDDEN_QUERY_PARAM_NAMES
             }
         }
 
-    private fun normalizeQueryCredentialKey(rawKey: String): String =
+    private fun normalizeQueryParamName(rawKey: String): String =
         rawKey
             .trim()
             .replace("_", "")
@@ -185,9 +178,9 @@ class CustomAuthenticationFilter(
 
     companion object {
         private const val MAX_PATH_LENGTH = 512
-        private const val FORBIDDEN_QUERY_CREDENTIAL_MESSAGE = "쿼리 파라미터로 인증 토큰을 전달할 수 없습니다."
+        private const val FORBIDDEN_QUERY_PARAM_MESSAGE = "쿼리 파라미터로 인증 토큰을 전달할 수 없습니다."
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
-        private val FORBIDDEN_QUERY_CREDENTIAL_KEYS =
+        private val FORBIDDEN_QUERY_PARAM_NAMES =
             setOf(
                 "accesstoken",
                 "refreshtoken",

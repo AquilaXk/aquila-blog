@@ -5,6 +5,7 @@ import com.back.global.exception.application.ErrorCode
 import com.back.global.web.ErrorResponseSource
 import com.back.global.web.ErrorResponseWriter
 import com.back.global.web.application.ClientIpResolver
+import com.back.global.web.logging.SensitiveQueryRedactor
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -59,6 +60,7 @@ class CustomAuthenticationFilter(
         val isPublicReadSafe = isPublicApi && isReadSafeMethod(request.method)
 
         try {
+            rejectForbiddenQueryParams(request)
             try {
                 authenticateIfPossible(request, allowRefreshRotation = !isPublicReadSafe)
             } catch (e: AppException) {
@@ -92,6 +94,43 @@ class CustomAuthenticationFilter(
             )
         }
     }
+
+    private fun rejectForbiddenQueryParams(request: HttpServletRequest) {
+        val rawQuery = request.queryString
+        if (!rawQuery.isNullOrBlank()) {
+            if (containsForbiddenQueryParam(rawQuery)) {
+                throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_PARAM_MESSAGE)
+            }
+            return
+        }
+        if (
+            canInspectParameterMapWithoutBodyParsing(request) &&
+            request.parameterMap.keys.any { containsForbiddenQueryParam(it) }
+        ) {
+            throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_PARAM_MESSAGE)
+        }
+    }
+
+    private fun canInspectParameterMapWithoutBodyParsing(request: HttpServletRequest): Boolean {
+        if (request.contentLengthLong > 0L) return false
+        val contentType = request.contentType?.lowercase().orEmpty()
+        return !contentType.startsWith("application/x-www-form-urlencoded") &&
+            !contentType.startsWith("multipart/")
+    }
+
+    private fun containsForbiddenQueryParam(raw: String): Boolean =
+        SensitiveQueryRedactor.decodePercentPasses(raw).any { decoded ->
+            decoded.split('&', ';').any { part ->
+                normalizeQueryParamName(part.substringBefore('=')) in FORBIDDEN_QUERY_PARAM_NAMES
+            }
+        }
+
+    private fun normalizeQueryParamName(rawKey: String): String =
+        rawKey
+            .trim()
+            .replace("_", "")
+            .replace("-", "")
+            .lowercase()
 
     /**
      * 기존 accessToken을 먼저 검증하고, 실패하면 보호 경로에 한해 refreshToken 회전 경로로 이동합니다.
@@ -139,6 +178,14 @@ class CustomAuthenticationFilter(
 
     companion object {
         private const val MAX_PATH_LENGTH = 512
+        private const val FORBIDDEN_QUERY_PARAM_MESSAGE = "쿼리 파라미터로 인증 토큰을 전달할 수 없습니다."
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
+        private val FORBIDDEN_QUERY_PARAM_NAMES =
+            setOf(
+                "accesstoken",
+                "refreshtoken",
+                "sessionkey",
+                "apikey",
+            )
     }
 }

@@ -224,10 +224,13 @@ class StorageDependencyHealthIndicatorTest {
     }
 
     @Test
-    fun `invalid endpoint and blank bucket fail closed with bounded reason`() {
+    fun `invalid endpoint and blank or untrimmed buckets fail closed with bounded reason`() {
         listOf(
             configuredProperties().apply { endpoint = "ftp://minio:9000" },
             configuredProperties().apply { bucket = " " },
+            configuredProperties().apply { bucket = " blog-images " },
+            configuredProperties().apply { cloudBucket = " " },
+            configuredProperties().apply { cloudBucket = " blog-cloud-private " },
         ).forEach { properties ->
             val registry = SimpleMeterRegistry()
             val health = StorageDependencyHealthIndicator(CloudStorageAdapter(properties, registry), registry).health()
@@ -238,9 +241,63 @@ class StorageDependencyHealthIndicatorTest {
         }
     }
 
+    @Test
+    fun `separated cloudBucket and post bucket probes both buckets and fails when secondary bucket is missing`() {
+        val registry = SimpleMeterRegistry()
+        val properties =
+            configuredProperties().apply {
+                bucket = "blog-images"
+                cloudBucket = "blog-cloud-private"
+            }
+        val probedBuckets = mutableListOf<String>()
+        val healthyClient =
+            HeadBucketS3Client { request ->
+                probedBuckets += request.bucket()
+                HeadBucketResponse.builder().build()
+            }
+        val healthyAdapter = CloudStorageAdapter(properties, registry)
+        ReflectionTestUtils.setField(healthyAdapter, "s3Client", healthyClient)
+        val healthyIndicator = StorageDependencyHealthIndicator(healthyAdapter, registry)
+
+        assertThat(healthyIndicator.health().status).isEqualTo(Status.UP)
+        assertThat(healthyClient.headBucketCalls).isEqualTo(2)
+        assertThat(probedBuckets).containsExactly("blog-cloud-private", "blog-images")
+
+        val failingClient =
+            HeadBucketS3Client { request ->
+                if (request.bucket() == "blog-images") {
+                    throw NoSuchBucketException
+                        .builder()
+                        .statusCode(404)
+                        .message("missing post bucket")
+                        .build()
+                }
+                HeadBucketResponse.builder().build()
+            }
+        val failingAdapter = CloudStorageAdapter(properties, registry)
+        ReflectionTestUtils.setField(failingAdapter, "s3Client", failingClient)
+        val failingIndicator = StorageDependencyHealthIndicator(failingAdapter, registry)
+
+        val downHealth = failingIndicator.health()
+        assertThat(downHealth.status).isEqualTo(Status.DOWN)
+        assertThat(downHealth.details["reason"]).isEqualTo(StorageDependencyFailureReason.MISSING_BUCKET.wireValue)
+        assertThat(failingClient.headBucketCalls).isEqualTo(2)
+
+        val singleBucketValidated =
+            StorageRuntimeConfigurationValidator.validate(
+                endpoint = properties.endpoint,
+                region = properties.region,
+                bucket = properties.bucket,
+                accessKey = properties.accessKey,
+                secretKey = properties.secretKey,
+                credentialVersion = properties.credentialVersion,
+            )
+        assertThat(singleBucketValidated.secondaryBucket).isNull()
+    }
+
     private fun indicator(
         registry: SimpleMeterRegistry,
-        onHeadBucket: () -> HeadBucketResponse,
+        onHeadBucket: (HeadBucketRequest) -> HeadBucketResponse,
     ): StorageDependencyHealthIndicator {
         val properties = configuredProperties()
         val adapter = CloudStorageAdapter(properties, registry)
@@ -280,14 +337,14 @@ class StorageDependencyHealthIndicatorTest {
             .build() as S3Exception
 
     private class HeadBucketS3Client(
-        private val onHeadBucket: () -> HeadBucketResponse,
+        private val onHeadBucket: (HeadBucketRequest) -> HeadBucketResponse,
     ) : S3Client {
         var headBucketCalls: Int = 0
             private set
 
         override fun headBucket(headBucketRequest: HeadBucketRequest): HeadBucketResponse {
             headBucketCalls++
-            return onHeadBucket()
+            return onHeadBucket(headBucketRequest)
         }
 
         override fun serviceName(): String = "s3"

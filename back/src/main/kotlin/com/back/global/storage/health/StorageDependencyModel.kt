@@ -100,6 +100,7 @@ class ValidatedStorageConfiguration internal constructor(
     val accessKey: String,
     val secretKey: String,
     val credentialVersion: String,
+    val secondaryBucket: String? = null,
 )
 
 enum class StorageDependencyProbeStage(
@@ -156,6 +157,9 @@ object StorageDependencyProber {
 
         return try {
             client.headBucket(HeadBucketRequest.builder().bucket(configuration.bucket).build())
+            configuration.secondaryBucket?.let { secondaryBucket ->
+                client.headBucket(HeadBucketRequest.builder().bucket(secondaryBucket).build())
+            }
             StorageDependencyProbeOutcome(
                 client = client,
                 result = StorageDependencyProbeResult.ready(configuration.credentialVersion),
@@ -219,6 +223,7 @@ object StorageRuntimeConfigurationValidator {
         accessKey: String,
         secretKey: String,
         credentialVersion: String,
+        secondaryBucket: String? = null,
     ): ValidatedStorageConfiguration {
         val resolvedEndpoint = requireConcrete(endpoint, "CUSTOM_STORAGE_ENDPOINT")
         val endpointUri =
@@ -230,6 +235,10 @@ object StorageRuntimeConfigurationValidator {
 
         val resolvedRegion = requireConcrete(region, "CUSTOM_STORAGE_REGION")
         val resolvedBucket = requireConcrete(bucket, "CUSTOM_STORAGE_BUCKET")
+        val resolvedSecondaryBucket =
+            secondaryBucket
+                ?.let { requireConcrete(it, "CUSTOM_STORAGE_BUCKET") }
+                ?.takeIf { it != resolvedBucket }
         val resolvedAccessKey = requireConcrete(accessKey, "CUSTOM_STORAGE_ACCESSKEY")
         val resolvedSecretKey = requireConcrete(secretKey, "CUSTOM_STORAGE_SECRETKEY")
         val resolvedVersion = requireConcrete(credentialVersion, "CUSTOM_STORAGE_CREDENTIAL_VERSION")
@@ -244,6 +253,7 @@ object StorageRuntimeConfigurationValidator {
             accessKey = resolvedAccessKey,
             secretKey = resolvedSecretKey,
             credentialVersion = resolvedVersion,
+            secondaryBucket = resolvedSecondaryBucket,
         )
     }
 

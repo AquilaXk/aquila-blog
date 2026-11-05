@@ -145,4 +145,141 @@ class CustomAuthenticationFilterHardeningTest {
             }
         assertThat(RequestPathNormalizer.normalize(servletPathFallbackRequest)).isEqualTo("/post/api/v1/posts")
     }
+
+    @Test
+    @DisplayName("쿼리 스트링이나 파라미터 맵에 인증 토큰 키가 포함되면 공개·보호 API 모두 400-1로 즉시 차단한다")
+    fun `query string or parameter map auth credentials are rejected with 400 before authentication`() {
+        val fixture = CustomAuthenticationFilterTest.CustomAuthenticationFilterFixture()
+        val filter = fixture.authenticationFilter()
+
+        val forbiddenQueryCases =
+            listOf(
+                "accessToken=leaked-jwt",
+                "access_token=leaked-jwt",
+                "ACCESS-TOKEN=leaked-jwt",
+                "refreshToken=leaked-refresh",
+                "refresh_token=leaked-refresh",
+                "sessionKey=leaked-session",
+                "session-key=leaked-session",
+                "apiKey=leaked-api-key",
+                "api%5Fkey=leaked-api-key",
+                "accessToken%3Dleaked-jwt",
+                "accessToken%3Dleaked-jwt%GG",
+                "%2561ccessToken=leaked-jwt",
+                "%252561ccessToken=leaked-jwt",
+                "a=1%26refreshToken%3Dleaked-refresh",
+                "bad=%GG&accessToken%3Dleaked-jwt",
+                "bad=%GG%26accessToken=leaked-jwt",
+                "page=1;refresh_token=leaked-refresh",
+            )
+
+        for (rawQuery in forbiddenQueryCases) {
+            val request =
+                MockHttpServletRequest("GET", "/post/api/v1/posts").apply {
+                    queryString = rawQuery
+                }
+            val response = MockHttpServletResponse()
+            fixture.givenPublicRequest(request)
+
+            filter.doFilter(request, response, fixture.noContentFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_BAD_REQUEST)
+            assertThat(response.contentAsString).contains("\"resultCode\":\"400-1\"")
+        }
+
+        for (paramKey in listOf("  Session_Key ", "api%5Fkey", "%61ccessToken", "accessToken%3Dleaked")) {
+            val parameterMapOnlyRequest =
+                MockHttpServletRequest("POST", "/member/api/v1/auth/logout").apply {
+                    addParameter(paramKey, "leaked-session")
+                }
+            val parameterMapResponse = MockHttpServletResponse()
+            fixture.givenProtectedRequest(parameterMapOnlyRequest)
+
+            filter.doFilter(parameterMapOnlyRequest, parameterMapResponse, fixture.noContentFilterChain())
+
+            assertThat(parameterMapResponse.status).isEqualTo(HttpServletResponse.SC_BAD_REQUEST)
+            assertThat(parameterMapResponse.contentAsString).contains("\"resultCode\":\"400-1\"")
+            verify(fixture.clientIpResolver, never()).resolve(parameterMapOnlyRequest)
+        }
+    }
+
+    @Test
+    @DisplayName("POST form/multipart 및 본문이 있는 요청은 인증 전 getParameterMap을 호출하거나 차단하지 않는다")
+    fun `post form and multipart requests do not parse parameter map before authentication`() {
+        val fixture = CustomAuthenticationFilterTest.CustomAuthenticationFilterFixture()
+        val filter = fixture.authenticationFilter()
+        fixture.givenEmptyAuthorizationHeader()
+        fixture.givenCookieTokens()
+
+        val bodyRequests =
+            listOf(
+                object : MockHttpServletRequest("POST", "/post/api/v1/posts") {
+                    var parameterMapCalls = 0
+
+                    override fun getParameterMap(): MutableMap<String, Array<String>> {
+                        parameterMapCalls++
+                        return super.getParameterMap()
+                    }
+                }.apply {
+                    contentType = "multipart/form-data; boundary=---test"
+                    setParameter("apiKey", "form-field-value")
+                },
+                object : MockHttpServletRequest("POST", "/post/api/v1/posts") {
+                    var parameterMapCalls = 0
+
+                    override fun getParameterMap(): MutableMap<String, Array<String>> {
+                        parameterMapCalls++
+                        return super.getParameterMap()
+                    }
+                }.apply {
+                    contentType = "application/x-www-form-urlencoded; charset=UTF-8"
+                    setParameter("accessToken", "form-field-value")
+                },
+                object : MockHttpServletRequest("POST", "/post/api/v1/posts") {
+                    var parameterMapCalls = 0
+
+                    override fun getParameterMap(): MutableMap<String, Array<String>> {
+                        parameterMapCalls++
+                        return super.getParameterMap()
+                    }
+                }.apply {
+                    setContent("{\"apiKey\":\"json-body\"}".toByteArray())
+                    setParameter("apiKey", "body-param")
+                },
+            )
+
+        for (request in bodyRequests) {
+            val response = MockHttpServletResponse()
+            fixture.givenPublicRequest(request)
+            fixture.givenClientIp(request, "203.0.113.10")
+
+            filter.doFilter(request, response, fixture.noContentFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            val calls = request.javaClass.getMethod("getParameterMapCalls").invoke(request) as Int
+            assertThat(calls).isZero()
+        }
+    }
+
+    @Test
+    @DisplayName("일반 쿼리 파라미터와 미디어 재생용 token 파라미터 및 깨진 퍼센트 인코딩 키는 차단하지 않는다")
+    fun `benign query parameters and playback token parameter are allowed`() {
+        val fixture = CustomAuthenticationFilterTest.CustomAuthenticationFilterFixture()
+        val filter = fixture.authenticationFilter()
+        fixture.givenEmptyAuthorizationHeader()
+        fixture.givenCookieTokens()
+
+        val request =
+            MockHttpServletRequest("GET", "/system/api/v1/public/cloud/files/12/playback").apply {
+                queryString = "token=signed-playback-token&%GG=1&page=1"
+                setParameter("token", "signed-playback-token")
+            }
+        val response = MockHttpServletResponse()
+        fixture.givenPublicRequest(request)
+        fixture.givenClientIp(request, "203.0.113.10")
+
+        filter.doFilter(request, response, fixture.noContentFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+    }
 }

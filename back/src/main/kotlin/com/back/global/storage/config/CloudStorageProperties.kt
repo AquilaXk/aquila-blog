@@ -35,6 +35,7 @@ data class CloudStorageProperties(
     override var endpoint: String = "http://localhost:9000",
     override var region: String = "us-east-1",
     override var bucket: String = "blog-images",
+    var cloudBucket: String = "",
     override var accessKey: String = "",
     override var secretKey: String = "",
     override var credentialVersion: String = "",
@@ -68,6 +69,9 @@ data class CloudStorageProperties(
     var cloudReconcileRepairEnabled: Boolean = false,
     var cloudReconcileMetricsRefreshEnabled: Boolean = true,
 ) : StoragePropertiesPort {
+    val resolvedCloudBucket: String
+        get() = if (cloudBucket.isNotEmpty()) cloudBucket else bucket
+
     fun validateResumableLifetimeAgainstMinioStaleExpiry() {
         val sliding = cloudVideoResumableExpiresSeconds.coerceAtLeast(60)
         val absoluteMax = cloudVideoResumableAbsoluteMaxSeconds.coerceAtLeast(sliding)

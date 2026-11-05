@@ -61,7 +61,7 @@ object RequestPathNormalizer {
         return current
     }
 
-    private fun decodePercentEncodedSafely(input: String): String {
+    internal fun decodePercentEncodedSafely(input: String): String {
         val out = StringBuilder(input.length)
         val byteBuffer = ByteArray(input.length / 3 + 1)
         var index = 0

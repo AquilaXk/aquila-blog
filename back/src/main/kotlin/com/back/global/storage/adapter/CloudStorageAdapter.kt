@@ -468,38 +468,16 @@ class CloudStorageAdapter(
         }
     }
 
-    private fun resolveStorageConfiguration(): ValidatedStorageConfiguration {
-        val postConfig =
-            StorageRuntimeConfigurationValidator.validate(
-                endpoint = properties.endpoint,
-                region = properties.region,
-                bucket = properties.bucket,
-                accessKey = properties.accessKey,
-                secretKey = properties.secretKey,
-                credentialVersion = properties.credentialVersion,
-            )
-        val cloudConfig =
-            StorageRuntimeConfigurationValidator.validate(
-                endpoint = properties.endpoint,
-                region = properties.region,
-                bucket = properties.resolvedCloudBucket,
-                accessKey = properties.accessKey,
-                secretKey = properties.secretKey,
-                credentialVersion = properties.credentialVersion,
-            )
-        if (postConfig.bucket == cloudConfig.bucket) {
-            return cloudConfig
-        }
-        return ValidatedStorageConfiguration(
-            endpoint = cloudConfig.endpoint,
-            region = cloudConfig.region,
-            bucket = cloudConfig.bucket,
-            accessKey = cloudConfig.accessKey,
-            secretKey = cloudConfig.secretKey,
-            credentialVersion = cloudConfig.credentialVersion,
-            secondaryBucket = postConfig.bucket,
+    private fun resolveStorageConfiguration(): ValidatedStorageConfiguration =
+        StorageRuntimeConfigurationValidator.validate(
+            endpoint = properties.endpoint,
+            region = properties.region,
+            bucket = properties.resolvedCloudBucket,
+            accessKey = properties.accessKey,
+            secretKey = properties.secretKey,
+            credentialVersion = properties.credentialVersion,
+            secondaryBucket = properties.bucket,
         )
-    }
 
     private fun validateObjectKey(objectKey: String) {
         val prefix =

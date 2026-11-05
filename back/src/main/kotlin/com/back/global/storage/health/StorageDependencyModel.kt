@@ -223,6 +223,7 @@ object StorageRuntimeConfigurationValidator {
         accessKey: String,
         secretKey: String,
         credentialVersion: String,
+        secondaryBucket: String? = null,
     ): ValidatedStorageConfiguration {
         val resolvedEndpoint = requireConcrete(endpoint, "CUSTOM_STORAGE_ENDPOINT")
         val endpointUri =
@@ -234,6 +235,10 @@ object StorageRuntimeConfigurationValidator {
 
         val resolvedRegion = requireConcrete(region, "CUSTOM_STORAGE_REGION")
         val resolvedBucket = requireConcrete(bucket, "CUSTOM_STORAGE_BUCKET")
+        val resolvedSecondaryBucket =
+            secondaryBucket
+                ?.let { requireConcrete(it, "CUSTOM_STORAGE_BUCKET") }
+                ?.takeIf { it != resolvedBucket }
         val resolvedAccessKey = requireConcrete(accessKey, "CUSTOM_STORAGE_ACCESSKEY")
         val resolvedSecretKey = requireConcrete(secretKey, "CUSTOM_STORAGE_SECRETKEY")
         val resolvedVersion = requireConcrete(credentialVersion, "CUSTOM_STORAGE_CREDENTIAL_VERSION")
@@ -248,6 +253,7 @@ object StorageRuntimeConfigurationValidator {
             accessKey = resolvedAccessKey,
             secretKey = resolvedSecretKey,
             credentialVersion = resolvedVersion,
+            secondaryBucket = resolvedSecondaryBucket,
         )
     }
 

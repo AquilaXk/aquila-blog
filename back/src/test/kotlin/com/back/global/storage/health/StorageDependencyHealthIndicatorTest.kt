@@ -282,6 +282,17 @@ class StorageDependencyHealthIndicatorTest {
         assertThat(downHealth.status).isEqualTo(Status.DOWN)
         assertThat(downHealth.details["reason"]).isEqualTo(StorageDependencyFailureReason.MISSING_BUCKET.wireValue)
         assertThat(failingClient.headBucketCalls).isEqualTo(2)
+
+        val singleBucketValidated =
+            StorageRuntimeConfigurationValidator.validate(
+                endpoint = properties.endpoint,
+                region = properties.region,
+                bucket = properties.bucket,
+                accessKey = properties.accessKey,
+                secretKey = properties.secretKey,
+                credentialVersion = properties.credentialVersion,
+            )
+        assertThat(singleBucketValidated.secondaryBucket).isNull()
     }
 
     private fun indicator(

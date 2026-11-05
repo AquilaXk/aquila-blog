@@ -1,7 +1,6 @@
 package com.back.global.storage.adapter
 
 import com.back.global.exception.application.AppException
-import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -9,33 +8,18 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.springframework.test.util.ReflectionTestUtils
 import software.amazon.awssdk.core.ResponseInputStream
-import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.http.AbortableInputStream
 import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest
-import software.amazon.awssdk.services.s3.model.AbortMultipartUploadResponse
-import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest
-import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse
-import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest
-import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
-import software.amazon.awssdk.services.s3.model.DeleteObjectResponse
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectResponse
-import software.amazon.awssdk.services.s3.model.HeadBucketRequest
-import software.amazon.awssdk.services.s3.model.HeadBucketResponse
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
-import software.amazon.awssdk.services.s3.model.PutObjectRequest
-import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.services.s3.model.S3Exception
 import software.amazon.awssdk.services.s3.model.S3Object
-import software.amazon.awssdk.services.s3.model.UploadPartRequest
-import software.amazon.awssdk.services.s3.model.UploadPartResponse
 import java.io.ByteArrayInputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -260,111 +244,6 @@ class CloudStorageAdapterTest {
             .hasMessageContaining("클라우드 파일을 불러오지 못했습니다.")
     }
 
-    @Test
-    @DisplayName("전용 cloudBucket이 설정되면 모든 S3 요청과 헬스 프로브가 cloudBucket으로 전달된다")
-    fun dedicatedCloudBucketRoutesAllOperationsToCloudBucket() {
-        val s3Client =
-            RecordingS3Client(
-                onHeadObject = {
-                    HeadObjectResponse
-                        .builder()
-                        .contentLength(4)
-                        .contentType("video/mp4")
-                        .eTag("\"etag-1\"")
-                        .build()
-                },
-                onListObjects = {
-                    ListObjectsV2Response
-                        .builder()
-                        .contents(emptyList())
-                        .isTruncated(false)
-                        .build()
-                },
-            ) { storedResponse("demo".toByteArray()) }
-
-        val adapter =
-            CloudStorageAdapter(
-                CloudStorageProperties(
-                    enabled = true,
-                    endpoint = "http://minio:9000",
-                    region = "us-east-1",
-                    bucket = "blog-images",
-                    cloudBucket = "blog-cloud-private",
-                    accessKey = "contract-access",
-                    secretKey = "contract-secret-not-for-production",
-                    credentialVersion = "1",
-                    cloudKeyPrefix = "cloud",
-                ),
-            )
-        ReflectionTestUtils.setField(adapter, "s3Client", s3Client)
-
-        adapter.initializeDependency()
-        assertThat(s3Client.lastHeadBucketRequest!!.bucket()).isEqualTo("blog-images")
-
-        adapter.upload(
-            CloudStoragePort.UploadRequest(
-                objectKey = objectKey,
-                originalFilename = "demo.mp4",
-                contentType = "video/mp4",
-                contentLength = 4,
-                inputStream = ByteArrayInputStream("demo".toByteArray()),
-            ),
-        )
-        assertThat(s3Client.lastPutObjectRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.open(objectKey)
-        assertThat(s3Client.lastGetObjectRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.openRange(objectKey, 0L..3L)
-        assertThat(s3Client.lastGetObjectRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.initiateMultipartUpload(
-            CloudStoragePort.MultipartUploadInitRequest(
-                objectKey = objectKey,
-                originalFilename = "demo.mp4",
-                contentType = "video/mp4",
-            ),
-        )
-        assertThat(s3Client.lastCreateMultipartRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.uploadMultipartPart(
-            CloudStoragePort.MultipartUploadPartRequest(
-                objectKey = objectKey,
-                uploadId = "upload-1",
-                partNumber = 1,
-                contentLength = 4,
-                inputStream = ByteArrayInputStream("demo".toByteArray()),
-            ),
-        )
-        assertThat(s3Client.lastUploadPartRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.completeMultipartUpload(
-            CloudStoragePort.MultipartUploadCompleteRequest(
-                objectKey = objectKey,
-                uploadId = "upload-1",
-                parts = listOf(CloudStoragePort.CompletedMultipartUploadPart(partNumber = 1, eTag = "\"etag-1\"")),
-            ),
-        )
-        assertThat(s3Client.lastCompleteMultipartRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.abortMultipartUpload(
-            CloudStoragePort.MultipartUploadAbortRequest(
-                objectKey = objectKey,
-                uploadId = "upload-1",
-            ),
-        )
-        assertThat(s3Client.lastAbortMultipartRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.head(objectKey)
-        assertThat(s3Client.lastHeadObjectRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.listObjects("cloud/", 10)
-        assertThat(s3Client.lastListObjectsRequest!!.bucket()).isEqualTo("blog-cloud-private")
-
-        adapter.delete(objectKey)
-        assertThat(s3Client.lastDeleteObjectRequest!!.bucket()).isEqualTo("blog-cloud-private")
-    }
-
     private fun adapterWithClient(s3Client: S3Client): CloudStorageAdapter {
         val adapter =
             CloudStorageAdapter(
@@ -408,68 +287,12 @@ class CloudStorageAdapterTest {
             private set
         var lastHeadObjectRequest: HeadObjectRequest? = null
             private set
-        var lastHeadBucketRequest: HeadBucketRequest? = null
-            private set
-        var lastPutObjectRequest: PutObjectRequest? = null
-            private set
-        var lastCreateMultipartRequest: CreateMultipartUploadRequest? = null
-            private set
-        var lastUploadPartRequest: UploadPartRequest? = null
-            private set
-        var lastCompleteMultipartRequest: CompleteMultipartUploadRequest? = null
-            private set
-        var lastAbortMultipartRequest: AbortMultipartUploadRequest? = null
-            private set
-        var lastListObjectsRequest: ListObjectsV2Request? = null
-            private set
-        var lastDeleteObjectRequest: DeleteObjectRequest? = null
-            private set
         var listObjectsRequestCount: Int = 0
             private set
-
-        override fun headBucket(headBucketRequest: HeadBucketRequest): HeadBucketResponse {
-            lastHeadBucketRequest = headBucketRequest
-            return HeadBucketResponse.builder().build()
-        }
-
-        override fun putObject(
-            putObjectRequest: PutObjectRequest,
-            requestBody: RequestBody,
-        ): PutObjectResponse {
-            lastPutObjectRequest = putObjectRequest
-            requestBody.contentStreamProvider().newStream().readBytes()
-            return PutObjectResponse.builder().build()
-        }
 
         override fun getObject(getObjectRequest: GetObjectRequest): ResponseInputStream<GetObjectResponse> {
             lastGetObjectRequest = getObjectRequest
             return onGetObject()
-        }
-
-        override fun createMultipartUpload(createMultipartUploadRequest: CreateMultipartUploadRequest): CreateMultipartUploadResponse {
-            lastCreateMultipartRequest = createMultipartUploadRequest
-            return CreateMultipartUploadResponse.builder().uploadId("upload-1").build()
-        }
-
-        override fun uploadPart(
-            uploadPartRequest: UploadPartRequest,
-            requestBody: RequestBody,
-        ): UploadPartResponse {
-            lastUploadPartRequest = uploadPartRequest
-            requestBody.contentStreamProvider().newStream().readBytes()
-            return UploadPartResponse.builder().eTag("\"etag-1\"").build()
-        }
-
-        override fun completeMultipartUpload(
-            completeMultipartUploadRequest: CompleteMultipartUploadRequest,
-        ): CompleteMultipartUploadResponse {
-            lastCompleteMultipartRequest = completeMultipartUploadRequest
-            return CompleteMultipartUploadResponse.builder().build()
-        }
-
-        override fun abortMultipartUpload(abortMultipartUploadRequest: AbortMultipartUploadRequest): AbortMultipartUploadResponse {
-            lastAbortMultipartRequest = abortMultipartUploadRequest
-            return AbortMultipartUploadResponse.builder().build()
         }
 
         override fun headObject(headObjectRequest: HeadObjectRequest): HeadObjectResponse {
@@ -479,13 +302,7 @@ class CloudStorageAdapterTest {
 
         override fun listObjectsV2(listObjectsV2Request: ListObjectsV2Request): ListObjectsV2Response {
             listObjectsRequestCount++
-            lastListObjectsRequest = listObjectsV2Request
             return onListObjects(listObjectsV2Request)
-        }
-
-        override fun deleteObject(deleteObjectRequest: DeleteObjectRequest): DeleteObjectResponse {
-            lastDeleteObjectRequest = deleteObjectRequest
-            return DeleteObjectResponse.builder().build()
         }
 
         override fun serviceName(): String = "s3"

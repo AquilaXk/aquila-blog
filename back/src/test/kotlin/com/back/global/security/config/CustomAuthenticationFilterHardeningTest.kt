@@ -164,10 +164,12 @@ class CustomAuthenticationFilterHardeningTest {
                 "apiKey=leaked-api-key",
                 "api%5Fkey=leaked-api-key",
                 "accessToken%3Dleaked-jwt",
+                "accessToken%3Dleaked-jwt%GG",
                 "%2561ccessToken=leaked-jwt",
                 "%252561ccessToken=leaked-jwt",
                 "a=1%26refreshToken%3Dleaked-refresh",
                 "bad=%GG&accessToken%3Dleaked-jwt",
+                "bad=%GG%26accessToken=leaked-jwt",
                 "page=1;refresh_token=leaked-refresh",
             )
 
@@ -185,18 +187,20 @@ class CustomAuthenticationFilterHardeningTest {
             assertThat(response.contentAsString).contains("\"resultCode\":\"400-1\"")
         }
 
-        val parameterMapOnlyRequest =
-            MockHttpServletRequest("POST", "/member/api/v1/auth/logout").apply {
-                setParameter("  Session_Key ", "leaked-session")
-            }
-        val parameterMapResponse = MockHttpServletResponse()
-        fixture.givenProtectedRequest(parameterMapOnlyRequest)
+        for (paramKey in listOf("  Session_Key ", "api%5Fkey", "%61ccessToken", "accessToken%3Dleaked")) {
+            val parameterMapOnlyRequest =
+                MockHttpServletRequest("POST", "/member/api/v1/auth/logout").apply {
+                    addParameter(paramKey, "leaked-session")
+                }
+            val parameterMapResponse = MockHttpServletResponse()
+            fixture.givenProtectedRequest(parameterMapOnlyRequest)
 
-        filter.doFilter(parameterMapOnlyRequest, parameterMapResponse, fixture.noContentFilterChain())
+            filter.doFilter(parameterMapOnlyRequest, parameterMapResponse, fixture.noContentFilterChain())
 
-        assertThat(parameterMapResponse.status).isEqualTo(HttpServletResponse.SC_BAD_REQUEST)
-        assertThat(parameterMapResponse.contentAsString).contains("\"resultCode\":\"400-1\"")
-        verify(fixture.clientIpResolver, never()).resolve(parameterMapOnlyRequest)
+            assertThat(parameterMapResponse.status).isEqualTo(HttpServletResponse.SC_BAD_REQUEST)
+            assertThat(parameterMapResponse.contentAsString).contains("\"resultCode\":\"400-1\"")
+            verify(fixture.clientIpResolver, never()).resolve(parameterMapOnlyRequest)
+        }
     }
 
     @Test

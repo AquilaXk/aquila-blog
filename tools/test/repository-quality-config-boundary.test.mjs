@@ -833,6 +833,7 @@ test("backend dependency policy upgrades Tomcat and removes expired CVE suppress
   const build = read("back/build.gradle.kts")
 
   assert.match(build, /extra\["tomcat\.version"\] = "11\.0\.25"/)
+  assert.match(build, /implementation\("org\.webjars:swagger-ui:5\.34\.1"\)/)
   assert.doesNotMatch(suppressions, /CVE-2026-66299/)
   assert.match(build, /failBuildOnCVSS = 7\.0f/)
   assert.match(build, /failOnError = true/)
@@ -840,6 +841,14 @@ test("backend dependency policy upgrades Tomcat and removes expired CVE suppress
     build,
     /suppressionFiles\.add\("config\/dependency-check-suppressions\.xml"\)/,
   )
+  const suppressBlocks = [...suppressions.matchAll(/<suppress\b([^>]*)>/g)]
+  assert.ok(suppressBlocks.length > 0)
+  const now = new Date()
+  for (const [, attrs] of suppressBlocks) {
+    const untilMatch = attrs.match(/\buntil="(\d{4}-\d{2}-\d{2})"/)
+    assert.ok(untilMatch, `missing until attribute on <suppress${attrs}>`)
+    assert.ok(new Date(`${untilMatch[1]}T23:59:59.999Z`) >= now, `expired until=${untilMatch[1]}`)
+  }
 })
 
 test("backend Netty policy pins the patched runtime version", () => {
@@ -855,7 +864,10 @@ test("backend Netty policy pins the patched runtime version", () => {
   assert.match(build, /Netty version alignment failed: expected \$nettyVersion, resolved \$resolvedModules/)
   assert.match(jacoco, /"verifyNettyVersionAlignment"/)
   assert.match(jacoco, /dependsOn\("verifyNettyVersionAlignment"\)/)
-  assert.doesNotMatch(suppressions, /CVE-2026-62380/)
+  assert.doesNotMatch(
+    suppressions,
+    /CVE-2026-62380|CVE-2026-44891|CVE-2026-55831|CVE-2026-55833|pkg:maven\/io\\.netty\//,
+  )
   assert.match(build, /failBuildOnCVSS = 7\.0f/)
   assert.match(build, /failOnError = true/)
 })

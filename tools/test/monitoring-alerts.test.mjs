@@ -503,6 +503,7 @@ test("docker_socket_proxy with POST=1 is isolated to autoheal_control and observ
   assert.doesNotMatch(autoheal, /-\s*observe\b/)
 
   assert.match(readProxy, /CONTAINERS:\s*"1"/)
+  assert.match(readProxy, /NETWORKS:\s*"1"/)
   assert.match(readProxy, /POST:\s*"0"/)
   assert.match(readProxy, /networks:\s*\n\s*-\s*observe\b/)
   assert.match(readProxy, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/)

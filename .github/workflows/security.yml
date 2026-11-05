@@ -157,7 +157,7 @@ jobs:
 
       - name: Build JVM sources for CodeQL
         working-directory: back
-        run: ./gradlew --no-daemon classes -x test
+        run: ./gradlew --no-daemon --no-build-cache --rerun-tasks classes -x test
 
       - name: Perform CodeQL Analysis (trusted context)
         if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]')

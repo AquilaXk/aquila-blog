@@ -108,8 +108,12 @@ compose ps >/dev/null
 compose ps >/dev/null
 [[ $(wc -l < "${materialize_log}" | tr -d ' ') -eq 1 ]] || fail "compose ps should skip materialize when service env files are ready"
 
+touch -t 202001010000 "${SCRIPT_DIR}/.env.front.prod"
+compose ps >/dev/null
+[[ $(wc -l < "${materialize_log}" | tr -d ' ') -eq 2 ]] || fail "compose ps should rematerialize when any service env file is older than .env.prod"
+
 compose up -d caddy >/dev/null
-[[ $(wc -l < "${materialize_log}" | tr -d ' ') -eq 2 ]] || fail "compose up should always materialize service env files"
+[[ $(wc -l < "${materialize_log}" | tr -d ' ') -eq 3 ]] || fail "compose up should always materialize service env files"
 
 curl() {
   printf '200 15'

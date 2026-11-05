@@ -23,12 +23,15 @@ log() {
 }
 
 materialized_service_env_ready() {
-  [[ -f "${SCRIPT_DIR}/.env.caddy.prod" &&
-    -f "${SCRIPT_DIR}/.env.back.prod" &&
-    -f "${SCRIPT_DIR}/.env.front.prod" &&
-    -f "${SCRIPT_DIR}/.env.front.metrics.prod" &&
-    -f "${SCRIPT_DIR}/.web-metrics-credentials/runtime/web-metrics-token" &&
-    ! "${ENV_FILE}" -nt "${SCRIPT_DIR}/.env.caddy.prod" ]]
+  local file
+  for file in \
+    "${SCRIPT_DIR}/.env.caddy.prod" \
+    "${SCRIPT_DIR}/.env.back.prod" \
+    "${SCRIPT_DIR}/.env.front.prod" \
+    "${SCRIPT_DIR}/.env.front.metrics.prod" \
+    "${SCRIPT_DIR}/.web-metrics-credentials/runtime/web-metrics-token"; do
+    [[ -f "${file}" && ! "${ENV_FILE}" -nt "${file}" ]] || return 1
+  done
 }
 
 compose() {
@@ -490,9 +493,9 @@ query_grafana_datasource_by_uid() {
 probe_grafana_core_datasources() {
   local grafana_user="$1"
   local grafana_password="$2"
+  local prometheus_ok="false"
+  local loki_ok="false"
 
-  prometheus_ok="false"
-  loki_ok="false"
   if prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
     prometheus_ok="true"
   fi
@@ -501,7 +504,7 @@ probe_grafana_core_datasources() {
   fi
 
   if [[ "${prometheus_ok}" != "true" || "${loki_ok}" != "true" ]] &&
-    (is_protected_http_status "${prometheus_status}" || is_protected_http_status "${loki_status}"); then
+    { is_protected_http_status "${prometheus_status}" || is_protected_http_status "${loki_status}"; }; then
     reset_grafana_admin_password
     if [[ "${prometheus_ok}" != "true" ]] &&
       prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
@@ -530,8 +533,6 @@ check_grafana_core_datasources() {
   load_grafana_ds_state
 
   local prometheus_status="" loki_status=""
-  local prometheus_ok="false"
-  local loki_ok="false"
 
   if probe_grafana_core_datasources "${grafana_user}" "${grafana_password}"; then
     if (( GRAFANA_DS_FAIL_COUNT > 0 )); then

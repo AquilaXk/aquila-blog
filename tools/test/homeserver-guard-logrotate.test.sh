@@ -74,4 +74,100 @@ LOG_FILE="${test_uncompressed}" STEADY_GUARD_LOG_MAX_BYTES=100 STEADY_GUARD_LOG_
 [[ -f "${test_uncompressed}.2" ]] || fail "test_uncompressed.1 should have shifted to .2"
 [[ -f "${test_uncompressed}.1.gz" ]] || fail "new archive should be .1.gz"
 
+eval "$(extract_function materialized_service_env_ready)"
+eval "$(extract_function compose)"
+eval "$(extract_function is_protected_http_status)"
+eval "$(extract_function probe_internal_caddy_route_metrics)"
+eval "$(extract_function probe_grafana_core_datasources)"
+
+SCRIPT_DIR="${workdir}/guard-runtime"
+mkdir -p "${SCRIPT_DIR}/.web-metrics-credentials/runtime"
+ENV_FILE="${SCRIPT_DIR}/.env.prod"
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
+NETWORK_NAME="blog_home_edge"
+printf 'WEB_DOMAIN=blog.example.com\n' > "${ENV_FILE}"
+printf 'services: {}\n' > "${COMPOSE_FILE}"
+
+materialize_log="${workdir}/materialize.log"
+docker_log="${workdir}/docker.log"
+cat > "${SCRIPT_DIR}/materialize_service_env.sh" <<EOF
+#!/usr/bin/env bash
+printf 'materialized\n' >> "${materialize_log}"
+touch "${SCRIPT_DIR}/.env.caddy.prod" "${SCRIPT_DIR}/.env.back.prod" "${SCRIPT_DIR}/.env.front.prod" "${SCRIPT_DIR}/.env.front.metrics.prod" "${SCRIPT_DIR}/.web-metrics-credentials/runtime/web-metrics-token"
+EOF
+chmod +x "${SCRIPT_DIR}/materialize_service_env.sh"
+
+docker() {
+  printf '%s\n' "$*" >> "${docker_log}"
+  return 0
+}
+
+compose ps >/dev/null
+[[ $(wc -l < "${materialize_log}" | tr -d ' ') -eq 1 ]] || fail "compose ps should materialize missing service env files once"
+
+compose ps >/dev/null
+[[ $(wc -l < "${materialize_log}" | tr -d ' ') -eq 1 ]] || fail "compose ps should skip materialize when service env files are ready"
+
+touch -t 202001010000 "${SCRIPT_DIR}/.env.front.prod"
+compose ps >/dev/null
+[[ $(wc -l < "${materialize_log}" | tr -d ' ') -eq 2 ]] || fail "compose ps should rematerialize when any service env file is older than .env.prod"
+
+compose up -d caddy >/dev/null
+[[ $(wc -l < "${materialize_log}" | tr -d ' ') -eq 3 ]] || fail "compose up should always materialize service env files"
+
+curl() {
+  printf '200 15'
+}
+: > "${docker_log}"
+metrics_out="$(probe_internal_caddy_route_metrics "blog.example.com" "/actuator/health/readiness")"
+[[ "${metrics_out}" == "200 15" ]] || fail "expected host curl fast path to return 200 15"
+[[ ! -s "${docker_log}" ]] || fail "expected host curl fast path not to spawn docker run"
+
+curl() {
+  printf '000 0'
+}
+docker() {
+  printf '%s\n' "$*" >> "${docker_log}"
+  printf '200 42'
+}
+metrics_fallback="$(probe_internal_caddy_route_metrics "blog.example.com" "/actuator/health/readiness")"
+[[ "${metrics_fallback}" == "200 42" ]] || fail "expected docker fallback to return 200 42"
+[[ -s "${docker_log}" ]] || fail "expected unreachable host curl to fall back to docker run"
+
+reset_calls=0
+reset_grafana_admin_password() {
+  reset_calls=$(( reset_calls + 1 ))
+}
+query_grafana_datasource_by_uid() {
+  printf '200'
+  return 0
+}
+probe_grafana_core_datasources "admin" "pw" || fail "expected healthy datasources to pass"
+[[ "${reset_calls}" -eq 0 ]] || fail "expected 200 OK datasources not to reset grafana admin password"
+
+query_grafana_datasource_by_uid() {
+  printf '000'
+  return 1
+}
+if probe_grafana_core_datasources "admin" "pw"; then
+  fail "expected unreachable datasources to fail"
+fi
+[[ "${reset_calls}" -eq 0 ]] || fail "expected unreachable datasources (000) not to reset grafana admin password"
+
+auth_fixed="false"
+reset_grafana_admin_password() {
+  reset_calls=$(( reset_calls + 1 ))
+  auth_fixed="true"
+}
+query_grafana_datasource_by_uid() {
+  if [[ "${auth_fixed}" != "true" ]]; then
+    printf '401'
+    return 1
+  fi
+  printf '200'
+  return 0
+}
+probe_grafana_core_datasources "admin" "pw" || fail "expected 401 datasources to recover after password reset"
+[[ "${reset_calls}" -eq 1 ]] || fail "expected 401 datasource response to trigger exactly one password reset"
+
 echo "[test] homeserver guard logrotate rules passed"

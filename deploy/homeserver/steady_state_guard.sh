@@ -22,8 +22,22 @@ log() {
   echo "[steady-guard] $(date -Is) $*"
 }
 
+materialized_service_env_ready() {
+  local file
+  for file in \
+    "${SCRIPT_DIR}/.env.caddy.prod" \
+    "${SCRIPT_DIR}/.env.back.prod" \
+    "${SCRIPT_DIR}/.env.front.prod" \
+    "${SCRIPT_DIR}/.env.front.metrics.prod" \
+    "${SCRIPT_DIR}/.web-metrics-credentials/runtime/web-metrics-token"; do
+    [[ -f "${file}" && ! "${ENV_FILE}" -nt "${file}" ]] || return 1
+  done
+}
+
 compose() {
-  bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
+  if [[ "${1:-}" == "up" ]] || ! materialized_service_env_ready; then
+    bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
+  fi
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -166,6 +180,20 @@ inspect_grafana_embed_headers() {
 }
 
 inspect_grafana_internal_health() {
+  local code
+  code="$(
+    compose exec -T grafana curl \
+      --connect-timeout 3 \
+      --max-time 10 \
+      -o /dev/null \
+      -s \
+      -w '%{http_code}' \
+      "http://127.0.0.1:3000/api/health" 2>/dev/null || true
+  )"
+  if [[ -n "${code}" && "${code}" != "000" ]]; then
+    printf '%s' "${code}"
+    return 0
+  fi
   docker run --rm --label promtail=ignore --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 10 \
@@ -178,6 +206,21 @@ inspect_grafana_internal_health() {
 probe_grafana_embed_origin_headers() {
   local grafana_domain="$1"
   local path="$2"
+  local headers
+  headers="$(
+    curl \
+      --connect-timeout 3 \
+      --max-time 12 \
+      -D - \
+      -o /dev/null \
+      -s \
+      -H "Host: ${grafana_domain}" \
+      "http://127.0.0.1:80${path}" 2>/dev/null || true
+  )"
+  if [[ "${headers}" == HTTP/* ]]; then
+    printf '%s' "${headers}"
+    return 0
+  fi
   docker run --rm --label promtail=ignore --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 12 \
@@ -355,6 +398,19 @@ ensure_caddy_mount_sync() {
 probe_internal_caddy_route_metrics() {
   local web_domain="$1"
   local path="$2"
+  local metrics
+  metrics="$(
+    curl \
+      --connect-timeout 3 \
+      --max-time 8 \
+      -s -o /dev/null -w "%{http_code} %{size_download}" \
+      "http://127.0.0.1:80${path}" \
+      -H "Host: ${web_domain}" 2>/dev/null || true
+  )"
+  if [[ -n "${metrics}" && "${metrics%% *}" != "000" ]]; then
+    printf '%s' "${metrics}"
+    return 0
+  fi
   docker run --rm --label promtail=ignore --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout 3 \
     --max-time 8 \
@@ -405,15 +461,27 @@ query_grafana_datasource_by_uid() {
 
   local response code
   response="$(
-    docker run --rm --label promtail=ignore --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
+    compose exec -T grafana curl \
       --connect-timeout 3 \
       --max-time 8 \
       -sS \
       -u "${grafana_user}:${grafana_password}" \
       -w $'\nHTTP_STATUS:%{http_code}\n' \
-      "http://grafana:3000/api/datasources/uid/${datasource_uid}" || true
+      "http://127.0.0.1:3000/api/datasources/uid/${datasource_uid}" 2>/dev/null || true
   )"
   code="$(printf '%s\n' "${response}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
+  if [[ -z "${code}" || "${code}" == "000" ]]; then
+    response="$(
+      docker run --rm --label promtail=ignore --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
+        --connect-timeout 3 \
+        --max-time 8 \
+        -sS \
+        -u "${grafana_user}:${grafana_password}" \
+        -w $'\nHTTP_STATUS:%{http_code}\n' \
+        "http://grafana:3000/api/datasources/uid/${datasource_uid}" || true
+    )"
+    code="$(printf '%s\n' "${response}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
+  fi
   [[ -n "${code}" ]] || code="none"
   printf '%s' "${code}"
   if [[ "${code}" == "200" ]] && printf '%s' "${response}" | grep -q "\"uid\":\"${datasource_uid}\""; then
@@ -422,21 +490,9 @@ query_grafana_datasource_by_uid() {
   return 1
 }
 
-check_grafana_core_datasources() {
-  local grafana_user grafana_password
-  grafana_user="$(env_value "GRAFANA_ADMIN_USER")"
-  grafana_password="$(env_value "GRAFANA_ADMIN_PASSWORD")"
-  [[ -n "${grafana_user}" ]] || grafana_user="admin"
-  [[ -n "${grafana_password}" ]] || grafana_password="change_me_grafana_password"
-  reset_grafana_admin_password
-
-  local fail_threshold cooldown_seconds
-  fail_threshold="$(normalize_positive_int "$(env_value "GRAFANA_DS_FAIL_THRESHOLD")" "3")"
-  cooldown_seconds="$(normalize_non_negative_int "$(env_value "GRAFANA_DS_RECREATE_COOLDOWN_SECONDS")" "900")"
-
-  load_grafana_ds_state
-
-  local prometheus_status loki_status
+probe_grafana_core_datasources() {
+  local grafana_user="$1"
+  local grafana_password="$2"
   local prometheus_ok="false"
   local loki_ok="false"
 
@@ -447,7 +503,38 @@ check_grafana_core_datasources() {
     loki_ok="true"
   fi
 
-  if [[ "${prometheus_ok}" == "true" && "${loki_ok}" == "true" ]]; then
+  if [[ "${prometheus_ok}" != "true" || "${loki_ok}" != "true" ]] &&
+    { is_protected_http_status "${prometheus_status}" || is_protected_http_status "${loki_status}"; }; then
+    reset_grafana_admin_password
+    if [[ "${prometheus_ok}" != "true" ]] &&
+      prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
+      prometheus_ok="true"
+    fi
+    if [[ "${loki_ok}" != "true" ]] &&
+      loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
+      loki_ok="true"
+    fi
+  fi
+
+  [[ "${prometheus_ok}" == "true" && "${loki_ok}" == "true" ]]
+}
+
+check_grafana_core_datasources() {
+  local grafana_user grafana_password
+  grafana_user="$(trim_quotes "$(env_value "GRAFANA_ADMIN_USER")")"
+  grafana_password="$(trim_quotes "$(env_value "GRAFANA_ADMIN_PASSWORD")")"
+  [[ -n "${grafana_user}" ]] || grafana_user="admin"
+  [[ -n "${grafana_password}" ]] || grafana_password="change_me_grafana_password"
+
+  local fail_threshold cooldown_seconds
+  fail_threshold="$(normalize_positive_int "$(env_value "GRAFANA_DS_FAIL_THRESHOLD")" "3")"
+  cooldown_seconds="$(normalize_non_negative_int "$(env_value "GRAFANA_DS_RECREATE_COOLDOWN_SECONDS")" "900")"
+
+  load_grafana_ds_state
+
+  local prometheus_status="" loki_status=""
+
+  if probe_grafana_core_datasources "${grafana_user}" "${grafana_password}"; then
     if (( GRAFANA_DS_FAIL_COUNT > 0 )); then
       log "OK grafana datasources recovered prometheus=${prometheus_status} loki=${loki_status} consecutive_failures=${GRAFANA_DS_FAIL_COUNT}"
     else
@@ -482,15 +569,7 @@ check_grafana_core_datasources() {
   save_grafana_ds_state
   sleep 3
 
-  prometheus_ok="false"
-  loki_ok="false"
-  if prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
-    prometheus_ok="true"
-  fi
-  if loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
-    loki_ok="true"
-  fi
-  if [[ "${prometheus_ok}" == "true" && "${loki_ok}" == "true" ]]; then
+  if probe_grafana_core_datasources "${grafana_user}" "${grafana_password}"; then
     GRAFANA_DS_FAIL_COUNT=0
     save_grafana_ds_state
     log "OK grafana datasources repaired prometheus=${prometheus_status} loki=${loki_status}"

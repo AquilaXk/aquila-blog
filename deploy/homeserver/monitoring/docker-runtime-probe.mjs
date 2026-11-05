@@ -192,7 +192,7 @@ const collectServiceMetrics = async (containers, service) => {
   }
 
   const inspect = await dockerGet(`/containers/${container.Id}/json`)
-  const stats = inspect.State?.Running ? await dockerGet(`/containers/${container.Id}/stats?stream=false`) : null
+  const stats = inspect.State?.Running ? await dockerGet(`/containers/${container.Id}/stats?stream=false&one-shot=true`) : null
   const memoryUsage = stats?.memory_stats?.usage || 0
   const memoryLimit = stats?.memory_stats?.limit || 0
   const restartCount = inspect.RestartCount || 0

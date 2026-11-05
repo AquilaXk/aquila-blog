@@ -5437,9 +5437,15 @@ test("homeserver guard rotates logs, Promtail filters ephemeral curl, and MinIO 
 
   // Bug 4: Promtail filters ephemeral curl containers
   assert.match(promtailConfig, /com\.docker\.compose\.project=blog_home/)
+  assert.match(promtailConfig, /refresh_interval:\s*30s/)
+  assert.match(promtailConfig, /sync_period:\s*30s/)
+  assert.match(promtailConfig, /older_than:\s*167h/)
   assert.match(promtailConfig, /__meta_docker_container_label_promtail/)
   assert.match(promtailConfig, /regex: ignore/)
   assert.match(steadyStateGuard, /--label promtail=ignore/)
+  assert.match(steadyStateGuard, /materialized_service_env_ready\(\)/)
+  assert.match(steadyStateGuard, /compose exec -T grafana curl/)
+  assert.match(steadyStateGuard, /probe_grafana_core_datasources\(\)/)
 })
 
 test("setup_hardening.sh restricts SSH UFW allowance to tailscale0 interface", () => {

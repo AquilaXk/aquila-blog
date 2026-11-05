@@ -127,6 +127,10 @@ test("compose routes docker_runtime_probe through docker_socket_read_proxy witho
 
   assert.doesNotMatch(probeBlock, /\/var\/run\/docker\.sock/)
   assert.match(probeBlock, /depends_on:\s*\n\s*-\s*docker_socket_read_proxy/)
+  assert.match(
+    read(path.join(repoRoot, "deploy/homeserver/monitoring/docker-runtime-probe.mjs")),
+    /\/stats\?stream=false&one-shot=true/,
+  )
 })
 
 test("resolveDockerEndpointOptions supports both unix socket paths and HTTP docker proxy URLs", async () => {

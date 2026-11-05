@@ -30,19 +30,19 @@ class PostLikeReconciliationServiceTest {
                 apiKey = "author-api-key",
             )
         post = Post(id = 10, author = author, title = "좋아요 보정 대상", content = "content", published = true, listed = true)
-        likesAttr = PostAttr(id = 100, subject = post, name = LIKES_COUNT, value = 999)
+        likesAttr = PostAttr(id = 100, subject = post, name = LIKES_COUNT, value = 0)
         likesAttr.createdAt = Instant.now().minusSeconds(3600)
         likesAttr.modifiedAt = Instant.now()
         postAttrRepository = FakePostAttrRepository(likesAttr)
         postLikeReconciliationService =
             PostLikeReconciliationService(
                 postAttrRepository = postAttrRepository,
-                postLikeRepository = FakePostLikeRepository(actualCount = 1),
+                postLikeRepository = FakePostLikeRepository(actualCount = 2),
             )
     }
 
     @Test
-    fun `최근 변경된 좋아요 attr가 실제 like 개수와 다르면 보정한다`() {
+    fun `최근 변경된 좋아요 attr가 최소 보장치보다 작으면 보정한다`() {
         val correctedCount =
             postLikeReconciliationService.reconcileRecentlyTouchedPosts(
                 lookbackHours = 24,
@@ -50,7 +50,26 @@ class PostLikeReconciliationServiceTest {
             )
 
         assertThat(correctedCount).isEqualTo(1)
-        assertThat(likesAttr.intValue).isEqualTo(1)
+        assertThat(likesAttr.intValue).isEqualTo(2)
+    }
+
+    @Test
+    fun `방문자 좋아요가 반영되어 attr가 최소 보장치보다 크면 보존한다`() {
+        likesAttr.intValue = 5
+        postLikeReconciliationService =
+            PostLikeReconciliationService(
+                postAttrRepository = postAttrRepository,
+                postLikeRepository = FakePostLikeRepository(actualCount = 1),
+            )
+
+        val correctedCount =
+            postLikeReconciliationService.reconcileRecentlyTouchedPosts(
+                lookbackHours = 24,
+                limit = 10,
+            )
+
+        assertThat(correctedCount).isEqualTo(0)
+        assertThat(likesAttr.intValue).isEqualTo(5)
     }
 
     private class FakePostAttrRepository(

@@ -18,8 +18,11 @@ class PostHitDedupService(
     @param:Value("\${custom.post.hit.viewerWindowSeconds:86400}")
     private val viewerWindowSeconds: Long,
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
+    @param:Value("\${custom.post.like.viewerWindowSeconds:31536000}")
+    private val likeViewerWindowSeconds: Long = 31_536_000L,
 ) : PostHitDedupUseCase {
     private val redisKeyPrefix = "post:hit:viewed:"
+    private val likeRedisKeyPrefix = "post:like:liked:"
 
     override fun shouldCountHit(
         postId: Long,
@@ -42,7 +45,49 @@ class PostHitDedupService(
         }
     }
 
+    override fun markLikedIfAbsent(
+        postId: Long,
+        viewerKey: String,
+    ): Boolean {
+        val safeViewerKey = viewerKey.trim()
+        if (safeViewerKey.isBlank()) return false
+
+        val normalizedKey = "$postId:${sha256(safeViewerKey)}"
+        val redisTemplate = redisTemplateProvider.getIfAvailable() ?: throw serviceUnavailable()
+
+        return try {
+            redisTemplate
+                .opsForValue()
+                .setIfAbsent(likeRedisKey(normalizedKey), "1", Duration.ofSeconds(likeViewerWindowSeconds)) == true
+        } catch (exception: DataAccessException) {
+            throw serviceUnavailable(exception)
+        } catch (exception: RuntimeException) {
+            throw serviceUnavailable(exception)
+        }
+    }
+
+    override fun unmarkLikedIfPresent(
+        postId: Long,
+        viewerKey: String,
+    ): Boolean {
+        val safeViewerKey = viewerKey.trim()
+        if (safeViewerKey.isBlank()) return false
+
+        val normalizedKey = "$postId:${sha256(safeViewerKey)}"
+        val redisTemplate = redisTemplateProvider.getIfAvailable() ?: throw serviceUnavailable()
+
+        return try {
+            redisTemplate.delete(likeRedisKey(normalizedKey)) == true
+        } catch (exception: DataAccessException) {
+            throw serviceUnavailable(exception)
+        } catch (exception: RuntimeException) {
+            throw serviceUnavailable(exception)
+        }
+    }
+
     private fun redisKey(value: String): String = "$redisKeyPrefix$value"
+
+    private fun likeRedisKey(value: String): String = "$likeRedisKeyPrefix$value"
 
     private fun serviceUnavailable(cause: Throwable? = null): AppException =
         AppException(

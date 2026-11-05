@@ -26,6 +26,8 @@ class PostSecurityConfigurer : PublicApiRouteContributor {
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/images/**", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/hit", HttpMethod.POST),
+            PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/like", HttpMethod.PUT),
+            PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/like", HttpMethod.DELETE),
         )
 
     fun configure(authorize: AuthorizeHttpRequestsDsl) {

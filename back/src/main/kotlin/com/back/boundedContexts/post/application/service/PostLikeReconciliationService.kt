@@ -33,12 +33,13 @@ class PostLikeReconciliationService(
         var correctedCount = 0
 
         likeAttrs.forEach { likeAttr ->
-            val actualLikesCount = postLikeRepository.countByPost(likeAttr.subject).toInt()
-            if (likeAttr.intValue != actualLikesCount) {
+            val actualLikesCount = postLikeRepository.countByPost(likeAttr.subject).toInt().coerceAtLeast(0)
+            val currentLikesCount = likeAttr.intValue ?: 0
+            if (currentLikesCount < actualLikesCount) {
                 logger.warn(
                     "Reconciling likes count for post {} from {} to {}",
                     likeAttr.subject.id,
-                    likeAttr.intValue,
+                    currentLikesCount,
                     actualLikesCount,
                 )
                 likeAttr.intValue = actualLikesCount

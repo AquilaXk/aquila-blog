@@ -46,13 +46,27 @@ class PostApplicationUseCaseCollaboratorTest {
         post.likesCountAttr = likesAttr
         given(postLikeRepository.countByPost(post)).willReturn(7)
         given(postAttrRepository.save(likesAttr)).willReturn(likesAttr)
+        given(postAttrRepository.incrementIntValue(post, LIKES_COUNT, 1)).willReturn(8)
+        given(postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1)).willReturn(-1)
         given(memberAttrRepository.incrementIntValue(member, POSTS_COUNT, -1)).willReturn(-2)
         given(memberAttrRepository.incrementIntValue(member, POSTS_COUNT, 2)).willReturn(0)
 
         service.syncLikesCount(post)
+        assertThat(post.likesCount).isEqualTo(7)
+
+        service.incrementLike(post)
+        assertThat(post.likesCount).isEqualTo(8)
+        assertThat(likesAttr.intValue).isEqualTo(8)
+        then(postRepository).should().updateLikesCount(post, 8, likesAttr)
+
+        given(postAttrRepository.incrementIntValue(post, LIKES_COUNT, 1)).willReturn(0)
+        service.decrementLike(post)
+        assertThat(post.likesCount).isEqualTo(0)
+        assertThat(likesAttr.intValue).isEqualTo(0)
+        then(postRepository).should().updateLikesCount(post, 0, likesAttr)
+
         service.decrementMemberPostsCount(member)
 
-        assertThat(post.likesCount).isEqualTo(7)
         then(postAttrRepository).should().save(likesAttr)
         then(memberAttrRepository).should().incrementIntValue(member, POSTS_COUNT, 2)
     }

@@ -38,8 +38,6 @@ class AdminOnlyRouteExposureContractTest : BaseControllerIntegrationTest() {
             HttpMethod.GET to "/post/api/v1/posts/1/comments/2",
             HttpMethod.PUT to "/post/api/v1/posts/1/comments/2",
             HttpMethod.DELETE to "/post/api/v1/posts/1/comments/2",
-            HttpMethod.PUT to "/post/api/v1/posts/1/like",
-            HttpMethod.DELETE to "/post/api/v1/posts/1/like",
             HttpMethod.POST to "/member/api/v1/auth/login",
             HttpMethod.GET to "/member/api/v1/privacy/export",
             HttpMethod.POST to "/member/api/v1/privacy/requests",
@@ -68,6 +66,8 @@ class AdminOnlyRouteExposureContractTest : BaseControllerIntegrationTest() {
             HttpMethod.GET to "/post/api/v1/posts/feed",
             HttpMethod.GET to "/post/api/v1/posts/1",
             HttpMethod.POST to "/post/api/v1/posts/1/hit",
+            HttpMethod.PUT to "/post/api/v1/posts/1/like",
+            HttpMethod.DELETE to "/post/api/v1/posts/1/like",
             HttpMethod.GET to "/post/api/v1/adm/posts/bootstrap",
         ).forEach { (method, path) ->
             assertThat(hasHandlerMethod(method, path))

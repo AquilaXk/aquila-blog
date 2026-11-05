@@ -5,4 +5,14 @@ interface PostHitDedupUseCase {
         postId: Long,
         viewerKey: String,
     ): Boolean
+
+    fun markLikedIfAbsent(
+        postId: Long,
+        viewerKey: String,
+    ): Boolean
+
+    fun unmarkLikedIfPresent(
+        postId: Long,
+        viewerKey: String,
+    ): Boolean
 }

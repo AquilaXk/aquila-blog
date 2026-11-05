@@ -83,6 +83,19 @@ class PostReadCacheInvalidator(
         clearRankedInteractionExploreAndSearchCaches(evictReason)
     }
 
+    internal fun invalidatePublicDetailCounters(
+        postId: Long,
+        evictReason: String,
+    ) {
+        listOf(
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_META,
+        ).forEach { cacheName ->
+            cacheManager.getCache(cacheName)?.evict(postId)
+            recordCacheEvict(cacheName, "key", evictReason)
+        }
+    }
+
     internal fun invalidateAuthorRepresentation(reason: String) {
         listOf(
             PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,

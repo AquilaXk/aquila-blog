@@ -180,6 +180,68 @@
         }
       }
     },
+    "/post/api/v1/posts/{id}/like": {
+      "put": {
+        "tags": [
+          "api-v-1-post-interaction-controller"
+        ],
+        "operationId": "like",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataPostLikeToggleResBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "api-v-1-post-interaction-controller"
+        ],
+        "operationId": "unlike",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataPostLikeToggleResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/adm/members/{id}/profileWorkspace/draft": {
       "put": {
         "tags": [
@@ -2752,6 +2814,32 @@
           },
           "data": {
             "$ref": "#/components/schemas/PostWriteResultDto"
+          }
+        }
+      },
+      "PostLikeToggleResBody": {
+        "type": "object",
+        "properties": {
+          "liked": {
+            "type": "boolean"
+          },
+          "likesCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "RsDataPostLikeToggleResBody": {
+        "type": "object",
+        "properties": {
+          "resultCode": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PostLikeToggleResBody"
           }
         }
       },

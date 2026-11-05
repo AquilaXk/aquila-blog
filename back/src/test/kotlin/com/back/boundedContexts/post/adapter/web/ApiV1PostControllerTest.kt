@@ -63,6 +63,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
     @AfterEach
     fun clearHitDedupState() {
         RedisTestSupport.clearKeys(redisTemplate, "post:hit:viewed:*")
+        RedisTestSupport.clearKeys(redisTemplate, "post:like:liked:*")
     }
 
     private fun writePost(
@@ -1735,6 +1736,119 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                 .post("/post/api/v1/posts/${privatePost.id}/hit") {
                     header("X-Forwarded-For", "203.0.113.100")
                     header(HttpHeaders.USER_AGENT, "JUnit-hit-private-404")
+                }.andExpect {
+                    status { isNotFound() }
+                    jsonPath("$.resultCode") { value("404-1") }
+                }
+        }
+    }
+
+    @Nested
+    inner class ToggleLike {
+        @Test
+        fun `익명 방문자의 좋아요 요청은 멱등하게 1회만 증가하고 version과 modifiedAt을 보존한다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = writePost(actor, "좋아요 멱등 검증 글", "내용", true, true)
+            entityManager.flush()
+            entityManager.clear()
+            val persistedBeforeLike = postFacade.findById(post.id).getOrThrow()
+            val initialLikesCount = persistedBeforeLike.likesCount
+            val initialVersion = persistedBeforeLike.version ?: 0L
+            val initialModifiedAt = persistedBeforeLike.modifiedAt
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.20")
+                    header(HttpHeaders.USER_AGENT, "JUnit-like-idempotent")
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostInteractionController::class.java))
+                    match(handler().methodName("like"))
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.msg") { value("좋아요를 반영했습니다.") }
+                    jsonPath("$.data.liked") { value(true) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
+                }
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.20")
+                    header(HttpHeaders.USER_AGENT, "JUnit-like-idempotent")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.liked") { value(true) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
+                }
+
+            entityManager.flush()
+            entityManager.clear()
+            val persistedAfterLike = postFacade.findById(post.id).getOrThrow()
+            assertThat(persistedAfterLike.likesCount).isEqualTo(initialLikesCount + 1)
+            assertThat(persistedAfterLike.version).isEqualTo(initialVersion)
+            assertThat(persistedAfterLike.modifiedAt).isEqualTo(initialModifiedAt)
+        }
+
+        @Test
+        fun `익명 방문자의 좋아요 취소 요청은 이전 좋아요가 있을 때 1회만 감소하고 재요청에 멱등하다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = writePost(actor, "좋아요 취소 멱등 검증 글", "내용", true, true)
+            val initialLikesCount = post.likesCount
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.21")
+                    header(HttpHeaders.USER_AGENT, "JUnit-unlike-idempotent")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.liked") { value(true) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
+                }
+
+            mvc
+                .delete("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.21")
+                    header(HttpHeaders.USER_AGENT, "JUnit-unlike-idempotent")
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostInteractionController::class.java))
+                    match(handler().methodName("unlike"))
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.msg") { value("좋아요 취소를 반영했습니다.") }
+                    jsonPath("$.data.liked") { value(false) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount) }
+                }
+
+            mvc
+                .delete("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.21")
+                    header(HttpHeaders.USER_AGENT, "JUnit-unlike-idempotent")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.liked") { value(false) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount) }
+                }
+        }
+
+        @Test
+        fun `실패 - 비공개 글에 대한 비로그인 방문자의 좋아요 및 좋아요 취소 요청은 404를 반환한다`() {
+            val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val privatePost = writePost(writer, "비공개 글 좋아요 차단", "내용", false, false)
+
+            mvc
+                .put("/post/api/v1/posts/${privatePost.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.22")
+                    header(HttpHeaders.USER_AGENT, "JUnit-like-private-404")
+                }.andExpect {
+                    status { isNotFound() }
+                    jsonPath("$.resultCode") { value("404-1") }
+                }
+
+            mvc
+                .delete("/post/api/v1/posts/${privatePost.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.22")
+                    header(HttpHeaders.USER_AGENT, "JUnit-like-private-404")
                 }.andExpect {
                     status { isNotFound() }
                     jsonPath("$.resultCode") { value("404-1") }

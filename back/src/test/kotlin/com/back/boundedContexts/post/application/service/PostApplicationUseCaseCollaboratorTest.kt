@@ -59,7 +59,11 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(likesAttr.intValue).isEqualTo(8)
         then(postRepository).should().updateLikesCount(post, 8, likesAttr)
 
-        given(postAttrRepository.incrementIntValue(post, LIKES_COUNT, 1)).willReturn(0)
+        given(postLikeRepository.countByPost(post)).willReturn(2)
+        service.syncLikesCount(post)
+        assertThat(post.likesCount).isEqualTo(8)
+        assertThat(likesAttr.intValue).isEqualTo(8)
+
         service.decrementLike(post)
         assertThat(post.likesCount).isEqualTo(0)
         assertThat(likesAttr.intValue).isEqualTo(0)
@@ -67,7 +71,7 @@ class PostApplicationUseCaseCollaboratorTest {
 
         service.decrementMemberPostsCount(member)
 
-        then(postAttrRepository).should().save(likesAttr)
+        then(postAttrRepository).should(times(2)).save(likesAttr)
         then(memberAttrRepository).should().incrementIntValue(member, POSTS_COUNT, 2)
     }
 

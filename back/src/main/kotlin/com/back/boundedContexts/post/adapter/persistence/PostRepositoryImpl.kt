@@ -586,7 +586,8 @@ class PostRepositoryImpl(
         val em = entityManager ?: return
         if (!em.contains(attr)) return
         val session = em.unwrap(SharedSessionContractImplementor::class.java)
-        val entry = session.persistenceContextInternal.getEntry(attr) ?: return
+        val targetAttr = org.hibernate.Hibernate.unproxy(attr)
+        val entry = session.persistenceContextInternal.getEntry(targetAttr) ?: return
         val loadedState = entry.loadedState ?: return
         val intValueIdx = entry.persister.propertyNames.indexOf("intValue")
         if (intValueIdx >= 0) {

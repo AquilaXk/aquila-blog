@@ -37,10 +37,7 @@ class PostCounterService(
     }
 
     fun decrementLike(post: Post) {
-        var updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1)
-        if (updatedLikesCount < 0) {
-            updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -updatedLikesCount)
-        }
+        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1).coerceAtLeast(0)
         applyLikesCount(post, updatedLikesCount)
     }
 
@@ -58,7 +55,7 @@ class PostCounterService(
     }
 
     fun syncLikesCount(post: Post) {
-        val actualLikesCount = postLikeRepository.countByPost(post).toInt()
+        val actualLikesCount = maxOf(post.likesCount, postLikeRepository.countByPost(post).toInt().coerceAtLeast(0))
         post.likesCount = actualLikesCount
         post.likesCountAttr?.intValue = actualLikesCount
         savePostAttr(post.likesCountAttr)

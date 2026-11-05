@@ -1793,7 +1793,12 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
         fun `익명 방문자의 좋아요 취소 요청은 이전 좋아요가 있을 때 1회만 감소하고 재요청에 멱등하다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = writePost(actor, "좋아요 취소 멱등 검증 글", "내용", true, true)
-            val initialLikesCount = post.likesCount
+            entityManager.flush()
+            entityManager.clear()
+            val persistedBeforeLike = postFacade.findById(post.id).getOrThrow()
+            val initialLikesCount = persistedBeforeLike.likesCount
+            val initialVersion = persistedBeforeLike.version ?: 0L
+            val initialModifiedAt = persistedBeforeLike.modifiedAt
 
             mvc
                 .put("/post/api/v1/posts/${post.id}/like") {
@@ -1804,6 +1809,9 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.data.liked") { value(true) }
                     jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
                 }
+
+            entityManager.flush()
+            entityManager.clear()
 
             mvc
                 .delete("/post/api/v1/posts/${post.id}/like") {
@@ -1829,6 +1837,13 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     jsonPath("$.data.liked") { value(false) }
                     jsonPath("$.data.likesCount") { value(initialLikesCount) }
                 }
+
+            entityManager.flush()
+            entityManager.clear()
+            val persistedAfterUnlike = postFacade.findById(post.id).getOrThrow()
+            assertThat(persistedAfterUnlike.likesCount).isEqualTo(initialLikesCount)
+            assertThat(persistedAfterUnlike.version).isEqualTo(initialVersion)
+            assertThat(persistedAfterUnlike.modifiedAt).isEqualTo(initialModifiedAt)
         }
 
         @Test

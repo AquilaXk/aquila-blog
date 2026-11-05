@@ -46,8 +46,13 @@ class ApiV1PostInteractionController(
         @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
         val post = findReadablePost(id)
-        if (postHitDedupUseCase.markLikedIfAbsent(id, resolveViewerKey())) {
-            postUseCase.incrementLike(post)
+        val viewerKey = resolveViewerKey()
+        if (postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)) {
+            runCatching { postUseCase.incrementLike(post) }
+                .onFailure {
+                    postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)
+                    throw it
+                }
         }
         return RsData(
             "200-1",
@@ -65,8 +70,13 @@ class ApiV1PostInteractionController(
         @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
         val post = findReadablePost(id)
-        if (postHitDedupUseCase.unmarkLikedIfPresent(id, resolveViewerKey())) {
-            postUseCase.decrementLike(post)
+        val viewerKey = resolveViewerKey()
+        if (postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)) {
+            runCatching { postUseCase.decrementLike(post) }
+                .onFailure {
+                    postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)
+                    throw it
+                }
         }
         return RsData(
             "200-1",

@@ -5,7 +5,6 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.dao.DataAccessException
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
@@ -27,59 +26,45 @@ class PostHitDedupService(
     override fun shouldCountHit(
         postId: Long,
         viewerKey: String,
-    ): Boolean {
-        val safeViewerKey = viewerKey.trim()
-        if (safeViewerKey.isBlank()) return true
-
-        val normalizedKey = "$postId:${sha256(safeViewerKey)}"
-        val redisTemplate = redisTemplateProvider.getIfAvailable() ?: throw serviceUnavailable()
-
-        return try {
+    ): Boolean =
+        executeViewerDedup(postId, viewerKey, onBlank = true) { redisTemplate, normalizedKey ->
             redisTemplate
                 .opsForValue()
-                .setIfAbsent(redisKey(normalizedKey), "1", Duration.ofSeconds(viewerWindowSeconds))
-        } catch (exception: DataAccessException) {
-            throw serviceUnavailable(exception)
-        } catch (exception: RuntimeException) {
-            throw serviceUnavailable(exception)
+                .setIfAbsent(redisKey(normalizedKey), "1", Duration.ofSeconds(viewerWindowSeconds)) == true
         }
-    }
 
     override fun markLikedIfAbsent(
         postId: Long,
         viewerKey: String,
-    ): Boolean {
-        val safeViewerKey = viewerKey.trim()
-        if (safeViewerKey.isBlank()) return false
-
-        val normalizedKey = "$postId:${sha256(safeViewerKey)}"
-        val redisTemplate = redisTemplateProvider.getIfAvailable() ?: throw serviceUnavailable()
-
-        return try {
+    ): Boolean =
+        executeViewerDedup(postId, viewerKey, onBlank = false) { redisTemplate, normalizedKey ->
             redisTemplate
                 .opsForValue()
                 .setIfAbsent(likeRedisKey(normalizedKey), "1", Duration.ofSeconds(likeViewerWindowSeconds)) == true
-        } catch (exception: DataAccessException) {
-            throw serviceUnavailable(exception)
-        } catch (exception: RuntimeException) {
-            throw serviceUnavailable(exception)
         }
-    }
 
     override fun unmarkLikedIfPresent(
         postId: Long,
         viewerKey: String,
+    ): Boolean =
+        executeViewerDedup(postId, viewerKey, onBlank = false) { redisTemplate, normalizedKey ->
+            redisTemplate.delete(likeRedisKey(normalizedKey)) == true
+        }
+
+    private fun executeViewerDedup(
+        postId: Long,
+        viewerKey: String,
+        onBlank: Boolean,
+        block: (StringRedisTemplate, String) -> Boolean,
     ): Boolean {
         val safeViewerKey = viewerKey.trim()
-        if (safeViewerKey.isBlank()) return false
+        if (safeViewerKey.isBlank()) return onBlank
 
         val normalizedKey = "$postId:${sha256(safeViewerKey)}"
         val redisTemplate = redisTemplateProvider.getIfAvailable() ?: throw serviceUnavailable()
 
         return try {
-            redisTemplate.delete(likeRedisKey(normalizedKey)) == true
-        } catch (exception: DataAccessException) {
-            throw serviceUnavailable(exception)
+            block(redisTemplate, normalizedKey)
         } catch (exception: RuntimeException) {
             throw serviceUnavailable(exception)
         }

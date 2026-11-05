@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -12,6 +13,8 @@ import java.time.Instant
 class PostLikeReconciliationService(
     private val postAttrRepository: PostAttrRepositoryPort,
     private val postLikeRepository: PostLikeRepositoryPort,
+    private val postRepository: PostRepositoryPort,
+    private val postHitSideEffectQueue: PostHitSideEffectQueue,
 ) {
     private val logger = LoggerFactory.getLogger(PostLikeReconciliationService::class.java)
 
@@ -34,16 +37,20 @@ class PostLikeReconciliationService(
 
         likeAttrs.forEach { likeAttr ->
             val actualLikesCount = postLikeRepository.countByPost(likeAttr.subject).toInt().coerceAtLeast(0)
-            val currentLikesCount = likeAttr.intValue ?: 0
-            if (currentLikesCount < actualLikesCount) {
+            val currentLikesCount = (likeAttr.intValue ?: 0).coerceAtLeast(0)
+            val targetLikesCount = maxOf(currentLikesCount, actualLikesCount)
+            if (currentLikesCount < targetLikesCount || likeAttr.subject.likesCount < targetLikesCount) {
                 logger.warn(
-                    "Reconciling likes count for post {} from {} to {}",
+                    "Reconciling likes count for post {} from attr={} post={} to {}",
                     likeAttr.subject.id,
                     currentLikesCount,
-                    actualLikesCount,
+                    likeAttr.subject.likesCount,
+                    targetLikesCount,
                 )
-                likeAttr.intValue = actualLikesCount
+                likeAttr.intValue = targetLikesCount
                 postAttrRepository.save(likeAttr)
+                postRepository.updateLikesCount(likeAttr.subject, targetLikesCount, likeAttr)
+                postHitSideEffectQueue.enqueue(likeAttr.subject.id, "like")
                 correctedCount++
             }
         }

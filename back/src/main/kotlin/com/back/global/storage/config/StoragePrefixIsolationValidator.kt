@@ -21,6 +21,8 @@ class StoragePrefixIsolationValidator(
         StoragePrefixIsolation.validate(
             postKeyPrefix = storageProperties.keyPrefix,
             cloudKeyPrefix = cloudStorageProperties.cloudKeyPrefix,
+            postBucket = storageProperties.bucket,
+            cloudBucket = cloudStorageProperties.resolvedCloudBucket,
         )
         cloudStorageProperties.validateAgainstEdgeTransferLimits()
     }

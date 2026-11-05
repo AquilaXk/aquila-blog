@@ -86,4 +86,65 @@ class StoragePrefixIsolationTest {
             )
         }.doesNotThrowAnyException()
     }
+
+    @Test
+    @DisplayName("물리적으로 분리된 버킷을 사용하면 동일한 prefix도 허용하되 동일 버킷이면 거부한다")
+    fun allowsOverlappingPrefixesOnlyWhenBucketsAreDistinct() {
+        assertThatCode {
+            StoragePrefixIsolation.validate(
+                postKeyPrefix = "shared",
+                cloudKeyPrefix = "shared",
+                postBucket = "blog-images",
+                cloudBucket = "blog-cloud-private",
+            )
+        }.doesNotThrowAnyException()
+
+        assertThatThrownBy {
+            StoragePrefixIsolation.validate(
+                postKeyPrefix = "shared",
+                cloudKeyPrefix = "shared",
+                postBucket = "blog-images",
+                cloudBucket = " blog-images ",
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("mutually exclusive")
+
+        assertThatThrownBy {
+            StoragePrefixIsolation.validate(
+                postKeyPrefix = "shared",
+                cloudKeyPrefix = "shared",
+                postBucket = "blog-images",
+                cloudBucket = "   ",
+            )
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("mutually exclusive")
+    }
+
+    @Test
+    @DisplayName("StoragePrefixIsolationValidator는 resolvedCloudBucket 기준으로 버킷 분리 여부를 검증한다")
+    fun validatorUsesResolvedCloudBucketForIsolationCheck() {
+        val args = org.springframework.boot.DefaultApplicationArguments()
+        val isolatedProps =
+            CloudStorageProperties(
+                bucket = "blog-images",
+                cloudBucket = "blog-cloud-private",
+                keyPrefix = "files",
+                cloudKeyPrefix = "files",
+            )
+        assertThatCode {
+            StoragePrefixIsolationValidator(isolatedProps, isolatedProps).run(args)
+        }.doesNotThrowAnyException()
+
+        val sharedBucketProps =
+            CloudStorageProperties(
+                bucket = "blog-images",
+                cloudBucket = "",
+                keyPrefix = "files",
+                cloudKeyPrefix = "files",
+            )
+        assertThatThrownBy {
+            StoragePrefixIsolationValidator(sharedBucketProps, sharedBucketProps).run(args)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("mutually exclusive")
+    }
 }

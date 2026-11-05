@@ -13,6 +13,8 @@ import org.springframework.http.HttpHeaders
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 /**
  * API 요청의 쿠키/JWT 인증을 SecurityContext로 연결하는 servlet filter입니다.
@@ -59,6 +61,7 @@ class CustomAuthenticationFilter(
         val isPublicReadSafe = isPublicApi && isReadSafeMethod(request.method)
 
         try {
+            rejectForbiddenQueryCredentials(request)
             try {
                 authenticateIfPossible(request, allowRefreshRotation = !isPublicReadSafe)
             } catch (e: AppException) {
@@ -92,6 +95,29 @@ class CustomAuthenticationFilter(
             )
         }
     }
+
+    private fun rejectForbiddenQueryCredentials(request: HttpServletRequest) {
+        val rawQuery = request.queryString
+        if (!rawQuery.isNullOrBlank()) {
+            for (segment in rawQuery.split('&', ';')) {
+                val rawName = segment.substringBefore('=')
+                val decodedName = runCatching { URLDecoder.decode(rawName, StandardCharsets.UTF_8) }.getOrDefault(rawName)
+                if (normalizeQueryCredentialKey(decodedName) in FORBIDDEN_QUERY_CREDENTIAL_KEYS) {
+                    throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_CREDENTIAL_MESSAGE)
+                }
+            }
+        }
+        if (request.parameterMap.keys.any { normalizeQueryCredentialKey(it) in FORBIDDEN_QUERY_CREDENTIAL_KEYS }) {
+            throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_CREDENTIAL_MESSAGE)
+        }
+    }
+
+    private fun normalizeQueryCredentialKey(rawKey: String): String =
+        rawKey
+            .trim()
+            .replace("_", "")
+            .replace("-", "")
+            .lowercase()
 
     /**
      * 기존 accessToken을 먼저 검증하고, 실패하면 보호 경로에 한해 refreshToken 회전 경로로 이동합니다.
@@ -139,6 +165,14 @@ class CustomAuthenticationFilter(
 
     companion object {
         private const val MAX_PATH_LENGTH = 512
+        private const val FORBIDDEN_QUERY_CREDENTIAL_MESSAGE = "쿼리 파라미터로 인증 토큰을 전달할 수 없습니다."
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
+        private val FORBIDDEN_QUERY_CREDENTIAL_KEYS =
+            setOf(
+                "accesstoken",
+                "refreshtoken",
+                "sessionkey",
+                "apikey",
+            )
     }
 }

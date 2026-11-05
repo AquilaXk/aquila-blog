@@ -69,7 +69,7 @@ class CloudStorageAdapter(
                 client.putObject(
                     PutObjectRequest
                         .builder()
-                        .bucket(properties.bucket)
+                        .bucket(properties.resolvedCloudBucket)
                         .key(request.objectKey)
                         .contentType(request.contentType)
                         .metadata(
@@ -105,7 +105,7 @@ class CloudStorageAdapter(
                 client.getObject(
                     GetObjectRequest
                         .builder()
-                        .bucket(properties.bucket)
+                        .bucket(properties.resolvedCloudBucket)
                         .key(objectKey)
                         .build(),
                 )
@@ -141,7 +141,7 @@ class CloudStorageAdapter(
                 client.getObject(
                     GetObjectRequest
                         .builder()
-                        .bucket(properties.bucket)
+                        .bucket(properties.resolvedCloudBucket)
                         .key(objectKey)
                         .range("bytes=${range.first}-${range.last}")
                         .build(),
@@ -176,7 +176,7 @@ class CloudStorageAdapter(
                 client.createMultipartUpload(
                     CreateMultipartUploadRequest
                         .builder()
-                        .bucket(properties.bucket)
+                        .bucket(properties.resolvedCloudBucket)
                         .key(request.objectKey)
                         .contentType(request.contentType)
                         .metadata(
@@ -210,7 +210,7 @@ class CloudStorageAdapter(
                     client.uploadPart(
                         UploadPartRequest
                             .builder()
-                            .bucket(properties.bucket)
+                            .bucket(properties.resolvedCloudBucket)
                             .key(request.objectKey)
                             .uploadId(request.uploadId)
                             .partNumber(request.partNumber)
@@ -245,7 +245,7 @@ class CloudStorageAdapter(
             client.completeMultipartUpload(
                 CompleteMultipartUploadRequest
                     .builder()
-                    .bucket(properties.bucket)
+                    .bucket(properties.resolvedCloudBucket)
                     .key(request.objectKey)
                     .uploadId(request.uploadId)
                     .multipartUpload(
@@ -284,7 +284,7 @@ class CloudStorageAdapter(
             client.abortMultipartUpload(
                 AbortMultipartUploadRequest
                     .builder()
-                    .bucket(properties.bucket)
+                    .bucket(properties.resolvedCloudBucket)
                     .key(request.objectKey)
                     .uploadId(request.uploadId)
                     .build(),
@@ -326,7 +326,7 @@ class CloudStorageAdapter(
                 client.headObject(
                     HeadObjectRequest
                         .builder()
-                        .bucket(properties.bucket)
+                        .bucket(properties.resolvedCloudBucket)
                         .key(objectKey)
                         .build(),
                 )
@@ -367,7 +367,7 @@ class CloudStorageAdapter(
                     client.listObjectsV2(
                         ListObjectsV2Request
                             .builder()
-                            .bucket(properties.bucket)
+                            .bucket(properties.resolvedCloudBucket)
                             .prefix(normalizedPrefix)
                             .maxKeys(remaining.coerceAtMost(S3_PAGE_SIZE))
                             .continuationToken(continuationToken)
@@ -411,7 +411,7 @@ class CloudStorageAdapter(
             client.deleteObject(
                 DeleteObjectRequest
                     .builder()
-                    .bucket(properties.bucket)
+                    .bucket(properties.resolvedCloudBucket)
                     .key(objectKey)
                     .build(),
             )
@@ -472,7 +472,7 @@ class CloudStorageAdapter(
         StorageRuntimeConfigurationValidator.validate(
             endpoint = properties.endpoint,
             region = properties.region,
-            bucket = properties.bucket,
+            bucket = properties.resolvedCloudBucket,
             accessKey = properties.accessKey,
             secretKey = properties.secretKey,
             credentialVersion = properties.credentialVersion,

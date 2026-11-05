@@ -20,6 +20,8 @@ object StoragePrefixIsolation {
     fun validate(
         postKeyPrefix: String,
         cloudKeyPrefix: String,
+        postBucket: String = "",
+        cloudBucket: String = "",
     ) {
         val postPrefix = normalize(postKeyPrefix)
         val cloudPrefix = normalize(cloudKeyPrefix)
@@ -29,9 +31,17 @@ object StoragePrefixIsolation {
         require(cloudPrefix.isNotBlank()) {
             "custom.storage.cloudKeyPrefix must be non-blank (got blank/whitespace)"
         }
-        require(!overlaps(postPrefix, cloudPrefix)) {
-            "custom.storage.keyPrefix('$postPrefix') and custom.storage.cloudKeyPrefix('$cloudPrefix') " +
-                "must be mutually exclusive (no equality or path containment)"
+        val normalizedPostBucket = postBucket.trim()
+        val normalizedCloudBucket = cloudBucket.trim()
+        val sameBucket =
+            normalizedPostBucket.isBlank() ||
+                normalizedCloudBucket.isBlank() ||
+                normalizedPostBucket == normalizedCloudBucket
+        if (sameBucket) {
+            require(!overlaps(postPrefix, cloudPrefix)) {
+                "custom.storage.keyPrefix('$postPrefix') and custom.storage.cloudKeyPrefix('$cloudPrefix') " +
+                    "must be mutually exclusive (no equality or path containment)"
+            }
         }
     }
 }

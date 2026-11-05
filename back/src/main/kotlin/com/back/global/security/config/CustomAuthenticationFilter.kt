@@ -99,18 +99,49 @@ class CustomAuthenticationFilter(
     private fun rejectForbiddenQueryCredentials(request: HttpServletRequest) {
         val rawQuery = request.queryString
         if (!rawQuery.isNullOrBlank()) {
-            for (segment in rawQuery.split('&', ';')) {
-                val rawName = segment.substringBefore('=')
-                val decodedName = runCatching { URLDecoder.decode(rawName, StandardCharsets.UTF_8) }.getOrDefault(rawName)
-                if (normalizeQueryCredentialKey(decodedName) in FORBIDDEN_QUERY_CREDENTIAL_KEYS) {
-                    throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_CREDENTIAL_MESSAGE)
-                }
+            if (containsForbiddenQueryCredential(rawQuery)) {
+                throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_CREDENTIAL_MESSAGE)
             }
+            return
         }
-        if (request.parameterMap.keys.any { normalizeQueryCredentialKey(it) in FORBIDDEN_QUERY_CREDENTIAL_KEYS }) {
+        if (
+            canInspectParameterMapWithoutBodyParsing(request) &&
+            request.parameterMap.keys.any { isForbiddenQueryCredentialKey(it) }
+        ) {
             throw AppException(ErrorCode.BAD_REQUEST, FORBIDDEN_QUERY_CREDENTIAL_MESSAGE)
         }
     }
+
+    private fun containsForbiddenQueryCredential(rawQuery: String): Boolean =
+        decodePercentPasses(rawQuery).any { queryPass ->
+            queryPass.split('&', ';').any { segment ->
+                decodePercentPasses(segment.substringBefore('=')).any { decodedKey ->
+                    isForbiddenQueryCredentialKey(decodedKey.substringBefore('='))
+                }
+            }
+        }
+
+    private fun decodePercentPasses(raw: String): List<String> {
+        val passes = mutableListOf(raw)
+        var current = raw
+        repeat(MAX_QUERY_DECODE_PASSES) {
+            val decoded = runCatching { URLDecoder.decode(current, StandardCharsets.UTF_8) }.getOrDefault(current)
+            if (decoded == current) return passes
+            passes += decoded
+            current = decoded
+        }
+        return passes
+    }
+
+    private fun canInspectParameterMapWithoutBodyParsing(request: HttpServletRequest): Boolean {
+        if (request.contentLengthLong > 0L) return false
+        val contentType = request.contentType?.lowercase().orEmpty()
+        return !contentType.startsWith("application/x-www-form-urlencoded") &&
+            !contentType.startsWith("multipart/")
+    }
+
+    private fun isForbiddenQueryCredentialKey(rawKey: String): Boolean =
+        normalizeQueryCredentialKey(rawKey) in FORBIDDEN_QUERY_CREDENTIAL_KEYS
 
     private fun normalizeQueryCredentialKey(rawKey: String): String =
         rawKey
@@ -165,6 +196,7 @@ class CustomAuthenticationFilter(
 
     companion object {
         private const val MAX_PATH_LENGTH = 512
+        private const val MAX_QUERY_DECODE_PASSES = 3
         private const val FORBIDDEN_QUERY_CREDENTIAL_MESSAGE = "쿼리 파라미터로 인증 토큰을 전달할 수 없습니다."
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
         private val FORBIDDEN_QUERY_CREDENTIAL_KEYS =

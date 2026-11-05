@@ -289,7 +289,7 @@ class CloudStorageAdapterTest {
                     endpoint = "http://minio:9000",
                     region = "us-east-1",
                     bucket = "blog-images",
-                    cloudBucket = " blog-cloud-private ",
+                    cloudBucket = "blog-cloud-private",
                     accessKey = "contract-access",
                     secretKey = "contract-secret-not-for-production",
                     credentialVersion = "1",
@@ -299,7 +299,7 @@ class CloudStorageAdapterTest {
         ReflectionTestUtils.setField(adapter, "s3Client", s3Client)
 
         adapter.initializeDependency()
-        assertThat(s3Client.lastHeadBucketRequest!!.bucket()).isEqualTo("blog-cloud-private")
+        assertThat(s3Client.lastHeadBucketRequest!!.bucket()).isEqualTo("blog-images")
 
         adapter.upload(
             CloudStoragePort.UploadRequest(

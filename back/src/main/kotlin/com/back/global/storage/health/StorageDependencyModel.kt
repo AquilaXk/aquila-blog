@@ -100,6 +100,7 @@ class ValidatedStorageConfiguration internal constructor(
     val accessKey: String,
     val secretKey: String,
     val credentialVersion: String,
+    val secondaryBucket: String? = null,
 )
 
 enum class StorageDependencyProbeStage(
@@ -156,6 +157,9 @@ object StorageDependencyProber {
 
         return try {
             client.headBucket(HeadBucketRequest.builder().bucket(configuration.bucket).build())
+            configuration.secondaryBucket?.let { secondaryBucket ->
+                client.headBucket(HeadBucketRequest.builder().bucket(secondaryBucket).build())
+            }
             StorageDependencyProbeOutcome(
                 client = client,
                 result = StorageDependencyProbeResult.ready(configuration.credentialVersion),

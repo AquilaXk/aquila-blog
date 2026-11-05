@@ -163,6 +163,11 @@ class CustomAuthenticationFilterHardeningTest {
                 "session-key=leaked-session",
                 "apiKey=leaked-api-key",
                 "api%5Fkey=leaked-api-key",
+                "accessToken%3Dleaked-jwt",
+                "%2561ccessToken=leaked-jwt",
+                "%252561ccessToken=leaked-jwt",
+                "a=1%26refreshToken%3Dleaked-refresh",
+                "bad=%GG&accessToken%3Dleaked-jwt",
                 "page=1;refresh_token=leaked-refresh",
             )
 
@@ -192,6 +197,64 @@ class CustomAuthenticationFilterHardeningTest {
         assertThat(parameterMapResponse.status).isEqualTo(HttpServletResponse.SC_BAD_REQUEST)
         assertThat(parameterMapResponse.contentAsString).contains("\"resultCode\":\"400-1\"")
         verify(fixture.clientIpResolver, never()).resolve(parameterMapOnlyRequest)
+    }
+
+    @Test
+    @DisplayName("POST form/multipart 및 본문이 있는 요청은 인증 전 getParameterMap을 호출하거나 차단하지 않는다")
+    fun `post form and multipart requests do not parse parameter map before authentication`() {
+        val fixture = CustomAuthenticationFilterTest.CustomAuthenticationFilterFixture()
+        val filter = fixture.authenticationFilter()
+        fixture.givenEmptyAuthorizationHeader()
+        fixture.givenCookieTokens()
+
+        val bodyRequests =
+            listOf(
+                object : MockHttpServletRequest("POST", "/post/api/v1/posts") {
+                    var parameterMapCalls = 0
+
+                    override fun getParameterMap(): MutableMap<String, Array<String>> {
+                        parameterMapCalls++
+                        return super.getParameterMap()
+                    }
+                }.apply {
+                    contentType = "multipart/form-data; boundary=---test"
+                    setParameter("apiKey", "form-field-value")
+                },
+                object : MockHttpServletRequest("POST", "/post/api/v1/posts") {
+                    var parameterMapCalls = 0
+
+                    override fun getParameterMap(): MutableMap<String, Array<String>> {
+                        parameterMapCalls++
+                        return super.getParameterMap()
+                    }
+                }.apply {
+                    contentType = "application/x-www-form-urlencoded; charset=UTF-8"
+                    setParameter("accessToken", "form-field-value")
+                },
+                object : MockHttpServletRequest("POST", "/post/api/v1/posts") {
+                    var parameterMapCalls = 0
+
+                    override fun getParameterMap(): MutableMap<String, Array<String>> {
+                        parameterMapCalls++
+                        return super.getParameterMap()
+                    }
+                }.apply {
+                    setContent("{\"apiKey\":\"json-body\"}".toByteArray())
+                    setParameter("apiKey", "body-param")
+                },
+            )
+
+        for (request in bodyRequests) {
+            val response = MockHttpServletResponse()
+            fixture.givenPublicRequest(request)
+            fixture.givenClientIp(request, "203.0.113.10")
+
+            filter.doFilter(request, response, fixture.noContentFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            val calls = request.javaClass.getMethod("getParameterMapCalls").invoke(request) as Int
+            assertThat(calls).isZero()
+        }
     }
 
     @Test

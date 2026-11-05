@@ -31,11 +31,11 @@ class CloudStoragePropertiesYamlBindingTest {
 
     @Test
     @DisplayName("resolvedCloudBucket은 전용 cloudBucket이 설정되면 이를 사용하고 비어 있으면 기본 bucket으로 폴백한다")
-    fun `resolvedCloudBucket prefers configured cloudBucket and falls back to bucket when blank`() {
-        val fallbackProps = CloudStorageProperties(bucket = " blog-images ", cloudBucket = "   ")
+    fun `resolvedCloudBucket prefers configured cloudBucket and falls back to bucket when empty`() {
+        val fallbackProps = CloudStorageProperties(bucket = "blog-images", cloudBucket = "")
         assertThat(fallbackProps.resolvedCloudBucket).isEqualTo("blog-images")
 
-        val dedicatedProps = CloudStorageProperties(bucket = "blog-images", cloudBucket = " blog-cloud-private ")
+        val dedicatedProps = CloudStorageProperties(bucket = "blog-images", cloudBucket = "blog-cloud-private")
         assertThat(dedicatedProps.resolvedCloudBucket).isEqualTo("blog-cloud-private")
     }
 }

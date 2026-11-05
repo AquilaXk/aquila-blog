@@ -70,7 +70,7 @@ data class CloudStorageProperties(
     var cloudReconcileMetricsRefreshEnabled: Boolean = true,
 ) : StoragePropertiesPort {
     val resolvedCloudBucket: String
-        get() = cloudBucket.trim().ifBlank { bucket.trim() }
+        get() = if (cloudBucket.isNotEmpty()) cloudBucket else bucket
 
     fun validateResumableLifetimeAgainstMinioStaleExpiry() {
         val sliding = cloudVideoResumableExpiresSeconds.coerceAtLeast(60)

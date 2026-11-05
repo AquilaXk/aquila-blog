@@ -564,7 +564,8 @@ class PostRepositoryImpl(
         val em = entityManager ?: return
         if (!em.contains(targetPost)) return
         val session = em.unwrap(SharedSessionContractImplementor::class.java)
-        val entry = session.persistenceContextInternal.getEntry(targetPost) ?: return
+        val targetEntity = org.hibernate.Hibernate.unproxy(targetPost)
+        val entry = session.persistenceContextInternal.getEntry(targetEntity) ?: return
         val loadedState = entry.loadedState ?: return
         val propertyNames = entry.persister.propertyNames
         val counterIdx = propertyNames.indexOf(counterProperty)
@@ -591,6 +592,20 @@ class PostRepositoryImpl(
         val loadedState = entry.loadedState ?: return
         val intValueIdx = entry.persister.propertyNames.indexOf("intValue")
         if (intValueIdx >= 0) {
+            if (loadedState[intValueIdx] != counterValue) {
+                em
+                    .createNativeQuery(
+                        """
+                        update post_attr
+                        set int_value = :counterValue,
+                            modified_at = now()
+                        where id = :id
+                          and int_value is distinct from :counterValue
+                        """.trimIndent(),
+                    ).setParameter("counterValue", counterValue)
+                    .setParameter("id", attr.id)
+                    .executeUpdate()
+            }
             loadedState[intValueIdx] = counterValue
         }
     }

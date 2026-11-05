@@ -36,21 +36,24 @@ class PostLikeReconciliationService(
         var correctedCount = 0
 
         likeAttrs.forEach { likeAttr ->
-            val actualLikesCount = postLikeRepository.countByPost(likeAttr.subject).toInt().coerceAtLeast(0)
+            val post = likeAttr.subject
+            val actualLikesCount = postLikeRepository.countByPost(post).toInt().coerceAtLeast(0)
             val currentLikesCount = (likeAttr.intValue ?: 0).coerceAtLeast(0)
             val targetLikesCount = maxOf(currentLikesCount, actualLikesCount)
-            if (currentLikesCount < targetLikesCount || likeAttr.subject.likesCount < targetLikesCount) {
+            if (likeAttr.intValue != targetLikesCount || post.likesCount != targetLikesCount) {
                 logger.warn(
                     "Reconciling likes count for post {} from attr={} post={} to {}",
-                    likeAttr.subject.id,
-                    currentLikesCount,
-                    likeAttr.subject.likesCount,
+                    post.id,
+                    likeAttr.intValue,
+                    post.likesCount,
                     targetLikesCount,
                 )
                 likeAttr.intValue = targetLikesCount
+                post.likesCount = targetLikesCount
+                post.likesCountAttr = likeAttr
                 postAttrRepository.save(likeAttr)
-                postRepository.updateLikesCount(likeAttr.subject, targetLikesCount, likeAttr)
-                postHitSideEffectQueue.enqueue(likeAttr.subject.id, "like")
+                postRepository.updateLikesCount(post, targetLikesCount, likeAttr)
+                postHitSideEffectQueue.enqueue(post.id, "like")
                 correctedCount++
             }
         }

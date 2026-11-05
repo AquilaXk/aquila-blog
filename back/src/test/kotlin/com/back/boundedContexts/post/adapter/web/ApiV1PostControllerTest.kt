@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostHitDedupService
+import com.back.boundedContexts.post.application.service.PostLikeReconciliationService
 import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.domain.Post
@@ -47,6 +48,9 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var postHitDedupService: PostHitDedupService
+
+    @Autowired
+    private lateinit var postLikeReconciliationService: PostLikeReconciliationService
 
     @Autowired(required = false)
     private var redisTemplate: StringRedisTemplate? = null
@@ -1868,6 +1872,50 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     status { isNotFound() }
                     jsonPath("$.resultCode") { value("404-1") }
                 }
+        }
+
+        @Test
+        fun `좋아요 정합성 보정 서비스는 flush 및 clear 이후에도 post_attr와 post의 likes_count를 영속화하고 version과 modifiedAt을 보존한다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = writePost(actor, "좋아요 정합성 보정 영속화 검증 글", "내용", true, true)
+            setPostCounterAttr(post.id, "likesCount", "likes_count_attr_id", 0)
+            jdbcTemplate.update(
+                "update post_attr set modified_at = now() where subject_id = ? and name = 'likesCount'",
+                post.id,
+            )
+            jdbcTemplate.update(
+                "insert into post_like (id, liker_id, post_id) values (nextval('post_like_seq'), ?, ?)",
+                actor.id,
+                post.id,
+            )
+            jdbcTemplate.update(
+                "update post set likes_count = 3 where id = ?",
+                post.id,
+            )
+            entityManager.flush()
+            entityManager.clear()
+            val persistedBeforeReconcile = postFacade.findById(post.id).getOrThrow()
+            val initialVersion = persistedBeforeReconcile.version ?: 0L
+            val initialModifiedAt = persistedBeforeReconcile.modifiedAt
+            entityManager.clear()
+
+            val correctedCount = postLikeReconciliationService.reconcileRecentlyTouchedPosts(24, 500)
+            entityManager.flush()
+            entityManager.clear()
+
+            val persistedAfterReconcile = postFacade.findById(post.id).getOrThrow()
+            val persistedAttrIntValue =
+                jdbcTemplate.queryForObject(
+                    "select int_value from post_attr where subject_id = ? and name = 'likesCount'",
+                    Int::class.java,
+                    post.id,
+                )
+
+            assertThat(correctedCount).isGreaterThanOrEqualTo(1)
+            assertThat(persistedAfterReconcile.likesCount).isEqualTo(1)
+            assertThat(persistedAttrIntValue).isEqualTo(1)
+            assertThat(persistedAfterReconcile.version).isEqualTo(initialVersion)
+            assertThat(persistedAfterReconcile.modifiedAt).isEqualTo(initialModifiedAt)
         }
     }
 

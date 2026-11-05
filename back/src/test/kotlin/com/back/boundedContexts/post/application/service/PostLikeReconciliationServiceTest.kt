@@ -63,6 +63,8 @@ class PostLikeReconciliationServiceTest {
 
         assertThat(correctedCount).isEqualTo(1)
         assertThat(likesAttr.intValue).isEqualTo(2)
+        assertThat(post.likesCount).isEqualTo(2)
+        assertThat(post.likesCountAttr).isSameAs(likesAttr)
         verify(postRepository).updateLikesCount(post, 2, likesAttr)
         verify(postHitSideEffectQueue).enqueue(post.id, "like")
     }
@@ -87,12 +89,66 @@ class PostLikeReconciliationServiceTest {
 
         assertThat(correctedCount).isEqualTo(1)
         assertThat(likesAttr.intValue).isEqualTo(5)
+        assertThat(post.likesCount).isEqualTo(5)
+        assertThat(post.likesCountAttr).isSameAs(likesAttr)
         verify(postRepository).updateLikesCount(post, 5, likesAttr)
         verify(postHitSideEffectQueue).enqueue(post.id, "like")
     }
 
     @Test
-    fun `방문자 좋아요가 반영되어 attr와 post likesCount 모두 최소 보장치 이상이면 보존한다`() {
+    fun `좋아요 취소 이후 post likesCount가 attr보다 크게 남아 있으면 targetLikesCount로 하향 보정한다`() {
+        likesAttr.intValue = 1
+        post.likesCount = 3
+        postLikeReconciliationService =
+            PostLikeReconciliationService(
+                postAttrRepository = postAttrRepository,
+                postLikeRepository = FakePostLikeRepository(actualCount = 0),
+                postRepository = postRepository,
+                postHitSideEffectQueue = postHitSideEffectQueue,
+            )
+
+        val correctedCount =
+            postLikeReconciliationService.reconcileRecentlyTouchedPosts(
+                lookbackHours = 24,
+                limit = 10,
+            )
+
+        assertThat(correctedCount).isEqualTo(1)
+        assertThat(likesAttr.intValue).isEqualTo(1)
+        assertThat(post.likesCount).isEqualTo(1)
+        assertThat(post.likesCountAttr).isSameAs(likesAttr)
+        verify(postRepository).updateLikesCount(post, 1, likesAttr)
+        verify(postHitSideEffectQueue).enqueue(post.id, "like")
+    }
+
+    @Test
+    fun `attr intValue가 null이고 실제 좋아요가 0건이어도 0으로 정규화하여 보정한다`() {
+        likesAttr.intValue = null
+        post.likesCount = 0
+        postLikeReconciliationService =
+            PostLikeReconciliationService(
+                postAttrRepository = postAttrRepository,
+                postLikeRepository = FakePostLikeRepository(actualCount = 0),
+                postRepository = postRepository,
+                postHitSideEffectQueue = postHitSideEffectQueue,
+            )
+
+        val correctedCount =
+            postLikeReconciliationService.reconcileRecentlyTouchedPosts(
+                lookbackHours = 24,
+                limit = 10,
+            )
+
+        assertThat(correctedCount).isEqualTo(1)
+        assertThat(likesAttr.intValue).isEqualTo(0)
+        assertThat(post.likesCount).isEqualTo(0)
+        assertThat(post.likesCountAttr).isSameAs(likesAttr)
+        verify(postRepository).updateLikesCount(post, 0, likesAttr)
+        verify(postHitSideEffectQueue).enqueue(post.id, "like")
+    }
+
+    @Test
+    fun `방문자 좋아요가 반영되어 attr와 post likesCount 모두 최소 보장치와 일치하면 보존한다`() {
         likesAttr.intValue = 5
         post.likesCount = 5
         postLikeReconciliationService =

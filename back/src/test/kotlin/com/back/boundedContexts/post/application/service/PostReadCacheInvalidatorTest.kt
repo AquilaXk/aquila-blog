@@ -182,6 +182,44 @@ class PostReadCacheInvalidatorTest {
     }
 
     @Test
+    @DisplayName("공개 상세 카운터 축출은 대상 postId의 snapshot과 meta만 제거하고 content 및 다른 글 캐시는 유지한다")
+    fun invalidatePublicDetailCountersEvictsOnlyTargetSnapshotAndMeta() {
+        put(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 77L)
+        put(PostQueryCacheNames.DETAIL_PUBLIC_META, 77L)
+        put(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 77L)
+        put(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 88L)
+        put(PostQueryCacheNames.DETAIL_PUBLIC_META, 88L)
+        put(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 88L)
+
+        invalidator.invalidatePublicDetailCounters(77L, "like")
+
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 77L)).isNull()
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_META, 77L)).isNull()
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 77L)).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 88L)).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_META, 88L)).isEqualTo("cached")
+        assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 88L)).isEqualTo("cached")
+        assertThat(
+            meterRegistry
+                .find("post.read.cache.evict")
+                .tag("cache", PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                .tag("scope", "key")
+                .tag("reason", "like")
+                .counter()
+                ?.count(),
+        ).isEqualTo(1.0)
+        assertThat(
+            meterRegistry
+                .find("post.read.cache.evict")
+                .tag("cache", PostQueryCacheNames.DETAIL_PUBLIC_META)
+                .tag("scope", "key")
+                .tag("reason", "like")
+                .counter()
+                ?.count(),
+        ).isEqualTo(1.0)
+    }
+
+    @Test
     @DisplayName("ranked sort 단일 인자 오버로드는 FEED clear와 ranked cursor/bootstrap 축출을 수행한다")
     fun invalidateRankedSortHotPagesDefaultOverloadEvictsBothRankedSorts() {
         // given

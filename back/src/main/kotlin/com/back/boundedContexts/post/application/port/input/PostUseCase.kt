@@ -56,6 +56,10 @@ interface PostUseCase {
 
     fun incrementHit(post: Post)
 
+    fun incrementLike(post: Post)
+
+    fun decrementLike(post: Post)
+
     fun findPagedByKw(
         kw: String,
         sort: PostSearchSortType1,

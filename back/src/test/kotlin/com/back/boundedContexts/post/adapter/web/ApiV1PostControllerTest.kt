@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostHitDedupService
+import com.back.boundedContexts.post.application.service.PostLikeReconciliationService
 import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.domain.Post
@@ -48,6 +49,9 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var postHitDedupService: PostHitDedupService
 
+    @Autowired
+    private lateinit var postLikeReconciliationService: PostLikeReconciliationService
+
     @Autowired(required = false)
     private var redisTemplate: StringRedisTemplate? = null
 
@@ -63,6 +67,7 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
     @AfterEach
     fun clearHitDedupState() {
         RedisTestSupport.clearKeys(redisTemplate, "post:hit:viewed:*")
+        RedisTestSupport.clearKeys(redisTemplate, "post:like:liked:*")
     }
 
     private fun writePost(
@@ -1739,6 +1744,182 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
                     status { isNotFound() }
                     jsonPath("$.resultCode") { value("404-1") }
                 }
+        }
+    }
+
+    @Nested
+    inner class ToggleLike {
+        @Test
+        fun `익명 방문자의 좋아요 요청은 멱등하게 1회만 증가하고 version과 modifiedAt을 보존한다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = writePost(actor, "좋아요 멱등 검증 글", "내용", true, true)
+            entityManager.flush()
+            entityManager.clear()
+            val persistedBeforeLike = postFacade.findById(post.id).getOrThrow()
+            val initialLikesCount = persistedBeforeLike.likesCount
+            val initialVersion = persistedBeforeLike.version ?: 0L
+            val initialModifiedAt = persistedBeforeLike.modifiedAt
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.20")
+                    header(HttpHeaders.USER_AGENT, "JUnit-like-idempotent")
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostInteractionController::class.java))
+                    match(handler().methodName("like"))
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.msg") { value("좋아요를 반영했습니다.") }
+                    jsonPath("$.data.liked") { value(true) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
+                }
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.20")
+                    header(HttpHeaders.USER_AGENT, "JUnit-like-idempotent")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.liked") { value(true) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
+                }
+
+            entityManager.flush()
+            entityManager.clear()
+            val persistedAfterLike = postFacade.findById(post.id).getOrThrow()
+            assertThat(persistedAfterLike.likesCount).isEqualTo(initialLikesCount + 1)
+            assertThat(persistedAfterLike.version).isEqualTo(initialVersion)
+            assertThat(persistedAfterLike.modifiedAt).isEqualTo(initialModifiedAt)
+        }
+
+        @Test
+        fun `익명 방문자의 좋아요 취소 요청은 이전 좋아요가 있을 때 1회만 감소하고 재요청에 멱등하다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = writePost(actor, "좋아요 취소 멱등 검증 글", "내용", true, true)
+            entityManager.flush()
+            entityManager.clear()
+            val persistedBeforeLike = postFacade.findById(post.id).getOrThrow()
+            val initialLikesCount = persistedBeforeLike.likesCount
+            val initialVersion = persistedBeforeLike.version ?: 0L
+            val initialModifiedAt = persistedBeforeLike.modifiedAt
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.21")
+                    header(HttpHeaders.USER_AGENT, "JUnit-unlike-idempotent")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.liked") { value(true) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
+                }
+
+            entityManager.flush()
+            entityManager.clear()
+
+            mvc
+                .delete("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.21")
+                    header(HttpHeaders.USER_AGENT, "JUnit-unlike-idempotent")
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostInteractionController::class.java))
+                    match(handler().methodName("unlike"))
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.msg") { value("좋아요 취소를 반영했습니다.") }
+                    jsonPath("$.data.liked") { value(false) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount) }
+                }
+
+            mvc
+                .delete("/post/api/v1/posts/${post.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.21")
+                    header(HttpHeaders.USER_AGENT, "JUnit-unlike-idempotent")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.liked") { value(false) }
+                    jsonPath("$.data.likesCount") { value(initialLikesCount) }
+                }
+
+            entityManager.flush()
+            entityManager.clear()
+            val persistedAfterUnlike = postFacade.findById(post.id).getOrThrow()
+            assertThat(persistedAfterUnlike.likesCount).isEqualTo(initialLikesCount)
+            assertThat(persistedAfterUnlike.version).isEqualTo(initialVersion)
+            assertThat(persistedAfterUnlike.modifiedAt).isEqualTo(initialModifiedAt)
+        }
+
+        @Test
+        fun `실패 - 비공개 글에 대한 비로그인 방문자의 좋아요 및 좋아요 취소 요청은 404를 반환한다`() {
+            val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val privatePost = writePost(writer, "비공개 글 좋아요 차단", "내용", false, false)
+
+            mvc
+                .put("/post/api/v1/posts/${privatePost.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.22")
+                    header(HttpHeaders.USER_AGENT, "JUnit-like-private-404")
+                }.andExpect {
+                    status { isNotFound() }
+                    jsonPath("$.resultCode") { value("404-1") }
+                }
+
+            mvc
+                .delete("/post/api/v1/posts/${privatePost.id}/like") {
+                    header("X-Forwarded-For", "203.0.113.22")
+                    header(HttpHeaders.USER_AGENT, "JUnit-like-private-404")
+                }.andExpect {
+                    status { isNotFound() }
+                    jsonPath("$.resultCode") { value("404-1") }
+                }
+        }
+
+        @Test
+        fun `좋아요 정합성 보정 서비스는 flush 및 clear 이후에도 삭제된 글을 건너뛰고 post_attr와 post의 likes_count를 영속화하며 version과 modifiedAt을 보존한다`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = writePost(actor, "좋아요 정합성 보정 영속화 검증 글", "내용", true, true)
+            val deletedPost = writePost(actor, "삭제된 좋아요 정합성 보정 제외 글", "내용", true, true)
+            setPostCounterAttr(post.id, "likesCount", "likes_count_attr_id", 0)
+            setPostCounterAttr(deletedPost.id, "likesCount", "likes_count_attr_id", 2)
+            jdbcTemplate.update(
+                "update post_attr set modified_at = now() where subject_id in (?, ?) and name = 'likesCount'",
+                post.id,
+                deletedPost.id,
+            )
+            postFacade.delete(deletedPost, actor)
+            jdbcTemplate.update(
+                "insert into post_like (id, liker_id, post_id) values (nextval('post_like_seq'), ?, ?)",
+                actor.id,
+                post.id,
+            )
+            jdbcTemplate.update(
+                "update post set likes_count = 3 where id = ?",
+                post.id,
+            )
+            entityManager.flush()
+            entityManager.clear()
+            val persistedBeforeReconcile = postFacade.findById(post.id).getOrThrow()
+            val initialVersion = persistedBeforeReconcile.version ?: 0L
+            val initialModifiedAt = persistedBeforeReconcile.modifiedAt
+            entityManager.clear()
+
+            val correctedCount = postLikeReconciliationService.reconcileRecentlyTouchedPosts(24, 500)
+            entityManager.flush()
+            entityManager.clear()
+
+            val persistedAfterReconcile = postFacade.findById(post.id).getOrThrow()
+            val persistedAttrIntValue =
+                jdbcTemplate.queryForObject(
+                    "select int_value from post_attr where subject_id = ? and name = 'likesCount'",
+                    Int::class.java,
+                    post.id,
+                )
+
+            assertThat(correctedCount).isGreaterThanOrEqualTo(1)
+            assertThat(persistedAfterReconcile.likesCount).isEqualTo(1)
+            assertThat(persistedAttrIntValue).isEqualTo(1)
+            assertThat(persistedAfterReconcile.version).isEqualTo(initialVersion)
+            assertThat(persistedAfterReconcile.modifiedAt).isEqualTo(initialModifiedAt)
         }
     }
 

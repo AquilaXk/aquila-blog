@@ -57,6 +57,58 @@ class PostHitDedupServiceTest {
         assertThat(service.shouldCountHit(postId = 1L, viewerKey = "viewer")).isFalse()
     }
 
+    @Test
+    fun `redis provider가 없으면 like dedupe와 unlike dedupe를 service unavailable로 거부한다`() {
+        val service = service(redisTemplate = null)
+
+        assertServiceUnavailable { service.markLikedIfAbsent(postId = 1L, viewerKey = "viewer") }
+        assertServiceUnavailable { service.unmarkLikedIfPresent(postId = 1L, viewerKey = "viewer") }
+    }
+
+    @Test
+    fun `redis가 예외를 던지면 like dedupe와 unlike dedupe를 service unavailable로 거부한다`() {
+        val valueOperations = valueOperations()
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        given(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration::class.java)))
+            .willThrow(DataAccessResourceFailureException("Redis unavailable"))
+        given(redisTemplate.delete(anyString()))
+            .willThrow(DataAccessResourceFailureException("Redis unavailable"))
+        val service = service(redisTemplate)
+
+        assertServiceUnavailable { service.markLikedIfAbsent(postId = 1L, viewerKey = "viewer") }
+        assertServiceUnavailable { service.unmarkLikedIfPresent(postId = 1L, viewerKey = "viewer") }
+    }
+
+    @Test
+    fun `markLikedIfAbsent는 SETNX 결과에 따라 true와 false를 반환한다`() {
+        val valueOperations = valueOperations()
+        given(redisTemplate.opsForValue()).willReturn(valueOperations)
+        val expectedKey = "post:like:liked:1:d35ca5051b82ffc326a3b0b6574a9a3161dee16b9478a199ee39cd803ce5b799"
+        given(
+            valueOperations.setIfAbsent(
+                expectedKey,
+                "1",
+                Duration.ofSeconds(31_536_000L),
+            ),
+        ).willReturn(true, false)
+        val service = service(redisTemplate)
+
+        assertThat(service.markLikedIfAbsent(postId = 1L, viewerKey = "viewer")).isTrue()
+        assertThat(service.markLikedIfAbsent(postId = 1L, viewerKey = "viewer")).isFalse()
+        assertThat(service.markLikedIfAbsent(postId = 1L, viewerKey = "   ")).isFalse()
+    }
+
+    @Test
+    fun `unmarkLikedIfPresent는 DEL 결과에 따라 true와 false를 반환한다`() {
+        val expectedKey = "post:like:liked:1:d35ca5051b82ffc326a3b0b6574a9a3161dee16b9478a199ee39cd803ce5b799"
+        given(redisTemplate.delete(expectedKey)).willReturn(true, false)
+        val service = service(redisTemplate)
+
+        assertThat(service.unmarkLikedIfPresent(postId = 1L, viewerKey = "viewer")).isTrue()
+        assertThat(service.unmarkLikedIfPresent(postId = 1L, viewerKey = "viewer")).isFalse()
+        assertThat(service.unmarkLikedIfPresent(postId = 1L, viewerKey = "   ")).isFalse()
+    }
+
     private fun service(redisTemplate: StringRedisTemplate?): PostHitDedupService =
         PostHitDedupService(
             viewerWindowSeconds = 60,

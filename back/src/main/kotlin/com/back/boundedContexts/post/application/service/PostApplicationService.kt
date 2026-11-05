@@ -492,6 +492,18 @@ class PostApplicationService(
         postHitSideEffectQueue.enqueue(post.id)
     }
 
+    @Transactional
+    override fun incrementLike(post: Post) {
+        postCounterService.incrementLike(post)
+        postHitSideEffectQueue.enqueue(post.id, "like")
+    }
+
+    @Transactional
+    override fun decrementLike(post: Post) {
+        postCounterService.decrementLike(post)
+        postHitSideEffectQueue.enqueue(post.id, "unlike")
+    }
+
     override fun findPagedByKw(
         kw: String,
         sort: PostSearchSortType1,

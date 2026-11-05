@@ -10,6 +10,7 @@ import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
+import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import org.springframework.stereotype.Service
 
 @Service
@@ -30,8 +31,31 @@ class PostCounterService(
         postRepository.updateHitCount(post, updatedHitCount, refreshedAttr)
     }
 
+    fun incrementLike(post: Post) {
+        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT)
+        applyLikesCount(post, updatedLikesCount)
+    }
+
+    fun decrementLike(post: Post) {
+        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1).coerceAtLeast(0)
+        applyLikesCount(post, updatedLikesCount)
+    }
+
+    private fun applyLikesCount(
+        post: Post,
+        likesCount: Int,
+    ) {
+        post.likesCount = likesCount
+        val refreshedAttr = post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)
+        refreshedAttr?.let {
+            it.intValue = likesCount
+            post.likesCountAttr = it
+        }
+        postRepository.updateLikesCount(post, likesCount, refreshedAttr)
+    }
+
     fun syncLikesCount(post: Post) {
-        val actualLikesCount = postLikeRepository.countByPost(post).toInt()
+        val actualLikesCount = maxOf(post.likesCount, postLikeRepository.countByPost(post).toInt().coerceAtLeast(0))
         post.likesCount = actualLikesCount
         post.likesCountAttr?.intValue = actualLikesCount
         savePostAttr(post.likesCountAttr)

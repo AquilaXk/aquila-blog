@@ -119,6 +119,7 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
                 """
                 select a
                 from PostAttr a
+                join fetch a.subject
                 where a.name = :name
                   and a.modifiedAt >= :modifiedAfter
                 order by a.modifiedAt desc

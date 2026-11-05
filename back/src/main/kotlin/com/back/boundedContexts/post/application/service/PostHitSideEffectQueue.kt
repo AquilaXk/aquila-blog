@@ -8,14 +8,17 @@ import java.util.UUID
 class PostHitSideEffectQueue(
     private val taskFacade: TaskFacade,
 ) {
-    fun enqueue(postId: Long) {
+    fun enqueue(
+        postId: Long,
+        reason: String = "hit",
+    ) {
         taskFacade.addToQueue(
             PostHitSideEffectPayload(
                 uid = UUID.randomUUID(),
                 aggregateType = "Post",
                 aggregateId = postId,
                 postId = postId,
-                reason = "hit",
+                reason = reason,
             ),
         )
     }

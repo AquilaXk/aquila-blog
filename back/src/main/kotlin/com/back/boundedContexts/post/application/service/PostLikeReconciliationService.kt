@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -12,6 +13,8 @@ import java.time.Instant
 class PostLikeReconciliationService(
     private val postAttrRepository: PostAttrRepositoryPort,
     private val postLikeRepository: PostLikeRepositoryPort,
+    private val postRepository: PostRepositoryPort,
+    private val postHitSideEffectQueue: PostHitSideEffectQueue,
 ) {
     private val logger = LoggerFactory.getLogger(PostLikeReconciliationService::class.java)
 
@@ -33,16 +36,24 @@ class PostLikeReconciliationService(
         var correctedCount = 0
 
         likeAttrs.forEach { likeAttr ->
-            val actualLikesCount = postLikeRepository.countByPost(likeAttr.subject).toInt()
-            if (likeAttr.intValue != actualLikesCount) {
+            val post = likeAttr.subject
+            val actualLikesCount = postLikeRepository.countByPost(post).toInt().coerceAtLeast(0)
+            val currentLikesCount = (likeAttr.intValue ?: 0).coerceAtLeast(0)
+            val targetLikesCount = maxOf(currentLikesCount, actualLikesCount)
+            if (likeAttr.intValue != targetLikesCount || post.likesCount != targetLikesCount) {
                 logger.warn(
-                    "Reconciling likes count for post {} from {} to {}",
-                    likeAttr.subject.id,
+                    "Reconciling likes count for post {} from attr={} post={} to {}",
+                    post.id,
                     likeAttr.intValue,
-                    actualLikesCount,
+                    post.likesCount,
+                    targetLikesCount,
                 )
-                likeAttr.intValue = actualLikesCount
+                likeAttr.intValue = targetLikesCount
+                post.likesCount = targetLikesCount
+                post.likesCountAttr = likeAttr
                 postAttrRepository.save(likeAttr)
+                postRepository.updateLikesCount(post, targetLikesCount, likeAttr)
+                postHitSideEffectQueue.enqueue(post.id, "like")
                 correctedCount++
             }
         }

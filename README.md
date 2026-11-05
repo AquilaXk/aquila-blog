@@ -183,3 +183,8 @@ node tools/ci/verify-test-execution-inventory.mjs
 | [Backend README](back/README.md) | Backend architecture, API modules, quality checks, and OpenAPI flow |
 | [k6 Guide](perf/k6/README.md) | Load and chaos scenarios for public read paths |
 | [Home Server Hardening](deploy/homeserver/HARDENING.md) | Home server hardening and operational checklist |
+
+## License
+
+- Source code in this repository is licensed under the [MIT License](LICENSE).
+- Blog post articles and media published on [blog.aquilaxk.site](https://blog.aquilaxk.site) are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (attribution required).

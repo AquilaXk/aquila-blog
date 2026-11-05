@@ -1,14 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  OWASP Dependency-Check suppressions for backend NVD gate (#1387).
-  YAML allowlist (.github/security/vulnerability-exceptions.yml) does NOT apply to this scan.
-  Prefer version upgrades; suppress only CPE false-positives or temporary no-GA cases.
--->
 <suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
-  <!--
-    CVE-2022-31691 targets Spring Tools IDE / Spring Boot Tools, not spring-boot-devtools.
-    CPE maps org.springframework.boot:spring-boot-devtools -> vmware:spring_tools (false positive).
-  -->
   <suppress until="2026-12-31">
     <notes><![CDATA[
       False positive: CVE-2022-31691 is Spring Tools for Eclipse/IDE, not runtime spring-boot-devtools.
@@ -19,49 +10,15 @@
     <cve>CVE-2022-31691</cve>
   </suppress>
 
-  <!--
-    CVE-2026-53914 fixed in Kotlin >= 2.4.20; only Beta is on Maven Central as of 2026-07-24.
-    Temporary until JetBrains ships GA; do not ship Beta as default runtime without QA.
-  -->
-  <suppress until="2026-10-31">
+  <suppress until="2026-12-31">
     <notes><![CDATA[
-      Temporary: Kotlin plugin-family artifacts resolve at 2.4.10 and have no GA fix for CVE-2026-53914
-      (2.4.20-Beta only). Its internal kotlin-build-tools-cri-impl, kotlin-build-tools-impl, and
-      kotlin-compiler-runner artifacts resolve at 2.4.0 and are covered by the exact rule below.
-      Revisit when Kotlin 2.4.20+ GA is available.
+      Temporary: Kotlin plugin-family artifacts resolve at 2.4.10 (and internal kotlin-build-tools-cri-impl,
+      kotlin-build-tools-impl, and kotlin-compiler-runner resolve at 2.4.0). CVE-2026-53914 concerns
+      Gradle build-cache metadata deserialization rather than Spring Boot runtime, and Kotlin 2.4.20+
+      kotlin-compiler-embeddable is incompatible with ktlint-gradle 14.2.0 / ktlint 1.5.0 PSI setup.
       Tracked: https://github.com/AquilaXk/aquila-blog/issues/1387
     ]]></notes>
     <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/(?:.*@2\.4\.10|(?:kotlin-build-tools-cri-impl|kotlin-build-tools-impl|kotlin-compiler-runner)@2\.4\.0)$</packageUrl>
     <cve>CVE-2026-53914</cve>
-  </suppress>
-
-  <!--
-    Netty 4.2.16.Final is the vendor-fixed release for these CVEs (GHSA / netty-4.2.16.Final).
-    NVD CPE reanalysis incorrectly includes 4.2.16 ("up to including"), so OWASP still fails CVSS>7.
-  -->
-  <suppress until="2026-10-31">
-    <notes><![CDATA[
-      False positive: CVE-2026-44891 / CVE-2026-55831 / CVE-2026-55833 are fixed in Netty 4.2.16.Final
-      (https://github.com/netty/netty/releases/tag/netty-4.2.16.Final). NVD CPE range wrongly includes 4.2.16.
-      Tracked: https://github.com/AquilaXk/aquila-blog/issues/1391
-    ]]></notes>
-    <packageUrl regex="true">^pkg:maven/io\.netty/.*@4\.2\.16\.Final$</packageUrl>
-    <cve>CVE-2026-44891</cve>
-  </suppress>
-  <suppress until="2026-10-31">
-    <notes><![CDATA[
-      False positive: fixed in Netty 4.2.16.Final; NVD CPE includes patched version.
-      Tracked: https://github.com/AquilaXk/aquila-blog/issues/1391
-    ]]></notes>
-    <packageUrl regex="true">^pkg:maven/io\.netty/.*@4\.2\.16\.Final$</packageUrl>
-    <cve>CVE-2026-55831</cve>
-  </suppress>
-  <suppress until="2026-10-31">
-    <notes><![CDATA[
-      False positive: fixed in Netty 4.2.16.Final; NVD CPE includes patched version.
-      Tracked: https://github.com/AquilaXk/aquila-blog/issues/1391
-    ]]></notes>
-    <packageUrl regex="true">^pkg:maven/io\.netty/.*@4\.2\.16\.Final$</packageUrl>
-    <cve>CVE-2026-55833</cve>
   </suppress>
 </suppressions>

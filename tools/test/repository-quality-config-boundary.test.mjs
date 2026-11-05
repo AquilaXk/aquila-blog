@@ -847,7 +847,7 @@ test("backend Netty policy pins the patched runtime version", () => {
   const build = read("back/build.gradle.kts")
   const jacoco = read("back/gradle/backend-jacoco.gradle.kts")
 
-  assert.match(build, /extra\["netty\.version"\] = "4\.2\.17\.Final"/)
+  assert.match(build, /extra\["netty\.version"\] = "4\.2\.20\.Final"/)
   assert.match(build, /tasks\.register\("verifyNettyVersionAlignment"\)/)
   assert.match(build, /getByName\("runtimeClasspath"\)/)
   assert.match(build, /component\.group == "io\.netty"/)

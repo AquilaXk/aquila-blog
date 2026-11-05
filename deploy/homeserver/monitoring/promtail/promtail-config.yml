@@ -37,4 +37,4 @@ scrape_configs:
     pipeline_stages:
       - docker: {}
       - drop:
-          older_than: 168h
+          older_than: 167h

@@ -22,8 +22,17 @@ log() {
   echo "[steady-guard] $(date -Is) $*"
 }
 
+materialized_service_env_ready() {
+  [[ -f "${SCRIPT_DIR}/.env.caddy.prod" &&
+    -f "${SCRIPT_DIR}/.env.back.prod" &&
+    -f "${SCRIPT_DIR}/.env.front.prod" &&
+    -f "${SCRIPT_DIR}/.env.front.metrics.prod" &&
+    -f "${SCRIPT_DIR}/.web-metrics-credentials/runtime/web-metrics-token" &&
+    ! "${ENV_FILE}" -nt "${SCRIPT_DIR}/.env.caddy.prod" ]]
+}
+
 compose() {
-  if [[ "${1:-}" == "up" ]]; then
+  if [[ "${1:-}" == "up" ]] || ! materialized_service_env_ready; then
     bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
   fi
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -478,6 +487,35 @@ query_grafana_datasource_by_uid() {
   return 1
 }
 
+probe_grafana_core_datasources() {
+  local grafana_user="$1"
+  local grafana_password="$2"
+
+  prometheus_ok="false"
+  loki_ok="false"
+  if prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
+    prometheus_ok="true"
+  fi
+  if loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
+    loki_ok="true"
+  fi
+
+  if [[ "${prometheus_ok}" != "true" || "${loki_ok}" != "true" ]] &&
+    (is_protected_http_status "${prometheus_status}" || is_protected_http_status "${loki_status}"); then
+    reset_grafana_admin_password
+    if [[ "${prometheus_ok}" != "true" ]] &&
+      prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
+      prometheus_ok="true"
+    fi
+    if [[ "${loki_ok}" != "true" ]] &&
+      loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
+      loki_ok="true"
+    fi
+  fi
+
+  [[ "${prometheus_ok}" == "true" && "${loki_ok}" == "true" ]]
+}
+
 check_grafana_core_datasources() {
   local grafana_user grafana_password
   grafana_user="$(trim_quotes "$(env_value "GRAFANA_ADMIN_USER")")"
@@ -491,30 +529,11 @@ check_grafana_core_datasources() {
 
   load_grafana_ds_state
 
-  local prometheus_status loki_status
+  local prometheus_status="" loki_status=""
   local prometheus_ok="false"
   local loki_ok="false"
 
-  if prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
-    prometheus_ok="true"
-  fi
-  if loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
-    loki_ok="true"
-  fi
-
-  if [[ "${prometheus_ok}" != "true" || "${loki_ok}" != "true" ]]; then
-    reset_grafana_admin_password
-    prometheus_ok="false"
-    loki_ok="false"
-    if prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
-      prometheus_ok="true"
-    fi
-    if loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
-      loki_ok="true"
-    fi
-  fi
-
-  if [[ "${prometheus_ok}" == "true" && "${loki_ok}" == "true" ]]; then
+  if probe_grafana_core_datasources "${grafana_user}" "${grafana_password}"; then
     if (( GRAFANA_DS_FAIL_COUNT > 0 )); then
       log "OK grafana datasources recovered prometheus=${prometheus_status} loki=${loki_status} consecutive_failures=${GRAFANA_DS_FAIL_COUNT}"
     else
@@ -549,15 +568,7 @@ check_grafana_core_datasources() {
   save_grafana_ds_state
   sleep 3
 
-  prometheus_ok="false"
-  loki_ok="false"
-  if prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
-    prometheus_ok="true"
-  fi
-  if loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
-    loki_ok="true"
-  fi
-  if [[ "${prometheus_ok}" == "true" && "${loki_ok}" == "true" ]]; then
+  if probe_grafana_core_datasources "${grafana_user}" "${grafana_password}"; then
     GRAFANA_DS_FAIL_COUNT=0
     save_grafana_ds_state
     log "OK grafana datasources repaired prometheus=${prometheus_status} loki=${loki_status}"

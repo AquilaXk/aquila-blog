@@ -24,7 +24,7 @@ description = "back"
 
 // Pin above Spring Boot 4.1.0 BOM for NVD High CVEs blocking Deploy (#1387).
 extra["tomcat.version"] = "11.0.25"
-extra["netty.version"] = "4.2.17.Final"
+extra["netty.version"] = "4.2.20.Final"
 extra["postgresql.version"] = "42.7.13"
 extra["jackson-2-bom.version"] = "2.21.7"
 extra["jackson-bom.version"] = "3.1.7"
@@ -82,7 +82,7 @@ dependencies {
 
     // SpringDoc
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
-    implementation("org.webjars:swagger-ui:5.32.14") // DOMPurify 3.4.12; fixes CVE-2026-65898 (#1451).
+    implementation("org.webjars:swagger-ui:5.34.1")
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
     // ShedLock

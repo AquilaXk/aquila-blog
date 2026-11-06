@@ -338,7 +338,7 @@ route:
 | `AquilaDockerRuntimeProbeScrapeDown` | docker runtime probe scrape 실패도 동일 |
 | `AquilaBackWorkerScrapeDown` | worker scrape 단절은 큐 알림 평가 왜곡을 낳지만, 메일 폭주 대신 호스트 가드가 1차로 본다 |
 
-**자가 점검 owner:** `deploy/homeserver/steady_state_guard.sh` + `install_steady_state_guard_cron.sh` (분 단위 cron).  
+**자가 점검 owner:** `deploy/homeserver/steady_state_guard.sh` + `install_steady_state_guard_cron.sh` (5분 단위 cron).  
 doctor.sh의 `Steady Guard Cron` / `Monitoring Stack` 섹션과 guard 로그(`.steady-state-guard.log`)로 확인한다.
 
 **재논의 방지**

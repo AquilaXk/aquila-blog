@@ -16,7 +16,8 @@ if [[ ! -x "${GUARD_SCRIPT}" ]]; then
   exit 1
 fi
 
-ENTRY="* * * * * cd ${SCRIPT_DIR} && ${GUARD_SCRIPT} >> ${LOG_FILE} 2>&1"
+SCHEDULE="${STEADY_GUARD_CRON_SCHEDULE:-*/5 * * * *}"
+ENTRY="${SCHEDULE} cd ${SCRIPT_DIR} && ${GUARD_SCRIPT} >> ${LOG_FILE} 2>&1"
 TMP_FILE="$(mktemp)"
 
 {

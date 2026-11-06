@@ -170,4 +170,6 @@ query_grafana_datasource_by_uid() {
 probe_grafana_core_datasources "admin" "pw" || fail "expected 401 datasources to recover after password reset"
 [[ "${reset_calls}" -eq 1 ]] || fail "expected 401 datasource response to trigger exactly one password reset"
 
+grep -Fq 'SCHEDULE="${STEADY_GUARD_CRON_SCHEDULE:-*/5 * * * *}"' "deploy/homeserver/install_steady_state_guard_cron.sh" || fail "expected install_steady_state_guard_cron.sh to default to a 5-minute schedule"
+
 echo "[test] homeserver guard logrotate rules passed"

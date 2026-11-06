@@ -170,4 +170,24 @@ query_grafana_datasource_by_uid() {
 probe_grafana_core_datasources "admin" "pw" || fail "expected 401 datasources to recover after password reset"
 [[ "${reset_calls}" -eq 1 ]] || fail "expected 401 datasource response to trigger exactly one password reset"
 
+cron_bin_dir="${workdir}/cron-bin"
+cron_store="${workdir}/crontab.store"
+mkdir -p "${cron_bin_dir}"
+printf '0 3 * * * /usr/local/bin/backup.sh\n* * * * * cd /old && /old/steady_state_guard.sh >> /old/.steady-state-guard.log 2>&1\n' > "${cron_store}"
+cat > "${cron_bin_dir}/crontab" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "-l" ]]; then
+  cat "${cron_store}"
+  exit 0
+fi
+cp "\$1" "${cron_store}"
+EOF
+chmod +x "${cron_bin_dir}/crontab"
+
+PATH="${cron_bin_dir}:${PATH}" bash "deploy/homeserver/install_steady_state_guard_cron.sh" >/dev/null
+grep -Fq '0 3 * * * /usr/local/bin/backup.sh' "${cron_store}" || fail "expected unrelated crontab entries to be preserved"
+! grep -Fq '* * * * * cd /old' "${cron_store}" || fail "expected legacy 1-minute steady_state_guard entry to be removed"
+grep -Fq "*/5 * * * * cd ${repo_root}/deploy/homeserver && ${repo_root}/deploy/homeserver/steady_state_guard.sh >> ${repo_root}/deploy/homeserver/.steady-state-guard.log 2>&1" "${cron_store}" || fail "expected 5-minute steady_state_guard crontab entry to be installed"
+
 echo "[test] homeserver guard logrotate rules passed"

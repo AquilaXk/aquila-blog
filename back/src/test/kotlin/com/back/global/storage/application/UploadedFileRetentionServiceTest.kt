@@ -228,7 +228,7 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
     }
 
     @Test
-    fun `미등록 게시글 첨부파일 동기화는 추적 row를 생성하고 활성화한다`() {
+    fun `미등록 게시글 이미지는 추적 row를 생성해 활성화하고 미등록 일반 첨부파일은 유령 row를 생성하지 않는다`() {
         val imageKey = "posts/2026/03/new-image.png"
         val fileKey = "posts/2026/03/new-file.pdf"
         val currentContent =
@@ -246,13 +246,73 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         )
 
         val imageFile = uploadedFileRepository.findByObjectKey(imageKey)!!
-        val postFile = uploadedFileRepository.findByObjectKey(fileKey)!!
+        val postFile = uploadedFileRepository.findByObjectKey(fileKey)
         assertThat(imageFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
         assertThat(imageFile.purpose).isEqualTo(UploadedFilePurpose.POST_IMAGE)
         assertThat(imageFile.ownerId).isEqualTo(41)
-        assertThat(postFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
-        assertThat(postFile.purpose).isEqualTo(UploadedFilePurpose.POST_FILE)
-        assertThat(postFile.ownerId).isEqualTo(41)
+        assertThat(postFile).isNull()
+    }
+
+    @Test
+    fun `기존에 등록된 레거시 POST_FILE만 참조 활성화와 삭제 예약 및 복구가 동작한다`() {
+        val legacyFileKey = "posts/2026/03/legacy-registered-file.pdf"
+        val unregisteredFileKey = "posts/2026/03/unregistered-ghost-file.pdf"
+        val contentWithFiles =
+            """
+            [legacy](${UploadedFileUrlCodec.buildFileUrl(legacyFileKey)})
+            [ghost](${UploadedFileUrlCodec.buildFileUrl(unregisteredFileKey)})
+            """.trimIndent()
+
+        uploadedFileRetentionService.registerTempUpload(
+            objectKey = legacyFileKey,
+            contentType = "application/pdf",
+            fileSize = 4096,
+            purpose = UploadedFilePurpose.POST_FILE,
+        )
+
+        val extractedFileKeys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(contentWithFiles)
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 52,
+            currentImageObjectKeys = emptyList(),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = extractedFileKeys,
+            previousFileObjectKeys = emptyList(),
+        )
+
+        val attachedLegacyFile = uploadedFileRepository.findByObjectKey(legacyFileKey)!!
+        assertThat(attachedLegacyFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
+        assertThat(attachedLegacyFile.purpose).isEqualTo(UploadedFilePurpose.POST_FILE)
+        assertThat(attachedLegacyFile.ownerType).isEqualTo(UploadedFileOwnerType.POST)
+        assertThat(attachedLegacyFile.ownerId).isEqualTo(52)
+        assertThat(attachedLegacyFile.purgeAfter).isNull()
+        assertThat(uploadedFileRepository.findByObjectKey(unregisteredFileKey)).isNull()
+
+        uploadedFileRetentionService.syncPostAttachmentKeys(
+            postId = 52,
+            currentImageObjectKeys = emptyList(),
+            previousImageObjectKeys = emptyList(),
+            currentFileObjectKeys = emptyList(),
+            previousFileObjectKeys = extractedFileKeys,
+        )
+
+        val detachedLegacyFile = uploadedFileRepository.findByObjectKey(legacyFileKey)!!
+        assertThat(detachedLegacyFile.status).isEqualTo(UploadedFileStatus.PENDING_DELETE)
+        assertThat(detachedLegacyFile.retentionReason).isEqualTo(UploadedFileRetentionReason.DETACHED_POST_ATTACHMENT)
+        assertThat(detachedLegacyFile.purgeAfter)
+            .isEqualTo(Instant.now(clock).plusSeconds(retentionProperties.deletedPostAttachmentSeconds))
+        assertThat(uploadedFileRepository.findByObjectKey(unregisteredFileKey)).isNull()
+
+        uploadedFileRetentionService.restoreDeletedPostAttachments(
+            postId = 52,
+            content = contentWithFiles,
+        )
+
+        val restoredLegacyFile = uploadedFileRepository.findByObjectKey(legacyFileKey)!!
+        assertThat(restoredLegacyFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
+        assertThat(restoredLegacyFile.purpose).isEqualTo(UploadedFilePurpose.POST_FILE)
+        assertThat(restoredLegacyFile.ownerId).isEqualTo(52)
+        assertThat(restoredLegacyFile.purgeAfter).isNull()
+        assertThat(uploadedFileRepository.findByObjectKey(unregisteredFileKey)).isNull()
     }
 
     @Test

@@ -86,7 +86,12 @@ class PostAttachmentRetentionService(
         purpose: UploadedFilePurpose,
     ) {
         currentKeys.forEach { objectKey ->
-            val uploadedFile = findOrCreate(objectKey)
+            val uploadedFile =
+                if (purpose == UploadedFilePurpose.POST_IMAGE) {
+                    findOrCreate(objectKey)
+                } else {
+                    uploadedFileRepository.findByObjectKey(objectKey) ?: return@forEach
+                }
             if (isProfileOwnedFile(uploadedFile) || hasActiveOwnerPostReference(uploadedFile, postId)) return@forEach
             uploadedFile.attachToPost(postId, purpose)
             uploadedFileRepository.save(uploadedFile)

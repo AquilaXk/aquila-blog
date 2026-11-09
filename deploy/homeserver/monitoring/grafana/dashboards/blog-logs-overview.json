@@ -68,7 +68,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "(sum(count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"} |= \"ERROR\" [5m])) / sum(count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"}[5m]))) * 100",
+          "expr": "(sum(count_over_time({compose_project=\"blog_home\",job=\"docker-containers\",service=~\"back_.*|back.*\"} |= \"ERROR\" [5m])) / sum(count_over_time({compose_project=\"blog_home\",job=\"docker-containers\",service=~\"back_.*|back.*\"}[5m]))) * 100",
           "legendFormat": "error_ratio",
           "queryType": "range",
           "refId": "A"
@@ -94,7 +94,7 @@
         "dedupStrategy": "none",
         "enableLogDetails": true,
         "prettifyLogMessage": false,
-        "showCommonLabels": false,
+        "showCommonLabels": true,
         "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
@@ -107,7 +107,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{compose_project=\"blog_home\",service=~\"back_.*|back.*\"}",
+          "expr": "{compose_project=\"blog_home\",job=\"docker-containers\",service=~\"back_.*|back.*\"}",
           "queryType": "range",
           "refId": "A"
         }
@@ -132,7 +132,7 @@
         "dedupStrategy": "none",
         "enableLogDetails": true,
         "prettifyLogMessage": false,
-        "showCommonLabels": false,
+        "showCommonLabels": true,
         "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
@@ -145,7 +145,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{compose_project=\"blog_home\",service=~\"back_.*|back.*\"} |= \"$requestId\"",
+          "expr": "{compose_project=\"blog_home\",job=\"docker-containers\",service=~\"back_.*|back.*\"} |= \"$requestId\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -170,7 +170,7 @@
         "dedupStrategy": "none",
         "enableLogDetails": true,
         "prettifyLogMessage": false,
-        "showCommonLabels": false,
+        "showCommonLabels": true,
         "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
@@ -183,7 +183,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{compose_project=\"blog_home\",service=~\"back_.*|back.*|caddy\"} |~ \"(?i)(x-request-id|requestid|request_id)\"",
+          "expr": "{compose_project=\"blog_home\",job=\"docker-containers\",service=~\"back_.*|back.*|caddy\"} |~ \"(?i)(x-request-id|requestid|request_id)\"",
           "queryType": "range",
           "refId": "A"
         }

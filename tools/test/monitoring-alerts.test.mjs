@@ -561,3 +561,25 @@ test("Prometheus disables lifecycle flag and Caddy denies /-/ management endpoin
   )
 })
 
+test("Promtail relabel_configs and Logs Overview dashboard panels keep consistent source metadata labels", () => {
+  const promtailConfig = read(path.join(repoRoot, "deploy/homeserver/monitoring/promtail/promtail-config.yml"))
+  const logsDashboard = JSON.parse(
+    read(path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-logs-overview.json")),
+  )
+
+  assert.match(promtailConfig, /- target_label:\s*job\s*\n\s*replacement:\s*docker-containers\b/)
+  assert.match(promtailConfig, /- target_label:\s*env\s*\n\s*replacement:\s*production\b/)
+  assert.match(promtailConfig, /- target_label:\s*source\s*\n\s*replacement:\s*loki\b/)
+
+  const lokiPanels = logsDashboard.panels.filter((panel) => panel.datasource?.type === "loki")
+  assert(lokiPanels.length >= 4, "Expected at least 4 Loki panels in blog-logs-overview.json")
+  for (const panel of lokiPanels) {
+    assert.match(panel.targets[0].expr, /compose_project="blog_home",job="docker-containers"/)
+    if (panel.type === "logs") {
+      assert.equal(panel.options.showLabels, true)
+      assert.equal(panel.options.showCommonLabels, true)
+    }
+  }
+})
+
+

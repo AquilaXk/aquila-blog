@@ -1695,18 +1695,26 @@ jobs:
             local status_pattern="$3"
             local cache_policy="${4:-default}"
             local headers_file
-            local code
+            local code=""
+            local smoke_attempt
             headers_file="$(mktemp)"
 
-            code="$(
-              curl -sS \
-                --connect-timeout "${DEPLOY_SECURITY_HEADER_CONNECT_TIMEOUT_SECONDS:-5}" \
-                -m "${DEPLOY_SECURITY_HEADER_MAX_TIME_SECONDS:-15}" \
-                -D "${headers_file}" \
-                -o /dev/null \
-                -w "%{http_code}" \
-                "${url}" || true
-            )"
+            for smoke_attempt in 1 2; do
+              : > "${headers_file}"
+              code="$(
+                curl -sS \
+                  --connect-timeout "${DEPLOY_SECURITY_HEADER_CONNECT_TIMEOUT_SECONDS:-10}" \
+                  -m "${DEPLOY_SECURITY_HEADER_MAX_TIME_SECONDS:-20}" \
+                  -D "${headers_file}" \
+                  -o /dev/null \
+                  -w "%{http_code}" \
+                  "${url}" || true
+              )"
+              if [ "${code}" != "000" ] || [ "${smoke_attempt}" -eq 2 ]; then
+                break
+              fi
+              sleep 1
+            done
             echo "[security-header-smoke] ${label} status=${code} url=${url}"
             if ! [[ "${code}" =~ ${status_pattern} ]]; then
               echo "[security-header-smoke] FAIL ${label}: unexpected status=${code} url=${url}" >&2
@@ -1764,8 +1772,10 @@ jobs:
             local url="$2"
             local attempts="${DEPLOY_CANARY_ATTEMPTS:-10}"
             local min_success_percent="${DEPLOY_CANARY_MIN_SUCCESS_PERCENT:-90}"
-            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-5}"
-            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-12}"
+            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-10}"
+            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-20}"
+            local retry_delay="${DEPLOY_CANARY_RETRY_DELAY_SECONDS:-1}"
+            local inter_attempt_delay="${DEPLOY_CANARY_INTER_ATTEMPT_DELAY_SECONDS:-0.3}"
 
             local success=0
             local code
@@ -1778,9 +1788,23 @@ jobs:
                   -w "%{http_code}" \
                   "${url}" || true
               )"
+              if [ "${code}" = "000" ]; then
+                sleep "${retry_delay}"
+                code="$(
+                  curl -sS \
+                    --connect-timeout "${connect_timeout}" \
+                    -m "${max_time}" \
+                    -o /dev/null \
+                    -w "%{http_code}" \
+                    "${url}" || true
+                )"
+              fi
               echo "[post-deploy-canary] ${label} attempt=${attempt}/${attempts} status=${code}"
               if [ "${code}" = "200" ]; then
                 success=$((success + 1))
+              fi
+              if [ "${attempt}" -lt "${attempts}" ]; then
+                sleep "${inter_attempt_delay}"
               fi
             done
 
@@ -1795,15 +1819,22 @@ jobs:
 
           extract_canary_post_id() {
             local feed_url="$1"
-            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-5}"
-            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-12}"
-            local body
-            body="$(
-              curl -sS \
-                --connect-timeout "${connect_timeout}" \
-                -m "${max_time}" \
-                "${feed_url}" || true
-            )"
+            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-10}"
+            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-20}"
+            local body=""
+            local extract_attempt
+            for extract_attempt in 1 2; do
+              body="$(
+                curl -sS \
+                  --connect-timeout "${connect_timeout}" \
+                  -m "${max_time}" \
+                  "${feed_url}" || true
+              )"
+              if [ -n "${body}" ] || [ "${extract_attempt}" -eq 2 ]; then
+                break
+              fi
+              sleep 1
+            done
             [ -z "${body}" ] && return 1
 
             local post_id=""

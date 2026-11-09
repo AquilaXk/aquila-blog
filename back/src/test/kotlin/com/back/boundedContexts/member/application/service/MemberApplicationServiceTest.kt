@@ -151,6 +151,46 @@ class MemberApplicationServiceTest : BaseMemberApplicationServiceIntegrationTest
         assertThat(events.last().currentProfileImgUrl).isEqualTo(nextDraftImageUrl)
     }
 
+    @Test
+    fun `프로필 이미지를 바꾸지 않고 텍스트만 수정해 publish 해도 공개 프로필 변경 이벤트를 발행한다`() {
+        val member = createMember("profile-workspace-text-publish", "텍스트발행")
+        val initialImageUrl = "https://example.com/same-avatar.png"
+
+        memberFacade.saveProfileWorkspaceDraft(
+            member = member,
+            content =
+                MemberProfileWorkspaceContent(
+                    profileImageUrl = initialImageUrl,
+                    profileRole = "Backend Engineer",
+                    profileBio = "초기 소개",
+                ),
+        )
+        memberFacade.publishProfileWorkspace(member)
+
+        reset(uploadedFileRetentionService)
+        memberFacade.saveProfileWorkspaceDraft(
+            member = member,
+            content =
+                MemberProfileWorkspaceContent(
+                    profileImageUrl = initialImageUrl,
+                    profileRole = "Platform Architect",
+                    profileBio = "수정된 소개",
+                    blogTitle = "새 블로그 제목",
+                ),
+        )
+        val eventsBeforeTextPublish = applicationEvents.stream(MemberPublicProfileChangedEvent::class.java).count()
+
+        memberFacade.publishProfileWorkspace(member)
+
+        then(uploadedFileRetentionService).shouldHaveNoInteractions()
+        val eventsAfterTextPublish = applicationEvents.stream(MemberPublicProfileChangedEvent::class.java).toList()
+        assertThat(eventsAfterTextPublish).hasSize((eventsBeforeTextPublish + 1).toInt())
+        val latestEvent = eventsAfterTextPublish.last()
+        assertThat(latestEvent.memberId).isEqualTo(member.id)
+        assertThat(latestEvent.previousProfileImgUrl).isEqualTo(initialImageUrl)
+        assertThat(latestEvent.currentProfileImgUrl).isEqualTo(initialImageUrl)
+    }
+
     private fun createMember(
         username: String,
         nickname: String,

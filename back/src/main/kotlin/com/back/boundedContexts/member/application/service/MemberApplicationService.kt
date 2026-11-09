@@ -216,17 +216,15 @@ class MemberApplicationService(
                 imageSyncRequest.currentProfileImgUrl,
             )
         }
-        if (imageSyncRequest != null) {
-            applicationEventPublisher.publishEvent(
-                MemberPublicProfileChangedEvent(
-                    memberId = member.id,
-                    previousNickname = member.nickname,
-                    currentNickname = member.nickname,
-                    previousProfileImgUrl = previousPublished.profileImageUrl,
-                    currentProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl,
-                ),
-            )
-        }
+        applicationEventPublisher.publishEvent(
+            MemberPublicProfileChangedEvent(
+                memberId = member.id,
+                previousNickname = member.nickname,
+                currentNickname = member.nickname,
+                previousProfileImgUrl = previousPublished.profileImageUrl,
+                currentProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl,
+            ),
+        )
     }
 
     private fun normalizeEmailOrNull(email: String?): String? =

@@ -234,6 +234,83 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     @Test
+    @DisplayName("공개 글 작성·수정·삭제 commit 직후 비동기 task 실행 전이라도 읽기 캐시와 검색 캐시를 즉시 무효화한다")
+    fun writeModifyDeleteCommitEvictsReadCachesImmediatelyBeforeTaskHandlerRuns() {
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        clearSideEffectMocks()
+
+        val post =
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "immediate cache eviction source",
+                        content = "tags: [kotlin]\n\nimmediate cache eviction content",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
+
+        assertThat(cacheLookupNames()).contains(
+            PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,
+            PostQueryCacheNames.FEED,
+            PostQueryCacheNames.EXPLORE,
+            PostQueryCacheNames.FEED_CURSOR_FIRST,
+            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
+            PostQueryCacheNames.BOOTSTRAP,
+            PostQueryCacheNames.SEARCH,
+            PostQueryCacheNames.SEARCH_NEGATIVE,
+            PostQueryCacheNames.TAGS,
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_META,
+            PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+            PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
+        )
+
+        clearSideEffectMocks()
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.modify(
+                actor = admin,
+                post = latestPost,
+                title = "immediate cache eviction modified",
+                content = "tags: [kotlin, spring]\n\nimmediate cache eviction modified content",
+                published = true,
+                listed = true,
+                expectedVersion = latestPost.version ?: 0L,
+            )
+        }
+
+        assertThat(cacheLookupNames()).contains(
+            PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,
+            PostQueryCacheNames.FEED,
+            PostQueryCacheNames.BOOTSTRAP,
+            PostQueryCacheNames.SEARCH,
+            PostQueryCacheNames.SEARCH_NEGATIVE,
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+        )
+
+        clearSideEffectMocks()
+        transactionTemplate.executeWithoutResult {
+            val latestPost = postApplicationService.findById(post.id)!!
+            postApplicationService.delete(latestPost, admin)
+        }
+
+        assertThat(cacheLookupNames()).contains(
+            PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,
+            PostQueryCacheNames.FEED,
+            PostQueryCacheNames.BOOTSTRAP,
+            PostQueryCacheNames.SEARCH,
+            PostQueryCacheNames.SEARCH_NEGATIVE,
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+        )
+    }
+
+    @Test
     @DisplayName("글 작성 commit은 후속 작업을 durable task row로 남긴다")
     fun writeCommitCreatesDurablePostWriteSideEffectTask() {
         // given

@@ -32,6 +32,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
 import java.time.Instant
@@ -54,6 +56,7 @@ class PostApplicationService(
     private val postTagIndexService: PostTagIndexService,
     private val postTempDraftService: PostTempDraftService,
     private val postHitSideEffectQueue: PostHitSideEffectQueue,
+    private val postReadCacheInvalidator: PostReadCacheInvalidator? = null,
 ) : PostUseCase {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
@@ -883,6 +886,47 @@ class PostApplicationService(
         domainEvent: EventPayload? = null,
     ) {
         taskFacade.addToQueue(command.toTaskPayload(domainEvent))
+        invalidateReadCacheAfterCommit(command)
+    }
+
+    private fun invalidateReadCacheAfterCommit(command: PostWriteSideEffectCommand) {
+        val invalidator = postReadCacheInvalidator ?: return
+        if (command.cacheInvalidationScope.isEmpty()) return
+        val request =
+            PostReadCacheInvalidationRequest(
+                postId = command.postId,
+                beforeTags = command.beforeTags,
+                afterTags = command.afterTags,
+                scope = command.cacheInvalidationScope,
+                evictReason = command.evictReason,
+            )
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                object : TransactionSynchronization {
+                    override fun afterCommit() {
+                        runCatching {
+                            invalidator.invalidate(request)
+                        }.onFailure { exception ->
+                            logger.warn(
+                                "Immediate post read cache invalidation after commit failed for postId={}; async task will retry",
+                                command.postId,
+                                exception,
+                            )
+                        }
+                    }
+                },
+            )
+        } else {
+            runCatching {
+                invalidator.invalidate(request)
+            }.onFailure { exception ->
+                logger.warn(
+                    "Immediate post read cache invalidation failed for postId={}; async task will retry",
+                    command.postId,
+                    exception,
+                )
+            }
+        }
     }
 
     private fun PostWriteSideEffectCommand.toTaskPayload(domainEvent: EventPayload?): PostWriteSideEffectPayload =

@@ -536,6 +536,51 @@ class PostApplicationServiceDeleteResilienceTest {
         then(postRecommendFeatureStoreService).should().evict(24)
     }
 
+    @Test
+    @DisplayName("트랜잭션 동기화가 비활성인 환경에서도 postReadCacheInvalidator가 주입되어 있으면 즉시 캐시를 비우고 예외는 격리한다")
+    fun immediateCacheInvalidationWithoutTransactionSynchronizationIsolatesFailure() {
+        val serviceWithInvalidator =
+            PostApplicationService(
+                postRepository = postRepository,
+                postWriteRequestIdempotencyRepository = postWriteRequestIdempotencyRepository,
+                memberRepository = memberRepository,
+                secureTipPort = secureTipPort,
+                uploadedFileRetentionService = uploadedFileRetentionService,
+                postRecommendRankingService = postRecommendRankingService,
+                postKeywordSearchPipelineService = postKeywordSearchPipelineService,
+                taskFacade = taskFacade,
+                objectMapper = objectMapper,
+                postHydrationService = postHydrationService,
+                postCounterService = postCounterService,
+                postTagIndexService = postTagIndexService,
+                postTempDraftService = postTempDraftService,
+                postHitSideEffectQueue = postHitSideEffectQueue,
+                postReadCacheInvalidator = postReadCacheInvalidator,
+            )
+        val author = member(9, "즉시무효화작성자")
+        val savedPost =
+            Post(id = 301, author = author, title = "즉시 무효화", content = "본문", published = true, listed = true).apply {
+                createdAt = Instant.now()
+                modifiedAt = createdAt
+            }
+        given(postRepository.saveAndFlush(anyPost())).willReturn(savedPost)
+        given(cacheManager.getCache(PostQueryCacheNames.FEED)).willThrow(RuntimeException("redis down"))
+
+        assertDoesNotThrow {
+            serviceWithInvalidator.write(
+                author = author,
+                title = "즉시 무효화",
+                content = "본문",
+                published = true,
+                listed = true,
+                summaryMode = PostSummaryMode.AUTO,
+            )
+        }
+
+        then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
+        assertThat(postWriteSideEffectTasks()).hasSize(1)
+    }
+
     private fun capturePostWriteSideEffectPayload(): PostWriteSideEffectPayload {
         val task = postWriteSideEffectTasks().single()
         return decodePostWritePayload(task)

@@ -579,7 +579,7 @@ jobs:
           TRIVY_SHA256: "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea"
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/trivy.tgz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o /tmp/trivy.tgz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           printf '%s  %s\n' "${TRIVY_SHA256}" /tmp/trivy.tgz | sha256sum --check -
           tar -xzf /tmp/trivy.tgz -C /tmp trivy
           sudo mv /tmp/trivy /usr/local/bin/trivy

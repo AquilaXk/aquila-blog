@@ -122,7 +122,7 @@ class PostReadCacheInvalidator(
 
     internal fun invalidate(
         request: PostReadCacheInvalidationRequest,
-        onPublicTagsEvicted: () -> Unit,
+        onPublicTagsEvicted: () -> Unit = {},
     ) {
         if (request.evicts(PostReadCacheInvalidationTarget.PUBLIC_TAGS)) {
             onPublicTagsEvicted()

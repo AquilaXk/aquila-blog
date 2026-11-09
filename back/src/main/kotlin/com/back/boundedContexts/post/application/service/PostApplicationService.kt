@@ -903,32 +903,8 @@ class PostApplicationService(
                 scope = command.cacheInvalidationScope,
                 evictReason = command.evictReason,
             )
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(
-                object : TransactionSynchronization {
-                    override fun afterCommit() {
-                        runCatching {
-                            invalidator.invalidate(request)
-                        }.onFailure { exception ->
-                            logger.warn(
-                                "Immediate post read cache invalidation after commit failed for postId={}; async task will retry",
-                                command.postId,
-                                exception,
-                            )
-                        }
-                    }
-                },
-            )
-        } else {
-            runCatching {
-                invalidator.invalidate(request)
-            }.onFailure { exception ->
-                logger.warn(
-                    "Immediate post read cache invalidation failed for postId={}; async task will retry",
-                    command.postId,
-                    exception,
-                )
-            }
+        scheduleCacheInvalidationAfterCommit(command.postId) {
+            invalidator.invalidate(request)
         }
     }
 
@@ -937,32 +913,38 @@ class PostApplicationService(
         reason: String,
     ) {
         val invalidator = postReadCacheInvalidator ?: return
+        scheduleCacheInvalidationAfterCommit(postId) {
+            invalidator.invalidatePublicDetailCounters(postId, reason)
+        }
+    }
+
+    private fun scheduleCacheInvalidationAfterCommit(
+        postId: Long,
+        action: () -> Unit,
+    ) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(
                 object : TransactionSynchronization {
                     override fun afterCommit() {
-                        runCatching {
-                            invalidator.invalidatePublicDetailCounters(postId, reason)
-                        }.onFailure { exception ->
-                            logger.warn(
-                                "Immediate post detail counter cache invalidation after commit failed for postId={}; async task will retry",
-                                postId,
-                                exception,
-                            )
-                        }
+                        runImmediateCacheInvalidation(postId, action)
                     }
                 },
             )
         } else {
-            runCatching {
-                invalidator.invalidatePublicDetailCounters(postId, reason)
-            }.onFailure { exception ->
-                logger.warn(
-                    "Immediate post detail counter cache invalidation failed for postId={}; async task will retry",
-                    postId,
-                    exception,
-                )
-            }
+            runImmediateCacheInvalidation(postId, action)
+        }
+    }
+
+    private fun runImmediateCacheInvalidation(
+        postId: Long,
+        action: () -> Unit,
+    ) {
+        runCatching(action).onFailure { exception ->
+            logger.warn(
+                "Immediate post read cache invalidation failed for postId={}; async task will retry",
+                postId,
+                exception,
+            )
         }
     }
 

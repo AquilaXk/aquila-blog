@@ -77,7 +77,7 @@ data class PublicPostDetailMetaCacheDto(
                 hitCount = post.hitCount,
                 summary = post.summaryText.orEmpty(),
                 summarySource = post.summarySource,
-                thumbnail = post.thumbnail ?: runCatching { PostPreviewExtractor.extractThumbnail(post.content) }.getOrNull(),
+                thumbnail = post.thumbnail ?: PostPreviewExtractor.extractThumbnail(post.content),
             )
         }
     }

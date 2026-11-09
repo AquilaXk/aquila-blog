@@ -59,7 +59,7 @@ data class PostWithContentDto(
         contentHtmlHash = contentHtmlTrust.contentHtmlHash,
         contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
         contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
-        thumbnail = post.thumbnail ?: runCatching { PostPreviewExtractor.extractThumbnail(post.content) }.getOrNull(),
+        thumbnail = post.thumbnail ?: PostPreviewExtractor.extractThumbnail(post.content),
     )
 
     constructor(post: Post) : this(
